@@ -526,7 +526,7 @@ every `.czn_pc`/`.gzn_pc` filename pair found recursively through nested contain
 `≥ 0x10000` check-value filter, which is the variant that reproduces §7.3's published
 numerators), `zg2_clmesh_sweep.py`. Every count attributed to `mesh_scan.py` below was
 produced by **importing and calling** `mesh_scan.read_block`/`validate`/`replay_g`, never by a
-second walker, so those figures are "by `mesh_scan.py`" in the sense §5 requires.
+second walker, so those figures are "by `mesh_scan.py`" in the sense `HANDOFF.md` §5 requires.
 
 ### 10.1 `mesh_scan.py` does NOT share Team B's "Gap 2" — confirmed on real files, not on the arithmetic
 
@@ -844,7 +844,7 @@ Consequences, stated as work to do rather than as new figures:
    records" is an under-count and needs re-deriving on its own population.** Every per-channel
    figure computed against that denominator — including §12.1's `26,601 / 26,601` all-zero
    results — is measured on a subset selected by the alignment gate. Those particular negatives
-   have an independent disassembly route (`spec-vertex-format.md` §12.1 / `HANDOFF.md` §27.1:
+   have an independent disassembly route (`spec-vertex-format.md` §12.1 / `HANDOFF.md` §30, archived 27.1 table:
    neither channel-array walker reads `+0x08` at all), so per `HANDOFF.md` §5
    they are the kind that survives their instrument being discredited; but the *denominator* in
    each table is wrong and should be restated.
@@ -926,7 +926,7 @@ gets right.
   parity; `gzn_meshes.py`: 8 bytes too early at the other). Both were "a constant where the
   format has a running alignment computation". **Prefer writing the alignment arithmetic out and
   testing both parity classes to writing the constant you observed** — and when a spec states an
-  offset, state it as the computation, per §5's existing rule, because this is exactly the defect
+  offset, state it as the computation, per `HANDOFF.md` §5's existing rule, because this is exactly the defect
   that rule exists to prevent and it recurred anyway.
 - **An instrument defect that under-counts by 13× leaves a self-consistent survivor set.** All
   2,843 survivors were real blocks, all passed every invariant, and every statistic computed on
@@ -938,3 +938,4 @@ gets right.
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the pre-2026-09-30 "no walker exists"/"no standalone parser"/"clean census negative" statements superseded by §9.5 (status header, §5, §6 item 1, §9 intro, §9.2 ×2, §9.6) and qualified the "no literal check" inference (§1, §3, §9.3, §9.5); recorded that `0x00D9E740` is the confirmed CRC-32 (§9.3); pointer from §6 item 6 to §9.5; struck the stale "Team B will send the predicate" line (§9.4); fixed 6 cross-references (§5→§1/§3 ×2, §6→§1–§3/§8, conversation §6a→§6.1, bare §5→`HANDOFF.md` §5 ×3).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec or cited to another spec); repointed 1 `HANDOFF.md` §27.x reference to the archived headings (§10.7 item 1, §27.1 → §30 archived 27.1 table); qualified 2 bare §5 refs as `HANDOFF.md` §5 (§10 method paragraph, §10.9 methodology notes); 2 left (§6 item 1 and §9.4 cross-reference note `HANDOFF.md` §27.3, interior thread on hold) (see review).
