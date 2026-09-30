@@ -156,3 +156,4 @@ Facts from the now-readable base tables (`spec-vpp-container.md` §7). **Team B'
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): added a superseded banner to §1 and marked the §6.4/§6.5 "only entry 0 is readable" statements superseded (`spec-vpp-container.md` §7); corrected §5 item 3 to agree with §2/§4 on 2-space indentation; noted `spec-asm-format.md` §9.3's partial answer to §6.5 item 1; reworded one disassembly listing fragment (§6.1); added the per-call-site seed note to §8's hash statement; flagged the `spec-output.md` citation as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).
