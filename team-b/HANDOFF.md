@@ -207,6 +207,24 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   run), `zlbw` (03 vintdoc), `hvcv` (04), `dzdq` (05), `grso`/`jklk` (02 before/after), `nxrt`/`bujl`
   (superseded by `epre`), `epre` (06 CTAB census).
 
+### 2026-09-30, cloud stretch 5c: bridge results 03/04/05 (and 02 knyf)
+
+- **05 `20260930T224833-team-b-dzdq`** (at `baecf76`, real-data regression after the fuzz fixes): container
+  decode over 9 archives, 1,690 containers: mode (a) 1,562/1,562 Ok, mode (b) 23,349/23,349 Ok; clmesh
+  dlc1-3 **4,232/4,232** land exactly on EOF (the recorded baseline), header rejected 0; `validate_mesh` over
+  dlc1-3 + vehicles + sr3_city_0: 300/300 parsed, **0 failed** (the new stride check refused nothing),
+  g-length 300/300, stride law 337/337, 912,594/912,594 unit normals and finite positions. Every fuzz fix can
+  only change output by refusing input, and nothing was refused, so real-data output is unchanged. No
+  pre-fix run exists on these same archives (the validator targets were added in the same commit as the
+  fixes), so this is reasoned from zero refusals, not a before/after diff. Noted:
+  `validate_mesh`'s "indices < vertex count" 1,898,653/2,009,874 tests every index against channel 0 only,
+  which is wrong for multi-channel meshes (§8: the draw range's `high16` picks the channel); a validator
+  scoping gap in code unchanged since the initial import, not a reader fault.
+- **04 `20260930T224830-team-b-hvcv`**: 38 archives in `packfiles/pc/cache` (names and sizes in the result).
+- **03 `20260930T213047-team-b-zlbw`** (vintdoc sweep): header CONFIRMED checks reproduce spec §2 exactly;
+  §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
+  the raw u32 at `0x1E` recorded per file.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
@@ -240,6 +258,19 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    `customization_creation_is_open`, `customization_screen_is_ready`, `player_parachute_has_backpack`.
 6. **Review status of §27/§28** of `spec-lua-api-behaviour.md`: are they cleared for implementation?
    (`game_get_coop_friendly_fire`, `crib_weapon_add_disable` are waiting on it.)
+7. **`spec-vint-doc-format.md` §3.1 string table contradicted by real data** (bridge job
+   `20260930T213047-team-b-zlbw`, `interface_startup.vpp_pc` + `interface.vpp_pc`; 777 rows = 159 distinct
+   documents repeated). The header checks reproduce §2 exactly (magic 159/159, versions 4/155, `+0x0A` zero
+   154/159, `+0x16` < size 159/159, every count range and median). But §3.1's CONFIRMED "u32 count N at
+   `0x1E`, then N u32 offsets":
+   - the u32 at `0x1E` is only ever **1, 256 or 257** (v1: 1×69, 256×1; v2: 1×380, 256×82, 257×177), and
+     68 v2 rows hold a value too large for the file;
+   - the values read as "offsets" include float-like words (e.g. `0x3F800000`), not pool offsets;
+   - §3.2's own refutation test `hdr[0x16] < 0x22 + 4N` fails on **79/709** rows;
+   - **0** files resolve ≥ 90% of entries to clean text (the spec's pass: 74/159).
+   Is the u32 at `0x1E` really N? Is the offset array really at `0x22`? Please re-read the string-array read
+   in the binary loader. `sr3vintdoc::parseStringTable` stays as the spec states it, labelled disputed;
+   the 12-combo walk grid landed on 0 files. A re-run with the raw u32 at `0x1E` per file is queued (job 03b).
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 

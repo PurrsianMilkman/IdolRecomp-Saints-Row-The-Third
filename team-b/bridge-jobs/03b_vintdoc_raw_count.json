@@ -1,0 +1,27 @@
+{
+  "title": "team-b: sr3vintdoc sweep re-run with raw u32 at 0x1E per file (spec Sec3.1 contradiction, Request 7)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "vintdoc_validate"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "vintdoc_validate",
+      "args": [
+        "{OUT}",
+        "{GAME}/packfiles/pc/cache/interface_startup.vpp_pc",
+        "{GAME}/packfiles/pc/cache/interface.vpp_pc"
+      ],
+      "timeout": 3600
+    }
+  ],
+  "collect": [
+    "*.tsv",
+    "*.txt"
+  ]
+}

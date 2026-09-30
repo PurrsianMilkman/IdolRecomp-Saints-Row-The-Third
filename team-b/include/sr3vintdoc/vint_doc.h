@@ -118,6 +118,15 @@ struct StringTable {
 
 // Reads the string-offset array at kHeaderSize. Throws FormatError if the
 // count-driven array runs past the end of `bytes`.
+//
+// DISPUTED BY REAL DATA (bridge job 20260930T213047-team-b-zlbw, 159
+// distinct files): the spec labels "u32 N at 0x1E, then N u32 offsets"
+// CONFIRMED (Sec3.1), but the u32 at 0x1E takes only the values 1, 256
+// and 257 (plus 68 rows too large to fit), the "offsets" include values
+// like 0x3F800000, 79/709 rows fail Sec3.2's own refutation test
+// (hdr[0x16] < 0x22 + 4N), and 0 files resolve >= 90% clean strings (spec:
+// 74/159). Kept as the spec states it, unchanged, pending Team A's answer
+// (team-b/HANDOFF.md "Requests to Team A", item 7). Do not build on it.
 StringTable parseStringTable(vpp::ByteView bytes);
 
 // HIGH CONFIDENCE, not CONFIRMED (Sec3.1): the string at base +
