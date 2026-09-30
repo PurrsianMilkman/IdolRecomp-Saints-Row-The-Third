@@ -57,6 +57,54 @@ round-half-to-even, unchanged behaviour) — `f35b1ab`. Documentation-only: two 
 (supersession annotations; `sr3xtbl` already treats whitespace-only text as absent, so the 2-space
 indentation note changes nothing); lua-bindings (cross-refs, §17 rewording). ctest 43/43 after the merge.
 
+### 2026-09-30, cloud stretch 1c: self-containment spec sync (`f29438b`, 32 specs)
+
+Merged (fast-forward). **No code impact, and none of this stretch's stubbed gaps closed**:
+`spec-vint-doc-format.md` is not in the sync; `spec-lua-api-behaviour.md`/`spec-lua-bindings.md` restate 0 facts
+(HANDOFF-reference repoints only), so fade/zscene/`vint_is_std_res`/the `0x00ea2596` rounding mode/the three
+vint_doc walk gaps all remain open requests. Restated facts in the other specs (physics material records +
+`+0x78` gated pair, vehicle-geometry high16, rig palette retraction, render-pipeline D3D9 notes) either describe
+what the readers already implement or concern nothing implemented; e.g. `sr3clmesh` already follows
+§4.4.6(f), which superseded the restated `kGatedPairBytes` placeholder. ctest 43/43.
+
+### 2026-09-30, cloud stretch 2: `verdict_stub_hits_with_missions.tsv` worked down (manager task)
+
+Every still-stubbed name in the ranking was checked against `spec-lua-api-behaviour.md`.
+**Batch 1 implemented** (`sr3luahost`, 38 new checks, 9/9 mutants killed): `set_mission_author` (§6.1, inert),
+`fade_out` (§2.9: colour setter, `screen_fade_do` request recorded with ms duration + alpha 1.0, opcode-0x53
+counted), `mission_end_silently` (§15.23, **partial**: only the CONFIRMED unconditional mission-flags-word write;
+the rest is gated on unmodelled state).
+
+Mission-path re-run submitted at `4591785`: job `20260930T215300-team-b-tdpr` (supersedes `knyf` for comparison).
+
+**Skipped, CONFIRMED behaviour depends on engine state the host doesn't model** (not faked):
+- `fade_in` (§8.13): queues only "when not already idle/faded" — needs the fade state machine (request 1).
+- `zscene_prep` (§8.21): needs the scene table and the entry's "kind" field (request 2).
+- `audio_object_post_event` (§2.4): success depends on the Wwise string→ID resolver (a stated gap in
+  `game_audio_get_audio_id` too); the object/position resolvers are unmodelled.
+- `player_controls_disable` (§7.22): whether the bit is written locally depends on the replicated-apply gate
+  `0x008addb0`, and §7.7 says which branch dominates in single-player "is not established".
+- `mesh_mover_hide`/`_show` (§9.16/§9.17): push a boolean whose value the spec never states; mesh movers,
+  the `0x006434a0` resolver and the secondary renderable are unmodelled.
+- `city_zone_swap` (§1.9): debug/dev gates + zone-streaming entries unmodelled.
+- `character_ragdoll_set_last_resort_position` (§7.18), `traffic_disable_lanes` (§12.19),
+  `sidewalk_disable_nodes` (§15.3), `party_dismiss_all` (§14.17), `customization_outfit_wear` (§13.4),
+  `mission_autosave` (§17.23), `mission_set_next_mission` (§25.4): each acts only through a resolver, roster,
+  outfit table, save chain or mission-system gate the host doesn't model; no Lua-visible result.
+
+**Skipped pending a decision — CONFIRMED but in §27/§28 (ranks 551-650)**, which carry no adversarial-review
+marker (the pre-pause rule was not to implement from unreviewed sections): `game_get_coop_friendly_fire`
+(§27.16, pure remap 0→2/1→0/2→1 of a raw mode) and `crib_weapon_add_disable` (§28.14, shared setter with 0).
+Both are trivial once cleared.
+
+**No behaviour spec at all** (request 5 below): the `vint_*` names in the ranking —
+`vint_internal_dataresponder_request` (282M calls) and `vint_dataresponder_finished` (282M, a UI busy-poll
+pair as big as the fade one), `vint_set_property`, `vint_get_property`, `vint_get_time_index`,
+`vint_get_safe_frame`, `vint_dataitem_get`, `vint_object_first_child`, `vint_object_clone` — plus
+`pause_map_stag_current_district_control`, `mip_streaming_pause`, `object_spawn_pause`,
+`customization_create_character`, `customization_creation_is_open`, `customization_screen_is_ready`,
+`player_parachute_has_backpack`.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
@@ -82,6 +130,14 @@ indentation note changes nothing); lua-bindings (cross-refs, §17 rewording). ct
    on EOF across the population, but that is evidence, not the disassembly answer.
 4. **`vint_is_std_res`** (UI registrar, 55-name `vint_*` family, §9.143: the next blocker for the 9/49
    missions past the fade wait): no behaviour entry. Need args/return/body.
+5. **Behaviour entries for the next still-unspecced names in `verdict_stub_hits_with_missions.tsv`**, in
+   ranking order: `vint_internal_dataresponder_request` + `vint_dataresponder_finished` (282M calls each, a UI
+   busy-poll pair), `vint_set_property`, `vint_get_property`, `vint_get_time_index`, `vint_get_safe_frame`,
+   `vint_dataitem_get`, `vint_object_first_child`, `vint_object_clone`, `pause_map_stag_current_district_control`,
+   then the mission-path singles `mip_streaming_pause`, `object_spawn_pause`, `customization_create_character`,
+   `customization_creation_is_open`, `customization_screen_is_ready`, `player_parachute_has_backpack`.
+6. **Review status of §27/§28** of `spec-lua-api-behaviour.md`: are they cleared for implementation?
+   (`game_get_coop_friendly_fire`, `crib_weapon_add_disable` are waiting on it.)
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 

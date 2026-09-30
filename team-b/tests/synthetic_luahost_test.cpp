@@ -88,6 +88,10 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"game_get_coop_join_type", "ui"},
         // Cloud phase (2026-09-30): Sec14.23, `gameplay` (tagged list line 1014).
         {"zscene_is_loaded", "gameplay"},
+        // Cloud phase batch 1 (tagged list lines 776/295/505).
+        {"set_mission_author", "gameplay"},
+        {"fade_out", "gameplay"},
+        {"mission_end_silently", "gameplay"},
     };
 }
 
@@ -986,6 +990,69 @@ int main() {
             es.setZsceneBusyFlagForTesting(false);
         }
 
+        // 24-26. Cloud phase batch 1.
+        {
+            auto check = [&](const char* chunk, const char* tag) {
+                auto r = host.runChunk(gp, chunk, tag);
+                CHECK(r.loadOk && r.pcallOk);
+            };
+            // set_mission_author (Sec6.1): inert, 0 results, any arguments.
+            check("assert(select('#', set_mission_author()) == 0)", "sma1.lua");
+            check("assert(select('#', set_mission_author('x', 1, true)) == 0)", "sma2.lua");
+
+            // fade_out (Sec2.9). Before any call: no colour, no requests.
+            CHECK(!es.hasScreenFadeColour());
+            CHECK(es.screenFadeRequests().empty());
+            check("assert(select('#', fade_out(2.5)) == 0)", "fo1.lua");
+            CHECK(es.hasScreenFadeColour());
+            CHECK(es.screenFadeColour().r == 0.0f && es.screenFadeColour().g == 0.0f &&
+                  es.screenFadeColour().b == 0.0f && es.screenFadeColour().a == 1.0f);
+            CHECK(es.screenFadeRequests().size() == 1);          // default flags 3: bit 0x1
+            CHECK(es.screenFadeRequests()[0].durationMs == 2500.0);
+            CHECK(es.screenFadeRequests()[0].targetAlpha == 1.0f);
+            CHECK(es.screenFadeOpcode53Count() == 1);             // default flags 3: bit 0x2
+            // Colour table, one nil component -> 0; flags 1 only.
+            check("fade_out(0.5, {255, nil, 51}, 1)", "fo2.lua");
+            CHECK(es.screenFadeColour().r == 1.0f && es.screenFadeColour().g == 0.0f &&
+                  es.screenFadeColour().b == 51.0f / 255.0f);
+            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeRequests()[1].durationMs == 500.0);
+            CHECK(es.screenFadeOpcode53Count() == 1);
+            // Flags 2 only: no screen_fade_do request; nil table/flags use defaults.
+            check("fade_out(1, nil, 2)", "fo3.lua");
+            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeOpcode53Count() == 2);
+            check("fade_out(1, nil, nil)", "fo4.lua");
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
+            // Flags 0: colour still set, nothing queued.
+            check("fade_out(1, {10, 20, 30}, 0)", "fo5.lua");
+            CHECK(es.screenFadeColour().g == 20.0f / 255.0f);
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
+            // Absent duration reads as 0 (lua_tonumber, no gate).
+            check("fade_out()", "fo6.lua");
+            CHECK(es.screenFadeRequests().size() == 4 && es.screenFadeRequests()[3].durationMs == 0.0);
+            // A non-table colour argument is indexed like the real call: Lua error.
+            {
+                auto r = host.runChunk(gp, "fade_out(1, 5)", "fo7.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+            }
+
+            // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors arg.
+            CHECK(es.missionFlagsWord() == 0);
+            check("mission_end_silently()", "mes1.lua");
+            CHECK(es.missionFlagsWord() == 0x4);
+            check("mission_end_silently(true)", "mes2.lua");
+            CHECK(es.missionFlagsWord() == 0x14);
+            check("mission_end_silently(nil)", "mes3.lua");
+            CHECK(es.missionFlagsWord() == 0x4);
+            es.setMissionFlagsWord(0xFFFFFFFFu); // other bits untouched
+            check("mission_end_silently(false)", "mes4.lua");
+            CHECK(es.missionFlagsWord() == 0xFFFFFFEFu);
+            check("assert(select('#', mission_end_silently(1)) == 0)", "mes5.lua"); // 1 is truthy
+            CHECK(es.missionFlagsWord() == 0xFFFFFFFFu);
+            // Wrong state: gameplay-tagged only.
+            auto r = host.runChunk(ui, "assert(fade_out == nil and mission_end_silently == nil)", "b1ui.lua");
+            CHECK(r.loadOk && r.pcallOk);
+        }
+
         // Every one of the 22 calls above must fold into the SAME HitLog
         // ranking every other stub uses (stub_registry.h/thread_scheduler.h).
         for (const char* name : {"coop_is_active", "game_get_key_name", "game_UI_audio_play",
@@ -997,7 +1064,8 @@ int main() {
                                   "game_hud_update_inventory", "tutorial_advance",
                                   "minimap_icon_add_do", "object_indicator_add_do",
                                   "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type",
-                                  "zscene_is_loaded"}) {
+                                  "zscene_is_loaded", "set_mission_author", "fade_out",
+                                  "mission_end_silently"}) {
             CHECK(host.hitLog().hits().count(name) == 1);
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }

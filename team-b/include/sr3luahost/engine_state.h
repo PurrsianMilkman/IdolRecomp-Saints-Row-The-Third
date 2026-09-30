@@ -544,6 +544,48 @@ public:
     int zsceneOpenBranchHits() const { return zsceneOpenBranchHits_; }
     void recordZsceneOpenBranchHit() { ++zsceneOpenBranchHits_; }
 
+    // --- fade_out (spec-lua-api-behaviour.md Sec2.9) ------------------------
+
+    // CONFIRMED: the three colour components (0.0 when absent) plus a fixed
+    // alpha of 255 go to the overlay colour setter, which scales each by
+    // 1/255. Stored here already scaled. hasScreenFadeColour() is false
+    // until the first fade_out: the real initial overlay colour is not in
+    // any spec.
+    struct ScreenFadeColour {
+        float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+    };
+    bool hasScreenFadeColour() const { return hasScreenFadeColour_; }
+    const ScreenFadeColour& screenFadeColour() const { return screenFadeColour_; }
+    void setScreenFadeColour(const ScreenFadeColour& c) { screenFadeColour_ = c; hasScreenFadeColour_ = true; }
+
+    // CONFIRMED: flags bit 0x1 queues the engine's "screen_fade_do" UI
+    // command with the duration x 1000.0 (ms) and a target alpha (1.0 from
+    // fade_out). This project has no UI command queue and does not fire the
+    // Lua `screen_fade_do` hook from here (Sec26.23 gives that callback 3
+    // numeric arguments, only 2 of which are known), so each request is just
+    // recorded. What the fade state machine (0x0059f8c0) does with it is the
+    // open Team A request (HANDOFF "Requests to Team A", item 1).
+    struct ScreenFadeRequest {
+        double durationMs = 0.0;
+        float targetAlpha = 0.0f;
+    };
+    const std::vector<ScreenFadeRequest>& screenFadeRequests() const { return screenFadeRequests_; }
+    void recordScreenFadeRequest(const ScreenFadeRequest& r) { screenFadeRequests_.push_back(r); }
+    // CONFIRMED: flags bit 0x2 queues a separate opcode-0x53 command
+    // (Sec8.13: a host-gated fade broadcast). No networking here; counted.
+    int screenFadeOpcode53Count() const { return screenFadeOpcode53Count_; }
+    void recordScreenFadeOpcode53() { ++screenFadeOpcode53Count_; }
+
+    // --- mission_end_silently (Sec15.23) ------------------------------------
+
+    // Raw stand-in for the global mission-flags word 0x014c848c. CONFIRMED:
+    // mission_end_silently always sets bit 0x4 and sets/clears bit 0x10 to
+    // mirror its argument (meaning of both bits OPEN). Default 0 is this
+    // project's choice; the real initial value and other writers are not
+    // specced.
+    uint32_t missionFlagsWord() const { return missionFlagsWord_; }
+    void setMissionFlagsWord(uint32_t v) { missionFlagsWord_ = v; }
+
 private:
     std::unordered_map<std::string, CharacterState> characters_;
     bool coopActive_ = false;
@@ -571,6 +613,13 @@ private:
     int zsceneGlobalStateCode_ = 0;
     std::unordered_set<std::string> zsceneTableRecords_; // lowercased names
     int zsceneOpenBranchHits_ = 0;
+
+    // --- fade_out (Sec2.9) / mission_end_silently (Sec15.23) ---
+    bool hasScreenFadeColour_ = false;
+    ScreenFadeColour screenFadeColour_;
+    std::vector<ScreenFadeRequest> screenFadeRequests_;
+    int screenFadeOpcode53Count_ = 0;
+    uint32_t missionFlagsWord_ = 0;
 };
 
 } // namespace sr3luahost

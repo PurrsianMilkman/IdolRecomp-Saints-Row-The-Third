@@ -722,6 +722,79 @@ int stub_zscene_is_loaded(lua_State* L) {
     return 1;
 }
 
+// ---------------------------------------------------------------------
+// 24. set_mission_author (Sec6.1): CONFIRMED fully inert - the prologue's
+// lua_gettop result is never used, nothing is read, pushed or touched.
+// ---------------------------------------------------------------------
+int stub_set_mission_author(lua_State* L) {
+    logCall(L, upLog(L), "set_mission_author", upStateTag(L));
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// 25. fade_out (Sec2.9)
+// Arg 1: number, read unconditionally via lua_tonumber (absent -> 0).
+// Arg 2: optional; if present and non-nil it is indexed as t[1], t[2],
+// t[3] with lua_gettable (so a non-table value raises the ordinary Lua
+// "attempt to index" error, exactly as the real API call would); each
+// nil/absent component -> 0.0; whole table absent/nil -> all 0.0.
+// Arg 3: optional flags via lua_tonumber, default 3. (The number->int
+// conversion before the bit tests is not described; roundToIntOpenMode.)
+// Colour setter with alpha 255, each scaled by 1/255 - unconditional.
+// Bit 0x1: "screen_fade_do" with duration x 1000.0 and target alpha 1.0.
+// Bit 0x2: the opcode-0x53 command. Return: none. All CONFIRMED.
+// ---------------------------------------------------------------------
+int stub_fade_out(lua_State* L) {
+    logCall(L, upLog(L), "fade_out", upStateTag(L));
+    EngineState* es = upState(L);
+    lua_Number duration = lua_tonumber(L, 1);
+    float rgb[3] = {0.0f, 0.0f, 0.0f};
+    if (lua_gettop(L) >= 2 && lua_type(L, 2) != LUA_TNIL) {
+        for (int k = 0; k < 3; ++k) {
+            lua_pushnumber(L, k + 1);
+            lua_gettable(L, 2);
+            if (lua_type(L, -1) != LUA_TNIL) rgb[k] = static_cast<float>(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+    int64_t flags = 3;
+    if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) flags = roundToIntOpenMode(lua_tonumber(L, 3));
+
+    EngineState::ScreenFadeColour c;
+    c.r = rgb[0] / 255.0f;
+    c.g = rgb[1] / 255.0f;
+    c.b = rgb[2] / 255.0f;
+    c.a = 255.0f / 255.0f;
+    es->setScreenFadeColour(c);
+    if (flags & 0x1) es->recordScreenFadeRequest({duration * 1000.0, 1.0f});
+    if (flags & 0x2) {
+        es->recordScreenFadeOpcode53();
+        EngineState::replicateStateChange("fade_out_opcode_0x53", "");
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// 26. mission_end_silently (Sec15.23) - PARTIAL, stated.
+// Arg 1: optional boolean, standard nil-gated, default false. Return: none.
+// Implemented (CONFIRMED, unconditional): 0x006da7b0 sets bit 0x4 of the
+// global mission-flags word and sets/clears bit 0x10 to mirror the arg.
+// NOT modelled: everything after it is gated on state this host lacks -
+// the "can end mission now" gate (0x006cf930), the active mission's
+// restartable flag and cleanup, and the non-host-client network request vs
+// local finalize (0x006d9f70). Nothing is faked for those.
+// ---------------------------------------------------------------------
+int stub_mission_end_silently(lua_State* L) {
+    logCall(L, upLog(L), "mission_end_silently", upStateTag(L));
+    bool arg = false;
+    if (lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL) arg = lua_toboolean(L, 1) != 0;
+    EngineState* es = upState(L);
+    uint32_t w = es->missionFlagsWord() | 0x4u;
+    w = arg ? (w | 0x10u) : (w & ~0x10u);
+    es->setMissionFlagsWord(w);
+    return 0;
+}
+
 void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
                   const char* name, lua_CFunction fn) {
     lua_pushlightuserdata(L, &state);
@@ -770,6 +843,11 @@ const std::vector<std::string>& specConfirmedStubNames() {
         // Cloud phase (2026-09-30): Sec14.23, tagged `gameplay` in
         // tools/lua_all_registered_1490_tagged.txt (line 1014).
         "zscene_is_loaded",
+        // Cloud phase batch 1 (2026-09-30), all `gameplay` in the tagged
+        // list (lines 295/505/776).
+        "set_mission_author",
+        "fade_out",
+        "mission_end_silently",
     };
     return names;
 }
@@ -811,6 +889,9 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("on_revived")) registerOne(L, state, log, stateTag, "on_revived", stub_on_revived);
     if (wants("game_get_coop_join_type")) registerOne(L, state, log, stateTag, "game_get_coop_join_type", stub_game_get_coop_join_type);
     if (wants("zscene_is_loaded")) registerOne(L, state, log, stateTag, "zscene_is_loaded", stub_zscene_is_loaded);
+    if (wants("set_mission_author")) registerOne(L, state, log, stateTag, "set_mission_author", stub_set_mission_author);
+    if (wants("fade_out")) registerOne(L, state, log, stateTag, "fade_out", stub_fade_out);
+    if (wants("mission_end_silently")) registerOne(L, state, log, stateTag, "mission_end_silently", stub_mission_end_silently);
 }
 
 } // namespace sr3luahost
