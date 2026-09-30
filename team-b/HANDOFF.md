@@ -178,6 +178,25 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
 
 **Bridge-results readiness (`b128350`):** `bridge_diff.py` exercised end to end on a real before/after pair of `lua_host_run` builds (`baecf76` vs HEAD) over a synthetic cache; it now shows first-error text, ignores `elapsed_seconds`, and rolls up `OPEN_STATE:` hits. Every queued job's outputs checked against the agent's 4 MB/file and 24 MB/job upload limits (`bridge-jobs/README.md`): `ctab_census` now shards its constants table (job 06 re-submitted as `…-epre`; ignore `nxrt`/`bujl`); `lua_host_run`'s hook-detail TSV (~34 MB) is skipped by design.
 
+### 2026-09-30, cloud stretch 5: spec syncs, lua_host_run integration test, no-palette refusal
+
+- Merged spec syncs: fxo/zone/geometry/save (`84e2ef6`), save/vertex/audio/foliage (`dc22cd1`).
+- Zone: "97 of 928" comments now cite the 1,002/1,002 tiling, 115 padded blocks (§10.8) (`c8711c6`).
+  Save: no player-authored strings anywhere in `team-b` (standing rule: none in code, tests, comments
+  or this file).
+- `lua_host_run_integration_py` ctest (`8e9509b`): synthetic 2-archive cache, _start ok / OPEN refusal /
+  Lua error / syntax error, and run-vs-run `bridge_diff.py` determinism.
+- Vertex §9 step 7b (retracted, now rig §11.15): the palette default already matched it. Audio 255/536
+  figures in comments and validator output. STATE vehicle row now uses our own 372/372, 9,536 parts
+  (`946c64a`). Vertex §6.6 HYPOTHESIS: `kTexcoordScale` labelled for vehicle codes 100/101 (`96be8ae`).
+- **Behaviour change (manager ruling):** `sr3_viewer pose`/`animpose` now REFUSE a mesh with no bone
+  palette declared (`kRefuseNoPalette`) instead of silently using the retracted direct-index +
+  (x,-y,-z) reading; `--legacy-skinning` still forces that reading, labelled debugging-only.
+  Golden impact: only `brad` skins, and its baseline records the palette path (56 entries), so no
+  golden baseline depends on the no-palette path; no job submitted, nothing re-frozen. No synthetic
+  test covers `resolveSkinningMode` (viewer is Windows-only); the extracted function was compiled and
+  run on Linux: no palette → refusal, `--legacy-skinning` → the labelled retracted reading.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
