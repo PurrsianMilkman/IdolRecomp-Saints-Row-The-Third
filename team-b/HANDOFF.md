@@ -17,8 +17,8 @@ The pause banner below is historical (see `TEAMS.md`). Newest entry first.
    `win32/zlib1.rc`/`zlib.map`, which the public export dropped, so configure failed on **every**
    platform, Windows included, from this repo); `user32` linked only on `WIN32`; `game_get_key_name`'s
    `GetKeyNameTextW` path behind `_WIN32` (off Windows it returns `""`, the existing failed-lookup
-   result); `fopen_s` only under `_MSC_VER` in 3 probe tools. **MSVC not re-verified** (no Windows in the
-   cloud) — queued as bridge jobs `01a/01b/01c`.
+   result); `fopen_s` only under `_MSC_VER` in 3 probe tools. **MSVC re-verified by bridge** (not in the
+   cloud): jobs `01a/01b/01c` (`ymee`/`jpsf`/`qqyx`, at `d0e6843`) — 42/42 suites pass under MSVC 17.14 (stretch 5b).
 2. **`zscene_is_loaded`** (§9.143 blocker, `spec-lua-api-behaviour.md` §14.23): CONFIRMED two-tier
    dispatch implemented in `sr3luahost` with opaque `EngineState` fields and test-only setters; the OPEN
    per-record branch is a labelled stub returning `false` and is counted (`lua_host_run` prints
@@ -196,6 +196,16 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   golden baseline depends on the no-palette path; no job submitted, nothing re-frozen. No synthetic
   test covers `resolveSkinningMode` (viewer is Windows-only); the extracted function was compiled and
   run on Linux: no palette → refusal, `--legacy-skinning` → the labelled retracted reading.
+
+### 2026-09-30, cloud stretch 5b: first real bridge results (PC agent live)
+
+- **01a/01b/01c OK** (`20260930T213035-team-b-ymee`, `…213037-team-b-jpsf`, `…213040-team-b-qqyx`, all at
+  `d0e6843`): MSVC 17.14 Release build of ALL_BUILD exit 0; 19 + 19 + 4 = **42/42 synthetic suites pass on
+  Windows**, every step exit 0. The portable (GCC/Linux) build change did not break MSVC. Only third-party
+  warnings (zlib C4244/C4127, lua51 C4334/C4324).
+- Still queued in PC order: `knyf` and `tdpr` (older mission runs, superseded by `grso`/`jklk` but will
+  run), `zlbw` (03 vintdoc), `hvcv` (04), `dzdq` (05), `grso`/`jklk` (02 before/after), `nxrt`/`bujl`
+  (superseded by `epre`), `epre` (06 CTAB census).
 
 ### Requests to Team A (relay via the manager)
 
