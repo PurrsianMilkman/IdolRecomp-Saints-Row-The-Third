@@ -54,7 +54,11 @@ uint32_t EngineState::findVdoObject(const std::string& name, bool hasParent, uin
         }
         return 0; // resolved parent, no matching child - real "not found" path
     }
-    uint32_t targetDoc = hasDoc ? docHandle : currentDefaultDocHandle_;
+    // The current default document is OPEN state; read it only when the
+    // answer depends on it. With no objects registered at all, "not found"
+    // holds for every document, so it is not read.
+    if (vdoObjects_.empty()) return 0;
+    uint32_t targetDoc = hasDoc ? docHandle : currentDefaultDocHandle_.get();
     for (const auto& [h, obj] : vdoObjects_) {
         if (obj.docHandle == targetDoc && obj.nameHash == targetHash) return h;
     }
