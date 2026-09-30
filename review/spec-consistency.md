@@ -74,7 +74,7 @@ every spec listed below differs from its team-b copy until the manager syncs it.
 | `124ff0a` | anim, render-pipeline, morph |
 | `a531f64` | rig, lua-bindings |
 | `a835e33` | save, tables-progression, tables-weapons-combat, world-streaming |
-| *(see below)* | lua-api-behaviour |
+| `428c840` | lua-api-behaviour (~250 edits: 49 refs, 47 stale OPEN, 127 superseded statements, 13 clean-room) |
 
 `spec-foliage-format.md` needed no change.
 
@@ -101,6 +101,8 @@ Both sides now carry an inline conflict marker pointing at each other. Nobody pi
 | save-format | `0x028DC4E0`: loop bound is the count or the capacity |
 | world-streaming | category `0x27` literal spelling (`…_cameras` vs `…_camera`) |
 | tables-environment | `bitmap_sheets` field at `+0x18` inside a `0x18`-stride record |
+| lua-api-behaviour §15.18 / §15.2 | default at `0x012a2d54` vs `0x01117a4c` |
+| lua-api-behaviour §9.21/§10.5 vs §15 onward | which of `0x0086f110`/`0x0086f1b0` is the single-target and which the broadcast commit: §15 onward says the opposite of §9.21/§10.5 at ~40 sites. One reading note added at §15.29 item 5; the sites are not individually edited |
 
 ### Needs the data (a re-count)
 

@@ -2012,6 +2012,32 @@ slider values); whether normals are renormalised after accumulation was not trac
 
 **STATE: PAUSED.** Peer `purrsian-44` relayed an explicit user PAUSE request (not a direct user turn in this session, but treated as safe/reversible and acted on per this project's own risk-asymmetry rule for relayed stop-work instructions). **Do NOT dispatch any new agents while this note says PAUSED.** Full pre-compaction text of this section as it stood before this pass is archived verbatim in §43 (sixteenth pass); §41/§42 hold the fourteenth/fifteenth-pass text. Read this section only to resume — the dated §7–§43 log below is for verifying a specific claim, not for re-deriving state.
 
+### 27.C Cloud phase — 2026-09-30 (read this first; the PAUSED state below is historical)
+
+The owner un-paused the project for cloud work (`TEAMS.md`). This session is **Team A** on branch `claude/crreish-team-a`; the manager merges it and syncs specs to `team-b/`. Only `team-a/` and `review/` are written from here.
+
+**Done this stretch**
+- **Clean-room fix:** `spec-lua-bindings.md` §17 contained a verbatim quote of shipped `cell_foreground.lua` source. It is now a name→value list (`43bd711`); the manager synced both copies. Public git history still has it, and that is the owner's call.
+- **Spec consistency review of all 46 specs:** `review/spec-consistency.md`. There were 9 reviewers and 7 fixers, and every diff was checked before commit (`7e27e89`, `df93b7b`, `1d0ae96`, `b012f9c`, `124ff0a`, `a531f64`, `a835e33`, `428c840`). About 900 verified edits in total, with old text struck or annotated in place. Every changed spec now ends with a `## Changelog` section; this is the convention from here on. The review's open lists hold about 17 conflicts that need the executable and about 14 that need a data re-count, plus structural items. Among the structural items: several `## 27.` sections in this file make "HANDOFF §27.x" citations ambiguous.
+- **Bridge tooling:**
+  - `team-a/ghidra/CrreishDump.java` (modes `lua`/`func`/`xref`/`str`) was reviewed and approved by the manager. Standing rule: new jobs that reuse the unchanged script need no approval; a new or changed script needs the manager's review first.
+  - Bus: `python3 bridge/bridge_client.py setup --url https://github.com/PurrsianMilkman/Project-Crreish-bus --team team-a` (checkout at `/root/crreish-bus`).
+- **Jobs submitted, all queued, waiting for the owner's PC agent (it had never reported in as of 21:34Z):**
+  - `20260930T212655-team-a-jzak` `mission-blockers.json`: `fade_is_fully_faded_out`/`_in`, `zscene_is_loaded`/`_prep`, `vint_is_std_res`, `fade_out`/`fade_in`, `sfx_faded_out`, `vint_get_safe_frame`; fade/zscene helper functions; uses of every fade/zscene global.
+  - `20260930T212747-team-a-kzih` `ranking-tranche-2.json`: the 17 unspecced names from Team B's ranking.
+  - `20260930T212750-team-a-qrwj` `review-conflicts.json`: 6 addresses in conflict.
+  - `20260930T213347-team-a-vmgr` `teamb-requests-1.json`: `sfx_faded_in`; `.vint_doc` reader via its extension strings and the magic `0x00003027`.
+
+**Blocked:** every executable question waits on the PC agent. Check with `python3 bridge/bridge_client.py status`, then `list` / `show <id>`.
+
+**Next, in Team B's priority order (their requests are under "Requests to Team A" at the top of `team-b/HANDOFF.md` on the integration branch):**
+1. Screen-fade state machine: `fade_is_fully_faded_*`, the phase values, what completes a fade, whether it is the same test as `sfx_faded_out`, `sfx_faded_in`.
+2. zscene lifecycle, and the §14.23 sense inversion.
+3. `vint_is_std_res`.
+4. `.vint_doc` walk gaps: where the critical-resource section starts, the override-offset base, property-record byte order.
+
+After that, the ranking tranche-2 names, then the review's executable conflicts. All findings go into specs in plain English. Raw Ghidra output stays in the bus.
+
 ### 27.0 What happened this pass, in order
 
 1. Peer relayed: user asks both teams to PAUSE. Stop dispatching new agents; for in-flight agents (Lua 551-650 Parts A/B, the `.vint_doc` review), land-and-transcribe if close, else `TaskStop` and record exact state. Bring HANDOFF fully up to date including exact re-dispatch briefs/name lists. Confirm every finished spec edit is saved+swept. Then reply "paused" with a one-line list of what was stopped. User plans to sync specs and update the GitHub repo, then continue on Anthropic's servers.
