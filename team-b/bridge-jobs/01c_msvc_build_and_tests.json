@@ -1,0 +1,45 @@
+{
+  "title": "team-b: MSVC build + synthetic suites, part 3/3 (4 suites; checks the portable-build change did not break Windows)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "sr3clmesh_tests",
+        "sr3tree_tests",
+        "sr3lua_tests",
+        "sr3luahost_tests"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "sr3clmesh_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tree_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3lua_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3luahost_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}
