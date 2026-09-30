@@ -537,10 +537,20 @@ int main() {
             // 0x1E is the real DirectInput scan code for 'A'
             // (spec-tables-ui-controls.md Sec4.3) - a real, ordinary key,
             // not the sentinel.
+            // Non-empty only where the real OS lookup exists (Windows); the
+            // portable build has no key-name source and returns "" - the
+            // CONFIRMED "1 Lua string" return contract holds on both.
+#ifdef _WIN32
             auto r2 = host.runChunk(ui,
                 "local n = game_get_key_name(0x1E)\n"
                 "assert(type(n) == 'string' and #n > 0)",
                 "keyname2.lua");
+#else
+            auto r2 = host.runChunk(ui,
+                "local n = game_get_key_name(0x1E)\n"
+                "assert(type(n) == 'string')",
+                "keyname2.lua");
+#endif
             CHECK(r2.loadOk && r2.pcallOk);
         }
 

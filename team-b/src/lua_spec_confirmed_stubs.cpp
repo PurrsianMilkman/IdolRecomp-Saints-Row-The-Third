@@ -9,7 +9,12 @@
 // engineered content. Same real-header convention src/window.cpp already
 // uses elsewhere in this project (plain #include <windows.h>, no
 // WIN32_LEAN_AND_MEAN/NOMINMAX games - this project has not needed them).
+// Non-Windows builds (the portable Linux/CI build, cloud phase 2026-09-30)
+// have no OS key-name source; game_get_key_name then takes its existing
+// "no real name resolved" path and returns "".
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 namespace sr3luahost {
 
@@ -111,6 +116,7 @@ int stub_game_get_key_name(lua_State* L) {
     // per spec: "a visible mismatch between the three arguments the call
     // site passes and the callee's own recovered signature ... not pinned
     // down with full confidence").
+#ifdef _WIN32
     LONG lParam = (static_cast<LONG>(code) & 0xFF) << 16;
     wchar_t buf[64] = {};
     int len = GetKeyNameTextW(lParam, buf, 64);
@@ -126,6 +132,10 @@ int stub_game_get_key_name(lua_State* L) {
     }
     lua_pushlstring(L, utf8.data(), utf8.size());
     return 1;
+#else
+    lua_pushstring(L, ""); // no OS key-name source off Windows - same honest empty result as a failed lookup
+    return 1;
+#endif
 }
 
 // ---------------------------------------------------------------------

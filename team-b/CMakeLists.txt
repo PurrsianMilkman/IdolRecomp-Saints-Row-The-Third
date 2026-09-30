@@ -10,8 +10,33 @@ endif()
 
 # Vendored zlib (spec Sec3: standard RFC 1950 zlib-wrapped DEFLATE) - used
 # as an off-the-shelf, unmodified library per task scope, not reimplemented.
-set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/zlib)
+#
+# Built here as a static library straight from the vendored sources rather
+# than via add_subdirectory(third_party/zlib): upstream's CMakeLists also
+# defines the shared `zlib` DLL target, whose win32/zlib1.rc and zlib.map
+# inputs are not in the published repo, so configure failed on every
+# platform (cloud phase, 2026-09-30). Only `zlibstatic` was ever linked.
+# zconf.h is generated into the same binary dir as before, so the existing
+# include paths below are unchanged.
+enable_language(C)
+include(CheckIncludeFile)
+check_include_file(unistd.h Z_HAVE_UNISTD_H)
+set(ZLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+configure_file(${ZLIB_DIR}/zconf.h.cmakein
+    ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib/zconf.h @ONLY)
+add_library(zlibstatic STATIC
+    ${ZLIB_DIR}/adler32.c  ${ZLIB_DIR}/compress.c ${ZLIB_DIR}/crc32.c
+    ${ZLIB_DIR}/deflate.c  ${ZLIB_DIR}/gzclose.c  ${ZLIB_DIR}/gzlib.c
+    ${ZLIB_DIR}/gzread.c   ${ZLIB_DIR}/gzwrite.c  ${ZLIB_DIR}/inflate.c
+    ${ZLIB_DIR}/infback.c  ${ZLIB_DIR}/inftrees.c ${ZLIB_DIR}/inffast.c
+    ${ZLIB_DIR}/trees.c    ${ZLIB_DIR}/uncompr.c  ${ZLIB_DIR}/zutil.c
+)
+target_include_directories(zlibstatic PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib ${ZLIB_DIR})
+if(MSVC)
+    target_compile_definitions(zlibstatic PRIVATE
+        _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+endif()
 
 # Vendored, real, unmodified Lua 5.1.5 (lua.org's own official release -
 # see third_party/lua51/CMakeLists.txt's own top comment for provenance and
@@ -818,7 +843,10 @@ add_library(sr3luahost STATIC
     src/lua_spec_confirmed_stubs.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
-target_link_libraries(sr3luahost PUBLIC lua51 user32)
+target_link_libraries(sr3luahost PUBLIC lua51)
+if(WIN32)
+    target_link_libraries(sr3luahost PUBLIC user32)
+endif()
 
 add_executable(sr3luahost_tests tests/synthetic_luahost_test.cpp)
 target_link_libraries(sr3luahost_tests PRIVATE sr3luahost)
