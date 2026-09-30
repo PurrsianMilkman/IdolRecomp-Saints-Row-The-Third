@@ -174,6 +174,8 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
 
 **Spec sync `982e688` (5 format specs):** vint-doc answers walk question (a) as HIGH CONFIDENCE (`+0x16` = absolute section offset), (b)/(c) HYPOTHESIS — `vint_doc.h` notes updated, full walk stays behind the validator's labelled grid (job 03 settles it). Effects: `sr3effects` already did not enforce `root+0x38 == size-root` (its own 1,468/1,812 measurement caused the downgrade; one stale "CONFIRMED" comment fixed) and never used the refuted abstract-base-class idea. Render pipeline: the 7 sites filling `projTM` (c28) / `world2view` (c48) — `sr3_viewer` vehicle path and 6 prototypes — are labelled HYPOTHESIS-based, STATE row added; `ctab_census`'s summary now lists which names sit at VS c28/c48 across every shader (job 06).
 
+**Fuzz coverage (`7891af0`):** the four lowest-coverage harnesses now drive the decode paths, not just `parse()` — coverage fxo 37→259, anim 53→118, texture 131→241, geometry 109→148 edges; a 5-minute run each with value profiling found 0 issues.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
