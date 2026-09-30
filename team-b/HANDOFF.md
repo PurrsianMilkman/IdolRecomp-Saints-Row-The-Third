@@ -237,6 +237,17 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   first call with the OPEN-state refusal naming `0x00723d20` (Sec14.23), as designed (`zscene_is_loaded` 714,285
   → 1, `thread_yield` −714,285). Still 9/49 past `_start`; the fade busy-polls still loop at this commit (their
   OPEN conversion is in `jklk`). Summaries otherwise unchanged.
+- **02 after `20260930T225845-team-b-jklk`** (at `a403a75`): **FAILED**, exit `0xC0000374` (Windows
+  STATUS_HEAP_CORRUPTION) in `lua_host_run`'s 804-script loop, ~170 s in; only the state-tag TSV came back.
+  Most likely cause (not reproducible on Linux): `a403a75` wrapped every spec stub in `openGuard`, a
+  try/catch frame holding a `std::string`, and 3 stubs raised Lua errors (`longjmp`) from inside it
+  (`zscene_is_loaded`, `sfx_faded_out` via `lua_error`; `fade_out` via `lua_gettable`). MSVC's `longjmp`
+  unwinds C++ frames using EH tables built under `/EHsc` on the assumption that `extern "C"` never throws,
+  so it can destroy a live string twice. glibc's `longjmp` does not unwind: Linux ASan stayed clean even
+  on a stress cache calling every stub ×13 argument shapes. **Fixed in `88cbe87`** (no Lua error may cross a
+  C++ frame: refusals thrown as C++ exceptions, `fade_out`'s indexing under its own `lua_pcall`, `lua_error`
+  only from a frame with no C++ state). Re-run submitted as job 02c `20260930T235551-team-b-tkjl`; the
+  grso→after diff waits on it.
 - **03 `20260930T213047-team-b-zlbw`** (vintdoc sweep): header CONFIRMED checks reproduce spec §2 exactly;
   §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
   the raw u32 at `0x1E` recorded per file.
