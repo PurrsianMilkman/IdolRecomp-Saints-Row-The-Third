@@ -1,7 +1,7 @@
 # Saints Row: The Third — Weapons and Combat Data Tables: XML Schemas Recovered from the Loaders
 
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process), agent AH
-**Phase:** Schema-from-loader campaign (`HANDOFF.md` §27.2) — group "weapons and combat"
+**Phase:** Schema-from-loader campaign (`HANDOFF.md` §30, archived §27.2) — group "weapons and combat"
 **Scope:** For each `.xtbl` gameplay table of the weapons/combat group whose literal filename appears in the executable: the loader, the element tree its reader accepts, each element's type and destination offset in the runtime record, defaults and required-vs-optional behaviour, unit conversions, name-hash keys, cross-table references and fixed capacities. Base-game *values* are out of scope (the compressed base-game containers are not read here — see §1.1). *[Superseded 2026-09-23: the base tables have since been read and validated, §18.]*
 **Method:** Exact filename literals were located by a raw scan of the executable and followed by string cross-reference in Ghidra 12.1.3 (project copy `tools/gp_tbl1`) to each table's loader; the per-row reader and its callees were decompiled and read to the end; the shared XML accessor helpers were read once and are documented in §1. The three raw-stored DLC archives (`dlc1/2/3.vpp_pc`, 142 `.xtbl` files) supplied real rows to validate against (§16). No whole-binary predicate search was used; negative claims ("the reader never reads element X") rest on a complete read of the reader body and its callees plus a case-insensitive whole-image literal scan (harness `tools/harnesses/tbl_exe_lit.py`).
 **Cleanroom compliance:** No decompiled code is reproduced and no original internal identifiers are used. XML table/element names, enum literals and flag literals are *data* and are listed; offsets, sizes, strides, constants and function addresses are evidence anchors. Function addresses use the form `FUN_00XXXXXX` for the image address only.
@@ -936,7 +936,7 @@ Status at checkpoint (2026-09-20): **all 22 assigned tables have a loader-derive
 
 ## 18. Validation against real base-game tables (2026-09-23)
 
-**Prepared by:** SPEC TEAM, follow-up validation pass, 2026-09-23 (`HANDOFF.md` §27.2 queue item 0). This section validates §1–§17 (written from loader disassembly + 9 DLC rows, §16) against the now-readable real base-game tables, per `spec-vpp-container.md` §7/§8 and `spec-xtbl-format.md` §7.
+**Prepared by:** SPEC TEAM, follow-up validation pass, 2026-09-23 (`HANDOFF.md` §31, archived §27.2 queue item 0). This section validates §1–§17 (written from loader disassembly + 9 DLC rows, §16) against the now-readable real base-game tables, per `spec-vpp-container.md` §7/§8 and `spec-xtbl-format.md` §7.
 
 ### 18.1 Method and sources
 
@@ -1056,3 +1056,4 @@ Each dead-element claim below is an exhaustive case-insensitive whole-executable
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the "base tables unreadable" and "no empirical cross-check" statements superseded by §18 (header, §1.1, §3, §4.3, §5); noted §18.5 availability for the `OM_REMOVAL` question (§4.2, §17 item 3e); aligned §1.6 weapons-array "count" with §2.1 capacity; added a conflict marker for the `items_inventory` live-bit offset (§1.6, vs `spec-save-format.md` §10.3); fixed tag counts in §18.3 (9 listed / 8 occurring) and §18.6 (5 genuinely unread of 8).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 2 `HANDOFF.md` §27.x references to the archived headings (§27.2 → §30 header, §27.2 queue item 0 → §31, §18); 0 left (see review).

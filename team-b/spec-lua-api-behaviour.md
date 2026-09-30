@@ -2830,7 +2830,7 @@ tranche). The peer team's own per-function call/script counts were not available
 underlying TSV cited for §1-§4's own headers is a peer-team artifact not present in this project's
 own `tools/` tree) — headers below therefore cite only the resolved name and address, not a call
 count, per this project's own standing practice of deferring rather than inventing a figure
-(`HANDOFF.md` §27.8). `audio_stop` was checked against §1-§4 first, per the task's own note, and is
+(`HANDOFF.md` §36, archived §27.8). `audio_stop` was checked against §1-§4 first, per the task's own note, and is
 **not** already documented there (§2's cluster covers `audio_object_post_event`/
 `audio_play_persona_line`/`audio_conversation_play`/`game_UI_audio_play`, a disjoint set) — it is
 decompiled below (§8.9).
@@ -3618,7 +3618,7 @@ behavioural oracle would settle several of this cluster's remaining OPEN items f
 flagged for the same underlying dispatch family), the real axis-index-1/4+ behaviour of
 `game_get_key_name_for_action`, and `game_peg_load_with_cb`'s own completion-callback dispatch path.
 This is a recommendation only; building or running such an oracle is out of scope for this task (per
-`HANDOFF.md` §27.3 item 3, emulator use is authorized for isolated computational functions, not for
+`HANDOFF.md` §41.27.3 item 3, first recorded in §38.27.3, emulator use is authorized for isolated computational functions, not for
 functions whose behaviour bottoms out in live per-object/per-frame state the way most of this OPEN list
 does).
 
@@ -10218,3 +10218,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 49 cross-references (e.g. §1.9→§1.7 in the §1 resolver lists, §33→§7.33, §14.3–11.5→§14.3–§14.5, §16.8→§16.11, §8.31/§16.30 in §22.3, placeholder "item N"/"D.N" refs in §11/§20, §23.7→§23.1); marked 47 stale OPEN/"unidentified"/"not traced" items resolved in place with pointers (extractor pair §4.1, `0x006434a0` §9.21/§14.6, `0x00a017c0` §15.10, 0x00e0xxxx family §26.23, `0x00d9e8b0` CRC-32, §2.9/§6.1/§12.20/§15.27/§16.7/§18.9 and others); annotated 127 stale or contradicted statements (spurious "new/first/not previously catalogued" claims for opcodes, bits, resolvers, primitives and hook bases; opcode-list errors such as `door_lock` in `0x43` and `inv_weapon_add_temporary` in `0x46`; commit-sibling inversion in §15.29; `"null"`→empty string at `0x0129a0e3`; `0x00d9e140`/`0x00d9e8b0` role misdescriptions; count slips) using strike-through plus pointer; reworded 13 clean-room problems (one `thunk_` Ghidra label, code-shaped expressions, a decompiler signature with an auto-type, inline raw x86 instructions); added 13 review markers for items needing a binary re-read (rounding semantics of `0x00ea2596` flagged OPEN in §4.1 with 3 pointers, the `0x00a525a0` address conflict at §20.14/§27.2, the `0x00a7a830` bit conflict at §3.7/§20.1/§21.30, setter-address-as-global OPEN notes at §18.2/§18.15), plus an in-spec §5.2 bullet for the §4.7/§4.8 header-address correction and one reworded draft self-correction in §20.29.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).

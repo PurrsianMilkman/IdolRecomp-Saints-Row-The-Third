@@ -405,7 +405,7 @@ expected to"; that story cannot also cover a midline/limb confusion. **[OPEN —
 published reading is right in the large and wrong on a minority of slots; neither the
 `+0x38` array nor any byte alignment of it is the correction.]**~~
 
-**This residual is very likely the visible symptom of the exact bug retracted above, though not yet re-measured to confirm it directly (§11.15's open item).** A midline cluster resolving to `r-toe0`, and 10 of 78 lateral slots disagreeing under a mapping now known to compound two errors (direct indexing *and* the wrong sign), is exactly the shape a real palette+sign bug would leave as residue in a test that happened to score well overall by accident. **Credit due to this section's own discipline**: rather than force an explanation onto this residual once the array reading looked refuted, it was left open — precisely the practice `HANDOFF.md` §27.8 asks for, applied here before §27.8 existed as a named rule.
+**This residual is very likely the visible symptom of the exact bug retracted above, though not yet re-measured to confirm it directly (§11.15's open item).** A midline cluster resolving to `r-toe0`, and 10 of 78 lateral slots disagreeing under a mapping now known to compound two errors (direct indexing *and* the wrong sign), is exactly the shape a real palette+sign bug would leave as residue in a test that happened to score well overall by accident. **Credit due to this section's own discipline**: rather than force an explanation onto this residual once the array reading looked refuted, it was left open — precisely the practice `HANDOFF.md` §36 ([archived] 27.8) asks for, applied here before that rule existed as a named rule.
 
 ### 11.5 What the shipped weights actually contain: ~~cross-limb influences, in quantity~~ — RESOLVED under the corrected decode 2026-09-13, and the answer is **none** (§11.5.1)
 
@@ -1724,7 +1724,7 @@ standing practice for per-agent `gp_*` copies.
 
 **This section supersedes §8.1's transform claim and §11.4's central verdict.** Both are retracted in place above (struck through, not deleted) rather than rewritten silently. This section records why, and what has and hasn't been independently checked on this side.
 
-**The retraction, credited to Team B's own file-side work (their HANDOFF §9.63) and their Fable-tier engineering attempt at fixing the `.anim_pc` seam-fragmentation artefact §11.6 described (`HANDOFF.md` §27.8's own worked example, now itself superseded — see the note at the end of this section).** Two errors were compounding, not one:
+**The retraction, credited to Team B's own file-side work (their HANDOFF §9.63) and their Fable-tier engineering attempt at fixing the `.anim_pc` seam-fragmentation artefact §11.6 described (`HANDOFF.md` §36 ([archived] 27.8)'s own worked example, now itself superseded — see the note at the end of this section).** Two errors were compounding, not one:
 
 1. **Blend indices are not rig-bone indices directly — they index a per-mesh bone-palette table.** The table lives at Mesh header `+0x38` (count) / the array immediately following the channel records (data) — the exact array §11.4 already located and correctly characterized as "the ascending list of rig bones this mesh may be skinned to." §11.4's own positive identification of this array was right; only its conclusion about what addresses it was wrong. **Confirmed, this session, character meshes specifically** — not tested against the other five carriers sharing this Mesh sub-block (vehicles, `.clmesh_pc`, trees, zones, foliage); Team B independently found and closed a real latent bug in their own reader on exactly this scoping question (their `bonePalette()` API read this slot unconditionally for any g-backed mesh, not gated by a skinning-layout flag — fixed, verified against 372/372 vehicles and their 237-mesh character population, unaffected either way since nothing currently calls it on non-character carriers).
 2. **The rig→mesh transform for skinning is `mesh = (−rig.x, −rig.y, −rig.z)`, not `(+rig.x, −rig.y, −rig.z)` (§8.1).** A full point inversion (`diag(−1,−1,−1)`, determinant −1), not a rotation. Confirmed against the shipped `bone_palette.cpp`/`meshSpaceInversionMatrix()` mechanism (Team B, reading the actual constants, not a doc comment). Which hand the *game* calls "left"/"right" is a separate naming question, unaffected by this correction, since `−I` commutes with any rotation.
@@ -1752,7 +1752,7 @@ standing practice for per-agent `gp_*` copies.
 - **§11.6's rows 1–2 and 5 stand** (dual-quaternion and CPU-pass refutations rest on §11.1–§11.2 unaffected by this; the "never posed this way" row measures clip joint rotation, not blend-index mapping). **Rows 3–4 and the "assets contain the conditions for it" conjunction are suspect**, pending §11.5's re-measurement — one relay categorized row 3 as resting on §11.1–§11.3 and standing, which looks inconsistent with that row's own cited figure (a cross-limb classification) and has not been independently confirmed; treated as suspect here rather than accepted on that basis alone. **→ DONE §11.5.1; §11.6 rows 3–4 updated in place there.**
 - ~~§11.7–§11.14 are flagged pending review~~ **DONE 2026-09-13 — see §11.7's own per-item verdict table (added same day) and §11.16.** Team B read all of it in full (not from titles) and gave a precise per-item verdict: items 1/2 and all of §11.8 (minus item 4, already superseded)/§11.9/§11.12–§11.14 stand independent of the blend-index/sign question; item 3 flips OPEN→RESOLVED (now further corroborated at the instruction level, §11.16); item 4/§11.10/§11.11 needed real re-examination, done in §11.17 (13/13 resolve); item 5 is moot.
 
-**Note on `HANDOFF.md` §27.8's own worked example.** That section (this project's "defer rather than invent" policy) used the anim-seam-fragmentation question — "confirmed real, confirmed unreachable past the shader boundary" — as its concrete illustration of a case where confirmed facts run out and no mechanism should be invented. That illustration is now itself retracted: the facts didn't run out, one of them was wrong. The policy stands; the example needs replacing, and this episode (a summary that needed the full source text twice before acting, an independent same-day rerun before trusting either side's numbers) is arguably a better one. See `HANDOFF.md` §27.8 for the update.
+**Note on `HANDOFF.md` §36 ([archived] 27.8)'s own worked example.** That section (this project's "defer rather than invent" policy) used the anim-seam-fragmentation question — "confirmed real, confirmed unreachable past the shader boundary" — as its concrete illustration of a case where confirmed facts run out and no mechanism should be invented. That illustration is now itself retracted: the facts didn't run out, one of them was wrong. The policy stands; the example needs replacing, and this episode (a summary that needed the full source text twice before acting, an independent same-day rerun before trusting either side's numbers) is arguably a better one. See `HANDOFF.md` §36 ([archived] 27.8) for the update.
 
 **What is NOT yet settled, stated plainly rather than guessed:**
 - ~~§11.5's actual re-measured figures under the corrected decode.~~ **DONE 2026-09-13 — §11.5.1.** Re-measured with the palette lookup and nothing else changed: **0 / 11,343** cross-limb vertices on §11.5's own two meshes and **0 / 34,442** over six, against a reversed-palette control at 0.2907 and a shuffled-palette control at 0.3047, with the original 1,683 / 11,343 reproduced digit-for-digit first and the zero liveness-checked (identical lane, vertex and bone-pair counts across all four readings; 0 unclassifiable pairs versus 6,451 under the retracted reading). The phenomenon is **absent, not diminished** — file-side corroboration of the render comparison above, by an instrument that reads no coordinates at all. This also closes §11.6 rows 3–4 and the "assets contain the conditions for it" conjunction (updated in place there).
@@ -2064,7 +2064,7 @@ full; the `0x410` stride and the three table origins agree exactly.]**
 > `RigSrc10.java` … `RigSrc14.java` in `tools/scripts/`; one `createFunction` call (on
 > previously-uncarved code at `0x007542a0`, this independent copy only) — otherwise read-only.**
 >
-> **Predicate, stated before tracing (per `HANDOFF.md` §5/§27.8).** A positive finding is either
+> **Predicate, stated before tracing (per `HANDOFF.md` §5/§36 ([archived] 27.8)).** A positive finding is either
 > (a) confirmation that a given supplier's `values[]` is the identity permutation
 > (`values[i] == i`) over its own declared count, established either from real file content or
 > from the fill code itself, or (b) confirmation that it is a genuine, *different* permutation —
@@ -2267,7 +2267,7 @@ into the headline.
 > here.** Fresh, independent Ghidra project copy `tools/gp_rig9`; new scripts `RegXref1.java`,
 > `RegXref2.java` in `tools/scripts/`; read-only, no `createFunction`, no edits.
 >
-> **Predicate, stated before searching (per `HANDOFF.md` §5/§27.8).** A positive finding is either
+> **Predicate, stated before searching (per `HANDOFF.md` §5/§36 ([archived] 27.8)).** A positive finding is either
 > (a) confirmation that `FUN_00700780` itself reads `0x01152d58`, or (b) confirmation that a
 > different, identifiable function reads it — characterized: what subsystem, how large, what else
 > is nearby worth cataloguing. A negative is a documented, bounded search finding no traceable
@@ -2385,7 +2385,7 @@ named and stopped at deliberately, not reopened here.
 > trace reached the identical verdict on every checkable point, which is itself worth stating
 > plainly rather than silently folding in, and (b) adds one fact §11.18 did not have.
 >
-> **Predicate, stated before tracing (per `HANDOFF.md` §27.8), unchanged from §11.18's own:** a
+> **Predicate, stated before tracing (per `HANDOFF.md` §36 ([archived] 27.8)), unchanged from §11.18's own:** a
 > positive finding is confirmation that a supplier's `values[]` is the identity permutation, or
 > confirmation that it is a genuine different permutation; a negative is a documented, bounded
 > trace reaching a genuine boundary. **Result: (a) for both, independently reproduced — see
@@ -2433,7 +2433,7 @@ every one of the following, matching §11.18 exactly:
 **Two fully independent passes, on two fully independent Ghidra copies, arriving at the
 identical mechanism and the identical identity-permutation verdict for both suppliers, is
 stronger corroboration than either pass alone** — the kind of redundant-but-cheap
-cross-check `HANDOFF.md` §27.8's own worked example recommends when a finding matters.
+cross-check `HANDOFF.md` §36 ([archived] 27.8)'s own worked example recommends when a finding matters.
 
 #### 11.19.2 The one new fact: `FUN_008cb170`'s class is `object_rig`, by RTTI — and a caveat on reading its vtable neighbor as customization-specific
 
@@ -2482,7 +2482,7 @@ mechanism behind attaching a held prop/weapon (with its own small bone set, henc
 mapping — no remapping needed when the sub-object's own slot space already IS the space it
 binds into) and kicking off its idle/held animation, though the exact semantic identity (prop?
 weapon? IK target?) is not pinned by any string or registration row and is left open rather
-than guessed, per `HANDOFF.md` §27.8.
+than guessed, per `HANDOFF.md` §36 ([archived] 27.8).
 
 #### 11.19.3 Net effect
 
@@ -2621,3 +2621,4 @@ Every negative above is a statement about a **predicate over a scope**, listed s
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked stale quaternion/rotation text superseded (Scope, §4, §9 item 4, §10 item 1 → §4.1/§13.4), struck §11.8 item 4 as retracted (§11.15), inverted-lesson note on §11.9 note 6 and the §11.7 verdict table; marked stale OPEN items resolved in place (§10 item 7, §11.7 verdict row, §11.12/§11.12.3/§11.13/§11.13.3/§11.14.4 item 3(b) → §11.15/§11.16, three §11.15 bullets → §11.5.1/§11.16.1); annotated §11.18.2/§11.18.3/§11.18.4 with the §11.18.5/§11.19.2 refinements, §11.8 item 3's retracted figures, the 260 head-rig count (§3.1), the 14→17 user count (§12), the function-count slip (2,900 vs ~41,785) and the later tracing of inventory row 9; fixed cross-references (§11.9.1 removed, `HANDOFF.md` §11.16.5 → this document's §11.16.5, §2 → §3.1, bare §5/§27.8 → `HANDOFF.md`); reworded decompiler-shaped text (§11.18.1 code block, `param_N` identifiers throughout §11.12–§11.19, `sVar1`, a C `for` loop, pointer-cast expressions).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec or in the cited sibling spec); repointed 10 `HANDOFF.md` §27.8 references (§11.4, §11.15, §11.18, §11.18.5, §11.19, §11.19.1, §11.19.2) to the archived heading `HANDOFF.md` §36 ([archived] 27.8); 0 left (see review).

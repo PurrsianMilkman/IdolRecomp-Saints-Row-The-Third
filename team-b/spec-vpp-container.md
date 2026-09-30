@@ -259,7 +259,7 @@ None of these gaps block using this document to *identify and locate* content in
 
 ## 7. Mode-(a) non-first entries — RESOLVED: the physical-offset rule (2026-09-20)
 
-**Added 2026-09-20.** The long-standing "only entry 0 of a mode-(a) container decodes" limitation (§3.2, §3.5–§3.8, §6 item 1, `HANDOFF.md` §27.3) is **resolved**. It was never a compression puzzle: every earlier pass read non-first entries at the directory's `+0x08`, which is a *logical* offset, not the physical position of the stream.
+**Added 2026-09-20.** The long-standing "only entry 0 of a mode-(a) container decodes" limitation (§3.2, §3.5–§3.8, §6 item 1, `HANDOFF.md` §36, archived §27.3 item 1) is **resolved**. It was never a compression puzzle: every earlier pass read non-first entries at the directory's `+0x08`, which is a *logical* offset, not the physical position of the stream.
 
 ### 7.1 The rule
 
@@ -310,3 +310,4 @@ Team B fixed and re-verified their `vpp::Container` (their `HANDOFF.md` §9.78) 
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 6 unmarked pre-§7 statements superseded/retracted in place with pointers to §7 (§2 `+0x04`/`+0x0C`/`+0x10` rows, §3.3 "`+0x08` remains the only field", §4 zlib-sniffing advice, §5.1 padding rule qualified), marked §6 item 1 body and the §6 closing paragraph as historical, and flagged `spec-output.md` as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 1 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

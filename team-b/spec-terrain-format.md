@@ -75,3 +75,4 @@ None of these gaps prevent locating and extracting a tile's terrain-related file
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 3 cross-references into `spec-zone-data-format.md` (§6→§1 twice, §6.4→§9.4); marked §2's `SR3Z` trailer HYPOTHESIS resolved (`spec-ctorless-types.md` §5); named `team-b/HANDOFF.md` for the §9.130 citation.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

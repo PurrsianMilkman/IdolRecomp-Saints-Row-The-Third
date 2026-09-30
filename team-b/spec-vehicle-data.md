@@ -297,3 +297,4 @@ Ghidra post-scripts: `tools/scripts/AfDec.java`, `AfDecRange.java`, `AfRangeRefs
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): added a resolved banner to §2 and marked §3/§6 item 1's "blocked" statements resolved (§7.9, §7.11); marked the "no shipped Airplane/Watercraft sample" statements (§5, §6 item 4, §7 headline, §7.5) superseded by §7.11; struck §6 item 5 (`.cvtf_pc`, resolved by `spec-geometry-format.md` §5); fixed the DLC vehicle count (6–7 → 7/8/2) and the integer-value count (46 → 80); struck §7.7's "largest value 100" row result (§7.11); flagged the `spec-output.md` citation as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

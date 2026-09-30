@@ -115,3 +115,4 @@ The record's name field is assembled by the compiler as a series of partial byte
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked row 17's "no file of this type ships" and §6 item 2 superseded by `spec-asm-format.md` §9.3 (109,219 type-17 `.cvbm_pc` entries); marked stale "open" notes resolved in rows 7 (morph §13), 21 (anim §6c), 23 (asm §9.3, partial), 29 (zone-data status) and §6 item 6; corrected the no-op-destructor count in item 4a (nine → eleven); fixed "§4 below" → "above"; flagged the `spec-output.md` citation as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

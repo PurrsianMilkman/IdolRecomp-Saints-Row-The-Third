@@ -1,7 +1,7 @@
 # Saints Row: The Third — Vehicle Interaction, World Objects and Items Data Tables: XML Schemas Recovered from the Loaders
 
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process), agent AS
-**Phase:** Schema-from-loader campaign (`HANDOFF.md` §27.2) — group "vehicle interaction, world objects and items"
+**Phase:** Schema-from-loader campaign (`HANDOFF.md` §31, archived §27.2) — group "vehicle interaction, world objects and items"
 **Scope:** For each `.xtbl` gameplay table of this group whose literal filename appears in the executable: the loader, the element tree its reader accepts, each element's type and destination offset in the runtime record, defaults and required-vs-optional behaviour, unit conversions, name-hash keys, cross-table references and fixed capacities, then validation against the real base-game rows (now readable, `spec-vpp-container.md` §7). Base-game *values* are not out of scope here — they were extracted and used throughout (§22).
 **Method:** Exact filename literals were located by a raw scan of the executable (`tools/harnesses/tbl_exe_lit.py`) and followed by string cross-reference in Ghidra 12.1.3 (project copy `tools/gp_as1`) to each table's loader; the per-row reader and its callees were decompiled and read to the end. The shared XML accessor helpers, name-hash convention and loader idioms were established once by agent AH (`spec-tables-weapons-combat.md` §1) and are reused/cited here, not re-derived. Real base rows for all 24 tables were extracted from `misc_tables.vpp_pc` with `tools/harnesses/vpp_modea.py` (the mode-a offset fix, `spec-vpp-container.md` §7) and validated against the schemas below (§22). No whole-binary predicate search was used.
 **Cleanroom compliance:** No decompiled code is reproduced and no original internal identifiers are used. XML table/element names, enum literals and flag literals are *data* and are listed; offsets, sizes, strides, constants and function addresses are evidence anchors. Function addresses use the form `FUN_00XXXXXX` for the image address only.
@@ -40,7 +40,7 @@ Base rows for all 24 tables were pulled from `misc_tables.vpp_pc` (1,342 entries
 sys.path.insert(0, r'D:\Project Crreish\TEAM A\tools\harnesses')
 import mmap, os
 import scan_meshes as sm, vehgeo_bulk as vb, vpp_modea as vm
-# open_archive()/get_table() as in spec-vehicle-data.md §7 / HANDOFF §27.2
+# open_archive()/get_table() as in spec-vehicle-data.md §7 / HANDOFF §31 (archived §27.2); extraction rule: spec-vpp-container.md §7, tolerant XML parse: spec-xtbl-format.md §7
 ```
 
 Harness: `tools/harnesses/as_extract.py` (all 24/24 found, byte-length checks all pass — `tools/as_base_xtbl/`). All 24 raw files parsed cleanly with `xml.etree.ElementTree` (none of them is one of the four known-quirky base files from `spec-xtbl-format.md` §7 — mismatched tag, control character `0x1F`, space in an element name — those are in unrelated tables). Validation harness: `tools/harnesses/as_validate.py`; results folded into each table's section and summarised in §22.
@@ -659,7 +659,7 @@ No predicate failed. No table's schema was contradicted by real data; three corr
 7. Several small semantic HYPOTHESES left unresolved for lack of a consumer-side trace: the `Capsule_Shape` indirection table's real meaning (§3.2), the airplane takeoff/landing curve's derived "slope" value's downstream use (§19.1), and `FUN_00A74910`'s exact generic role (string intern vs. material-specific — used identically in §9.1, §15.1 and elsewhere in this project).
 8. `vehicle_animation_modifiers.xtbl` and `externalized_vehicle_components.xtbl` were extracted and byte-length-verified against real base data but not run through the same per-field validation harness as the rest of §22 — a light, explicitly-flagged gap, not a contradiction.
 
-No confirmed fact in this document was invented past what the disassembly or the real base rows support; where the trail ran out (items 1–4 above), that is recorded as OPEN rather than guessed, per `HANDOFF.md` §27.8.
+No confirmed fact in this document was invented past what the disassembly or the real base rows support; where the trail ran out (items 1–4 above), that is recorded as OPEN rather than guessed, per `HANDOFF.md` §36 (archived §27.8).
 
 ---
 
@@ -670,3 +670,4 @@ Ghidra project copy: `tools/gp_as1` (disposable, robocopied from `tools/ghidra_p
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): qualified §6/§7 in the §1.1 coverage table (not structurally validated / `Component` record OPEN); fixed 3 cross-references (weapons-combat §14.5→§14.4, save-format §10.3/§16→§10.3, §22→§21.1); swapped the reversed From/To of the `vi_*` row in §21; added the 52-row patch-copy caveat to the §22 `vehicle_interaction_info` row.
+- 2026-09-30 (cloud, self-containment pass): restated 1 load-bearing HANDOFF/WALLS-only facts inline (§1.4: extraction/XML-parse rule now cited to `spec-vpp-container.md` §7 / `spec-xtbl-format.md` §7); repointed 3 `HANDOFF.md` §27.x references to the archived headings (§27.2 ×2 → §31, §27.8 → §36); 0 left (see review).
