@@ -96,6 +96,7 @@ Mission-path re-run submitted at `4591785`: job `20260930T215300-team-b-tdpr` (s
 marker (the pre-pause rule was not to implement from unreviewed sections): `game_get_coop_friendly_fire`
 (§27.16, pure remap 0→2/1→0/2→1 of a raw mode) and `crib_weapon_add_disable` (§28.14, shared setter with 0).
 Both are trivial once cleared.
+**Manager decision 2026-09-30: §27/§28 NOT cleared** — don't implement from them until Team A's adversarial review lands (requested). Batch 1 merged to integration. Standing by for specs / PC job results.
 
 **No behaviour spec at all** (request 5 below): the `vint_*` names in the ranking —
 `vint_internal_dataresponder_request` (282M calls) and `vint_dataresponder_finished` (282M, a UI busy-poll
