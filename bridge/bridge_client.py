@@ -100,6 +100,8 @@ def cmd_status(a):
     c = load_conf()
     sync(c)
     p = git(["show", "origin/status:agent.json"], c["dir"], check=False)
+    if p.returncode != 0:  # heartbeats from agents before the CRLF fix were stored as "agent.json\r"
+        p = git(["show", "origin/status:agent.json\r"], c["dir"], check=False)
     if p.returncode != 0:
         print("PC agent has never reported in (no 'status' branch). Is pc_agent.py running on the PC?")
         return 1

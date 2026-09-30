@@ -163,10 +163,12 @@ std::vector<ZoneMeshBlockEntry> ZoneGeometry::locate(ByteView cznContent, ByteVi
         }
 
         // 2. `~al` ("always loaded") zones pad between segments to the
-        //    next 16-byte boundary where ordinary zones do not (spec
-        //    Sec10.5: 97 of 928 tiling files use a skip, and they are the
-        //    `sr3_city~fNNNN~al` variants). One extra computed position,
-        //    still not a search.
+        //    next 16-byte boundary (spec Sec10.5 sampled "97 of 928 tiling
+        //    files use a skip", all `sr3_city~fNNNN~al`; superseded as a
+        //    population figure by this project's chain check, 1,002/1,002
+        //    tile with 115 padded blocks - spec Sec10.8 conflict note;
+        //    whether only `~al` zones pad is OPEN there). One extra
+        //    computed position, still not a search.
         if (!located) {
             const size_t padded = alignUp(gCursor, 16);
             if (padded != gCursor && segmentHolds(padded)) {

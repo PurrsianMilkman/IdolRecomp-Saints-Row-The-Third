@@ -14,7 +14,7 @@ so §9.4's **2,843 blocks is really 38,152** over the same 1,083 pairs (§10.5).
 population is separately **refuted** as a header-offset artefact (§10.6). The
 **object placement / property stream is still opaque** — the per-type resource-construction
 route to it is now a confirmed dead end (§9.1), and a promising but unconfirmed lead (a
-generic named-property mechanism, §9.3) has replaced it as the open thread. This document
+generic named-property mechanism, §9.3) has replaced it as the open thread. *(2026-09-30, §9.5: a real top-level `.czn_pc` walker has since been found; the "no walker" negative of §9.2 is superseded.)* This document
 records what holds, what was **tested and refuted**, and exactly where the investigation
 stops. It is not titled as a format specification because the format as a whole is not
 specified here.
@@ -26,16 +26,20 @@ specified here.
 
 **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
+**Review status summary (2026-09-30).** An adversarial desk review (spec text and Team B's files only, not the executable or the game data) covered 27 units: **9 DESK-PASS** (§4, §7.1, §7.4, §8.2, §9.3 consistency-only, §9.6, §10.2, §10.7, §10.9); **11 DESK-PASS, text fixes applied** (§3, §5/§6, §7.2, §7.3, §8.1, §9.1, §9.2, §9.4, §10.3, §10.4, §10.6); **3 NEEDS-EXE** (§1, §9.5, §10.5.1); **2 NEEDS-DATA** (§2, §10.8); **2 VALIDATED-BY-DATA** (§10.1 for `p ≡ 0 / 4`, §10.5 for the 38,152-block count and 1,002-file coverage). A desk pass alone does not clear a unit: it means the text is internally consistent, not that it was re-derived. VALIDATED-BY-DATA units are already backed by Team B's full-population run. Two conflicts are marked in place and not settled here: the top-level step alignment (`align8` in §1/§8.1 versus the 4-byte round-up in §9.5), and the `.gzn_pc` tiling residuals, where Team B's full-population 1,002 / 1,002 tile supersedes this spec's 74-file / 284-block residuals (§10.8). **Awaiting the executable:** §1/§8.1/§9.5 step rule (0x00864c60, 0x007512f0, 0x008652d0); §7.2 version-field width (Mesh sub-parser via 0x00e718b0); §9.1 rows 29/30 of 0x00700780 and the 0x00dd2e30 null-ctor branch; §10.5.1 `~al` padding decision. **Awaiting real data:** §1 (D1, D3), §2 (D4), §7.1 (D5), §7.3 (D6), §9.4 (D7), §10.1 odd parity (D2), §10.3 (D8), §10.4 (D9), §10.5.1/§10.8 (D10, D11, D13), §10.6 (D12). The `.czn_pc` object-stream interior is ON HOLD by the owner; nothing about its content was added. *(Data-check and address lists: the 2026-09-30 zone desk review, `adv_zone.md`, not in this repository.)*
+
 ---
 
 ## 1. What was established
 
 - **Population.** 2,971 distinct files, 180 bytes … 2,586,376 bytes, **every one a multiple of 4**. Paired 1:1 with `.czh_pc` (the zone header, resolved in `spec-ctorless-types.md` §5); only 1,083 have a `.gzn_pc` side. **[CONFIRMED — empirical.]**
-- **The file opens with a typed record.** The first eight bytes are `{ u32 id, u32 length }` where the id always has its high bit set and its upper half is exactly `0x8000`. **The record that follows lands exactly at `align8(8 + length)` in 2,931 / 2,971 files (98.7%)**, against a **2.6%** control (the rate at which an id-shaped word appears at a *random* 8-aligned offset in the same files). The id/length reading is therefore real, not a coincidence of shape. **[CONFIRMED — empirical, controlled.]**
-- **Only three distinct leading ids ship**: `0x80002233` (1,500 files), `0x80002237` (1,365), `0x80002234` (106). Across the whole population **790 distinct id values** occur. **[CONFIRMED — empirical.]**
-- **No id is a hardcoded magic.** A search over every instruction in the binary for the immediates `0x80002237` and `0x2237` returns **nothing**. The loader never compares the leading word against a constant, so these ids are resolved through data — a registry or table — not by a literal check. **[CONFIRMED — disassembly-level search of the whole image.]**
-- **Zone files carry world-object placement and behaviour data.** The embedded strings are property- and asset-names: `"Neutral Gang"`, `"gang offensive"`, `"use_default_loadout"`, `"execute lua script"`, `"enabled platform"`, `"bounding box"`, `"Floating"`, `"#npc_ng_male_soldier"`, `"Env_StreetLamp_Cool"`, `"Zload_hidden"`. **[CONFIRMED — empirical.]**
+- **The file opens with a typed record.** The first eight bytes are `{ u32 id, u32 length }` where the id always has its high bit set and its upper half is exactly `0x8000`. **The record that follows lands exactly at `align8(8 + length)` in 2,931 / 2,971 files (98.7%)**, against a **2.6%** control (the rate at which an id-shaped word appears at a *random* 8-aligned offset in the same files). The id/length reading is therefore real, not a coincidence of shape. **[CONFIRMED — empirical, controlled.]** **[CONFLICT — step alignment, desk review 2026-09-30: this states the next record at `align8(8 + length)`; §9.5 describes the compiled walker's alignment step as a round-up to a multiple of 4, and §2's own table has the 8-aligned walk completing in fewer files (882) than the 4-aligned (2,855) or 16-aligned (2,695) walk. Not settled here: to be decided against the walker's step arithmetic at 0x00864c60 / 0x007512f0 / 0x008652d0 and by re-running the first step with align4 versus align8 over all 2,971 files (review data check D1). See the matching marker in §9.5.]** **[OPEN — desk review 2026-09-30: the 40 non-conforming files are not characterised; to be settled against real data (D1).]**
+- **Only three distinct leading ids ship**: `0x80002233` (1,500 files), `0x80002237` (1,365), `0x80002234` (106). Across the whole population **790 distinct id values** occur. **[CONFIRMED — empirical.]** **[OPEN — desk review 2026-09-30: the harvest method for the 790 is not stated; with chains only 2–3 records deep (§2) and ~9 tag-handlers in the walker (§9.5), the figure may count id-shaped words at arbitrary or interior offsets; to be settled against real data by re-counting over records reached by the first 2–3 steps only (D3).]**
+- **No id is a hardcoded magic.** A search over every instruction in the binary for the immediates `0x80002237` and `0x2237` returns **nothing**. The loader never compares the leading word against a constant, so these ids are resolved through data — a registry or table — not by a literal check. **[CONFIRMED — disassembly-level search of the whole image.]** *(Qualified 2026-09-30, §9.5: the real walker does compare `tag & 0x7fffffff` against fixed constants, but they are held in the two tag-constant globals at 0x013026f4 / 0x0130279c rather than encoded as immediates. The immediate-search negative stands; the "registry, not a literal check" inference does not.)*
+- **Zone files carry world-object placement and behaviour data.** The embedded strings are property and asset names: a faction name and AI-behaviour property names (among them `use_default_loadout`, which §9.3 finds compiled into the executable as a property name the engine hashes and looks up), a script-execution property, platform / bounding-box / floating-state properties, a character-template reference, an environment prop asset name and a load-visibility flag. *(Paraphrased 2026-09-30 by the desk review: ten verbatim strings were quoted here; only `use_default_loadout` is shown by this spec to be a name the code itself compares, so only it is kept literally.)* **[CONFIRMED — empirical.]**
 - **The zone module resolves dependencies by authoring extension.** One function references `.effectx`, `.cmeshx`, `.rigx`, `.todx`, `.ctdgx`, `.lmeshx`, `.smeshx`, `.fmeshx`, alongside `"tree objects"` and `"misc_resource"` — so zone contents reference other assets by their **authoring** names, which the module maps to shipped files. **[CONFIRMED — disassembly.]** This completes the project's authoring-extension list (§4).
+
+**Review status (2026-09-30): NEEDS-EXE: the step alignment (align8 here versus the 4-byte round-up in §9.5) and the 790-id harvest; 0x00864c60 / 0x007512f0 / 0x008652d0, data checks D1, D3 — desk review (not re-derived from the executable).**
 
 ## 2. What was tested and refuted
 
@@ -49,49 +53,57 @@ It is not. Walking that model:
 | 8 | 882 / 2,971 | **0 / 2,971** |
 | 16 | 2,695 / 2,971 | **0 / 2,971** |
 
-**No alignment reaches end-of-file in a single file.** Chains stop after 2 records (1,531 files) or 3 (1,144), and the walk then hits words that are not id-shaped — commonly a `0xFFFB`-family value. **[CONFIRMED — empirical, whole population, three alignment variants.]**
+**No alignment reaches end-of-file in a single file.** Chains stop after 2 records (1,531 files) or 3 (1,144), and the walk then hits words that are not id-shaped — commonly a `0xFFFB`-family value. **[CONFIRMED — empirical, whole population, three alignment variants.]** **[OPEN — desk review 2026-09-30: the 8-aligned row (882) is the worst of the three although §1 states align8 as the rule (see §1's CONFLICT marker); "0 / 2,971 lands on EOF" sits beside §8.1's "reached EOF 32" over the 1,002 pairs; the definitions of "error" and "EOF" and the alignment used for the 2/3-record counts are not stated (1,531 + 1,144 = 2,675, leaving 296 files unaccounted); to be settled against real data (D4).]**
 
 This is recorded because the model *looked* right: it reproduces the smallest file's five records perfectly by hand, which is exactly the trap the project's own lesson warns about — a rule that fits some data is not the loader's rule. The refutation is as useful as a confirmation would have been: it says the top level is **not** a uniform chain, so a reimplementation must not walk one.
 
+**Review status (2026-09-30): NEEDS-DATA: alignment-table labelling and the EOF / error definitions (D4); step-rule conflict, see §1 — desk review (not re-derived from the executable).**
+
 ## 3. The reading the evidence supports
 
-**[HYPOTHESIS — unconfirmed.]** A zone file is a **small number of typed top-level sections** (2–3 in the overwhelming majority of files), each introduced by `{id, length}`, whose **interiors use per-type encodings** rather than a recursive uniform chunk format. The large section holds the object stream. Supporting observations, each independently confirmed above: the leading record is real and its successor is exactly where its length predicts; chains are 2–3 deep, not dozens; 790 distinct ids exist but no id is literal-checked in code; and the embedded content is property-name / asset-name data of the kind a data-driven object description produces.
+**[HYPOTHESIS — unconfirmed.]** A zone file is a **small number of typed top-level sections** (2–3 in the overwhelming majority of files), each introduced by `{id, length}`, whose **interiors use per-type encodings** rather than a recursive uniform chunk format. The large section holds the object stream. Supporting observations, each independently confirmed above: the leading record is real and its successor is exactly where its length predicts; chains are 2–3 deep, not dozens; 790 distinct ids exist but no id is literal-checked in code *(qualified 2026-09-30, §9.5: ids are compared against constants held in globals, not immediates)*; and the embedded content is property-name / asset-name data of the kind a data-driven object description produces. *(Desk review 2026-09-30: "2–3 sections" is a lower bound set by where the flat walk stopped — §8.1 shows most stops are on words that are not id-shaped — not a count of sections; and the 790 figure is subject to §1's OPEN harvest-method marker.)*
 
 What this does **not** establish: the meaning of any id, the interior layout of any section, or how the `0xFFFB`-family values fit. Those are open.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied — desk review (not re-derived from the executable).**
 
 ## 4. Cross-format contribution
 
 Independent of `.czn_pc` itself, this pass produced two durable results, both already folded into other documents:
 
 - **The complete authoring-extension list** for this engine: `.zonex`, `.cmeshx`, `.lmeshx`, `.smeshx`, `.fmeshx`, `.rigx`, `.effectx`, `.todx`, `.ctdgx` — plus `.ctd` and `.animx` known previously. Authoring names appear *inside* shipped data as cross-references; the shipped counterparts are the `c`/`g` pairs this project has specified.
-- **`.czh_pc` confirmed from the code side.** The zone-header reader validates the shared material block, applies **the same mandatory 16-byte pad arithmetic** documented in `spec-geometry-format.md` §3.1.1, then runs the `SR3Z` parser and stores the material-block pointer at `SR3Z + 0x08`. This independently reproduces the layout that `spec-ctorless-types.md` §5 established by replay, and identifies one further field. **[CONFIRMED — disassembly.]**
+- **`.czh_pc` confirmed from the code side.** The zone-header reader validates the shared material block, applies **the same mandatory 16-byte pad arithmetic** documented in `spec-geometry-format.md` §3.1.1, then runs the `SR3Z` parser and stores the material-block pointer at `SR3Z + 0x08` (a field of the parsed in-memory header object, not a file offset). This independently reproduces the layout that `spec-ctorless-types.md` §5 established by replay, and identifies one further field. **[CONFIRMED — disassembly.]**
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 5. Where this stops, and why
 
 Completing `.czn_pc` requires the **per-section readers**, and those are inside the zone streaming subsystem: a ~7.6 KB function owning the *"zone header cache"* / *"zone always loaded"* strings, a ~2.7 KB dependency resolver, and a ~3.4 KB loader. That is a **runtime-subsystem investigation** — the category the user explicitly scoped out of this project — rather than a format pass, which is what this was taken on as.
 
-That boundary was not visible in advance: `.czn_pc` was selected precisely *because* it looked like a format pass, and it is reasonable that it did. The honest finding is that **this particular format does not have a standalone parser to read** — unlike every other format in this project, its structure is only expressed in the code that walks it section by section.
+That boundary was not visible in advance: `.czn_pc` was selected precisely *because* it looked like a format pass, and it is reasonable that it did. The honest finding is that **this particular format does not have a standalone parser to read** *(⚠ SUPERSEDED 2026-09-30, §9.5: a real top-level walker exists, `FUN_00864c60`/`FUN_007512f0` via `FUN_008652d0`)* — unlike every other format in this project, its structure is only expressed in the code that walks it section by section.
 
 **What a reimplementation can and cannot do.** It *can* read the zone **header** (`spec-ctorless-types.md` §5, fully resolved), it *can* read the zone's **geometry** — the embedded Mesh sub-blocks and their `.gzn_pc` payload, using machinery already specified in `spec-geometry-format.md` §4.1 (§7 below) — and it *can* extract the property and asset name strings. It **cannot** read the object placement/property stream, which is what still needs the per-section readers.
 
 ## 6. Open Items
 
-1. The per-section interior layouts **for the non-geometry sections** — needs the zone streaming subsystem (§5); a **user scope decision**, not a next step this pass should take unilaterally. *(The geometry sections are no longer open — see §7. The scope restriction was released 2026-09-11, HANDOFF §27.3, and this item was attempted under that release: see §9. Result — the per-type registration/constructor route is now a confirmed dead end (§9.1), four further named entry points contain no top-level walker and an exhaustive instruction-idiom census found none elsewhere in the binary (§9.2), and a new, disassembly-confirmed lead — a generic hash-keyed named-property mechanism independently tied to a confirmed zone-content string — was found by a different route and is not yet closed (§9.3/§9.5).)*
+1. The per-section interior layouts **for the non-geometry sections** — needs the zone streaming subsystem (§5); a **user scope decision**, not a next step this pass should take unilaterally. *(The geometry sections are no longer open — see §7. The scope restriction was released 2026-09-11, HANDOFF §27.3, and this item was attempted under that release: see §9. Result — the per-type registration/constructor route is now a confirmed dead end (§9.1), four further named entry points contain no top-level walker and an exhaustive instruction-idiom census found none elsewhere in the binary (§9.2) *(⚠ SUPERSEDED 2026-09-30, §9.5: a real walker exists, `FUN_00864c60`/`FUN_007512f0` via `FUN_008652d0`; the census predicate missed its compiled form, `WALLS.md`)*, and a new, disassembly-confirmed lead — a generic hash-keyed named-property mechanism independently tied to a confirmed zone-content string — was found by a different route and is not yet closed (§9.3/§9.5).)*
 2. What the 790 id values are and where the table that resolves them is built.
 3. The `0xFFFB`-family values that terminate every flat walk.
-4. The relationship between the three leading ids (`…2233` / `…2234` / `…2237`) and the zone `fast`/`slow` type split.
+4. The relationship between the three leading ids (`…2233` / `…2234` / `…2237`) and the zone `fast`/`slow` type split. *(Desk review 2026-09-30: `fast`/`slow` are the registration-table names of §9.1; `spec-asm-format.md` §9.3 names `container_kind` 29/30 "Zone"/"Zone (High LOD)", a different id space — see §9.1's note.)*
 5. ~~`.gzn_pc`~~ — **resolved as the shared g-file payload, §7** — and its internal
    structure resolved further 2026-09-13: it is a **contiguous chain of self-delimiting Mesh
    segments** beginning at byte 0, each `[u32 tag][payload][u32 tag]`, packed back to back
    (ordinary zones) or padded to the next 16-byte boundary between segments (`~al` zones);
-   928 of 1,002 pairs tile exactly to EOF, controls 0 of 1,002 both ways (§10.5). §7.1's
+   928 of 1,002 pairs tile exactly to EOF, controls 0 of 1,002 both ways (§10.5) *(⚠ superseded as a population figure by Team B's 1,002 / 1,002 tile to EOF — see the conflict note in §10.8.)*. §7.1's
    "tag, three zero words, then the index buffer at `+0x10`" describes the FIRST segment;
    nobody had asked how many segments a `.gzn_pc` holds, and the answer is a mean of ~38.** Remaining within it: the per-channel vertex layout beyond the index buffer, which is the same standing open item as `spec-geometry-format.md` §4.1.2 and not specific to zones.
-6. Which of the 790 section ids introduces the geometry sections — the Mesh blocks were located by their own signature, not by walking the section list.
-7. **Why 74 of 1,002 `.gzn_pc` files do not tile to EOF under any segment-packing rule** (§10.8). They break late — e.g. `sr3_city~s1213` at cursor 1,880,316 of 1,883,284 after 256 segments — on "no bookend at the declared length" or "declared length overruns". Added 2026-09-13. **[OPEN / UNKNOWN.]**
+6. Which of the 790 section ids introduces the geometry sections — the Mesh blocks were located by their own signature, not by walking the section list. *(Partially advanced 2026-09-30, §9.5: ids `0x2237` and `0x2251` have geometry-shaped handlers; field layout provisional, `spec-terrain-format.md` §5 item 2.)*
+7. **Why 74 of 1,002 `.gzn_pc` files do not tile to EOF under any segment-packing rule** (§10.8). They break late — e.g. `sr3_city~s1213` at cursor 1,880,316 of 1,883,284 after 256 segments — on "no bookend at the declared length" or "declared length overruns". Added 2026-09-13. **[OPEN / UNKNOWN.]** **[SUPERSEDED as stated — desk review 2026-09-30: Team B tiles 1,002 / 1,002 under the cursor-or-next-16-boundary rule, see §10.8's conflict note; what remains open is why this pass's walker failed on these 74 (D10).]**
 8. **Whether the 921 of 39,073 g-backed zone candidates that close under no alignment are the same set as the ~915 whose primary-buffer element-size byte is not 2** (§10.8). Two residuals of nearly equal size; a set comparison would settle it and was not run. Added 2026-09-13. **[OPEN.]**
 9. **The ~671 `.ccar_pc` g-backed Mesh-block candidates that close under neither alignment** (1,038 candidates over 367 pairs, 367 validating either way, §10.7). Vehicles are not affected by the alignment gate, so this residual needs its own explanation. Flagged, not diagnosed. Added 2026-09-13. **[OPEN / UNKNOWN.]**
-10. **`mesh_scan.py`'s `p + 0x0E` and `p + 0x12` header-offset branches** (anchors at `p ≡ 2` / `p ≡ 6 (mod 8)`) are unexercised by any shipped zone block — 0 of 2,843 validated, 36 and 16 candidates respectively (§10.1). Untested, not confirmed. Added 2026-09-13. **[OPEN / UNKNOWN.]**
+10. **`mesh_scan.py`'s `p + 0x0E` and `p + 0x12` header-offset branches** (anchors at `p ≡ 2` / `p ≡ 6 (mod 8)`) are unexercised by any shipped zone block — 0 of 2,843 validated, 36 and 16 candidates respectively (§10.1). Untested, not confirmed. Added 2026-09-13. **[OPEN / UNKNOWN.]** **[OPEN — desk review 2026-09-30: measured on the old 2,843-block set, not re-run on the corrected 38,152; Team B's locator uses 4-aligned anchors only, so its 38,152 does not cover these branches; to be settled against real data (D2).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (items 5, 7, 10 marked against §10.5/§10.8 and Team B; item 4 naming note) — desk review (not re-derived from the executable).**
 
 
 ## 7. The geometry *is* readable — the shared Mesh mechanism generalises (added 2026-09-10)
@@ -108,29 +120,37 @@ The `.gzn_pc` pass tested whether the g-file mechanism established for `.gcmesh_
 
 That is byte-for-byte the segment shape documented for trees: **tag, three zero words, then the index buffer at `+0x10`**. 1,083 `.gzn_pc` ship against 2,971 zones, and **81 are zero bytes** — a zone with no geometry payload. **[CONFIRMED — empirical, controlled.]**
 
+**Review status (2026-09-30): DESK-PASS (the 11 of 1,002 files whose `+0x10` word is not `0x00010000` are uncharacterised, data check D5) — desk review (not re-derived from the executable).**
+
 ### 7.2 `.czn_pc` embeds the shared "Mesh" sub-block
 
-At the position where the g-file's tag occurs in the c-file, the preceding `u32` is **`9` in 1,002 / 1,002 files** — the shared Mesh sub-block's version field. Scanning a ±20-byte window, **no other offset shows a version-9 reading above 4/1,002**, and a random-offset control's best single offset is 6/1,002. The word after the tag is a plausible block length in 980/1,002. **[CONFIRMED — empirical, controlled.]**
+At the position where the g-file's tag occurs in the c-file, the preceding `u32` is **`9` in 1,002 / 1,002 files** — the shared Mesh sub-block's version field. Scanning a ±20-byte window, **no other offset shows a version-9 reading above 4/1,002**, and a random-offset control's best single offset is 6/1,002. The word after the tag is a plausible block length in 980/1,002 *(the plausibility criterion is not stated)*. **[CONFIRMED — empirical, controlled.]**
 
-So a zone's geometry is laid out as: `u32 version (9)` | `u32 check value` | `u32 block length` | the Mesh header — the structure `spec-geometry-format.md` §4.1.1 specifies, with the check value tagging its `.gzn_pc` segment.
+~~So a zone's geometry is laid out as: `u32 version (9)` | `u32 check value` | `u32 block length` | the Mesh header — the structure `spec-geometry-format.md` §4.1.1 specifies, with the check value tagging its `.gzn_pc` segment.~~ **Corrected 2026-09-30 (desk review, from §10.1 and Team B's byte-level read in `team-b/HANDOFF.md` lines 6276-6281):** the pre-header is a computation, not a fixed layout — the version word (9), then round up to 4, then three `u32` fields (check value, c-side length, g-side length), then round up to 8, where the Mesh header of `spec-geometry-format.md` §4.1.1 begins; the check value tags the block's `.gzn_pc` segment. The struck line omitted the g-side length. **[OPEN — desk review 2026-09-30: §10.1 calls the version field a `u16` while this section's anchor reads a `u32 == 9`; the two readings agree only for 4-aligned anchors; the width is to be settled against the executable (the Mesh sub-parser reached via 0x00e718b0).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (pre-header layout corrected to §10.1; version width OPEN) — desk review (not re-derived from the executable).**
 
 ### 7.3 Population profile of the embedded meshes — ⚠ two of five bullets REFUTED 2026-09-13, see §10.6
 
 Enumerating blocks whose check value is hash-like (`≥ 0x10000`, which removes the small-integer coincidences that made a first attempt uninterpretable) across 400 zones:
 
-- **4,478 Mesh blocks**; most zones carry 1–3, but 51 carry eight or more.
+- **4,478 Mesh blocks**; most zones carry 1–3, but 51 carry eight or more. *(Desk review 2026-09-30: unreconciled with §10.5 — over the 1,002 nonzero pairs, 580 files carry 37,730 blocks, a mean of ~65 per multi-block file — and §10.6 could not re-derive the 4,478 denominator; the 400-zone sample is not stated to be representative.)* **[OPEN — desk review 2026-09-30: per-file block histogram over all 1,002 pairs; to be settled against real data (D6).]**
 - **The bookend holds in 4,477 / 4,478** — each block ends with a second copy of its own check value, the same property found in trees. A specific `≥ 0x10000` value landing at a computed offset has a ~2⁻³² chance rate per trial, so this is decisive on its own arithmetic.
 - ⚠ **REFUTED 2026-09-13 — §10.6.** Original wording: ~~**Flags bit 0 set (g-backed) in 3,448 / 4,478**; the remainder are inline-mode, as foliage is.~~ The ~1,030-block "inline-mode" remainder is an artefact of this bullet's own harness (`gzn_meshes.py`), whose header offset `ap(S+12,8)` lands 8 bytes early for anchors at `S ≡ 4 (mod 8)` — in **1,055 of 1,055** such anchors the byte it read as "flags" is the low byte of the g-length field, and that field is even in **1,048 of 1,055**, so bit 0 reads clear. **Replacement figure, whole 1,083-pair population, `mesh_scan.py`'s dynamic header offset: 292 of 39,366 candidates (0.74%) read flags bit 0 clear**, not 23%. See §10.6.
 - ⚠ **PARTLY REFUTED 2026-09-13 — §10.6.** Original wording: ~~**Stride byte: 2** in 3,448 (matching the g-backed count exactly), then 12, 4 and 16 — the same stride profile as `.ccmesh_pc` and `.csrt_pc`.~~ The leading value is right and holds far more strongly than stated — **2 in 38,152 of 38,152** blocks over the corrected zone population (§10.5). **The "12, 4 and 16" tail is the same artefact as the bullet above**, read 8 bytes early at `S ≡ 4 (mod 8)` anchors: **0 of those 1,055 anchors reads 2**. And the parenthetical "matching the g-backed count exactly" was read at the time as corroboration; it is the opposite — both reads come off the same header pointer, so both fail together on the same anchors (§10.9's methodology note).
-- Count field: median 132, maximum 21,822.
+- Count field: median 132, maximum 21,822. *(Desk review 2026-09-30: which header field and offset "count" denotes is not stated, and it was read off the same partly mis-offset anchors, §10.6.)*
 
-**[CONFIRMED — empirical, for the block count, the bookend rate, the leading stride value and the count field. REFUTED for the flags/inline split and the stride histogram's tail — see the two marked bullets and §10.6. This label previously read a bare `CONFIRMED — empirical` covering all five bullets.]**
+**[CONFIRMED — empirical, for the block count, the bookend rate, the leading stride value and the count field. REFUTED for the flags/inline split and the stride histogram's tail — see the two marked bullets and §10.6. This label previously read a bare `CONFIRMED — empirical` covering all five bullets.]** *(Desk review 2026-09-30: the block count 4,478 is qualified by §10.6's finding that its denominator is not re-derivable; read it as OPEN, not CONFIRMED.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (bullet 1 and count field marked; block-count label qualified per §10.6) — desk review (not re-derived from the executable).**
 
 ### 7.4 What this changes
 
-Zone **geometry** is not a new format and does not need the zone streaming subsystem: it is the machinery this project already specified, reachable by locating the version-9 signature. ⚠ **Added 2026-09-13:** locating the version-9 signature finds the *descriptor*; finding its matching payload segment in the `.gzn_pc` is a **chain walk, not a search** — see §10.4/§10.5.1, and do not reuse `mesh_scan.py`'s 16-aligned tag search, which reaches only 7.28% of them. What remains opaque is the **object placement and property stream** — the sections carrying `"Neutral Gang"`, `"use_default_loadout"` and the rest — which is what §5's scope boundary actually applies to.
+Zone **geometry** is not a new format and does not need the zone streaming subsystem: it is the machinery this project already specified, reachable by locating the version-9 signature. ⚠ **Added 2026-09-13:** locating the version-9 signature finds the *descriptor*; finding its matching payload segment in the `.gzn_pc` is a **chain walk, not a search** — see §10.4/§10.5.1, and do not reuse `mesh_scan.py`'s 16-aligned tag search, which reaches only 7.28% of them. What remains opaque is the **object placement and property stream** — the sections carrying §1's faction and behaviour property names (`use_default_loadout` and the rest) — which is what §5's scope boundary actually applies to.
 
 **Correction to this document's original framing:** the first version of §5 stated that a reimplementation "cannot currently read `.czn_pc`". That was too pessimistic — it was written before the shared-mechanism test was run. The geometry was accessible the whole time through machinery already documented elsewhere in the project.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 8. Attacking the top level from an independent anchor (2026-09-11, user-authorised)
 
@@ -140,7 +160,7 @@ a negative.
 
 ### 8.1 The Mesh block is NOT a top-level section — controlled negative
 
-The top level is a chain of `{u32 tag (high bit set), u32 length}` records, 8-aligned.
+The top level is a chain of `{u32 tag (high bit set), u32 length}` records, 8-aligned. **[CONFLICT — step alignment: see §1's marker and §9.5; 0x00864c60 / 0x007512f0 / 0x008652d0, data check D1.]**
 §7.2 gives a locator for the embedded Mesh sub-block that is **independent of those
 lengths** (`u32 == 9` followed by the paired `.gzn_pc`'s own tag), so the file carries two
 independent descriptions of where things are and they can be checked against each other.
@@ -158,6 +178,10 @@ geometry by walking the top level. **[CONFIRMED — empirical, controlled.]**
 Descriptively, walking from offset 0 over the 1,002 `c`/`g` pairs stops as: `tag lacks
 the high bit` 567, `zero tag` 228, `length overruns the file` 175, `reached EOF` 32; and
 the chain is 2 records deep in 444 files and 3 in 505, matching §2's shape.
+
+*(Desk review 2026-09-30: 0 / 1,002 against an expected ~3 has little statistical power; the "nested, not top-level" conclusion rests more on the independent walker finding of §9.5 than on this statistic. The "reached EOF 32" stop count here sits against §2's 0 / 2,971, see §2's OPEN marker.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (step-rule conflict marked; statistical power noted) — desk review (not re-derived from the executable).**
 
 ### 8.2 Two measurements discarded — recorded so they are not repeated
 
@@ -180,13 +204,15 @@ Both were caught by asking what a failure would have looked like, before publica
 not after. The independent-anchor *idea* is still the right one — §8.1 is its product —
 but two of the three tests built on it could not have failed.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ## 9. The zone module's own parser: a confirmed absence, and the mechanism it most likely feeds (2026-09-12)
 
 **Prepared by:** SPEC TEAM, 2026-09-12. This section resumes the item §6.1/§8's "read the
 zone module's own parser" left open, working forward from the registration table exactly as
 directed. **The registration-table route is a confirmed dead end for a structural reason,
 not a search failure** — and four further named-entry-point traces plus one exhaustive
-instruction-idiom census also came back empty for the top-level walker. One genuinely new
+instruction-idiom census also came back empty for the top-level walker *(⚠ SUPERSEDED 2026-09-30, §9.5: a walker exists)*. One genuinely new
 mechanism was found by a different route (a confirmed zone-content string), and one existing
 finding (§7) was independently reproduced over the complete population with a different,
 stronger validator. Evidence: `tools/scripts/CznFindTagWalk.java`,
@@ -219,7 +245,7 @@ type-specific code ever runs against them through this path.** **[CONFIRMED —
 disassembly.]**
 
 This sharpens, with an exact mechanism, something this document already believed for a
-different reason (§5's "no id is literal-checked" argument, and HANDOFF §22's "no standalone
+different reason (§1/§3's "no id is literal-checked" argument, and HANDOFF §22's "no standalone
 parser"): there was never a vtable-dispatched constructor here for data-side discovery to
 find, because the table slot is a literal zero, not a hidden indirection. **Methodology
 note:** the task brief's expectation — that a registered type's constructor is
@@ -227,6 +253,10 @@ vtable-dispatched and only findable by data-side discovery — held for the morp
 for every other type this project has resolved, but it does not hold universally, and the
 registration table is cheap enough to check first: reading two 4-byte fields settled this in
 under a minute, against what could have been an open-ended vtable hunt.
+
+*(Desk review 2026-09-30: consistent with `spec-format-inventory.md` rows 29/30 and `spec-ctorless-types.md`. `spec-asm-format.md` §9.3 names `container_kind` 29 "Zone" and 30 "Zone (High LOD)"; that is the `.asm_pc` manifest's container-kind id space, a different table from this registration ordinal, and this spec does not establish that the two numberings correspond. Re-check against the executable: rows 29/30 of 0x00700780 and the null-ctor branch in 0x00dd2e30.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (naming note added) — desk review (not re-derived from the executable).**
 
 ### 9.2 Four further named entry points traced; none contain a walker of the top-level `{tag, length}` chain
 
@@ -241,9 +271,9 @@ entry points were read in full:
 | `FUN_00863080` ("SR3Z" parser) + `FUN_00863170`/`FUN_00863310` (`.zonex` filename helpers) | Parses the **`.czh_pc`** header block (magic `0x5A335253`, version range 27–29) and swaps authoring/shipped extensions | No — this is the already-documented zone-*header* reader, a different file |
 | `FUN_00db1ad0`/`00db2ce0`/`00db33d0`/`00db3450`/`00db3fd0`/`00db4980` (a "streaming container" cluster found via the strings "prepackaged stream", "unrecognized prim type/streaming allocator/container type") | Generic, engine-wide bookkeeping for any streamed container (retry/allocate-wait state machine) plus a **text-driven** registry that resolves *names* of primitive types, stream allocators and container types via per-name lookup calls | No — this is shared infrastructure for every streaming container in the game, not zone-specific, and it resolves by name/string, not by the numeric `{tag,length}` records `.czn_pc` actually uses |
 
-**[CONFIRMED — disassembly, each function read and described above.]** None reads a `u32`
+~~**[CONFIRMED — disassembly, each function read and described above.]**~~ **[Label scoped 2026-09-30 (desk review): CONFIRMED — disassembly for the description of each function above only; as support for "no top-level walker exists" it is SUPERSEDED by §9.5.]** None reads a `u32`
 at a cursor, checks its upper half against `0x8000`, and advances by a second `u32` length —
-the operation `spec-zone-data-format.md` §2/§8 established purely from file-side replay.
+the operation `spec-zone-data-format.md` §2/§8 established purely from file-side replay. *(⚠ SUPERSEDED 2026-09-30, §9.5: the walker exists elsewhere, in `FUN_00864c60`/`FUN_007512f0` via `FUN_008652d0`, not among the entry points above.)*
 
 **A whole-binary census closes this further.** Rather than another small-displacement scan
 (no selectivity at this project's scale, HANDOFF §5), the search looked for the
@@ -256,9 +286,9 @@ functions total in the entire 41,785-function binary satisfy both conditions, an
 CRT/heap-allocator internals** (`__cftoa_l`, two copies of `__tsopen_nolock`,
 `___sbh_alloc_block`, and ten functions in the tight `0x452000–0x454000`/`0x4b2000` range
 consistent with the statically-linked small-block heap). **None sits in any zone-relevant
-address range or is reachable from any entry point in the table above.** **[CONFIRMED —
-disassembly, exhaustive census, `CznFindTagWalk.java`.]** Stated as a predicate: a walker
-matching this shape, anywhere in the binary, would have shown up in this list; it did not.
+address range or is reachable from any entry point in the table above.** ~~**[CONFIRMED —
+disassembly, exhaustive census, `CznFindTagWalk.java`.]**~~ **[SUPERSEDED 2026-09-30 by §9.5 — the census's 14-function count is not disputed, but its reading as a walker negative is refuted; label withdrawn (desk review).]** Stated as a predicate: a walker
+matching this shape, anywhere in the binary, would have shown up in this list; it did not. *(⚠ SUPERSEDED 2026-09-30, §9.5: the real walker's compiled form uses `& 0x80000003`, a branching round-up and `& 0x7fffffff`, none of which this predicate covered; see `WALLS.md`.)*
 
 **Two scope-jumps, flagged and not pursued**, per this project's standing discipline
 (HANDOFF §5): `FUN_00da90d0`/`FUN_00da8d90`, called from `FUN_00859110` to test whether a
@@ -267,9 +297,11 @@ callers** spread across totally unrelated subsystems (rendering, physics, UI, au
 generic, engine-wide named-callback/event lookup, not a zone-specific manager. It was not
 traced further. **[CONFIRMED — disassembly, call-site census.]**
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (CONFIRMED labels beside the SUPERSEDED marks struck/scoped) — desk review (not re-derived from the executable).**
+
 ### 9.3 A different route found the engine's generic named-property mechanism, tied to a confirmed zone-content string
 
-`spec-zone-data-format.md` §1 already lists `use_default_loadout` and `execute lua script`
+`spec-zone-data-format.md` §1 already lists `use_default_loadout` and a script-execution property
 among the strings embedded in shipped `.czn_pc` data. Searching the **executable's own**
 string data for these exact strings (rather than searching for zone-specific code) finds
 that several of them are *also* compiled into the game's code as literal comparison targets
@@ -286,6 +318,10 @@ small, complete, disassembly-readable subsystem:
   routine documented there, since it lives at a different address, but the fold-to-lowercase
   + table-driven-word loop shape is the same). **[CONFIRMED — disassembly for this
   routine's own mechanics; HIGH CONFIDENCE — inferred that it is the same hash family.]**
+  *(Resolved 2026-09-30: `0x00D9E740` is the engine's table-driven CRC-32 (lower-cased, no
+  final XOR), CONFIRMED in `spec-tables-environment.md` §1.4 and `spec-tables-weapons-combat.md`
+  §1.4; `spec-extensionless-types.md` §4 explains why this CRC-32, not the rotate-6/XOR hash of
+  `spec-vpp-container.md` §2.2, is the engine's general-purpose name hash.)*
 - **`FUN_00a33730`** — resolves a hashed name to a small ordinal (a byte, `0xFF` = absent)
   via a **40-bucket** hash table (`hash mod 0x28`) with an internal free-list allocator that
   assigns a fresh ordinal to a name seen for the first time. **[CONFIRMED — disassembly.]**
@@ -309,7 +345,7 @@ generic, hash-keyed named-property mechanism — get/set by name, backed by a sm
 per-class ordinal table built once from a hardcoded name list — and at least one of that
 list's names is confirmed to be literal `.czn_pc` object-stream content. This is a
 mechanism-level explanation, not previously available, for **why no zone id or property is
-ever literal-compared** (§1/§5): identity here is a *runtime hash*, resolved through a table,
+ever literal-compared** (§1/§3): identity here is a *runtime hash*, resolved through a table,
 never a compile-time immediate — exactly the shape that defeats an immediate-value search of
 the kind this project already ran and reported negative (§1's "search over every instruction
 for `0x80002237`/`0x2237` returns nothing").
@@ -324,6 +360,8 @@ each — consistent with dispatch through yet another table this pass did not op
 informative about who holds that table. **[HIGH CONFIDENCE — inferred, that this mechanism
 is what the object/property stream ultimately feeds; OPEN, whether this exact class's
 loader is ever handed a `.czn_pc`-backed stream directly.]**
+
+**Review status (2026-09-30): DESK-PASS (consistency only — the object-stream interior is on hold; internal arithmetic ties: `0x28` = 40 buckets, `0x140` = 40 × 8) — desk review (not re-derived from the executable).**
 
 ### 9.4 Independent, full-population confirmation that zone geometry uses the shared Mesh sub-block (§7, reproduced by a different method)
 
@@ -367,7 +405,7 @@ count), precisely the 81 files this document's §7.1 already identified as carry
 zero-byte `.gzn_pc`. Restricted to the 1,002 files where the test could actually fail (a
 nonzero `.gzn_pc`), the rate is **1,002 / 1,002 — no failure occurred.**
 
-> ⚠ **Cross-reference note, 2026-09-12** (✅ **confirmed correct by Team B on direct inspection** — they read `spec-terrain-format.md` §3 themselves and matched its two "magic values" to the two dominant ids among the 790 the population pass found)**:** `spec-terrain-format.md` §3 characterised `.czn_pc`'s top level differently from §6 above (a single-sample "magic value" reading rather than this section's `{id, length}` chain), never previously cross-checked. Reconciled: they describe the same structure; terrain's sample also found a readable `"Region<003>"` string inside a top-level record's interior that this document's population-wide pass never looked for — recorded there, cross-referenced here, and not pursued further (record-interior content remains the project's one parked question, `HANDOFF.md` §27.3).
+> ⚠ **Cross-reference note, 2026-09-12** (✅ **confirmed correct by Team B on direct inspection** — they read `spec-terrain-format.md` §3 themselves and matched its two "magic values" to the two dominant ids among the 790 the population pass found)**:** `spec-terrain-format.md` §3 characterised `.czn_pc`'s top level differently from §1–§3/§8 above (a single-sample "magic value" reading rather than this section's `{id, length}` chain), never previously cross-checked. Reconciled: they describe the same structure; terrain's sample also found a readable region-label string inside a top-level record's interior that this document's population-wide pass never looked for — recorded there, cross-referenced here, and not pursued further (record-interior content remains the project's one parked question, `HANDOFF.md` §27.3).
 >
 > **Also flagged by Team B's own independent reader — both hypotheses below were checked against Team B's own code and REFUTED as stated, corrected in place rather than left standing.** Their spot-check found a 93.1% Mesh-block hit rate against this section's 100% (restricted-denominator) figure, and 0% inline-mode blocks against §7.3's ~23%.
 >
@@ -383,7 +421,7 @@ nonzero `.gzn_pc`), the rate is **1,002 / 1,002 — no failure occurred.**
 >
 > ✅ **RESOLVED 2026-09-13 — §10.6. It does need revising: the ~23% figure is REFUTED.** The step this note declined to take — reading §7.3's original extraction script's exact test rather than its comment — was taken, and the script (`gzn_meshes.py`) computes the Mesh header at `ap(S+12,8)`, which lands **8 bytes early** for every anchor at `S ≡ 4 (mod 8)`. In **1,055 of 1,055** such anchors the byte it read as "flags" is the low byte of the g-length field, even in **1,048**, so bit 0 reads clear. Corrected figure over the whole 1,083-pair population with `mesh_scan.py`'s dynamic offset: **292 of 39,366 candidates (0.74%) read flags bit 0 clear.** Team B's 0 of 14,920 and this document's figure were never in tension because this document's figure was not measuring inline mode at all. **Note which half was wrong: the note above correctly refused to explain away a disagreement it had not diagnosed, and correctly identified the one unread artefact that would settle it — the cost of leaving it was one day, not a wrong publication.**
 >
-> Their third flag, a 46-file extraction gap, could not be diagnosed from this side without their own numbers; **2,971 total `.czn_pc` files vs 1,083 with any `.gzn_pc` present at all (§7.1) is a real, already-explained ~1,888-file gap and does not appear to be the source of their separate 46-file figure.** Team B will send the exact predicate once it lands.
+> Their third flag, a 46-file extraction gap, could not be diagnosed from this side without their own numbers; **2,971 total `.czn_pc` files vs 1,083 with any `.gzn_pc` present at all (§7.1) is a real, already-explained ~1,888-file gap and does not appear to be the source of their separate 46-file figure.** ~~Team B will send the exact predicate once it lands.~~ → received, see the ✅ note above (37 files, not 46).
 >
 > **Both refuted hypotheses were labelled `HYPOTHESIS — unconfirmed` when first written, specifically so a refutation would be a small correction rather than a retraction of something asserted as fact — that discipline is why fixing this cost one paragraph, not a re-investigation.**
 **[CONFIRMED — empirical, controlled by construction, full population,
@@ -404,9 +442,13 @@ zone by roughly 4× (§7.3's ~11 per zone against this section's 2.84) and that 
 unreconciled between two published figures in the same document. It was the visible symptom of
 §10.5's defect the whole time. **When an independent reproduction of a finding lands on a
 materially different COUNT while confirming the finding, the count discrepancy is a result in
-its own right and must be reconciled before either number is published** — §5's "when your
+its own right and must be reconciled before either number is published** — `HANDOFF.md` §5's "when your
 count disagrees with another team's by a factor, publish neither until it reconciles", which
 this document violated against itself rather than against a peer.
+
+**[OPEN — desk review 2026-09-30: Team B's pair count was 1,037 found plus a 37-file extraction gap (the note above), 1,074, not reconciled to this section's 1,083; to be settled against real data (D7).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (1,083 versus Team B's 1,037 + 37 marked OPEN) — desk review (not re-derived from the executable).**
 
 ### 9.5 Where this leaves the object/property stream
 
@@ -427,23 +469,31 @@ sampled, over the whole 41,785-function binary.]**~~
 never covered its real compiled form.** A fresh trace, starting from the render-side question
 of what draws zone/building geometry (`spec-vertex-format.md` §12.13 item 5,
 `spec-vehicle-geometry.md` §11.9.3), found a real top-level `.czn_pc` walker: `FUN_00864c60`
-and `FUN_007512f0` (reached via `FUN_00864000`) each walk a buffer computing
-`tag = *(u32*)(cursor+base)`, test `tag & 0x7fffffff` against a fixed constant
-(`DAT_013026f4 = 0x2237`, `DAT_0130279c = 0x2251` — both real, in-population ids, `0x2237`
+and `FUN_007512f0` (the latter reached via `FUN_00864000`, which calls it at 0x00864081,
+`spec-vehicle-geometry.md`) each walk a buffer: they read the `u32` tag at the current cursor,
+compare the tag with its high bit cleared against a fixed id held in one of two tag-constant
+globals (0x013026f4 holds `0x2237`, 0x0130279c holds `0x2251` — both real, in-population ids, `0x2237`
 being the exact "Region" id `spec-terrain-format.md` §3's own real sample already found
-preceding readable `"Region<003>"`/`"Region"` strings), and on mismatch advance
-`cursor += cursor_field + length_field + alignment` — exactly this document's own §2/§8
-`{high-bit tag, length}` chain shape. Both are called, alongside (at least) 6 further
+preceding readable region-label strings), and on a mismatch step the cursor past the record by
+its header, its length field and an alignment pad — exactly this document's own §2/§8
+`{high-bit tag, length}` chain shape. *(Reworded 2026-09-30 by the desk review from
+pseudocode-shaped lines into prose.)* **[OPEN — desk review 2026-09-30: the exact step (the base
+the cursor is relative to, whether the length excludes the 8-byte header, and the rounding
+granularity) is stated only verbally; to be settled against the executable at 0x00864c60 /
+0x007512f0 / 0x008652d0 — see the step-alignment CONFLICT below.]** Both are called, alongside (at least) 6 further
 sibling tag-handlers, from one master dispatcher, `FUN_008652d0`, itself called from
 `FUN_00866580`/`FUN_00861460`/`FUN_00861800`/`FUN_0084e3b0`/`FUN_007acfe0` — a chain sitting
 in the same tight `0x863000`–`0x866000` code module as the already-documented `.czh_pc`
 header parser (`FUN_00863080`) but never checked by name in the table above.
-**Why the original census missed it, precisely:** the real compiled walker uses
-`& 0x80000003` (not the literal `0x80000000` the census required), a branching
-`(x-1|0xfffffffc)+1` round-up idiom (not an `AND`-mask instruction at all) for its alignment
-step, and `& 0x7fffffff` (not `0xFFFFFFF8`/`0xFFFF0000`) to strip/test the tag's high bit —
-none of which match either of the two required literals the census's predicate searched
-for. **Same family as `WALLS.md`'s standing "an instruction-form census undercounts without
+**Why the original census missed it, precisely:** the real compiled walker masks with
+`0x80000003` (not the literal `0x80000000` the census required), rounds its alignment step up
+to the next multiple of 4 with a branching sequence built on an OR with `0xfffffffc` (not an
+`AND`-mask instruction at all), and masks with `0x7fffffff` (not `0xFFFFFFF8`/`0xFFFF0000`) to
+strip/test the tag's high bit — none of which match either of the two required literals the
+census's predicate searched for. **[CONFLICT — step alignment, desk review 2026-09-30: this
+4-byte round-up contradicts §1/§8.1's `align8(8 + length)`; see §1's marker. To be settled
+against 0x00864c60 / 0x007512f0 / 0x008652d0 (base, header size, length semantics, 4 versus 8
+rounding) and data check D1.]** **Same family as `WALLS.md`'s standing "an instruction-form census undercounts without
 a control on every compiler-emitted form" lesson (the D3D9 vtable-call census, the vehicle
 `high16` stride census) — a new instance, not a new category.** This corrects the strong
 form of the negative (a walker exists); it does **not** by itself confirm the *object/property
@@ -467,7 +517,7 @@ interior — see `spec-terrain-format.md` §5 open item 2's own pending-scope no
 candidate yet for how the object/property stream's per-instance values reach a live object —
 by name, hashed, through a small per-class ordinal table, not by fixed file offset. This is
 consistent with, and gives a mechanism for, every negative this document and its predecessors
-have already recorded about `.czn_pc` never containing a literal-checked id.
+have already recorded about `.czn_pc` never containing a literal-checked id. *(Qualified 2026-09-30: the top-level walker in the CORRECTED paragraph above does compare tags against constants held in globals; the hash mechanism remains a lead for the property interior only.)*
 
 **Concrete next step:** find who holds the table that resolves `FUN_00a33e00`'s (and
 siblings') indirect call sites — i.e. the registration mechanism for this
@@ -477,9 +527,11 @@ family is constructed while a `.czn_pc` buffer is the active stream, which is th
 needed to close §9.3's open half. A string-hash brute-force of the remaining unidentified
 top-level ids (`0x2233`/`0x2234`/`0x2237` and the wider 790) against candidate names was
 considered and **not attempted this pass**: the project's one precedent for this exact
-technique (`spec-conversation-format.md` §6a, hashing 3,917 candidate strings against 57
+technique (`spec-conversation-format.md` §6.1, hashing 3,917 candidate strings against 57
 unnamed ids) scored 0 matches with a 0-match control, i.e. unsuccessful rather than
 miscalibrated, and there is no stronger candidate name list here than there was there.
+
+**Review status (2026-09-30): NEEDS-EXE: exact step formula and tag compare at 0x00864c60 / 0x007512f0 / 0x008652d0, uses of the globals 0x013026f4 / 0x0130279c; pseudocode-shaped lines reworded — desk review (not re-derived from the executable).**
 
 ### 9.6 Methodology note
 
@@ -491,11 +543,13 @@ ctor/dtor fields for a literal zero before spending any budget on data-side cons
 discovery** — it is the cheapest possible test and it is conclusive either way. Separately:
 a compound instruction-idiom census (two specific immediates required in the same function)
 is exhaustive and cheap to run over the whole binary and returned a clean, informative
-negative here, in contrast to this project's repeated experience with single-displacement
+negative here *(⚠ SUPERSEDED 2026-09-30, §9.5: the negative was wrong — the predicate missed the walker's real compiled form)*, in contrast to this project's repeated experience with single-displacement
 predicates (HANDOFF §5, four prior failures at 469/461/23/272 hits) — the difference being
 that a compound, mechanism-specific predicate over 32-bit immediates is inherently far
 narrower than a single small-displacement byte offset, even before any address-range
 filtering is applied.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 10. Zone geometry was under-counted 13x: the `.gzn_pc` segment chain, and two header-offset defects (2026-09-13)
 
@@ -522,7 +576,7 @@ every `.czn_pc`/`.gzn_pc` filename pair found recursively through nested contain
 `≥ 0x10000` check-value filter, which is the variant that reproduces §7.3's published
 numerators), `zg2_clmesh_sweep.py`. Every count attributed to `mesh_scan.py` below was
 produced by **importing and calling** `mesh_scan.read_block`/`validate`/`replay_g`, never by a
-second walker, so those figures are "by `mesh_scan.py`" in the sense §5 requires.
+second walker, so those figures are "by `mesh_scan.py`" in the sense `HANDOFF.md` §5 requires.
 
 ### 10.1 `mesh_scan.py` does NOT share Team B's "Gap 2" — confirmed on real files, not on the arithmetic
 
@@ -562,6 +616,10 @@ In shipped zone data the Mesh anchor is always 4-aligned; the two odd-parity bra
 confirmed. **[HIGH CONFIDENCE — inferred, that the anchor is always 4-aligned; the `p + 0x0E`
 and `p + 0x12` branches are OPEN / UNKNOWN for want of a single shipped case.]**
 
+*(Desk review 2026-09-30: VALIDATED-BY-DATA for the two 4-aligned branches — Team B, `team-b/HANDOFF.md` lines 6283-6294, over all 24,477 anchors with two independent oracles: 2,596 close at `0x10`, 247 at `0x14`, zero disagree. The `p ≡ 2 / 6` branches remain OPEN: the 0-of-2,843 figure was not re-run on the corrected 38,152 (data check D2). The mod-8 classes are of the file offset, which matches the rule only if the loaded buffer is itself 8-aligned; that is not stated.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: 2,596 at `0x10` / 247 at `0x14`, Team B two-oracle run; `p ≡ 2 / 6` NEEDS-DATA (D2) — desk review (not re-derived from the executable).**
+
 ### 10.2 The same gap exists on this side: 39,073 g-backed candidates, 2,843 close
 
 The ladder below is the same file set, one pass, each rung strictly stricter than the one above.
@@ -586,9 +644,11 @@ leaves 36,231 (92.72%) unclosed.** Team B's split is 2,843 of 24,477. The candid
 are different and the totals must not be combined — but **their count of closing anchors is
 identical to ours, and 24,477 − 21,634 = 2,843 exactly**, which is strong circumstantial
 evidence that their closing set *is* §9.4's validated set. That is a count match, not a set
-match, and per §5 it should be confirmed by set comparison from their side before either team
+match, and per `HANDOFF.md` §5 it should be confirmed by set comparison from their side before either team
 relies on it. **[CONFIRMED — empirical for this side's ladder; HYPOTHESIS — unconfirmed that
 the two closing sets are the same set.]**
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ### 10.3 The non-closing candidates are real Mesh blocks — five discriminators, each with a control that fires
 
@@ -619,6 +679,8 @@ perturbed — **+16: 0 / 37,206; −16: 0 / 38,152; −4: 1 / 38,152 (0.003%); +
 (0.215%)**. The same length at a random 16-aligned offset in the same `.gzn_pc`: 1,275 / 114,462
 (1.11%).
 
+**[OPEN — desk review 2026-09-30: these controls do not agree with the D1 row above or with §10.5 — D1 gives the check value present in a different zone's `.gzn_pc` for 77 / 36,231, yet the tag here is "found in 493" of 36,230; the perturbation figures here (−4: 1 / 38,152; +4: 80 / 37,206) differ from §10.5's (−4: 0; +4: 81 / 39,073), and the denominators 37,206 / 38,152 / 39,073 are not explained; to be settled against real data by one re-run on a single denominator (D8).]**
+
 **[CONFIRMED — empirical, controlled: the 36,231 non-closing candidates are real Mesh
 sub-block headers, each naming a distinct segment that genuinely exists in the paired
 `.gzn_pc`, at a byte offset the block's own declared length independently confirms.]**
@@ -641,6 +703,8 @@ false-positive rate is not, and this is worth them re-measuring. **[CONFIRMED �
 the 6.98% chance rate, `zg2_candidate_reality.py` test D7, 200 random 4-aligned trials per
 `.czn_pc` over 1,083 files; the applicability filter — hash-like value, usable length — is the
 same one the real test uses, which is why only 3,584 of ~200,000 trials could fire.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (control-figure disagreements marked OPEN, D8) — desk review (not re-derived from the executable).**
 
 ### 10.4 The cause: a `.gzn_pc` is a contiguous CHAIN of segments, and only the first one is 16-aligned
 
@@ -675,6 +739,10 @@ own alignment residue, so `mesh_scan.py`'s 16-alignment gate and `mesh_scan.py`'
 oracle directly contradict each other on 92.7% of zone blocks — and the oracle is the value the
 format publishes.** **[CONFIRMED — empirical, byte-level, with the contradiction demonstrated
 numerically on both readings of the same six blocks.]**
+
+**[OPEN — desk review 2026-09-30: the offsets tile (0 + 612 = 612, + 1,280 = 1,892, + 720 = 2,612, + 1,176 = 3,788, + 234,088 = 237,876) and the residues mod 16 are right, but the replay-from-16-aligned figures are inconsistent — rows at residue 4 give +4 (1,284, 724, 60,836) except the `0x2150` row (1,172, −4); "nearest 16-aligned position" does not say round up or down; and the table shows six of the zone's 12 candidates with only one of its two validated blocks visible (segment 0); to be settled against real data (D9).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (replay-figure inconsistency marked OPEN, D9) — desk review (not re-derived from the executable).**
 
 ### 10.5 The corrected count: 2,843 → 38,152 blocks, a 13.4× under-count
 
@@ -724,9 +792,15 @@ the declared length, advance by that length, and require the walk to land **exac
 - Controls: perturbing every advance by +4 breaks the walk in **1,002 of 1,002**; walking the
   same tag→length map against a **different** zone's `.gzn_pc` breaks it in **1,002 of 1,002**.
 
+**[CONFLICT — tiling figures, desk review 2026-09-30: Team B's full-population chain check tiles 1,002 / 1,002 (successors 37,035 contiguous / 115 padded / 0 other; its +4 control leaves 21 / 1,002 tiling), `team-b/HANDOFF.md` lines 6386-6391. The 831 / 928 / 97, 37,446 / 284 and 510 / 580 figures above are SUPERSEDED as population facts by that figure — see the full note in §10.8.]**
+
 **[CONFIRMED — empirical, controlled: the `.gzn_pc` payload is a chain of self-delimiting
 Mesh segments beginning at byte 0, each `[tag][payload][tag]`, packed contiguously (ordinary
 zones) or padded to the next 16-byte boundary between segments (`~al` zones).]**
+
+*(Desk review 2026-09-30: VALIDATED-BY-DATA — Team B's full-population run reproduces the 38,152-block count exactly and 1,002 files with at least one block, `team-b/STATE.md` line 32 and `team-b/HANDOFF.md` lines 6380-6386.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: 38,152 blocks and 1,002 / 1,002 files (Team B); tiling sub-figures superseded, §10.8 — desk review (not re-derived from the executable).**
 
 #### 10.5.1 What a reimplementation should do
 
@@ -736,12 +810,16 @@ both search-free:
 1. **From the c-side**, in c-file order, keep a running cursor starting at 0; block *k*'s segment
    begins at the cursor and the cursor advances by that block's declared g-length (for a `~al`
    zone, rounded up to the next 16-byte boundary). Correct for 37,446 of 37,730 blocks in
-   multi-block files.
+   multi-block files. *(⚠ Unlabelled figure, superseded by Team B's full-population count: with the running cursor, else the cursor rounded up to 16, in c-file order, skipping candidates that fit neither, every one of the 37,150 successors is placed — 37,035 contiguous + 115 padded + 0 other, `team-b/HANDOFF.md` lines 6389-6391; see §10.8.)*
 2. **From the g-side**, walk the chain as above and resolve each tag to its c-side block.
 
 If a search is used anyway, the offset must be **4-aligned, not 16-aligned**, and the exact
 replay plus bookend must still gate it — that combination is what the 0.13% foreign-file control
 and the 0-of-38,152 perturbed-length controls above measure.
+
+**[OPEN — desk review 2026-09-30: whether the 16-byte pad applies after every segment of a `~al` zone or only when the tag at the cursor does not resolve (97 files "use a skip" in §10.5; Team B counts 115 padded blocks), and whether any non-`~al` zone pads, is not stated, nor what happens to a candidate that fits neither position; to be settled against the executable (whatever advances the g-cursor alongside the Mesh sub-parser reached via 0x00e718b0) and real data (D10, D11).]**
+
+**Review status (2026-09-30): NEEDS-EXE: the `~al` padding decision and failure behaviour; data checks D10, D11 — desk review (not re-derived from the executable).**
 
 ### 10.6 §7.3's ~23% inline-mode population is REFUTED — a second header-offset defect, this one ours
 
@@ -788,7 +866,7 @@ candidates passing its plausibility gates (0.74%) read flags bit 0 clear**, acro
 1,083-pair population — not 23%. `mesh_scan.py` does not attempt to validate inline blocks, so
 this pass says nothing about whether those 292 are real; what it establishes is that the
 inline-mode *population* is sub-1%. **This removes the tension with Team B's 0 of 14,920 rather
-than explaining it away: there is essentially no inline-mode zone geometry to find.**
+than explaining it away: ~~there is essentially no inline-mode zone geometry to find.~~** *(Narrowed 2026-09-30 by the desk review: no inline-mode block has been validated by any full replay; the 292 remain unvalidated, data check D12.)*
 **[REFUTED — §7.3's ~23% inline-mode figure and its non-2 element-size population, both
 mechanically explained as one header-offset defect; CONFIRMED — empirical for the replacement
 figure of 292 / 39,366.]**
@@ -805,15 +883,17 @@ the surviving claims.
 The natural and tidy reading — that the non-closing anchors are concentrated among candidates
 misread as inline-mode under a naive offset, so one header-offset bug explains both puzzles —
 does not survive measurement. **The 36,231 non-closing g-backed candidates split 28,997 at
-`p ≡ 0 (mod 8)` and 7,213 at `p ≡ 4 (mod 8)`: 80.0% sit in the alignment class where no
+`p ≡ 0 (mod 8)` and 7,213 at `p ≡ 4 (mod 8)` *(28,997 + 7,213 = 36,210; the remaining 21 are not assigned in the text — desk review 2026-09-30)*: 80.0% sit in the alignment class where no
 header-offset rule was ever in dispute.** The header-offset defects explain the inline-mode
 figure and nothing else; the 13.4× under-count is entirely the g-side segment locator.
 **[REFUTED — empirical, controlled by the alignment split of the non-closing population
 itself.]**
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (overreach narrowed; 21-candidate remainder noted) — desk review (not re-derived from the executable).**
+
 ### 10.7 Scale, and the same instrument's effect on other carriers
 
-`mesh_scan.py` is the project's **shared** validator for all six carrier pairs, so per §5 its
+`mesh_scan.py` is the project's **shared** validator for all six carrier pairs, so per `HANDOFF.md` §5 its
 defect is correlated rather than distributed and the whole list of figures resting on it is
 suspect at once. Re-running the identical one-line change per carrier:
 
@@ -840,7 +920,7 @@ Consequences, stated as work to do rather than as new figures:
    records" is an under-count and needs re-deriving on its own population.** Every per-channel
    figure computed against that denominator — including §12.1's `26,601 / 26,601` all-zero
    results — is measured on a subset selected by the alignment gate. Those particular negatives
-   have an independent disassembly route (`spec-vertex-format.md` §12.1 / `HANDOFF.md` §27.1:
+   have an independent disassembly route (`spec-vertex-format.md` §12.1 / `HANDOFF.md` §30, archived 27.1 table:
    neither channel-array walker reads `+0x08` at all), so per `HANDOFF.md` §5
    they are the kind that survives their instrument being discredited; but the *denominator* in
    each table is wrong and should be restated.
@@ -851,6 +931,8 @@ Consequences, stated as work to do rather than as new figures:
    candidates over 367 pairs, of which 367 validate at **either** alignment. Vehicles are not
    affected by the alignment gate, so the other ~671 candidates need their own explanation.
    Flagged, not diagnosed. **[OPEN / UNKNOWN.]**
+
+**Review status (2026-09-30): DESK-PASS (out of zone scope for the other carriers; Team B quotes `.clmesh_pc` 12,628 → 29,908 at `team-b/HANDOFF.md` line 6330 against 16,324 → 29,908 here, unexplained) — desk review (not re-derived from the executable).**
 
 ### 10.8 Residuals, honestly
 
@@ -865,11 +947,16 @@ Consequences, stated as work to do rather than as new figures:
   **[OPEN / UNKNOWN.]**
 - **284 of 37,730 blocks in multi-block files do not start where the previous segment ended**,
   and 70 of 580 multi-block files have non-monotone segment order. **[OPEN / UNKNOWN.]**
+
+**[CONFLICT with Team B, resolved against this text by a full-population figure — desk review 2026-09-30:** Team B's chain check (`team-b/tools/validation/validate_zone_chain.cpp`, header comment lines 10-18; `team-b/HANDOFF.md` lines 6386-6391) reports over the same 10 archives that **1,002 / 1,002** files tile their `.gzn_pc` to EOF exactly (0 short, 0 past) with the located blocks taken in c-file order, 38,152 blocks, and over the 37,150 successors in the 580 multi-block files (37,730 − 580) a split of **37,035 contiguous / 115 at the next 16-byte boundary / 0 other**, with a firing +4 control (21 / 1,002 still tile). Its placement rule is: segment at the running cursor, else at the cursor rounded up to 16, candidates that fit neither skipped without moving the cursor (`team-b/src/zone_geometry.cpp` lines 165-201; a 16-aligned search is used only before the first segment is placed). A demonstrated tiling of every file plainly refutes "74 files tile under no packing rule", the 284 misplaced blocks and the 70 non-monotone files; those figures, and §10.5's 831 / 928 / 97, 37,446 / 284 and 510 / 580, are **SUPERSEDED as population facts** and stand only as what this pass's own g-side walker measured. (HANDOFF line 6390's "matching §10.5 exactly" is itself inaccurate: 37,035 / 115 / 0 does not match 37,446 / 284, and the +4 controls differ, 21 / 1,002 tiling there versus 0 / 1,002 here.) **Still OPEN:** why this pass's walker failed on 74 files — run both walkers on the same pairs and diff the failing sets (review data check D10).**]**
+
 - **40 of 36,231 L2F candidates have a check value absent from the paired `.gzn_pc` entirely**
   and 40 lie inside a validated block's declared span; these are the clearest non-block
   candidates in the population.
 - **The `p ≡ 2` and `p ≡ 6 (mod 8)` branches of `mesh_scan.py`'s header arithmetic are
   unexercised by any shipped zone block** (0 of 2,843 validated). Untested, not confirmed.
+
+**Review status (2026-09-30): NEEDS-DATA: 74 / 284 / 70 residuals superseded by Team B's 1,002 / 1,002 tile, cause of this walker's failures open (D10); 921 versus ~915 set comparison (D13); odd parity (D2) — desk review (not re-derived from the executable).**
 
 ### 10.9 What to send Team B
 
@@ -922,7 +1009,7 @@ gets right.
   parity; `gzn_meshes.py`: 8 bytes too early at the other). Both were "a constant where the
   format has a running alignment computation". **Prefer writing the alignment arithmetic out and
   testing both parity classes to writing the constant you observed** — and when a spec states an
-  offset, state it as the computation, per §5's existing rule, because this is exactly the defect
+  offset, state it as the computation, per `HANDOFF.md` §5's existing rule, because this is exactly the defect
   that rule exists to prevent and it recurred anyway.
 - **An instrument defect that under-counts by 13× leaves a self-consistent survivor set.** All
   2,843 survivors were real blocks, all passed every invariant, and every statistic computed on
@@ -930,3 +1017,11 @@ gets right.
   vehicles (`HANDOFF.md` §26.10). **The more selective the wrong filter, the healthier the surviving evidence
   looks.** Here the corrected population *strengthened* every claim measured on the old one
   (element-size byte 2 in 38,152 / 38,152), which is the lucky outcome, not the guaranteed one.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the pre-2026-09-30 "no walker exists"/"no standalone parser"/"clean census negative" statements superseded by §9.5 (status header, §5, §6 item 1, §9 intro, §9.2 ×2, §9.6) and qualified the "no literal check" inference (§1, §3, §9.3, §9.5); recorded that `0x00D9E740` is the confirmed CRC-32 (§9.3); pointer from §6 item 6 to §9.5; struck the stale "Team B will send the predicate" line (§9.4); fixed 6 cross-references (§5→§1/§3 ×2, §6→§1–§3/§8, conversation §6a→§6.1, bare §5→`HANDOFF.md` §5 ×3).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec or cited to another spec); repointed 1 `HANDOFF.md` §27.x reference to the archived headings (§10.7 item 1, §27.1 → §30 archived 27.1 table); qualified 2 bare §5 refs as `HANDOFF.md` §5 (§10 method paragraph, §10.9 methodology notes); 2 left (§6 item 1 and §9.4 cross-reference note `HANDOFF.md` §27.3, interior thread on hold) (see review).
+- 2026-09-30 (format desk review, `adv_zone.md`): added the review status summary and a status line per unit (27 units); marked the top-level step-alignment conflict (§1/§8.1 `align8` versus §9.5 4-byte round-up) on both sides, unsettled, pointing at 0x00864c60 / 0x007512f0 / 0x008652d0 and D1; marked the `.gzn_pc` tiling residuals (§6 items 5/7, §10.5, §10.5.1, §10.8) superseded by Team B's full-population 1,002 / 1,002 tile and 37,035 / 115 / 0 split (`team-b/HANDOFF.md` lines 6386-6391), cause of this pass's 74 failures left OPEN; corrected §7.2's pre-header layout to §10.1's (g-length was missing); struck/scoped §9.2's CONFIRMED labels beside the SUPERSEDED marks; reworded §9.5's pseudocode-shaped lines into prose; paraphrased quoted game strings in §1/§7.4/§9.3/§9.4/§9.5 (kept only `use_default_loadout`, a name the code compares); narrowed §10.6's inline-mode overreach; added OPEN markers for the data checks D1-D13 and the executable checks. No content added about the object-stream interior (on hold).

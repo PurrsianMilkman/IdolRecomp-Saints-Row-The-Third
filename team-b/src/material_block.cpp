@@ -1,5 +1,7 @@
 #include "sr3geometry/material_block.h"
 
+#include <algorithm>
+
 namespace sr3geometry {
 
 MaterialBlock MaterialBlock::parse(ByteView bytes) {
@@ -18,7 +20,11 @@ MaterialBlock MaterialBlock::parse(ByteView bytes) {
     // +0x10-+0x1F is confirmed zero padding, not read.
 
     size_t pos = kMaterialBlockHeaderSize;
-    m.textureNames.reserve(m.textureSlotCount);
+    // Every name takes at least its NUL byte, so no more names than bytes
+    // remaining can exist; cap the reservation there rather than trusting
+    // the file's count (found by fuzz_geometry/fuzz_clmesh/fuzz_zoneheader:
+    // a count of 0xB0000002 reserved ~94 GB before the loop could throw).
+    m.textureNames.reserve(std::min<size_t>(m.textureSlotCount, bytes.size() - pos));
     for (uint32_t i = 0; i < m.textureSlotCount; ++i) {
         size_t len = bytes.cStringLength(pos);
         ByteView nameBytes = bytes.subview(pos, len);

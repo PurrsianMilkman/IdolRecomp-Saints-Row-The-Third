@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // sr3save::nameHash(): the engine's general lower-cased, seed-0, no-final-
@@ -47,6 +48,7 @@
 // routine before the parent/document-scoped lookup below. Header-only, no
 // new link dependency (include/ is one shared tree - see this project's
 // own established convention, every library already does this).
+#include "sr3luahost/open_state.h"
 #include "sr3save/save_crc.h"
 
 namespace sr3luahost {
@@ -60,10 +62,11 @@ namespace sr3luahost {
 // spec's own "keyed by the arg-3-derived integer when nonzero, else by
 // object identity alone" text as closely as this minimal registry allows.
 struct EnemyTargetRecord {
-    // Real, spec-confirmed banker's-rounded (round-half-to-even) int64 of
-    // arg 3 - CONFIRMED per Sec3's own primitive-upgrade note (0x00ea2596
-    // resolved to a banker's-rounding float->int64 conversion, not a plain
-    // truncation).
+    // int64 of arg 3 via 0x00ea2596. Its rounding mode was labelled
+    // banker's rounding (CONFIRMED) in Sec3's primitive note, but the
+    // 2026-09-30 consistency review found Sec2/Sec3/Sec3.9 disagree and marked
+    // it OPEN (Sec4.1). Converted with roundToIntOpenMode()
+    // (lua_spec_confirmed_stubs.cpp), this project's CHOSEN round-half-to-even.
     int64_t priorityOrId = 0;
     // Bit 0x04: set from arg 4 (optional bool, default false). CONFIRMED
     // structure (Sec3.9); the real-world MEANING of this bit is HIGH
@@ -156,16 +159,18 @@ struct ObjectIndicatorRecord {
 
 // One tracked "character"-shaped object (per this header's own top note:
 // really just "whatever the resolved name string was", never a true
-// distinct engine entity). Every field's default is this project's OWN
-// explicit choice for "a name not yet seen" - stated per-field below, not
-// scraped from any real data source (the spec does not state real default
-// values for a fresh/unspawned object, only the runtime FIELD SHAPES).
+// distinct engine entity). CLOUD PHASE 2026-09-30: every engine field
+// below that a stub READS is an OpenValue (open_state.h) - OPEN for a name
+// not yet seen, refusing reads until set, because no spec gives a fresh
+// object's values. The per-field notes below that mention a "default"
+// describe the pre-conversion stand-ins and are kept for history; the
+// stand-in values themselves are gone.
 struct CharacterState {
     // set_ignore_ai_flag (Sec3.4): the character's "ignore AI" flag.
     // Real read location per spec: bit 1 of the byte at object +0x2bc.
     // Default false ("not ignoring AI") - this project's own chosen
     // default for "alive, ordinary, not yet specially flagged."
-    bool ignoreAI = false;
+    OpenValue<bool> ignoreAI{"character ignore-AI flag (+0x2bc)", "spec-lua-api-behaviour.md Sec3.4"};
 
     // set_ignore_ai_flag's own conditional side effect (Sec3.4): "forces
     // the character's action/animation-override state to a fixed id
@@ -178,7 +183,7 @@ struct CharacterState {
     // confirms for the sibling animation-override field elsewhere in this
     // spec (not claimed to be the SAME physical field - this project's own
     // field, scoped only to set_ignore_ai_flag).
-    int32_t actionOverrideId = -1;
+    OpenValue<int32_t> actionOverrideId{"character action/animation override", "spec-lua-api-behaviour.md Sec3.4"};
 
     // Read-only-by-us gate for the conditional branch above: the
     // "in a vehicle" state-enum value is 3 per Sec3.4/Sec3.10's own cross-
@@ -187,13 +192,13 @@ struct CharacterState {
     // would naturally pair with it, is out of scope) - exposed only so a
     // test can set up the "newly enabling ignore-AI while in a vehicle"
     // condition directly. Default 0 ("not in a vehicle").
-    int32_t stateEnum = 0;
+    OpenValue<int32_t> stateEnum{"character state enum (+0x16d4)", "spec-lua-api-behaviour.md Sec3.4/Sec3.10"};
 
     // The other half of the same conditional (Sec3.4): "clears the
     // override to 0 if the character currently carries a nonzero
     // attacker/threat reference." Default 0 ("no attacker/threat
     // reference") - same "no Lua setter in scope" note as stateEnum above.
-    int32_t attackerThreatRef = 0;
+    OpenValue<int32_t> attackerThreatRef{"character attacker/threat reference", "spec-lua-api-behaviour.md Sec3.4"};
 
     // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31):
     // CONFIRMED, cross-checked to be the SAME integer field at object
@@ -203,13 +208,13 @@ struct CharacterState {
     // SHAPE, never a real default value for an unspawned character), kept
     // as a plain int32 to honor the confirmed "stored as a plain integer"
     // detail precisely, converted to a double only at Lua-push time.
-    int32_t maxHitPoints = 100;
+    OpenValue<int32_t> maxHitPoints{"character max hit points (+0x1cac)", "spec-lua-api-behaviour.md Sec7.12/Sec7.31"};
 
     // set_current_hit_points (Sec7.31): object +0x1cb8, clamped into
     // [0, maxHitPoints] on write (CONFIRMED). Default equals maxHitPoints
     // ("alive, full health" - this project's own chosen default, per this
     // task's own suggested convention).
-    int32_t currentHitPoints = 100;
+    OpenValue<int32_t> currentHitPoints{"character current hit points (+0x1cb8)", "spec-lua-api-behaviour.md Sec7.31"};
 
     // set_current_hit_points' own HIGH-CONFIDENCE-tier consequence (Sec7.31:
     // "if the new value is <= 0 and two further predicates ... are both
@@ -322,8 +327,7 @@ public:
     // task's own "no real networking layer" instruction). setCoopActive()
     // exists only so a test can exercise the true branch directly; no Lua
     // function among these 12 ever calls it.
-    bool isCoopActive() const { return coopActive_; }
-    void setCoopActive(bool active) { coopActive_ = active; }
+    OpenValue<bool>& coopActive() { return coopActive_; }
 
     // game_UI_audio_play (Sec2.2): "Returns the resulting voice/play-
     // instance handle as a Lua number" - the spec confirms a handle is
@@ -380,8 +384,7 @@ public:
     // lookup") - default 0 (this project's own "no default document yet"
     // sentinel, VdoObject's own doc comment). Test-only setter; no Lua
     // function among this task's 13 in-scope names ever changes it.
-    uint32_t currentDefaultDocHandle() const { return currentDefaultDocHandle_; }
-    void setCurrentDefaultDocHandle(uint32_t h) { currentDefaultDocHandle_ = h; }
+    OpenValue<uint32_t>& currentDefaultDocHandle() { return currentDefaultDocHandle_; }
 
     // Implements vint_object_find's own CONFIRMED mechanism (Sec15): hash
     // `name` (FUN_00D9E740 - this project's own default seed 0, since the
@@ -412,8 +415,7 @@ public:
     // vehicle-store UI mode" - this project's own chosen default, same
     // "single-process, nothing active yet" convention as isCoopActive()
     // above). Test-only setter, matching setCoopActive()'s own precedent.
-    bool isVehicleStoreActive() const { return vehicleStoreActive_; }
-    void setVehicleStoreActiveForTesting(bool active) { vehicleStoreActive_ = active; }
+    OpenValue<bool>& vehicleStoreActive() { return vehicleStoreActive_; }
 
     // --- Completion_is_client (Sec10.2) -------------------------------------
 
@@ -429,8 +431,7 @@ public:
     // convention already established for coopActive_/replicateStateChange
     // above). Test-only setter; no Lua function among this task's 9
     // in-scope names ever changes it.
-    bool isHost() const { return isHost_; }
-    void setHostForTesting(bool host) { isHost_ = host; }
+    OpenValue<bool>& isHost() { return isHost_; }
 
     // --- game_hud_update_inventory (Sec10.3) --------------------------------
 
@@ -447,8 +448,7 @@ public:
     // for "a real HUD refresh happened" (no real HUD to refresh) - a
     // plain incrementing counter, same shape choice as
     // nextAudioVoiceHandle() above.
-    bool hasLocalPlayer() const { return hasLocalPlayer_; }
-    void setHasLocalPlayerForTesting(bool has) { hasLocalPlayer_ = has; }
+    OpenValue<bool>& hasLocalPlayer() { return hasLocalPlayer_; }
     int hudInventoryRefreshCount() const { return hudInventoryRefreshCount_; }
     void recordHudInventoryRefresh() { ++hudInventoryRefreshCount_; }
 
@@ -498,29 +498,143 @@ public:
     // `coopJoinType_` is this project's own minimal `int` stand-in,
     // default 0. Pure query among this task's 9 in-scope names (the real
     // writer is a different, out-of-scope function) - test-only setter.
-    int coopJoinType() const { return coopJoinType_; }
-    void setCoopJoinTypeForTesting(int code) { coopJoinType_ = code; }
+    OpenValue<int>& coopJoinType() { return coopJoinType_; }
+
+    // --- name resolution the host does not model (cloud phase 2026-09-30) --
+
+    // Whether a tutorial id resolves in the 210-entry tutorial table
+    // (0x00717780, entry kind == 3; tutorial_advance Sec10.4). The table is
+    // not loaded here, so every id is OPEN until set.
+    OpenValueMap<bool>& tutorialResolves() { return tutorialResolves_; }
+    // Whether a name resolves to a live engine object through the resolver
+    // the calling function uses (ai_add_enemy_target Sec3.9: "on successful
+    // resolution of both names"; object_indicator_add_do Sec10.6). One map
+    // for all resolvers - a stated simplification; OPEN until set.
+    OpenValueMap<bool>& objectResolves() { return objectResolves_; }
+
+    // --- zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23) --------------
+
+    // Real body: a two-tier dispatch (CONFIRMED, disassembly). Tier 1, only
+    // when a name is given: the scene's per-name state (0x00723d20) reads
+    // exactly 1 -> true. Tier 2 (0x00721db0): the busy flag 0x0153b556 (the
+    // same flag zscene_prep gates on, Sec8.21) set -> true; else, if a name
+    // was given and resolves through the scene-table lookup (0x00d9e8b0 ->
+    // 0x00721be0, a CRC-32 of the lowercased name) to a non-"current"
+    // record, a per-record test whose sense is OPEN; else the global state
+    // code 0x0153b51c == 2.
+    //
+    // Every one of those values is OPEN state here (open_state.h): no spec
+    // gives an initial value or a writer (zscene_prep's load sequence is
+    // only HIGH CONFIDENCE, Sec8.21), so nothing is defaulted. Reading an
+    // OPEN one throws OpenStateError, which zscene_is_loaded reports as a
+    // Lua error naming the global. Tests (and later, specced writers) set
+    // them. zsceneTableResolves is keyed by the lowercased name; the
+    // per-name state by the exact Lua string (0x00723d20's own lookup is
+    // not described). zsceneOpenBranchHits() counts arrivals at the OPEN
+    // per-record branch, which also refuses.
+    OpenValueMap<int>& zsceneNameState() { return zsceneNameState_; }
+    OpenValue<bool>& zsceneBusyFlag() { return zsceneBusyFlag_; }
+    OpenValue<int>& zsceneStateCode() { return zsceneStateCode_; }
+    OpenValueMap<bool>& zsceneTableResolves() { return zsceneTableResolves_; }
+    static std::string zsceneTableKey(const std::string& name);
+    int zsceneOpenBranchHits() const { return zsceneOpenBranchHits_; }
+    void recordZsceneOpenBranchHit() { ++zsceneOpenBranchHits_; }
+
+    // --- screen-fade state machine (Sec26.23, Sec26.9) ----------------------
+
+    // The globals Sec26.23 names for the screen-fade-request primitive
+    // 0x0059f8c0's state machine. All OPEN (values, types beyond "compared
+    // as an integer", initial state and transitions are unspecced - HANDOFF
+    // request 1). CONFIRMED consumer: sfx_faded_out pushes 0x012e6aa4 == 3
+    // (Sec26.9). fade_out/fade_in drive this machine, but how is not specced,
+    // so they do not write it.
+    struct FadeStateMachine {
+        OpenValue<uint32_t> g012e6aa0{"0x012e6aa0", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g012e6aa4{"0x012e6aa4", "spec-lua-api-behaviour.md Sec26.9/Sec26.23"};
+        OpenValue<uint32_t> g012e6aa8{"0x012e6aa8", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effc8{"0x013effc8", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effcc{"0x013effcc", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effd0{"0x013effd0", "spec-lua-api-behaviour.md Sec26.23"};
+    };
+    FadeStateMachine& fadeState() { return fadeState_; }
+
+    // --- fade_out (spec-lua-api-behaviour.md Sec2.9) ------------------------
+
+    // CONFIRMED: the three colour components (0.0 when absent) plus a fixed
+    // alpha of 255 go to the overlay colour setter, which scales each by
+    // 1/255. Stored here already scaled. hasScreenFadeColour() is false
+    // until the first fade_out: the real initial overlay colour is not in
+    // any spec.
+    struct ScreenFadeColour {
+        float r = 0.0f, g = 0.0f, b = 0.0f, a = 0.0f;
+    };
+    bool hasScreenFadeColour() const { return hasScreenFadeColour_; }
+    const ScreenFadeColour& screenFadeColour() const { return screenFadeColour_; }
+    void setScreenFadeColour(const ScreenFadeColour& c) { screenFadeColour_ = c; hasScreenFadeColour_ = true; }
+
+    // CONFIRMED: flags bit 0x1 queues the engine's "screen_fade_do" UI
+    // command with the duration x 1000.0 (ms) and a target alpha (1.0 from
+    // fade_out). This project has no UI command queue and does not fire the
+    // Lua `screen_fade_do` hook from here (Sec26.23 gives that callback 3
+    // numeric arguments, only 2 of which are known), so each request is just
+    // recorded. What the fade state machine (0x0059f8c0) does with it is the
+    // open Team A request (HANDOFF "Requests to Team A", item 1).
+    struct ScreenFadeRequest {
+        double durationMs = 0.0;
+        float targetAlpha = 0.0f;
+    };
+    const std::vector<ScreenFadeRequest>& screenFadeRequests() const { return screenFadeRequests_; }
+    void recordScreenFadeRequest(const ScreenFadeRequest& r) { screenFadeRequests_.push_back(r); }
+    // CONFIRMED: flags bit 0x2 queues a separate opcode-0x53 command
+    // (Sec8.13: a host-gated fade broadcast). No networking here; counted.
+    int screenFadeOpcode53Count() const { return screenFadeOpcode53Count_; }
+    void recordScreenFadeOpcode53() { ++screenFadeOpcode53Count_; }
+
+    // --- mission_end_silently (Sec15.23) ------------------------------------
+
+    // The global mission-flags word 0x014c848c. CONFIRMED: mission_end_silently
+    // always sets bit 0x4 and sets/clears bit 0x10 to mirror its argument
+    // (meaning of both OPEN). Every other bit, and the initial value, is OPEN:
+    // only the bits a confirmed writer has written are known (open_state.h).
+    OpenBits32& missionFlagsWord() { return missionFlagsWord_; }
 
 private:
     std::unordered_map<std::string, CharacterState> characters_;
-    bool coopActive_ = false;
+    OpenValue<bool> coopActive_{"co-op session (0x0087ba20 non-null + session counter check)", "spec-lua-api-behaviour.md Sec3.1"};
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
 
     std::unordered_map<uint32_t, VdoObject> vdoObjects_;
     uint32_t nextVdoObjectHandle_ = 1;
-    uint32_t currentDefaultDocHandle_ = 0;
+    OpenValue<uint32_t> currentDefaultDocHandle_{"current default vint document (0x00e0ceb0)", "spec-lua-bindings.md Sec15"};
 
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
     // above for citation/reasoning. ---
-    bool vehicleStoreActive_ = false;                        // Sec10.1
-    bool isHost_ = true;                                      // Sec10.2
-    bool hasLocalPlayer_ = true;                               // Sec10.3
+    OpenValue<bool> vehicleStoreActive_{"vehicle-store active state", "spec-lua-api-behaviour.md Sec10.1"};
+    OpenValue<bool> isHost_{"host check (0x0087ba20: +0x5c == +0x58)", "spec-lua-api-behaviour.md Sec10.2/Sec8.27"};
+    OpenValue<bool> hasLocalPlayer_{"local player exists (0x009da4e0)", "spec-lua-api-behaviour.md Sec10.3"};
     int hudInventoryRefreshCount_ = 0;                         // Sec10.3
     std::unordered_map<std::string, int> tutorialAdvanceCounts_; // Sec10.4
     std::string qteAnimationTriggerCallback_;                  // Sec10.7
-    int coopJoinType_ = 0;                                      // Sec10.9
+    OpenValue<int> coopJoinType_{"0x012f44fc (co-op join type)", "spec-lua-api-behaviour.md Sec10.9"};
+    OpenValueMap<bool> tutorialResolves_{"tutorial table 0x00717780 lookup", "spec-lua-api-behaviour.md Sec10.4"};
+    OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6"};
+
+    // --- zscene_is_loaded (Sec14.23), see the accessor doc comment above ---
+    OpenValueMap<int> zsceneNameState_{"zscene per-name state (0x00723d20)", "spec-lua-api-behaviour.md Sec14.23"};
+    OpenValue<bool> zsceneBusyFlag_{"0x0153b556", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
+    OpenValue<int> zsceneStateCode_{"0x0153b51c", "spec-lua-api-behaviour.md Sec14.23"};
+    OpenValueMap<bool> zsceneTableResolves_{"zscene table lookup 0x00721be0", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
+    int zsceneOpenBranchHits_ = 0;
+    FadeStateMachine fadeState_;
+
+    // --- fade_out (Sec2.9) / mission_end_silently (Sec15.23) ---
+    bool hasScreenFadeColour_ = false;
+    ScreenFadeColour screenFadeColour_;
+    std::vector<ScreenFadeRequest> screenFadeRequests_;
+    int screenFadeOpcode53Count_ = 0;
+    OpenBits32 missionFlagsWord_{"0x014c848c", "spec-lua-api-behaviour.md Sec15.23"};
 };
 
 } // namespace sr3luahost

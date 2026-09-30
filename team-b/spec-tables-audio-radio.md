@@ -1,7 +1,7 @@
 # Saints Row: The Third — Audio, Radio and Foley Data Tables: XML Schemas Recovered from the Loaders
 
 **Prepared by:** SPEC TEAM, agent AO
-**Phase:** Schema-from-loader campaign (`HANDOFF.md` §27.2) — group "audio, radio and foley"
+**Phase:** Schema-from-loader campaign (`HANDOFF.md` §31, archived §27.2) — group "audio, radio and foley"
 **Scope:** For each `.xtbl` gameplay table of the audio/radio/foley group whose literal filename appears in the executable: the loader, the element tree its reader accepts, each element's type and destination offset in the runtime record, defaults and required-vs-optional behaviour, unit conversions, name-hash keys, cross-table references and fixed capacities — then, where the base-game container is readable, validation against the real shipped rows.
 **Method:** Exact filename literals were located by a raw case-insensitive scan of the executable (`tools/harnesses/tbl_exe_lit.py`) and followed by string cross-reference in Ghidra 12.1.3 (disposable project copy `tools/gp_ao1`) to each table's loader; the per-row reader and its callees were decompiled (`tools/scripts/AhDecMk.java`, reusing agent AH's generic "disassemble+decompile" harness) and read to the end. Literal addresses referenced only as data (element names, enum strings) were resolved with a small purpose-built script, `tools/scripts/AoStrAt.java` (prints the ASCII string located *at* a given address, the reverse of `AfStrXrefs.java`). Base-game table content is now readable (`spec-vpp-container.md` §7); this pass additionally extracted all 16 assigned tables from `misc_tables.vpp_pc` via the standard mode-(a) reader (`tools/harnesses/vpp_modea.py`) and validated the loader-derived schema against the real rows with a tolerant, regex-based reader (never a strict XML parser, per `spec-xtbl-format.md` §7's tolerance requirement) — `tools/harnesses/ao_validate.py`-equivalent logic, run from the session scratchpad and reported per table below. No whole-binary predicate search was used; negative claims ("only N of M rows are reachable") rest on a complete read of the loader body plus an exhaustive regex count against the real extracted file, not a spot check.
 **Cleanroom compliance:** No decompiled code is reproduced and no original internal identifiers are used. XML table/element names, enum literals and flag literals are *data* and are listed freely; offsets, sizes, strides, constants and function addresses are evidence anchors. Function addresses use the form `FUN_00XXXXXX` for the image address only.
@@ -115,7 +115,7 @@ Extracted from `misc_tables.vpp_pc` entry 54 (797,216 bytes — by far the large
 
 ## 6. `audio_personas.xtbl` — persona demographic classification and its own name-suffix convention
 
-**Loader `FUN_0070B090`** (DLC-aware: `dlc%d_audio_personas.xtbl` or plain). Row `<Audio_Persona>`. First base-game load allocates a **300-entry**, `0x30`-byte-stride record array (`0x3840` bytes = exactly `300 × 0x30`) at `DAT_01504094`; capacity is bound-checked directly (`if (299 < count) return NULL`).
+**Loader `FUN_0070B090`** (DLC-aware: `dlc%d_audio_personas.xtbl` or plain). Row `<Audio_Persona>`. First base-game load allocates a **300-entry**, `0x30`-byte-stride record array (`0x3840` bytes = exactly `300 × 0x30`) at `DAT_01504094`; capacity is bound-checked directly (the loader fails, returning null, once the count exceeds 299).
 
 Per row, `Name` and an "if present" `wwise_id` (`u32`) are read by the loader itself; if a persona with the same `wwise_id` already exists in the table it is skipped (deduplication by id, linear scan), otherwise a new record is filled by **`FUN_00709F40`**:
 
@@ -219,7 +219,7 @@ Row `<NewEntity>` (the file's single settings block) directly under `<Table>`, c
 - Station array allocated at `DAT_013C58CC`, stride **`0x690`** bytes, zeroed, then **station 0 is hard-initialised in code, not from any row**: `+0x40` = the literal display name `"My Radio 85.5"`, `+0x689` bit 5 cleared then set (bits 3/5 of the flag byte set directly, matching `spec-save-format.md` §12.8.1's identification of record 0 as **"Mix Tape"**), and a block of default audio-processing floats (EQ-like constants at `+0x5B0`–`+0x668`, not xtbl-derived, not decoded further here — out of this document's scope).
 - The `<Info>` rows are then walked to fill stations **1..N** (station 0 is never touched by this walk).
 
-### 11.2 Per-`<Info>`-row fields → station record (base = `pvVar4 + 0x689` for the *first* row, `+0x690` per subsequent row — i.e. offsets below are relative to each station's own base)
+### 11.2 Per-`<Info>`-row fields → station record (base = station-array base `+ 0x689` for the *first* row, `+0x690` per subsequent row — i.e. offsets below are relative to each station's own base)
 
 | Offset | Field | Source element | Type / reader | Notes |
 |---|---|---|---|---|
@@ -403,9 +403,9 @@ All rows below were extracted from `misc_tables.vpp_pc` this pass (byte-length e
 | `playlist_artist_track.xtbl` | 214 | 21,996 | 138 `Track` | 145 | 0 duplicate `WWise_ID` |
 | `voc_sb_line_sit.xtbl` | 323 | 41,373 | 265 `Entry` | 600 (scratch, loader-local) | 265/265 `Soundbank` values match a real `audio_banks.xtbl` `Name` |
 | `commercial_events.xtbl` | 80 | 2,769 | 15 `Event` | **30**, bound-checked | reproduces the save-format spec's own "1,2,6,27" observation |
+| `commercials.xtbl` | 79 | 19,914 | 81 `Commercial` | patches a separate registry | 33/33 `EnableEvent` + 28/28 `DisableEvent` resolve |
 
 **Multi-archive correction (2026-09-28, Team B, independently re-verified by SPEC TEAM):** three of this group's tables — `audio_banks.xtbl`, `audio_personas.xtbl`, `foley_engine.xtbl` — each ship a SECOND, THIRD and FOURTH real copy, one per DLC archive, under a `dlcN_`-prefixed filename (`dlc1_audio_banks.xtbl` etc.) rather than the shared base filename — the same pattern already seen for `customization_items.xtbl`/`customization_outfits.xtbl` (`spec-customization-data.md` §6). Neither patch archive (`patch_compressed.vpp_pc`/`patch_uncompressed.vpp_pc`) carries any of the 16 tables in this group, checked directly. Confirmed merged totals, orchestrator-recounted from scratch against all 38 real archives: `audio_banks.xtbl` 496 base + 15 + 17 + 16 (dlc1/2/3) = **544**; `audio_personas.xtbl` 265 base + 7 + 11 + 10 = **293**; `foley_engine.xtbl` 84 base + 1 + 1 + 1 = **87**. The other 13 tables in this group have no DLC-prefixed counterpart. This does not change any of this section's per-table structural/validation findings above, which were run against the base copy only and remain accurate as base-copy findings.
-| `commercials.xtbl` | 79 | 19,914 | 81 `Commercial` | patches a separate registry | 33/33 `EnableEvent` + 28/28 `DisableEvent` resolve |
 
 ---
 
@@ -427,3 +427,8 @@ No further tables remain unassigned to this document — all 16 tables named in 
 ## 21. Artifacts
 
 Ghidra disposable project copy: `tools/gp_ao1` (robocopied from `tools/ghidra_projects`, safe to delete once consolidated). Scripts (`tools/scripts/`): `AfStrXrefs.java`, `AfCallers.java`, `AhDecMk.java`, `AhAsm.java`, `AhTab.java` (all reused from agents AF/AH, unmodified) and one new, small script written this pass, `AoStrAt.java` (prints the ASCII string located *at* a given address — the reverse lookup `AfStrXrefs.java` doesn't provide). Dumps: `tools/ao_strxrefs1.txt`, `ao_strxrefs2.txt` (filename-literal cross-references), `ao_dec_*.txt` (decompiles), `ao_asm_*.txt` (annotated disassembly), `ao_strat*.txt`/`ao_tab1.txt`/`ao_mem*.txt` (literal/constant resolution). Extracted real base-game table content: `tools/ao_xtbl/` (all 16 files, byte-exact from `misc_tables.vpp_pc`). Runner: `tools/run_ao.ps1` (PowerShell headless-analyzer wrapper against `gp_ao1`, same shape as agent AH's `run_tbl.ps1`).
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): moved the orphaned `commercials.xtbl` row of the §19 validation table back above the "Multi-archive correction" paragraph so it renders inside the table, and reworded 2 decompiler-shaped expressions (§6 capacity check, §11.2 auto-named local).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 1 `HANDOFF.md` §27.x references to the archived headings (§27.2 → §31, header); 0 left (see review).

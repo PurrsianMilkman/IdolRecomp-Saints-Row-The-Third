@@ -9,7 +9,12 @@
 // engineered content. Same real-header convention src/window.cpp already
 // uses elsewhere in this project (plain #include <windows.h>, no
 // WIN32_LEAN_AND_MEAN/NOMINMAX games - this project has not needed them).
+// Non-Windows builds (the portable Linux/CI build, cloud phase 2026-09-30)
+// have no OS key-name source; game_get_key_name then takes its existing
+// "no real name resolved" path and returns "".
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 namespace sr3luahost {
 
@@ -57,6 +62,18 @@ bool caseInsensitiveEquals(const std::string& a, const std::string& b) {
     return true;
 }
 
+// lua_tonumber + 0x00ea2596, the engine's double->int64 conversion. Its
+// rounding mode is OPEN (spec-lua-api-behaviour.md Sec4.1 after the
+// 2026-09-30 consistency review: Sec2/Sec3/Sec3.9 describe it as
+// truncation, round-half-correcting or banker's rounding, pending a re-read).
+// Every call site goes through this one function so the choice is made once:
+// this project's own CHOSEN stand-in is round-half-to-even (std::nearbyint
+// under the default FE_TONEAREST mode), kept from before the review. It only
+// matters for non-integral arguments.
+int64_t roundToIntOpenMode(lua_Number v) {
+    return static_cast<int64_t>(std::nearbyint(v));
+}
+
 // Small helper matching this batch's own recurring "mandatory string,
 // read via lua_tolstring, NULL-safe" shape.
 std::string argString(lua_State* L, int idx) {
@@ -74,7 +91,7 @@ std::string argString(lua_State* L, int idx) {
 // ---------------------------------------------------------------------
 int stub_coop_is_active(lua_State* L) {
     logCall(L, upLog(L), "coop_is_active", upStateTag(L));
-    lua_pushboolean(L, upState(L)->isCoopActive() ? 1 : 0);
+    lua_pushboolean(L, upState(L)->coopActive().get() ? 1 : 0); // OPEN until set (open_state.h)
     return 1;
 }
 
@@ -111,6 +128,7 @@ int stub_game_get_key_name(lua_State* L) {
     // per spec: "a visible mismatch between the three arguments the call
     // site passes and the callee's own recovered signature ... not pinned
     // down with full confidence").
+#ifdef _WIN32
     LONG lParam = (static_cast<LONG>(code) & 0xFF) << 16;
     wchar_t buf[64] = {};
     int len = GetKeyNameTextW(lParam, buf, 64);
@@ -126,6 +144,11 @@ int stub_game_get_key_name(lua_State* L) {
     }
     lua_pushlstring(L, utf8.data(), utf8.size());
     return 1;
+#else
+    // No OS key-name source off Windows: refused as OPEN rather than an
+    // invented "" (the portable Linux/CI build only).
+    throw OpenStateError("GetKeyNameTextW result for key code " + std::to_string(code), "spec-lua-api-behaviour.md Sec2.3");
+#endif
 }
 
 // ---------------------------------------------------------------------
@@ -176,14 +199,16 @@ int stub_game_audio_get_audio_id(lua_State* L) {
         int t = lua_type(L, 1);
         if (t == LUA_TNUMBER) {
             double raw = lua_tonumber(L, 1);
-            int64_t rounded = static_cast<int64_t>(std::nearbyint(raw)); // "round-to-int pair" - same primitive family as Sec3.9's confirmed banker's rounding
+            int64_t rounded = roundToIntOpenMode(raw); // "round-to-int pair"; rounding mode OPEN, see roundToIntOpenMode
             result = static_cast<double>(static_cast<uint32_t>(rounded) & 0xFFFFu); // masked to 16 bits, CONFIRMED
         } else if (t == LUA_TSTRING) {
             std::string s = argString(L, 1);
             if (s.empty() || caseInsensitiveEquals(s, "none")) {
                 result = 0.0; // CONFIRMED sentinel
             } else {
-                result = 0.0; // TODO / explicit gap - see this function's own doc comment above
+                // The Wwise string->id resolution (0x00462960) is not modelled:
+                // refused as OPEN rather than returning an invented 0.
+                throw OpenStateError("Wwise id for '" + s + "' (0x00462960)", "spec-lua-api-behaviour.md Sec8.22/Sec2.2");
             }
         }
         // else: present but neither string nor number - not covered by the
@@ -214,8 +239,11 @@ int stub_game_get_key_name_for_action(lua_State* L) {
         lua_pushstring(L, "STR_THE_MOUSE");
         return 1;
     }
-    lua_pushstring(L, "");
-    return 1;
+    // Every other name goes through the CBA/CAA tables and the live key
+    // bindings (Sec8.23); neither is modelled here, so the result is OPEN
+    // rather than an invented "".
+    throw OpenStateError("key binding for action '" + name + "' (0x005be440 CBA/CAA lookup)",
+                         "spec-lua-api-behaviour.md Sec8.23");
 }
 
 // ---------------------------------------------------------------------
@@ -240,7 +268,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
     req.requestName = name;
 
     double nRaw = lua_tonumber(L, 2);
-    int64_t count = static_cast<int64_t>(std::nearbyint(nRaw));
+    int64_t count = roundToIntOpenMode(nRaw);
     if (count >= 1 && count <= 6) {
         for (int64_t i = 0; i < count; ++i) {
             int argIndex = 3 + static_cast<int>(i);
@@ -258,7 +286,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
 // ---------------------------------------------------------------------
 // 7. ai_add_enemy_target (Sec3.9)
 // Arguments: 4 (acting character, target name or "#CLOSEST_PLAYER#",
-// priority/id number [banker's-rounded, CONFIRMED per the primitive-
+// priority/id number [rounded via 0x00ea2596, mode OPEN since the 2026-09-30 review; was labelled CONFIRMED per the primitive-
 // upgrade note], optional bool default false). Return: 1 boolean
 // (resolve-and-add success/failure - always true in this minimal
 // registry, see engine_state.h's own EnemyTargetRecord doc comment).
@@ -268,7 +296,7 @@ int stub_ai_add_enemy_target(lua_State* L) {
     std::string actor = argString(L, 1);
     std::string target = argString(L, 2);
     double priorityRaw = lua_tonumber(L, 3);
-    int64_t priority = static_cast<int64_t>(std::nearbyint(priorityRaw)); // banker's rounding, CONFIRMED (0x00ea2596)
+    int64_t priority = roundToIntOpenMode(priorityRaw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
     bool arg4 = false;
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) arg4 = lua_toboolean(L, 4) != 0;
     bool sentinelMatch = caseInsensitiveEquals(target, "#CLOSEST_PLAYER#");
@@ -279,10 +307,15 @@ int stub_ai_add_enemy_target(lua_State* L) {
     rec.sentinelMatchFlag = sentinelMatch;
     std::string key = (priority != 0) ? std::to_string(priority) : target;
 
-    CharacterState& actorState = upState(L)->getOrCreateCharacter(actor);
-    actorState.enemyTargets[key] = rec;
-
-    lua_pushboolean(L, 1);
+    // CONFIRMED: "on successful resolution of both names" the record is
+    // added and the boolean result is that success. Resolution is OPEN
+    // state here (no object registry); the earlier always-true is gone.
+    bool resolved = upState(L)->objectResolves().get(actor) && upState(L)->objectResolves().get(target);
+    if (resolved) {
+        CharacterState& actorState = upState(L)->getOrCreateCharacter(actor);
+        actorState.enemyTargets[key] = rec;
+    }
+    lua_pushboolean(L, resolved ? 1 : 0);
     return 1;
 }
 
@@ -322,21 +355,22 @@ int stub_set_ignore_ai_flag(lua_State* L) {
     if (lua_gettop(L) >= 2 && lua_type(L, 2) != LUA_TNIL) newValue = lua_toboolean(L, 2) != 0;
 
     CharacterState& character = upState(L)->getOrCreateCharacter(name);
-    bool wasIgnoring = character.ignoreAI;
-    character.ignoreAI = newValue;
-    EngineState::replicateStateChange("set_ignore_ai_flag", name);
-
-    if (newValue && !wasIgnoring) {
+    // Every value the body branches on is read BEFORE anything is written,
+    // so an OPEN one (open_state.h) refuses the call without a partial update.
+    bool wasIgnoring = character.ignoreAI.get();
+    bool enabling = newValue && !wasIgnoring;
+    int override = 1; // 1 = leave, 0x19 or 0 = write that value
+    if (enabling) {
         // HIGH CONFIDENCE only for the real-world meaning of id 0x19 and
         // for this exact gating condition (spec's own words) - the
         // STRUCTURE (state-enum-gated conditional override write) itself
         // is CONFIRMED.
-        if (character.stateEnum == 3) {
-            character.actionOverrideId = 0x19;
-        } else if (character.attackerThreatRef != 0) {
-            character.actionOverrideId = 0;
-        }
+        if (character.stateEnum.get() == 3) override = 0x19;
+        else if (character.attackerThreatRef.get() != 0) override = 0;
     }
+    character.ignoreAI.set(newValue);
+    EngineState::replicateStateChange("set_ignore_ai_flag", name);
+    if (enabling && override != 1) character.actionOverrideId.set(override);
     return 0;
 }
 
@@ -350,7 +384,7 @@ int stub_get_max_hit_points(lua_State* L) {
     logCall(L, upLog(L), "get_max_hit_points", upStateTag(L));
     std::string name = argString(L, 1);
     CharacterState& character = upState(L)->getOrCreateCharacter(name);
-    lua_pushnumber(L, static_cast<lua_Number>(character.maxHitPoints));
+    lua_pushnumber(L, static_cast<lua_Number>(character.maxHitPoints.get())); // OPEN until set
     return 1;
 }
 
@@ -372,12 +406,12 @@ int stub_set_current_hit_points(lua_State* L) {
     double raw = lua_tonumber(L, 2); // real API: absent -> 0.0, CONFIRMED nil-handling
 
     CharacterState& character = upState(L)->getOrCreateCharacter(name);
-    int32_t cap = character.maxHitPoints; // CONFIRMED cross-check: same field get_max_hit_points reads
-    int64_t rounded = static_cast<int64_t>(std::nearbyint(raw)); // this project's own choice of banker's rounding for consistency with this spec's other confirmed round-to-int primitive (Sec3.9) - not itself independently confirmed at THIS exact call site
+    int32_t cap = character.maxHitPoints.get(); // CONFIRMED cross-check: same field get_max_hit_points reads; OPEN until set
+    int64_t rounded = roundToIntOpenMode(raw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
     int64_t clampedWide = std::max<int64_t>(0, std::min<int64_t>(rounded, cap));
     int32_t clamped = static_cast<int32_t>(clampedWide);
 
-    character.currentHitPoints = clamped;
+    character.currentHitPoints.set(clamped);
     EngineState::replicateStateChange("set_current_hit_points", name);
 
     if (clamped <= 0) {
@@ -448,7 +482,7 @@ int stub_vint_object_find(lua_State* L) {
 // ---------------------------------------------------------------------
 int stub_store_vehicle_get_state(lua_State* L) {
     logCall(L, upLog(L), "store_vehicle_get_state", upStateTag(L));
-    lua_pushnumber(L, upState(L)->isVehicleStoreActive() ? 1.0 : 0.0);
+    lua_pushnumber(L, upState(L)->vehicleStoreActive().get() ? 1.0 : 0.0); // OPEN until set
     return 1;
 }
 
@@ -465,7 +499,7 @@ int stub_store_vehicle_get_state(lua_State* L) {
 // ---------------------------------------------------------------------
 int stub_Completion_is_client(lua_State* L) {
     logCall(L, upLog(L), "Completion_is_client", upStateTag(L));
-    bool result = upState(L)->isCoopActive() && !upState(L)->isHost();
+    bool result = upState(L)->coopActive().get() && !upState(L)->isHost().get(); // both OPEN until set; && order as before
     lua_pushboolean(L, result ? 1 : 0);
     return 1;
 }
@@ -482,7 +516,7 @@ int stub_Completion_is_client(lua_State* L) {
 // ---------------------------------------------------------------------
 int stub_game_hud_update_inventory(lua_State* L) {
     logCall(L, upLog(L), "game_hud_update_inventory", upStateTag(L));
-    if (upState(L)->hasLocalPlayer()) {
+    if (upState(L)->hasLocalPlayer().get()) { // OPEN until set
         upState(L)->recordHudInventoryRefresh();
     }
     return 0;
@@ -509,7 +543,10 @@ int stub_game_hud_update_inventory(lua_State* L) {
 int stub_tutorial_advance(lua_State* L) {
     logCall(L, upLog(L), "tutorial_advance", upStateTag(L));
     std::string id = argString(L, 1);
-    bool resolved = !id.empty();
+    // Resolution through the 210-entry tutorial table is OPEN state (the
+    // table is not loaded here); the earlier "any non-empty id resolves"
+    // stand-in is gone.
+    bool resolved = upState(L)->tutorialResolves().get(id);
     if (resolved) {
         upState(L)->recordTutorialAdvance(id);
     }
@@ -544,7 +581,7 @@ int stub_minimap_icon_add_do(lua_State* L) {
     if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) rec.group = argString(L, 3);
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.param4 = lua_tonumber(L, 4);
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) {
-        rec.flag5 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 5)));
+        rec.flag5 = roundToIntOpenMode(lua_tonumber(L, 5));
     }
     CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
     obj.minimapIcons.push_back(std::move(rec));
@@ -581,13 +618,18 @@ int stub_object_indicator_add_do(lua_State* L) {
     logCall(L, upLog(L), "object_indicator_add_do", upStateTag(L));
     std::string objectName = argString(L, 1);
     ObjectIndicatorRecord rec;
-    rec.arg2 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 2))); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
-    rec.arg3 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 3))); // same, CONFIRMED no nil gate
-    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 4)));
+    rec.arg2 = roundToIntOpenMode(lua_tonumber(L, 2)); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
+    rec.arg3 = roundToIntOpenMode(lua_tonumber(L, 3)); // same, CONFIRMED no nil gate
+    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = roundToIntOpenMode(lua_tonumber(L, 4));
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) rec.arg5 = lua_tonumber(L, 5);
-    CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
-    obj.objectIndicators.push_back(std::move(rec));
-    lua_pushboolean(L, 1); // see this function's own doc comment above for why this minimal stand-in always reaches the real "success" push path
+    // Result = whether arg 1 resolves (Sec10.6); OPEN state here, so the
+    // earlier always-true is gone.
+    bool resolved = upState(L)->objectResolves().get(objectName);
+    if (resolved) {
+        CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
+        obj.objectIndicators.push_back(std::move(rec));
+    }
+    lua_pushboolean(L, resolved ? 1 : 0);
     return 1;
 }
 
@@ -654,8 +696,183 @@ int stub_on_revived(lua_State* L) {
 // ---------------------------------------------------------------------
 int stub_game_get_coop_join_type(lua_State* L) {
     logCall(L, upLog(L), "game_get_coop_join_type", upStateTag(L));
-    lua_pushnumber(L, static_cast<lua_Number>(upState(L)->coopJoinType()));
+    lua_pushnumber(L, static_cast<lua_Number>(upState(L)->coopJoinType().get())); // OPEN until set
     return 1;
+}
+
+// ---------------------------------------------------------------------
+// Reading OPEN engine state (open_state.h) from a stub: the refusal becomes
+// a Lua error naming the global and its spec section. Lua errors longjmp, so
+// each such stub is split in two: an *Eval helper holds every C++ object,
+// catches the OpenStateError, pushes the message and returns kOpenState; the
+// thin lua_CFunction then calls lua_error with no C++ object alive. The
+// refusal is also counted in the HitLog as "<name>:OPEN_STATE", so a run
+// shows which OPEN value blocked which name.
+// ---------------------------------------------------------------------
+constexpr int kOpenState = -2;
+
+void pushOpenState(lua_State* L, const char* fn, const OpenStateError& e) {
+    std::string tag = std::string(fn) + ":OPEN_STATE";
+    logCall(L, upLog(L), tag.c_str(), upStateTag(L));
+    lua_pushfstring(L, "%s: %s", fn, e.what());
+}
+
+// ---------------------------------------------------------------------
+// 23. zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23)
+// Arguments: 1 optional string, standard nil-gated idiom, default absent
+// (CONFIRMED). Return: 1 boolean (CONFIRMED). Pure query.
+// CONFIRMED: the two-tier dispatch and every test in it, implemented in
+// order over EngineState's OPEN-state containers. OPEN: every value those
+// tests read (no initial values or writers are specced) and the sense of
+// the tier-2 per-record test. Any OPEN read -> Lua error naming it.
+// Reaching the per-record branch is also counted.
+// Added in the cloud phase (2026-09-30) as a mission-driving blocker
+// (HANDOFF Sec9.143: 714K busy-poll calls in the first mission run).
+// ---------------------------------------------------------------------
+int zsceneIsLoadedEval(lua_State* L) {
+    logCall(L, upLog(L), "zscene_is_loaded", upStateTag(L));
+    EngineState* es = upState(L);
+    bool hasName = lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL;
+    std::string name = hasName ? argString(L, 1) : std::string();
+    try {
+        if (hasName && es->zsceneNameState().get(name) == 1) return 1;   // tier 1 (0x00723d20)
+        if (es->zsceneBusyFlag().get()) return 1;                         // tier 2: 0x0153b556
+        if (hasName && es->zsceneTableResolves().get(EngineState::zsceneTableKey(name))) {
+            es->recordZsceneOpenBranchHit();                              // per-record test: sense OPEN
+            throw OpenStateError("zscene per-record state test (sense unreconciled)",
+                                 "spec-lua-api-behaviour.md Sec14.23");
+        }
+        return es->zsceneStateCode().get() == 2 ? 1 : 0;                  // 0x0153b51c == 2
+    } catch (const OpenStateError& e) {
+        pushOpenState(L, "zscene_is_loaded", e);
+        return kOpenState;
+    }
+}
+
+int stub_zscene_is_loaded(lua_State* L) {
+    int r = zsceneIsLoadedEval(L);
+    if (r == kOpenState) return lua_error(L);
+    lua_pushboolean(L, r);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// 24. set_mission_author (Sec6.1): CONFIRMED fully inert - the prologue's
+// lua_gettop result is never used, nothing is read, pushed or touched.
+// ---------------------------------------------------------------------
+int stub_set_mission_author(lua_State* L) {
+    logCall(L, upLog(L), "set_mission_author", upStateTag(L));
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// 25. fade_out (Sec2.9)
+// Arg 1: number, read unconditionally via lua_tonumber (absent -> 0).
+// Arg 2: optional; if present and non-nil it is indexed as t[1], t[2],
+// t[3] with lua_gettable (so a non-table value raises the ordinary Lua
+// "attempt to index" error, exactly as the real API call would); each
+// nil/absent component -> 0.0; whole table absent/nil -> all 0.0.
+// Arg 3: optional flags via lua_tonumber, default 3. (The number->int
+// conversion before the bit tests is not described; roundToIntOpenMode.)
+// Colour setter with alpha 255, each scaled by 1/255 - unconditional.
+// Bit 0x1: "screen_fade_do" with duration x 1000.0 and target alpha 1.0.
+// Bit 0x2: the opcode-0x53 command. Return: none. All CONFIRMED.
+// ---------------------------------------------------------------------
+int stub_fade_out(lua_State* L) {
+    logCall(L, upLog(L), "fade_out", upStateTag(L));
+    EngineState* es = upState(L);
+    lua_Number duration = lua_tonumber(L, 1);
+    float rgb[3] = {0.0f, 0.0f, 0.0f};
+    if (lua_gettop(L) >= 2 && lua_type(L, 2) != LUA_TNIL) {
+        for (int k = 0; k < 3; ++k) {
+            lua_pushnumber(L, k + 1);
+            lua_gettable(L, 2);
+            if (lua_type(L, -1) != LUA_TNIL) rgb[k] = static_cast<float>(lua_tonumber(L, -1));
+            lua_pop(L, 1);
+        }
+    }
+    int64_t flags = 3;
+    if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) flags = roundToIntOpenMode(lua_tonumber(L, 3));
+
+    EngineState::ScreenFadeColour c;
+    c.r = rgb[0] / 255.0f;
+    c.g = rgb[1] / 255.0f;
+    c.b = rgb[2] / 255.0f;
+    c.a = 255.0f / 255.0f;
+    es->setScreenFadeColour(c);
+    if (flags & 0x1) es->recordScreenFadeRequest({duration * 1000.0, 1.0f});
+    if (flags & 0x2) {
+        es->recordScreenFadeOpcode53();
+        EngineState::replicateStateChange("fade_out_opcode_0x53", "");
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// 26. mission_end_silently (Sec15.23) - PARTIAL, stated.
+// Arg 1: optional boolean, standard nil-gated, default false. Return: none.
+// Implemented (CONFIRMED, unconditional): 0x006da7b0 sets bit 0x4 of the
+// global mission-flags word and sets/clears bit 0x10 to mirror the arg.
+// NOT modelled: everything after it is gated on state this host lacks -
+// the "can end mission now" gate (0x006cf930), the active mission's
+// restartable flag and cleanup, and the non-host-client network request vs
+// local finalize (0x006d9f70). Nothing is faked for those.
+// ---------------------------------------------------------------------
+int stub_mission_end_silently(lua_State* L) {
+    logCall(L, upLog(L), "mission_end_silently", upStateTag(L));
+    bool arg = false;
+    if (lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL) arg = lua_toboolean(L, 1) != 0;
+    upState(L)->missionFlagsWord().setBits(0x4u | 0x10u, 0x4u | (arg ? 0x10u : 0u));
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// 27. sfx_faded_out (Sec26.9): no arguments; 1 boolean, true iff the
+// fade-state global 0x012e6aa4 equals 3 (CONFIRMED, 2-instruction body).
+// That global is OPEN state (EngineState::FadeStateMachine): until a spec
+// gives its value or writer, a call raises the OPEN-state Lua error.
+// ---------------------------------------------------------------------
+int sfxFadedOutEval(lua_State* L) {
+    logCall(L, upLog(L), "sfx_faded_out", upStateTag(L));
+    try {
+        return upState(L)->fadeState().g012e6aa4.get() == 3u ? 1 : 0;
+    } catch (const OpenStateError& e) {
+        pushOpenState(L, "sfx_faded_out", e);
+        return kOpenState;
+    }
+}
+
+int stub_sfx_faded_out(lua_State* L) {
+    int r = sfxFadedOutEval(L);
+    if (r == kOpenState) return lua_error(L);
+    lua_pushboolean(L, r);
+    return 1;
+}
+
+// Every spec stub is registered through this trampoline. A stub reading
+// OPEN engine state (open_state.h) throws OpenStateError; the trampoline
+// catches it, logs "OPEN_STATE:<global>" in the HitLog, pushes the message
+// and raises it as a Lua error only after every C++ object in this frame
+// is gone (Lua errors longjmp). The stub's own frames were already unwound
+// by the C++ throw.
+template <lua_CFunction Fn>
+int openGuard(lua_State* L) {
+    int pushed = 0;
+    bool refused = false;
+    {
+        std::string message;
+        try {
+            pushed = Fn(L);
+        } catch (const OpenStateError& e) {
+            refused = true;
+            std::string tag = std::string("OPEN_STATE:") + e.global();
+            logCall(L, upLog(L), tag.c_str(), upStateTag(L));
+            message = e.what();
+        }
+        if (refused) lua_pushstring(L, message.c_str());
+    }
+    if (refused) return lua_error(L);
+    return pushed;
 }
 
 void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
@@ -703,6 +920,16 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "on_qte_animation_trigger",
         "on_revived",
         "game_get_coop_join_type",
+        // Cloud phase (2026-09-30): Sec14.23, tagged `gameplay` in
+        // tools/lua_all_registered_1490_tagged.txt (line 1014).
+        "zscene_is_loaded",
+        // Cloud phase batch 1 (2026-09-30), all `gameplay` in the tagged
+        // list (lines 295/505/776).
+        "set_mission_author",
+        "fade_out",
+        "mission_end_silently",
+        // Item-3 scaffolding (2026-09-30): Sec26.9, `ui` (tagged list line 1251).
+        "sfx_faded_out",
     };
     return names;
 }
@@ -721,28 +948,33 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     // do not all share one real registered cluster tag, so a single
     // Host construction calls this function twice - once per state - each
     // time with only that state's own real subset).
-    if (wants("coop_is_active")) registerOne(L, state, log, stateTag, "coop_is_active", stub_coop_is_active);
-    if (wants("game_get_key_name")) registerOne(L, state, log, stateTag, "game_get_key_name", stub_game_get_key_name);
-    if (wants("game_UI_audio_play")) registerOne(L, state, log, stateTag, "game_UI_audio_play", stub_game_UI_audio_play);
-    if (wants("game_audio_get_audio_id")) registerOne(L, state, log, stateTag, "game_audio_get_audio_id", stub_game_audio_get_audio_id);
-    if (wants("game_get_key_name_for_action")) registerOne(L, state, log, stateTag, "game_get_key_name_for_action", stub_game_get_key_name_for_action);
-    if (wants("game_peg_load_with_cb")) registerOne(L, state, log, stateTag, "game_peg_load_with_cb", stub_game_peg_load_with_cb);
-    if (wants("ai_add_enemy_target")) registerOne(L, state, log, stateTag, "ai_add_enemy_target", stub_ai_add_enemy_target);
-    if (wants("on_take_damage")) registerOne(L, state, log, stateTag, "on_take_damage", stub_on_take_damage);
-    if (wants("set_ignore_ai_flag")) registerOne(L, state, log, stateTag, "set_ignore_ai_flag", stub_set_ignore_ai_flag);
-    if (wants("get_max_hit_points")) registerOne(L, state, log, stateTag, "get_max_hit_points", stub_get_max_hit_points);
-    if (wants("set_current_hit_points")) registerOne(L, state, log, stateTag, "set_current_hit_points", stub_set_current_hit_points);
-    if (wants("ai_clear_scripted_action")) registerOne(L, state, log, stateTag, "ai_clear_scripted_action", stub_ai_clear_scripted_action);
-    if (wants("vint_object_find")) registerOne(L, state, log, stateTag, "vint_object_find", stub_vint_object_find);
-    if (wants("store_vehicle_get_state")) registerOne(L, state, log, stateTag, "store_vehicle_get_state", stub_store_vehicle_get_state);
-    if (wants("Completion_is_client")) registerOne(L, state, log, stateTag, "Completion_is_client", stub_Completion_is_client);
-    if (wants("game_hud_update_inventory")) registerOne(L, state, log, stateTag, "game_hud_update_inventory", stub_game_hud_update_inventory);
-    if (wants("tutorial_advance")) registerOne(L, state, log, stateTag, "tutorial_advance", stub_tutorial_advance);
-    if (wants("minimap_icon_add_do")) registerOne(L, state, log, stateTag, "minimap_icon_add_do", stub_minimap_icon_add_do);
-    if (wants("object_indicator_add_do")) registerOne(L, state, log, stateTag, "object_indicator_add_do", stub_object_indicator_add_do);
-    if (wants("on_qte_animation_trigger")) registerOne(L, state, log, stateTag, "on_qte_animation_trigger", stub_on_qte_animation_trigger);
-    if (wants("on_revived")) registerOne(L, state, log, stateTag, "on_revived", stub_on_revived);
-    if (wants("game_get_coop_join_type")) registerOne(L, state, log, stateTag, "game_get_coop_join_type", stub_game_get_coop_join_type);
+    if (wants("coop_is_active")) registerOne(L, state, log, stateTag, "coop_is_active", openGuard<stub_coop_is_active>);
+    if (wants("game_get_key_name")) registerOne(L, state, log, stateTag, "game_get_key_name", openGuard<stub_game_get_key_name>);
+    if (wants("game_UI_audio_play")) registerOne(L, state, log, stateTag, "game_UI_audio_play", openGuard<stub_game_UI_audio_play>);
+    if (wants("game_audio_get_audio_id")) registerOne(L, state, log, stateTag, "game_audio_get_audio_id", openGuard<stub_game_audio_get_audio_id>);
+    if (wants("game_get_key_name_for_action")) registerOne(L, state, log, stateTag, "game_get_key_name_for_action", openGuard<stub_game_get_key_name_for_action>);
+    if (wants("game_peg_load_with_cb")) registerOne(L, state, log, stateTag, "game_peg_load_with_cb", openGuard<stub_game_peg_load_with_cb>);
+    if (wants("ai_add_enemy_target")) registerOne(L, state, log, stateTag, "ai_add_enemy_target", openGuard<stub_ai_add_enemy_target>);
+    if (wants("on_take_damage")) registerOne(L, state, log, stateTag, "on_take_damage", openGuard<stub_on_take_damage>);
+    if (wants("set_ignore_ai_flag")) registerOne(L, state, log, stateTag, "set_ignore_ai_flag", openGuard<stub_set_ignore_ai_flag>);
+    if (wants("get_max_hit_points")) registerOne(L, state, log, stateTag, "get_max_hit_points", openGuard<stub_get_max_hit_points>);
+    if (wants("set_current_hit_points")) registerOne(L, state, log, stateTag, "set_current_hit_points", openGuard<stub_set_current_hit_points>);
+    if (wants("ai_clear_scripted_action")) registerOne(L, state, log, stateTag, "ai_clear_scripted_action", openGuard<stub_ai_clear_scripted_action>);
+    if (wants("vint_object_find")) registerOne(L, state, log, stateTag, "vint_object_find", openGuard<stub_vint_object_find>);
+    if (wants("store_vehicle_get_state")) registerOne(L, state, log, stateTag, "store_vehicle_get_state", openGuard<stub_store_vehicle_get_state>);
+    if (wants("Completion_is_client")) registerOne(L, state, log, stateTag, "Completion_is_client", openGuard<stub_Completion_is_client>);
+    if (wants("game_hud_update_inventory")) registerOne(L, state, log, stateTag, "game_hud_update_inventory", openGuard<stub_game_hud_update_inventory>);
+    if (wants("tutorial_advance")) registerOne(L, state, log, stateTag, "tutorial_advance", openGuard<stub_tutorial_advance>);
+    if (wants("minimap_icon_add_do")) registerOne(L, state, log, stateTag, "minimap_icon_add_do", openGuard<stub_minimap_icon_add_do>);
+    if (wants("object_indicator_add_do")) registerOne(L, state, log, stateTag, "object_indicator_add_do", openGuard<stub_object_indicator_add_do>);
+    if (wants("on_qte_animation_trigger")) registerOne(L, state, log, stateTag, "on_qte_animation_trigger", openGuard<stub_on_qte_animation_trigger>);
+    if (wants("on_revived")) registerOne(L, state, log, stateTag, "on_revived", openGuard<stub_on_revived>);
+    if (wants("game_get_coop_join_type")) registerOne(L, state, log, stateTag, "game_get_coop_join_type", openGuard<stub_game_get_coop_join_type>);
+    if (wants("zscene_is_loaded")) registerOne(L, state, log, stateTag, "zscene_is_loaded", openGuard<stub_zscene_is_loaded>);
+    if (wants("set_mission_author")) registerOne(L, state, log, stateTag, "set_mission_author", openGuard<stub_set_mission_author>);
+    if (wants("fade_out")) registerOne(L, state, log, stateTag, "fade_out", openGuard<stub_fade_out>);
+    if (wants("mission_end_silently")) registerOne(L, state, log, stateTag, "mission_end_silently", openGuard<stub_mission_end_silently>);
+    if (wants("sfx_faded_out")) registerOne(L, state, log, stateTag, "sfx_faded_out", openGuard<stub_sfx_faded_out>);
 }
 
 } // namespace sr3luahost

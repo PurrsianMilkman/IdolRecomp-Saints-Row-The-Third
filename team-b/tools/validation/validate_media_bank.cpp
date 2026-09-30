@@ -425,8 +425,8 @@ void report() {
     printf("\n--- the `extra` field (spec Sec4.2/Sec4.3) ---\n");
     printf("records with extra != 0           : %lld / %lld\n", g_recordsWithNonZeroExtra,
            g_recordsTotal);
-    printf("files containing any extra != 0   : %lld / %lld   (spec Sec4.3: the naive model broke "
-           "on exactly 6 files)\n",
+    printf("files containing any extra != 0   : %lld / %lld   (spec Sec4.3, 2026-09-30: 281/536, "
+           "superseding the old \"exactly 6\")\n",
            g_filesWithNonZeroExtra, g_mediaWalkedOk);
     printf("non-zero extra NOT a 0x800 multiple: %lld   (spec Sec4.2: always an exact multiple; "
            "any nonzero here contradicts it)\n",
@@ -451,10 +451,10 @@ void report() {
     printf("\n--- CONTROL 1: the same population under Sec4.3's discarded naive chain\n");
     printf("    (`extra` dropped entirely). If this equals the correct count, this run has\n");
     printf("    NOT demonstrated that `extra` is load-bearing on this population. ---\n");
-    printf("naive model walks cleanly         : %lld / %lld   (spec Sec4.3: 530/536)\n",
+    printf("naive model walks cleanly         : %lld / %lld   (spec Sec4.3, 2026-09-30: 255/536, superseding the old 530/536)\n",
            g_naiveWalkOk, g_mediaFound);
     printf("correct model walks cleanly       : %lld / %lld\n", g_mediaWalkedOk, g_mediaFound);
-    printf("files the naive model gets wrong  : %lld   (spec Sec4.3: exactly 6)\n",
+    printf("files the naive model gets wrong  : %lld   (spec Sec4.3, 2026-09-30: 281, superseding the old \"exactly 6\")\n",
            g_mediaWalkedOk - g_naiveWalkOk);
     printf("records under the naive model     : %lld   (vs %lld correct)\n", g_naiveRecords,
            g_recordsTotal);

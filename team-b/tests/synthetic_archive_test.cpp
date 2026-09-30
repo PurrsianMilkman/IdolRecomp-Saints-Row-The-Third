@@ -16,6 +16,7 @@
 // game's files - that can only be verified against actual .vpp_pc data,
 // which is out of scope for the clean team by design.
 
+#include "alloc_guard.h"
 #include <algorithm>
 #include <iostream>
 #include <string>
@@ -652,6 +653,54 @@ int main() {
             threwA = true;
         }
         CHECK(threwA);
+    }
+
+    // --- Fuzz regression (fuzz/regressions/vpp, second reproducer): an entry
+    // count far beyond what the buffer's 24-byte directory records can hold
+    // must not be trusted for an up-front reservation.
+    {
+        const std::string text = "x";
+        std::vector<uint8_t> blob = buildContainer({rawEntry("a.txt", std::vector<uint8_t>(text.begin(), text.end()))});
+        writeU32LE(blob, 0x154, 0x03A00000u);      // entry count (spec Sec1.1 +0x154): ~61M
+        writeU32LE(blob, 0x15C, 0x03A00000u * 24); // directory size kept consistent (== count x 24, checked by Header::parse)
+        bool badAlloc = false, threw = false;
+        {
+            allocguard::AllocCap cap(256u << 20);
+            try {
+                vpp::Container c(vpp::ByteView(blob.data(), blob.size()));
+            } catch (const std::bad_alloc&) {
+                badAlloc = true;
+            } catch (const std::exception&) {
+                threw = true;
+            }
+        }
+        CHECK(!badAlloc);
+        CHECK(threw);
+    }
+
+    // --- Fuzz regression (fuzz/regressions/vpp): a compressed entry whose
+    // declared +0x0C size no DEFLATE stream of its length could produce
+    // (1032:1 is the format's maximum) is rejected before allocating it.
+    {
+        const std::string text = "tiny payload";
+        EntrySpec e = compressedEntry("huge.bin", std::vector<uint8_t>(text.begin(), text.end()));
+        e.uncompressedSize = 0xF0000000u; // ~3.75 GB claimed for a ~20-byte stream
+        std::vector<uint8_t> blob = buildContainer({e});
+        vpp::Container c(vpp::ByteView(blob.data(), blob.size()));
+        bool badAlloc = false;
+        vpp::DecompressResult dr;
+        {
+            allocguard::AllocCap cap(256u << 20);
+            try {
+                dr = c.decompressEntry(0);
+            } catch (const std::bad_alloc&) {
+                badAlloc = true;
+            }
+        }
+        CHECK(!badAlloc);
+        CHECK(dr.status == vpp::DecodeStatus::ZlibStreamError);
+        CHECK(dr.data.empty());
+        CHECK(!dr.diagnostic.empty());
     }
 
     if (g_failures == 0) {

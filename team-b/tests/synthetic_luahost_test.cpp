@@ -86,6 +86,13 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"on_qte_animation_trigger", "gameplay"},
         {"on_revived", "gameplay"},
         {"game_get_coop_join_type", "ui"},
+        // Cloud phase (2026-09-30): Sec14.23, `gameplay` (tagged list line 1014).
+        {"zscene_is_loaded", "gameplay"},
+        // Cloud phase batch 1 (tagged list lines 776/295/505).
+        {"set_mission_author", "gameplay"},
+        {"fade_out", "gameplay"},
+        {"mission_end_silently", "gameplay"},
+        {"sfx_faded_out", "ui"},
     };
 }
 
@@ -497,6 +504,14 @@ int main() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         lua_State* ui = host.uiState();
+        // A call reading OPEN engine state (open_state.h) must fail with a
+        // Lua error naming that state, until a test sets it.
+        auto refusesOpen = [&](lua_State* st, const char* chunk, const char* needle) {
+            auto r = host.runChunk(st, chunk, "open_refusal.lua");
+            CHECK(r.loadOk && !r.pcallOk);
+            CHECK(r.pcallError.find("is OPEN") != std::string::npos);
+            CHECK(r.pcallError.find(needle) != std::string::npos);
+        };
         EngineState& es = host.engineState();
 
         // Real per-state placement: 21 of the 22 names are a real function
@@ -518,12 +533,14 @@ int main() {
             CHECK(r4.loadOk && r4.pcallOk);
         }
 
-        // 1. coop_is_active (Sec3.1): default false; EngineState::setCoopActive()
-        // is a C++-only test entry point (no Lua setter among these 13).
+        // 1. coop_is_active (Sec3.1): the co-op session state is OPEN until
+        // set (no invented "no session" default); set -> reported as is.
         {
+            refusesOpen(gp, "coop_is_active()", "co-op session");
+            es.coopActive().set(false);
             auto r = host.runChunk(gp, "assert(coop_is_active() == false)", "coop1.lua");
             CHECK(r.loadOk && r.pcallOk);
-            es.setCoopActive(true);
+            es.coopActive().set(true);
             auto r2 = host.runChunk(gp, "assert(coop_is_active() == true)", "coop2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
         }
@@ -537,11 +554,19 @@ int main() {
             // 0x1E is the real DirectInput scan code for 'A'
             // (spec-tables-ui-controls.md Sec4.3) - a real, ordinary key,
             // not the sentinel.
+            // Non-empty only where the real OS lookup exists (Windows); the
+            // portable build has no key-name source and returns "" - the
+            // CONFIRMED "1 Lua string" return contract holds on both.
+#ifdef _WIN32
             auto r2 = host.runChunk(ui,
                 "local n = game_get_key_name(0x1E)\n"
                 "assert(type(n) == 'string' and #n > 0)",
                 "keyname2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
+#else
+            // No OS key-name source off Windows: OPEN, not an invented "".
+            refusesOpen(ui, "game_get_key_name(0x1E)", "GetKeyNameTextW");
+#endif
         }
 
         // 3. game_UI_audio_play (Sec2.2): a handle is ALWAYS returned,
@@ -569,6 +594,8 @@ int main() {
                 "assert(game_audio_get_audio_id('NoNe') == 0)", // case-insensitive
                 "audioid1.lua");
             CHECK(r.loadOk && r.pcallOk);
+            // Any other string needs the Wwise resolver: OPEN, not an invented 0.
+            refusesOpen(ui, "game_audio_get_audio_id('some_event')", "Wwise id");
         }
 
         // 5. game_get_key_name_for_action (Sec8.23): CONFIRMED literal
@@ -577,10 +604,11 @@ int main() {
         {
             auto r = host.runChunk(ui,
                 "assert(game_get_key_name_for_action('CAA_CAMERA_ROTATE') == 'STR_THE_MOUSE')\n"
-                "assert(game_get_key_name_for_action('caa_camera_rotate') == 'STR_THE_MOUSE')\n"
-                "assert(game_get_key_name_for_action('CBA_SOME_UNKNOWN_ACTION') == '')",
+                "assert(game_get_key_name_for_action('caa_camera_rotate') == 'STR_THE_MOUSE')",
                 "actionname1.lua");
             CHECK(r.loadOk && r.pcallOk);
+            // Everything else goes through the CBA/CAA tables + live bindings: OPEN.
+            refusesOpen(ui, "game_get_key_name_for_action('CBA_SOME_UNKNOWN_ACTION')", "key binding");
         }
 
         // 6. game_peg_load_with_cb (Sec8.24): CONFIRMED arg-reading
@@ -608,10 +636,19 @@ int main() {
         }
 
         // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, banker's-rounded priority, and the always-true
+        // bit, arg4's bit, the integral priority (the rounding mode of
+        // non-integral values is OPEN, Sec4.1, so only an integer is tested), and the always-true
         // resolve-success return (this project's own minimal registry -
         // see EnemyTargetRecord's own doc comment).
         {
+            // Name resolution is OPEN until set; unresolved -> false, no record.
+            refusesOpen(gp, "ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true)", "named-object resolution");
+            es.objectResolves().set("villain01", true);
+            es.objectResolves().set("#CLOSEST_PLAYER#", false);
+            auto r0 = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true) == false)", "enemy0.lua");
+            CHECK(r0.loadOk && r0.pcallOk);
+            CHECK(es.getOrCreateCharacter("villain01").enemyTargets.empty());
+            es.objectResolves().set("#CLOSEST_PLAYER#", true);
             auto r = host.runChunk(gp,
                 "local ok = ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true)\n"
                 "assert(ok == true)",
@@ -639,20 +676,37 @@ int main() {
         // CONFIDENCE-tagged conditional action-override side effect when
         // newly enabling while stateEnum==3 ("in a vehicle").
         {
-            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true
+            // The prior flag (and, when newly enabling, the state enum /
+            // threat reference) are OPEN until set; nothing is written on refusal.
+            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "ignore-AI flag");
+            CHECK(!es.getOrCreateCharacter("npc_a").ignoreAI.known());
+            es.getOrCreateCharacter("npc_a").ignoreAI.set(true);
+            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch
             CHECK(r.loadOk && r.pcallOk);
-            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI == true);
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
 
             auto r2 = host.runChunk(gp, "set_ignore_ai_flag('npc_a', false)", "ignoreai2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
-            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI == false);
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
+            // Newly enabling with the state enum OPEN: refused, flag unchanged.
+            refusesOpen(gp, "set_ignore_ai_flag('npc_a', true)", "state enum");
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
 
             auto& npcB = es.getOrCreateCharacter("npc_b");
-            npcB.stateEnum = 3; // this project's own test-only setup - "in a vehicle" (Sec3.4/Sec3.10)
-            CHECK(npcB.actionOverrideId == -1); // default "no override"
+            npcB.ignoreAI.set(false);
+            npcB.stateEnum.set(3); // test setup - "in a vehicle" (Sec3.4/Sec3.10)
+            CHECK(!npcB.actionOverrideId.known());
             auto r3 = host.runChunk(gp, "set_ignore_ai_flag('npc_b', true)", "ignoreai3.lua"); // false->true: "newly enabling"
             CHECK(r3.loadOk && r3.pcallOk);
-            CHECK(es.getOrCreateCharacter("npc_b").actionOverrideId == 0x19); // HIGH CONFIDENCE meaning, CONFIRMED structure
+            CHECK(es.getOrCreateCharacter("npc_b").actionOverrideId.get() == 0x19); // HIGH CONFIDENCE meaning, CONFIRMED structure
+            // Not in a vehicle, nonzero threat -> override cleared to 0.
+            auto& npcC = es.getOrCreateCharacter("npc_c");
+            npcC.ignoreAI.set(false);
+            npcC.stateEnum.set(0);
+            npcC.attackerThreatRef.set(7);
+            auto r4 = host.runChunk(gp, "set_ignore_ai_flag('npc_c', true)", "ignoreai4.lua");
+            CHECK(r4.loadOk && r4.pcallOk);
+            CHECK(npcC.actionOverrideId.get() == 0);
         }
 
         // 10./11. get_max_hit_points (Sec7.12) / set_current_hit_points
@@ -663,28 +717,33 @@ int main() {
         // arg 2 omission resolves to 0 (CONFIRMED); clamped<=0 sets the
         // HIGH-CONFIDENCE-only isDeadHighConfidence flag.
         {
-            auto r = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp1.lua"); // default
+            // Max hit points are OPEN until set (no invented 100).
+            refusesOpen(gp, "get_max_hit_points('hero')", "max hit points");
+            refusesOpen(gp, "set_current_hit_points('hero', 50)", "max hit points");
+            es.getOrCreateCharacter("hero").maxHitPoints.set(100);
+            auto r = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp1.lua");
             CHECK(r.loadOk && r.pcallOk);
 
             auto r2 = host.runChunk(gp, "set_current_hit_points('hero', 50)", "hp2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
-            CHECK(es.getOrCreateCharacter("hero").currentHitPoints == 50);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 50);
             auto r3 = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp3.lua"); // untouched
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("hero").isDeadHighConfidence == false);
 
             auto r4 = host.runChunk(gp, "set_current_hit_points('hero', 999)", "hp4.lua"); // clamp to cap
             CHECK(r4.loadOk && r4.pcallOk);
-            CHECK(es.getOrCreateCharacter("hero").currentHitPoints == 100);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 100);
 
             auto r5 = host.runChunk(gp, "set_current_hit_points('hero', -50)", "hp5.lua"); // clamp to 0
             CHECK(r5.loadOk && r5.pcallOk);
-            CHECK(es.getOrCreateCharacter("hero").currentHitPoints == 0);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 0);
             CHECK(es.getOrCreateCharacter("hero").isDeadHighConfidence == true);
 
+            es.getOrCreateCharacter("freshvictim").maxHitPoints.set(80);
             auto r6 = host.runChunk(gp, "set_current_hit_points('freshvictim')", "hp6.lua"); // omitted arg2 -> 0 (CONFIRMED nil-handling)
             CHECK(r6.loadOk && r6.pcallOk);
-            CHECK(es.getOrCreateCharacter("freshvictim").currentHitPoints == 0);
+            CHECK(es.getOrCreateCharacter("freshvictim").currentHitPoints.get() == 0);
         }
 
         // 12. ai_clear_scripted_action (Sec7.24): the confirmed resolve
@@ -715,10 +774,13 @@ int main() {
                 "vintfind1.lua");
             CHECK(r.loadOk && r.pcallOk);
 
-            // Document-wide find (no parent/doc args -> current default
-            // document, 0 by this project's own default).
+            // Document-wide find (no parent/doc args -> the current default
+            // document). With objects registered, the answer depends on that
+            // document, which is OPEN state until set.
             uint32_t rootHandle = es.registerVdoObjectForTesting("root_widget", /*parentHandle=*/0, /*docHandle=*/0);
             CHECK(rootHandle != 0);
+            refusesOpen(ui, "vint_object_find('root_widget')", "current default vint document");
+            es.currentDefaultDocHandle().set(0);
             auto r2 = host.runChunk(ui,
                 "local h = vint_object_find('root_widget')\n"
                 "assert(h == " + std::to_string(rootHandle) + ")",
@@ -766,12 +828,14 @@ int main() {
         // test entry point (no Lua setter among these 9, same precedent
         // as coop_is_active/Sec3.1 above).
         {
+            refusesOpen(ui, "store_vehicle_get_state()", "vehicle-store");
+            es.vehicleStoreActive().set(false);
             auto r = host.runChunk(ui,
                 "local v = store_vehicle_get_state()\n"
                 "assert(type(v) == 'number' and v == 0.0)",
                 "vehiclestore1.lua");
             CHECK(r.loadOk && r.pcallOk);
-            es.setVehicleStoreActiveForTesting(true);
+            es.vehicleStoreActive().set(true);
             auto r2 = host.runChunk(ui, "assert(store_vehicle_get_state() == 1.0)", "vehiclestore2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
         }
@@ -782,17 +846,19 @@ int main() {
         // isHost() defaults true (this project's own single-instance
         // default).
         {
-            es.setCoopActive(false);
-            auto r = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient1.lua"); // no session
+            es.coopActive().set(false);
+            auto r = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient1.lua"); // no session: host flag not needed
             CHECK(r.loadOk && r.pcallOk);
-            es.setCoopActive(true);
-            auto r2 = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient2.lua"); // session, but host (default)
+            es.coopActive().set(true);
+            refusesOpen(ui, "Completion_is_client()", "host check"); // session, host flag OPEN
+            es.isHost().set(true);
+            auto r2 = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient2.lua"); // session, host
             CHECK(r2.loadOk && r2.pcallOk);
-            es.setHostForTesting(false);
+            es.isHost().set(false);
             auto r3 = host.runChunk(ui, "assert(Completion_is_client() == true)", "isclient3.lua"); // session, not host
             CHECK(r3.loadOk && r3.pcallOk);
-            es.setHostForTesting(true); // restore for later fixtures in this same Host instance
-            es.setCoopActive(false);
+            es.isHost().set(true);
+            es.coopActive().set(false);
         }
 
         // 16. game_hud_update_inventory (Sec10.3): default hasLocalPlayer
@@ -800,14 +866,17 @@ int main() {
         // no-op. No Lua return value.
         {
             CHECK(es.hudInventoryRefreshCount() == 0);
+            refusesOpen(ui, "game_hud_update_inventory()", "local player");
+            CHECK(es.hudInventoryRefreshCount() == 0);
+            es.hasLocalPlayer().set(true);
             auto r = host.runChunk(ui, "game_hud_update_inventory()", "hudinv1.lua");
             CHECK(r.loadOk && r.pcallOk);
             CHECK(es.hudInventoryRefreshCount() == 1);
-            es.setHasLocalPlayerForTesting(false);
+            es.hasLocalPlayer().set(false);
             auto r2 = host.runChunk(ui, "game_hud_update_inventory()", "hudinv2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
             CHECK(es.hudInventoryRefreshCount() == 1); // unchanged - no local player
-            es.setHasLocalPlayerForTesting(true);
+            es.hasLocalPlayer().set(true);
         }
 
         // 17. tutorial_advance (Sec10.4): this project's own stated
@@ -816,6 +885,12 @@ int main() {
         // empty id does not resolve (false), no counter bump.
         {
             CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 0);
+            // Table resolution is OPEN until set (the old "any non-empty id
+            // resolves" stand-in is gone).
+            refusesOpen(gp, "tutorial_advance('hint_grab_weapon')", "tutorial table");
+            CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 0);
+            es.tutorialResolves().set("hint_grab_weapon", true);
+            es.tutorialResolves().set("", false);
             auto r = host.runChunk(gp, "assert(tutorial_advance('hint_grab_weapon') == true)", "tutadv1.lua");
             CHECK(r.loadOk && r.pcallOk);
             CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 1);
@@ -856,6 +931,13 @@ int main() {
         // registry's own resolver (see this function's own doc comment,
         // lua_spec_confirmed_stubs.cpp, for why).
         {
+            // Resolution of arg 1 is OPEN until set (the old always-true is gone).
+            refusesOpen(gp, "object_indicator_add_do('indicator_obj', 2, 5)", "named-object resolution");
+            es.objectResolves().set("unresolved_obj", false);
+            auto r0 = host.runChunk(gp, "assert(object_indicator_add_do('unresolved_obj', 2, 5) == false)", "objind0.lua");
+            CHECK(r0.loadOk && r0.pcallOk);
+            CHECK(es.getOrCreateCharacter("unresolved_obj").objectIndicators.empty());
+            es.objectResolves().set("indicator_obj", true);
             auto r = host.runChunk(gp,
                 "local ok = object_indicator_add_do('indicator_obj', 2, 5)\n"
                 "assert(ok == true)",
@@ -909,11 +991,161 @@ int main() {
         // test entry point (no real setter in this task's 9-function
         // scope - the real writer is a different, out-of-scope function).
         {
+            refusesOpen(ui, "game_get_coop_join_type()", "0x012f44fc");
+            es.coopJoinType().set(0);
             auto r = host.runChunk(ui, "assert(game_get_coop_join_type() == 0)", "jointype1.lua");
             CHECK(r.loadOk && r.pcallOk);
-            es.setCoopJoinTypeForTesting(2);
+            es.coopJoinType().set(2);
             auto r2 = host.runChunk(ui, "assert(game_get_coop_join_type() == 2)", "jointype2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
+        }
+
+        // 23. zscene_is_loaded (Sec14.23) over OPEN state (open_state.h):
+        // nothing is defaulted, so every read of an unset value is a Lua error
+        // naming the global, until a test (or, later, a specced writer) sets it.
+        {
+            auto check = [&](const char* chunk, const char* tag) {
+                auto r = host.runChunk(gp, chunk, tag);
+                CHECK(r.loadOk && r.pcallOk);
+            };
+            auto refuses = [&](const char* chunk, const char* needle) {
+                auto r = host.runChunk(gp, chunk, "zsref.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find(needle) != std::string::npos);
+            };
+            check("assert(type(zscene_is_loaded) == 'function')", "zs0a.lua");
+            {
+                auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil)", "zs0b.lua");
+                CHECK(r.loadOk && r.pcallOk);
+            }
+            // All OPEN: the first value each path reads is named.
+            refuses("zscene_is_loaded()", "0x0153b556");              // no name: busy flag first
+            refuses("zscene_is_loaded('m02_scene')", "m02_scene");     // tier-1 per-name state
+            CHECK(host.hitLog().hits().count("zscene_is_loaded:OPEN_STATE") == 1);
+
+            // Tier 1 (CONFIRMED): per-name state exactly 1 -> true, even with
+            // the rest still OPEN.
+            es.zsceneNameState().set("m02_scene", 1);
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs5.lua");
+            check("assert(select('#', zscene_is_loaded('m02_scene')) == 1)", "zs4.lua");
+            // Other value -> tier 2, whose busy flag is still OPEN.
+            es.zsceneNameState().set("m02_scene", 2);
+            refuses("zscene_is_loaded('m02_scene')", "0x0153b556");
+            // Busy flag set -> true regardless of name / other state.
+            es.zsceneBusyFlag().set(true);
+            check("assert(zscene_is_loaded() == true)", "zs14.lua");
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs15.lua");
+            // Busy flag clear, no name -> the state code, still OPEN.
+            es.zsceneBusyFlag().set(false);
+            refuses("zscene_is_loaded()", "0x0153b51c");
+            es.zsceneStateCode().set(1);
+            check("assert(zscene_is_loaded() == false)", "zs9.lua");
+            check("assert(zscene_is_loaded(nil) == false)", "zs2.lua");
+            es.zsceneStateCode().set(3);
+            check("assert(zscene_is_loaded() == false)", "zs9b.lua"); // exactly 2, not >= 2
+            es.zsceneStateCode().set(2);
+            check("assert(zscene_is_loaded() == true)", "zs10.lua");
+            // A name whose table resolution is OPEN is refused before the code test.
+            refuses("zscene_is_loaded('m02_scene')", "0x00721be0");
+            // Resolution known false -> the code test.
+            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m02_scene"), false);
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs11.lua");
+            // Resolution known true -> the per-record branch: sense OPEN, refused
+            // and counted. The table key is case-insensitive; tier 1's is not.
+            es.zsceneNameState().set("M03_Scene", 0);
+            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m03_scene"), true);
+            CHECK(es.zsceneOpenBranchHits() == 0);
+            refuses("zscene_is_loaded('M03_Scene')", "per-record");
+            CHECK(es.zsceneOpenBranchHits() == 1);
+            check("assert(zscene_is_loaded() == true)", "zs13.lua"); // no name: branch not reached
+            CHECK(es.zsceneOpenBranchHits() == 1);
+            // A Lua error from OPEN state does not wedge the host.
+            check("assert(pcall(zscene_is_loaded, 'unset_scene') == false)", "zs16.lua");
+        }
+
+        // 24-26. Cloud phase batch 1.
+        {
+            auto check = [&](const char* chunk, const char* tag) {
+                auto r = host.runChunk(gp, chunk, tag);
+                CHECK(r.loadOk && r.pcallOk);
+            };
+            // set_mission_author (Sec6.1): inert, 0 results, any arguments.
+            check("assert(select('#', set_mission_author()) == 0)", "sma1.lua");
+            check("assert(select('#', set_mission_author('x', 1, true)) == 0)", "sma2.lua");
+
+            // fade_out (Sec2.9). Before any call: no colour, no requests.
+            CHECK(!es.hasScreenFadeColour());
+            CHECK(es.screenFadeRequests().empty());
+            check("assert(select('#', fade_out(2.5)) == 0)", "fo1.lua");
+            CHECK(es.hasScreenFadeColour());
+            CHECK(es.screenFadeColour().r == 0.0f && es.screenFadeColour().g == 0.0f &&
+                  es.screenFadeColour().b == 0.0f && es.screenFadeColour().a == 1.0f);
+            CHECK(es.screenFadeRequests().size() == 1);          // default flags 3: bit 0x1
+            CHECK(es.screenFadeRequests()[0].durationMs == 2500.0);
+            CHECK(es.screenFadeRequests()[0].targetAlpha == 1.0f);
+            CHECK(es.screenFadeOpcode53Count() == 1);             // default flags 3: bit 0x2
+            // Colour table, one nil component -> 0; flags 1 only.
+            check("fade_out(0.5, {255, nil, 51}, 1)", "fo2.lua");
+            CHECK(es.screenFadeColour().r == 1.0f && es.screenFadeColour().g == 0.0f &&
+                  es.screenFadeColour().b == 51.0f / 255.0f);
+            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeRequests()[1].durationMs == 500.0);
+            CHECK(es.screenFadeOpcode53Count() == 1);
+            // Flags 2 only: no screen_fade_do request; nil table/flags use defaults.
+            check("fade_out(1, nil, 2)", "fo3.lua");
+            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeOpcode53Count() == 2);
+            check("fade_out(1, nil, nil)", "fo4.lua");
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
+            // Flags 0: colour still set, nothing queued.
+            check("fade_out(1, {10, 20, 30}, 0)", "fo5.lua");
+            CHECK(es.screenFadeColour().g == 20.0f / 255.0f);
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
+            // Absent duration reads as 0 (lua_tonumber, no gate).
+            check("fade_out()", "fo6.lua");
+            CHECK(es.screenFadeRequests().size() == 4 && es.screenFadeRequests()[3].durationMs == 0.0);
+            // A non-table colour argument is indexed like the real call: Lua error.
+            {
+                auto r = host.runChunk(gp, "fade_out(1, 5)", "fo7.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+            }
+
+            // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
+            // arg. The word starts fully OPEN; only those two bits become known.
+            CHECK(es.missionFlagsWord().knownMask() == 0);
+            check("mission_end_silently()", "mes1.lua");
+            CHECK(es.missionFlagsWord().knownMask() == 0x14);
+            CHECK(es.missionFlagsWord().get(0x14) == 0x4);
+            check("mission_end_silently(true)", "mes2.lua");
+            CHECK(es.missionFlagsWord().get(0x14) == 0x14);
+            check("mission_end_silently(nil)", "mes3.lua");
+            CHECK(es.missionFlagsWord().get(0x14) == 0x4);
+            check("assert(select('#', mission_end_silently(1)) == 0)", "mes5.lua"); // 1 is truthy
+            CHECK(es.missionFlagsWord().get(0x10) == 0x10);
+            {
+                bool refused = false;
+                try {
+                    (void)es.missionFlagsWord().get(0x1);
+                } catch (const sr3luahost::OpenStateError& e) {
+                    refused = std::string(e.what()).find("0x014c848c") != std::string::npos;
+                }
+                CHECK(refused); // bits no confirmed writer touched stay OPEN
+            }
+            // Wrong state: gameplay-tagged only.
+            auto r = host.runChunk(ui, "assert(fade_out == nil and mission_end_silently == nil)", "b1ui.lua");
+            CHECK(r.loadOk && r.pcallOk);
+        }
+
+        // 27. sfx_faded_out (Sec26.9): 0x012e6aa4 == 3, OPEN until set.
+        {
+            auto r0 = host.runChunk(ui, "sfx_faded_out()", "sfo0.lua");
+            CHECK(r0.loadOk && !r0.pcallOk && r0.pcallError.find("0x012e6aa4") != std::string::npos);
+            es.fadeState().g012e6aa4.set(3);
+            auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
+            CHECK(r1.loadOk && r1.pcallOk);
+            es.fadeState().g012e6aa4.set(2);
+            auto r2 = host.runChunk(ui, "assert(sfx_faded_out() == false)", "sfo2.lua");
+            CHECK(r2.loadOk && r2.pcallOk);
+            auto r3 = host.runChunk(gp, "assert(sfx_faded_out == nil)", "sfo3.lua");
+            CHECK(r3.loadOk && r3.pcallOk);
         }
 
         // Every one of the 22 calls above must fold into the SAME HitLog
@@ -926,9 +1158,36 @@ int main() {
                                   "store_vehicle_get_state", "Completion_is_client",
                                   "game_hud_update_inventory", "tutorial_advance",
                                   "minimap_icon_add_do", "object_indicator_add_do",
-                                  "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type"}) {
+                                  "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type",
+                                  "zscene_is_loaded", "set_mission_author", "fade_out",
+                                  "mission_end_silently", "sfx_faded_out"}) {
             CHECK(host.hitLog().hits().count(name) == 1);
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
+        }
+    }
+
+    // --- Hook evidence labels (spec-lua-bindings.md §4 desk review,
+    // 2026-09-30): nothing removed, every Group 1 name labelled.
+    {
+        int sec8 = 0, pending = 0, refuted = 0, groupLevel = 0;
+        for (const auto& h : sr3luahost::confirmedHooks()) {
+            switch (h.evidence) {
+                case sr3luahost::HookEvidence::Sec8Confirmed: ++sec8; break;
+                case sr3luahost::HookEvidence::Sec4ScanPendingRecheck: ++pending; break;
+                case sr3luahost::HookEvidence::RefutedSec14_3: ++refuted; break;
+                case sr3luahost::HookEvidence::GroupLevel: ++groupLevel; break;
+            }
+            if (h.group != sr3luahost::HookGroup::Group1_GeneralNamed) CHECK(h.evidence == sr3luahost::HookEvidence::GroupLevel);
+        }
+        CHECK(refuted == 5);
+        CHECK(pending == 42);
+        CHECK(sec8 + pending + refuted == 78); // every Group 1 name labelled
+        CHECK(groupLevel == static_cast<int>(sr3luahost::confirmedHooks().size()) - 78);
+        for (const auto& h : sr3luahost::confirmedHooks()) {
+            if (h.name == "screen_fade_do" || h.name == "hud_running_man_event_update")
+                CHECK(h.evidence == sr3luahost::HookEvidence::Sec8Confirmed);
+            if (h.name == "garage_populate") CHECK(h.evidence == sr3luahost::HookEvidence::RefutedSec14_3);
+            if (h.name == "newsticker_populate") CHECK(h.evidence == sr3luahost::HookEvidence::Sec4ScanPendingRecheck);
         }
     }
 

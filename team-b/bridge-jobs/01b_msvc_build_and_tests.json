@@ -1,0 +1,165 @@
+{
+  "title": "team-b: MSVC build + synthetic suites, part 2/3 (19 suites; checks the portable-build change did not break Windows)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "sr3d3d9bc_hlsl_tests",
+        "sr3vehicleinfo_tests",
+        "sr3customization_tests",
+        "sr3texture_tests",
+        "sr3geometry_tests",
+        "sr3materialbinding_tests",
+        "sr3anim_tests",
+        "sr3animpayload_tests",
+        "sr3morph_tests",
+        "sr3foliage_tests",
+        "sr3conversation_tests",
+        "sr3cutscene_tests",
+        "sr3mesh_tests",
+        "sr3rig_tests",
+        "sr3rigpose_tests",
+        "sr3rigmultibonepose_tests",
+        "sr3bonepalette_tests",
+        "sr3zone_tests",
+        "sr3audio_tests"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "sr3d3d9bc_hlsl_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3vehicleinfo_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3customization_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3texture_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3geometry_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3materialbinding_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3anim_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3animpayload_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3morph_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3foliage_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3conversation_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3cutscene_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3mesh_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3rig_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3rigpose_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3rigmultibonepose_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3bonepalette_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3zone_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3audio_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}

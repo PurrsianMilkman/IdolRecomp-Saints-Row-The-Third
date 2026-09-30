@@ -54,7 +54,11 @@ uint32_t EngineState::findVdoObject(const std::string& name, bool hasParent, uin
         }
         return 0; // resolved parent, no matching child - real "not found" path
     }
-    uint32_t targetDoc = hasDoc ? docHandle : currentDefaultDocHandle_;
+    // The current default document is OPEN state; read it only when the
+    // answer depends on it. With no objects registered at all, "not found"
+    // holds for every document, so it is not read.
+    if (vdoObjects_.empty()) return 0;
+    uint32_t targetDoc = hasDoc ? docHandle : currentDefaultDocHandle_.get();
     for (const auto& [h, obj] : vdoObjects_) {
         if (obj.docHandle == targetDoc && obj.nameHash == targetHash) return h;
     }
@@ -82,6 +86,18 @@ uint32_t EngineState::multiply33XorHashBucket(const std::string& name, uint32_t 
     }
     if (bucketCount == 0) return 0; // guard only - the real function is never called this pass with bucketCount==0 (game_peg_load_with_cb always passes the fixed literal 9000)
     return hash % bucketCount;
+}
+
+namespace {
+std::string lowercased(const std::string& s) {
+    std::string out(s);
+    for (char& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+} // namespace
+
+std::string EngineState::zsceneTableKey(const std::string& name) {
+    return lowercased(name);
 }
 
 } // namespace sr3luahost

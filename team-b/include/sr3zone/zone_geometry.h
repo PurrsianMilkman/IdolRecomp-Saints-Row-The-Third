@@ -69,7 +69,9 @@
 // at that computed position by the `[tag]...[tag]` bookend before it is
 // trusted. `~al` ("always loaded") zones pad between segments to the next
 // 16-byte boundary, so that one extra computed position is tried too
-// (Sec10.5: 97 of 928 tiling files use a skip, all of them `~al`). A
+// (Sec10.5's sampled "97 of 928 tiling files use a skip, all `~al`" is
+// superseded by this project's 1,002/1,002 tiling with 115 padded blocks,
+// spec Sec10.8; which zones pad is OPEN there). A
 // candidate that no computed position confirms is skipped WITHOUT moving
 // the cursor, so a coincidental `9` cannot derail the chain behind it.
 //

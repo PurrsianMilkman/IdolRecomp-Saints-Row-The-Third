@@ -1,0 +1,73 @@
+# Team B portable build: every platform-independent library, tool and
+# synthetic test suite under team-b/, built with GCC on Linux. The D3D11
+# renderer and sr3_viewer stay behind if(WIN32) in team-b/CMakeLists.txt,
+# so they are skipped here. The tests use synthetic inputs only - no game data.
+name: team-b portable build
+
+on:
+  push:
+    paths: ['team-b/**', '.github/workflows/team-b-portable.yml']
+  pull_request:
+    paths: ['team-b/**', '.github/workflows/team-b-portable.yml']
+  workflow_dispatch:
+
+jobs:
+  gcc:
+    name: GCC ${{ matrix.build_type }}${{ matrix.sanitize && ' + ASan/UBSan' || '' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Release
+            sanitize: false
+          - build_type: Debug
+            sanitize: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: |
+          FLAGS=""
+          if [ "${{ matrix.sanitize }}" = "true" ]; then
+            FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+          fi
+          cmake -S team-b -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_FLAGS="$FLAGS" -DCMAKE_CXX_FLAGS="$FLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$FLAGS"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j4
+
+  fuzz-smoke:
+    name: libFuzzer smoke (Clang, ASan/UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja and the libFuzzer runtime
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-18 libclang-rt-18-dev
+      - name: Configure
+        run: |
+          FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined"
+          cmake -S team-b -B build-fuzz -G Ninja -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCRREISH_FUZZ=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="$FLAGS" -DCMAKE_CXX_FLAGS="$FLAGS"
+      - name: Build
+        run: cmake --build build-fuzz
+      - name: Replay fixed-bug reproducers
+        run: |
+          for d in team-b/fuzz/regressions/*/; do
+            t=$(basename "$d")
+            ./build-fuzz/fuzz_$t -malloc_limit_mb=1024 -rss_limit_mb=2048 "$d"*
+          done
+      - name: Fuzz each target for 20 seconds
+        run: FUZZ_JOBS=4 team-b/fuzz/run_fuzz.sh build-fuzz 20 fuzz-work
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz-work/artifacts

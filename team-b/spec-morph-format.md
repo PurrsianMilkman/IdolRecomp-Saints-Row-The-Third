@@ -64,8 +64,8 @@ One 16-byte entry per target: `{ u32 id, u32 n, u32 runtime_ptr(=0 on disk), u32
 | `+0x00` | 4 | Zero in every record inspected | **[OPEN.]** |
 | `+0x04` | 2 | **`N` — number of affected vertices.** Drives the bulk size `N × 12`. **`N = 0` occurs in 19,454 / 45,243 descriptors (43%)** — a target declared but touching no vertices; the exact-size replay includes these records, so they are structure, not an artifact. A plausible reading — every file carries the full slider set and only some targets are active for a given head or garment — is **[HYPOTHESIS]**, not asserted. *(Team B, 2026-09-10; re-verified.)* | **[CONFIRMED — the exact-size replay (§4) depends on it; 1,541/1,541.]** |
 | `+0x06` | 2 | **Maximum vertex index** referenced by this target's elements | **[CONFIRMED — empirical: equals `max(index)` in 25,789 / 25,789 records, §5.]** |
-| `+0x08` | 12 | Three floats, small positive (e.g. `0.015, 0.072, 0.066`) | **[HIGH CONFIDENCE — inferred: dequantisation parameters, see §7.]** |
-| `+0x14` | 12 | Three floats, larger (e.g. `1.72, 1.52, 1.23`); tiny for subtle targets | **[HIGH CONFIDENCE — inferred: dequantisation parameters, see §7.]** |
+| `+0x08` | 12 | Three floats, small positive (e.g. `0.015, 0.072, 0.066`) | **[HIGH CONFIDENCE — inferred: dequantisation parameters, see §7.]** — **RESOLVED, §13.3: `A`, the position-delta scale.** |
+| `+0x14` | 12 | Three floats, larger (e.g. `1.72, 1.52, 1.23`); tiny for subtle targets | **[HIGH CONFIDENCE — inferred: dequantisation parameters, see §7.]** — **RESOLVED, §13.3: `B`, the normal-delta scale.** |
 | `+0x20` | 8 | Runtime bulk-pointer slot, zero on disk; the loader writes the absolute address of this record's bulk run here | **[CONFIRMED — disassembly.]** |
 
 ### 3.5 Bulk runs (mode 1, inline)
@@ -74,10 +74,10 @@ For each descriptor record in order: align to 16, then **`N` elements of 12 byte
 
 | Element offset | Size | Content | Confidence |
 |---|---|---|---|
-| `+0` `+2` `+4` | 3 × 2 | Three quantised components. Values are strongly bimodal, piling up near `0` and near `65535` — the signature of small signed deltas stored as biased / two's-complement 16-bit integers. | **[CONFIRMED — the distribution; HIGH CONFIDENCE — that they are quantised position deltas; OPEN — exact decode.]** |
+| `+0` `+2` `+4` | 3 × 2 | Three quantised components. Values are strongly bimodal, piling up near `0` and near `65535` — the signature of small signed deltas stored as biased / two's-complement 16-bit integers. | **[CONFIRMED — the distribution; HIGH CONFIDENCE — that they are quantised position deltas; OPEN — exact decode.]** — **RESOLVED, §13.2/§13.3: two's-complement `i16` position delta, divided by `32767.0` and scaled by `A`; the values use the full `int16` range (§12.1), not only small deltas.** |
 | `+6` | 2 | **Vertex index** (§5) | **[CONFIRMED — empirical, 25,789/25,789.]** |
-| `+8` | 2 | Not characterized | **[OPEN.]** |
-| `+10` | 2 | Always `< 4096` (10,415,507 / 10,415,507 elements) | **[CONFIRMED — the bound; OPEN — meaning.]** |
+| `+8` | 2 | Not characterized | **[OPEN.]** — **RETIRED, corrected by §13.2: `+8`/`+9`/`+10` are three `u8` biased normal-delta bytes; `+11` is zero padding.** |
+| `+10` | 2 | Always `< 4096` (10,415,507 / 10,415,507 elements) | **[CONFIRMED — the bound; OPEN — meaning.]** — **RETIRED, corrected by §13.2: not a 2-byte field; the bound is a side effect of `+11` being zero.** |
 
 ### 3.6 Trailer
 
@@ -140,7 +140,7 @@ The bulk is provably not raw floats — read as `f32`, the three leading compone
 
 - The descriptor's two float triples (§3.4) have the shape of **per-axis dequantisation parameters** — a small triple and a larger triple, per target, with subtle targets carrying tiny values in both. Whether they are `(min, extent)`, `(offset, scale)`, or `(scale, center)` — and whether the 16-bit values are unsigned-biased or two's-complement — was not determined. **[HIGH CONFIDENCE — that these are the decode parameters; OPEN — the formula.]** — **RETIRED, resolved by §13.3: neither guess was right. `A` (the small triple) scales the *position* delta, `B` (the larger triple) scales the *normal* delta — two different quantities, not two parameters of one quantity, which is also why none of the three algebraic identities tried against them (§12.1) could have existed. The 16-bit position components are two's-complement, divided by exactly `32767.0`.**
 - Element `+8` is uncharacterized; `+10` is bounded below 4,096. Plausibly a quantised normal delta or a per-vertex weight. **[OPEN.]** — **RETIRED, resolved by §13.2: `+8`/`+9`/`+10` are three individual unsigned bytes, one per normal axis, decoded as `(u8/255.0)*2.0-1.0`; `+11` is unused padding, confirmed zero in 21,104,267 / 21,104,267 elements. The old "`+10` as u16 is always `< 4096`" reading was a side effect of `+11` being zero, not a property of the format — there was no separate 2-byte field there at all.**
-- The relationship between the vertex indices here and the vertex order in the paired `.ccmesh_pc` (`spec-geometry-format.md` §4.1.2) is untested. **[OPEN.]** *(Still open — not addressed by §12 or §13; see §11 item 6.)*
+- The relationship between the vertex indices here and the vertex order in the paired `.ccmesh_pc` (`spec-geometry-format.md` §4.1.2) is untested. **[OPEN.]** *(Still open — not addressed by §12 or §13; see §11 item 6.)* — **RESOLVED, §15: index `i` addresses vertex `i` of the paired mesh directly.**
 
 Closing this needs the code that *applies* a morph to a mesh at runtime (the GPU-side object the outer validator hands the block to, §3.1), not the loader — a separate, scoped target. — **That code was found and read: §12.2 shows the GPU-side object named here is actually dead code for every shipped file (mode 1 only), and §13 recovers the real applier, `FUN_009f6d30`, reached from the customization assembler instead. The "separate, scoped target" this paragraph called for is exactly §12–§13's subject.**
 
@@ -337,6 +337,7 @@ the kernel's last parameter being a **float weight** is the slider value.
 
 ```
 // per target entry {u32 id, f32 hi, f32 lo, f32 hi2, u8 flags} at (obj+0x2C), count at +0x28
+// (entry stride 0x40, field offsets per §14.4)
 w = clamp01( (slider - lo) / (hi - lo) )
 if (flags != 0):
     w2 = clamp01( (slider - lo) / (hi2 - lo) )
@@ -432,9 +433,9 @@ structurally only one call site, reached once, after every active slider for tha
 has already added its contribution.
 
 What raw assembly had to settle was *which vector* that one call normalises, since
-Ghidra's decompilation of `FUN_009f7690` prints the call as `FUN_00da05a0();` with **zero**
+Ghidra's decompilation of `FUN_009f7690` prints the call to `FUN_00da05a0` with **zero**
 visible arguments, despite `FUN_00da05a0`'s own decompiled signature (correctly recovered
-from *its own* body) being `void __fastcall FUN_00da05a0(float *param_1)`. A call whose
+from *its own* body) declaring a single register-passed (`__fastcall`) float-pointer parameter. A call whose
 callee is known to take one pointer argument, printed with none, is not merely unclear —
 it is proof the call site's argument-loading instruction was not attributed to the call,
 which raw disassembly can recover directly.
@@ -604,7 +605,7 @@ fields alone**, with those fields at exact fixed offsets inside it:
         or icon reference, not consumed by the deformation path at all)
 ```
 
-`param_2 + 0x28` (a count) and `param_2 + 0x2c` (a pointer to this array) belong to a
+Argument 2's `+0x28` (a count) and `+0x2c` (a pointer to this array) belong to a
 *different*, enclosing 0x30-byte structure this document calls a **slider slot** (one
 per UI slider) — not to be confused with the **slider bucket** (the 14-entry outer
 table, §14.6), which is a different structure at a different stride holding an array of
@@ -636,7 +637,7 @@ description hypothesised, now confirmed from the branch structure itself rather 
 inferred from the sign-flip alone.
 
 **Whether a curve precedes the linear interpolation, or `lo`/`hi`/`hi2` is the entire
-remap: CONFIRMED — disassembly that it is the entire remap.** Between reading `param_5`
+remap: CONFIRMED — disassembly that it is the entire remap.** Between reading argument 5
 (the slider float) and producing the final `w`, the kernel calls nothing but
 `FUN_0074e710` (an *id lookup*, not a value transform — see §14.6) and the two helper
 reads for the target's own directory entry. There is no call to any table-lookup,
@@ -645,25 +646,25 @@ spline, or easing function on the weight's value path. The two divisions and two
 
 ### 14.5 Where the slider value lives, and what remains genuinely open
 
-`FUN_009f9020(param_1, param_2)`: `param_2` is the mesh/morph-block being processed (its
+`FUN_009f9020` takes two arguments. Argument 2 is the mesh/morph-block being processed (its
 `+0x78` byte carries the two gate bits already required for this whole path to run, and
 its `+0x58` field is a **small integer handle** (`< 0x100`) into the free-list *pool
 registry* — the same intrusive-pool idiom already documented at §8 for the type-7
 constructor. `FUN_0074e490`/`FUN_0074e710` (used inside the kernel) index that pool
 directly: `(&DAT_015bd398)[handle * 0x15]`. **[CONFIRMED — disassembly.]**
 
-`param_1` is a **separate** object, first visible only as a bare parameter. The
+Argument 1 is a **separate** object, first visible only as a bare parameter. The
 dispatcher reads the live slider value from it as:
 
 The slider's own 48-byte **slot** (§14.6) carries, at its own `+0x24` field, an index
 (`sliderIndex`) into a separate array. That array's base pointer is stored inside the
-sub-object reached through `param_1`'s own `+4` field, and the array itself begins `8`
+sub-object reached through argument 1's own `+4` field, and the array itself begins `8`
 bytes past that base; the current slider value is then the first float of the 12-byte
 record at position `sliderIndex` within that array (i.e. `sliderIndex * 0xc` bytes past
 the `+8` starting point).
 
 i.e. an array of **12-byte (3-float) records**, based at a fixed `+8` offset inside a
-sub-object reached through `param_1`'s own `+4` field, one record per slider, selected by
+sub-object reached through argument 1's own `+4` field, one record per slider, selected by
 an index carried in that slider's own 48-byte **slot** (§14.6 — distinct from the 14-entry
 **bucket** table). **This is the disassembly-level
 answer to "where does the slider value come from": a runtime array of per-slider
@@ -683,7 +684,7 @@ path.** **[CONFIRMED — disassembly, for the *mechanism*.]**
    min/max table in an unblocked `.xtbl` (the DLC-archive workaround already used for
    `customization_items.xtbl` in `spec-customization-data.md` §1 — not attempted this
    pass; flagged as the concrete next step). **[OPEN / UNKNOWN.]**
-3. **Whether `param_1` is, or derives from, the documented customization singleton
+3. **Whether argument 1 is, or derives from, the documented customization singleton
    `DAT_0263e0f4`** (spec §12.3): NOT settled to CONFIRMED. A targeted textual scan
    (`MorphSliderSingletonCheck.java`) found that, of the three candidate functions on the
    call path (`FUN_009f36d0`, and its own two callers `FUN_009f46f0`/`FUN_009f4550`),
@@ -721,41 +722,41 @@ path.** **[CONFIRMED — disassembly, for the *mechanism*.]**
    keep-pointed-at" reading.]**
 
    **(b) `FUN_009f9020`'s first argument — item 3's actual question — is
-   the 4-byte field at offset `+4` inside `param_1`, where `param_1` is `FUN_009f36d0`'s
+   the 4-byte field at offset `+4` inside the object that is `FUN_009f36d0`'s
    OWN incoming first parameter, not `DAT_0263e0f4` and not a fresh reload of it.** The
    one and only call to `FUN_009f9020` inside `FUN_009f36d0` (confirmed by a full-body
    raw-asm scan for calls resolving to `0x009f9020` — exactly one hit) is at `0x009f3e64`;
    the instruction immediately loading its first argument, at `0x009f3e5b`, reads register
    `EAX` from offset `+4` of the object in `EBP`, three instructions before a cdecl call
    sequence that pushes `EBX` then `EAX` and calls `0x009f9020` (cdecl: last-pushed `EAX`
-   is `FUN_009f9020`'s `param_1`, first-pushed `EBX` is its `param_2` — confirmed as the
+   is `FUN_009f9020`'s argument 1, first-pushed `EBX` is its argument 2 — confirmed as the
    mesh/morph-block of this section's own description, since the two instructions
    immediately before the argument load store `EAX` into `EBX`'s own `+0x58` field and OR
-   bit `0x10` into `EBX`'s own `+0x78` byte). `EBP` itself is `FUN_009f36d0`'s own `param_1`,
+   bit `0x10` into `EBX`'s own `+0x78` byte). `EBP` itself is `FUN_009f36d0`'s own argument 1,
    register-pinned for the function's entire 3706-byte body: loaded exactly once, at
    the prologue — an instruction at `0x009f370b` that loads `EBP` from the stack at offset
    `+0x28c`, immediately followed by a zero-check-and-branch on `EBP` matching the
-   decompiled `if (param_1 == 0) goto LAB_009f4528;` — and an exhaustive scan of every
+   decompiled null-check early exit on that argument (branch target `LAB_009f4528`) — and an exhaustive scan of every
    instruction in the function found no other write to `EBP` anywhere — so `EBP` at the
    call site is provably the same value as `EBP` at the later pointer-identity-compare
    sites against `DAT_0263e0f4`, with no register-reuse ambiguity in between.
    **[CONFIRMED — disassembly: the argument-load instruction is located, and the
-   argument is a field of `FUN_009f36d0`'s own `param_1`, not `DAT_0263e0f4` itself and
+   argument is a field of `FUN_009f36d0`'s own argument 1, not `DAT_0263e0f4` itself and
    not freshly read from it.]**
 
    **What this settles, and what it still doesn't.** Item 3's literal question —
-   whether `FUN_009f9020`'s `param_1` argument *is* `DAT_0263e0f4` — is now answered:
-   **no, it is not; it is one field (`+4`) inside `FUN_009f36d0`'s own `param_1`
+   whether `FUN_009f9020`'s first argument *is* `DAT_0263e0f4` — is now answered:
+   **no, it is not; it is one field (`+4`) inside `FUN_009f36d0`'s own argument 1
    object**, per (b). But (b) sits right next to (a): that same `FUN_009f36d0`
-   `param_1`/`EBP` is, a few dozen instructions later in the identical function
+   argument 1 (`EBP`) is, a few dozen instructions later in the identical function
    invocation, checked by raw pointer identity against `DAT_0263e0f4` — a check only
-   meaningful if `param_1` belongs to the same tracked-singleton class of object
-   `DAT_0263e0f4` addresses. Whether `param_1`/`EBP` actually *equals* `DAT_0263e0f4` at
+   meaningful if argument 1 belongs to the same tracked-singleton class of object
+   `DAT_0263e0f4` addresses. Whether argument 1 (`EBP`) actually *equals* `DAT_0263e0f4` at
    the moment of the `FUN_009f9020` call is a runtime fact no static disassembly read
    can settle, so that narrower claim stays **[HIGH CONFIDENCE, not CONFIRMED —
-   `FUN_009f36d0`'s `param_1` is of the same object-class/registry `DAT_0263e0f4` tracks,
+   `FUN_009f36d0`'s argument 1 is of the same object-class/registry `DAT_0263e0f4` tracks,
    evidenced by the direct identity compare against it inside the same function; this is
-   a different, weaker claim than "param_1 IS DAT_0263e0f4 at the time of the
+   a different, weaker claim than "argument 1 IS DAT_0263e0f4 at the time of the
    FUN_009f9020 call," which is runtime-state-dependent.]** No further static step is
    identified that would close this specific remaining gap — it would need dynamic/live
    inspection (break at `0x009f3e64`, read `EBP` vs. `DAT_0263e0f4` directly), consistent
@@ -818,6 +819,8 @@ rejection path on overflow.
 
 ### 14.7 Methodology notes for §5
 
+*(§5 here means `HANDOFF.md` §5, the methodology notes — not this document's §5.)*
+
 - **A died session's precisely-stated next step is worth more than a fresh survey.**
   The prior session's diagnosis — "the decompiler lost the pointer argument at this one
   call site; read the raw assembly there" — was exactly right and named the exact
@@ -826,7 +829,7 @@ rejection path on overflow.
   a re-survey. When a died session leaves a specific, falsifiable next step, trust it and
   start there.
 - **A call printed with the wrong arity is stronger evidence than a call that "looks
-  unclear."** `FUN_00da05a0();` decompiled with zero visible arguments, while
+  unclear."** The call to `FUN_00da05a0` decompiled with zero visible arguments, while
   `FUN_00da05a0`'s own body — decompiled correctly — declares one `float *` parameter.
   That mismatch is not merely uninformative; it is proof the call site's argument-loading
   instruction specifically was not attributed, which tells you exactly what raw
@@ -846,7 +849,9 @@ rejection path on overflow.
   did not settle the question outright — and is reported here as HIGH CONFIDENCE rather
   than CONFIRMED for exactly that reason — but it is a real, cheap intermediate step
   between "decompile everything" and "mark it OPEN and move on," and it is now available
-  to whichever later pass wants to close the remaining gap.
+  to whichever later pass wants to close the remaining gap. *(Its suggested "keep
+  pointed at" reading was later refuted, §14.5 item 3(a) — a cautionary as well as a
+  positive example.)*
 - **Restate a prior finding's exact fields before trusting it, even when re-deriving it
   agrees.** §13.3's remap formula was already CONFIRMED and this session's full kernel
   read did not change it — but the earlier read had never stated the per-entry stride
@@ -1075,6 +1080,11 @@ resolved oppositely on their own evidence, and this document does not extend the
 rig document's still-open indirection hypothesis to morphs — there is nothing
 here for it to explain.
 
+**Update:** `spec-rig-format.md` §11.4's verdict was retracted and its §11.7 item 3
+marked RESOLVED (rig §11.15, same date): blend indices do go through the Mesh `+0x38`
+bone palette, so the rig case is no longer open and the "opposite resolution" contrast
+drawn above no longer holds as stated. The morph conclusion itself is unaffected.
+
 ### 15.7 What this does not settle
 
 The morph *directory*'s `id`-based binding of a target to a *specific* mesh at
@@ -1113,11 +1123,11 @@ The generic dispatcher `FUN_00dd2e30` calls each constructor as `ctor(name, a2, 
 
 **a2, the argument the constructors gate on, is the streaming *container* being loaded.** The dispatcher's only stack argument is forwarded unchanged to the constructor; its sole caller, the container load step `FUN_00db2ce0`, pushes its own `this` — a push of register `EDI`, followed by loading `ECX` from `ESI` and calling `0x00dd2e30`, at `0x00db2d44`. `spec-resource-dispatch.md` §8.6 calls it the "caller arg"; it is the container object. **[CONFIRMED — disassembly.]**
 
-**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `FUN_009f1730` (the store immediately precedes the container-start call `FUN_00dafea0(job+0x10)`, or `FUN_00daff10` on one path; the same field is later passed to the poll `FUN_00dafb60` (a result of `5` sends the job down the retire path) and the release `FUN_00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `FUN_00db2ce0` reports as `Error calling load() function for streaming file (%s)`. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `FUN_00c9b840` (a 2-instruction `return param_1`), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
+**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `FUN_009f1730` (the store immediately precedes the container-start call `FUN_00dafea0(job+0x10)`, or `FUN_00daff10` on one path; the same field is later passed to the poll `FUN_00dafb60` (a result of `5` sends the job down the retire path) and the release `FUN_00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `FUN_00db2ce0` reports as `Error calling load() function for streaming file (%s)`. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `FUN_00c9b840` (a 2-instruction identity function returning its argument), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
 
 ### 16.3 What `DAT_0263e0f4` is: the current job of a 64-entry pool
 
-`FUN_009f1370` (the subsystem initialiser) builds a pool of **64 job records of `0x224` bytes** at `0x02641720`–`0x0264a020` (`0x8900 / 0x224 = 64` exactly), labelled by the engine's own strings **"pcust comp %d"** and a **"component streaming"** memory pool of `0x450000` bytes. Jobs are chained by links at job`+0x1b4`/`+0x1b8`; `DAT_0263e0fc` is the free-list head, `DAT_0263e0f8` the pending-queue head, and **`DAT_0263e0f4` the *current* job — null while idle**. The scheduler pops the queue head into `DAT_0263e0f4` (when nothing is current), and every retire/cancel path (`FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0`, `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, and the assembler's own tail) releases the container handle (`FUN_00dafad0(job+0x10)`) and nulls `DAT_0263e0f4`; most of them also return the job to the free list. So the earlier "singleton" wording (§12.3, `spec-rig-format.md` §12) should be read as **"the current job record"**. The assembler `FUN_009f36d0` operates on a job passed as its `param_1` and un-registers it with a pointer-identity compare of `param_1` against `DAT_0263e0f4` followed by a clear at its end (§14.5 item 3); the ctors write through `DAT_0263e0f4`. That the two are the same object at run time remains a runtime fact (§14.5 item 3's bounded gap, unchanged), but the offsets line up field for field — every stash slot a constructor writes is read by the assembler at the identical offset, as a `(pointer, length)` pair. **[CONFIRMED — disassembly for the pool, lists and lifecycle; HIGH CONFIDENCE — inferred for identity of `param_1` and `DAT_0263e0f4`.]**
+`FUN_009f1370` (the subsystem initialiser) builds a pool of **64 job records of `0x224` bytes** at `0x02641720`–`0x0264a020` (`0x8900 / 0x224 = 64` exactly), labelled by the engine's own strings **"pcust comp %d"** and a **"component streaming"** memory pool of `0x450000` bytes. Jobs are chained by links at job`+0x1b4`/`+0x1b8`; `DAT_0263e0fc` is the free-list head, `DAT_0263e0f8` the pending-queue head, and **`DAT_0263e0f4` the *current* job — null while idle**. The scheduler pops the queue head into `DAT_0263e0f4` (when nothing is current), and every retire/cancel path (`FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0`, `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, and the assembler's own tail) releases the container handle (`FUN_00dafad0(job+0x10)`) and nulls `DAT_0263e0f4`; most of them also return the job to the free list. So the earlier "singleton" wording (§12.3, `spec-rig-format.md` §12) should be read as **"the current job record"**. The assembler `FUN_009f36d0` operates on a job passed as its argument 1 and un-registers it with a pointer-identity compare of that argument against `DAT_0263e0f4` followed by a clear at its end (§14.5 item 3); the ctors write through `DAT_0263e0f4`. That the two are the same object at run time remains a runtime fact (§14.5 item 3's bounded gap, unchanged), but the offsets line up field for field — every stash slot a constructor writes is read by the assembler at the identical offset, as a `(pointer, length)` pair. **[CONFIRMED — disassembly for the pool, lists and lifecycle; HIGH CONFIDENCE — inferred for identity of that argument and `DAT_0263e0f4`.]**
 
 ### 16.4 Job-record field map (everything with an identified writer or reader)
 
@@ -1177,11 +1187,16 @@ So **none of IDs 9/10/14 is a distinct format**: each is the sibling format's pa
 
 ### 16.7 The complete list of direct users of `DAT_0263e0f4`
 
-**Seventeen functions, not fourteen** (55 references, reference manager and operand scan agreeing exactly): `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, `FUN_009f07c0` (`return DAT_0263e0f4 != 0`), the five constructors `0x009f08c0`/`0x009f0910`/`0x009f0970`/`0x009f09d0`/`0x009f0a20`, `FUN_009f1370` (pool init), `FUN_009f1730` (scheduler), `FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0` (cancel/retire paths), the undefined `0x009f32f0` completion callback, `FUN_009f36d0` (assembler), `FUN_009f5220` (`FUN_009f46f0` then `if (DAT_0263e0f4 == 0) FUN_009ed530`). The earlier 14 were the ones that were already Ghidra functions; `0x009f08c0` and `0x009f0a20` had no function and `0x009f32f0` still has none. **[CONFIRMED — disassembly.]**
+**Seventeen functions, not fourteen** (55 references, reference manager and operand scan agreeing exactly): `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, `FUN_009f07c0` (returns whether a job is current), the five constructors `0x009f08c0`/`0x009f0910`/`0x009f0970`/`0x009f09d0`/`0x009f0a20`, `FUN_009f1370` (pool init), `FUN_009f1730` (scheduler), `FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0` (cancel/retire paths), the undefined `0x009f32f0` completion callback, `FUN_009f36d0` (assembler), `FUN_009f5220` (calls `FUN_009f46f0`, then `FUN_009ed530` when no job is current). The earlier 14 were the ones that were already Ghidra functions; `0x009f08c0` and `0x009f0a20` had no function and `0x009f32f0` still has none. **[CONFIRMED — disassembly.]**
 
 ### 16.8 What remains open
 
 1. **How an entry gets typed 9–14 instead of 5/3/7/20.** The extensions are identical, so the type must come from the container (its container type, e.g. "Cust_Component"/"Cust_Logo", or the entry's own type byte in the manifest trailer, `spec-resource-dispatch.md` §8.5); which one was not traced. **[HYPOTHESIS — container type; OPEN.]**
 2. Job`+0x00`/`+0x04`/`+0x0c` semantics beyond what §16.4 lists, and who enqueues jobs (the writer of the pending queue).
-3. Whether the assembler's `param_1` equals `DAT_0263e0f4` at the moment it runs — a runtime fact (§14.5 item 3, unchanged).
+3. Whether the assembler's argument 1 equals `DAT_0263e0f4` at the moment it runs — a runtime fact (§14.5 item 3, unchanged).
 4. The morph-slider value's home and range (§14.5 item 2) is unaffected by this section.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 6 stale table rows/items resolved in place (§3.4 `+0x08`/`+0x14`, §3.5 `+0`/`+8`/`+10`, §7 vertex-index line → §13.2/§13.3/§15); added a stride pointer to the §13.3 pseudocode (§14.4); added an update note to §15.6 (rig §11.4 retracted, §11.7 item 3 resolved); clarified §14.7 "§5" as `HANDOFF.md` §5 and annotated its textual-scan bullet with the §14.5 item 3(a) refutation; reworded decompiler-shaped text (a decompiled signature, pseudocode calls/conditions/returns, `LAB_` goto, ~25 `param_N` uses) into plain English.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (all 7 `HANDOFF.md` §5 references are methodology/provenance and already state their lesson inline; §5 still exists at that number); repointed 0 `HANDOFF.md` §27.x references to the archived headings (none present); 0 left (see review).

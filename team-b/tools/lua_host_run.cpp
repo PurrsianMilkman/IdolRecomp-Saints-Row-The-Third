@@ -758,6 +758,12 @@ int main(int argc, char** argv) {
     fs::path cacheDir = argv[1];
     std::string registrationListPath = argv[2];
     fs::path outDir = argv[3];
+    // The two further tools/ inputs below are read from the same directory as
+    // the registration list (cloud phase, 2026-09-30: the PC bridge runs tools
+    // with cwd = the job's output dir, so a bare "tools/..." would not
+    // resolve). Unchanged for the usual `tools/lua_all_registered_*.txt` run
+    // from team-b/.
+    fs::path toolsDir = fs::path(registrationListPath).parent_path();
     uint64_t maxScriptsToRun = (argc >= 5) ? std::stoull(argv[4]) : UINT64_MAX;
     fs::create_directories(outDir);
 
@@ -1056,7 +1062,7 @@ int main(int argc, char** argv) {
     }
 
     // --- Cross-reference against the static call-count ranking -----------
-    fs::path reconciliationPath = fs::path("tools") / "lua_reconciliation_called_and_registered_1181.tsv";
+    fs::path reconciliationPath = toolsDir / "lua_reconciliation_called_and_registered_1181.tsv";
     auto staticRank = loadStaticReconciliation(reconciliationPath.string());
     std::cout << "\nLoaded " << staticRank.size() << " rows from " << reconciliationPath.string()
               << " for the static-vs-runtime cross-check (0 means that file wasn't found from this working "
@@ -1399,7 +1405,7 @@ int main(int argc, char** argv) {
     std::ofstream hookByHookOut(outDir / "verdict_hook_fires_by_hook.tsv");
     hookByHookOut << "hook_name\thook_group\tgameplay_defined_in_N_scripts\tgameplay_called_ok\t"
                      "gameplay_called_error\tui_defined_in_N_scripts\tui_called_ok\tui_called_error\t"
-                     "total_calls_attempted_both_states\n";
+                     "total_calls_attempted_both_states\thook_evidence\n";
     uint64_t hooksEverDefinedCount = 0, hooksEverCalledOkCount = 0, hooksEverCalledErrCount = 0;
     for (size_t hi = 0; hi < hooks.size(); ++hi) {
         const auto& h = hooks[hi];
@@ -1407,7 +1413,8 @@ int main(int argc, char** argv) {
         uint64_t totalAttempted = agg.gpCalledOk + agg.gpCalledErr + agg.uiCalledOk + agg.uiCalledErr;
         hookByHookOut << h.name << "\t" << hookGroupLabel(h.group) << "\t" << agg.gpDefined << "\t"
                       << agg.gpCalledOk << "\t" << agg.gpCalledErr << "\t" << agg.uiDefined << "\t"
-                      << agg.uiCalledOk << "\t" << agg.uiCalledErr << "\t" << totalAttempted << "\n";
+                      << agg.uiCalledOk << "\t" << agg.uiCalledErr << "\t" << totalAttempted << "\t"
+                      << hookEvidenceLabel(h.evidence) << "\n";
         if (agg.gpDefined > 0 || agg.uiDefined > 0) hooksEverDefinedCount++;
         hooksEverCalledOkCount += (agg.gpCalledOk + agg.uiCalledOk);
         hooksEverCalledErrCount += (agg.gpCalledErr + agg.uiCalledErr);
@@ -1718,7 +1725,7 @@ int main(int argc, char** argv) {
     // mission was driven at its own real position in the walk," exactly
     // analogous to how the main pass's own per-script rows already work.
     std::cout << "\n\n=== STEP 1 (this task): real mission-driving pass ===\n";
-    fs::path missionTsvPath = fs::path("tools") / "mission_package_per_container.tsv";
+    fs::path missionTsvPath = toolsDir / "mission_package_per_container.tsv";
     std::vector<MissionPackageRow> missionRows = loadMissionPackageRows(missionTsvPath.string());
     std::cout << "Loaded " << missionRows.size() << " real rows from " << missionTsvPath.string()
               << " (0 means that file wasn't found from this working directory - step 1 is skipped "
@@ -1946,6 +1953,8 @@ int main(int argc, char** argv) {
     mline("total_ticks_survived_across_all_missions=" + std::to_string(ticksSum));
     mline("total_stub_calls_this_step_contributed(ALL-INCLUSIVE minus pre-step-1 snapshot, real HitLog delta)=" +
           std::to_string(missionIncrementalTotal));
+    mline("zscene_is_loaded_open_branch_hits(whole run, Sec14.23's OPEN per-record branch, stubbed false)=" +
+          std::to_string(host.engineState().zsceneOpenBranchHits()));
     mline("\n--- Per-mission detail (also in verdict_mission_drive.tsv) ---");
     for (auto& mr : missionResults) {
         std::ostringstream row;

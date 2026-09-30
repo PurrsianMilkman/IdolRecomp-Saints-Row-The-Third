@@ -16,13 +16,14 @@
 > **2026-09-11 — the keyframe payload is resolved (§6c).** Stream layout, rotation
 > samples (smallest-three quaternions with an adaptive per-axis step) and
 > translation samples (`base/64 + delta/4000`) are all decoded. What flags bit
-> `0x40` adds to the payload is the main remaining gap (§6c.4).
+> `0x40` adds to the payload is the main remaining gap (§6c.4). **[Resolved: see §10
+> — a per-track layer-override table, 518 / 518.]**
 
 - The format has a clean four-byte ASCII magic, **`ANIM`**, present in **4,209 / 4,209** real files. **[CONFIRMED — empirical, whole population.]**
 - **The two separately-registered types that both claim `.anim_pc` are the same format**, not two formats sharing an extension — they are two *entry points* into one shared animation subsystem. This was the specific open question raised by `spec-format-inventory.md` §3, and it's now answered with evidence rather than assumption (§5).
 - Both loaders key on a **`.animx`** runtime name rather than the on-disk `.anim_pc` — an authoring-name/shipped-name split of the same kind already documented for `_cust.xtbl` → `.cvtf_pc` (`spec-geometry-format.md` §5). **[CONFIRMED — disassembly.]**
 - The header carries a **root-motion delta transform**: a unit quaternion plus a translation vector, confirmed at **4,209 / 4,209** against **0 / 4,209** and **0 / 12,177** on two independent controls (§4). This is the single most decisive structural confirmation in this project to date.
-- The per-keyframe/per-track payload itself is **not** resolved (§6). An honest negative: the obvious uniform layout model is measurably wrong.
+- ~~The per-keyframe/per-track payload itself is **not** resolved (§6).~~ **[Superseded: resolved in §6c (stream layout, rotation and translation samples); flags bit `0x40`'s extra table in §10.]** An honest negative: the obvious uniform layout model is measurably wrong.
 
 ## 2. Header layout
 
@@ -32,7 +33,7 @@ All offsets are from the start of the file. Field names are this document's own 
 |---|---|---|---|
 | `+0x00` | 4 | Magic `ANIM` (ASCII, bytes `41 4E 49 4D`) | **[CONFIRMED — empirical, 4209/4209.]** |
 | `+0x04` | 1 | **Version. Must be exactly `14` (`0x0E`).** | **[CONFIRMED — both ways: the loader rejects anything not exactly equal to 14, and all 4,209 real files read exactly 14.]** |
-| `+0x05` | 1 | **Flags bitfield.** Bit `0x08` is set in every file; bit `0x01` in nearly all. **Bit `0x10` gates the optional section at `+0x40`** (§3). Observed values: `0x09` (2167), `0x0d` (1308), `0x49` (320), `0x4d` (182), `0x1d` (87), `0x19` (60), `0x8d` (51), `0x59` (15), and four rarer values — *counts over the 4,197 files with a full `0x48`-byte header; the 12 shorter files all read `0x09`, so over all 4,209 the `0x09` count is 2,179.* | **[CONFIRMED — disassembly for bit `0x10`'s exact role; CONFIRMED — empirical for the value distribution. OPEN — the meaning of bits `0x01`, `0x04`, `0x08`, `0x40`, `0x80`.]** |
+| `+0x05` | 1 | **Flags bitfield.** Bit `0x08` is set in every file; bit `0x01` in nearly all. **Bit `0x10` gates the optional section at `+0x40`** (§3). Observed values: `0x09` (2167), `0x0d` (1308), `0x49` (320), `0x4d` (182), `0x1d` (87), `0x19` (60), `0x8d` (51), `0x59` (15), and four rarer values — *counts over the 4,197 files with a full `0x48`-byte header; the 12 shorter files all read `0x09`, so over all 4,209 the `0x09` count is 2,179.* | **[CONFIRMED — disassembly for bit `0x10`'s exact role; CONFIRMED — empirical for the value distribution. OPEN — the meaning of bits `0x01`, `0x04`, `0x08`, `0x40`, `0x80`.]** **[Partly resolved: `0x01` selects the rotation mode (§6c.3 item 3); `0x80` widens the per-track counts (§6c.1); `0x40` adds a per-track layer-override table (§10). `0x04`, `0x08` remain OPEN.]** |
 | `+0x06` | 2 | A `u16` count. Range `2`–`1099`, mean ~81, 365 distinct values; scales with file size. Plausibly a frame or key count, **but see §6 — the arithmetic does not support the obvious reading.** | **[CONFIRMED — present and varying; HYPOTHESIS — that it is specifically a frame count.]** |
 | `+0x08` | 1 | Small count, range `0`–`20` | **[CONFIRMED present; OPEN — meaning.]** |
 | `+0x09` | 1 | Small count, range `0`–`20` | **[CONFIRMED present; OPEN — meaning.]** |
@@ -42,7 +43,7 @@ All offsets are from the start of the file. Field names are this document's own 
 | `+0x18` | 4 | **Root-motion rotation: quaternion `w`** (`f32`) | **[CONFIRMED — empirical, see §4.]** |
 | `+0x1C` | 12 | **Root-motion translation: `x`, `y`, `z`** (3 × `f32`). **Exactly zero in 1,953 / 4,209 files** (in-place animations), with a further 7 within `1e-4` (largest `9e-5`, e.g. `gml1_fl_bk_getup.anim_pc`) — numerically zero for any practical purpose; median magnitude `0.12`; max `261.6`. *(An earlier version of this table said 1,954 — that figure came from a `< 1e-6` threshold that admitted one file at `1.000e-06`; the clean team's independent count of 1,953 exact is the correct one, and reconciles exactly with a `< 1e-4` count of 1,960.)* | **[CONFIRMED — empirical for the field; HIGH CONFIDENCE — inferred that it is specifically root translation, from the zero-for-in-place-animations pattern and the §4 pairing with the rotation.]** |
 | `+0x28` | 4 | **Track-to-bone table offset, file-relative — and the header size.** Zero means the identity mapping (track *i* animates bone *i*); non-zero points at a byte table of `+0x0A` entries, one per track, each a bone index with **255 meaning "unused"**. Its value is **`(flags & 0x10) ? 0x48 : 0x38`** in **394 / 394** clips that have one — i.e. the table sits immediately after the header, whose length depends on whether `+0x40`/`+0x44` are present. **So the keyframe payload begins after the TABLE, not at a fixed `0x48`.** *(Previously recorded here as "observed zero in every sample inspected, OPEN" — true, and the 90% case mistaken for the only case: 3,803 of 4,209 clips use the identity mapping.)* | **[CONFIRMED — disassembly + empirical, see §6b.]** |
-| `+0x30` | 4 | **An in-file offset.** `≤ file size` in 4,209 / 4,209. Points near, but not at, end of file; the gap varies widely (2, 10, 12, 122, 230 … bytes). | **[CONFIRMED — empirical, that it is an in-file offset; OPEN — what it points at.]** |
+| `+0x30` | 4 | **An in-file offset.** `≤ file size` in 4,209 / 4,209. Points near, but not at, end of file; the gap varies widely (2, 10, 12, 122, 230 … bytes). | **[CONFIRMED — empirical, that it is an in-file offset; OPEN — what it points at.]** **[Resolved: the end of the keyframe payload — §6c.1, §8 item 3.]** |
 | `+0x34` | 12 | Not characterized | **[OPEN.]** |
 | `+0x40` | 4 | **Optional file-relative offset, present only when flags bit `0x10` is set** (§3). Fixed up to an absolute pointer at load; `-1` means null. | **[CONFIRMED — disassembly and empirical, see §3.]** |
 | `+0x44` | 4 | Paired high/zero word for `+0x40`, zeroed by the loader during fixup | **[CONFIRMED — disassembly.]** |
@@ -98,8 +99,8 @@ Supporting detail: loaded animations are tracked in a **handle table** of 36-byt
 > **Superseded in part by §6c (2026-09-11): the payload's stream layout is now
 > resolved, and rotation samples are decoded.** This section is kept because its
 > *refutations* are what forced the method change that worked — and §6.2's entropy
-> measurement correctly predicted the mechanism §6c found. Translation samples
-> remain undecoded.
+> measurement correctly predicted the mechanism §6c found. ~~Translation samples
+> remain undecoded.~~ **[Resolved: decoded in §6c.5.]**
 
 The natural first guess for the bulk of the file is a uniform `frames × tracks × bytes_per_key` array, using `+0x06` as the frame count and `+0x0A`/`+0x0B` as track counts. **Tested against the whole population, that model does not hold.** Computing `(payload_extent) / (f06 × (b0A + b0B))` across all 4,197 full-header files gives a median of **0.55** with a standard deviation of **0.34** and quartiles of 0.35 / 0.55 / 0.78 — i.e. no consistent bytes-per-key value, and a nominal figure of roughly *half a byte* per frame-track, which cannot be a literal uncompressed key.
 
@@ -229,11 +230,11 @@ p += rotKeys * 3                      // rotation samples, one byte per axis
                                       //  mode that shipped data does not use)
 
 // translation control records
-if (f & 0x20) == 0:  p = align2(p+1)
+if (f & 0x20) == 0:  p = alignUp2(p)     // (first written as align2(p+1), same meaning)
                      m = 0; acc = 0
                      while acc < transKeys:  acc += u16(p + m*8);   m += 1
                      p += m * 8
-else:                p = align4(p+3)
+else:                p = alignUp4(p)     // (first written as align4(p+3), same meaning)
                      m = 0; acc = 0
                      while acc < transKeys:  acc += i32(p + m*16);  m += 1
                      p += m * 16
@@ -256,8 +257,8 @@ p += transKeys                        // one more byte per translation key
 > flags bit `0x40` separates them almost perfectly, and stratifying raises the
 > clean rate to **99.89%** while isolating the entire residual. The original
 > figure was not wrong, it was **diluted** — the same error shape as the morph
-> control diluted by single-element records (§13) and the vehicle equality test
-> diluted by a wrong denominator (§26.9).
+> control diluted by single-element records (`HANDOFF.md` §13) and the vehicle equality test
+> diluted by a wrong denominator (`HANDOFF.md` §26.9).
 
 The endpoint test is the strong one: `+0x30` is an oracle **the file itself
 declares**, not a boundary chosen to make the walk look right, and the residual
@@ -438,7 +439,9 @@ all of which were read out of the executable image rather than inferred. The
 **numeric assembly of a component from its base, multiplier and delta is
 [HIGH CONFIDENCE — inferred]**: it was read from one decompiled branch and has
 not been replayed against file bytes, so the field widths within a sample byte
-are not yet independently confirmed.
+are not yet independently confirmed. **[Superseded: the numeric assembly was replayed
+later in this subsection and upgraded to [CONFIRMED — disassembly + empirical] by
+independent-decoder agreement — see the 2026-09-11 upgrade note above.]**
 
 ### 6c.3 What is still open in the payload
 
@@ -452,7 +455,8 @@ are not yet independently confirmed.
    superseded; see §9.1 for the split and §6c.4's inline correction). What the
    third sub-population (55 clips) carries beyond the declared tracks is
    characterised, with several models refuted, in **§9.1**; still **[OPEN]**
-   overall.
+   overall. **[Resolved: see §10 — skipping the layer-override table makes 518 / 518
+   land; §10.5.]**
 3. ~~**The second rotation mode.**~~ — **RESOLVED (§9.1's disassembly side
    trip).** A runtime flag adds one more byte per rotation key; shipped data
    does not use it (replaying with it on drops the walk to 6.6%). **What
@@ -465,7 +469,8 @@ are not yet independently confirmed.
    for (2 bits permutation + 6 bits span), bytes 0–2 give 2 bits each to the
    step-size index, and the remaining 6 bits per byte are the sample bases.
    Consistent, but only the span field is empirically confirmed. **[HIGH
-   CONFIDENCE — inferred.]**
+   CONFIDENCE — inferred.]** *(See also §6c.2's 2026-09-11 upgrade note on the
+   numeric decode.)*
 
 ### 6c.4 The residual has a single DISCRIMINATOR, flags bit `0x40` — but not a single MECHANISM (superseded in part, see §9)
 
@@ -474,7 +479,7 @@ are not yet independently confirmed.
 > below said **"They are not two mechanisms. They are one."** That is now known to
 > be wrong: §9 characterises **three** sub-populations within the bit-`0x40` set
 > (334 continuation-explained, 55 walk-cleanly-but-never-land, ~129 outright
-> failures), and the 55 do not share the CONT population's mechanism — that is the
+> failures — *= 121 FAIL + 8 LONG in §9.1's stratum table*), and the 55 do not share the CONT population's mechanism — that is the
 > entire subject of §9.1. **What survives, and is why the heading is corrected
 > rather than deleted:** flags bit `0x40` genuinely is the discriminator that
 > separates this residual from the clean population (the table below is
@@ -520,13 +525,15 @@ and what is wrong is only how many blocks to walk.
 > number already in hand. Note the numerator moved too: **re-measuring** on the
 > restricted population gives 334, not 335, since one of those two non-bit clips
 > was inside the original count. **Re-dividing 335 by 397 would have carried the
-> error forward** — a corrected denominator needs a re-measurement, not arithmetic. But the extra count is
+> error forward** — a corrected denominator needs a re-measurement, not arithmetic.
+
+But the extra count is
 **not** any header field tested — it is 39 blocks for 310 of them and varies
 otherwise (74, 113, 90, …), and matches neither `+0x0B`, nor `+0x06`, nor twice
 the track count (≤ 0.3% each). **So this is not yet "the track count is wrong";
 it is "there is more payload after the tracks, and walking it as though it were
 more tracks usually lands right."** Those are different claims and only the first
-is measured. **[OPEN — what flags bit `0x40` adds to the payload.]**
+is measured. **[OPEN — what flags bit `0x40` adds to the payload.]** **[Resolved: see §10.]**
 
 **Why this matters beyond the residual:** the clips carrying the bit are
 disproportionately vehicle-occupant and layered-action animations by name
@@ -612,7 +619,9 @@ insensitive because many axes are genuinely near zero under any nearby reading.
    record without observably touching a second record's fields) — narrowing
    *where* a resolution lives in code without settling the question. **Status:
    [OPEN]** — recorded as a real null result, not forced to a verdict.
-4. **The rotation path's replay is PARTIAL** (§6c.2, updated 2026-09-11). It now
+4. **[Superseded 2026-09-11: upgraded to [CONFIRMED — disassembly + empirical] by
+   independent-decoder agreement, and the clamp-breach test was run — both in §6c.2.
+   Text below kept as written.]** **The rotation path's replay is PARTIAL** (§6c.2, updated 2026-09-11). It now
    has one — bounded and smooth, 2.6–3.3× better than controls — but with weak
    controls, so it stays **[HIGH CONFIDENCE — inferred; replay consistent]** rather
    than confirmed. The asymmetry with translation is narrowed, not closed, and is
@@ -625,7 +634,7 @@ insensitive because many axes are genuinely near zero under any nearby reading.
    which is the silently-plausible failure in its purest form: it renders, it moves,
    it reviews as "close enough", and nothing forces a second look. Treat the
    rotation arithmetic as unverified until the clamp-breach test in `HANDOFF.md`
-   §27.1(b) has been run — that test needs no new disassembly and the oracle is
+   §27.1(b) (that HANDOFF item has since been rewritten; the test itself is in §6c.2's numeric replay) has been run — that test needs no new disassembly and the oracle is
    already in the data (`x² + y² + z² ≤ 1` must hold almost everywhere).
 
 ## 7. A correction to this project's container tooling, found by this pass
@@ -636,11 +645,11 @@ insensitive because many axes are genuinely near zero under any nearby reading.
 
 ## 8. Open Items
 
-1. **The keyframe/track payload encoding** (§6) — the single most valuable remaining gap, and the one thing standing between this spec and a usable animation reimplementation. Needs the runtime sampling code, not the loader.
-2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `FUN_004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
-3. ~~**What `+0x30` points at**~~ — **RESOLVED (§6c.1): it is the end of the keyframe payload.** The per-track walk lands on it exactly in 3,687 of 4,086 clips. *(Previously: "a valid in-file offset in every file, target unidentified.")*
+1. ~~**The keyframe/track payload encoding** (§6) — the single most valuable remaining gap,~~ **[Resolved: §6c; the `0x40` extra table in §10.]** and the one thing standing between this spec and a usable animation reimplementation. Needs the runtime sampling code, not the loader.
+2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **[`0x01` resolved since: rotation-mode select, §6c.3 item 3.]** **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `FUN_004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
+3. ~~**What `+0x30` points at**~~ — **RESOLVED (§6c.1): it is the end of the keyframe payload.** The per-track walk lands on it exactly in 3,687 of 4,086 clips *(diluted figure, corrected in §6c.1: 3,687 / 3,691 with flags bit `0x40` clear; 518 / 518 with it set once the §10 table is skipped)*. *(Previously: "a valid in-file offset in every file, target unidentified.")*
 4. **`+0x06`, `+0x08`, `+0x09`** — confirmed present and varying; `+0x06`'s frame-count reading is actively undermined by §6. *(`+0x0A`/`+0x0B` are now resolved — see §2 and §6a.)*
-5. **`+0x28` and `+0x34`** — zero or unexamined in every sample checked.
+5. **`+0x28` and `+0x34`** — zero or unexamined in every sample checked. **[`+0x28` resolved since: track-to-bone table offset, §6b. `+0x34` still OPEN.]**
 6. **The 12 sub-`0x48`-byte files** — all static prop poses (doors, barriers, crates), all flags `0x09`, all with an identity-ish transform. They parse consistently but represent a minimal-case shape not separately characterized.
 7. **Cross-archive validation** — all 4,209 samples come from a single archive (`preload_anim.vpp_pc`). Other archives ship `.anim_pc` files too; none were checked. Consistent with this project's standing rule, this is flagged rather than generalized.
 
@@ -669,6 +678,10 @@ insensitive because many axes are genuinely near zero under any nearby reading.
 > `AnimFindLayerSetup.java`.
 
 ### 9.1 The third population: BOUNDED between 55/135 and 69/121, not settled — plus a live retraction of the continuation search's own evidential weight
+
+> **⚠ SUPERSEDED 2026-09-12 by §10:** there is no third sub-population; skipping the
+> layer-override table makes 518 / 518 bit-`0x40` clips land (§10, §10.5). All of §9.1
+> below, including its closing verdict, is kept as written.
 
 > **Target size is bounded, not corrected — a second mid-pass revision, and it
 > demotes the first one.** This subsection was drafted twice already: the task
@@ -757,7 +770,7 @@ pass's own reimplementation — not the shipping reader; see below.]**
 > restricted to the 397 clips where landing is not already precluded by
 > construction, the real alignment clearly dominates.~~
 >
-> **⚠ THAT DILUTION RECONCILIATION IS REFUTED (2026-09-12) — a feasibility bound kills it outright.** Our 397 is a strict subset of their 518 (their extra 121 being the outright walk failures). Under `+7`, ours finds **37 of 397**. If both implementations agreed on the 397 shared clips, their total could be **at most 37 + 121 = 158**, even granting that every one of the extra 121 hit spuriously. **They report 333. 333 > 158.** No population composition reconciles that — dilution is arithmetically impossible as an explanation. **At least one of the two shift-control implementations is not measuring what its description says.** The likely divergence is one of two one-line choices: what exactly is shifted (our `+7` displaces the payload start; theirs may displace a different anchor), or what counts as a hit (ours requires landing exactly on `u32(+0x30)`; theirs may count a clip merely for completing the walk without landing on that target — which would also explain their observed near-identity, since "completes" is plausibly insensitive to start while "lands on a specific offset" is not). **Next step: diff the two control implementations on those two points before trusting either verdict.** Until that is done, the status of this measurement is **UNKNOWN, not confirmed and not refuted** — the 334/397 real-vs-shifted separation stands as a measurement, but no inference from it (narrower or otherwise) should be treated as settled. **[STATUS: RESOLVED 2026-09-12, `CONFIRMED — empirical` — Team B's shift control had the wrong anchor (payload start, corrupting the declared-track walk itself, rather than `end_of_declared_walk`); rebuilt correctly it converges with this measurement within 4 clips, and a desync-rate diagnostic confirms the mechanism (2.04% completion under the correct anchor's shift vs 5.92–6.27% at the real start / wrong-anchor start). Full resolution in `HANDOFF.md` §27.2 item 1. **This settles that the continuation evidence for extra payload is real; it does not settle what flag `0x40` means at runtime, which stays OPEN.**]** What it shows: landing at the *correct*, byte-precise
+> **⚠ THAT DILUTION RECONCILIATION IS REFUTED (2026-09-12) — a feasibility bound kills it outright.** Our 397 is a strict subset of their 518 (their extra 121 being the outright walk failures). Under `+7`, ours finds **37 of 397**. If both implementations agreed on the 397 shared clips, their total could be **at most 37 + 121 = 158**, even granting that every one of the extra 121 hit spuriously. **They report 333. 333 > 158.** No population composition reconciles that — dilution is arithmetically impossible as an explanation. **At least one of the two shift-control implementations is not measuring what its description says.** The likely divergence is one of two one-line choices: what exactly is shifted (our `+7` displaces the payload start; theirs may displace a different anchor), or what counts as a hit (ours requires landing exactly on `u32(+0x30)`; theirs may count a clip merely for completing the walk without landing on that target — which would also explain their observed near-identity, since "completes" is plausibly insensitive to start while "lands on a specific offset" is not). **Next step: diff the two control implementations on those two points before trusting either verdict.** Until that is done, the status of this measurement is **UNKNOWN, not confirmed and not refuted** — the 334/397 real-vs-shifted separation stands as a measurement, but no inference from it (narrower or otherwise) should be treated as settled. **[STATUS: RESOLVED 2026-09-12, `CONFIRMED — empirical` — Team B's shift control had the wrong anchor (payload start, corrupting the declared-track walk itself, rather than `end_of_declared_walk`); rebuilt correctly it converges with this measurement within 4 clips, and a desync-rate diagnostic confirms the mechanism (2.04% completion under the correct anchor's shift vs 5.92–6.27% at the real start / wrong-anchor start). Full resolution in `HANDOFF.md` §27.2 item 1. **This settles that the continuation evidence for extra payload is real; it does not settle what flag `0x40` means at runtime, which stays OPEN.** **[Resolved: §10.3.]**]** What it shows: landing at the *correct*, byte-precise
 > alignment is far more likely than landing at a nearby wrong one, for this
 > specific population — consistent with *some* real, byte-precise structure
 > being there for a walk-shaped parser to lock onto. **It does not show that
@@ -891,7 +904,7 @@ candidates are tried that some will land by chance regardless of where the walk
 begins. **[REFUTED — empirical; kept in the harness (`anim_flag40j.py` /
 `anim_flag40k.py`) rather than deleted, per this project's standing rule on
 vacuous tests, so the weak version cannot be rediscovered and quoted.]**
-**§5-worthy methodology note:** this is the ambiguity-count safeguard's own
+**`HANDOFF.md` §5-worthy methodology note:** this is the ambiguity-count safeguard's own
 failure mode — ambiguity-1 is only informative when the candidate space searched
 is narrow enough that landing at all is informative; a wide enough search makes
 ambiguity-1 achievable almost anywhere.
@@ -921,7 +934,7 @@ than a finding: `cop_ps_aim_alta_trn90_lft` and its mirrored pair
 repeating 4×`i16` (8-byte) period in which the 4th lane is a **constant −19**
 across at least four consecutive groups in both files. That is a real,
 reproduced-across-a-mirrored-pair regularity, and it is exactly the kind of
-single/paired-sample observation this project's own rules (§5, "don't generalize
+single/paired-sample observation this project's own rules (`HANDOFF.md` §5, "don't generalize
 from one small sample") say not to promote further without a population test —
 which, given the exhaustive-search vacuity result immediately above, was not run
 for this specific record shape in this pass. **[HYPOTHESIS — unconfirmed; a
@@ -960,7 +973,8 @@ per this project's own standing rule:
   trailing bytes was not traced — [OPEN], and is the most direct remaining
   lead**: it requires reading the callers of the whole layer-blend chain (two
   found, `FUN_004c7640` and `FUN_004bd0b0`, decompiled but not yet read for this
-  question) to see how a layer's override-array fields get set.
+  question) to see how a layer's override-array fields get set. **[Resolved: §10.2 —
+  parsed fresh from the clip's own bytes on every call.]**
 
 **Three independent lines now converge on a leading reading worth stating
 explicitly, though not as settled: there may be no `0x40`-keyed extra-block
@@ -1014,7 +1028,7 @@ but did not read for this question.
 **The partner team's per-frame-root-orientation hypothesis, tested and labelled —
 on two different populations, kept distinct.** First, this reimplementation's 55,
 measured independently against every bit-`0x40` sibling stratum (not only the
-clean population, closing the §5-style objection that a trait checked only
+clean population, closing the `HANDOFF.md` §5-style objection that a trait checked only
 against the target is not yet a discriminator):
 
 | Population | n | name contains `trn` | median root angle (`+0x0C`) | p90 |
@@ -1197,11 +1211,11 @@ silently marked done.
 > not discriminate cleanly; attributed to the partner team.]**
 >
 > **The number that would have been published wrong if not stratified, kept
-> here as the sharpest §5 lesson this task produced:** pooled and unstratified,
+> here as the sharpest `HANDOFF.md` §5 lesson this task produced:** pooled and unstratified,
 > this same data reads **9.89× vs 7.34× favouring BLEND** — a clean-looking
 > confirmation of the wrong answer, produced by exactly the kind of
 > mixed-population dilution this project has hit repeatedly (§6c.4's own
-> original 90.2% figure, §13's morph records, §26.9's vehicle equality test).
+> original 90.2% figure, `HANDOFF.md` §13's morph records, `HANDOFF.md` §26.9's vehicle equality test).
 > **One weak directional lean, stated as weak and not as a verdict:** a true
 > blend-toward-the-next-record decoder should get *better* as its prediction
 > weight approaches the next record's own value at long spans, not roughly 3×
@@ -1222,7 +1236,7 @@ resolution would have to be found in code, which is offered here as the
 concrete next step rather than as a competing verdict.
 
 **Disassembly of `FUN_004c9b90`** (the translation decoder) shows **two** distinct
-16-byte (SSE, `undefined1 [16]`) loads, doing two different jobs:
+16-byte (SSE) loads, doing two different jobs:
 
 1. **Over the sample-byte stream.** The decoder holds a cursor to the 3-byte
    per-key delta stream (state offset `+0x2b8`, written by the stream-setup
@@ -1309,7 +1323,7 @@ cannot be used to choose between the two.
 
 ### 10.1 What `FUN_004c21a0` actually reads the override data from
 
-`FUN_004c21a0` is a `thiscall` function; its receiver (`ECX`, called `param_1`
+`FUN_004c21a0` is a `thiscall` function; its receiver (`ECX`, argument 1
 below) is a per-call **blend/evaluator context**, not the clip buffer. Reading
 its body in full, the fields actually touched are:
 
@@ -1554,16 +1568,21 @@ not.
   this project's own methodology asks for; a dynamic breakpoint on
   `FUN_004c21a0` would only reconfirm what the byte-level test already shows.
 
-**§5-worthy methodology note.** A decompiled call site showing zero visible
+**`HANDOFF.md` §5-worthy methodology note.** A decompiled call site showing zero visible
 arguments is not evidence the callee takes none -- under `-noanalysis`,
 register-passed arguments that the immediate caller never itself reads (only
 forwards) are invisible to the decompiler's pseudocode, even though the
 callee's own decompilation correctly recovers a full parameter list. The
 tell was a genuine four-parameter callee (`FUN_004c1190`) reached by an
-apparent zero-argument call (`FUN_004c1260`'s `FUN_004c1190();`); the fix was
+apparent zero-argument call (`FUN_004c1260`'s call to `FUN_004c1190`, printed with no arguments); the fix was
 reading raw disassembly at the specific call site rather than trusting the
 decompiler's account of it. This is the same shape as the project's standing
 rule about auditing an instrument's whole output list once it is shown wrong
 at one point -- here inverted usefully: a decompiled call that *looks*
 information-free is exactly the place to go back to raw instructions before
 concluding a function has no traceable inputs.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 14 stale OPEN/superseded statements resolved in place with pointers (§1 banner and headline, §2 flags and `+0x30` rows, §6 banner, §6c.2 closing label, §6c.3 items 2/4, §6c.4, §6c.6 item 4, §8 items 1/2/3/5, §9.1 superseded banner, §9.1 L760, §9.1 override-array lead); rewrote §6c.1 translation-branch `align2(p+1)`/`align4(p+3)` as the defined `alignUp2(p)`/`alignUp4(p)`; annotated the ~129 figure (= 121 FAIL + 8 LONG); split a blockquote that swallowed body text (§6c.4); qualified 9 bare `§5`/`§13`/`§26.9`/`§27.1` refs as `HANDOFF.md`; reworded 3 decompiler-shaped tokens (`undefined1 [16]`, `param_1`, a pseudocode call).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 3 left (§6c.6 `HANDOFF.md` §27.1(b), §9.1 and §10.5 `HANDOFF.md` §27.2 item 1: no archived §27 copy from 2026-09-11/12 survives) (see review).

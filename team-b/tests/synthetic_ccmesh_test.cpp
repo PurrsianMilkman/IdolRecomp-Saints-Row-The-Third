@@ -10,6 +10,8 @@
 // version of this reader that tried to re-derive BlobA's length by
 // walking null-terminated names instead of reading its real length field.
 
+#include "alloc_guard.h"
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -413,6 +415,35 @@ int main() {
         CHECK(g.offset() == naive + 16); // found one full block past the naive position
         CHECK(g.arrays()[3].count == 3);
         CHECK(g.hasMeshSubBlock());
+    }
+
+    // --- Fuzz regression (fuzz/regressions/geometry, clmesh, zoneheader):
+    // a texture-slot count far beyond the buffer must not be trusted for an
+    // up-front reservation. 0xB0000002 names x 32 bytes each would reserve
+    // ~94 GB; with the cap armed that is a bad_alloc, not the malformed-input
+    // exception the name loop raises once the bytes run out.
+    {
+        std::vector<uint8_t> blob(0x20, 0);
+        uint32_t magic = 0x00043854, nameLen = 3, count = 0xB0000002u;
+        std::memcpy(blob.data() + 0x00, &magic, 4);
+        std::memcpy(blob.data() + 0x04, &nameLen, 4);
+        std::memcpy(blob.data() + 0x0C, &count, 4);
+        blob.insert(blob.end(), {'a', 0, 'b', 0});
+        bool formatError = false, badAlloc = false;
+        {
+            allocguard::AllocCap cap(64u << 20);
+            try {
+                (void)sr3geometry::MaterialBlock::parse(sr3geometry::ByteView(blob.data(), blob.size()));
+            } catch (const std::bad_alloc&) {
+                badAlloc = true;
+            } catch (const std::exception&) {
+                // FormatError, or ByteView's out_of_range once the names run
+                // out - the reader's existing malformed-input exceptions.
+                formatError = true;
+            }
+        }
+        CHECK(formatError);
+        CHECK(!badAlloc);
     }
 
     if (g_failures == 0) {
