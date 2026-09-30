@@ -64,6 +64,15 @@ def stop_class(reason):
     return reason.split(" ")[0] if reason else ""
 
 
+def short(text, n=70):
+    text = (text or "").replace("|", "/").replace("`", "'").strip() or "-"
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+# Summary keys that change on every run without meaning anything.
+NOISY_KEYS = {"elapsed_seconds"}
+
+
 def to_int(v):
     try:
         return int(float(v))
@@ -98,7 +107,7 @@ def diff_missions(before, after, lines):
         if rb.get("first_unimplemented_stub") != ra.get("first_unimplemented_stub"):
             d.append(f"first stub `{rb.get('first_unimplemented_stub') or '-'}`→`{ra.get('first_unimplemented_stub') or '-'}`")
         if rb.get("first_error_message") != ra.get("first_error_message"):
-            d.append("first error changed")
+            d.append(f"first error `{short(rb.get('first_error_message'))}`→`{short(ra.get('first_error_message'))}`")
         if d:
             changes.append(f"| {stem} | {'; '.join(d)} |")
     if changes:
@@ -113,7 +122,7 @@ def diff_missions(before, after, lines):
 
 def diff_kv(name, before, after, lines):
     b, a = read_kv(before), read_kv(after)
-    changed = [(k, b.get(k), a.get(k)) for k in sorted(set(a) | set(b)) if b.get(k) != a.get(k)]
+    changed = [(k, b.get(k), a.get(k)) for k in sorted(set(a) | set(b)) if b.get(k) != a.get(k) and k not in NOISY_KEYS]
     lines.append(f"## Summary `{name}`\n")
     if not changed:
         lines.append("No changes.\n")
@@ -135,6 +144,15 @@ def diff_stubs(before, after, top, lines):
     b, kb = load(before)
     a, ka = load(after)
     lines.append(f"## Stub hits (`{os.path.basename(after)}`, column `{ka}`)\n")
+    # OPEN-state refusals (sr3luahost logs them as "OPEN_STATE:<value>"): the
+    # engine values that blocked the run, most-hit first.
+    open_rows = sorted(((a.get(n, 0), b.get(n, 0), n) for n in set(a) | set(b) if n.startswith("OPEN_STATE:")), reverse=True)
+    if open_rows:
+        lines.append(f"- OPEN-state refusals ({len(open_rows)} distinct values; after / before):")
+        for ca, cb, n in open_rows[:top]:
+            lines.append(f"  - `{n[len('OPEN_STATE:'):]}`: {ca} / {cb}")
+    b = {n: c for n, c in b.items() if not n.startswith("OPEN_STATE:")}
+    a = {n: c for n, c in a.items() if not n.startswith("OPEN_STATE:")}
     gone = sorted(set(b) - set(a), key=lambda n: -b[n])
     new = sorted(set(a) - set(b), key=lambda n: -a[n])
     lines.append(f"- before: {len(b)} names, {sum(b.values())} calls; after: {len(a)} names, {sum(a.values())} calls")

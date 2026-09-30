@@ -14,12 +14,13 @@
 // are counted in the summary, never dropped silently.
 //
 // Outputs in <out_dir>:
-//   ctab_census.tsv      archive, entry path, fxo name, blob index, stage,
-//                        shader version, ctab status, constant name,
-//                        register set (raw + label), register index, count,
-//                        class, type, rows, columns, elements
-//   ctab_census_blobs.tsv one row per blob: status and constant count, so a
-//                        blob with no CTAB still appears
+//   ctab_census_blobs.tsv  one row per blob: blob_id, archive, entry path, fxo
+//                          name, blob index, stage, shader version, ctab status,
+//                          constant count (a blob with no CTAB still appears)
+//   ctab_census_constants_NNN.tsv  one row per constant, keyed by blob_id:
+//                          name, register set (raw + label), index, count,
+//                          class, type, rows, columns, elements; split into
+//                          parts under the bridge's 4 MB per-file limit
 //   ctab_census_summary.txt totals and per-register-set counts
 // The TSVs hold names the shaders declare (text describing game files); they
 // go to the private bus and are not committed.
@@ -27,6 +28,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <cstring>
 #include <map>
 #include <string>
 #include <vector>
@@ -50,7 +52,33 @@ struct Totals {
     std::map<std::string, long> vsC28, vsC48;
 };
 Totals g;
-std::ofstream g_rows, g_blobs;
+std::ofstream g_blobs;
+long g_blobId = 0;
+
+// The bridge uploads text files up to 4 MB each and 24 MB per job
+// (bridge/pc_agent.py max_artifact_bytes / max_job_upload_bytes). The
+// constants table is written normalised (keyed by blob id, no repeated
+// path columns) and split into parts of at most kPartBytes, so no part is
+// dropped by the per-file limit.
+constexpr size_t kPartBytes = 3500000;
+fs::path g_outDir;
+std::ofstream g_rows;
+size_t g_rowBytes = 0;
+int g_part = 0;
+const char* kConstHeader = "blob_id\tconstant\tregister_set_raw\tregister_set\tregister_index\tregister_count\t"
+                           "class_raw\ttype_raw\trows\tcolumns\telements\n";
+void writeConstRow(const std::string& row) {
+    if (!g_rows.is_open() || g_rowBytes + row.size() > kPartBytes) {
+        if (g_rows.is_open()) g_rows.close();
+        char name[64];
+        std::snprintf(name, sizeof name, "ctab_census_constants_%03d.tsv", g_part++);
+        g_rows.open(g_outDir / name);
+        g_rows << kConstHeader;
+        g_rowBytes = std::strlen(kConstHeader);
+    }
+    g_rows << row;
+    g_rowBytes += row.size();
+}
 
 std::vector<uint8_t> readFile(const std::string& p) {
     std::ifstream f(p, std::ios::binary | std::ios::ate);
@@ -128,6 +156,7 @@ void processFxo(const std::string& archive, const std::string& path, const std::
     for (size_t bi = 0; bi < blobs.size(); ++bi) {
         const Blob& b = blobs[bi];
         ++g.blobs;
+        ++g_blobId;
         vpp::ByteView blob(data.data() + b.offset, b.length);
         std::string version = "?", status;
         size_t count = 0;
@@ -156,17 +185,18 @@ void processFxo(const std::string& archive, const std::string& path, const std::
                     if (c.registerIndex == 28) ++g.vsC28[key];
                     if (c.registerIndex == 48) ++g.vsC48[key];
                 }
-                g_rows << tsv(archive) << "\t" << tsv(path) << "\t" << tsv(name) << "\t" << bi << "\t" << b.stage
-                       << "\t" << version << "\t" << status << "\t" << tsv(c.name) << "\t" << c.registerSetRaw << "\t"
-                       << registerSetLabel(c.registerSetRaw) << "\t" << c.registerIndex << "\t" << c.registerCount
-                       << "\t" << c.type.classRaw << "\t" << c.type.typeRaw << "\t" << c.type.rows << "\t"
-                       << c.type.columns << "\t" << c.type.elements << "\n";
+                std::string row = std::to_string(g_blobId) + "\t" + tsv(c.name) + "\t" + std::to_string(c.registerSetRaw) +
+                                  "\t" + registerSetLabel(c.registerSetRaw) + "\t" + std::to_string(c.registerIndex) + "\t" +
+                                  std::to_string(c.registerCount) + "\t" + std::to_string(c.type.classRaw) + "\t" +
+                                  std::to_string(c.type.typeRaw) + "\t" + std::to_string(c.type.rows) + "\t" +
+                                  std::to_string(c.type.columns) + "\t" + std::to_string(c.type.elements) + "\n";
+                writeConstRow(row);
             }
         } catch (const std::exception& ex) {
             status = std::string("disassemble_failed:") + tsv(ex.what());
             ++g.disassembleFailed;
         }
-        g_blobs << tsv(archive) << "\t" << tsv(path) << "\t" << tsv(name) << "\t" << bi << "\t" << b.stage << "\t"
+        g_blobs << g_blobId << "\t" << tsv(archive) << "\t" << tsv(path) << "\t" << tsv(name) << "\t" << bi << "\t" << b.stage << "\t"
                 << version << "\t" << status << "\t" << count << "\n";
     }
 }
@@ -223,11 +253,9 @@ int main(int argc, char** argv) {
         }
     }
     std::sort(archives.begin(), archives.end());
-    g_rows.open(out / "ctab_census.tsv");
-    g_rows << "archive\tentry_path\tfxo\tblob_index\tstage\tversion\tctab_status\tconstant\tregister_set_raw\t"
-              "register_set\tregister_index\tregister_count\tclass_raw\ttype_raw\trows\tcolumns\telements\n";
+    g_outDir = out;
     g_blobs.open(out / "ctab_census_blobs.tsv");
-    g_blobs << "archive\tentry_path\tfxo\tblob_index\tstage\tversion\tctab_status\tconstant_count\n";
+    g_blobs << "blob_id\tarchive\tentry_path\tfxo\tblob_index\tstage\tversion\tctab_status\tconstant_count\n";
     for (const auto& a : archives) {
         std::vector<uint8_t> bytes = readFile(a);
         std::string base = fs::path(a).filename().string();
@@ -253,7 +281,8 @@ int main(int argc, char** argv) {
     line("disassemble_failed=" + std::to_string(g.disassembleFailed));
     line("ctab_well_formed=" + std::to_string(g.wellFormed) + " not_present=" + std::to_string(g.notPresent) +
          " malformed=" + std::to_string(g.malformed));
-    line("constants=" + std::to_string(g.constants));
+    line("constants=" + std::to_string(g.constants) + " in " + std::to_string(g_part) +
+         " part file(s) ctab_census_constants_NNN.tsv, keyed by blob_id from ctab_census_blobs.tsv");
     for (auto& kv : g.byRegisterSet) line("register_set_" + kv.first + "=" + std::to_string(kv.second));
     // Which names sit at VS c28 / c48 (name xregisterCount -> blob count).
     for (auto& kv : g.vsC28) line("vs_c28 " + kv.first + "=" + std::to_string(kv.second));

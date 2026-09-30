@@ -45,12 +45,12 @@ with tempfile.TemporaryDirectory() as d:
     write(os.path.join(b, "verdict_mission_drive_summary.txt"),
           "=== x ===\nmissions_with_start_call_ok=9/49\ntotal_ticks_survived_across_all_missions=10\n")
     write(os.path.join(a, "verdict_mission_drive_summary.txt"),
-          "missions_with_start_call_ok=12/49\ntotal_ticks_survived_across_all_missions=10\nnew_key=1\n")
+          "missions_with_start_call_ok=12/49\ntotal_ticks_survived_across_all_missions=10\nnew_key=1\nelapsed_seconds=9\n")
     stub_hdr = "name\tcall_count_all_inclusive\tother\n"
     write(os.path.join(b, "verdict_stub_hits_with_missions.tsv"),
           stub_hdr + "fade_is_fully_faded_out\t30833183\tx\nzscene_is_loaded\t714285\tx\nvint_x\t7\tx\n")
     write(os.path.join(a, "verdict_stub_hits_with_missions.tsv"),
-          stub_hdr + "zscene_is_loaded\t500\tx\nvint_x\t7\tx\nnew_stub\t3\tx\n")
+          stub_hdr + "zscene_is_loaded\t500\tx\nvint_x\t7\tx\nnew_stub\t3\tx\nOPEN_STATE:0x0153b556\t40\tx\n")
     vd_hdr = "archive\tentry\tsize\tA-P1-O1\tA-P3-O1\tcombos_landed\n"
     write(os.path.join(b, "vintdoc_per_file.tsv"), vd_hdr + "i.vpp_pc\ta.vint_doc\t10\tfail\tLAND\t1\n")
     write(os.path.join(a, "vintdoc_per_file.tsv"), vd_hdr + "i.vpp_pc\ta.vint_doc\t10\tLAND\tLAND\t2\n")
@@ -68,6 +68,8 @@ with tempfile.TemporaryDirectory() as d:
     check("| `missions_with_start_call_ok` | 9/49 | 12/49 |" in t, "summary change")
     check("total_ticks_survived" not in t, "unchanged summary key not listed")
     check("| `new_key` | - | 1 |" in t, "new summary key")
+    check("elapsed_seconds" not in t, "noisy key ignored")
+    check("- OPEN-state refusals (1 distinct values; after / before):" in t and "`0x0153b556`: 40 / 0" in t, "OPEN rollup")
     check("no longer hit (1): `fade_is_fully_faded_out` (30833183)" in t, "stub gone")
     check("newly hit (1): `new_stub` (3)" in t, "stub new")
     check("| `zscene_is_loaded` | 714285 | 500 | -713785 |" in t, "stub delta")
