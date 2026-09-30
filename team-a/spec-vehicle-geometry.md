@@ -65,7 +65,7 @@ Offsets from file start. "Offset" fields are file-relative on disk and fixed up 
 | `+0x4C` | **Parent index**, `-1` or `< count` in **9,951 / 9,951**. Roots per vehicle are typically 14–21: the hierarchy is a *forest* (most parts attach directly to the body/rig), not a single tree. | **[CONFIRMED — empirical.]** |
 | `+0x54` `+0xA0` `+0xA4` `+0xAC` `+0xB4` `+0xBC` `+0xC4` `+0xD0` | Offset fields, fixed up with `-1` = null | **[CONFIRMED — disassembly; OPEN — targets.]** |
 | `+0x68` | Byte; bit `0x80` excludes the part from bounding-box accumulation | **[CONFIRMED — disassembly.]** |
-| `+0xC0` / `+0xC4` | Count + pointer to 64-byte records whose `+0x04` index is remapped through a 100-entry table built by a resolution call | **[CONFIRMED — disassembly; HIGH CONFIDENCE — per-part sub-mesh/material references.]** |
+| `+0xC0` / `+0xC4` | Count + pointer to 64-byte records whose `+0x04` index is remapped through a 100-entry table built by a resolution call | **[CONFIRMED — disassembly; HIGH CONFIDENCE — per-part sub-mesh/material references.]** *(Material-reference reading REFUTED: the remap resolves through a generic deferred request-registration mechanism, not a material-index lookup — §11.7, §11.5; target domain OPEN.)* |
 | `+0xCC` | `u32`, clamped to at least `4` for type `17` | **[CONFIRMED — disassembly; OPEN — meaning.]** |
 
 ### 4.1 Part-type enum, decoded from 9,951 shipped names
@@ -109,7 +109,7 @@ Three bounding boxes are computed from root parts (parent `-1`) filtered by type
 
 ## 7. What is embedded, and what is not
 
-- **Mesh** (`+0x04`): the `.ccmesh_pc` machinery in full. The "Mesh" sub-block's flags bit 0 is set in **393 / 393** — vertex data lives in `.gcar_pc`, as for character meshes. Its primary buffer count/stride reads as a 2-byte-element stream (e.g. 19,728 × 2) — the same shape documented in `spec-geometry-format.md` §4.1.2. **[CONFIRMED — empirical.]** The g-side cursor initialisation traced for character meshes (`FUN_00751f60`) is *not* the code path here; the vehicle constructor passes a single cursor. The primary buffer starting at `.gcar_pc` offset `0x10` is therefore **[HIGH CONFIDENCE — inferred from the shared code path, not re-derived for vehicles]**.
+- **Mesh** (`+0x04`): the `.ccmesh_pc` machinery in full. The "Mesh" sub-block's flags bit 0 is set in **393 / 393** — vertex data lives in `.gcar_pc`, as for character meshes. Its primary buffer count/stride reads as a 2-byte-element stream (e.g. 19,728 × 2) — the same shape documented in `spec-geometry-format.md` §4.1.2. **[CONFIRMED — empirical.]** The g-side cursor initialisation traced for character meshes (`FUN_00751f60`) is *not* the code path here; the vehicle constructor passes a single cursor. The primary buffer starting at `.gcar_pc` offset `0x10` is therefore **[HIGH CONFIDENCE — inferred from the shared code path, not re-derived for vehicles]**. *(See also `spec-vertex-format.md` §4.2: exact `g`-side replay — check value, align 16, index buffer, then channels — validates 388/388 `.ccar_pc`/`.gcar_pc` pairs.)*
 - **Morph** (`+0x08`, `.gcar_pc` data at `+0x0C`): mode **0** in 326/326 — descriptor stride `0x18`, 12-byte elements read from the secondary buffer with per-target `0x0BADBEEF` bookends, exactly the layout `spec-morph-format.md` §6 derived from the loader but could not observe. Now observed. The morph region always follows the vertex data in `.gcar_pc` (326/326), typically ~350 KiB later — the intervening space being the mesh's remaining channel/index streams. **[CONFIRMED — empirical.]**
 - **Materials — substantially resolved 2026-09-11, see §7.1.** What vehicles lack is only the material-*reference* block; they **do** carry the mixed-case name blob and the same per-material texture-binding entries as `.ccmesh_pc`.
 - **Materials (original entry):** the shared material-reference block is absent from every vehicle file. The `+0xCC`/`+0xD0` table passed through a name-resolution routine, together with `spec-geometry-format.md` §5's per-vehicle `.cvtf_pc` color/material catalogue, is the likely source — **[HYPOTHESIS; OPEN.]**
@@ -132,11 +132,11 @@ Vehicle sampler hashes observed: `0x2808EB90`, `0x3819300B`, `0x69B48F91`, `0xD2
 
 **And a correction this forced on `spec-vertex-format.md` §8.3:** the **slot index is not the semantic**. `0x2808EB90` is slot 1 in meshes and slot 0 in vehicles, so a reader must key on the **hash**. The "slot 0 = diffuse, slot 1 = normal" reading is a character-mesh convention, not a format rule — over-generalised from a single carrier.
 
-**⚠ `+0x0C` does NOT mean the same thing here as in `.ccmesh_pc`.** There it equals `1 + max(material id)` with ids dense from zero (241/241 multi-material meshes). **On vehicles that is false.** It is an **upper bound**: `max(material id) < u16(subheader + 0x0C)` in **372/372**.
+**⚠ `+0x0C` does NOT mean the same thing here as in `.ccmesh_pc`.** There it equals `1 + max(material id)` with ids dense from zero (241/241 multi-material meshes). **On vehicles that is false.** It is an **upper bound**: `max(material id) < u16(subheader + 0x0C)` in **372/372**. *(Reframed 2026-09-11, `spec-vertex-format.md` §8.4.1/§8.4.3: `+0x0C` is an exact count of declared materials on both carriers; vehicles declare 2× what their draw ranges reference, which is why it looked like an upper bound.)*
 
 Whole-population figures, all **372 / 372**: draw ranges parse; max material id below `+0x0C`; material ids dense from zero; and the index buffer fully covered by the ranges. *(An earlier version quoted these as 86/86 — that denominator was an artefact of a group-count cap of 64 in this project's own parser, a limit taken from character meshes where nothing exceeds it. Vehicles are multi-part assets and legitimately have more groups, so the cap silently discarded 286 of 372 files and the harness still reported a confident N/N. See `HANDOFF.md` §5.)* A vehicle declares a material set larger than any single mesh inside it uses, which is what a multi-part asset should do. *(An earlier version of this section asserted the mesh semantics here; retracted.)* **[CONFIRMED — empirical.]**
 
-**Vehicle draw-range material ids are packed 16:16** — `id = field & 0xFFFF`, `field >> 16` a sub-mesh/part index. See `spec-vertex-format.md` §8.2's table. **[CONFIRMED — empirical, 86/86.]**
+**Vehicle draw-range material ids are packed 16:16** — `id = field & 0xFFFF`, `field >> 16` a ~~sub-mesh/part index~~ **vertex-channel index** *(corrected: §11.1, RESOLVED 2026-09-28; the part-index reading is refuted there, and the 86/86 denominator is retracted in the paragraph above — 393/393 vehicles, 90,290/90,290 ranges per §11.1)*. See `spec-vertex-format.md` §8.2's table. **[CONFIRMED — empirical, 86/86.]**
 
 **Formerly "still open" — item 1 below is RESOLVED, 2026-09-18. See the closure after the refuted-candidates table before treating it as open.**
 
@@ -163,10 +163,10 @@ All at or below chance — **including the sub-mesh index, which this document p
 
 New harness: `tools/harnesses/veh_matassoc_final.py` (the re-verification + methodology-note script above).
 
-**Cross-team implementation, 2026-09-18 (relayed, independently verified on their end before acting on it — they re-read this section and §11.2 directly rather than the summary alone).** Team B rewrote their reader's `MaterialBindings::parse()` from a sliding-window guess-and-check search to direct arithmetic over the fixed-stride descriptor arrays + self-declaring chain — no `runs found == declared count` guess needed, which is exactly why it unblocks vehicles specifically (they declare roughly 2× the materials their draw ranges reference, so that guard was structurally unsatisfiable for them before). **Real-data result: vehicles went from 3/372 located to 393/393**, recovering 17,026 binding runs / 36,010 texture entries; characters stayed unregressed at 1,995/2,002 (the 7 unlocated are one already-explained class, tiny censor-overlay placeholders too small for a full record). They separately found their own project already had an independent copy of this same finding on file (`spec-vertex-format.md` §12.8 on their side, since 2026-09-12/13, flagged "stated but not applied") — this closure connected that too. **Provenance note, per `HANDOFF.md` §27.8: relayed, not independently rerun against their binary on this side.** One figure checked directly against this session's own re-verification run and matches exactly: 36,010 texture entries (this side's own `veh_matassoc_final.py` rerun independently gets 36,010 flat entries across the same 393 files). **Update — fully reconciled, exactly, 2026-09-18.** The 17,026 vs. 16,781 gap was not a data disagreement: their harness counts one "run" per **material**, regardless of whether it has any texture bindings; this side's 16,781 counted only materials with `a_count > 0`. `17,026 − 16,781 = 245` — and `245` is exactly the count of non-null materials with `a_count == 0` across the same 393-vehicle population (independently re-verified on this side, not just accepted: `total non-null materials 17,026`, `a_count==0: 245`, `a_count>0: 16,781`, matching Team B's own reconciliation digit-for-digit). Real and expected, not an artifact: vehicles declare roughly twice the materials their draw ranges reference (§8.4.1 above), so a real chunk of materials legitimately carry zero texture bindings. Two different quantities sharing the word "run," now fully reconciled rather than left as an unexplained wrinkle.
+**Cross-team implementation, 2026-09-18 (relayed, independently verified on their end before acting on it — they re-read this section and §11.2 directly rather than the summary alone).** Team B rewrote their reader's `MaterialBindings::parse()` from a sliding-window guess-and-check search to direct arithmetic over the fixed-stride descriptor arrays + self-declaring chain — no `runs found == declared count` guess needed, which is exactly why it unblocks vehicles specifically (they declare roughly 2× the materials their draw ranges reference, so that guard was structurally unsatisfiable for them before). **Real-data result: vehicles went from 3/372 located to 393/393**, recovering 17,026 binding runs / 36,010 texture entries; characters stayed unregressed at 1,995/2,002 (the 7 unlocated are one already-explained class, tiny censor-overlay placeholders too small for a full record). They separately found their own project already had an independent copy of this same finding on file (`spec-vertex-format.md` §12.8 on their side, since 2026-09-12/13, flagged "stated but not applied") — this closure connected that too. **Provenance note, per `HANDOFF.md` §27.8: relayed, not independently rerun against their binary on this side.** One figure checked directly against this session's own re-verification run and matches exactly: 36,010 texture entries (this side's own `veh_matassoc_final.py` rerun independently gets 36,010 flat entries across the same 393 files). **Update — fully reconciled, exactly, 2026-09-18.** The 17,026 vs. 16,781 gap was not a data disagreement: their harness counts one "run" per **material**, regardless of whether it has any texture bindings; this side's 16,781 counted only materials with `a_count > 0`. `17,026 − 16,781 = 245` — and `245` is exactly the count of non-null materials with `a_count == 0` across the same 393-vehicle population (independently re-verified on this side, not just accepted: `total non-null materials 17,026`, `a_count==0: 245`, `a_count>0: 16,781`, matching Team B's own reconciliation digit-for-digit). Real and expected, not an artifact: vehicles declare roughly twice the materials their draw ranges reference (`spec-vertex-format.md` §8.4.3), so a real chunk of materials legitimately carry zero texture bindings. Two different quantities sharing the word "run," now fully reconciled rather than left as an unexplained wrinkle.
 
 **Scope note Team B stated themselves, not overclaimed:** this closes their reader/parsing path only — their interactive viewer still has no rendering surface for vehicle files, a separate open task on their side.
-2. **Where vehicle paint comes from.** The runs are dominated by shared/generic textures — `shd_damagenormal_n.tga` leads nearly every run, then `burn_test`, `viewsphere_chrome`, `viewsphere_rubber`, `missing-alpha`. The car's own livery (`al_veh_universal.tga` and siblings) is *present in the blob* but was not observed bound. That is consistent with paint being applied at runtime from the `.cvtf_pc` customisation catalogue — which is what §7 hypothesised — rather than baked into the model. **[HYPOTHESIS.]**
+2. **Where vehicle paint comes from.** The runs are dominated by shared/generic textures — `shd_damagenormal_n.tga` leads nearly every run, then `burn_test`, `viewsphere_chrome`, `viewsphere_rubber`, `missing-alpha`. The car's own livery (`al_veh_universal.tga` and siblings) is *present in the blob* but was not observed bound. That is consistent with paint being applied at runtime from the `.cvtf_pc` customisation catalogue — which is what §7 hypothesised — rather than baked into the model. **[HYPOTHESIS.]** **[Resolved for the source: CONFIRMED — disassembly, §7.2 Q3; the application path is still unread.]**
 
 ### 7.2 Three loader questions from the implementation team, answered (2026-09-11)
 
@@ -273,12 +273,12 @@ its callee list is the index to everything above (embedded mesh+morph, name tabl
 2. The `+0xCC`/`+0xD0` name-resolved table and the material path (§7).
 3. The `+0xE0` 32-byte records and the `+0x134`/`+0x140` arrays.
 4. Part-record pointer fields (§4) and the undecoded flag bits; type-enum values not in §4.1.
-5. The vehicle g-side vertex-buffer offset — assumed `0x10` by shared code path, not traced for the vehicle cursor.
+5. The vehicle g-side vertex-buffer offset — assumed `0x10` by shared code path, not traced for the vehicle cursor. *(See `spec-vertex-format.md` §4.2: exact `g`-side replay validates 388/388 vehicle pairs; the cursor itself is still not traced.)*
 6. ~~The global vehicle-info table the constructor consults (0xB80-byte entries) — the runtime link to `spec-vehicle-data.md`, not characterized.~~ **RESOLVED 2026-09-20 (agent AF) — `spec-vehicle-data.md` §7: 132 entries × `0xB80` bytes at `0x027C87B0`, one per `<Vehicle>` of a `_veh.xtbl`, slot-indexed in `vehicles.xtbl` order; the full name→offset map and flag words are there. CONFIRMED — disassembly.**
-7. The packed draw-range id's **high half** (0–14, i.e. `N = max+1` taking only ten values, 324/393 of them multiples of three) — six candidates refuted; §11.9.8 gives the concrete next step (factor the field as a 3-valued × a 1-to-5-valued term instead of testing it whole).
+7. ~~The packed draw-range id's **high half** (0–14, i.e. `N = max+1` taking only ten values, 324/393 of them multiples of three) — six candidates refuted; §11.9.8 gives the concrete next step (factor the field as a 3-valued × a 1-to-5-valued term instead of testing it whole).~~ **RESOLVED 2026-09-28 — vertex-channel index (§11.1, §11.5).**
 8. The `0x30`-byte group record's `+0x1C` dword — the only undetermined field left in that record (§11.9.1).
 9. The Mesh header `+0x48`/`+0x50` `u16` table that each group's `+0x28` slots hold pre-resolved pointers into — confirmed NOT the index buffer (§11.9.2), contents still unknown.
-10. The `0x28`-byte runtime record array at the render holder's `+0xfc`, whose `u16` at `+0x24` is a group index — its remaining fields and its element count (§11.9.5); if it is also sized `3 × k`, it meets item 7.
+10. The `0x28`-byte runtime record array at the render holder's `+0xfc`, whose `u16` at `+0x24` is a group index — its remaining fields and its element count (§11.9.5); ~~if it is also sized `3 × k`, it meets item 7~~ (moot: item 7 is resolved).
 
 ## 11. Vehicle material-to-draw-range association, per-part scoping, and the 2x pairing (2026-09-12)
 
@@ -352,7 +352,7 @@ range itself is the clue worth carrying forward:** `high16` is capped at 14
 irrespective of any per-vehicle structural count, which argues for a small,
 fixed-size enumeration (an engine-level constant, not a per-file array size) rather
 than an index recoverable from this file's own declared counts. ~~**[OPEN -- what the
-15-value cap (0-14) actually enumerates.]**~~ **RESOLVED 2026-09-28, jointly (SPEC TEAM disassembly + Team B population test) -- see the corrected row later in this section's summary table and `spec-render-pipeline.md` §16.4/§18.6: `high16` is a vertex-CHANNEL index. Disassembly (`spec-render-pipeline.md` §18.6, `FUN_00b13bf0`) shows it read directly from the draw-range record and used with no scaling or offset as a plain index (times the array's own stride) into the vertex-channel array at the mesh header's `+0x18` -- the exact array `meshHeader+0x10`(count)/`+0x18`(array), stride `0x18` this document's own line 955-956 (pre-dating this pass) already documents as the ordinary vertex-channel array `spec-vertex-format.md` describes. Team B independently confirmed the MEANING survives a full-population, same-vehicle join with zero counterexceptions: 393/393 vehicles and all 90,290/90,290 draw ranges have `high16` (their `submeshIndex`) `<` that same vehicle's own real channel count; the real per-vehicle channel-count range is 2-15, so the population-wide max valid index is exactly 14 -- matching `high16`'s own already-measured maximum to the integer. Two independent methods (causal disassembly, exhaustive real-data join), same field, same answer, zero exceptions either side -- the same bar that killed the four earlier candidates for this field.**
+15-value cap (0-14) actually enumerates.]**~~ **RESOLVED 2026-09-28, jointly (SPEC TEAM disassembly + Team B population test) -- see the corrected row later in this section's summary table and `spec-render-pipeline.md` §16.4/§18.6: `high16` is a vertex-CHANNEL index. Disassembly (`spec-render-pipeline.md` §18.6, `FUN_00b13bf0`) shows it read directly from the draw-range record and used with no scaling or offset as a plain index (times the array's own stride) into the vertex-channel array at the mesh header's `+0x18` -- the exact array `meshHeader+0x10`(count)/`+0x18`(array), stride `0x18` this document's own ~~line 955-956~~ §11.9.2 'vertex channels' bullet (pre-dating this pass) already documents as the ordinary vertex-channel array `spec-vertex-format.md` describes. Team B independently confirmed the MEANING survives a full-population, same-vehicle join with zero counterexceptions: 393/393 vehicles and all 90,290/90,290 draw ranges have `high16` (their `submeshIndex`) `<` that same vehicle's own real channel count; the real per-vehicle channel-count range is 2-15, so the population-wide max valid index is exactly 14 -- matching `high16`'s own already-measured maximum to the integer. Two independent methods (causal disassembly, exhaustive real-data join), same field, same answer, zero exceptions either side -- the same bar that killed the four earlier candidates for this field.**
 
 **Further corroboration, 2026-09-29 (Team B, a real shader-driven draw of `car_4dr_genki_0`).** A tighter, per-channel version of the same check: across all 57 real draw groups of that vehicle, the maximum vertex index actually used by draw ranges pointing at `submeshIndex`=N equals channel N's own `elementCount − 1` exactly, for all 9 real channels (elementCounts 6954, 3662, 15, 1605, 1917, 11, 1046, 1145, 2), zero exceptions. This is a stronger bound than the earlier population join (which checked `high16` stays within the valid channel-count range) -- it confirms a draw range pointing at channel N never reads a vertex index outside that specific channel's own real bounds, on real geometry that has now actually been drawn. **[CONFIRMED -- empirical, real data, one real vehicle's full draw-group population.]**
 
@@ -585,7 +585,7 @@ them as open guesses:
 | Question | Status |
 |---|---|
 | Does draw-range `high16` track a per-vehicle part-TYPE taxonomy (the task's own candidate)? | **REFUTED** -- passes feasibility (max 13 distinct types/vehicle, cap 15) but flat dose-response (mean 6-11 across distinctTypes 1-13), the same shape as the materialCount refutation (§11.6) |
-| Is the high half read/tested anywhere in the load-time construction chain? | ~~**REFUTED, as a real negative** -- zero `SHR/SAR 0x10` and zero `CMP` against 14/15 in the entire named neighbourhood (§11.6)~~ **NARROWED 2026-09-28 -- that negative was scoped to `SHR/SAR`+`CMP`-shaped code, a real instruction-form blind spot (same class already on record, `HANDOFF.md` §27.4): `spec-render-pipeline.md` §16.4 independently found a render-time (not load-time) consumer, `FUN_00e58480`, that reads this exact field via a direct sub-field load (a `u16` at the packed dword's `+0x2` byte -- byte-identical, little-endian, to "the high 16 bits", so almost certainly the same field) rather than a shift+compare. Team B cross-checked the value-range match independently from real data (this section's own 90,290-draw-range population: max 14 = 15 values = the render-pipeline side's independently-derived "≤15-valued selector") before either side had compared notes -- two methods, same byte offset, same value width. Does not resolve what the field means (still OPEN below); does confirm `FUN_00e58480` is reading the real field, not a lookalike. `this+0x130`'s vtable+`0x1c` target -- what actually consumes the selector after `FUN_00e58480` forwards it -- is the open next hop, being pursued in `spec-render-pipeline.md`'s own follow-up passes, not re-derived here.** |
+| Is the high half read/tested anywhere in the load-time construction chain? | ~~**REFUTED, as a real negative** -- zero `SHR/SAR 0x10` and zero `CMP` against 14/15 in the entire named neighbourhood (§11.6)~~ **NARROWED 2026-09-28 -- that negative was scoped to `SHR/SAR`+`CMP`-shaped code, a real instruction-form blind spot (same class already on record, `HANDOFF.md` §27.4): `spec-render-pipeline.md` §16.4 independently found a render-time (not load-time) consumer, `FUN_00e58480`, that reads this exact field via a direct sub-field load (a `u16` at the packed dword's `+0x2` byte -- byte-identical, little-endian, to "the high 16 bits", so almost certainly the same field) rather than a shift+compare. Team B cross-checked the value-range match independently from real data (this section's own 90,290-draw-range population: max 14 = 15 values = the render-pipeline side's independently-derived "≤15-valued selector") before either side had compared notes -- two methods, same byte offset, same value width. Does not resolve what the field means (still OPEN below) *(resolved separately: vertex-channel index, row above / §11.1)*; does confirm `FUN_00e58480` is reading the real field, not a lookalike. `this+0x130`'s vtable+`0x1c` target -- what actually consumes the selector after `FUN_00e58480` forwards it -- is the open next hop, being pursued in `spec-render-pipeline.md`'s own follow-up passes, not re-derived here.** |
 | Do the +0xC0/+0xC4 remap's written values coincide with the unreferenced material range `[k, materialCount)` -- the sharpest test named in `HANDOFF.md` §27.2 item 5? | **REFUTED, disassembly + empirical.** The remap resolves through a generic deferred request-registration mechanism, not a material-index lookup (domain mismatch, §11.7); the on-disk pre-remap value also lands in `[k, materialCount)` at chance rate (10.4% real vs 10.5% shuffled control, n=6,727). **This settles per-part scoping and the 2x pairing's identity as independent questions, not as one still open** |
 
 New harnesses: `veh_assoc.py`, `veh_pairing.py` (both `tools/harnesses/`, run from that
@@ -599,6 +599,8 @@ pass (2026-09-12): Ghidra scripts `Veh2CallSiteRaw.java`, `Veh2ResolveChain.java
 `highhalf.txt`); harness `veh2_kind.py` (`tools/harnesses/`).
 
 ### 11.6 What the 0-14 cap on the packed high half enumerates -- still OPEN, a fourth candidate refuted, and the search space narrowed
+
+*(Superseded 2026-09-28: `high16` is a vertex-channel index, §11.1/§11.5, so `N = max(high16)+1` is bounded by the vehicle's own channel count, 2–15. The enumeration question below is answered by that; what the `3a+b` factoring reflects in channel-count terms was not re-examined.)*
 
 **Restated precisely, so the next session does not re-derive it:** the packed
 draw-range id's high half is capped at 14 (15 values, 0-14) across the full
@@ -665,7 +667,7 @@ the range's own group index (refuted, chance-level with control), the material
 set (refuted, no dose-response), and now the part-type taxonomy (refuted, no
 dose-response) are all down. Combined with the clean negative above, the cap's
 consumer is not in this file's own declared counts and is not read anywhere in
-this asset's load-time code. **[OPEN — the enumeration itself.]** **Concrete
+this asset's load-time code. **[OPEN — the enumeration itself.]** **[Resolved 2026-09-28: vertex-channel index, §11.1.]** **Concrete
 next step, sharper than "read more disassembly here":** the consumer, if it
 exists, must be found from the *data* side of the runtime abstraction rather
 than the construction side — enumerate every cross-reference to the
@@ -701,8 +703,8 @@ against raw disassembly rather than trusted from the decompiler's variable
 names alone, because a plausible-looking substitution is exactly the failure
 mode `HANDOFF.md` §5 records as this component's worst published error
 (`Veh2CallSiteRaw.java`, `scratchpad/veh/callsite_raw.txt`). Confirmed: the
-existing table's `param_4`/`param_5` (part-array base, `partCount`) are
-correct as published. **New:** `param_1` (register `ECX` at the call site) is
+existing table's 4th/5th arguments (part-array base, `partCount`) are
+correct as published. **New:** the `this` argument (register `ECX` at the call site) is
 a pointer to a **previously undocumented outer-header field at file offset
 `+0x1C`** — this spec's §3 table jumps from `+0x18` straight to `+0x20`; that
 gap was a real gap, not an oversight elsewhere. It is fixed up **lazily,
@@ -936,8 +938,8 @@ slots:
 
 **The class's field `+0x30` holds the Mesh-header pointer, and `+0x48` holds the
 created index-buffer object.** Proof, from `FUN_00482f00` (called out of slot
-`+0x10`) and `FUN_00483140` (slot `+0x14`), both of which begin
-`if (*(this+0x30) == 0) return;`:
+`+0x10`) and `FUN_00483140` (slot `+0x14`), both of which
+return immediately when the pointer at `this+0x30` is null:
 
 - **vertex channels:** count from `meshHeader+0x10`, array from `meshHeader+0x18`,
   stride `0x18`; per channel, create a buffer through the device wrapper
@@ -1176,6 +1178,8 @@ The single clean vehicle was an accident of that file's layout -- the same trap
 
 #### 11.9.8 The sharpest new empirical handle, left for the next pass
 
+*(Superseded 2026-09-28: `high16` is a vertex-channel index, §11.1/§11.5, so `N = max(high16)+1` is bounded by the vehicle's own channel count, 2–15. The enumeration question below is answered by that; what the `3a+b` factoring reflects in channel-count terms was not re-examined.)*
+
 One fact from this pass is worth more than the refutations, and no previous
 candidate test looked at it. Because `high16` is **dense from 0 in 393/393
 vehicles** (P5), the enumeration is fully described by `N = max(high16) + 1`. And
@@ -1215,6 +1219,8 @@ at `this+0xfc` (writers listed in 11.9.5) and its element count -- if that array
 is also built as `3 x k`, the two halves of this section meet.
 
 ### 11.10 Section 11.9.8's factoring executed: `high16 = a*3 + b` confirmed, the fast factor is a clean fixed-3 negative, the slow factor inherits the whole field's correlation-not-index shape, and every named engine candidate for either factor is refuted
+
+*(Superseded 2026-09-28: `high16` is a vertex-channel index, §11.1/§11.5, so `N = max(high16)+1` is bounded by the vehicle's own channel count, 2–15. The enumeration question below is answered by that; what the `3a+b` factoring reflects in channel-count terms was not re-examined.)*
 
 Section 11.9.8 left a named next step: stop testing `high16` as one field and **factor**
 it, since `N = max(high16)+1` takes only ten values that cluster at exact multiples of
@@ -1424,8 +1430,8 @@ not to a reference record. **[CONFIRMED -- disassembly, `0xab0fd3`-`0xab0fe3`.]*
 Read start to end (`0xab0a10`-`0xab0d16`, matching the known 775-byte size),
 `FUN_00ab0a10`'s body:
 
-1. Reads six floats from a pointer chain rooted at its own `param_1`
-   (`*(*(*param_1+4)+0x50)`, then offsets `+0x10,+0x14,+0x18,+0x20,+0x24,+0x28`
+1. Reads six floats from a pointer chain rooted at its own first argument
+   (`[[[arg]+4]+0x50]`, three dereferences, then offsets `+0x10,+0x14,+0x18,+0x20,+0x24,+0x28`
    off that) -- geometry state belonging to the part, not a kind tag.
 2. Allocates a fresh 0x30-byte (48-byte) block from a per-thread pooled
    allocator (`TlsGetValue` + an indirect call through the TLS block's own
@@ -1613,3 +1619,7 @@ disassembly-only tooling cannot perform) rather than a third static sweep of the
 same call graph. **[CONFIRMED -- disassembly, exhaustive within the scope described;
 OPEN -- the non-zero kind bands' meaning.]**
 
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 2 cross-references (§8.4.1→`spec-vertex-format.md` §8.4.3; "line 955-956"→§11.9.2); marked stale text superseded in place (§7.1 `+0x0C` "upper bound" and `high16` "part index", §4 `+0xC0`/`+0xC4` material-reference reading downgraded per §11.7); marked 6 stale OPEN/HYPOTHESIS items resolved (§7.1 paint source, §10 items 7 and 10, §11.5 amendment row, §11.6 "enumeration" OPEN, and superseded-notes under the §11.6/§11.9.8/§11.10 headings); added pointers to `spec-vertex-format.md` §4.2's 388/388 replay at §7 and §10 item 5 (labels unchanged); reworded 3 decompiler-shaped lines (§11.7, §11.9.2, §11.11).
