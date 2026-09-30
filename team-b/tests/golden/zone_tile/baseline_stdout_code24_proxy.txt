@@ -1,0 +1,12 @@
+[zone] sr3_city~f0816~al.czn_pc: czn=17532 bytes gzn=192100 bytes
+[zone] 1 Mesh sub-block(s) located
+[block 0] fromGFile=1 indexCount=13229 drawGroupsLocated=1
+[channel 0] layoutCode=24 elementCount=4642 stride=20 strideMatchesLaw=1 texcoordCount=0
+[channel 0] layout code 24: decoding POSITION(+0)+NORMAL(+12) only - the format's own +16 byte slot is REFUTED as a tangent and its real content is OPEN; this command never reads it (see mesh_block.cpp layoutInfoFor case 24)
+[groups] 2 LOD group(s) - drawing group 0
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+bounds   : 338.269 x 60.027 x 261.673   (min Y -28.648)
+topology : strip of 13229 indices -> 2510 non-degenerate triangles
+camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)
+captured : _work/zone_tile.png (frame 0)
+frames   : 1 presented

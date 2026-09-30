@@ -1,0 +1,590 @@
+=== Lit-clmesh prototype: real G-buffer prepass -> real directional light -> real material pass ===
+(forked from prototype_lit_car.cpp - see this file's own top comment)
+
+[shaderHash join] real .fxo_pc distinct stems: 310
+
+[archive] sr3_city_0.vpp_pc :: 1018h0.str2_pc opened, 44 entries
+
+=== [census] real hash0 -> real .fxo_pc-stem resolution across every .clmesh_pc in 1018h0.str2_pc ===
+  lite_fixh.clmesh_pc              materials=3 resolved=3
+  lamppoststrbse_a.clmesh_pc       materials=2 resolved=2
+  lamppoststr_b.clmesh_pc          materials=4 resolved=4
+  sheer_cliff_seambuster.clmesh_pc materials=5 resolved=5
+  drain_wall_lrg_01.clmesh_pc      materials=3 resolved=3
+  road_gasstntnkvalve_02.clmesh_pc materials=5 resolved=5
+  solar_panels_a01.clmesh_pc       materials=2 resolved=2
+  safety_tower_light_r.clmesh_pc   materials=3 resolved=3
+  safety_tower_light_y.clmesh_pc   materials=3 resolved=3
+  antenna_b.clmesh_pc              materials=2 resolved=2
+  barriers02.clmesh_pc             materials=2 resolved=2
+  barriers01.clmesh_pc             materials=2 resolved=2
+  const_bar_c.clmesh_pc            materials=2 resolved=2
+  const_bar_b.clmesh_pc            materials=4 resolved=4
+  airport_controltower.clmesh_pc   materials=19 resolved=19
+  rf4_rock_wall_cnve_lg.clmesh_pc  materials=2 resolved=2
+  rf4_rock_blder_sm.clmesh_pc      materials=2 resolved=2
+  rf4_rock_blder.clmesh_pc         materials=2 resolved=2
+  fnc_chn_rstbrb_h.clmesh_pc       materials=5 resolved=5
+  terminal_sign_c.clmesh_pc        materials=3 resolved=3
+  hwy_destsign_a.clmesh_pc         materials=4 resolved=4
+  hwy_destsign_base_a.clmesh_pc    materials=2 resolved=2
+[census] TOTAL: 81/81 real materials resolved hash0 -> a real .fxo_pc stem (100.00%)
+[census] MISS LIST (0): explicit, not silently placeholdered:
+
+=== [census 2, NEW] structural role4+role6 drawability (generalized VS/PS resolution, Lead 1) ===
+  lite_fixh.clmesh_pc              materials=3 structurallyDrawable=2 (was 3 under the old _v/_mv-only rule)
+  lamppoststrbse_a.clmesh_pc       materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  lamppoststr_b.clmesh_pc          materials=4 structurallyDrawable=3 (was 3 under the old _v/_mv-only rule)
+  sheer_cliff_seambuster.clmesh_pc materials=5 structurallyDrawable=4 (was 1 under the old _v/_mv-only rule)
+  drain_wall_lrg_01.clmesh_pc      materials=3 structurallyDrawable=2 (was 1 under the old _v/_mv-only rule)
+  road_gasstntnkvalve_02.clmesh_pc materials=5 structurallyDrawable=4 (was 2 under the old _v/_mv-only rule)
+  solar_panels_a01.clmesh_pc       materials=2 structurallyDrawable=1 (was 1 under the old _v/_mv-only rule)
+  safety_tower_light_r.clmesh_pc   materials=3 structurallyDrawable=2 (was 3 under the old _v/_mv-only rule)
+  safety_tower_light_y.clmesh_pc   materials=3 structurallyDrawable=2 (was 3 under the old _v/_mv-only rule)
+  antenna_b.clmesh_pc              materials=2 structurallyDrawable=1 (was 1 under the old _v/_mv-only rule)
+  barriers02.clmesh_pc             materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  barriers01.clmesh_pc             materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  const_bar_c.clmesh_pc            materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  const_bar_b.clmesh_pc            materials=4 structurallyDrawable=3 (was 4 under the old _v/_mv-only rule)
+  airport_controltower.clmesh_pc   materials=19 structurallyDrawable=18 (was 3 under the old _v/_mv-only rule)
+  rf4_rock_wall_cnve_lg.clmesh_pc  materials=2 structurallyDrawable=1 (was 1 under the old _v/_mv-only rule)
+  rf4_rock_blder_sm.clmesh_pc      materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  rf4_rock_blder.clmesh_pc         materials=2 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  fnc_chn_rstbrb_h.clmesh_pc       materials=5 structurallyDrawable=4 (was 2 under the old _v/_mv-only rule)
+  terminal_sign_c.clmesh_pc        materials=3 structurallyDrawable=1 (was 2 under the old _v/_mv-only rule)
+  hwy_destsign_a.clmesh_pc         materials=4 structurallyDrawable=3 (was 1 under the old _v/_mv-only rule)
+  hwy_destsign_base_a.clmesh_pc    materials=2 structurallyDrawable=1 (was 1 under the old _v/_mv-only rule)
+[census 2] TOTAL: 58/81 real materials structurally pair role4+role6 through SOME real candidate file (71.60%) - was 44/81 (54.32%) under the parent fork's own literal _v/_mv-only rule, same population, computed in this same loop for a like-for-like comparison
+
+[env table] REAL row wired: weather_time_of_day.xtbl Weather_Time_Segment Name=noon (Start_Time=1430 HHMM) x Weather_Stages/Stage Stage_Name=Overcast -
+  TOD_Light_Color=(1.0000,0.8632,0.6376) Intensity=13.0000, Ambient_Color=(0.6038,0.8469,1.0000) Intensity=1.2000,
+  Back_Ambient_Color=(0.2623,0.6724,1.0000) Intensity=2.5000, Exposure_Min=0.1200 (all real, read via sr3tables_environment from misc_tables.vpp_pc)
+
+[clmesh] airport_controltower.clmesh_pc (11032 bytes) + .glmesh_pc (270472 bytes)
+[clmesh] materialCount=19 renderGroupCount=2 landsOnEof=1
+[materials] 19 material record(s):
+  material[0]: hash0=0x454731FD stem=ir_window_reflectmask structurallyDrawable(preview)=yes texCount=5 constNames(B)=7 vec4Consts(C)=9 -> [slot=0 hash=0x2808EB90 'airport_terminal_glass_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_glass.tga'] [slot=2 hash=0xF73A1423 'airport_terminal_glass_s.tga'] [slot=3 hash=0x46AA914E 'airport_terminal_glass_tod.tga'] [slot=4 hash=0xDBEA623E 'windows_skyscraper_noise.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x70A93EEF value=(0.200000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0xBB3E4CF5 value=(0.003035, 1.002944, 10.000000, 255.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[1]: hash0=0x5B024F97 stem=ir_bbsimpledecal1 structurallyDrawable(preview)=yes texCount=4 constNames(B)=12 vec4Consts(C)=14 -> [slot=0 hash=0x2808EB90 'roof_gravel01_n.tga'] [slot=1 hash=0x69B48F91 'roof_gravel01_d.tga'] [slot=2 hash=0xE848C9CA 'trim_artdeco01_s.tga'] [slot=3 hash=0x433202E1 'roof_decal_grime01_d.tga']
+      B/C: nameHash=0x08CC10EF value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xCF3CBD59 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xC51059A6 value=(0.000000, 0.000000, 0.000000, 1.000000)
+      B/C: nameHash=0x73A62825 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDC93E39B value=(0.250000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x67A84715 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xFEA116AF value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[2]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[3]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[4]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'door_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'door_skyscraper_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[5]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'warehouse01_a_foundation_n.tga'] [slot=1 hash=0x69B48F91 'warehouse01_a_foundation_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[6]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[7]: hash0=0x4B8E4452 stem=ir_bbsimple1 structurallyDrawable(preview)=yes texCount=3 constNames(B)=9 vec4Consts(C)=11 -> [slot=0 hash=0x2808EB90 'metal_suports_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'metal_suports_skyscraper_d.tga'] [slot=2 hash=0xE848C9CA 'metal_suports_skyscraper_s.tga']
+      B/C: nameHash=0x08CC10EF value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xCF3CBD59 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xC51059A6 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x73A62825 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[8]: hash0=0x2CA87F92 stem=ir_sr3glass1 structurallyDrawable(preview)=yes texCount=3 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x69B48F91 'glass_tiled.tga'] [slot=1 hash=0xFFB521EF 'windowgrime_dcl02.tga'] [slot=2 hash=0xC14A2F45 'refgenericinside.tga']
+      B/C: nameHash=0x4945268E value=(0.100000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x0DA96BC4 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x603883FF value=(0.100000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x5BDFABB1 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[9]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[10]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[11]: hash0=0x4B8E4452 stem=ir_bbsimple1 structurallyDrawable(preview)=yes texCount=3 constNames(B)=9 vec4Consts(C)=11 -> [slot=0 hash=0x2808EB90 'ap_hangar02_a_door02_n.tga'] [slot=1 hash=0x69B48F91 'ap_hangar02_a_door02_d.tga'] [slot=2 hash=0xE848C9CA 'ap_hangar02_a_door02_s.tga']
+      B/C: nameHash=0x08CC10EF value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xCF3CBD59 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xC51059A6 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x73A62825 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[12]: hash0=0xB4803FCF stem=ir_at_bbsimple1 structurallyDrawable(preview)=yes texCount=3 constNames(B)=9 vec4Consts(C)=11 -> [slot=0 hash=0x69B48F91 'chandeliera_d.tga'] [slot=1 hash=0x2808EB90 'chandeliera_n.tga'] [slot=2 hash=0xE848C9CA 'chandeliera_s.tga']
+      B/C: nameHash=0x08CC10EF value=(7.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xCF3CBD59 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xC51059A6 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x73A62825 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.020000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[13]: hash0=0xA9E6EB9E stem=ir_sr3diffspec_nospecmap structurallyDrawable(preview)=yes texCount=1 constNames(B)=7 vec4Consts(C)=9 -> [slot=0 hash=0x69B48F91 'airventindustriala_d.tga']
+      B/C: nameHash=0x08CC10EF value=(75.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xC51059A6 value=(0.496933, 0.760525, 0.896269, 1.000000)
+      B/C: nameHash=0xCF3CBD59 value=(0.500000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x73A62825 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0xBB3E4CF5 value=(0.031896, 5.406282, 50.000000, 128.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[14]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[15]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec structurallyDrawable(preview)=yes texCount=2 constNames(B)=6 vec4Consts(C)=8 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      B/C: nameHash=0x55B343E2 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[16]: hash0=0xD28715E8 stem=ir_bbsimple2 structurallyDrawable(preview)=yes texCount=2 constNames(B)=5 vec4Consts(C)=7 -> [slot=0 hash=0x2808EB90 'airport_terminal_decal_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_decal_d.tga']
+      B/C: nameHash=0x57AF8C9F value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0xDA695748 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x436006F2 value=(1.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[17]: hash0=0x5A8E5EE3 stem=ir_at_bbsimple3 structurallyDrawable(preview)=yes texCount=1 constNames(B)=2 vec4Consts(C)=4 -> [slot=0 hash=0x69B48F91 'roof_decal_patch_d.tga']
+      B/C: nameHash=0x9F9A4F60 value=(0.000000, 0.000000, 0.000000, 0.000000)
+      B/C: nameHash=0x03E0B860 value=(1.000000, 1.000000, 1.000000, 1.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+  material[18]: hash0=0x786DE88A stem=ir_mesh_depth_only structurallyDrawable(preview)=no(resolved,no candidate real-pairs role4+role6) texCount=0 constNames(B)=0 vec4Consts(C)=3 -> (no real texture binding on this material)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+      C[trailing,unnamed,OPEN] value=(0.000000, 0.000000, 0.000000, 0.000000)
+
+[renderGroup 0] channels=4 indexCount=13138 ranges=16
+
+[device] kind=Hardware
+
+[stem 'ir_window_reflectmask'] 3 real candidate file(s) to try, in order: ir_window_reflectmask_bs.fxo_pc ir_window_reflectmask_fd.fxo_pc ir_window_reflectmask_s.fxo_pc
+  candidate 'ir_window_reflectmask_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_window_reflectmask_fd.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 ?0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_window_reflectmask_s.fxo_pc': role4=OK (pass 0)  role6=OK (pass 2)
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s0
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s1  Specular_MapSampler: s-1
+
+[stem 'ir_bbsimpledecal1'] 4 real candidate file(s) to try, in order: ir_bbsimpledecal1_bs.fxo_pc ir_bbsimpledecal1_c.fxo_pc ir_bbsimpledecal1_fd.fxo_pc ir_bbsimpledecal1_s.fxo_pc
+  candidate 'ir_bbsimpledecal1_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_bbsimpledecal1_c.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_bbsimpledecal1_fd.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 ?0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_bbsimpledecal1_s.fxo_pc': role4=OK (pass 0)  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  [stem 'ir_bbsimpledecal1'] UNRESOLVED: no real candidate file for this stem fully compiled for both role4 and role6 (4 candidate(s) tried)
+
+[stem 'ir_srtwotonediffuse_no_spec'] 4 real candidate file(s) to try, in order: ir_srtwotonediffuse_no_spec_bs.fxo_pc ir_srtwotonediffuse_no_spec_c.fxo_pc ir_srtwotonediffuse_no_spec_fd.fxo_pc ir_srtwotonediffuse_no_spec_s.fxo_pc
+  candidate 'ir_srtwotonediffuse_no_spec_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_srtwotonediffuse_no_spec_c.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_srtwotonediffuse_no_spec_fd.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 ?0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_srtwotonediffuse_no_spec_s.fxo_pc': role4=OK (pass 0)  role6=OK (pass 2)
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s0
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s1  Specular_MapSampler: s-1
+
+[stem 'ir_bbsimple1'] 8 real candidate file(s) to try, in order: ir_bbsimple1_v.fxo_pc ir_bbsimple1_mv.fxo_pc ir_bbsimple1_bs.fxo_pc ir_bbsimple1_c.fxo_pc ir_bbsimple1_fd.fxo_pc ir_bbsimple1_mc.fxo_pc ir_bbsimple1_ms.fxo_pc ir_bbsimple1_s.fxo_pc
+  candidate 'ir_bbsimple1_v.fxo_pc': role4=OK (pass 0)  role6=OK (pass 2)
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s0
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s1  Specular_MapSampler: s2
+
+[stem 'ir_sr3glass1'] 4 real candidate file(s) to try, in order: ir_sr3glass1_bs.fxo_pc ir_sr3glass1_c.fxo_pc ir_sr3glass1_mc.fxo_pc ir_sr3glass1_s.fxo_pc
+  candidate 'ir_sr3glass1_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3glass1_c.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3glass1_mc.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 POSITION1 NORMAL1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 POSITION1 NORMAL1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3glass1_s.fxo_pc': role4=OK (pass 0)  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  [stem 'ir_sr3glass1'] UNRESOLVED: no real candidate file for this stem fully compiled for both role4 and role6 (4 candidate(s) tried)
+
+[stem 'ir_at_bbsimple1'] 5 real candidate file(s) to try, in order: ir_at_bbsimple1_bs.fxo_pc ir_at_bbsimple1_c.fxo_pc ir_at_bbsimple1_fd.fxo_pc ir_at_bbsimple1_mc.fxo_pc ir_at_bbsimple1_s.fxo_pc
+  candidate 'ir_at_bbsimple1_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_at_bbsimple1_c.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_at_bbsimple1_fd.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 ?0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_at_bbsimple1_mc.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION1 NORMAL1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 POSITION1 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_at_bbsimple1_s.fxo_pc': role4=OK (pass 1)  role6=OK (pass 3)
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s1
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s0  Specular_MapSampler: s2
+
+[stem 'ir_sr3diffspec_nospecmap'] 4 real candidate file(s) to try, in order: ir_sr3diffspec_nospecmap_bs.fxo_pc ir_sr3diffspec_nospecmap_c.fxo_pc ir_sr3diffspec_nospecmap_fd.fxo_pc ir_sr3diffspec_nospecmap_s.fxo_pc
+  candidate 'ir_sr3diffspec_nospecmap_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 NORMAL0 TEXCOORD0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3diffspec_nospecmap_c.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 NORMAL0 TEXCOORD0 BLENDWEIGHT0 BLENDINDICES0 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3diffspec_nospecmap_fd.fxo_pc': role4=FAIL: real VS input signature (POSITION0 NORMAL0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 NORMAL0 TEXCOORD0 ?1 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
+  candidate 'ir_sr3diffspec_nospecmap_s.fxo_pc': role4=OK (pass 0)  role6=OK (pass 2)
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s-1
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s0  Specular_MapSampler: s-1
+
+[resolution] 14/16 ranges resolved to an ACTUALLY-COMPILING real shader file (role4+role6), 5 distinct real VS files
+
+
+[final] 14/16 real draw ranges drawable through the new pipeline
+[final] drawable materialId(s): 0 2 3 4 5 6 7 9 10 11 12 13 14 15
+
+[texture] material[0] normal:   airport_terminal_glass_n.tga from airport_terminal_glass_n.cvbm_pc (256x256)
+[texture] material[0] diffuse:  airport_terminal_glass.tga from sr3_city_awld.cpeg_pc (256x256)
+[texture] material[2] normal:   airport_terminal_tile02_n.tga from airport_terminal_tile02_n.cvbm_pc (512x256)
+[texture] material[2] diffuse:  airport_terminal_tile02_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[3] normal:   airport_terminal_stone01_n.tga from airport_terminal_stone01_n.cvbm_pc (512x256)
+[texture] material[3] diffuse:  airport_terminal_stone01_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[4] normal:   door_skyscraper_n.tga from door_skyscraper_n.cvbm_pc (512x512)
+[texture] material[4] diffuse:  door_skyscraper_d.tga from sr3_city_awld.cpeg_pc (512x512)
+[texture] material[5] normal:   warehouse01_a_foundation_n.tga from warehouse01_a_foundation_n.cvbm_pc (64x64)
+[texture] material[5] diffuse:  warehouse01_a_foundation_d.tga from sr3_city_awld.cpeg_pc (256x256)
+[texture] material[6] normal:   airport_terminal_tile02_n.tga from airport_terminal_tile02_n.cvbm_pc (512x256)
+[texture] material[6] diffuse:  airport_terminal_tile02_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[7] normal:   metal_suports_skyscraper_n.tga from metal_suports_skyscraper_n.cvbm_pc (512x256)
+[texture] material[7] diffuse:  metal_suports_skyscraper_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[7] specular: metal_suports_skyscraper_s.tga from metal_suports_skyscraper_s.cvbm_pc (512x256)
+[texture] material[9] normal:   airport_terminal_stone02_n.tga from airport_terminal_stone02_n.cvbm_pc (512x256)
+[texture] material[9] diffuse:  airport_terminal_stone02_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[10] normal:   airport_terminal_stone01_n.tga from airport_terminal_stone01_n.cvbm_pc (512x256)
+[texture] material[10] diffuse:  airport_terminal_stone01_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[11] normal:   ap_hangar02_a_door02_n.tga from sr3_city_awld.cpeg_pc (256x512)
+[texture] material[11] diffuse:  ap_hangar02_a_door02_d.tga from sr3_city_awld.cpeg_pc (256x256)
+[texture] material[11] specular: ap_hangar02_a_door02_s.tga from sr3_city_awld.cpeg_pc (512x512)
+[texture] material[12] normal:   chandeliera_n.tga from chandeliera_n.cvbm_pc (256x256)
+[texture] material[12] diffuse:  chandeliera_d.tga from chandeliera_d.cvbm_pc (256x256)
+[texture] material[12] specular: chandeliera_s.tga from chandeliera_s.cvbm_pc (256x256)
+[texture] material[13] diffuse:  airventindustriala_d.tga from airventindustriala_d.cvbm_pc (128x128)
+[texture] material[14] normal:   airport_terminal_stone02_n.tga from airport_terminal_stone02_n.cvbm_pc (512x256)
+[texture] material[14] diffuse:  airport_terminal_stone02_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[15] normal:   airport_terminal_tile_n.tga from airport_terminal_tile_n.cvbm_pc (512x256)
+[texture] material[15] diffuse:  airport_terminal_tile_d.tga from sr3_city_awld.cpeg_pc (512x256)
+
+[channel 0] layoutCode=2 vertices=8027 hasNormal=1 hasTangent=1
+[channel 1] layoutCode=2 vertices=118 hasNormal=1 hasTangent=1
+[channel 3] layoutCode=0 vertices=40 hasNormal=1 hasTangent=0
+    PLACEHOLDER tangent (channel genuinely has none, a shader needs it)
+
+[bounds] min(-37.033 -2.052 -24.681) max(37.456 67.604 25.041)
+[camera] CHOSEN fovY=45deg near=3.724 far=536.319 (not real game camera data). projection invertible=1
+=== Constant-buffer fill decisions, GENERIC TEMPLATE (real vs. placeholder, by real CTAB name) ===
+  ir_at_bbsimple1_s.fxo_pc role4 VS IR_World2View          : REAL: this tool's own view matrix
+  ir_at_bbsimple1_s.fxo_pc role4 VS Normal_Map_TilingU     : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role4 VS Normal_Map_TilingV     : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role4 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role4 VS objTM                  : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_at_bbsimple1_s.fxo_pc role4 VS projTM                 : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_at_bbsimple1_s.fxo_pc role4 PS Alpha_Threshold        : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role4 PS Normal_Map_Height      : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role4 PS Specular_Power         : REAL engine default (spec-render-pipeline.md Sec20.12.11): 0.1 floor
+  ir_bbsimple1_v.fxo_pc role4 VS Bone_weights              : PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a static prop is already in one real object space)
+  ir_bbsimple1_v.fxo_pc role4 VS IR_World2View             : REAL: this tool's own view matrix
+  ir_bbsimple1_v.fxo_pc role4 VS Normal_Map_TilingU        : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS Normal_Map_TilingV        : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS Object_instance_params_2  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS objTM                     : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_bbsimple1_v.fxo_pc role4 VS projTM                    : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_bbsimple1_v.fxo_pc role4 PS Normal_Map_Height         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role4 PS Specular_Power            : REAL engine default (spec-render-pipeline.md Sec20.12.11): 0.1 floor
+  ir_sr3diffspec_nospecmap_s.fxo_pc role4 VS IR_World2View : REAL: this tool's own view matrix
+  ir_sr3diffspec_nospecmap_s.fxo_pc role4 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role4 VS objTM         : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role4 VS projTM        : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role4 PS Specular_Power : REAL engine default (spec-render-pipeline.md Sec20.12.11): 0.1 floor
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS IR_World2View : REAL: this tool's own view matrix
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS Normal_Map_TilingU : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS Normal_Map_TilingV : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS objTM      : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 VS projTM     : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role4 PS Normal_Map_Height : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role4 VS IR_World2View    : REAL: this tool's own view matrix
+  ir_window_reflectmask_s.fxo_pc role4 VS Normal_Map_TilingU : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role4 VS Normal_Map_TilingV : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role4 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role4 VS objTM            : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_window_reflectmask_s.fxo_pc role4 VS projTM           : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_window_reflectmask_s.fxo_pc role4 PS Normal_Map_Height : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 VS Diffuse_Color          : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role6 VS Fog_dist               : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role6 VS Object_instance_params : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role6 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role6 VS eyePos                 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_at_bbsimple1_s.fxo_pc role6 VS objTM                  : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_at_bbsimple1_s.fxo_pc role6 VS projTM                 : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_at_bbsimple1_s.fxo_pc role6 PS Alpha_Threshold        : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Fog_color              : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS IR_Pixel_Steps         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Self_Illumination      : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Alpha         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Color         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Map_Amount    : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Target_dimensions      : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Tint_color             : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+  ir_bbsimple1_v.fxo_pc role6 VS Bone_weights              : PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a static prop is already in one real object space)
+  ir_bbsimple1_v.fxo_pc role6 VS Diffuse_Color             : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Fog_dist                  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Object_instance_params    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Object_instance_params_2  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS eyePos                    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS objTM                     : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_bbsimple1_v.fxo_pc role6 VS projTM                    : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_bbsimple1_v.fxo_pc role6 PS Fog_color                 : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS IR_Pixel_Steps            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Self_Illumination         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Alpha            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Color            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Map_Amount       : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Target_dimensions         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Tint_color                : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS Fog_dist      : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS eyePos        : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS objTM         : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS projTM        : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Diffuse_Color : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Fog_color     : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS IR_Pixel_Steps : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Alpha : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Color : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Map_Amount : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Tint_color    : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Wet_mask_levels : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Diffuse_Color : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Diffuse_Color_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Fog_dist   : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Object_instance_params : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS eyePos     : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS objTM      : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS projTM     : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Fog_color  : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS IR_Pixel_Steps : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Tint_color : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+  ir_window_reflectmask_s.fxo_pc role6 VS Diffuse_Color    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS Fog_dist         : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS Object_instance_params : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS Render_offset    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS eyePos           : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_window_reflectmask_s.fxo_pc role6 VS objTM            : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_window_reflectmask_s.fxo_pc role6 VS projTM           : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_window_reflectmask_s.fxo_pc role6 PS Fog_color        : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS IR_Pixel_Steps   : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Reflection_Map_Opacity : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS TOD_window_tint  : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Time             : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Tint_color       : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+  ir_window_reflectmask_s.fxo_pc role6 PS V_ambient_render : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Wet_mask_levels  : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+
+=== Constant-buffer fill decisions, PER-MATERIAL real overrides (Lead 2) ===
+  material[0] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[0] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[0] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[0] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[0] role6 PS Reflection_Map_Opacity              : REAL per-material (materialShaderConstants B/C array, nameHash=0x70A93EEF)
+  material[0] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[0] role6 PS Wet_mask_levels                     : REAL per-material (materialShaderConstants B/C array, nameHash=0xBB3E4CF5)
+  material[0] C[7..8]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[2] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[2] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[2] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[2] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[2] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[2] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[2] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[3] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[3] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[3] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[3] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[3] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[3] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[3] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[4] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[4] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[4] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[4] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[4] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[4] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[4] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[5] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[5] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[5] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[5] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[5] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[5] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[5] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[6] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[6] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[6] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[6] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[6] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[6] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[6] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[7] role4 PS Specular_Power                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x08CC10EF)
+  material[7] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[7] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[7] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[7] role6 PS Specular_Map_Amount                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xCF3CBD59)
+  material[7] role6 PS Specular_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0xC51059A6)
+  material[7] role6 PS Specular_Alpha                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x73A62825)
+  material[7] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[7] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[7] C[9..10]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[9] role4 PS Normal_Map_Height                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[9] role4 VS Normal_Map_TilingU                  : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[9] role4 VS Normal_Map_TilingV                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[9] role6 PS Self_Illumination                   : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[9] role6 VS Diffuse_Color                       : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[9] role6 VS Diffuse_Color_2                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[9] C[6..7]                                      : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[10] role4 PS Normal_Map_Height                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[10] role4 VS Normal_Map_TilingU                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[10] role4 VS Normal_Map_TilingV                 : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[10] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[10] role6 VS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[10] role6 VS Diffuse_Color_2                    : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[10] C[6..7]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[11] role4 PS Specular_Power                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x08CC10EF)
+  material[11] role4 PS Normal_Map_Height                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[11] role4 VS Normal_Map_TilingU                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[11] role4 VS Normal_Map_TilingV                 : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[11] role6 PS Specular_Map_Amount                : REAL per-material (materialShaderConstants B/C array, nameHash=0xCF3CBD59)
+  material[11] role6 PS Specular_Color                     : REAL per-material (materialShaderConstants B/C array, nameHash=0xC51059A6)
+  material[11] role6 PS Specular_Alpha                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x73A62825)
+  material[11] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[11] role6 VS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[11] C[9..10]                                    : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[12] role4 PS Specular_Power                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x08CC10EF)
+  material[12] role4 PS Normal_Map_Height                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[12] role4 VS Normal_Map_TilingU                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[12] role4 VS Normal_Map_TilingV                 : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[12] role6 PS Specular_Map_Amount                : REAL per-material (materialShaderConstants B/C array, nameHash=0xCF3CBD59)
+  material[12] role6 PS Specular_Color                     : REAL per-material (materialShaderConstants B/C array, nameHash=0xC51059A6)
+  material[12] role6 PS Specular_Alpha                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x73A62825)
+  material[12] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[12] role6 VS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[12] C[9..10]                                    : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[13] role4 PS Specular_Power                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x08CC10EF)
+  material[13] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[13] role6 PS Specular_Color                     : REAL per-material (materialShaderConstants B/C array, nameHash=0xC51059A6)
+  material[13] role6 PS Specular_Map_Amount                : REAL per-material (materialShaderConstants B/C array, nameHash=0xCF3CBD59)
+  material[13] role6 PS Specular_Alpha                     : REAL per-material (materialShaderConstants B/C array, nameHash=0x73A62825)
+  material[13] role6 PS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[13] role6 PS Wet_mask_levels                    : REAL per-material (materialShaderConstants B/C array, nameHash=0xBB3E4CF5)
+  material[13] C[7..8]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[14] role4 PS Normal_Map_Height                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[14] role4 VS Normal_Map_TilingU                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[14] role4 VS Normal_Map_TilingV                 : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[14] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[14] role6 VS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[14] role6 VS Diffuse_Color_2                    : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[14] C[6..7]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+  material[15] role4 PS Normal_Map_Height                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x57AF8C9F)
+  material[15] role4 VS Normal_Map_TilingU                 : REAL per-material (materialShaderConstants B/C array, nameHash=0xDA695748)
+  material[15] role4 VS Normal_Map_TilingV                 : REAL per-material (materialShaderConstants B/C array, nameHash=0x436006F2)
+  material[15] role6 PS Self_Illumination                  : REAL per-material (materialShaderConstants B/C array, nameHash=0x9F9A4F60)
+  material[15] role6 VS Diffuse_Color                      : REAL per-material (materialShaderConstants B/C array, nameHash=0x03E0B860)
+  material[15] role6 VS Diffuse_Color_2                    : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
+  material[15] C[6..7]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
+
+[gbuffer] created 3 real off-screen colour targets (Normals/Depth/Lighting, CHOSEN format DXGI_FORMAT_R8G8B8A8_UNORM, 800x600) + 1 real depth-stencil surface + 1 real light-accumulation target.
+[pass A: G-buffer prepass] 14 real DrawIndexed calls into the 3 real off-screen targets + real DSV
+  [gbuffer Normals (oC0)] R:min=0,max=243,mean=20.65  G:min=0,max=231,mean=21.80  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
+  [gbuffer Lighting-parameter (oC2, encodes real Specular_Power)] R:min=0,max=255,mean=34.09  G:min=0,max=0,mean=0.00  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
+[light shader] ir_light_directional real pass 0: VS inputs=POSITION0 TEXCOORD0   PS declares IR_GBuffer_NormalsSampler@s13 IR_GBuffer_LightingSampler@s12  real PS outputs=1
+[pass B: directional light] 1 real DrawIndexed(6) fullscreen quad, ir_light_directional pass 0, real IR_GBuffer_NormalsSampler/IR_GBuffer_LightingSampler bound to pass A's own real output -> real light buffer
+  [light-accumulation buffer (real noon/Overcast weather row x real G-buffer)] R:min=21,max=21,mean=21.00  G:min=46,max=46,mean=46.00  B:min=65,max=65,mean=65.00  A:min=91,max=91,mean=91.00
+[pass C: material pass] 14 real DrawIndexed calls (4959 triangles), IR_LBufferSampler bound to pass B's own real light-buffer output, Diffuse_MapSampler/Specular_MapSampler bound to each material's own real uploaded texture, for every range whose shader declares them
+
+=== Real RGBA8 pixel statistics (800x600, 480000 pixels) ===
+  R: min=0 max=255 mean=14.541
+  G: min=0 max=255 mean=15.296
+  B: min=0 max=255 mean=36.478
+  A: min=255 max=255 mean=255.000
+  geometry silhouette (differs from the (13,13,20) clear colour): 67922 pixels (14.15%)
+
+[png] wrote _work/clmesh_airport_controltower_lit.png
+
+=== DONE ===

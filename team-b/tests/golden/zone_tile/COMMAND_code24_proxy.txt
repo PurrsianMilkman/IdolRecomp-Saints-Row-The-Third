@@ -1,0 +1,107 @@
+Golden scene: zone_tile, real .czn_pc/.gzn_pc zone geometry, vertex layout code 24
+====================================================================================
+
+Real command (run with cwd = tests/golden/ so the "captured:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <sr3_viewer.exe> zone \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        sr3_city~f0816~al.czn_pc \
+        --group 0 --frames 1 --capture _work/zone_tile.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by
+tests/golden/build.bat straight from tools/sr3_viewer.cpp (this task's own
+new `zone` command, added additively - see that file's own "zone tile" doc
+comment right above runZoneTile()) - NOT build_verify/sr3_viewer.exe, which
+predates this command entirely and does not recognise the "zone" subcommand
+at all ("unknown command: zone", same class of staleness already documented
+for vehicle_genki/COMMAND.txt's own `vehicle` command). build.bat was
+extended this pass with a new compile block for sr3zone (zone_header.cpp/
+zone_geometry.cpp) and two new object names on sr3_viewer.exe's link line -
+see that file's own comments for why it stays a standalone cl.exe build
+rather than a CMakeLists.txt target.
+
+Real data: sr3_city_0.vpp_pc (the whole shipped city-geometry archive),
+sr3_city~f0816~al.czn_pc + sr3_city~f0816~al.gzn_pc, nested inside
+awld_compact.str2_pc within sr3_city_0.vpp_pc - sr3_viewer's own findEntry()
+already recurses into nested .str2_pc containers, so only the top-level
+archive path is given here (same convention vehicle_genki/COMMAND.txt
+documents for its own nested .str2_pc). This exact tile was found by a
+read-only, disposable scratch scan tool (not committed to tools/ - it
+reused sr3zone::ZoneGeometry::locate() + sr3mesh::MeshBlock::decodeChannel()
+directly against the already-fixed mesh_block.cpp, no engine logic
+invented for the scan itself) that recursively walked both real city
+archives (sr3_city_0.vpp_pc, sr3_city_1.vpp_pc) reporting every Mesh
+sub-block channel whose layoutCode == 24: sr3_city_0.vpp_pc yielded 21 such
+channels across 11 distinct tile stems, all decodeOk=1
+(sr3_city_1.vpp_pc yielded 0 - all its zone geometry uses other layout
+codes). "sr3_city~f0816~al" block 0 was chosen from that 21-channel list
+because it is a single, self-contained Mesh sub-block (no second block to
+also account for) with a substantial, clearly-recognisable population:
+4,642 vertices, index count 13,229, 2 LOD groups located, decodeOk=1.
+
+Why vertex layout code 24, position+normal only: spec-vertex-format.md
+Sec12.3 confirms position (+0, FLOAT3) and normal (+12, UBYTE4N xyz) for
+code 24 at full population (581,647/581,647 each, across all 448 real
+shipped channels of this code) - this tile's own channel reproduces that
+same shape exactly (elementCount=4642, stride=20, strideMatchesLaw=1,
+texcoordCount=0 for this particular channel). The format's own `+16` byte
+slot is a REFUTED tangent (pooled unit-vector rate only 8.0% across those
+448 real channels) whose real content is OPEN, not merely unconfirmed -
+this command never reads it into any field (see
+src/mesh_block.cpp's layoutInfoFor() case 24 and decodeChannel()'s
+`reservedBytes` cursor-advance comment for exactly how the cursor steps
+over those 4 bytes without decoding them). Rendering is unlit/normal-
+shaded (MeshDrawMode::NormalAsColour) - the same unlit fidelity level
+mesh/pose/vehicle already use; no texcoords/materials/textures are needed
+or used, matching this channel's own real texcoordCount of 0.
+
+Why --group 0: group 0 is the highest-detail LOD group and is the whole
+mesh, not a fragment of it (same convention every other command in this
+file already uses for drawGroup's default) - see baseline_stdout.txt's own
+"[groups]"/"[block 0]" lines, which reproduce this tile's real 2 LOD
+groups and confirm group 0 is being drawn.
+
+Why --frames 1 --capture-frame 0: the same single-frame capture convention
+vehicle_genki/vehicle_standard already use - a static, CHOSEN orbit camera
+(yaw/pitch/distance defaults, no override given here: yaw=0.6 rad/34.4deg,
+pitch=0.35 rad/20.1deg, distanceScale=1.8 - see baseline_stdout.txt's own
+"camera :" line, identical defaults to the `vehicle` command's own), never
+animated, so frame 0 is the only frame that ever needs capturing.
+
+Determinism: confirmed directly this session by running this exact command
+twice in a row into two different --capture paths and MD5-comparing the
+resulting PNGs - byte-identical both times (MD5
+147e898b5d5d8890c14581231458e9bb), and the two stdout captures differ ONLY
+in the "captured : <path>" line echoing back the --capture argument itself
+(the same one caller-chosen-path detail brad/vehicle_genki's own COMMAND.txt
+files already document for their own baselines). No RNG, no wall-clock
+input: a fixed real-hardware D3D11 device (reported in stdout rather than
+hidden), a fixed camera, and the same real archive bytes every time.
+
+Regression (the mesh_block.cpp change that made layout code 24 decodable):
+before/after decode of a real, already-working layout-code-3 channel
+(characters.vpp_pc :: brad.ccmesh_pc, 5,044 vertices, the same brad data
+tests/golden/brad/ already freezes) is BYTE-IDENTICAL - same per-vertex
+position/normal/tangent/weights/indices/texcoords text dump AND the same
+whole-population float-bitpattern checksum
+(0xFE2983977BBF1B35) before and after this change, confirming the new
+`reservedBytes` cursor-advance is a provable no-op for every layout code
+except 24 (reservedBytes defaults to 0 everywhere else).
+
+Frozen here:
+  baseline_capture.png - the real captured frame (real position+normal
+                         geometry, unlit/normal-as-colour shaded).
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (czn/gzn byte counts, located-block
+                         count, channel layout/stride/population, the
+                         explicit "+16 slot never read" note, LOD group
+                         count, device, object-space bounds, topology,
+                         camera framing, capture path, frame count) - this
+                         project's own real draw-stream summary, not a
+                         format invented for this harness.
+
+Re-run and check with: tools/golden_scene_check.cpp's checkZoneTileScene()
+(see that file's own header comment for the convention this directory
+follows).

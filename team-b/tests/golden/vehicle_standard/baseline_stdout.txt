@@ -1,0 +1,71 @@
+[shaderHash join] real .fxo_pc distinct stems: 310, distinct stem-CRCs: 310, collisions: 0
+[vehicle] car_4dr_standard03_4.ccar_pc: ccar=81684 bytes gcar=501288 bytes cpeg=0 bytes gpeg=0 bytes
+[vehicle] parts=31 anchor='body'
+[mesh] channels=9 indexCount=19728 drawGroupsLocated=1
+[mesh] channel[0]: layoutCode=101 texcoordCount=1 elementCount=3354
+[mesh] channel[1]: layoutCode=100 texcoordCount=1 elementCount=3314
+[mesh] channel[2]: layoutCode=101 texcoordCount=1 elementCount=1367
+[mesh] channel[3]: layoutCode=100 texcoordCount=1 elementCount=1763
+[mesh] channel[4]: layoutCode=101 texcoordCount=1 elementCount=1078
+[mesh] channel[5]: layoutCode=100 texcoordCount=1 elementCount=1253
+[mesh] channel[6]: layoutCode=101 texcoordCount=3 elementCount=20
+[mesh] channel[7]: layoutCode=101 texcoordCount=3 elementCount=11
+[mesh] channel[8]: layoutCode=101 texcoordCount=3 elementCount=7
+[group0] 13 draw ranges total
+[material] located=1 materialCount=36
+[shaderHash] extracted 36/36 material shaderHash values, complete=1
+[arrayBC] extracted 36/36 material array-B/C tables, complete=1
+  range[ 0] materialId=  0 submeshIndex=0 shaderHash=0x6ACE0195 -> stem='ir_sr3carpaint_r' vsFile='ir_sr3carpaint_r_v.fxo_pc'
+  range[ 1] materialId=  5 submeshIndex=0 shaderHash=0x4BA8EA73 -> stem='ir_sr3carviewsphere_g' vsFile='ir_sr3carviewsphere_g_v.fxo_pc'
+  range[ 2] materialId=  4 submeshIndex=1 shaderHash=0x82CD0274 -> stem='ir_sr3carviewsphere' vsFile='ir_sr3carviewsphere_v.fxo_pc'
+  range[ 3] materialId=  7 submeshIndex=0 shaderHash=0x96A7EE91 -> stem='ir_sr3cardiffusespec_g' vsFile='ir_sr3cardiffusespec_g_v.fxo_pc'
+  range[ 4] materialId=  6 submeshIndex=0 shaderHash=0x977567B7 -> stem='ir_sr3cardiffusespec' vsFile='ir_sr3cardiffusespec_v.fxo_pc'
+  range[ 5] materialId=  8 submeshIndex=0 shaderHash=0x977567B7 -> stem='ir_sr3cardiffusespec' vsFile='ir_sr3cardiffusespec_v.fxo_pc'
+  range[ 6] materialId=  3 submeshIndex=1 shaderHash=0x4BA8EA73 -> stem='ir_sr3carviewsphere_g' vsFile='ir_sr3carviewsphere_g_v.fxo_pc'
+  range[ 7] materialId=  1 submeshIndex=0 shaderHash=0x09B15FCE -> stem='ir_sr3carpaint_gr' vsFile='ir_sr3carpaint_gr_v.fxo_pc'
+  range[ 8] materialId= 11 submeshIndex=0 shaderHash=0x3E483A22 -> stem='ir_bbsimple_1uv_decal' vsFile='ir_bbsimple_1uv_decal_v.fxo_pc'
+  range[ 9] materialId=  9 submeshIndex=0 shaderHash=0x96A7EE91 -> stem='ir_sr3cardiffusespec_g' vsFile='ir_sr3cardiffusespec_g_v.fxo_pc'
+  range[10] materialId= 12 submeshIndex=0 shaderHash=0x5E500124 -> stem='ir_sr3carlightcover' vsFile='ir_sr3carlightcover_v.fxo_pc'
+  range[11] materialId= 10 submeshIndex=0 shaderHash=0x5E500124 -> stem='ir_sr3carlightcover' vsFile='ir_sr3carlightcover_v.fxo_pc'
+  range[12] materialId=  2 submeshIndex=0 shaderHash=0x82CD0274 -> stem='ir_sr3carviewsphere' vsFile='ir_sr3carviewsphere_v.fxo_pc'
+[resolution summary] 13/13 ranges resolved to a real VS file, 8 distinct real VS files
+[shader 'ir_bbsimple_1uv_decal_v.fxo_pc'] stem='ir_bbsimple_1uv_decal' usedByRanges=1  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=64 bytes. textureKind='normal'
+[shader 'ir_sr3cardiffusespec_g_v.fxo_pc'] stem='ir_sr3cardiffusespec_g' usedByRanges=2  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 NORMAL0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='none'
+[shader 'ir_sr3cardiffusespec_v.fxo_pc'] stem='ir_sr3cardiffusespec' usedByRanges=2  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 NORMAL0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='none'
+[shader 'ir_sr3carlightcover_v.fxo_pc'] stem='ir_sr3carlightcover' usedByRanges=2  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 NORMAL0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='none'
+[shader 'ir_sr3carpaint_gr_v.fxo_pc'] stem='ir_sr3carpaint_gr' usedByRanges=1  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='normal'
+[shader 'ir_sr3carpaint_r_v.fxo_pc'] stem='ir_sr3carpaint_r' usedByRanges=1  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='normal'
+[shader 'ir_sr3carviewsphere_g_v.fxo_pc'] stem='ir_sr3carviewsphere_g' usedByRanges=2  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='normal'
+[shader 'ir_sr3carviewsphere_v.fxo_pc'] stem='ir_sr3carviewsphere' usedByRanges=2  VS complete=1 unsupported=0  PS complete=1 unsupported=0  signature: POSITION0 TEXCOORD0 NORMAL0 TANGENT0 BLENDINDICES0 
+  RESOLVED AND COMPILED OK. reflected cbuffers: VS=4096 bytes PS=48 bytes. textureKind='normal'
+[final] 13/13 real draw ranges will actually be drawn, using 8 real distinct shaders
+[channel 0] layoutCode=101 vertices=3354 hasNormal=1 hasTangent=1
+[channel 1] layoutCode=100 vertices=3314 hasNormal=1 hasTangent=0
+    PLACEHOLDER: a resolved shader on this channel declares TANGENT0, but layoutCode=100 genuinely has no tangent data - filling a constant placeholder tangent for all 3314 vertices
+[bounds] object-space (after real per-part transform): min(-1.917 -1.038 -2.177) max(1.628 1.275 4.199)  clamped rigidPartIndex: 0
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+[paint] shader='ir_bbsimple_1uv_decal_v.fxo_pc' materialId=11 PS constant 'Normal_Map_Height' -> REAL array-B/C value (0.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_bbsimple_1uv_decal_v.fxo_pc' materialId=11 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3cardiffusespec_g_v.fxo_pc' materialId=7 PS constant 'Specular_Power' -> REAL array-B/C value (65.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3cardiffusespec_g_v.fxo_pc' materialId=9 PS constant 'Specular_Power' -> REAL array-B/C value (65.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3cardiffusespec_v.fxo_pc' materialId=6 PS constant 'Specular_Power' -> REAL array-B/C value (65.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3cardiffusespec_v.fxo_pc' materialId=8 PS constant 'Specular_Power' -> REAL array-B/C value (65.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carlightcover_v.fxo_pc' materialId=10 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carlightcover_v.fxo_pc' materialId=12 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carpaint_gr_v.fxo_pc' materialId=1 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carpaint_r_v.fxo_pc' materialId=0 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carviewsphere_g_v.fxo_pc' materialId=3 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carviewsphere_g_v.fxo_pc' materialId=5 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carviewsphere_v.fxo_pc' materialId=2 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+[paint] shader='ir_sr3carviewsphere_v.fxo_pc' materialId=4 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
+camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)
+[draw] issued 13 real DrawIndexed calls per frame, across 8 real distinct shaders
+captured : _work/vehicle_standard.png (frame 0)
+frames   : 1 presented

@@ -1,0 +1,153 @@
+Golden scene: tree, real .csrt_pc/.gsrt_pc tree geometry, vertex layout code 11 (Position+Normal+Tangent)
+===========================================================================================================
+
+Real command (run with cwd = tests/golden/ so the "wrote:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <tree_baseline_render.exe> \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        st_pine_tall _work/tree.png
+
+<tree_baseline_render.exe> = tests/golden/_bin/tree_baseline_render.exe, built fresh by
+tests/golden/build.bat straight from tools/tree_baseline_render.cpp - that tool is
+UNMODIFIED by this task (it already existed, built during Sec9.110 "for exactly this
+eventual moment", see its own top-of-file comment) - the only real change this task
+made is to src/mesh_block.cpp / include/sr3mesh/mesh_block.h (layout codes 11/12/13
+flipped from `known=false`/absent to `known=true`, per spec-vertex-format.md
+Sec12.12's new FLOAT16 Position finding). NOT build_verify/tree_baseline_render.exe,
+which predates this fix and refuses every real tree with the same honest FATAL this
+directory's own former STATUS.txt recorded (see "History" below).
+
+Real data: sr3_city_0.vpp_pc (the whole shipped city-geometry archive),
+st_pine_tall.csrt_pc + st_pine_tall.gsrt_pc, found by tree_baseline_render's own
+recursive archive search (no nested .str2_pc in this case - both files sit directly
+in the top-level archive). st_pine_tall was named directly by this task's own brief -
+one of the trees spec-vertex-format.md Sec12.12's own population evidence cites (code
+11's 22-channel population; code 12's 4-channel population explicitly lists
+"st_pine_tall (153 vertices)"). The tool auto-selects the lowest-index PRESENT LOD
+slot (highest detail) - LOD slot 0 in this archive, which turns out to be layout code
+11 (not layout 12, despite this directory's own former STATUS.txt table reporting no
+LOD 0 present for this tree). That is a known, already-explained discrepancy, not a
+new mystery: spec-vertex-format.md Sec12.11 documents directly that an earlier scan's
+own methodology under-counted tree LOD slots via a 4-byte alignment-grid bug, fixed
+later the same session - "this pass also applied the 4-byte alignment fix to code 11
+and found most trees ship a second code-11 LOD channel the original scan had missed."
+sr3tree::Tree::parse() itself was not touched by this task; only decodeChannel()'s own
+refusal for codes 11/12/13 was lifted.
+
+Real numbers (from baseline_stdout.txt, reproduced independently 3 times - see
+"Determinism" below): channel 0, layoutCode=11, stride=36, elementCount=1710,
+texcoordCount=1, indexCount=2982 -> 994 triangles emitted, 1 draw range (LOD group 0,
+material 0), object-space bounds X[-3.168 4.102] Y[0.000 42.625] Z[-2.418 4.137].
+
+Sanity check against spec-vertex-format.md Sec12.12's own cited example
+("st_pine_tall, a 43 m pine with bbox Y=[0, 43.03], decodes Y values spanning nearly
+its full real height"): this LOD0 channel's own decoded Y span is [0.000, 42.625],
+height 42.625 - within 1% of the spec's own cited ~43.03 m figure. (The small gap is
+expected, not a discrepancy to chase: LOD0's 1,710 vertices are a discrete triangle
+mesh, not guaranteed to include the file's exact topmost bbox-corner point, and
+FLOAT16 carries only ~3 decimal digits of precision at this magnitude.) Independently
+re-checked directly against the raw decoded Vertex array (not just the renderer's own
+aggregate bounds line) with a throwaway scratch dump tool - same figure exactly,
+[0.000000, 42.625000]. Sample decoded vertices (from that same scratch dump, first 3
+of 1,710): v[0] pos=(0.822754, 1.884766, 0.031616); v[1] pos=(0.542969, 1.878906,
+-0.633301); v[2] pos=(0.616211, 7.074219, -0.203979) - real, non-denormal, per-tree-
+shaped floating point values, not near-zero artifacts.
+
+THIS BASELINE'S CORE FIELD (POSITION) IS HIGH CONFIDENCE, NOT CONFIRMED - stated
+plainly here, not smoothed over (spec-vertex-format.md Sec12.12):
+  Position (FLOAT16x3 at channel offset +0) is empirical, full-population (code 11
+  specifically: 28,423/28,457 vertices in-bounds against each tree's own real bbox,
+  22/22 channels individually >=90%), independently reproduced twice, non-denormal,
+  correctly scaled against this exact tree's own real bounding box (see the sanity
+  check above) - the strongest evidence this project currently has for it. But it
+  stops short of CONFIRMED for two honest, UNRESOLVED reasons this baseline inherits
+  rather than hides:
+    1. No CPU/GPU consumer of this exact byte range has been found anywhere in the
+       disassembly (spec Sec12.9.1's existing finding - neither Mesh-block walker
+       dereferences an individual vertex field's content for these codes - extends to
+       this byte range too). This is empirical/statistical confidence, not
+       disassembly-confirmed against a real reader.
+    2. Offset +0 and offset +16 are ~70% byte-identical cross-channel duplicates
+       (spec Sec12.9.7), with an existing, STILL-OPEN hedge that this pair could be
+       runtime-populated/stale content rather than authored per-vertex data. This
+       FLOAT16 finding is NEW EVIDENCE TOWARD "real, authored data" (a coherent,
+       correctly-scaled, recognisable tree silhouette falls directly out of it - see
+       baseline_render.png itself) - it does NOT resolve that tension or disprove the
+       "stale" explanation.
+  Normal (+8, UBYTE4N xyz) and Tangent (+12, UBYTE4N xyz + handedness sign in the 4th
+  byte) ARE CONFIRMED (spec Sec12.9.5/Sec12.10.2 - the same confirmed offsets already
+  established earlier the same session, per HANDOFF's own resume note) - only Position
+  carries the lower tier on this baseline. This is a visibly DIFFERENT, LOWER
+  confidence tier than the zone_tile golden scene's own Position field (layout code
+  24, spec Sec12.3, full-population CONFIRMED, 581,647/581,647) - do not read this
+  baseline as being on the same footing as that one. zone_tile's own COMMAND.txt
+  caveats its unread +16 slot; this baseline goes one step further, because here the
+  caveat sits on the scene's own CORE geometry field, not a side slot.
+
+What this reader deliberately never touches (skip/reserved, not decoded into any
+Vertex field - see src/mesh_block.cpp's layoutInfoFor() case 11/12/13 and
+decodeChannel()'s own cursor-arithmetic comments for exactly how the cursor steps over
+these bytes without reading them): the 2-byte gap between Position and Normal
+(channel offset +6..+8, UNKNOWN, not investigated by this task's own scope); the
+near-duplicate FLOAT16x3 repeat at +16..+22 (the SAME byte range caveat 2 above is
+about - read once, at +0, deliberately never a second time into a second Vertex
+field); and 10 further UNKNOWN bytes at +22..+32. These gap sizes (2 + 6 + 10 = 18
+bytes total, expressed as two separate LayoutInfo fields:
+reservedBytesAfterPosition=2 before Normal, reservedBytes=16 after Tangent) were
+independently re-derived from the real 36-byte stride and the real +8/+12
+Normal/Tangent offsets, not assumed from any brief's own sketch of the layout - they
+check out exactly: 6 (position) + 2 (gap) + 4 (normal) + 4 (tangent) + 6 (dup) + 10
+(gap) + 4 (this channel's one texcoord set) = 36.
+
+Rendering: default MeshDrawMode::Checker (tool default, not overridden - procedural
+checker pattern in UV space, reveals scale/wrap; no material/texture resolution
+needed or used for this mode). Camera: tool's own defaults (yaw=0.6 rad, pitch=0.35
+rad, distance scale 1.8, size 800x600) - CHOSEN, not real, same "chosen framing"
+convention already used by every other scene in this directory (see
+vehicle_genki/COMMAND.txt for the same kind of disclosure).
+
+Regression (the mesh_block.cpp/mesh_block.h change that made layout codes 11/12/13
+decodable): a full tests/golden/_bin rebuild and re-check of every PRE-EXISTING frozen
+scene (brad, vehicle_genki, vehicle_standard, zone_tile) - all 4 PASS byte-exact
+against their own already-frozen baselines (0 regressions across layout codes 2, 3,
+24, and vehicles.vpp_pc's own draw-range shaders/geometry) - see
+tools/golden_scene_check.cpp's own run output for the exact PASS lines. Additionally,
+a dedicated before/after decodeChannel() checksum over real brad.ccmesh_pc data
+(layout code 3, 5,044 vertices, channel 0) is BYTE-IDENTICAL: checksum
+0x11C1813DEDFA5FDC both before and after this change (a throwaway scratch tool, an
+XOR/rotate mix over every decoded float's raw IEEE-754 bit pattern plus every raw
+uint8 field in Vertex) - confirms the new `hasPositionFloat16`/
+`reservedBytesAfterPosition` LayoutInfo fields (both appended at the END of the
+struct, defaulting false/0) are a provable no-op for every pre-existing layout code's
+positional aggregate-init list (codes 0/1/2/3/4/100/101).
+
+Determinism: this exact command, run 3 separate times (once during exploration, once
+for this file's own freeze capture, once for a final re-verification), produced
+MD5-identical baseline_render.png every time: 3310859e4b462da87bb534667ac144d5. No
+RNG, no wall-clock input: a fixed real-hardware D3D11 device (reported in stdout
+rather than hidden), a fixed camera, the same real archive bytes every time.
+
+History: this directory previously held a STATUS.txt documenting an honest,
+exhaustively-evidenced gap ("every real tree's every present LOD slot uses vertex
+layout code 11/12/13, which sr3mesh::MeshBlock correctly refused to decode, so there
+was nothing to freeze") - see HANDOFF.md Sec9.110 for that full history (STATUS.txt's
+own text is preserved verbatim there) and spec-vertex-format.md Sec12.9-Sec12.12 for
+how it closed. STATUS.txt is superseded by this COMMAND.txt now that the tree IS
+decodable, per this task's own instruction, and has been removed from this directory -
+no history is lost, since HANDOFF.md Sec9.110 already carries its full content.
+
+Frozen here:
+  baseline_render.png  - the real captured frame (real Position [HIGH CONFIDENCE, see
+                         above] + Normal + Tangent [both CONFIRMED] geometry,
+                         checker-shaded).
+  baseline_stdout.txt  - tree_baseline_render's own real stdout for this exact
+                         invocation (archive/stem, materials, shader hashes, LOD
+                         presence, capsules, wind params, mesh/channel decode summary,
+                         topology, device, object-space bounds, size, output path) -
+                         this project's own real draw-stream summary, not a format
+                         invented for this harness.
+
+Re-run and check with: tools/golden_scene_check.cpp's checkTreeScene() (see that
+file's own header comment for the convention this directory follows).

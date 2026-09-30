@@ -1,0 +1,11 @@
+﻿[zone-composite] sr3_city~f0816~al.czn_pc: czn=17532 bytes gzn=192100 bytes
+[zone-composite] 1 Mesh sub-block(s) located
+[zone-composite] block 0: channel 0 is layoutCode=24 (elementCount=4642), channel 1 is layoutCode=0 (elementCount=3062)
+[zone-composite] channel 0 (code24): 2 group-target(s)
+[zone-composite] channel 1 (code0): 2 group-target(s)
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+bounds   : 338.269 x 60.027 x 262.513   (min Y -28.648) [combined, both channels]
+camera   : orbit yaw=140.0deg pitch=22.0deg distanceScale=1.60 (CHOSEN framing, same defaults as runZoneTile()'s own `zone` command)
+colour   : code24 (channel 0) = FLAT RED (0.95,0.12,0.12); code0 (channel 1) = MaterialIdAsColour (unchanged per-material hues)
+captured : zone_tile/_investigation_composite_angle2.png (frame 0)
+frames   : 1 presented

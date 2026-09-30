@@ -1,0 +1,159 @@
+Golden scene: clmesh_airport_controltower_lit, real 3-pass deferred-LIT
+`.clmesh_pc` BUILDING render (G-buffer prepass -> real directional light ->
+real material pass)
+========================================================================================
+
+NEW SCENE, not a re-freeze - does NOT touch or overwrite the existing
+tests/golden/clmesh_airport_controltower/ plain-textured golden (that scene
+still passes unchanged, confirmed by this same session's own regression run -
+see "Regression" below). Frozen 2026-09-30, orchestrator task ("extend the
+proven per-pixel-lit deferred rendering pipeline from vehicles to real
+level-mesh city props"), via tools/prototype_lit_clmesh_tower.cpp - a fork of
+tools/prototype_lit_car.cpp (that file's own real 3-pass deferred pipeline:
+G-buffer prepass -> ir_light_directional's real pass-0 -> real material pass
+reading the light result), extended from vehicle paint to a real
+sr3clmesh::LevelMesh static prop. See that new file's own top comment for the
+FULL REAL/CHOSEN/PLACEHOLDER/OPEN breakdown - only the key findings are
+repeated here.
+
+Real command (run with cwd = tests/golden/, matching every other scene in
+this directory, so the "[png] wrote ..." line records the exact relative
+path this file also records):
+
+    <prototype_lit_clmesh_tower.exe> _work/clmesh_airport_controltower_lit.png
+
+<prototype_lit_clmesh_tower.exe> = tests/golden/_bin/prototype_lit_clmesh_tower.exe,
+built fresh by tests/golden/build.bat straight from
+tools/prototype_lit_clmesh_tower.cpp (build.bat extended this session with a
+new "prototype_lit_clmesh_tower.cpp (8th golden-scene target)" section, plus
+one earlier new section compiling src/xtbl.cpp + src/tables_environment.cpp -
+the real weather_time_of_day.xtbl reader this tool needs and no earlier
+golden-scene tool in this script needed).
+
+This tool takes ONE optional positional argument (the output PNG path,
+defaulting to a hardcoded tools/ path if omitted) - the SAME "positional
+out-path, no other flags" shape tree_baseline_render.exe already uses,
+consistent with every prototype_*.cpp in this family being a standalone,
+mostly-hardcoded tool rather than a general-purpose command (the real
+archive path/prop name are hardcoded inside the tool itself, matching how
+prototype_lit_car.cpp hardcodes car_4dr_genki_0).
+
+Real data: same as the existing clmesh_airport_controltower scene -
+sr3_city_0.vpp_pc (1.5 GB) :: 1018h0.str2_pc :: airport_controltower.clmesh_pc
+/.glmesh_pc (11,032 / 270,472 real bytes).
+
+WHAT THIS TOOL DOES, in order (all real tool output, printed every run,
+frozen verbatim in baseline_stdout.txt below - not a separate report):
+
+1. Real shaderHash (MaterialRecord::hash0) -> real .fxo_pc-stem CENSUS across
+   EVERY material of EVERY real .clmesh_pc reachable from 1018h0.str2_pc (22
+   files, not just the tower) - 81/81 (100.00%) real materials resolve,
+   ZERO misses (explicit empty miss list printed, not silently omitted).
+2. The real weather_time_of_day.xtbl noon/Overcast row (same real row + same
+   by-NAME lookup - not by array index - prototype_lit_car.cpp already
+   established; confirmed HIT this run, printed in full).
+3. Loads airport_controltower.clmesh_pc/.glmesh_pc via sr3clmesh::LevelMesh,
+   dumps all 19 real materials' hash0/resolved-stem/texture-bindings, and -
+   NEW - whether each resolves to a DRAWABLE real stem (has a real per-stem
+   `_v`/`_mv` vertex-shader file) vs resolved-but-NOT-drawable (real stem
+   exists, but that stem's real shaders.vpp_pc entries are pixel-stage-only)
+   vs an actual hash0 miss (none here - see item 1).
+4. Resolves render group 0's 16 draw ranges the same way; only 2 of them
+   (materialId 7 "metal_suports_skyscraper" and materialId 11
+   "ap_hangar02_a_door02", both real stem `ir_bbsimple1`) are drawable
+   through the proven role4(G-buffer-write)->role6(forward-lit) mechanism.
+   The other 14 ranges resolve their real hash0 correctly but their stem has
+   no real per-stem VS file under this project's existing join - reported
+   per-range, not silently dropped.
+5. Compiles ir_bbsimple1's real role4 (G-buffer write) and role6
+   (forward-lit) passes - both OK. Independently re-traced THIS session
+   (not assumed from car paint): role4's PS writes oC0/oC1/oC2 with the
+   EXACT SAME Normals/Depth/Lighting-parameter encode shape car paint uses;
+   role6's PS final instruction is the SAME "oC0 = r2 * Tint_color" shape,
+   so the SAME Tint_color=1 PLACEHOLDER override is kept, now independently
+   re-confirmed for this shader too (not just inherited).
+6. Uploads this prop's real per-material Normal_MapSampler/Diffuse_MapSampler
+   /Specular_MapSampler textures (materialTextureBinding() + the SAME
+   findAndUploadTexture()/TextureSearchCache mechanism runClmesh() already
+   uses) - all 6 texture lookups (2 materials x 3 roles) succeed. The
+   specular role hash (0xE848C9CA) is a NEW real finding this session, not
+   an existing sr3geometry named constant - see the tool's own top comment.
+7. Runs the real 3-pass pipeline (kW=800,kH=600, CHOSEN) and captures.
+
+HONEST RESULT (the central finding of this scene, stated plainly, not hidden
+behind a prettier framing): the final composited image is a real, correctly-
+projected, correctly-textured-at-the-G-buffer-stage, but visually FLAT BLACK
+silhouette of the drawable geometry (the tower's metal support shaft + the
+hangar door) against the CHOSEN dark clear colour. This is a MEASURED,
+deterministic consequence of applying this tool's OWN already-established
+real-confirmed-zero-when-unauthored convention faithfully to every named CTAB
+constant this session found no real per-material source for (Diffuse_Color,
+Object_instance_params, Specular_Color, Specular_Map_Amount,
+Self_Illumination at the material stage; Normal_Map_TilingU/V at the
+G-buffer stage) - per this task's own explicit instruction NOT to invent a
+new fallback rule beyond the one pre-existing Tint_color exception. This
+tool's own NEW printTargetStats() diagnostic readback (run every time,
+printed in baseline_stdout.txt) proves the pipeline is still genuinely
+exercised end-to-end even though the final colour is black: the G-buffer's
+own lighting-parameter target really does carry the real Specular_Power 0.1
+floor (measured R channel 0..1/255, matching max(0.1/512,1/256)'s real
+encode exactly), and the light-accumulation buffer really does carry the
+real noon/Overcast weather-row colour run through the real shader math
+(measured uniform (21,46,65,91) - uniform because the G-buffer normal
+feeding it is itself uniform, for the Normal_Map_TilingU/V=0 reason above,
+not because the light math itself is fake). sr3clmesh::LevelMesh::
+MaterialRecord's own `constantNameCount`/`vec4ConstantCount` fields
+structurally resemble vehicles' already-proven per-material array-B/C
+constant mechanism and are a concrete, testable lead for recovering real
+Diffuse_Color/Specular_Color/etc. values in a follow-up session, but
+decoding a new part of this binary format is a separate investigation this
+task's own "don't invent a new fallback rule" instruction rules out
+attempting here - left OPEN, not chased, not silently patched over.
+
+Why NOT the render-everything-at-any-cost alternative: forcing a non-zero
+value into Diffuse_Color/Specular_Color/etc. without a real source would be
+exactly the "invented fix" this project's own operating discipline (and this
+task's own item 5) explicitly rules out - a nicer-looking PNG built on a
+fabricated number is worse than an honestly dark one built on real data only.
+
+Regression (this session): ALL 7 pre-existing golden scenes (brad,
+vehicle_genki, vehicle_standard, zone_tile, tree, clmesh_lite_fixh,
+clmesh_airport_controltower) still PASS byte-exact against their own
+untouched baselines, from the SAME fresh tests/golden/_bin rebuild (deleted
+and rebuilt via tests/golden/build.bat, extended - not modified in its
+existing sections - to also build this scene's own tool) this scene's own
+baseline was frozen from. --selftest also reports OK for all 8 scenes
+(including this new one).
+
+Determinism: confirmed directly this session by running the exact command
+above 3 times into 3 different output paths and MD5-comparing the resulting
+PNGs - byte-identical all 3 times - and by re-running the FULL stdout capture
+a 2nd time and diffing against the frozen baseline_stdout.txt - byte-
+identical (the only thing that could vary, the caller-chosen output path
+string, is held constant across these determinism re-runs). No RNG, no
+wall-clock input: a fixed real-hardware D3D11 device (kind reported in
+stdout, not hidden - "Hardware" on the machine that froze this baseline), a
+fixed camera, the same real archive bytes every time.
+
+Frozen here:
+  baseline_capture.png - the real captured frame (800x600, this tool's own
+                         CHOSEN resolution): a real, correctly-projected
+                         black silhouette of the tower's metal support shaft
+                         + hangar door against the dark clear colour -
+                         viewed directly (not just inferred from stdout)
+                         before freezing; matches this scene's own honest
+                         "HONEST RESULT" section above exactly.
+  baseline_stdout.txt  - this tool's own real stdout for this exact
+                         invocation: the full 81/81 shaderHash census (item
+                         1 above), the real weather row dump, the full
+                         19-material hash0/stem/drawable dump, the
+                         2/16-drawable-range resolution, both compiled
+                         passes' real CTAB sampler registers, all 6 real
+                         texture uploads, every real cbuffer fill decision
+                         (REAL/PLACEHOLDER, by real CTAB name), the 3
+                         diagnostic intermediate-target readbacks, and the
+                         final real pixel statistics + geometry-silhouette
+                         percentage.
+
+Re-run and check with: tools/golden_scene_check.cpp's
+checkClmeshAirportControlTowerLitScene().

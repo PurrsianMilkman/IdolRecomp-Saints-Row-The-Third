@@ -1,0 +1,18 @@
+[clmesh] lite_fixh.clmesh_pc (1856 bytes) + lite_fixh.glmesh_pc (2552 bytes)
+[clmesh] materialCount=3 renderGroupCount=2 headMeshRefs=0 landsOnEof=1
+[materials] 3 material record(s):
+  material[0]: hash0=0xA580257E (real shaderHash - reported, not wired to a compiled shader here) texCount=1 -> [slot=0 hash=0x69B48F91 'lightfixtures_d.tga']
+  material[1]: hash0=0xA580257E (real shaderHash - reported, not wired to a compiled shader here) texCount=1 -> [slot=0 hash=0x69B48F91 'lightfixtures_d.tga']
+  material[2]: hash0=0x786DE88A (real shaderHash - reported, not wired to a compiled shader here) texCount=0 -> (no real texture binding on this material)
+[renderGroup 0] flags=0x01 channels=1 indexCount=145 drawGroupsLocated=1
+  range materialId=0 submeshIndex=0 startIndex=0 indexCount=9 minVertex=96 maxVertex=103
+  range materialId=1 submeshIndex=0 startIndex=9 indexCount=136 minVertex=0 maxVertex=95
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+  texture[mat 0]: lightfixtures_d.tga from lightfixtures_d.cvbm_pc (256x256, BC1_UNORM)
+  texture[mat 1]: lightfixtures_d.tga from lightfixtures_d.cvbm_pc (256x256, BC1_UNORM)
+  texture[mat 2]: no real texture binding at all - flat colour
+bounds   : 0.337 x 0.271 x 0.334   (min Y -0.254)
+topology : 1 channel target(s), 180 indices -> 60 non-degenerate triangles total, 2 distinct materialId(s) used
+camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)
+captured : _work/clmesh_lite_fixh.png (frame 0)
+frames   : 1 presented

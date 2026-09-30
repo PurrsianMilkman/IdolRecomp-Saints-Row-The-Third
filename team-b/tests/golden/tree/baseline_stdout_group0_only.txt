@@ -1,0 +1,17 @@
+archive  : sr3_city_0.vpp_pc
+stem     : st_pine_tall (.csrt_pc 3792 bytes + .gsrt_pc 182180 bytes)
+materials: 4 decoded, 4 present, 13 material-set names
+           distinct shader hash(es): 0x967A81C0
+LOD slots: 3 present of 4 total
+capsules : 2 (radius 1.1000 1.0000)
+wind     : steady-state @ level=0.1, band0(amp=1.5150 freq=1.0100) band1(amp=0.5020 freq=2.0060) band2(amp=0.0000 freq=1.6750) band3(amp=0.0089 freq=10.3348)
+drawing  : LOD slot 0, channel 0, group 0, draw-groups-located=yes
+mesh blk : 1 channel(s), 3150 index(es), index%3==0
+           channel 0: layout 11, 1 texcoord set(s), stride 36, 1710 element(s)
+indexCount      : 2982
+trianglesEmitted: 994
+subDraws        : 1 range(s) [mat=0 idx=0..2982]
+bounds (renderer): X[-3.168 4.102] Y[0.000 42.625] Z[-2.418 4.137]
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+size     : 800x600
+wrote    : tree.png

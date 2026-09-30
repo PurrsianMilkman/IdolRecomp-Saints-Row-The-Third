@@ -1,0 +1,39 @@
+Golden scene: brad, single-bone test pose (bind + posed)
+=========================================================
+
+Real command (run with cwd = tests/golden/ so the "wrote:" lines in
+baseline_stdout.txt are the exact relative paths this file records -
+absolute paths would make the frozen stdout depend on where/who
+captured it):
+
+    build_verify\sr3_viewer.exe pose ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\characters.vpp_pc" ^
+        brad.ccmesh_pc brad.rig_pc _work\brad
+
+Real data: characters.vpp_pc (the whole shipped character-mesh archive,
+549/549 population-validated - HANDOFF.md Sec9.101-area), brad.ccmesh_pc/
+brad.gcmesh_pc/brad.rig_pc entries within it.
+
+Why this pose: `sr3_viewer pose` has exactly one built-in test pose (no
+--angle/--yaw/--pitch given here, so every default applies) - joint [16]
+"l-upperarmtwist1", +45 degrees about Z (mesh space), the same single-
+bone regression check this project has run since HANDOFF.md Sec9.13/
+Sec9.62. It is deterministic (CPU skinning, no RNG, no wall-clock input)
+and was independently re-verified byte-identical old-binary-vs-new-binary
+across a real canonical-file change (HANDOFF.md Sec9.105, 2026-09-29):
+bind MD5 289843206DB6F06976BC4EFECA0E162C, posed MD5
+BCB280190B75E414B3FEB3D06D143734 - this baseline's two PNGs reproduce
+those exact hashes.
+
+Frozen here:
+  baseline_bind.png    - brad_bind.png  (T-pose / rest pose)
+  baseline_posed.png   - brad_posed.png (single-bone-subtree posed)
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (mesh/rig decode summary, skinning
+                         stats, bboxes, device, and the bind-vs-posed
+                         pixel-diff line) - this project's own real
+                         draw-stream summary, not a format invented for
+                         this harness.
+
+Re-run and check with: tools/golden_scene_check.cpp (see that file's own
+header comment for the convention this directory follows).

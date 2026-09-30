@@ -1,0 +1,76 @@
+vint_align_elements	1	vint_lib.lua
+vint_anim_loop_callback	2	vint_lib.lua
+vint_apply_start_values	-	C-registered (§13.7)
+vint_clear_tween_event_reference	-	call-only, unresolved
+vint_datagroup_add_subscription	-	C-registered (§13.7)
+vint_datagroup_insert_item	-	C-registered (§13.7)
+vint_datagroup_remove_item	-	C-registered (§13.7)
+vint_datagroup_remove_subscription	-	C-registered (§13.7)
+vint_dataitem_add_subscription	-	C-registered (§13.7)
+vint_dataitem_find	-	C-registered (§13.7)
+vint_dataitem_get	-	C-registered (§13.7)
+vint_dataitem_set	-	C-registered (§13.7)
+vint_dataresponder_finished	-	C-registered (§13.7)
+vint_dataresponder_post	-	C-registered (§13.7)
+vint_dataresponder_request	4	vint_lib.lua
+vint_debug_decode_wide_string	-	C-registered (§13.7)
+vint_debug_safe_frame	1	vint_lib.lua
+vint_debug_safe_frame_objects	2	vint_lib.lua
+vint_debug_sleep	-	C-registered (§13.7)
+vint_document_find	-	C-registered (§13.7)
+vint_document_get_depth	-	C-registered (§13.7)
+vint_document_get_name_from_handle	-	C-registered (§13.7)
+vint_document_load	-	C-registered (§13.7)
+vint_document_set_depth	-	C-registered (§13.7)
+vint_document_unload	-	C-registered (§13.7)
+vint_force_lua_gc	-	C-registered (§13.7)
+vint_force_mouse_move_event	-	C-registered (§13.7)
+vint_get_avg_processing_time	-	C-registered (§13.7)
+vint_get_current_clickable_element	-	C-registered (§13.7)
+vint_get_global_anchor	-	C-registered (§13.7)
+vint_get_property	-	C-registered (§13.7)
+vint_get_safe_frame	-	C-registered (§13.7)
+vint_get_screen_size	-	C-registered (§13.7)
+vint_get_time_index	-	C-registered (§13.7)
+vint_hide_children	1	vint_lib.lua
+vint_insert_values_in_string	-	C-registered (§13.7)
+vint_internal_dataresponder_request	-	C-registered (§13.7)
+vint_is_std_res	-	C-registered (§13.7)
+vint_lib_init_buttons	0	vint_lib.lua
+vint_lib_init_constants	0	vint_lib.lua
+vint_menu_swap_invalidate	0	vint_lib.lua
+vint_menu_swap_thread	0	vint_lib.lua
+vint_menu_swap_unload	0	vint_lib.lua
+vint_object_add_child	-	C-registered (§13.7)
+vint_object_clone	-	C-registered (§13.7)
+vint_object_clone_rename	-	C-registered (§13.7)
+vint_object_create	-	C-registered (§13.7)
+vint_object_destroy	-	C-registered (§13.7)
+vint_object_find	-	C-registered (§13.7)
+vint_object_first_child	-	C-registered (§13.7)
+vint_object_get_name_from_handle	-	C-registered (§13.7)
+vint_object_next_sibling	-	C-registered (§13.7)
+vint_object_parent	-	C-registered (§13.7)
+vint_object_rename	-	C-registered (§13.7)
+vint_object_set_parent	-	C-registered (§13.7)
+vint_options_remap_reset_bindings	-	C-registered (pre-existing census, not §13.7's 55)
+vint_options_remap_set_key_binding	-	C-registered (pre-existing census, not §13.7's 55)
+vint_reset_child_tween_object	-	call-only, unresolved
+vint_set_child_tween_reverse	-	call-only, unresolved
+vint_set_child_tween_state	0	game_ui_globals.lua
+vint_set_child_tween_target_handle	0	game_ui_globals.lua
+vint_set_input_params	-	C-registered (§13.7)
+vint_set_mouse_cursor	-	C-registered (pre-existing census, not §13.7's 55)
+vint_set_property	-	C-registered (§13.7)
+vint_set_property_typed	-	C-registered (§13.7)
+vint_set_time_index	-	C-registered (§13.7)
+vint_set_tween_event_reference	-	call-only, unresolved
+vint_sound_load	-	C-registered (§13.7)
+vint_sound_play	-	C-registered (§13.7)
+vint_subscribe_to_input_event	-	C-registered (§13.7)
+vint_subscribe_to_mouse_input	-	C-registered (§13.7)
+vint_subscribe_to_raw_input	-	C-registered (§13.7)
+vint_to_std_res	2	vint_lib.lua
+vint_unsubscribe_to_input_event	-	C-registered (§13.7)
+vint_unsubscribe_to_mouse_input	-	C-registered (§13.7)
+vint_unsubscribe_to_raw_input	-	C-registered (§13.7)

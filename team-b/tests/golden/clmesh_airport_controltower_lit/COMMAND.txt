@@ -1,0 +1,187 @@
+Golden scene: clmesh_airport_controltower_lit, real 3-pass deferred-LIT
+`.clmesh_pc` BUILDING render (G-buffer prepass -> real directional light ->
+real material pass)
+========================================================================================
+
+RE-FROZEN 2026-09-30 (orchestrator task: verify two leads against real bytes
+for the previous session's own two OPEN findings - the sparse "resolved, not
+drawable" material count, and the flat-black final colour). BOTH LEADS
+PANNED OUT. Per this project's own established re-freeze convention
+(HANDOFF.md Sec9.124/Sec9.127: preserve the old baseline under renamed
+files, never silently overwrite), the ORIGINAL sparse-silhouette baseline
+this replaces is preserved unchanged at:
+
+    COMMAND_sparse_silhouette_v1.txt
+    baseline_capture_sparse_silhouette_v1.png
+    baseline_stdout_sparse_silhouette_v1.txt
+
+(byte-identical to what this directory held before this re-freeze - verified
+by MD5 immediately before and after this re-freeze, see this session's own
+report). Read that file for the original tool's own full narrative; only
+what CHANGED is repeated in full below.
+
+Real command (run with cwd = tests/golden/, matching every other scene in
+this directory):
+
+    <prototype_lit_clmesh_tower2.exe> _work/clmesh_airport_controltower_lit.png
+
+<prototype_lit_clmesh_tower2.exe> = tests/golden/_bin/prototype_lit_clmesh_tower2.exe,
+built fresh by tests/golden/build.bat (extended this session with a new
+"prototype_lit_clmesh_tower2.cpp" section - tests/golden/build.bat itself
+edited, NOT tools/prototype_lit_clmesh_tower.cpp or tools/prototype_lit_car
+.cpp, both still untouched) straight from tools/prototype_lit_clmesh_tower2
+.cpp - a NEW fork of tools/prototype_lit_clmesh_tower.cpp (itself untouched,
+"fork, don't modify" preserved one level further). See that new file's own
+top comment for the FULL REAL/CHOSEN/PLACEHOLDER/OPEN breakdown; only the
+key findings are repeated here.
+
+WHAT CHANGED, both independently verified against real bytes THIS session
+before being trusted (this project's own "a spec citation must still be
+re-checked against THIS carrier's real bytes" discipline):
+
+LEAD 1 - generalized VS/PS resolution. The specific "bare-stem file"
+hypothesis is REFUTED (0/8 of the tower's non-suffixed real stems have a
+bare `<stem>.fxo_pc` file at all - measured via tools/clmesh_lead_probe.cpp,
+kept in-tree). But the BROADER claim spec-fxo-format.md Sec6.6 makes - the
+`_v`/`_mv` suffix is a REGISTRATION-TIME naming convention only, "NOT a
+structural requirement" - is CONFIRMED: every one of those 8 stems' OTHER
+real files (`_bs`/`_c`/`_fd`/`_mc`/`_ms`/`_s` suffixes, which the ORIGINAL
+tool's own top comment had assumed were "pixel-stage-only" from the NAME
+alone, never checked structurally) in fact carries a real, non-empty role4
+AND role6 VS+PS T8 pairing. pickVertexFile() is generalized to
+candidateTryOrder() + a real try-until-it-compiles loop (still `_v`/`_mv`
+first, unchanged precedent; then every other real candidate, through the
+SAME unmodified compileOnePass() - real D3DCompile + reflection + the
+existing known-VS-input-signature check + real GPU object creation, not
+just structural T8 pairing). Measured result, same population the parent
+fork's own census covered (81 real materials across every .clmesh_pc in
+1018h0.str2_pc): 58/81 (71.60%) now structurally pair role4+role6 through
+SOME real candidate file, vs 44/81 (54.32%) under the old literal
+`_v`/`_mv`-only rule (computed in the SAME loop for a like-for-like
+comparison - the parent fork's own "2/81" framing was specific to the
+tower's own materials, not the full population, which already had more
+`_v`/`_mv` coverage elsewhere). For the tower's own 16 real draw ranges
+specifically (only 16 of its 19 materials have a range in render group 0 -
+materialId 16/17/18 are real data absences from this render group, not a
+resolution failure): 14/16 now resolve to an ACTUALLY-COMPILING real shader
+(was 2/16) - materialId 0,2,3,4,5,6,7,9,10,11,12,13,14,15 all drawable.
+materialId 1 (`ir_bbsimpledecal1`) and materialId 8 (`ir_sr3glass1`) remain
+genuinely UNRESOLVED: every one of their real candidate files' VS input
+signature (e.g. `POSITION0 TEXCOORD0 NORMAL0 TEXCOORD1`, a second UV set no
+candidate for either stem avoids needing) falls outside this pipeline's own
+pre-existing known-subset check - an honest negative, not forced to draw
+with a mismatched layout. Every resolution attempt (success or fail, all 8
+stems x up to 8 candidates) is printed in full in baseline_stdout.txt below.
+
+LEAD 2 - real per-material shader constants. CONFIRMED against real bytes:
+airport_controltower.clmesh_pc's own MaterialRecord B (constant-name-hash)/C
+(vec4-value) arrays - counted since the parent fork's own session
+(constantNameCount/vec4ConstantCount, level_mesh.h +0x0E/+0x0F) but never
+decoded - are real and populated. NEW library accessor
+sr3clmesh::LevelMesh::materialShaderConstants() (include/sr3clmesh/
+level_mesh.h + src/level_mesh.cpp - library code, not fork-only, so other
+tools can reuse it) decodes them per spec-foliage-format.md Sec6/Sec6.2's
+array layout (A 12-byte texture bindings, 4-aligned; B 4-byte name hashes,
+4-aligned; C 16-byte vec4 values, 16-aligned - same run-start
+materialTextureBinding() already uses), CONFIRMED to apply unconditionally
+to every real .clmesh_pc material record by spec-physics-format.md
+Sec4.4.6(h) part 1's own disassembly chain-trace (not assumed by foliage
+analogy alone - every hop of the real call chain from the constructor down
+to the shared record parser has exactly one caller engine-wide). Measured,
+airport_controltower.clmesh_pc's own 14 drawable materials: EVERY real B
+hash checked (95/95, 100%) matches a REAL CTAB constant name on that exact
+material's own resolved role4/role6 shader (CRC-32 of the lower-cased name,
+sr3fxo::hashLowerName - the same primitive spec-fxo-format.md Sec7.6
+defines) - ZERO unmatched B hashes, printed explicitly (none to list). Index
+correspondence is positional 1:1 (C[i] is B[i]'s own value); C has exactly 2
+genuinely-unmatched trailing entries in 18/19 real records (3 in the one
+`ir_mesh_depth_only`/B=0 exception) - OPEN, not guessed at, never written
+anywhere. The recovered REAL values directly explain the parent fork's own
+"flat black" root cause: real Normal_Map_TilingU/TilingV read 1.0 (not the
+zero default that flattened the G-buffer normal to a single UV texel), and
+real Diffuse_Color reads (1,1,1,1) (a neutral "no tint" white, not zero).
+These are wired into the exact same cbuffer slots the parent fork's own
+generic zero/default template used, via the SAME fillFloat4Registers()
+mechanism, per-materialId (a new per-material cbuffer, not the old
+shared-per-shader one - materials sharing a shader CAN carry distinct real
+B/C values, even though this tower's own happen not to). Every fill decision
+(REAL per-material override vs. the generic template vs. genuinely OPEN) is
+logged in baseline_stdout.txt, labelled plainly.
+
+STILL OPEN, unchanged in kind, NOT addressed by either lead (in scope was
+verifying the two leads, not re-tuning every remaining constant): `eyePos`,
+`Object_instance_params`, `Fog_dist`/`Fog_color`, `IR_Pixel_Steps`,
+`Target_dimensions`, `objTM` (identity placeholder - no per-instance
+placement) all still fill from the generic zero/identity template, not a
+real per-material or per-instance source. A real, honestly-observed
+CONSEQUENCE of this (visible directly in baseline_capture.png, only
+possible to even SEE now that the render isn't flat black): the final
+image's colour grading is a saturated, neon-look cyan/magenta rim effect
+concentrated at silhouette edges, consistent with a view-dependent
+specular/Fresnel term made degenerate by `eyePos`'s own zero placeholder
+(the "view direction" math sees the origin, not this tool's own real
+camera position) - a plausible explanation, not independently traced this
+session, flagged as a real follow-up lead rather than chased further here.
+
+RESULT: a real, deterministic, recognizable airport-control-tower silhouette
+(tower shaft + control cab + terminal building roof, all visible in the
+frozen PNG) with genuine per-pixel normal/lighting/colour variation, NOT the
+previous flat black output. Real RGBA8 pixel statistics (800x600, 480000
+pixels): R min=0 max=255 mean=14.541, G min=0 max=255 mean=15.296, B min=0
+max=255 mean=36.478, A min=255 max=255 mean=255.000; geometry silhouette
+(differs from the (13,13,20) clear colour): 67922 pixels (14.15%, was 5513
+pixels / 1.15% in the old sparse baseline - a 12.3x increase in drawn
+coverage). G-buffer Normals target no longer uniform (R:min=0,max=243 G:
+min=0,max=231 - was R:min=0,max=0 G:min=0,max=0 exactly, the old baseline's
+own measured consequence of the zero TilingU/V default).
+
+Determinism: confirmed THIS session by running the exact command above
+twice from a completely FRESH tests/golden/_bin (deleted and rebuilt via
+tests/golden/build.bat before freezing this baseline) into 2 different
+_work/ output copies and MD5-comparing - PNG byte-identical both times
+(also matching an earlier, separate 3-run determinism check from an
+incremental build - 3/3 identical, confirming the rebuild itself doesn't
+perturb output), stdout byte-identical both times (the only line that can
+ever vary, the caller-chosen output-path echo, was held constant). No RNG,
+no wall-clock input: a fixed real-hardware D3D11 device (kind reported in
+stdout - "Hardware" on the machine that froze this baseline), a fixed
+camera, the same real archive bytes every time.
+
+Regression (this session): ALL 8 pre-existing golden scenes (brad,
+vehicle_genki, vehicle_standard, zone_tile, tree, clmesh_lite_fixh,
+clmesh_airport_controltower, and this scene's own former self before this
+re-freeze) confirmed PASS from the SAME fresh tests/golden/_bin rebuild this
+new baseline was frozen from; this scene itself re-verified against its OWN
+new baseline immediately after freezing. --selftest also reports OK for all
+8 scenes (including this one, now checked against the NEW baseline).
+
+Frozen here:
+  baseline_capture.png - the real captured frame (800x600, this tool's own
+                         CHOSEN resolution): a real, correctly-projected,
+                         genuinely lit/normal-mapped/diffuse-textured render
+                         of the tower + terminal building, viewed directly
+                         (not just inferred from stdout) before freezing.
+  baseline_stdout.txt  - this tool's own real stdout for this exact
+                         invocation: the full hash0 census, the NEW
+                         structural-drawability census (both the new and old
+                         rule, computed side by side), the real weather row
+                         dump, the full 19-material hash0/stem/structural-
+                         preview/B-C-array dump, the per-stem candidate
+                         try-and-compile log (every attempt, success or
+                         fail), the 14/16-drawable-range resolution, both
+                         compiled passes' real CTAB sampler registers, all
+                         real texture uploads, every real cbuffer fill
+                         decision (generic template AND the new per-material
+                         real-override pass), the 3 diagnostic intermediate-
+                         target readbacks, and the final real pixel
+                         statistics + geometry-silhouette percentage.
+
+Preserved (the ORIGINAL sparse-silhouette baseline this replaces, unchanged
+- see above): COMMAND_sparse_silhouette_v1.txt,
+baseline_capture_sparse_silhouette_v1.png,
+baseline_stdout_sparse_silhouette_v1.txt.
+
+Re-run and check with: tools/golden_scene_check.cpp's
+checkClmeshAirportControlTowerLitScene() (updated this session to invoke
+prototype_lit_clmesh_tower2.exe instead of prototype_lit_clmesh_tower.exe,
+same golden directory).

@@ -1,0 +1,30 @@
+# Never commit game content or anything derived from the executable.
+*.vpp_pc
+*.str2_pc
+*.asm_pc
+*.cpeg_pc
+*.gpeg_pc
+*.exe
+*.dll
+*.dmp
+*.gpr
+*.rep/
+*.png
+!team-b/third_party/lua51/doc/*.png
+*.dds
+*.tga
+*.bnk_pc
+
+# Build output
+build*/
+_bin/
+_work/
+*.obj
+*.pdb
+*.ilk
+*.log
+
+# Local tooling
+.claude/
+*.before-*
+hs_err_pid*

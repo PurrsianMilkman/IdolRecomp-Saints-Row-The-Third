@@ -1,0 +1,498 @@
+full_name	defining_script	suffix	define_line	called_at_all	called_by_same_script	called_by_other_script	calling_scripts
+bg_saints_cleanup	bg_saints.lua	cleanup	74	0	0	0	
+bg_saints_init	bg_saints.lua	init	57	0	0	0	
+building_purchase_cleanup	building_purchase.lua	cleanup	72	0	0	0	
+building_purchase_init	building_purchase.lua	init	16	0	0	0	
+cat_mouse_results_cleanup	cat_mouse_results.lua	cleanup	62	0	0	0	
+cat_mouse_results_init	cat_mouse_results.lua	init	49	0	0	0	
+cell_background_cleanup	cell_background.lua	cleanup	10	0	0	0	
+cell_background_init	cell_background.lua	init	4	0	0	0	
+cell_camera_init	cell_camera.lua	init	13	0	0	0	
+cell_cheats_cleanup	cell_cheats.lua	cleanup	92	0	0	0	
+cell_cheats_init	cell_cheats.lua	init	37	0	0	0	
+cell_extras_cleanup	cell_extras.lua	cleanup	60	0	0	0	
+cell_extras_init	cell_extras.lua	init	22	0	0	0	
+cell_foreground_cleanup	cell_foreground.lua	cleanup	166	0	0	0	
+cell_foreground_init	cell_foreground.lua	init	113	0	0	0	
+cell_menu_main_cleanup	cell_menu_main.lua	cleanup	171	0	0	0	
+cell_menu_main_init	cell_menu_main.lua	init	122	0	0	0	
+cell_missions_cleanup	cell_missions.lua	cleanup	101	0	0	0	
+cell_missions_init	cell_missions.lua	init	19	0	0	0	
+cell_music_menu_init	cell_music_menu.lua	init	12	0	0	0	
+cell_music_sub_cleanup	cell_music_sub.lua	cleanup	60	0	0	0	
+cell_music_sub_init	cell_music_sub.lua	init	22	0	0	0	
+cell_phone_init	cell_phone.lua	init	83	0	0	0	
+cell_playlist_cleanup	cell_playlist.lua	cleanup	867	0	0	0	
+cell_playlist_init	cell_playlist.lua	init	126	0	0	0	
+cell_rewards_cleanup	cell_rewards.lua	cleanup	140	0	0	0	
+cell_rewards_init	cell_rewards.lua	init	33	0	0	0	
+cell_saintsbook_cleanup	cell_saintsbook.lua	cleanup	192	0	0	0	
+cell_saintsbook_init	cell_saintsbook.lua	init	110	0	0	0	
+cell_stats_cleanup	cell_stats.lua	cleanup	77	0	0	0	
+cell_stats_init	cell_stats.lua	init	17	0	0	0	
+cinema_clip_editor_cleanup	cinema_clip_editor.lua	cleanup	381	0	0	0	
+cinema_clip_editor_init	cinema_clip_editor.lua	init	162	0	0	0	
+cinema_clip_editor_timeline_init	cinema_clip_editor_timeline.lua	init	96	1	0	1	cinema_clip_editor.lua
+cinema_clip_manager_cleanup	cinema_clip_manager.lua	cleanup	95	0	0	0	
+cinema_clip_manager_init	cinema_clip_manager.lua	init	58	0	0	0	
+city_load_cleanup	city_load.lua	cleanup	158	0	0	0	
+city_load_init	city_load.lua	init	24	0	0	0	
+clones_m3_cleanup	clones_m3.lua	cleanup	183	0	0	0	
+clones_m3_init	clones_m3.lua	init	73	0	0	0	
+clones_the_end_cleanup	clones_the_end.lua	cleanup	20	0	0	0	
+clones_the_end_init	clones_the_end.lua	init	5	0	0	0	
+cmp_activity_cleanup	cmp_activity.lua	cleanup	13	0	0	0	
+cmp_activity_init	cmp_activity.lua	init	4	0	0	0	
+cmp_common_cleanup	cmp_common.lua	cleanup	250	0	0	0	
+cmp_common_init	cmp_common.lua	init	131	0	0	0	
+cmp_fail_cleanup	cmp_fail.lua	cleanup	123	0	0	0	
+cmp_fail_init	cmp_fail.lua	init	96	0	0	0	
+cmp_mission_cleanup	cmp_mission.lua	cleanup	13	0	0	0	
+cmp_mission_init	cmp_mission.lua	init	4	0	0	0	
+cmp_rewards_cleanup	cmp_rewards.lua	cleanup	15	0	0	0	
+cmp_rewards_init	cmp_rewards.lua	init	1	0	0	0	
+cmp_stronghold_cleanup	cmp_stronghold.lua	cleanup	20	0	0	0	
+cmp_stronghold_init	cmp_stronghold.lua	init	11	0	0	0	
+countdown_cleanup	countdown.lua	cleanup	26	0	0	0	
+countdown_init	countdown.lua	init	17	0	0	0	
+credits_cleanup	credits.lua	cleanup	341	0	0	0	
+credits_init	credits.lua	init	246	0	0	0	
+cte_binoc_only_cleanup	cte_binoc_only.lua	cleanup	55	0	0	0	
+cte_binoc_only_init	cte_binoc_only.lua	init	6	0	0	0	
+cte_crack_binoc_cleanup	cte_crack_binoc.lua	cleanup	52	0	0	0	
+cte_crack_binoc_init	cte_crack_binoc.lua	init	8	0	0	0	
+cte_hours_later_cleanup	cte_hours_later.lua	cleanup	11	0	0	0	
+cte_hours_later_init	cte_hours_later.lua	init	4	0	0	0	
+cte_nemo_chair_cleanup	cte_nemo_chair.lua	cleanup	145	0	0	0	
+cte_nemo_chair_init	cte_nemo_chair.lua	init	8	0	0	0	
+cte_news_cleanup	cte_news.lua	cleanup	186	0	0	0	
+cte_news_init	cte_news.lua	init	13	0	0	0	
+cte_rocket_scope_cleanup	cte_rocket_scope.lua	cleanup	18	0	0	0	
+cte_rocket_scope_init	cte_rocket_scope.lua	init	5	0	0	0	
+cte_sniper_rifle_cleanup	cte_sniper_rifle.lua	cleanup	16	0	0	0	
+cte_sniper_rifle_init	cte_sniper_rifle.lua	init	3	0	0	0	
+cutscene_effects_cleanup	cutscene_effects.lua	cleanup	73	0	0	0	
+cutscene_effects_init	cutscene_effects.lua	init	23	0	0	0	
+cutscene_test_cleanup	cutscene_test.lua	cleanup	6	0	0	0	
+cutscene_test_init	cutscene_test.lua	init	1	0	0	0	
+cutscene_titles_cleanup	cutscene_titles.lua	cleanup	19	0	0	0	
+cutscene_titles_init	cutscene_titles.lua	init	9	0	0	0	
+cutscene_titles_start	cutscene_titles.lua	start	26	0	0	0	
+dialog_cleanup	dialog.lua	cleanup	126	0	0	0	
+dialog_init	dialog.lua	init	52	0	0	0	
+dlc1_mm_01_cleanup	dlc1_mm_01.lua	cleanup	114	0	0	0	
+dlc1_mm_01_run	dlc1_mm_01.lua	run	101	0	0	0	
+dlc1_mm_01_start	dlc1_mm_01.lua	start	71	0	0	0	
+dlc1_mm_01_success	dlc1_mm_01.lua	success	121	0	0	0	
+dlc1_mm_02_cleanup	dlc1_mm_02.lua	cleanup	115	0	0	0	
+dlc1_mm_02_run	dlc1_mm_02.lua	run	102	0	0	0	
+dlc1_mm_02_start	dlc1_mm_02.lua	start	71	0	0	0	
+dlc1_mm_02_success	dlc1_mm_02.lua	success	122	0	0	0	
+dlc1_mm_03_cleanup	dlc1_mm_03.lua	cleanup	115	0	0	0	
+dlc1_mm_03_run	dlc1_mm_03.lua	run	102	0	0	0	
+dlc1_mm_03_start	dlc1_mm_03.lua	start	71	0	0	0	
+dlc1_mm_03_success	dlc1_mm_03.lua	success	122	0	0	0	
+dlc1_mm_04_cleanup	dlc1_mm_04.lua	cleanup	115	0	0	0	
+dlc1_mm_04_run	dlc1_mm_04.lua	run	102	0	0	0	
+dlc1_mm_04_start	dlc1_mm_04.lua	start	71	0	0	0	
+dlc1_mm_04_success	dlc1_mm_04.lua	success	122	0	0	0	
+dlc1_mm_05_cleanup	dlc1_mm_05.lua	cleanup	115	0	0	0	
+dlc1_mm_05_run	dlc1_mm_05.lua	run	102	0	0	0	
+dlc1_mm_05_start	dlc1_mm_05.lua	start	71	0	0	0	
+dlc1_mm_05_success	dlc1_mm_05.lua	success	122	0	0	0	
+dlc1_mm_06_cleanup	dlc1_mm_06.lua	cleanup	115	0	0	0	
+dlc1_mm_06_run	dlc1_mm_06.lua	run	102	0	0	0	
+dlc1_mm_06_start	dlc1_mm_06.lua	start	71	0	0	0	
+dlc1_mm_06_success	dlc1_mm_06.lua	success	122	0	0	0	
+dlc2_m01_cleanup	dlc2_m01.lua	cleanup	1141	0	0	0	
+dlc2_m01_run	dlc2_m01.lua	run	1469	1	1	0	dlc2_m01.lua
+dlc2_m01_start	dlc2_m01.lua	start	1103	0	0	0	
+dlc2_m02_cleanup	dlc2_m02.lua	cleanup	1130	0	0	0	
+dlc2_m02_run	dlc2_m02.lua	run	957	1	1	0	dlc2_m02.lua
+dlc2_m02_start	dlc2_m02.lua	start	921	0	0	0	
+dlc2_m02_success	dlc2_m02.lua	success	1225	0	0	0	
+dlc2_m03_cleanup	dlc2_m03.lua	cleanup	1266	0	0	0	
+dlc2_m03_run	dlc2_m03.lua	run	1164	1	1	0	dlc2_m03.lua
+dlc2_m03_start	dlc2_m03.lua	start	1126	0	0	0	
+dlc2_m03_success	dlc2_m03.lua	success	1356	0	0	0	
+dlc3_m01_cleanup	dlc3_m01.lua	cleanup	1293	0	0	0	
+dlc3_m01_run	dlc3_m01.lua	run	1243	1	1	0	dlc3_m01.lua
+dlc3_m01_start	dlc3_m01.lua	start	1210	0	0	0	
+dlc3_m01_success	dlc3_m01.lua	success	1367	0	0	0	
+dlc3_m02_cleanup	dlc3_m02.lua	cleanup	1091	0	0	0	
+dlc3_m02_run	dlc3_m02.lua	run	973	1	1	0	dlc3_m02.lua
+dlc3_m02_start	dlc3_m02.lua	start	948	0	0	0	
+dlc3_m02_success	dlc3_m02.lua	success	1243	0	0	0	
+dlc3_m03_cleanup	dlc3_m03.lua	cleanup	1842	0	0	0	
+dlc3_m03_run	dlc3_m03.lua	run	1782	1	1	0	dlc3_m03.lua
+dlc3_m03_start	dlc3_m03.lua	start	1751	0	0	0	
+dlc3_m03_success	dlc3_m03.lua	success	1947	0	0	0	
+game_lobby_cleanup	game_lobby.lua	cleanup	208	0	0	0	
+game_lobby_init	game_lobby.lua	init	155	0	0	0	
+genki_common_cleanup	genki_common.lua	cleanup	418	1	1	0	genki_common.lua
+genki_common_init	genki_common.lua	init	273	1	1	0	genki_common.lua
+genki_news_cleanup	genki_news.lua	cleanup	84	0	0	0	
+genki_news_init	genki_news.lua	init	16	0	0	0	
+gis_grain_cleanup	gis_grain.lua	cleanup	69	0	0	0	
+gis_grain_init	gis_grain.lua	init	9	0	0	0	
+horde_results_cleanup	horde_results.lua	cleanup	140	0	0	0	
+horde_results_init	horde_results.lua	init	77	0	0	0	
+hud_btnmash_cleanup	hud_btnmash.lua	cleanup	221	0	0	0	
+hud_btnmash_init	hud_btnmash.lua	init	106	0	0	0	
+hud_cleanup	hud.lua	cleanup	571	0	0	0	
+hud_collection_init	hud_collection.lua	init	83	1	0	1	hud.lua
+hud_collection_start	hud_collection.lua	start	184	1	1	0	hud_collection.lua
+hud_diversion_cleanup	hud_diversion.lua	cleanup	490	0	0	0	
+hud_diversion_init	hud_diversion.lua	init	49	0	0	0	
+hud_healthbars_cleanup	hud_healthbars.lua	cleanup	69	0	0	0	
+hud_healthbars_init	hud_healthbars.lua	init	26	1	0	1	hud.lua
+hud_init	hud.lua	init	270	0	0	0	
+hud_mayhem_init	hud_mayhem.lua	init	90	1	0	1	hud.lua
+hud_msg_init	hud_msg.lua	init	187	0	0	0	
+hud_noto_init	hud_noto.lua	init	54	1	0	1	hud.lua
+hud_predator_cleanup	hud_predator.lua	cleanup	150	0	0	0	
+hud_predator_init	hud_predator.lua	init	89	0	0	0	
+hud_qte_init	hud_qte.lua	init	77	0	0	0	
+hud_reticules_init	hud_reticules.lua	init	318	1	0	1	hud.lua
+hud_running_man_cleanup	hud_running_man.lua	cleanup	284	0	0	0	
+hud_running_man_init	hud_running_man.lua	init	185	0	0	0	
+hud_touch_combo_init	hud_touch_combo.lua	init	58	0	0	0	
+hud_whored_cleanup	hud_whored.lua	cleanup	22	0	0	0	
+hud_whored_init	hud_whored.lua	init	3	0	0	0	
+m01_cleanup	m01.lua	cleanup	1148	0	0	0	
+m01_run	m01.lua	run	1058	1	1	0	m01.lua
+m01_start	m01.lua	start	1008	0	0	0	
+m01_success	m01.lua	success	1262	0	0	0	
+m02_cleanup	m02.lua	cleanup	734	0	0	0	
+m02_run	m02.lua	run	1065	1	1	0	m02.lua
+m02_start	m02.lua	start	703	0	0	0	
+m02_success	m02.lua	success	891	0	0	0	
+m03_cleanup	m03.lua	cleanup	1038	0	0	0	
+m03_run	m03.lua	run	972	1	1	0	m03.lua
+m03_start	m03.lua	start	867	0	0	0	
+m03_success	m03.lua	success	1130	0	0	0	
+m04_cleanup	m04.lua	cleanup	399	0	0	0	
+m04_run	m04.lua	run	298	1	1	0	m04.lua
+m04_start	m04.lua	start	266	0	0	0	
+m04_success	m04.lua	success	444	0	0	0	
+m05_cleanup	m05.lua	cleanup	489	0	0	0	
+m05_run	m05.lua	run	439	1	1	0	m05.lua
+m05_start	m05.lua	start	399	0	0	0	
+m05_success	m05.lua	success	609	0	0	0	
+m06_cleanup	m06.lua	cleanup	898	0	0	0	
+m06_run	m06.lua	run	763	1	1	0	m06.lua
+m06_start	m06.lua	start	726	0	0	0	
+m06_success	m06.lua	success	998	0	0	0	
+m07_cleanup	m07.lua	cleanup	853	0	0	0	
+m07_run	m07.lua	run	784	1	1	0	m07.lua
+m07_start	m07.lua	start	744	0	0	0	
+m07_success	m07.lua	success	937	0	0	0	
+m08_cleanup	m08.lua	cleanup	453	0	0	0	
+m08_run	m08.lua	run	409	1	1	0	m08.lua
+m08_start	m08.lua	start	350	0	0	0	
+m08_success	m08.lua	success	571	0	0	0	
+m09_cleanup	m09.lua	cleanup	1936	0	0	0	
+m09_run	m09.lua	run	1855	1	1	0	m09.lua
+m09_start	m09.lua	start	1818	0	0	0	
+m09_success	m09.lua	success	2047	0	0	0	
+m10_cleanup	m10.lua	cleanup	1165	0	0	0	
+m10_run	m10.lua	run	1101	1	1	0	m10.lua
+m10_start	m10.lua	start	1068	0	0	0	
+m10_success	m10.lua	success	1275	0	0	0	
+m11_cleanup	m11.lua	cleanup	863	0	0	0	
+m11_run	m11.lua	run	725	1	1	0	m11.lua
+m11_start	m11.lua	start	697	0	0	0	
+m11_success	m11.lua	success	1022	0	0	0	
+m12_cleanup	m12.lua	cleanup	723	0	0	0	
+m12_run	m12.lua	run	531	1	1	0	m12.lua
+m12_start	m12.lua	start	509	0	0	0	
+m12_success	m12.lua	success	800	0	0	0	
+m13_cleanup	m13.lua	cleanup	1407	0	0	0	
+m13_run	m13.lua	run	1248	1	1	0	m13.lua
+m13_start	m13.lua	start	1205	0	0	0	
+m13_success	m13.lua	success	1508	0	0	0	
+m14_cleanup	m14.lua	cleanup	454	0	0	0	
+m14_run	m14.lua	run	385	1	1	0	m14.lua
+m14_start	m14.lua	start	356	0	0	0	
+m14_success	m14.lua	success	531	0	0	0	
+m15_cleanup	m15.lua	cleanup	801	0	0	0	
+m15_run	m15.lua	run	664	1	1	0	m15.lua
+m15_start	m15.lua	start	641	0	0	0	
+m15_success	m15.lua	success	906	0	0	0	
+m16_cleanup	m16.lua	cleanup	1329	0	0	0	
+m16_run	m16.lua	run	1189	1	1	0	m16.lua
+m16_start	m16.lua	start	1151	0	0	0	
+m16_success	m16.lua	success	1443	0	0	0	
+m17_cleanup	m17.lua	cleanup	739	0	0	0	
+m17_run	m17.lua	run	601	1	1	0	m17.lua
+m17_start	m17.lua	start	573	0	0	0	
+m17_success	m17.lua	success	911	0	0	0	
+m18_cleanup	m18.lua	cleanup	1129	0	0	0	
+m18_run	m18.lua	run	1401	1	1	0	m18.lua
+m18_start	m18.lua	start	1091	0	0	0	
+m18_success	m18.lua	success	1249	0	0	0	
+m19_cleanup	m19.lua	cleanup	680	0	0	0	
+m19_run	m19.lua	run	574	1	1	0	m19.lua
+m19_start	m19.lua	start	545	0	0	0	
+m19_success	m19.lua	success	827	0	0	0	
+m20_cleanup	m20.lua	cleanup	498	0	0	0	
+m20_run	m20.lua	run	451	1	1	0	m20.lua
+m20_start	m20.lua	start	429	0	0	0	
+m20_success	m20.lua	success	536	0	0	0	
+m21_cleanup	m21.lua	cleanup	694	0	0	0	
+m21_run	m21.lua	run	1037	1	1	0	m21.lua
+m21_start	m21.lua	start	662	0	0	0	
+m21_success	m21.lua	success	827	0	0	0	
+m22_cleanup	m22.lua	cleanup	1210	0	0	0	
+m22_run	m22.lua	run	1380	1	1	0	m22.lua
+m22_start	m22.lua	start	1183	0	0	0	
+m22_success	m22.lua	success	1331	0	0	0	
+m23_cleanup	m23.lua	cleanup	945	0	0	0	
+m23_run	m23.lua	run	856	1	1	0	m23.lua
+m23_start	m23.lua	start	830	0	0	0	
+m23_success	m23.lua	success	1076	0	0	0	
+m24_cleanup	m24.lua	cleanup	670	0	0	0	
+m24_run	m24.lua	run	537	1	1	0	m24.lua
+m24_start	m24.lua	start	496	0	0	0	
+m24_success	m24.lua	success	751	0	0	0	
+main_menu_campaign_cleanup	main_menu_campaign.lua	cleanup	86	0	0	0	
+main_menu_campaign_init	main_menu_campaign.lua	init	30	0	0	0	
+main_menu_common_cleanup	main_menu_common.lua	cleanup	107	0	0	0	
+main_menu_common_init	main_menu_common.lua	init	40	0	0	0	
+main_menu_coop_cleanup	main_menu_coop.lua	cleanup	172	0	0	0	
+main_menu_coop_init	main_menu_coop.lua	init	60	0	0	0	
+main_menu_coop_top_cleanup	main_menu_coop_top.lua	cleanup	100	0	0	0	
+main_menu_coop_top_init	main_menu_coop_top.lua	init	47	0	0	0	
+main_menu_extras_cleanup	main_menu_extras.lua	cleanup	91	0	0	0	
+main_menu_extras_init	main_menu_extras.lua	init	40	0	0	0	
+main_menu_load_cleanup	main_menu_load.lua	cleanup	11	0	0	0	
+main_menu_load_init	main_menu_load.lua	init	5	0	0	0	
+main_menu_load_start	main_menu_load.lua	start	15	1	0	1	main_menu_top.lua
+main_menu_new_game_cleanup	main_menu_new_game.lua	cleanup	100	0	0	0	
+main_menu_new_game_init	main_menu_new_game.lua	init	39	0	0	0	
+main_menu_top_cleanup	main_menu_top.lua	cleanup	156	0	0	0	
+main_menu_top_init	main_menu_top.lua	init	17	0	0	0	
+mm_m16_5_cleanup	mm_m16_5.lua	cleanup	119	0	0	0	
+mm_m16_5_run	mm_m16_5.lua	run	81	1	1	0	mm_m16_5.lua
+mm_m16_5_start	mm_m16_5.lua	start	60	0	0	0	
+mm_m16_5_success	mm_m16_5.lua	success	127	0	0	0	
+mm_m1_5_cleanup	mm_m1_5.lua	cleanup	119	0	0	0	
+mm_m1_5_run	mm_m1_5.lua	run	97	1	1	0	mm_m1_5.lua
+mm_m1_5_start	mm_m1_5.lua	start	71	0	0	0	
+mm_m1_5_success	mm_m1_5.lua	success	126	0	0	0	
+mm_p_01_cleanup	mm_p_01.lua	cleanup	169	0	0	0	
+mm_p_01_run	mm_p_01.lua	run	105	1	1	0	mm_p_01.lua
+mm_p_01_start	mm_p_01.lua	start	80	0	0	0	
+mm_p_01_success	mm_p_01.lua	success	199	0	0	0	
+mm_p_02_cleanup	mm_p_02.lua	cleanup	150	0	0	0	
+mm_p_02_run	mm_p_02.lua	run	110	0	0	0	
+mm_p_02_start	mm_p_02.lua	start	81	0	0	0	
+mm_p_02_success	mm_p_02.lua	success	158	0	0	0	
+mm_p_03_cleanup	mm_p_03.lua	cleanup	243	0	0	0	
+mm_p_03_run	mm_p_03.lua	run	205	1	1	0	mm_p_03.lua
+mm_p_03_start	mm_p_03.lua	start	177	0	0	0	
+mm_p_03_success	mm_p_03.lua	success	283	0	0	0	
+mm_p_04_cleanup	mm_p_04.lua	cleanup	142	0	0	0	
+mm_p_04_run	mm_p_04.lua	run	107	0	0	0	
+mm_p_04_start	mm_p_04.lua	start	78	0	0	0	
+mm_p_04_success	mm_p_04.lua	success	152	0	0	0	
+mm_p_05_cleanup	mm_p_05.lua	cleanup	142	0	0	0	
+mm_p_05_run	mm_p_05.lua	run	107	1	1	0	mm_p_05.lua
+mm_p_05_start	mm_p_05.lua	start	78	0	0	0	
+mm_p_05_success	mm_p_05.lua	success	150	0	0	0	
+mm_p_06_cleanup	mm_p_06.lua	cleanup	160	0	0	0	
+mm_p_06_run	mm_p_06.lua	run	117	1	1	0	mm_p_06.lua
+mm_p_06_start	mm_p_06.lua	start	85	0	0	0	
+mm_p_06_success	mm_p_06.lua	success	168	0	0	0	
+mm_p_07_cleanup	mm_p_07.lua	cleanup	128	0	0	0	
+mm_p_07_run	mm_p_07.lua	run	108	1	1	0	mm_p_07.lua
+mm_p_07_start	mm_p_07.lua	start	86	0	0	0	
+mm_p_07_success	mm_p_07.lua	success	143	0	0	0	
+msn_cyber_cleanup	msn_cyber.lua	cleanup	81	0	0	0	
+msn_cyber_init	msn_cyber.lua	init	5	0	0	0	
+msn_cyber_start	msn_cyber.lua	start	86	1	1	0	msn_cyber.lua
+msn_killbane_cleanup	msn_killbane.lua	cleanup	83	0	0	0	
+msn_killbane_init	msn_killbane.lua	init	15	0	0	0	
+msn_proto_select_cleanup	msn_proto_select.lua	cleanup	325	0	0	0	
+msn_proto_select_init	msn_proto_select.lua	init	62	0	0	0	
+msn_text_adventure_cleanup	msn_text_adventure.lua	cleanup	270	0	0	0	
+msn_text_adventure_init	msn_text_adventure.lua	init	236	0	0	0	
+object_indicator_init	object_indicator.lua	init	66	0	0	0	
+pause_co_op_menu_cleanup	pause_co_op_menu.lua	cleanup	120	0	0	0	
+pause_co_op_menu_init	pause_co_op_menu.lua	init	72	0	0	0	
+pause_ctrl_scheme_cleanup	pause_ctrl_scheme.lua	cleanup	130	0	0	0	
+pause_ctrl_scheme_init	pause_ctrl_scheme.lua	init	17	0	0	0	
+pause_invite_friends_cleanup	pause_invite_friends.lua	cleanup	191	0	0	0	
+pause_invite_friends_init	pause_invite_friends.lua	init	103	0	0	0	
+pause_map_cleanup	pause_map.lua	cleanup	493	0	0	0	
+pause_map_init	pause_map.lua	init	287	0	0	0	
+pause_menu_common_cleanup	pause_menu_common.lua	cleanup	83	0	0	0	
+pause_menu_common_init	pause_menu_common.lua	init	34	0	0	0	
+pause_menu_top_cleanup	pause_menu_top.lua	cleanup	288	0	0	0	
+pause_menu_top_init	pause_menu_top.lua	init	111	0	0	0	
+pause_options_audio_cleanup	pause_options_audio.lua	cleanup	171	0	0	0	
+pause_options_audio_init	pause_options_audio.lua	init	117	0	0	0	
+pause_options_clip_select_cleanup	pause_options_clip_select.lua	cleanup	104	0	0	0	
+pause_options_clip_select_init	pause_options_clip_select.lua	init	56	0	0	0	
+pause_options_controls_cleanup	pause_options_controls.lua	cleanup	72	1	1	0	pause_options_controls.lua
+pause_options_controls_init	pause_options_controls.lua	init	16	0	0	0	
+pause_options_difficulty_cleanup	pause_options_difficulty.lua	cleanup	197	0	0	0	
+pause_options_difficulty_init	pause_options_difficulty.lua	init	34	0	0	0	
+pause_options_display_cal_cleanup	pause_options_display_cal.lua	cleanup	137	0	0	0	
+pause_options_display_cal_init	pause_options_display_cal.lua	init	46	0	0	0	
+pause_options_display_cleanup	pause_options_display.lua	cleanup	80	0	0	0	
+pause_options_display_init	pause_options_display.lua	init	43	0	0	0	
+pause_options_display_pc_cleanup	pause_options_display_pc.lua	cleanup	536	1	1	0	pause_options_display_pc.lua
+pause_options_display_pc_init	pause_options_display_pc.lua	init	384	0	0	0	
+pause_options_menu_cleanup	pause_options_menu.lua	cleanup	150	0	0	0	
+pause_options_menu_init	pause_options_menu.lua	init	87	0	0	0	
+pause_options_mouse_cleanup	pause_options_mouse.lua	cleanup	67	1	1	0	pause_options_mouse.lua
+pause_options_mouse_init	pause_options_mouse.lua	init	17	0	0	0	
+pause_options_record_mode_cleanup	pause_options_record_mode.lua	cleanup	134	0	0	0	
+pause_options_record_mode_init	pause_options_record_mode.lua	init	40	0	0	0	
+pause_options_remap_cleanup	pause_options_remap.lua	cleanup	205	0	0	0	
+pause_options_remap_init	pause_options_remap.lua	init	121	0	0	0	
+pause_save_game_cleanup	pause_save_game.lua	cleanup	287	0	0	0	
+pause_save_game_init	pause_save_game.lua	init	85	0	0	0	
+player_choice_tutorial_cleanup	player_choice_tutorial.lua	cleanup	77	0	0	0	
+player_choice_tutorial_init	player_choice_tutorial.lua	init	12	0	0	0	
+power_up_cleanup	power_up.lua	cleanup	41	0	0	0	
+power_up_init	power_up.lua	init	5	0	0	0	
+reward_granted_cleanup	reward_granted.lua	cleanup	61	0	0	0	
+reward_granted_init	reward_granted.lua	init	19	0	0	0	
+reward_granted_start	reward_granted.lua	start	92	1	0	1	cmp_common.lua,cmp_rewards.lua
+save_warning_cleanup	save_warning.lua	cleanup	23	0	0	0	
+save_warning_init	save_warning.lua	init	3	0	0	0	
+screen_capture_init	screen_capture.lua	init	22	0	0	0	
+screen_fade_cleanup	screen_fade.lua	cleanup	109	0	0	0	
+screen_fade_init	screen_fade.lua	init	70	0	0	0	
+sh01_cleanup	sh01.lua	cleanup	603	0	0	0	
+sh01_run	sh01.lua	run	375	1	1	0	sh01.lua
+sh01_start	sh01.lua	start	341	0	0	0	
+sh01_success	sh01.lua	success	667	0	0	0	
+sh02_cleanup	sh02.lua	cleanup	1244	0	0	0	
+sh02_run	sh02.lua	run	633	1	1	0	sh02.lua
+sh02_start	sh02.lua	start	602	0	0	0	
+sh02_success	sh02.lua	success	1305	0	0	0	
+sh03_cleanup	sh03.lua	cleanup	610	0	0	0	
+sh03_run	sh03.lua	run	507	1	1	0	sh03.lua
+sh03_start	sh03.lua	start	473	0	0	0	
+sh03_success	sh03.lua	success	736	0	0	0	
+sh04_cleanup	sh04.lua	cleanup	533	0	0	0	
+sh04_run	sh04.lua	run	440	1	1	0	sh04.lua
+sh04_start	sh04.lua	start	404	0	0	0	
+sh04_success	sh04.lua	success	577	0	0	0	
+sr3_city_init	sr3_city.lua	init	17	0	0	0	
+ss_grid_cleanup	ss_grid.lua	cleanup	5	0	0	0	
+ss_grid_init	ss_grid.lua	init	1	0	0	0	
+store_character_cleanup	store_character.lua	cleanup	2650	0	0	0	
+store_character_init	store_character.lua	init	2324	0	0	0	
+store_clothing_cleanup	store_clothing.lua	cleanup	478	0	0	0	
+store_clothing_init	store_clothing.lua	init	107	0	0	0	
+store_common_cleanup	store_common.lua	cleanup	156	0	0	0	
+store_common_init	store_common.lua	init	70	0	0	0	
+store_crib_cash_cleanup	store_crib_cash.lua	cleanup	84	0	0	0	
+store_crib_cash_init	store_crib_cash.lua	init	31	0	0	0	
+store_crib_cleanup	store_crib.lua	cleanup	210	0	0	0	
+store_crib_init	store_crib.lua	init	109	0	0	0	
+store_demo_init	store_demo.lua	init	8	0	0	0	
+store_dlc_cleanup	store_dlc.lua	cleanup	90	0	0	0	
+store_dlc_init	store_dlc.lua	init	40	0	0	0	
+store_gallery_cleanup	store_gallery.lua	cleanup	68	0	0	0	
+store_gallery_init	store_gallery.lua	init	25	0	0	0	
+store_gang_cleanup	store_gang.lua	cleanup	136	0	0	0	
+store_gang_init	store_gang.lua	init	36	0	0	0	
+store_stronghold_cleanup	store_stronghold.lua	cleanup	195	0	0	0	
+store_stronghold_init	store_stronghold.lua	init	65	0	0	0	
+store_tattoo_cleanup	store_tattoo.lua	cleanup	640	0	0	0	
+store_tattoo_init	store_tattoo.lua	init	515	0	0	0	
+store_vehicle_cleanup	store_vehicle.lua	cleanup	2609	0	0	0	
+store_vehicle_init	store_vehicle.lua	init	2411	0	0	0	
+store_weapon_cleanup	store_weapon.lua	cleanup	405	0	0	0	
+store_weapon_init	store_weapon.lua	init	113	0	0	0	
+tutorial_cleanup	tutorial.lua	cleanup	77	0	0	0	
+tutorial_init	tutorial.lua	init	19	0	0	0	
+vdo_bitmap_viewer_init	vdo_bitmap_viewer.lua	init	4	0	0	0	
+vdo_button_highlight_cleanup	vdo_button_highlight.lua	cleanup	15	0	0	0	
+vdo_button_highlight_init	vdo_button_highlight.lua	init	11	0	0	0	
+vdo_button_pc_cleanup	vdo_button_pc.lua	cleanup	15	0	0	0	
+vdo_button_pc_init	vdo_button_pc.lua	init	13	0	0	0	
+vdo_button_remap_cleanup	vdo_button_remap.lua	cleanup	9	0	0	0	
+vdo_button_remap_init	vdo_button_remap.lua	init	7	0	0	0	
+vdo_button_toggle_cleanup	vdo_button_toggle.lua	cleanup	10	0	0	0	
+vdo_button_toggle_init	vdo_button_toggle.lua	init	8	0	0	0	
+vdo_cell_filter_cleanup	vdo_cell_filter.lua	cleanup	24	0	0	0	
+vdo_cell_filter_init	vdo_cell_filter.lua	init	21	0	0	0	
+vdo_cell_menu_button_init	vdo_cell_menu_button.lua	init	1	0	0	0	
+vdo_cell_menu_init	vdo_cell_menu.lua	init	5	0	0	0	
+vdo_cell_missions_button_init	vdo_cell_missions_button.lua	init	1	0	0	0	
+vdo_cell_missions_list_cleanup	vdo_cell_missions_list.lua	cleanup	4	0	0	0	
+vdo_cell_missions_list_init	vdo_cell_missions_list.lua	init	1	0	0	0	
+vdo_city_control_init	vdo_city_control.lua	init	1	0	0	0	
+vdo_dialog_cleanup	vdo_dialog.lua	cleanup	42	0	0	0	
+vdo_dialog_init	vdo_dialog.lua	init	38	0	0	0	
+vdo_export_progress_meter_cleanup	vdo_export_progress_meter.lua	cleanup	9	0	0	0	
+vdo_export_progress_meter_init	vdo_export_progress_meter.lua	init	5	0	0	0	
+vdo_grid_button_check_cleanup	vdo_grid_button_check.lua	cleanup	4	0	0	0	
+vdo_grid_button_check_init	vdo_grid_button_check.lua	init	1	0	0	0	
+vdo_grid_button_cleanup	vdo_grid_button.lua	cleanup	4	0	0	0	
+vdo_grid_button_init	vdo_grid_button.lua	init	1	0	0	0	
+vdo_grid_button_layered_cleanup	vdo_grid_button_layered.lua	cleanup	13	0	0	0	
+vdo_grid_button_layered_init	vdo_grid_button_layered.lua	init	10	0	0	0	
+vdo_grid_list_cleanup	vdo_grid_list.lua	cleanup	21	0	0	0	
+vdo_grid_list_init	vdo_grid_list.lua	init	18	0	0	0	
+vdo_gsi_cleanup	vdo_gsi.lua	cleanup	12	0	0	0	
+vdo_gsi_combo_cleanup	vdo_gsi_combo.lua	cleanup	12	0	0	0	
+vdo_gsi_combo_init	vdo_gsi_combo.lua	init	8	0	0	0	
+vdo_gsi_info_cleanup	vdo_gsi_info.lua	cleanup	16	0	0	0	
+vdo_gsi_info_init	vdo_gsi_info.lua	init	12	0	0	0	
+vdo_gsi_init	vdo_gsi.lua	init	8	0	0	0	
+vdo_gsi_meter_cleanup	vdo_gsi_meter.lua	cleanup	12	0	0	0	
+vdo_gsi_meter_init	vdo_gsi_meter.lua	init	8	0	0	0	
+vdo_gsi_timer_cleanup	vdo_gsi_timer.lua	cleanup	23	0	0	0	
+vdo_gsi_timer_init	vdo_gsi_timer.lua	init	19	0	0	0	
+vdo_gsi_xy_init	vdo_gsi_xy.lua	init	8	0	0	0	
+vdo_hint_bar_cleanup	vdo_hint_bar.lua	cleanup	19	0	0	0	
+vdo_hint_bar_init	vdo_hint_bar.lua	init	12	0	0	0	
+vdo_hint_button_cleanup	vdo_hint_button.lua	cleanup	8	0	0	0	
+vdo_hint_button_init	vdo_hint_button.lua	init	5	0	0	0	
+vdo_item_stats_cleanup	vdo_item_stats.lua	cleanup	4	0	0	0	
+vdo_item_stats_init	vdo_item_stats.lua	init	1	0	0	0	
+vdo_mega_list_cleanup	vdo_mega_list.lua	cleanup	9	0	0	0	
+vdo_mega_list_init	vdo_mega_list.lua	init	6	0	0	0	
+vdo_newsticker_cleanup	vdo_newsticker.lua	cleanup	20	0	0	0	
+vdo_newsticker_init	vdo_newsticker.lua	init	17	0	0	0	
+vdo_pause_button_highlight_cleanup	vdo_pause_button_highlight.lua	cleanup	13	0	0	0	
+vdo_pause_button_highlight_init	vdo_pause_button_highlight.lua	init	8	0	0	0	
+vdo_pause_button_toggle_cleanup	vdo_pause_button_toggle.lua	cleanup	9	0	0	0	
+vdo_pause_button_toggle_init	vdo_pause_button_toggle.lua	init	7	0	0	0	
+vdo_pause_mega_list_cleanup	vdo_pause_mega_list.lua	cleanup	15	0	0	0	
+vdo_pause_mega_list_init	vdo_pause_mega_list.lua	init	10	0	0	0	
+vdo_respect_meter_init	vdo_respect_meter.lua	init	1	0	0	0	
+vdo_row_cleanup	vdo_row.lua	cleanup	4	0	0	0	
+vdo_row_init	vdo_row.lua	init	1	0	0	0	
+vdo_scrollbar_cleanup	vdo_scrollbar.lua	cleanup	9	0	0	0	
+vdo_scrollbar_init	vdo_scrollbar.lua	init	6	0	0	0	
+vdo_scrollbox_cleanup	vdo_scrollbox.lua	cleanup	18	0	0	0	
+vdo_scrollbox_init	vdo_scrollbox.lua	init	14	0	0	0	
+vdo_scrolling_text_cleanup	vdo_scrolling_text.lua	cleanup	4	0	0	0	
+vdo_scrolling_text_init	vdo_scrolling_text.lua	init	1	0	0	0	
+vdo_slider_cleanup	vdo_slider.lua	cleanup	4	0	0	0	
+vdo_slider_init	vdo_slider.lua	init	1	0	0	0	
+vdo_spinner_cleanup	vdo_spinner.lua	cleanup	13	0	0	0	
+vdo_spinner_init	vdo_spinner.lua	init	10	0	0	0	
+vdo_store_header_init	vdo_store_header.lua	init	3	0	0	0	
+vdo_store_popup_init	vdo_store_popup.lua	init	2	0	0	0	
+vdo_susan_init	vdo_susan.lua	init	32	0	0	0	
+vdo_toggle_cleanup	vdo_toggle.lua	cleanup	4	0	0	0	
+vdo_toggle_color_cleanup	vdo_toggle_color.lua	cleanup	10	0	0	0	
+vdo_toggle_color_init	vdo_toggle_color.lua	init	8	0	0	0	
+vdo_toggle_init	vdo_toggle.lua	init	1	0	0	0	
+vdo_weapon_radial_init	vdo_weapon_radial.lua	init	20	0	0	0	
+vdo_weapon_radial_slot_init	vdo_weapon_radial_slot.lua	init	35	0	0	0	
+vint_bugs_cleanup	vint_bugs.lua	cleanup	68	0	0	0	
+vint_bugs_init	vint_bugs.lua	init	17	0	0	0	
+watermark_cleanup	watermark.lua	cleanup	26	0	0	0	
+watermark_init	watermark.lua	init	1	0	0	0	
+whored_countdown_cleanup	whored_countdown.lua	cleanup	134	0	0	0	
+whored_countdown_init	whored_countdown.lua	init	6	0	0	0	

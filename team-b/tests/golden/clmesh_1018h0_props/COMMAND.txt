@@ -1,0 +1,97 @@
+clmesh_1018h0_props - individually-readable renders for 1018h0.str2_pc's
+==========================================================================
+smaller real `.clmesh_pc` props (Part 2 of the redispatched
+`aecbcba5573eda88c` task brief, 2026-09-30)
+
+NOT a golden-regression scene (no baseline_*/checkXScene() exists for this
+directory - these PNGs are real, viewable OUTPUT, not a frozen byte-exact
+baseline). Produced by the new `clmesh-batch` command
+(runClmeshBatch(), tools/sr3_viewer.cpp).
+
+Why this exists: HANDOFF.md Sec9.136's own `clmesh-tile` composite render
+(runClmeshTile()) places every real prop in 1018h0.str2_pc on ONE shared-
+scale grid with ONE shared camera distance - real geometry, real textures,
+but a real, honestly-documented consequence of this population's own 200x+
+real size range (0.24 units for a small streetlight up to 74 units for
+airport_controltower.clmesh_pc) is that most of the smaller real props read
+as only a few pixels tall next to the tower-scale prop's own footprint.
+`clmesh-batch` gives each real prop its OWN individual capture, camera
+auto-fit to THAT prop's own real local bounding box (the exact same
+`buildOrbitViewProjection()` math the single-object `clmesh` command/
+clmesh_lite_fixh's own golden scene already use, which computes
+`distance = extent * distanceScale` from whatever bounds it is given) - so
+a small streetlight and a large sign gantry both render as clear,
+individually-readable images, at the SAME yaw/pitch/distanceScale framing
+convention (34.4deg/20.1deg/1.80), not a per-tier bucketing scheme.
+
+Real command used (cwd = tests/golden/):
+
+    <sr3_viewer.exe> clmesh-batch ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" ^
+        1018h0.str2_pc ^
+        "D:\Project Crreish\TEAM B\tests\golden\clmesh_1018h0_props" ^
+        --exclude airport_controltower
+
+<sr3_viewer.exe> = the same tests/golden/_bin/sr3_viewer.exe build.bat
+produces, OR tests/golden's own isolated CMake build (build_clmesh2/Release/
+sr3_viewer.exe) - both are the exact same tools/sr3_viewer.cpp source,
+either works identically for this command.
+
+Why --exclude airport_controltower: that prop already has its OWN dedicated
+golden scene (tests/golden/clmesh_airport_controltower/) - excluded here so
+this directory is specifically "the OTHER ~20 real props", per this task's
+own brief, not because it renders badly in clmesh-batch (it would render
+fine here too, auto-fit the same as every other prop).
+
+Real result: 21 real .clmesh_pc entries in 1018h0.str2_pc, 1 excluded
+(airport_controltower), 20 remaining. Of those 20, 20/20 parsed, textured
+and captured successfully - NONE needed to be skipped. (Real, honestly-
+reported, UNCHANGED from HANDOFF.md Sec9.136's own finding:
+terminal_sign_c.clmesh_pc is NOT in this count of 20 - it was already
+excluded from the denominator by Sec9.136's own "1/21 fails" framing,
+consistent with this run: terminal_sign_c is entry [18] of the real 21-entry
+container and SKIPPED here too, same real cause, same error text -
+"renderGroup[0] Mesh sub-block parse failed: segment does not open with the
+block's check value: found 0x0, expected 0x1a34fc47" - a real, narrow,
+already-reported non-blocking gap, not re-chased or newly found this pass).
+
+Naming: <NN>_<stem>.png, NN = zero-padded real container-entry order (00-19,
+NOT counting the excluded airport_controltower or the skipped
+terminal_sign_c), stem = the real .clmesh_pc entry's own name with the
+extension stripped. The 20 files, in order:
+  00_lite_fixh                 09_antenna_b                  17_fnc_chn_rstbrb_h
+  01_lamppoststrbse_a          10_barriers02                 18_hwy_destsign_a
+  02_lamppoststr_b             11_barriers01                 19_hwy_destsign_base_a
+  03_sheer_cliff_seambuster    12_const_bar_c
+  04_drain_wall_lrg_01         13_const_bar_b
+  05_road_gasstntnkvalve_02    14_rf4_rock_wall_cnve_lg
+  06_solar_panels_a01          15_rf4_rock_blder_sm
+  07_safety_tower_light_r      16_rf4_rock_blder
+  08_safety_tower_light_y
+
+Viewed directly (not just inferred from stdout) before reporting done:
+00_lite_fixh (the same streetlight already frozen as its own golden scene,
+confirms clmesh-batch's per-prop auto-fit matches runClmesh()'s own
+framing), 07_safety_tower_light_r (a real red safety-light fixture, clearly
+textured), 09_antenna_b (a tall, thin real antenna mast - correctly framed
+full-height, not cropped, honestly thin because the real object itself is
+thin, not a rendering bug), 16_rf4_rock_blder (a real rock-boulder
+formation with real weathered-stone texture detail), 17_fnc_chn_rstbrb_h (a
+real chain-link fence gate with a real "high voltage" warning decal and
+barbed-wire trim, 3 channel targets), 18_hwy_destsign_a (a real highway
+destination-sign gantry structure).
+
+Determinism: spot-checked directly this session - reran the exact same
+command into a second, different output directory and MD5-compared 3 of
+the 20 output files (00_lite_fixh, 16_rf4_rock_blder,
+19_hwy_destsign_base_a) - byte-identical all three (MD5s
+a44e42f41ba0e1b330caeb5e66a9eefc / 61f0d357bc7e092ca3b0c7189dcd70b1 /
+273208f284e0ac0a4e8335c8209840b5), and the two stdout captures differed
+ONLY in the caller-chosen --out_dir path being echoed back - same
+determinism pattern every frozen golden scene in this directory already
+established, same underlying mechanism (fixed real-hardware D3D11 device,
+fixed per-prop orbit camera, no RNG/wall-clock input).
+
+Re-run yourself with the command above (any sr3_viewer.exe build that
+includes runClmeshBatch() - this project's own isolated build_clmesh2/ or
+tests/golden/_bin/ both qualify).

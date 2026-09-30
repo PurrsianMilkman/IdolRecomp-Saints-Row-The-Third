@@ -1,0 +1,114 @@
+Golden scene: clmesh_airport_controltower, real `.clmesh_pc`/`.glmesh_pc` BUILDING render
+============================================================================================
+
+NEW SCENE, not a re-freeze - no old baseline existed for this command before this
+task. Frozen 2026-09-30, redispatch of agent `aecbcba5573eda88c` (own task brief:
+freeze `airport_controltower` as a 2nd building golden scene if genuinely cheap +
+individually-readable renders for `1018h0`'s ~20 smaller props), follow-on to
+HANDOFF.md Sec9.133/Sec9.136 which already rendered and independently viewed this
+exact prop but never froze it as its own golden scene.
+
+Real command (run with cwd = tests/golden/ so the "captured:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <sr3_viewer.exe> clmesh ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" ^
+        airport_controltower.clmesh_pc ^
+        --rendergroup 0 --frames 1 --capture _work/clmesh_airport_controltower.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by
+tests/golden/build.bat straight from tools/sr3_viewer.cpp (unmodified by this
+freeze) - same binary clmesh_lite_fixh already uses, no build.bat change
+needed for this scene (build.bat already compiles src/level_mesh.cpp/
+sr3clmesh and links it into sr3_viewer.exe from the Sec9.136 freeze).
+
+Real data: sr3_city_0.vpp_pc (the whole shipped open-world streaming archive,
+1.5 GB), airport_controltower.clmesh_pc/.glmesh_pc (11,032 / 270,472 real
+bytes), nested inside 1018h0.str2_pc within sr3_city_0.vpp_pc (the SAME real
+"Zone (High LOD)" fine-cell container lite_fixh already comes from,
+spec-world-streaming.md Sec10.1/Sec10.5) - sr3_viewer's own findEntry()
+already recurses into nested .str2_pc containers, so only the top-level
+archive path is given here.
+
+Why airport_controltower: the largest real `.clmesh_pc` reachable from
+1018h0.str2_pc (19 materials, vs lite_fixh's 2) - a genuinely different real
+population point from the existing clmesh_lite_fixh scene (a small
+streetlight prop), exercising the multi-channel-target / many-distinct-
+texture-name path (18/19 materials resolve a real texture in this archive;
+material[18] has no real texture binding at all on this prop - reported as a
+flat-colour material, not silently skipped, same "never a neighbour's
+texture" rule every clmesh render follows) rather than a small single/dual-
+texture prop. Real geometry: cylindrical tower shaft, octagonal observation
+cabin with antenna spikes, adjoining curved-roof terminal building with real
+stairs and windows (visually confirmed directly, see "Frozen here" below).
+
+Why --rendergroup 0: same reasoning as clmesh_lite_fixh's own COMMAND.txt -
+LevelMesh's own two independent render groups (renderGroupCount=2 for this
+prop too), group 0 is the higher-index-count, more geometrically complete
+one (16,581 indices / 5,527 non-degenerate triangles, 16 distinct
+materialId(s) used here, vs not inspected for group 1 on this prop - kept
+consistent with the existing scene's own convention rather than re-litigated
+per prop).
+
+Why NOT --distance 2.2/--frames 3/--capture-frame 2 (a paraphrased command
+from this task's own brief): tested directly - the command above, using the
+SAME defaults (--frames 1 --capture-frame 0, distanceScale 1.8 default, no
+--distance override) clmesh_lite_fixh's own baseline already established,
+already frames the whole tower+terminal readably in one 1100x700 capture
+(bounds 74.489 x 69.656 x 49.722, see baseline_stdout.txt's own "bounds"
+line) - no non-determinism, no need for extra warm-up frames (this render
+group's own camera is a fixed orbit with no animation, so frame 0 and frame
+2 are pixel-identical by construction, same as every other scene in this
+directory - verified directly, not assumed: see "Determinism" below). Adding
+--distance 2.2/--frames 3 would only add unnecessary render time (this
+prop's own draw is already the slowest scene in this directory) for no
+framing benefit, so the simpler, already-established default command was
+used instead - a "whatever exact args give a clean, stable, reproducible
+capture" call, per this task's own explicit allowance.
+
+Timing: ~16.3-16.5s per render on the machine that froze this baseline
+(NVIDIA GeForce RTX 3090, see baseline_stdout.txt's own "device" line) -
+close to, and faster than, the ~26s/25.7s figures HANDOFF.md Sec9.136 itself
+already measured and independently reverified (different machine load at
+capture time, same real command/mechanism - TextureSearchCache, Sec9.136's
+own addition, is what keeps this prop's own 19-material texture search fast
+at all; without it this render did not finish within several minutes, per
+that section's own report). Still comfortably cheap for a golden-regression
+suite (single-digit-percent of a typical CI budget, not the whole suite by
+itself).
+
+Determinism: confirmed directly this session by running this exact command
+THREE times in a row into three different --capture paths and MD5-comparing
+the resulting PNGs - byte-identical all three times (MD5
+d109b7e13e710aadea1eea0facaf86e0), and the stdout captures differed ONLY in
+the "captured : <path>" line echoing back the --capture argument itself -
+the same caller-chosen-path convention every other baseline in this
+directory documents. No RNG, no wall-clock input: a fixed real-hardware D3D11
+device (reported in stdout rather than hidden), a fixed camera, the same
+real archive bytes every time - same reasoning clmesh_lite_fixh's own
+COMMAND.txt already gives, reconfirmed independently for this prop rather
+than assumed to carry over.
+
+Frozen here:
+  baseline_capture.png - the real captured frame (1100x700, matching this
+                         command's --size default): a real, correctly-
+                         textured airport control tower - cylindrical shaft,
+                         octagonal observation cabin with antenna spikes,
+                         adjoining curved-roof terminal building with real
+                         stairs and windows, viewed directly by me (not just
+                         inferred from stdout) before freezing.
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (real material record dump for all 19
+                         materials incl. hash0/texCount and every real
+                         texture-binding entry, both render-group walks,
+                         render group 0's own per-range materialId/
+                         submeshIndex/vertex span, real per-material texture
+                         resolution for 18/19 materials incl. which real
+                         .cpeg_pc/.cvbm_pc pack each came from, material[18]'s
+                         honest "no real texture binding at all" line,
+                         object-space bounds, device, topology, camera
+                         framing, capture path, frame count).
+
+Re-run and check with: tools/golden_scene_check.cpp's
+checkClmeshAirportControlTowerScene().

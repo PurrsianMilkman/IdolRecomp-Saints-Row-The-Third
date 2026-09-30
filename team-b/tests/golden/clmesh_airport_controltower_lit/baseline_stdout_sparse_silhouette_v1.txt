@@ -1,0 +1,132 @@
+=== Lit-clmesh prototype: real G-buffer prepass -> real directional light -> real material pass ===
+(forked from prototype_lit_car.cpp - see this file's own top comment)
+
+[shaderHash join] real .fxo_pc distinct stems: 310
+
+[archive] sr3_city_0.vpp_pc :: 1018h0.str2_pc opened, 44 entries
+
+=== [census] real hash0 -> real .fxo_pc-stem resolution across every .clmesh_pc in 1018h0.str2_pc ===
+  lite_fixh.clmesh_pc              materials=3 resolved=3
+  lamppoststrbse_a.clmesh_pc       materials=2 resolved=2
+  lamppoststr_b.clmesh_pc          materials=4 resolved=4
+  sheer_cliff_seambuster.clmesh_pc materials=5 resolved=5
+  drain_wall_lrg_01.clmesh_pc      materials=3 resolved=3
+  road_gasstntnkvalve_02.clmesh_pc materials=5 resolved=5
+  solar_panels_a01.clmesh_pc       materials=2 resolved=2
+  safety_tower_light_r.clmesh_pc   materials=3 resolved=3
+  safety_tower_light_y.clmesh_pc   materials=3 resolved=3
+  antenna_b.clmesh_pc              materials=2 resolved=2
+  barriers02.clmesh_pc             materials=2 resolved=2
+  barriers01.clmesh_pc             materials=2 resolved=2
+  const_bar_c.clmesh_pc            materials=2 resolved=2
+  const_bar_b.clmesh_pc            materials=4 resolved=4
+  airport_controltower.clmesh_pc   materials=19 resolved=19
+  rf4_rock_wall_cnve_lg.clmesh_pc  materials=2 resolved=2
+  rf4_rock_blder_sm.clmesh_pc      materials=2 resolved=2
+  rf4_rock_blder.clmesh_pc         materials=2 resolved=2
+  fnc_chn_rstbrb_h.clmesh_pc       materials=5 resolved=5
+  terminal_sign_c.clmesh_pc        materials=3 resolved=3
+  hwy_destsign_a.clmesh_pc         materials=4 resolved=4
+  hwy_destsign_base_a.clmesh_pc    materials=2 resolved=2
+[census] TOTAL: 81/81 real materials resolved hash0 -> a real .fxo_pc stem (100.00%)
+[census] MISS LIST (0): explicit, not silently placeholdered:
+
+[env table] REAL row wired: weather_time_of_day.xtbl Weather_Time_Segment Name=noon (Start_Time=1430 HHMM) x Weather_Stages/Stage Stage_Name=Overcast -
+  TOD_Light_Color=(1.0000,0.8632,0.6376) Intensity=13.0000, Ambient_Color=(0.6038,0.8469,1.0000) Intensity=1.2000,
+  Back_Ambient_Color=(0.2623,0.6724,1.0000) Intensity=2.5000, Exposure_Min=0.1200 (all real, read via sr3tables_environment from misc_tables.vpp_pc)
+
+[clmesh] airport_controltower.clmesh_pc (11032 bytes) + .glmesh_pc (270472 bytes)
+[clmesh] materialCount=19 renderGroupCount=2 landsOnEof=1
+[materials] 19 material record(s):
+  material[0]: hash0=0x454731FD stem=ir_window_reflectmask drawable=no(resolved,no real _v/_mv file) texCount=5 -> [slot=0 hash=0x2808EB90 'airport_terminal_glass_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_glass.tga'] [slot=2 hash=0xF73A1423 'airport_terminal_glass_s.tga'] [slot=3 hash=0x46AA914E 'airport_terminal_glass_tod.tga'] [slot=4 hash=0xDBEA623E 'windows_skyscraper_noise.tga']
+  material[1]: hash0=0x5B024F97 stem=ir_bbsimpledecal1 drawable=no(resolved,no real _v/_mv file) texCount=4 -> [slot=0 hash=0x2808EB90 'roof_gravel01_n.tga'] [slot=1 hash=0x69B48F91 'roof_gravel01_d.tga'] [slot=2 hash=0xE848C9CA 'trim_artdeco01_s.tga'] [slot=3 hash=0x433202E1 'roof_decal_grime01_d.tga']
+  material[2]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+  material[3]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+  material[4]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'door_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'door_skyscraper_d.tga']
+  material[5]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'warehouse01_a_foundation_n.tga'] [slot=1 hash=0x69B48F91 'warehouse01_a_foundation_d.tga']
+  material[6]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+  material[7]: hash0=0x4B8E4452 stem=ir_bbsimple1 drawable=yes texCount=3 -> [slot=0 hash=0x2808EB90 'metal_suports_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'metal_suports_skyscraper_d.tga'] [slot=2 hash=0xE848C9CA 'metal_suports_skyscraper_s.tga']
+  material[8]: hash0=0x2CA87F92 stem=ir_sr3glass1 drawable=no(resolved,no real _v/_mv file) texCount=3 -> [slot=0 hash=0x69B48F91 'glass_tiled.tga'] [slot=1 hash=0xFFB521EF 'windowgrime_dcl02.tga'] [slot=2 hash=0xC14A2F45 'refgenericinside.tga']
+  material[9]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+  material[10]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+  material[11]: hash0=0x4B8E4452 stem=ir_bbsimple1 drawable=yes texCount=3 -> [slot=0 hash=0x2808EB90 'ap_hangar02_a_door02_n.tga'] [slot=1 hash=0x69B48F91 'ap_hangar02_a_door02_d.tga'] [slot=2 hash=0xE848C9CA 'ap_hangar02_a_door02_s.tga']
+  material[12]: hash0=0xB4803FCF stem=ir_at_bbsimple1 drawable=no(resolved,no real _v/_mv file) texCount=3 -> [slot=0 hash=0x69B48F91 'chandeliera_d.tga'] [slot=1 hash=0x2808EB90 'chandeliera_n.tga'] [slot=2 hash=0xE848C9CA 'chandeliera_s.tga']
+  material[13]: hash0=0xA9E6EB9E stem=ir_sr3diffspec_nospecmap drawable=no(resolved,no real _v/_mv file) texCount=1 -> [slot=0 hash=0x69B48F91 'airventindustriala_d.tga']
+  material[14]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+  material[15]: hash0=0xF510FE89 stem=ir_srtwotonediffuse_no_spec drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile_d.tga']
+  material[16]: hash0=0xD28715E8 stem=ir_bbsimple2 drawable=no(resolved,no real _v/_mv file) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_decal_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_decal_d.tga']
+  material[17]: hash0=0x5A8E5EE3 stem=ir_at_bbsimple3 drawable=no(resolved,no real _v/_mv file) texCount=1 -> [slot=0 hash=0x69B48F91 'roof_decal_patch_d.tga']
+  material[18]: hash0=0x786DE88A stem=ir_mesh_depth_only drawable=yes texCount=0 -> (no real texture binding on this material)
+
+[renderGroup 0] channels=4 indexCount=13138 ranges=16
+
+[resolution] 2/16 ranges resolved to a drawable real VS file, 1 distinct real VS files
+
+[device] kind=Hardware
+
+[shader 'ir_bbsimple1_v.fxo_pc'] stem='ir_bbsimple1' usedByRanges=2
+  role4 (G-buffer write, real pass index 0): OK
+    real PS outputs written: 3 (SV_Target0..2)  real Normal_MapSampler register: s0
+  role6 (forward lit, real pass index 2): OK
+    real IR_LBufferSampler register: s12  Diffuse_MapSampler: s1  Specular_MapSampler: s2
+
+[final] 2/16 real draw ranges drawable through the new pipeline
+[final] drawable materialId(s): 7 11
+
+[texture] material[7] normal:   metal_suports_skyscraper_n.tga from metal_suports_skyscraper_n.cvbm_pc (512x256)
+[texture] material[7] diffuse:  metal_suports_skyscraper_d.tga from sr3_city_awld.cpeg_pc (512x256)
+[texture] material[7] specular: metal_suports_skyscraper_s.tga from metal_suports_skyscraper_s.cvbm_pc (512x256)
+[texture] material[11] normal:   ap_hangar02_a_door02_n.tga from sr3_city_awld.cpeg_pc (256x512)
+[texture] material[11] diffuse:  ap_hangar02_a_door02_d.tga from sr3_city_awld.cpeg_pc (256x256)
+[texture] material[11] specular: ap_hangar02_a_door02_s.tga from sr3_city_awld.cpeg_pc (512x512)
+
+[channel 0] layoutCode=2 vertices=8027 hasNormal=1 hasTangent=1
+
+[bounds] min(-37.033 -2.052 -24.681) max(37.456 67.604 25.041)
+[camera] CHOSEN fovY=45deg near=3.724 far=536.319 (not real game camera data). projection invertible=1
+=== Constant-buffer fill decisions (real vs. placeholder, by real CTAB name) ===
+  ir_bbsimple1_v.fxo_pc role4 VS Bone_weights              : PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a static prop is already in one real object space)
+  ir_bbsimple1_v.fxo_pc role4 VS IR_World2View             : REAL: this tool's own view matrix
+  ir_bbsimple1_v.fxo_pc role4 VS Normal_Map_TilingU        : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS Normal_Map_TilingV        : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS Object_instance_params_2  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role4 VS objTM                     : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_bbsimple1_v.fxo_pc role4 VS projTM                    : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_bbsimple1_v.fxo_pc role4 PS Normal_Map_Height         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role4 PS Specular_Power            : REAL engine default (spec-render-pipeline.md Sec20.12.11): 0.1 floor
+  ir_bbsimple1_v.fxo_pc role6 VS Bone_weights              : PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a static prop is already in one real object space)
+  ir_bbsimple1_v.fxo_pc role6 VS Diffuse_Color             : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Fog_dist                  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Object_instance_params    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS Object_instance_params_2  : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS eyePos                    : PLACEHOLDER: zero (untraced per-instance parameter)
+  ir_bbsimple1_v.fxo_pc role6 VS objTM                     : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
+  ir_bbsimple1_v.fxo_pc role6 VS projTM                    : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
+  ir_bbsimple1_v.fxo_pc role6 PS Fog_color                 : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS IR_Pixel_Steps            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Self_Illumination         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Alpha            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Color            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Specular_Map_Amount       : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Target_dimensions         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Tint_color                : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
+
+[gbuffer] created 3 real off-screen colour targets (Normals/Depth/Lighting, CHOSEN format DXGI_FORMAT_R8G8B8A8_UNORM, 800x600) + 1 real depth-stencil surface + 1 real light-accumulation target.
+[pass A: G-buffer prepass] 2 real DrawIndexed calls into the 3 real off-screen targets + real DSV
+  [gbuffer Normals (oC0)] R:min=0,max=0,mean=0.00  G:min=0,max=0,mean=0.00  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=2.93
+  [gbuffer Lighting-parameter (oC2, encodes real Specular_Power)] R:min=0,max=1,mean=0.01  G:min=0,max=0,mean=0.00  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=2.93
+[light shader] ir_light_directional real pass 0: VS inputs=POSITION0 TEXCOORD0   PS declares IR_GBuffer_NormalsSampler@s13 IR_GBuffer_LightingSampler@s12  real PS outputs=1
+[pass B: directional light] 1 real DrawIndexed(6) fullscreen quad, ir_light_directional pass 0, real IR_GBuffer_NormalsSampler/IR_GBuffer_LightingSampler bound to pass A's own real output -> real light buffer
+  [light-accumulation buffer (real noon/Overcast weather row x real G-buffer)] R:min=21,max=21,mean=21.00  G:min=46,max=46,mean=46.00  B:min=65,max=65,mean=65.00  A:min=91,max=91,mean=91.00
+[pass C: material pass] 2 real DrawIndexed calls (2358 triangles), IR_LBufferSampler bound to pass B's own real light-buffer output, Diffuse_MapSampler/Specular_MapSampler bound to each material's own real uploaded texture, for every range whose shader declares them
+
+=== Real RGBA8 pixel statistics (800x600, 480000 pixels) ===
+  R: min=0 max=13 mean=12.851
+  G: min=0 max=13 mean=12.851
+  B: min=0 max=20 mean=19.770
+  A: min=255 max=255 mean=255.000
+  geometry silhouette (differs from the (13,13,20) clear colour): 5513 pixels (1.15%)
+
+[png] wrote _work/clmesh_airport_controltower_lit.png
+
+=== DONE ===

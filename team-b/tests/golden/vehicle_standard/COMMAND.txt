@@ -1,0 +1,71 @@
+Golden scene: vehicle_standard, real per-draw-range shader render of a
+base-game vehicle
+=========================================================================
+
+Real command (run with cwd = tests/golden/ so the "captured:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <sr3_viewer.exe> vehicle ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\vehicles.vpp_pc" ^
+        car_4dr_standard03_4.ccar_pc ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\shaders.vpp_pc" ^
+        --group 0 --frames 1 --capture _work/vehicle_standard.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by
+tests/golden/build.bat straight from tools/sr3_viewer.cpp (unmodified) - NOT
+build_verify/sr3_viewer.exe, which predates this session's `vehicle` command
+addition to tools/sr3_viewer.cpp and does not recognise the "vehicle"
+subcommand at all ("unknown command: vehicle", confirmed directly). See
+tests/golden/build.bat's own comments for why sr3_viewer.exe is built here
+rather than through build_verify/ or CMakeLists.txt.
+
+Real data: vehicles.vpp_pc (the whole shipped base-game vehicle archive) -
+car_4dr_standard03_4.ccar_pc + car_4dr_standard03_4.gcar_pc +
+car_4dr_standard03_4.cpeg_pc/.gpeg_pc sit DIRECTLY in this archive, no
+.str2_pc nesting (unlike the DLC case in vehicle_genki/COMMAND.txt) - this
+is the base-game-vs-DLC path difference this session already established.
+Note the real shipped name carries the "_4" suffix; the bare
+"car_4dr_standard03" name does not exist in this archive (confirmed
+directly). shaders.vpp_pc is the real shared shader archive from the same
+real cache.
+
+Why --group 0: group 0 is this vehicle's default/primary LOD group and was
+already independently verified this session (before this baseline existed):
+13/13 draw ranges resolve to a real compiled shader, 8 distinct real shaders
+- see baseline_stdout.txt's own "[resolution summary]" and "[final]" lines,
+which reproduce that exact 13/13 and 8 count.
+
+Why --frames 1 --capture-frame 0: the same single-frame capture convention
+`pose`/`mesh` already use elsewhere in this file - the camera is a static,
+CHOSEN orbit (yaw/pitch/distance defaults, no override given here: yaw=0.6
+rad/34.4deg, pitch=0.35 rad/20.1deg, distanceScale=1.8 - see
+baseline_stdout.txt's own "camera :" line), never animated, so frame 0 is
+the only frame that ever needs capturing.
+
+Determinism: confirmed directly this session by running this exact command
+twice in a row into two different --capture paths and MD5-comparing the
+resulting PNGs - byte-identical both times (MD5 50d7b6eb3281825c79c18560
+e5f43470), and the two stdout captures differ ONLY in the "captured : <path>"
+line echoing back the --capture argument itself (the same one caller-chosen-
+path detail brad/COMMAND.txt already documents for its own baseline). No
+RNG, no wall-clock input: a fixed real-hardware D3D11 device (reported in
+stdout rather than hidden), a fixed camera, and the same real archive bytes
+every time.
+
+Frozen here:
+  baseline_capture.png - the real captured frame (device, shaders, real
+                         per-part transforms, real paint-tint PS constants
+                         from this vehicle's own array-B/C table - see the
+                         "[paint]" lines in baseline_stdout.txt).
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (shaderHash join summary, vehicle/mesh
+                         decode, draw-range shader resolution per range,
+                         per-shader compile summary, object-space bounds,
+                         device, real per-material paint-constant overrides,
+                         camera framing, draw-call count, capture path,
+                         frame count) - this project's own real draw-stream
+                         summary, not a format invented for this harness.
+
+Re-run and check with: tools/golden_scene_check.cpp (see that file's own
+header comment for the convention this directory follows).

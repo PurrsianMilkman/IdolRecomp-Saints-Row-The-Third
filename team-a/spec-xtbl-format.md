@@ -1,0 +1,152 @@
+# Saints Row: The Third — `.xtbl` Gameplay Data Table Format Specification
+
+**Prepared by:** SPEC TEAM (cleanroom reverse-engineering process)
+**Phase:** 1, Target #5 (from `spec-output.md` §4)
+**Scope:** The structure and format conventions of `.xtbl` gameplay/design data table files, and how reliably they can currently be extracted from `.vpp_pc`/`.str2_pc` archives given the container format's known limitations.
+**Method:** Black-box extraction and inspection of real `.xtbl` files pulled from `misc_tables.vpp_pc`, `da_tables.vpp_pc`, `cutscene_tables.vpp_pc`, and `sr3_city_missions.vpp_pc`, using a throwaway research script built on the already-confirmed container format (`spec-vpp-container.md`). That script is research tooling only, kept in the same `tools/` area as prior passes' scripts, out of any deliverable. No new disassembly was done this pass — everything below comes from directly reading real extracted content and cross-checking it against well-formed-XML validation, not from decompiling new code.
+**Cleanroom compliance:** No verbatim decompiled code or original executable-internal identifiers appear below (none were needed this pass). One category of literal content — an internal build-time authoring path embedded as *game data* inside a `.xtbl` file — is described functionally rather than quoted verbatim, consistent with this project's general hygiene around internal path strings, even though it originates from data rather than the executable itself.
+
+---
+
+## 1. Important finding first: extraction reliability is worse than previously documented
+
+Before describing the format itself, this needs to be surfaced prominently because it affects both this document's sample set and any tooling already built from the container-format spec.
+
+**`spec-vpp-container.md` §3.2 previously described mode (a) (independent per-entry compressed streams) as reliable for "the large majority" of entries, with a decode-failure anomaly affecting only "a real minority" in one sampled archive.** Pulling a broad, real sample set of `.xtbl` files for this pass showed that characterization understates the problem substantially:
+
+- **Only the *first* entry (index 0) in a mode-(a) container was found to decode to genuinely correct, well-formed content**, across every archive checked this pass (`misc_tables.vpp_pc`, `da_tables.vpp_pc`).
+- **Every other entry either throws a decompression error outright, or — more concerning — decompresses "successfully" (produces exactly the declared uncompressed byte count, no exception) while being silently corrupted**: checked against real files, these "successful" non-first entries were **not well-formed XML** (truncated mid-tag, missing closing elements), despite matching their declared size exactly. A naive extractor that only checks "did decompression throw an error" or "does the output length match" — which is what the container-format spec's own verification tooling did — **will not detect this corruption** and will report success.
+- The one exception: **mode (b) (shared/combined stream) containers decode correctly for *all* their entries**, including in a fresh test this pass (`Running Man.str2_pc`'s `running_man_globals.xtbl`, entry 1 of 2, decoded byte-for-byte to well-formed XML). This makes sense post hoc: mode (b) always decodes the whole payload as one continuous stream from its true start, which is the same condition that makes a mode-(a) container's entry 0 work — there's no missing prior state to reconstruct.
+- **What was ruled out this pass, to save a future pass the time:** the corruption is not explained by simple padding/truncation (tested with generous read windows and exact-length reads — both fail identically), and it is not fixed by concatenating each entry's own declared compressed-byte range in sequence and decoding that virtual stream continuously (tested directly — fails at the exact same byte position as decoding entry 1 in isolation). **This strongly suggests entries beyond the first need some additional decoder state — very plausibly a preset compression dictionary — that isn't recoverable from the entries' own declared fields alone**, and that reconstructing it will need to trace the actual in-game decompression call for a non-first entry specifically (as opposed to the container-open and entry-lookup code paths already traced for the container-format spec). **[HIGH CONFIDENCE that a real, currently-unidentified mechanism is missing — not yet identified what it is.]**
+
+**Practical consequence for this document:** every sample described below was individually verified to be well-formed XML after extraction (not just checked for the right byte count) — either because it was a container's entry 0, or because it came from a confirmed mode-(b) container. This is a smaller, more expensive-to-obtain sample set than a first attempt suggested, but everything in it is genuinely trustworthy.
+
+---
+
+## 2. File-Level Conventions
+
+Confirmed across every sample (4 files, 3 different source archives, sizes from ~6 KB to ~1.4 MB):
+
+| Convention | Observation | Confidence |
+|---|---|---|
+| **Encoding** | Plain ASCII/UTF-8-compatible text (no BOM, no multi-byte sequences observed in the samples checked). | **CONFIRMED — empirical**, small sample. |
+| **No XML declaration.** | None of the samples begin with `<?xml version="1.0"?>` or similar — the file starts directly with the root element. | **CONFIRMED — empirical.** |
+| **Line endings: CRLF** (`\r\n`), not bare `\n`. | Consistent across every sample. | **CONFIRMED — empirical.** |
+| **Indentation: tabs are the common convention, but a second, genuinely real 2-space convention also exists** — one additional tab (or, in the second convention, two spaces) per nesting level; not a universal single rule. | A sample seen only in partial/unvalidated form in the first draft of this document (`audio_constants.xtbl`) appeared to use 2-space indentation — **that specific file was independently confirmed (by a second team working from this document) to be corrupted content, not a real convention**: it's a non-first entry in a mode-(a) container (§1's reliability caveat), and re-checking it turned up a concrete truncated-tag defect unrelated to its indentation. **However, a later pass (`spec-vehicle-data.md`) found genuine, cleanly-formed 2-space-indented `.xtbl` files from a fully-reliable source (raw/uncompressed DLC archives — no corruption possible): per-vehicle "variants/customization" definition files (e.g. `sp_mdsphere_genki.xtbl`) consistently use 2-space indentation, while the sibling per-vehicle "stats" file for the same vehicle (e.g. `sp_mdsphere_genki_veh.xtbl`) uses tabs.** So indentation style is real, confirmed data — it just isn't a single universal rule; it appears to vary by which internal tool/template authored a given table, not by corruption. Do not treat 2-space indentation as a corruption signal by itself. | **CONFIRMED — empirical, corrected this pass.** |
+| **Root structure:** a single `<root>` element directly containing one `<Table>` element **(NOT universal — 260 of the 1,595 top-level base tables lack it, §8)** (and, often, sibling metadata elements — see §3). | Present in all 4 validated samples. | **CONFIRMED — empirical.** |
+
+---
+
+## 3. Table Content Structure
+
+### 3.1 Row elements: schema-named, not generically named
+
+Every table's actual data rows are wrapped in an element **named after the table's own subject**, not a generic tag like `<Row>` or `<Entry>`. Observed row-element names: `<Achievement>` (in an achievements table), `<Barnstorming>` (a stunt/activity table with exactly one row, named after the activity itself), `<Cutscene>` (a cutscene-definition table), `<Running_man_globals>` (a single-row "globals" table for one specific mission). **[CONFIRMED — empirical, 4/4 samples.]** A table can contain one row (as in the two smaller, single-purpose samples) or many (larger tables like the full achievements list use many `<Achievement>` siblings under one `<Table>`).
+
+### 3.2 Self-describing schema metadata
+
+Three of the four validated samples include, as siblings of `<Table>` inside `<root>`, a `<TableDescription>` block and an `<EntryCategories>` block (the smallest sample, the single-activity `Barnstorming` table, has both; the largest, the cutscene table, was only checked at its head/tail and the presence of these blocks there specifically was not individually re-confirmed, though the same general `<root><Table>...</Table></root>` shape holds). **[CONFIRMED for the achievements/barnstorming/running-man-globals samples — empirical.]**
+
+- **`<TableDescription>`** contains, among other things, a `<Single_Line_XML>` boolean flag and a list of `<Element>` entries — each describing one field that can appear in a table row: its name, an editor-facing type (e.g. a generic `String` type was observed), a human-readable description, a default value, and in at least one case a `<Reference>` sub-block pointing at *another* `.xtbl` file and a type name within it (observed: a reference from one activity table to `vehicles.xtbl`'s `Vehicle.Name` field) — i.e. **these tables can declare typed cross-references to rows in other named `.xtbl` files**, which a design/level-editor tool would presumably use to populate dropdowns or validate links. **[CONFIRMED — empirical.]**
+- **`<EntryCategories>`** is a flat or shallow taxonomy of `<Category><Name>...</Name></Category>` entries, used to group rows for display in an editing tool (e.g. an achievements table's categories included groupings like "Missions" and "Random"). **[CONFIRMED — empirical.]**
+
+This means a `.xtbl` file is not just data — it's data **plus its own editor-facing schema**, self-contained in the same file. **[HIGH CONFIDENCE, based on a consistent 3/4 pattern; not yet confirmed as universal across every `.xtbl` file in the game.]**
+
+### 3.3 Per-row editor metadata
+
+Individual rows frequently (not universally) contain a `<_Editor>` sub-element — seen holding at least a `<Category>` value used to file that specific row into one of the categories declared in `<EntryCategories>` (§3.2). The leading underscore in the tag name is consistent with a convention for marking tool/editor-only metadata as distinct from actual gameplay-consumed fields. **[CONFIRMED — empirical, present in most but not all rows checked — e.g. present on `<Achievement>` rows, absent on at least one `<Activity>` row sampled.]**
+
+### 3.4 Value formatting
+
+- Plain scalar values (strings, integers) are stored as unremarkable element text content (e.g. `<Name>Dead Presidents</Name>`, `<Min_Speed>10</Min_Speed>`).
+- Floating-point values observed in the cutscene table sample were formatted to ~~**exactly 6 decimal places**~~ **6 decimal places in that sample, but this is NOT universal: exponent-form values and very long integer parts occur in other base tables (§8)** (e.g. `0.000000`, `-30.000000`), consistently, including for exact integer-valued floats. **[CONFIRMED — empirical, one sample; not cross-checked against a table with floats from a different source archive.]**
+- Compound/vector values (e.g. a 3D position) are broken into a wrapping element with `<X>`, `<Y>`, `<Z>` children, rather than a single delimited-string value. **[CONFIRMED — empirical, one sample.]**
+- At least one field in the cutscene-table sample holds a literal, absolute build-time file-system path into what is clearly an internal project directory structure, used as a reference from the table row to an external cinematic-camera-script asset. Per this project's cleanroom conventions around internal path strings, the exact path is not reproduced here; the relevant structural fact is that **`.xtbl` fields can hold literal authoring-time absolute paths as data**, which a real implementation reading these files should be prepared to encounter (and likely needs to re-map to a portable path scheme rather than using verbatim, since the original paths point at a build machine that won't exist for anyone else). **[CONFIRMED — empirical, one sample.]**
+
+---
+
+## 4. Confirmed Structural Variation
+
+The task behind this pass was specifically to check whether one early sample (`running_man_globals.xtbl`, seen in the container-format pass) generalizes, or whether real structural variety exists. It does:
+
+- **A distinctly different filename/extension convention exists within the same table-file family**: `cutscene_tables.vpp_pc`'s entries use the extension **`.cte_xtbl`**, not plain `.xtbl` (observed name: a per-cutscene file whose content is otherwise a completely normal `<root><Table><Cutscene>...` document, structurally consistent with everything in §3). **[CONFIRMED — empirical.]** An implementation that only recognizes exact `.xtbl` extensions will silently skip this whole category of table files; matching on a `xtbl`-ending pattern more broadly (or specifically also recognizing `.cte_xtbl`) is advisable.
+- **Table size varies enormously**: from a single-row, ~6 KB file up to a ~1.4 MB file (the cutscene table) containing what is presumably a large number of shot/camera/lighting definitions for one cinematic — the format does not appear to impose or imply any practical size ceiling.
+- **Indentation is not a single universal rule — corrected this pass.** The original `audio_constants.xtbl` exception (from `misc_tables.vpp_pc`) is still confirmed corrupted content (a non-first entry in a mode-(a) container, per §1's reliability caveat, with a concrete truncated-tag defect found independently) — that specific finding stands. But a separate, later pass (`spec-vehicle-data.md`) found genuinely clean, fully-reliable 2-space-indented files (per-vehicle customization/variant tables from raw DLC archives), proving 2-space indentation is real in at least one table family, not inherently a corruption marker. See §2's updated indentation row.
+
+---
+
+## 5. Open Items for a Further Pass
+
+1. ~~**The root cause of the mode-(a) non-first-entry corruption (§1).**~~ **RESOLVED 2026-09-20 (`spec-vpp-container.md` §7): the entries were being read at the logical `+0x08` instead of the physical offset `payload_start + Σ round_up(+0x10, 0x800)`; base-game `.xtbl` tables (1,342 in `misc_tables`, 118 in `cutscene_tables`, 110 in `da_tables`) are now readable, e.g. `weapons.xtbl` (526,229 bytes). Not yet population-validated.** (Original text follows, kept as history.) This is now understood to be the single biggest blocker to reliably reading *any* `.xtbl` content beyond a container's first entry (or content in a mode-(b) container), and by extension blocks reliable extraction of most other compressed content types too (meshes, effects, etc. in mode-(a) containers face the identical issue, per the container-format spec). This should probably be escalated in priority above further `.xtbl`-specific work, since it's a container-format-level gap that this pass has now shown to be much larger in practical impact than previously scoped.
+2. **Whether the self-describing schema blocks (`<TableDescription>`, `<EntryCategories>`, `<_Editor>`) are universal** across all `.xtbl`/`.cte_xtbl` files, or only common — the sample size here (4 files) is small relative to the ~1,300+ table files known to exist from the Phase 0 survey.
+3. ~~Whether the 2-space-indent variant seen in one unvalidated sample is real~~ — **closed**: confirmed corruption, not a real convention (see §2).
+4. **Cross-reference resolution semantics** (§3.2's `<Reference>` mechanism) — confirmed to exist structurally, but how a tool or game system actually resolves a reference like "`vehicles.xtbl`'s `Vehicle.Name`" into a specific row was not investigated.
+
+## 6. Registered type ID 23, `Cutscene File` — traced: stash-only, consumed by the cutscene loader through the generic table parser (2026-09-20)
+
+`spec-format-inventory.md` listed registered type ID 23, `Cutscene File` (`.xtbl`, constructor `LAB_00731e20`, destructor `LAB_00731e40`), as "container yes; cutscene-specific schema untraced". This pass decompiled both functions in full, followed the global they write to its readers, and read the consumer. **Verdict: the constructor is stash-only — it parses nothing — and the stashed buffer is handed to a cutscene loader that runs it through the engine's generic in-memory `.xtbl` parser and then reads a definite set of named elements. The schema the reader asks for falls out cheaply and is recorded in §6.3, cross-checked against one real, reliable file (§6.4).** No cutscene-specific *binary* schema exists: this type is the ordinary XML table format of §2–§3, consumed by cutscene code.
+
+### 6.1 The constructor and destructor
+
+**`LAB_00731e20` (27 bytes, 7 instructions):** read its 3rd and 4th incoming arguments (the loaded primary buffer and its byte length, per the dispatcher convention — `spec-morph-format.md` §16.2); store the buffer pointer to global `DAT_0153b8d0`; **write a NUL byte at `buffer[length-1]`** (`MOV byte [EAX+ECX*1-1],0`, `0x00731e2d`); store the length to `DAT_0153b8d4`; return true. It calls nothing and reads no file byte — the NUL write is the only touch, and it exists so the buffer can be treated as a C string downstream (the file's own last byte, typically a trailing newline, is overwritten). It is the twin of type 24's constructor `LAB_00731e50` next door (`spec-cutscene-camera-format.md`), which stashes to `DAT_0153b8d8`/`DAT_0153b8dc` without the NUL write. **[CONFIRMED — disassembly, complete body.]**
+
+**`LAB_00731e40` (13 bytes, 4 instructions) is a real destructor, not the no-op `FUN_00754410`:** it zeroes `DAT_0153b8d0` and `DAT_0153b8d4`. **[CONFIRMED — disassembly.]**
+
+### 6.2 The hand-off chain
+
+`DAT_0153b8d0` has **exactly two readers** (reference manager and a full operand scan agree, 4/4 references including the two writers): `FUN_00737230` and `FUN_00737290`. `DAT_0153b8d4` (the length) has **no reader at all** — it is written by the constructor and cleared by the destructor and never consulted; the length matters only for the NUL write. **[CONFIRMED — disassembly.]**
+
+| Step | Function | What it does |
+|---|---|---|
+| 1 | `FUN_0072bff0` (sole caller of the next step) | calls the cutscene load driver with the cutscene manager object `DAT_0153b528` |
+| 2 | `FUN_00737290` — the "cutscene load driver" (`spec-cutscene-camera-format.md` §1/§8) | returns immediately if `DAT_0153b8d0` is null; otherwise allocates the literal **"cutscene load pool"** (`0x190000` bytes), calls step 3, then (unless a mode flag from `FUN_00721bc0` says otherwise) hands the type-24 buffer `DAT_0153b8d8` to the camera-script parser `FUN_00569290`, then `FUN_00732290`/`FUN_00731cc0` |
+| 3 | `FUN_00737230` | `strlen` of `DAT_0153b8d0` (relying on the NUL from §6.1), calls step 4, then the cutscene reader (step 5), frees the parsed document (`FUN_00dab960`) and, on success, calls `FUN_00732160` (post-load count/array setup, not traced) |
+| 4 | **`FUN_00daca90`** — whose fallback memory pool carries the literal label **"xml_table_parse_from_memory"** | the generic in-memory `.xtbl` parser: parses the XML text (`FUN_00dc5820`), and returns the document's **`Table`** child element (`FUN_00dc4ff0(doc, "Table")` — §2's root/`<Table>` shape). On failure it formats the literal message "The table file is missing or invalid - parsing error: %s." |
+| 5 | **`FUN_00736ec0` — the cutscene-specific reader** (scene object in `EDI`; the `Table` element is its stack argument) | takes the `Cutscene` row of the table and reads the elements in §6.3, storing into the scene object |
+
+`FUN_00daca90` has two other callers — `FUN_005984c0` and code at `0x00a9ae64` that Ghidra has no function for — not traced here (this is the generic loader, so other `.xtbl`-consuming types are expected to use it). **[CONFIRMED — disassembly for every link; the identity of the scene object as `DAT_0153b528` is confirmed from `FUN_0072bff0`'s call and `FUN_00737290`'s use of its argument.]**
+
+### 6.3 What the cutscene reader asks for (element names, as literal strings in the reader)
+
+These are the element names `FUN_00736ec0` and its sub-readers pass to the table accessors. Nesting is stated only where a function's own calls show it; value semantics are **not** decoded (the helper results are handles/indices into other subsystems). **[CONFIRMED — disassembly for every name; nesting per function as stated.]**
+
+| Reader | Reads (from the `Cutscene` row unless noted) |
+|---|---|
+| `FUN_00736ec0` (top level) | `CTSGroupName`, `CribName`, `VintDocument`, `PegFilename`, `NextScene`, `BinkMovieFilename`, `RestorePlayerPos` (bool), `SceneLightset` |
+| `FUN_00738df0` | `Options` → repeated `Option` rows: `Enabled`, `Float`, `String` (two literal option names are special-cased case-insensitively: `Load Item Mesh`, `TOD Mission Override`), `ColorRed`/`ColorGreen`/`ColorBlue`/`ColorInt`/`ColorSat`/`ColorContrast`/`ColorBleach`, `LightName`, `Position`, `Orient`, `HotSpot`, `Attenuation`, `Intensity`, `Color`, `Vector`, `FrameStart`, `FrameEnd`, `ObjName`, `Param` (→ `Float`), `ItemName`, `WearStyle`, `Variant` |
+| `FUN_00736420` | `Shots`; per shot `SlateName`, `AnimShotLength`, `DefinedShotLength`, `Camera` (with `TrackyCustom` → `Enabled`, `Spring`, `Leash`, `LeashDEG`, `Tolerance`, `ToleranceDEG`), from a sub-element of the same walk `CharacterName`, `BoneName`, `OrientOffset`, then `DOFEnabled`, `Zone_swaps` (and `Zone_swap`/`Enable`/`Disable` rows on the same element), `CSEffects` → `CSEffect` rows: `Character`, `CharacterTagName`, `navpoint`, `Position`, `Orient`, `ShotStartFrame`, `ShotEndFrame`, `HumansOnFire`, `EntireCutscene`, `looping`, `CribCustomizationEnabled`, `CribCustomizationLevel` |
+| `FUN_00736340` | `Shots` → `SlateName` (a second, name-only walk) |
+| `FUN_00735440` / `FUN_00735330` | `Navpoint` rows / `Subject` rows |
+| `FUN_007356d0` / `FUN_00733d30` | `Character` rows / `Vehicle` rows |
+| `FUN_00733650` (called after `SceneLightset`) | `Lightset` rows: `StartTime`, `EndTime`, `Light` rows → `CharacterExclusions` |
+| `FUN_00733e40`, `FUN_00735bf0`, `FUN_00731940` | no element names — numeric helpers |
+
+Where `FUN_00736ec0` stores its top-level reads (scene object `DAT_0153b528`; `+` = byte offset): `CTSGroupName` → `+0x08`/`+0x0c` (two dwords from a looked-up record; defaults `DAT_01147200`/`DAT_01147204` when the column is absent); `CribName` → `+0x36e8`/`+0x36ec`; `VintDocument` → `+0x3580`; `PegFilename` → `+0x358c`; `NextScene` → `+0x35cc`; `BinkMovieFilename` → `+0x3590` (0 when absent); `RestorePlayerPos == true` → a 16-dword snapshot taken from the player object at `+0x35f0`–`+0x362c`; `SceneLightset` → `+0x2180`; the `Options` walk fills `+0x2174`. **[CONFIRMED — disassembly.]**
+
+### 6.4 Empirical cross-check against a real file
+
+Harness: `tools/harnesses/cutscene_xtbl_probe.py`. Sample: `01_in.cte_xtbl`, **entry 0** of `cutscene_tables.vpp_pc` (a mode-(a) container, so only entry 0 is trustworthy per §1; the file is 1,443,556 bytes and parses as well-formed XML). Its shape is exactly what §6.2 predicts: root → one `Table` → **one `Cutscene` row** (§3.1's schema-named row element), whose direct children in order are `CutsceneType`, `HackyLoadLocation`, `BBoxMin`, `BBoxMax`, `Soundtrack`, `CameraScript`, `VintDocument`, `BinkMovieFilename`, `SceneLightset`, `Lightsets`, `Characters`, `Items`, `Navpoints`, `Options`, `Shots`. `Shots` holds **57 `Shot` rows**, each carrying `SlateName`, `DefinedShotLength` and `AnimShotLength` (57/57/57 — the three per-shot names `FUN_00736420` reads).
+
+- **Elements the reader reads that are present in the sample:** `VintDocument`, `BinkMovieFilename`, `SceneLightset`, `Shots`/`SlateName`/`AnimShotLength`/`DefinedShotLength`, `Options`, and — at depth below the row — `Zone_swaps` (1), `CSEffects` (17) / `CSEffect` (41, each with `ShotStartFrame` and `ShotEndFrame`, 41/41), `Navpoint` (2), `Lightset` (58) / `Light` (247), `StartTime`/`EndTime` (1 each), `Character` (1,658).
+- **Elements the reader reads that this sample lacks:** `CribName` and `NextScene` (both explicitly null-tested in `FUN_00736ec0`), `CTSGroupName` (null → the two default dwords), `RestorePlayerPos` (a bool zeroed before its accessor runs), `PegFilename` (passed through `FUN_00731860`, whose null handling was not read). Their absence from a real shipped file is what the guarded code paths predict; it is not evidence the reader would accept their absence everywhere. Also absent from this one cutscene (loop bodies or optional branches whose guards were not individually read): `Camera`/`TrackyCustom`/`DOFEnabled`, `Subject`, `Vehicle`, `CharacterExclusions`.
+- **Elements present in the file but not read by the functions above:** `CutsceneType`, `HackyLoadLocation`, `BBoxMin`/`BBoxMax`, `Soundtrack`, `CameraScript` (§3.4's authoring-path reference to the `.csc_pc` script), and per-shot `Name`/`maxHandle`/`Zones`/`HighLODs`/`Audios`. They are consumed elsewhere or not at all; not traced.
+
+**[CONFIRMED — empirical for the one sample; HIGH CONFIDENCE — inferred that the schema generalises across the ~115 sibling `.cte_xtbl` files, none of which beyond entry 0 is reliably extractable (§1).]**
+
+### 6.5 What this settles, and the honest gap
+
+**Settled:** what `LAB_00731e20`/`LAB_00731e40` do; that no cutscene-specific binary parse exists; the full hand-off chain to the reader and the generic parser it uses; the reader's element vocabulary and where its top-level results land.
+
+**Open.** (1) **The extension.** The registered extension for type 23 is `.xtbl`, but the per-cutscene files that carry this schema ship as **`.cte_xtbl`** (115 of the 118 entries in `cutscene_tables.vpp_pc`; only `effects.xtbl`, `items_3d.xtbl` and `cutscene.xtbl` carry plain `.xtbl`, and they are non-first entries, unreadable per §1). How a `.cte_xtbl` entry reaches a type registered as `.xtbl` — and which request names it — was **not traced** (it would need the resource-request site for type 23, i.e. a search this pass was told not to run). **[OPEN.]** (2) Value semantics of the reader's handles; what `FUN_00732160`/`FUN_00732290`/`FUN_00731cc0` do after the read. (3) The two other callers of `FUN_00daca90` (`FUN_005984c0`, `0x00a9ae64`).
+
+## 7. XML tolerance quirks in the base-game tables (2026-09-20)
+
+Base-game tables are now readable (`spec-vpp-container.md` §7), which exposed authoring quirks a strict XML parser rejects. Over the 2,080 `.xtbl` entries Team B decoded, one file is not well-formed even by tolerant rules, and SPEC TEAM found three more that a strict parser rejects (all four listed in `spec-vpp-container.md` §8): a **mismatched close tag** (`template.xtbl`: `<RampExposure>False</Exposure>`), an **illegal control character `0x1F`** inside element text (`<Name>09_PLayer\x1f_Neg</Name>` in `07_out.cte_xtbl` and `07_out-lightset.xtbl`), and an **element name containing a space** (`<Xbox 360_Identifier>` in `xbox360_text.xtbl`). **A conforming reader must tolerate all three** — consistent with the engine's own hand-written XML reader (`spec-tables-weapons-combat.md` §1: node layout name/next/child/text, case-insensitive matching) rather than a standards parser. Team B reports 1,817 of the 2,080 files in the `<root><Table>` shape; the remaining shapes (schema-block-first files, `TableDescription`) are described in §2–§3. **[CONFIRMED — empirical for the four files; the 2,080 / 1,817 counts are Team B's measurements.]** The universality of the schema block across the now-readable ~1,600 base tables has still NOT been checked (§5 item 2).
+
+## 8. Shape and number-format facts from the readable base tables (2026-09-20)
+
+Facts from the now-readable base tables (`spec-vpp-container.md` §7). **Team B's sr3xtbl survey (their `HANDOFF.md` §9.79; not all re-derived):** 2,222 xtbl-family entries in all 38 archives = 2,080 compressed + 142 raw DLC (`.xtbl` 1,888, `.cte_xtbl` 334; nothing else ends in `xtbl`); 2,222/2,222 decode and parse, 2,214 with zero warnings — the 8 warned entries are exactly the four files of §7 (one mismatched close tag; two with control character `0x1F` in `<Name>`; `xbox360_text.xtbl` with 101 tags containing a space); an independent strict oracle rejects exactly those 8 and agrees on element count/depth for the other 2,214; truncation controls 318/318. No BOM, XML declaration, comment, PI, CDATA or DOCTYPE anywhere; entities only `&lt;` `&gt;` (~4,500 each) and `&amp;` (21); self-closing always written `<X />` (8,047); exactly one attribute in 141 entries (`<TableDescription source=".."/>`); CRLF in 2,208 entries and LF-only in 12; UTF-8 non-ASCII in 4; **mixed content (text plus child elements) occurs in 56 entries (1,827 elements)**; root is `root` (2,217) or `Root` (5); 299 distinct row-element names, 58,089 rows (top: `CRC` 10,630, `Entry` 5,590, `NewEntity` 5,539); some names differ only in case (`Camera`/`camera`, `Category`/`category`, `Color_Entry`/`color_entry`).
+
+**Corrections to §2 and §3.4 (SPEC TEAM re-derived, top-level entries of the four mode-(a) archives, read with the §7 rule):** (1) "`<root>` then one `<Table>`" is **not universal**: **260 of 1,595** top-level tables do not begin `<root><Table>` — exactly Team B's total of 260 (they break it down as 128 `blend_tree` files, 122 `state_machine` files and 10 others: `action_nodes`, `node_graph_files`, `control_filters`, `control_parameters`, `networks`, `default_global` and three lightset/district files; the family split is Team B's, not re-derived); the entries nested inside `.str2_pc` all have the shape. (2) "floats have exactly 6 decimals" is **false**: 33 exponent-form values (e.g. `1.49011611938e-08`, all in `roadblock_layouts.xtbl` in this scan) and very long integer parts (21–29 digits per Team B, in the `01_z01`/`02_z02` cutscene tables; 30 values with 15+ integer digits in this scan) — a reader must parse numbers with the engine's own grammar (`spec-tables-traffic-ai.md` §1: leading `0x` reads as 0.0, `e`/`E` exponent) rather than assume a fixed format.
+
+**Hash confirmation on real saves (Team B, re-derived by SPEC TEAM):** the engine name hash is the reflected CRC-32 over the lower-cased bytes, init 0, no final XOR. Saved base unlockable ids 4,992/4,992 = hash of `unlockables`/`patch_unlockables` row names; cheat ids 151/151 = hash of `cheats.xtbl` `<UnlockString>` (see `spec-save-format.md` §14).

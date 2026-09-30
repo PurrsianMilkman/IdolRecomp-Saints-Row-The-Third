@@ -1,0 +1,24 @@
+[zone] sr3_city~f0816~al.czn_pc: czn=17532 bytes gzn=192100 bytes
+[zone] 1 Mesh sub-block(s) located
+[block 0] fromGFile=1 indexCount=13229 drawGroupsLocated=1
+[channel 1] layoutCode=0 elementCount=3062 stride=20 strideMatchesLaw=1 texcoordCount=1
+[channel 1] layout code 0 (sr3mesh::layoutInfoFor(0): known=1 base=16 hasNormal=1 hasTangent=0 hasSkinning=0): decoding POSITION(+0,FLOAT3) + NORMAL(+12,UBYTE4N) + TEXCOORD0(+16,SHORT2/1024) - the real UV-bearing render geometry, not the UV-less layout-code-24 companion stream this command drew before
+  [group 0 range 2] materialId=2 submeshIndex=1 startIndex=7728 indexCount=3 minVertex=1259 maxVertex=1261
+  [group 0 range 3] materialId=3 submeshIndex=1 startIndex=7731 indexCount=27 minVertex=296 maxVertex=310
+  [group 0 range 4] materialId=4 submeshIndex=1 startIndex=7758 indexCount=22 minVertex=2038 maxVertex=2053
+  [group 1 range 1] materialId=9 submeshIndex=1 startIndex=8287 indexCount=1510 minVertex=2054 maxVertex=3061
+  [group 1 range 2] materialId=10 submeshIndex=1 startIndex=9797 indexCount=244 minVertex=0 maxVertex=163
+  [group 1 range 3] materialId=11 submeshIndex=1 startIndex=10041 indexCount=196 minVertex=164 maxVertex=295
+  [group 1 range 4] materialId=3 submeshIndex=1 startIndex=10237 indexCount=1420 minVertex=311 maxVertex=1258
+  [group 1 range 5] materialId=2 submeshIndex=1 startIndex=11657 indexCount=214 minVertex=1262 maxVertex=1405
+  [group 1 range 6] materialId=12 submeshIndex=1 startIndex=11871 indexCount=856 minVertex=1406 maxVertex=1977
+  [group 1 range 7] materialId=13 submeshIndex=1 startIndex=12727 indexCount=88 minVertex=1978 maxVertex=2037
+[groups] 2 LOD group(s) located - rendering channel 1's own ranges from 2 of them (auto: union across every located group, see doc comment)
+[material] 10 draw range(s) across 2 group(s) belong to channel 1 (this channel's own submeshIndex filter), 8 distinct real materialId(s)
+[material] NO confirmed materialId->texture/shader binding for zone data (genuine, checked dead end, not invented): the vehicle-style 0x424BD00D GeometryBlock sub-header never occurs in any real .czn_pc (0/2,971 files); .czh_pc's own alternate name table (ZoneHeader::materialBlock()) is 100% non-texture for this file (71/71 names); a peer-relayed cc:0-texture-stem-family hypothesis was tested population-wide and matches only 1.0% of real Mesh blocks (381/37,147) and 11.5% of real .czn_pc files (53/460, mostly degenerate 1-vs-1 cases) - a clean negative. Each real draw range is still drawn separately with its own real materialId (MeshDrawMode::MaterialIdAsColour - flat colour per material, never a neighbour's texture), not textured.
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+bounds   : 334.822 x 55.310 x 237.104   (min Y -25.083)
+topology : 2 group(s) rendered, 4584 indices -> 1528 non-degenerate triangles total
+camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)
+captured : _work/zone_tile.png (frame 0)
+frames   : 1 presented
