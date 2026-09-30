@@ -4,8 +4,9 @@
   "bus_url": "https://github.com/PurrsianMilkman/Project-Crreish-bus.git",
   "project_url": "https://github.com/PurrsianMilkman/Project-Crreish.git",
 
-  "game_dir": "C:/Program Files (x86)/Steam/steamapps/common/Saints Row The Third",
-  "exe_path": "C:/Program Files (x86)/Steam/steamapps/common/Saints Row The Third/saintsrowthethird_dx11.exe",
+  "game_dir": "D:/Project Crreish/Saints Row 3 CRREISH",
+  "_exe_note": "Team A analyses the DX9 executable SaintsRowTheThird.exe only; all spec addresses are for it, not SaintsRowTheThird_DX11.exe.",
+  "exe_path": "D:/Project Crreish/Saints Row 3 CRREISH/SaintsRowTheThird.exe",
   "work_dir": "D:/crreish-bridge-work",
 
   "teams": ["team-a", "team-b"],
@@ -24,7 +25,7 @@
     "analyze_headless": "C:/ghidra/support/analyzeHeadless.bat",
     "project_dir": "D:/SR3-Ghidra",
     "project_name": "SR3",
-    "program": "saintsrowthethird_dx11.exe"
+    "program": "SaintsRowTheThird.exe"
   },
 
   "tools": {}
