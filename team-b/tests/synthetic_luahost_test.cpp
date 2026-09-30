@@ -1118,8 +1118,34 @@ int main() {
             CHECK(es.screenFadeRequests().size() == 4 && es.screenFadeRequests()[3].durationMs == 0.0);
             // A non-table colour argument is indexed like the real call: Lua error.
             {
+                size_t before = es.screenFadeRequests().size();
                 auto r = host.runChunk(gp, "fade_out(1, 5)", "fo7.lua");
                 CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find("attempt to index") != std::string::npos);
+                CHECK(es.screenFadeRequests().size() == before); // nothing applied
+            }
+            // lua_gettable semantics kept (it now runs under fade_out's own
+            // lua_pcall, fix for bridge job jklk): __index metamethods are
+            // honoured, and an error inside one is an ordinary Lua error.
+            check("fade_out(1, setmetatable({}, {__index = function(t, k) return k * 10 end}), 0)", "fo8.lua");
+            CHECK(es.screenFadeColour().r == 10.0f / 255.0f && es.screenFadeColour().b == 30.0f / 255.0f);
+            {
+                auto r = host.runChunk(gp, "fade_out(1, setmetatable({}, {__index = function() error('boom') end}), 0)", "fo9.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find("boom") != std::string::npos);
+            }
+            // Refusals raised repeatedly through openGuard, with a heap-allocated
+            // (long) scene name, keep their exact message (jklk regression).
+            {
+                auto r = host.runChunk(gp,
+                    "for i = 1, 200 do\n"
+                    "  local ok, m = pcall(zscene_is_loaded, 'a_scene_name_well_past_the_small_string_buffer')\n"
+                    "  assert(not ok and string.find(m, '^zscene_is_loaded: engine state '))\n"
+                    "  ok = pcall(fade_out, 1, 5)\n"
+                    "  assert(not ok)\n"
+                    "end", "guard_loop.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << r.pcallError << "\n";
             }
 
             // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
@@ -1152,6 +1178,11 @@ int main() {
         {
             auto r0 = host.runChunk(ui, "sfx_faded_out()", "sfo0.lua");
             CHECK(r0.loadOk && !r0.pcallOk && r0.pcallError.find("0x012e6aa4") != std::string::npos);
+            // Repeated through openGuard with the exact message (jklk regression).
+            auto rl = host.runChunk(ui,
+                "for i = 1, 200 do local ok, m = pcall(sfx_faded_out)\n"
+                "  assert(not ok and string.find(m, '^sfx_faded_out: engine state ')) end", "sfo_loop.lua");
+            CHECK(rl.loadOk && rl.pcallOk);
             es.fadeState().g012e6aa4.set(3);
             auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
             CHECK(r1.loadOk && r1.pcallOk);

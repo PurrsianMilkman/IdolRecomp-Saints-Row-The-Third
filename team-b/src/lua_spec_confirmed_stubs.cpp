@@ -707,19 +707,29 @@ int stub_game_get_coop_join_type(lua_State* L) {
 
 // ---------------------------------------------------------------------
 // Reading OPEN engine state (open_state.h) from a stub: the refusal becomes
-// a Lua error naming the global and its spec section. Lua errors longjmp, so
-// each such stub is split in two: an *Eval helper holds every C++ object,
-// catches the OpenStateError, pushes the message and returns kOpenState; the
-// thin lua_CFunction then calls lua_error with no C++ object alive. The
-// refusal is also counted in the HitLog as "<name>:OPEN_STATE", so a run
-// shows which OPEN value blocked which name.
+// a Lua error naming the global and its spec section. An *Eval helper
+// catches the OpenStateError, logs "<name>:OPEN_STATE" in the HitLog (so a
+// run shows which OPEN value blocked which name) and rethrows it as a
+// PendingLuaError carrying "<name>: <message>"; openGuard raises it.
 // ---------------------------------------------------------------------
-constexpr int kOpenState = -2;
+//
+// NO LUA ERROR MAY CROSS A C++ FRAME (fix 2026-09-30, bridge job
+// 20260930T225845-team-b-jklk: 0xC0000374 heap corruption on MSVC). A Lua
+// error is a longjmp; on MSVC x64 longjmp unwinds C++ frames through their
+// EH tables, which /EHsc builds assuming extern "C" calls (lua_error,
+// lua_gettable) never throw, so a frame holding a std::string could be
+// destroyed twice. So no stub calls lua_error or an erroring Lua API
+// itself: a refusal is thrown as a C++ exception (OpenStateError, or
+// PendingLuaError with a ready message), and only openGuard's outer frame,
+// which holds no C++ object and no try block, calls lua_error.
+struct PendingLuaError {
+    std::string message;
+};
 
-void pushOpenState(lua_State* L, const char* fn, const OpenStateError& e) {
+[[noreturn]] void throwOpenState(lua_State* L, const char* fn, const OpenStateError& e) {
     std::string tag = std::string(fn) + ":OPEN_STATE";
     logCall(L, upLog(L), tag.c_str(), upStateTag(L));
-    lua_pushfstring(L, "%s: %s", fn, e.what());
+    throw PendingLuaError{std::string(fn) + ": " + e.what()};
 }
 
 // ---------------------------------------------------------------------
@@ -749,14 +759,12 @@ int zsceneIsLoadedEval(lua_State* L) {
         }
         return es->zsceneStateCode().get() == 2 ? 1 : 0;                  // 0x0153b51c == 2
     } catch (const OpenStateError& e) {
-        pushOpenState(L, "zscene_is_loaded", e);
-        return kOpenState;
+        throwOpenState(L, "zscene_is_loaded", e);
     }
 }
 
 int stub_zscene_is_loaded(lua_State* L) {
     int r = zsceneIsLoadedEval(L);
-    if (r == kOpenState) return lua_error(L);
     lua_pushboolean(L, r);
     return 1;
 }
@@ -783,18 +791,37 @@ int stub_set_mission_author(lua_State* L) {
 // Bit 0x1: "screen_fade_do" with duration x 1000.0 and target alpha 1.0.
 // Bit 0x2: the opcode-0x53 command. Return: none. All CONFIRMED.
 // ---------------------------------------------------------------------
+// Runs under fade_out's own lua_pcall: indexes its one argument as t[1],
+// t[2], t[3] with lua_gettable (the ordinary Lua error on a non-table, or
+// from an __index metamethod, lands in that lua_pcall, never across a C++
+// frame) and returns the three raw values. No C++ object in this frame.
+int fadeOutReadColour(lua_State* L) {
+    for (int k = 1; k <= 3; ++k) {
+        lua_pushnumber(L, k);
+        lua_gettable(L, 1);
+    }
+    return 3;
+}
+
 int stub_fade_out(lua_State* L) {
     logCall(L, upLog(L), "fade_out", upStateTag(L));
     EngineState* es = upState(L);
     lua_Number duration = lua_tonumber(L, 1);
     float rgb[3] = {0.0f, 0.0f, 0.0f};
     if (lua_gettop(L) >= 2 && lua_type(L, 2) != LUA_TNIL) {
-        for (int k = 0; k < 3; ++k) {
-            lua_pushnumber(L, k + 1);
-            lua_gettable(L, 2);
-            if (lua_type(L, -1) != LUA_TNIL) rgb[k] = static_cast<float>(lua_tonumber(L, -1));
+        lua_pushcfunction(L, fadeOutReadColour);
+        lua_pushvalue(L, 2);
+        if (lua_pcall(L, 1, 3, 0) != 0) {
+            const char* m = lua_tostring(L, -1);
+            std::string message = m ? m : "fade_out: error indexing argument 2";
             lua_pop(L, 1);
+            throw PendingLuaError{message};
         }
+        for (int k = 0; k < 3; ++k) {
+            int idx = -3 + k;
+            if (lua_type(L, idx) != LUA_TNIL) rgb[k] = static_cast<float>(lua_tonumber(L, idx));
+        }
+        lua_pop(L, 3);
     }
     int64_t flags = 3;
     if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) flags = roundToIntOpenMode(lua_tonumber(L, 3));
@@ -842,14 +869,12 @@ int sfxFadedOutEval(lua_State* L) {
     try {
         return upState(L)->fadeState().g012e6aa4.get() == 3u ? 1 : 0;
     } catch (const OpenStateError& e) {
-        pushOpenState(L, "sfx_faded_out", e);
-        return kOpenState;
+        throwOpenState(L, "sfx_faded_out", e);
     }
 }
 
 int stub_sfx_faded_out(lua_State* L) {
     int r = sfxFadedOutEval(L);
-    if (r == kOpenState) return lua_error(L);
     lua_pushboolean(L, r);
     return 1;
 }
@@ -860,23 +885,34 @@ int stub_sfx_faded_out(lua_State* L) {
 // and raises it as a Lua error only after every C++ object in this frame
 // is gone (Lua errors longjmp). The stub's own frames were already unwound
 // by the C++ throw.
+#if defined(_MSC_VER)
+#define CRREISH_NOINLINE __declspec(noinline)
+#else
+#define CRREISH_NOINLINE __attribute__((noinline))
+#endif
+
+// Calls the stub. On a refusal, leaves the error message on the Lua stack
+// and returns -1. Never inlined into openGuard, so the frame that calls
+// lua_error below has no try block and no C++ object for an MSVC longjmp
+// to unwind.
+template <lua_CFunction Fn>
+CRREISH_NOINLINE int openGuardCall(lua_State* L) {
+    try {
+        return Fn(L);
+    } catch (const OpenStateError& e) {
+        std::string tag = std::string("OPEN_STATE:") + e.global();
+        logCall(L, upLog(L), tag.c_str(), upStateTag(L));
+        lua_pushstring(L, e.what());
+    } catch (const PendingLuaError& e) {
+        lua_pushstring(L, e.message.c_str());
+    }
+    return -1;
+}
+
 template <lua_CFunction Fn>
 int openGuard(lua_State* L) {
-    int pushed = 0;
-    bool refused = false;
-    {
-        std::string message;
-        try {
-            pushed = Fn(L);
-        } catch (const OpenStateError& e) {
-            refused = true;
-            std::string tag = std::string("OPEN_STATE:") + e.global();
-            logCall(L, upLog(L), tag.c_str(), upStateTag(L));
-            message = e.what();
-        }
-        if (refused) lua_pushstring(L, message.c_str());
-    }
-    if (refused) return lua_error(L);
+    int pushed = openGuardCall<Fn>(L);
+    if (pushed < 0) return lua_error(L);
     return pushed;
 }
 
