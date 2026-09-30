@@ -904,3 +904,21 @@ target_link_libraries(lua_bare_reference_census PRIVATE sr3lua vpp_container)
 # which of the 54 real _start-defining stems it covers.
 add_executable(mission_package_census tools/mission_package_census.cpp)
 target_link_libraries(mission_package_census PRIVATE sr3asm vpp_container)
+
+# .vint_doc UI document reader (spec-vint-doc-format.md), cloud phase
+# 2026-09-30. CONFIRMED header/string-table/record shapes only - no
+# full-document walk yet (three layout facts are OPEN; see
+# include/sr3vintdoc/vint_doc.h). vintdoc_validate is the real-data
+# population sweep run through the PC bridge
+# (bridge-jobs/03_vintdoc_validate.json); it also scores the OPEN layout
+# candidates as a labelled hypothesis test.
+add_library(sr3vintdoc STATIC src/vint_doc.cpp)
+target_include_directories(sr3vintdoc PUBLIC include)
+target_link_libraries(sr3vintdoc PUBLIC vpp_container)
+
+add_executable(sr3vintdoc_tests tests/synthetic_vintdoc_test.cpp)
+target_link_libraries(sr3vintdoc_tests PRIVATE sr3vintdoc)
+add_test(NAME synthetic_vintdoc_test COMMAND sr3vintdoc_tests)
+
+add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
+target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)
