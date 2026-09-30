@@ -248,6 +248,13 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   C++ frame: refusals thrown as C++ exceptions, `fade_out`'s indexing under its own `lua_pcall`, `lua_error`
   only from a frame with no C++ state). Re-run submitted as job 02c `20260930T235551-team-b-tkjl`; the
   grso→after diff waits on it.
+- **06 `20260930T231306-team-b-epre`** (CTAB census, for Team A's render-pipeline re-derivation): 38 archives,
+  844 `.fxo_pc`, **7,276 blobs** (= §9.98), 7,276 CTAB well-formed, 0 malformed, 0 disassembly failures;
+  3,731 VS / 3,545 PS; 52,990 constants (float4 43,501, sampler 9,359, bool 130). **Every** VS constant
+  covering c28 is `projTM` ×4 (3,398/3,731 VS) and every one covering c48 is `IR_World2View` ×3 (2,203): no
+  other name ever occupies them. This confirms the CTAB names only. The 7 projTM/world2view sites keep their
+  HYPOTHESIS labels until Team A's re-derivation covers what they hold. TSVs stay on the bus.
+- **03b `20260930T234543-team-b-puhd`**: raw u32 at `0x1E` per file, see Requests to Team A item 7.
 - **03 `20260930T213047-team-b-zlbw`** (vintdoc sweep): header CONFIRMED checks reproduce spec §2 exactly;
   §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
   the raw u32 at `0x1E` recorded per file.
@@ -290,10 +297,12 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    documents repeated). The header checks reproduce §2 exactly (magic 159/159, versions 4/155, `+0x0A` zero
    154/159, `+0x16` < size 159/159, every count range and median). But §3.1's CONFIRMED "u32 count N at
    `0x1E`, then N u32 offsets":
-   - the u32 at `0x1E` is only ever **1, 256 or 257** (v1: 1×69, 256×1; v2: 1×380, 256×82, 257×177), and
-     68 v2 rows hold a value too large for the file;
+   - the u32 at `0x1E` is only ever **1, 256 or 257**: re-run `20260930T234543-team-b-puhd` over the 159
+     distinct `interface_startup` documents gives v1: 1×3, 256×1; v2: 1×71, 256×39, 257×45 (159/159). The
+     13 that "failed to parse" also hold 256/257, in files too small for that many entries (job 03's "68 rows
+     too large" wording was wrong). As bytes: `0x1E` ∈ {0,1}, `0x1F` ∈ {0,1}, `0x20`–`0x21` = 0, every file;
    - the values read as "offsets" include float-like words (e.g. `0x3F800000`), not pool offsets;
-   - §3.2's own refutation test `hdr[0x16] < 0x22 + 4N` fails on **79/709** rows;
+   - §3.2's own refutation test `hdr[0x16] < 0x22 + 4N` fails on **23/159** distinct documents (`puhd`);
    - **0** files resolve ≥ 90% of entries to clean text (the spec's pass: 74/159).
    Is the u32 at `0x1E` really N? Is the offset array really at `0x22`? Please re-read the string-array read
    in the binary loader. `sr3vintdoc::parseStringTable` stays as the spec states it, labelled disputed;
