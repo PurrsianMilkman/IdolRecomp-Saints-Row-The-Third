@@ -219,7 +219,13 @@ struct Channel {
     bool strideMatchesLaw = false;
 };
 
-// Texcoord fixed-point scale: 1024 represents 1.0 (spec §6.5).
+// Texcoord fixed-point scale: 1024 represents 1.0 (spec §6.5, CONFIRMED).
+// Applied to every layout code, vehicles (100/101) included. For vehicles
+// that rests on spec-vertex-format.md §6.6, downgraded 2026-09-30 to
+// HYPOTHESIS (runtime-capture provenance), with 1/1024 versus 1/256 on flat-
+// mapped vehicle panels marked OPEN there. So for codes 100/101 this scale
+// is a HYPOTHESIS, kept unchanged until that item is settled; the raw int16
+// stays available in Vertex::texcoordsRaw.
 constexpr float kTexcoordScale = 1024.0f;
 
 // A decoded vertex. Only fields the layout actually carries are populated.

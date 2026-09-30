@@ -874,6 +874,13 @@ add_test(NAME synthetic_luahost_roster_test COMMAND sr3luahost_roster_tests)
 add_executable(lua_host_run tools/lua_host_run.cpp)
 target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm)
 
+# Integration check (cloud phase 2026-09-30): lua_host_run end to end on a
+# synthetic two-archive cache written by tests/lua_host_run_fixture.cpp
+# (mission _start success, OPEN-state refusal, Lua runtime error, syntax
+# error), and two runs diffed with tools/bridge_diff.py for determinism.
+add_executable(lua_host_run_fixture tests/lua_host_run_fixture.cpp)
+target_link_libraries(lua_host_run_fixture PRIVATE vpp_container)
+
 # Per-script entry-point naming census (HANDOFF Sec9.118): for each real
 # script, every TOP-LEVEL global function named "<scriptStem>_<suffix>",
 # histogrammed. Reuses the same archive-walking method as the tools
@@ -949,6 +956,11 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME bridge_diff_py COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_diff_test.py)
+    add_test(NAME lua_host_run_integration_py
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_host_run_integration_test.py
+                     $<TARGET_FILE:lua_host_run_fixture> $<TARGET_FILE:lua_host_run>
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/lua_all_registered_1490_tagged.txt
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/bridge_diff.py)
 endif()
 
 # Real-data validation harnesses (tools/validation/*.cpp), plus two loose

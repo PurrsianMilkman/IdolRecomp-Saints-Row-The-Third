@@ -96,6 +96,12 @@
 //           its frequency, and the 530/6 split that frequency implies, are
 //           contradicted.
 //
+//           SPEC SYNCED 2026-09-30: spec-audio-format.md Sec4.2/Sec4.3/Sec10
+//           now mark the "usually zero" and 530/536 / "exactly 6" text
+//           superseded and cite the figures above (255/536 clean, 281
+//           broken, 91.8% extra != 0). The spec text quoted in this note is
+//           the pre-review wording, kept as history.
+//
 //           NOTE on which middle field is which: the chain rule adds `size`
 //           and `extra`, so it cannot distinguish {offset, extra, size} from
 //           {offset, size, extra} - both replay 536/536 identically. What

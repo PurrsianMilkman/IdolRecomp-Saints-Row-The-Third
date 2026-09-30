@@ -1170,8 +1170,11 @@ namespace {
 // Sec9.63's bone-palette + (-x,-y,-z) reading from opt-in to the DEFAULT
 // for the population where it is unambiguous (272/318 real mesh/rig
 // pairs, single-set - Sec9.63.6). Meshes that declare no palette at all
-// (bonePaletteDeclaredCount() == 0) are untouched by any of this -
-// --bone-palette never applied to them either.
+// (bonePaletteDeclaredCount() == 0) are REFUSED since 2026-09-30
+// (manager ruling after spec-vertex-format.md Sec9 step 7b was retracted in
+// favour of spec-rig-format.md Sec11.15): no spec gives them a skinning
+// rule. Before that they silently took the retracted direct-index +
+// (x,-y,-z) reading, which --legacy-skinning still forces on request.
 //
 // EXTENDED BY HANDOFF Sec9.63.10 to the 46/318 MULTI-SET meshes, which
 // Sec9.63.9 still refused because "which set does this draw range use"
@@ -1190,9 +1193,15 @@ enum class SkinningMode {
                        // Sec9.63.10). Same (-x,-y,-z) convention; the only
                        // difference is that a vertex's lane indexes its
                        // range's SET rather than the whole palette.
-    kDirectLegacy,     // direct index + (x,-y,-z): no palette declared at
-                       // all, OR --legacy-skinning forced the
-                       // pre-promotion reading for comparison/debugging
+    kDirectLegacy,     // direct index + (x,-y,-z), ONLY when
+                       // --legacy-skinning is passed: an explicit opt-in
+                       // for debugging/comparison. NOT SPEC-BACKED:
+                       // spec-vertex-format.md Sec9 step 7b retracted this
+                       // reading 2026-09-30 (rig Sec11.15).
+    kRefuseNoPalette,  // no palette declared: no spec gives a skinning rule
+                       // for such a mesh (OPEN), so refuse. Manager ruling
+                       // 2026-09-30; until then this fell back to the
+                       // retracted reading above.
     kRefuseMultiSet,   // >1 set AND the per-range selector was not readable
                        // - still no correct reading, so still refuse
     kRefuseTruncated,  // palette declared but not fully readable - refuse
@@ -1203,8 +1212,13 @@ enum class SkinningMode {
 
 struct SkinningModeResult {
     SkinningMode mode = SkinningMode::kDirectLegacy;
-    std::string refusalMessage; // set only for the two kRefuse* modes
+    std::string refusalMessage; // set only for the kRefuse* modes
 };
+
+bool isSkinningRefusal(SkinningMode mode) {
+    return mode == SkinningMode::kRefuseMultiSet || mode == SkinningMode::kRefuseTruncated ||
+           mode == SkinningMode::kRefuseNoPalette;
+}
 
 SkinningModeResult resolveSkinningMode(const sr3mesh::MeshBlock& mesh, bool legacyForced) {
     SkinningModeResult result;
@@ -1215,7 +1229,12 @@ SkinningModeResult resolveSkinningMode(const sr3mesh::MeshBlock& mesh, bool lega
     const uint16_t declared = mesh.bonePaletteDeclaredCount();
     const std::vector<uint8_t>& palette = mesh.bonePalette();
     if (declared == 0 && palette.empty()) {
-        result.mode = SkinningMode::kDirectLegacy; // no palette declared at all - unchanged
+        result.mode = SkinningMode::kRefuseNoPalette;
+        result.refusalMessage =
+            "this mesh declares no bone palette: no spec-backed skinning for meshes without a "
+            "palette (spec-vertex-format.md Sec9 step 7b / spec-rig-format.md Sec11.15; the old "
+            "direct-index + (x,-y,-z) reading is retracted). Pass --legacy-skinning to force "
+            "that retracted reading for debugging only.";
         return result;
     }
     if (palette.empty() || palette.size() != declared) {
@@ -1633,7 +1652,7 @@ const char* skinningModeLabel(SkinningMode mode) {
         case SkinningMode::kPaletteMultiSet:
             return "bone-palette SETS, per draw range + (-x,-y,-z)  [HANDOFF Sec9.63.10]";
         case SkinningMode::kDirectLegacy:
-            return "direct-index + (x,-y,-z)  [no bone palette declared, or --legacy-skinning]";
+            return "direct-index + (x,-y,-z)  [--legacy-skinning; RETRACTED in spec, debugging only]";
         default:
             return "REFUSED";
     }
@@ -1657,11 +1676,11 @@ int runPose(int argc, char** argv) {
                      "sets\n"
                      "       (Sec9.63.10), refusing only if that selector or its per-vertex "
                      "assignment is\n"
-                     "       ambiguous; no palette declared -> direct-index + (x,-y,-z), "
-                     "unchanged.\n"
+                     "       ambiguous; no palette declared -> REFUSED (no spec-backed rule; "
+                     "vertex Sec9 / rig Sec11.15).\n"
                      "       --legacy-skinning: force the pre-promotion direct-index + (x,-y,-z) "
                      "reading even on\n"
-                     "                          a single-set mesh, to reproduce Sec9.56.x's "
+                     "                          any mesh (RETRACTED in spec; debugging only), to reproduce Sec9.56.x's "
                      "pre-Sec9.63 numbers.\n");
         return 1;
     }
@@ -1847,8 +1866,7 @@ int runPose(int argc, char** argv) {
     // the mesh's own declaration (see resolveSkinningMode() above this
     // function). A multi-set mesh refuses here, before any GPU work.
     const SkinningModeResult skinModeResult = resolveSkinningMode(mesh, legacySkinning);
-    if (skinModeResult.mode == SkinningMode::kRefuseMultiSet ||
-        skinModeResult.mode == SkinningMode::kRefuseTruncated) {
+    if (isSkinningRefusal(skinModeResult.mode)) {
         std::fprintf(stderr, "%s\n", skinModeResult.refusalMessage.c_str());
         return 1;
     }
@@ -2177,13 +2195,13 @@ int runAnimPose(int argc, char** argv) {
                      "multi-set -> the\n"
                      "       block's own per-draw-range set selector (Sec9.63.10), refusing only "
                      "if that array\n"
-                     "       or its per-vertex assignment is ambiguous; no palette declared -> the\n"
-                     "       pre-Sec9.62 direct-index + (x,-y,-z) reading, unchanged.\n"
+                     "       or its per-vertex assignment is ambiguous; no palette declared -> REFUSED\n"
+                     "       (no spec-backed rule; vertex Sec9 / rig Sec11.15).\n"
                      "       --bone-palette: kept for compatibility - a no-op now that this is "
                      "the default.\n"
                      "       --legacy-skinning: FORCE the pre-promotion direct-index + (x,-y,-z) "
                      "reading even on a\n"
-                     "                          single-set mesh, to reproduce Sec9.56.x's "
+                     "                          single-set or no-palette mesh (RETRACTED in spec; debugging only), to reproduce Sec9.56.x's "
                      "pre-Sec9.63 numbers.\n"
                      "       --times are FRACTIONS of the clip's own duration (+0x06), default "
                      "0,0.33,0.66,1.0\n");
@@ -2473,8 +2491,7 @@ int runAnimPose(int argc, char** argv) {
     // already refused it - the refusal is now automatic, not gated on the
     // flag.
     const SkinningModeResult skinModeResult = resolveSkinningMode(mesh, legacySkinning);
-    if (skinModeResult.mode == SkinningMode::kRefuseMultiSet ||
-        skinModeResult.mode == SkinningMode::kRefuseTruncated) {
+    if (isSkinningRefusal(skinModeResult.mode)) {
         std::fprintf(stderr, "%s\n", skinModeResult.refusalMessage.c_str());
         return 1;
     }

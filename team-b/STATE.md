@@ -32,7 +32,7 @@ libraries below and the render-side libraries, which get their own tables)
 | `.csrt_pc`/`.gsrt_pc` tree | Complete | 28/28 | §9.67, §9.72 |
 | `.clmesh_pc` collision/static-prop | Complete | 100,384/100,384 | §9.64, §9.65 |
 | `.czh_pc`/`.czn_pc`/`.gzn_pc` zone | Solid (object-stream body OPEN, parked on Team A) | 38,152/38,152 geometry | §9.55, §9.86 |
-| `.ccar_pc`/`.gcar_pc` vehicle assembly | Complete | 393/393, 9,951 parts | §9.69, §9.84 |
+| `.ccar_pc`/`.gcar_pc` vehicle assembly | Complete | part records 372/372 files, 9,536 parts (our run; 393/9,951 is the spec's figure); channel decode, material bindings and `high16` join 393/393 | §9.25, §9.69, §9.84, §9.89, §9.102 |
 | `_media.bnk_pc` audio wrapper | Structure only, no Wwise/Vorbis decode | 536/536 | §9.57 |
 | `sr3d3d9bc` D3D9 SM2/3 bytecode disassembler | Stage 1 complete | 7,276/7,276 blobs, 0 unknown opcodes | §9.97 |
 

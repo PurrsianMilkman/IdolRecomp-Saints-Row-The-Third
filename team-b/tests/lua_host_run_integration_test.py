@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""lua_host_run end to end on a synthetic archive cache (cloud phase, 2026-09-30).
+
+    lua_host_run_integration_test.py <fixture_exe> <lua_host_run_exe> <registered_tagged.txt> <bridge_diff.py>
+
+The fixture (tests/lua_host_run_fixture.cpp) writes two containers holding
+game_lib.lua, system_lib.lua, three mission scripts and one file with a syntax
+error. lua_host_run is run on that cache twice. The test checks the first run's
+per-mission rows, per-script rows, summaries and stub hits, then diffs the two
+runs with tools/bridge_diff.py: apart from timing, the output must not change.
+"""
+import csv
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+failures = 0
+
+
+def check(cond, what):
+    global failures
+    if not cond:
+        failures += 1
+        print(f"CHECK FAILED: {what}")
+
+
+def read_tsv(path):
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE))
+
+
+def read_kv(path):
+    out = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"^([^=\s]+)=(.*)$", line.strip())
+            if m:
+                out[m.group(1)] = m.group(2)
+    return out
+
+
+def run_host(host, reglist, cache, out):
+    r = subprocess.run([host, cache, reglist, out], capture_output=True, text=True, timeout=600)
+    check(r.returncode == 0, f"lua_host_run exit status {r.returncode}: {r.stderr[-2000:]}")
+
+
+def main(argv):
+    fixture, host, reglist, bridge_diff = argv
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = os.path.join(tmp, "cache")
+        os.makedirs(cache)
+        subprocess.run([fixture, cache], check=True)
+        out1, out2 = os.path.join(tmp, "run1"), os.path.join(tmp, "run2")
+        run_host(host, reglist, cache, out1)
+        run_host(host, reglist, cache, out2)
+
+        # Missions: one _start succeeds, one stops on OPEN engine state, one on a Lua error.
+        missions = {r["stem"]: r for r in read_tsv(os.path.join(out1, "verdict_mission_drive.tsv"))}
+        found = sorted(s for s, r in missions.items() if r["script_found"] == "1")
+        check(found == ["dlc1_mm_04", "dlc1_mm_05", "dlc1_mm_06"], f"missions found: {found}")
+        m5, m6, m4 = missions.get("dlc1_mm_05", {}), missions.get("dlc1_mm_06", {}), missions.get("dlc1_mm_04", {})
+        check(m5.get("start_call_ok") == "1", "dlc1_mm_05 _start succeeds")
+        check(m6.get("start_call_ok") == "0", "dlc1_mm_06 _start refused")
+        check("0x00723d20" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
+              f"dlc1_mm_06 stops on the OPEN zscene state: {m6.get('start_call_error')}")
+        check(m4.get("start_call_ok") == "0", "dlc1_mm_04 _start fails")
+        check("attempt to index local 't'" in m4.get("start_call_error", ""),
+              f"dlc1_mm_04 reports the Lua error: {m4.get('start_call_error')}")
+        for stem in found:
+            check(missions[stem].get("load_ok") == "1", f"{stem} loads")
+
+        # Per script: the syntax error is rejected by both real Lua and sr3lua.
+        scripts = {r["entry_name"]: r for r in read_tsv(os.path.join(out1, "verdict_per_script.tsv"))}
+        broken = scripts.get("broken_syntax.lua", {})
+        check(broken.get("gameplay_load_ok") == "0", "broken_syntax.lua fails real Lua load")
+        check(broken.get("sr3lua_parse_ok") == "0", "broken_syntax.lua fails sr3lua parse")
+        check(len(scripts) == 6, f"6 scripts listed, got {len(scripts)}")
+
+        summary = read_kv(os.path.join(out1, "verdict_summary.txt"))
+        check(summary.get("archives_scanned") == "2", f"archives_scanned={summary.get('archives_scanned')}")
+        check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
+        check(summary.get("real_luaL_loadbuffer_ok", "").startswith("5/6"), "5/6 scripts load")
+        check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "6/6", "sr3lua agrees on 6/6")
+        drive = read_kv(os.path.join(out1, "verdict_mission_drive_summary.txt"))
+        check(re.match(r"^3/\d+$", drive.get("missions_with_script_found", "")) is not None, "3 missions found")
+        check(re.match(r"^1/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "1 _start ok")
+
+        hits = {r["name"]: r for r in read_tsv(os.path.join(out1, "verdict_stub_hits_with_missions.tsv"))}
+        check(hits.get("set_mission_author", {}).get("call_count_all_inclusive") == "1", "set_mission_author hit once")
+        check(hits.get("zscene_is_loaded:OPEN_STATE", {}).get("call_count_all_inclusive") == "1",
+              "zscene_is_loaded OPEN refusal logged once")
+
+        # Determinism: a second run on the same cache diffs clean.
+        r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True)
+        report = r.stdout
+        check(r.returncode == 0, "bridge_diff exit status")
+        check("No per-mission changes." in report, "no per-mission changes between runs")
+        check("## Stub hits" in report, "stub hit section present")
+        for marker in ("no longer hit", "newly hit", "Biggest count changes", "| key | before | after |"):
+            check(marker not in report, f"second run differs: '{marker}' in diff report")
+        if failures:
+            print(report)
+
+    print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
