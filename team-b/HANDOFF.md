@@ -57,6 +57,16 @@ round-half-to-even, unchanged behaviour) — `f35b1ab`. Documentation-only: two 
 (supersession annotations; `sr3xtbl` already treats whitespace-only text as absent, so the 2-space
 indentation note changes nothing); lua-bindings (cross-refs, §17 rewording). ctest 43/43 after the merge.
 
+### 2026-09-30, cloud stretch 1c: self-containment spec sync (`f29438b`, 32 specs)
+
+Merged (fast-forward). **No code impact, and none of this stretch's stubbed gaps closed**:
+`spec-vint-doc-format.md` is not in the sync; `spec-lua-api-behaviour.md`/`spec-lua-bindings.md` restate 0 facts
+(HANDOFF-reference repoints only), so fade/zscene/`vint_is_std_res`/the `0x00ea2596` rounding mode/the three
+vint_doc walk gaps all remain open requests. Restated facts in the other specs (physics material records +
+`+0x78` gated pair, vehicle-geometry high16, rig palette retraction, render-pipeline D3D9 notes) either describe
+what the readers already implement or concern nothing implemented; e.g. `sr3clmesh` already follows
+§4.4.6(f), which superseded the restated `kGatedPairBytes` placeholder. ctest 43/43.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
