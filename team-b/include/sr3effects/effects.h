@@ -76,7 +76,7 @@ constexpr size_t kRootFlagCount = 0x08;   // i32; >0 gates the optional block at
 constexpr size_t kRootDuration = 0x20;    // f32, seconds (CONFIRMED, §6.2 item 2)
 constexpr size_t kRootSecondFloat = 0x24; // f32, meaning OPEN
 constexpr size_t kRootTexListCount = 0x28;
-constexpr size_t kRootEndField = 0x38;    // == file size - root (CONFIRMED, 3/3 in spec)
+constexpr size_t kRootEndField = 0x38;    // == file size - root in 3/3 spec samples, 1,468/1,812 measured; downgraded from CONFIRMED (spec §5.3 desk review 2026-09-30) - not enforced
 constexpr size_t kRootArray40Count = 0x40;
 constexpr size_t kRootSubObjectCount = 0x60;
 constexpr size_t kRootArray70Count = 0x70;

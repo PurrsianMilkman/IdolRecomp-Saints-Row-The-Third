@@ -1078,6 +1078,10 @@ int main() {
             if (c.registerSet != sr3d3d9bc::RegisterSet::Float4) continue;
             std::string decision;
             std::vector<std::array<float, 4>> regs;
+            // HYPOTHESIS-BASED (render-pipeline provenance downgrade, 2026-09-30): filling a CTAB constant
+            // named *proj* (projTM, VS c28x4) with the fused view*projection and *world2view* (c48) with the
+            // view matrix rests on spec-render-pipeline.md Sec20.12.5/Sec20.12.9, now HYPOTHESIS on provenance
+            // pending re-derivation from the shipped shaders (bridge job 06, ctab_census). No behaviour change.
             if (containsCI(c.name, "proj")) {
                 for (int i = 0; i < 4; ++i) { std::array<float, 4> r; packColumn(viewProj, i, r.data()); regs.push_back(r); }
                 decision = "REAL: buildOrbitViewProjection() (view*proj), framed to the real decoded+transformed bounds";

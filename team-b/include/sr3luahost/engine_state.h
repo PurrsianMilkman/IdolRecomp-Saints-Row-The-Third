@@ -159,16 +159,18 @@ struct ObjectIndicatorRecord {
 
 // One tracked "character"-shaped object (per this header's own top note:
 // really just "whatever the resolved name string was", never a true
-// distinct engine entity). Every field's default is this project's OWN
-// explicit choice for "a name not yet seen" - stated per-field below, not
-// scraped from any real data source (the spec does not state real default
-// values for a fresh/unspawned object, only the runtime FIELD SHAPES).
+// distinct engine entity). CLOUD PHASE 2026-09-30: every engine field
+// below that a stub READS is an OpenValue (open_state.h) - OPEN for a name
+// not yet seen, refusing reads until set, because no spec gives a fresh
+// object's values. The per-field notes below that mention a "default"
+// describe the pre-conversion stand-ins and are kept for history; the
+// stand-in values themselves are gone.
 struct CharacterState {
     // set_ignore_ai_flag (Sec3.4): the character's "ignore AI" flag.
     // Real read location per spec: bit 1 of the byte at object +0x2bc.
     // Default false ("not ignoring AI") - this project's own chosen
     // default for "alive, ordinary, not yet specially flagged."
-    bool ignoreAI = false;
+    OpenValue<bool> ignoreAI{"character ignore-AI flag (+0x2bc)", "spec-lua-api-behaviour.md Sec3.4"};
 
     // set_ignore_ai_flag's own conditional side effect (Sec3.4): "forces
     // the character's action/animation-override state to a fixed id
@@ -181,7 +183,7 @@ struct CharacterState {
     // confirms for the sibling animation-override field elsewhere in this
     // spec (not claimed to be the SAME physical field - this project's own
     // field, scoped only to set_ignore_ai_flag).
-    int32_t actionOverrideId = -1;
+    OpenValue<int32_t> actionOverrideId{"character action/animation override", "spec-lua-api-behaviour.md Sec3.4"};
 
     // Read-only-by-us gate for the conditional branch above: the
     // "in a vehicle" state-enum value is 3 per Sec3.4/Sec3.10's own cross-
@@ -190,13 +192,13 @@ struct CharacterState {
     // would naturally pair with it, is out of scope) - exposed only so a
     // test can set up the "newly enabling ignore-AI while in a vehicle"
     // condition directly. Default 0 ("not in a vehicle").
-    int32_t stateEnum = 0;
+    OpenValue<int32_t> stateEnum{"character state enum (+0x16d4)", "spec-lua-api-behaviour.md Sec3.4/Sec3.10"};
 
     // The other half of the same conditional (Sec3.4): "clears the
     // override to 0 if the character currently carries a nonzero
     // attacker/threat reference." Default 0 ("no attacker/threat
     // reference") - same "no Lua setter in scope" note as stateEnum above.
-    int32_t attackerThreatRef = 0;
+    OpenValue<int32_t> attackerThreatRef{"character attacker/threat reference", "spec-lua-api-behaviour.md Sec3.4"};
 
     // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31):
     // CONFIRMED, cross-checked to be the SAME integer field at object
@@ -206,13 +208,13 @@ struct CharacterState {
     // SHAPE, never a real default value for an unspawned character), kept
     // as a plain int32 to honor the confirmed "stored as a plain integer"
     // detail precisely, converted to a double only at Lua-push time.
-    int32_t maxHitPoints = 100;
+    OpenValue<int32_t> maxHitPoints{"character max hit points (+0x1cac)", "spec-lua-api-behaviour.md Sec7.12/Sec7.31"};
 
     // set_current_hit_points (Sec7.31): object +0x1cb8, clamped into
     // [0, maxHitPoints] on write (CONFIRMED). Default equals maxHitPoints
     // ("alive, full health" - this project's own chosen default, per this
     // task's own suggested convention).
-    int32_t currentHitPoints = 100;
+    OpenValue<int32_t> currentHitPoints{"character current hit points (+0x1cb8)", "spec-lua-api-behaviour.md Sec7.31"};
 
     // set_current_hit_points' own HIGH-CONFIDENCE-tier consequence (Sec7.31:
     // "if the new value is <= 0 and two further predicates ... are both
@@ -325,8 +327,7 @@ public:
     // task's own "no real networking layer" instruction). setCoopActive()
     // exists only so a test can exercise the true branch directly; no Lua
     // function among these 12 ever calls it.
-    bool isCoopActive() const { return coopActive_; }
-    void setCoopActive(bool active) { coopActive_ = active; }
+    OpenValue<bool>& coopActive() { return coopActive_; }
 
     // game_UI_audio_play (Sec2.2): "Returns the resulting voice/play-
     // instance handle as a Lua number" - the spec confirms a handle is
@@ -383,8 +384,7 @@ public:
     // lookup") - default 0 (this project's own "no default document yet"
     // sentinel, VdoObject's own doc comment). Test-only setter; no Lua
     // function among this task's 13 in-scope names ever changes it.
-    uint32_t currentDefaultDocHandle() const { return currentDefaultDocHandle_; }
-    void setCurrentDefaultDocHandle(uint32_t h) { currentDefaultDocHandle_ = h; }
+    OpenValue<uint32_t>& currentDefaultDocHandle() { return currentDefaultDocHandle_; }
 
     // Implements vint_object_find's own CONFIRMED mechanism (Sec15): hash
     // `name` (FUN_00D9E740 - this project's own default seed 0, since the
@@ -415,8 +415,7 @@ public:
     // vehicle-store UI mode" - this project's own chosen default, same
     // "single-process, nothing active yet" convention as isCoopActive()
     // above). Test-only setter, matching setCoopActive()'s own precedent.
-    bool isVehicleStoreActive() const { return vehicleStoreActive_; }
-    void setVehicleStoreActiveForTesting(bool active) { vehicleStoreActive_ = active; }
+    OpenValue<bool>& vehicleStoreActive() { return vehicleStoreActive_; }
 
     // --- Completion_is_client (Sec10.2) -------------------------------------
 
@@ -432,8 +431,7 @@ public:
     // convention already established for coopActive_/replicateStateChange
     // above). Test-only setter; no Lua function among this task's 9
     // in-scope names ever changes it.
-    bool isHost() const { return isHost_; }
-    void setHostForTesting(bool host) { isHost_ = host; }
+    OpenValue<bool>& isHost() { return isHost_; }
 
     // --- game_hud_update_inventory (Sec10.3) --------------------------------
 
@@ -450,8 +448,7 @@ public:
     // for "a real HUD refresh happened" (no real HUD to refresh) - a
     // plain incrementing counter, same shape choice as
     // nextAudioVoiceHandle() above.
-    bool hasLocalPlayer() const { return hasLocalPlayer_; }
-    void setHasLocalPlayerForTesting(bool has) { hasLocalPlayer_ = has; }
+    OpenValue<bool>& hasLocalPlayer() { return hasLocalPlayer_; }
     int hudInventoryRefreshCount() const { return hudInventoryRefreshCount_; }
     void recordHudInventoryRefresh() { ++hudInventoryRefreshCount_; }
 
@@ -501,8 +498,19 @@ public:
     // `coopJoinType_` is this project's own minimal `int` stand-in,
     // default 0. Pure query among this task's 9 in-scope names (the real
     // writer is a different, out-of-scope function) - test-only setter.
-    int coopJoinType() const { return coopJoinType_; }
-    void setCoopJoinTypeForTesting(int code) { coopJoinType_ = code; }
+    OpenValue<int>& coopJoinType() { return coopJoinType_; }
+
+    // --- name resolution the host does not model (cloud phase 2026-09-30) --
+
+    // Whether a tutorial id resolves in the 210-entry tutorial table
+    // (0x00717780, entry kind == 3; tutorial_advance Sec10.4). The table is
+    // not loaded here, so every id is OPEN until set.
+    OpenValueMap<bool>& tutorialResolves() { return tutorialResolves_; }
+    // Whether a name resolves to a live engine object through the resolver
+    // the calling function uses (ai_add_enemy_target Sec3.9: "on successful
+    // resolution of both names"; object_indicator_add_do Sec10.6). One map
+    // for all resolvers - a stated simplification; OPEN until set.
+    OpenValueMap<bool>& objectResolves() { return objectResolves_; }
 
     // --- zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23) --------------
 
@@ -592,24 +600,26 @@ public:
 
 private:
     std::unordered_map<std::string, CharacterState> characters_;
-    bool coopActive_ = false;
+    OpenValue<bool> coopActive_{"co-op session (0x0087ba20 non-null + session counter check)", "spec-lua-api-behaviour.md Sec3.1"};
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
 
     std::unordered_map<uint32_t, VdoObject> vdoObjects_;
     uint32_t nextVdoObjectHandle_ = 1;
-    uint32_t currentDefaultDocHandle_ = 0;
+    OpenValue<uint32_t> currentDefaultDocHandle_{"current default vint document (0x00e0ceb0)", "spec-lua-bindings.md Sec15"};
 
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
     // above for citation/reasoning. ---
-    bool vehicleStoreActive_ = false;                        // Sec10.1
-    bool isHost_ = true;                                      // Sec10.2
-    bool hasLocalPlayer_ = true;                               // Sec10.3
+    OpenValue<bool> vehicleStoreActive_{"vehicle-store active state", "spec-lua-api-behaviour.md Sec10.1"};
+    OpenValue<bool> isHost_{"host check (0x0087ba20: +0x5c == +0x58)", "spec-lua-api-behaviour.md Sec10.2/Sec8.27"};
+    OpenValue<bool> hasLocalPlayer_{"local player exists (0x009da4e0)", "spec-lua-api-behaviour.md Sec10.3"};
     int hudInventoryRefreshCount_ = 0;                         // Sec10.3
     std::unordered_map<std::string, int> tutorialAdvanceCounts_; // Sec10.4
     std::string qteAnimationTriggerCallback_;                  // Sec10.7
-    int coopJoinType_ = 0;                                      // Sec10.9
+    OpenValue<int> coopJoinType_{"0x012f44fc (co-op join type)", "spec-lua-api-behaviour.md Sec10.9"};
+    OpenValueMap<bool> tutorialResolves_{"tutorial table 0x00717780 lookup", "spec-lua-api-behaviour.md Sec10.4"};
+    OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6"};
 
     // --- zscene_is_loaded (Sec14.23), see the accessor doc comment above ---
     OpenValueMap<int> zsceneNameState_{"zscene per-name state (0x00723d20)", "spec-lua-api-behaviour.md Sec14.23"};

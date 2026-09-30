@@ -15,6 +15,7 @@ python3 bridge/bridge_client.py submit team-b/bridge-jobs/<file>.json
 
 | `04_ls_cache.json` | Lists `packfiles/pc/cache` so population jobs can name every archive explicitly (the agent does not glob). | yes |
 | `05_realdata_regression_fuzz_fixes.json` | Re-runs `validate_container_decode`, `validate_clmesh` (dlc1-3) and `validate_mesh` after the fuzz fixes (container reservations, DEFLATE-ratio bound, material-name reservation, mesh stride check). Compare against HANDOFF's recorded baselines: container decode mode (a) 4,272/4,272 and mode (b) 385,168/385,168 Ok (full population - this job covers a subset, so expect all-Ok, not those totals); clmesh dlc1-3 4,232/4,232 land on EOF (§ "GO/NO-GO"); mesh 549/549 stride law and g-length (§9.63.9 table, archive set not recorded - read the per-archive lines). Any refusal the new mesh stride check causes shows up as a `failed` count. | yes |
+| `06_ctab_census.json` | `ctab_census` over every archive in the cache (`--cache-dir`): one TSV row per CTAB constant of every `.fxo_pc` VS/PS blob (name, register set incl. samplers, index, count, type), a per-blob table and a summary. Expect `blobs=7276` and `ctab_well_formed + not_present = 7276, malformed=0` (§9.98). For Team A's render-pipeline re-derivation; the TSVs stay on the bus. | yes |
 
 Each job was checked against `bridge/pc_agent.py`'s own `validate()` before it was committed.
 

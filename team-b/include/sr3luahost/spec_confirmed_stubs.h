@@ -40,6 +40,19 @@
 // Sec9.143 blockers (fade_is_fully_faded_out/_in, vint_is_std_res) have no
 // behaviour spec yet and stay generic stubs (requested from Team A).
 //
+// IMPLEMENTED PRE-REVIEW, PENDING EXE RE-CLEARANCE (2026-09-30): the desk
+// review now marks spec-lua-api-behaviour.md §1-§5 "NOT yet cleared for
+// implementation". Six functions here come from those sections and were
+// implemented pre-pause, when they counted as reviewed:
+//   game_UI_audio_play (§2.2, NEEDS-EXE), game_get_key_name (§2.3,
+//   NEEDS-EXE), coop_is_active (§3.1, NEEDS-EXE), set_ignore_ai_flag
+//   (§3.4, NEEDS-EXE: 0x004e2050's `this` and the read bit's mask),
+//   ai_add_enemy_target (§3.9, DESK-PASS), on_take_damage (§3.13,
+//   DESK-PASS).
+// They are kept working (manager decision pending; option (a) = label, no
+// behaviour change) and nothing new is implemented from §1-§5 until Team A's
+// executable re-derivation clears it.
+//
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
 // The 8 vint_object_* lifecycle siblings Sec15 flags as "likely equally

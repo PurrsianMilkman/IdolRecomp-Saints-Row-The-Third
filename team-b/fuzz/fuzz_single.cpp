@@ -14,10 +14,12 @@
 #elif CRREISH_FUZZ_TARGET_geometry
 #include "sr3geometry/geometry_block.h"
 #include "sr3geometry/material_block.h"
+#include "sr3geometry/material_binding.h"
 #elif CRREISH_FUZZ_TARGET_rig
 #include "sr3rig/rig.h"
 #elif CRREISH_FUZZ_TARGET_anim
 #include "sr3anim/animation.h"
+#include "sr3anim/payload.h"
 #elif CRREISH_FUZZ_TARGET_clmesh
 #include "sr3clmesh/level_mesh.h"
 #elif CRREISH_FUZZ_TARGET_zoneheader
@@ -27,6 +29,8 @@
 #include "sr3save/save_snapshot.h"
 #elif CRREISH_FUZZ_TARGET_fxo
 #include "sr3fxo/shader_wrapper.h"
+#include "sr3fxo/d3d9_blob.h"
+#include "sr3fxo/wrapper_header.h"
 #elif CRREISH_FUZZ_TARGET_d3d9bc
 #include "sr3d3d9bc/ctab.h"
 #include "sr3d3d9bc/disassembler.h"
@@ -68,16 +72,35 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
         (void)sr3xtbl::ParseDocument(std::string_view(reinterpret_cast<const char*>(data), size), o);
     });
 #elif CRREISH_FUZZ_TARGET_texture
-    guarded([&] { (void)sr3texture::TexturePair::parse(v); });
+    guarded([&] {
+        auto tp = sr3texture::TexturePair::parse(v);
+        for (size_t i = 0; i < tp.records().size() && i < 64; ++i) {
+            guarded([&] { (void)tp.levelLayout(i); });
+            guarded([&] { (void)tp.pixelBytes(i, v); }); // the same bytes stand in for the g-file
+        }
+        guarded([&] { tp.validateAgainstGpeg(v); });
+    });
 #elif CRREISH_FUZZ_TARGET_geometry
     guarded([&] {
         auto m = sr3geometry::MaterialBlock::parse(v);
-        guarded([&] { (void)sr3geometry::GeometryBlock::parse(v, m); });
+        guarded([&] {
+            auto g = sr3geometry::GeometryBlock::parse(v, m);
+            for (size_t i = 0; i < g.arrays().size() && i < 16; ++i) guarded([&] { (void)g.arrayBytes(i, v); });
+            guarded([&] { (void)sr3geometry::MaterialBindings::parse(v, g.offset(), v.size()); });
+        });
+        guarded([&] { (void)sr3geometry::GeometryBlock::parseAt(v, m.totalSize); });
     });
 #elif CRREISH_FUZZ_TARGET_rig
     guarded([&] { (void)sr3rig::Rig::parse(v); });
 #elif CRREISH_FUZZ_TARGET_anim
-    guarded([&] { (void)sr3anim::Animation::parse(v); });
+    guarded([&] {
+        auto a = sr3anim::Animation::parse(v);
+        (void)a.rootRotationNormSquared();
+        guarded([&] {
+            auto p = sr3anim::Payload::walk(v, a);
+            for (size_t i = 0; i < p.tracks().size() && i < 64; ++i) guarded([&] { (void)p.rotations(v, i); });
+        });
+    });
 #elif CRREISH_FUZZ_TARGET_clmesh
     guarded([&] { (void)sr3clmesh::LevelMesh::parse(v); });
 #elif CRREISH_FUZZ_TARGET_zoneheader
@@ -86,7 +109,21 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     guarded([&] { (void)sr3save::SaveDirectory::parse(v, sr3save::SaveDirectory::HashPolicy::Ignore); });
     guarded([&] { (void)sr3save::SaveSnapshot::parse(v); });
 #elif CRREISH_FUZZ_TARGET_fxo
-    guarded([&] { (void)sr3fxo::ShaderWrapper::parse(v); });
+    guarded([&] {
+        auto sw = sr3fxo::ShaderWrapper::parse(v);
+        for (const auto& es : sw.shaders())
+            if (es.offset <= size && es.length <= size - es.offset)
+                (void)sr3fxo::inspectD3d9Blob(vpp::ByteView(data + es.offset, es.length));
+    });
+    guarded([&] {
+        sr3fxo::WrapperHeader h;
+        std::string why;
+        if (!sr3fxo::WrapperHeader::tryParse(v, h, why)) return;
+        size_t end = 0;
+        for (const auto& b : h.layoutBlobs(end))
+            if (b.offset <= size && b.length <= size - b.offset)
+                (void)sr3fxo::inspectD3d9Blob(vpp::ByteView(data + b.offset, b.length));
+    });
 #elif CRREISH_FUZZ_TARGET_d3d9bc
     guarded([&] {
         auto d = sr3d3d9bc::disassemble(v);
