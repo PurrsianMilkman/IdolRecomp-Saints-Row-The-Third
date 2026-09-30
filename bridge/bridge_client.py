@@ -70,7 +70,14 @@ def sync(c):
 def cmd_setup(a):
     d = os.path.abspath(os.path.expanduser(a.dir))
     if not os.path.isdir(os.path.join(d, ".git")):
-        git(["clone", "-q", a.url, d], os.path.dirname(d))
+        os.makedirs(d, exist_ok=True)
+        git(["init", "-q"], d)
+        git(["remote", "add", "origin", a.url], d)
+    # Clean room: a team's clone only ever fetches its own branch and the heartbeat,
+    # so Team B never has Team A's results on disk (and vice versa).
+    git(["config", "--unset-all", "remote.origin.fetch"], d, check=False)
+    git(["config", "--add", "remote.origin.fetch", "+refs/heads/%s*:refs/remotes/origin/%s*" % (a.team, a.team)], d)
+    git(["config", "--add", "remote.origin.fetch", "+refs/heads/status*:refs/remotes/origin/status*"], d)
     git(["config", "user.name", "Crreish cloud (%s)" % a.team], d)
     git(["config", "user.email", "crreish-cloud@localhost"], d)
     git(["fetch", "-q", "origin"], d, check=False)
