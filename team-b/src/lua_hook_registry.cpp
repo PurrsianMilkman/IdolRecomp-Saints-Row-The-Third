@@ -34,7 +34,77 @@ const char* hookGroupNote(HookGroup g) {
     return "";
 }
 
+const char* hookEvidenceLabel(HookEvidence e) {
+    switch (e) {
+        case HookEvidence::Sec8Confirmed: return "sec8_confirmed";
+        case HookEvidence::Sec4ScanPendingRecheck: return "sec4_scan_pending_recheck";
+        case HookEvidence::RefutedSec14_3: return "refuted_sec14_3_still_fired";
+        case HookEvidence::GroupLevel: return "group_level";
+    }
+    return "unknown";
+}
+
 namespace {
+
+// Group 1 names that appear only in spec-lua-bindings.md §4's table (not
+// in §8.2, not re-confirmed by §14.4/§14.6), per the 2026-09-30 desk-review
+// note on §4: "the remaining §4 names rest on the original automated scan
+// and should be re-checked ... to be settled against the executable."
+const char* const kSec4ScanOnlyHooks[] = {
+    "Main_menu_gameboot_complete",
+    "button_mashing_minigame",
+    "cat_mouse_results_populate",
+    "cmp_rewards_success",
+    "cmp_stronghold_success",
+    "coop_diversion_success_responder",
+    "countdown_display",
+    "countdown_unpause",
+    "credits_grab_credits",
+    "horde_results_populate",
+    "hud_btnmash",
+    "hud_diversion",
+    "hud_mayhem_world_cash_update",
+    "hud_qte",
+    "hud_running_man_load_complete",
+    "hud_touch_combo",
+    "hud_zombie",
+    "main_menu_ethernet_disconnected",
+    "main_menu_internet_disconnected",
+    "map_district_names",
+    "map_filter",
+    "mayhem_local_player_world_cash",
+    "newsticker_populate",
+    "object_indicator_remove",
+    "object_indicator_update",
+    "options_display_populate_display_modes",
+    "options_display_populate_msaa",
+    "screen_fade_auto_save_hide",
+    "screen_fade_auto_save_show",
+    "sr2_balance_meter",
+    "store_gallery_init_complete",
+    "tutorial_advance",
+    "tutorial_responder",
+    "vcust_populate_color_grid",
+    "vcust_populate_menu",
+    "vcust_populate_palette_menu",
+    "vcust_populate_underglow_color",
+    "vcust_populate_wheel_grid_menu",
+    "vcust_populate_wheel_menu",
+    "vint_remap_get_action_binding",
+    "vint_remap_update_display",
+    "whored_countdown_timer_update",
+};
+// §14.3: checked and found NOT to be Lua-hook dispatcher calls.
+const char* const kRefutedSec14_3Hooks[] = {
+    "cmp_mission_success", "cmp_activity_success", "cmp_fail_populate",
+    "garage_populate", "garage_performance_stats",
+};
+
+bool inList(const std::string& name, const char* const* list, size_t n) {
+    for (size_t i = 0; i < n; ++i)
+        if (name == list[i]) return true;
+    return false;
+}
 
 std::vector<HookSpec> buildConfirmedHooks() {
     std::vector<HookSpec> h;
@@ -318,6 +388,15 @@ std::vector<HookSpec> buildConfirmedHooks() {
     // checked and refuted per Sec14.6's own text).
     add("dialog_build", HookGroup::Group1_GeneralNamed);
 
+    for (HookSpec& spec : h) {
+        if (spec.group != HookGroup::Group1_GeneralNamed) continue;
+        if (inList(spec.name, kRefutedSec14_3Hooks, sizeof(kRefutedSec14_3Hooks) / sizeof(*kRefutedSec14_3Hooks)))
+            spec.evidence = HookEvidence::RefutedSec14_3;
+        else if (inList(spec.name, kSec4ScanOnlyHooks, sizeof(kSec4ScanOnlyHooks) / sizeof(*kSec4ScanOnlyHooks)))
+            spec.evidence = HookEvidence::Sec4ScanPendingRecheck;
+        else
+            spec.evidence = HookEvidence::Sec8Confirmed;
+    }
     return h;
 }
 

@@ -663,8 +663,22 @@ std::vector<Vertex> MeshBlock::decodeChannel(size_t index) const {
     cursor += info.reservedBytes;
     const size_t texcoordsAt = cursor;
 
+    // Each element is one stride-sized record (spec Sec5's stride law), so a
+    // stride shorter than the fixed fields decoded from it would make every
+    // element overlap the next - internally inconsistent, not a real layout.
+    // Refused rather than decoded; this also stops a zero stride from reading
+    // the same bytes elementCount times (found by fuzz_mesh: a zero-stride
+    // channel with ~0x73c80078 elements).
+    if (channel.elementCount > 0 && channel.stride() < texcoordsAt) {
+        throw FormatError("channel " + std::to_string(index) + " stride " + std::to_string(channel.stride()) +
+                          " is shorter than its layout's fixed fields (" + std::to_string(texcoordsAt) +
+                          " bytes) - refusing to decode overlapping elements");
+    }
     std::vector<Vertex> out;
-    out.reserve(channel.elementCount);
+    // No more elements than the segment can hold after dataOffset (fuzz_mesh:
+    // the count was trusted for an up-front reservation of ~500 GB).
+    const size_t available = segment.size() > channel.dataOffset ? segment.size() - channel.dataOffset : 0;
+    out.reserve(std::min<size_t>(channel.elementCount, available / std::max<size_t>(channel.stride(), 1) + 1));
     for (uint32_t v = 0; v < channel.elementCount; ++v) {
         const size_t base = channel.dataOffset + static_cast<size_t>(v) * channel.stride();
         Vertex vertex;

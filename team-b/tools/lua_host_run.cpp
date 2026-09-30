@@ -1405,7 +1405,7 @@ int main(int argc, char** argv) {
     std::ofstream hookByHookOut(outDir / "verdict_hook_fires_by_hook.tsv");
     hookByHookOut << "hook_name\thook_group\tgameplay_defined_in_N_scripts\tgameplay_called_ok\t"
                      "gameplay_called_error\tui_defined_in_N_scripts\tui_called_ok\tui_called_error\t"
-                     "total_calls_attempted_both_states\n";
+                     "total_calls_attempted_both_states\thook_evidence\n";
     uint64_t hooksEverDefinedCount = 0, hooksEverCalledOkCount = 0, hooksEverCalledErrCount = 0;
     for (size_t hi = 0; hi < hooks.size(); ++hi) {
         const auto& h = hooks[hi];
@@ -1413,7 +1413,8 @@ int main(int argc, char** argv) {
         uint64_t totalAttempted = agg.gpCalledOk + agg.gpCalledErr + agg.uiCalledOk + agg.uiCalledErr;
         hookByHookOut << h.name << "\t" << hookGroupLabel(h.group) << "\t" << agg.gpDefined << "\t"
                       << agg.gpCalledOk << "\t" << agg.gpCalledErr << "\t" << agg.uiDefined << "\t"
-                      << agg.uiCalledOk << "\t" << agg.uiCalledErr << "\t" << totalAttempted << "\n";
+                      << agg.uiCalledOk << "\t" << agg.uiCalledErr << "\t" << totalAttempted << "\t"
+                      << hookEvidenceLabel(h.evidence) << "\n";
         if (agg.gpDefined > 0 || agg.uiDefined > 0) hooksEverDefinedCount++;
         hooksEverCalledOkCount += (agg.gpCalledOk + agg.uiCalledOk);
         hooksEverCalledErrCount += (agg.gpCalledErr + agg.uiCalledErr);

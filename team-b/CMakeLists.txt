@@ -852,6 +852,14 @@ add_executable(sr3luahost_tests tests/synthetic_luahost_test.cpp)
 target_link_libraries(sr3luahost_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
 
+# Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
+# only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
+# bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
+add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
+target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
+target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+add_test(NAME synthetic_luahost_roster_test COMMAND sr3luahost_roster_tests)
+
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
 # stub environment above, reporting real luaL_loadbuffer/lua_pcall
@@ -922,3 +930,54 @@ add_test(NAME synthetic_vintdoc_test COMMAND sr3vintdoc_tests)
 
 add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
 target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)
+
+# libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.
+option(CRREISH_FUZZ "Build the libFuzzer harnesses (Clang)" OFF)
+if(CRREISH_FUZZ)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "CRREISH_FUZZ needs Clang (libFuzzer)")
+    endif()
+    include(fuzz/fuzz.cmake)
+endif()
+
+# Bridge-result diff tool (tools/bridge_diff.py) unit test, when Python is available.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME bridge_diff_py COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_diff_test.py)
+endif()
+
+# Real-data validation harnesses (tools/validation/*.cpp), plus two loose
+# tools, as CMake targets - the portable equivalent of
+# tools/validation/build_one.bat, which links every harness against every
+# reader library. Cloud phase 2026-09-30: lets the PC bridge build them by
+# target name and keeps them compiling in Linux CI. Harnesses that need D3D
+# (d3dcompiler/d3d11) or sr3render stay Windows-only.
+option(CRREISH_VALIDATION_TOOLS "Build tools/validation harnesses" ON)
+if(CRREISH_VALIDATION_TOOLS)
+    set(CRREISH_ALL_READER_LIBS vpp_container sr3save sr3asm sr3fxo sr3effects sr3xtbl
+        sr3tables_trafficai sr3tables_weapons sr3tables_progression sr3tables_environment
+        sr3tables_animation sr3tables_audio_radio sr3tables_ui_controls sr3tables_vehicle_world
+        sr3tables_diversions sr3tables_customization sr3d3d9bc sr3vehicleinfo sr3customization
+        sr3texture sr3geometry sr3anim sr3morph sr3foliage sr3conversation sr3cutscene sr3mesh
+        sr3vehicle sr3rig sr3zone sr3audio sr3clmesh sr3tree sr3lua sr3luahost sr3vintdoc)
+    set(CRREISH_WINDOWS_ONLY_VALIDATION d3dctest_semantics d3dctest_semantics_sm4
+        validate_d3d9bc_hlsl_population validate_d3d9bc_hlsl_sm4_population validate_peg_population
+        golden_scene_check) # drives the D3D11 sr3_viewer.exe
+    file(GLOB CRREISH_VALIDATION_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tools/validation/*.cpp)
+    list(APPEND CRREISH_VALIDATION_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/golden_scene_check.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/clmesh_lead_probe.cpp)
+    foreach(src ${CRREISH_VALIDATION_SOURCES})
+        get_filename_component(name ${src} NAME_WE)
+        if(NOT WIN32 AND name IN_LIST CRREISH_WINDOWS_ONLY_VALIDATION)
+            continue()
+        endif()
+        add_executable(${name} ${src})
+        target_link_libraries(${name} PRIVATE ${CRREISH_ALL_READER_LIBS} zlibstatic)
+        target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib
+            ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib)
+        if(WIN32 AND name IN_LIST CRREISH_WINDOWS_ONLY_VALIDATION)
+            target_link_libraries(${name} PRIVATE d3dcompiler d3d11 dxgi)
+        endif()
+    endforeach()
+endif()

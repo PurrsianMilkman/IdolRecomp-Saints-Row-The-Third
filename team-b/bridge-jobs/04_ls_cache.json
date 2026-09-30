@@ -1,0 +1,10 @@
+{
+  "title": "team-b: list the game's packfile cache (archive names for the population jobs)",
+  "steps": [
+    {
+      "kind": "ls",
+      "pattern": "packfiles/pc/cache/*"
+    }
+  ],
+  "collect": []
+}

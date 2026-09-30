@@ -48,6 +48,7 @@
 // routine before the parent/document-scoped lookup below. Header-only, no
 // new link dependency (include/ is one shared tree - see this project's
 // own established convention, every library already does this).
+#include "sr3luahost/open_state.h"
 #include "sr3save/save_crc.h"
 
 namespace sr3luahost {
@@ -506,43 +507,48 @@ public:
     // --- zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23) --------------
 
     // Real body: a two-tier dispatch (CONFIRMED, disassembly). Tier 1, only
-    // when a name is given: a per-name cutscene state (0x00723d20) read
-    // exactly `1` -> true. Tier 2 (0x00721db0): a global flag (0x0153b556 -
-    // the same busy flag zscene_prep gates on, Sec8.21) set -> true; else,
-    // if a name was given and resolves through the name-hash table lookup
-    // (0x00d9e8b0 -> 0x00721be0) to a record other than the fixed "current"
-    // sentinel, a per-record test whose sense is OPEN (read as inverted
-    // relative to tier 1, not reconciled); else a global state code
-    // (0x0153b51c) equal to `2` -> true.
+    // when a name is given: the scene's per-name state (0x00723d20) reads
+    // exactly 1 -> true. Tier 2 (0x00721db0): the busy flag 0x0153b556 (the
+    // same flag zscene_prep gates on, Sec8.21) set -> true; else, if a name
+    // was given and resolves through the scene-table lookup (0x00d9e8b0 ->
+    // 0x00721be0, a CRC-32 of the lowercased name) to a non-"current"
+    // record, a per-record test whose sense is OPEN; else the global state
+    // code 0x0153b51c == 2.
     //
-    // This project has no cutscene/scene-streaming subsystem and no copy of
-    // the real scene table, so every field below is a raw, opaque stand-in
-    // with no meaning assigned to its codes (the real meaning of state codes
-    // 1/2 is OPEN, Sec14.23). Defaults (empty maps, flag clear, code 0) are
-    // this project's own choice: the real initial values and every real
-    // writer (zscene_prep's load sequence, Sec8.21, is only HIGH CONFIDENCE
-    // and not traced past its first call) are not in any spec yet. All
-    // setters are test-only.
-    //
-    // zsceneFastPathState(): the tier-1 per-name state, keyed by the exact
-    // Lua string (the real per-name lookup inside 0x00723d20 is not
-    // described). zsceneHasTableRecord(): whether a name resolves through
-    // the tier-2 table lookup; keyed lowercased, since 0x00d9e8b0 hashes the
-    // lowercased string (HANDOFF Sec3). The record's own state is not
-    // stored: the only test that reads it is the OPEN branch.
-    // zsceneOpenBranchHits() counts how often that OPEN branch was reached
-    // (it returns false, the same falsy result the generic stub gave before)
-    // so a real run can report whether the OPEN item ever decides anything.
-    bool zsceneFastPathState(const std::string& name, int& stateOut) const;
-    void setZsceneFastPathStateForTesting(const std::string& name, int state) { zsceneFastPathStates_[name] = state; }
-    bool zsceneBusyFlag() const { return zsceneBusyFlag_; }
-    void setZsceneBusyFlagForTesting(bool set) { zsceneBusyFlag_ = set; }
-    int zsceneGlobalStateCode() const { return zsceneGlobalStateCode_; }
-    void setZsceneGlobalStateCodeForTesting(int code) { zsceneGlobalStateCode_ = code; }
-    bool zsceneHasTableRecord(const std::string& name) const;
-    void addZsceneTableRecordForTesting(const std::string& name);
+    // Every one of those values is OPEN state here (open_state.h): no spec
+    // gives an initial value or a writer (zscene_prep's load sequence is
+    // only HIGH CONFIDENCE, Sec8.21), so nothing is defaulted. Reading an
+    // OPEN one throws OpenStateError, which zscene_is_loaded reports as a
+    // Lua error naming the global. Tests (and later, specced writers) set
+    // them. zsceneTableResolves is keyed by the lowercased name; the
+    // per-name state by the exact Lua string (0x00723d20's own lookup is
+    // not described). zsceneOpenBranchHits() counts arrivals at the OPEN
+    // per-record branch, which also refuses.
+    OpenValueMap<int>& zsceneNameState() { return zsceneNameState_; }
+    OpenValue<bool>& zsceneBusyFlag() { return zsceneBusyFlag_; }
+    OpenValue<int>& zsceneStateCode() { return zsceneStateCode_; }
+    OpenValueMap<bool>& zsceneTableResolves() { return zsceneTableResolves_; }
+    static std::string zsceneTableKey(const std::string& name);
     int zsceneOpenBranchHits() const { return zsceneOpenBranchHits_; }
     void recordZsceneOpenBranchHit() { ++zsceneOpenBranchHits_; }
+
+    // --- screen-fade state machine (Sec26.23, Sec26.9) ----------------------
+
+    // The globals Sec26.23 names for the screen-fade-request primitive
+    // 0x0059f8c0's state machine. All OPEN (values, types beyond "compared
+    // as an integer", initial state and transitions are unspecced - HANDOFF
+    // request 1). CONFIRMED consumer: sfx_faded_out pushes 0x012e6aa4 == 3
+    // (Sec26.9). fade_out/fade_in drive this machine, but how is not specced,
+    // so they do not write it.
+    struct FadeStateMachine {
+        OpenValue<uint32_t> g012e6aa0{"0x012e6aa0", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g012e6aa4{"0x012e6aa4", "spec-lua-api-behaviour.md Sec26.9/Sec26.23"};
+        OpenValue<uint32_t> g012e6aa8{"0x012e6aa8", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effc8{"0x013effc8", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effcc{"0x013effcc", "spec-lua-api-behaviour.md Sec26.23"};
+        OpenValue<uint32_t> g013effd0{"0x013effd0", "spec-lua-api-behaviour.md Sec26.23"};
+    };
+    FadeStateMachine& fadeState() { return fadeState_; }
 
     // --- fade_out (spec-lua-api-behaviour.md Sec2.9) ------------------------
 
@@ -578,13 +584,11 @@ public:
 
     // --- mission_end_silently (Sec15.23) ------------------------------------
 
-    // Raw stand-in for the global mission-flags word 0x014c848c. CONFIRMED:
-    // mission_end_silently always sets bit 0x4 and sets/clears bit 0x10 to
-    // mirror its argument (meaning of both bits OPEN). Default 0 is this
-    // project's choice; the real initial value and other writers are not
-    // specced.
-    uint32_t missionFlagsWord() const { return missionFlagsWord_; }
-    void setMissionFlagsWord(uint32_t v) { missionFlagsWord_ = v; }
+    // The global mission-flags word 0x014c848c. CONFIRMED: mission_end_silently
+    // always sets bit 0x4 and sets/clears bit 0x10 to mirror its argument
+    // (meaning of both OPEN). Every other bit, and the initial value, is OPEN:
+    // only the bits a confirmed writer has written are known (open_state.h).
+    OpenBits32& missionFlagsWord() { return missionFlagsWord_; }
 
 private:
     std::unordered_map<std::string, CharacterState> characters_;
@@ -608,18 +612,19 @@ private:
     int coopJoinType_ = 0;                                      // Sec10.9
 
     // --- zscene_is_loaded (Sec14.23), see the accessor doc comment above ---
-    std::unordered_map<std::string, int> zsceneFastPathStates_;
-    bool zsceneBusyFlag_ = false;
-    int zsceneGlobalStateCode_ = 0;
-    std::unordered_set<std::string> zsceneTableRecords_; // lowercased names
+    OpenValueMap<int> zsceneNameState_{"zscene per-name state (0x00723d20)", "spec-lua-api-behaviour.md Sec14.23"};
+    OpenValue<bool> zsceneBusyFlag_{"0x0153b556", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
+    OpenValue<int> zsceneStateCode_{"0x0153b51c", "spec-lua-api-behaviour.md Sec14.23"};
+    OpenValueMap<bool> zsceneTableResolves_{"zscene table lookup 0x00721be0", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
     int zsceneOpenBranchHits_ = 0;
+    FadeStateMachine fadeState_;
 
     // --- fade_out (Sec2.9) / mission_end_silently (Sec15.23) ---
     bool hasScreenFadeColour_ = false;
     ScreenFadeColour screenFadeColour_;
     std::vector<ScreenFadeRequest> screenFadeRequests_;
     int screenFadeOpcode53Count_ = 0;
-    uint32_t missionFlagsWord_ = 0;
+    OpenBits32 missionFlagsWord_{"0x014c848c", "spec-lua-api-behaviour.md Sec15.23"};
 };
 
 } // namespace sr3luahost
