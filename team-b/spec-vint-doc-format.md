@@ -129,8 +129,12 @@ That intermediate atlas layer does genuinely exist elsewhere in this subsystem, 
 3. **The critical-resource entry's own 1-byte selector.** Its value space and exact meaning (autoload vs. plain reference, or something else) were not pinned down.
 4. **The one unconditionally-skipped byte following an element record's child-count field.** Possibly a flag or alignment pad; not decoded.
 5. **String-pool suffix-sharing.** Whether the ~half of files with imperfect string resolution genuinely use a suffix-sharing scheme, or whether some index/offset pairings are simply still wrong, was not settled (§3.1).
-6. **The possible getter/setter offset swap** flagged in §5 against `spec-lua-bindings.md` §9.2/§9.3 — a cheap, concrete check against an already-disassembled trampoline would resolve this quickly.
+6. ~~**The possible getter/setter offset swap** flagged in §5 against `spec-lua-bindings.md` §9.2/§9.3 — a cheap, concrete check against an already-disassembled trampoline would resolve this quickly.~~ **[RESOLVED 2026-09-30 — §5: `+0x08` is the setter, `+0x0c` the getter; corrected in `spec-lua-bindings.md` §9.3.]**
 7. **The exact property name(s) carrying a `bitmap`-type element's image reference**, and its precise hookup to either a direct PEG entry or the BitmapSheets atlas indirection (§6).
 8. **The concrete keyframe-array encoding for `tween`/`animation` elements** (§7), and the runtime's own keyframe-interpolation consumer.
 9. **Whether `.vint_xdoc` ships anywhere at all** — zero found in the one archive searched this pass.
 10. **The tags-`1`/`2` raw-value property paths** ("applied through a dedicated path, not the generic named-property setter") — their real-world kind was not identified.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked §8 item 6 (getter/setter offset swap) resolved per §5.

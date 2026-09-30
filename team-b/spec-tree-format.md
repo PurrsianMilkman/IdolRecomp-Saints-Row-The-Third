@@ -54,7 +54,7 @@
 | *(align 8)* | | | |
 | Runtime arrays | `n_mat × 8`, then `4 × 8`, then `n16 × 16` | pointer slots per material and per LOD; `n16` (0 or 6) 16-byte records in the three tall trees | **[CONFIRMED — sizes; OPEN — the 16-byte records.]** |
 | *(align 16)* | | | |
-| **Collision capsules** | `n_cap × 0x60` | §8; `n_cap` from `T+0x18` | **[CONFIRMED — sizes; HIGH CONFIDENCE — meaning.]** |
+| **Collision capsules** | `n_cap × 0x60` | §8; `n_cap` from `T+0x18` | **[CONFIRMED — sizes; HIGH CONFIDENCE — meaning.]** *(start/end/radius meaning upgraded to CONFIRMED — disassembly by the §8 update, `FUN_00a713e0`)* |
 | EOF | | exact in 11/11 | |
 
 ## 4. The `'TREE'` block (`0x208` bytes)
@@ -122,9 +122,9 @@ The same 32-bit values select the same texture *roles* in two formats with disjo
 | Offset | Content | Confidence |
 |---|---|---|
 | `+0x00` … `+0x0F` | four dwords: small indices/flags in some files (`1,1,5,5`; `16,16,17,17`), byte-pattern fills (`0x01010101`) in others, float-like in the tall pine | **[OPEN.]** |
-| `+0x10` | `float4` **start point** (w = z) | **[HIGH CONFIDENCE.]** |
-| `+0x20` | `float4` **end point** | **[HIGH CONFIDENCE.]** |
-| `+0x30` | **radius** (0.06 … 1.1) | **[HIGH CONFIDENCE.]** |
+| `+0x10` | `float4` **start point** (w = z) | **[HIGH CONFIDENCE.]** *(upgraded to CONFIRMED — disassembly by the update below)* |
+| `+0x20` | `float4` **end point** | **[HIGH CONFIDENCE.]** *(upgraded to CONFIRMED — disassembly by the update below)* |
+| `+0x30` | **radius** (0.06 … 1.1) | **[HIGH CONFIDENCE.]** *(upgraded to CONFIRMED — disassembly by the update below)* |
 | `+0x34` … | zero except in the tall pine (11 further floats) | **[OPEN.]** |
 
 Why capsules: in 9 of 12 records the segment is exactly vertical (same x/z, y from ≈0 to ≈ the tree's height: `0.004 → 3.004` r `0.06`; `0.358 → 16.358` r `0.563`; `−2.385 → 25.604` r `0.8`); the large tree carries a trunk plus three tilted branches at r `0.33`; the three shrubs carry none. A trunk/branch collision (or wind-anchor) capsule fits all of that; the field semantics are inferred, not read from code that consumes them. **[HIGH CONFIDENCE — inferred.]**
@@ -135,12 +135,12 @@ Why capsules: in 9 of 12 records the segment is exactly vertical (same x/z, y fr
 
 - Contiguous segments, one per present Mesh sub-block, in LOD order. Segment `n` starts where segment `n−1` ends (first at `+0`); starts are 4-aligned, not 16. **[CONFIRMED — empirical, 25/25 by tag search; the loader threads a `g`-cursor through the Mesh parser, which is how consecutive meshes find their data.]**
 - Segment `+0x00`: the **tag** — equal to the Mesh sub-block's check value in the `c`-file (`25/25`); `+0x04…+0x0F` zero; `+0x10`: the `count × stride` index buffer (first three `u16` all `< count`, 25/25). **[CONFIRMED — empirical; mirrors `spec-geometry-format.md` §4.1.2 items 9–10.]**
-- Segment length per vertex ≈ 16–27 bytes across the population (index buffer plus vertex channels). **[CONFIRMED — measured; channel layout OPEN as in the geometry spec.]**
+- Segment length per vertex ≈ 16–27 bytes across the population (index buffer plus vertex channels). **[CONFIRMED — measured; channel layout OPEN as in the geometry spec.]** **[The general channel array is closed in `spec-vertex-format.md`; for the tree layout codes 11/13, normal/tangent are located (code 13 HYPOTHESIS only) and position is still OPEN, `spec-vertex-format.md` §12.9/§12.10.]**
 
 ## 10. Cross-format notes
 
 - **Three shared blocks in one file**: the material-reference block (`+0`), the inline material definition (foliage's record), and the Mesh sub-block (`.ccmesh_pc`/`.ccar_pc`/foliage). The material-record parser has **10 call sites in 8 functions**; the Mesh wrapper 8; both are used by several parsers this project has not yet opened — a lookup table for future passes is in `tools/tree_callers.txt`.
-- The Mesh sub-block **bookend** (last `u32` = check value) was not noticed on `.ccmesh_pc`; worth re-checking there (`spec-geometry-format.md` §4.1.2 item 11).
+- The Mesh sub-block **bookend** (last `u32` = check value) was not noticed on `.ccmesh_pc`; worth re-checking there (`spec-geometry-format.md` §4.1.2 item 11). **[Since confirmed on 1,937/1,937 `.ccmesh_pc`/`.csmesh_pc` pairs, `spec-vertex-format.md` §4.1.]**
 - Foliage's inline-mode Mesh (no `g`) vs trees' g-backed Mesh with per-mesh segments: same block, both branches of the bit-0 switch now observed on real files.
 
 ## 11. Methodology note
@@ -153,8 +153,8 @@ The first replay attempt guessed the material records started at "names end, ali
 2. ~~Geometry sub-structure `+0x58`, `+0x60`, `+0x64`, `+0x68`.~~ **ADVANCED 2026-09-20 (§13.5): the readers of the rest of the structure were identified (new confirmed fields `+0xE0…+0xF4`), but no reader of these four fields exists in the bounded scope (§13.5.3); empirical relations recorded. Still OPEN.**
 3. ~~The 16-byte records (`+0x5C`, 6 in each of the three tall trees).~~ **ADVANCED 2026-09-20 (§13.5.3): no reader found; structure decoded (2×3 grid of `(a,b)` with constant `(c,d)`, `d` = `+0xDC`, 3/3) alongside a co-occurring float block at `+0x80…+0xDC`; meaning HYPOTHESIS only. Still OPEN.**
 4. Capsule header dwords and the tall pine's trailing floats. **(Partially resolved 2026-09-12: the start/end/radius fields' CONSUMER is now confirmed by disassembly — see the update to §8 above and `spec-vertex-format.md` §12.9.2. The leading four dwords at `+0x00`..`+0x0F` and the tall pine's trailing floats remain OPEN; `FUN_00a713e0` does not read them.)**
-5. Which two other formats use the material-set block (`FUN_00e40210`'s other callers `FUN_00866d80`, `FUN_00e3e590`).
-6. The `g` segment's channel layout beyond the index buffer (shared with the geometry spec).
+5. Which two other formats use the material-set block (`FUN_00e40210`'s other callers `FUN_00866d80`, `FUN_00e3e590`). **[Partly resolved: `FUN_00e3e590` is the `.clmesh_pc` MIDDLE parser (`spec-physics-format.md` §4.4.6); `FUN_00866d80` is still open.]**
+6. The `g` segment's channel layout beyond the index buffer (shared with the geometry spec). **[Now tracked in `spec-vertex-format.md` §12.9/§12.10: normal/tangent located for codes 11/13 (13 HYPOTHESIS only); position still OPEN.]**
 
 ## 13. Consumer-side decode — the wind object, LOD distances, GPU build (2026-09-20, agent AE)
 
@@ -314,3 +314,7 @@ Team B's independent tree reader (a fresh build, 2026-09-20; 11 distinct trees /
 3. §13.2's `k0x15` row wording ("0.5 for pines, shrubs") was loose: `st_shrub_lrg` has 0.1 (it belongs to the five-tree 0.1 set with `st_com_*`, consistent with §13.4). **(Re-derived; corrected in place above.)**
 4. The one-float-shifted frequency control that scores 0 is the shift to `(8+4g, 9+4g)`; the *other* one-float shift, `(6+4g, 7+4g)`, scores 26/44 (it coincides with the amplitude pairs). **(Re-derived by the orchestrator: 0/44 and 26/44.)**
 5. §13.5.2 does not say whether `+0xF0 = (B−A)·s` and `+0xF4 = (D−C)·s` use the scaled or unscaled `A,B,C,D`; Team B's reader exposes `+0xF0/+0xF4` raw from the file and does not recompute them. **[OPEN — unspecified in the current text.]**
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): annotated the §3/§8 capsule labels with the §8 update's CONFIRMED — disassembly result, marked the §9 bookend note confirmed (`spec-vertex-format.md` §4.1), pointed the §9 and §12 item 6 channel-layout notes to `spec-vertex-format.md` §12.9/§12.10, and marked §12 item 5 partly resolved (`FUN_00e3e590` = `.clmesh_pc` MIDDLE parser).
