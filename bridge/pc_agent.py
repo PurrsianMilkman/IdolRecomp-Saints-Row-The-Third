@@ -133,11 +133,14 @@ class Bus:
     def force_status(self, payload):
         """Heartbeat on the 'status' branch: always a single parentless commit, force-pushed,
         built with plumbing so the working tree is never touched."""
-        data = json.dumps(payload, indent=2) + "\n"
+        # Bytes, not text: on Windows text-mode pipes turn "\n" into "\r\n", which put a stray CR into
+        # the mktree file name ("agent.json\r").
+        data = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
         blob = subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=self.path, input=data,
-                              text=True, capture_output=True, check=True).stdout.strip()
-        tree = subprocess.run(["git", "mktree"], cwd=self.path, input="100644 blob %s\tagent.json\n" % blob,
-                              text=True, capture_output=True, check=True).stdout.strip()
+                              capture_output=True, check=True).stdout.decode().strip()
+        tree = subprocess.run(["git", "mktree"], cwd=self.path,
+                              input=("100644 blob %s\tagent.json\n" % blob).encode("utf-8"),
+                              capture_output=True, check=True).stdout.decode().strip()
         commit = git(["commit-tree", tree, "-m", "PC agent heartbeat"], self.path).stdout.strip()
         git(["push", "-q", "-f", "origin", commit + ":refs/heads/status"], self.path, check=False)
 
@@ -502,9 +505,23 @@ def main():
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "pc_config.json"))
     ap.add_argument("--once", action="store_true", help="process pending jobs once, then exit")
     a = ap.parse_args()
-    with open(a.config, encoding="utf-8") as f:
-        cfg = json.load(f)
-    Agent(cfg).loop(once=a.once)
+    Agent(load_config(a.config)).loop(once=a.once)
+
+
+def load_config(path):
+    """Read pc_config.json. Windows paths typed with backslashes are accepted: the config never needs a
+    JSON escape, so every backslash is treated as a path separator (C:\\new would otherwise silently
+    become a newline)."""
+    with open(path, encoding="utf-8-sig") as f:
+        text = f.read()
+    try:
+        return json.loads(text.replace("\\\\", "/").replace("\\", "/"))
+    except json.JSONDecodeError as e:
+        lines = text.splitlines()
+        bad = lines[e.lineno - 1] if 0 < e.lineno <= len(lines) else ""
+        raise SystemExit("pc_config.json is not valid JSON (line %d, column %d): %s\n    %s\n"
+                         "Check for a missing comma or quote, or a trailing comma before } ."
+                         % (e.lineno, e.colno, e.msg, bad.strip()))
 
 
 if __name__ == "__main__":

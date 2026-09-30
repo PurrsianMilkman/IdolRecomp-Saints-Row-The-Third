@@ -22,6 +22,8 @@ where git >nul 2>&1 || (
   pause
   exit /b 1
 )
+rem CMake: use the one on PATH, else the copy bundled with Visual Studio 2022 (found via vswhere).
+where cmake >nul 2>&1 || call :find_vs_cmake
 where cmake >nul 2>&1 || (
   echo CMake was not found. Install Visual Studio 2022 with "Desktop development with C++" ^(it includes CMake^),
   echo or CMake from https://cmake.org/download/ with "Add to PATH", then run this again.
@@ -33,3 +35,15 @@ where cmake >nul 2>&1 || (
 echo Agent exited, restarting in 30 seconds. Close this window to stop.
 timeout /t 30 /nobreak >nul
 goto loop
+
+:find_vs_cmake
+set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+if not exist "%VSWHERE%" exit /b 0
+for /f "usebackq delims=" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSDIR=%%i"
+if not defined VSDIR exit /b 0
+set "VSCMAKE=%VSDIR%\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin"
+if exist "%VSCMAKE%\cmake.exe" (
+  set "PATH=%VSCMAKE%;%PATH%"
+  echo Using the CMake bundled with Visual Studio: %VSCMAKE%
+)
+exit /b 0

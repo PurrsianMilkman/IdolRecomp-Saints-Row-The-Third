@@ -13,6 +13,7 @@ results/<id>/.
     bridge_client.py wait <id> [--timeout 3600]
     bridge_client.py show <id>
     bridge_client.py list
+    bridge_client.py cancel <id> [<id> ...] [--reason TEXT]   # withdraw queued jobs
 
 Job fields: team, title, ref (project-repo branch or commit; 'auto' = the
 current branch of the project checkout, which must be pushed), steps, collect.
@@ -100,6 +101,8 @@ def cmd_status(a):
     c = load_conf()
     sync(c)
     p = git(["show", "origin/status:agent.json"], c["dir"], check=False)
+    if p.returncode != 0:  # heartbeats from agents before the CRLF fix were stored as "agent.json\r"
+        p = git(["show", "origin/status:agent.json\r"], c["dir"], check=False)
     if p.returncode != 0:
         print("PC agent has never reported in (no 'status' branch). Is pc_agent.py running on the PC?")
         return 1
@@ -219,6 +222,38 @@ def cmd_show(a):
     return print_result(c, a.id)
 
 
+def cmd_cancel(a):
+    """Withdraw queued jobs: writes a 'cancelled' result so the PC agent skips them. A job the agent has
+    already started still runs; its own result then fails to push and the cancellation stands."""
+    c = load_conf()
+    d = sync(c)
+    done = []
+    for jid in a.ids:
+        if not os.path.exists(os.path.join(d, "jobs", jid + ".json")):
+            print("%s: no such job on %s" % (jid, c["team"]))
+            continue
+        rp = result_path(c, jid)
+        if os.path.exists(rp):
+            print("%s: already has a result, not cancelled" % jid)
+            continue
+        os.makedirs(os.path.dirname(rp), exist_ok=True)
+        with open(rp, "w") as f:
+            json.dump({"id": jid, "team": c["team"], "status": "cancelled", "note": a.reason,
+                       "finished": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), "steps": []}, f, indent=2)
+        done.append(jid)
+    if not done:
+        return 1
+    git(["add", "results"], d)
+    git(["commit", "-qm", "cancel %s" % " ".join(done)], d)
+    for i in range(5):
+        if git(["push", "-q", "origin", "HEAD:" + c["team"]], d, check=False).returncode == 0:
+            print("cancelled: " + " ".join(done))
+            return 0
+        time.sleep(2 ** (i + 1))
+        git(["pull", "-q", "--rebase", "origin", c["team"]], d, check=False)
+    die("could not push cancellation")
+
+
 def cmd_list(a):
     c = load_conf()
     d = sync(c)
@@ -239,6 +274,7 @@ def main():
     p = sp.add_parser("quick"); p.add_argument("--title"); p.add_argument("--ref", default="auto"); p.add_argument("--build"); p.add_argument("--collect"); p.add_argument("--run-timeout", type=int, default=3600); p.add_argument("--wait", action="store_true"); p.add_argument("--timeout", type=int, default=7200); p.add_argument("command", nargs=argparse.REMAINDER); p.set_defaults(f=cmd_quick)
     p = sp.add_parser("wait"); p.add_argument("id"); p.add_argument("--timeout", type=int, default=7200); p.set_defaults(f=cmd_wait)
     p = sp.add_parser("show"); p.add_argument("id"); p.set_defaults(f=cmd_show)
+    p = sp.add_parser("cancel"); p.add_argument("ids", nargs="+"); p.add_argument("--reason", default="superseded"); p.set_defaults(f=cmd_cancel)
     p = sp.add_parser("list"); p.add_argument("-n", type=int, default=30); p.set_defaults(f=cmd_list)
     a = ap.parse_args()
     if a.cmd == "quick" and a.command and a.command[0] == "--":
