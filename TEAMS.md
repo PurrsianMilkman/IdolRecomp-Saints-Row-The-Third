@@ -8,9 +8,9 @@ with two separate teams and one session managing both. The pause banners at the 
 
 | Session | Branch | Reads | Writes |
 |---|---|---|---|
-| **Manager** | `claude/project-crreish-teams-imlxay` (integration) | everything | `TEAMS.md`, `bridge/`, merges, spec sync |
-| **Team A** (specs) | `claude/crreish-team-a` | everything | `team-a/`, `review/` |
-| **Team B** (build) | `claude/crreish-team-b` | `team-b/`, `bridge/`, root docs only | `team-b/`, `.github/` |
+| **Manager** (`session_011LDv9wRaDB64XptUsyvxmx`) | `claude/project-crreish-teams-imlxay` (integration) | everything | `TEAMS.md`, `bridge/`, merges, spec sync |
+| **Team A** (specs, `session_01HKD2RtWHkUAmraBrnepDmd`) | `claude/crreish-team-a` | everything | `team-a/`, `review/` |
+| **Team B** (build, `session_01GDLnHaxBfXDAc7uTdrRLZq`) | `claude/crreish-team-b` | `team-b/`, `bridge/`, root docs only | `team-b/`, `.github/` |
 
 Team B's session is started with a sparse checkout (`team-b/` and `bridge/` only), so `team-a/HANDOFF.md`,
 `team-a/WALLS.md` and Team A's bridge results are not even on its disk. The clean-room rules in
