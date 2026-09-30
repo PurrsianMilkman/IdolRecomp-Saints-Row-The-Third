@@ -2168,14 +2168,7 @@ caller of `FUN_00753d40`, at `0x007542be` — inside sixty-odd bytes of code Ghi
 carved into a `Function` (`getFunctionContaining` returned none). Defining it
 (`createFunction`, this independent copy only) and decompiling gives a thin pass-through:
 
-```c
-undefined4 FUN_007542a0(p1,p2,p3,p4,p5) {
-  undefined4 r = FUN_00753d40(p1,p2,p3,p4,p5);
-  if ((char)r == '\0') return r;
-  /* zero five more fields on the receiver, set two to -1, one to 1 */
-  return 1;
-}
-```
+`0x007542a0` is a thin pass-through: it calls `0x00753d40` with the same five arguments, and if that call's own low byte reads as `0`, returns that same result immediately. Otherwise it zeroes five further fields on the receiver, sets two of them to `-1` and one to `1`, then returns `1`.
 
 Both `FUN_00753d40` (`0x01152d58`) and `FUN_007542a0` (`0x01152d68`) turn up, sixteen bytes
 apart, as **plain data words** in `.rdata` — not reached by any `CALL` at all for
