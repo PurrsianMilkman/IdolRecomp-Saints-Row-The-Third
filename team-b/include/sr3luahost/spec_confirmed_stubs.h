@@ -34,6 +34,12 @@
 // hudInventoryRefreshCount_/tutorialAdvanceCounts_/
 // qteAnimationTriggerCallback_/coopJoinType_) backing them.
 //
+// Cloud phase (2026-09-30): +1, zscene_is_loaded (spec-lua-api-behaviour.md
+// Sec14.23), one of the HANDOFF Sec9.143 mission-driving blockers. Its OPEN
+// per-record branch is a labelled stub - see its own doc comment. The other
+// Sec9.143 blockers (fade_is_fully_faded_out/_in, vint_is_std_res) have no
+// behaviour spec yet and stay generic stubs (requested from Team A).
+//
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
 // The 8 vint_object_* lifecycle siblings Sec15 flags as "likely equally

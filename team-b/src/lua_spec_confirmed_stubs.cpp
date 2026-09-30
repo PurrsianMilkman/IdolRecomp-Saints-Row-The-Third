@@ -668,6 +668,48 @@ int stub_game_get_coop_join_type(lua_State* L) {
     return 1;
 }
 
+// ---------------------------------------------------------------------
+// 23. zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23)
+// Arguments: 1 optional string, standard nil-gated idiom, default absent
+// (CONFIRMED). Return: 1 boolean (CONFIRMED). Pure query.
+// CONFIRMED: the two-tier dispatch and tier 1's exact test (a named
+// scene's per-name state reads exactly 1 -> true). Tier 2's global-flag
+// and global-state-code (== 2) tests are implemented as literal reads of
+// EngineState's opaque stand-ins; no meaning is given to the codes (OPEN).
+// OPEN, stubbed: the tier-2 per-record branch, whose read sense is
+// "apparently inverted" relative to tier 1 and not reconciled. Reaching it
+// returns false (the falsy result the generic stub gave before this
+// function existed) and bumps EngineState::zsceneOpenBranchHits().
+// Added in the cloud phase (2026-09-30) as a mission-driving blocker
+// (HANDOFF Sec9.143: 714K busy-poll calls in the first mission run).
+// ---------------------------------------------------------------------
+int stub_zscene_is_loaded(lua_State* L) {
+    logCall(L, upLog(L), "zscene_is_loaded", upStateTag(L));
+    EngineState* es = upState(L);
+    bool hasName = lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL;
+    std::string name = hasName ? argString(L, 1) : std::string();
+
+    // Tier 1 (0x00723d20), only when a name is given.
+    int fastState = 0;
+    if (hasName && es->zsceneFastPathState(name, fastState) && fastState == 1) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    // Tier 2 (0x00721db0).
+    if (es->zsceneBusyFlag()) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    if (hasName && es->zsceneHasTableRecord(name)) {
+        // OPEN (Sec14.23): per-record test with unreconciled sense - not implemented.
+        es->recordZsceneOpenBranchHit();
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+    lua_pushboolean(L, es->zsceneGlobalStateCode() == 2 ? 1 : 0);
+    return 1;
+}
+
 void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
                   const char* name, lua_CFunction fn) {
     lua_pushlightuserdata(L, &state);
@@ -713,6 +755,9 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "on_qte_animation_trigger",
         "on_revived",
         "game_get_coop_join_type",
+        // Cloud phase (2026-09-30): Sec14.23, tagged `gameplay` in
+        // tools/lua_all_registered_1490_tagged.txt (line 1014).
+        "zscene_is_loaded",
     };
     return names;
 }
@@ -753,6 +798,7 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("on_qte_animation_trigger")) registerOne(L, state, log, stateTag, "on_qte_animation_trigger", stub_on_qte_animation_trigger);
     if (wants("on_revived")) registerOne(L, state, log, stateTag, "on_revived", stub_on_revived);
     if (wants("game_get_coop_join_type")) registerOne(L, state, log, stateTag, "game_get_coop_join_type", stub_game_get_coop_join_type);
+    if (wants("zscene_is_loaded")) registerOne(L, state, log, stateTag, "zscene_is_loaded", stub_zscene_is_loaded);
 }
 
 } // namespace sr3luahost
