@@ -45,6 +45,18 @@ mission re-run), `20260930T213047-team-b-zlbw` (03 vintdoc sweep). Read results 
 42 suites, `02` mission-driving re-run, `03` `sr3vintdoc` sweep over `interface_startup.vpp_pc` +
 `interface.vpp_pc`. **Job 03's `--dump` JSON contains game text: read it from the bus, never commit it.**
 
+### 2026-09-30, cloud stretch 1b: consistency-review merge (`b243443`, 44 spec copies)
+
+Changelogs checked for the specs current code depends on (lua-api-behaviour, lua-bindings, vint-doc-format,
+vpp-container, xtbl-format, audio-format). **One code impact:** `spec-lua-api-behaviour.md` §4.1 now marks
+`0x00ea2596`'s rounding mode OPEN (the §2/§3/§3.9 descriptions disagree); 8 stub call sites relied on it and
+3 comments called banker's rounding CONFIRMED. All now go through `roundToIntOpenMode()` (CHOSEN
+round-half-to-even, unchanged behaviour) — `f35b1ab`. Documentation-only: two `sr3audio` header comments said
+"four mode-(b) archives" (the corrected spec says those are the four raw `0x0` archives); fixed. No impact:
+§14.23 (`zscene_is_loaded`) unchanged; vint-doc (only §8 item 6 marked resolved); vpp-container/xtbl
+(supersession annotations; `sr3xtbl` already treats whitespace-only text as absent, so the 2-space
+indentation note changes nothing); lua-bindings (cross-refs, §17 rewording). ctest 43/43 after the merge.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M

@@ -61,10 +61,11 @@ namespace sr3luahost {
 // spec's own "keyed by the arg-3-derived integer when nonzero, else by
 // object identity alone" text as closely as this minimal registry allows.
 struct EnemyTargetRecord {
-    // Real, spec-confirmed banker's-rounded (round-half-to-even) int64 of
-    // arg 3 - CONFIRMED per Sec3's own primitive-upgrade note (0x00ea2596
-    // resolved to a banker's-rounding float->int64 conversion, not a plain
-    // truncation).
+    // int64 of arg 3 via 0x00ea2596. Its rounding mode was labelled
+    // banker's rounding (CONFIRMED) in Sec3's primitive note, but the
+    // 2026-09-30 consistency review found Sec2/Sec3/Sec3.9 disagree and marked
+    // it OPEN (Sec4.1). Converted with roundToIntOpenMode()
+    // (lua_spec_confirmed_stubs.cpp), this project's CHOSEN round-half-to-even.
     int64_t priorityOrId = 0;
     // Bit 0x04: set from arg 4 (optional bool, default false). CONFIRMED
     // structure (Sec3.9); the real-world MEANING of this bit is HIGH

@@ -122,8 +122,9 @@
 // Sec4.2 states "Record 0's offset is always 0x800 - the first 0x800-byte
 // block after the header region". The general sentence is right; the literal
 // constant is not. Measured directly over the same 536-file population
-// (tools/validation/diag_media_bank_first_offset.cpp, all four mode-(b)
-// archives):
+// (tools/validation/diag_media_bank_first_offset.cpp, all four raw (flags
+// 0x0) audio archives - the spec's "mode-(b) archives", label corrected
+// 2026-09-30):
 //
 //   offset[0] == 0x800                                    278 / 536
 //   offset[0] == round_up(0x20 + recordCount*16, 0x800)   536 / 536
