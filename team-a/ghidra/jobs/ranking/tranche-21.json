@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 21 (names 451-475 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "gang_customization_select_gang_sign",
+    "gang_customization_revert_vehicle",
+    "gang_customization_revert_gang_sign",
+    "gang_customization_confirm_vehicle",
+    "gang_customization_confirm_gang_sign",
+    "game_use_imperial_units",
+    "game_steam_open_url",
+    "game_steam_open_dlc_page_overlay",
+    "game_request_game_terminate",
+    "game_record_set_quality_level",
+    "game_record_mode_show_hud",
+    "game_record_mode_enable",
+    "game_record_mode_can_encode",
+    "game_proto_select",
+    "game_pause_map_filter",
+    "game_machinima_record",
+    "game_machinima_overwrite_clip",
+    "game_machinima_delete_clip",
+    "game_machinima_copy_clip",
+    "game_machinima_clip_exists",
+    "game_lobby_update_ready_state",
+    "game_lobby_horde_continue_from_wave",
+    "game_lobby_finished_loading",
+    "game_kick_coop_player",
+    "game_is_waiting_for_partner"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

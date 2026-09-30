@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 15 (names 301-325 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "vehicle_is_flipped",
+    "vehicle_in_air",
+    "vehicle_get_max_speed",
+    "vehicle_flee",
+    "vehicle_evacuate",
+    "vehicle_detonate_random_parked_car",
+    "vehicle_component_shatter_glass",
+    "vehicle_component_is_shattered",
+    "vehicle_allow_ownership_transfer",
+    "vcust_show_nos_hydraulic_warning",
+    "vcust_set_underglow",
+    "vcust_select_paint_slot",
+    "vcust_purchase_performance_upgrade",
+    "vcust_purchase_paint",
+    "vcust_purchase_component",
+    "vcust_preview_rim_sizing",
+    "vcust_change_top_level_menu",
+    "vcust_adjust_camera_angle",
+    "vault_heli_hack_for_m01",
+    "tutorial_stop_current",
+    "tutorial_lock",
+    "turn_to_check_done",
+    "trigger_allow_dead_guys",
+    "store_vehicle_notify_screen_covered",
+    "store_vehicle_no_vehicle_exit"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 11 (names 201-225 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "mesh_mover_set_damaged_by_player_only",
+    "mesh_mover_ready",
+    "mesh_mover_apply_impulse",
+    "main_menu_set_coop_menu_type",
+    "main_menu_new_game",
+    "main_menu_horde_start",
+    "inv_item_get_weapon_upgrades",
+    "inv_item_add_do",
+    "inv_item_add_ammo",
+    "human_has_taken_non_melee_damage_from_player",
+    "hud_x_of_y_remove",
+    "hud_get_text_adventure_current_screen_index",
+    "hud_diversion_remove_callback",
+    "helicopter_set_dont_use_constraints",
+    "group_show_do",
+    "group_is_loaded_internal",
+    "group_hide_do",
+    "get_vehicle_speed",
+    "get_get_key_names_for_axis_action",
+    "get_current_difficulty",
+    "get_closest_npc_to_object",
+    "get_char_skydiving_state",
+    "garage_repair_vehicle",
+    "game_steam_open_overlay",
+    "game_start_find_syslink_servers"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

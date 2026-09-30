@@ -60,3 +60,20 @@ Taken from the resume notes in both HANDOFFs and `team-b/STATE.md` (§9.143).
 3. Continue the next spec tranches in the order that ranking gives.
 
 **Held:** the `.czn_pc` object-stream interior stays on hold until the owner decides.
+
+## Which model for which job
+
+The team leads run on Opus 5.5 and orchestrate. Each subagent they dispatch gets the model that suits its
+task (the Agent tool's `model`: `fable`, `opus`, `sonnet`, `haiku`). This replaces the pre-pause habit of
+dispatching every agent on the same model.
+
+| Model | Strength | Use it for |
+|---|---|---|
+| **Fable 5.1** (`fable`) | Most capable; the deepest reasoning and long-horizon work | Team A: interpreting disassembly into behaviour (state machines, walkers, layouts), adversarial re-derivation against the executable, resolving conflicting evidence. Either team: root-causing hard bugs that resisted a first attempt (e.g. the clmesh NaN/`Fog_dist` artifact). |
+| **Opus 5.5** (`opus`) | The default: strong reasoning and coding | Writing specs from Ghidra dumps; non-trivial C++ (new format readers, host engine-state modelling); independent verification of another agent's work (rebuild + rerun); reviewing diffs before merge. |
+| **Sonnet 5.5** (`sonnet`) | Fast, capable everyday coding | Well-specified implementation: CONFIRMED-spec Lua functions with unit tests, fuzz harnesses, tool ports, CI, scripts for comparing results, bridge job files; desk reviews of cross-references and consistency. |
+| **Haiku 4.5** (`haiku`) | Cheapest, fastest | Mechanical work: greps and censuses, spec-copy/format checks, bulk renames, reading large bridge outputs and summarising or tabulating them. |
+
+Rules: verification of an agent's work is done by a model at least as capable as the one that did it. When
+a task turns out harder than expected (two failed attempts, or conflicting evidence), escalate it one tier
+instead of retrying on the same model.

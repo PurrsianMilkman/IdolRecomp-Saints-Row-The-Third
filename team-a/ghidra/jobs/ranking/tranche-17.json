@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 17 (names 351-375 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "sb_select_hitman_target",
+    "sb_select_chop_shop_vehicle",
+    "sb_saintsbook_is_available",
+    "save_system_set_operation",
+    "save_system_delete_game",
+    "save_system_change_device",
+    "save_game_wrap_up",
+    "satellite_weapon_mode_set",
+    "radio_unblock",
+    "radio_set_sing_along_track",
+    "radio_newsbreak_clear",
+    "radio_clear_sing_along_track",
+    "qte_start_m02_skyqte_01",
+    "playlist_stop_track",
+    "playlist_play_track",
+    "players_naked",
+    "player_take_human_shield_do",
+    "player_names_get_all",
+    "player_get_custom_voice",
+    "player_action_is_pressed",
+    "perform_killswitch",
+    "pause_menu_is_using_vehicle_southpaw_control_scheme",
+    "pause_menu_is_using_southpaw_control_scheme",
+    "pause_menu_horde_mode_retry",
+    "pause_menu_horde_mode_new"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}
