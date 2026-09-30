@@ -13,7 +13,10 @@ Container::Container(ByteView bytes) : bytes_(bytes) {
 
     size_t nameBase = header_.nameBase();
 
-    entries_.reserve(header_.entryCount);
+    // At most one entry per 24-byte directory record the buffer can hold; the
+    // loop below throws on the first record past the end anyway (found by
+    // fuzz_vpp: an entry count of ~61M reserved ~1.4 GB before that).
+    entries_.reserve(std::min<size_t>(header_.entryCount, bytes_.size() / kDirectoryEntryStride));
     for (uint32_t i = 0; i < header_.entryCount; ++i) {
         DirectoryEntry raw = DirectoryEntry::parse(bytes_, i);
 
@@ -232,6 +235,20 @@ DecompressResult Container::decompressModeB(size_t index) const {
 DecompressResult Container::inflateToSize(size_t physicalOffset, size_t maxInputBytes,
                                            size_t targetSize) const {
     DecompressResult result;
+
+    // DEFLATE cannot expand its input by more than 1032:1 (zlib's documented
+    // maximum compression factor). A declared output size beyond that for the
+    // bytes available cannot be produced by any real stream, so reject it
+    // before allocating it (found by fuzz_vpp: a +0x0C of ~3 GB over a few
+    // hundred input bytes allocated the whole output buffer up front).
+    constexpr uint64_t kMaxDeflateRatio = 1032;
+    if (static_cast<uint64_t>(targetSize) > static_cast<uint64_t>(maxInputBytes) * kMaxDeflateRatio + 1024) {
+        result.status = DecodeStatus::ZlibStreamError;
+        result.diagnostic = "declared decompressed size " + std::to_string(targetSize) +
+                            " exceeds what DEFLATE can produce from the " + std::to_string(maxInputBytes) +
+                            " input bytes available (max ratio 1032:1)";
+        return result;
+    }
 
     z_stream strm{};
     if (inflateInit(&strm) != Z_OK) {
