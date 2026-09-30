@@ -114,13 +114,13 @@ CI `fuzz-smoke` job (replays `fuzz/regressions/`, then 20 s/target). **5 real bu
 by an untrusted count — all fixed with a unit test that fails without the fix** (`tests/alloc_guard.h`):
 `MaterialBlock::parse` (~94 GB), `Container::decompressEntry` (~3 GB; now bounded by DEFLATE's 1032:1 maximum),
 `Container` ctor (~1.4 GB), `MeshBlock::decodeChannel` (~500 GB, and a zero stride looped `elementCount` times —
-now a stride shorter than the layout's fixed fields is refused with `FormatError`). **The mesh stride refusal is
+now a stride shorter than the layout's fixed fields is refused with `FormatError`). **After all five fixes, a 120 s/target pass over all 16 targets found 0 (≈28M executions).** **The mesh stride refusal is
 the one behaviour change a real file could in principle hit**; bridge job 05 re-runs `validate_mesh`/
 `validate_clmesh`/`validate_container_decode` against HANDOFF's baselines to confirm it doesn't.
 
 **Item 2, diff tooling.** `tools/bridge_diff.py` (+ `tests/bridge_diff_test.py`, in ctest): before/after
 Markdown of mission-drive per-mission changes, summary `key=value` lines, stub-hit deltas and vint_doc per-file
-layout results. Usage in `bridge-jobs/README.md`. Jobs 04 (cache listing) and 05 (real-data regression) written.
+layout results. Usage in `bridge-jobs/README.md`. Jobs 04 (cache listing) and 05 (real-data regression) written. **Submitted at `baecf76`:** 04 `…-hvcv`, 05 `…-dzdq`, mission re-run `…-grso` (all `20260930T2248xx-team-b-*`).
 
 **Item 3, OPEN-state scaffolding.** `include/sr3luahost/open_state.h`: `OpenValue<T>` / `OpenValueMap<T>` /
 `OpenBits32` — a named engine global (address + spec section) that starts OPEN and throws `OpenStateError` on
