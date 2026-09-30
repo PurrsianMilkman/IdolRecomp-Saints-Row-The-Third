@@ -34,7 +34,7 @@ Note the asymmetry: **2,971 `.czn_pc` and 2,971 `.czh_pc`, but only 1,083 `.gzn_
 
 ## 3. The dispatcher's null-constructor path
 
-The generic resource dispatcher (`spec-resource-dispatch.md` §4–5) reads the constructor pointer from the type's row, then branches on the paired-file flag. **Both branches begin with the same null test, and both jump past the call to the shared success tail on null.** The tail sets the "loaded" bit and returns success. A constructor that *runs* and returns false is a failure; a constructor that is *absent* is a success. **[CONFIRMED — disassembly.]**
+The generic resource dispatcher (`spec-resource-dispatch.md` §4–5; the null-constructor path itself is documented in its §6a) reads the constructor pointer from the type's row, then branches on the paired-file flag. **Both branches begin with the same null test, and both jump past the call to the shared success tail on null.** The tail sets the "loaded" bit and returns success. A constructor that *runs* and returns false is a failure; a constructor that is *absent* is a success. **[CONFIRMED — disassembly.]**
 
 That single branch is the whole answer to the inventory's question. It also means the buffer's lifetime and residency are managed exactly as for any other resource — only the parse step is missing.
 
@@ -98,5 +98,9 @@ The zone **streaming** subsystem — the function owning the literal strings *"z
 1. The 14-byte record layout (§5.1) — needs the array's consumer.
 2. ~~`SR3Z` `+0x1E`~~ **(`+0x1E` RESOLVED 2026-09-20, see the row above and `spec-world-streaming.md` §10.7; also `+0x0C..+0x17` = three `f32` world-space origin the record positions are relative to)**, and the header bytes between `+0x20` and `+0x40`.
 3. What actually distinguishes `fast` from `slow` for zones and zone headers (a loading policy is the inference, not a finding).
-4. `.czn_pc`'s own structure — investigated 2026-09-10 and **not resolved**; see `spec-zone-data-format.md`. Its leading `{id, length}` record is confirmed with a control (98.7% vs 2.6%), but a uniform chunk walk is **refuted** population-wide (0/2,971 reach EOF), and **no id value appears as an immediate anywhere in the binary** — the ids are data-driven, so there is no standalone parser to read. Completing it requires the zone streaming subsystem, i.e. a runtime pass.
+4. `.czn_pc`'s own structure — investigated 2026-09-10 and **not resolved**; see `spec-zone-data-format.md`. Its leading `{id, length}` record is confirmed with a control (98.7% vs 2.6%), but a uniform chunk walk is **refuted** population-wide (0/2,971 reach EOF), and **no id value appears as an immediate anywhere in the binary** — the ids are data-driven, so there is no standalone parser to read. Completing it requires the zone streaming subsystem, i.e. a runtime pass. **[Update: `spec-zone-data-format.md` is now "PARTIALLY RESOLVED" — the zone geometry is readable (its §7, §10); the object/property stream remains open.]**
 5. Why type 39 `Buffer` registers empty-string extensions rather than null ones — the distinction is deliberate in the registration data.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): added the `spec-resource-dispatch.md` §6a pointer for the null-constructor path (§3); noted in §6 item 4 that `spec-zone-data-format.md` now reads the zone geometry (object/property stream still open).
