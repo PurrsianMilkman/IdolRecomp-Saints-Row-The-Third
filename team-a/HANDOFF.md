@@ -2028,6 +2028,8 @@ The owner un-paused the project for cloud work (`TEAMS.md`). This session is **T
   - `20260930T212750-team-a-qrwj` `review-conflicts.json`: 6 addresses in conflict.
   - `20260930T213347-team-a-vmgr` `teamb-requests-1.json`: `sfx_faded_in`; `.vint_doc` reader via its extension strings and the magic `0x00003027`.
 
+- **Self-containment pass (manager request, after the review merged as integration `b243443`):** the archived §27 copies were renamed `N.27`, so only the live resume note is `## 27.`. Every spec reference to HANDOFF or WALLS was checked; 6 load-bearing facts were brought into specs and about 75 §27.x references were repointed. See `review/spec-consistency.md`, last section. Open for the owner: the RTTI-names question in `spec-rig-format.md`, which the manager is raising.
+
 **Blocked:** every executable question waits on the PC agent. Check with `python3 bridge/bridge_client.py status`, then `list` / `show <id>`.
 
 **Next, in Team B's priority order (their requests are under "Requests to Team A" at the top of `team-b/HANDOFF.md` on the integration branch):**
@@ -2105,11 +2107,11 @@ Tooling: Ghidra headless ONLY from PowerShell; `python` is broken, use `py` with
 
 **Full verbatim text of §27 as it stood immediately before this pass's rewrite — preserved for history, do not resume from this, resume from the live §27 above.**
 
-## 27. ▶ RESUME HERE — rewritten 2026-09-30 for the context guard, sixteenth pass (concrete, not narrative)
+### 43.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-30 for the context guard, sixteenth pass (concrete, not narrative)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§42 log below and in each spec's own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section as it stood before THIS pass is archived verbatim in §42 (fifteenth pass); §41 holds the fourteenth-pass text.**
 
-### 27.1 DONE (compacted repeatedly; this pass folds the fifteenth-pass table plus everything landed since — do not re-derive)
+#### 43.27.1 DONE (compacted repeatedly; this pass folds the fifteenth-pass table plus everything landed since — do not re-derive)
 
 **Every row independently re-verified by the orchestrator against real files/bytes before being recorded. Full historical rows (tenth-pass baseline through fourteenth-pass) are unchanged — see §41/§42 archives for exact wording; only NEW rows since the fifteenth pass are given in full below.**
 
@@ -2121,7 +2123,7 @@ Tooling: Ghidra headless ONLY from PowerShell; `python` is broken, use `py` with
 | All 8 of the Lua "8 overlaps" dual-registered names — CONFIRMED genuine, zero coincidental cases | `audio_object_post_event`, `game_is_active_input_gamepad`, `coop_is_active`, `hud_display_set_element`, `audio_stop`, `hud_display_create_state`, `hud_display_commit_state`, `hud_display_remove_state`. Method: each name's `{namePtr,funcPtr}` pair checked directly in both registrars' own full raw array walks — same pointer both places, every time. Bonus fix: §13.2's own pre-existing error (`hud_display_set_element` wrongly listed as a 311-cluster member) corrected. Relayed clean list to peer (their host should wire all 8 into both Lua states, not just `audio_object_post_event`). | `spec-lua-bindings.md` §13.5, §13.2 |
 | Lua 351-450 tranche — IN PROGRESS, name lists pre-computed centrally this time (no rank-arithmetic collisions) | Computed all 4 parts' disjoint name lists up front via direct TSV grep against the live spec's 363-then-substantially-more already-covered names, split gameplay into 3×~30/32 + UI into 1×15. **§19 (Part D, 15 UI names) LANDED and transcribed** — real findings: `game_get_party_member_count` confirmed hardcoded-zero stub (a real, more elaborate implementation sits unused right next to it in memory); previously-OPEN `0x00825010` (§16.7) resolved as a real "apply record into slot" primitive; hidden-register-argument convention (string/row-pointer in a callee-saved register, zero visible stack args) confirmed twice independently. **Part C (32 gameplay names) LANDED, report in hand, NOT YET transcribed — this is the exact interrupted task, see §27.2 item 2.** Parts A/B still running. | `spec-lua-api-behaviour.md` §19 (done); §20 pending for Part C |
 
-### 27.2 IN FLIGHT / STATE (rewritten 2026-09-30, sixteenth pass, at ~77% context usage — context-guard-triggered, not a crisis but do this rewrite before anything else per the guard's own instruction)
+#### 43.27.2 IN FLIGHT / STATE (rewritten 2026-09-30, sixteenth pass, at ~77% context usage — context-guard-triggered, not a crisis but do this rewrite before anything else per the guard's own instruction)
 
 **STATE: RUNNING. Nothing blocked on the user beyond the standing `.czn_pc` park (§27.3) — but see item 1 below, a related nuance needs the user's attention too.**
 
@@ -2146,7 +2148,7 @@ Tooling: Ghidra headless ONLY from PowerShell; `python` is broken, use `py` with
 
 **Working rules (updated 2026-09-30 — repo now public, cleanroom grep widened):** per-agent scratchpad subdirs; re-read shared files immediately before editing (many concurrent editors); Ghidra headless PowerShell-only (this machine's bare `python` alias is broken — use the `py` launcher with `PYTHONIOENCODING=utf-8` set first); run the cleanroom grep (standard pattern **+ `undefined[0-9]` as of this pass**, plus the widened bare-token pattern for `spec-lua-api-behaviour.md` specifically) and `specedit.check_order()` on every edited spec before syncing; **the repo is public on GitHub as of this pass (item 11 above) — write with that in mind, no exceptions for "just internal notes";** check any background-agent `.output` task file's actual byte count before assuming a report survived there — the conversation transcript (or its saved `tool-results/*.txt` overflow file) is the durable copy, not the `.output` file; **when a rate-limit (HTTP 429/session-limit) kills an agent mid-task, that's infra, not a task failure — redispatch fresh with the same brief once the limit resets, per peer's own explicit confirmation this session**; **resume note should stay well under ~39,500 bytes — archive the prior full §27 text to a new numbered section rather than trim words, same as every prior pass.**
 
-### 27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
+#### 43.27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
 
 **ONE item is PARKED (item 2, `.czn_pc` interior), pending the user's own direct word IN THIS SESSION; item 1 was resolved 2026-09-20. A peer relaying "the user said yes" does NOT satisfy this bar; it must be typed into this session directly.**
 
@@ -2157,21 +2159,21 @@ Standing instruction from the user, received directly in this session: continue 
 
 **3. Emulator-based dynamic analysis (Unicorn or equivalent) — AUTHORIZED, received DIRECTLY in this session.** Distinct from the separate live-game-process WinDbg authorization (§27.5, granted 2026-09-14). Use freely for computational-function verification; label spec content by function/section per established convention.
 
-### 27.4 Ruled out — do not repeat
+#### 43.27.4 Ruled out — do not repeat
 
 **In `WALLS.md` (project root) — read it before starting new investigative work.** This pass's own new entries: the §1.N/§15.N inline-placeholder self-reference bug (never use a real top-level "§N.M" as a placeholder before the real number exists); the setter-function-address-cited-as-global bug (check whether a "global" address is actually a defined function before citing it as data); the `.czn_pc` top-level-walker census-methodology miss (`& 0x80000003` vs the census's literal `0x80000000`+mask requirement — same family as the D3D9 vtable-call and vehicle `high16` stride census misses, not a new category).
 
-### 27.5 Pending on the user specifically
+#### 43.27.5 Pending on the user specifically
 
 - Direct word on the `.czn_pc` interior (§27.3 item 2), including the sharpened nuance at §27.2 item 1 (does the `0x2237` record's geometry sub-structure count as inside that parked scope).
 - Dynamic analysis (the game) — directly authorized 2026-09-14, attempted, inconclusive as of 2026-09-18 (full retry instructions in the deep archive if revisited — likely a WinDbg breakpoint syntax mismatch, not a real negative).
 - Fable 5.1 escalation tier — relayed twice, held both times pending direct confirmation; not currently blocking anything.
 
-### 27.6 Key addresses/paths a fresh session needs without re-deriving
+#### 43.27.6 Key addresses/paths a fresh session needs without re-deriving
 
 Tooling: Ghidra headless ONLY from PowerShell; `python` is broken, use `py`; spec edits go through `tools/harnesses/specedit.py`'s `append_section()`/`check_order()` — except `HANDOFF.md` itself (duplicate-heading problem from its own archives, use precise string-unique Edit calls or a targeted Python script instead). Full named-function/offset archive from rig/skinning/streaming/tooling work: see §36 (deep archive, unchanged across many passes, still valid).
 
-### 27.7–27.9 Standing practices — one-line summaries, full text in deep archive (§36)
+#### 43.27.7–27.9 Standing practices — one-line summaries, full text in deep archive (§36)
 
 - **Document continuously, not just at checkpoints**: every dispatched agent writes its own findings into its target spec/HANDOFF as part of finishing.
 - **When confirmed facts run out, defer rather than invent**: stop and document the honest gap; reproduce a peer's own reconciliation check yourself before writing anything.
@@ -3061,17 +3063,17 @@ Standing instruction from the user, received directly in this session: continue 
 
 **Verbatim copy of §27 as it stood immediately before this pass's rewrite — preserved for anyone who needs the exact prior wording rather than this pass's condensed carry-forward. The live §27 above has since been rewritten; treat THIS block as historical, not current.**
 
-## 27. ▶ RESUME HERE — rewritten 2026-09-29 for the context guard, eleventh pass (concrete, not narrative)
+### 38.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-29 for the context guard, eleventh pass (concrete, not narrative)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§36 log below and in each spec's own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section (all of §27.1–§27.9 as they stood before this pass, including §27.6's key-addresses reference material and §27.7–§27.9's standing-practice write-ups in full) is archived verbatim in §36.**
 
-### 27.1 DONE (compacted 2026-09-25, tenth pass; table itself unchanged this pass) — headline rows only; do not re-derive
+#### 38.27.1 DONE (compacted 2026-09-25, tenth pass; table itself unchanged this pass) — headline rows only; do not re-derive
 
 **Every row independently re-verified by the orchestrator against real files/bytes before being recorded.**
 
 [Full DONE table — 40 rows, unchanged from the tenth pass through this point — omitted from this archive copy to save space; it is identical to the live §27.1 table as it stood at the start of the twelfth pass, before this pass's own new rows were appended. See git-equivalent history or the live table's own row set for the exact tenth/eleventh-pass content if ever needed; every row's content is also independently recorded in its own cited spec section regardless.]
 
-### 27.2 IN FLIGHT / STATE (rewritten 2026-09-29, twelfth pass, at 75% context usage)
+#### 38.27.2 IN FLIGHT / STATE (rewritten 2026-09-29, twelfth pass, at 75% context usage)
 
 **STATE: RUNNING, nothing blocked on the user beyond the standing `.czn_pc` park (§27.3).**
 
@@ -3089,7 +3091,7 @@ Standing instruction from the user, received directly in this session: continue 
 
 **Working rules:** per-agent scratchpad subdirs; re-read shared files immediately before editing; Ghidra headless PowerShell-only; resume note must stay under ~39,500 bytes.
 
-### 27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
+#### 38.27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
 
 **ONE item PARKED (`.czn_pc` interior), pending the user's own direct word in this exact session — a peer relay, even a verbatim quote, does not satisfy this.**
 
@@ -3100,21 +3102,21 @@ Standing instruction from the user, received directly: continue all other work w
 
 **3. Emulator-based dynamic analysis — AUTHORIZED, received directly, verbatim: "you can use an emulator to test stuff. you have permission to do whatever you need."** Read narrowly: isolated-function emulation for behavioral verification, distinct from the separate live-game WinDbg authorization (§27.5).
 
-### 27.4 Ruled out — do not repeat
+#### 38.27.4 Ruled out — do not repeat
 
 In `WALLS.md` — read it, not this section, before starting new investigative work.
 
-### 27.5 Pending on the user specifically
+#### 38.27.5 Pending on the user specifically
 
 - Direct word on the `.czn_pc` interior. Nothing else currently blocked on the user.
 - Dynamic analysis (the game) — authorized 2026-09-14, attempted, inconclusive as of 2026-09-18.
 - Fable 5.1 escalation tier — relayed twice, held both times; not currently blocking anything.
 
-### 27.6 Key addresses/paths a fresh session needs without re-deriving
+#### 38.27.6 Key addresses/paths a fresh session needs without re-deriving
 
 Full text archived verbatim in §36. One-line version: `.clmesh_pc` MIDDLE chain, the D3D9 vertex-declaration builder (`FUN_00476ca0`), the mesh group/draw-range runtime chain, and the zone Mesh-block g-side locator fix are all fully traced elsewhere. Ghidra headless ONLY from PowerShell; Python needs `PYTHONIOENCODING=utf-8`; spec edits go through `specedit.py`; a rate-limit death (HTTP 429) is infra, not a task failure.
 
-### 27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
+#### 38.27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
 
 - Document continuously, not just at checkpoints.
 - When confirmed facts run out, defer rather than invent; reproduce a peer's reconciliation yourself before publishing it.
@@ -3224,11 +3226,11 @@ to purrsian-44; both specs synced.
 ## 41. Archive: pre-compaction full §27 text, fourteenth pass (2026-09-30, at ~76% context usage)
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## 27. ▶ RESUME HERE — rewritten 2026-09-29 for the context guard, thirteenth pass (concrete, not narrative)
+### 41.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-29 for the context guard, thirteenth pass (concrete, not narrative)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§38 log below and in each spec own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section as it stood before THIS pass is archived verbatim in §38.**
 
-### 27.1 DONE (compacted 2026-09-25, tenth pass; table itself unchanged this pass) — headline rows only; do not re-derive
+#### 41.27.1 DONE (compacted 2026-09-25, tenth pass; table itself unchanged this pass) — headline rows only; do not re-derive
 
 **Every row independently re-verified by the orchestrator against real files/bytes before being recorded.**
 
@@ -3313,7 +3315,7 @@ to purrsian-44; both specs synced.
 | Lua gameplay-API behaviour, character/AI/vehicle state-flag + damage/death + event-hook cluster (new spec §3, 2026-09-29) — 17 functions decompiled from the 1,014-entry gameplay registrar (`0x00a20840`), all cross-team top-priority-by-call-count names: `coop_is_active` dual-registration CONFIRMED as one shared function pointer in both the gameplay and third (`0x00845aa0`) registrars, resolving the task's own flagged overlap question; `on_death`/`on_vehicle_destroyed`/`on_attack_performed`/`on_take_damage` are the named-hook family's (§4/§8/§12 of `spec-lua-bindings.md`) registration side, writing into one of (so far) 3 distinct per-object-kind hook-slot arrays (character `+0x68`/`+0x6c`, vehicle `+0x30`/`+0x34`, a 3rd unidentified kind `+0x20`/`+0x24`); `character_kill` routes through the SAME generic damage-application routine (`FUN_0096fa20`) real combat uses, not a bypass, and its own post-damage "is dead" check is cross-confirmed against `character_is_dead`'s own predicate (`FUN_0096f4f0`) and the death-finalizer's own state-write (both agree on state-enum value 5 at object `+0xcc8`); `turn_invulnerable`/`turn_vulnerable`, `character_prevent_flinching`, `character_allow_ragdoll`, `npc_combat_enable`, `set_ignore_ai_flag` are bit-flag setters independently cross-checked against their own literal debug-tag strings (`"human_force_flagsinvulnerable"` etc.); `notoriety_force_no_spawn`'s arg 1 is a gang/notoriety TRACK name, not a game object. Also independently promoted the shared front matter's 4 call-shape-only Lua C-API primitives from HIGH CONFIDENCE to CONFIRMED by reading their own bodies against real Lua 5.1 `lapi.c` source, and resolved the `0x00dfe160`+`0x00ea2596` pair the same way §2 did independently. Full args/types/optionality/return/side-effects per function; several real OPEN items flagged rather than guessed (hook-slot-number meanings, 2 unidentified object kinds, notoriety track-code table). | `spec-lua-api-behaviour.md` §3 |
 | **NEW CAPABILITY — Unicorn emulation harness built + proved (2026-09-29, §27.3 item 3 authorization used for the first time).** `tools/harnesses/unicorn_call.py`: reusable x86-32 call-a-real-function-under-emulation module (full-PE-image mapping, thiscall/cdecl/stdcall/fastcall support, stubs, `va_is_file_backed()` runtime-vs-static-data check, `EmuFault` diagnostics). Proved on the CRC-32 control (`FUN_00D9E790`, 7/7 emulated calls matched the already-independently-validated reference) + a bonus 2nd hash (`FUN_00DAB330`, 5/5). Two harder OPEN-question candidates investigated and honestly rejected as poor emulation targets with concrete reasons (found, not assumed): `continuous_spawn_stop`'s boolean bottoms out in live per-entity vtable dispatch; `notoriety_force_no_spawn`'s name table is runtime-populated (confirmed zero-backed in the static file via the harness's own check). Side-finding: §4.7/§4.8's header addresses were array-build-instruction addresses, not real function entry points — corrected. | `spec-lua-api-behaviour.md` §5 |
 
-### 27.2 IN FLIGHT / STATE (rewritten 2026-09-29, thirteenth pass, at ~78% context usage)
+#### 41.27.2 IN FLIGHT / STATE (rewritten 2026-09-29, thirteenth pass, at ~78% context usage)
 
 **STATE: RUNNING, nothing blocked on the user beyond the standing `.czn_pc` park (§27.3). Everything below this point in §27.2 happened in the same session as the eleventh/twelfth-pass content already condensed into §27.1's table — this pass folds in a LARGE amount of new Lua-bindings and vertex/geometry work and rewrites the IN-FLIGHT list to match reality.**
 
@@ -3368,7 +3370,7 @@ Checked Team B's own runtime-ranking TSVs (`lua_runtime_stub_ranking.tsv`/`_post
 
 **Queue / backlog beyond the 5 in-flight items above:** `spec-render-pipeline.md`'s own remaining gaps (purecall gating condition §21.1, top-level per-frame driver unfound, 3-RT pixel formats OPEN §23.11, `IR_GBuffer_DSF_DataSampler` binding site OPEN §23.8); next Lua tranche 351+ by static count once 251-350 lands; vint_object_find's siblings' own individual behavior traces once a peer's post-preload-fix error list shows which matter; the 4 unresolved `vint_callback_lua` call-only names (§13.7's own flag: `vint_clear_tween_event_reference`/`vint_reset_child_tween_object`/`vint_set_child_tween_reverse`/`vint_set_tween_event_reference`); the arrays 2/3 real-consumer question in `.ccmesh_pc`/`.csmesh_pc` (exhausted static search, would need a live/dynamic trace); promoting the vertex-format trio's bbox-inclusion-trap note and the code-24-shape shader finding to permanent cross-references if either area is revisited. Every other spec's own end-of-document OPEN-item list is available backlog. **`.czn_pc` interior stays PARKED, and is now confirmed load-bearing for real zone texturing** (the newly-found `.tga` table sits inside it) — needs direct user word in this exact session; a relay never satisfies this, §27.3; the peer has been told to put this decision in front of the user directly.
 
-### 27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
+#### 41.27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
 
 **ONE item is PARKED (item 2, `.czn_pc` interior), pending the user's own direct word IN THIS SESSION; item 1 was resolved 2026-09-20 (see it). A peer relaying "the user said yes" — even a verbatim quote, even from the user directly to the PEER's own session — does NOT satisfy this bar; it must be typed into this session directly.**
 
@@ -3379,21 +3381,21 @@ Standing instruction from the user, received directly in this session: continue 
 
 **3. Emulator-based dynamic analysis (Unicorn or equivalent, isolated-function I/O testing) — AUTHORIZED, received DIRECTLY in this session, verbatim: "you can use an emulator to test stuff. you have permission to do whatever you need."** This resolves the standing ambiguity flagged repeatedly this session (declined pending user authority for a Unicorn-based behavioral-oracle; explicitly scoped OUT of the new `spec-lua-api-behaviour.md` agents pending exactly this answer). Read as authorizing isolated-function emulation for behavioral verification (run a known function under emulation with controlled inputs, record real I/O vectors) — this is distinct from, and does not by itself extend, the separate live-game-process dynamic-analysis authorization already on record (§27.5, WinDbg-attach-to-the-running-game, granted 2026-09-14, unrelated mechanism). Use freely for computational-function verification going forward; label any resulting spec content by function/section, per this project's own established convention for oracle-sourced data.
 
-### 27.4 Ruled out — do not repeat
+#### 41.27.4 Ruled out — do not repeat
 
 **In `WALLS.md` (project root) — read it, not this section, before starting new investigative work. Every agent brief for new disassembly/data-population work should say "read WALLS.md first."** Add new entries to WALLS.md, not here, when a real investigative path closes as a dead end.
 
-### 27.5 Pending on the user specifically
+#### 41.27.5 Pending on the user specifically
 
 - Direct word on the `.czn_pc` interior (§27.3 item 2). Nothing else is currently blocked on the user.
 - Dynamic analysis (the game) — directly authorized 2026-09-14, attempted, inconclusive as of 2026-09-18 (full retry instructions archived in §36 if this is ever revisited — likely cause was a WinDbg breakpoint syntax mismatch, not a real negative).
 - Fable 5.1 escalation tier — relayed twice, held both times pending direct confirmation in this session; not currently blocking anything.
 
-### 27.6 Key addresses/paths a fresh session needs without re-deriving
+#### 41.27.6 Key addresses/paths a fresh session needs without re-deriving
 
 **Full text (all named functions/offsets from rig/skinning/streaming/tooling work) archived verbatim in §36 — moved there this pass to buy resume-note headroom, since none of it has changed in many sessions.** One-line version: `.clmesh_pc` MIDDLE chain, the D3D9 vertex-declaration builder (`FUN_00476ca0`), the mesh group/draw-range runtime chain, and the zone Mesh-block g-side locator fix are all fully traced elsewhere — do not re-derive any of them; see the cited spec sections in §27.1's own table. Tooling reminders: Ghidra headless ONLY from PowerShell; Python needs `PYTHONIOENCODING=utf-8`; spec edits go through `tools/harnesses/specedit.py`'s `append_section()`/`check_order()`; a rate-limit death (HTTP 429) is infra, not a task failure — resume the same agent, don't restart fresh.
 
-### 27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
+#### 41.27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
 
 - **Document continuously, not just at checkpoints** (§27.7 in §36): every dispatched agent writes its own findings into its target spec/HANDOFF as part of finishing, not handed back for later consolidation.
 - **When confirmed facts run out, defer rather than invent** (§27.8 in §36): stop and document the honest gap rather than propose an untraced mechanism; when a peer offers a reconciliation for something you published, reproduce their check yourself before writing anything.
@@ -3404,11 +3406,11 @@ Standing instruction from the user, received directly in this session: continue 
 ## 42. Archive: pre-compaction full §27 text, fifteenth pass (2026-09-30, at ~76% context usage)
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## 27. ▶ RESUME HERE — rewritten 2026-09-30 for the context guard, fifteenth pass (concrete, not narrative)
+### 42.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-30 for the context guard, fifteenth pass (concrete, not narrative)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§41 log below and in each spec's own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section as it stood before the fourteenth pass is archived verbatim in §41.**
 
-### 27.1 DONE (compacted 2026-09-25, tenth pass; new rows appended this pass, thirteenth-pass rows folded in — do not re-derive)
+#### 42.27.1 DONE (compacted 2026-09-25, tenth pass; new rows appended this pass, thirteenth-pass rows folded in — do not re-derive)
 
 **Every row independently re-verified by the orchestrator against real files/bytes before being recorded.**
 
@@ -3428,7 +3430,7 @@ Standing instruction from the user, received directly in this session: continue 
 | Lua tranche 251-350 — CLOSED, all 4 parts landed and transcribed as §15-§17 (+1 UI part) | §15 = Part B (28 gameplay names, ranks ~281-318). §16 = Part D (15 UI-cluster names). §17 = Part A (30 gameplay names, ranks ~252-286). **"Part C" took 4 dispatch attempts** — the first 3 each independently re-derived a band that had just landed concurrently (§15 then §17 then §17 again), each time from a stale read of the live file taken before the real band landed; all 3 were genuine, high-quality independent re-derivations (used as cross-checks, not wasted — one found and fixed a real §1.N/§15.N self-reference numbering bug, another found a real new cross-reference between §12.10's and §17.24's shared-singleton resolvers, both folded in). **4th attempt dispatched with a final live-recheck-before-reporting step; RUNNING.** Real bug found and fixed in the process: §15's own inline prose used "§1.N" as an unrenumbered self-reference placeholder (only HEADING lines get auto-renumbered by `specedit.append_section`, not inline text) — fixed line-by-line, logged as a new standing `WALLS.md` lesson (never use a real top-level "§N.M" as an inline placeholder). | `spec-lua-api-behaviour.md` §15-§17 |
 | Zone draw-call → role-4/5 G-buffer link — CLOSED, upgraded from structural to disassembly-grounded (2026-09-30) | Two real `.czn_pc` top-level record handlers found (`FUN_00864c60`/id `0x2237`"Region", `FUN_007512f0`/id `0x2251`, both under master dispatcher `FUN_008652d0`) — both create/register render materials through the IDENTICAL allocator (`FUN_00e5e240`)/registry (`FUN_00e3fcb0`) functions vehicle-body paint uses, so any zone material is drawn through the SAME format-agnostic technique-select (`FUN_00e5e530`) already confirmed to resolve to role 4/5 for vehicles — no longer just a vertex-shape coincidence. Bonus: decoded the `0x2237` Region record's real structure (header + inline materials + index-lists + Mesh-block-ref array, the same generic idiom `.clmesh_pc`/trees/foliage already use). Also directly corrects `spec-zone-data-format.md` §9.1/§9.2's own "no top-level `.czn_pc` walker exists" negative — the walker exists, compiled with a masking idiom (`& 0x80000003`, a branching round-up, `& 0x7fffffff`) that census's predicate never covered; new `WALLS.md` census-methodology lesson recorded. Honest gaps left: no live/dynamic trace, the final per-item draw-loop hand-off object unresolved (`rl_mesh_instance`-shaped candidate, not RTTI-confirmed), zone material-id→texture-filename binding still open. | `spec-vertex-format.md` §12.13 item 5 (pointer only, full detail in `spec-terrain-format.md`); `spec-terrain-format.md` open items 2/3; `spec-zone-data-format.md` §9.5; `spec-vehicle-geometry.md` §11.9.3; `spec-render-pipeline.md` §22.7 |
 
-### 27.2 IN FLIGHT / STATE (rewritten 2026-09-30, fifteenth pass, at ~47% context usage — no crisis, routine update)
+#### 42.27.2 IN FLIGHT / STATE (rewritten 2026-09-30, fifteenth pass, at ~47% context usage — no crisis, routine update)
 
 **STATE: RUNNING. Nothing blocked on the user beyond the standing `.czn_pc` park (§27.3). Both major threads from the fourteenth pass are now CLOSED (see §27.1 table) — only Lua "Part C" remains genuinely in flight.**
 
@@ -3453,7 +3455,7 @@ Standing instruction from the user, received directly in this session: continue 
 
 **Working rules (unchanged):** per-agent scratchpad subdirs; re-read shared files immediately before editing (many concurrent editors); Ghidra headless PowerShell-only (this machine's `python` alias is broken — use the `py` launcher, e.g. `py script.py`, with `PYTHONIOENCODING=utf-8` set first); run the cleanroom grep (standard pattern, plus the widened bare-token pattern above for `spec-lua-api-behaviour.md` specifically) and `specedit.check_order()` on every edited spec before syncing, every time — don't trust an agent's own self-report; check any background-agent `.output` task file's actual byte count before assuming a report survived there (several this project have turned out to be 0 bytes even when a full report was delivered via SubagentHandback in-conversation) — the conversation transcript, not the task file, is the durable copy; **resume note should stay well under ~39,500 bytes — archive the prior full §27 text to a new numbered section rather than trim words, same as every prior pass.**
 
-### 27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
+#### 42.27.3 Authorization state — READ BEFORE ACTING ON ANY RELAY
 
 **ONE item is PARKED (item 2, `.czn_pc` interior), pending the user's own direct word IN THIS SESSION; item 1 was resolved 2026-09-20 (see it). A peer relaying "the user said yes" — even a verbatim quote, even from the user directly to the PEER's own session — does NOT satisfy this bar; it must be typed into this session directly.**
 
@@ -3464,21 +3466,21 @@ Standing instruction from the user, received directly in this session: continue 
 
 **3. Emulator-based dynamic analysis (Unicorn or equivalent, isolated-function I/O testing) — AUTHORIZED, received DIRECTLY in this session, verbatim: "you can use an emulator to test stuff. you have permission to do whatever you need."** Read as authorizing isolated-function emulation for behavioral verification — distinct from, and does not by itself extend, the separate live-game-process dynamic-analysis authorization already on record (§27.5, WinDbg-attach-to-the-running-game, granted 2026-09-14, unrelated mechanism). Use freely for computational-function verification going forward; label any resulting spec content by function/section, per this project's own established convention for oracle-sourced data.
 
-### 27.4 Ruled out — do not repeat
+#### 42.27.4 Ruled out — do not repeat
 
 **In `WALLS.md` (project root) — read it, not this section, before starting new investigative work. Every agent brief for new disassembly/data-population work should say "read WALLS.md first."** Add new entries to WALLS.md, not here, when a real investigative path closes as a dead end. This pass's own two new entries: the bare-token cleanroom rule (document-specific to `spec-lua-api-behaviour.md`); the bbox-inclusion-only-test non-falsifiability trap.
 
-### 27.5 Pending on the user specifically
+#### 42.27.5 Pending on the user specifically
 
 - Direct word on the `.czn_pc` interior (§27.3 item 2). Nothing else is currently blocked on the user.
 - Dynamic analysis (the game) — directly authorized 2026-09-14, attempted, inconclusive as of 2026-09-18 (full retry instructions archived in §36 if this is ever revisited — likely cause was a WinDbg breakpoint syntax mismatch, not a real negative).
 - Fable 5.1 escalation tier — relayed twice, held both times pending direct confirmation in this session; not currently blocking anything.
 
-### 27.6 Key addresses/paths a fresh session needs without re-deriving
+#### 42.27.6 Key addresses/paths a fresh session needs without re-deriving
 
 **Full text (all named functions/offsets from rig/skinning/streaming/tooling work) archived verbatim in §36 — one-line version: `.clmesh_pc` MIDDLE chain, the D3D9 vertex-declaration builder (`FUN_00476ca0`), the mesh group/draw-range runtime chain, and the zone Mesh-block g-side locator fix are all fully traced elsewhere — do not re-derive any of them; see the cited spec sections in §27.1's own table.** Tooling reminders: Ghidra headless ONLY from PowerShell; this machine's bare `python` command is broken (Microsoft Store alias stub) — use `py` (the `py.exe` launcher) instead, with `PYTHONIOENCODING=utf-8` set first; spec edits go through `tools/harnesses/specedit.py`'s `append_section()`/`check_order()` — except `HANDOFF.md` itself, which has a duplicate-heading problem from its own archived old-§27 copies and must be edited with precise string-unique Edit calls or a targeted Python script instead; a rate-limit death (HTTP 429) is infra, not a task failure — resume the same agent, don't restart fresh; a background agent's own `.output` task file can read 0 bytes even when a full report was delivered in-conversation via SubagentHandback — don't treat an empty `.output` file as a lost report without checking the conversation transcript first.
 
-### 27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
+#### 42.27.7–27.9 Standing practices — full text archived in §36, one-line summaries here
 
 - **Document continuously, not just at checkpoints** (§27.7 in §36): every dispatched agent writes its own findings into its target spec/HANDOFF as part of finishing, not handed back for later consolidation.
 - **When confirmed facts run out, defer rather than invent** (§27.8 in §36): stop and document the honest gap rather than propose an untraced mechanism; when a peer offers a reconciliation for something you published, reproduce their check yourself before writing anything.

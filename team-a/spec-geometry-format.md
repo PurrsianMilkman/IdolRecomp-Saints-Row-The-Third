@@ -328,3 +328,4 @@ The **string region belonging to Region 1** (starting at file offset 496) holds 
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 1 cross-reference (§1 table `.clmesh_pc` §4.1→§4.2), marked 8 stale open items resolved/closed in place (§4.1.2 items 3, 6, 11, the §4.1.2 closing OPEN, §6 items 2, 4, 5, 8), reworded 2 decompiler-shaped expressions (§4.1.1 virtual-call expression, §8 auto-named argument), and flagged `spec-output.md` as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

@@ -183,3 +183,4 @@ The bundle *name* string (without extension) is then looked up in the engine's i
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the stale "blocked/unreachable/parked/OPEN" statements in §1, §2.1, §3, §5.3 and §5.4 resolved (§6, §6.1); marked §4 item 4's morph dequantisation gap resolved (`spec-morph-format.md` §13); flagged the `spec-output.md` citation as unpublished.
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

@@ -163,3 +163,33 @@ Both sides now carry an inline conflict marker pointing at each other. Nobody pi
   - one render §6.6 row.
 
   Verifying before applying was necessary.
+
+## Follow-up (same day): self-containment pass for Team B
+
+The manager asked for this follow-up. Team B cannot read `team-a/HANDOFF.md` or `team-a/WALLS.md`, so every
+reference to them in the specs was checked: about 220 HANDOFF references and 70 WALLS mentions across 32 specs.
+
+- **HANDOFF headings.** The four archived copies of old resume notes, inside §38, §41, §42 and §43, no longer
+  use `## 27.`. They are now `### N.27 Archived resume note` with subsections `#### N.27.k` (commit
+  `536b06a`). Only the live resume note is §27.
+- **Load-bearing facts.** Six facts that were stated only in HANDOFF or WALLS are now in the specs:
+  - vehicle-geometry §11.6: the "zero CreateVertexDeclaration calls" premise is refuted;
+  - render-pipeline §12.1: the `DAT_0351f8f8` slot refutation;
+  - render-pipeline §22.2: the material-handle cache;
+  - physics §4.4.6(h);
+  - tables-animation §1.3;
+  - tables-vehicle-world §1.4.
+
+  Each of these is either restated inline or cited to the spec that states it. The §4.7/§4.8 address
+  correction in lua-api-behaviour §5.2 was restated in the main pass.
+- **Repointed references.** About 75 `HANDOFF §27.x` references were repointed to the archive that actually
+  holds the cited text: §36 for the full "[archived] 27.4–27.9" standing practices, and §30/§31/§38/§41 for
+  dated items. References to the old §27.4 "ruled out" list now point to `WALLS.md`, where that list moved
+  on 2026-09-28. Bare "§5" references that meant HANDOFF are now explicit.
+- **Left as is (about 30, none load-bearing).**
+  - References to pre-2026-09-20 §27.2 text, which no archive preserves. The facts are stated in the
+    specs.
+  - References to the on-hold `.czn_pc` interior.
+  - 11 attributions that credit HANDOFF or WALLS with a point neither file contains: 6 in
+    lua-api-behaviour, 2 in lua-bindings, 2 in effects and 1 in conversation. The point itself is stated
+    in the spec each time, so only the attribution is wrong.

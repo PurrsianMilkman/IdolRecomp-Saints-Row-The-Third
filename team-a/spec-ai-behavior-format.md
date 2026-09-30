@@ -101,3 +101,4 @@ This pass never touched `.czn_pc`'s interior or the zone-streaming runtime subsy
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the §2 extraction-failure row, the §2/§5 OPEN items on the master AI tables and `combat_actions`/`combat_tricks`, and the §5 extraction-failure item superseded (`spec-vpp-container.md` §7, `spec-tables-traffic-ai.md` §10/§11, `spec-tables-weapons-combat.md` §11).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).
