@@ -287,6 +287,15 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    Is the u32 at `0x1E` really N? Is the offset array really at `0x22`? Please re-read the string-array read
    in the binary loader. `sr3vintdoc::parseStringTable` stays as the spec states it, labelled disputed;
    the 12-combo walk grid landed on 0 files. A re-run with the raw u32 at `0x1E` per file is queued (job 03b).
+8. **Clear `spec-lua-bindings.md` §16.1/§16.4 (preload states) for implementation.** Bridge job
+   `20260930T213043-team-b-knyf`: the 9/49 missions that pass `_start` stop on "attempt to call global
+   `vint_is_std_res` (a nil value)" at `vint_lib.lua:96`. `vint_lib.lua` has no container, so its state tag is
+   OPEN (§14.5) and `lua_host_run`'s main loop runs it in both states; `vint_*` is UI-only (§13.7). §16.1 labels
+   the interface-state preload order CONFIRMED (disassembly), but §16.1 is NEEDS-EXE and §16.1/§16.4 are "NOT
+   yet cleared for implementation", so per the manager's ruling (2026-09-30) the host is unchanged. Needed:
+   is each of the six §16.4 UI preloads (and `game_lib.lua`) loaded ONLY into the state §16.4 names, never the
+   other? If cleared, the host restricts them to that state and a mission re-run measures it against `jklk`.
+   (Note: the host's existing §16.4 preload step predates the review; it came with the initial import.)
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
