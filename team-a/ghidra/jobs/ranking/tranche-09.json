@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 09 (names 151-175 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "pcu_get_num_items_category",
+    "pcu_get_items_in_category",
+    "pcu_get_item_defaults",
+    "pcu_delete_outfit",
+    "pcu_create_outfit",
+    "pcu_clear_obscured_slots",
+    "pcu_clear_item_new",
+    "pcu_category_nav_clear_slot",
+    "pcu_can_create_outfit",
+    "pcu_bra_required",
+    "pcr_report_skin_colors",
+    "pcr_report_hair_items",
+    "pcr_report_hair_colors",
+    "pcr_report_eye_colors",
+    "pcr_report_anims",
+    "pcr_randomize_eye_colors",
+    "pcr_purchase_tattoo",
+    "pcr_lips_randomize",
+    "pcr_hair_randomize_all",
+    "pcr_get_voice",
+    "pcr_get_triangle_cursor_pos",
+    "pcr_creation_complete",
+    "pcr_cleanup_player_voice",
+    "pcr_apply_regional_preset",
+    "pcr_add_default_clothing"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}
