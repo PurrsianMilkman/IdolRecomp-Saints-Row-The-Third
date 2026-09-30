@@ -75,6 +75,8 @@ Every still-stubbed name in the ranking was checked against `spec-lua-api-behavi
 counted), `mission_end_silently` (§15.23, **partial**: only the CONFIRMED unconditional mission-flags-word write;
 the rest is gated on unmodelled state).
 
+Mission-path re-run submitted at `4591785`: job `20260930T215300-team-b-tdpr` (supersedes `knyf` for comparison).
+
 **Skipped, CONFIRMED behaviour depends on engine state the host doesn't model** (not faked):
 - `fade_in` (§8.13): queues only "when not already idle/faded" — needs the fade state machine (request 1).
 - `zscene_prep` (§8.21): needs the scene table and the entry's "kind" field (request 2).
