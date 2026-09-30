@@ -232,6 +232,11 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   OPEN-tagged (no container), so the host runs it in both states; §16.4 lists it as a UI preload and `vint_*`
   is UI-only (§13.7). **Question for the manager:** restrict the §16.4-named preload scripts to the state
   §16.4 names (a behaviour change in `lua_host_run`)? Not done without a ruling.
+- **02 before `20260930T224835-team-b-grso`** (at `baecf76`), `bridge_diff.py` against `knyf`: only `mm_p_01`
+  changes — it used to spin in `zscene_is_loaded` (714,285 calls) until the watchdog, and now stops on the
+  first call with the OPEN-state refusal naming `0x00723d20` (Sec14.23), as designed (`zscene_is_loaded` 714,285
+  → 1, `thread_yield` −714,285). Still 9/49 past `_start`; the fade busy-polls still loop at this commit (their
+  OPEN conversion is in `jklk`). Summaries otherwise unchanged.
 - **03 `20260930T213047-team-b-zlbw`** (vintdoc sweep): header CONFIRMED checks reproduce spec §2 exactly;
   §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
   the raw u32 at `0x1E` recorded per file.
