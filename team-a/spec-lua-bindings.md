@@ -1312,23 +1312,14 @@ Prompted by a peer team's Lua host hitting a real runtime failure: `cell_menu_ma
 
 **The real mechanism, found in real shipped Lua source, not disassembly: `ID_MISSIONS` and ten siblings are ordinary Lua-side global assignments (`NAME = value`, no `local` keyword) inside `cell_foreground.lua`** — the cell-phone UI's own parent/container document, a separate `.str2_pc` bundle from `cell_menu_main.lua`:
 
-```lua
--- These are for the 9 buttons on the cellphone.
-ID_INVALID          = -2
-ID_MAIN             = -1
-ID_MAP              = 0
-ID_MISSIONS         = 1
-ID_SAINTSBOOK        = 2
-ID_REWARDS           = 3
-ID_MUSIC             = 4
-ID_CAMERA            = 5
-ID_PHONE             = 6
-ID_CASH              = 7
-ID_EXTRAS            = 8
-```
+Described in this project's own words (no script text reproduced): the file assigns eleven integer globals, one per cell-phone menu button plus two sentinels — `ID_INVALID` = `-2`, `ID_MAIN` = `-1`, `ID_MAP` = `0`, `ID_MISSIONS` = `1`, `ID_SAINTSBOOK` = `2`, `ID_REWARDS` = `3`, `ID_MUSIC` = `4`, `ID_CAMERA` = `5`, `ID_PHONE` = `6`, `ID_CASH` = `7`, `ID_EXTRAS` = `8`.
 
-Once this chunk has run once in a given Lua state, these 11 names sit as ordinary globals in that state's `_G` for the state's lifetime — which is exactly what `cell_menu_main.lua` depends on for its own very first executable line (`[ID_MAP] = {`, i.e. it fails immediately, at table-construction time, if the enum isn't already defined). A grep of every real `.lua` file inside `interface.vpp_pc` (632 files) for the name family found only 3 other hits, none of them a second definition: `cell_menu_main.lua`/`pause_map.lua` only *use* the names; `game_lobby.lua` has an unrelated same-named **local** (`local ID_MAP = 3`, a different value, correctly scoped to that one file, a harmless collision). None of the three fixed boot-preload UI files (`system_lib.lua`, `game_ui_globals.lua`, `vint_lib.lua`, `spec-lua-bindings.md` §16) define any of these names either — this enum lives nowhere except `cell_foreground.lua`. **[CONFIRMED — real shipped Lua source, byte-exact quote, cross-checked against every other real hit of the name family inside `interface.vpp_pc`; the multi-gigabyte city/mission archives were not exhaustively swept for a duplicate definition, architecturally implausible for a client-UI cell-phone enum, flagged rather than silently assumed.]**
+Once this chunk has run once in a given Lua state, these 11 names sit as ordinary globals in that state's `_G` for the state's lifetime — which is exactly what `cell_menu_main.lua` depends on for its own very first executable line (`[ID_MAP] = {`, i.e. it fails immediately, at table-construction time, if the enum isn't already defined). A grep of every real `.lua` file inside `interface.vpp_pc` (632 files) for the name family found only 3 other hits, none of them a second definition: `cell_menu_main.lua`/`pause_map.lua` only *use* the names; `game_lobby.lua` has an unrelated same-named **local** (`local ID_MAP = 3`, a different value, correctly scoped to that one file, a harmless collision). None of the three fixed boot-preload UI files (`system_lib.lua`, `game_ui_globals.lua`, `vint_lib.lua`, `spec-lua-bindings.md` §16) define any of these names either — this enum lives nowhere except `cell_foreground.lua`. **[CONFIRMED — read from real shipped Lua source (names and values only; the script text itself is not reproduced here), cross-checked against every other real hit of the name family inside `interface.vpp_pc`; the multi-gigabyte city/mission archives were not exhaustively swept for a duplicate definition, architecturally implausible for a client-UI cell-phone enum, flagged rather than silently assumed.]**
 
 **Direct, actionable conclusion: this was never a missing native registration.** `cell_menu_main.lua`'s real dependency is that `cell_foreground.lua` (its own parent/container document) must be loaded and run in the same Lua state *before* `cell_menu_main.lua`'s own chunk executes. A host seeing this specific nil-global failure is very likely loading `cell_menu_main.lua` standalone, without its sibling/parent document.
 
 **Net effect on this document's own scope: the function-only census is not missing a "constants" tier — there isn't one to miss.** No native `lua_pushnumber`/`lua_pushboolean` + `lua_setglobal`/`lua_setfield(LUA_GLOBALSINDEX)` batch of any kind exists anywhere in this binary; every Lua-visible global this engine ever creates by name is either a registered C function (this document's own subject) or ordinary Lua-side script data, resolved the normal way by loading the right chunk first. **[CONFIRMED — exhaustive negative, whole-binary.]**
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review): §17 — replaced a verbatim quote of shipped game Lua source (`cell_foreground.lua`, including its comment) with a plain name→value list; the facts are unchanged. See `review/spec-consistency.md`.

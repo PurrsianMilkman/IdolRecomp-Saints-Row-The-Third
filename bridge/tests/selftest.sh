@@ -60,4 +60,11 @@ grep -q "(not uploaded) blob.bin" <<<"$OUT"          # binary refused
 test "$(cat "$T/cloudbus/results/$JID/summary.tsv")" = "$(printf 'bytes\t10')"
 R=$(python3 "$HERE/bridge_client.py" show "$BAD" || true); grep -q "REJECTED" <<<"$R"; grep -q "Team A only" <<<"$R"
 python3 "$HERE/bridge_client.py" status | grep -q ALIVE
+# clean room: a team-a job must never reach the team-b clone
+AJ=$(HOME="$T/homeA" bash -c 'mkdir -p "$HOME" && python3 "$0/bridge_client.py" setup --url "$1/bus.git" --team team-a --dir "$1/cloudbusA" >/dev/null && echo "{\"title\":\"a\",\"steps\":[{\"kind\":\"ls\"}]}" | python3 "$0/bridge_client.py" submit -' "$HERE" "$T")
+python3 "$HERE/pc_agent.py" --config "$T/pc_config.json" --once >> "$T/agent.log" 2>&1
+python3 "$HERE/bridge_client.py" list >/dev/null
+! git -C "$T/cloudbus" branch -r | grep -q team-a
+! git -C "$T/cloudbus" cat-file -e "origin/team-a" 2>/dev/null
+HOME="$T/homeA" python3 "$HERE/bridge_client.py" show "$AJ" | grep -q "\[OK\]"
 echo "SELFTEST PASS"
