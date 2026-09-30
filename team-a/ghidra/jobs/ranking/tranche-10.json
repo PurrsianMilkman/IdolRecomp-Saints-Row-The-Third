@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 10 (names 176-200 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "pause_menu_change_control_scheme",
+    "pause_map_zoom",
+    "pause_map_set_gps",
+    "pause_map_add_bookmark",
+    "path_name_is_path",
+    "party_use_melee_weapons_only",
+    "parking_spot_set_max",
+    "parking_spot_reset_max",
+    "override_npc_run_and_cower_run",
+    "open_vint_dialog_check_done",
+    "on_vehicle_debris_flow_recycled",
+    "on_mount",
+    "on_m21_player_choice",
+    "on_hit_ped",
+    "on_dismount",
+    "object_indicator_remove_script_group_do",
+    "object_indicator_add_script_group_do",
+    "npc_weapon_pickup_override",
+    "npc_detection_enable",
+    "npc_brute_always_throws",
+    "mission_help_table_do",
+    "mission_help_clear",
+    "mission_collectible_collected",
+    "minimap_icon_remove_script_group_do",
+    "minimap_icon_add_script_group_do"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

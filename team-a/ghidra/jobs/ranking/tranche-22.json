@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 22 (names 476-500 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "game_is_going_to_main_menu",
+    "game_is_german_build",
+    "game_is_demo",
+    "game_is_debug_reloading_level",
+    "game_get_pending_game_play_mode",
+    "game_get_game_play_mode",
+    "game_get_coop_ping",
+    "game_format_int_to_string",
+    "game_event_tracking_interface_exit",
+    "game_cancel_mission",
+    "game_audio_set_rtpc",
+    "force_throw_do",
+    "force_throw_char_do",
+    "force_fire_target_do",
+    "force_fire_do",
+    "follower_is_unconscious",
+    "flashpoint_start_mission",
+    "flashlights_enable",
+    "flashlights_disable",
+    "fade_get_percent",
+    "dlc3_m03_punch_unload",
+    "dlc3_m03_punch_load",
+    "dlc2_m02_clapboards_set",
+    "dlc2_m02_clapboards_reset",
+    "dlc2_m02_clapboards_get"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

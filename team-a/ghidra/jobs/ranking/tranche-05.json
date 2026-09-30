@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 05 (names 51-75 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "boss_battle_matt_begin",
+    "auto_pickup_disable",
+    "audio_set_listener_override",
+    "audio_play_for_navpoint",
+    "audio_clear_listener_override",
+    "audio_any_conversation_playing",
+    "ai_set_in_scripted_cover",
+    "ai_pay_attention_to_position",
+    "ai_do_scripted_rush",
+    "ai_clear_priority_target",
+    "action_sequence_end",
+    "action_play_synced_do",
+    "action_play_directional_stumble_do",
+    "waiting_for_player_dialog",
+    "vehicle_spotlight_is_target_spotted",
+    "vehicle_set_weapons_disarmed",
+    "vehicle_set_sirenlights",
+    "vehicle_set_no_chase",
+    "vehicle_set_kneecappers",
+    "vehicle_set_ambient",
+    "vehicle_never_flatten_tires",
+    "vehicle_is_vtol_jet",
+    "vehicle_is_vtol_hover",
+    "vehicle_is_ready",
+    "vehicle_is_helicopter"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 12 (names 226-250 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth=1",
+    "maxfuncs=15",
+    "maxinsn=500",
+    "game_show_party_ui",
+    "game_show_coop_partner_gamercard",
+    "game_show_community_sessions_ui",
+    "game_set_coop_join_type",
+    "game_record_mode_is_supported",
+    "game_record_mode_is_active",
+    "game_machinima_playback_enter",
+    "game_machinima_is_recording",
+    "game_lobby_update_map_selection",
+    "game_lobby_update_char_selection",
+    "game_lobby_set_horde_mode_data",
+    "game_lobby_get_local_player_name",
+    "game_join_syslink_game",
+    "game_is_pc_dx11",
+    "game_is_local_player_in_vehicle",
+    "game_is_joinable",
+    "game_is_connected_to_internet",
+    "game_is_autosaving",
+    "game_hud_hide",
+    "game_get_ps3_button_swap",
+    "game_difficulty_select",
+    "game_coop_kick_player",
+    "game_coop_get_starting_syslink",
+    "fov_check_xz_plane",
+    "flee_to_navpoint"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}
