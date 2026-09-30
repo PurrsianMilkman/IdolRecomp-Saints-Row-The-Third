@@ -2,21 +2,25 @@
 
 *Created 2026-09-11. Resolves `spec-geometry-format.md` §6 open item 8's channel-array half, and the standing "we have topology but no vertices" gap.*
 
+**Review status summary (2026-09-30).** An adversarial desk review (no executable, no game data) gave each of 51 units a verdict: **8 DESK-PASS**, **27 DESK-PASS with text fixes applied**, **8 VALIDATED-BY-DATA**, **7 NEEDS-EXE**, **1 NEEDS-DATA**. A desk pass alone does not clear a unit — it means the text is internally consistent and its cited evidence supports it as worded; only the VALIDATED-BY-DATA units (§2 core fields, §3, §4.1, §6.1, §8.4.3, §12.8, §12.10.1, §12.13 item 4) are already backed by Team B's full-population runs. Provenance: the §6.6 CONFIRMED label that rested on an out-of-project runtime capture is downgraded to HYPOTHESIS per the project manager's ruling. **Awaiting the executable:** §7 (rewrite bases, `FUN_00e711c0`), §8.2 (group-array cursor), §8.4 (align8 gating), §12.9.1–§12.9.4, §12.9.13, §12.9.14, §12.10.3, §12.12 (consumer), §12.13 item 5. **Awaiting real data:** §6.6 (vehicle UV scale), §8.1 (34,000 residual triangles), §12.1–§12.3 and §12.13 item 3 (re-run on the corrected population, code 24 on 535 channels), §12.5 (vehicle tangent denominators), §12.9.6–§12.9.11 (`+0` versus `+16`), §12.10.5/§12.12 (half-float element type, shuffled-bbox control).
+
 ---
 
 ## 1. Headline
 
-**The per-vertex attribute data is fully located and fully decoded.** Every shipped mesh in the game stores its vertices as one or more **channels**, each described by a 24-byte record in the shared "Mesh" sub-block, and each stored as a separate contiguous, 16-byte-aligned array inside the paired `g`-file.
+**The per-vertex attribute data is fully located and fully decoded.** ~~Every shipped mesh in the game~~ Every Mesh block validated in the carriers of §4.2 *(desk review 2026-09-30: that population comes from the pre-fix 16-byte-grid scan, an under-count for zones, level meshes and trees (§4.2 warning), and the scanner skips flags-bit-2 blocks (§10 item 9), so this is not a census of every shipped mesh)* stores its vertices as one or more **channels**, each described by a 24-byte record in the shared "Mesh" sub-block, and each stored as a separate contiguous, 16-byte-aligned array inside the paired `g`-file.
 
 The three things that were missing are now all answered:
 
 | Question | Answer | Confidence |
 |---|---|---|
 | Where are the vertices? | In the `g`-file, immediately after the index buffer, one contiguous array per channel, each 16-byte aligned | **CONFIRMED — disassembly + exact-size replay** |
-| How big is a vertex? | `base(layout_code) + 4 × texcoord_count`, where the two size bytes in the record already state it directly | **CONFIRMED — disassembly + 26,601/26,601 channels** |
-| What is *in* a vertex? | `float3` position; `UBYTE4N` normal; `UBYTE4N` tangent + handedness sign; `UBYTE4N` blend weights and `UBYTE4` blend indices; then N texture-coordinate sets of two signed 16-bit fixed-point values at `1024 = 1.0` *(generic layout codes; tree codes 11/12/13 carry FLOAT16×3 position and zone code 24 carries no texcoord — see §12.10.5)* | **CONFIRMED — empirical, with controls (§6)** |
+| How big is a vertex? | `base(layout_code) + 4 × texcoord_count`, where the two size bytes in the record already state it directly | **CONFIRMED — disassembly + 26,601/26,601 channels** *(26,601 is the pre-fix scan population, an under-count — §4.2 warning; Team B's full-population runs reproduce the law on 549/549 character meshes and on 3,872 vehicle channels with 0 violations, `team-b/HANDOFF.md` §9.7, §9.29)* |
+| What is *in* a vertex? | `float3` position; `UBYTE4N` normal; `UBYTE4N` tangent + handedness sign; `UBYTE4N` blend weights and `UBYTE4` blend indices; then N texture-coordinate sets of two signed 16-bit fixed-point values at `1024 = 1.0` *(generic layout codes; tree codes 11/12/13 carry FLOAT16×3 position and zone code 24 carries no texcoord — see §12.10.5)* | **CONFIRMED — empirical, with controls (§6)** *(for the generic codes 0–4/100/101; tree codes 11/12/13 position is HIGH CONFIDENCE only, §12.12, and code 24's `+16` slot is OPEN, §12.13 item 3)* |
 
-The single most load-bearing correction in this document: **the `count × stride` buffer that `spec-geometry-format.md` §4.1.1 nominated as "the single strongest candidate for the actual interleaved vertex buffer" is the *index* buffer, not the vertex buffer.** Its element size is 2 bytes in 100% of shipped blocks. The vertex data is the per-channel arrays that follow it — a structure that section did describe, but as a secondary detail rather than as the answer.
+The single most load-bearing correction in this document: **the `count × stride` buffer that `spec-geometry-format.md` §4.1.1 nominated as "the single strongest candidate for the actual interleaved vertex buffer" is the *index* buffer, not the vertex buffer.** Its element size is 2 bytes in 100% of ~~shipped~~ blocks measured *(desk review 2026-09-30: the basis here is samples of 428 and 120 blocks, §8, plus 38,152/38,152 zone blocks in `spec-zone-data-format.md` §10.5 — not a census of every carrier)*. The vertex data is the per-channel arrays that follow it — a structure that section did describe, but as a secondary detail rather than as the answer.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (population scope of the headline, 26,601 and the index-size claim qualified) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -30,26 +34,35 @@ To reach it, follow `spec-geometry-format.md` §4.1.2 (material block → mandat
 
 | Offset | Size | Meaning | Confidence |
 |---|---|---|---|
-| `+0x00` | 1 | Flags. **Bit 0** set = this block's bulk data lives in the paired `g`-file; clear = inline in the `c`-file. **Bit 2** selects an alternative multi-stream representation. | **CONFIRMED — disassembly** |
+| `+0x00` | 1 | Flags. **Bit 0** set = this block's bulk data lives in the paired `g`-file; clear = inline in the `c`-file. **Bit 2** selects an alternative multi-stream representation. *(Bit 1 is not defined in this document; `spec-rig-format.md` §11.4 records that when it is set the loader advances by `u16(+0x38)` bytes over the bone-palette byte array — see the note below the table.)* | **CONFIRMED — disassembly** |
 | `+0x10` | 4 | **Channel count** | **CONFIRMED — disassembly** |
 | `+0x18` | 4 | Pointer to the channel array, fixed up at load; the array physically follows the `0x70` header | **CONFIRMED — disassembly** |
 | `+0x20` | 4 | **Index count** (see §8 — this is the field previously read as a vertex count) | **CONFIRMED — disassembly + empirical** |
 | `+0x28` | 4 | Pointer to the index buffer, fixed up at load | **CONFIRMED — disassembly** |
 | `+0x30` | 1 | **Index element size in bytes** — reads `2` in every shipped block observed | **CONFIRMED — disassembly + empirical** |
 
+**Further header fields documented elsewhere (desk review 2026-09-30, pointers only; not re-derived here):** `+0x04` group count and `+0x08` group-array pointer (§8.2, §12.6; `spec-vehicle-geometry.md` §11.9.1); `+0x38` `u16` count with pointer `+0x40` — the per-mesh bone-palette byte array (`spec-geometry-format.md` §4.1.1; `spec-rig-format.md` §11.4/§11.15); `+0x48` `u16` count with pointer `+0x50` — the palette-set table (`spec-geometry-format.md` §4.1.1; Team B reads it as `[count, start]` pairs, 318/318, `team-b/HANDOFF.md` §9.63.6). The loader supports an index size of 4 as well as 2 (`spec-vehicle-geometry.md` §11.9.2).
+
 Immediately before the header, the block declares three values used below. **Their offsets are fixed**, measured from the block's `u16` version field:
 
 | Offset from the version field | Size | Meaning |
 |---|---|---|
 | `+0x00` | 2 | version, reads `9` |
-| `+0x04` | 4 | **check value** — equals the first `u32` of the paired `g`-file |
+| `+0x02` | 2 | zero *(added 2026-09-30: Team B's anchor signature reads the `u32` at `+0x00` as `9` on every validated block, i.e. these two bytes are zero, `team-b/HANDOFF.md` §9.55.2)* |
+| `+0x04` | 4 | **check value** — equals the first `u32` of the paired `g`-file *(of this block's own `g`-side segment, which in a chained `.gzn_pc` does not start at byte 0 — §4.2 warning)* |
 | `+0x08` | 4 | byte length this block occupies in the `c`-file |
 | `+0x0C` | 4 | **byte length its segment occupies in the `g`-file** |
-| `+0x10` | — | the `0x70`-byte header begins here, padded to an 8-byte boundary |
+| `+0x10` | — | the `0x70`-byte header begins here, padded to an 8-byte boundary *(stated exactly, 2026-09-30: header start = `align8(version_pos + 0x10)` on the **absolute** `c`-file offset, i.e. displacement `0x10` or `0x14` — see the note below)* |
 
-These offsets are **unconditional, not merely observed**: the loader rejects the block outright unless both the buffer base and the cursor are 4-byte aligned, which fixes every subsequent pad in the run-up to the header. **[CONFIRMED — disassembly for the alignment precondition; CONFIRMED — empirical, the clean team reports 400/400 using the `g`-file's own first word and file size as independent oracles, and this team reproduces it.]** *(An earlier version of this document said only "immediately before the header" without a relative anchor — correct but not directly implementable. Fixed.)*
+> **Header displacement, stated exactly (added 2026-09-30, from the desk review).** The pad before the header is measured on the absolute `c`-file offset: `header_start = align8(version_pos + 0x10)`, so the header sits at `+0x10` when the version field is 8-aligned and at `+0x14` when it is 4 (mod 8), with a zero filler word at `+0x10..+0x13`. This is established by Team B's validation, not re-derived here: over 24,477 zone anchors checked by two independent oracles, 2,596 close at `+0x10` and 247 at `+0x14`, zero ambiguous (`team-b/HANDOFF.md` §9.55.2); the same rule fixed the `.clmesh_pc` `+0x48` reference chain (§9.66, 113 → 29 unresolved) and is used by the tree reader from its first version (§9.67); `spec-zone-data-format.md` §10.6 records a related defect in the other direction (rounding `version_pos + 0x0C` up to 8, which lands 8 bytes early when the version field is 4 mod 8). A reader that hard-codes `+0x10` is correct only where an upstream alignment step guarantees an 8-aligned version field (every paired character/prop/vehicle mesh).
+
+These offsets are **unconditional, not merely observed** *(qualified 2026-09-30: the offsets from the version field to the check value, `c`-length and `g`-length are fixed; the header start is not — see the note above)*: the loader rejects the block outright unless both the buffer base and the cursor are 4-byte aligned, which fixes every subsequent pad in the run-up to the header. **[CONFIRMED — disassembly for the alignment precondition; CONFIRMED — empirical, the clean team reports 400/400 using the `g`-file's own first word and file size as independent oracles, and this team reproduces it.]** *(An earlier version of this document said only "immediately before the header" without a relative anchor — correct but not directly implementable. Fixed.)*
 
 The `g`-length field is what makes the replay in §4 an exact test rather than a plausibility argument.
+
+*(Desk review 2026-09-30: the pre-header offsets check `+0x04` and `g`-length `+0x0C`, and header fields `+0x00`/`+0x10`/`+0x20`/`+0x30`, are exercised by Team B's full-population runs — 549/549 paired character meshes with both bookends, `team-b/HANDOFF.md` §9.7; 38,152/38,152 zone blocks, §9.55.3.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA for the pre-header and core header fields (Team B 549/549 characters, 38,152/38,152 zone blocks); text fixes applied (header displacement align8 on the absolute offset, `+0x02` zero, further header fields and flags bit 1 pointed to, check value per segment) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -64,7 +77,7 @@ Each channel is described by one 24-byte record. Every byte the loader reads is 
 | `+0x05` | 1 | **Layout code** — selects a predefined vertex layout (§5). Rewritten in place at load time (§7). | **CONFIRMED — disassembly** |
 | `+0x06` | 1 | **Texture-coordinate set count** — also the input to the load-time rewrite (§7) | **CONFIRMED — disassembly + empirical** |
 | `+0x07` | 1 | **Component-group B size**, in bytes per element | **CONFIRMED — disassembly** |
-| `+0x08` | 8 | Not read by this parser. Zero in every sample inspected. **[Resolved: zero on disk in 26,601/26,601 records, CLOSED as a strong negative, §12.1; at runtime the GPU-upload routine stores the created vertex-buffer handle here, `spec-vehicle-geometry.md` §11.9.2.]** | **OPEN / UNKNOWN** *(superseded, see §12.1)* |
+| `+0x08` | 8 | Not read by this parser. Zero in every sample inspected. **[Resolved: zero on disk in 26,601/26,601 records, CLOSED as a strong negative, §12.1; at runtime the GPU-upload routine stores the created vertex-buffer handle here, `spec-vehicle-geometry.md` §11.9.2.]** | ~~**OPEN / UNKNOWN**~~ **CLOSED** *(superseded, see §12.1)* |
 | `+0x10` | 4 | Data pointer, written by the loader (not meaningful on disk) | **CONFIRMED — disassembly** |
 | `+0x14` | 4 | Zeroed by the loader — the high half of a 64-bit pointer slot | **CONFIRMED — disassembly** |
 
@@ -74,7 +87,11 @@ Each channel is described by one 24-byte record. Every byte the loader reads is 
 >
 > This is worth recording as a methodology note, not just a typo: **when a decompiler expression mixes pointer types, the printed index is in units of the pointed-to type.** The same trap appears anywhere the decompiler casts an `int`-typed pointer down to a `byte` pointer before indexing it -- the printed offset then reads as a byte count even though the underlying arithmetic actually advanced by the original, wider element size.
 
-**Both size bytes are summed.** In every channel observed in the paired-mesh population, group B reads `0` and group A carries the whole per-vertex stride, i.e. the engine supports a second interleaved component group per channel that no shipped asset uses. **[CONFIRMED — empirical, group B = 0 in 2,029/2,029 channels of `.ccmesh_pc`/`.csmesh_pc`; HYPOTHESIS — that group B is a second interleaved group rather than something else, since no example exercises it.]**
+**Both size bytes are summed.** In every channel observed in the paired-mesh population, group B reads `0` and group A carries the whole per-vertex stride, i.e. the engine supports a second interleaved component group per channel that no shipped asset uses. **[CONFIRMED — empirical, group B = 0 in 2,029/2,029 channels of `.ccmesh_pc`/`.csmesh_pc` *(a different scan from §12.2's 2,076 + 107 = 2,183 records for the same two carriers; the two counts are not reconciled in this document)*; HYPOTHESIS — that group B is a second interleaved group rather than something else, since no example exercises it.]**
+
+*(Desk review 2026-09-30: VALIDATED-BY-DATA — the record offsets `+0x00`–`+0x07` and the size formula are what Team B's reader uses; 549/549 character meshes replay exactly, 3,872 vehicle channels decode with 0 failures, 38,152 zone blocks parse under the exact-length contract, `team-b/HANDOFF.md` §9.7, §9.29, §9.55.3.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B 549/549 characters, 3,872/3,872 vehicle channels, 38,152 zone blocks; `+0x08` label corrected to CLOSED; 2,029 vs 2,183 flagged — desk review (not re-derived from the executable).**
 
 ---
 
@@ -83,9 +100,9 @@ Each channel is described by one 24-byte record. Every byte the loader reads is 
 The loader walks the `g`-file segment with a cursor that starts at the segment base. Two separate functions implement this walk — one for the inline case and one for the `g`-file case — and **they perform the identical arithmetic against different base buffers**. **[CONFIRMED — disassembly, both implementations read side by side.]**
 
 ```
-segment start (16-byte aligned)
+segment start (16-byte aligned)            <- only the first segment of a chained file; see the note below
   u32            check value               <- must equal the block's own check value
-  align to 16
+  align to 16                              <- on the ABSOLUTE g-file offset, not segment-relative
   index buffer   index_count × index_size  (§8)
   for each channel, in record order:
       align to 16
@@ -95,6 +112,10 @@ segment start (16-byte aligned)
 ```
 
 The total must equal the `g`-length the block itself declares.
+
+> **Alignment origin, stated exactly (added 2026-09-30, from the desk review).** Every "align to 16" above is on the **absolute** `g`-file offset (pad = `(−abs_pos) mod 16`), not relative to the segment start. The two coincide for every carrier whose segment starts 16-aligned (characters, props, vehicles), which is why the replays in §4.1 cannot tell them apart; they differ in a chained `.gzn_pc`, whose segments after the first start on a 4-byte grid (`spec-zone-data-format.md` §10.4, where the declared `g`-length is shown to encode the segment's own alignment residue). Team B's reader aligned segment-relative until a zone chain exposed it; switching to absolute alignment is what lets 38,152/38,152 zone blocks pass the exact-length contract (`team-b/HANDOFF.md` §9.55.3, Bug A). So "segment start (16-byte aligned)" holds for the first segment of a file only. The final "align to 4" is the same on either origin because segment starts are 4-aligned. The inline case (flags bit 0 clear) is asserted to use the identical arithmetic but has not been replayed (§10 item 10).
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (absolute-grid alignment and first-segment-only 16-alignment, citing `spec-zone-data-format.md` §10.4 and Team B §9.55.3); core walk VALIDATED-BY-DATA by Team B 549/549 and 38,152/38,152 — desk review (not re-derived from the executable).**
 
 ### 4.1 Replay results
 
@@ -110,6 +131,10 @@ Reproducing that walk from the `c`-file's declared fields alone and comparing ag
 *(All `.ccmesh_pc`/`.gcmesh_pc` and `.csmesh_pc`/`.gsmesh_pc` pairs found across 18 archives. Not a sample — every such pair in those archives. The wider sweep in §4.2 covers 20 archives and so reaches a slightly larger pair count for the same extensions; the two numbers differ only by archive coverage, not by any file failing.)*
 
 **Why this is a strong test rather than a fitted one:** the replay consumes the index buffer and every channel using counts and sizes read from a *different file*, and must land on a byte total that the block declared independently — and then find a specific 32-bit value sitting exactly there. A single wrong stride, a single missed alignment, or a single misread count breaks it. **[CONFIRMED — empirical, exact, whole population.]**
+
+*(Desk review 2026-09-30: Team B independently reproduces the walk with both bookends on the 549 `characters.vpp_pc` pairs, `team-b/HANDOFF.md` §9.7; the other 1,388 pairs are Team A-only.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B 549/549 (subset of the 1,937) — desk review (not re-derived from the executable).**
 
 ### 4.2 The same walk validates blocks in carriers whose containers are only partly understood
 
@@ -133,9 +158,13 @@ Across those 17,934 blocks, **26,601 channels** were read, and the stride law of
 >
 > That document establishes two things about `.clmesh_pc`/`.glmesh_pc`: it is registered with a **different constructor pair**, and its **outer container is genuinely a different format** — its own magic (`0x4fe66afa`), its own required version (`20`), a `0x140`-byte header, and no six-array walk. **Both of those findings stand. This pass does not contradict either.**
 >
-> What this pass adds is one level down: **the shared "Mesh" sub-block is nonetheless embedded inside `.clmesh_pc`, and its vertex data is confirmed — 12,628 blocks validated by exact `g`-side replay including the bookend check.** So the correct statement is that `.clmesh_pc` reaches the *same* shared vertex machinery by a *different* route through a *different* outer container. The open item those sections left — "`.clmesh_pc`'s own vertex format" as a separate unknown — is **closed, and the answer is that it does not have one of its own.** **[CONFIRMED — empirical.]**
+> What this pass adds is one level down: **the shared "Mesh" sub-block is nonetheless embedded inside `.clmesh_pc`, and its vertex data is confirmed — 12,628 blocks validated by exact `g`-side replay including the bookend check.** So the correct statement is that `.clmesh_pc` reaches the *same* shared vertex machinery by a *different* route through a *different* outer container. The open item those sections left — "`.clmesh_pc`'s own vertex format" as a separate unknown — is **closed, and the answer is that it does not have one of its own.** **[CONFIRMED — empirical.]** *(Caveat added 2026-09-30: a `g`-side-only validator cannot see blocks that declare `g`-file bulk but have no `.glmesh_pc`; Team B finds 113 of 2,899 `.clmesh_pc` `+0x48` MeshBlock references that do not parse, one class of them exactly that case, `team-b/HANDOFF.md` §9.66 — so "12,628 validated" says nothing about those.)*
 >
 > The earlier hedge that the shared mechanism was "only a plausible-but-unconfirmed guess" for this format was therefore right to be cautious about the *six-array structure* (which really is absent) and wrong only in extending that caution to the vertex data itself.
+
+*(Desk review 2026-09-30: the pair counts for vehicles differ across this document and its neighbours — 388 here, 393 in §8.4.1, 365 in §12.8, 372 in Team B's runs — by archive scope; they are not tabulated in one place. The zone row's corrected 38,152 is reproduced exactly by Team B, `team-b/HANDOFF.md` §9.55.3.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (clmesh no-`g`-file caveat, vehicle denominators flagged); the zone/level/tree rows remain superseded per the warning above — desk review (not re-derived from the executable).**
 
 ---
 
@@ -154,9 +183,10 @@ Each texture-coordinate set costs exactly 4 bytes. Observed codes and their meas
 | `2` | 20 | position + normal + tangent | level meshes, zones, static props |
 | `3` | 28 | position + normal + tangent + skinning | **characters (dominant)** |
 | `4` | 12 | position only | zones, level meshes |
-| `11` | 32 | *(not probed — 13 channels)* | trees |
-| `13` | 32 | *(not probed — 2 channels)* | trees |
-| `24` | 20 | *(not probed — 448 channels)* | zones |
+| `11` | 32 | *(not probed — 13 channels)* ~~*(not probed)*~~ *(since probed: §12.9.5, §12.12, §12.10.5; 22 channels after the scan fix)* | trees |
+| `13` | 32 | *(not probed — 2 channels)* ~~*(not probed)*~~ *(since probed: §12.9.5, §12.12, §12.10.5; 4 channels after the scan fix)* | trees |
+| `12` | 32 | *(row added 2026-09-30: shipped, 36-byte stride at texcoord count 1, §12.10.1; fields §12.10.2, §12.12)* | trees |
+| `24` | 20 | *(not probed — 448 channels)* ~~*(not probed)*~~ *(since probed: position + normal, no texcoord, `+16` OPEN, §12.3, §12.13 items 3–4; 535 channels in Team B's population, `team-b/HANDOFF.md` §9.127)* | zones |
 | `100` | 20 | position + normal + rigid part index | **vehicles** |
 | `101` | 24 | position + normal + tangent + rigid part index | **vehicles** |
 
@@ -165,6 +195,10 @@ Each texture-coordinate set costs exactly 4 bytes. Observed codes and their meas
 **On what is and is not predictive here, stated plainly:** the base is *measured* per code, so quoting a hit rate for the base alone would be circular. The **slope is genuinely predictive** — it is a single constant that must hold across every texture-coordinate count a code is observed at, and it does, for all 7 codes seen at two or more distinct counts (codes 0, 1, 2, 3, 4, 100, 101), spanning counts 0 through 4. Codes 11, 13 and 24 are each observed at one count only and so contribute no test of the slope. **[CONFIRMED — empirical, for the slope; measured, not predicted, for the bases.]**
 
 **One clean out-of-sample confirmation.** The base table was fixed from an earlier sweep in which code 3 appeared only at texture-coordinate counts 1, 2 and 3. The final whole-population sweep turned up **4 channels of code 3 at count 4**, a combination absent when the table was written. The law predicts a 44-byte stride for them, and all 4 read exactly 44. A small number, but it is a genuine prediction rather than a refit. **[CONFIRMED — empirical, out of sample.]**
+
+*(Desk review 2026-09-30: the per-code channel totals behind 20,773 are not given, so the figure cannot be re-derived from this text; it comes from the same pre-fix scan as 26,601. Team B's runs validate the law for codes 1/3 (549/549 character meshes, `team-b/HANDOFF.md` §9.7) and 100/101 (3,872 channels, 0 violations, §9.29); no Team B aggregate covers codes 0, 2 and 4.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (code 12 row added, stale 11/13/24 rows annotated); codes 1, 3, 100, 101 VALIDATED-BY-DATA by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -189,9 +223,13 @@ Decoded as three little-endian floats at element offset 0, positions are finite 
 
 **Control:** decoding a `float3` at offsets +4, +8 or +12 instead does not merely give a worse bounding box — it does not produce finite floating-point values at all. The position field's location is therefore not a choice among several plausible readings. **[CONFIRMED — empirical, the control is decisive.]**
 
+*(Desk review 2026-09-30: VALIDATED-BY-DATA — Team B finds positions finite in 1,773,744/1,773,744 character vertices and decodes 5,629,811 vehicle vertices with 0 failures, `team-b/HANDOFF.md` §9.7, §9.29. The body mesh behind 1.376 × 1.855 × 0.525 is not named, so that figure is not reproducible by name.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: float3 at +0, Team B 1,773,744/1,773,744 characters and 5,629,811 vehicle vertices — desk review (not re-derived from the executable).**
+
 ### 6.2 Normal at +12, tangent at +16
 
-Both decode as **UBYTE4N** — four unsigned bytes, each mapped to [−1, 1] as `(b / 255) × 2 − 1` — with the first three components forming a unit vector.
+Both decode as **UBYTE4N** — four unsigned bytes, each mapped to [−1, 1] as `(b / 255) × 2 − 1` — with the first three components forming a unit vector. *(This mapping has no exact zero: 127 → −0.0039, 128 → +0.0039.)*
 
 Measuring "is the low-3-byte vector unit length to within 6%" across the population:
 
@@ -215,9 +253,13 @@ A rate of exactly 1.000 for a 6%-tolerance geometric test is not something an ar
 | the vector at **+12** | **113 distinct values**, spread across the range; at the extremes (≤1 or ≥254) only **0.0002** of the time |
 | the vector at **+16** | **exactly 2 distinct values** — `0` (80.4%) and `255` (19.6%); at the extremes **1.0000** |
 
-A field taking only the two extreme values is a **sign**, and a packed unit vector carrying a sign in its fourth component is the standard way to store a **tangent** plus the handedness needed to reconstruct the bitangent. So **+16 is the tangent and +12 is the normal** — now established by the data rather than by convention, and consistent with the ordering argument and with the fact that layouts exist having the first vector and not the second but never the reverse. **[CONFIRMED — empirical, 49,598 vertices.]** *(Carrier qualifier added by §12.5: the two-value handedness byte holds on characters, static props, level meshes and zones; it does NOT hold on vehicles (`.ccar_pc`), where the same byte takes 256 distinct values — see §12.5.)*
+A field taking only the two extreme values is a **sign**, and a packed unit vector carrying a sign in its fourth component is the standard way to store a **tangent** plus the handedness needed to reconstruct the bitangent. So **+16 is the tangent and +12 is the normal** *(the handedness reading of the +16 fourth byte holds on characters, static props, level meshes and zones only — not on vehicles, §12.5)* — now established by the data rather than by convention, and consistent with the ordering argument and with the fact that layouts exist having the first vector and not the second but never the reverse. **[CONFIRMED — empirical, 49,598 vertices.]** *(Carrier qualifier added by §12.5: the two-value handedness byte holds on characters, static props, level meshes and zones; it does NOT hold on vehicles (`.ccar_pc`), where the same byte takes 256 distinct values — see §12.5.)*
 
 **The normal's own fourth byte is therefore *not* a sign, and remains unidentified** — 113 distinct values with a dominant mode (`112`, 23%) is real per-vertex scalar content, not padding. **[OPEN / UNKNOWN — but now known *not* to be handedness.]** §12.4 narrows this considerably (per-region tag, finer than material, most likely smoothing-group-style); §12.13 item 1 runs the direct material-id correlation §12.4 itself flagged as the next step, and REFUTES literal material-id identity while reinforcing the smoothing-group reading — see there for the full test.
+
+*(Desk review 2026-09-30: the normal's unit length is VALIDATED-BY-DATA on 1,773,744/1,773,744 character and 5,629,811/5,629,811 vehicle vertices, `team-b/HANDOFF.md` §9.7, §9.29. The tangent-sign split rests on 49,598 vertices and on §12.4's four non-vehicle classes.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (carrier qualifier moved into the claim, no-exact-zero noted); normal VALIDATED-BY-DATA by Team B — desk review (not re-derived from the executable).**
 
 ### 6.3 Skinning — weights then indices (codes 1 and 3)
 
@@ -232,7 +274,11 @@ The number of non-zero weights per vertex distributes as 1 influence 47.6%, 2 in
 
 Two independently-decoded fields agreeing per-lane, per-vertex, without exception, cannot be produced by a misaligned offset. **[CONFIRMED — empirical, controlled.]**
 
-The largest non-sentinel index observed is **63**, consistent with a 64-entry bone palette. **[CONFIRMED — empirical for the value; HIGH CONFIDENCE — inferred for "palette size is 64".]**
+The largest non-sentinel index observed is **63**, consistent with a 64-entry bone palette. **[CONFIRMED — empirical for the value; HIGH CONFIDENCE — inferred for "palette size is 64".]** *(Qualified 2026-09-30: blend indices address the **per-mesh bone palette** — a variable-length `u8` array whose length is the `u16` at Mesh header `+0x38` — not the rig directly, `spec-rig-format.md` §11.15; 64 is a cap (one palette load path clamps the bone count to 64, `spec-rig-format.md` §11.2), not the palette length of a given mesh. Team B: highest blend index used < palette size in 318/318 meshes, `team-b/HANDOFF.md` §9.63.6. Weight bytes are best read as `b / 255` and renormalised, since the sums are 254–256.)*
+
+*(Desk review 2026-09-30: VALIDATED-BY-DATA — weight sums in [250, 260] 1,773,744/1,773,744 and weight-zero ⇔ index-255 7,094,976/7,094,976 lanes, `team-b/HANDOFF.md` §9.7.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (palette indirection per `spec-rig-format.md` §11.15, weight decode); structure VALIDATED-BY-DATA by Team B — desk review (not re-derived from the executable).**
 
 ### 6.4 Vehicles — a single rigid part index (codes 100 and 101)
 
@@ -241,11 +287,15 @@ Vehicles carry **4 bytes where characters carry 8**, and no partition-of-unity f
 > **All four bytes hold the same value: 77,816 / 77,816 and 62,505 / 62,505 vertices (1.000000).**
 > **Control** — the same test against the normal field: **0.000000**.
 
-The bytes are either all zero or all non-zero, never mixed. This is a **single part index broadcast across four lanes** — a rigid bind, where every vertex belongs to exactly one movable part and the weight is implicitly 1.0, stored in the same 4-byte slot shape the skinned path uses so one shader path serves both. Maximum values observed are 28 and 21, the right order for a car's separable parts. **[CONFIRMED — empirical for the replication and the value range; HIGH CONFIDENCE — inferred for the "rigid part bind" interpretation.]**
+The bytes are either all zero or all non-zero, never mixed. This is a **single part index broadcast across four lanes** — a rigid bind, where every vertex belongs to exactly one movable part and the weight is implicitly 1.0, stored in the same 4-byte slot shape the skinned path uses so one shader path serves both. Maximum values observed are 28 and 21 *(60-block samples; Team B's full 372-vehicle run finds a maximum of 37, below the 41-part maximum, `team-b/HANDOFF.md` §9.29)*, the right order for a car's separable parts. **[CONFIRMED — empirical for the replication and the value range; HIGH CONFIDENCE — inferred for the "rigid part bind" interpretation.]**
+
+*(The four-lane replication itself rests on 77,816 + 62,505 sampled vertices, not on the full 5.6M-vertex population.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (maximum part index 37 from Team B's full population) — desk review (not re-derived from the executable).**
 
 ### 6.5 Texture coordinates — 4 bytes each, at the end
 
-Every remaining 4-byte slot is a texture-coordinate set, and the count is stated directly by record `+0x06`. Each is **two signed 16-bit fixed-point values with 1024 representing 1.0** — decode as `int16 / 1024.0`.
+Every remaining 4-byte slot is a texture-coordinate set, and the count is stated directly by record `+0x06`. Each is **two signed 16-bit fixed-point values with 1024 representing 1.0** — decode as `int16 / 1024.0`. The first `int16` is U, the second V (the lane order of the per-lane table below).
 
 > **Correction, same day, to the first version of this document.** That version said "a half-float pair is the reading consistent with the observed ranges." **Half-float is refuted, decisively and easily:** across 2,222,554 shipped coordinate values, **94.6% have a half-float exponent field of zero** — i.e. under that reading essentially the entire population would be denormal, decoding to ~0.0001 and collapsing whole meshes to a single point. A genuine half-float population sits near 0% there, not 95%. The values are small integers, and reading them as floats produces nothing.
 
@@ -276,33 +326,35 @@ Of 400 channels examined, 48 carry negatives in **both** lanes, 51 in U only, 40
 
 That `+0x06` is a texture-coordinate **count** rather than an arbitrary variant id is confirmed by the stride law (§5): each increment adds exactly 4 bytes, in every layout code, across counts 0 to 4.
 
-### 6.6 Does the 1024 scale hold for vehicles (codes 100/101) specifically? — CLOSED
+**Review status (2026-09-30): DESK-PASS (Team B re-measured the int16/1024 reading on a different subset, `team-b/HANDOFF.md` §9.8); U/V lane order stated — desk review (not re-derived from the executable).**
+
+### 6.6 Does the 1024 scale hold for vehicles (codes 100/101) specifically? — ~~CLOSED~~ HYPOTHESIS (provenance downgrade 2026-09-30, see below)
 
 **Raised 2026-09-29 by a peer team's real shader-driven render**, whose translated vehicle-paint vertex shader (`ir_sr3carpaint_gr_v.fxo_pc`) carries its own compiled UV-descale constant of **1/256**, not this section's **1/1024** — a real, 4× discrepancy worth checking directly rather than assuming §6.5's population (predominantly characters/static props, per its own 400-channel sample) already covers vehicles.
 
 **First, a direct measurement restricted to vehicle channels only** (sem 100/101, 400 channels sampled from `vehicles.vpp_pc`, same per-channel-max-raw-value statistic §6.5 uses): median **1869**, p25 landing at exactly **1021** (matching the character/static-prop control's own near-uniform 1021–1034 cluster), but a much longer right tail (p75 **2875**, max **30125**). A quarter of vehicle channels sit exactly where the character population sits; the rest skew well above it — the expected shape of **legitimate UV tiling** on a large flat body panel repeating a detail/damage texture, not a uniformly shifted base scale (which would shift the *whole* distribution, not just its upper half). **[CONFIRMED — empirical, real data, 2026-09-29.]**
 
-**Second, and decisive: real runtime evidence (dirty-side, out of this document's normal disassembly scope — an external runtime capture; findings summarized here, the source is not for clean-side consultation) directly answers §12.9.4's open `D3DDECLTYPE` question and explains the exact 4×.** Real captured D3D9 vertex declarations show texture coordinates registered as raw **`D3DDECLTYPE_SHORT2`** (confirmed twice independently: a Vulkan-side format-rejection log reading `VkFormat 80 = R16G16_SSCALED = D3DDECLTYPE_SHORT2`, and a directly-read declaration string `short2 TEXCOORD @28`) — **not** the hardware-normalizing `SHORT2N`, so the GPU passes the stored int16 through completely unchanged and the entire descale is software, done inside the vertex shader. Real disassembled shader bytecode (two independent shaders, `ir_bbsimple2_decal_s` and `ir_bbsimple_1uv_decal_s`) shows the exact, consistent pattern:
+**Second, and decisive: real runtime evidence (dirty-side, out of this document's normal disassembly scope — an external runtime capture; findings summarized here, the source is not for clean-side consultation) directly answers §12.9.4's open `D3DDECLTYPE` question and explains the exact 4×.** Real captured D3D9 vertex declarations show texture coordinates registered as raw **`D3DDECLTYPE_SHORT2`** (reported twice in that capture: once by a translation layer's format log naming the non-normalising signed two-component 16-bit format, once by a declaration entry giving a two-component short texcoord at element offset 28 — *capture strings paraphrased 2026-09-30, clean-room*) — **not** the hardware-normalizing `SHORT2N`, so the GPU passes the stored int16 through completely unchanged and the entire descale is software, done inside the vertex shader. Real disassembled shader bytecode (two independent shaders, `ir_bbsimple2_decal_s` and `ir_bbsimple_1uv_decal_s`) shows the same pattern in both: the raw U lane is multiplied by one per-material tiling constant, the raw V lane by a second, and the resulting pair is multiplied by a constant equal to exactly 1/1024 (0.0009765625) before being written to the texcoord output. *(Three-instruction listing paraphrased 2026-09-30, clean-room. The same pattern was later re-derived from the shipped shader corpus by this project's own disassembler, §12.13 item 5.)*
 
-```
-mul r0.x, c1.x, v1.x        ; per-material TilingU * raw_u
-mul r0.y, c2.x, v1.y        ; per-material TilingV * raw_v
-mul o1.xy, r0, c3.x         ; c3.x = 0.0009765625 = 1/1024 exactly
-```
-
-**i.e. `uv = raw × tiling × (1/1024)`**, with the tiling pair being a genuine, real, per-shader/per-material constant (its register location moves between shaders — `c1`/`c2` in one, `c2`/`c3` in another — and some shaders carry no tiling pair at all, defaulting to 1). **The base decode mechanism is settled: raw `SHORT2`, universal `1/1024`, with a separate per-shader tiling factor applied before it.** **[CONFIRMED — real captured runtime declarations + real disassembled shader bytecode from two independent real shaders.]**
+**i.e. `uv = raw × tiling × (1/1024)`**, with the tiling pair being a genuine, real, per-shader/per-material constant (its register location moves between shaders — `c1`/`c2` in one, `c2`/`c3` in another — and some shaders carry no tiling pair at all, defaulting to 1). **The base decode mechanism is ~~settled~~ proposed: raw `SHORT2`, universal `1/1024`, with a separate per-shader tiling factor applied before it.** ~~**[CONFIRMED — real captured runtime declarations + real disassembled shader bytecode from two independent real shaders.]**~~ **[HYPOTHESIS]** **[Provenance 2026-09-30: this label rested on an out-of-project runtime capture; downgraded to HYPOTHESIS per the project manager's ruling; re-derivation from clean sources pending.]** *(What does not depend on the capture: the shader-side tiling-then-1/1024 multiply was re-derived from the shipped `shaders.vpp_pc` corpus by this project's own disassembler, §12.13 item 5 (see that item's own label); the raw non-normalising `SHORT2` declaration type rests on the capture alone.)*
 
 **The vehicle-paint shader's own `1/256` is specifically this pattern.** Peer-team verification (2026-09-29), checked against their translator's own disassembly-to-bytecode mapping (not just the rendered constant name): the constant is sourced from a genuine `def` bytecode instruction — a compile-time literal baked into the shader by the compiler, structurally distinct from, and never confusable with, an ordinary CTAB-reflected app-settable c-register (the translator only ever labels a register this way when it walked a real `DEF` opcode for that index; there is no path for a runtime-settable register to be mislabeled this way). A `def`-sourced constant is exactly what a real SM2/3 compiler emits when it folds a compile-time-literal tiling factor together with the always-present `1/1024` into one immediate — this shader's own tiling factor is simply fixed in source rather than exposed as a material parameter, unlike `ir_bbsimple2_decal_s`/`ir_bbsimple_1uv_decal_s` above. **[CONFIRMED — real disassembled bytecode, `def`-vs-CTAB distinction checked directly against the peer team's own translator source, not inferred.]** Vehicles use the same universal `1/1024` texcoord scale as every other carrier; no exception exists for this layout family.
 
-**Actionable note for whoever wires this at draw time:** the general, robust mechanism — demonstrated necessary across multiple real shaders — is two separate constants (a per-shader-located tiling pair, defaulting to 1 when absent, read from that shader's own CTAB by name, typically `Normal_Map_TilingU`/`Normal_Map_TilingV`) always followed by the fixed universal `1/1024`, not a single hardcoded divisor per shader — that part is safe to build against now. §12.9.4's `D3DDECLTYPE` gap is resolved for texcoords specifically (raw `SHORT2`).
+**Actionable note for whoever wires this at draw time:** the general, robust mechanism — demonstrated necessary across multiple real shaders — is two separate constants (a per-shader-located tiling pair, defaulting to 1 when absent, read from that shader's own CTAB by name, typically `Normal_Map_TilingU`/`Normal_Map_TilingV`) always followed by the fixed universal `1/1024`, not a single hardcoded divisor per shader — that part is safe to build against now. §12.9.4's `D3DDECLTYPE` gap is ~~resolved~~ answered only provisionally for texcoords (raw `SHORT2`) — that answer rests on the out-of-project capture and is HYPOTHESIS per the provenance note above.
+
+*(Desk review 2026-09-30: the `def`-versus-CTAB paragraph rests on a peer team's translator, not on the runtime capture, and its label is left as it stands; its reading of `1/256` as a folded tiling × `1/1024` is inferred, never shown numerically. The first vehicle-only measurement above is in-project data and is unaffected.)* **[OPEN — desk review 2026-09-30: vehicle UV scale 1/1024 versus 1/256 on vehicle panels with flat mapping (seam continuity, §6.5 absolute-delta metric), and the carpaint shader's folded `def` constant value; to be settled against real data and the shipped shader corpus.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (runtime-capture CONFIRMED label downgraded to HYPOTHESIS on provenance; capture strings and shader listing paraphrased) — desk review (not re-derived from the executable).**
 
 ## 7. The load-time rewrite of the layout code
 
-The loader passes each channel record through a small routine that **rewrites the layout-code byte in place**, combining it with the texture-coordinate count. Codes are accepted from a fixed set — 0 through 4, 14 through 26, and 100 and 101 — and each accepted code owns a **4-wide** range in the rewritten numbering, into which the texture-coordinate count is added. When the count is zero the routine returns without changing anything, so a layout with no texture coordinates keeps its original code. **[CONFIRMED — disassembly, the exact accepted set and the exact arithmetic.]**
+The loader passes each channel record through a small routine that **rewrites the layout-code byte in place**, combining it with the texture-coordinate count. Codes are accepted from a fixed set — 0 through 4, 14 through 26, and 100 and 101 — and each accepted code owns a **4-wide** range in the rewritten numbering, into which the texture-coordinate count is added. **[OPEN — desk review 2026-09-30: this does not reconcile with §12.10.3's code-24 value `texcoord_count + 0x57` (contiguous 4-wide ranges from 0 for codes 0–4 and 14–26 would put code 24 at 60, not 87), so the per-code base constants are not uniform or not contiguous; to be settled against the executable (full case table of `FUN_00e711c0`).]** When the count is zero the routine returns without changing anything, so a layout with no texture coordinates keeps its original code. **[CONFIRMED — disassembly, the exact accepted set and the exact arithmetic.]**
 
 The effect is to fold *(layout, texcoord count)* into a single flat identifier, which is the natural shape of an index into a table of prebuilt vertex declarations. **[HIGH CONFIDENCE — inferred.]**
 
 **Two consequences worth stating.** First, **the on-disk byte is the pre-rewrite value** — anything reading these files sees the raw layout code, and should not expect the flattened numbering. Second, the accepted set is **wider than what ships**: codes ~~5–10, 12, and~~ 14–23, 25, 26 are accepted by the loader but were not observed in any shipped asset examined here. *(Corrected: codes 5–10 are not in the accepted set stated above — the case list is `0x00`–`0x04`, `0x0E`–`0x1A`, `0x64`–`0x65`, §12.9.3/§12.10.3 — and code 12 does ship (trees, §10 item 2, §12.10.1) but is likewise not accepted (§12.10.3).)* Their layouts are consequently unknown. **[CONFIRMED — disassembly for the accepted set; OPEN / UNKNOWN for the unobserved codes' layouts.]**
+
+**Review status (2026-09-30): NEEDS-EXE: per-code base constants of the rewrite (`FUN_00e711c0`), the 4-wide claim versus code 24 → `tc + 0x57`, behaviour at texcoord count 0 — desk review (not re-derived from the executable).**
 
 ---
 
@@ -310,15 +362,17 @@ The effect is to fold *(layout, texcoord count)* into a single flat identifier, 
 
 The buffer that `spec-geometry-format.md` §4.1.1 identified as the leading vertex-buffer candidate is the **index buffer**:
 
-- Its element size field reads **2** in **every** shipped block observed, across all carriers. A vertex buffer with a 2-byte stride is not possible; a 16-bit index buffer is exactly that.
-- **Every index is less than the vertex count of the channels that follow it: 428 / 428 blocks (1.000000).** Control — the same range test applied to the vertex data region instead: **0 / 428 (0.000000)**.
+- Its element size field reads **2** in **every** shipped block observed, across all carriers *(scope, 2026-09-30: the blocks observed are the 428/120-block samples below plus 38,152/38,152 zone blocks, `spec-zone-data-format.md` §10.5; no census over every carrier)*. A vertex buffer with a 2-byte stride is not possible; a 16-bit index buffer is exactly that.
+- **Every index is less than the vertex count of the channels that follow it: 428 / 428 blocks (1.000000).** *(On multi-channel meshes, the channel a range's indices address is the one its `high16` selects on vehicles, §8.2 / `spec-vehicle-geometry.md` §11.5; Team B: 4,312,125/4,312,125 indices in range on 549 character meshes, `team-b/HANDOFF.md` §9.7.)* Control — the same range test applied to the vertex data region instead: **0 / 428 (0.000000)**.
 - **The largest index equals exactly the last vertex** (`max index / (vertex count − 1)` = 1.0000 as both median and mean, in 100% of blocks) — the signature of a complete, fully-referenced index buffer over exactly that vertex array.
 
 **[CONFIRMED — empirical, controlled.]** This also retroactively explains the very first black-box observation recorded for this format — a long run of smoothly ascending 16-bit values at `g`-file offset `0x10` — which was correct all along.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (scope of the size-2 claim, channel selection on multi-channel meshes); index range VALIDATED-BY-DATA on characters by Team B (4,312,125/4,312,125) — desk review (not re-derived from the executable).**
+
 ### 8.1 Primitive topology — triangle **strips**, stitched with degenerate triangles
 
-**These are triangle strips, not triangle lists.** The buffer is consumed as a sliding window — triangle *k* is indices *k*, *k+1*, *k+2* — and separate strips are joined by repeating an index, producing zero-area triangles the rasteriser discards. **[CONFIRMED — empirical, controlled.]**
+**These are triangle strips, not triangle lists.** The buffer is consumed as a sliding window — triangle *k* is indices *k*, *k+1*, *k+2* — and separate strips are joined by repeating an index, producing zero-area triangles the rasteriser discards. **[CONFIRMED — empirical, controlled.]** *(Here "degenerate" means a window whose three indices are not all distinct, including `idx[k] == idx[k+2]`.)*
 
 The decisive measurement is a counting argument that needs no rendering. A surface has roughly two triangles per vertex (Euler; somewhat fewer in practice, since UV seams and open boundaries duplicate vertices). Counting **non-degenerate** triangles under each reading:
 
@@ -340,7 +394,9 @@ Four further observations all agree:
 
 **What is still not pinned:** whether the buffer is additionally subdivided per render batch by descriptors in the outer six-array structure — arrays 1–3, since resolved as attachment-socket/collision data unrelated to render batching (`spec-geometry-format.md` §4.1.5), not per-batch descriptors. *(Resolved: the per-range subdivision lives in the Mesh sub-block's group/draw-range records, §8.2; §10 item 7.)* A renderer can draw correct geometry: consume as a strip and drop zero-area triangles. **[CONFIRMED — strip over list.]**
 
-**The exact stitching/winding convention within a range — CLOSED, 2026-09-29 (§12.13 item 2).** Triangle *k*, 0-indexed from each draw range's own start (degenerate slots counted), is `(idx[k], idx[k+1], idx[k+2])` for even *k* and `(idx[k+1], idx[k], idx[k+2])` for odd *k* — the standard GPU triangle-strip parity rule, with parity measured **locally from each range's own start**, never carried across a range boundary from the buffer's global position. Confirmed against real decoded vertex normals as an independent ground truth (not assumed): 5,043,382 / 5,077,382 (99.33%) of 5,077,382 real triangles across 1,756 real character/static-prop meshes agree, including 97.9–99.6% agreement on the very first real triangle immediately following a restart, at every observed restart run length (1 through 5). A naive fixed-winding reading scores only 51.58% (chance level); measuring parity from the buffer's global position instead of each range's own start scores only 75.33% — confirming parity resets per range. **No separate, explicitly-encoded winding correction exists at restarts of any length; this fixed rule is sufficient on its own.** **[CONFIRMED — empirical, controlled, real ground truth, 2026-09-29.]** Not yet extended to vehicles (`.ccar_pc`, different outer-header shape and multiple channels per mesh — untangling which channel each LOD group's ranges index was out of scope) or to `.clmesh_pc`/`.czn_pc` (different outer-header shape entirely) — do not assume cross-carrier confirmation beyond characters and static props.
+**The exact stitching/winding convention within a range — CLOSED, 2026-09-29 (§12.13 item 2).** Triangle *k*, 0-indexed from each draw range's own start (degenerate slots counted), is `(idx[k], idx[k+1], idx[k+2])` for even *k* and `(idx[k+1], idx[k], idx[k+2])` for odd *k* — the standard GPU triangle-strip parity rule, with parity measured **locally from each range's own start**, never carried across a range boundary from the buffer's global position. Confirmed against real decoded vertex normals as an independent ground truth (not assumed): 5,043,382 / 5,077,382 (99.33%) of 5,077,382 real triangles across 1,756 real character/static-prop meshes agree, including 97.9–99.6% agreement on the very first real triangle immediately following a restart, at every observed restart run length (1 through 5). A naive fixed-winding reading scores only 51.58% (chance level); measuring parity from the buffer's global position instead of each range's own start scores only 75.33% — confirming parity resets per range. **No separate, explicitly-encoded winding correction exists at restarts of any length; this fixed rule is sufficient on its own** *(for 99.33% of triangles; the remaining 34,000 = 5,077,382 − 5,043,382 disagreeing triangles are not analysed, and their per-mesh distribution is not given)*. **[CONFIRMED — empirical, controlled, real ground truth, 2026-09-29.]** Not yet extended to vehicles (`.ccar_pc`, different outer-header shape and multiple channels per mesh — untangling which channel each LOD group's ranges index was out of scope) or to `.clmesh_pc`/`.czn_pc` (different outer-header shape entirely) — do not assume cross-carrier confirmation beyond characters and static props. **[OPEN — desk review 2026-09-30: per-mesh distribution of the 34,000 residual triangles, and the rule on vehicles/`.clmesh_pc`/`.czn_pc` using the resolved `high16` channel mapping; to be settled against real data.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (degenerate defined, residual stated, scope open) — desk review (not re-derived from the executable).**
 
 ### 8.2 Draw ranges — the index buffer is partitioned, and drawing it as one strip is wrong
 
@@ -354,7 +410,7 @@ Four further observations all agree:
 
 **Where the ranges live — not where this document previously guessed.** §8.1 suggested the outer six-array structure (arrays 1–3) as the likely home of per-batch descriptors. **That was wrong.** Array 1 is *absent* on the very meshes exhibiting the artifact, and arrays 2–3 hold per-material float data. The ranges are inside the **"Mesh" sub-block itself**, in a record array the earlier passes walked past without decoding:
 
-- **Mesh header `+0x04`** holds a **group count**. The groups are `0x30`-byte records, laid down after the channel array (and after the flag-bit-1 arrays when present), 16-byte aligned.
+- **Mesh header `+0x04`** holds a **group count**. The groups are `0x30`-byte records, laid down after the channel array (and after the flag-bit-1 arrays when present — the bone-palette bytes counted by header `+0x38` and the palette-set table counted by `+0x48`, §2 note, `spec-rig-format.md` §11.4), 16-byte aligned. **[OPEN — desk review 2026-09-30: the exact cursor arithmetic from the end of the channel records to the group array (sizes of the `+0x38`/`+0x48` arrays, alignment between them) is not stated here, and Team B locates the group array by search; to be settled against the executable (`FUN_00e71410` around the call to `FUN_00e71310` at `0x00e7156e`–`0x00e71590`) and real data (assert the searched offset equals `align16` of the computed end of the palette-set table).]**
 - Each group's first `u32` is **how many draw ranges it owns**.
 - After all the group records come the ranges themselves, **20 bytes each**, grouped in record order.
 
@@ -380,11 +436,11 @@ That is the standard indexed-draw descriptor, including the minimum/maximum vert
 
 The third test is the one that settles it. The declared vertex bounds are not used to locate anything — they are an independent *assertion about content*, and the real index data honours it in every range of every mesh. A misidentified field cannot do that. **[CONFIRMED — empirical, exact.]**
 
-**The groups are level-of-detail steps — now confirmed by rendering, not inferred.** Of 1,831 meshes, 1,347 have a single group and 281 have four. A head LOD mesh has exactly one group holding exactly one range, `{slot 0, start 0, count 882, vertices 0–310}` — the entire buffer, the entire vertex array. A full body has four groups of four or five ranges each, contiguous, the later groups progressively shorter.
+**The groups are level-of-detail steps — now confirmed by rendering, not inferred.** Of 1,831 meshes, 1,347 have a single group and 281 have four *(the other 203 meshes' group counts are not given here)*. A head LOD mesh has exactly one group holding exactly one range, `{slot 0, start 0, count 882, vertices 0–310}` — the entire buffer, the entire vertex array. A full body has four groups of four or five ranges each, contiguous, the later groups progressively shorter.
 
 Shrinking index counts alone cannot separate "LOD levels" from "progressively smaller *parts* of one model", so the clean team tested the competing hypothesis directly by **rendering each group on its own**: every group draws the complete character — same pose, proportions and silhouette — with detail falling away as the counts drop (on one character the hair disappears entirely at group 3, matching its range count going 5/5/5/4). A part-wise split would have rendered a fragment; none does. **[CONFIRMED — empirical, refuted by images rather than argued away.]**
 
-**One trap for an implementer.** On multi-channel meshes the channels have **different vertex counts**, and the draw ranges are bounded by the **largest** one, not by channel 0's. Checking ranges against channel 0 produces 22 spurious failures out of 1,831 — all of them multi-channel meshes where `maxVertex` is exactly the last channel's count minus one. Bound against the largest channel and it is 1,831 / 1,831. *(Recorded because it cost this pass a false anomaly: the number looked like a format irregularity and was a wrong denominator in the test.)*
+**One trap for an implementer.** On multi-channel meshes the channels have **different vertex counts**, and the draw ranges are bounded by the **largest** one, not by channel 0's. Checking ranges against channel 0 produces 22 spurious failures out of 1,831 — all of them multi-channel meshes where `maxVertex` is exactly the last channel's count minus one. Bound against the largest channel and it is 1,831 / 1,831. *(Desk review 2026-09-30: on vehicles each range selects its channel by `high16` (§8.2 table, `spec-vehicle-geometry.md` §11.5), so the correct bound there is the selected channel's count; "largest channel" is the rule that happened to pass on this 1,831-mesh population, which is not broken down by carrier.)* *(Recorded because it cost this pass a false anomaly: the number looked like a format irregularity and was a wrong denominator in the test.)*
 
 **How to draw it:** pick one group, then issue one indexed draw per range in it, resetting the strip at every range boundary. Do not concatenate ranges. Within a range, consume as a strip and discard degenerate triangles (§8.1).
 
@@ -397,7 +453,11 @@ Shrinking index counts alone cannot separate "LOD levels" from "progressively sm
 
 > **The `0x30`-byte group record is now fully decoded from the loader, and the `+0x0C`/`+0x10` reading is confirmed from the CONSUMER side** (2026-09-13, `spec-vehicle-geometry.md` §11.9). `FUN_00e71310` is the group/draw-range array parser: Mesh header `+0x04` = group count, `+0x08` = group array base (an 8-byte pointer slot, `+0x0C` zeroed). Group record: `+0x00` draw-range count, `+0x04` vec3 bbox min, `+0x10` vec3 bbox max, `+0x1C` unknown, `+0x20` pointer to this group's `0x14`-byte draw-range array, `+0x28` pointer to an array of `rangeCount` 8-byte slots each pre-resolved to `meshHeader[+0x50] + storedValue * 2`. All groups' range arrays are contiguous first, then all groups' 8-byte slot arrays — not interleaved per group. And `FUN_00e72d00` is an engine function that takes a packed 16:16 draw-range handle, walks exactly this path, and returns the range's `+0x0C` and `+0x10` as its two output parameters — i.e. the renderer itself treats them as the minimum and maximum vertex index, independently of this document's validation statistics.
 
-**Locating the group array:** its offset is derived above, but it can also be *found* rather than computed — search for a position at which the invariants hold (ranges contiguous from 0, exact coverage of the index buffer, vertex bounds sane) and only one candidate survives. That is the same search-and-check technique that pinned the pre-header offsets in §2, and it is worth preferring to arithmetic wherever a structure exposes invariants this strong.
+**Locating the group array:** its offset is derived above, but it can also be *found* rather than computed — search for a position at which the invariants hold (ranges contiguous from 0, exact coverage of the index buffer, vertex bounds sane) and only one candidate survives. That is the same search-and-check technique that pinned the pre-header offsets in §2, and it is worth preferring to arithmetic wherever a structure exposes invariants this strong. *(Desk review 2026-09-30: "derived above" overstates it — the text above gives the order of the arrays but not their sizes; search with these invariants is the method that currently works, as Team B's reader does.)*
+
+*(Desk review 2026-09-30: the range structure is VALIDATED-BY-DATA on characters — Team B's LOD-group/draw-range reader reproduces the group structure (e.g. 4 groups of 5/5/5/4 ranges on one body mesh) and a 561-mesh breadth sweep finds no partition failures, `team-b/HANDOFF.md` §9.10, §9.21.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (group-array offset marked OPEN, multi-channel bound qualified, group-count gap noted); structure VALIDATED-BY-DATA on characters by Team B — desk review (not re-derived from the executable).**
 
 ### 8.3 The material/slot id, and where per-material data lives
 
@@ -408,7 +468,7 @@ Each draw range's first field is a **material id**. Two facts about it are settl
 - **The material count is a `u16` at offset `+0x0C` of the `0x424BD00D` sub-header.** Spelled out, because an earlier draft said only "outer sub-header" and an implementer reasonably read it against the *Mesh* sub-block's `0x70` header, where it reads zero on every file:
 >
 > ```
-> material_block_end = 0x20 + u32(file + 0x04)
+> material_block_end = 0x20 + u32(file + 0x04)          // `file` = start of the carrier's own c-file data
 > subheader          = material_block_end + (16 - (material_block_end % 16))   // mandatory pad, always 1..16
 > assert u32(subheader) == 0x424BD00D
 > materialCount      = u16(subheader + 0x0C)
@@ -489,9 +549,13 @@ material 3: alfred_sm_lower_dp.tga, alfred_sm_lower_n.tga, Cloth_Matte_02_SB.tga
 
 So the per-material data is one record per material, immediately after the Mesh sub-block. Decoding it is the obvious next step and was not attempted this pass. **[CONFIRMED — empirical, that the region exists and is one record per material; OPEN — its contents, and therefore the id-to-texture binding.]** *(Superseded: contents and binding now CONFIRMED — §12.8; `spec-vehicle-geometry.md` §11.2.)*
 
-**Until it is decoded, do not guess a mapping.** A wrong texture assignment renders a plausible-looking character that is silently wrong, and the usual check — looking at it — cannot catch that. Flat per-material colour is the correct interim: it displays exactly what is actually known.
+~~**Until it is decoded, do not guess a mapping.**~~ *(Superseded: decoded — §12.8.)* A wrong texture assignment renders a plausible-looking character that is silently wrong, and the usual check — looking at it — cannot catch that. Flat per-material colour is the correct interim: it displays exactly what is actually known.
 
 *(One negative result recorded so it is not re-derived: sub-header `+0x10` is **not** the LOD/group count. It matched on the first two meshes examined and holds in only **189 / 428** — a coincidence caught by population-testing a field identification that looked settled on a small sample.)*
+
+*(Desk review 2026-09-30: the material-count claim is VALIDATED-BY-DATA — Team B finds the `0x424BD00D` magic at its independently derived position and `u16(+0x0C) == 1 + max(material id)` in 549/549 meshes, 277/277 multi-material, control `+0x0E` 0/277, `team-b/HANDOFF.md` §9.22. The run-length ≥ 2 and non-zero-hash guards remain correct for the search fallback.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied ("file" defined, remaining stale guidance pointed to §12.8); material count VALIDATED-BY-DATA by Team B 549/549 — desk review (not re-derived from the executable).**
 
 ---
 
@@ -504,8 +568,12 @@ separate variable-length per-material loop**, and because vehicles run this exac
 same function (`spec-vehicle-geometry.md` §7.2 Q1), the rule holds for `.ccar_pc`
 identically.
 
-The parse cursor enters the array-data region at **sub-header `+0x88`** (§2) and is
-advanced like this:
+~~The parse cursor enters the array-data region at **sub-header `+0x88`** (§2) and is
+advanced like this:~~ **Corrected 2026-09-30 (desk review):** the arrays below lie **after
+the end of the Mesh sub-block** — the cursor starts at `version_pos + c_len` (§12.8, the
+chain validated 2,002/2,002 and 365/365), not at sub-header `+0x88`; the name blob,
+arrays 1–4 and the Mesh sub-block itself lie between those two points. The cursor is
+then advanced like this:
 
 ```
 N2 = u16(subheader + 0x0E)          // a SECOND count, not previously documented
@@ -529,7 +597,9 @@ problem that does not exist; the counts give the boundaries directly. The
 **variable-length** part is the per-material loop that follows, which runs exactly
 `u16(+0x0C)` times, each iteration consuming as much as that material needs.
 
-**[CONFIRMED — disassembly.]**
+**[CONFIRMED — disassembly.]** *(Origin corrected above. §12.8 aligns before array_C unconditionally where this listing gates it on `N > 0`; the two differ only when `N = 0`.)* **[OPEN — desk review 2026-09-30: whether the `align8` before array_C is gated on `N > 0`, whether alignment is on the absolute c-file offset, and what arrays A/B/C hold; to be settled against the executable (`FUN_00e40210`, `FUN_00e71090`, tail of `FUN_00e71410`).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (start cursor corrected to the Mesh sub-block end per §12.8); NEEDS-EXE for the align8 gating and array contents — desk review (not re-derived from the executable).**
 
 #### 8.4.1 A consequence: `+0x0C` is an exact count of material records
 
@@ -593,6 +663,10 @@ An equality guard was never correct for either carrier: for **binding** runs the
 bound holds but equality is incidental, and for **draw** runs the bound does not hold
 at all.
 
+*(Desk review 2026-09-30: consistent with Team B's full vehicle run — draw ranges exceed `materialCount` in 371/372 and masked ids are bounded 372/372, `team-b/HANDOFF.md` §9.35.)*
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 #### 8.4.2 What a name-validity check must require
 
 Relaxing an equality guard to `≤` is **not sufficient on its own**, and the reason is
@@ -609,7 +683,7 @@ renders fine on screen.** The structural requirements that make it checkable:
 
 1. **The offset must land on a name boundary** — the first byte of the blob, or the
    byte immediately after a NUL. The blob begins with a **leading NUL** by the
-   `align16(cur+4) + 1` convention (§8.3), so offset 0 is not a name.
+   `align16(cur+4) + 1` convention ~~(§8.3)~~ *(not stated in §8.3 — dangling reference, desk review 2026-09-30; the convention is stated as code in `spec-geometry-format.md` §3.1.1, the blob-skip block placed under its §4.1.2)*, so offset 0 is not a name.
 2. **The sampler hash must be a full 32-bit constant.** §8.3 established that the
    *hash*, not the slot index, identifies the sampler; a value under 256 or `-1` is
    not a hash and is the cheapest available rejection test.
@@ -632,6 +706,8 @@ was watching**, happily accepting a name carved out of the middle of another str
 **Strictness is not a scalar.** A guard can simultaneously reject true cases and
 accept false ones, and the loud half conceals the quiet half: the too-tight failure
 generates complaints, the too-loose failure generates renders that look fine.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (dangling §8.3 reference marked) — desk review (not re-derived from the executable).**
 
 #### 8.4.3 Vehicle material sets are PAIRED — half of every set is unreferenced
 
@@ -713,18 +789,24 @@ per-material record carries an association key at all (then `HANDOFF.md` §27.2;
 is where evidence for what it keys *on* would be most visible — those records exist
 for a reason that is not "a draw range points at me". Harness `car_runcount.py`.
 
+*(Desk review 2026-09-30: VALIDATED-BY-DATA for the measurement — Team B's independent run (`team-b/HANDOFF.md` §9.35.2) gives 336/372 at exactly 2×, cap 2.0000, character control 1.0000 on 549/549; the damage-state interpretation stays HYPOTHESIS.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B 336/372 at 2×, cap 2.0000, control 1.0000 (549/549) — desk review (not re-derived from the executable).**
+
 ## 9. What a reader needs, in order
 
 1. Walk to the Mesh sub-block (`spec-geometry-format.md` §4.1.2); confirm its version field reads `9`.
-2. Read the check value, the `c`-length and the `g`-length that precede the `0x70` header.
+2. Read the check value, the `c`-length and the `g`-length that precede the `0x70` header. *(The header itself starts at `align8(version_pos + 0x10)` on the absolute `c`-file offset — `+0x10` or `+0x14`, §2 note.)*
 3. From the header take flags `+0x00`, channel count `+0x10`, index count `+0x20`, index size `+0x30`.
-4. Read `channel_count` records of 24 bytes immediately after the header.
+4. Read `channel_count` records of 24 bytes immediately after the header. *(For skinned meshes the bone-palette bytes (header `+0x38`) and the palette-set table (`+0x48`) follow the records and precede the groups — §2 note, `spec-rig-format.md` §11.4/§11.15.)*
 5. If flags bit 0 is set, the data is in the `g`-file; otherwise it is inline in the `c`-file at the same cursor. Bit 2 selects a different representation not covered here.
-6. Walk the segment per §4: check value, align 16, index buffer, then each channel aligned to 16.
+6. Walk the segment per §4: check value, align 16, index buffer, then each channel aligned to 16 *(every alignment on the absolute `g`-file offset, §4 note)*.
 7. Decode each channel's elements per §6, using the layout code at record `+0x05` and the texture-coordinate count at `+0x06`.
 7a. Read the group count at mesh header `+0x04` and the draw ranges that follow the groups (§8.2). **Draw one range at a time** — never the whole index buffer at once.
-7b. To skin the mesh, map rig rest positions into vertex space with `(x, −y, −z)` and use the blend indices as direct bone-array indices — `spec-rig-format.md` §8.1.
+7b. ~~To skin the mesh, map rig rest positions into vertex space with `(x, −y, −z)` and use the blend indices as direct bone-array indices — `spec-rig-format.md` §8.1.~~ **[Retracted 2026-09-30 — superseded by `spec-rig-format.md` §11.15.]** To skin the mesh, resolve each blend index through the mesh's own bone palette (the `u8` array counted by Mesh header `+0x38`, whose entries are rig bone indices) and map rig rest positions into vertex space as `(−x, −y, −z)`. *(Corroborated independently by Team B, `team-b/HANDOFF.md` §9.63: palette complete and highest blend index below palette size in 318/318 character meshes, §9.63.6.)*
 8. Verify: the walk must consume exactly the declared `g`-length and end on a repeat of the check value. **If it does not, stop — do not guess.**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (step 7b retracted per `spec-rig-format.md` §11.15; header displacement, palette arrays and absolute alignment added to steps 2, 4 and 6) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -738,8 +820,10 @@ for a reason that is not "a draw range points at me". Harness `car_runcount.py`.
 6. ~~**Normal-versus-tangent assignment.**~~ **CLOSED** (§6.2) — decided by the handedness byte, not by convention.
 7. ~~**Primitive topology.**~~ **CLOSED** (§8.1, §8.2) — triangle strips stitched with degenerate triangles, not lists; the list reading yields an impossible 0.53 triangles per vertex. The per-range subdivision is also now resolved (§8.2) and is required for geometric correctness. ~~The exact stitching convention *within* a range (repeats per restart, winding correction) remains open.~~ **CLOSED, 2026-09-29 (§8.1/§12.13 item 2):** standard alternating-parity strip rule, measured locally from each range's own start, no separate restart correction needed — 99.33% agreement against real decoded normals on 5M+ real triangles.
 8. ~~**Component group B** — always zero in shipped data; its purpose is inferred from the summing arithmetic alone.~~ **CLOSED — §12.2 (26,601/26,601 zero; live-read and summed by the loader).**
-9. **The multi-stream representation** (flags bit 2) — never observed set in the 1,937 paired meshes; the `g`-side scanner in §4.2 skips such blocks, so its frequency in other carriers is untested.
-10. **Foliage and other inline-mode carriers** — foliage stores this block inline (flags bit 0 clear), so the `g`-side validation used throughout this document does not apply to it. Its channel records are readable by the same §3 rules, but were not replayed here.
+9. **The multi-stream representation** (flags bit 2) — never observed set in the 1,937 paired meshes; the `g`-side scanner in §4.2 skips such blocks, so its frequency in other carriers is untested. *(Update 2026-09-30: Team B's shared reader throws on flags bit 2, and it parses 38,152/38,152 zone blocks, 28/28 tree files and all 372 vehicles, `team-b/HANDOFF.md` §9.55.3, §9.67, §9.29 — so bit 2 is set in none of those populations; other carriers remain untested.)*
+10. **Foliage and other inline-mode carriers** — foliage stores this block inline (flags bit 0 clear), so the `g`-side validation used throughout this document does not apply to it. Its channel records are readable by the same §3 rules, but were not replayed here. *(Team B's 19/19 foliage run, `team-b/HANDOFF.md` §4.5, does not parse the Mesh sub-block internals; still open.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (item 9 answered for zones/trees/vehicles from Team B's runs) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -752,6 +836,9 @@ for a reason that is not "a draw range points at me". Harness `car_runcount.py`.
 | `spec-geometry-format.md` §4.1.2 item 6 | The ambiguity it left open — "consistent with a 16-bit index buffer *or* a compact vertex-attribute stream" — resolves to **index buffer** (§8). |
 | `spec-geometry-format.md` §4.2 | `.clmesh_pc`/`.glmesh_pc` vertex data is **confirmed**, not "a plausible-but-unconfirmed guess" — ~~11,446~~ 12,628 blocks validated (§4.2; itself an under-count, corrected to 29,908 per the §4.2 warning). |
 | `spec-geometry-format.md` §6 item 8 | The channel-array half is **closed**. Arrays 1, 2, 3 and 5 of the outer six-array structure remain open — this pass did not touch them. *(Arrays 1–3 since resolved, `spec-geometry-format.md` §4.1.5; array 5 remains open.)* |
+
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 12. The Remaining Unidentified Fields — Normal's 4th Byte, Layout Codes 11/13/24, Channel Record `+0x08`, Component Group B (2026-09-12)
 
@@ -790,7 +877,7 @@ nonzero byte anywhere in this 8-byte span, on any of 26,601 independently-author
 six different carrier formats and at least four different content pipelines (character, vehicle,
 tree, zone/level-mesh tooling), would have shown up as a nonzero count in the table above. This
 strengthens the earlier claim ("zero in every sample inspected", §3) from an unstated sample to the
-full shipped population.
+~~full shipped population~~ pre-fix scan population *(desk review 2026-09-30: the zone, level-mesh and tree rows are under-counts, §4.2 warning, so this is not the full shipped population)*.
 
 **Disassembly side.** `VtxChannelRecordRead.java` decompiled both functions that walk the 24-byte
 channel-record array — `FUN_00e71410` (inline/c-file path) and `FUN_00e71740` (g-file path), the
@@ -824,7 +911,9 @@ struct displacement has no selectivity. Given the field is zero in literally eve
 instance, even a real but unexercised consumer would never see a nonzero value in any shipped
 asset — which is the practically load-bearing fact for anyone implementing this format. **OPEN,
 narrowly:** whether any other engine subsystem reads this displacement at all *(partly answered: at runtime the GPU-upload routine stores the created vertex-buffer handle at this displacement, `spec-vehicle-geometry.md` §11.9.2)*; **CLOSED** for every
-purpose a format implementer has.
+purpose a format implementer has. **[OPEN — desk review 2026-09-30: the zero-on-disk predicate has not been re-run on the corrected (4-byte-grid) block population; to be settled against real data.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied ("full shipped population" narrowed to the pre-fix scan); NEEDS-DATA: re-run on the corrected population — desk review (not re-derived from the executable).**
 
 ### 12.2 Component group B — CLOSED, a strong negative, extended to the full population
 
@@ -854,7 +943,9 @@ asset in the 26,601-record population ever populates it.**
 arithmetic that would have used a nonzero value had one existed.]** This is exactly a
 well-characterised negative with a control (the control is that the field is live-read and
 arithmetically load-bearing, not skipped) — it is not being upgraded into "the engine never
-supports a second component group", only into "shipped content never exercises it".
+supports a second component group", only into "shipped content never exercises it". *(Desk review 2026-09-30: same pre-fix population as §12.1. For characters and vehicles the claim is independently backed by Team B's stride checks, which would expose a non-zero `sizeB` — 549/549 meshes and 3,872 channels with 0 violations, `team-b/HANDOFF.md` §9.7, §9.29. The 2,076 + 107 = 2,183 records here versus §3's 2,029 are different scans, not reconciled.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (population scope); characters and vehicles backed by Team B stride checks; NEEDS-DATA: re-run on the corrected population — desk review (not re-derived from the executable).**
 
 ### 12.3 Layout codes 11, 13, 24 — partially closed
 
@@ -866,12 +957,12 @@ supports a second component group", only into "shipped content never exercises i
 | 13 | `.csrt_pc` (trees) | 2 | 260 | 32 | 1 |
 | 24 | `.czn_pc` (zones) | 448 | 581,647 | 20 | 0 |
 
-Every channel of every code was decoded (not sampled) — these are the full populations of codes
-11/13/24 across all 38 shipped archives; there is nothing left unexamined for lack of a sample.
+Every channel of every code was decoded (not sampled) — ~~these are the full populations of codes
+11/13/24 across all 38 shipped archives; there is nothing left unexamined for lack of a sample.~~ *(struck 2026-09-30: these are the populations of the pre-fix scan, not full populations — see the note below and, for code 24, Team B's 535 code-24 channels, `team-b/HANDOFF.md` §9.127.)*
 *(Under-count: the 16-byte-grid scan bug, §4.2 warning. Corrected populations: code 11 = 22 channels / 28,457 vertices, code 13 = 4 channels / 1,172 vertices, §12.11.)*
 
 **Code 24 — position and normal CONFIRMED, tangent-slot OPEN.** Position at `+0` decodes as a
-finite `float3` in **581,647 / 581,647** vertices (1.000000) — the same test, at the same rate,
+finite `float3` in **581,647 / 581,647** vertices (1.000000) *(448 channels of the pre-fix scan; Team B's corrected population has 535 code-24 channels, `team-b/HANDOFF.md` §9.127, on which these tests have not been re-run)* — the same test, at the same rate,
 used to confirm position for every other code in `spec-vertex-format.md` §6.1. The vector at `+12`
 passes the unit-length test in **581,647 / 581,647** — matching the normal signature everywhere
 else in this format. **So code 24's first 16 bytes are structurally identical to code 2's
@@ -940,7 +1031,9 @@ samples agreeing is explicitly listed there as *not* confirmation on its own.
 **[HYPOTHESIS — unconfirmed: position at `+12` for code 13, insufficient population to promote
 further.]** *(Superseded: `+12` is the tangent slot for codes 11/13, §12.9.5 (code 13 as small-sample corroboration); position is FLOAT16×3 at `+0`, §12.12.)* Codes 11 and 13 share a measured base (32 bytes) but that is not evidence they share a
 layout — `spec-vertex-format.md` §5 already notes the codes are "an enumeration... not a bitfield",
-so equal bases can be coincidental (code 4 already breaks the regular-family reading at base 12).
+so equal bases can be coincidental (code 4 already breaks the regular-family reading at base 12). **[OPEN — desk review 2026-09-30: code-24 position/normal rates and the 1/62/385 `+16` buckets on Team B's 535-channel population; to be settled against real data.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied ("full population" struck; 448 vs 535 flagged); NEEDS-DATA: re-run code 24 on 535 channels — desk review (not re-derived from the executable).**
 
 ### 12.4 The normal's 4th byte
 
@@ -967,8 +1060,8 @@ applied to the normal's own byte is trustworthy.
 normal's 4th byte's maximum observed value is **exactly 127**, never higher — i.e. **bit 7 (0x80)
 is 0 in all 555,771 sampled vertices.** `spec-vertex-format.md` §6.2 already noted extremes
 (≤1 or ≥254) are rare (0.0002); this pass makes it exact and much stronger: the entire top half of
-the byte's range is unused, not merely rare at the very top. **[CONFIRMED — empirical, 555,771 / 6
-carrier/layout-independent samples, zero exceptions.]**
+the byte's range is unused, not merely rare at the very top. **[CONFIRMED — empirical, ~~555,771 / 6
+carrier/layout-independent samples~~ 555,771 sampled vertices in 10 (carrier, layout) classes over 4 carriers, zero exceptions.]**
 
 **Testing the five candidate interpretations, range arithmetic first:**
 
@@ -1037,7 +1130,7 @@ carrier/layout-independent samples, zero exceptions.]**
    **[HIGH CONFIDENCE — inferred: the field is a per-region enumerated tag rather than a
    continuously-computed value, from the triangle-constancy test above, replicated across 4
    carriers and 8 classes with a control that could fail (and does, showing the channel's own
-   chance rate) in every row.]** **NOT CONFIRMED:** what the tag actually indexes. It is not shown
+   chance rate) in every row.]** *(Desk review 2026-09-30: not every row discriminates — the `.czn_pc` layout 2 row's control is 0.9295 against a real 0.9982, so that row gives no support; the `.ccmesh_pc` layout 3 control is 0.4018. The support rests on the other six rows.)* **NOT CONFIRMED:** what the tag actually indexes. It is not shown
    to equal the draw-range material id (§8.2/§8.3) directly — that would need per-range
    correlation against the already-decoded draw-range structure, which this pass did not run (the
    concrete next step, using `car_runcount.py`-style range decoding against this byte per range).
@@ -1062,6 +1155,8 @@ look like). Vertex color was also directly refuted on existing data (the byte ca
 555,771 sampled vertices; a real color/alpha channel pins near 255 or spans 0–255, this does
 neither). See §12.13 item 1 for the full test.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (sample-size phrase corrected, non-discriminating czn row excluded from support) — desk review (not re-derived from the executable).**
+
 ### 12.5 A carrier-specific correction candidate: the tangent's 4th byte is NOT a clean handedness signal on vehicles
 
 While building the internal control for §12.4, the control **failed** on one of the five carriers it
@@ -1074,7 +1169,7 @@ does **not** hold on vehicles.
 `vehicles.vpp_pc`, `dlc1.vpp_pc`, `dlc2.vpp_pc`, `dlc3.vpp_pc` — layout 101, position + normal +
 tangent + rigid part index):
 
-- The vector at `+16` passes the unit-length test in **832,194 / 832,194** vertices, and bytes
+- The vector at `+16` passes the unit-length test in **832,194 / 832,194** vertices *(desk review 2026-09-30: this is not the same denominator as the 3,405,780 vertices of the next bullet, stated for the same 388-vehicle population; which subset 832,194 is — about 24% of it — is not recorded, so these two offset controls are not full-population)*, and bytes
   `+20..+23` (the rigid part index, §6.4) are all identical in **832,194 / 832,194** — both confirm
   the offset arithmetic is correct (a decisive control tested against the alternative ordering:
   swapping which 4-byte group is the tangent and which is the rigid index scores **0 / 832,194** on
@@ -1091,8 +1186,8 @@ tangent + rigid part index):
   byte's own 128-value spread.
 
 **Failing case, stated:** had the offsets been wrong (e.g. tangent and rigid-index swapped), the
-unit-length and all-identical controls above would have failed; they did not, on the full
-population, so the byte being measured is genuinely the slot that holds the handedness sign on
+unit-length and all-identical controls above would have failed; they did not, on ~~the full
+population~~ the 832,194-vertex subset, so the byte being measured is genuinely the slot that holds the handedness sign on
 every other carrier. **[CONFIRMED — empirical, full 388-vehicle / 3,405,780-vertex population.]**
 **Correction candidate:** `spec-vertex-format.md` §6.2's tangent-handedness finding should be read
 as confirmed on characters, static props, level meshes and zones, and **not yet established on
@@ -1100,7 +1195,9 @@ vehicles**, where the same structural slot carries a richer, non-binary value wh
 pass did not determine. This is recorded here rather than edited into §6.2 directly, per this
 project's standing rule that corrections stay visible in place — a future pass should fold it in
 alongside a decision on whether vehicles genuinely lack encoded handedness or encode it
-differently.
+differently. *(Team B's 2,444 code-101 channels, `team-b/HANDOFF.md` §9.29, are the full population to compare against; Team B has published unit normals only, not the tangent fourth byte.)* **[OPEN — desk review 2026-09-30: which subset the 832,194 figure is, and the tangent fourth-byte histogram over all code-101 vertices split by texcoord count and channel; to be settled against real data.]**
+
+**Review status (2026-09-30): NEEDS-DATA: 832,194 vs 3,405,780 denominators; full code-101 tangent fourth-byte histogram — desk review (not re-derived from the executable).**
 
 ### 12.6 One adjacent, unlabelled field noticed in passing — flagged, not chased
 
@@ -1116,19 +1213,23 @@ a real, previously-unlisted pair of header fields, but chasing it fully is a sep
 from the five assigned here and was not pursued past noticing it. **[OPEN / UNKNOWN — flagged for
 a future pass, not this one.]** **[Resolved 2026-09-13: `+0x04` = group count, `+0x08` = group-array pointer returned by `FUN_00e71310` — §8.2; `spec-vehicle-geometry.md` §11.9.1.]**
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 12.7 Summary
 
 | Item | Verdict | Confidence |
 |---|---|---|
-| Channel record `+0x08` (8 bytes) | Not read by either channel-array walker; zero in 26,601/26,601 records, all 6 carriers | CONFIRMED — disassembly + empirical |
+| Channel record `+0x08` (8 bytes) | Not read by either channel-array walker; zero in 26,601/26,601 records, all 6 carriers *(pre-fix scan population)* | CONFIRMED — disassembly + empirical |
 | Component group B | Zero in 26,601/26,601 records, all 6 carriers, despite being live-read/summed arithmetic | CONFIRMED — empirical + disassembly |
 | Layout code 24 (zones) | Position/normal confirmed (581,647/581,647); tangent-slot reading REFUTED, actual content OPEN | CONFIRMED (pos/normal) / OPEN (`+16`) |
-| Layout codes 11/13 (trees) | Plain-float3-position convention REFUTED for code 11 (full 17,624-vertex population); code 13 flagged, sample too small (2 channels) | CONFIRMED (refutation) / HYPOTHESIS (code 13) |
+| Layout codes 11/13 (trees) | Plain-float3-position convention REFUTED for code 11 (full 17,624-vertex population); code 13 flagged, sample too small (2 channels) | CONFIRMED (refutation) / HYPOTHESIS (code 13) *(superseded: normal/tangent at `+8`/`+12`, §12.9.5; position FLOAT16×3 at `+0`, HIGH CONFIDENCE, §12.12; populations 22 and 4 channels after the scan fix)* |
 | Normal's 4th byte: sign bit, weight remainder, padding | REFUTED (range arithmetic + direct measurement) | CONFIRMED — empirical |
 | Normal's 4th byte: occlusion/bake term | Weakened — one supporting signal, one decisive signal against | HIGH CONFIDENCE against, not fully refuted |
 | Normal's 4th byte: region index (material/smoothing-group-like) | Leading candidate — 99.0–99.9% per-triangle constancy across 4 carriers | HIGH CONFIDENCE — inferred |
-| Tangent 4th byte = handedness, on vehicles specifically | Does not hold as currently stated in §6.2 (17.94% extremes, not ~100%) | CONFIRMED — empirical (correction candidate) |
+| Tangent 4th byte = handedness, on vehicles specifically | Does not hold as currently stated in §6.2 (17.94% extremes, not ~100%) *(§6.2 now carries the carrier qualifier)* | CONFIRMED — empirical (correction candidate) |
 | Mesh header `+0x04`/`+0x08` | Previously unlisted; gates the channel walk / stores a helper's pointer return | OPEN / UNKNOWN **[Resolved 2026-09-13: group count / group-array pointer, §8.2; `spec-vehicle-geometry.md` §11.9.1.]** |
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (superseded rows annotated) — desk review (not re-derived from the executable).**
 
 ### 12.8 A relayed finding, verified: §8.3's texture-binding search can be replaced by direct arithmetic
 
@@ -1211,6 +1312,10 @@ not edit §8.3 directly, per this project's standing rule that corrections stay 
 rather than quietly overwriting the text they update; a future pass should fold this in as the
 primary method there, with the search demoted to a cross-check.
 
+*(Desk review 2026-09-30: VALIDATED-BY-DATA — Team B rewrote its material-binding parse by the same direct arithmetic and closed the vehicle association on its 372-vehicle population, `team-b/HANDOFF.md` §9.69. Whether the `align8` steps above are taken on the absolute `c`-file offset is not stated here.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: 2,002/2,002 and 365/365 here, independently adopted by Team B (§9.69) — desk review (not re-derived from the executable).**
+
 ### 12.9 Layout codes 11/13 (trees) — normal and tangent located via the tree-specific disassembly chain; position still open (2026-09-12)
 
 *(Position superseded by §12.12: FLOAT16×3 at `+0`, HIGH CONFIDENCE. The FLOAT32 negatives in §12.9 remain valid for FLOAT32 only.)*
@@ -1278,9 +1383,9 @@ contain entries for codes 11/13**, because they never reach it.
 to any specific layout code — 11/13 included — was not achieved in this pass; flagged rather than
 chased, per this project's scope-jump rule (`HANDOFF.md` §5).** **The one piece of this that mattered
 for a real question — which `D3DDECLTYPE` texcoord elements get — is now resolved a different way,
-via real runtime declarations rather than tracing this cache's builder caller: §6.6 confirms
+via real runtime declarations rather than tracing this cache's builder caller: §6.6 ~~confirms~~ reports
 `D3DDECLTYPE_SHORT2` (raw, non-normalizing), from real captured D3D9 declarations in the separate
-RTX-remix effort. The broader question below — which layout code maps to which cached declaration,
+RTX-remix effort. **[Provenance 2026-09-30: that answer rests on an out-of-project runtime capture and is HYPOTHESIS (§6.6); the texcoord declaration type is open again pending re-derivation from clean sources.]** The broader question below — which layout code maps to which cached declaration,
 11/13 included — remains open.** A single sentinel byte pattern
 resembling a Direct3D `D3DVERTEXELEMENT9` terminator, already located by an earlier pass at
 `0x01351c5c` (referenced from `FUN_00476ca0`), leads to a genuine, working, engine-wide
@@ -1298,6 +1403,10 @@ or 11/13 — was not identified. This is exactly the generic, non-tree-specific 
 project's methodology notes warn against chasing once found by accident; it is recorded here as a
 lead for whoever next has reason to resolve a layout code from first principles (not only 11/13),
 and deliberately not pursued further in this pass.
+
+**[OPEN — desk review 2026-09-30: §12.9.1–§12.9.4 are negatives read from the decompiler (no CPU-side field reader; 11/13 absent from the rewrite switch; the declaration cache's only reference a vtable slot), and `spec-render-pipeline.md` §8 describes the same builder's device source differently (the fixed global `DAT_03171ac4`, versus the thread-local-derived object of §12.9.14.2) and cites a third lookup table (`01351d10`) this document does not list; to be settled against the executable (`FUN_00e71410`, `FUN_00e71740`, `FUN_00e711c0`, `FUN_00476ca0`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: decompiler-read negatives and the device-source conflict with `spec-render-pipeline.md` §8 — desk review (not re-derived from the executable).**
 
 **12.9.5 Normal and tangent ARE present in code 11/13, eight bytes earlier than the generic
 layout's own +12/+16 — CONFIRMED — empirical, full population.** Having exhausted the disassembly
@@ -1341,6 +1450,8 @@ floats. A windowed multi-field test can be defeated by a single non-conforming m
 offsets where the rest of the window is sound — worth carrying forward as a general caution
 alongside this format's other windowed test (§6.1's float3 scan), and a concrete instance of the
 "assumed search shape" family of lessons in `HANDOFF.md` §5.
+
+**Review status (2026-09-30): DESK-PASS (code 11 at full pre-fix population; code 13 corroboration only; Team B's reader decodes the normal at +8, `team-b/src/mesh_block.cpp`) — desk review (not re-derived from the executable).**
 
 **12.9.6 Position is still OPEN — every remaining offset was range-checked before being reported,
 per this project's rule to check a candidate's achievable shape before running a population test on
@@ -1450,7 +1561,7 @@ elsewhere, after the tree-specific disassembly chain (§12.9.1–§12.9.4) estab
 consumer exists to read the fields directly and that codes 11/13 are structurally excluded from the
 generic layout-code rewrite/declaration-slot mechanism (§12.9.3) — independent, disassembly-level
 support for treating trees as a genuinely separate mechanism rather than a shifted version of the
-generic one. Position remains `OPEN / UNKNOWN`: no contiguous float3 exists anywhere in the
+generic one. Position remains `OPEN / UNKNOWN` *(superseded: FLOAT16×3 at `+0`, HIGH CONFIDENCE, §12.12; the FLOAT32 negatives here stand for FLOAT32 only, and §12.9.6's 100%-finite `+4`/`+20`/`+28` single floats are explained by that half-float layout rather than being findings in their own right)*: no contiguous float3 exists anywhere in the
 32-byte base outside the confirmed normal/tangent pair (§12.9.6), three individual offsets are each
 cleanly finite on their own (`+4`, `+20`, `+28`) without being adjacent to one another, and two
 offsets (`+0`, `+16`) show a real but partial structural relationship to each other that is more
@@ -1467,6 +1578,10 @@ channels carry a high `+24` unit-vector rate and which do not, exactly as `vtx_l
 already did for code 24. Harness: `tools/harnesses/tree2_offset_relations.py` (new, `tree2_`-prefixed
 per this pass's naming convention); Ghidra scripts: `tools/scripts/Tree2VertexDeclTable.java`,
 `tools/scripts/Tree2LayoutRewriteDecompile.java`.
+
+**[OPEN — desk review 2026-09-30: whether `+0` or `+16` carries the authored position where the two differ (about 30% of code-11 vertices, §12.9.7) — decode both as half3 and compare face normals against the stored `+8` normal; to be settled against real data.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (superseded position text pointed to §12.12); NEEDS-DATA: `+0` versus `+16` — desk review (not re-derived from the executable).**
 
 ### 12.9.12 Per-channel `+24` unit-vector rate, item 3 of Sec 12.9.11's next steps -- real per-instance variation, mechanism still not characterised (2026-09-14)
 
@@ -1495,7 +1610,7 @@ purpose but not previously tabulated in full):
 `st_shrub_nice_01`) each occur twice -- not a naming collision, but two genuinely distinct Mesh
 sub-blocks at different byte offsets within the same c/g file pair** (`st_pine_xmas`: g-file
 offsets 4,432 and 53,952; `st_shrub_nice_01`: offsets 464 and 13,456 -- gaps far too large to be
-the same block misread twice), most plausibly a near/far LOD pair sharing one asset name. **This is
+the same block misread twice), most plausibly a near/far LOD pair sharing one asset name *(a guess, not tested here)*. **This is
 evidence against a simple per-species or per-asset-name explanation for the rate**: the two
 `st_pine_xmas` instances score 0.5350 and 0.9849 -- a ~45-point spread for nominally the same tree
 -- and the two `st_shrub_nice_01` instances score 0.6522 and 1.0000, an even wider spread. Whatever
@@ -1509,7 +1624,9 @@ field" framing remains exactly as speculative as it was there -- this pass adds 
 structural fact (the rate is per-mesh-instance, not per-species) without resolving the underlying
 mechanism. Sec 12.9.11's item 3 is complete as scoped (a full per-channel characterization now
 exists, matching `vtx_layout_detail.py`'s code-24 precedent); items 1 and 2 remain independently in
-flight (see `HANDOFF.md` Sec 27.2).
+flight (see `HANDOFF.md` Sec 27.2). *(Desk review 2026-09-30: the table is the pre-fix 13-channel population; the corrected population is 22 channels, §12.3 note.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (stale population and near/far guess flagged) — desk review (not re-derived from the executable).**
 
 ### 12.9.13 Item 1 of Sec 12.9.11's next steps -- no CPU-side writer of +0/+4/+16/+20 exists anywhere in the traced load chain, CONFIRMED clean negative (2026-09-14)
 
@@ -1524,13 +1641,13 @@ instruction streams scanned for store-class operations, specifically looking for
 target address is the vertex data pointer plus a small displacement of `0`, `4`, `16`, or `20`.
 
 **The tree constructor's last two calls, confirmed from raw disassembly (`FUN_00a71810`,
-`0x00a718a2`/`0x00a718a8`):** `CALL 0x00a6f500` immediately followed by `CALL 0x00a713e0`, both
+`0x00a718a2`/`0x00a718a8`):** a call to `0x00a6f500` immediately followed by a call to `0x00a713e0`, both
 taking the tree object as their explicit stack argument -- exactly the order the task
 brief names, with nothing else interposed after the file parse completes.
 
 **`FUN_00a6f500` is a global doubly-linked-list insertion, not a vertex-buffer touch --
-CONFIRMED, disassembly.** The instruction immediately preceding the call (`0x00a7189d`) is
-`MOV ECX,0x2706800` -- a fixed global address, not anything derived from the tree object or its
+CONFIRMED, disassembly.** The instruction immediately preceding the call (`0x00a7189d`) loads the
+this-pointer register with the fixed global address `0x02706800` -- not anything derived from the tree object or its
 geometry sub-structure -- confirming the function's "this" argument is a
 module-level singleton (a global tree-registry list head), while the tree object itself is only
 the second, explicit argument. The function body writes exactly four fields, all on
@@ -1538,10 +1655,10 @@ the **tree object's own** `+0x28`/`+0x2c`/`+0x30`/`+0x34` (prev/next list-link s
 `'TREE'` block, matching this function's pre-existing project annotation), then calls two more
 functions:
 
-- `FUN_00a6f920(head+0xc)` -- one conditional dword write of its second argument into the first
+- `FUN_00a6f920`, called with the address of the list head's `+0xC` field -- one conditional dword write of its second argument into the first
   argument's `+0xA8` slot (only when the two differ), into the **global list head's own** bookkeeping area (`head+0xc+0xa8`,
   i.e. a "last-registered" tracking slot on the manager singleton, not on the tree object).
-- `FUN_00a6f950(*(head+8))` -- an exponential-smoothing/decay update (the difference between two
+- `FUN_00a6f950`, called with the pointer stored in the list head's `+8` slot -- an exponential-smoothing/decay update (the difference between two
   of the six values below, blended back in via an interpolation weight) across six `float` fields
   at byte offsets `+0x98`/`+0xac`/`+0xd0`/
   `+0xd4`/`+0xd8`/`+0xdc` of **whatever object the global head's own `+8` slot points to** -- a
@@ -1600,11 +1717,15 @@ authored-but-unidentified content explanation are left standing exactly as they 
 Ghidra addresses for reference: `FUN_00a6f500` (`0x00a6f500`), `FUN_00a6f920` (`0x00a6f920`,
 writes global-manager `+0xa8`), `FUN_00a6f950` (`0x00a6f950`, smoothing update on a second global
 object's `+0x98..+0xdc`), the global tree-registry list head (`DAT_02706800`), call site
-`0x00a718a2` (`MOV ECX,0x2706800` at `0x00a7189d` immediately before). Ghidra script:
+`0x00a718a2` (the load of the fixed address `0x02706800` at `0x00a7189d` immediately before). Ghidra script:
 `tools/scripts/Tree4WriterTrace.java` (full decompile + call-target list + raw-instruction store
 scan for `FUN_00a6f500`/`FUN_00e71410`/`FUN_00e71740`), `tools/scripts/Tree4WriterTrace2.java`
 (`FUN_00a6f920`/`FUN_00a6f950`/`FUN_00a71810` full decompile), `tools/scripts/Tree4CallSiteAsm.java`
 (raw disassembly of the `FUN_00a71810` call sequence).
+
+**[OPEN — desk review 2026-09-30: the negative is scoped to the traced CPU load chain; any writer into a locked tree vertex buffer (users of `FUN_00482f00`'s lock/copy path) or a GPU-side fixup is outside it; to be settled against the executable (`FUN_00a6f500`, `FUN_00a6f920`, `FUN_00a6f950`, `FUN_00a713e0`, `FUN_00482f00`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: scope-limited negative; raw instruction quotes paraphrased to prose — desk review (not re-derived from the executable).**
 
 ### 12.9.14 The vertex-declaration-builder's own caller (Sec 12.9.11 item 2) — traced two levels deeper than Sec 12.9.4; both named entry points reach genuine, disassembly-confirmed dead ends, position still OPEN (2026-09-14)
 
@@ -1616,21 +1737,21 @@ the task brief (the vtable slot `0x0129fda4` referencing `FUN_00476ca0`, and the
 GPU-upload chain). Both were pushed further than any prior pass; neither reached a caller that
 supplies a tree-specific element list.
 
-**12.9.14.1 Entry point 1: the real vtable base is `0x0129fd90`, found by byte-pattern search after `getReferencesTo` came back empty — CONFIRMED, disassembly.** Re-running `getReferencesTo(0x0129fda4)` (the slot Sec 12.9.4 named) confirms it directly: 0 references, exactly matching "not an ordinary call site." The neighbourhood (`0x0129fd8c`-`0x0129fde4`) turns out to hold a small, genuine C++-style vtable, not raw scattered data — established by searching memory for the literal little-endian encoding of candidate base addresses, which `getReferencesTo` had also returned 0 hits for on the table-base addresses themselves:
+**12.9.14.1 Entry point 1: the real vtable base is `0x0129fd90`, found by byte-pattern search after `getReferencesTo` came back empty — CONFIRMED, disassembly.** Re-running the reference query on `0x0129fda4` (the slot Sec 12.9.4 named) confirms it directly: 0 references, exactly matching "not an ordinary call site." The neighbourhood (`0x0129fd8c`-`0x0129fde4`) turns out to hold a small, genuine C++-style vtable, not raw scattered data — established by searching memory for the literal little-endian encoding of candidate base addresses, which `getReferencesTo` had also returned 0 hits for on the table-base addresses themselves:
 
 | Search target | Hits | Context |
 |---|---|---|
 | `0x0129fd8c` (one slot before the first function pointer) | 0 | — |
-| `0x0129fd90` (the first function-pointer slot) | 2 | `00476bef` in `FUN_00476bd0`: `MOV dword ptr [ESI],0x129fd90`; `00476c48` in `FUN_00476c40`: `MOV dword ptr [EDI],0x129fd90` |
+| `0x0129fd90` (the first function-pointer slot) | 2 | `00476bef` in `FUN_00476bd0` and `00476c48` in `FUN_00476c40`: each stores the constant `0x0129fd90` into the first dword of the object in hand |
 
 Both hits are the classic MSVC ctor/dtor "(re)set vptr to this class's own vtable" idiom — confirming `0x0129fd90` is the real vtable base (not `0x0129fd8c`, which fits the standard MSVC layout slot for an RTTI locator pointer at `vtbl-4`, consistent with, not independently proven as, RTTI). `FUN_00476bd0` is therefore this class's constructor and `FUN_00476c40` its destructor body. Decompiling the full 8-slot primary vtable (`0x0129fd90`-`0x0129fdac`) resolves every member:
 
 | Offset | Function | Role, read directly from the decompiled body |
 |---|---|---|
 | +0x00 | `FUN_00476c20` | deleting destructor (calls `FUN_00476c40`, then conditionally frees) |
-| +0x04 | `FUN_008a5bf0` | shared no-op stub (`{ return; }`) — 400+ unrelated vtables engine-wide reuse this same address; not format-specific |
+| +0x04 | `FUN_008a5bf0` | shared no-op stub (returns immediately) — 400+ unrelated vtables engine-wide reuse this same address; not format-specific |
 | +0x08 | `FUN_00476bb0` | calls the object's own destructor slot with flag 0, then passes the object to `FUN_00e49600` — a `Release()`-shaped method: invokes the destructor, then frees via the pool-free counterpart of the ctor's own `FUN_00e49580` allocator |
-| +0x0C | `FUN_00435660` | shared stub, `{ return 0xffffffff; }` — ~83 unrelated call sites engine-wide reuse this address as a default "unimplemented" virtual |
+| +0x0C | `FUN_00435660` | shared stub that returns `0xffffffff` — ~83 unrelated call sites engine-wide reuse this address as a default "unimplemented" virtual |
 | +0x10 | `FUN_00476c90` | zeroes the dword at `this+0x1C0`, fills `0x1B8` bytes from `this+0x08` with `0xFF`, then calls `FUN_00e79570` — resets a cache: `this+0x1c0` is exactly the live-count field `FUN_00476ca0` checks against the `0x87` cap Sec 12.9.4 already found, so this is that cache's own reset/init method |
 | +0x14 | **`FUN_00476ca0`** | **the `CreateVertexDeclaration` builder itself — Sec 12.9.4's original target** |
 | +0x18 | `FUN_00476ea0` | thin wrapper that calls slot `+0x14` on the **same object** via indirect dispatch, passes that call's result together with its own argument 2 to `FUN_00e7bfa0`, and returns the same result — i.e. this is the "public" entry point whose caller this task needs, and it internally re-enters the builder rather than being a separate implementation |
@@ -1638,15 +1759,17 @@ Both hits are the classic MSVC ctor/dtor "(re)set vptr to this class's own vtabl
 
 A second, secondary-base vtable begins at `0x0129fdb4` (the constructed object's own `+0x4` field is set to `&PTR_FUN_0129fdb4` alongside `+0x0` = `&PTR_FUN_0129fd90`, i.e. multiple inheritance); its slot 0 (`FUN_00476f60`) just forwards to the same `FUN_00476c20` deleting destructor and was not pursued further, since the target method (`+0x14` on the primary vtable) is already resolved.
 
-**12.9.14.2 `FUN_00476ca0`'s parameter shape, confirmed directly by a fresh full decompile — refines, does not contradict, Sec 12.9.4.** It is a `thiscall` method taking one pointer argument (argument 2) to a `{elements pointer, count, ...}` header (first dword = element-record array base, second dword = count), record stride `0x10` bytes (type at `+0`, usage at `+4`, a method byte at `+8`, a further byte at `+9`, a field at `+12`). Each record is validated exactly as Sec 12.9.4 already reported (type ≠ -1 and < 0x34; usage ≠ -1 and < 0x12; method byte < 8; the `+12` field < 3), translated through the same three lookup tables (`DAT_01351d58`, `DAT_01351c98`, `PTR_DAT_01351c64`) into a `D3DVERTEXELEMENT9`-shaped record, terminated with the `DAT_01351c5c`/`DAT_01351c60` sentinel pair Sec 12.9.4 located, and committed via a **thread-local-storage-derived** device object's vtable `+0x158` (`FS:[0x2c]` → a pointer at `+0x674` → a second pointer at `+0x764` → dereferenced once more → `vtable[+0x158]`) — not a fixed global, which is new detail. On success, a 64-bit value from `FUN_00e7bfc0()` is stored into `this+0x3e0+cacheIndex*8`/`this+0x3e4+cacheIndex*8`, the live count at `+0x1c0` is incremented, and the new cache index is returned. **No table indexed by anything layout-code-shaped exists anywhere in this function's body.** It is a pure "build exactly what you hand me" declaration factory; whichever element records (and therefore which offset carries `D3DDECLUSAGE_POSITION`) go into argument 2 is decided entirely by the caller, before this function is ever reached.
+**12.9.14.2 `FUN_00476ca0`'s parameter shape, confirmed directly by a fresh full decompile — refines, does not contradict, Sec 12.9.4.** It is a `thiscall` method taking one pointer argument (argument 2) to a `{elements pointer, count, ...}` header (first dword = element-record array base, second dword = count), record stride `0x10` bytes (type at `+0`, usage at `+4`, a method byte at `+8`, a further byte at `+9`, a field at `+12`). Each record is validated exactly as Sec 12.9.4 already reported (type ≠ -1 and < 0x34; usage ≠ -1 and < 0x12; method byte < 8; the `+12` field < 3), translated through the same three lookup tables (`DAT_01351d58`, `DAT_01351c98`, `PTR_DAT_01351c64`) into a `D3DVERTEXELEMENT9`-shaped record, terminated with the `DAT_01351c5c`/`DAT_01351c60` sentinel pair Sec 12.9.4 located, and committed via a **thread-local-storage-derived** device object's vtable `+0x158` (the thread-local-storage array pointer at FS offset `0x2c` → a pointer at `+0x674` → a second pointer at `+0x764` → dereferenced once more → `vtable[+0x158]`) — not a fixed global, which is new detail. On success, a 64-bit value returned by `FUN_00e7bfc0` is stored in the cache-entry array at `this+0x3e0` (8 bytes per cache index), the live count at `+0x1c0` is incremented, and the new cache index is returned. **No table indexed by anything layout-code-shaped exists anywhere in this function's body.** It is a pure "build exactly what you hand me" declaration factory; whichever element records (and therefore which offset carries `D3DDECLUSAGE_POSITION`) go into argument 2 is decided entirely by the caller, before this function is ever reached.
 
-**12.9.14.3 The class is constructed exactly once, engine-wide, and its pointer is provably discarded at the only call site — CONFIRMED, raw disassembly, a genuine dead end.** `FUN_00476bd0` (the constructor: allocates `0x818` bytes via `FUN_00e49580`, installs both vtable pointers, returns the new object) has exactly one caller in the entire binary: `FUN_00e49250`, at call site `0x00e492c1`. `FUN_00e49250` is the engine's top-level Render Layer bring-up routine, identified unambiguously by four debug strings it passes to a logging callback in sequence: `"RL: factory"`, `"RL: shader library"`, `"RL: other systems"`, `"RL: gpu visibility"` — the vertex-declaration-class constructor call sits in the "RL: factory" section, called the same bare-statement way as several sibling one-shot subsystem initializers around it. **Checked in raw disassembly, not only the decompiler's C view** (which could plausibly elide an assignment to an as-yet-unnamed global): the instruction immediately after `CALL 0x00476bd0` at `0x00e492c1` is `MOV EAX,[0x0132db98]` — reading an unrelated global — with no intervening store of `EAX` anywhere before it is overwritten. **The constructed object's pointer is not captured into any register, stack slot, or global reachable from this call site.** Combined with 12.9.14.1's finding that none of this class's 8 primary-vtable methods (destructor aside) has a single caller anywhere else in the binary besides their own vtable-slot self-reference (every one of `FUN_00476bb0`/`FUN_00435660`/`FUN_00476c90`/`FUN_00476ca0`/`FUN_00476ea0`/`FUN_00476ed0` shows exactly 1 total reference — the data slot that stores it into the vtable, nothing else), this is as far as static cross-reference analysis can go: **there is no statically-visible path from "an instance of this class exists" to "some caller supplies it a tree-shaped element list."** Two explanations are left open, neither confirmed: the instance is retained through a mechanism this pass did not locate (e.g. participation in a pool/registry maintained by the allocator itself, not chased further here), or this specific class — despite matching Sec 12.9.4's description of the `CreateVertexDeclaration`-calling infrastructure exactly — is not actually the path trees' declarations go through at all.
+**12.9.14.3 The class is constructed exactly once, engine-wide, and its pointer is provably discarded at the only call site — CONFIRMED, raw disassembly, a genuine dead end.** `FUN_00476bd0` (the constructor: allocates `0x818` bytes via `FUN_00e49580`, installs both vtable pointers, returns the new object) has exactly one caller in the entire binary: `FUN_00e49250`, at call site `0x00e492c1`. `FUN_00e49250` is the engine's top-level Render Layer bring-up routine, identified unambiguously by four debug strings it passes to a logging callback in sequence, naming its factory, shader-library, other-systems and GPU-visibility bring-up stages *(strings paraphrased 2026-09-30, clean-room)* — the vertex-declaration-class constructor call sits in the factory stage, called the same bare-statement way as several sibling one-shot subsystem initializers around it. **Checked in raw disassembly, not only the decompiler's C view** (which could plausibly elide an assignment to an as-yet-unnamed global): the instruction immediately after the call to `0x00476bd0` at `0x00e492c1` overwrites the return-value register with a load from the unrelated global `0x0132db98`, with no intervening store of the returned pointer. **The constructed object's pointer is not captured into any register, stack slot, or global reachable from this call site.** Combined with 12.9.14.1's finding that none of this class's 8 primary-vtable methods (destructor aside) has a single caller anywhere else in the binary besides their own vtable-slot self-reference (every one of `FUN_00476bb0`/`FUN_00435660`/`FUN_00476c90`/`FUN_00476ca0`/`FUN_00476ea0`/`FUN_00476ed0` shows exactly 1 total reference — the data slot that stores it into the vtable, nothing else), this is as far as static cross-reference analysis can go: **there is no statically-visible path from "an instance of this class exists" to "some caller supplies it a tree-shaped element list."** Two explanations are left open, neither confirmed: the instance is retained through a mechanism this pass did not locate (e.g. participation in a pool/registry maintained by the allocator itself, not chased further here), or this specific class — despite matching Sec 12.9.4's description of the `CreateVertexDeclaration`-calling infrastructure exactly — is not actually the path trees' declarations go through at all. **[OPEN — desk review 2026-09-30: "pointer discarded" does not exclude the constructor registering `this` itself (it allocates through the pool allocator `FUN_00e49580`), so the dead-end label is not proven; and `spec-render-pipeline.md` §8 gives a different device source for this builder (the fixed global `DAT_03171ac4`) than 12.9.14.2's thread-local chain; to be settled against the executable (`FUN_00476bd0` body, `FUN_00e49250` around `0x00e492c1`, indirect calls through slot `+0x14`).]**
 
 **12.9.14.4 Entry point 2: the vehicle GPU-upload chain's one non-vehicle caller is the unrelated Effects format, not trees — CONFIRMED, cross-checked against `spec-effects-format.md`.** `FUN_00482e00` (~~the vehicle-class constructor~~ the pooled renderer-object constructor — corrected per `spec-vehicle-geometry.md` §11.9.2, which names the vehicle constructor as `FUN_00ab1080`; installs vtable `PTR_FUN_012a0418`, per `spec-vehicle-geometry.md` Sec 11.9) has exactly 3 callers engine-wide: `FUN_00489260`, `FUN_00482d20` (the class pool itself), and `FUN_0043e420` — the task brief's suggested lead, checked here. `FUN_0043e420` opens with a version gate that rejects the call unless the dword at its second argument's `+4` field falls in the range 42-44, and is reached — via its sole caller `FUN_0043e1c0` — only after its first argument's leading dword reads `0x57423137`. That is the exact `71BW` marker and 42-44 (43 or 44 observed) version range `spec-effects-format.md` already documents, independently, as its own format's fixed identifying marker. **`FUN_0043e420` is the Effects/particle geometry loader, not trees.** It does call the same shared helpers trees use (`FUN_00e71090`, the tree/foliage/vehicle/effects material parser; `FUN_00e718b0`, the Mesh sub-block wrapper) and the same vehicle-shaped renderer-object class (`FUN_00482e00`/`FUN_00482f00`) — useful corroboration that this renderer-object class is a genuinely generic "renderable sub-mesh" reused by at least three unrelated formats — but it settles nothing about trees specifically. `FUN_00482f00` (the GPU-upload committer this class uses) was re-decompiled in full this pass: it contains only vertex/index buffer creation (`DAT_03171ac4` vtable `+0x68`/`+0x6c`) and a raw `memcpy` of file bytes into the locked buffer — **no declaration-building call and no layout-code branch of any kind**, for either format that reaches it. This is consistent with, not new evidence against, Sec 12.9.1's finding that declaration binding never happens inline in any load-time GPU-upload path traced so far — tree, vehicle, or effects alike.
 
 **12.9.14.5 Verdict — position remains OPEN; this pass narrows the gap without closing it.** Stacked against Sec 12.9.13 (no CPU-side writer of `+0`/`+4`/`+16`/`+20` anywhere in the traced load chain) and Sec 12.9.1/12.9.3 (no CPU-side field reader anywhere; codes 11/13 excluded from the generic layout-code rewrite table), this pass adds a third independent negative result: the one concretely-identified, engine-wide vertex-declaration-cache/builder class (vtable `0x0129fd90`, `FUN_00476ca0` at `+0x14`) is real, internally consistent with Sec 12.9.4's original summary, and now read start-to-finish in full — but is **statically unreachable** from any caller that could be shown to supply a tree-specific element list, because its one instance's pointer is discarded at its one construction site and none of its methods have a literal caller anywhere in the ~6 MB binary. Per `HANDOFF.md` §36, archived item 27.8, this is recorded as the honest gap rather than a guess: **no disassembly-side answer for which of `+0`/`+4`/`+16`/`+20`/`+24`/`+28` carries `D3DDECLUSAGE_POSITION` was found in this pass.** Both of the task's named entry points were followed to a genuine, verified dead end (not merely to the same wall Sec 12.9.4 already hit — this pass went one level further on each: found the real vtable base and every one of its methods, confirmed the sole instance's pointer loss in raw disassembly, and positively identified entry point 2's one live lead as a different, already-documented format instead of trees). The natural next step, if this is picked up again, is a method class this project has not yet tried on this exact question: a **runtime/dynamic trace** (e.g. a breakpoint on `FUN_00476ca0` or on `CreateVertexDeclaration` itself while a tree is on screen, dumping the live element array passed as argument 2) — static cross-reference analysis has now been run against this specific target twice, by two independent passes, with the same negative result both times.
 
 Ghidra scripts, this pass (`tools/scripts/`): `Tree2VtxDeclSource.java`, `Tree2VtxDeclSource2.java`, `Tree2VtxDeclSource3.java`, `Tree2VtableByteSearch.java`, `Tree2VtableCtor.java`, `Tree2VtableOwner.java`, `Tree2FindStore.java`, `Tree2LastCheck.java`, `Tree2Decl476ca0.java`. Ghidra project copy: `tools/gp_treeA` (robocopied from `tools/ghidra_projects`; safe to delete once consolidated).
+
+**Review status (2026-09-30): NEEDS-EXE: constructor self-registration and device-source conflict with `spec-render-pipeline.md` §8; raw instruction quotes, decompiler stubs and debug strings paraphrased to prose — desk review (not re-derived from the executable).**
 
 ### 12.10 Codes 11/12/13/24 — code 12 fully field-probed for the first time, the "master declaration table" angle closed for all four codes, and a peer-flagged second `CreateVertexDeclaration` lead REFUTED (2026-09-29)
 
@@ -1696,6 +1819,10 @@ and a peer team's own measurement) agree on 36 bytes with zero discrepancy to
 reconcile.** This closes the size half of `spec-vertex-format.md` §10 item 1 for code
 12, the one code among the four this document had never even structurally sized before.
 
+*(Desk review 2026-09-30: VALIDATED-BY-DATA for one of the three trees — Team B's tree reader decodes `st_pine_tall` LOD slot 1 as layout 12 with 153 elements, `team-b/HANDOFF.md` §9.124.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B `st_pine_tall` slot 1, layout 12, 153 elements — desk review (not re-derived from the executable).**
+
 #### 12.10.2 Code 12's element fields — normal at `+8`, tangent at `+12`, identical convention to codes 11/13; position OPEN, same shape as 11 — CONFIRMED / OPEN, empirical, full population
 
 *(Position superseded by §12.12: FLOAT16×3 at `+0`, HIGH CONFIDENCE. The FLOAT32 negatives below remain valid for FLOAT32 only.)*
@@ -1740,7 +1867,9 @@ per-vertex position data. **Per this project's small-sample rule, three distinct
 is not enough to characterise a per-tree-varying signal further, so this is recorded as
 OPEN rather than pushed toward either explanation.** [**CONFIRMED — empirical** for the
 normal/tangent offsets and the negative result on the rest; **OPEN** for position,
-unchanged in kind from 11/13's own open position question.]
+unchanged in kind from 11/13's own open position question.] *(Position superseded by §12.12. The table's 0%-finite `+0`/`+4` row differs from code 11's 100%-finite `+4` in §12.9.6; not explained here.)*
+
+**Review status (2026-09-30): DESK-PASS (normal/tangent 609/609) — desk review (not re-derived from the executable).**
 
 #### 12.10.3 Code 12 is excluded from the load-time rewrite table exactly like 11 and 13 — CONFIRMED, disassembly, directly (not inferred)
 
@@ -1779,12 +1908,14 @@ possible either, for the same reason §12.9.14 already gives — not because the
 never located, but because no live caller supplying content to build one for zones was
 ever found.** This does not reopen or contradict §12.9.14; it confirms the same
 dead end applies to code 24 specifically, closing the task's item 2 for all four codes
-at once rather than leaving it untested for 24.
+at once rather than leaving it untested for 24. **[OPEN — desk review 2026-09-30: the full case table of `FUN_00e711c0` (per-code bases, why code 24 maps to `texcoord_count + 0x57`, behaviour at count 0) is needed to reconcile this with §7's "4-wide range"; to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: single-function switch (`FUN_00e711c0`) — desk review (not re-derived from the executable).**
 
 #### 12.10.4 A second `CreateVertexDeclaration`-shaped lead, REFUTED — the "0xf3xxxx module" is Wwise audio middleware, not a second vertex-declaration path
 
 `spec-render-pipeline.md` §8 records a whole-binary census of the exact
-`MOV reg,[base+0x158]` / `CALL reg` idiom used at the one confirmed
+load-a-method-pointer-from-vtable-offset-`0x158`-then-call-through-that-register idiom used at the one confirmed
 `CreateVertexDeclaration` call site (`FUN_00476ca0`) and found **two further real
 matches**, both in a previously-uninvestigated address region: `FUN_00f3a6d0`, and one
 further, at the time unlabeled, call site. That document flagged both as "OPEN,
@@ -1807,8 +1938,8 @@ of both functions and their immediate siblings in the same address region:
 - The containing address region is unambiguously **Wwise audio SDK code, not a
   renderer**: a directly adjacent sibling function (`FUN_00f387a0`, itself one of the
   region's other coincidental vtable-offset hits — the `DrawIndexedPrimitive`-shaped
-  `+0x148` slot per the same census) calls the literal, unmistakable Wwise API symbol
-  **`AK::MemoryMgr::Malloc`** under an `EnterCriticalSection`/`LeaveCriticalSection`
+  `+0x148` slot per the same census) calls the Wwise SDK's memory-manager allocation routine, named by its own symbol
+  *(symbol text paraphrased 2026-09-30)*, under a critical-section enter/leave
   pair, in a device/capability-enumeration loop shape. Three further near-identical
   sibling functions in the same region (`FUN_00f398c0`, `FUN_00f3be50`, `FUN_00f3c3d0`)
   share one body template — read a capability code off one object, a count off another,
@@ -1820,22 +1951,24 @@ of both functions and their immediate siblings in the same address region:
   base-object-identity check behind it.
 
 **[CONFIRMED — disassembly: both call sites take the wrong argument count for
-`CreateVertexDeclaration`; CONFIRMED — disassembly, via the literal `AK::MemoryMgr::Malloc`
+`CreateVertexDeclaration`; CONFIRMED — disassembly, via the literal Wwise memory-manager
 symbol, that the containing module is Wwise audio middleware, matching this project's
 own existing "Audio: Wwise + wrapper" finding (`spec-audio-format.md`) rather than
 anything render- or tree-related.]** `spec-render-pipeline.md` §8's own "OPEN,
 plausible... not confirmed" hedge on this lead should be read as **REFUTED** going
 forward — recorded in that document directly, and as a new `WALLS.md` entry, so a
-future agent does not re-open this exact lead expecting a second declaration path.
+future agent does not re-open this exact lead expecting a second declaration path. *(Desk review 2026-09-30: "zero explicit arguments" is read from the decompiler's call shape; a register-passed call would hide arguments. The Wwise identification rests on the sibling function's symbol, not on these two call sites.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (SDK symbol paraphrased; argument-count caveat noted) — desk review (not re-derived from the executable).**
 
 #### 12.10.5 Summary — per-code element layout, all four codes, final state
 
 | Code | Carrier | Size (bytes) | `+0` | `+8` | `+12` | texcoord slot | Confidence |
 |---|---|---|---|---|---|---|---|
-| **11** | trees | 32 + 4×texcoord (32 observed at idx 1, i.e. 36 total on disk) | **POSITION** — `D3DDECLTYPE_FLOAT16_3` (half-precision) / `D3DDECLUSAGE_POSITION`, at `+0`; 99.88% in-bounds, 22/22 channels (§12.12) | **NORMAL** — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_NORMAL` | **TANGENT** — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_TANGENT`, 4th byte = handedness sign | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Normal/tangent **CONFIRMED — empirical** (§12.9.5); position **HIGH CONFIDENCE — empirical, real consumer not yet found** (§12.12) |
-| **12** | trees | 32 + 4×texcoord (36 total on disk, idx 1 observed) | **POSITION** — `D3DDECLTYPE_FLOAT16_3` at `+0`; 100.00% in-bounds, 4/4 channels (§12.12) | **NORMAL** — same encoding/offset as 11/13 | **TANGENT** — same encoding/offset/sign convention as 11/13 | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Size **CONFIRMED — empirical, 3 methods agreeing** (§12.10.1); normal/tangent **CONFIRMED — empirical, full population** (§12.10.2); position **HIGH CONFIDENCE — empirical** (§12.12) |
-| **13** | trees | 32 + 4×texcoord (36 total on disk, idx 1 observed) | **POSITION** — `D3DDECLTYPE_FLOAT16_3` at `+0`; 100.00% in-bounds, 4/4 channels (§12.12) | **NORMAL** (small-sample corroboration only) | **TANGENT** (small-sample corroboration only) | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Normal/tangent **HYPOTHESIS — unconfirmed, insufficient population** (§12.9.5); position **HIGH CONFIDENCE — empirical** (§12.12) |
-| **24** | zones | **20 bytes, NO texcoord** (`idx`=0 really does mean zero here — see correction below) | **POSITION** — `D3DDECLTYPE_FLOAT3` / `D3DDECLUSAGE_POSITION`, full population 581,647/581,647 | **NORMAL** at `+12` (this code's base is 8 bytes shorter than 11/12/13, so its own normal sits at `+12`, not `+8`) — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_NORMAL` | `+16` slot is **OPEN**, not a clean tangent (pooled unit-vector rate 8.0%, real but uncharacterised per-channel-varying structure in 62/448 channels); also now REFUTED as FLOAT16×2/SHORT2-family position, secondary-UV, or skinning weight (§12.13 item 3) | **NONE — this code carries no texcoord at all, in 448/448 real channels** (corrected, 2026-09-30; see below — an earlier version of this row wrongly stated a texcoord at `+20`, extrapolated from codes 11/12/13's pattern rather than measured for 24 specifically) | Position/normal **CONFIRMED — empirical, full population** (§12.3); `+16` slot **OPEN, REFUTED as tangent** (§12.3) **and REFUTED as FLOAT16×2/SHORT2-family position/UV/weight** (§12.13 item 3); **no-texcoord CONFIRMED — empirical, full population, cross-team** (§12.13 item 4) |
+| **11** | trees | 32 + 4×texcoord ~~(32 observed at idx 1, i.e. 36 total on disk)~~ (base 32; 36 on disk at texcoord count 1) | **POSITION** — ~~`D3DDECLTYPE_FLOAT16_3`~~ three half floats (no D3D9 `FLOAT16_3` type exists — see the note below) / `D3DDECLUSAGE_POSITION`, at `+0`; 99.88% in-bounds, 22/22 channels (§12.12) | **NORMAL** — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_NORMAL` | **TANGENT** — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_TANGENT`, 4th byte = handedness sign | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Normal/tangent **CONFIRMED — empirical** (§12.9.5); position **HIGH CONFIDENCE — empirical, real consumer not yet found** (§12.12) |
+| **12** | trees | 32 + 4×texcoord (36 total on disk, idx 1 observed) | **POSITION** — ~~`D3DDECLTYPE_FLOAT16_3`~~ three half floats at `+0`; 100.00% in-bounds, 4/4 channels (§12.12) | **NORMAL** — same encoding/offset as 11/13 | **TANGENT** — same encoding/offset/sign convention as 11/13 | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Size **CONFIRMED — empirical, 3 methods agreeing** (§12.10.1); normal/tangent **CONFIRMED — empirical, full population** (§12.10.2); position **HIGH CONFIDENCE — empirical** (§12.12) |
+| **13** | trees | 32 + 4×texcoord (36 total on disk, idx 1 observed) | **POSITION** — ~~`D3DDECLTYPE_FLOAT16_3`~~ three half floats at `+0`; 100.00% in-bounds, 4/4 channels (§12.12) | **NORMAL** (small-sample corroboration only) | **TANGENT** (small-sample corroboration only) | `D3DDECLTYPE_SHORT2` (raw) / `D3DDECLUSAGE_TEXCOORD`, at `+32` | Normal/tangent **HYPOTHESIS — unconfirmed, insufficient population** (§12.9.5); position **HIGH CONFIDENCE — empirical** (§12.12) |
+| **24** | zones | **20 bytes, NO texcoord** (`idx`=0 really does mean zero here — see correction below) | **POSITION** — `D3DDECLTYPE_FLOAT3` / `D3DDECLUSAGE_POSITION`, full population 581,647/581,647 *(448 channels of the pre-fix scan; 535 in Team B's population, `team-b/HANDOFF.md` §9.127)* | **NORMAL** at `+12` (this code's base is 8 bytes shorter than 11/12/13, so its own normal sits at `+12`, not `+8`) — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_NORMAL` | `+16` slot is **OPEN**, not a clean tangent (pooled unit-vector rate 8.0%, real but uncharacterised per-channel-varying structure in 62/448 channels); also now REFUTED as FLOAT16×2/SHORT2-family position, secondary-UV, or skinning weight (§12.13 item 3) | **NONE — this code carries no texcoord at all, in 448/448 real channels** *(535/535 in Team B's population, `team-b/HANDOFF.md` §9.126)* (corrected, 2026-09-30; see below — an earlier version of this row wrongly stated a texcoord at `+20`, extrapolated from codes 11/12/13's pattern rather than measured for 24 specifically) | Position/normal **CONFIRMED — empirical, full population** (§12.3); `+16` slot **OPEN, REFUTED as tangent** (§12.3) **and REFUTED as FLOAT16×2/SHORT2-family position/UV/weight** (§12.13 item 3); **no-texcoord CONFIRMED — empirical, full population, cross-team** (§12.13 item 4) |
 
 **A note on the `D3DDECLTYPE`/`D3DDECLUSAGE` enum names in the table above, stated
 plainly so this is not overclaimed:** the *byte-level encoding* (UBYTE4N unit vector,
@@ -1843,7 +1976,16 @@ raw signed-short pair, float3) is CONFIRMED by the same empirical battery this d
 uses for every other layout code, and the enum name given is the direct, unambiguous
 Direct3D name for that encoding/role pair — the same non-hedged convention this
 document already applies throughout (e.g. §6.2's normal/tangent, §6.6's texcoord
-`SHORT2`). What is **not** established for any of these four codes, and is a real gap
+`SHORT2`). *(Corrected 2026-09-30: this does not hold for the tree position. The public D3D9
+`D3DDECLTYPE` enumeration has only `D3DDECLTYPE_FLOAT16_2` and `D3DDECLTYPE_FLOAT16_4` for
+half floats (Microsoft's Direct3D 9 `D3DDECLTYPE` reference / `d3d9types.h`); there is no
+`FLOAT16_3`. A real declaration for this field would be `FLOAT16_4` over `+0..+7` — making the
+two bytes at `+6`, which Team B's reader leaves unread (`team-b/src/mesh_block.cpp`), a fourth
+component — or `FLOAT16_2` plus a further element. The texcoord `SHORT2` name also rests on
+§6.6's out-of-project capture, now HYPOTHESIS.)* **[OPEN — desk review 2026-09-30: the
+half-float element type of tree position (histogram of the `u16` at `+6` and `+22` for codes
+11/12/13; a constant `0x3C00` = 1.0 would support `FLOAT16_4`); to be settled against real
+data.]** What is **not** established for any of these four codes, and is a real gap
 shared with the rest of this format (§12.9.4 notes it generically): the literal numeric
 type/usage/method **byte values** a real in-memory element-descriptor record would
 carry into `FUN_00476ca0` (§12.9.14.2's `{type, usage, method, ...}` shape) were never
@@ -1870,6 +2012,8 @@ except for the corrected 4-byte g-side alignment grid `spec-vertex-format.md` §
 already documents as necessary for trees/zones). Ghidra scripts, this pass
 (`tools/scripts/`): `VtxCode12F3Module.java`, `VtxCode12RewriteCheck.java`, run against
 `tools/gp_render9`.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (`FLOAT16_3` corrected — not a D3D9 type; code-11 size wording; code-24 population 448 vs 535; `SHORT2` provenance) — desk review (not re-derived from the executable).**
 
 ### 12.11 Codes 11/12/13's Position field — a second, independent, genuinely falsifiable negative (2026-09-29)
 
@@ -1949,6 +2093,8 @@ already correctly implemented in `tree_replay.py`; fixed to match, then verified
 against this document's own previously-cited bbox examples (`st_com_break`,
 `st_com_lrg`) before trusting the rest of the run.
 
+**Review status (2026-09-30): DESK-PASS (struck/superseded by §12.12; retained as history) — desk review (not re-derived from the executable).**
+
 ### 12.12 Codes 11/12/13's Position field — FOUND: FLOAT16×3 at `+0` (duplicated at `+16`), a real, scaled, non-denormal positive (2026-09-29)
 
 **§12.11's own FLOAT32/quantized-short negative was real but tested the wrong decode
@@ -1959,7 +2105,7 @@ float. Re-running the SAME per-tree bbox control (decode a candidate offset, com
 against that tree's own on-disk bbox, a control that can and does fail) against every
 free offset in the 36-byte stride, now also decoded as FLOAT16×3/×4, SHORT4 (raw and
 ÷1024, reusing this document's own confirmed universal texcoord descale constant,
-§6.6), and bbox-dequantized SHORT4N/UBYTE4N (signed and unsigned):
+~~§6.6~~ §6.5; §6.6's shader evidence is now HYPOTHESIS on provenance), and bbox-dequantized SHORT4N/UBYTE4N (signed and unsigned):
 
 **Result: FLOAT16×3 at offset `+0` passes cleanly, at real non-denormal magnitude, for
 all three codes, independently reproduced twice (once by the investigating pass, once
@@ -2040,6 +2186,10 @@ additional FLOAT16/SHORT4/UBYTE4N decode branches (working copies audited under 
 investigating agent's own scratch directory; the orchestrator re-ran the extended
 script directly rather than trusting the report alone).
 
+**[OPEN — desk review 2026-09-30: the per-tree bbox-inclusion test is the weak test §12.13 item 3 shows can pass under a shuffled control, and no shuffled-bbox control or per-vertex test was run here; `+0` and `+16` differ in about 30% of vertices. To be settled against real data first — shuffled-tree-bbox control, face normals from the half3 positions against the stored `+8` normal for `+0` and for `+16`, histograms of the `u16` at `+6` and `+22` — then against a consumer (a tree material's vertex-shader input declaration). Team B's golden tree (`st_pine_tall`, Y span 42.625 against the spec's bbox 43.03, `team-b/HANDOFF.md` §9.120) is single-sample plausibility only.]**
+
+**Review status (2026-09-30): NEEDS-EXE: consumer trace for tree position; NEEDS-DATA first: shuffled-bbox control, per-vertex face-normal test, `+6`/`+22` histograms — desk review (not re-derived from the executable).**
+
 ### 12.13 Targeted refinements — strip-stitching winding CONFIRMED, normal's 4th byte narrowed (not material id, not vertex color), code 24's `+16` slot multiply-refuted, and code 24 confirmed genuinely texcoord-free with a real textured companion stream (2026-09-29/30)
 
 A dedicated pass took on three specific open items this document had each flagged with a concrete next step, and closed or narrowed all three. No disassembly was needed — all three are empirical/harness work built on top of already-CONFIRMED structures (the draw-range decode of §8.2, the channel-array walk of §4). Population: 1,756 real character/static-prop meshes for item 2, 752 real multi-material meshes (2,647 draw ranges) for item 1, 448 real code-24 channels (581,647 vertices) for item 3.
@@ -2051,6 +2201,8 @@ A dedicated pass took on three specific open items this document had each flagge
 - Direct numeric identity (dominant byte value equals the range's material slot id): **3 / 2,647 (0.0011)** — a clean rejection.
 
 **Conclusion: the normal's 4th byte is NOT the draw-range material id** — REFUTED both by exact-value and by granularity mismatch — while remaining fully consistent with, and reinforcing, §12.4's "smoothing-group-style" alternative (a partition finer than and orthogonal to material assignment is exactly what real smoothing groups look like). Vertex color and AO/occlusion were also directly re-checked: vertex color is REFUTED decisively (the byte's range caps at 127 in all 555,771 of §12.4's sampled vertices — bit 7 never set; a real color/alpha channel pins near 255 or spans 0–255, this does neither); AO/occlusion was not re-tested (already weakened in §12.4, one signal each way). No other project document was found (grepped all `spec-*.md` for "smoothing group"/"vertex color"/"occlusion"/"region id") to cross-check an analogous field against. **[CONFIRMED — empirical, real data, controlled: material-id identity and vertex color both REFUTED; the smoothing-group-style reading stands as the best-supported, still-unconfirmed candidate.]**
+
+**Review status (2026-09-30): DESK-PASS (item 1: refutations supported; identity OPEN) — desk review (not re-derived from the executable).**
 
 **Item 2 — the exact within-range strip stitching/winding convention (§8.1/§8.2/§10 item 7), flagged there as unpinned: now CONFIRMED with an exact, falsifiable rule.** Real draw ranges of 1,756 real character/static-prop meshes (`.ccmesh_pc`/`.csmesh_pc`) were walked; for every non-degenerate triangle, a face normal computed from real decoded vertex positions was scored against the dot product with the mean of the three corners' already-CONFIRMED decoded vertex normals (§6.2) — an independent ground truth, not assumed:
 
@@ -2064,7 +2216,9 @@ The global-parity control scoring far below the local-parity reading confirms pa
 
 **Rule, stated for an implementer:** triangle *k* (0-indexed from each draw range's own start, degenerate slots counted) is `(idx[k], idx[k+1], idx[k+2])` for even *k*, `(idx[k+1], idx[k], idx[k+2])` for odd *k*; discard degenerate triangles; never carry parity across a range boundary. **[CONFIRMED — empirical, controlled, real ground truth, 5,077,382 real triangles.]**
 
-**Not extended to every carrier — flagged explicitly so nobody assumes otherwise.** Vehicles (`.ccar_pc`) were attempted and did not work in the time available: their outer container uses a different header locator entirely, and store multiple channels per mesh (apparently separate LOD copies as distinct channels) rather than one channel with grouped ranges, so untangling which channel each LOD group's ranges actually index was out of scope given the character/prop result was already decisive on 5M+ real triangles. `.clmesh_pc`/`.czn_pc` also don't share `.ccmesh_pc`'s outer-header shape and weren't pursued. This result is CONFIRMED for characters and static props specifically, not generalized further.
+**Not extended to every carrier — flagged explicitly so nobody assumes otherwise.** Vehicles (`.ccar_pc`) were attempted and did not work in the time available: their outer container uses a different header locator entirely, and store multiple channels per mesh (apparently separate LOD copies as distinct channels) rather than one channel with grouped ranges, so untangling which channel each LOD group's ranges actually index was out of scope given the character/prop result was already decisive on 5M+ real triangles. `.clmesh_pc`/`.czn_pc` also don't share `.ccmesh_pc`'s outer-header shape and weren't pursued. This result is CONFIRMED for characters and static props specifically, not generalized further. *(Desk review 2026-09-30: the 34,000 disagreeing triangles (0.67%) are not analysed; see the §8.1 OPEN note.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (item 2: residual and scope, see §8.1) — desk review (not re-derived from the executable).**
 
 **Item 3 — code 24's `+16` slot (§12.3/§12.10.5/§10 item 1): FLOAT16×2 and the entire SHORT2 family now also REFUTED for position/UV/weight, extending the existing UBYTE4N-tangent refutation — and a real methodology trap caught along the way.** Tested against each channel's own real position bbox (computed from the already-CONFIRMED `+0` float3 decode — zones have no independent external bbox field the way trees do, §12.12):
 
@@ -2079,6 +2233,10 @@ The global-parity control scoring far below the local-parity reading confirms pa
 
 **Methodology note — a good `WALLS.md` candidate, flagged by the investigating pass ~~and not yet promoted there~~ *(since promoted: `WALLS.md` "Data-shape / naive-count traps", per-channel bounding-box entry)*: the naive per-channel-bbox-inclusion test that initially looked like a breakthrough for SHORT2÷1024 is a real instance of the same non-falsifiability trap §12.12 already warned about for bias/scale dequantization — but this shows it can also bite a *fixed, no-fitted-parameters* decode, not only a fitted one, whenever the reference bbox itself is too generic (as zone-chunk position boxes apparently are). A per-vertex control, not a per-channel-bbox control, is the safer default check going forward.**
 
+*(Desk review 2026-09-30: item 3's "full population" is the 448-channel pre-fix population; Team B's corrected zone population has 535 code-24 channels, `team-b/HANDOFF.md` §9.127, on which these tests have not been re-run. The byte-3 blend-mask lead is unconfirmed.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (item 3: population 448 vs 535 flagged); NEEDS-DATA: re-run on 535 channels — desk review (not re-derived from the executable).**
+
 **Item 4 (2026-09-30) — code 24 has NO texcoord at all, in the full real population, confirmed independently on both sides of the clean-room boundary; and it has a real, textured companion stream in the same mesh, which narrows what it can be.** Cross-checking a peer team's own file-side population sweep of `.czn_pc` (their own independently-built reader, `sr3zone::ZoneGeometry::locate()`) against this side's disassembly-confirmed channel-record model (`spec-geometry-format.md` §4.1.1) turned up the item-3 premise error corrected above, and resolving it produced a real, useful finding:
 
 - **Direct re-measurement, real bytes, full population** (`.czn_pc`/`.gzn_pc`, `sr3_city_0`/`sr3_city_1`, `mesh_scan.py`+`vertex_decl.py`'s own channel-record reader): every one of 448 real code-24 channels reads `a=20, b=0`, i.e. **measured stride 20 bytes exactly, zero texcoord bytes appended** — not 24. `predict_stride(24, idx=0) = base(20) + 4×0 = 20` was the correct reading all along; the error was in an earlier pass's own table row, which stated a texcoord existed at `+20` by analogy with codes 11/12/13 (which genuinely do carry one) rather than by measuring code 24's own channel record. **[CONFIRMED — empirical, full population, re-measured directly from real bytes, matching the peer team's own independent file-side finding of `texcoordCount == 0` exactly.]**
@@ -2087,7 +2245,11 @@ The global-parity control scoring far below the local-parity reading confirms pa
 
 **Net effect: the `+16` slot's REFUTED status (item 3) is unaffected by this correction — every one of item 3's real tests (bbox-inclusion, per-vertex tracking, weight-partition-of-unity) stands independently of the erroneous `+20` comparison, which is now removed rather than counted as supporting evidence.** What changes is the surrounding picture: code 24 is now understood to be genuinely, confirmedly texcoord-free (not just unmeasured), and to be one of several parallel vertex streams inside a zone mesh's Mesh sub-block rather than the sole geometry description for that surface.
 
-**Item 5 (2026-09-30) — why code 24 never carries a texcoord: a dedicated shader-consumer trace across the entire real shader corpus finds it's the vertex shape this engine's own shared G-buffer normal/lighting-parameter fill pass requires, not a special case.** Following up on the role update above (code 24 confirmed the visible building shell, not a proxy), a pass built a real D3D9 SM2.0/3.0 shader-bytecode disassembler (validated against the exact two shaders §6.6 already cites — reproduced §6.6's own `mul r0.x,c1.x,v1.x`/`mul r0.y,c2.x,v1.y`/`mul o1.xy,r0,c3.x` pattern and independently re-derived the same `1/1024` `def` constant, byte-for-byte) and used the project's own already-resolved mode-(a) physical-offset rule (`spec-vpp-container.md` §7) to bulk-extract and disassemble the ENTIRE real shader corpus: all 844 distinct `.fxo_pc` entries in `shaders.vpp_pc`, 3,731 vertex-shader blobs total — not hand-picked samples.
+*(Desk review 2026-09-30: VALIDATED-BY-DATA for the stride/no-texcoord claim — Team B finds `texcoordCount == 0` in 535/535 code-24 channels and 491/535 with a textured sibling, `team-b/HANDOFF.md` §9.126, §9.127, and its zone golden tile reads code 24 at stride 20 with 0 texcoords, §9.116. The identical "44 without a sibling" on both denominators (448 and 535) would require all 87 added blocks to have siblings; it is unexplained, not an independent cross-check.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B 535/535 zero-texcoord code-24 channels; 44-of-448 versus 44-of-535 unexplained — desk review (not re-derived from the executable).**
+
+**Item 5 (2026-09-30) — why code 24 never carries a texcoord: a dedicated shader-consumer trace across the entire real shader corpus finds it's the vertex shape this engine's own shared G-buffer normal/lighting-parameter fill pass requires, not a special case.** Following up on the role update above (code 24 confirmed the visible building shell, not a proxy), a pass built a real D3D9 SM2.0/3.0 shader-bytecode disassembler (validated against the exact two shaders §6.6 already cites — reproduced §6.6's per-lane tiling-then-1/1024 multiply pattern *(instruction text paraphrased 2026-09-30, clean-room)* and independently re-derived the same `1/1024` `def` constant, byte-for-byte) and used the project's own already-resolved mode-(a) physical-offset rule (`spec-vpp-container.md` §7) to bulk-extract and disassemble the ENTIRE real shader corpus: all 844 distinct `.fxo_pc` entries in `shaders.vpp_pc`, 3,731 vertex-shader blobs total — not hand-picked samples.
 
 - **The position+normal/zero-texcoord vertex shape (exactly what code 24 measures) is routine in this engine, not special-cased: 761 VS-blob instances across 100+ distinct files.** It appears in car glass, TV screens, swimming-pool water, distant-vehicle LODs, decal materials, vertex-colored materials, "diffuse-color-only" materials, and window-reflection materials, among others — real, disassembly-confirmed, not inferred from naming. **[CONFIRMED — real disassembled bytecode, full-corpus sweep, 844/844 files.]**
 - **Two real sub-families exist within that shape.** (a) Genuinely flat/parameter-only materials: e.g. `ir_vertexcoloring1_s.fxo_pc` technique 1 (VS input = `{normal, position}` only; its paired pixel shader, found via the file's own real T8 pass table, has ZERO texture-sample instructions and computes its 3 outputs purely from the interpolated normal via `dp3`/`rsq`/`mad`/`nrm`) — the same boilerplate shape recurs, byte-for-byte, in `ir_sr3diffcolonly_s.fxo_pc`, `ir_sr3megatv_s.fxo_pc`, `ir_sr3_swimmingpool_s.fxo_pc`, `ir_sr3glass_diffuse_reflect_s.fxo_pc`, `ir_window_reflectmask_scraper_s.fxo_pc`. (b) Texture sampled with zero per-vertex UV, but via **spherical environment-map reflection**, not triplanar: of 2,432 real texture-sample instructions reachable from this vertex shape across the whole corpus, only 14 files (`rl_ir_envmap_bs/s.fxo_pc`, `ir_decal_*.fxo_pc`, `ir_blood_pool_*.fxo_pc`, `ir_sr3carglass_*.fxo_pc`) show a position/normal-derived value projected into a 2-component UV before sampling, and in every one of those 14 the pattern is the standard normalized-reflection-vector-into-2-components formula — not a world-space XZ/dominant-axis triplanar projection. **No literal triplanar pattern was found anywhere in this family — a real, though not provably exhaustive, negative.** **[CONFIRMED — real disassembled bytecode for both sub-families; OPEN/negative — no triplanar found, not proven absent everywhere.]**
@@ -2095,9 +2257,14 @@ The global-parity control scoring far below the local-parity reading confirms pa
 
 **Reading: code 24 isn't a special-cased offscreen "proxy" — it's the vertex shape this engine's own shared, near-universal G-buffer normal/lighting-parameter fill pass structurally requires.** That explains both why it never carries a texcoord (that pass never samples a diffuse map at all) and why the shell alone renders as a flatly-shaded solid (that's exactly what a G-buffer normals/depth fill looks like in isolation) — while the surface's real diffuse appearance is most plausibly carried by the sibling, texcoord-bearing channel (sem 0/2/4) through a *different* pass on the same or a paired shader. **Genuinely open, not decided:** no confirmed binding from a specific real zone draw range's material id to any one `.fxo_pc` filename exists (the vehicle-style `shaderHash`-based mechanism is confirmed absent for zones, unchanged from this section's own item 4 finding); no confirmed trace that a real `.czn_pc` draw call reaches the role-4/5 selection path specifically; the ~10% of code-24 blocks with no textured sibling channel (this section, item 4) remains unexplained by this finding.
 
+**[OPEN — desk review 2026-09-30: no `.czn_pc` draw was traced to the role-4/5 pass selection; the link is an affinity argument (a common vertex shape), not a consumer trace; to be settled against the executable (the role-byte selection path, `spec-render-pipeline.md` §23.3/§23.5, applied to a zone draw). Team B independently reproduces the 844-file / 3,731-VS-blob corpus count; the 761-instance figure has no Team B counterpart.]**
+
+**Review status (2026-09-30): NEEDS-EXE: zone draw to role-4/5 pass selection not traced — desk review (not re-derived from the executable).**
+
 Harnesses (new this pass, `tools/harnesses/`): `strip_winding_check.py` (item 2; `strip_winding_check_veh.py` incomplete, vehicles not resolved), `normal_byte_material_corr.py` (item 1), `code24_slot16_probe.py`/`code24_slot16_control.py`/`code24_slot16_pervertex.py`/`code24_slot16_names.py`/`code24_slot16_bytestats.py` (item 3). All reuse existing modules (`mesh_scan.py`, `vertex_decl.py`, `vertex_fields2.py`, `batch_probe.py`, `batch_array.py`, `batch_validate.py`, `car_runcount.py`, `car_textures.py`) rather than re-deriving structure already established elsewhere in this document. Item 4's own verification: ad hoc scratchpad scripts against `mesh_scan.py`/`vertex_decl.py`/`vehgeo_bulk.py`/`vertex_fields2.py` directly, real data (`sr3_city_0.vpp_pc`/`sr3_city_1.vpp_pc`), not yet promoted to a named `tools/harnesses/` script. Item 5's own tooling (new, `tools/harnesses/`): `sm_disasm.py` (a real, validated D3D9 SM2/3 shader-bytecode disassembler — the first in this project), `fxo_layout24_shape_scan.py` (the full 844-file/3,731-VS-blob corpus scan), `fxo_role_to_pass_check.py` (role-byte → T8 pass mapping check), `fxo_uvless_texld_sweep.py` (the 2D-sampler-texld-without-UV sweep) — built on the existing `vpp_modea.py`/`fxo_parse.py`.
 
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 10 cross-references (8 leftover §1.x→§12.x in §12.1–§12.6, `spec-tree-format.md` §17→§4/§13.2, §12.10.5 code-13 row §12.3→§12.9.5) and named the doc on 5 bare/HANDOFF refs (§26.16, §27.2 ×2, §5/§27.6→§5); marked stale text superseded in place (accepted layout-code set §7/§10 item 2, code-12 shipping, §6.2/§10 item 4 tangent byte not holding on vehicles, §8.2 `high16` = vertex-channel index, §8.3 texture-binding OPENs →§12.8, §8.4.3 association routes, §11 block count 11,446→12,628 and arrays 1–3, §12.3 tree counts and code-13 `+12`, §12.10.2 `+0` row, headline vertex content qualifier); marked 7 stale OPEN items resolved (channel record `+0x08` ×3, component group B, tree position §10 item 1 and §12.9/§12.9.14/§12.10.2 headings, Mesh header `+0x04`/`+0x08` ×2, §8.1 per-range subdivision); qualified the §12.12 CONFIRMED label to match its own Net effect; added a population note to §12.1 and an offset note to §12.9.13; reworded 6 decompiler-shaped lines (§12.9.13, §12.9.14.1/.2/.5).
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none found — every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings (§12.9.12, §12.9.14.5: Sec 27.8 → §36 archived item 27.8); 4 left (see review).
+- 2026-09-30 (desk adversarial review, `review/adv_vertex.md`): retracted §9 step 7b in place (blend index → per-mesh bone palette, rig→mesh `(−x,−y,−z)`, `spec-rig-format.md` §11.15, Team B §9.63); downgraded §6.6's runtime-capture CONFIRMED label to HYPOTHESIS on provenance (manager ruling) and paraphrased the capture strings and shader-assembly lines (§6.6, §12.13 item 5); paraphrased raw x86, decompiler stubs, debug strings and an SDK symbol (§12.9.13, §12.9.14, §12.10.4); added the header displacement `align8(version_pos + 0x10)` (§2) and absolute-grid 16-byte alignment (§4), both from Team B §9.55.2/§9.55.3/§9.66 and `spec-zone-data-format.md` §10.4; corrected overclaims (headline "every shipped mesh", 26,601 and "full population" as pre-fix scan figures, code-24 448 vs Team B 535, §12.5 832,194 vs 3,405,780, `D3DDECLTYPE_FLOAT16_3` not a D3D9 type, §6.3 palette, §6.4 max part 37, §8.4 start cursor); added OPEN markers, per-unit review status lines and a review summary.
