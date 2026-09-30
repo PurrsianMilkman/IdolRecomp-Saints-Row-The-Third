@@ -931,6 +931,11 @@ add_test(NAME synthetic_vintdoc_test COMMAND sr3vintdoc_tests)
 add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
 target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)
 
+# CTAB constant census over every shipped D3D9 shader (bridge job 06):
+# per-constant name -> register set/index/count TSV.
+add_executable(ctab_census tools/ctab_census.cpp)
+target_link_libraries(ctab_census PRIVATE sr3d3d9bc sr3fxo vpp_container)
+
 # libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.
 option(CRREISH_FUZZ "Build the libFuzzer harnesses (Clang)" OFF)
 if(CRREISH_FUZZ)
