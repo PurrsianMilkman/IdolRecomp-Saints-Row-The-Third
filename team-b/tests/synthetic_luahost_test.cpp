@@ -92,6 +92,7 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"set_mission_author", "gameplay"},
         {"fade_out", "gameplay"},
         {"mission_end_silently", "gameplay"},
+        {"sfx_faded_out", "ui"},
     };
 }
 
@@ -933,61 +934,67 @@ int main() {
             CHECK(r2.loadOk && r2.pcallOk);
         }
 
-        // 23. zscene_is_loaded (Sec14.23). Defaults (this project's own
-        // choice, see engine_state.h): nothing loaded, flag clear, code 0.
+        // 23. zscene_is_loaded (Sec14.23) over OPEN state (open_state.h):
+        // nothing is defaulted, so every read of an unset value is a Lua error
+        // naming the global, until a test (or, later, a specced writer) sets it.
         {
             auto check = [&](const char* chunk, const char* tag) {
                 auto r = host.runChunk(gp, chunk, tag);
                 CHECK(r.loadOk && r.pcallOk);
             };
-            // Wrong state: gameplay-tagged only.
+            auto refuses = [&](const char* chunk, const char* needle) {
+                auto r = host.runChunk(gp, chunk, "zsref.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find(needle) != std::string::npos);
+            };
             check("assert(type(zscene_is_loaded) == 'function')", "zs0a.lua");
             {
                 auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil)", "zs0b.lua");
                 CHECK(r.loadOk && r.pcallOk);
             }
-            // Defaults: false with no name, nil name, or an unknown name;
-            // always exactly one boolean.
-            check("assert(zscene_is_loaded() == false)", "zs1.lua");
-            check("assert(zscene_is_loaded(nil) == false)", "zs2.lua");
-            check("assert(zscene_is_loaded('m02_scene') == false)", "zs3.lua");
-            check("assert(select('#', zscene_is_loaded('x')) == 1)", "zs4.lua");
+            // All OPEN: the first value each path reads is named.
+            refuses("zscene_is_loaded()", "0x0153b556");              // no name: busy flag first
+            refuses("zscene_is_loaded('m02_scene')", "m02_scene");     // tier-1 per-name state
+            CHECK(host.hitLog().hits().count("zscene_is_loaded:OPEN_STATE") == 1);
 
-            // Tier 1 (CONFIRMED): per-name state exactly 1 -> true; any
-            // other value falls through to tier 2 (all clear -> false).
-            es.setZsceneFastPathStateForTesting("m02_scene", 1);
+            // Tier 1 (CONFIRMED): per-name state exactly 1 -> true, even with
+            // the rest still OPEN.
+            es.zsceneNameState().set("m02_scene", 1);
             check("assert(zscene_is_loaded('m02_scene') == true)", "zs5.lua");
-            check("assert(zscene_is_loaded() == false)", "zs6.lua"); // tier 1 needs a name
-            check("assert(zscene_is_loaded('M02_SCENE') == false)", "zs7.lua"); // tier-1 key is the exact string
-            es.setZsceneFastPathStateForTesting("m02_scene", 2);
-            check("assert(zscene_is_loaded('m02_scene') == false)", "zs8.lua");
-
-            // Tier 2, global state code: == 2 only.
-            es.setZsceneGlobalStateCodeForTesting(1);
+            check("assert(select('#', zscene_is_loaded('m02_scene')) == 1)", "zs4.lua");
+            // Other value -> tier 2, whose busy flag is still OPEN.
+            es.zsceneNameState().set("m02_scene", 2);
+            refuses("zscene_is_loaded('m02_scene')", "0x0153b556");
+            // Busy flag set -> true regardless of name / other state.
+            es.zsceneBusyFlag().set(true);
+            check("assert(zscene_is_loaded() == true)", "zs14.lua");
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs15.lua");
+            // Busy flag clear, no name -> the state code, still OPEN.
+            es.zsceneBusyFlag().set(false);
+            refuses("zscene_is_loaded()", "0x0153b51c");
+            es.zsceneStateCode().set(1);
             check("assert(zscene_is_loaded() == false)", "zs9.lua");
-            es.setZsceneGlobalStateCodeForTesting(2);
+            check("assert(zscene_is_loaded(nil) == false)", "zs2.lua");
+            es.zsceneStateCode().set(3);
+            check("assert(zscene_is_loaded() == false)", "zs9b.lua"); // exactly 2, not >= 2
+            es.zsceneStateCode().set(2);
             check("assert(zscene_is_loaded() == true)", "zs10.lua");
-            check("assert(zscene_is_loaded('unknown') == true)", "zs11.lua"); // unresolved name reaches the code test
-
-            // Tier 2, OPEN per-record branch: pre-empts the code test,
-            // returns false, is counted. Lookup is case-insensitive.
-            es.addZsceneTableRecordForTesting("m03_scene");
+            // A name whose table resolution is OPEN is refused before the code test.
+            refuses("zscene_is_loaded('m02_scene')", "0x00721be0");
+            // Resolution known false -> the code test.
+            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m02_scene"), false);
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs11.lua");
+            // Resolution known true -> the per-record branch: sense OPEN, refused
+            // and counted. The table key is case-insensitive; tier 1's is not.
+            es.zsceneNameState().set("M03_Scene", 0);
+            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m03_scene"), true);
             CHECK(es.zsceneOpenBranchHits() == 0);
-            check("assert(zscene_is_loaded('M03_Scene') == false)", "zs12.lua");
+            refuses("zscene_is_loaded('M03_Scene')", "per-record");
             CHECK(es.zsceneOpenBranchHits() == 1);
             check("assert(zscene_is_loaded() == true)", "zs13.lua"); // no name: branch not reached
             CHECK(es.zsceneOpenBranchHits() == 1);
-            es.addZsceneTableRecordForTesting(""); // even a record keyed "" is not reached without a name
-            check("assert(zscene_is_loaded() == true)", "zs13b.lua");
-            CHECK(es.zsceneOpenBranchHits() == 1);
-
-            // Tier 2, busy flag: true before the record branch and regardless of name.
-            es.setZsceneGlobalStateCodeForTesting(0);
-            es.setZsceneBusyFlagForTesting(true);
-            check("assert(zscene_is_loaded() == true)", "zs14.lua");
-            check("assert(zscene_is_loaded('m03_scene') == true)", "zs15.lua");
-            CHECK(es.zsceneOpenBranchHits() == 1);
-            es.setZsceneBusyFlagForTesting(false);
+            // A Lua error from OPEN state does not wedge the host.
+            check("assert(pcall(zscene_is_loaded, 'unset_scene') == false)", "zs16.lua");
         }
 
         // 24-26. Cloud phase batch 1.
@@ -1035,22 +1042,44 @@ int main() {
                 CHECK(r.loadOk && !r.pcallOk);
             }
 
-            // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors arg.
-            CHECK(es.missionFlagsWord() == 0);
+            // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
+            // arg. The word starts fully OPEN; only those two bits become known.
+            CHECK(es.missionFlagsWord().knownMask() == 0);
             check("mission_end_silently()", "mes1.lua");
-            CHECK(es.missionFlagsWord() == 0x4);
+            CHECK(es.missionFlagsWord().knownMask() == 0x14);
+            CHECK(es.missionFlagsWord().get(0x14) == 0x4);
             check("mission_end_silently(true)", "mes2.lua");
-            CHECK(es.missionFlagsWord() == 0x14);
+            CHECK(es.missionFlagsWord().get(0x14) == 0x14);
             check("mission_end_silently(nil)", "mes3.lua");
-            CHECK(es.missionFlagsWord() == 0x4);
-            es.setMissionFlagsWord(0xFFFFFFFFu); // other bits untouched
-            check("mission_end_silently(false)", "mes4.lua");
-            CHECK(es.missionFlagsWord() == 0xFFFFFFEFu);
+            CHECK(es.missionFlagsWord().get(0x14) == 0x4);
             check("assert(select('#', mission_end_silently(1)) == 0)", "mes5.lua"); // 1 is truthy
-            CHECK(es.missionFlagsWord() == 0xFFFFFFFFu);
+            CHECK(es.missionFlagsWord().get(0x10) == 0x10);
+            {
+                bool refused = false;
+                try {
+                    (void)es.missionFlagsWord().get(0x1);
+                } catch (const sr3luahost::OpenStateError& e) {
+                    refused = std::string(e.what()).find("0x014c848c") != std::string::npos;
+                }
+                CHECK(refused); // bits no confirmed writer touched stay OPEN
+            }
             // Wrong state: gameplay-tagged only.
             auto r = host.runChunk(ui, "assert(fade_out == nil and mission_end_silently == nil)", "b1ui.lua");
             CHECK(r.loadOk && r.pcallOk);
+        }
+
+        // 27. sfx_faded_out (Sec26.9): 0x012e6aa4 == 3, OPEN until set.
+        {
+            auto r0 = host.runChunk(ui, "sfx_faded_out()", "sfo0.lua");
+            CHECK(r0.loadOk && !r0.pcallOk && r0.pcallError.find("0x012e6aa4") != std::string::npos);
+            es.fadeState().g012e6aa4.set(3);
+            auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
+            CHECK(r1.loadOk && r1.pcallOk);
+            es.fadeState().g012e6aa4.set(2);
+            auto r2 = host.runChunk(ui, "assert(sfx_faded_out() == false)", "sfo2.lua");
+            CHECK(r2.loadOk && r2.pcallOk);
+            auto r3 = host.runChunk(gp, "assert(sfx_faded_out == nil)", "sfo3.lua");
+            CHECK(r3.loadOk && r3.pcallOk);
         }
 
         // Every one of the 22 calls above must fold into the SAME HitLog
@@ -1065,7 +1094,7 @@ int main() {
                                   "minimap_icon_add_do", "object_indicator_add_do",
                                   "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type",
                                   "zscene_is_loaded", "set_mission_author", "fade_out",
-                                  "mission_end_silently"}) {
+                                  "mission_end_silently", "sfx_faded_out"}) {
             CHECK(host.hitLog().hits().count(name) == 1);
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }

@@ -92,19 +92,8 @@ std::string lowercased(const std::string& s) {
 }
 } // namespace
 
-bool EngineState::zsceneFastPathState(const std::string& name, int& stateOut) const {
-    auto it = zsceneFastPathStates_.find(name);
-    if (it == zsceneFastPathStates_.end()) return false;
-    stateOut = it->second;
-    return true;
-}
-
-bool EngineState::zsceneHasTableRecord(const std::string& name) const {
-    return zsceneTableRecords_.count(lowercased(name)) != 0;
-}
-
-void EngineState::addZsceneTableRecordForTesting(const std::string& name) {
-    zsceneTableRecords_.insert(lowercased(name));
+std::string EngineState::zsceneTableKey(const std::string& name) {
+    return lowercased(name);
 }
 
 } // namespace sr3luahost

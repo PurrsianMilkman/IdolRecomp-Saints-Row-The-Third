@@ -681,44 +681,58 @@ int stub_game_get_coop_join_type(lua_State* L) {
 }
 
 // ---------------------------------------------------------------------
+// Reading OPEN engine state (open_state.h) from a stub: the refusal becomes
+// a Lua error naming the global and its spec section. Lua errors longjmp, so
+// each such stub is split in two: an *Eval helper holds every C++ object,
+// catches the OpenStateError, pushes the message and returns kOpenState; the
+// thin lua_CFunction then calls lua_error with no C++ object alive. The
+// refusal is also counted in the HitLog as "<name>:OPEN_STATE", so a run
+// shows which OPEN value blocked which name.
+// ---------------------------------------------------------------------
+constexpr int kOpenState = -2;
+
+void pushOpenState(lua_State* L, const char* fn, const OpenStateError& e) {
+    std::string tag = std::string(fn) + ":OPEN_STATE";
+    logCall(L, upLog(L), tag.c_str(), upStateTag(L));
+    lua_pushfstring(L, "%s: %s", fn, e.what());
+}
+
+// ---------------------------------------------------------------------
 // 23. zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23)
 // Arguments: 1 optional string, standard nil-gated idiom, default absent
 // (CONFIRMED). Return: 1 boolean (CONFIRMED). Pure query.
-// CONFIRMED: the two-tier dispatch and tier 1's exact test (a named
-// scene's per-name state reads exactly 1 -> true). Tier 2's global-flag
-// and global-state-code (== 2) tests are implemented as literal reads of
-// EngineState's opaque stand-ins; no meaning is given to the codes (OPEN).
-// OPEN, stubbed: the tier-2 per-record branch, whose read sense is
-// "apparently inverted" relative to tier 1 and not reconciled. Reaching it
-// returns false (the falsy result the generic stub gave before this
-// function existed) and bumps EngineState::zsceneOpenBranchHits().
+// CONFIRMED: the two-tier dispatch and every test in it, implemented in
+// order over EngineState's OPEN-state containers. OPEN: every value those
+// tests read (no initial values or writers are specced) and the sense of
+// the tier-2 per-record test. Any OPEN read -> Lua error naming it.
+// Reaching the per-record branch is also counted.
 // Added in the cloud phase (2026-09-30) as a mission-driving blocker
 // (HANDOFF Sec9.143: 714K busy-poll calls in the first mission run).
 // ---------------------------------------------------------------------
-int stub_zscene_is_loaded(lua_State* L) {
+int zsceneIsLoadedEval(lua_State* L) {
     logCall(L, upLog(L), "zscene_is_loaded", upStateTag(L));
     EngineState* es = upState(L);
     bool hasName = lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL;
     std::string name = hasName ? argString(L, 1) : std::string();
+    try {
+        if (hasName && es->zsceneNameState().get(name) == 1) return 1;   // tier 1 (0x00723d20)
+        if (es->zsceneBusyFlag().get()) return 1;                         // tier 2: 0x0153b556
+        if (hasName && es->zsceneTableResolves().get(EngineState::zsceneTableKey(name))) {
+            es->recordZsceneOpenBranchHit();                              // per-record test: sense OPEN
+            throw OpenStateError("zscene per-record state test (sense unreconciled)",
+                                 "spec-lua-api-behaviour.md Sec14.23");
+        }
+        return es->zsceneStateCode().get() == 2 ? 1 : 0;                  // 0x0153b51c == 2
+    } catch (const OpenStateError& e) {
+        pushOpenState(L, "zscene_is_loaded", e);
+        return kOpenState;
+    }
+}
 
-    // Tier 1 (0x00723d20), only when a name is given.
-    int fastState = 0;
-    if (hasName && es->zsceneFastPathState(name, fastState) && fastState == 1) {
-        lua_pushboolean(L, 1);
-        return 1;
-    }
-    // Tier 2 (0x00721db0).
-    if (es->zsceneBusyFlag()) {
-        lua_pushboolean(L, 1);
-        return 1;
-    }
-    if (hasName && es->zsceneHasTableRecord(name)) {
-        // OPEN (Sec14.23): per-record test with unreconciled sense - not implemented.
-        es->recordZsceneOpenBranchHit();
-        lua_pushboolean(L, 0);
-        return 1;
-    }
-    lua_pushboolean(L, es->zsceneGlobalStateCode() == 2 ? 1 : 0);
+int stub_zscene_is_loaded(lua_State* L) {
+    int r = zsceneIsLoadedEval(L);
+    if (r == kOpenState) return lua_error(L);
+    lua_pushboolean(L, r);
     return 1;
 }
 
@@ -788,11 +802,31 @@ int stub_mission_end_silently(lua_State* L) {
     logCall(L, upLog(L), "mission_end_silently", upStateTag(L));
     bool arg = false;
     if (lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL) arg = lua_toboolean(L, 1) != 0;
-    EngineState* es = upState(L);
-    uint32_t w = es->missionFlagsWord() | 0x4u;
-    w = arg ? (w | 0x10u) : (w & ~0x10u);
-    es->setMissionFlagsWord(w);
+    upState(L)->missionFlagsWord().setBits(0x4u | 0x10u, 0x4u | (arg ? 0x10u : 0u));
     return 0;
+}
+
+// ---------------------------------------------------------------------
+// 27. sfx_faded_out (Sec26.9): no arguments; 1 boolean, true iff the
+// fade-state global 0x012e6aa4 equals 3 (CONFIRMED, 2-instruction body).
+// That global is OPEN state (EngineState::FadeStateMachine): until a spec
+// gives its value or writer, a call raises the OPEN-state Lua error.
+// ---------------------------------------------------------------------
+int sfxFadedOutEval(lua_State* L) {
+    logCall(L, upLog(L), "sfx_faded_out", upStateTag(L));
+    try {
+        return upState(L)->fadeState().g012e6aa4.get() == 3u ? 1 : 0;
+    } catch (const OpenStateError& e) {
+        pushOpenState(L, "sfx_faded_out", e);
+        return kOpenState;
+    }
+}
+
+int stub_sfx_faded_out(lua_State* L) {
+    int r = sfxFadedOutEval(L);
+    if (r == kOpenState) return lua_error(L);
+    lua_pushboolean(L, r);
+    return 1;
 }
 
 void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
@@ -848,6 +882,8 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "set_mission_author",
         "fade_out",
         "mission_end_silently",
+        // Item-3 scaffolding (2026-09-30): Sec26.9, `ui` (tagged list line 1251).
+        "sfx_faded_out",
     };
     return names;
 }
@@ -892,6 +928,7 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("set_mission_author")) registerOne(L, state, log, stateTag, "set_mission_author", stub_set_mission_author);
     if (wants("fade_out")) registerOne(L, state, log, stateTag, "fade_out", stub_fade_out);
     if (wants("mission_end_silently")) registerOne(L, state, log, stateTag, "mission_end_silently", stub_mission_end_silently);
+    if (wants("sfx_faded_out")) registerOne(L, state, log, stateTag, "sfx_faded_out", stub_sfx_faded_out);
 }
 
 } // namespace sr3luahost

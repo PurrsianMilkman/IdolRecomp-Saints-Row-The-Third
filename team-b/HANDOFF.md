@@ -106,6 +106,34 @@ pair as big as the fade one), `vint_set_property`, `vint_get_property`, `vint_ge
 `customization_create_character`, `customization_creation_is_open`, `customization_screen_is_ready`,
 `player_parachute_has_backpack`.
 
+### 2026-09-30, cloud stretch 3: manager's standing no-data queue (fuzzing, diff tooling, OPEN-state scaffolding, Linux tools)
+
+**Item 1, fuzzing — DONE (`49c4782`).** `team-b/fuzz/` (see its README): 16 libFuzzer harnesses (ASan/UBSan) for
+every reader of untrusted bytes, seeded from the synthetic suites by link-time `--wrap` capture (tests unchanged),
+CI `fuzz-smoke` job (replays `fuzz/regressions/`, then 20 s/target). **5 real bugs, one class — allocation sized
+by an untrusted count — all fixed with a unit test that fails without the fix** (`tests/alloc_guard.h`):
+`MaterialBlock::parse` (~94 GB), `Container::decompressEntry` (~3 GB; now bounded by DEFLATE's 1032:1 maximum),
+`Container` ctor (~1.4 GB), `MeshBlock::decodeChannel` (~500 GB, and a zero stride looped `elementCount` times —
+now a stride shorter than the layout's fixed fields is refused with `FormatError`). **The mesh stride refusal is
+the one behaviour change a real file could in principle hit**; bridge job 05 re-runs `validate_mesh`/
+`validate_clmesh`/`validate_container_decode` against HANDOFF's baselines to confirm it doesn't.
+
+**Item 2, diff tooling.** `tools/bridge_diff.py` (+ `tests/bridge_diff_test.py`, in ctest): before/after
+Markdown of mission-drive per-mission changes, summary `key=value` lines, stub-hit deltas and vint_doc per-file
+layout results. Usage in `bridge-jobs/README.md`. Jobs 04 (cache listing) and 05 (real-data regression) written.
+
+**Item 3, OPEN-state scaffolding.** `include/sr3luahost/open_state.h`: `OpenValue<T>` / `OpenValueMap<T>` /
+`OpenBits32` — a named engine global (address + spec section) that starts OPEN and throws `OpenStateError` on
+read until set. Stubs turn that into a Lua error naming the global, counted in the HitLog as
+`<name>:OPEN_STATE`. **This replaced my own earlier chosen defaults** (zscene busy flag false / state code 0 /
+empty scene table; mission-flags word 0), which the manager's rule ("no invented initial values") forbids:
+`zscene_is_loaded` now errors "0x0153b556 is OPEN" instead of looping on a made-up `false`, so the next mission
+run will say exactly which value blocks it. The mission-flags word knows only bits 0x4/0x10. The six fade
+state-machine globals §26.23 names are declared; `sfx_faded_out` (§26.9, `0x012e6aa4 == 3`) implemented on them.
+Earlier sessions' stand-in defaults (`coopActive_`, `isHost_`, `hasLocalPlayer_`, `coopJoinType_`,
+`vehicleStoreActive_`, EngineState §10.x) are **not** converted yet — they predate this rule and change mission
+behaviour; listed here for the manager to decide.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
