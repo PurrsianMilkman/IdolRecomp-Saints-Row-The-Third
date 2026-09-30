@@ -2,7 +2,7 @@
 
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process), agent AJ
 **Phase:** 2, "schema-from-loader" campaign (`HANDOFF.md` §27.2), group *traffic, ambient population, roadblocks and AI*. Sibling documents: `spec-tables-weapons-combat.md` (agent AH), `spec-tables-progression.md` (agent AI), `spec-tables-environment.md` (agent AK).
-**Scope:** For each `.xtbl` table of the group, the element tree the exe's loader asks for, each element's type and destination in the runtime table (or global), defaults, required/optional behaviour, unit conversions, limits, hash keys and cross-table references — recovered **from the exe alone**. No base-game table value was read; no mode-(a) container was opened (the parked limitation, `HANDOFF.md` §27.3, is neither touched nor relied on). DLC raw tables are the only value samples (§24).
+**Scope:** For each `.xtbl` table of the group, the element tree the exe's loader asks for, each element's type and destination in the runtime table (or global), defaults, required/optional behaviour, unit conversions, limits, hash keys and cross-table references — recovered **from the exe alone**. No base-game table value was read; no mode-(a) container was opened (the parked limitation, `HANDOFF.md` §27.3, is neither touched nor relied on). DLC raw tables are the only value samples (§24). *(Original pass; base-game tables were later extracted and validated, see §26.)*
 **Method:** Exactly the method of `spec-vehicle-data.md` §7 (agent AF): the literal table filename in the exe → its one cross-reference → the loader → the per-row reader → the element-name literals passed to the shared XML accessors. Ghidra project copy `tools/gp_tbl3` (disposable). Tooling: `tools/scripts/AjBoth.java` (decompile + string-annotated disassembly of a function and its callees), `AjAsmFn.java`, `AjDecTree.java`, `AfStrXrefs.java`/`AfDec.java` (agent AF's); `tools/harnesses/aj_va.py` (reads constants/strings/pointer tables out of the exe image by virtual address); wrapper `tools/run_tbl3.ps1`. Dumps: `tools/aj_*.txt`. No whole-binary predicate search was used; every function was reached from a filename literal, an element-name literal or a named global.
 **Cleanroom compliance:** No decompiled code is reproduced; no original internal identifiers are used (functions are cited by address only, as evidence). XML element and table names, enum strings and other data literals are game data and are listed as such. Offsets, strides, capacities and constants are stated as measured.
 **Confidence key:** **CONFIRMED — disassembly** · **CONFIRMED — empirical** · **HIGH CONFIDENCE — inferred** · **HYPOTHESIS — unconfirmed** · **OPEN / UNKNOWN**.
@@ -99,7 +99,7 @@ These are initialised `.data` arrays (readable statically). They are game data a
 - **Roadblock layout-flag names** (4, `0x013091F0`): `end cap`, `intersection`, `no flee`, `Can Spawn on Disabled Lanes`; **roadblock object-type names** (5, `0x01309200`): `Vehicle`, `Vehicle Group`, `NPC`, `Item`, `Action Node` — §5.
 - Hard-coded 24 h-clock and capacity limits are given per table.
 
-*(§§2–22 follow, then §23 the cross-reference map, §24 validation, §25 open items.)*
+*(§§2–22 follow, then §23 the cross-reference map, §24 validation, §25 open items, §26 base-table validation.)*
 
 ## 2. `traffic_lanes.xtbl` — lane-speed classes
 
@@ -112,7 +112,7 @@ Loader `0x00A69060` (whole function read; 177 bytes). **[CONFIRMED — disassemb
 | `LaneSpeed` (repeated) | row | array element *i* in document order | count taken with `CountChildren` first, then each row fetched with `NthChild` |
 | `Speed` | float (always-write reader, §1.3) | `float[i]` at `0x02705420 + 4·i` | stored raw, **no unit conversion**; the largest value seen is kept in the float global `0x02705FEC` (reset to 0 first) |
 
-The count is stored in `0x02705FE8`. **There is no bound check in the loader**; the array occupies `0x02705420…0x02705FE7` (`0xBC8` bytes = 754 floats) directly below the count global, so 754 is the implied ceiling (HIGH CONFIDENCE — layout adjacency, not exercised). A `LaneSpeed` without a `Speed` child would store an unspecified value (§1.3). The file's other content (the lane grid proper, etc.) is **not read by this loader** — whether other code reads the same file by another route was not searched (no second filename xref exists: the literal has exactly one reference). Consumers of the array (which lane class uses index *i*, the unit — mph vs m/s — of `Speed`) were not traced. **[OPEN.]**
+The count is stored in `0x02705FE8`. **There is no bound check in the loader**; the array occupies `0x02705420…0x02705FE7` (`0xBC8` bytes = 754 floats) directly below the count global, so 754 is the implied ceiling (HIGH CONFIDENCE — layout adjacency, not exercised). A `LaneSpeed` without a `Speed` child would store an unspecified value (§1.3). The file's other content (the lane grid proper, etc.) is **not read by this loader** — whether other code reads the same file by another route was not searched (no second filename xref exists: the literal has exactly one reference). Consumers of the array (which lane class uses index *i*, the unit — mph vs m/s — of `Speed`) were not traced. *(Unit partially resolved 2026-09-23: m/s from editor metadata, HIGH CONFIDENCE, §25 item 11.)* **[OPEN.]**
 
 ## 3. `traffic_types.xtbl` — **no loader exists in the exe**
 
@@ -548,7 +548,7 @@ The **reader of slot 14 is `0x004CB510`**. Like `control_filters.xtbl` and `acti
 
 ## 24. Validation
 
-**Ground truth available.** Of the 32 tables in this group, **only `homies.xtbl` has raw-readable samples** (`dlc1/2/3_homies.xtbl`, extracted by `tools/harnesses/tbl_dlc_list.py` into `tools/ah_dlc_xtbl/`; the three archives are stored raw, so no mode-(a) question arises). ~~Every other table of the group is base-game only and lives in a mode-(a) container — it was neither read nor decoded.~~ **SUPERSEDED 2026-09-23** — the mode-(a) container is now readable; 30 of the other 31 group tables were located and decoded from real base-game archives (`vehicle_despawn_mp.xtbl` was not found in any scanned archive), see §26. The validation below is therefore complete for §15 and **structural / internal-consistency only** for the rest (§24.3).
+**Ground truth available.** Of the 32 tables in this group, **only `homies.xtbl` has raw-readable samples** (`dlc1/2/3_homies.xtbl`, extracted by `tools/harnesses/tbl_dlc_list.py` into `tools/ah_dlc_xtbl/`; the three archives are stored raw, so no mode-(a) question arises). ~~Every other table of the group is base-game only and lives in a mode-(a) container — it was neither read nor decoded.~~ **SUPERSEDED 2026-09-23** — the mode-(a) container is now readable; 30 of the other 31 group tables were located and decoded from real base-game archives (`vehicle_despawn_mp.xtbl` was not found in any scanned archive), see §26. *(Count corrected 2026-09-30: §26.0 reports 32/32 found; `vehicle_despawn_mp.xtbl` is not one of the 32 tables counted in §1.1, so all 31 other group tables were located.)* The validation below is therefore complete for §15 and **structural / internal-consistency only** for the rest (§24.3).
 
 ### 24.1 The three DLC homies tables against §15 **[CONFIRMED — empirical]**
 
@@ -578,23 +578,25 @@ Two loader properties were verified by the DLC samples' *shape* rather than by v
 
 ### 24.3 What is *not* validated
 
+⚠ **SUPERSEDED 2026-09-23 by §26** (real base tables, 32/32 found and decoded). The paragraph below describes the DLC-only state of §24.
+
 No raw sample exists for `traffic_lanes`, `ambient_traffic_events`, `roadblock_*`, `panic_reactions`, `ai_*`, `generic_*`, `action_node*`, `distant_*`, `follower_heads`, `driver_bailout`, `vehicle_despawn`, `Escort_constants`, `human_transition`, `PEDF_Life`/`Life_default`, `node_graph_files`. Their schemas rest on disassembly alone. The claims are of the form "the reader asks for element X, converts it thus, and stores it there"; whether a shipped base table *contains* an element the reader does not ask for, or omits one the reader treats as required, cannot be checked here. Every range check quoted (e.g. `Min_life ≤ 240 hours`, `Cooldown ≤ 600 s`, `Num_lanes ∈ 1…4`) is a **rejection rule of the loader**, i.e. a bound the shipped data must satisfy — but the *values* in the shipped data are unknown.
 
 ## 25. Running open-items list
 
 1. **`traffic_types.xtbl` has no loader** (§3); the only "traffic type" definition site is `distant_vehicle_traffic_types.xtbl` (§14.4). ~~If a base table of that name exists it is not read by name.~~ **CONFIRMED 2026-09-23** — a base table of that name DOES exist (`misc_tables.vpp_pc` entry 256) and is still not read by name (re-checked with the file in hand); see §26.
-2. **Team registry** — the id↔name binding behind `roadblock_notoriety.Team` (only ids 1, 2, 3, 5, 6 accepted), `ai_behavior.human_elm.Team` and `Vehicle Group` (`0x0094CC60`, `0x005961A0`) was not recovered (**real name strings now known, §26.4**: `roadblock_notoriety` uses `Deckers`/`Morningstar`/`Police`/`Luchadores`/`STAG`; `ai_behavior.human_elm.Team` additionally uses `Neutral Gang`/`Playas`/`Civilian` — 8 distinct strings from real base data, the id↔name mapping itself still OPEN); and the **rank/character-descriptor table at `0x029A91A0`** (stride `0x698`) used by `ai_behavior.human_elm.Rank` — which loader fills it was not traced.
+2. **Team registry** — the id↔name binding behind `roadblock_notoriety.Team` (only ids 1, 2, 3, 5, 6 accepted), `ai_behavior.human_elm.Team` and `Vehicle Group` (`0x0094CC60`, `0x005961A0`) was not recovered (**real name strings now known, §26.3**: `roadblock_notoriety` uses `Deckers`/`Morningstar`/`Police`/`Luchadores`/`STAG`; `ai_behavior.human_elm.Team` additionally uses `Neutral Gang`/`Playas`/`Civilian` — 8 distinct strings from real base data, the id↔name mapping itself still OPEN); and the **rank/character-descriptor table at `0x029A91A0`** (stride `0x698`) used by `ai_behavior.human_elm.Rank` — which loader fills it was not traced.
 3. **§7** — the owner of the world-object registry at `0x02442750` and the meaning of object flags `+0x33`/`+0x34` (object data comes from zone data, whose interior is the parked area and was not read); which subsystem consumes the roadblock arrays.
 4. **§8** — the real capacity of the appended panic-reaction rows (no check in the loader) and the identity of the three callbacks written into slots 0–2; the goal table's words `+0x04…+0x07`.
 5. **§13.4** — `action_nodes.xtbl`'s packed record layout and consumers. ~~the `Spawn_Timer` post-processing (`0x00D9E140`).~~ **RESOLVED, 2026-09-30** — corrected attribution too: `Spawn_Timer` is a §13.1 field (`action_node_groups.xtbl`), not §13.4's. `0x00D9E140` was independently decompiled by an unrelated pass documenting the Lua API (`spec-lua-api-behaviour.md` §1.2/§11.3): it adds its integer argument to a fixed global base, wraps the sum into a fixed range (a ±1,800,000,000 correction), and writes the result through a hidden pointer argument — a deadline/timestamp computation, not a per-record post-processing step. This is consistent with §26's own observation at the `action_node_groups.xtbl` call site (arg `1`, return value discarded, no visible effect on the record) — the hidden-pointer destination there is a separate global, not this record, which is exactly why no effect on the record was ever observed. **[CONFIRMED — disassembly, `0x00D9E140`'s own body, cross-project.]**
 6. **§21** — the string built by `0x00DA8790` for each life `State`/`Action`, and what `Skeleton_Set` names select.
 7. **§22** — how the slot-15 base path is applied; slot order of the first thirteen descriptor names; the `state_machine`/`blend_tree` graph format (a separate subsystem).
-8. **§18** — which mode selects `vehicle_despawn_mp.xtbl`; who reads `safety_despawn_time`; the nested `Table/Table` shape can only be confirmed with a sample.
+8. **§18** — which mode selects `vehicle_despawn_mp.xtbl`; who reads `safety_despawn_time`; the nested `Table/Table` shape can only be confirmed with a sample. *(A real sample now exists, §26.1/§26.3, and `safety_despawn_time` is absent from it; whether the nesting was checked is not reported there.)*
 9. **§15** — provenance of the per-row blocked-mission list buffer (`+0xF4`, capacity `+0xF8`); consumers of the `+0xF1`/`+0xF2` flag bits.
 10. **§20** — runtime meaning of the human-state names; the exact capacity behaviour when a 51st state or 100th pair is offered.
 11. **§2** — ~~consumers and units of the `LaneSpeed` array; the implied capacity of 754 is arithmetic only.~~ **PARTIALLY RESOLVED 2026-09-23** — the real base file's own `TableDescription` labels `Speed`'s `Display_Name` as "Lane Speed (m/s)", i.e. the unit is almost certainly **m/s** (editor metadata, not a runtime trace — HIGH CONFIDENCE, not CONFIRMED); the base file has only 3 real `LaneSpeed` rows against the 754 arithmetic ceiling. The true runtime consumer is still OPEN. See §26.2/§26.4.
 12. **§10** — the full schema of `combat_actions.xtbl` is AH's (`spec-tables-weapons-combat.md`); this document lists only the fields the AI loaders touch.
-13. **All base-table values** remain unreadable (mode-(a), parked). Every schema here decodes a base table directly the moment one is available; none of the rules above depends on it.
+13. ~~**All base-table values** remain unreadable (mode-(a), parked). Every schema here decodes a base table directly the moment one is available; none of the rules above depends on it.~~ **→ RESOLVED 2026-09-23, §26** (base tables readable; 32/32 found and decoded).
 14. **Audio middleware:** the third-party Wwise engine is used for `Persona_Situation` / `Audio` / `Music_Emitter` event ids; those hashes are the middleware's (public) string-to-id function and were not re-derived.
 
 ### 25.1 Artifacts
@@ -617,7 +619,7 @@ Legend: ✅ = every element name in the real file is in this document's schema (
 
 | Table | Result | Undocumented elements found |
 |---|---|---|
-| `traffic_lanes.xtbl` | ⚠ | `UID`, `Description` per `LaneSpeed` row (not read by the loader — §1's "no other element name is passed to any accessor" still holds; these are dead-to-the-loader authoring metadata) |
+| `traffic_lanes.xtbl` | ⚠ | `UID`, `Description` per `LaneSpeed` row (not read by the loader — §2's "no other element name is passed to any accessor" still holds; these are dead-to-the-loader authoring metadata) |
 | `traffic_types.xtbl` | ⚠ (moot — unloaded) | row element is `TrafficTypes` (not documented since no loader exists); single child `Name` |
 | `ambient_traffic_events.xtbl` | ✅ | none |
 | `roadblock_layouts.xtbl` | ✅ | none (`Variant_name` case differs from the documented `Variant_Name` — case-insensitive, no effect) |
@@ -715,3 +717,7 @@ Legend: ✅ = every element name in the real file is in this document's schema (
 - **`generic_characters.xtbl`'s dead-row rule and `ai_personalities.xtbl`'s dead top-level block** (§26.4) are both real, shipped instances of "the schema is wider than what the loader reads" — the DLC sample (10 `homies.xtbl` rows) never touched either table.
 
 *(§25, this document's own running open-items list, is unchanged in numbering; the items resolved or advanced above are struck through in place at their original citations there, not renumbered.)*
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked §24.3, the scope header and §25 item 13 superseded/resolved by §26; added pointers from §2 (unit, §25 item 11) and §25 item 8 (real sample exists); corrected the 30-of-31 table count against §26.0 (32/32); fixed 3 cross-references (§26.4→§26.3, §1→§2, roadmap now lists §26).

@@ -74,7 +74,7 @@ The validation ladder returns a distinct error code for each failure mode — ba
 
 `0x0B` is exactly `'f' XOR 'm'`. Under `h = rotl32(h, 6) XOR c`, two strings differing only in their **final** character produce hashes differing by exactly that character's XOR — so this is that hash, and the paired names differ only in a trailing `f`/`m`. **The control rules out the alternative:** CRC-32 of two strings differing only in the last character gives `0x97D2D988`, not `0x0B` — the whole word scrambles. **[CONFIRMED — empirical, controlled.]**
 
-**The registry key is a table-driven CRC-32.** *(Scope note, 2026-09-10: this routine is **not** specific to conversations — a call-site census puts it at ≈835 call sites, making it the engine's general-purpose name hash. `spec-extensionless-types.md` §4.)* The constructor's key routine is the standard reflected CRC-32 update — `h = (h >> 8) XOR table[(tolower(c) XOR h) & 0xFF]`, seeded `0xFFFFFFFF`, over a 256-entry table — applied to the lowercased basename. **[CONFIRMED — disassembly.]**
+**The registry key is a table-driven CRC-32.** *(Scope note, 2026-09-10: this routine is **not** specific to conversations — a call-site census puts it at ≈835 call sites, making it the engine's general-purpose name hash. `spec-extensionless-types.md` §4.)* The constructor's key routine is the standard reflected CRC-32 update — `h = (h >> 8) XOR table[(tolower(c) XOR h) & 0xFF]`, seeded `0xFFFFFFFF` *(at this call site; the routine takes the seed as an argument and other callers pass 0 — `spec-vehicle-data.md` §7.1)*, over a 256-entry table — applied to the lowercased basename. **[CONFIRMED — disassembly.]**
 
 **Correction to published text.** `spec-vpp-container.md` §2.2 and `spec-rig-format.md` §5 established the rotate-6/XOR hash as "engine-wide" and stated that a reimplementation "needs exactly one". The first half stands — that hash really is used across archives, rig bone names, the foliage registry and now speaker ids — but **the second half is wrong**: this format uses a *different* hash for its registry key. A reimplementation needs both, and must not assume a 32-bit name hash in an unfamiliar structure is the rotate-6/XOR one. **[CONFIRMED — disassembly.]**
 
@@ -108,7 +108,7 @@ Also ruled out: **no hash of the conversation's own name appears in any record**
 
 ## 7. Cross-format notes
 
-- **Stash-only constructors are now the rule for non-geometry types, not the exception** — morph types 11/12, `.csc_pc` type 24, and `.ctdg_pc` type 42. Two of the three additionally register into a fixed-size global table (foliage's 64 slots, this format's 330), which caps how many can be resident.
+- **Stash-only constructors are now the rule for non-geometry types, not the exception** — morph types 11/12, `.csc_pc` type 24, and `.ctdg_pc` type 42. Two of the three additionally register into a fixed-size global table (foliage's 64 slots, this format's 330), which caps how many can be resident. **[Corrected 2026-09-30: only one of the three listed does — `.ctdg_pc` (330 slots). Foliage (type 37) is not in the list; it also registers into a 64-slot table (`spec-foliage-format.md` §2).]**
 - **No shared engine block appears** — the known-magic scan finds none of the material, Mesh, Morph, `ANIM`, foliage or tree magics in any of the 4,984 files. Standalone, like `.csc_pc`.
 - The `.ctd` authoring extension joins `.fmeshx`, `.animx` and `.effectx` in this project's list of authoring-vs-shipped name pairs.
 
@@ -120,8 +120,12 @@ Also ruled out: **no hash of the conversation's own name appears in any record**
 
 ## 9. Open Items
 
-1. The names behind the 57 speaker ids (§6.1) — closable via the validator's string table.
+1. The names behind the 57 speaker ids (§6.1) — ~~closable via the validator's string table~~. **[Updated per §6.2: not closable statically — the names are not present in the executable's static image; this would need a live session or authoring data.]**
 2. The line-id namespace: what `+0x04` resolves against (an audio bank? a subtitle table?) and whether ids are unique per speaker or global.
 3. Whether `+0x08` is milliseconds (§4) — the shape fits, nothing read confirms it.
 4. What the playback tick's small slot table's per-slot fields mean (only its role as a pending-playback list was established).
 5. Whether any shipped file approaches the 30-record or 30-speaker limits (max observed 17 and 4) — i.e. whether the caps are generous or were once tight.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): corrected §7's "two of the three register into a fixed-size table" (only `.ctdg_pc`; foliage is outside the list); added the per-call-site seed note to §6's CRC-32 description; marked §9 item 1 not closable statically (§6.2).

@@ -14,7 +14,7 @@
 
 - **No extension-less file exists anywhere in the game.** A recursive scan of **405,694 entries** across all 38 archives *and* inside every `.str2_pc` bundle finds **zero** entries whose name has no extension. **[CONFIRMED — empirical, exhaustive.]**
 - **So these six types are never resolved by filename.** They still take the normal `(name, buffer, size, …)` constructor signature and really do receive buffers — so they are **constructed programmatically**, by whatever subsystem already holds the data, rather than by the resource system resolving a path. The registration entry exists to give that data a type, a name and a lifetime, not to find it on disk. **[CONFIRMED — disassembly + the exhaustive negative.]**
-- **`FUN_00754410`, listed in the inventory as the destructor for nine types, is a no-op** — its entire body is a return. It is also *called* as a labelled hook (e.g. with the literal `"Lightset"` and a size), so it is a **stripped instrumentation stub**, not a destructor. Those nine types have no teardown at all. **[CONFIRMED — disassembly.]**
+- **`FUN_00754410`, listed in the inventory as the destructor for nine types **[count corrected 2026-09-30: eleven — `spec-format-inventory.md` §2 lists it for IDs 2 and 8–14 by address and as "(no-op stub)" for 25, 33 and 43; see its §3]**, is a no-op** — its entire body is a return. It is also *called* as a labelled hook (e.g. with the literal `"Lightset"` and a size), so it is a **stripped instrumentation stub**, not a destructor. Those nine types have no teardown at all. **[CONFIRMED — disassembly.]**
 - **All four load-time patterns this project has catalogued reappear here**, which is a good sign the catalogue is complete: parse-in-constructor (25, 33, 38), stash-only (26, 43), and register-into-a-hash-table (34, 38).
 - **A breadth correction on the engine's hashes** (§4): the rotate-6/XOR hash this project has repeatedly called "the engine-wide string hash" has **18 call sites**. The table-driven CRC-32 has **835**. Calling the former engine-wide, relative to the latter, was backwards.
 
@@ -69,4 +69,8 @@ Light Curve's 512-bucket index comes from `FUN_00dab2b0`, which looked like anot
 2. Type 25 `Lightset`'s actual payload format (its consumer was not opened).
 3. Type 38 `Light Curve`'s parse routine.
 4. Why type 34 `Activity table file` is capped at two entries.
-5. Whether any of the nine types whose "destructor" is the no-op stub leak, or whether their teardown lives elsewhere.
+5. Whether any of the nine **[eleven — see §1]** types whose "destructor" is the no-op stub leak, or whether their teardown lives elsewhere.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): corrected the no-op-destructor type count (nine → eleven, per `spec-format-inventory.md` §2/§3) in §1 and §5 item 5.
