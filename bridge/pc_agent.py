@@ -502,9 +502,23 @@ def main():
     ap.add_argument("--config", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "pc_config.json"))
     ap.add_argument("--once", action="store_true", help="process pending jobs once, then exit")
     a = ap.parse_args()
-    with open(a.config, encoding="utf-8") as f:
-        cfg = json.load(f)
-    Agent(cfg).loop(once=a.once)
+    Agent(load_config(a.config)).loop(once=a.once)
+
+
+def load_config(path):
+    """Read pc_config.json. Windows paths typed with backslashes are accepted: the config never needs a
+    JSON escape, so every backslash is treated as a path separator (C:\\new would otherwise silently
+    become a newline)."""
+    with open(path, encoding="utf-8-sig") as f:
+        text = f.read()
+    try:
+        return json.loads(text.replace("\\\\", "/").replace("\\", "/"))
+    except json.JSONDecodeError as e:
+        lines = text.splitlines()
+        bad = lines[e.lineno - 1] if 0 < e.lineno <= len(lines) else ""
+        raise SystemExit("pc_config.json is not valid JSON (line %d, column %d): %s\n    %s\n"
+                         "Check for a missing comma or quote, or a trailing comma before } ."
+                         % (e.lineno, e.colno, e.msg, bad.strip()))
 
 
 if __name__ == "__main__":
