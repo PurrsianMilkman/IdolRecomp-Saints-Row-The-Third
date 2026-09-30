@@ -62,6 +62,18 @@ bool caseInsensitiveEquals(const std::string& a, const std::string& b) {
     return true;
 }
 
+// lua_tonumber + 0x00ea2596, the engine's double->int64 conversion. Its
+// rounding mode is OPEN (spec-lua-api-behaviour.md Sec4.1 after the
+// 2026-09-30 consistency review: Sec2/Sec3/Sec3.9 describe it as
+// truncation, round-half-correcting or banker's rounding, pending a re-read).
+// Every call site goes through this one function so the choice is made once:
+// this project's own CHOSEN stand-in is round-half-to-even (std::nearbyint
+// under the default FE_TONEAREST mode), kept from before the review. It only
+// matters for non-integral arguments.
+int64_t roundToIntOpenMode(lua_Number v) {
+    return static_cast<int64_t>(std::nearbyint(v));
+}
+
 // Small helper matching this batch's own recurring "mandatory string,
 // read via lua_tolstring, NULL-safe" shape.
 std::string argString(lua_State* L, int idx) {
@@ -186,7 +198,7 @@ int stub_game_audio_get_audio_id(lua_State* L) {
         int t = lua_type(L, 1);
         if (t == LUA_TNUMBER) {
             double raw = lua_tonumber(L, 1);
-            int64_t rounded = static_cast<int64_t>(std::nearbyint(raw)); // "round-to-int pair" - same primitive family as Sec3.9's confirmed banker's rounding
+            int64_t rounded = roundToIntOpenMode(raw); // "round-to-int pair"; rounding mode OPEN, see roundToIntOpenMode
             result = static_cast<double>(static_cast<uint32_t>(rounded) & 0xFFFFu); // masked to 16 bits, CONFIRMED
         } else if (t == LUA_TSTRING) {
             std::string s = argString(L, 1);
@@ -250,7 +262,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
     req.requestName = name;
 
     double nRaw = lua_tonumber(L, 2);
-    int64_t count = static_cast<int64_t>(std::nearbyint(nRaw));
+    int64_t count = roundToIntOpenMode(nRaw);
     if (count >= 1 && count <= 6) {
         for (int64_t i = 0; i < count; ++i) {
             int argIndex = 3 + static_cast<int>(i);
@@ -268,7 +280,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
 // ---------------------------------------------------------------------
 // 7. ai_add_enemy_target (Sec3.9)
 // Arguments: 4 (acting character, target name or "#CLOSEST_PLAYER#",
-// priority/id number [banker's-rounded, CONFIRMED per the primitive-
+// priority/id number [rounded via 0x00ea2596, mode OPEN since the 2026-09-30 review; was labelled CONFIRMED per the primitive-
 // upgrade note], optional bool default false). Return: 1 boolean
 // (resolve-and-add success/failure - always true in this minimal
 // registry, see engine_state.h's own EnemyTargetRecord doc comment).
@@ -278,7 +290,7 @@ int stub_ai_add_enemy_target(lua_State* L) {
     std::string actor = argString(L, 1);
     std::string target = argString(L, 2);
     double priorityRaw = lua_tonumber(L, 3);
-    int64_t priority = static_cast<int64_t>(std::nearbyint(priorityRaw)); // banker's rounding, CONFIRMED (0x00ea2596)
+    int64_t priority = roundToIntOpenMode(priorityRaw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
     bool arg4 = false;
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) arg4 = lua_toboolean(L, 4) != 0;
     bool sentinelMatch = caseInsensitiveEquals(target, "#CLOSEST_PLAYER#");
@@ -383,7 +395,7 @@ int stub_set_current_hit_points(lua_State* L) {
 
     CharacterState& character = upState(L)->getOrCreateCharacter(name);
     int32_t cap = character.maxHitPoints; // CONFIRMED cross-check: same field get_max_hit_points reads
-    int64_t rounded = static_cast<int64_t>(std::nearbyint(raw)); // this project's own choice of banker's rounding for consistency with this spec's other confirmed round-to-int primitive (Sec3.9) - not itself independently confirmed at THIS exact call site
+    int64_t rounded = roundToIntOpenMode(raw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
     int64_t clampedWide = std::max<int64_t>(0, std::min<int64_t>(rounded, cap));
     int32_t clamped = static_cast<int32_t>(clampedWide);
 
@@ -554,7 +566,7 @@ int stub_minimap_icon_add_do(lua_State* L) {
     if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) rec.group = argString(L, 3);
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.param4 = lua_tonumber(L, 4);
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) {
-        rec.flag5 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 5)));
+        rec.flag5 = roundToIntOpenMode(lua_tonumber(L, 5));
     }
     CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
     obj.minimapIcons.push_back(std::move(rec));
@@ -591,9 +603,9 @@ int stub_object_indicator_add_do(lua_State* L) {
     logCall(L, upLog(L), "object_indicator_add_do", upStateTag(L));
     std::string objectName = argString(L, 1);
     ObjectIndicatorRecord rec;
-    rec.arg2 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 2))); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
-    rec.arg3 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 3))); // same, CONFIRMED no nil gate
-    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = static_cast<int64_t>(std::nearbyint(lua_tonumber(L, 4)));
+    rec.arg2 = roundToIntOpenMode(lua_tonumber(L, 2)); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
+    rec.arg3 = roundToIntOpenMode(lua_tonumber(L, 3)); // same, CONFIRMED no nil gate
+    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = roundToIntOpenMode(lua_tonumber(L, 4));
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) rec.arg5 = lua_tonumber(L, 5);
     CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
     obj.objectIndicators.push_back(std::move(rec));

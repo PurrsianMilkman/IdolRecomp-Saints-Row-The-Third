@@ -620,7 +620,8 @@ int main() {
         }
 
         // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, banker's-rounded priority, and the always-true
+        // bit, arg4's bit, the integral priority (the rounding mode of
+        // non-integral values is OPEN, Sec4.1, so only an integer is tested), and the always-true
         // resolve-success return (this project's own minimal registry -
         // see EnemyTargetRecord's own doc comment).
         {
