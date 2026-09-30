@@ -31,3 +31,4 @@ hs_err_pid*
 
 # Bridge: local PC config (paths on the owner PC)
 bridge/pc_config.json
+__pycache__/
