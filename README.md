@@ -22,6 +22,8 @@ file layouts and behaviour in plain language, with confidence labels: **CONFIRME
 disassembly), **HIGH CONFIDENCE**, **HYPOTHESIS** and **OPEN**. Anything unresolved is recorded as
 open rather than guessed.
 
+**Running Claude Code in the cloud against this repo? Read [`CLOUD-START.md`](CLOUD-START.md) first.**
+
 ## What's here
 
 - `team-a/`: Team A's specifications (`spec-*.md`), its running log (`HANDOFF.md`), and `WALLS.md`,

@@ -9684,3 +9684,526 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 - **A third global identified in the area-state cluster already tracked at §19.1** (0x022ffd40, alongside the already-known 0x022ffd44/0x022ffd48/0x022ffd4c), feeding a shared UI-refresh notifier (0x0082dc40) called identically by this tranche's own `pcu_get_areas` and (indirectly, via the shared revalidate-everything primitive 0x0082e210) `pcu_wear_current_clothing`/`pcu_discard_slot`.
 - **A fourth confirmed direct consumer of the exact §16.16/§19.16 shared 63-slot PCR composite-item list**: `pcr_change_eye_color`, joining `pcr_change_composite`/`pcr_set_random_composite`/`pcr_change_skin_color` already on record.
 - No opcode/network-replicate record-and-replicate idiom (the 0x00710cb0 pattern) was found in any of these 22 — consistent with §19.16's own observation that the UI/customization cluster doesn't use that idiom; the closest analogue here is the newly-resolved 0x00e0xxxx named-callback builder family, which is a genuinely different mechanism.
+
+## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
+
+Fourth part of a fresh four-part tranche, "ranks 551-650" (informal name; real TSV ranks span roughly 563-665). 11 of the 25 names resolve in the 311-entry UI-wrapper cluster anchored at 0x008430f0; the other 14 resolve in the 113-entry loop registrar at 0x00845aa0. All 25 open with the same shared `lua_CFunction` prologue idiom already established in this document's own front matter (`lua_gettop`=0x00dfde50, `lua_type`=0x00dfe040, `lua_toboolean`=0x00dfe1e0, `lua_tolstring`=0x00dfe210, `lua_tonumber`+round-cast=0x00dfe160+0x00ea2596, `lua_pushnumber`=0x00dfe3a0, `lua_pushstring`=0x00dfe420, `lua_pushboolean`=0x00dfe590) — cited by reference, not re-derived.
+
+### 27.1 `cat_mouse_results_select` (0x007bd240) — 311-entry UI-wrapper table, wrapper 0x007bd280
+
+**Arguments:** 1 mandatory number (a result-slot/winner index), no nil-gate. **Return:** none.
+
+**A genuine, confirmed hidden-`this` case.** The decompiled pseudocode renders the final call as taking one visible argument. Raw disassembly shows a zero-argument accessor (0x006a3900) is called first; if its result (in EAX) is non-null, that value is loaded into ECX as an implicit `this` immediately before the real call, with the rounded index value as the one genuine explicit push. The real call is **0x006c8050(this = result of 0x006a3900, index)** — the decompiler dropped the `this` entirely, matching this document's established hidden-register-argument convention.
+
+**Side effects/subsystem:** none returned to Lua. Resolves a "current cat-and-mouse results" context object (0x006a3900) and, if one exists, sets the selected result/winner slot on it via 0x006c8050. Minigame results-screen UI. **[CONFIRMED — disassembly for the hidden-`this` fix; OPEN — 0x006a3900/0x006c8050's own internal bodies.]**
+
+### 27.2 `cell_is_mission_complete` (0x00a525a0) — 311-entry UI-wrapper table, wrapper 0x0083bd90 ("cell"/cellphone)
+
+Note: this wrapper's paired function address lands in the address range this document elsewhere treats as "the 1,014-entry gameplay table's own neighborhood" — it is still a completely ordinary, independently real function; no address-resolution ambiguity, just a real function that happens to sit in that numeric range.
+
+**Arguments:** 1 mandatory string (a mission name). **Return:** 1 boolean.
+
+**Body:** clean, disassembly-confirmed 1-argument passthrough — resolves the string via `lua_tolstring` and passes it directly to a predicate, 0x006d6f30(missionName), pushing its boolean result. No hidden-argument mismatch at this call site.
+
+**Side effects/subsystem:** none (pure query) — reports whether a named mission has been completed, for the cellphone UI. **[CONFIRMED — disassembly, full 20-instruction body; OPEN — 0x006d6f30's own internal body.]**
+
+### 27.3 `Completion_should_wait_for_coop` (0x007bfc10) — 311-entry UI-wrapper table, wrapper 0x007c04b0 ("Completion"/"completion" — mixed case; §10's own front matter already noted this exact name as registered in this wrapper without decompiling it)
+
+**Arguments:** none (the `lua_gettop` boilerplate call is made and its result discarded). **Return:** 1 boolean.
+
+**Body:** resolves a cached UI-screen context by the fixed name key `"completion_screen"` via a new, not-previously-catalogued named-context resolver, 0x00878ca0(nameString) — distinct from the co-op/session singleton 0x0087ba20 already tracked elsewhere in this document. An internal flag starts at a "true" default. If the resolve fails, that default stands. If it succeeds: when a global byte at 0x02282282 (a new global, sitting directly between the two already-tracked completion-screen flags 0x02282281 (§26.6) and 0x02282283 (cited elsewhere) — a third, newly-pinned member of that exact flag cluster) is zero, the internal flag is recomputed from a byte read through a double pointer-dereference of the resolved context's own +4 field (true when that byte is ≥1); when that global is non-zero, the internal flag instead comes from a call, confirmed via raw disassembly to be a **hidden-`this` case the decompiled pseudocode dropped entirely** — 0x00877ca0(this = the resolved screen context, explicit arg = literal 1). **Whichever path set it, the value actually pushed to Lua is the logical negation of that internal flag** — i.e. this function's name describes the pushed result directly, not the internal flag's own polarity.
+
+**Side effects/subsystem:** none (pure query) — reports whether the completion/results screen should wait for a co-op partner, defaulting to "no" when no completion-screen context is active. **[CONFIRMED — disassembly for the full control flow, the hidden-`this` fix, and the final negation; HIGH CONFIDENCE for the ">=1" byte-read's semantic role; OPEN — 0x00878ca0/0x00877ca0's own internal bodies.]**
+
+### 27.4 `Completion_user_is_done_viewing` (0x007bdc80) — same wrapper (0x007c04b0)
+
+**Arguments:** none. **Return:** none.
+
+**Body:** resolves the SAME named context as item 27.3 above (0x00878ca0, `"completion_screen"`). If resolved, calls **a further, confirmed hidden-`this` case**: the decompiled pseudocode shows a 1-visible-argument call, but raw disassembly confirms the resolved context handle is loaded into ECX as an implicit `this` immediately before the call, with only the literal 1 as a genuine explicit push — the real call is 0x008788e0(this = context, 1).
+
+**Worth flagging precisely, not resolved:** 0x008788e0 is the SAME address §2.10 (`audio_conversation_play`) already cites, there described as "one more direct call... with the conversation id" with no `this` mentioned. Either that section's own call site also carries an unremarked hidden `this` (plausible — that section's own audit predates this document's later hidden-argument focus), or this is a second address exhibiting the "identical-code-folding" pattern this document already hypothesizes for the open 0x009da4e0 anomaly (§23.23 observation 2) — i.e. one address, genuinely different real call shapes at different sites. Not resolved either way this pass.
+
+**Side effects/subsystem:** none returned — marks something (most plausibly "done viewing this screen," per the Lua name) on the completion-screen context object via 0x008788e0(context, 1), if that context currently exists. **[CONFIRMED — disassembly for the hidden-`this` fix; OPEN — 0x008788e0's own real signature/role, and the cross-reference to §2.10 above.]**
+
+### 27.5 `vcust_set_camera_pos` (0x0081fa80) — 311-entry UI-wrapper table, wrapper 0x00820aa0 ("vcust", vehicle customization — the same wrapper §19.6/§19.10/§19.11/§26.16 document)
+
+**Arguments:** 1 mandatory string (a camera-position preset name; `"Standard"` is checked explicitly — see below).
+
+**Body:** resolves a 2-part (8-byte) identity value via a zero-argument accessor, 0x00812e40 (new — plausibly "the current vehicle-customization target identity," structurally parallel to the already-tracked garage "currently selected vehicle" 2-part global pair, §23.10, though here returned rather than read from globals directly). If non-zero, resolves it through the SAME established hash-keyed context resolver and fixed table key this document already tracks from its very first appearance (0x00458230 against table key 0x031d152c — first established §9.2, reused §23.10, reused again here), gated on: the resolved object's own +0x33 byte not having bit 0x10 set, AND the shared class-descriptor table (0x02cc9900) having bit 0x80 set at the row offset +6 for that object's class — the SAME "is a vehicle-kind object" combination reconfirmed repeatedly throughout this document (§17/§19.10/§23.10 among others).
+
+If that passes, the SAME shared predicate 0x00853b10 this document tracks throughout (§23.10 and many earlier sections) is checked; **this function's own body branches away when that predicate is non-zero and proceeds only when it reports zero** — the reverse of how §23.10's own prose describes the same predicate gating a "proceed when alive" case. Flagged as an observation to reconcile in a future pass, not asserted as a contradiction, since the exact true/false convention at each individual call site has not been independently re-derived here.
+
+**Two genuine, confirmed hidden/dropped-argument findings on the two calls inside that gated block:**
+1. A hidden-ECX buffer-pointer argument, the SAME convention already established at §23.8 (0x00d9e7e0) — here on a different callee. Three stack dwords (two zero literals plus a per-object class-index byte) are built on the stack and their address loaded into ECX (a register-to-register move from the stack pointer immediately after the three pushes) right before the call; the decompiled pseudocode shows only the 3 genuinely-explicit pushed arguments (the preset-name string, 0, and -1) and drops the hidden ECX buffer pointer entirely. The real call is **0x00d9e8b0(this = pointer to {0, 0, classIndexByte}, presetNameString, 0, -1)**. This extends §26.22's own characterization of 0x00d9e8b0 ("opens a network-tagged record named `"Vehicle_delivery"`") with a concrete hidden-argument signature — the caller-supplied string here is the Lua-given preset name rather than a fixed literal, showing the name argument is a genuine caller-supplied value, not always a hardcoded record tag.
+2. A confirmed further sighting of the exact "stale, not-yet-cleaned stack slot" mechanism §26.2 already documents — but here the decompiler ALREADY reconstructs it correctly (no correction needed): the three stack dwords from the call above are never popped by that call's own return (it pops only its 3 genuinely-explicit arguments), so they are still sitting on the stack, unpopped, when the very next call reads them as its own 2nd-4th parameters. The real call is **0x00a9b080(resolvedObject, classIndexByte, 0, 0)** — matching the decompiled pseudocode's own 4-argument rendering exactly, an independent confirmation that this exact mechanism (already known to sometimes fool the decompiler, §26.2) does NOT always fool it.
+
+Immediately after, the preset-name string is compared case-insensitively against the literal `"Standard"` (via the already-recognized case-insensitive-compare library call the decompiler itself labels correctly, at 0x00eaa178) and the boolean result written into a new global, 0x01300b88 ("is the Standard camera preset currently applied").
+
+**Side effects/subsystem:** vehicle-customization camera — resolves a named camera-position preset against the current live vehicle-customization target, opens a tagged record via 0x00d9e8b0 and applies it via 0x00a9b080, then caches whether the applied preset was specifically `"Standard"`. **[CONFIRMED — disassembly for the full control flow, both hidden/stale-slot argument findings, and the shared-primitive reuses; OPEN — 0x00812e40/0x00d9e8b0/0x00a9b080's own exact internal bodies, and the 0x00853b10 polarity reconciliation noted above.]**
+
+### 27.6 `pause_menu_has_seen_display_cal_screen` (0x007e0490) — 311-entry UI-wrapper table, wrapper 0x007e18e0 (the same wrapper §16.11-§16.13/§26.10 document)
+
+**Arguments:** none. **Return:** 1 boolean.
+
+**Body:** trivial — pushes a single global byte, 0x02297c80 (new, not previously catalogued — "has the display-calibration screen been shown"), with no other logic at all.
+
+**Side effects/subsystem:** none (pure read). Pause-menu / first-run display-calibration flow. **[CONFIRMED — disassembly, 9-instruction body.]**
+
+### 27.7 `msn_text_adventure_set_screen` (0x008410c0) — 311-entry UI-wrapper table, wrapper 0x00841100
+
+**Arguments:** 1 mandatory number (a screen/state index), rounded via the established round-cast pair. **Return:** none.
+
+**Body:** the rounded value is written directly to a global, 0x01301124 (new — "current text-adventure mini-game screen index"), with no forwarding call to any other function at all — a pure global setter, distinct from this tranche's other numeric setters (items 27.8/27.9 below), which DO forward to a helper.
+
+**Side effects/subsystem:** sets the current screen/step of the "text adventure" mission mini-game directly via a global write. **[CONFIRMED — disassembly, full 9-instruction body, no hidden arguments — clean.]**
+
+### 27.8 `horde_results_set_end_action` (0x007c6370) — 311-entry UI-wrapper table, wrapper 0x007c63a0-adjacent
+
+**Arguments:** 1 mandatory number, rounded. **Return:** none.
+
+**Body:** clean single-argument forward of the rounded value to 0x006e4600(actionId). No hidden argument at this call site.
+
+**Side effects/subsystem:** sets the end-of-round action for the Horde-mode results screen. **[CONFIRMED — disassembly, full body; OPEN — 0x006e4600's own internal body.]**
+
+### 27.9 `garage_preview_vehicle` (0x005f8890) — 311-entry UI-wrapper table, wrapper 0x005fc500 (the same wrapper §23.10 documents for `garage_get_repair_cost`)
+
+**Arguments:** 1 mandatory number, rounded — an index. **Return:** none.
+
+**Body:** the rounded index is used to look up an entry in a new global array, 0x014a1a80 (vehicle-type/model ids, indexed directly). If that value differs from a cached "preview" value in another new global, 0x014a1d1c, the cache is updated and a zero-argument refresh call fires (0x005f8670). No hidden arguments — clean, disassembly-confirmed match to the decompiled shape throughout.
+
+**A worthwhile cross-function note:** 0x014a1d1c sits in the SAME narrow global-memory region as the already-tracked garage "currently selected vehicle" 2-part identity pair (0x014a1d28/0x014a1d2c, §23.10) — a third, newly-pinned member of that garage-state cluster.
+
+**Side effects/subsystem:** updates which vehicle model is shown in the garage preview stall, refreshing the display only when the resolved model actually changes. **[CONFIRMED — disassembly, full body, clean argument shape; OPEN — 0x005f8670's own internal body.]**
+
+### 27.10 `game_lobby_coop_finished` (0x007ab170) — 311-entry UI-wrapper table, wrapper 0x007abbb0 (the same wrapper §26.4 documents for `game_lobby_get_remote_player_name`)
+
+**Arguments:** none. **Return:** none.
+
+**Body:** sets a new global flag, 0x0224244c, to 1 ("co-op lobby finished"), then calls a 4-numeric-argument primitive, 0x005a0580(-1, 1, 0, 1.0) — all 4 arguments confirmed genuinely explicit via raw disassembly, matching the decompiled shape exactly (the float-store sequence around the 4th argument is the ordinary FPU-value-reservation idiom already noted at §23.22, not a hidden argument).
+
+**Side effects/subsystem:** marks the co-op lobby phase as finished and fires a UI transition/fade-shaped call. 0x005a0580 sits in the same broad address neighborhood as the already-documented screen-fade-command family (0x0059f8c0/0x0059fc40/0x005a0270/0x005a0400, §8.13/§26.23) but is a distinct address not independently decompiled this pass — plausibly a further sibling of that family, flagged as OPEN rather than asserted. **[CONFIRMED — disassembly, full body, clean 4-argument call; OPEN — 0x005a0580's own internal body and its relationship (if any) to the established fade-command family.]**
+
+### 27.11 `dialog_box_force_close` (0x007c4960) — 311-entry UI-wrapper table, wrapper 0x007c5630 (the same wrapper §23.17/§23.18 document), 407-byte body, the largest/most branchy of this batch — summarized per this document's own house style
+
+**Arguments:** 1 mandatory number, rounded — a dialog-type/slot id.
+
+**Body:** re-uses, byte-for-byte, the exact self-consistency gate `dialog_box_set_result` (§23.18) already establishes: validates the id is non-zero, `(id & 0xFFFF) < 4`, and the corresponding slot in the SAME per-slot record array (base 0x02282d40, 0x184-byte stride, self-id field at +0x12c) actually currently holds that same id — now a second, independent consumer of that exact array/gate.
+
+On a pass: calls two predicates via thiscall (`this` = the slot's own +0xc sub-object; both rendered by the decompiler with zero visible arguments at all, including the implicit receiver — 0x00d9e4c0 then, conditionally, 0x00d9e400) to decide whether the dialog can close immediately; if not closeable, sets a "close pending" byte at the slot's own +0x13a and returns.
+
+Otherwise (the real close path), if the slot isn't already marked closing (+0x13b): sets two closing-state flag bytes (+0x139, +0x13b); if a per-slot function-pointer field at +0x13c is non-null, calls it (this = slot, explicit arg -1) — the same "on-close callback" vtable-style slot idiom already seen elsewhere (cf. §26.6's dialog-close-shaped callback). Then, if a further predicate on the slot's own +0x140 sub-field (0x00da73c0 — new address, not previously catalogued) returns false, drives a dialog-close notification through the already-resolved builder/named-callback family (§26.23): resolves a builder handle (0x00e1a1b0), checks it against the slot's +0x140 sub-field via **a newly-observed 9th member of that family, 0x00e0cef0(targetPointer, builderHandle) → boolean** (§8.13 had already opened the two lowest-level members of this family, 0x00e0cef0/0x00e0ca80, as "the low-level pair actually behind the `"screen_fade_do"` string lookup," without naming 0x00e0cef0's own separate role beyond that — this is a second, distinct consumer of it, confirming it's a generic "does this target have a resolvable named callback" check, not fade-specific); if true, resolves a target handle via 0x00e0ca80, sets the target's own +0x14 field from the slot's own +0x14 field, appends two float values (-1.0, then 1.0) via the family's own push wrappers, and finalizes/dispatches via 0x00e0cd00 — firing a named callback with those two floats and the tag, the exact SAME builder mechanism §26.23 already fully characterizes, now confirmed driving a dialog-close notification rather than a PCU-customization report or a screen fade.
+
+**A confirmed, independent re-confirmation of §26.23's own footnote about 0x00e0ca80's real 4-argument signature:** at this call site, two explicit zero-literal pushes immediately precede the 0x00e1a1b0 call and are NOT consumed by it (0x00e1a1b0 remains a zero-real-argument accessor here too) — they are left, unpopped, as stale stack content that 0x00e0ca80 itself reads as its own 3rd/4th parameters. The decompiled pseudocode mis-attributes these two zeros to the 0x00e1a1b0 call instead — the SAME kind of stale-slot misattribution already flagged at §26.2, here caught at a different call site in a different function, independently reconfirming §26.23's own characterization of 0x00e0ca80's real signature.
+
+Finally, regardless of the branch above, if the slot isn't already flagged fully removed (+0x138): calls 0x007c3050(this = slot, 0), then removes the slot from a doubly-linked list using the SAME record array's own +4/+8 fields as next/prev pointers, rooted at two new globals, 0x02282d10 and 0x02282d14 (list-anchor pointers — 0x02282d10 reads as "the currently active/topmost dialog," 0x02282d14 as a second list anchor the slot gets moved onto when closed, most plausibly a closed/free pool; exact roles not exhaustively traced, flagged OPEN), handling the single-node and now-empty-list edge cases explicitly.
+
+**Side effects/subsystem:** force-closes a specific dialog slot (validated against its own self-consistency gate), running its close-predicate/callback chain, firing a named dialog-close notification through the builder family, and unlinking the slot from an active-dialog list. **[CONFIRMED — disassembly for the self-consistency gate reuse, the builder-family reuse (including the new 0x00e0cef0 sighting and the stale-slot misattribution), and the full high-level control-flow shape; HIGH CONFIDENCE — the list-anchor globals' general role; OPEN — 0x00d9e4c0/0x00d9e400/0x00da73c0's own internal bodies and the precise distinction between the two list-anchor globals.]**
+
+### 27.12 `game_autosave` (0x00841f50) — 113-entry loop registrar 0x00845aa0
+
+**Arguments:** none. **Return:** none. **Body:** a single zero-argument forwarding call, 0x00b95060(). **[CONFIRMED — disassembly, 7-instruction body.]** **Side effects/subsystem:** triggers an autosave.
+
+### 27.13 `game_send_pause_menu_player_invite` (0x008440e0) — same registrar
+
+**Arguments:** 1 mandatory number, rounded — a player slot/index. **Return:** 1 boolean.
+
+**Body:** calls a zero-argument helper (0x00d34dd0 — in the same narrow address neighborhood as the already-documented syslink-discovery helpers 0x00d34cf0/§23.11), then sends the invite via 0x007c93b0(slot), pushing its boolean result. No hidden arguments — clean.
+
+**Side effects/subsystem:** sends a player-invite from the pause menu for the given slot. **[CONFIRMED — disassembly, full body; OPEN — 0x00d34dd0/0x007c93b0's own internal bodies.]**
+
+### 27.14 `game_can_send_player_invite` (0x00844120) — same registrar
+
+**Arguments:** 1 mandatory number, rounded. **Return:** 1 boolean.
+
+**Body:** structural sibling of item 27.13 — calls a zero-argument helper, 0x0101b530, then queries 0x007c93e0(slot) and pushes its boolean. **0x0101b530 is the SAME address §8.21 (`zscene_prep`) already characterizes, there with HIGH CONFIDENCE as beginning a load/prepare sequence in a cutscene-streaming context — its reuse here, in a completely unrelated network-invite-eligibility check, suggests it's actually a more generic platform "begin/poll an async task" primitive rather than something zscene-specific.** No hidden arguments.
+
+**Side effects/subsystem:** the query counterpart of item 27.13 — checks whether a player invite can currently be sent to the given slot. **[CONFIRMED — disassembly, full body; the 0x0101b530 cross-reference to §8.21 is a new scope-broadening observation, not a contradiction; OPEN — 0x007c93e0's own internal body.]**
+
+### 27.15 `game_set_coop_friendly_fire` (0x00844510) — same registrar
+
+**Arguments:** 1 mandatory number, rounded — a friendly-fire mode (0, 1, or 2). **Return:** none.
+
+**Body:** clean, disassembly-confirmed 3-way branch with no hidden arguments anywhere. A genuine, confirmed finding: **the externally-given mode value is NOT applied directly — it goes through a fixed rotation before being handed to the real setter, 0x007031e0.** Mode 0 falls through to the default path (0x00d2f500(); 0x007031e0(1)). Mode 1 calls 0x0101bac0() then 0x007031e0(2). Mode 2 calls 0x0101ba90() then 0x007031e0(0). Any other (invalid) input also falls through to the default path, but with 0x007031e0(0) instead of (1) — the one behavioral difference between "mode 0" and "an invalid mode." 0x0101bac0/0x0101ba90 are two further, newly-sighted members of the small 0x0101bxxx platform-helper family this tranche repeatedly touches (see item 27.21's family note below).
+
+**Side effects/subsystem:** sets the coop friendly-fire mode, remapping the externally-exposed enum (0→1, 1→2, 2→0 internally) before applying it via 0x007031e0. **[CONFIRMED — disassembly, full 3-way branch and the enum rotation; OPEN — 0x00d2f500/0x0101bac0/0x0101ba90/0x007031e0's own internal bodies.]**
+
+### 27.16 `game_get_coop_friendly_fire` (0x00844580) — same registrar
+
+**Arguments:** none (the boilerplate `lua_gettop` call is rendered with its `lua_State` argument dropped by the decompiler — the same established rendering quirk this document's own front matter already notes, not a new finding). **Return:** 1 number.
+
+**Body:** queries a zero-argument raw mode value (0x007029a0) and remaps it: 0→2, 1→0, 2→1, then pushes it as a number.
+
+**A clean, confirmed cross-function finding: this remap is the exact mathematical inverse of item 27.15's own external→internal rotation** (0→1, 1→2, 2→0) — composing the two confirms a self-consistent round-trip between the Lua-visible enum and an internal representation shifted by one, independently verified by reading both functions' own branch tables rather than assuming.
+
+**Side effects/subsystem:** none (pure query) — reports the current coop friendly-fire mode, translated back to the externally-exposed enum. **[CONFIRMED — disassembly, full body and the inverse-rotation cross-check; OPEN — 0x007029a0's own internal body.]**
+
+### 27.17 `game_send_party_invites` (0x007c9f50) — same registrar
+
+**Arguments:** none (read via the boilerplate call only). **Return:** none.
+
+**A genuine, disassembly-confirmed hardcoded no-op stub — no argument is ever read beyond the universal `lua_gettop`, and no other call of any kind is made.** This function does nothing at all beyond the shared prologue, joining the recurring "plausible-sounding name, does nothing real" pattern already flagged multiple times in this document (§26.3, §26.8, §19.8).
+
+**Side effects/subsystem:** none — a confirmed complete no-op. **[CONFIRMED — disassembly, full 6-instruction body, no branches, no other calls.]**
+
+### 27.18 `game_is_connected_to_network` (0x008427e0) — same registrar
+
+**Arguments:** none. **Return:** 1 boolean.
+
+**A further, confirmed instance of this document's thunk-label caution (§23.13/§23.7).** The decompiled pseudocode labels the call as a thunk to one address; raw disassembly shows the real target is **0x0086fdf0** — a third confirmed member of the small adjacent platform-state-accessor family this tranche resolves (0x0086fdd0/0x0086fde0/0x0086fdf0, each exactly 16 bytes apart; 0x0086fde0 is the already-established real target behind `game_is_connected_to_service`, §23.13).
+
+**Side effects/subsystem:** none (pure read). Platform network-connectivity check. **[CONFIRMED — disassembly, both the clean trivial body and the real thunk target.]**
+
+### 27.19 `game_is_signed_in` (0x00842810) — same registrar
+
+**Arguments:** none. **Return:** 1 boolean.
+
+Same thunk-label caution as item 27.18: the decompiler's displayed thunk label does not match the real target, which raw disassembly confirms is **0x0086fdd0** — the fourth confirmed member of the same 16-byte-spaced platform-accessor family (0x0086fdd0/e0/f0).
+
+**Side effects/subsystem:** none (pure read). Platform signed-in-state check. **[CONFIRMED — disassembly.]**
+
+### 27.20 `game_sign_into_network` (0x00842840) — same registrar
+
+**Arguments:** 1 mandatory boolean (read unconditionally); 1 mandatory string (read unconditionally, at the next stack slot).
+
+**Body:** resolves a zero-argument accessor, 0x00e0ceb0 — the SAME not-previously-decompiled accessor §23.15 (`game_check_coop_dlc`) already cites as "plausibly tied to the SAME 0x00e0xxxx event-report family" — here reused in an entirely different (network sign-in, not DLC-parsing) context, a second confirmed sighting that broadens its apparent scope beyond DLC-specific. If it resolves, caches its own +0x14 field into a new global, 0x02317b34 — the SAME caching idiom §23.15 documents (there into a different global, 0x02317b68). The string argument is copied into a fixed buffer (0x02317b14, max length 0x1f) via the SAME established bounded-copy helper §23.15 documents, 0x00da7930.
+
+**A further, confirmed thunk-label mismatch — a fifth instance of this tranche's own recurring caution:** the decompiled pseudocode shows the boolean argument and a fixed code address (0x00841af0) passed to a thunk-displayed call; raw disassembly confirms the real target is **0x009ed510**, called with 2 genuinely explicit arguments (the boolean, and the literal address 0x00841af0 — most plausibly registering an async completion callback at that address, tagged with the boolean). No stack argument was dropped here — both arguments genuinely match the decompiled count; only the call TARGET address was mis-displayed.
+
+Unconditionally afterward (not gated on anything checked this pass), resolves two localization keys via the SAME resolver §23.15 documents (0x0084a1b0) — `"MENU_PC_SIGN_IN_ERROR"` then `"MENU_TITLE_NOTICE"` — and opens a dialog via 0x007c3d80 (a distinct address from §23.15's own dialog-open call, 0x007c3e60 — a sibling dialog-open variant, not the same function).
+
+**Side effects/subsystem:** attempts to sign into the platform's online service; caches a resolved context's own field and the given account/service-hint string; registers an async completion callback; and — given the unconditional call with the literal string `"MENU_PC_SIGN_IN_ERROR"` — surfaces what reads as a PC-specific "can't sign in this way" notice regardless of outcome checked this pass (HIGH CONFIDENCE, not certain — 0x009ed510's own callback path was not independently traced, so whether the notice is truly unconditional in every real runtime case is not fully closed). **[CONFIRMED — disassembly for the full argument shape, both established-primitive reuses, and the thunk-target correction; HIGH CONFIDENCE — the "always shows a PC sign-in error" characterization; OPEN — 0x009ed510/0x007c3d80's own internal bodies.]**
+
+### 27.21 `game_show_coop_gamercard` (0x00844640) — same registrar
+
+**Arguments:** 1 mandatory number, rounded — a player slot. **Return:** none.
+
+**Body:** calls a zero-argument helper, 0x0101b4a0, THEN reads/rounds the argument and forwards it to 0x007c9440(slot). No hidden arguments — clean.
+
+**A new family sighting worth flagging together with items 27.14/27.22 below:** this tranche touches FIVE distinct addresses in the narrow 0x0101b4a0–0x0101bac0 range (0x0101b4a0 here; 0x0101b4f0 in item 27.22; 0x0101b530, already established §8.21, in item 27.14; 0x0101ba90/0x0101bac0 in item 27.15) — all called with zero explicit stack arguments, all clustered around network/coop/gamercard/friendly-fire functions. 0x0101b4f0 is independently already OPEN at §13.24 (`crib_disable_interface`, an unrelated crib-UI toggle) and 0x0101b530 is HIGH-CONFIDENCE-characterized at §8.21 (zscene streaming) — both completely unrelated feature areas from this tranche's own coop/network context, which together suggest this whole family is a small set of generic platform-SDK helper calls (plausibly presence/overlay/async-task primitives), not feature-specific. Worth a dedicated future pass.
+
+**Side effects/subsystem:** shows a coop partner's platform gamercard/profile card for the given slot. **[CONFIRMED — disassembly, full body; OPEN — 0x0101b4a0/0x007c9440's own internal bodies.]**
+
+### 27.22 `game_main_menu_join_friend_in_progress` (0x00844670) — same registrar
+
+**Arguments:** 1 mandatory number, rounded — a friend slot/index. **Return:** 1 boolean.
+
+**Body:** attempts to join via 0x007c9410(slot) (capturing its boolean result), THEN calls the zero-argument helper 0x0101b4f0 (already OPEN at §13.24, see item 27.21's family note), THEN pushes the earlier-captured boolean. Note the platform-helper call happens AFTER the join attempt here, the reverse order from item 27.21's BEFORE — flagged as an observed ordering difference, not further interpreted. No hidden arguments.
+
+**Side effects/subsystem:** attempts to join a friend's in-progress game from the main menu. **[CONFIRMED — disassembly, full body; OPEN — 0x007c9410's own internal body.]**
+
+### 27.23 `game_coop_start_new_live` (0x008425d0) — same registrar
+
+**Arguments:** 1 optional boolean, default **true** — a notably different default polarity from most optional booleans elsewhere in this document (the SAME cross-reference §23.1 already flags for a different function's arg2). **Return:** none.
+
+**Body:** unconditionally calls a zero-argument helper, 0x00d2f540 (this exact address also appears at §8.12, `camera_restrict_set_active`, in a completely unrelated camera-restriction-state-transition role — the same address reused across two very different feature areas, another data point for the "these small helpers are more generic than their call sites suggest" pattern already noted in items 27.14/27.21 above) — then, if a real (non-absent) argument was actually given, reads it as a boolean and forwards it; otherwise defaults to true. Forwards to 0x007027b0(bool). No hidden arguments — clean, exact match to the decompiled shape.
+
+**Side effects/subsystem:** starts a new Xbox-Live-style online co-op session, with the boolean most plausibly a "publicly joinable" flag. **[CONFIRMED — disassembly, full body, clean argument-presence gating; OPEN — 0x00d2f540/0x007027b0's own internal bodies.]**
+
+### 27.24 `game_coop_start_new_syslink` (0x00842640) — same registrar
+
+**A direct, confirmed structural sibling of item 27.23 — byte-for-byte identical control-flow shape, differing only in which two helper addresses it calls.** Same 1-optional-boolean-default-true argument shape; unconditionally calls a zero-argument helper 0x00d34d40 (in the same syslink-prefixed address neighborhood as the already-documented syslink helpers 0x00d34cf0/§23.11 and 0x00d34dd0/item 27.13 above — a fourth member of that loose "0xd34xxx = syslink" cluster), then forwards the boolean to 0x007027d0 (the syslink-flavored sibling of item 27.23's 0x007027b0).
+
+**Side effects/subsystem:** the system-link (LAN) counterpart of `game_coop_start_new_live` (item 27.23). **[CONFIRMED — disassembly, full body, structural match to item 27.23 confirmed instruction-for-instruction; OPEN — 0x00d34d40/0x007027d0's own internal bodies.]**
+
+### 27.25 `game_get_in_progress_type` (0x008447b0) — same registrar
+
+**Arguments:** none (same dropped-`lua_State`-argument rendering quirk on the `lua_gettop` call as item 27.16, not a new finding). **Return:** 1 number.
+
+**Body:** trivial passthrough of a zero-argument query, 0x006ced00(), pushed as a number. The int-to-double conversion sequence around the push is the ordinary FPU-value-reservation idiom already established at §23.22, not a hidden argument.
+
+**Side effects/subsystem:** none (pure query) — reports the current session's "in progress" (co-op/session) type enum. **[CONFIRMED — disassembly, full 12-instruction body.]**
+
+### 27.26 Cross-function observations
+
+1. **A recurring, now heavily-reconfirmed decompiler caution: a displayed "thunk" call label is not proof of the real call target.** This tranche alone adds FIVE new confirmed instances on top of this document's existing two (§23.13, §23.7): items 27.18/27.19 resolve a tight, 16-byte-spaced family of platform-state accessors (0x0086fdd0 = signed-in, 0x0086fde0 = connected-to-service [already established, §23.13], 0x0086fdf0 = connected-to-network), and item 27.20 resolves a completely separate mismatch (real target 0x009ed510, an async-callback-register call). Always check the literal disassembled `CALL` operand before trusting a decompiler-displayed thunk label.
+2. **The small 0x0101b4a0–0x0101bac0 platform-helper cluster is touched by FIVE different addresses across THREE unrelated feature areas this pass alone** (network invites, coop gamercard/friendly-fire, and — via two already-established cross-references, §8.21 zscene streaming and §13.24 crib UI — completely unrelated subsystems too). Strong circumstantial evidence this is a small family of generic platform-SDK wrapper calls rather than anything feature-specific; worth a dedicated resolution pass.
+3. **Two more addresses (0x00d2f540, item 27.23; 0x00458230/0x031d152c, item 27.5) are independently confirmed reused across unrelated feature areas** within this document's existing citations (0x00d2f540 also at §8.12's camera-restriction code; 0x00458230/0x031d152c already tracked since §9.2, reused at §23.10, reused again here) — consistent with this document's broader pattern of a fairly small set of generic context-resolution/state-transition primitives serving many different Lua-facing features.
+4. **The 0x00e0xxxx builder/named-callback family (fully characterized at §26.23) gains a newly-observed 9th member, 0x00e0cef0(targetPointer, builderHandle) → boolean** (item 27.11), and its already-known stale-stack-slot-argument quirk on 0x00e0ca80 (documented at §26.23's own footnote) is independently reconfirmed at a different call site in a different function (item 27.11) — the decompiler mis-attributes two leftover zero arguments to the immediately-preceding zero-argument accessor call instead of to the real consumer one call later, the same misattribution class §26.2 first flagged.
+5. **A second, cleanly self-consistent example of a "setter/getter pair share an inverted internal enum rotation" idiom** (items 27.15/27.16, `game_set_coop_friendly_fire`/`game_get_coop_friendly_fire`) — independently verified by reading and composing both functions' own branch tables, not assumed from the names alone.
+6. **A confirmed hardcoded complete no-op stub** (item 27.17, `game_send_party_invites` — no argument read beyond the boilerplate, no other call at all), joining the recurring "plausible name, does nothing" pattern (§26.3/§26.8/§19.8).
+7. **Two further, genuinely confirmed hidden-`this`-pointer cases inside the small `"completion_screen"`-context family** (items 27.3/27.4), on two different callees (0x00877ca0, 0x008788e0) — both dropped entirely from the decompiled pseudocode's own rendering, not merely a dropped stack argument. Item 27.4's callee, 0x008788e0, is the SAME address §2.10 already cites without mentioning any implicit `this` — flagged as an open question (unremarked hidden `this` at that older site, vs. a second instance of the open "identical-code-folding" hypothesis for shared addresses with genuinely different real call shapes, §23.23).
+8. **New globals pinned this pass:** 0x02282282 (a third member of the already-tracked completion-screen flag cluster alongside 0x02282281/0x02282283); 0x014a1d1c (a third member of the garage "selected/preview vehicle" cluster alongside 0x014a1d28/0x014a1d2c, §23.10); 0x01300b88 ("is Standard camera preset active"); 0x01301124 ("current text-adventure screen index"); 0x0224244c ("coop lobby finished"); 0x02297c80 ("has seen display-calibration screen"); 0x02317b34 (a second member of the §23.15 "cached +0x14 field" idiom, alongside that section's own 0x02317b68); and a new list-anchor pair, 0x02282d10/0x02282d14, on the already-established dialog-slot record array (0x02282d40, §23.18).
+9. **Two genuinely new hidden/dropped-argument mechanisms confirmed again this pass, both matching mechanism classes this document already tracks rather than introducing a new one:** a hidden-ECX stack-buffer pointer (item 27.5, matching §23.8's convention) and a stale-stack-slot reuse that the decompiler reconstructs CORRECTLY without needing correction (item 27.5's second call) — worth noting as a case where this exact mechanism does NOT fool the decompiler, alongside the already-documented cases where it does (§26.2, and item 27.11 above).
+
+## 28. Ranks 551-650 tranche, part C — 25 gameplay-cluster functions (2026-09-30)
+
+Third part of the fresh four-part "ranks 551-650" tranche's own gameplay side (Part C). Addresses resolved from `tools/scratchpad/lua_gameplay_1014_raw_pairs.txt` (12 of the 25 needed a force-disassemble+function-boundary fix). Every function below opens with the document's already-established shared `lua_CFunction` prologue — cited, not re-described per item.
+
+### 28.1 `helicopter_set_dont_death_spiral` (0x00a4cc40)
+
+**Arguments:** 1 mandatory string (vehicle/helicopter reference). 1 mandatory boolean, no nil-gate.
+
+**Return:** none.
+
+**Body:** resolves via the dedicated vehicle resolver 0x00a281e0 (§4.5). On success, calls 0x00b37740(vehicle, boolean). **Raw-disassembly note (a fresh, confirmed instance of the "argument delivered via a stale stack slot" idiom WALLS.md flags as a newer finding):** the boolean argument is not re-loaded from a register at the call site — it reaches 0x00b37740 by reading back a stack slot that the earlier `lua_toboolean` result was written into several instructions before, left un-cleaned by the intervening resolver call. The decompiled pseudocode's rendering is nonetheless numerically correct here (no hidden-argument correction needed) — this is a "confirmed, harmless instance" of the idiom, not a correction.
+
+**Side effects/subsystem:** sets a per-vehicle "don't death-spiral" flag on a resolved helicopter via 0x00b37740(vehicle, flag) — presumably suppresses the scripted/physics death-spiral behavior on heli destruction. **[CONFIRMED — disassembly, full chain; OPEN — 0x00b37740's own internals.]**
+
+### 28.2 `helicopter_fly_to_set_goal_direction` (0x00a4fa80)
+
+**Arguments:** 1 mandatory string (helicopter reference). 1 mandatory string (target reference, may resolve as a named object OR be absent-handled via arg 3's presence). 1 optional boolean, standard `lua_type`-gated idiom (checked only if enough args are present) — a "use direct offset" mode selector.
+
+**Return:** none.
+
+**Body:** resolves arg 1 via the vehicle resolver 0x00a281e0, then gates on the same helicopter-qualification predicate already established at §12.11 (0x00ad31a0). On success: initializes a local 3-float buffer from three fixed default-position constants (0x029cdb98/0x029cdb9c/0x029cdba0), then calls 0x00da4130 — **already established at §22.4 as an orientation-record copier whose signature is (this = destination buffer, source = an object's own +0x4c)** — with a genuine, newly-confirmed variant: raw disassembly shows this call is a HIDDEN-`this` thiscall (this = the address of the local 3-float buffer just initialized), with its one explicit argument being the literal address 0x01321400 rather than a live object's +0x4c field. This is a real extension of 0x00da4130's documented role: **0x01321400 is the SAME fixed constant block already independently established at §20.24 as part of 0x00a455a0's own internal fixed-transform fallback path** — confirming, from a second, unrelated caller, that 0x01321400 is a genuinely reused default-orientation/transform constant, not coincidence.
+
+Then resolves the target via 0x00a455a0 (already richly documented at §1.12/§4.2/§20.24 as a shared position-lookup helper) — confirmed here with its already-established 3-explicit-argument shape (target name, a 12-byte position-output buffer, a 36-byte extra-output buffer), no hidden `this`. On success, dispatches to 0x00b3f6d0(helicopter, x, y, z) — confirmed via raw disassembly to be a plain 4-explicit-argument cdecl call (helicopter handle passed as a genuine stack argument, not a hidden receiver) — either the raw resolved-target offset triple (if the boolean mode is set) or the delta between the resolved target's position and the helicopter's own +0x40/+0x44/+0x48 fields (otherwise).
+
+**Side effects/subsystem:** sets a helicopter's own "fly-to" goal direction, either as an absolute resolved-target offset or as a computed delta from the helicopter's current position, after first priming a local default-position buffer via the same fixed-transform-constant mechanism (0x01321400) §20.24 already tracks. Subsystem: vehicle AI/pathfinding (helicopter). **[CONFIRMED — disassembly, full chain, including the 0x00da4130/0x01321400 cross-reference and the clean 0x00b3f6d0 4-arg check; OPEN — 0x00b3f6d0/0x00ad31a0's own full internals.]**
+
+### 28.3 `hdr_bloom_set_multiplier` (0x00a4cab0)
+
+**Arguments:** 1 mandatory number, no nil-gate.
+
+**Return:** none.
+
+**Body:** the rounded/converted float is forwarded, via a clean single-float cdecl call (raw-disassembly-confirmed, no hidden this), to 0x005dcee0.
+
+**Side effects/subsystem:** sets a global HDR bloom multiplier via 0x005dcee0(float) — a bare, no-resolver, no-gate global setter. **[CONFIRMED — disassembly, full body; OPEN — 0x005dcee0's own internal target.]**
+
+### 28.4 `guardian_angel_enable_indicators` (0x00a4ab80)
+
+**Arguments:** 1 mandatory boolean, no nil-gate, no name argument at all.
+
+**Return:** none.
+
+**Body:** the boolean is forwarded, via a clean single-argument cdecl call (no hidden this), to 0x00626210.
+
+**Side effects/subsystem:** a bare global "guardian angel indicators enabled" toggle — same no-resolver, no-target shape already catalogued for several other bare boolean setters in this document (e.g. §25.28's `npc_drop_grenades` class). **[CONFIRMED — disassembly, full body; OPEN — 0x00626210's own internal target.]**
+
+### 28.5 `group_get_next_npc` (0x00a4c590)
+
+**Arguments:** 1 mandatory string (script-group name). 1 mandatory string (current-NPC character name).
+
+**Return:** 1 Lua value (string, the next NPC's name) or nothing pushed on failure (falls through returning the `lua_gettop`-derived 0/1 flag; only the success path pushes).
+
+**Body:** arg 1 resolves via the "guardian angel"/script-group resolver 0x005eab60 (§6.6/§6.8/§25.16) — **raw-disassembly re-confirms this resolver is invoked as a method on the shared singleton 0x02442750** (a further sighting, joining §25.16's own). Liveness-gated (0x00853b10). Arg 2 resolves via the plain character resolver 0x005e4dd0 — **also re-confirmed here as a method on the SAME singleton 0x02442750** (a further sighting, joining §25.14/§25.28). Liveness-gated. On success: reads the resolved character's own +0x9c field ("next in group" pointer); if it is non-null AND does not equal the resolved group's own +0x40 field (the group's member-list head — establishing a circular-list wraparound stop condition), pushes the name string read from that next-pointer's own +0x18 field and returns 1; otherwise returns 0 with nothing pushed.
+
+**Side effects/subsystem:** none (pure query) — walks a script-group's own circular member list starting from a given current NPC (character+0x9c = "next" link), stopping at the group's own head (group record+0x40), returning the next member's name (via a name-field convention at +0x18 shared with item 28.6 below). Subsystem: AI/ambient scripting (escort/backup groups). **[CONFIRMED — disassembly, full chain, including both singleton re-confirmations; no hidden-argument corrections beyond the already-established singleton-this pattern.]**
+
+### 28.6 `group_get_first_npc` (0x00a4c520)
+
+**Arguments:** 1 mandatory string (script-group name).
+
+**Return:** 1 Lua value (string, the first NPC's name) or nothing pushed on failure.
+
+**Body:** resolves via the SAME 0x005eab60 resolver, re-confirmed here too as a method on singleton 0x02442750. Liveness-gated. On success, if the group's own +0x40 field (member-list head) is non-null, pushes the name string at that head's own +0x18 field and returns 1; else returns 0. **Raw-disassembly note:** an extra register push appears immediately before the resolver call in the disassembly, but it is confirmed to be an unrelated, deferred callee-saved-register preservation (the compiler saving the caller's original register value for later restore, scheduled adjacent to the call by coincidence) — NOT a second argument to the resolver; this reading is independently confirmed by comparing against item 28.5's own call to the identical resolver, which shows exactly one pushed argument with no such extra push.
+
+**Side effects/subsystem:** none (pure query) — returns a script-group's first member's name via the same group+0x40→+0x18 convention item 28.5 establishes reading the OTHER direction. Subsystem: AI/ambient scripting. **[CONFIRMED — disassembly, full chain; the register-push non-argument reading is cross-checked against item 28.5, not merely assumed.]**
+
+### 28.7 `get_num_humans_in_trigger` (0x00a4c0c0)
+
+**Arguments:** 1 mandatory string (trigger name).
+
+**Return:** 1 number (count of matching humans), always pushed.
+
+**Body:** resolves via the trigger resolver 0x005e4e30 (§24.14), re-confirmed here as a method on singleton 0x02442750. Liveness-gated. **Two decompiler-rendering artifacts confirmed, matching this document's already-flagged class (§25.12/§25.25): the top-level `lua_gettop` call, and the liveness check on the resolved trigger handle, are BOTH rendered by the decompiler with zero visible arguments, while raw disassembly confirms each genuinely receives its one real argument (the Lua state, and the trigger handle, respectively) — harmless rendering quirks, not real argument drops.**
+
+On success: calls the trigger's own vtable+0x58 slot (thiscall, this = trigger handle, 2 explicit output-buffer-pointer arguments) to fill two local buffers, then passes them plus fixed literals (32, 47, 0, 0) to 0x0075d4b0, which returns a count and fills an array of up to 32 id-pairs (8 bytes each — matching the literal 32 bound exactly). For each returned id-pair: resolves it via 0x00458230 against kind-tag 0x031d152c on the DISTINCT singleton 0x024433a8 — **re-confirming the exact §24.5 family (id-pair resolver + kind-tag + singleton) from a fresh, independent consumer.** Gates on capability bit 0x10 (clear) at +0x33 and a kind-descriptor bit 0x1 at row-offset +0xa of table 0x02cc9900. **A confirmed decompiler FALSE POSITIVE:** the liveness check on this candidate is rendered in pseudocode with an apparent 2nd argument (built from decompiler-invented "unaffected register" placeholders); raw disassembly proves the real call passes exactly ONE argument (the candidate handle) — the 2nd "argument" is pure decompiler noise, joining this document's already-documented class of such artifacts (§24.6 item 3). **A genuine, confirmed hidden-`this` finding:** the final containment test, rendered in pseudocode as a plain 1-argument call taking the candidate's own +0x40-offset pointer, is proven by raw disassembly to be a thiscall with `this` = the OUTER resolved trigger handle (not the candidate) and one explicit argument = the candidate's own +0x40-offset pointer — the pseudocode completely drops the trigger receiver. On a pass, increments a counter; the final count is pushed as the Lua return value.
+
+**Side effects/subsystem:** none (pure query) — counts how many of a category-filtered set of nearby objects (category literal 47, plausibly "human," matching the function's own name — not independently proven) fall inside a resolved trigger volume, via a genuine hidden-`this` containment test on the trigger itself. Subsystem: trigger volume / occupancy query. **[CONFIRMED — disassembly for the whole chain, including the hidden-`this` correction, the false-positive-argument correction, and two decompiler-rendering artifacts; OPEN — the exact real-world meaning of the category literal 47 and 0x0075d4b0/vtable+0x58's own internals.]**
+
+### 28.8 `get_char_vehicle_is_in_air` (0x00a4b160)
+
+**Arguments:** 1 mandatory string (character reference).
+
+**Return:** 1 boolean, via `lua_pushboolean` — always exactly 1 value.
+
+**Body:** resolves via the generic/`"#PLAYER#"` chain 0x00a281a0. On success, reads the SAME cached "active vehicle" id-pair already established at §24.5 (character's own +0x16c0/+0x16c4), resolves it via 0x00458230 against kind-tag 0x031d152c on singleton 0x024433a8 (a further, independent re-confirmation of the exact §24.5 family). Gates on capability bit 0x10 clear at +0x33 AND a kind-descriptor bit 0x80 at row-offset +6 of table 0x02cc9900 — the SAME class of descriptor check §24.5 already establishes (there at a different consuming bit). Liveness-gated (0x00853b10), then queries 0x00ad4040(vehicle) — a plain, clean single-argument cdecl call, no hidden this (a genuine "vehicle in air" predicate, distinct from the already-documented +0xc8-byte "in water" check at §24.7's 0x00ad3370).
+
+**Side effects/subsystem:** none (pure query) — reports whether a resolved character's cached active vehicle is currently airborne, reached via the exact §24.5 id-pair/singleton/kind-tag mechanism, re-confirmed from a second independent consumer. Subsystem: vehicle physics/character-vehicle linkage. **[CONFIRMED — disassembly, full chain, no hidden-argument corrections — a clean negative check.]**
+
+### 28.9 `effect_play_finisher` (0x00a48da0)
+
+**Arguments:** 1 mandatory string (effect name). 1 optional number (a height/Z offset, standard nil-gated idiom via `lua_type`, default 0.0). 1 further optional number/selector — **raw-disassembly-confirmed the decompiled "4.2039e-45" default is NOT a genuine small float: it is the raw bit pattern for the plain integer 3, mistyped by the decompiler as a denormal float literal** (confirmed by reading the actual instruction, which moves the literal dword value 3, not any float encoding, into that slot).
+
+**Return:** none.
+
+**Body — an unusually dense cluster of decompiler-dropped-explicit-argument findings (4 separate instances in one function, all of the "real argument silently missing from the pseudocode rendering" class §24.22/§24.29 already flags, none of them a `this`-pointer case):**
+1. The top-level `lua_gettop` call is rendered with zero arguments; raw disassembly confirms the Lua state is genuinely pushed (the same rendering artifact as items 28.7/28.21 above).
+2. A zero-argument predicate 0x005bc5d0 selects between two fixed string-literal addresses (0x0116e190 or 0x0116e184 — contents not independently read this pass, OPEN) which are then passed to 0x005c50b0 (already established at §9.1/§12.10/§12.12 as an "allocate an effect-instance slot, sentinel -1 on exhaustion" helper) — **the pseudocode renders this call with ZERO arguments, but raw disassembly proves the selected string-literal address IS pushed as a genuine explicit argument**, meaningfully refining 0x005c50b0's own established signature (it is name/string-keyed, not the bare parameterless slot-allocator the existing citations imply).
+3. On the success path, 0x00a45800 — **already established at §12.10/§25.23 as taking the effect/target name as an explicit argument, with no liveness check afterward** — is rendered here with zero visible arguments; raw disassembly confirms the effect-name string (spilled through a local stack slot) IS genuinely passed, and confirms the already-documented "no subsequent liveness check" structural quirk holds here too.
+4. The finalizer 0x005cf190 (already established at §9.1/§12.10/§12.12 as a shared packer) is rendered with zero arguments; raw disassembly proves a genuine explicit pointer argument (the address of a local stack buffer) IS pushed.
+
+Beyond these four, a fifth call — to a not-yet-catalogued function 0x0052a940, passed the resolved effect-anchor's own +0x4c sub-struct pointer, a local position/height buffer, and the string-selected literal (0x0116e190/0x0116e184's result) as its three visible pseudocode arguments — is **confirmed via raw disassembly to ALSO receive a hidden `this`: a 4th value, loaded into the thiscall register as the address of a local stack buffer distinct from either of the two buffer pointers already accounted for in the visible arguments, set immediately before the call.** The pseudocode drops this receiver entirely.
+
+The final dispatch, 0x00a48af0(&localBuffer, luaState), is confirmed via raw disassembly to be a clean 2-explicit-argument cdecl call exactly matching the pseudocode, no hidden this.
+
+**Side effects/subsystem:** plays a named "finisher" effect anchored to a resolved effect-target object (via 0x00a45800, gated on class-descriptor bit 0x2 at row-offset +6 of table 0x02cc9900 — matching the already-established bit/offset several other effect functions in this document use), packing a height offset and the integer-3-or-selector value, dispatched through the same shared finalizer/apply pair (0x005cf190→0x00a48af0) already established for `effect_play`/`effect_play_on_script_object`/`effect_play_on_human` (§9.1/§12.10/§12.12). Subsystem: effects/finisher animation. **[CONFIRMED — disassembly for the whole chain, the float-mistyping correction, and all five dropped/hidden-argument findings; OPEN — the contents of the two string literals 0x0116e190/0x0116e184, and 0x0052a940/0x005bc5d0's own full internals.]**
+
+### 28.10 `dlc3_m03_set_sprint_waning` (0x00a46fd0)
+
+**Arguments:** 1 mandatory boolean, no nil-gate, no name argument.
+
+**Return:** none.
+
+**Body:** the boolean is forwarded via a clean single-argument cdecl call (no hidden this) to 0x009db820.
+
+**Side effects/subsystem:** a bare global "DLC3 Mission 03 sprint waning" flag — same no-resolver, no-target shape as item 28.4. Subsystem: DLC3/mission-scripted state. **[CONFIRMED — disassembly, full body; OPEN — 0x009db820's own internal target.]**
+
+### 28.11 `debris_flow_recycle_object` (0x00a47fd0)
+
+**Arguments:** 1 mandatory number (debris-flow id, rounded via the established pair §4.1), no nil-gate. 1 mandatory string (object reference name).
+
+**Return:** none.
+
+**Body:** the object name resolves via 0x00a3de90 — **already established at §15.22/§25.22, re-confirmed here as a method on singleton 0x02442750 from a further, independent (second) consumer.** Liveness-gated. On success, passes the debris-flow id plus the resolved object's own +8/+0xc position pair (the SAME convention §1.10/§4.3/§25.22 already establish) to 0x006fd8b0 — confirmed via raw disassembly to be a clean 3-explicit-argument cdecl call, no hidden this, matching the pseudocode exactly.
+
+**Side effects/subsystem:** removes a named world object from a debris-flow instance's own avoid/tracking list — the mirror operation of the already-documented `debris_flow_add_avoid_object` (§25.22), sharing its exact resolver and position-pair convention. Subsystem: debris-flow/particle effects. **[CONFIRMED — disassembly, full chain, no hidden-argument corrections found.]**
+
+### 28.12 `customization_restore_player_rig` (0x00a43c30)
+
+**Arguments:** 1 optional number (a player-selector bitmask), standard nil-gated idiom, default 3 (both bits set).
+
+**Return:** none.
+
+**Body:** if bit 0 of the bitmask is set: fetches the local player-1 rig context via a zero-argument getter 0x009da4e0 (raw-disassembly-confirmed genuinely zero-argument), reads its own +0xa41 byte ("is female" — value 1 = female, else male), and calls 0x009e3400(rigHandle, filenameString, resourcePointer, 0) with the gender-appropriate pair of fixed string-literal/resource addresses (0x011259c4/"cf_body.rig" + 0x011259d0 for female; 0x011259b0/"cm_body.rig" + 0x011259bc for male) — confirmed via raw disassembly to be a clean 4-explicit-argument cdecl call, no hidden this. If bit 1 is set: performs the identical gender check and 0x009e3400 call, but against a second/co-op player rig context (fetched via a DIFFERENT zero-argument getter, 0x009df3d0, called twice — once to check existence, once to re-fetch — an odd but confirmed-real double-call pattern, not a decompiler artifact).
+
+**Side effects/subsystem:** restores one or both local players' body rig to the gender-appropriate default file ("cf_body.rig" for female, "cm_body.rig" for male) via a shared rig-load helper 0x009e3400. Subsystem: character customization/rig. **[CONFIRMED — disassembly, full chain, fully clean — no hidden-argument corrections found anywhere in this function; the +0xa41 "gender" byte field is independently re-confirmed by item 28.21's own dedicated query below.]**
+
+### 28.13 `crib_weapon_add_enable` (0x00a42c20)
+
+**Arguments:** none consumed (the `lua_gettop` result is read but never used).
+
+**Return:** none.
+
+**Body:** calls the shared setter, 0x005ee6f0, with the fixed literal 1. Raw-disassembly-confirmed clean, single-literal-argument cdecl call, no hidden this.
+
+**Side effects/subsystem:** the enable half of a global "can add weapons to crib storage" flag via 0x005ee6f0(bool). Subsystem: crib/weapon-locker progression. **[CONFIRMED — disassembly, full body; OPEN — 0x005ee6f0's own internal target.]**
+
+### 28.14 `crib_weapon_add_disable` (0x00a42c40)
+
+**Arguments:** none consumed. **Return:** none.
+
+**Body:** calls the SAME shared setter as item 28.13, 0x005ee6f0, with the fixed literal 0. Raw-disassembly-confirmed clean, single-literal cdecl call, no hidden this.
+
+**Side effects/subsystem:** the disable half of the same flag item 28.13 sets. **[CONFIRMED — disassembly, full body.]**
+
+### 28.15 `crib_unlock_strongold` (0x00a46500)
+
+**Arguments:** 1 mandatory string (stronghold/crib name — note the function's own in-binary name is "strongold," not "stronghold").
+
+**Return:** none.
+
+**Body:** resolves via 0x0071f0d0 — **a NEW confirmed member of the shared singleton-0x02442750 resolver family** (raw-disassembly-confirmed thiscall against 0x02442750), not previously catalogued in this document's sampled sections. Liveness-gated (0x00853b10). **A genuine, confirmed hidden-`this` finding:** the dispatch call, rendered in pseudocode as a bare parameterless call, is proven by raw disassembly to be a thiscall with `this` = the resolved stronghold handle and ZERO explicit stack arguments, via 0x005f1cc0.
+
+**Side effects/subsystem:** unlocks a named stronghold/crib location. Subsystem: crib/stronghold unlock progression. **[CONFIRMED — disassembly, full chain, including the hidden-`this` correction and the new resolver-family sighting; OPEN — 0x005f1cc0's own internals.]**
+
+### 28.16 `continuous_explosion_start` (0x00a46340)
+
+**Arguments:** 2 mandatory strings — arg 1 a continuous-explosion type/definition name, arg 2 a target/position reference name.
+
+**Return:** none.
+
+**Body:** arg 1 resolves via 0x005eb390 — **raw-disassembly-confirmed to be a PLAIN cdecl call (one explicit string argument, NO singleton `this`)** — a genuine, useful negative: this resolver is NOT a member of the shared 0x02442750 family, consistent with being its own dedicated continuous-explosion-definition table. On success, arg 2 resolves via 0x00a455a0 — **confirmed, via raw disassembly, to take the exact same 3-argument shape (name, 12-byte position-output buffer, 36-byte extra-output buffer) already established at §1.12/§4.2/§20.24, and now independently re-confirmed from a SECOND Lua entry point in this same tranche (item 28.2 above), strengthening its already-documented signature.** On success, dispatches to 0x005eb6c0(explosionInstance, x, y, z) — confirmed via raw disassembly to be a clean 4-explicit-argument cdecl call (instance handle passed as a genuine stack argument, not a hidden receiver), matching the pseudocode exactly.
+
+**Side effects/subsystem:** starts a named continuous-explosion effect instance at a named target's resolved position. Subsystem: continuous-explosion/particle effects — directly related to the already-documented `continuous_explosion_follow_target_add` (§25.23). **[CONFIRMED — disassembly, full chain, including the clean resolver negative and the 0x00a455a0 cross-tranche re-confirmation; OPEN — 0x005eb390/0x005eb6c0's own internals.]**
+
+### 28.17 `clear_callbacks_for_obj` (0x00a46020)
+
+**Arguments:** 1 mandatory string (object reference name, any kind).
+
+**Return:** none.
+
+**Body — the richest single function in this tranche for the named-hook-slot-array family, with SEVEN confirmed hidden-`this` findings:** first tries the generic resolver 0x00a280c0 (confirmed clean, plain 2-argument call, no singleton — consistent with this resolver family's established negative per §25.29 item 1). If it succeeds: clears callbacks at that handle's own +0x1f00 base (the already-established hook-array base, §24.20/§24.23/§24.25) via a NEW sibling wrapper, 0x009e19b0 — **raw-disassembly-confirmed hidden `this` = handle+0x1f00, zero explicit stack arguments** — and returns.
+
+Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on singleton 0x02442750). Liveness-gated. Then branches on TWO kind-descriptor bits at row-offset +0xb of table 0x02cc9900: bit 0x4 → clears at that SAME resolved handle's own +0xf8 (the already-established character sub-record base, §24.21/§24.25) via 0x00a33da0 (**confirmed hidden `this` = handle+0xf8, zero explicit args**); bit 0x8 → clears at handle+0xb0 (**a BRAND-NEW hook-array base, confirmed hidden `this`**) via 0x00a3a210. If NEITHER bit is set, tries four further per-kind sub-object getters in sequence on the SAME resolved handle — 0x00807930, 0x00a27100, 0x00a29c40, 0x006fc2b0 (all four confirmed clean, plain single-argument cdecl calls, no hidden this on the getters themselves) — and for whichever ONE returns non-null, clears callbacks at THAT sub-object's own +0xf8 / +0xc0 / +0x98 / +0x90 respectively, via 0x00a44fa0 / 0x00a2d990 / 0x00a44fa0 / 0x00a31210 (**all four confirmed hidden-`this` findings** — note +0xc0 re-confirms the already-established base per §24.29 item 4, while +0xb0/+0x98/+0x90 are BRAND-NEW hook-array bases, and 0x00a44fa0 is confirmed as a further sibling wrapper of the family, used at TWO different bases in this one function).
+
+**Side effects/subsystem:** the generic "remove all registered Lua callbacks for this named object" dispatcher — routes to whichever hook-array base/wrapper convention applies depending on the resolved object's own kind, extending the named-hook-slot-array family's confirmed base census with THREE brand-new bases this pass (+0xb0, +0x98, +0x90) and a further sibling wrapper (0x009e19b0, alongside the already-known 0x005e4660/0x00a56df0/0x00a33da0/0x00a3a210/0x00a2d990/0x00a31210/0x00a44fa0). Subsystem: scripted-callback/event-hook management, cross-cutting all hookable object kinds. **[CONFIRMED — disassembly for the entire dispatch structure and all seven hidden-`this` findings; OPEN — the exact real-world "kind" each of the four getters (0x00807930/0x00a27100/0x00a29c40/0x006fc2b0) selects, beyond their already-partial characterization at §10.5/§17.1's own citations.]**
+
+### 28.18 `city_zone_swap_is_active` (0x00a42a60)
+
+**Arguments:** 1 mandatory string (city-zone/pair name).
+
+**Return:** 1 boolean, via `lua_pushboolean`.
+
+**Body:** the name is hashed via 0x00d9e8b0 — the same general-purpose name-hash primitive already extensively established project-wide (§1.9 area, §8, §9) — called here with the already-established literal shape (name, 0, -1), matching EXACTLY the call shape the sibling setter `city_zone_swap` (§1.9) is already documented as using for its own "bookkeeping call." **A genuinely new refinement confirmed via raw disassembly here: a 4th, hidden argument is ALSO passed — the address of a local 4-byte stack buffer, loaded into the receiver register immediately before the call — and that SAME buffer is the one immediately forwarded, unmodified, as the sole argument to the following lookup call, 0x0084a7c0.** This strongly suggests 0x00d9e8b0 writes its computed hash into this caller-supplied buffer as an output parameter, on top of (or instead of) any value it returns via the accumulator register — a fuller signature than any of this primitive's existing citations capture. (Flagged for cross-check against `city_zone_swap`'s own §1.9 call site, to see whether the identical buffer-consumption pattern is present there too, since that citation's own text doesn't mention a 4th argument.) 0x0084a7c0(&buffer) then returns the boolean pushed to Lua.
+
+**Side effects/subsystem:** none (pure query) — looks up whether a named city-zone swap is currently active, via the hashed-name lookup 0x0084a7c0. Subsystem: city zone-swap/streaming state — the read-side counterpart to the already-documented `city_zone_swap` setter (§1.9). **[CONFIRMED — disassembly, full chain, including the new hidden 4th-argument/output-buffer finding on 0x00d9e8b0; OPEN — 0x0084a7c0's own internals, and whether §1.9's own call site shares the same 4th argument.]**
+
+### 28.19 `character_set_counter_on_grabbed` (0x00a421a0)
+
+**Arguments:** 1 mandatory string (character reference). 1 mandatory boolean, no nil-gate.
+
+**Return:** none.
+
+**Body:** resolves via the generic/`"#PLAYER#"` chain 0x00a281a0. **A genuine, confirmed hidden-`this` finding, delivered via a stale stack slot for the boolean (the same newer idiom class WALLS.md flags):** the pseudocode renders the dispatch as a bare 1-argument free call; raw disassembly proves the real call is a thiscall with `this` = the resolved character handle and one explicit stack argument = the boolean (read back from a stack slot written earlier, not a live register) — via 0x00947720.
+
+**Side effects/subsystem:** toggles a per-character "counter on grabbed" flag directly on the resolved character — this is almost certainly a further sibling of the "human_force_flags"-style family already established at §20.26/§20.27 (`character_set_only_scripted_grabs`/`character_set_counter_on_grabbed_by_player`, which set adjacent bits 0x2000000/0x4000000 of the SAME +0x1c98 flags field via the identical double-gate template), though 0x00947720's own internal double-gate structure and exact bit were NOT independently decompiled this pass (budget) — flagged as HIGH CONFIDENCE for the family membership, OPEN for the exact bit/tag-pair. Subsystem: character/combat state. **[CONFIRMED — disassembly for the hidden-`this`/stale-stack-slot correction; HIGH CONFIDENCE — family membership inferred from the name/resolver/argument-shape match to §20.26/§20.27, not independently proven at the bit level; OPEN — 0x00947720's own body.]**
+
+### 28.20 `character_remove_child_item_by_name` (0x00a452d0)
+
+**Arguments:** 1 mandatory string (character reference). 1 mandatory string (child item name).
+
+**Return:** none.
+
+**Body:** resolves via the generic/`"#PLAYER#"` chain 0x00a281a0. On success (and if arg 2 is non-null): walks a circular linked list rooted at the character's own +0x1c field (a "children" list head), following each node's own +0x20 "next" pointer, stopping on wraparound back to the head. For each node: requires class-descriptor bit 0x40 at row-offset +9 of table 0x02cc9900 (a NEW bit/offset combination on this table), AND a liveness-style gate 0x00853b30(node, 0x1f) — **the SAME gate primitive already established at §4.7 as `0x00853b30(obj, literal)`, there cited with literal 0x1e; this is a fresh sighting with a DIFFERENT literal, 0x1f, extending the known literal-code set for this gate family.** If the node's own +0xe0 field points to a non-null name-string pointer, and a case-insensitive compare (via the standard library `stricmp`) against arg 2 matches: removes the node via 0x00853ea0(node, 0, 0) — a not-yet-catalogued destroy/detach primitive. All calls in this function raw-disassembly-confirmed clean (no hidden-`this` or dropped-argument corrections found anywhere) — a solid negative check.
+
+**Side effects/subsystem:** removes a named child item from a resolved character's own attached-children list, gated by a class-descriptor bit and the §4.7-established liveness-gate family (now with a second confirmed literal code, 0x1f). Subsystem: character/child-item attachment. **[CONFIRMED — disassembly, full chain, fully clean; new bit/offset confirmation (class-descriptor +9 bit 0x40); new literal-code sighting on the already-established 0x00853b30 gate family.]**
+
+### 28.21 `character_get_gender` (0x00a43090)
+
+**Arguments:** 1 mandatory string (character reference).
+
+**Return:** 1 number, always pushed (0 on resolve failure).
+
+**Body:** resolves via the generic/`"#PLAYER#"` chain 0x00a281a0 (plain-shape, literal 0 second argument). On success, reads and pushes the character's own +0xa41 byte as a number. **Decompiler-rendering artifact confirmed (same class as item 28.7 above): the top-level `lua_gettop` call is rendered with zero visible arguments; raw disassembly confirms the Lua state is genuinely pushed.**
+
+**Side effects/subsystem:** none (pure query) — reads a resolved character's own "gender" byte (+0xa41; 1 = female, else male) as a raw number. **This is a direct, independent re-confirmation of the exact +0xa41 field and its 1=female/else=male sense already established (within this same tranche) by item 28.12's `customization_restore_player_rig`** — closing that field's role from a second, dedicated query entry point. Subsystem: character identity. **[CONFIRMED — disassembly, full chain, fully clean.]**
+
+### 28.22 `character_evacuate_from_all_vehicles` (0x00a413d0)
+
+**Arguments:** 1 mandatory string (character reference). 1 optional boolean, standard nil-gated idiom, default `false`.
+
+**Return:** none.
+
+**Body:** resolves via the generic/`"#PLAYER#"` chain 0x00a281a0. On success, calls 0x00af3e10(character, NOT(boolean), 0) — confirmed via raw disassembly to be a clean 3-explicit-argument cdecl call (character passed as a genuine stack argument, not a hidden receiver), with the 2nd argument's sense INVERTED before being forwarded, matching this document's already-established "negated-sense boolean forwarding" convention (§3.16/§6.18/§12.9/§21.21/§25.26).
+
+**Side effects/subsystem:** forces a resolved character out of every vehicle it currently occupies, forwarding the caller's boolean in negated sense plus a fixed trailing 0. Subsystem: character/vehicle interaction. **[CONFIRMED — disassembly, full chain, no hidden-argument corrections; OPEN — 0x00af3e10's own internal meaning of the negated argument and the trailing literal.]**
+
+### 28.23 `cellphone_animate_start_do` (0x00a46550)
+
+**Arguments:** none consumed (the `lua_gettop` result is read but never used).
+
+**Return:** none.
+
+**Body:** calls 0x007e2b60 with a fixed literal argument, 0. Raw-disassembly-confirmed clean, single-literal cdecl call, no hidden this.
+
+**Side effects/subsystem:** starts a cellphone-animation state machine at a fixed initial stage (literal 0) — a genuine "takes no real Lua arguments" case, joining the already-catalogued class (§25.5/§25.21). Subsystem: cellphone UI/animation. **[CONFIRMED — disassembly, full body; OPEN — 0x007e2b60's own internal state machine.]**
+
+### 28.24 `boss_battle_matt_get_cheat` (0x00a40b10)
+
+**Arguments:** none consumed.
+
+**Return:** 1 number, always pushed.
+
+**Body:** calls a zero-argument getter, 0x005e5ad0 (raw-disassembly-confirmed genuinely zero-argument — no push before the call), and pushes its integer result as a double.
+
+**Side effects/subsystem:** none (pure query) — returns the currently-active "boss battle vs. Matt" cheat code, presumably reading from the same sentinel-global cluster §24.1 (`boss_battle_matt_cheats_stop`) already establishes (0x012ec724 through 0x012ec754). **[CONFIRMED — disassembly, full chain; OPEN — 0x005e5ad0's own internal read target.]**
+
+### 28.25 `boss_battle_matt_cheats_start` (0x00a40a10)
+
+**Arguments:** 1 optional number (a cheat-code id), standard nil-gated idiom, then floor-clamped so that any resolved value ≤ -1 collapses to exactly -1 ("no code"/default sentinel), default 0 when absent. 1 optional number, standard nil-gated idiom, default 0. 1 optional number, standard nil-gated idiom, default 0. 1 optional boolean, standard nil-gated idiom, default TRUE (an asymmetric default, joining the already-flagged pattern at §18.2/§20.26).
+
+**Return:** none.
+
+**Body:** all four (possibly-defaulted) values are forwarded to 0x005e59f0(clampedId, num2, num3, boolean) — confirmed via raw disassembly to be a clean 4-explicit-argument cdecl call, argument order exactly matching the pseudocode, no hidden this.
+
+**Side effects/subsystem:** starts the "boss battle vs. Matt" cheats subsystem — the direct start-side counterpart to the already-documented `boss_battle_matt_cheats_stop` (§24.1) — setting a cheat-code id plus two further numeric parameters and a boolean (default true). Subsystem: boss-battle scripted encounter. **[CONFIRMED — disassembly, full chain, fully clean.]**
+
+### 28.26 Cross-function observations
+
+1. **Two fresh, confirmed instances of WALLS.md's newest finding — a real explicit argument reaching a callee via a stale, not-yet-cleaned stack slot rather than a live register**: item 28.1 (`helicopter_set_dont_death_spiral`'s own dispatch to 0x00b37740, where the pseudocode is nonetheless numerically correct) and item 28.19 (`character_set_counter_on_grabbed`'s dispatch to 0x00947720, where this delivery mechanism accompanies a genuine hidden-`this` correction the pseudocode drops entirely). Confirms this idiom is a real, recurring compiled shape in this binary, independent of whether it happens to coincide with a hidden-argument bug in the pseudocode.
+2. **Seven confirmed hidden-`this` findings in a single function** (`clear_callbacks_for_obj`, item 28.17) — the densest concentration of this finding class in one function so far in this document — extending the named-hook-slot-array family's confirmed sub-record-base census with THREE brand-new bases (+0xb0, +0x98, +0x90) plus a further sibling wrapper (0x009e19b0), on top of re-confirming the already-known +0x1f00/+0xf8/+0xc0 bases from fresh consumers.
+3. **Five separate decompiler-dropped-EXPLICIT-argument findings this pass** (not `this`-pointer cases) — four of them clustered in one function (`effect_play_finisher`, item 28.9: the top-level `lua_gettop` call, the 0x005c50b0 string-literal argument, the 0x00a45800 effect-name argument, and the 0x005cf190 buffer-pointer argument) plus one further hidden-`this`-PLUS-explicit-argument combination (0x0052a940, also in item 28.9). This matches and extends this document's already-documented caution (§24.22/§24.29 item 2) that the decompiler drops real explicit arguments, not only implicit `this` pointers, and that a single function can exhibit several such drops at once.
+4. **Two confirmed decompiler-rendering artifacts of the "lua_gettop/liveness-check shown with zero arguments" class** (already established at §25.12/§25.25), freshly re-confirmed at items 28.7, 28.9, and 28.21 (four separate call sites total across three functions) — all harmless, all independently checked against raw disassembly rather than assumed.
+5. **One confirmed decompiler FALSE POSITIVE of the "apparent extra argument" class** (§24.6 item 3's own documented pattern): item 28.7's inner liveness check renders with a spurious 2nd argument built from decompiler-invented "unaffected register" placeholders; raw disassembly proves the real call takes exactly one argument.
+6. **One confirmed decompiler float-mistyping artifact, a new variant of a known class**: item 28.9's optional 3rd-argument default, rendered as the float literal "4.2039e-45," is confirmed via raw disassembly to be the raw bit pattern for the plain integer 3 — not a genuine small float at all, just the decompiler's default display convention for a dword literal stored into a float-typed slot.
+7. **A likely fuller signature confirmed for the already-extensively-documented general-purpose name-hash primitive 0x00d9e8b0**: item 28.18 (`city_zone_swap_is_active`) shows this function, at this call site, takes a 4th hidden argument — a caller-supplied local-buffer address — on top of its already-documented (name, 0, -1) explicit triple, with the buffer immediately consumed by the following lookup call. This call site's explicit triple matches EXACTLY the shape already documented for the sibling setter `city_zone_swap` (§1.9's own citation), but that citation's text does not mention a 4th argument — flagged for cross-check against whether §1.9's own call site carries the same hidden buffer or genuinely lacks it.
+8. **0x00da4130, already established at §22.4 as an orientation-record copier (this = destination, source = a live object's own +0x4c field), is confirmed here (item 28.2) to ALSO accept the fixed constant table 0x01321400 as its source** — and that exact constant address is independently, separately established at §20.24 as part of a DIFFERENT function's (0x00a455a0's) own internal fixed-transform fallback path. Two unrelated call sites converging on the same fixed address is good evidence 0x01321400 is a genuine, deliberately shared default-orientation/transform block, not a coincidental address collision.
+9. **0x00a455a0's already-richly-documented (§1.12/§4.2/§20.24) 3-argument position-lookup signature is independently re-confirmed twice more this pass**, from two different Lua entry points in this same tranche (items 28.2 and 28.16) — now confirmed from at least 5 distinct call sites across the whole document.
+10. **Two further confirmed resolver-family (singleton 0x02442750) sightings, on top of the ~10 already on record per §25.29 item 1**: 0x005eab60 and 0x005e4dd0 both re-confirmed at item 28.5; 0x00a3de90 re-confirmed at item 28.11 (second consumer); 0x00734e90 re-confirmed at item 28.17 (further consumer); and 0x0071f0d0 (item 28.15) is a BRAND-NEW confirmed member not previously catalogued in the sampled sections. A useful negative also landed: 0x005eb390 (item 28.16, the continuous-explosion-definition resolver) is confirmed to be a plain cdecl call with NO singleton `this` — not every by-name resolver in the binary belongs to this family.
+11. **The +0xa41 "gender" byte field (1 = female, else male) is established and independently cross-confirmed twice within this same tranche** — once as a WRITE-side consumer (item 28.12, `customization_restore_player_rig`, selecting which default body rig to load) and once as a dedicated READ-side query (item 28.21, `character_get_gender`) — a clean, closed pair.
+12. **Two sibling functions §18.2's own text explicitly flagged as pending ("exist further down the same TSV band for a future pass") are both closed this pass**: `boss_battle_matt_get_cheat` (item 28.24) and `boss_battle_matt_cheats_start` (item 28.25), both tying cleanly to the already-documented `boss_battle_matt_cheats_stop` (§24.1) sentinel-global cluster.
+13. **A new liveness-gate literal code confirmed for the already-established `0x00853b30(object, literal)` gate family (§4.7, there with literal 0x1e)**: item 28.20 shows a second literal, 0x1f, at the same call shape — extending the known code set for this gate.
+14. **A new class-descriptor bit/offset confirmed on table 0x02cc9900**: bit 0x40 at row-offset +9 (item 28.20, gating character child-item removal) — not previously catalogued among this table's already-tracked offsets (+6, +7, +0xa, +0xb) in the sampled sections.

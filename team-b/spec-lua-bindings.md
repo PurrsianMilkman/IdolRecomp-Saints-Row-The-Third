@@ -470,8 +470,8 @@ entry** and **all 17 of `element`'s entries** gives a consistent, fully decoded 
 |---|---|---|
 | `+0x00` | name pointer | a property name string, e.g. `render_mode`, `visible`, `mask`, `offset`, `anchor`, `tint`, `alpha`, `depth`, `mouse_depth`, `screen_size`, `screen_nw`, `screen_se`, `rotation`, `scale`, `auto_offset`, `unscaled_size`, `background` (`element`'s full 17); `screen_size` alone for `point` |
 | `+0x04` | small integer, values seen: 1, 3, 5, 6, 7, 0xd | a per-property type/size code (not decoded to specific types this pass) |
-| `+0x08` | pointer into `.text` | a **getter** trampoline (§9.3) |
-| `+0x0c` | pointer into `.text` | a **setter** trampoline (§9.3) |
+| `+0x08` | pointer into `.text` | a **setter** trampoline (§9.3) — **CORRECTED 2026-09-30, see below: originally labeled "getter," swapped with `+0x0c`** |
+| `+0x0c` | pointer into `.text` | a **getter** trampoline (§9.3) — **CORRECTED 2026-09-30, see below: originally labeled "setter," swapped with `+0x08`** |
 | `+0x10`, `+0x14` | always 0 in every record read | reserved / unused this pass |
 | `+0x18` | 0 in the static image | the name-hash cache `FUN_00e28bd0` computes and writes at first registration |
 | `+0x1c` | `0x100` or `0x000` | a flags field; `0x100` on every settable property observed, `0x000` on the four geometry-derived, apparently read-only properties (`screen_size`, `screen_nw`, `screen_se`, `unscaled_size`) |
@@ -491,12 +491,14 @@ project's current analysis state — the same situation already noted for `vint_
 slots in §3.]** The `+0x08` and `+0x0c` pointers for `render_mode`, `visible`, and `mask` (6 addresses
 total) are every one of them a tiny, near-identical thunk: guard the incoming object pointer against null,
 then forward to a **fixed slot in the target object's own vtable**, passing through its two remaining
-arguments unchanged. The getter and setter of the *same* property consistently target vtable slots exactly
-8 bytes (2 slots) apart: `render_mode` get/set = vtable `+0x34`/`+0x30`; `visible` = `+0x3c`/`+0x38`; `mask` =
+arguments unchanged. The setter and getter of the *same* property consistently target vtable slots exactly
+8 bytes (2 slots) apart: `render_mode` set/get = vtable `+0x34`/`+0x30`; `visible` = `+0x3c`/`+0x38`; `mask` =
 `+0x44`/`+0x40`. This is the confirmed shape of a compiler- or macro-generated property-accessor family: each
-named property occupies a fixed 2-slot `[set, get]` pair in the *concrete* VDO subclass's own vtable, and the
+named property occupies a fixed 2-slot `[get, set]` pair in the *concrete* VDO subclass's own vtable, and the
 property table's real job is to give that pair a Lua-visible **name**, a **type/size code**, and a
 **hash-indexed lookup** — not to hold construction/destruction logic for the type as a whole.
+
+**⚠ CORRECTION, 2026-09-30 (`.vint_doc` format bootstrap + adversarial review) — the `+0x08`/`+0x0c` get/setter labels above were SWAPPED in the original write-up, now fixed at §9.2's own table too.** The `.vint_doc` file-loading code (a genuine third consumer of this property-descriptor table beyond the two trampoline-disassembly checks that established the shape above) calls the descriptor's `+0x08` function with the freshly-parsed file value as a payload argument (`(targetObject, parsedValue, 0)`) while loading a document — i.e. `+0x08` is unambiguously the **setter**, and `+0x0c` is therefore the **getter**, the reverse of this section's own original labeling. The vtable-slot offsets/distances themselves (the "8 bytes apart" finding, and each named property's own pair of slot numbers) are unaffected by this correction — only which physical descriptor field (`+0x08` vs `+0x0c`) is the getter vs. the setter changes. See `spec-vint-doc-format.md` §5 for the file-loading call site that caught this.
 
 ### 9.4 What this settles about §5's original guess
 
