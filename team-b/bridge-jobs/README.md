@@ -19,6 +19,20 @@ python3 bridge/bridge_client.py submit team-b/bridge-jobs/<file>.json
 
 Each job was checked against `bridge/pc_agent.py`'s own `validate()` before it was committed.
 
+## Upload limits (read before trusting a missing file)
+
+The PC agent uploads each collected text file up to 4 MB and at most 24 MB per job
+(`bridge/pc_agent.py` `max_artifact_bytes` / `max_job_upload_bytes`); anything over is listed under
+`files_not_uploaded` in the result JSON, not silently lost. Checked against the tools' real output shapes
+(synthetic runs, 2026-09-30):
+- `lua_host_run` (jobs 02): every file is small except `verdict_hook_fires_detail.tsv` (~42 KB per script,
+  so ~34 MB for the 804 real scripts) — it will be skipped by design; nothing in `bridge_diff.py` needs it.
+- `ctab_census` (job 06): the constants table is written normalised and split into
+  `ctab_census_constants_NNN.tsv` parts under 3.5 MB each, so it survives the per-file limit.
+- `vintdoc_validate` (job 03): per-file TSV well under the limit; the `--dump` JSON is one document.
+- Plain-stdout validators (job 05): stdout over 64 KB is clipped inline and uploaded in full as
+  `_bridge/stepNN.stdout.txt` regardless of `collect`.
+
 ## Reading results: before/after
 
 ```
