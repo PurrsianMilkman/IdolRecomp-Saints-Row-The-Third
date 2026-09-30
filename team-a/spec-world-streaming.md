@@ -8,26 +8,36 @@
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
+**Review status summary (2026-09-30)** — adversarial desk review (`review/adv_world_streaming.md`) of 39 units (§1–§6, §7.1–§7.3, §8.1–§8.8, §9.1–§9.7, §10.1–§10.9, §11.1–§11.5): **DESK-PASS 10** (§6, §8.4, §8.6, §8.7, §9.1, §9.3, §10.1, §10.7, §10.8, §10.9); **DESK-PASS, text fixes applied 16** (§1, §3, §4, §5, §7.2, §7.3, §8.1, §8.3, §8.5, §8.8, §9.2, §9.4, §9.6, §9.7, §10.3, §10.4); **NEEDS-EXE 9** (§8.2, §9.5, §10.2, §10.5, §11.1–§11.5); **NEEDS-DATA 2** (§2, §5.1); **VALIDATED-BY-DATA 2** (§7.1, §10.6 — both on Team A's own population checks; Team B's only figure here is the tile-1018 `hN` census). A desk pass alone does not clear a unit: it means the text is internally consistent, not that it was re-derived from the executable or data; only VALIDATED-BY-DATA units are backed by a full-population run. **Awaiting the executable:** §8.2, §9.5, §10.2, §10.5, §11.1, §11.2, §11.3, §11.4, §11.5, plus the OPEN notes inside §7.2, §8.1, §9.4 (`0x27` literal) and §10.3 (cell-id composition). **Awaiting real data:** §2, §5.1, §10.2 (2× record counts), plus the OPEN notes inside §1 and §4. No content about the on-hold `.czn_pc` interior was added.
+
 ---
 
 ## 1. Overview and headline result: this is a large system, but reliability is excellent
 
-`sr3_city_0.vpp_pc` (1,502,024,767 bytes, 1,033 entries) and `sr3_city_1.vpp_pc` (2,611,376,351 bytes, 1,516 entries) together hold the entire open-world city's streamable content — terrain, props, and every named building interior/landmark. Both archives are **fully raw/uncompressed at the top level** (flags `0x0`), and — this is the headline finding, since reliability was explicitly the thing worth checking — **every nested `.str2_pc` bundle sampled this pass (tile bundles, LOD-tier bundles, and named-landmark bundles alike) is a mode-(b) shared-stream container**, meaning **all of it decodes reliably, not just first entries**, per the already-established mode-(b) guarantee (`spec-vpp-container.md` §3.6). **[CONFIRMED — empirical, every sample checked, zero exceptions.]** This is one of the largest content categories in the game, and none of it is blocked by the parked mode-(a) container limitation that has constrained several other targets.
+`sr3_city_0.vpp_pc` (1,502,024,767 bytes, 1,033 entries) and `sr3_city_1.vpp_pc` (2,611,376,351 bytes, 1,516 entries) together hold the entire open-world city's streamable content — terrain, props, and every named building interior/landmark. Both archives are **fully raw/uncompressed at the top level** (flags `0x0`), and — this is the headline finding, since reliability was explicitly the thing worth checking — **every nested `.str2_pc` bundle sampled this pass (tile bundles, LOD-tier bundles, and named-landmark bundles alike) is a mode-(b) shared-stream container**, meaning ~~**all of it decodes reliably, not just first entries**~~ **every bundle sampled decodes reliably, not just first entries** *[desk review 2026-09-30: "all of it" extrapolated from the sample; the CONFIRMED label below covers the bundles sampled]*, per the already-established mode-(b) guarantee (`spec-vpp-container.md` §3.6). **[CONFIRMED — empirical, every sample checked, zero exceptions.]** **[OPEN — desk review 2026-09-30: no full-population mode-(b) count (flags bit `0x2` of every nested `.str2_pc` in both archives) is recorded, and the entry totals 1,033 / 1,516 are not reconciled with the §2–§4 counts (see the §4 note); to be settled against real data.]** This is one of the largest content categories in the game, and none of it is blocked by the parked mode-(a) container limitation that has constrained several other targets.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (scope of "all of it" narrowed to the sample; full-population mode-(b) count still NEEDS-DATA) — desk review (not re-derived from the executable).**
 
 ## 2. The coordinate grid
 
-Most entries are named by a **4-digit zero-padded coordinate** (`CCRR` — 2-digit column, 2-digit row, e.g. `1018`, `0924`), each with an `.asm_pc` manifest and an `.str2_pc` content bundle (`1018.asm_pc` / `1018.str2_pc`). **[CONFIRMED — empirical, 360 such coordinate pairs found in `sr3_city_0.vpp_pc` alone.]** Scanning every coordinate-named entry across both archives: **columns range 03–22 (20 distinct values), rows range 01–24 (24 distinct values)** — a roughly 20×24 tile city grid. **[CONFIRMED — empirical, exact min/max across both archives.]** `sr3_city_1.vpp_pc`'s coordinate-named tiles (e.g. `2224`, `1101`) extend the same coordinate space rather than using a separate numbering scheme — the two archives are two halves of one continuous grid, not two independent ones. **[HIGH CONFIDENCE — inferred from the shared, non-overlapping-looking coordinate ranges; not independently proven via a real-world-position cross-check.]**
+Most entries are named by a **4-digit zero-padded coordinate** (`CCRR` — 2-digit column, 2-digit row, e.g. `1018`, `0924`) *(zone names may carry one marker character after the four digits — a backtick, `$`, `!`, `^` or `~`, §10.7)*, each with an `.asm_pc` manifest and an `.str2_pc` content bundle (`1018.asm_pc` / `1018.str2_pc`). **[CONFIRMED — empirical, 360 such coordinate pairs found in `sr3_city_0.vpp_pc` alone.]** **[OPEN — desk review 2026-09-30: 360 pairs each with an `.asm_pc` would need at least 360 manifests in `sr3_city_0`, but `spec-asm-format.md` §9 counts 331 there (405 in `sr3_city_1`); whether 360 counts `.str2_pc` names only, and whether the two archives' coordinate sets are disjoint (§6 item 7), are unmeasured; to be settled against real data.]** Scanning every coordinate-named entry across both archives: **columns range 03–22 (20 distinct values), rows range 01–24 (24 distinct values)** — a roughly 20×24 tile city grid. **[CONFIRMED — empirical, exact min/max across both archives.]** `sr3_city_1.vpp_pc`'s coordinate-named tiles (e.g. `2224`, `1101`) extend the same coordinate space rather than using a separate numbering scheme — the two archives are two halves of one continuous grid, not two independent ones. **[HIGH CONFIDENCE — inferred from the shared, non-overlapping-looking coordinate ranges; not independently proven via a real-world-position cross-check.]**
+
+**Review status (2026-09-30): NEEDS-DATA: 360 `sr3_city_0` pairs exceed the 331 manifests `spec-asm-format.md` §9 counts there; archive disjointness unmeasured — desk review (not re-derived from the executable).**
 
 ## 3. Per-tile content variants
 
 Beyond the plain `CCRR.str2_pc` base bundle, each coordinate can have additional sibling entries following consistent suffix conventions:
 
-- **`CCRRhN.str2_pc`** (`N` = 0–3, e.g. `1018h0.str2_pc` … `1018h3.str2_pc`) — additional content bundles per tile, **no `.asm_pc` manifest of their own**. **[CONFIRMED — empirical, naming pattern, 91 such entries in `sr3_city_0.vpp_pc`.]** Content differs meaningfully between `h0` and `h3` on the one tile checked in full — not the same props at different quality, but different specific named props entirely (e.g. `h0` held lamp posts/light fixtures/drainage pieces, `h3` held fencing/utility-tower pieces) — ~~**so "LOD tier" is a plausible but not confirmed reading; a per-tile spatial subdivision or prop-category batching reads equally well from the one sample checked.** **[HYPOTHESIS — the `h`-suffix grouping is real and consistent; its exact meaning (LOD vs. spatial vs. category split) is not determined.]**~~ **[RESOLVED 2026-09-20, agent AA — §10: `hN` is fine-grid cell N (a 2×2 quarter) of tile `CCRR`, a container of the engine kind "Zone (High LOD)" holding the full-detail LOD-0 level meshes that overlap that quarter; the tile bundle holds the `~L1` versions. It is a location, not a quality step and not a prop-category batch. The differing "named props" of h0 vs h3 are simply different quarters of the tile. Also corrected: the hN records are not manifest-less — they are records inside the parent tile's own `.asm_pc` (§10.2).]**
-- **`CCRR^<name>.asm_pc` / `.str2_pc` / `.str2_pc`+`hN`** (e.g. `1018^planecrash`, `1015^megab1`, `1015^megab2`) — a **named special set-piece or sub-area** anchored to a specific tile, getting its own manifest and its own `h0`–`h3` variants, just like a full tile. **[CONFIRMED — empirical, naming pattern; 70 base + 46 LOD-suffixed entries in `sr3_city_0.vpp_pc`.]** Names read as real, specific in-game locations (a plane-crash wreckage site, two "megab" — plausibly "mega building" — set-pieces).
+- **`CCRRhN.str2_pc`** (`N` = 0–3, e.g. `1018h0.str2_pc` … `1018h3.str2_pc`) — additional content bundles per tile, **no `.asm_pc` manifest of their own**. **[CONFIRMED — empirical, naming pattern, 91 such entries in `sr3_city_0.vpp_pc`.]** *[desk review 2026-09-30: 91 here (and 70 / 46 below) are top-level entry counts in `sr3_city_0` only; §10.2 gives manifest-record counts over both archives (422 `CCRRhN`, 129 `CCRR^name`, 421 `CCRR^nameHN`), so the two are not comparable and no per-archive split is recorded.]* Content differs meaningfully between `h0` and `h3` on the one tile checked in full — not the same props at different quality, but different specific named props entirely (e.g. `h0` held lamp posts/light fixtures/drainage pieces, `h3` held fencing/utility-tower pieces) — ~~**so "LOD tier" is a plausible but not confirmed reading; a per-tile spatial subdivision or prop-category batching reads equally well from the one sample checked.** **[HYPOTHESIS — the `h`-suffix grouping is real and consistent; its exact meaning (LOD vs. spatial vs. category split) is not determined.]**~~ **[RESOLVED 2026-09-20, agent AA — §10: `hN` is fine-grid cell N (a 2×2 quarter) of tile `CCRR`, a container of the engine kind "Zone (High LOD)" holding the full-detail LOD-0 level meshes that overlap that quarter; the tile bundle holds the `~L1` versions. It is a location, not a quality step and not a prop-category batch. The differing "named props" of h0 vs h3 are simply different quarters of the tile. Also corrected: the hN records are not manifest-less — they are records inside the parent tile's own `.asm_pc` (§10.2).]**
+- **`CCRR^<name>.asm_pc` / `.str2_pc` / `.str2_pc`+`hN`** (e.g. `1018^planecrash`, `1015^megab1`, `1015^megab2`) — a **named special set-piece or sub-area** anchored to a specific tile, getting its own manifest and its own `h0`–`h3` variants, just like a full tile. **[CONFIRMED — empirical, naming pattern; 70 base + 46 LOD-suffixed entries in `sr3_city_0.vpp_pc`.]** *[Superseded as population figures by §10.2's record counts; see the note above.]* Names read as real, specific in-game locations (a plane-crash wreckage site, two "megab" — plausibly "mega building" — set-pieces).
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (91/70/46 marked as `sr3_city_0` entry counts, superseded by §10.2's record counts) — desk review (not re-derived from the executable).**
 
 ## 4. Named landmark/interior bundles (the largest category by entry count)
 
-The majority of non-coordinate entries (512 of 673 "other" entries in `sr3_city_0.vpp_pc`) are **named building interiors and landmarks**, each with its own `.asm_pc`/`.str2_pc` pair, completely independent of the coordinate grid's naming. Real examples found: `angels_crib` (a player-owned property, 14.3 MB / 1,673 entries — by far the richest single bundle sampled), `smiling_jacks`, `sw_planetsaints`, `sw_rimjobs_1`/`_2`, `bank_m1^bank`, `int_dt_ps2`, `sbe^bridge`. **[CONFIRMED — empirical.]** A large sub-family follows a systematic `_a_<2-letter-type>_<2-letter-direction>_<NN>[_modal]` pattern (e.g. `_a_sn_nw_03_modal`, `_a_tb_sw_01`, `_a_es_ne_03_modal`) — the direction codes (`nw`/`sw`/`ne`) matching city-quadrant compass directions — consistent with a library of **reusable, procedurally-placed generic ambient building interiors**, distinct from the one-off named landmarks. ~~**[HIGH CONFIDENCE — inferred from the systematic naming; the 2-letter type codes' specific meanings were not decoded.]**~~ **[CORRECTED 2026-09-20, agent AA — §10.8: the `_a_<type>_<region>_<NN>` bundles are not generic ambient interiors; they are the zones of the game's *activity instances* (container kind "mission", zone type 6) with a `_modal` companion (kind "mission model data") holding the activity's `.xtbl` table and conversations. The second code is the hood-region group, the first code one of ten activity mechanics; the letters are not parsed by the code examined.]** Many entries (both landmark and generic) carry a `_modal` suffix — plausibly marking an interior that's loaded as a self-contained instanced space (entering swaps to it) rather than being part of the seamless exterior world, matching the "modal"/dialog-like connotation of the word. **[HYPOTHESIS — plausible reading from the name alone, not confirmed against loading behavior.]**
+The majority of non-coordinate entries (512 of 673 "other" entries in `sr3_city_0.vpp_pc`) **[OPEN — desk review 2026-09-30: the denominator is not stated and does not fit §1's 1,033 `sr3_city_0` entries — 360 coordinate pairs (§2) + 91 `hN` + 70 + 46 `^name` entries (§3) + 673 "other" is at least 1,240 even counting each pair once — so 512/673 is unverified; to be settled against real data.]** are **named building interiors and landmarks**, each with its own `.asm_pc`/`.str2_pc` pair, completely independent of the coordinate grid's naming. Real examples found: `angels_crib` (a player-owned property, 14.3 MB / 1,673 entries — by far the richest single bundle sampled), `smiling_jacks`, `sw_planetsaints`, `sw_rimjobs_1`/`_2`, `bank_m1^bank`, `int_dt_ps2`, `sbe^bridge`. **[CONFIRMED — empirical.]** A large sub-family follows a systematic `_a_<2-letter-type>_<2-letter-direction>_<NN>[_modal]` pattern (e.g. `_a_sn_nw_03_modal`, `_a_tb_sw_01`, `_a_es_ne_03_modal`) — the direction codes (`nw`/`sw`/`ne`) matching city-quadrant compass directions — consistent with a library of **reusable, procedurally-placed generic ambient building interiors**, distinct from the one-off named landmarks. ~~**[HIGH CONFIDENCE — inferred from the systematic naming; the 2-letter type codes' specific meanings were not decoded.]**~~ **[CORRECTED 2026-09-20, agent AA — §10.8: the `_a_<type>_<region>_<NN>` bundles are not generic ambient interiors; they are the zones of the game's *activity instances* (container kind "mission", zone type 6) with a `_modal` companion (kind "mission model data") holding the activity's `.xtbl` table and conversations. The second code is the hood-region group, the first code one of ten activity mechanics; the letters are not parsed by the code examined.]** Many entries (both landmark and generic) carry a `_modal` suffix — plausibly marking an interior that's loaded as a self-contained instanced space (entering swaps to it) rather than being part of the seamless exterior world, matching the "modal"/dialog-like connotation of the word. **[HYPOTHESIS — plausible reading from the name alone, not confirmed against loading behavior.]** *[Refined for the activity zones only, §10.8/§10.9: there `_modal` is the mission-model-data companion (activity table + conversations); landmark `_modal` names were not examined there.]*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (512/673 denominator flagged OPEN; `_modal` pointer to §10.8) — desk review (not re-derived from the executable).**
 
 ## 5. What's inside a bundle — mostly already-solved formats, a few genuinely new ones
 
@@ -35,7 +45,7 @@ Every `.str2_pc` bundle sampled (a base tile, both `h0`/`h3` LOD-style variants,
 
 - **`.cvbm_pc`/`.gvbm_pc`** — confirmed, this is the already-documented `.cpeg_pc`/`.gpeg_pc` texture-pair format (`spec-texture-format.md` §7) — used pervasively here for prop textures, and for a **per-tile minimap texture** (`minimap_1018.cvbm_pc`/`.gvbm_pc`), a genuinely new confirmed use of this format.
 - **`.cefct_pc`** — particle effects, already documented (`spec-effects-format.md`) — found inside `angels_crib` (e.g. `vfx_slotmachine_dth.cefct_pc`, `vfx_fruitflys.cefct_pc`).
-- **`.asm_pc`** — every manifest here (per-tile and the archive-wide `stream_grid.asm_pc`, a single 8.2 MB / 1,812-record manifest covering the whole archive's content collectively) uses the exact same confirmed format as `spec-asm-format.md`, including the same fixed magic/version and record shapes — a per-tile `.asm_pc` describes exactly one sibling entry, matching the already-documented single-reference record shape exactly. **[CONFIRMED — empirical, header magic/version/record-count checked directly.]**
+- **`.asm_pc`** — every manifest here (per-tile and the archive-wide `stream_grid.asm_pc`, a single 8.2 MB / 1,812-record manifest covering the whole archive's content collectively) uses the exact same confirmed format as `spec-asm-format.md`, including the same fixed magic/version and record shapes — a per-tile `.asm_pc` describes exactly one sibling entry, matching the already-documented single-reference record shape exactly. *[Corrected §10.2: a per-tile manifest also holds the tile's `hN` records — `1018.asm_pc` holds five records (`1018`, `1018h0`..`1018h3`).]* **[CONFIRMED — empirical, header magic/version/record-count checked directly.]**
 
 **What's genuinely new, found here for the first time, and not decoded this pass:**
 
@@ -44,6 +54,8 @@ Every `.str2_pc` bundle sampled (a base tile, both `h0`/`h3` LOD-style variants,
 - **`.rig_pc`** — found once in `angels_crib` (`doubledoor01.rig_pc`, 312 bytes) — plausibly an animation rig/skeleton reference for an animated prop (a door). Not investigated. *[The `.rig_pc` format has since been documented: `spec-rig-format.md`.]*
 - **`.lightmult_pc`** — found once in `angels_crib` (`fireflicker_001.lightmult_pc`, 514 bytes) — plausibly a lighting-parameter/multiplier asset for a named light effect. Not investigated.
 - **`sr3_city.grid_pc`** — see §5.1, resolved in a follow-up pass.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (forward pointer to §10.2 for multi-record tile manifests) — desk review (not re-derived from the executable).**
 
 ### 5.1 `sr3_city.grid_pc` — record layout resolved; it's a flat name/ID directory, not a spatial lookup
 
@@ -69,7 +81,9 @@ repeated name_count times:
 
 **The important honest finding for "how names map to world positions":** **this file does not map landmark names to coordinates or world positions.** Sections 1–2 (the actual named landmarks — the harder, more interesting case) carry only a bare sequential ID alongside each name/name-group; there is no coordinate, position, or grid-tile reference attached to a landmark's own record anywhere in this file. **[CONFIRMED — empirical, both sections fully parsed, no such field present.]** Whatever ties `angels_crib` to a specific place in the world is stored elsewhere (very likely embedded directly in world/prop-placement data, or resolved by a different mechanism entirely, e.g. a script-driven trigger volume) — **not** in this index. This file's real role looks like a flat **name-to-small-integer-ID directory** (the same general shape as the fixed lookup tables in `.asm_pc`, `spec-asm-format.md` §3) — useful for resolving a name to an internal ID quickly, not for spatial lookup.
 
-**What's still open:** the exact section-boundary/transition mechanism (a large, only-partly-explained gap was found between section 2 and section 3 that a simple "next section's count" separator doesn't fully account for), the preamble entry's exact field layout, and ~~section 4's index-value scheme~~ [resolved, §10.6(e)].
+**What's still open:** the exact section-boundary/transition mechanism (a large, only-partly-explained gap was found between section 2 and section 3 that a simple "next section's count" separator doesn't fully account for), the preamble entry's exact field layout, and ~~section 4's index-value scheme~~ [resolved, §10.6(e)]. **[OPEN — desk review 2026-09-30: as written the file cannot be parsed from this text alone — the preamble's length (hence the first record's offset), the bytes between sections 2→3 and 3→4, and any trailer are not specified, only the 1→2 separator (`41`); to be settled against real data (hex of the preamble, inter-section gaps and trailer, separators checked against the next section's count 41 / 468 / 437).]**
+
+**Review status (2026-09-30): NEEDS-DATA: preamble length, the 2→3 and 3→4 section gaps and the trailer are unspecified, so the file is not parseable from this text — desk review (not re-derived from the executable).**
 
 ## 6. Open Items
 
@@ -84,13 +98,15 @@ repeated name_count times:
 
 None of these gaps block the core deliverable: the tile/coordinate/landmark naming scheme is now clearly documented, reliability is confirmed excellent (mode-(b) throughout, no blocked content found), every bundle's contents can be enumerated and its already-solved sub-formats (textures, effects, manifests) extracted with full confidence, and `sr3_city.grid_pc`'s own record structure is now decoded — only the terrain and static-prop-mesh formats *(their vertex layouts since decoded: `spec-vertex-format.md`)*, and the still-unlocated mechanism that actually places named landmarks at world positions, remain open.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ## 7. The zone streaming subsystem — the category table (2026-09-11, user-authorised)
 
 **The zone streaming subsystem registers a fixed table of named streaming categories at
 startup.** One ~7.6 KB function builds each entry as a small stack struct — `{u32 id,
 const char *name, …}` — and hands it to one of **seven** ~147-byte registration
 helpers. **41 registration calls**, **40 ids** recovered spanning **`0x01`–`0x29`** (38
-distinct), and **34 names**. This function was explicitly left unopened by the
+distinct), and **34 names** *[desk review 2026-09-30: = 34 name occurrences — 32 distinct ids with a recovered name (38 minus the six blank rows of §7.1) plus the two repeat registrations of `0x19`/`0x1E`]*. This function was explicitly left unopened by the
 2026-09-10 ctorless pass; it is opened here under direct user authorisation.
 
 ### 7.1 The category table
@@ -131,6 +147,10 @@ registered through more than one helper, which means the helpers are not
 one-per-category and probably distinguish *kind* of registration (a pool versus a
 policy, or a fast/slow variant). **[OPEN — what the seven helpers do differently.]** *→ closed §8.3 / §8.4.*
 
+*Data check (desk review 2026-09-30): `spec-asm-format.md` §8.2 matches these ids against table 1 of the shipped manifests — 38/38 ids equal, 0 mismatches, 805 manifests (a Team A population check). Team B's `.asm_pc` reader parses all 805 manifests exactly (`team-b/STATE.md`, §9.71), which corroborates the file side, not the id↔name pairing itself.*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: table-1 ids 38/38 equal over 805 manifests (`spec-asm-format.md` §8.2, Team A population; Team B `.asm_pc` 805/805 corroborates the file format); "34 names" wording explained — desk review (not re-derived from the executable).**
+
 ### 7.2 What this gives a reimplementation, and what it does not
 
 **Gives:** the zone-relevant categories are now named and numbered, and four of them
@@ -159,10 +179,12 @@ cpu` (`0x60000`), `RL_skin large bone pool` (`0xC00`), `RL_skin small bone pool`
 (`0x60`), `Deformation weights` (`0x39000`), `Sr3_gds_mempool` (`0x40000`),
 `synced_resource` (`0x1D000`), `dc_states` (`0x10`). **[CONFIRMED — disassembly, literal
 arguments at each call site.]** These are *not* the streaming categories above — a
-different mechanism that happens to share the subsystem.
+different mechanism that happens to share the subsystem. **[OPEN — desk review 2026-09-30: twelve pools are listed against the 15 call sites claimed; the other three, and the pool-creation function's address, are not recorded here; to be settled against the executable.]**
 
 Harness `zone_pools.py`; dumps `tools/stream_full.txt`, `tools/stream_pools.txt`,
 `tools/zone_module.txt`.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (12 of 15 pool call sites listed; the other 3 OPEN for the executable) — desk review (not re-derived from the executable).**
 
 ### 7.3 A negative worth recording about the `.czn_pc` payload
 
@@ -174,7 +196,9 @@ value is **not literal-checked anywhere in the binary**: every site where `0xFFF
 misread**, which is consistent with the walk having already left the top level and
 entered a section interior. **[CONFIRMED — disassembly, whole-binary immediate scan.]**
 *Predicate stated: this rules out a literal comparison against those five values. It
-does not rule out a computed or masked test.*
+does not rule out a computed or masked test.* *[Label scope — desk review 2026-09-30: by that predicate the CONFIRMED covers only "no literal compare against `0xFFFA`–`0xFFFE`"; the bold reading that the word is ordinary data rather than a sentinel is HIGH CONFIDENCE — inferred.]*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (label scoped to "no literal compare"; not-a-sentinel reading HIGH CONFIDENCE) — desk review (not re-derived from the executable).**
 
 ## 8. The seven registration helpers, the double-registration mechanism, and per-category budgets (2026-09-12)
 
@@ -231,7 +255,7 @@ is absent on the rest, which use a direct-store-to-stack-slot idiom the original
 pass evidently did not annotate this deep into a 7,594-byte function — a bounded,
 stated tool limitation, not a finding about the format. **[CONFIRMED — disassembly, for
 the struct layout and the first 14 id/name pairs; CONFIRMED — disassembly via the
-decompile-text replay, cross-checked by hand against raw instructions, for the rest.]**
+decompile-text replay, cross-checked by hand against raw instructions, for the rest.]** **[OPEN — desk review 2026-09-30: §8.4 gives `0x19` and `0x1E` two call sites each (placeholder and real branch), but this 14-call order shows each once (positions 5 and 9); where each id's other call site falls in the 41-call order is not stated; to be settled against the executable (ordered address/id list of all 41 calls).]**
 
 **A third, independent recovery**: reading the raw instructions directly (not either
 replay engine) at address `0x005d74fe` shows a store of the literal value `0x17` to the
@@ -241,6 +265,8 @@ stack at offset `+0x4bc`, immediately followed by a store of the literal string
 where §7.1 recorded 34. The decompiled pseudocode this project's tables were built from
 does not surface it as a clean sibling assignment (both replays report it unresolved);
 it is plainly visible in the disassembly. **[CONFIRMED — disassembly.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (0x19/0x1E call-order tension flagged OPEN for the executable) — desk review (not re-derived from the executable).**
 
 ### 8.2 The registration struct's field layout
 
@@ -263,7 +289,7 @@ same offsets recovered twice, by two different code shapes:
 | `+0x10` | CPU-side pointer (an allocation result, or a bump-allocator address) | `FUN_00dd5fd0`; matches the result of a `FUN_00dad460` call assigned directly to this field in the `time of day` row |
 | `+0x14` | **CPU size** | `FUN_00dd5fd0` param 2; matches the inline value `0x1400` assigned directly to this field in the same row |
 | `+0x18` | CPU alignment | `FUN_00dd5fd0` param 3; matches the inline value `0x80` assigned directly to this field |
-| `+0x1C` | GPU-side pointer | `FUN_00dd5fd0` writes `DAT_02a3c580+DAT_02a3c584`; matches the result of a `FUN_00ea3362` call assigned directly to this field |
+| `+0x1C` | GPU-side pointer | `FUN_00dd5fd0` writes the sum of the two globals at `0x02a3c580` and `0x02a3c584`; matches the result of a `FUN_00ea3362` call assigned directly to this field |
 | `+0x20` | **GPU size** | `FUN_00dd5fd0` param 4; matches the inline value `0x200000` assigned directly to this field |
 | `+0x24` | GPU alignment | `FUN_00dd5fd0` param 5; matches the inline value `0x80` assigned directly to this field |
 
@@ -274,7 +300,9 @@ helpers is used or whether the setter function or a direct assignment wrote them
 One further mechanical fact from `FUN_00dd64b0`: it zeroes the entry indexed by the category id in the global array at `0x02A3C170`,
 i.e. **category ids are used as a direct index into a global array** — consistent with
 the enum being sparse-but-dense-ish over `0x01`–`0x29` rather than a hash key, and
-relevant to §8.6.
+relevant to §8.6. **[OPEN — desk review 2026-09-30: the table leaves `+0x0E`–`+0x0F` undescribed and gives no total struct size; and since id `0xFE` (§8.6) reaches the same finisher through `FUN_005d56b0` (§9.2), the array at `0x02A3C170` must span at least `0xFF` entries, not only `0x01`–`0x29`; element stride, total size and every reference to `0x02A3C170` are to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: `+0x0E`–`+0x0F` and total struct size unstated; array `0x02A3C170` span (id `0xFE`) and element stride unverified — desk review (not re-derived from the executable).**
 
 ### 8.3 What the seven helpers do differently
 
@@ -287,7 +315,7 @@ allocated object size and the configure callee are what differ:
 
 | helper | object size | configure callee | what the callee does |
 |---|---|---|---|
-| `FUN_005d5440` | `0x50` (80 B) | `FUN_00dd6ed0` | Reads CPU/GPU ptr+size+align (`+0x10`…`+0x24`); if the struct's `+0x20` count is `>0`, additionally drives a named-pool creation through the allocator's `+0x90` slot. The general "sized pool, optional secondary named allocation" shape. |
+| `FUN_005d5440` | `0x50` (80 B) | `FUN_00dd6ed0` | Reads CPU/GPU ptr+size+align (`+0x10`…`+0x24`); if the struct's `+0x20` count *(= the GPU-size field of §8.2)* is `>0`, additionally drives a named-pool creation through the allocator's `+0x90` slot. The general "sized pool, optional secondary named allocation" shape. |
 | `FUN_005d54e0` | `0x64` (100 B) | `FUN_00dd7ce0` | Reads CPU/GPU **alignment** from the struct, then calls `FUN_00dd5c00` passing the **second helper argument's own first two dwords** (not the struct's own size fields) as the size input — i.e. this helper's size is conventionally supplied through the second argument, not `+0x14`/`+0x20` (§8.5 explains why several `54e0` rows show `0` there). |
 | `FUN_005d5580` | `0x4c` (76 B) | `FUN_0045a180` | Hashes the name (`FUN_00dd5640`); if `+0x24` (GPU align) is `≥0x10`, allocates **two** further auxiliary objects (`0x60` B, `0xb8` B) through the same allocator and drives a GPU-side call using the second argument's slot 1. |
 | `FUN_005d5620` | `0x4c` (76 B) | `FUN_00dd5ce0` | Bails out immediately if the allocator pointer (`+0x08`) is null; otherwise calls the allocator's `+0x38` slot **with no size arguments at all**. Never reads `+0x10`…`+0x24`. This is the "no real budget, placeholder" helper — see §8.4. |
@@ -299,12 +327,14 @@ allocated object size and the configure callee are what differ:
 full.]** Reading the seven side by side answers the task's framing directly: the helpers
 are **not** one-per-facet of a category (not "CPU vs GPU", not "primary vs variant
 pool") — they differ in **how the size/allocator information reaches the new object**:
-three read the struct's own CPU/GPU fields directly (`5440`, `5750`, and — via a
+~~three~~ four *[desk review 2026-09-30: four helpers are named, so the tally is 4 + 1 + 1 + `5850` = 7]* read the struct's own CPU/GPU fields directly (`5440`, `5750`, and — via a
 size-through-the-second-argument route — `54e0`, `5580`); one deliberately reads no size
 at all (`5620`); one adopts an object built elsewhere rather than sizing anything itself
 (`56b0`). `5850` is a superset of the "reads its own fields" shape with an added
 sub-pool. Population: **41 calls, all seven helper bodies, all seven configure callees —
 every one read, none sampled.**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (helper tally 4 + 1 + 1 + 1; `+0x20` named as GPU size) — desk review (not re-derived from the executable).**
 
 ### 8.4 The two double-registered ids — corrected framing
 
@@ -336,6 +366,8 @@ branch computes a real size from the same tier-selection block that also feeds
 `debug_superzone` (§8.5). **[CONFIRMED — disassembly; corrects §7.1's framing, which
 is left in place above as the record of what was believed before this pass.]**
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 8.5 Per-category budgets — alignment demonstrated before publication
 
 **Method, restated as the task requires:** every figure below is read from the **same
@@ -350,19 +382,19 @@ all three observed tiers (`0`, `2`, `4`) are given.
 **The required cross-check, done first:** `0x1A` (*zone always loaded*) and `0x28`
 (*zone header cache*) do **not** have similar budgets, which is what the task asked to
 verify before publishing anything further. `0x1A`'s CPU budget is `0xA00000` (10 MiB) at
-tier `0`, `0xCE5400` (~13.5 MiB) at `2`, `0x793000` (~8 MiB) at `4` — set by direct
+tier `0`, `0xCE5400` (~13.5 MiB *[desk review 2026-09-30: = 13,521,920 B ≈ 12.9 MiB; 13.5 is decimal MB]*) at `2`, `0x793000` (~8 MiB *[≈ 7.6 MiB]*) at `4` — set by direct
 field assignment, scaling with the tier. `0x28`'s budget is a **flat `0x200000`** (2 MiB)
 at every tier, and — structurally distinct from `0x1A` — is not built from the struct's
 own CPU/GPU fields at all: it is the return value of a **dedicated, named allocator
 call** (the named-allocator routine `FUN_00db52d0` with name "zone header cache" and size `0x200000`), passed in as the helper's second
-argument. Different magnitude (4–7×), different mechanism, same category table. That is
+argument. Different magnitude (4–7× *[desk review 2026-09-30: 3.8–6.4× — `0x793000` to `0xCE5400` over `0x200000`]*), different mechanism, same category table. That is
 the shape a correct alignment produces; two rows that happened to collide would be the
 signal to distrust the extraction, not to publish it.
 
 | id | name | helper(s) | CPU budget | GPU budget | tier-dependent? |
 |---|---|---|---|---|---|
 | `0x06` | Player slots | `54e0` | `0x8000` (32 KiB) | `0x6000` (24 KiB) | no (flat) |
-| `0x11` | weapon high res gpu | `5440` | `0x4000` (16 KiB) | `0x190000` (1.5 MiB) | GPU align only (table lookup) |
+| `0x11` | weapon high res gpu | `5440` | `0x4000` (16 KiB) | `0x190000` (1.5 MiB *[≈ 1.56 MiB]*) | GPU align only (table lookup) |
 | `0x12` | time of day | `5440` | `0x1400` (5 KiB) | `0x200000` (2 MiB) | no |
 | `0x15` | interface image gpu compacting | `5750` | `0x80000` (512 KiB) | `0xC00000` (12 MiB) *(corrected §9.5: flag-gated)* | no *(corrected §9.5)* |
 | `0x19` (real branch) | test_level_mip_streaming | `5580` | `0x40000` (256 KiB) | `0x3F00000` (~63 MiB, clamped) | yes — only exists when the tier argument ≠ 0 |
@@ -396,6 +428,8 @@ textures*)'s single call site is reached only when the tier argument equals 4, w
 alternative branch — at every other observed tier this category is **not registered at all**. The
 static "41 calls" count includes this site regardless; whether it executes depends on
 the tier argument.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (MiB labels for `0x190000`/`0xCE5400`/`0x793000`; magnitude ratio 3.8–6.4×) — desk review (not re-derived from the executable).**
 
 ### 8.6 The three absent ids — `0x14` is dead code, `0x22`/`0x23` are absent entirely
 
@@ -451,6 +485,8 @@ that these two ids are **most likely gaps in a sparse enum** (matching `spec-for
 already-documented pattern of skipped ids elsewhere in this binary's registration
 tables, e.g. resource types 6 and 28), but this is not yet a closed question.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 8.7 How the budgets interact — mechanism-level answer, physical sharing still open
 
 Three distinct **mechanisms** for conveying a budget were found in §8.3/§8.5, and the
@@ -486,6 +522,8 @@ would need the allocator vtable's own implementation (the `+0x38`/`+0x90` slots 
 throughout this section), which is a further, larger investigation outside this pass's
 bound.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 8.8 Open items and concrete next steps
 
 1. **`0x22`/`0x23`**: enumerate `FUN_00dd64b0`'s full caller list (bounded, not yet done)
@@ -498,7 +536,7 @@ bound.
    follow-on. *[Addressed §9.4.]*
 3. **The tier argument's real-world meaning** — observed values `0`, `2`, `4`, branched
    explicitly; other values fall through unhandled at several sites (§8.4, §8.5). The
-   pattern (tier `0` consistently gives the *largest* budget, `2`/`4` smaller) is
+   pattern (tier `0` consistently gives the *largest* budget, `2`/`4` smaller *[desk review 2026-09-30: not without exception — `0x1A`'s tier-2 CPU budget exceeds tier 0's, §8.5; see §9.7]*) is
    consistent with `0` meaning "streaming disabled, load generously" versus `2`/`4`
    being active-streaming presets — **[HYPOTHESIS — unconfirmed]**, not traced to a
    caller of `FUN_005d58f0` this pass.
@@ -516,6 +554,8 @@ setter/finisher/configure-callee functions), `tools/scripts/StrmSecondCaller.jav
 had an uncompilable illegal escape sequence left from before the rate-limit interruption
 this task resumed from; never actually run until this pass), `tools/harnesses/strm_replay.py`
 and `tools/harnesses/strm_disasm_replay.py` (the two independent replays, §8.1).
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (item 3's "consistently" pointed at the `0x1A` counter-example) — desk review (not re-derived from the executable).**
 
 ## 9. Closing the 24 unresolved budget rows, the 0x22/0x23 caller-list check, and the stack-annotation coverage gap (2026-09-12, second pass)
 
@@ -599,6 +639,8 @@ zeroed** and only the allocator call carries a nonzero literal (seen repeatedly 
 first at `0xF`), the two numbers can legitimately disagree — see the explicit caution in
 §9.4.
 
+**Review status (2026-09-30): DESK-PASS (the `DAT_0149365c` token is a bare citation token and the stack-variable-prefix mention is prose about Ghidra's naming — both allowed; no change) — desk review (not re-derived from the executable).**
+
 ### 9.2 `0x22`/`0x23` — CLOSED. `FUN_00dd64b0`'s full caller list contains only the seven known helpers
 
 §8.8 item 1's concrete next step, executed exactly as specified: `Strm2Dd64b0Callers.java`
@@ -616,7 +658,7 @@ reference-table scan) landing on the identical 7 addresses is the alignment chec
 had a call site existed that Ghidra's function-boundary analysis failed to attribute to a
 containing function, the two counts would have disagreed (7 vs. 8, or same-7-different-8th).
 They did not. **A failing case would have been an 8th address in either list, or the two
-lists disagreeing on which 7.** Neither happened.
+lists disagreeing on which 7.** Neither happened. *[Predicate — desk review 2026-09-30: both routes count call-type references only; a function-pointer (data) reference to `0x00dd64b0` used for an indirect call would appear in neither, and none was looked for.]*
 
 **Conclusion: the sparse-enum reading is CONFIRMED, not merely "most likely."**
 `FUN_00dd64b0` is reached **only** through the seven helpers; there is no third entry
@@ -628,6 +670,8 @@ registered has now been checked and is negative.** `0x22` and `0x23` are gaps in
 enum, matching the already-documented pattern elsewhere in this binary's registration
 tables (resource types 6 and 28) — **[CONFIRMED — disassembly]**, upgraded from §8.6's
 "most likely… not yet a closed question."
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (predicate: call-type references only) — desk review (not re-derived from the executable).**
 
 ### 9.3 The disassembly-only replay's coverage gap — bounded, and now closed as a dead end for this specific technique
 
@@ -672,6 +716,8 @@ equivalent) rather than hunting for an automatic-analysis setting, since the fra
 itself is already complete and correct — the gap is specifically in reference-object
 creation, not in stack-offset knowledge.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 9.4 The 24 unresolved budget rows — resolved by hand-tracing the source against the offset map, not by blind script extension
 
 **Method, matching §8.5's own bar exactly:** every value below comes from reading
@@ -712,7 +758,7 @@ resolving to the same value **through the same variable** — that did not happe
 | `0x16` | effect preload | `0x203000` (t2/4) / `0x300000` (t0) | `0x77e800` (t2) / `0x984800` (t4) / `0xaf0000` (t0) | yes |
 | `0x0F` | Small smesh slots | `0x800` (2 KiB) | `0xb400` (45 KiB) | no |
 | `0x10` | Large smesh slots | `0x800` (2 KiB) | `0x2b000` (172 KiB) | no |
-| `0x0A` | customization streaming | `0x450000` (4.5 MiB), single value via dedicated named allocator | — | no |
+| `0x0A` | customization streaming | `0x450000` (4.5 MiB *[desk review 2026-09-30: = 4,521,984 B ≈ 4.31 MiB; the hex is the extracted value]*), single value via dedicated named allocator | — | no |
 | `0x0B` | customization logo | `0x80000` (512 KiB), single value via dedicated named allocator | — | no |
 | `0x27` | vehicle_customization_cameras **[spelling conflict: the call literal quoted below this table reads `vehicle_customization_camera`; not re-checked]** | `0` (dedicated named allocator called with a literal zero size) | — | no |
 
@@ -723,14 +769,14 @@ pass's replay printout. `0x0A`/`0x0B`/`0x27` additionally recover the **id and n
 previously blank in the prior pass's table (Defect A, §9.1) — `0x0A`/`0x0B` use the same
 "adopt a dedicated named allocator" mechanism already confirmed for `0x28` (§8.7); `0x27`
 is the same mechanism with a literal-zero size, read directly off the
-call to the named-allocator routine `FUN_00db52d0` with name "vehicle_customization_camera" and size 0 **[spelling conflict: the table above writes `vehicle_customization_cameras`; not re-checked]**.
+call to the named-allocator routine `FUN_00db52d0` with name "vehicle_customization_camera" and size 0 **[spelling conflict: the table above writes `vehicle_customization_cameras`; not re-checked]** **[OPEN — desk review 2026-09-30: one read of the name literal at this registration settles the spelling; to be settled against the executable.]**.
 
 **Newly resolved, partially (one side clean, the other genuinely open — reported as such,
 not guessed):**
 
 | id | name | resolved side | open side, and why |
 |---|---|---|---|
-| `0x18` | debug_superzone | GPU: `0x45fd800` (t2) / `0x52e5000` (t4) / `0x9a84000` (t0) | CPU: each tier assigns the *address* of a distinct reserved data region (`&DAT_...`), never a byte count — genuinely not a size in this function |
+| `0x18` | debug_superzone | GPU: `0x45fd800` (t2) / `0x52e5000` (t4) / `0x9a84000` (t0) | CPU: each tier assigns the *address* of a distinct reserved data region (a global data address), never a byte count — genuinely not a size in this function |
 | `0x0E` | Compositing render target | CPU: `0x10000` (64 KiB), flat | GPU: the field holds the address of a code location (`0x01008000`), not a byte count |
 | `0x0C` | Customization compositing | CPU: `0x9800` (t2/4) / `0x14000` (t0) | GPU: a multiplied/offset expression (`tier value × 25, minus a running pointer`) — a computed quantity, not a literal |
 | `0x24` | Texture compression scratch | CPU: `0xbb8000` (t2/4); GPU: `0` (explicit literal, both confirmed) | CPU at tier 0 only: the address of a reserved region, not a byte count |
@@ -810,6 +856,8 @@ the specific structural reason recorded, and **1 was not a real budget row to be
 (the dead-code artefact above): `17 + 1 + 1 + 4 + 1 = 24`. Denominator: all 24 rows named
 in §8.8, none excluded or sampled.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (`0x450000` = 4.31 MiB; `&DAT_` reworded; `0x27` spelling OPEN for the executable) — desk review (not re-derived from the executable).**
+
 ### 9.5 Correction to §8.5 — `0x15`'s GPU budget is flag-gated, not flat
 
 §8.5 publishes `0x15` ("interface image gpu compacting") as `CONFIRMED — disassembly` with
@@ -824,7 +872,9 @@ above per this project's visible-correction rule; the corrected reading is: **CP
 `0x80000` (unchanged); GPU `0xa00000` (10 MiB) by default, `0xc00000` (12 MiB) when
 `DAT_0149365c` is set — flag-dependent, not the flat, unconditional value previously
 published.** What that flag actually gates (a graphics-quality option distinct from the
-streaming tier, most plausibly) is `OPEN / UNKNOWN` and out of this pass's scope.
+streaming tier, most plausibly) is `OPEN / UNKNOWN` and out of this pass's scope. **[OPEN — desk review 2026-09-30: §11.4 reports this flag set to `1` at the top of the init function `0x005d1a30`; if that store is unconditional and never undone, the `0xa00000` "default" is never the shipped value — every writer of `0x0149365c` (and of `0x0149365d`–`f`) is to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: whether the store of `1` to `0x0149365c` at `0x005d1a30` (§11.4) is unconditional, which would make `0xa00000` never the shipped value — desk review (not re-derived from the executable).**
 
 ### 9.6 Two already-published rows extended (`0x1C`/`0x1D` GPU, `0x21` GPU)
 
@@ -849,6 +899,8 @@ against the same tier ladder already used (and already trusted) for these rows' 
 CPU figures — i.e. no new source location was introduced, only additional fields read from
 one already-verified block.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (the ratio and unit fixes this unit prompted are applied in §9.7 and §10.4) — desk review (not re-derived from the executable).**
+
 ### 9.7 Items 3 and 4 — status unchanged, restated briefly
 
 **Item 3 (the tier argument's real-world meaning):** no new evidence this pass. The pattern already
@@ -857,7 +909,7 @@ distinct tiers (`0x01`, `0x03`, `0x07`, `0x16`, `0x18`, `0x21`, and the already-
 `0x1A`/`0x1C`/`0x1D`/`0x1F`), with `2` and `4` consistently smaller and frequently
 **identical to each other** (`0x01`, `0x03`, `0x07`, `0x16`, `0x18`'s CPU, `0x21`'s CPU) —
 is now measured on a much larger set of rows than the four §8.5 hand-checked, and holds
-without exception across all of them. This strengthens the existing
+~~without exception across all of them~~ *[desk review 2026-09-30: not without exception — §8.5's own `0x1A` row has tier 2 (`0xCE5400`) above tier 0 (`0xA00000`); `0x07`'s GPU has tier 4 equal to tier 0 (`0xcc0000`); `0x21`'s tier-0 GPU is an address, not a size]* for the other rows listed. This strengthens the existing
 `HYPOTHESIS — unconfirmed` reading ("`0` = streaming disabled / load generously" vs. `2`/`4`
 = active-streaming presets, with `2` and `4` often sharing one design point) without
 promoting it to confirmed — the caller of `FUN_005d58f0` that actually supplies the tier argument
@@ -869,23 +921,27 @@ vtable's own implementation (the `+0x38`/`+0x90` slots), which this pass did not
 Worth noting only as a side observation, not a resolution: `0x1C` and `0x1D` (confirmed
 sharing a *mechanism* in §8.7) now also have a fully tier-scoped GPU figure each (§9.6),
 and the two rows' CPU:GPU ratios are **not** constant across tiers or between the two ids
-(`0x1C` runs roughly 2.2–2.4×, `0x1D` roughly 6.4–7.5×) — a real difference between the two
+(`0x1C` runs roughly 2.2–2.4×, `0x1D` roughly 6.4–7.5× *[desk review 2026-09-30: these are GPU:CPU ratios, and from §8.5/§9.6 they compute to 2.20–2.37× for `0x1C` and 6.25–7.62× for `0x1D`]*) — a real difference between the two
 categories, and, on its own, weak evidence *against* the two sharing one physical pool with
 a fixed split (a single shared pool sized by one governing ratio would be expected to show
 one consistent ratio, not two). Flagged as a side observation only; it does not reach the
 allocator implementation the question actually needs.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied ("without exception" struck, `0x1A` counter-example; ratios recomputed 2.20–2.37× / 6.25–7.62×) — desk review (not re-derived from the executable).**
+
 ## 10. What the `hN` suffix denotes — the "Zone (High LOD)" fine-cell containers, and the `_a_` activity zones (2026-09-20, agent AA)
 
 Closes §6 item 5, advances §6 item 6, resolves §5.1's section-4 `index` question and the §3 suffix hedging. New Ghidra project copy `tools/gp_hn1`; scripts `tools/scripts/Hn1Strings.java`, `Hn1CallChain.java` (plus the existing `SaveWDecomp.java`); harnesses `tools/harnesses/hn1_*.py`; dumps `tools/hn1_*.txt`. Labels: CONFIRMED — disassembly / CONFIRMED — empirical / HIGH CONFIDENCE — inferred / HYPOTHESIS / OPEN. No decompiled code is reproduced; function addresses are evidence anchors, quoted strings are engine data literals.
 
-**Population and exclusions.** All 805 shipped `.asm_pc` manifests (agent Y's exact-consumption parser, `spec-asm-format.md` §9; 737 of them inside `sr3_city_0/1`); `sr3_city.grid_pc` (998 regular records); and **every `.czh_pc` in the game — 2,971 files, all read out of raw top-level containers**. No mode-(a) or non-raw container was met, so nothing was excluded. **No `.czn_pc` interior was read or decoded** (parked, `HANDOFF.md` §27.3); the only placement-like data touched is the position words of the `SR3Z` record array in `.czh_pc` (a separate, already-documented structure, `spec-ctorless-types.md` §5.1) and it is used only as a spatial control.
+**Population and exclusions.** All 805 shipped `.asm_pc` manifests (agent Y's exact-consumption parser, `spec-asm-format.md` §9; 737 of them inside `sr3_city_0/1` *[desk review 2026-09-30: `spec-asm-format.md` §9 gives 331 + 405 = 736; the one-manifest difference is not reconciled]*); `sr3_city.grid_pc` (998 regular records); and **every `.czh_pc` in the game — 2,971 files, all read out of raw top-level containers**. No mode-(a) or non-raw container was met, so nothing was excluded. **No `.czn_pc` interior was read or decoded** (parked, `HANDOFF.md` §27.3); the only placement-like data touched is the position words of the `SR3Z` record array in `.czh_pc` (a separate, already-documented structure, `spec-ctorless-types.md` §5.1) and it is used only as a spatial control.
 
 ### 10.1 The answer
 
 `CCRRhN` is **the fine-grid cell number N of tile `CCRR`, packaged as a container of the engine's own container kind `Zone (High LOD)`; it holds the full-detail (LOD 0) level meshes whose volumes overlap that cell.** The tile's own bundle (kind `Zone`) holds only the reduced-detail `~L1` versions of the same meshes. Each tile is cut into a 2×2 block of fine cells; `N → (column offset N & 1, row offset N >> 1)`, row 0 being the higher-z row. Of §3's three readings: "LOD tier" is right about *what* (the kind is literally named High LOD and the entries are the LOD-0 files), "spatial subdivision" is right about *which* (N is a location, not a quality step), and "prop-category batch" is refuted. **[CONFIRMED — disassembly + empirical; three independent legs, §10.2–§10.6.]**
 
 What is *not* settled: what re-triggers the load/unload reconciliation during free-roam driving (§10.4).
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ### 10.2 The engine's own names: container kinds and their default allocators
 
@@ -898,11 +954,13 @@ The container-kind registration function (`FUN_006ff730`; 41 rows through `FUN_0
 
 Entries whose manifest `pool_id` is 0 inherit the kind's default pool (`spec-asm-format.md` §7.4), and **every** entry of every `hN` record has `pool_id` 0 (41,689 entries) — so hN meshes are allocated from "high lod level allocator" (`0x1D`, budgets `spec-world-streaming.md` §8.5/§9.6) while the tile record's own pool-0 entries come from "medium lod level allocator" (`0x1C`). This is the code-level meaning of the two allocator names that §7.2 could only read off the strings. **[CONFIRMED — disassembly (both rows); pool ids equal the manifest table-1 ids 28/29, empirical.]**
 
-**Correction to §3:** hN containers have "no `.asm_pc` manifest *of their own*" — true, but their manifest **records are in the parent tile's `.asm_pc`**: `1018.asm_pc` holds five records (`1018`, `1018h0`..`1018h3`). The same holds for `CCRR^<name>` and its `hN`. **[CONFIRMED — empirical: 468 `Zone` records + 422 `CCRRhN` records + 129 `CCRR^name` records + 421 `CCRR^nameHN` records; every hN-suffixed record has `container_kind` 30 `Zone (High LOD)`, every tile / `^name` record `container_kind` 29 `Zone`.]**
+**Correction to §3:** hN containers have "no `.asm_pc` manifest *of their own*" — true, but their manifest **records are in the parent tile's `.asm_pc`**: `1018.asm_pc` holds five records (`1018`, `1018h0`..`1018h3`). The same holds for `CCRR^<name>` and its `hN`. **[CONFIRMED — empirical: 468 `Zone` records + 422 `CCRRhN` records + 129 `CCRR^name` records + 421 `CCRR^nameHN` records; every hN-suffixed record has `container_kind` 30 `Zone (High LOD)`, every tile / `^name` record `container_kind` 29 `Zone`.]** **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9 counts 1,194 kind-29 and 1,686 kind-30 records, exactly twice the 597 (468 + 129) and 843 (422 + 421) here — plausibly because `stream_grid.asm_pc` repeats the tile records, but neither spec states the de-duplication; and the kind row's byte offsets of the default and secondary pool ids are not given, so the default-pool substitution cannot be reproduced from this text; to be settled against real data and the executable (`FUN_006ff730` rows `0x1D`/`0x1E`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: kind-row pool byte offsets not given; also NEEDS-DATA for the 2× record counts against `spec-asm-format.md` §9 — desk review (not re-derived from the executable).**
 
 ### 10.3 The runtime: six level managers, and level 4 is the fine grid
 
-World startup (`FUN_0084e3b0`, reached from the main init `FUN_007acfe0`) calls the world-layout loader `FUN_0085d500` → `FUN_0085a070` (the routine that prints "Processing … zones", loads every manifest and registers the containers), which builds the runtime layout `FUN_00855f80`. That constructor makes **six level managers** and gives each a container kind, a grid, a cell size and a "window" (load-volume extent). The cell id used everywhere is a `u16` whose top 3 bits are the level number (`FUN_0085c7a0` checks `id >> 13 == level`). **[CONFIRMED — disassembly, constructor arguments read from the instruction stream and cross-checked against the decompile.]**
+World startup (`FUN_0084e3b0`, reached from the main init `FUN_007acfe0`) calls the world-layout loader `FUN_0085d500` → `FUN_0085a070` (the routine that prints "Processing … zones", loads every manifest and registers the containers), which builds the runtime layout `FUN_00855f80`. That constructor makes **six level managers** and gives each a container kind, a grid, a cell size and a "window" (load-volume extent). The cell id used everywhere is a `u16` whose top 3 bits are the level number (`FUN_0085c7a0` checks `id >> 13 == level`). *[desk review 2026-09-30: how the lower 13 bits encode the cell is not stated — it is not the `(row << 8) | col` of `sr3_city.grid_pc` (§10.6(e)); OPEN, to be settled against the executable (`FUN_0085c7a0`).]* **[CONFIRMED — disassembly, constructor arguments read from the instruction stream and cross-checked against the decompile.]**
 
 | level | kind | grid (cols × rows) | cell size (x, z) | window (x, z) | desired-list capacity |
 |---|---|---|---|---|---|
@@ -912,36 +970,42 @@ World startup (`FUN_0084e3b0`, reached from the main init `FUN_007acfe0`) calls 
 | 4 | `0x1E` **Zone (High LOD)** | **2·25 × 2·25 = 50 × 50** | **160 × 140 m** | 159.5 × 139.5 m | **4** |
 | 5 | (kind 0) | list class | — | — | — |
 
-The sizes are the defaults the loader writes when its optional `.wlayoutx` file is absent (zone width 320.0, zone height 280.0, 25 × 25 zones, "trigger grow" 120.0, city extent 2000.0); **no `.wlayoutx` exists in any shipped archive or in the install folder (21,217 top-level archive entries scanned)**, so these are the shipped values. **[CONFIRMED — disassembly (constants at `0x01301e00`+, `0x01164e40`+) + empirical: the placed-object extents of 112 tiles span a median 317 m (p90 321) in x and 279 m (p90 285) in z, §10.6(g).]** Level 4's grid is exactly twice the resolution of level 3 in both axes; its per-level origin offset vector is (−80, 0, +70), i.e. a quarter of the tile size, which is what makes the fine cells nest exactly inside the tiles. Each cell of levels 3 and 4 can hold up to 10 container variants (constructor argument 10 = the variant-list capacity used when a cell record is created, see the next-but-one paragraph). Both grids have a **half-cell brick stagger**: the row parity term (`row / this[+0xB4]`, `+0xB4` = 1 for level 3, 2 for level 4) shifts every other tile row by `+0xB0` = 160 m (level 4: every other *pair* of fine rows, so a tile's two fine rows stay together). **[CONFIRMED — disassembly (`FUN_0085b430`, `FUN_0085e9d0`); direction and size CONFIRMED — empirical, §10.6(g).]**
+The sizes are the defaults the loader writes when its optional `.wlayoutx` file is absent (zone width 320.0, zone height 280.0, 25 × 25 zones, "trigger grow" 120.0, city extent 2000.0 *[meaning not established — the 25 × 25 grid spans 8,000 × 7,000 m]*); **no `.wlayoutx` exists in any shipped archive or in the install folder (21,217 top-level archive entries scanned)**, so these are the shipped values. **[CONFIRMED — disassembly (constants at `0x01301e00`+, `0x01164e40`+) + empirical: the placed-object extents of 112 tiles span a median 317 m (p90 321) in x and 279 m (p90 285) in z, §10.6(g).]** Level 4's grid is exactly twice the resolution of level 3 in both axes; its per-level origin offset vector is (−80, 0, +70), i.e. a quarter of the tile size, which is what makes the fine cells nest exactly inside the tiles. Each cell of levels 3 and 4 can hold up to 10 container variants (constructor argument 10 = the variant-list capacity used when a cell record is created, see the next-but-one paragraph). Both grids have a **half-cell brick stagger**: the row parity term (`row / this[+0xB4]`, `+0xB4` = 1 for level 3, 2 for level 4) shifts every other tile row *(the even rows, §10.6(g))* by `+0xB0` = 160 m (level 4: every other *pair* of fine rows, so a tile's two fine rows stay together). **[CONFIRMED — disassembly (`FUN_0085b430`, `FUN_0085e9d0`); direction and size CONFIRMED — empirical, §10.6(g).]**
 
 Cell numbering, from the cell-enumeration routine (`FUN_0085e9d0`) and the cell-bounds routine (`FUN_0085b430`): columns increase with +x; **rows increase toward −z** (a cell's upper z bound is a constant minus row × cell height); the enumeration is row-major (rows outer, columns inner). A tile's box therefore yields its four fine cells in the order (low x, high z), (high x, high z), (low x, low z), (high x, low z). **[CONFIRMED — disassembly.]**
 
 **Where the name is composed.** The per-level "register the containers of this zone" method (grid-class vtable `0x01164ed4`, slot 9 = `FUN_00860900`; list-class twin `FUN_0085e490` at `0x01164f94`) takes the zone's name, turns it into a box (`FUN_0085bac0`), enumerates the level's cells over that box, and — **when the level is 4, composes the container name with the format string `"%sh%d"` (literal at `0x01164bc0`) using the zone name and the cell's index in that enumeration** — then looks the container up by name (`FUN_00db3530`, the container registry filled from the `.asm_pc` files) and stores it in the cell's record. A name containing `^` or `~` (a sub-area / state variant) is *appended* to the cell record's variant list instead of replacing slot 0; each cell record `{variant array, count, selected index, current index, level}` (built by `FUN_0085ae20`) therefore holds the default `CCRRhN` plus its `CCRR^<name>hN` alternatives, and the loader acquires the **selected** variant (`record+6`; level 0 acquires all). **[CONFIRMED — disassembly.]** This is exactly `sr3_city.grid_pc` section 4 (§10.6(e)).
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (stagger parity, city-extent caveat, cell-id composition OPEN); levels 0–2/5 remain §10.9 OPEN (5) — desk review (not re-derived from the executable).**
+
 ### 10.4 Which fine cells are wanted, and what is still open
 
 The per-level "which cells do I want" method (vtable slot `+0x08`, `FUN_00860c50`) is short and was read in full together with every callee except the box-to-point distance primitive `FUN_00dc8be0`:
 
-1. Build an axis-aligned box centred on the streaming **focus position** with half-extents = ½ × the level's window vector (level 4: ±79.75 m in x, ±69.75 m in z; level 3: ±239.75 × ±279.75 m; the y extent is 4,000 m, i.e. unbounded in practice).
+1. Build an axis-aligned box centred on the streaming **focus position** with half-extents = ½ × the level's window vector (level 4: ±79.75 m in x, ±69.75 m in z; level 3: ±239.75 × ±279.75 m; the y extent is 4,000 m *[full or half extent not stated]*, i.e. unbounded in practice).
 2. Enumerate every cell of the level's grid that box overlaps (`FUN_0085e9d0`, box shrunk by a small epsilon so touching neighbours do not count).
 3. If there are more candidates than the list capacity, sort them by a distance comparator against the focus (`FUN_0085cd70`, nearest-first — the x87 return plumbing was not fully unravelled, direction HIGH CONFIDENCE) and truncate; keep only cells that have a registered container record.
 
 **For level 4 the window (159.5 × 139.5 m) is smaller than one fine cell (160 × 140 m), so it overlaps 1, 2 or 4 cells and never more — the capacity of 4 never truncates.** In other words: *the fine cells wanted are exactly those touched by a cell-sized window around the focus point; near a tile corner they belong to up to four different tiles.* The routine takes no quality/graphics parameter (inputs: focus position, the level's constant window, the output list). **[CONFIRMED — disassembly.]**
 
-The reconciliation itself (`FUN_008610e0`, with `FUN_00860e70`): for each level that is not on hold (a per-level counter) and whose pending list (`+0x58`) is empty, compute the wanted list, diff it against the level's active list (`+0x18`), **release** the containers of dropped cells (and of cells whose selected variant changed) (manager slot `+0x34` = `FUN_0085ef70` → `FUN_00dafad0`, a reference-count decrement that frees at zero) and **acquire** those of new cells (slot `+0x30` = `FUN_0085ee30` → `FUN_00dafea0`, a load request). **[CONFIRMED — disassembly for the flow; the two container primitives' roles HIGH CONFIDENCE — bodies read, refcount-style.]** The same selection routine is used read-only by gameplay code (`FUN_00862020` → `FUN_008b9060`: "is cell X inside the streaming window around the player").
+The reconciliation itself (`FUN_008610e0`, with `FUN_00860e70`): for each level that is not on hold (a per-level counter) and whose pending list (`+0x58`) is empty *[§11.2 places this pending test in `FUN_00860e70` via manager vtable slot `+0x14`; whether that slot reads this `+0x58` list is not stated]*, compute the wanted list, diff it against the level's active list (`+0x18`), **release** the containers of dropped cells (and of cells whose selected variant changed) (manager slot `+0x34` = `FUN_0085ef70` → `FUN_00dafad0`, a reference-count decrement that frees at zero) and **acquire** those of new cells (slot `+0x30` = `FUN_0085ee30` → `FUN_00dafea0`, a load request). **[CONFIRMED — disassembly for the flow; the two container primitives' roles HIGH CONFIDENCE — bodies read, refcount-style.]** The same selection routine is used read-only by gameplay code (`FUN_00862020` → `FUN_008b9060`: "is cell X inside the streaming window around the player").
 
-**OPEN — what calls the reconciliation in steady state.** `FUN_008610e0` has seven static call sites in five functions: `FUN_008618f0` (per-level hold-counter inc/dec plus an optional flush; six callers, one of them the modal-content hold/cleanup path `FUN_006d2080`), `FUN_00861800` and `FUN_00861460` (startup preload, both reached from `FUN_0084e3b0`), `FUN_008625f0` (the startup wait-until-loaded loop, likewise) and `FUN_00861850` (call-and-poll helper; four callers — one through a vtable, two around `0x7A8180`/`0x7B0650`, one at `0xBDBF30` — not classified). The focus position it uses is written by `FUN_0085bce0` (five call sites: world init, a game-state start routine and two others). **No per-frame caller was found among these**, so whether free-roam streaming re-runs this exact routine every frame or reaches the manager slots through another path is not established here. The hN *selection rule* above does not depend on the answer.
+**OPEN — what calls the reconciliation in steady state.** `FUN_008610e0` has seven static call sites in five functions: `FUN_008618f0` (per-level hold-counter inc/dec plus an optional flush; six callers, one of them the modal-content hold/cleanup path `FUN_006d2080`), `FUN_00861800` and `FUN_00861460` (startup preload, both reached from `FUN_0084e3b0`), `FUN_008625f0` (the startup wait-until-loaded loop, likewise) and `FUN_00861850` (call-and-poll helper; four callers — one through a vtable, two around `0x7A8180`/`0x7B0650`, one at `0xBDBF30` — not classified). The focus position it uses is written by `FUN_0085bce0` (five call sites: world init, a game-state start routine and two others). *[§11.3 finds the startup path `FUN_00861800` → `FUN_00861460` reading a separate position at `0x029cdb98`; which focus each startup reconciliation uses is OPEN.]* **No per-frame caller was found among these**, so whether free-roam streaming re-runs this exact routine every frame or reaches the manager slots through another path is not established here. The hN *selection rule* above does not depend on the answer.
 
-Budget observation, not a finding: a median hN record totals 2.4 MB of GPU-side data (p90 4.2 MB, max 6.2 MB, 422 records) against the "high lod level allocator" GPU budgets of 6.55 MB (tier 0) / 2.7 MB (tier 2) / 3.0 MB (tier 4) (§9.6); how up to four resident cells fit the smaller tiers (shared meshes, tolerated allocation failure — flag `0x40` entries) was not traced. **[OPEN.]**
+Budget observation, not a finding: a median hN record totals 2.4 MB of GPU-side data (p90 4.2 MB, max 6.2 MB, 422 records) against the "high lod level allocator" GPU budgets of 6.55 MB (tier 0) / 2.7 MB (tier 2) / 3.0 MB (tier 4) *[desk review 2026-09-30: in decimal MB 6.55 / 2.78 / 3.04 = 6.25 / 2.65 / 2.90 MiB]* (§9.6); how up to four resident cells fit the smaller tiers (shared meshes, tolerated allocation failure — flag `0x40` entries) was not traced. **[OPEN.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (y-extent ambiguity, pending-list attribution, MB/MiB units, startup focus pointer) — desk review (not re-derived from the executable).**
 
 ### 10.5 What goes into an hN: the packing rule
 
 The routine that registers one zone's content (`FUN_00859110`; the build-shared source path string in `FUN_008568f0`/`FUN_00857560` names `world_zone_layout_build_shared.cpp`; at run time in the shipped game the layout methods above take the "look the container up by name" branch instead, because the authoring `.zonex` inputs do not exist) does the following for a zone whose `SR3Z +0x1E` type selects kind `Zone` (§10.7):
 
 - registers the tile container, and for each level mesh placed in the zone registers **the `~L1` file** (`FUN_00858290` → `FUN_00858060`, default case; kind `Level Always Loaded` registers `~L2`, kind `Large interior zone` registers base + `~L1` + `~L2`);
-- then, only if both the fast and the slow zone files exist, asks `FUN_00854db0` for the tile's **four sub-boxes** (tile box halved in x and z; order (low x, high z), (high x, high z), (low x, low z), (high x, low z) — read from the instruction stream, identical to the runtime enumeration order of §10.3, an independent cross-check) and, for each sub-box N: counts (`FUN_00858e40`, count-only pass) the placed level-mesh objects whose transformed bounding box overlaps the sub-box, **and only if the count is positive** opens a container named `"%sh%d"` (tile name, N) — **with container-kind byte `0x1E`, i.e. `Zone (High LOD)`, at the container-creation call (`FUN_006f6c20` from `0x00859AFF`)** — registers each overlapping mesh's **base** `.clmesh_pc` in it (second, registering pass; a mesh spanning several sub-boxes is registered in each), and then appends a fixed list of 13 named skyline meshes (`FUN_00855520`).
+- then, only if both the fast and the slow zone files exist, asks `FUN_00854db0` for the tile's **four sub-boxes** (tile box halved in x and z; order (low x, high z), (high x, high z), (low x, low z), (high x, low z) — read from the instruction stream, identical to the runtime enumeration order of §10.3, an independent cross-check) and, for each sub-box N: counts (`FUN_00858e40`, count-only pass) the placed level-mesh objects whose transformed bounding box overlaps the sub-box, **and only if the count is positive** opens a container named `"%sh%d"` (tile name, N) — **with container-kind byte `0x1E`, i.e. `Zone (High LOD)`, at the container-creation call (`FUN_006f6c20` from `0x00859AFF`)** — registers each overlapping mesh's **base** `.clmesh_pc` in it (second, registering pass; a mesh spanning several sub-boxes is registered in each), and then appends a fixed list of 13 named skyline meshes (`FUN_00855520`). **[OPEN — desk review 2026-09-30: the append cannot be unconditional — Team B's census of tile 1018 (`team-b/HANDOFF.md` §9.132: `1018h2`/`1018h3` hold 8/12 entries) is below 13 meshes, and §10.6(c) finds only 43 hN-only entries across all 122 tiles; the condition under which a skyline name is appended, and the 13 literals themselves (§10.6(c) gives wildcard patterns), are to be settled against the executable (`FUN_00855520`).]**
 
-**[CONFIRMED — disassembly for every step; the placed objects are the 14-byte records of the fast `.czh_pc` header, §10.7.]** Consequences that the data then confirms (§10.6): empty cells get no container (hence partial sets), a big mesh is duplicated into every cell it touches, and the four hN of one tile are *not* ordered by quality.
+**[CONFIRMED — disassembly for every step; the placed objects are the 14-byte records of the fast `.czh_pc` header, §10.7.]** *[Scope — desk review 2026-09-30: the CONFIRMED does not cover an unconditional skyline append (see the OPEN note above); and since the shipped game takes the lookup branch, this is authoring-time packing code whose outcome, not execution, the shipped data confirms (§10.6).]* Consequences that the data then confirms (§10.6): empty cells get no container (hence partial sets), a big mesh is duplicated into every cell it touches, and the four hN of one tile are *not* ordered by quality.
+
+**Review status (2026-09-30): NEEDS-EXE: the "appends 13 skyline meshes" step is contradicted as unconditional by Team B's 1018h2/h3 (8/12 entries) and §10.6(c); condition and literals of `FUN_00855520` needed — desk review (not re-derived from the executable).**
 
 ### 10.6 Empirical validation over the whole population
 
@@ -951,7 +1015,7 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 
 (c) **Set relations.** 122 of 468 tiles carry any `~L1` mesh; **all 122 have at least one hN record, and none of the 346 mesh-less tiles has one (0 counter-examples)**. 86 tiles have all four cells; the other 36 show partial sets (e.g. `{h0,h1}` 7 tiles, `{h1,h2,h3}` 5, …) — the empty-cell rule. In 77 of the 86 full tiles the union of the four hN mesh sets **equals** the tile's `~L1` set; in the rest the only additions are meshes from the 13-name skyline list — **across all 122 tiles that have hN records, all 43 "hN-only" entries belong to it, 0 outside** (`skygen_80m_med02`, `airport_terminal_a`, `ss_syn_*`, `ss_decker_tower01`, `ssdecker_tower_base`, `ss_luch_*`, `ss_ori_base01`, `ss_oiron_tower01`; the same 13 literals `FUN_00855520` builds). Across the 86 full tiles a mesh appears in 1 / 2 / 3 / 4 of the four cells in 5,351 / 2,758 / 1,191 / 1,060 cases, and **whenever it appears in several cells its (primary, secondary) sizes are identical — 8,320 of 8,320 repeat appearances** (the same file, not a lower-quality variant). **[CONFIRMED — empirical.]** This also explains §3's "h0 = lamp posts / drainage, h3 = fencing / utility tower": different quarters of the tile hold different objects.
 
-(d) **Not a quality tier.** Total GPU-side size of h0..h3 is monotone in only 12 of 86 tiles (chance for four distinct values ≈ 7/86 ≈ 8.3 %), mean entries per cell are flat (52.9 / 53.6 / 54.4 / 56.2). **[CONFIRMED — empirical (negative control for the LOD-tier reading of N).]**
+(d) **Not a quality tier.** Total GPU-side size of h0..h3 is monotone in only 12 of 86 tiles (chance for four distinct values ≈ 7/86 ≈ 8.3 % *[desk review 2026-09-30: = 2/24 ≈ 8.3 %, i.e. about 7 of 86 tiles expected]*), mean entries per cell are flat (52.9 / 53.6 / 54.4 / 56.2). **[CONFIRMED — empirical (negative control for the LOD-tier reading of N).]**
 
 (e) **`sr3_city.grid_pc` section 4 is the fine-cell directory.** The file parses to 998 records (sections 1 / 2 / 3 / 4 = 52 / 41 / 468 / 437); the 468 of section 3 are exactly the 468 tile records. **Section 4's `index` is the fine-cell address `(fine_row << 8) | fine_col`** with `fine_col = 2·col + (N & 1)`, `fine_row = 2·row + (N >> 1)` (`col`,`row` = the tile's `CCRR` digits): predicted correctly for **all names of all 437 groups** (a group = the default `CCRRhN` plus its `CCRR^…hN` variants, which share a cell; 15 name slots hold the literal `null` = empty variant slot). Controls: swapping the two bits of N matches 209/422 (only the N = 0/3 cases), a row stride of 50 or reversed N match 0/422, the true model 422/422. Section 3's `index` is the same encoding one level up, `(row << 8) | col`, 468/468. **This resolves §5.1's "section 4's index-value scheme".** **[CONFIRMED — empirical.]**
 
@@ -959,11 +1023,17 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 
 (g) **The tile lattice is exact.** With the record positions (`s16 / 64` m plus the header origin, §10.7), the midpoint of each tile's placed-object extents obeys, over 112 tiles, **`centre_x = 320·col − 4000 − 160·(row mod 2)`** (even rows −4000.0, odd rows −4160.0, MAD 2.2 / 1.4 m) and **`centre_z = 3640 − 280·row`** (MAD 1.6 m). That reproduces the code's 320 × 280 tile, the half-tile stagger *and its sign* (even rows shifted +160 relative to odd rows, as the parity term adds `+0xB0` on even rows), rows running toward −z, and puts the populated columns 03–22 symmetrically about x = 0 on even rows. A fine cell's centre is the tile centre ± (80, 70): N = 0 (−80, +70), 1 (+80, +70), 2 (−80, −70), 3 (+80, −70). **[CONFIRMED — empirical; lattice constants HIGH CONFIDENCE as *exact* because they come from extents midpoints, not from a boundary field.]**
 
+*Data check (desk review 2026-09-30): every figure in (a)–(g) reproduces from its own counts (repeat appearances 2,758 + 2·1,191 + 3·1,060 = 8,320; 18,680 appearances − 43 hN-only = 18,637 pairs; 52 + 41 + 468 + 437 = 998). This is Team A's own population; the only Team B figure is tile 1018 (`team-b/HANDOFF.md` §9.132: `1018h0`..`h3` = 44/40/8/12 entries, 100 % `.clmesh_pc`/`.glmesh_pc`), which agrees with (a).*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: (a)–(g) reproduce exactly (8,320; 18,637; 998) on Team A's own population; Team B figure only for tile 1018 (§9.132, 100 % `.clmesh_pc`/`.glmesh_pc`) — desk review (not re-derived from the executable).**
+
 ### 10.7 Header-level side results (all in `.czh_pc`, none in `.czn_pc`)
 
 - **`SR3Z +0x1E` is the zone type — the selector of the container kind.** The registration routine switches on this word: `{1, 3, 8, 10, 11, 13}` → kind `0x1B` Level Always Loaded; `{5, 6}` → `0x21` mission; `7` → `0x1F` Interior zone; `9` → `0x20` Large interior zone; `12` → `0x22` large mission; anything else (incl. 2) → `0x1D` Zone. Over **all 2,971 `.czh_pc` files** (every container with a zone-header entry in every archive, kind taken from its manifest record) the observed pairs are: Zone ↔ 2 (1,194), Interior ↔ 7 (140), Large interior ↔ 9 (174), Level Always Loaded ↔ 1 / 3 / 8 / 10 / 13 (2 / 1,194 / 58 / 51 / 21), mission ↔ 5 / 6 (62 / 72), large mission ↔ 12 (3) — **0 exceptions, 11 is the only case value never observed.** Resolves `spec-ctorless-types.md` §5 / §8 item 2 for `+0x1E` (that document is not edited here). In `sr3_city_0/1` the zone file names carry a marker character before the extension: activity zones (type 6, 59) end in a backtick, the six arena zones (type 9, §10.8) in `$`, ordinary zones have none (the name parser tolerates `! $ \` ^ ~` after the four digits). **[CONFIRMED — disassembly + empirical, 2,971/2,971.]**
 - **`SR3Z +0x0C..+0x17` are three `f32`: the world-space origin the record positions are relative to.** Over the 1,265 tile / sub-area / activity-zone headers of `sr3_city_0/1`: zero in every file without records, non-zero in all 248 files that have records. **All 248 files with records are `~f` (fast) headers; all 603 `~s` (slow) headers in the same set have count 0** — an observation on `spec-ctorless-types.md` §8 item 3 (fast vs slow). **[CONFIRMED — disassembly (used as the translation) + empirical.]**
 - **Record fields as read by the hN packing routine** (partial answer to `spec-ctorless-types.md` §5.1): `+0`, `+2`, `+4` = `s16` position words, **1/64 m** per unit (constant `2⁻⁶`), added to the header origin (validated: spreads 317 / 279 m, §10.6(g)); `+12` = `u16` name index compared with a list of the source zone file's level-mesh names; `+6` = `s16` scaled by `2⁻¹²` and fed to a one-scalar transform builder (a rotation angle in radians fits the zero-heavy distribution better than a scale factor — **HYPOTHESIS**, not established); `+8`, `+10` are not read by this consumer. The shipped `.czh_pc` name list does **not** contain the level-mesh names (it holds textures and `.fmeshx` names, `spec-terrain-format.md` §2), so mapping a record's name index to a mesh file is not possible from the header alone — **OPEN**.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ### 10.8 The `_a_<type>_<region>_<NN>` names (secondary; §6 item 6)
 
@@ -975,6 +1045,8 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 
 **First code (type) — ten codes, ten disjoint element vocabularies. [HIGH CONFIDENCE — inferred from content; the code→official-activity-name table is not stored in these names.]** Types `dt es ga ha if mh rm sn tb tm` (DLC adds 3-letter codes such as `tbp`, and the region code can be absent, e.g. `dlc1_a_es_01`, or two-part, `dlc1_a_bm_nw_01` — so the pattern is `<dlc prefix>_a_<type>[_<region>]_<NN>`, not fixed-width). Each type's `.xtbl` uses element names that no other type uses, and they describe distinct mechanics: `dt` — `Dealer_Type`, `Deals`, `Buyer_Spawn`, `Deal_Use_Count` (deal-and-buyer loop); `es` — `Client`, `Dropoff_Navpoints`, `Drift`/`Air`/`Crash`/`Drive_By` bonus counters; `ga` — `Attackers`, `Attack_Group`, `Camera_Restriction` (2 files only); `ha` — `Aircraft_path`, `Enemy_Helicopter_Type`, `Chance_of_rocket_launcher`, `Convoy_Level_Info`; `if` — `Crazy_Chance`, `Bonus_Spots`, `Active_Hood`; `mh` — `Combo_Max_Multiplier`, `Hood_Name`; `rm` — `Electric_Trap`, `Explosion_Timer`, `Door_Mover`, `Alternative_Cash_Amount`, `Cutscene`, `Banter` (trap arena, the one type with an interior bundle); `sn` — `Ho`, `Ho_Rescue`, `Dropoff_Effect`; `tb` — `Checkpoint_Group`, `Barrel_Group`, `Bonus_Time`; `tm` — `Convoy`, `Crowd`, `High_Value_Targets`, `Coop_Tank_Spawn_Location` (9 files = 3 regions × 3). The population is 59 instances (8 types × 2 regions × 3 ordinals, `tm` 3 regions × 3, `ga` only 2; the save table has 60 keys, `spec-save-format.md` §9.3a). **The letters are not decoded from the letters** — the mechanic behind each code is read from the table content; the game's own display names for the 19 activity types would come from `activity_types.xtbl` (loaded by the world-startup routine `FUN_0084e3b0`), which is **not a top-level entry of any archive** *[superseded: `spec-tables-progression.md` §14.16 read it from `misc_tables.vpp_pc` (19 activity-type names with the DLC1 copy); mapping the ten codes to those names is still open]* and was not searched for inside nested containers this pass, so a code → display-name table cannot be given here. Activity zones mostly carry no placement records (51 of 59 fast headers have count 0), so their world positions are largely not recoverable from headers; the only two `nw`-coded zones that do carry an origin (`_a_tm_nw_01`, `_a_tm_nw_03`, 2 and 5 records) sit at world x = +1,402 / +1,075, z = −28 / −952 — with the lattice of §10.6(g) that is not obviously "north-west" if +x is east, and a zone with 2–5 records need not have its origin in its activity area, so this is a caution against reading the letters as compass points, not a refutation.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 10.9 What this changes in earlier sections, and what stays open
 
 - **§3** — the suffix hedging is struck through there and points here; the "no manifest of their own" wording is corrected in §10.2.
@@ -984,13 +1056,17 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 - **§7.2 / §8** — the two allocator names now have a code-level meaning: `medium lod level allocator` = the pool of container kind `Zone` (tile bundle, `~L1`), `high lod level allocator` = the pool of kind `Zone (High LOD)` (fine cells, base meshes). `zone always loaded` is the level-0 kind's pool (**HYPOTHESIS** by name — §10.3; that kind row's pool byte was not read this pass).
 - **OPEN:** (1) what drives the reconciliation each frame (§10.4) — **advanced, not closed, by §11.5**; (2) how up to four resident cells fit the tier-2/4 high-LOD budgets (§10.4); (3) the meaning of record word `+6` and the name-index → mesh mapping for shipped headers (§10.7); (4) display names of the ten activity types (needs `activity_types.xtbl`, not found as a top-level archive entry *[since found in `misc_tables.vpp_pc`, `spec-tables-progression.md` §14.16; the code→name mapping is still open]*) and whether the region letters are compass sectors (§10.8); (5) the per-level window/capacity numbers of levels 0–2 and 5 (only levels 3 and 4 were tabulated); (6) the meaning of `SR3Z +0x1E` case 11 and of the level-5 manager (kind 0).
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ## 11. Runtime streaming behavior: the distance/box rule, hysteresis, the camera-position source, and load/eviction order (2026-09-30)
 
 A follow-up pass, scoped deliberately to the streaming manager's own executable code (no `.czn_pc` record content read at any point — this section is entirely code-derived), characterizes the RUNTIME behavior on top of the container kinds/ladder §10 already establishes: when the engine actually loads or unloads each of the three levels most relevant to open-world traversal as the camera/player moves — **L2 = `awld_compact`** (engine level 0, "Level Always Loaded"), **L1 = the plain tile bundle** (engine level 3, "Zone"), **L0 = the `hN` "Zone (High LOD)" fine cells** (engine level 4) — using the same level-manager/vtable-method terms §10.3/§10.4 already establish.
 
 ### 11.1 The distance/box rule — confirms and re-derives §10.4's own figures independently
 
-The per-level "which cells do I want" method (`0x00860c50`, already read in full at §10.4) builds its box by reading the level manager's own stored window-size fields (three floats at fixed offsets `+0xa4`/`+0xa8`/`+0xac` of the manager object) and multiplying each by a constant read directly from data as the IEEE-754 double **0.5** (address `0x012a2dc0`) — i.e. `box = focus ± (window / 2)`, re-deriving §10.4's own already-published window figures from the box-construction code itself rather than from constructor arguments: L0 (engine level 4) window ≈159.5×139.5 m; L1 (engine level 3) window ≈479.5×559.5 m. **L2 (engine level 0) goes through the IDENTICAL generic function `0x00860c50` as L0/L1 — there is no special-cased "always loaded" branch anywhere in this chain.** Camera position is structurally irrelevant to L2's own load/unload decision only because its own grid is 1×1 covering the whole world (§10.3), not because the code exempts it. This is a world-unit axis-aligned box test, re-evaluated fresh on every reconciliation call — never expressed anywhere as "N cells in each direction." **[CONFIRMED — disassembly, re-deriving §10.4's own window figures from a second, independent code path (the box constructor rather than the manager's own constructor arguments).]**
+The per-level "which cells do I want" method (`0x00860c50`, already read in full at §10.4) builds its box by reading the level manager's own stored window-size fields (three floats at fixed offsets `+0xa4`/`+0xa8`/`+0xac` of the manager object) and multiplying each by a constant read directly from data as the IEEE-754 double **0.5** (address `0x012a2dc0`) — i.e. `box = focus ± (window / 2)`, re-deriving §10.4's own already-published window figures from the box-construction code itself rather than from constructor arguments: L0 (engine level 4) window ≈159.5×139.5 m; L1 (engine level 3) window ≈479.5×559.5 m. **L2 (engine level 0) goes through the IDENTICAL generic function `0x00860c50` as L0/L1 — there is no special-cased "always loaded" branch anywhere in this chain.** Camera position is structurally irrelevant to L2's own load/unload decision only because its own grid is 1×1 covering the whole world (§10.3), not because the code exempts it. This is a world-unit axis-aligned box test, re-evaluated fresh on every reconciliation call — never expressed anywhere as "N cells in each direction." **[CONFIRMED — disassembly, re-deriving §10.4's own window figures from a second, independent code path (the box constructor rather than the manager's own constructor arguments).]** **[Label scope and OPEN — desk review 2026-09-30: the box routine establishes which fields are read (`+0xa4`/`+0xa8`/`+0xac`), the factor 0.5 and box = focus ± window/2; the window numbers are whatever the constructor stored in those fields, so they are not re-derived independently. Whether level 0 is a grid-class manager using this same slot (levels 1, 2 and 5 are list class, §10.3), and level 0's cell extent (on which "camera structurally irrelevant" rests), are not shown; to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: box figures come from constructor-stored fields, not an independent re-derivation; level 0's manager class/slot and cell extent unshown — desk review (not re-derived from the executable).**
 
 ### 11.2 Hysteresis — CONFIRMED NEGATIVE; a temporal debounce exists instead of a spatial gap
 
@@ -1000,34 +1076,45 @@ What does exist, and could be mistaken for hysteresis, is purely temporal, not s
 - Two adjacent 6-entry per-level integer counter arrays at `0x02444f0c` and `0x02444f24` (exactly 24 bytes apart, i.e. contiguous 6-int blocks). `0x02444f24` is incremented/decremented by a small helper at `0x008618f0` and, while nonzero for a level, suppresses rebuilding that level's wanted list at all (inside `0x00860e70`). `0x02444f0c` separately gates whether the acquire/release loops run for that level inside `0x008610e0` itself. Whether these are one logical per-level "hold" state read through two symbols or genuinely two independent counters is **OPEN**.
 - Independently, `0x00860e70` skips rebuilding a level's wanted list while that level's own "pending" list (read via the level manager's own vtable slot `+0x14`) is still non-empty, routing instead to an unexamined function at `0x0085fdd0` — i.e. a level with an outstanding in-flight request is not re-evaluated until it drains. This is a real anti-thrash debounce, but it is gated on "is a load still in flight," not on distance.
 
-**[CONFIRMED — no distance-based load/unload gap for any of L0/L1/L2; the anti-thrash mechanism found is request-in-flight / hold-counter debouncing, not a wider keep-radius.]**
+**[CONFIRMED — no distance-based load/unload gap for any of L0/L1/L2; the anti-thrash mechanism found is request-in-flight / hold-counter debouncing, not a wider keep-radius.]** **[OPEN — desk review 2026-09-30: this negative covers only the functions read — `0x0085fdd0` (taken exactly while a request is pending, unexamined above), the optional flush in `0x008618f0` and the second comparator `0x0085d010` (§11.4) are unread, so a keep test there is not excluded; at level 3 a cell can also leave the wanted list through nearest-first truncation (up to 9 overlapped tiles against capacity 7, §10.3/§10.4) while still inside the box; to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: the absence claim leaves `0x0085fdd0`, the `0x008618f0` flush and `0x0085d010` unread — desk review (not re-derived from the executable).**
 
 ### 11.3 Camera-position source — CONFIRMED single global feed; HIGH CONFIDENCE it is the render-camera/view state, not the player pawn directly
 
-All three levels' reconciliation reads one global 12-byte Vector3 — 8 bytes at `0x02447c64` plus 4 bytes at `0x02447c6c` — written **exclusively** by one 25-byte function, `0x0085bce0`, whose entire body is "copy caller's 12-byte argument into these two globals, return." Every consumer (`0x00860c50`, reached via `0x00860e70` / `0x008610e0` / `0x00861850` / `0x008618f0`) treats it purely as the focus point.
+All three levels' reconciliation reads one global 12-byte Vector3 — 8 bytes at `0x02447c64` plus 4 bytes at `0x02447c6c` — written **exclusively** *(predicate: no other static write reference; writes through a pointer or block copy are not excluded)* by one 25-byte function, `0x0085bce0`, whose entire body is "copy caller's 12-byte argument into these two globals, return." Every consumer (`0x00860c50`, reached via `0x00860e70` / `0x008610e0` / `0x00861850` / `0x008618f0`) treats it purely as the focus point.
 
 Five static call sites into `0x0085bce0` land in at least three structurally distinct systems — reconfirming this project's own prior finding that different systems really do use different "current position" sources even though they happen to funnel into the same global here:
 1. **World/game init** (`0x0084e3b0`, reached from the main init routine `0x007acfe0`) — a one-time startup default.
-2. **A camera-cut / view state-machine function, `0x007a82c0`.** It maintains a small 2-slot ring buffer of pending "camera shot" records (12-byte position + blend/transition byte parameters per record, `0x3c` bytes each, base ~`0x0224206c`, indexed by a sign-safe mod-2 counter at `0x0224205c` — the `(x+1)&0x80000001` idiom WALLS.md already flags as a branching round-up form *[correction 2026-09-30: WALLS.md flags `& 0x80000003` and the `(x-1|0xfffffffc)+1` round-up, not this mod-2 idiom; it is in the same family of non-literal idioms WALLS.md warns about]*). When a new shot becomes pending it calls `0x0085bce0` with that record's own position field, then immediately calls two further functions (`0x00da38e0`, `0x00564c20`) reading the same local buffer — consistent with building/applying a view matrix from it. **HIGH CONFIDENCE (not independently proven by opening those two functions' own bodies): the position source in steady state is the active render-camera record, not the player pawn directly and not a separate dedicated "streaming anchor" object.**
+2. **A camera-cut / view state-machine function, `0x007a82c0`.** It maintains a small 2-slot ring buffer of pending "camera shot" records (12-byte position + blend/transition byte parameters per record, `0x3c` bytes each, base ~`0x0224206c`, indexed by a sign-safe mod-2 counter at `0x0224205c` — the `(x+1)&0x80000001` idiom WALLS.md already flags as a branching round-up form *[correction 2026-09-30: WALLS.md flags `& 0x80000003` and the `(x-1|0xfffffffc)+1` round-up, not this mod-2 idiom; it is in the same family of non-literal idioms WALLS.md warns about]*). When a new shot becomes pending it calls `0x0085bce0` with that record's own position field, then immediately calls two further functions (`0x00da38e0`, `0x00564c20`) reading the same local buffer — consistent with building/applying a view matrix from it. **HIGH CONFIDENCE (not independently proven by opening those two functions' own bodies): the position source in steady state is the active render-camera record, not the player pawn directly and not a separate dedicated "streaming anchor" object.** **[OPEN — desk review 2026-09-30: as described, `0x007a82c0` writes the focus only "when a new shot becomes pending", i.e. at camera-shot events; that it pends a record every frame during free roam is not shown, so "steady state" is not established; to be settled against the executable (`0x007a82c0` and its callers).]**
 3. **A second, distinct path** through a large function at `0x00702a50` (itself reached from a cluster of further-out functions in the `0x0072axxx`/`0x0072bxxx` region that look mission/activity-transition-shaped). Immediately before calling `0x0085bce0` it fetches a fresh 12-byte value via a function at `0x009e7cb0` and writes it straight through — reading as a "warp the streaming focus to a specific place" call (mission start / fast travel / respawn), not a per-frame camera follow. **OPEN:** exactly what `0x009e7cb0` reads.
 
+*[desk review 2026-09-30: three of the five call sites are described above; the other two (§10.4: "a game-state start routine and two others") are not listed — OPEN.]*
+
 A **separate, structurally unrelated** global position (12 bytes at `0x029cdb98`) is used only by the one-time startup/interior-preload path (`0x00861800` → `0x00861460`, which reconciles levels 0/1/2 individually at boot) — a further confirmation that "current position" is not a single universal concept in this codebase.
+
+**Review status (2026-09-30): NEEDS-EXE: the focus is written at camera-shot events; a per-frame feed is not shown; 2 of 5 call sites undescribed — desk review (not re-derived from the executable).**
 
 ### 11.4 Load/eviction order and budget — nearest-first plus a second flag-gated sort; no per-tick load budget; eviction is immediate
 
 **Load order, two layers:**
-- **Build-time sort (`0x00860c50`, already established at §10.4):** when overlap candidates exceed a level's list capacity, they are sorted via a qsort-style call using comparator `0x0085cd70` before truncating — that comparator computes a box for each candidate cell (via the level manager's vtable slot `+0x28`) and a box-to-point distance against the focus (via `0x00dc8be0`), then compares the two distances, independently re-confirming §10.4's own "nearest-first" reading from raw instructions. The sort's own comparison *direction* stays HIGH CONFIDENCE, not CONFIRMED, per §10.4's own already-recorded x87 return-value ambiguity — this pass hit the identical ambiguity and did not resolve it further.
-- **Acquire-time sort (`0x0085ee30`, the level manager's own "acquire" method) — a genuinely new finding:** if a global flag at `0x0149365c` is set, the candidate list is **re-sorted again** with a **different** comparator (`0x0085d010`, not decompiled this pass) before any load requests are issued; if the flag is clear, acquires are issued in whatever order the list already has. `0x0149365c` is set to `1` at the top of a large startup display/quality-mode init function (`0x005d1a30`, alongside three sibling flag bytes at `0x0149365d`/`e`/`f`) and is the SAME literal address §9.5 already found gating an unrelated streaming-budget calculation — consistent with a general boot-time quality-tier bit reused across unrelated call sites, not something streaming-specific. **HIGH CONFIDENCE this second sort step exists and runs; OPEN what `0x0085d010` actually orders by and what `0x0149365c` semantically means.**
+- **Build-time sort (`0x00860c50`, already established at §10.4):** when overlap candidates exceed a level's list capacity, they are sorted via a qsort-style call using comparator `0x0085cd70` before truncating — that comparator computes a box for each candidate cell (via the level manager's vtable slot `+0x28`) and a box-to-point distance against the focus (via `0x00dc8be0`), then compares the two distances, independently re-confirming §10.4's own "nearest-first" reading from raw instructions *[desk review 2026-09-30: this shows a distance comparator; with its direction unresolved (next sentence) it does not re-confirm nearest-first]*. The sort's own comparison *direction* stays HIGH CONFIDENCE, not CONFIRMED, per §10.4's own already-recorded x87 return-value ambiguity — this pass hit the identical ambiguity and did not resolve it further.
+- **Acquire-time sort (`0x0085ee30`, the level manager's own "acquire" method) — a genuinely new finding:** if a global flag at `0x0149365c` is set, the candidate list is **re-sorted again** with a **different** comparator (`0x0085d010`, not decompiled this pass) before any load requests are issued; if the flag is clear, acquires are issued in whatever order the list already has. `0x0149365c` is set to `1` at the top of a large startup display/quality-mode init function (`0x005d1a30`, alongside three sibling flag bytes at `0x0149365d`/`e`/`f`) and is the SAME literal address §9.5 already found gating an unrelated streaming-budget calculation — consistent with a general boot-time quality-tier bit reused across unrelated call sites, not something streaming-specific. **HIGH CONFIDENCE this second sort step exists and runs; OPEN what `0x0085d010` actually orders by and what `0x0149365c` semantically means.** **[OPEN — desk review 2026-09-30: if the store at `0x005d1a30` is unconditional, the flag is constant `1` at run time, so this second sort always runs and §9.5's `0x15` default never applies; "general boot-time quality-tier bit" is not evidenced; every writer of `0x0149365c`–`f` is to be settled against the executable.]**
 
-**Per-tick budget: CONFIRMED negative.** No "load at most N per frame" throttle exists anywhere in the acquire chain (`0x0085ee30` → `0x00dafea0`) — every candidate remaining after the sort/truncate steps above gets an acquire call issued in the same pass, unconditionally. The only bound is each level's own small fixed list capacity (6/1/7/7/4 for engine levels 0–4, §10.3) plus the fact that only the delta between the new wanted list and the previous active list is ever touched.
+**Per-tick budget: CONFIRMED negative.** No "load at most N per frame" throttle exists anywhere in the acquire chain (`0x0085ee30` → `0x00dafea0`) — every candidate remaining after the sort/truncate steps above gets an acquire call issued in the same pass, unconditionally. The only bound is each level's own small fixed list capacity (6/1/7/7/4 for engine levels 0–4, §10.3) plus the fact that only the delta between the new wanted list and the previous active list is ever touched. *[Scope — desk review 2026-09-30: the negative covers the acquire chain read (`0x0085ee30` → `0x00dafea0`); throttling further downstream, where the I/O is actually started, was not examined — OPEN.]*
 
-**Eviction: CONFIRMED immediate, not deferred/lazy.** The release path (`0x0085ef70` for the general per-variant case; the level-0/L2 case releases every variant of a dropped cell rather than just the selected one) calls a reference-count-decrement primitive, `0x00dafad0` (the SAME primitive §10.4 already cites as "a reference-count decrement that frees at zero," now independently confirmed and fully traced), and — the instant it reaches zero — calls further teardown routines (`0x00daf270` / `0x00daf010`) in the same call: no keep-alive counter, delay timer, or LRU structure found anywhere in this chain. The mirror-image acquire primitive (`0x00dafea0`, the SAME primitive §10.4 cites as "a load request") is likewise an immediate refcount increment/attach with a same-call fast path when already resident. Both primitives additionally check the calling thread's id (`GetCurrentThreadId` against a recorded owner at `0x01329ea4`) and silently no-op off-thread — confirming all loading/unloading is expected to run on one specific thread, with no async eviction worker.
+**Eviction: CONFIRMED immediate, not deferred/lazy.** The release path (`0x0085ef70` for the general per-variant case; the level-0/L2 case releases every variant of a dropped cell rather than just the selected one) calls a reference-count-decrement primitive, `0x00dafad0` (the SAME primitive §10.4 already cites as "a reference-count decrement that frees at zero," now independently confirmed and fully traced), and — the instant it reaches zero — calls further teardown routines (`0x00daf270` / `0x00daf010`) in the same call: no keep-alive counter, delay timer, or LRU structure found anywhere in this chain. The mirror-image acquire primitive (`0x00dafea0`, the SAME primitive §10.4 cites as "a load request") is likewise an immediate refcount increment/attach with a same-call fast path when already resident. Both primitives additionally check the calling thread's id (`GetCurrentThreadId` against a recorded owner at `0x01329ea4`) and silently no-op off-thread — confirming all loading/unloading is expected to run on one specific thread, with no async eviction worker *[desk review 2026-09-30: the thread check shows that off-thread calls are ignored; that no other worker frees containers is inferred from it, not shown]*.
+
+**Review status (2026-09-30): NEEDS-EXE: "no per-tick budget" covers the acquire call only; `0x0149365c` writers and `0x0085d010` unread; no-async-worker inferred — desk review (not re-derived from the executable).**
 
 ### 11.5 The top-level per-frame driver (§10.9's own OPEN item 1) — advanced, still not closed
 
-Starting from the driver hunt rather than assuming it is the same unresolved driver `spec-render-pipeline.md` separately flags for the render pipeline: the reconciliation entry `0x008610e0` is reached, among other already-known paths, through a short all-levels wrapper (`0x00861850`), itself called from: (i) unconditionally, at the tail of a Bink-video-playback state machine (`0x00bdbf30`); (ii) directly from a function (`0x007a8180`) that also flushes per-viewport pending render state; (iii) through a two-hop wrapper (`0x00854c90`) sitting in a real, resolved vtable at `~0x01164690` (surrounded by other genuine function-pointer slots at `0x01164680`–`0x011646a0`) behind a gate (`0x004578b0`/`0x00457210`) that is unconditionally true; (iv) one further raw call site not resolved to a named function. Critically, `0x007a8180` itself has **zero** static callers anywhere in the binary per Ghidra's own reference database — its one known invocation site (`0x007a8511`) is likewise called by nothing statically — meaning both are reached only through some indirect/callback dispatch not located this pass. **This is consistent with, and meaningfully extends, §10.9's own conclusion** ("no per-frame caller was found" — §10.4's wording, carried as §10.9 OPEN item 1) rather than closing it: the population of concrete trigger paths is now much richer (Bink-video tick, a viewport-flush routine, a vtable slot, camera-cut transitions, mission/activity transitions, hold-counter changes, startup/interior preload), but the single "runs once per rendered frame, unconditionally" driver remains **OPEN**. Concrete next step if resumed: find whatever writes a function pointer to `0x007a8511` (or resolves the vtable class at `0x01164690`), and separately trace what the registration helper `0x00bdc120` (called from the startup init `0x005d1a30`) actually registers `0x00bdbf30` *into* — that table's own per-frame walker is the most likely place the real driver lives.
+Starting from the driver hunt rather than assuming it is the same unresolved driver `spec-render-pipeline.md` separately flags for the render pipeline: the reconciliation entry `0x008610e0` is reached, among other already-known paths, through a short all-levels wrapper (`0x00861850`), itself called from: (i) unconditionally, at the tail of a Bink-video-playback state machine (`0x00bdbf30`); (ii) directly from a function (`0x007a8180`) that also flushes per-viewport pending render state; (iii) through a two-hop wrapper (`0x00854c90`) sitting in a real, resolved vtable at `~0x01164690` (surrounded by other genuine function-pointer slots at `0x01164680`–`0x011646a0`) behind a gate (`0x004578b0`/`0x00457210`) that is unconditionally true; (iv) one further raw call site not resolved to a named function. Critically, `0x007a8180` itself has **zero** static callers anywhere in the binary per Ghidra's own reference database — its one known invocation site (`0x007a8511`) is likewise called by nothing statically — meaning both are reached only through some indirect/callback dispatch not located this pass. **[OPEN — desk review 2026-09-30: `0x007a8511` is described as an invocation site, i.e. an instruction inside some function, yet also as "called by nothing" — the function containing it is not identified; (iv) is plausibly the call near `0x7B0650` that §10.4 lists; and the gate `0x004578b0`/`0x00457210` is called unconditionally true without its bodies described; to be settled against the executable.]** **This is consistent with, and meaningfully extends, §10.9's own conclusion** ("no per-frame caller was found" — §10.4's wording, carried as §10.9 OPEN item 1) rather than closing it: the population of concrete trigger paths is now much richer (Bink-video tick, a viewport-flush routine, a vtable slot, camera-cut transitions, mission/activity transitions, hold-counter changes, startup/interior preload), but the single "runs once per rendered frame, unconditionally" driver remains **OPEN**. Concrete next step if resumed: find whatever writes a function pointer to `0x007a8511` (or resolves the vtable class at `0x01164690`), and separately trace what the registration helper `0x00bdc120` (called from the startup init `0x005d1a30`) actually registers `0x00bdbf30` *into* — that table's own per-frame walker is the most likely place the real driver lives.
+
+**Review status (2026-09-30): NEEDS-EXE: the function containing `0x007a8511` is unidentified; call site (iv) and the gate bodies not described — desk review (not re-derived from the executable).**
 
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 4 cross-references (§9.1 §9.4→§9.5; HANDOFF §11→§26.22 twice; §11.5 quote attributed to §10.4) and annotated the WALLS.md idiom reference (§11.3); marked vertex-layout, `.rig_pc` and `activity_types.xtbl` open items resolved by other specs (§5, §6, §10.8, §10.9); added forward pointers on §7.1/§7.2 unrecovered names and [OPEN] tags and on superseded §8.5/§8.6/§8.8 rows; fixed the wrong id in §8.4 (`0x14`→each id); added a spelling-conflict marker for category `0x27` (§9.4); reworded decompiler-shaped expressions and replaced the `param_1` auto-name with "the tier argument" (§8.2–§8.8, §9.1, §9.4, §9.5, §9.7); labelled the level-0 pool reading HYPOTHESIS (§10.9).
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 2 left (§9.4 `HANDOFF.md` §27.1 "41 registrations, 40 ids": no archived copy survives, §26.22 already cited alongside; §10 `HANDOFF.md` §27.3, interior thread on hold) (see review).
+- 2026-09-30 (cloud format-spec desk review, `review/adv_world_streaming.md`): added the review status summary and a status line per unit (39 units: 10 DESK-PASS, 16 with text fixes, 9 NEEDS-EXE, 2 NEEDS-DATA, 2 VALIDATED-BY-DATA); narrowed §1's "all of it" to the sample; fixed unit labels (§8.5 `0xCE5400`/`0x793000`/`0x190000`, §9.4 `0x450000`, §10.4 MB/MiB), the §8.3 helper tally, the §9.7 ratios and struck its "without exception" (`0x1A` counter-example), the §10.6(d) chance figure; scoped labels in §7.3 (not-a-sentinel now HIGH CONFIDENCE), §10.5, §11.1, §11.4; reworded two code-shaped `DAT_` expressions (§8.2, §9.4); added OPEN markers for the executable/data (§1, §2, §4, §5.1, §7.2, §8.1, §8.2, §9.4, §9.5, §10 intro, §10.2–§10.5, §11.1–§11.5); no confidence label raised.
