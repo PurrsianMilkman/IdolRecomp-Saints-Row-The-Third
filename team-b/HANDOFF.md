@@ -34,7 +34,13 @@ The pause banner below is historical (see `TEAMS.md`). Newest entry first.
    `tools/validation/probe_vintdoc_*.cpp` were read: they hypothesised `+0x16` = absolute offset of the
    critical-resource section but recorded no result; the validator's grid includes that candidate (`A-*`).
 
-**Blocked:** the bus repo isn't set up, so nothing has run on real data. Jobs queued in
+**Bus live (2026-09-30, manager):** `bridge_client.py setup` done (fetches only `team-b*`/`status*`; no Team A
+branch on disk). Integration branch merged (spec-lua-bindings §17 rewording, values unchanged, no code impact).
+**Submitted, queued until the PC agent reports in** (all from `d0e6843`): `20260930T213035-team-b-ymee` (01a),
+`20260930T213037-team-b-jpsf` (01b), `20260930T213040-team-b-qqyx` (01c), `20260930T213043-team-b-knyf` (02
+mission re-run), `20260930T213047-team-b-zlbw` (03 vintdoc sweep). Read results with
+`python3 bridge/bridge_client.py wait <id>` / `show <id>`.
+**Earlier:** the bus repo wasn't set up, so nothing had run on real data. Jobs queued in
 `team-b/bridge-jobs/` (see its README; all pass `pc_agent.py`'s own `validate()`): `01a-c` MSVC build +
 42 suites, `02` mission-driving re-run, `03` `sr3vintdoc` sweep over `interface_startup.vpp_pc` +
 `interface.vpp_pc`. **Job 03's `--dump` JSON contains game text: read it from the bus, never commit it.**
