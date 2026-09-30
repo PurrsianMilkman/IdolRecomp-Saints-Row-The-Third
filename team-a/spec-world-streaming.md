@@ -39,9 +39,9 @@ Every `.str2_pc` bundle sampled (a base tile, both `h0`/`h3` LOD-style variants,
 
 **What's genuinely new, found here for the first time, and not decoded this pass:**
 
-- **`.czh_pc` / `.czn_pc` / `.gzn_pc`** — since documented in full: `spec-terrain-format.md`. Summary: `.czh_pc` is a material/prop reference list (the shared material block again, split into ground-texture and foliage-mesh-source groups); `.czn_pc` holds multi-region chunk metadata (real, readable `"Region<NNN>"` labels found); `.gzn_pc` is the geometry payload, showing the same 16-byte-header-then-index-buffer shape as `.gcmesh_pc`/`.glmesh_pc` — vertex-attribute layout still open there, same as those two.
-- **`.clmesh_pc` / `.glmesh_pc`** — since documented: `spec-geometry-format.md` §4.1. Confirmed structurally analogous to `.ccmesh_pc`/`.gcmesh_pc` (material block on the CPU side, likely index buffer on the GPU side); vertex-attribute layout still open, same as `.gcmesh_pc`. Also seen with a `~lN` per-object suffix (e.g. `mathmatikron~l1.clmesh_pc`, `mathmatikron~l2.clmesh_pc`) that looks like a genuine per-mesh LOD-level convention, distinct from the tile-level `hN` suffix in §3.
-- **`.rig_pc`** — found once in `angels_crib` (`doubledoor01.rig_pc`, 312 bytes) — plausibly an animation rig/skeleton reference for an animated prop (a door). Not investigated.
+- **`.czh_pc` / `.czn_pc` / `.gzn_pc`** — since documented in full: `spec-terrain-format.md`. Summary: `.czh_pc` is a material/prop reference list (the shared material block again, split into ground-texture and foliage-mesh-source groups); `.czn_pc` holds multi-region chunk metadata (real, readable `"Region<NNN>"` labels found); `.gzn_pc` is the geometry payload, showing the same 16-byte-header-then-index-buffer shape as `.gcmesh_pc`/`.glmesh_pc` — vertex-attribute layout still open there, same as those two. *[Since resolved: the per-vertex attribute layout is decoded in `spec-vertex-format.md`.]*
+- **`.clmesh_pc` / `.glmesh_pc`** — since documented: `spec-geometry-format.md` §4.1. Confirmed structurally analogous to `.ccmesh_pc`/`.gcmesh_pc` (material block on the CPU side, likely index buffer on the GPU side); vertex-attribute layout still open, same as `.gcmesh_pc`. *[Since resolved: the per-vertex attribute layout is decoded in `spec-vertex-format.md`.]* Also seen with a `~lN` per-object suffix (e.g. `mathmatikron~l1.clmesh_pc`, `mathmatikron~l2.clmesh_pc`) that looks like a genuine per-mesh LOD-level convention, distinct from the tile-level `hN` suffix in §3.
+- **`.rig_pc`** — found once in `angels_crib` (`doubledoor01.rig_pc`, 312 bytes) — plausibly an animation rig/skeleton reference for an animated prop (a door). Not investigated. *[The `.rig_pc` format has since been documented: `spec-rig-format.md`.]*
 - **`.lightmult_pc`** — found once in `angels_crib` (`fireflicker_001.lightmult_pc`, 514 bytes) — plausibly a lighting-parameter/multiplier asset for a named light effect. Not investigated.
 - **`sr3_city.grid_pc`** — see §5.1, resolved in a follow-up pass.
 
@@ -73,16 +73,16 @@ repeated name_count times:
 
 ## 6. Open Items
 
-1. **`.czh_pc`/`.czn_pc`/`.gzn_pc` — since documented, see `spec-terrain-format.md`.** Material/foliage references, multi-region metadata, and geometry payload all sketched; the geometry payload's own vertex-attribute layout remains open (needs disassembly, same as `.gcmesh_pc`).
-2. **`.clmesh_pc`/`.glmesh_pc` — since documented, see `spec-geometry-format.md` §4.1.** Confirmed structurally analogous to `.ccmesh_pc`/`.gcmesh_pc`; vertex-attribute layout still open there too.
-3. **`.rig_pc`** and **`.lightmult_pc`** — each seen once, not investigated at all.
+1. **`.czh_pc`/`.czn_pc`/`.gzn_pc` — since documented, see `spec-terrain-format.md`.** Material/foliage references, multi-region metadata, and geometry payload all sketched; the geometry payload's own vertex-attribute layout remains open (needs disassembly, same as `.gcmesh_pc`). *[Since resolved: the per-vertex attribute layout is decoded in `spec-vertex-format.md`.]*
+2. **`.clmesh_pc`/`.glmesh_pc` — since documented, see `spec-geometry-format.md` §4.1.** Confirmed structurally analogous to `.ccmesh_pc`/`.gcmesh_pc`; vertex-attribute layout still open there too. *[Since resolved: the per-vertex attribute layout is decoded in `spec-vertex-format.md`.]*
+3. **`.rig_pc`** and **`.lightmult_pc`** — each seen once, not investigated at all. *[`.rig_pc` format since documented in `spec-rig-format.md`; `.lightmult_pc` still not investigated.]*
 4. **`sr3_city.grid_pc`'s binary layout — substantially resolved, see §5.1.** The record shape and all 4 sections' semantics are confirmed (two landmark-name directories, a coordinate-tile directory, a tile-variant grouping directory). The honest, load-bearing finding: **this file does not do the spatial name→position mapping it was hoped to** — landmark records carry no coordinate/position field at all, only a bare sequential ID. Whatever actually places a named landmark in the world is a different, still-unlocated mechanism. What's left here specifically: the section 2→3 transition/boundary mechanism, the preamble entry's fields, and ~~section 4's index-value scheme~~ [resolved, §10.6(e)].
 5. ~~**The `hN` suffix's exact meaning** (§3) — LOD tier, spatial subdivision, or prop-category batch are all plausible from the one tile checked; not distinguished.~~ **RESOLVED 2026-09-20 (agent AA) — §10.** `hN` = fine cell N of the tile's 2×2 subdivision, engine container kind "Zone (High LOD)", full-detail (LOD 0) level meshes; three independent legs (engine kind/pool names in code; the runtime level-4 grid at twice the tile resolution; the shipped grid file's cell addresses 437/437) plus population checks. Still open there: what re-triggers the load/unload reconciliation each frame (§10.4).
-6. ~~**The `_a_<type>_<dir>_<NN>` generic-interior naming scheme's type codes** (§4) — the systematic pattern is confirmed, the individual 2-letter codes' meanings are not.~~ **ADVANCED 2026-09-20 (agent AA) — §10.8.** The names are activity-instance zones, not generic interiors; the second code equals the game's hood-region prefix (data-confirmed for `nw`/`dt`); the first code is one of ten activity mechanics identified from each `.xtbl`'s element vocabulary; the code examined never splits or tables the letters. Still open: display names of the ten types (`activity_types.xtbl` was not located as a top-level archive entry) and whether the region letters are compass sectors.
+6. ~~**The `_a_<type>_<dir>_<NN>` generic-interior naming scheme's type codes** (§4) — the systematic pattern is confirmed, the individual 2-letter codes' meanings are not.~~ **ADVANCED 2026-09-20 (agent AA) — §10.8.** The names are activity-instance zones, not generic interiors; the second code equals the game's hood-region prefix (data-confirmed for `nw`/`dt`); the first code is one of ten activity mechanics identified from each `.xtbl`'s element vocabulary; the code examined never splits or tables the letters. Still open: display names of the ten types (`activity_types.xtbl` was not located as a top-level archive entry) *[since found: `spec-tables-progression.md` §14.16 read it from `misc_tables.vpp_pc` (19 activity-type names with the DLC1 copy); mapping the ten 2-letter codes to those names is still open]* and whether the region letters are compass sectors.
 7. **Whether the two archives' coordinate ranges are truly non-overlapping halves of one grid**, or whether there's a more complex relationship (e.g. `sr3_city_1.vpp_pc` holding override/patch content for the same coordinates) — inferred from the ranges looking disjoint in the samples checked, not exhaustively verified.
 8. **`stream_grid.asm_pc`'s full 1,812-record content** was not enumerated — confirmed to use the established `.asm_pc` format, but not cross-checked entry-by-entry the way the smaller `sr3_city_missions.asm_pc` was in `spec-mission-packages.md`.
 
-None of these gaps block the core deliverable: the tile/coordinate/landmark naming scheme is now clearly documented, reliability is confirmed excellent (mode-(b) throughout, no blocked content found), every bundle's contents can be enumerated and its already-solved sub-formats (textures, effects, manifests) extracted with full confidence, and `sr3_city.grid_pc`'s own record structure is now decoded — only the terrain and static-prop-mesh formats, and the still-unlocated mechanism that actually places named landmarks at world positions, remain open.
+None of these gaps block the core deliverable: the tile/coordinate/landmark naming scheme is now clearly documented, reliability is confirmed excellent (mode-(b) throughout, no blocked content found), every bundle's contents can be enumerated and its already-solved sub-formats (textures, effects, manifests) extracted with full confidence, and `sr3_city.grid_pc`'s own record structure is now decoded — only the terrain and static-prop-mesh formats *(their vertex layouts since decoded: `spec-vertex-format.md`)*, and the still-unlocated mechanism that actually places named landmarks at world positions, remain open.
 
 ## 7. The zone streaming subsystem — the category table (2026-09-11, user-authorised)
 
@@ -98,7 +98,7 @@ distinct), and **34 names**. This function was explicitly left unopened by the
 | id | name | id | name |
 |---|---|---|---|
 | `0x01` | Vehicle slots | `0x16` | effect preload |
-| `0x02` | Vehicle Fully Cust slots | `0x17` | *(name not recovered)* |
+| `0x02` | Vehicle Fully Cust slots | `0x17` | *(name not recovered; see §8.1: `decal mempool`)* |
 | `0x03` | Character slots | `0x18` | debug_superzone |
 | `0x04` | Character high res slots | `0x19` | test_level_mip_streaming |
 | `0x05` | CS High Res slots | `0x1A` | **zone always loaded** |
@@ -107,14 +107,14 @@ distinct), and **34 names**. This function was explicitly left unopened by the
 | `0x08` | cutscene | `0x1D` | **high lod level allocator** |
 | `0x09` | zscene | `0x1E` | mip_streaming |
 | `0x0A` | customization streaming | `0x1F` | **interiors** |
-| `0x0B` | *(name not recovered)* | `0x20` | modal gameplay |
+| `0x0B` | *(name not recovered; see §9.4: `customization logo`)* | `0x20` | modal gameplay |
 | `0x0C` | Customization compositing | `0x21` | large modal gameplay |
-| `0x0D` | *(name not recovered)* | `0x24` | Texture compression scratch |
+| `0x0D` | *(name not recovered; see §9.4: `cust shaderball slots`)* | `0x24` | Texture compression scratch |
 | `0x0E` | Compositing render target | `0x25` | morph preload mempool |
-| `0x0F` | *(name not recovered)* | `0x26` | level container cache |
-| `0x10` | Large smesh slots | `0x27` | *(name not recovered)* |
+| `0x0F` | *(name not recovered; see §9.4: `Small smesh slots`)* | `0x26` | level container cache |
+| `0x10` | Large smesh slots | `0x27` | *(name not recovered; see §9.4: `vehicle_customization_camera(s)`)* |
 | `0x11` | weapon high res gpu | `0x28` | **zone header cache** |
-| `0x12` | time of day | `0x29` | *(name not recovered)* |
+| `0x12` | time of day | `0x29` | *(name not recovered; see §9.4: `TOD_luts`)* |
 | `0x13` | interface streaming | | |
 | `0x15` | interface image gpu compacting | | |
 
@@ -123,13 +123,13 @@ the pairing is exact rather than inferred: the name always sits 4 bytes after th
 the same struct, which is what makes the extraction reliable.
 
 **Ids `0x14`, `0x22` and `0x23` do not appear** in this function. They may be registered
-elsewhere, or unused. **[OPEN.]**
+elsewhere, or unused. **[OPEN.]** *→ closed §8.6 / §9.2.*
 
 **Two ids are registered twice** — `0x19` (test_level_mip_streaming) and `0x1E`
 (mip_streaming) — each via a *different* helper of the seven. So a category can be
 registered through more than one helper, which means the helpers are not
 one-per-category and probably distinguish *kind* of registration (a pool versus a
-policy, or a fast/slow variant). **[OPEN — what the seven helpers do differently.]**
+policy, or a fast/slow variant). **[OPEN — what the seven helpers do differently.]** *→ closed §8.3 / §8.4.*
 
 ### 7.2 What this gives a reimplementation, and what it does not
 
@@ -148,7 +148,7 @@ discarded** — it paired "most recent string" with "last small number" and
 cross-associated fields between adjacent registrations, reporting an allocation
 belonging to `cloth sim runtime cpu` against `time of day`. Sizes are therefore **not**
 published here. Attributing them correctly needs the seven helper bodies read, so the
-field order inside the struct is known rather than guessed. **[OPEN.]**
+field order inside the struct is known rather than guessed. **[OPEN.]** *→ closed §8.2 / §8.5 / §9.4.*
 
 **Separately, a small set of named memory pools is created through a different, directly
 readable call** taking `(buffer, size, alignment, name, …)`. Only **15** such call sites
@@ -186,7 +186,7 @@ the two double-registered ids rather than editing §7.1 itself.
 
 ### 8.1 Method: replaying the writes, one field per pass, two independent replays
 
-Per HANDOFF.md §11: a first budget extraction read "the most recent string" next to
+Per HANDOFF.md §26.22: a first budget extraction read "the most recent string" next to
 "the last small number" and cross-associated fields between adjacent registrations. The
 fix used here is the decompiler's own stack-slot arithmetic: a field `N` bytes into the
 same struct is always the local variable whose numeric suffix is `N` less, so a sibling
@@ -210,7 +210,7 @@ methodology lesson this pass earns:**
    assignment regex on `;\s*$` and silently lost every value on a line long enough to
    wrap, under-reporting real findings as "unresolved." Fixed by stripping the tag from
    every line before any pattern sees it, gated by a known-positive assertion.
-2. **The replay's own bookkeeping reproduced HANDOFF.md §11's exact trap one level up.**
+2. **The replay's own bookkeeping reproduced HANDOFF.md §26.22's exact trap one level up.**
    A stack slot reused by a registration's own `if`/`else` branches (one branch writing
    a struct field directly, the other leaving it to the shared setter function
    `FUN_00dd5fd0`) was read by "direct value if present, else the setter's" — which
@@ -258,12 +258,12 @@ same offsets recovered twice, by two different code shapes:
 |---|---|---|
 | `+0x00` | category id (`u32`) | already established; every write pairs with `+0x04` |
 | `+0x04` | name (`char*`) | already established |
-| `+0x08` | allocator/"class" pointer | `FUN_00dd64b0` reads `param_2[2]` (= `+0x08`) as a pointer to an object whose own vtable slot `+0x38` is then used |
+| `+0x08` | allocator/"class" pointer | `FUN_00dd64b0` reads the second argument's third dword (`+0x08`) as a pointer to an object whose own vtable slot `+0x38` is then used |
 | `+0x0C`,`+0x0D` | flag bytes, set `1` once budget fields are written | `FUN_00dd5fd0` |
-| `+0x10` | CPU-side pointer (an allocation result, or a bump-allocator address) | `FUN_00dd5fd0`; matches the inline value `FUN_00dad460(...)` assigned directly to this field in the `time of day` row |
+| `+0x10` | CPU-side pointer (an allocation result, or a bump-allocator address) | `FUN_00dd5fd0`; matches the result of a `FUN_00dad460` call assigned directly to this field in the `time of day` row |
 | `+0x14` | **CPU size** | `FUN_00dd5fd0` param 2; matches the inline value `0x1400` assigned directly to this field in the same row |
-| `+0x18` | CPU alignment | `FUN_00dd5fd0` param 3; matches the inline value `(char*)0x80` assigned directly to this field |
-| `+0x1C` | GPU-side pointer | `FUN_00dd5fd0` writes `DAT_02a3c580+DAT_02a3c584`; matches the inline value `FUN_00ea3362(...)` assigned directly to this field |
+| `+0x18` | CPU alignment | `FUN_00dd5fd0` param 3; matches the inline value `0x80` assigned directly to this field |
+| `+0x1C` | GPU-side pointer | `FUN_00dd5fd0` writes `DAT_02a3c580+DAT_02a3c584`; matches the result of a `FUN_00ea3362` call assigned directly to this field |
 | `+0x20` | **GPU size** | `FUN_00dd5fd0` param 4; matches the inline value `0x200000` assigned directly to this field |
 | `+0x24` | GPU alignment | `FUN_00dd5fd0` param 5; matches the inline value `0x80` assigned directly to this field |
 
@@ -271,7 +271,7 @@ same offsets recovered twice, by two different code shapes:
 CPU/GPU size live at fixed, struct-relative offsets regardless of which of the seven
 helpers is used or whether the setter function or a direct assignment wrote them.
 
-One further mechanical fact from `FUN_00dd64b0`: it writes `(&DAT_02a3c170)[id] = 0`,
+One further mechanical fact from `FUN_00dd64b0`: it zeroes the entry indexed by the category id in the global array at `0x02A3C170`,
 i.e. **category ids are used as a direct index into a global array** — consistent with
 the enum being sparse-but-dense-ish over `0x01`–`0x29` rather than a hash key, and
 relevant to §8.6.
@@ -312,25 +312,25 @@ every one read, none sampled.**
 different helper of the seven … a category can be registered through more than one
 helper."* That is imprecise in a load-bearing way. Reading both call sites in full:
 
-The registration struct's id field (`+0x00`) is set to `0x19` and its name field (`+0x04`) to the literal string `"test_level_mip_streaming"`. Depending on `param_1`: when it is `0`, the remaining fields are left at their defaults (or explicitly zeroed) and the placeholder helper `FUN_005d5620` is called on the struct; otherwise the real setter `FUN_00dd5fd0` populates the struct's CPU/GPU size fields — given a real, tier-computed size among its inputs — before the sized-allocation helper `FUN_005d5580` is called on the same struct.
+The registration struct's id field (`+0x00`) is set to `0x19` and its name field (`+0x04`) to the literal string `"test_level_mip_streaming"`. Depending on the tier argument: when it is `0`, the remaining fields are left at their defaults (or explicitly zeroed) and the placeholder helper `FUN_005d5620` is called on the struct; otherwise the real setter `FUN_00dd5fd0` populates the struct's CPU/GPU size fields — given a real, tier-computed size among its inputs — before the sized-allocation helper `FUN_005d5580` is called on the same struct.
 
-And, independently, structurally identically for `0x1E` / `"mip_streaming"`: when `param_1` is `0`, only the placeholder helper `FUN_005d5620` is called on that registration's own struct; otherwise `FUN_00dd5fd0` populates it before `FUN_005d5580` is called on it — the same two-branch shape as the `0x19` case above.
+And, independently, structurally identically for `0x1E` / `"mip_streaming"`: when the tier argument is `0`, only the placeholder helper `FUN_005d5620` is called on that registration's own struct; otherwise `FUN_00dd5fd0` populates it before `FUN_005d5580` is called on it — the same two-branch shape as the `0x19` case above.
 
 **These are not two simultaneous registrations of one id. Each id is registered exactly
 once per run, through exactly one of two mutually-exclusive branches on a single runtime
-parameter (`param_1`, the sole argument to `FUN_005d58f0`) — the same parameter that
+parameter (the *tier argument*, the sole argument to `FUN_005d58f0`) — the same parameter that
 gates several quality-tier budget branches elsewhere in the function** (observed values
 `0`, `2`, `4`; anything else falls through unhandled — see §8.8). The "41 calls" count is
 a count of **call sites present in the compiled code**, not a count of registrations
 that execute on any one run.
 
-**Both ids use the identical helper pair** — `FUN_005d5620` when `param_1==0`,
+**Both ids use the identical helper pair** — `FUN_005d5620` when the tier argument is 0,
 `FUN_005d5580` otherwise — which, per §8.3, is exactly the "no size at all" helper versus
 the "hash the name, allocate a real sized backing store" helper. **So the two-helper
 split is a real-allocation-vs-placeholder distinction, gated by the same runtime
 parameter that selects a texture/streaming quality tier elsewhere in this function, not
-a per-category "two facets" or "primary plus variant" split.** `0x14`'s the
-`param_1==0` branch registers *test_level_mip_streaming*/*mip_streaming* with **no
+a per-category "two facets" or "primary plus variant" split.** Each id's
+tier-argument-0 branch registers *test_level_mip_streaming*/*mip_streaming* with **no
 backing store** (a debug/no-op registration — matches the "test_level" name); the other
 branch computes a real size from the same tier-selection block that also feeds
 `debug_superzone` (§8.5). **[CONFIRMED — disassembly; corrects §7.1's framing, which
@@ -344,17 +344,17 @@ never assembled by proximity. Values are shown only where a clean literal was re
 where the source computes an address (a pointer into an already-allocated region) rather
 than a byte count, or where the value is a call's return (unrecoverable without
 executing the allocator), the field is marked **unresolved**, per the constraint against
-publishing a guess. Several rows are tier-dependent on `param_1`; where hand-verified,
+publishing a guess. Several rows are tier-dependent on the tier argument; where hand-verified,
 all three observed tiers (`0`, `2`, `4`) are given.
 
 **The required cross-check, done first:** `0x1A` (*zone always loaded*) and `0x28`
 (*zone header cache*) do **not** have similar budgets, which is what the task asked to
 verify before publishing anything further. `0x1A`'s CPU budget is `0xA00000` (10 MiB) at
-`param_1==0`, `0xCE5400` (~13.5 MiB) at `2`, `0x793000` (~8 MiB) at `4` — set by direct
+tier `0`, `0xCE5400` (~13.5 MiB) at `2`, `0x793000` (~8 MiB) at `4` — set by direct
 field assignment, scaling with the tier. `0x28`'s budget is a **flat `0x200000`** (2 MiB)
 at every tier, and — structurally distinct from `0x1A` — is not built from the struct's
 own CPU/GPU fields at all: it is the return value of a **dedicated, named allocator
-call**, `FUN_00db52d0("zone header cache", 0x200000)`, passed in as the helper's second
+call** (the named-allocator routine `FUN_00db52d0` with name "zone header cache" and size `0x200000`), passed in as the helper's second
 argument. Different magnitude (4–7×), different mechanism, same category table. That is
 the shape a correct alignment produces; two rows that happened to collide would be the
 signal to distrust the extraction, not to publish it.
@@ -364,17 +364,17 @@ signal to distrust the extraction, not to publish it.
 | `0x06` | Player slots | `54e0` | `0x8000` (32 KiB) | `0x6000` (24 KiB) | no (flat) |
 | `0x11` | weapon high res gpu | `5440` | `0x4000` (16 KiB) | `0x190000` (1.5 MiB) | GPU align only (table lookup) |
 | `0x12` | time of day | `5440` | `0x1400` (5 KiB) | `0x200000` (2 MiB) | no |
-| `0x15` | interface image gpu compacting | `5750` | `0x80000` (512 KiB) | `0xC00000` (12 MiB) | no |
-| `0x19` (real branch) | test_level_mip_streaming | `5580` | `0x40000` (256 KiB) | `0x3F00000` (~63 MiB, clamped) | yes — only exists when `param_1≠0` |
-| `0x19` (default branch) | test_level_mip_streaming | `5620` | `0` | `0` | only when `param_1==0` |
+| `0x15` | interface image gpu compacting | `5750` | `0x80000` (512 KiB) | `0xC00000` (12 MiB) *(corrected §9.5: flag-gated)* | no *(corrected §9.5)* |
+| `0x19` (real branch) | test_level_mip_streaming | `5580` | `0x40000` (256 KiB) | `0x3F00000` (~63 MiB, clamped) | yes — only exists when the tier argument ≠ 0 |
+| `0x19` (default branch) | test_level_mip_streaming | `5620` | `0` | `0` | only when the tier argument is 0 |
 | `0x1E` (real / default) | mip_streaming | `5580` / `5620` | same shape as `0x19` | same shape | same split |
 | `0x1A` | zone always loaded | `5440` | `0xA00000`/`0xCE5400`/`0x793000` (tier `0`/`2`/`4`) | unresolved (computed address) | **yes** |
-| `0x1C` | medium lod level allocator | `54e0` | via 2nd arg: `0x404000` (tier 0) / `0x1EC400` (tier 2 & 4) | — | **yes** |
-| `0x1D` | high lod level allocator | `54e0` | via 2nd arg: `0x100000` (tier 0) / `0x61800` (tier 2 & 4) | — | **yes** |
+| `0x1C` | medium lod level allocator | `54e0` | via 2nd arg: `0x404000` (tier 0) / `0x1EC400` (tier 2 & 4) | — *(extended §9.6)* | **yes** |
+| `0x1D` | high lod level allocator | `54e0` | via 2nd arg: `0x100000` (tier 0) / `0x61800` (tier 2 & 4) | — *(extended §9.6)* | **yes** |
 | `0x1F` | interiors | `5440` | `0x200000`/`0xE1000`/`0xE1000` (tier `0`/`2`/`4`) | unresolved (computed address) | **yes** |
-| `0x1B` | always loaded textures | `5440` | `0x20000` (128 KiB) | unresolved | **only registered at all when `param_1==4`** — see below |
+| `0x1B` | always loaded textures | `5440` | `0x20000` (128 KiB) | unresolved | **only registered at all when the tier argument is 4** — see below |
 | `0x20` | modal gameplay | `5850` | `0x120000` (tier 0) / `0x110000` (tiers 2,4) | `0x2E0000` / `0x260000` | yes |
-| `0x21` | large modal gameplay | `5850` | `0x320000` (tier 0) | unresolved for 2/4 | yes |
+| `0x21` | large modal gameplay | `5850` | `0x320000` (tier 0) *(tiers 2/4 extended §9.6)* | unresolved for 2/4 *(extended §9.6)* | yes |
 | `0x26` | level container cache | `54e0` | `0xB0000` (704 KiB) | linked value `0x16000` (88 KiB) via 2nd arg | no |
 | `0x28` | zone header cache | `56b0` | `0x200000` (2 MiB), via dedicated named allocator | — | **no (flat)** |
 | `0x17` | decal mempool | `5440` | unresolved this pass | unresolved | — |
@@ -392,17 +392,17 @@ replay tooling (`tools/harnesses/strm_replay.py`) can be re-run against any of t
 future pass adds register/call-return tracking.
 
 **A conditional registration worth flagging on its own:** `0x1B` (*always loaded
-textures*)'s single call site sits inside `if (param_1 == 4) { … }` with **no**
-`else` — at every other observed tier this category is **not registered at all**. The
+textures*)'s single call site is reached only when the tier argument equals 4, with **no**
+alternative branch — at every other observed tier this category is **not registered at all**. The
 static "41 calls" count includes this site regardless; whether it executes depends on
-`param_1`.
+the tier argument.
 
 ### 8.6 The three absent ids — `0x14` is dead code, `0x22`/`0x23` are absent entirely
 
 **`0x14` — prepared, never registered.** The full body of `FUN_005d58f0` contains
 exactly two writes of `"Interface slots"` paired with id `0x14` (address `0x005d735b` in
 the raw instructions), immediately preceded by two real allocator calls
-(`FUN_00dad460(0x85000, 4, 0, 0)` and a second `0x400`-byte allocation through the
+(a `FUN_00dad460` allocation of `0x85000` bytes with alignment 4, and a second `0x400`-byte allocation through the
 struct's own allocator vtable) — i.e. the code goes as far as **carving out real memory**
 for this category. No call to any of the seven helpers references that struct's address
 anywhere in the function: exhaustively, by text search of the full 1,028-line
@@ -428,8 +428,8 @@ the seven helpers — was checked directly and **bounded**, not via a whole-bina
 bytes; found earlier via `helpers.txt`'s own caller lists — exactly the "read a named
 entry point's own call list" method this project's methodology calls for). Decompiled in
 full: it registers **exactly one** category, id `0xFE`, name `"GSA_DESTUB_ALLOCATOR"`,
-wrapping an object built by `FUN_00db52d0("stream2 dynamic container allocator",
-0x20000)`. **`0xFE` is far outside the `0x01`–`0x29` range this category table
+wrapping an object built by the named-allocator routine `FUN_00db52d0` with name "stream2 dynamic container allocator"
+and size `0x20000`. **`0xFE` is far outside the `0x01`–`0x29` range this category table
 occupies** — this is evidently the same generic registration infrastructure reused for
 an unrelated debug-stub allocator, not a second entry point into the streaming category
 enum. A literal scan of `FUN_00db01a0`'s own instructions for `0x14`/`0x22`/`0x23` as
@@ -438,7 +438,7 @@ id-shaped write. **[CONFIRMED — disassembly, for what this specific, bounded s
 covered: the only known registration site plus the only known second caller of any of
 the seven helpers.]**
 
-**Net for `0x22`/`0x23`: OPEN.** What was checked and came back negative: the main
+**Net for `0x22`/`0x23`: OPEN.** *[Closed §9.2: CONFIRMED gaps in a sparse enum.]* What was checked and came back negative: the main
 registration site (exhaustive), and the one other known caller of a shared helper
 (exhaustive for that function). What was **not** checked, and is explicitly out of
 scope for the bounded-search method this project uses (a whole-binary immediate scan is
@@ -490,13 +490,13 @@ bound.
 
 1. **`0x22`/`0x23`**: enumerate `FUN_00dd64b0`'s full caller list (bounded, not yet done)
    to close the "different caller" hypothesis completely. If that list contains only
-   the seven helpers, the sparse-enum reading is confirmed.
+   the seven helpers, the sparse-enum reading is confirmed. *[Closed §9.2.]*
 2. **24 of 41 budget rows unresolved** (§8.5) — recoverable in principle by extending
    `strm_replay.py` to follow allocator-call chains (e.g. `FUN_00dad460`'s own first
    argument almost always **is** the size, just one hop further than this pass's
    resolver follows) rather than marking any call-derived value opaque. Cheap, bounded
-   follow-on.
-3. **`param_1`'s real-world meaning** — observed values `0`, `2`, `4`, branched
+   follow-on. *[Addressed §9.4.]*
+3. **The tier argument's real-world meaning** — observed values `0`, `2`, `4`, branched
    explicitly; other values fall through unhandled at several sites (§8.4, §8.5). The
    pattern (tier `0` consistently gives the *largest* budget, `2`/`4` smaller) is
    consistent with `0` meaning "streaming disabled, load generously" versus `2`/`4`
@@ -508,7 +508,7 @@ bound.
    27 use a direct-store argument-passing idiom that Ghidra's existing stack-frame
    analysis does not annotate; re-running analysis with a higher stack-depth limit on
    just this function (rather than the whole binary) may close this without a full
-   re-analysis.
+   re-analysis. *[Closed as a dead end for this technique, §9.3.]*
 
 **Tooling this pass:** `tools/scripts/StrmBudgetFns.java` (decompiles the shared
 setter/finisher/configure-callee functions), `tools/scripts/StrmSecondCaller.java`
@@ -557,14 +557,14 @@ prior pass caught and fixed for the four rows it hand-verified) — it is the **
 form** of the same trap, and it was still live for every row that pass did not hand-check.
 Two concrete examples, both caught by re-reading the full source around the write site
 rather than trusting the printed value:
-- `debug_superzone` (`0x18`)'s GPU field is written inside a three-way `param_1==2 / ==4 /
-  ==0` ladder (values `0x45fd800` / `0x52e5000` / `0x9a84000`); the naive replay reports
+- `debug_superzone` (`0x18`)'s GPU field is written inside a three-way tier-argument ladder (tier 2 / 4 /
+  0) (values `0x45fd800` / `0x52e5000` / `0x9a84000`); the naive replay reports
   only the last (`0x9a84000`) with no indication the other two exist.
 - `interface image gpu compacting` (`0x15`, **already published as CONFIRMED** in §8.5)'s
-  GPU value is gated not by `param_1` at all but by an unrelated boolean flag
+  GPU value is gated not by the tier argument at all but by an unrelated boolean flag
   (`DAT_0149365c`): the base value is `0xa00000`, overridden to `0xc00000` only when that
   flag is set. The published row states a flat `0xC00000` unconditionally — **this is
-  corrected in §9.4 below, left visible rather than silently edited.**
+  corrected in §9.5 below, left visible rather than silently edited.**
 
 **Mechanism confirmed — helper `FUN_005d54e0`'s second-argument descriptor carries BOTH
 sizes, not one.** §8.3 already stated (from reading the configure callee, `FUN_00dd7ce0`)
@@ -714,7 +714,7 @@ resolving to the same value **through the same variable** — that did not happe
 | `0x10` | Large smesh slots | `0x800` (2 KiB) | `0x2b000` (172 KiB) | no |
 | `0x0A` | customization streaming | `0x450000` (4.5 MiB), single value via dedicated named allocator | — | no |
 | `0x0B` | customization logo | `0x80000` (512 KiB), single value via dedicated named allocator | — | no |
-| `0x27` | vehicle_customization_cameras | `0` (dedicated named allocator called with a literal zero size) | — | no |
+| `0x27` | vehicle_customization_cameras **[spelling conflict: the call literal quoted below this table reads `vehicle_customization_camera`; not re-checked]** | `0` (dedicated named allocator called with a literal zero size) | — | no |
 
 **[CONFIRMED — disassembly]** for all twelve rows above: each is a direct literal (or a
 directly-read tier-selected literal) at the exact struct/descriptor offset the mechanism
@@ -723,7 +723,7 @@ pass's replay printout. `0x0A`/`0x0B`/`0x27` additionally recover the **id and n
 previously blank in the prior pass's table (Defect A, §9.1) — `0x0A`/`0x0B` use the same
 "adopt a dedicated named allocator" mechanism already confirmed for `0x28` (§8.7); `0x27`
 is the same mechanism with a literal-zero size, read directly off the
-`FUN_00db52d0("vehicle_customization_camera", 0)` call.
+call to the named-allocator routine `FUN_00db52d0` with name "vehicle_customization_camera" and size 0 **[spelling conflict: the table above writes `vehicle_customization_cameras`; not re-checked]**.
 
 **Newly resolved, partially (one side clean, the other genuinely open — reported as such,
 not guessed):**
@@ -731,7 +731,7 @@ not guessed):**
 | id | name | resolved side | open side, and why |
 |---|---|---|---|
 | `0x18` | debug_superzone | GPU: `0x45fd800` (t2) / `0x52e5000` (t4) / `0x9a84000` (t0) | CPU: each tier assigns the *address* of a distinct reserved data region (`&DAT_...`), never a byte count — genuinely not a size in this function |
-| `0x0E` | Compositing render target | CPU: `0x10000` (64 KiB), flat | GPU: the field holds the address of a code label (`&LAB_01008000`), not a byte count |
+| `0x0E` | Compositing render target | CPU: `0x10000` (64 KiB), flat | GPU: the field holds the address of a code location (`0x01008000`), not a byte count |
 | `0x0C` | Customization compositing | CPU: `0x9800` (t2/4) / `0x14000` (t0) | GPU: a multiplied/offset expression (`tier value × 25, minus a running pointer`) — a computed quantity, not a literal |
 | `0x24` | Texture compression scratch | CPU: `0xbb8000` (t2/4); GPU: `0` (explicit literal, both confirmed) | CPU at tier 0 only: the address of a reserved region, not a byte count |
 | `0x0D` | cust shaderball slots | CPU `0x800` / GPU `0x4000`, both already numerically correct in the prior pass's own replay output | name only — "cust shaderball slots", missing purely from Defect A (§9.1) |
@@ -768,7 +768,7 @@ externally-managed pools named "lut cpu" / "lut gpu", sized `0x400` (CPU) / `0x3
 that same pool object by adjacency and by the shared "lut" naming with the category itself
 (`TOD_luts`). **`HIGH CONFIDENCE — inferred`, explicitly not `CONFIRMED`**: the connection
 is by position and name, not by a traced pointer identity (the intervening code goes
-through an indirect vtable call — `(**(code**)(...+0x90))(...)` — that this pass did not
+through an indirect call via the allocator's vtable slot `+0x90` that this pass did not
 resolve to a concrete callee). Reported as the best available lead rather than left as a
 bare "unresolved."
 
@@ -797,7 +797,7 @@ the tail of the already-documented `0x14` dead-code sequence (§8.6) — the sam
 to **id `0x0F`'s own name string and an unrelated 16-byte copy**, i.e. leftover values with
 no relation to `0x14` or to any real category. This is an independent, second confirmation
 of §8.6's finding that no helper call ever references `0x14`'s own struct address — and it
-resolves a loose thread from `HANDOFF.md` §27.1's "41 registrations, 40 ids": **the 41st
+resolves a loose thread from `HANDOFF.md` §27.1's "41 registrations, 40 ids" (the same figures are recorded in HANDOFF.md §26.22: "41 calls, 40 ids"): **the 41st
 "registration-shaped" call site is this artefact, not a 41st id.** **[CONFIRMED —
 disassembly.]**
 
@@ -818,7 +818,7 @@ row (found while tracing the general "most-recent-write-wins" defect, §9.1 Defe
 the value is not flat. It is `0xa00000` (10 MiB) by default, overridden to `0xc00000`
 (12 MiB) only when an unrelated boolean flag (`DAT_0149365c`) is set — the same flag that
 also appears inside the neighbouring `test_level_mip_streaming`/`mip_streaming` tier logic.
-This flag is **not** `param_1` (the tier selector §8.4/§8.5 already document) — it is a
+This flag is **not** the tier argument (the tier selector §8.4/§8.5 already document) — it is a
 second, independent switch. **[CONFIRMED — disassembly.]** §8.5's row is left in place
 above per this project's visible-correction rule; the corrected reading is: **CPU
 `0x80000` (unchanged); GPU `0xa00000` (10 MiB) by default, `0xc00000` (12 MiB) when
@@ -851,7 +851,7 @@ one already-verified block.
 
 ### 9.7 Items 3 and 4 — status unchanged, restated briefly
 
-**Item 3 (`param_1`'s real-world meaning):** no new evidence this pass. The pattern already
+**Item 3 (the tier argument's real-world meaning):** no new evidence this pass. The pattern already
 on record — tier `0` gives the largest budget on every row measured in §9.4 that has three
 distinct tiers (`0x01`, `0x03`, `0x07`, `0x16`, `0x18`, `0x21`, and the already-published
 `0x1A`/`0x1C`/`0x1D`/`0x1F`), with `2` and `4` consistently smaller and frequently
@@ -860,7 +860,7 @@ is now measured on a much larger set of rows than the four §8.5 hand-checked, a
 without exception across all of them. This strengthens the existing
 `HYPOTHESIS — unconfirmed` reading ("`0` = streaming disabled / load generously" vs. `2`/`4`
 = active-streaming presets, with `2` and `4` often sharing one design point) without
-promoting it to confirmed — the caller of `FUN_005d58f0` that actually supplies `param_1`
+promoting it to confirmed — the caller of `FUN_005d58f0` that actually supplies the tier argument
 was still not traced this pass.
 
 **Item 4 (physical pool-sharing between `0x1A`/`0x1F` and `0x1C`/`0x1D`):** unchanged and
@@ -973,7 +973,7 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 
 **Second code (region) — matches the game's own hood-region prefixes. [CONFIRMED — empirical for `nw`, `dt`; HIGH CONFIDENCE for `sw`, `ne`.]** The values are `dt`, `ne`, `nw`, `sw` (4). The `.xtbl` of the `mh` activities with second code `nw` carry `Hood_Name` = `HOOD_NW_01`..`_04`; the `if` activities with `dt` carry `Active_Hood` = `HOOD_DT_01`..`_03` — exactly the engine's hood-id strings (`HOOD_NW_01..04`, `HOOD_NE_01..04`, `HOOD_DT_01..03` and `HOOD_SE_01` are literal in the binary). The `sw` activities name five *named* hoods instead (`HOOD_BRIDGEPORT`, `HOOD_YEARWOOD`, `HOOD_DOWNERS_GROVE` for `if`; `HOOD_POINT_PRYOR`, `HOOD_NEW_BARANEC`, `HOOD_BRIDGEPORT`, `HOOD_YEARWOOD`, `HOOD_ZOMBIE` for `mh`), which the binary also holds as literals but does not label `SW`; no `ne`-coded `.xtbl` carries a hood tag. Gang fields agree with region grouping (`ha` `dt` → Morningstar, `ha` `nw` → Deckers; `dt` activities → Luchadores / Morningstar). So the second code is the **hood-region group** of the activity; that `nw`/`ne`/`sw` mean the compass sense of those letters and `dt` downtown is the natural reading of the shared prefix but is **not** established (the hood polygons are not in any file read here).
 
-**First code (type) — ten codes, ten disjoint element vocabularies. [HIGH CONFIDENCE — inferred from content; the code→official-activity-name table is not stored in these names.]** Types `dt es ga ha if mh rm sn tb tm` (DLC adds 3-letter codes such as `tbp`, and the region code can be absent, e.g. `dlc1_a_es_01`, or two-part, `dlc1_a_bm_nw_01` — so the pattern is `<dlc prefix>_a_<type>[_<region>]_<NN>`, not fixed-width). Each type's `.xtbl` uses element names that no other type uses, and they describe distinct mechanics: `dt` — `Dealer_Type`, `Deals`, `Buyer_Spawn`, `Deal_Use_Count` (deal-and-buyer loop); `es` — `Client`, `Dropoff_Navpoints`, `Drift`/`Air`/`Crash`/`Drive_By` bonus counters; `ga` — `Attackers`, `Attack_Group`, `Camera_Restriction` (2 files only); `ha` — `Aircraft_path`, `Enemy_Helicopter_Type`, `Chance_of_rocket_launcher`, `Convoy_Level_Info`; `if` — `Crazy_Chance`, `Bonus_Spots`, `Active_Hood`; `mh` — `Combo_Max_Multiplier`, `Hood_Name`; `rm` — `Electric_Trap`, `Explosion_Timer`, `Door_Mover`, `Alternative_Cash_Amount`, `Cutscene`, `Banter` (trap arena, the one type with an interior bundle); `sn` — `Ho`, `Ho_Rescue`, `Dropoff_Effect`; `tb` — `Checkpoint_Group`, `Barrel_Group`, `Bonus_Time`; `tm` — `Convoy`, `Crowd`, `High_Value_Targets`, `Coop_Tank_Spawn_Location` (9 files = 3 regions × 3). The population is 59 instances (8 types × 2 regions × 3 ordinals, `tm` 3 regions × 3, `ga` only 2; the save table has 60 keys, `spec-save-format.md` §9.3a). **The letters are not decoded from the letters** — the mechanic behind each code is read from the table content; the game's own display names for the 19 activity types would come from `activity_types.xtbl` (loaded by the world-startup routine `FUN_0084e3b0`), which is **not a top-level entry of any archive** and was not searched for inside nested containers this pass, so a code → display-name table cannot be given here. Activity zones mostly carry no placement records (51 of 59 fast headers have count 0), so their world positions are largely not recoverable from headers; the only two `nw`-coded zones that do carry an origin (`_a_tm_nw_01`, `_a_tm_nw_03`, 2 and 5 records) sit at world x = +1,402 / +1,075, z = −28 / −952 — with the lattice of §10.6(g) that is not obviously "north-west" if +x is east, and a zone with 2–5 records need not have its origin in its activity area, so this is a caution against reading the letters as compass points, not a refutation.
+**First code (type) — ten codes, ten disjoint element vocabularies. [HIGH CONFIDENCE — inferred from content; the code→official-activity-name table is not stored in these names.]** Types `dt es ga ha if mh rm sn tb tm` (DLC adds 3-letter codes such as `tbp`, and the region code can be absent, e.g. `dlc1_a_es_01`, or two-part, `dlc1_a_bm_nw_01` — so the pattern is `<dlc prefix>_a_<type>[_<region>]_<NN>`, not fixed-width). Each type's `.xtbl` uses element names that no other type uses, and they describe distinct mechanics: `dt` — `Dealer_Type`, `Deals`, `Buyer_Spawn`, `Deal_Use_Count` (deal-and-buyer loop); `es` — `Client`, `Dropoff_Navpoints`, `Drift`/`Air`/`Crash`/`Drive_By` bonus counters; `ga` — `Attackers`, `Attack_Group`, `Camera_Restriction` (2 files only); `ha` — `Aircraft_path`, `Enemy_Helicopter_Type`, `Chance_of_rocket_launcher`, `Convoy_Level_Info`; `if` — `Crazy_Chance`, `Bonus_Spots`, `Active_Hood`; `mh` — `Combo_Max_Multiplier`, `Hood_Name`; `rm` — `Electric_Trap`, `Explosion_Timer`, `Door_Mover`, `Alternative_Cash_Amount`, `Cutscene`, `Banter` (trap arena, the one type with an interior bundle); `sn` — `Ho`, `Ho_Rescue`, `Dropoff_Effect`; `tb` — `Checkpoint_Group`, `Barrel_Group`, `Bonus_Time`; `tm` — `Convoy`, `Crowd`, `High_Value_Targets`, `Coop_Tank_Spawn_Location` (9 files = 3 regions × 3). The population is 59 instances (8 types × 2 regions × 3 ordinals, `tm` 3 regions × 3, `ga` only 2; the save table has 60 keys, `spec-save-format.md` §9.3a). **The letters are not decoded from the letters** — the mechanic behind each code is read from the table content; the game's own display names for the 19 activity types would come from `activity_types.xtbl` (loaded by the world-startup routine `FUN_0084e3b0`), which is **not a top-level entry of any archive** *[superseded: `spec-tables-progression.md` §14.16 read it from `misc_tables.vpp_pc` (19 activity-type names with the DLC1 copy); mapping the ten codes to those names is still open]* and was not searched for inside nested containers this pass, so a code → display-name table cannot be given here. Activity zones mostly carry no placement records (51 of 59 fast headers have count 0), so their world positions are largely not recoverable from headers; the only two `nw`-coded zones that do carry an origin (`_a_tm_nw_01`, `_a_tm_nw_03`, 2 and 5 records) sit at world x = +1,402 / +1,075, z = −28 / −952 — with the lattice of §10.6(g) that is not obviously "north-west" if +x is east, and a zone with 2–5 records need not have its origin in its activity area, so this is a caution against reading the letters as compass points, not a refutation.
 
 ### 10.9 What this changes in earlier sections, and what stays open
 
@@ -981,8 +981,8 @@ The routine that registers one zone's content (`FUN_00859110`; the build-shared 
 - **§4** — the `_a_` "generic ambient building interiors" reading (HIGH CONFIDENCE — inferred) is **refuted** by §10.8 (activity zones, kind `mission`); the `_modal` "self-contained instanced space" hypothesis is refined: `_modal` = the mission-model-data companion (activity table + conversations).
 - **§5.1** — section 4's `index` scheme resolved (§10.6(e)); section 3's index is `(row << 8) | col`.
 - **§6 items 5 and 6, and item 4's "section 4's index-value scheme"** — struck through in place.
-- **§7.2 / §8** — the two allocator names now have a code-level meaning: `medium lod level allocator` = the pool of container kind `Zone` (tile bundle, `~L1`), `high lod level allocator` = the pool of kind `Zone (High LOD)` (fine cells, base meshes). `zone always loaded` is the level-0 kind's pool (§10.3; that kind row's pool byte was not read this pass).
-- **OPEN:** (1) what drives the reconciliation each frame (§10.4) — **advanced, not closed, by §11.5**; (2) how up to four resident cells fit the tier-2/4 high-LOD budgets (§10.4); (3) the meaning of record word `+6` and the name-index → mesh mapping for shipped headers (§10.7); (4) display names of the ten activity types (needs `activity_types.xtbl`, not found as a top-level archive entry) and whether the region letters are compass sectors (§10.8); (5) the per-level window/capacity numbers of levels 0–2 and 5 (only levels 3 and 4 were tabulated); (6) the meaning of `SR3Z +0x1E` case 11 and of the level-5 manager (kind 0).
+- **§7.2 / §8** — the two allocator names now have a code-level meaning: `medium lod level allocator` = the pool of container kind `Zone` (tile bundle, `~L1`), `high lod level allocator` = the pool of kind `Zone (High LOD)` (fine cells, base meshes). `zone always loaded` is the level-0 kind's pool (**HYPOTHESIS** by name — §10.3; that kind row's pool byte was not read this pass).
+- **OPEN:** (1) what drives the reconciliation each frame (§10.4) — **advanced, not closed, by §11.5**; (2) how up to four resident cells fit the tier-2/4 high-LOD budgets (§10.4); (3) the meaning of record word `+6` and the name-index → mesh mapping for shipped headers (§10.7); (4) display names of the ten activity types (needs `activity_types.xtbl`, not found as a top-level archive entry *[since found in `misc_tables.vpp_pc`, `spec-tables-progression.md` §14.16; the code→name mapping is still open]*) and whether the region letters are compass sectors (§10.8); (5) the per-level window/capacity numbers of levels 0–2 and 5 (only levels 3 and 4 were tabulated); (6) the meaning of `SR3Z +0x1E` case 11 and of the level-5 manager (kind 0).
 
 ## 11. Runtime streaming behavior: the distance/box rule, hysteresis, the camera-position source, and load/eviction order (2026-09-30)
 
@@ -1008,7 +1008,7 @@ All three levels' reconciliation reads one global 12-byte Vector3 — 8 bytes at
 
 Five static call sites into `0x0085bce0` land in at least three structurally distinct systems — reconfirming this project's own prior finding that different systems really do use different "current position" sources even though they happen to funnel into the same global here:
 1. **World/game init** (`0x0084e3b0`, reached from the main init routine `0x007acfe0`) — a one-time startup default.
-2. **A camera-cut / view state-machine function, `0x007a82c0`.** It maintains a small 2-slot ring buffer of pending "camera shot" records (12-byte position + blend/transition byte parameters per record, `0x3c` bytes each, base ~`0x0224206c`, indexed by a sign-safe mod-2 counter at `0x0224205c` — the `(x+1)&0x80000001` idiom WALLS.md already flags as a branching round-up form). When a new shot becomes pending it calls `0x0085bce0` with that record's own position field, then immediately calls two further functions (`0x00da38e0`, `0x00564c20`) reading the same local buffer — consistent with building/applying a view matrix from it. **HIGH CONFIDENCE (not independently proven by opening those two functions' own bodies): the position source in steady state is the active render-camera record, not the player pawn directly and not a separate dedicated "streaming anchor" object.**
+2. **A camera-cut / view state-machine function, `0x007a82c0`.** It maintains a small 2-slot ring buffer of pending "camera shot" records (12-byte position + blend/transition byte parameters per record, `0x3c` bytes each, base ~`0x0224206c`, indexed by a sign-safe mod-2 counter at `0x0224205c` — the `(x+1)&0x80000001` idiom WALLS.md already flags as a branching round-up form *[correction 2026-09-30: WALLS.md flags `& 0x80000003` and the `(x-1|0xfffffffc)+1` round-up, not this mod-2 idiom; it is in the same family of non-literal idioms WALLS.md warns about]*). When a new shot becomes pending it calls `0x0085bce0` with that record's own position field, then immediately calls two further functions (`0x00da38e0`, `0x00564c20`) reading the same local buffer — consistent with building/applying a view matrix from it. **HIGH CONFIDENCE (not independently proven by opening those two functions' own bodies): the position source in steady state is the active render-camera record, not the player pawn directly and not a separate dedicated "streaming anchor" object.**
 3. **A second, distinct path** through a large function at `0x00702a50` (itself reached from a cluster of further-out functions in the `0x0072axxx`/`0x0072bxxx` region that look mission/activity-transition-shaped). Immediately before calling `0x0085bce0` it fetches a fresh 12-byte value via a function at `0x009e7cb0` and writes it straight through — reading as a "warp the streaming focus to a specific place" call (mission start / fast travel / respawn), not a per-frame camera follow. **OPEN:** exactly what `0x009e7cb0` reads.
 
 A **separate, structurally unrelated** global position (12 bytes at `0x029cdb98`) is used only by the one-time startup/interior-preload path (`0x00861800` → `0x00861460`, which reconciles levels 0/1/2 individually at boot) — a further confirmation that "current position" is not a single universal concept in this codebase.
@@ -1025,4 +1025,8 @@ A **separate, structurally unrelated** global position (12 bytes at `0x029cdb98`
 
 ### 11.5 The top-level per-frame driver (§10.9's own OPEN item 1) — advanced, still not closed
 
-Starting from the driver hunt rather than assuming it is the same unresolved driver `spec-render-pipeline.md` separately flags for the render pipeline: the reconciliation entry `0x008610e0` is reached, among other already-known paths, through a short all-levels wrapper (`0x00861850`), itself called from: (i) unconditionally, at the tail of a Bink-video-playback state machine (`0x00bdbf30`); (ii) directly from a function (`0x007a8180`) that also flushes per-viewport pending render state; (iii) through a two-hop wrapper (`0x00854c90`) sitting in a real, resolved vtable at `~0x01164690` (surrounded by other genuine function-pointer slots at `0x01164680`–`0x011646a0`) behind a gate (`0x004578b0`/`0x00457210`) that is unconditionally true; (iv) one further raw call site not resolved to a named function. Critically, `0x007a8180` itself has **zero** static callers anywhere in the binary per Ghidra's own reference database — its one known invocation site (`0x007a8511`) is likewise called by nothing statically — meaning both are reached only through some indirect/callback dispatch not located this pass. **This is consistent with, and meaningfully extends, §10.9's own conclusion** ("no per-frame caller was found") rather than closing it: the population of concrete trigger paths is now much richer (Bink-video tick, a viewport-flush routine, a vtable slot, camera-cut transitions, mission/activity transitions, hold-counter changes, startup/interior preload), but the single "runs once per rendered frame, unconditionally" driver remains **OPEN**. Concrete next step if resumed: find whatever writes a function pointer to `0x007a8511` (or resolves the vtable class at `0x01164690`), and separately trace what the registration helper `0x00bdc120` (called from the startup init `0x005d1a30`) actually registers `0x00bdbf30` *into* — that table's own per-frame walker is the most likely place the real driver lives.
+Starting from the driver hunt rather than assuming it is the same unresolved driver `spec-render-pipeline.md` separately flags for the render pipeline: the reconciliation entry `0x008610e0` is reached, among other already-known paths, through a short all-levels wrapper (`0x00861850`), itself called from: (i) unconditionally, at the tail of a Bink-video-playback state machine (`0x00bdbf30`); (ii) directly from a function (`0x007a8180`) that also flushes per-viewport pending render state; (iii) through a two-hop wrapper (`0x00854c90`) sitting in a real, resolved vtable at `~0x01164690` (surrounded by other genuine function-pointer slots at `0x01164680`–`0x011646a0`) behind a gate (`0x004578b0`/`0x00457210`) that is unconditionally true; (iv) one further raw call site not resolved to a named function. Critically, `0x007a8180` itself has **zero** static callers anywhere in the binary per Ghidra's own reference database — its one known invocation site (`0x007a8511`) is likewise called by nothing statically — meaning both are reached only through some indirect/callback dispatch not located this pass. **This is consistent with, and meaningfully extends, §10.9's own conclusion** ("no per-frame caller was found" — §10.4's wording, carried as §10.9 OPEN item 1) rather than closing it: the population of concrete trigger paths is now much richer (Bink-video tick, a viewport-flush routine, a vtable slot, camera-cut transitions, mission/activity transitions, hold-counter changes, startup/interior preload), but the single "runs once per rendered frame, unconditionally" driver remains **OPEN**. Concrete next step if resumed: find whatever writes a function pointer to `0x007a8511` (or resolves the vtable class at `0x01164690`), and separately trace what the registration helper `0x00bdc120` (called from the startup init `0x005d1a30`) actually registers `0x00bdbf30` *into* — that table's own per-frame walker is the most likely place the real driver lives.
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 4 cross-references (§9.1 §9.4→§9.5; HANDOFF §11→§26.22 twice; §11.5 quote attributed to §10.4) and annotated the WALLS.md idiom reference (§11.3); marked vertex-layout, `.rig_pc` and `activity_types.xtbl` open items resolved by other specs (§5, §6, §10.8, §10.9); added forward pointers on §7.1/§7.2 unrecovered names and [OPEN] tags and on superseded §8.5/§8.6/§8.8 rows; fixed the wrong id in §8.4 (`0x14`→each id); added a spelling-conflict marker for category `0x27` (§9.4); reworded decompiler-shaped expressions and replaced the `param_1` auto-name with "the tier argument" (§8.2–§8.8, §9.1, §9.4, §9.5, §9.7); labelled the level-0 pool reading HYPOTHESIS (§10.9).
