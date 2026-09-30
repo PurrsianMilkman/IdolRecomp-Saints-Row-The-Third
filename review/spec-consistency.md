@@ -193,3 +193,22 @@ reference to them in the specs was checked: about 220 HANDOFF references and 70 
   - 11 attributions that credit HANDOFF or WALLS with a point neither file contains: 6 in
     lua-api-behaviour, 2 in lua-bindings, 2 in effects and 1 in conversation. The point itself is stated
     in the spec each time, so only the attribution is wrong.
+
+## Provenance downgrades (manager ruling, 2026-09-30)
+
+A render-pipeline desk review found claims whose CONFIRMED label rested on a runtime capture made outside
+this project's own tooling. The manager ruled that each such label is downgraded to HYPOTHESIS. The claim
+text stays, together with a provenance note. Each claim is re-derived only from clean sources (our own
+disassembly through the bridge, or Team B's CTAB reader output over the shipped shaders), and CONFIRMED is
+restored claim by claim with the new evidence. **Team B: check any code that depends on these.**
+
+| Spec / section | Claim (downgraded to HYPOTHESIS) | Clean re-derivation route |
+|---|---|---|
+| render-pipeline §20.12.5 | `projTM` (c28) is a fused view-projection; `IR_World2View` (c48) is the pure view; the register assignment holds across 3,398 / 2,357 / 2,203 shaders | Team B CTAB reader over all shipped shaders (register/name census) |
+| render-pipeline §20.12.9 | the `projTM` row of the summary table ("CONFIRMED by runtime evidence") | same as §20.12.5 |
+| render-pipeline §23.11 addendum | address `14E90F00` bound at draws 1483–1485, with no render-target header | none static; needs the `CreateTexture` path through our own disassembly (render job `20260930T223855-team-a-ueqn`) |
+
+Passages that rest on the same capture but never carried a CONFIRMED label were not struck. They got the
+provenance note, and unlabelled ones are now marked HYPOTHESIS: §20.12.12 (`Tint_color` runtime values),
+§23.6, §23.6.1 and §23.11 (render-target formats). The light-shader register numbers in §23.6/§23.6.1 were
+independently re-derived by Team B's CTAB census, so they do not depend on the capture.
