@@ -176,6 +176,8 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
 
 **Fuzz coverage (`7891af0`):** the four lowest-coverage harnesses now drive the decode paths, not just `parse()` — coverage fxo 37→259, anim 53→118, texture 131→241, geometry 109→148 edges; a 5-minute run each with value profiling found 0 issues.
 
+**Bridge-results readiness (`b128350`):** `bridge_diff.py` exercised end to end on a real before/after pair of `lua_host_run` builds (`baecf76` vs HEAD) over a synthetic cache; it now shows first-error text, ignores `elapsed_seconds`, and rolls up `OPEN_STATE:` hits. Every queued job's outputs checked against the agent's 4 MB/file and 24 MB/job upload limits (`bridge-jobs/README.md`): `ctab_census` now shards its constants table (job 06 re-submitted as `…-epre`; ignore `nxrt`/`bujl`); `lua_host_run`'s hook-detail TSV (~34 MB) is skipped by design.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
