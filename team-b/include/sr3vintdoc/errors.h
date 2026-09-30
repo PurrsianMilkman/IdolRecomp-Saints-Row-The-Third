@@ -17,7 +17,7 @@ namespace sr3vintdoc {
 // NEVER thrown for a version outside the CONFIRMED-shipped {1, 2} set, a
 // property tag outside the CONFIRMED-shipped 1-7 range, or anything else
 // either spec marks OPEN - those are DISAGREEMENTS to surface through the
-// population validator (tools/validation/validate_vintdoc_population.cpp),
+// population validator (tools/vintdoc_validate.cpp),
 // not parse failures. A version/tag outside the documented set is still
 // read structurally where the record shape makes that possible (see
 // vint_doc.h's own notes), so one out-of-range value doesn't necessarily

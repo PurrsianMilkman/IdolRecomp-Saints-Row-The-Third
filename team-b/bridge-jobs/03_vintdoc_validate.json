@@ -1,0 +1,30 @@
+{
+  "title": "team-b: sr3vintdoc population sweep, interface_startup + interface (HANDOFF Sec C)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "vintdoc_validate"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "vintdoc_validate",
+      "args": [
+        "{OUT}",
+        "{GAME}/packfiles/pc/cache/interface_startup.vpp_pc",
+        "{GAME}/packfiles/pc/cache/interface.vpp_pc",
+        "--dump",
+        "vdo_bitmap_viewer"
+      ],
+      "timeout": 3600
+    }
+  ],
+  "collect": [
+    "*.tsv",
+    "*.txt",
+    "*.json"
+  ]
+}

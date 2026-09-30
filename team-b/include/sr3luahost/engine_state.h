@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // sr3save::nameHash(): the engine's general lower-cased, seed-0, no-final-
@@ -501,6 +502,47 @@ public:
     int coopJoinType() const { return coopJoinType_; }
     void setCoopJoinTypeForTesting(int code) { coopJoinType_ = code; }
 
+    // --- zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23) --------------
+
+    // Real body: a two-tier dispatch (CONFIRMED, disassembly). Tier 1, only
+    // when a name is given: a per-name cutscene state (0x00723d20) read
+    // exactly `1` -> true. Tier 2 (0x00721db0): a global flag (0x0153b556 -
+    // the same busy flag zscene_prep gates on, Sec8.21) set -> true; else,
+    // if a name was given and resolves through the name-hash table lookup
+    // (0x00d9e8b0 -> 0x00721be0) to a record other than the fixed "current"
+    // sentinel, a per-record test whose sense is OPEN (read as inverted
+    // relative to tier 1, not reconciled); else a global state code
+    // (0x0153b51c) equal to `2` -> true.
+    //
+    // This project has no cutscene/scene-streaming subsystem and no copy of
+    // the real scene table, so every field below is a raw, opaque stand-in
+    // with no meaning assigned to its codes (the real meaning of state codes
+    // 1/2 is OPEN, Sec14.23). Defaults (empty maps, flag clear, code 0) are
+    // this project's own choice: the real initial values and every real
+    // writer (zscene_prep's load sequence, Sec8.21, is only HIGH CONFIDENCE
+    // and not traced past its first call) are not in any spec yet. All
+    // setters are test-only.
+    //
+    // zsceneFastPathState(): the tier-1 per-name state, keyed by the exact
+    // Lua string (the real per-name lookup inside 0x00723d20 is not
+    // described). zsceneHasTableRecord(): whether a name resolves through
+    // the tier-2 table lookup; keyed lowercased, since 0x00d9e8b0 hashes the
+    // lowercased string (HANDOFF Sec3). The record's own state is not
+    // stored: the only test that reads it is the OPEN branch.
+    // zsceneOpenBranchHits() counts how often that OPEN branch was reached
+    // (it returns false, the same falsy result the generic stub gave before)
+    // so a real run can report whether the OPEN item ever decides anything.
+    bool zsceneFastPathState(const std::string& name, int& stateOut) const;
+    void setZsceneFastPathStateForTesting(const std::string& name, int state) { zsceneFastPathStates_[name] = state; }
+    bool zsceneBusyFlag() const { return zsceneBusyFlag_; }
+    void setZsceneBusyFlagForTesting(bool set) { zsceneBusyFlag_ = set; }
+    int zsceneGlobalStateCode() const { return zsceneGlobalStateCode_; }
+    void setZsceneGlobalStateCodeForTesting(int code) { zsceneGlobalStateCode_ = code; }
+    bool zsceneHasTableRecord(const std::string& name) const;
+    void addZsceneTableRecordForTesting(const std::string& name);
+    int zsceneOpenBranchHits() const { return zsceneOpenBranchHits_; }
+    void recordZsceneOpenBranchHit() { ++zsceneOpenBranchHits_; }
+
 private:
     std::unordered_map<std::string, CharacterState> characters_;
     bool coopActive_ = false;
@@ -521,6 +563,13 @@ private:
     std::unordered_map<std::string, int> tutorialAdvanceCounts_; // Sec10.4
     std::string qteAnimationTriggerCallback_;                  // Sec10.7
     int coopJoinType_ = 0;                                      // Sec10.9
+
+    // --- zscene_is_loaded (Sec14.23), see the accessor doc comment above ---
+    std::unordered_map<std::string, int> zsceneFastPathStates_;
+    bool zsceneBusyFlag_ = false;
+    int zsceneGlobalStateCode_ = 0;
+    std::unordered_set<std::string> zsceneTableRecords_; // lowercased names
+    int zsceneOpenBranchHits_ = 0;
 };
 
 } // namespace sr3luahost

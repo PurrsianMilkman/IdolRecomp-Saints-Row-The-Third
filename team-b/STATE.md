@@ -1,4 +1,6 @@
-# STATE — real denominators, updated as of 2026-09-30 (PAUSED, see HANDOFF.md resume note)
+# STATE — real denominators, updated as of 2026-09-30 (cloud phase; see HANDOFF.md resume note)
+
+**Cloud phase 2026-09-30:** portable GCC build + CI, 43/43 synthetic suites; `zscene_is_loaded` implemented (§14.23). See HANDOFF's cloud entry.
 
 Adopted from external decompilation-project research (`AI-WORKFLOW-INSTRUCTIONS.md` §12: "keep a
 state-of-the-project file with real metrics and denominators... the orchestrator can then answer 'how
@@ -89,7 +91,7 @@ re-list all ~236 of them.
 | `.clmesh_pc` real per-material shader constants (B/C name-hash/vec4 arrays) | **DONE (§9.141)** — `sr3clmesh::LevelMesh::materialShaderConstants()`, 95/95 (100%) real B-hash→CTAB-name matches on the tower's materials; VS/PS resolution generalized beyond `_v`/`_mv` suffix search, population rate 44/81→58/81 (54%→72%) | §9.141 |
 | Deferred-lit render extended from vehicles to `.clmesh_pc` props | **DONE, honest partial (§9.139/§9.141/§9.142)** — real render achieved (14.15% silhouette coverage, up from 1.15%), but a "position-correlated colour" artifact's root cause is genuinely OPEN (`eyePos` empirically refuted as the cause, traced to `Fog_dist`/other placeholder-zero constants producing a GPU-`min()`-clamped NaN; full isolation would need per-constant A/B across ~5 shader families, correctly out of scope so far) | §9.139, §9.141, §9.142 |
 | Golden-scene regression baselines | **8/8 frozen** — the original 5 (brad, 2 vehicles, `zone_tile`, `tree`) + `clmesh_lite_fixh`/`clmesh_airport_controltower` (§9.136/§9.138) + `clmesh_airport_controltower_lit` (§9.139, re-frozen §9.141 with the old sparse baseline preserved under renamed files). All independently rebuilt from fresh objects + reran by me, byte-exact + `--selftest` OK, every time a new scene lands | §9.110, §9.112, §9.116, §9.120, §9.124, §9.136, §9.138, §9.139, §9.141 |
-| `.vint_doc` UI document reader (`sr3vintdoc`) | **NOT STARTED — PAUSED at the investigation stage.** Only `include/sr3vintdoc/errors.h` (a skeleton) exists; no parser, no CMake wiring, no validation run. 5 throwaway probe tools in `tools/validation/` from the investigation phase. See HANDOFF §C for the re-dispatch brief. | (new, unreviewed spec) |
+| `.vint_doc` UI document reader (`sr3vintdoc`) | **CONFIRMED-scope reader DONE, cloud phase 2026-09-30** — header, string table, all record shapes as positioned decoders, synthetic suite, population validator. **No full-document walk** (3 layout facts OPEN, requested from Team A). **No real-data run yet** (bridge job `03` queued). | HANDOFF cloud stretch 1 |
 
 ## Missions/UI Lua domain (data-side census, §9.108)
 

@@ -3,6 +3,74 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## ☁ CLOUD PHASE (un-paused 2026-09-30, Team B session on `claude/crreish-team-b`) — read this first
+
+The pause banner below is historical (see `TEAMS.md`). Newest entry first.
+
+### 2026-09-30, cloud stretch 1
+
+**Done (all pushed, evidence in each commit message):**
+1. **Portable build + CI.** Every non-`WIN32` target now builds with GCC 13.3 on Linux; **ctest 42/42 pass**
+   (43/43 after `sr3vintdoc` below), Release and Debug+ASan/UBSan, no sanitizer reports.
+   `.github/workflows/team-b-portable.yml` runs both configs on every push touching `team-b/`. Fixes:
+   `zlibstatic` is built directly from the vendored sources (upstream's `add_subdirectory` needed
+   `win32/zlib1.rc`/`zlib.map`, which the public export dropped, so configure failed on **every**
+   platform, Windows included, from this repo); `user32` linked only on `WIN32`; `game_get_key_name`'s
+   `GetKeyNameTextW` path behind `_WIN32` (off Windows it returns `""`, the existing failed-lookup
+   result); `fopen_s` only under `_MSC_VER` in 3 probe tools. **MSVC not re-verified** (no Windows in the
+   cloud) — queued as bridge jobs `01a/01b/01c`.
+2. **`zscene_is_loaded`** (§9.143 blocker, `spec-lua-api-behaviour.md` §14.23): CONFIRMED two-tier
+   dispatch implemented in `sr3luahost` with opaque `EngineState` fields and test-only setters; the OPEN
+   per-record branch is a labelled stub returning `false` and is counted (`lua_host_run` prints
+   `zscene_is_loaded_open_branch_hits`). 20 new checks, 5 mutants all killed. **It will not by itself
+   unblock the busy-poll**: nothing in the host sets the scene state yet, because the writers
+   (`zscene_prep`'s load sequence) and initial values are not specced — see request 2.
+   `lua_host_run` now finds its `tools/` inputs next to the registration list, so it runs from the bridge.
+3. **`sr3vintdoc`** (§C brief): CONFIRMED-scope reader (`include/sr3vintdoc/vint_doc.h` top note lists
+   exactly what is and isn't implemented), `tests/synthetic_vintdoc_test.cpp`, and
+   `tools/vintdoc_validate.cpp` (reproduces the spec's population figures per archive; scores 12
+   candidate walk layouts as a labelled HYPOTHESIS test with ambiguity counts). **No full-document walk
+   yet** — request 3. Smoke-tested end to end on a synthetic `.vpp_pc`. The pre-pause probe tools in
+   `tools/validation/probe_vintdoc_*.cpp` were read: they hypothesised `+0x16` = absolute offset of the
+   critical-resource section but recorded no result; the validator's grid includes that candidate (`A-*`).
+
+**Bus live (2026-09-30, manager):** `bridge_client.py setup` done (fetches only `team-b*`/`status*`; no Team A
+branch on disk). Integration branch merged (spec-lua-bindings §17 rewording, values unchanged, no code impact).
+**Submitted, queued until the PC agent reports in** (all from `d0e6843`): `20260930T213035-team-b-ymee` (01a),
+`20260930T213037-team-b-jpsf` (01b), `20260930T213040-team-b-qqyx` (01c), `20260930T213043-team-b-knyf` (02
+mission re-run), `20260930T213047-team-b-zlbw` (03 vintdoc sweep). Read results with
+`python3 bridge/bridge_client.py wait <id>` / `show <id>`.
+**Earlier:** the bus repo wasn't set up, so nothing had run on real data. Jobs queued in
+`team-b/bridge-jobs/` (see its README; all pass `pc_agent.py`'s own `validate()`): `01a-c` MSVC build +
+42 suites, `02` mission-driving re-run, `03` `sr3vintdoc` sweep over `interface_startup.vpp_pc` +
+`interface.vpp_pc`. **Job 03's `--dump` JSON contains game text: read it from the bus, never commit it.**
+
+### Requests to Team A (relay via the manager)
+
+1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
+   busy-poll calls, the top two mission blockers): no behaviour entry exists. Need args/return/body, and
+   the screen-fade state machine they read: the globals §26.23 names for `0x0059f8c0`
+   (`0x012e6aa0`/`0x012e6aa4`/`0x012e6aa8`/`0x013effc8`/`0x013effcc`/`0x013effd0`) — their initial values,
+   every phase value and transition, and **what completes a fade** (a timer tick? the Lua `screen_fade_do`
+   callback returning? a completion callback?). §26.9 gives `sfx_faded_out` = `0x012e6aa4 == 3`; is
+   `fade_is_fully_faded_out` the same test, and what does `fade_in`'s `0x0059fc40` write? (`sfx_faded_in`
+   is also unspecced.)
+2. **`zscene` lifecycle** (for `zscene_is_loaded` to ever return true in the host): what `zscene_prep`'s
+   `0x0101b530`/`0x00721c20(1,0,0)` do to the per-name state that tier 1 (`0x00723d20`) reads, the busy
+   flag `0x0153b556` and the state code `0x0153b51c` (initial values, who writes `1`/`2` and when); whether
+   tier 1's per-name state is the same record `0x00721be0` returns; reconcile §14.23's OPEN sense
+   inversion; and where the `0x0153b294` scene table's entries come from (which data file).
+3. **`spec-vint-doc-format.md` walk gaps** (implementing it hit these; no guessing done):
+   (a) where the critical-resource section starts — §3.2 says "after the string-offset array" but §3.1
+   puts the string bytes at that same position; is header `+0x16` an absolute offset to it?
+   (b) §5's baseline/override "byte-offset": absolute, or relative to what? After the selected list is
+   read, where does the main cursor resume for the element's children (after the override header, or
+   after the list's terminator)? (c) property-record byte order: tag byte, then u32 name hash, then value
+   (what `sr3vintdoc` assumes), or hash first? The bridge sweep (job 03) will report which candidate lands
+   on EOF across the population, but that is evidence, not the disassembly answer.
+4. **`vint_is_std_res`** (UI registrar, 55-name `vint_*` family, §9.143: the next blocker for the 9/49
+   missions past the fade wait): no behaviour entry. Need args/return/body.
+
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
 **The user asked both teams to pause (relayed via `purrsian-44`). No new agent dispatching, no new work,

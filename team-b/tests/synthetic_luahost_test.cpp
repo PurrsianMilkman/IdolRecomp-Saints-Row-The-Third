@@ -86,6 +86,8 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"on_qte_animation_trigger", "gameplay"},
         {"on_revived", "gameplay"},
         {"game_get_coop_join_type", "ui"},
+        // Cloud phase (2026-09-30): Sec14.23, `gameplay` (tagged list line 1014).
+        {"zscene_is_loaded", "gameplay"},
     };
 }
 
@@ -537,10 +539,20 @@ int main() {
             // 0x1E is the real DirectInput scan code for 'A'
             // (spec-tables-ui-controls.md Sec4.3) - a real, ordinary key,
             // not the sentinel.
+            // Non-empty only where the real OS lookup exists (Windows); the
+            // portable build has no key-name source and returns "" - the
+            // CONFIRMED "1 Lua string" return contract holds on both.
+#ifdef _WIN32
             auto r2 = host.runChunk(ui,
                 "local n = game_get_key_name(0x1E)\n"
                 "assert(type(n) == 'string' and #n > 0)",
                 "keyname2.lua");
+#else
+            auto r2 = host.runChunk(ui,
+                "local n = game_get_key_name(0x1E)\n"
+                "assert(type(n) == 'string')",
+                "keyname2.lua");
+#endif
             CHECK(r2.loadOk && r2.pcallOk);
         }
 
@@ -916,6 +928,63 @@ int main() {
             CHECK(r2.loadOk && r2.pcallOk);
         }
 
+        // 23. zscene_is_loaded (Sec14.23). Defaults (this project's own
+        // choice, see engine_state.h): nothing loaded, flag clear, code 0.
+        {
+            auto check = [&](const char* chunk, const char* tag) {
+                auto r = host.runChunk(gp, chunk, tag);
+                CHECK(r.loadOk && r.pcallOk);
+            };
+            // Wrong state: gameplay-tagged only.
+            check("assert(type(zscene_is_loaded) == 'function')", "zs0a.lua");
+            {
+                auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil)", "zs0b.lua");
+                CHECK(r.loadOk && r.pcallOk);
+            }
+            // Defaults: false with no name, nil name, or an unknown name;
+            // always exactly one boolean.
+            check("assert(zscene_is_loaded() == false)", "zs1.lua");
+            check("assert(zscene_is_loaded(nil) == false)", "zs2.lua");
+            check("assert(zscene_is_loaded('m02_scene') == false)", "zs3.lua");
+            check("assert(select('#', zscene_is_loaded('x')) == 1)", "zs4.lua");
+
+            // Tier 1 (CONFIRMED): per-name state exactly 1 -> true; any
+            // other value falls through to tier 2 (all clear -> false).
+            es.setZsceneFastPathStateForTesting("m02_scene", 1);
+            check("assert(zscene_is_loaded('m02_scene') == true)", "zs5.lua");
+            check("assert(zscene_is_loaded() == false)", "zs6.lua"); // tier 1 needs a name
+            check("assert(zscene_is_loaded('M02_SCENE') == false)", "zs7.lua"); // tier-1 key is the exact string
+            es.setZsceneFastPathStateForTesting("m02_scene", 2);
+            check("assert(zscene_is_loaded('m02_scene') == false)", "zs8.lua");
+
+            // Tier 2, global state code: == 2 only.
+            es.setZsceneGlobalStateCodeForTesting(1);
+            check("assert(zscene_is_loaded() == false)", "zs9.lua");
+            es.setZsceneGlobalStateCodeForTesting(2);
+            check("assert(zscene_is_loaded() == true)", "zs10.lua");
+            check("assert(zscene_is_loaded('unknown') == true)", "zs11.lua"); // unresolved name reaches the code test
+
+            // Tier 2, OPEN per-record branch: pre-empts the code test,
+            // returns false, is counted. Lookup is case-insensitive.
+            es.addZsceneTableRecordForTesting("m03_scene");
+            CHECK(es.zsceneOpenBranchHits() == 0);
+            check("assert(zscene_is_loaded('M03_Scene') == false)", "zs12.lua");
+            CHECK(es.zsceneOpenBranchHits() == 1);
+            check("assert(zscene_is_loaded() == true)", "zs13.lua"); // no name: branch not reached
+            CHECK(es.zsceneOpenBranchHits() == 1);
+            es.addZsceneTableRecordForTesting(""); // even a record keyed "" is not reached without a name
+            check("assert(zscene_is_loaded() == true)", "zs13b.lua");
+            CHECK(es.zsceneOpenBranchHits() == 1);
+
+            // Tier 2, busy flag: true before the record branch and regardless of name.
+            es.setZsceneGlobalStateCodeForTesting(0);
+            es.setZsceneBusyFlagForTesting(true);
+            check("assert(zscene_is_loaded() == true)", "zs14.lua");
+            check("assert(zscene_is_loaded('m03_scene') == true)", "zs15.lua");
+            CHECK(es.zsceneOpenBranchHits() == 1);
+            es.setZsceneBusyFlagForTesting(false);
+        }
+
         // Every one of the 22 calls above must fold into the SAME HitLog
         // ranking every other stub uses (stub_registry.h/thread_scheduler.h).
         for (const char* name : {"coop_is_active", "game_get_key_name", "game_UI_audio_play",
@@ -926,7 +995,8 @@ int main() {
                                   "store_vehicle_get_state", "Completion_is_client",
                                   "game_hud_update_inventory", "tutorial_advance",
                                   "minimap_icon_add_do", "object_indicator_add_do",
-                                  "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type"}) {
+                                  "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type",
+                                  "zscene_is_loaded"}) {
             CHECK(host.hitLog().hits().count(name) == 1);
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }
