@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The confirmed engine->Lua hook name census this project fires as real
 // calls, built ONLY from spec-lua-bindings.md Sec8.2-8.4 and Sec12.2-12.9
 // (read in full before writing this file - not worked from a summary).

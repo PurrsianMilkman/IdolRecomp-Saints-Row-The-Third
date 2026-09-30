@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The Lua 5.1 host scaffold's VERDICT TOOL: loads game_lib.lua for real and
 // attempts to load/run real shipped mission/UI Lua scripts against the
 // stub environment built by sr3luahost (include/sr3luahost/host.h), then
@@ -927,7 +934,11 @@ int main(int argc, char** argv) {
     std::cout << "Wrote " << (outDir / "verdict_script_state_tags.tsv").string() << "\n";
 
     // --- Real, disassembly-confirmed preload order for both states
-    // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30): before this,
+    // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30).
+    // IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30):
+    // Sec16.1 is NEEDS-EXE and Sec16.1/Sec16.4 are "NOT yet cleared for
+    // implementation". Kept working, behaviour unchanged, until Team A
+    // clears it (team-b/HANDOFF.md Requests to Team A, item 8). Before this,
     // this host only ever preloaded game_lib.lua, alone, into gameplay -
     // missing system_lib.lua on BOTH states and the entire UI-state chain.
     //   UI state, in order:       system_lib.lua -> vint_lib.lua ->

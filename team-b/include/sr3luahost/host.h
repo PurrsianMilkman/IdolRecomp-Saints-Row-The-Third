@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The Lua 5.1 host scaffold itself: two real, independent lua_State
 // instances (embedded stock Lua 5.1, third_party/lua51 - see lua_c_api.h),
 // modeling the real engine's own confirmed state split

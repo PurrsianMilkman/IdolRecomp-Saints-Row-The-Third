@@ -163,6 +163,8 @@ struct ElementHead {
 };
 ElementHead readElementHead(Cursor& c);
 
+// Implemented pre-review, pending clearance: spec-lua-bindings.md Sec9.1 is
+// "NOT yet cleared for implementation" (manager rule 2026-09-30); unchanged.
 // spec-lua-bindings.md Sec9.1: the 13 registered element type names (13/13
 // registration call sites read directly).
 extern const char* const kRegisteredElementTypes[13];
