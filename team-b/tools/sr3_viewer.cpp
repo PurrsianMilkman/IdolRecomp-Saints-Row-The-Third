@@ -1192,7 +1192,12 @@ enum class SkinningMode {
                        // range's SET rather than the whole palette.
     kDirectLegacy,     // direct index + (x,-y,-z): no palette declared at
                        // all, OR --legacy-skinning forced the
-                       // pre-promotion reading for comparison/debugging
+                       // pre-promotion reading for comparison/debugging.
+                       // NOT SPEC-BACKED: spec-vertex-format.md Sec9 step
+                       // 7b retracted this reading 2026-09-30 (rig
+                       // Sec11.15). For a mesh with no palette no spec gives
+                       // a skinning rule - OPEN; this path is a labelled
+                       // fallback, unchanged, not a spec implementation.
     kRefuseMultiSet,   // >1 set AND the per-range selector was not readable
                        // - still no correct reading, so still refuse
     kRefuseTruncated,  // palette declared but not fully readable - refuse
@@ -1633,7 +1638,7 @@ const char* skinningModeLabel(SkinningMode mode) {
         case SkinningMode::kPaletteMultiSet:
             return "bone-palette SETS, per draw range + (-x,-y,-z)  [HANDOFF Sec9.63.10]";
         case SkinningMode::kDirectLegacy:
-            return "direct-index + (x,-y,-z)  [no bone palette declared, or --legacy-skinning]";
+            return "direct-index + (x,-y,-z)  [no bone palette declared, or --legacy-skinning; RETRACTED in spec, not spec-backed]";
         default:
             return "REFUSED";
     }
