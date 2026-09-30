@@ -762,8 +762,9 @@ void testZoneGeometryChainSegmentNotSixteenAligned() {
 }
 
 // `~al` ("always loaded") zones pad between segments to the next 16-byte
-// boundary where ordinary zones do not (spec Sec10.5: 97 of the 928 files
-// that tile use a skip, and all of them are `sr3_city~fNNNN~al` variants).
+// boundary (spec Sec10.5 sampled "97 of 928 tiling files use a skip", all
+// `sr3_city~fNNNN~al`; superseded by this project's 1,002/1,002 tiling with
+// 115 padded blocks, spec Sec10.8, which leaves which zones pad OPEN).
 // The walk must try that one extra computed position - still arithmetic,
 // still not a search.
 void testZoneGeometryChainWithSixteenAlignedPadding() {
