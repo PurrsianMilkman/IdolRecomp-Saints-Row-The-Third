@@ -133,11 +133,14 @@ class Bus:
     def force_status(self, payload):
         """Heartbeat on the 'status' branch: always a single parentless commit, force-pushed,
         built with plumbing so the working tree is never touched."""
-        data = json.dumps(payload, indent=2) + "\n"
+        # Bytes, not text: on Windows text-mode pipes turn "\n" into "\r\n", which put a stray CR into
+        # the mktree file name ("agent.json\r").
+        data = (json.dumps(payload, indent=2) + "\n").encode("utf-8")
         blob = subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=self.path, input=data,
-                              text=True, capture_output=True, check=True).stdout.strip()
-        tree = subprocess.run(["git", "mktree"], cwd=self.path, input="100644 blob %s\tagent.json\n" % blob,
-                              text=True, capture_output=True, check=True).stdout.strip()
+                              capture_output=True, check=True).stdout.decode().strip()
+        tree = subprocess.run(["git", "mktree"], cwd=self.path,
+                              input=("100644 blob %s\tagent.json\n" % blob).encode("utf-8"),
+                              capture_output=True, check=True).stdout.decode().strip()
         commit = git(["commit-tree", tree, "-m", "PC agent heartbeat"], self.path).stdout.strip()
         git(["push", "-q", "-f", "origin", commit + ":refs/heads/status"], self.path, check=False)
 
