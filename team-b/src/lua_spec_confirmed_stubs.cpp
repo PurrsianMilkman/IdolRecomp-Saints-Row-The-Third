@@ -254,6 +254,8 @@ int stub_game_get_key_name_for_action(lua_State* L) {
 // the first absent slot; return 0 always. Each filename's real,
 // CONFIRMED, empirically-vector-validated hash bucket (bucket_count=9000,
 // engine_state.h's own multiply33XorHashBucket) is computed and stored -
+// (OPEN for a name whose hash is >= 2^31 or that has a byte >= 0x80:
+// Sec8.2 leaves modulo and char signedness OPEN, see engine_state.h) -
 // the one real, checkable number this minimal registry can reproduce
 // exactly from this function's own confirmed shared resolution chain
 // with game_peg_unload (Sec2.7). Explicit gap: the completion-sweep/
@@ -275,7 +277,10 @@ int stub_game_peg_load_with_cb(lua_State* L) {
             if (lua_gettop(L) < argIndex || lua_type(L, argIndex) != LUA_TSTRING) break; // "breaking out early on any absent slot"
             PegLoadFilenameEntry entry;
             entry.name = argString(L, argIndex);
-            entry.bucketIndex = EngineState::multiply33XorHashBucket(entry.name, 9000);
+            // Stored only where Sec8.2's OPEN readings agree; OPEN otherwise.
+            if (EngineState::multiply33XorHashBucketUnambiguous(entry.name, 9000)) {
+                entry.bucketIndex.set(EngineState::multiply33XorHashBucket(entry.name, 9000));
+            }
             req.filenames.push_back(std::move(entry));
         }
     }

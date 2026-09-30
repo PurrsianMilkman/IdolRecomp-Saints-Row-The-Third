@@ -485,6 +485,15 @@ int main() {
         CHECK(EngineState::multiply33XorHashBucket("", 0x20) == 0x0);
         CHECK(EngineState::multiply33XorHashBucket("SAINTS_ROW_THE_THIRD", 0x100) == 0x7d);
         CHECK(EngineState::multiply33XorHashBucket("a", 0x20) == 0x1);
+        // Sec8.2 (2026-09-30): modulo and char signedness are OPEN, so a
+        // bucket is only unambiguous for ASCII names, and for a
+        // non-power-of-two count only when the hash is below 2^31.
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("tex_a.cvbm_pc", 1024));  // power of two
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("tex_a.cvbm_pc", 9000)); // 0xd80fcd8f
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("tex_b.cvbm_pc", 9000));  // 0x4010c64c
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("", 9000));
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("a\xe9", 0x20));        // byte >= 0x80
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("a\x80", 9000));
     }
 
     // --- The 12 spec-confirmed names promoted from a generic logged-nil
@@ -624,8 +633,13 @@ int main() {
             CHECK(req.requestName == "req1");
             CHECK(req.filenames.size() == 2);
             CHECK(req.filenames[0].name == "tex_a.cvbm_pc");
-            CHECK(req.filenames[0].bucketIndex == EngineState::multiply33XorHashBucket("tex_a.cvbm_pc", 9000));
+            // tex_a hashes to 0xd80fcd8f (>= 2^31): with 9000 buckets signed and
+            // unsigned modulo disagree, both OPEN in Sec8.2 -> index stays OPEN.
+            CHECK(!req.filenames[0].bucketIndex.known());
             CHECK(req.filenames[1].name == "tex_b.cvbm_pc");
+            // tex_b hashes to 0x4010c64c (< 2^31): every reading agrees.
+            CHECK(req.filenames[1].bucketIndex.known());
+            CHECK(req.filenames[1].bucketIndex.get() == 0x4010c64cu % 9000u);
 
             // Count out of the confirmed 1..6 range -> no filenames read,
             // even though more string args were supplied.

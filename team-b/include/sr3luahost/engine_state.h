@@ -93,7 +93,16 @@ struct PegLoadFilenameEntry {
     // array (`0x029e1930`) to resolve the bucket into an actual loaded
     // texture, so only the bucket index itself - the one real, checkable
     // number this minimal registry can reproduce exactly - is stored.
-    uint32_t bucketIndex = 0;
+    //
+    // OPEN for some names (2026-09-30, spec-texture-format.md Sec8.2 desk
+    // review): the spec states initial value 0 and 32-bit wrap, but leaves
+    // signed vs unsigned modulo and the character load's signedness OPEN.
+    // With 9000 buckets those change the answer when the 32-bit hash is
+    // >= 2^31 or the name has a byte >= 0x80, so the index is set only
+    // when every reading agrees (multiply33XorHashBucketUnambiguous) and
+    // stays OPEN otherwise.
+    OpenValue<uint32_t> bucketIndex{"multiply-33 bucket index (signed modulo / char signedness)",
+                                    "spec-texture-format.md Sec8.2"};
 };
 
 // One `game_peg_load_with_cb` (Sec8.24) request-tracking slot.
@@ -365,7 +374,19 @@ public:
     // bucket_count=9000. A free function (no state needed) - exposed here
     // rather than in a texture-domain header since this is the only
     // consumer among this task's 12 in-scope names.
+    //
+    // Spec update 2026-09-30 (Sec8.2): initial value 0 and 32-bit wrap are
+    // now stated there, as implemented. Still OPEN there: signed vs
+    // unsigned modulo and the character load's signedness. This function
+    // takes the unsigned reading of both; it is the answer only when
+    // multiply33XorHashBucketUnambiguous() is true.
     static uint32_t multiply33XorHashBucket(const std::string& name, uint32_t bucketCount);
+    // True when every reading Sec8.2 leaves OPEN gives the same bucket:
+    // every byte < 0x80 (no signedness question on the load or the
+    // lowercase fold), and either a power-of-two bucket count (the modulo
+    // only keeps low bits) or a 32-bit hash < 2^31 (signed and unsigned
+    // modulo agree on non-negative values).
+    static bool multiply33XorHashBucketUnambiguous(const std::string& name, uint32_t bucketCount);
 
     // --- vint_object_find (spec-lua-bindings.md Sec15) ---------------------
 
