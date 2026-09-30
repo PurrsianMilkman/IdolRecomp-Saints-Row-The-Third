@@ -2028,6 +2028,8 @@ The owner un-paused the project for cloud work (`TEAMS.md`). This session is **T
   - `20260930T212750-team-a-qrwj` `review-conflicts.json`: 6 addresses in conflict.
   - `20260930T213347-team-a-vmgr` `teamb-requests-1.json`: `sfx_faded_in`; `.vint_doc` reader via its extension strings and the magic `0x00003027`.
 
+- **Self-containment pass (manager request, after the review merged as integration `b243443`):** the archived §27 copies were renamed `N.27`, so only the live resume note is `## 27.`. Every spec reference to HANDOFF or WALLS was checked; 6 load-bearing facts were brought into specs and about 75 §27.x references were repointed. See `review/spec-consistency.md`, last section. Open for the owner: the RTTI-names question in `spec-rig-format.md`, which the manager is raising.
+
 **Blocked:** every executable question waits on the PC agent. Check with `python3 bridge/bridge_client.py status`, then `list` / `show <id>`.
 
 **Next, in Team B's priority order (their requests are under "Requests to Team A" at the top of `team-b/HANDOFF.md` on the integration branch):**
