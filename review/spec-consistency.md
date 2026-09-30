@@ -208,6 +208,8 @@ restored claim by claim with the new evidence. **Team B: check any code that dep
 | render-pipeline §20.12.9 | the `projTM` row of the summary table ("CONFIRMED by runtime evidence") | same as §20.12.5 |
 | render-pipeline §23.11 addendum | address `14E90F00` bound at draws 1483–1485, with no render-target header | none static; needs the `CreateTexture` path through our own disassembly (render job `20260930T223855-team-a-ueqn`) |
 
+| vertex-format §6.6 | "base decode mechanism": raw non-normalising SHORT2 texcoords with a universal 1/1024 scale and tiling (heading "CLOSED" is now HYPOTHESIS; §12.9.4 and §12.10.5 notes follow it) | the tiling and 1/1024 multiply are already re-derived from the shipped shaders (§12.13 item 5); only the raw SHORT2 declaration type rests on the capture, so it needs the declaration-building code through our own disassembly (`0x00476ca0` path) |
+
 Passages that rest on the same capture but never carried a CONFIRMED label were not struck. They got the
 provenance note, and unlabelled ones are now marked HYPOTHESIS: §20.12.12 (`Tint_color` runtime values),
 §23.6, §23.6.1 and §23.11 (render-target formats). The light-shader register numbers in §23.6/§23.6.1 were
