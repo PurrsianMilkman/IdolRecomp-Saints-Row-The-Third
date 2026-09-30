@@ -134,6 +134,28 @@ Earlier sessions' stand-in defaults (`coopActive_`, `isHost_`, `hasLocalPlayer_`
 `vehicleStoreActive_`, EngineState §10.x) are **not** converted yet — they predate this rule and change mission
 behaviour; listed here for the manager to decide.
 
+**Item 4, Linux tools.** Every `tools/validation/*.cpp` harness plus `clmesh_lead_probe` is now a CMake target
+(`CRREISH_VALIDATION_TOOLS`, default ON — the portable equivalent of `build_one.bat`, linking every reader
+library), so the PC bridge can build any of them by name and the Linux CI job compiles all 105. Windows-only
+(D3D/`sr3_viewer`): `d3dctest_semantics{,_sm4}`, `validate_d3d9bc_hlsl{,_sm4}_population`,
+`validate_peg_population`, `golden_scene_check`, `tree_baseline_render`, the `prototype_*` renderers.
+
+**Registration corrections (manager, from the specs):**
+- **`vint_*` (§13.7):** the host built from the 1,490 list already registers all 58 `vint_*` names (55 from
+  §13.7's registrar) as stubs in the UI state only — no fix needed. The §9.143/§9.108 wording "`vint_is_std_res`
+  genuinely missing" came from the older 1,430 roster; and the committed
+  `results/verdict_stub_hits_with_missions.tsv` shows all 739 `vint_is_std_res` calls in the UI state with
+  **0 from the mission pass**, so "the 9/49 missions uniformly hit `vint_is_std_res` next" is not supported by
+  that file. The queued mission re-runs will settle it (per-mission `first_error_message`).
+- **§13.5 dual registration:** confirmed all 8 are in both states (host override of the tag file);
+  `tools/LUA_ROSTER_NOTES.md` now annotates the tag files/tsvs; pinned by the new
+  `tests/synthetic_luahost_roster_test.cpp` (real 1,490 list).
+- **24 bare globals (§13.2/§16.3):** not registered, flagged PENDING in the notes and the roster test — not
+  treated as Lua stdlib.
+- **Hook names (§4 desk review):** every Group 1 hook now carries an evidence label; 42 rest on §4's scan
+  only (pending recheck), 5 are §14.3-refuted (still fired, labelled). Output column added to
+  `verdict_hook_fires_by_hook.tsv`.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
@@ -191,6 +213,14 @@ would look bad public even though the technical content itself (real addresses/o
 A's clean-room disassembly) was already a deliberate publish decision, not mine to second-guess.
 
 ### A. Working mode (standing, confirmed 2026-09-12/09-20, boundary sharpened 2026-09-29)
+**Cloud-phase update (2026-09-30, owner via manager): pick each subagent's model by task (Agent tool
+`model`), replacing the "dispatch Sonnet agents" habit below. Full table: `TEAMS.md` "Which model for which
+job". For Team B: `sonnet` — CONFIRMED-spec Lua functions with unit tests, fuzz harnesses, tool ports, CI,
+result-comparison scripts, bridge job files; `opus` — new format readers, engine-state modelling in the host,
+and independent verification (fresh rebuild + full rerun) of any agent's work before recording it; `fable` —
+root-causing hard bugs that resisted a first attempt (e.g. the clmesh NaN/`Fog_dist` artifact) and tricky
+validation discrepancies in bridge results; `haiku` — greps, censuses, summarising large bridge outputs.
+Verify with an equal-or-stronger model; escalate one tier after two failed attempts.**
 Don't ask permission needlessly; work when the orchestrator peer (`purrsian-44`) says so. Standing goal: FULL RECOMP, autonomous. Only `spec-*.md` implemented from; NEVER the exe/disassembly (Team A's side). **`D:\SR3RTXREMIXCOMP` is OFF-LIMITS — do not open any path under it, even though it's listed as a working directory** (a real boundary crossing happened there 2026-09-29, caught by the orchestrator, corrected in place, memory saved: `feedback_cleanroom-boundary-scope.md`). If a spec cites a path under that folder as evidence, use only the fact the spec states, never open the path. Process: dispatch Sonnet 5 agents with precise context → **I independently rebuild from FRESH objects and rerun the agent's FULL verification plan myself before recording anything or touching `build_verify/`** — non-negotiable, has caught real mistakes repeatedly. Real canonical-file fixes are an authorized exception to "agents don't touch canonical files" given a real regression plan (precedent §9.68/§9.87/§9.105/§9.111). **When relaying new info to an ALREADY-running agent, always use `SendMessage` to its own agent-id — NEVER a fresh `Agent` call** (a fresh call spawns a contextless duplicate risking a file collision; happened once this session, caught via `TaskStop` before any edit, 0 harm — see the memory this created).
 
 ### B. DONE, compact citations (full narrative in each §9.xx — do not re-derive)

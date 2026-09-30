@@ -852,6 +852,14 @@ add_executable(sr3luahost_tests tests/synthetic_luahost_test.cpp)
 target_link_libraries(sr3luahost_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
 
+# Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
+# only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
+# bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
+add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
+target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
+target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+add_test(NAME synthetic_luahost_roster_test COMMAND sr3luahost_roster_tests)
+
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
 # stub environment above, reporting real luaL_loadbuffer/lua_pcall
@@ -944,7 +952,7 @@ endif()
 # reader library. Cloud phase 2026-09-30: lets the PC bridge build them by
 # target name and keeps them compiling in Linux CI. Harnesses that need D3D
 # (d3dcompiler/d3d11) or sr3render stay Windows-only.
-option(CRREISH_VALIDATION_TOOLS "Build tools/validation harnesses (not yet verified on Linux)" OFF)
+option(CRREISH_VALIDATION_TOOLS "Build tools/validation harnesses" ON)
 if(CRREISH_VALIDATION_TOOLS)
     set(CRREISH_ALL_READER_LIBS vpp_container sr3save sr3asm sr3fxo sr3effects sr3xtbl
         sr3tables_trafficai sr3tables_weapons sr3tables_progression sr3tables_environment
@@ -953,7 +961,8 @@ if(CRREISH_VALIDATION_TOOLS)
         sr3texture sr3geometry sr3anim sr3morph sr3foliage sr3conversation sr3cutscene sr3mesh
         sr3vehicle sr3rig sr3zone sr3audio sr3clmesh sr3tree sr3lua sr3luahost sr3vintdoc)
     set(CRREISH_WINDOWS_ONLY_VALIDATION d3dctest_semantics d3dctest_semantics_sm4
-        validate_d3d9bc_hlsl_population validate_d3d9bc_hlsl_sm4_population validate_peg_population)
+        validate_d3d9bc_hlsl_population validate_d3d9bc_hlsl_sm4_population validate_peg_population
+        golden_scene_check) # drives the D3D11 sr3_viewer.exe
     file(GLOB CRREISH_VALIDATION_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tools/validation/*.cpp)
     list(APPEND CRREISH_VALIDATION_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/tools/golden_scene_check.cpp

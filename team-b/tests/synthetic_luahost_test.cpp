@@ -1100,6 +1100,31 @@ int main() {
         }
     }
 
+    // --- Hook evidence labels (spec-lua-bindings.md §4 desk review,
+    // 2026-09-30): nothing removed, every Group 1 name labelled.
+    {
+        int sec8 = 0, pending = 0, refuted = 0, groupLevel = 0;
+        for (const auto& h : sr3luahost::confirmedHooks()) {
+            switch (h.evidence) {
+                case sr3luahost::HookEvidence::Sec8Confirmed: ++sec8; break;
+                case sr3luahost::HookEvidence::Sec4ScanPendingRecheck: ++pending; break;
+                case sr3luahost::HookEvidence::RefutedSec14_3: ++refuted; break;
+                case sr3luahost::HookEvidence::GroupLevel: ++groupLevel; break;
+            }
+            if (h.group != sr3luahost::HookGroup::Group1_GeneralNamed) CHECK(h.evidence == sr3luahost::HookEvidence::GroupLevel);
+        }
+        CHECK(refuted == 5);
+        CHECK(pending == 42);
+        CHECK(sec8 + pending + refuted == 78); // every Group 1 name labelled
+        CHECK(groupLevel == static_cast<int>(sr3luahost::confirmedHooks().size()) - 78);
+        for (const auto& h : sr3luahost::confirmedHooks()) {
+            if (h.name == "screen_fade_do" || h.name == "hud_running_man_event_update")
+                CHECK(h.evidence == sr3luahost::HookEvidence::Sec8Confirmed);
+            if (h.name == "garage_populate") CHECK(h.evidence == sr3luahost::HookEvidence::RefutedSec14_3);
+            if (h.name == "newsticker_populate") CHECK(h.evidence == sr3luahost::HookEvidence::Sec4ScanPendingRecheck);
+        }
+    }
+
     if (g_failures == 0) {
         std::cout << "ALL sr3luahost SYNTHETIC TESTS PASSED\n";
         return 0;
