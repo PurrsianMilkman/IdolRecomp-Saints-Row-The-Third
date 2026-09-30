@@ -170,7 +170,9 @@ compare with `tools/bridge_diff.py`.
 **§1-§5 desk review:** the 6 already-implemented functions from those sections (game_UI_audio_play §2.2,
 game_get_key_name §2.3, coop_is_active §3.1, set_ignore_ai_flag §3.4 — NEEDS-EXE; ai_add_enemy_target §3.9,
 on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and labelled
-(`spec_confirmed_stubs.h`) pending the manager's decision; nothing new from §1-§5.
+(`spec_confirmed_stubs.h`) — **manager approved option (a), 2026-09-30:** each is "implemented pre-review, pending exe re-clearance"; when Team A's re-derivation lands, a changed spec gets fixed and a refuted one reverts to a labelled stub. Nothing new from §1-§5.
+
+**Spec sync `982e688` (5 format specs):** vint-doc answers walk question (a) as HIGH CONFIDENCE (`+0x16` = absolute section offset), (b)/(c) HYPOTHESIS — `vint_doc.h` notes updated, full walk stays behind the validator's labelled grid (job 03 settles it). Effects: `sr3effects` already did not enforce `root+0x38 == size-root` (its own 1,468/1,812 measurement caused the downgrade; one stale "CONFIRMED" comment fixed) and never used the refuted abstract-base-class idea. Render pipeline: the 7 sites filling `projTM` (c28) / `world2view` (c48) — `sr3_viewer` vehicle path and 6 prototypes — are labelled HYPOTHESIS-based, STATE row added; `ctab_census`'s summary now lists which names sit at VS c28/c48 across every shader (job 06).
 
 ### Requests to Team A (relay via the manager)
 

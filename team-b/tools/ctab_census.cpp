@@ -45,6 +45,9 @@ struct Totals {
     long archives = 0, archivesFailed = 0, fxoEntries = 0, fxoDecodeFailed = 0, blobs = 0;
     long disassembleFailed = 0, wellFormed = 0, notPresent = 0, malformed = 0, constants = 0;
     std::map<std::string, long> byRegisterSet;
+    // Vertex-shader float4 constants starting at c28 / c48, by name and count
+    // (the render-pipeline projTM / world2view claims, Sec20.12.5/Sec20.12.9).
+    std::map<std::string, long> vsC28, vsC48;
 };
 Totals g;
 std::ofstream g_rows, g_blobs;
@@ -148,6 +151,11 @@ void processFxo(const std::string& archive, const std::string& path, const std::
                 ++count;
                 ++g.constants;
                 ++g.byRegisterSet[registerSetLabel(c.registerSetRaw)];
+                if (std::string(b.stage) == "vertex" && c.registerSetRaw == 2) {
+                    std::string key = c.name + " x" + std::to_string(c.registerCount);
+                    if (c.registerIndex == 28) ++g.vsC28[key];
+                    if (c.registerIndex == 48) ++g.vsC48[key];
+                }
                 g_rows << tsv(archive) << "\t" << tsv(path) << "\t" << tsv(name) << "\t" << bi << "\t" << b.stage
                        << "\t" << version << "\t" << status << "\t" << tsv(c.name) << "\t" << c.registerSetRaw << "\t"
                        << registerSetLabel(c.registerSetRaw) << "\t" << c.registerIndex << "\t" << c.registerCount
@@ -247,5 +255,8 @@ int main(int argc, char** argv) {
          " malformed=" + std::to_string(g.malformed));
     line("constants=" + std::to_string(g.constants));
     for (auto& kv : g.byRegisterSet) line("register_set_" + kv.first + "=" + std::to_string(kv.second));
+    // Which names sit at VS c28 / c48 (name xregisterCount -> blob count).
+    for (auto& kv : g.vsC28) line("vs_c28 " + kv.first + "=" + std::to_string(kv.second));
+    for (auto& kv : g.vsC48) line("vs_c48 " + kv.first + "=" + std::to_string(kv.second));
     return 0;
 }

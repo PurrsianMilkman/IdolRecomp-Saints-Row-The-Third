@@ -22,6 +22,15 @@
 //    suffix sharing, OPEN), so a caller must treat a failed or odd string
 //    as expected, not as a parse error.
 //
+// UPDATE 2026-09-30 (spec desk review, synced): the spec now answers item 1
+// below as HIGH CONFIDENCE (inferred): header +0x16 is the ABSOLUTE file
+// offset of the first critical-resource entry. Items 2 and 3 remain
+// HYPOTHESIS; item 3's text tension is acknowledged there in favour of the
+// reading this library already uses (tag, hash, value). The full walk stays
+// behind the labelled HYPOTHESIS grid in tools/vintdoc_validate.cpp (combos
+// A-*, i.e. +0x16 absolute, are the spec's current reading) until the
+// population sweep (bridge job 03) or the executable settles 2 and 3.
+//
 // NOT implemented - a full-document walk. Three facts it needs are OPEN or
 // ambiguous in the spec, so no parseDocument() exists yet:
 //  1. where the critical-resource section starts. Sec3.2 says "after the
@@ -92,7 +101,7 @@ struct Header {
     uint32_t field0ARaw = 0;            // +0x0A, OPEN (0 on 154/159, float-like otherwise)
     uint32_t metadataCount = 0;         // +0x0E
     uint32_t criticalResourceCount = 0; // +0x12
-    uint32_t secondaryOffsetRaw = 0;    // +0x16, OPEN; < file size on 159/159; NOT the string-pool base
+    uint32_t secondaryOffsetRaw = 0;    // +0x16: absolute offset of the critical-resource section, HIGH CONFIDENCE (spec §3.2, 2026-09-30); < file size on 159/159; NOT the string-pool base
     uint16_t elementCount = 0;          // +0x1A, top-level elements
     uint16_t animationCount = 0;        // +0x1C, top-level animations
 };
