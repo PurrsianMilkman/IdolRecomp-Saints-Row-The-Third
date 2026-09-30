@@ -17,7 +17,7 @@
 
 | Depth reached | Tables |
 |---|---|
-| **Full byte-offset schema, CONFIRMED — disassembly, and CONFIRMED — empirical against real base rows** | `vi_enter.xtbl`, `vi_exit.xtbl`, `vi_ride.xtbl` (§2), `vehicle_interaction_info.xtbl` (§3), `vehicle_interaction_point_sets.xtbl` (§4), `vehicle_wheel_groups.xtbl` (§5), `vehicle_animation_modifiers.xtbl` (§6), `externalized_vehicle_components.xtbl` (§7), `vehicle_cust_slots.xtbl`, `vehicle_cust_interface.xtbl` (§8), `vehicle_cust_color_sets.xtbl` (§9.2), `vehicle_surfing_style_two.xtbl` (§10), `level_objects.xtbl` (§12), `props.xtbl` (§13), `triggers.xtbl` (§14), `items_inventory.xtbl` (§15), `contacts_sr3.xtbl` (§17), `activity_player_persona_replacement.xtbl` (§18), `airplane_takeoff_land_curves.xtbl` (§19) |
+| **Full byte-offset schema, CONFIRMED — disassembly, and CONFIRMED — empirical against real base rows** | `vi_enter.xtbl`, `vi_exit.xtbl`, `vi_ride.xtbl` (§2), `vehicle_interaction_info.xtbl` (§3), `vehicle_interaction_point_sets.xtbl` (§4), `vehicle_wheel_groups.xtbl` (§5), `vehicle_animation_modifiers.xtbl` (§6 — *qualified 2026-09-30: real rows extracted, structural predicates not re-run, §6.2*), `externalized_vehicle_components.xtbl` (§7 — *qualified 2026-09-30: slot header only; the `Component` record's own fields are OPEN, §7.1/§23*), `vehicle_cust_slots.xtbl`, `vehicle_cust_interface.xtbl` (§8), `vehicle_cust_color_sets.xtbl` (§9.2), `vehicle_surfing_style_two.xtbl` (§10), `level_objects.xtbl` (§12), `props.xtbl` (§13), `triggers.xtbl` (§14), `items_inventory.xtbl` (§15), `contacts_sr3.xtbl` (§17), `activity_player_persona_replacement.xtbl` (§18), `airplane_takeoff_land_curves.xtbl` (§19) |
 | **Header/mechanism CONFIRMED — disassembly; full byte offsets of one nested sub-block left OPEN** | `vehicle_cust_color_pool.xtbl` (§9.1, the per-`Color` shader-value block) |
 | **Element vocabulary CONFIRMED — empirical from real rows; runtime record only partially traced from code** | `Vehicle-Customization-Lightset.xtbl`, `store_gang_lightset.xtbl`, `test_shop_light_01.xtbl` (§11, the shared "LightSet/Light" schema) |
 | **Array/resolver/row-tag CONFIRMED — disassembly and empirical; full per-item byte offsets OPEN** | `items_3d.xtbl` (§16) |
@@ -339,7 +339,7 @@ Loader `FUN_006c3eb0`. Unlike almost every other table in this group, this is a 
 | `Max_Lifetime_Respect` (s32, always) | `DAT_014c7738` | clamped ≥ 0 |
 | `Max_Cash` (f32, always) | `DAT_014c773c` | clamped ≥ 0 |
 
-**The `Record_Display_Time`/`Record_Queue_Time`/`Record_Threshold`/`Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` sextet is the exact same "on-screen stunt record" field group `spec-tables-weapons-combat.md` §14.5 (`windshield_cannon.xtbl`) and §11.2 (`combat_tricks.xtbl`) already document** — confirmed shared idiom, third table using it. A trailing call `FUN_006a4ad0(vehicleSurfingNode)` reads a **nested `Balance_Bar_Params`** block (12 more `f32` fields: `Balanced_Region_Size`, `_Size_Change`, `_Min_Size`, `_Acceleration`, `Balanced_Acceleration_Change`, `_Max`, `Unbalanced_Region_Acceleration`, `Unbalanced_Acceleration_Change`, `_Max`, `Balancing_Acceleration`, `_Change`, `_Max`) into a 22-dword local struct, then does an SR2-legacy-asset lookup (`"sr2_balance_meter"`) unrelated to the XML. **[CONFIRMED — disassembly.]**
+**The `Record_Display_Time`/`Record_Queue_Time`/`Record_Threshold`/`Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` sextet is the exact same "on-screen stunt record" field group `spec-tables-weapons-combat.md` §14.4 (`windshield_cannon.xtbl`) and §11.2 (`combat_tricks.xtbl`) already document** — confirmed shared idiom, third table using it. A trailing call `FUN_006a4ad0(vehicleSurfingNode)` reads a **nested `Balance_Bar_Params`** block (12 more `f32` fields: `Balanced_Region_Size`, `_Size_Change`, `_Min_Size`, `_Acceleration`, `Balanced_Acceleration_Change`, `_Max`, `Unbalanced_Region_Acceleration`, `Unbalanced_Acceleration_Change`, `_Max`, `Balancing_Acceleration`, `_Change`, `_Max`) into a 22-dword local struct, then does an SR2-legacy-asset lookup (`"sr2_balance_meter"`) unrelated to the XML. **[CONFIRMED — disassembly.]**
 
 ---
 
@@ -444,7 +444,7 @@ Loader `FUN_0093e0c0`. **This table does not allocate its own row array.** Each 
 
 ## 15. `items_inventory.xtbl` — player inventory item catalogue
 
-Loader `FUN_008dc8c0`. Array anchor already known from `spec-tables-weapons-combat.md` §1.6 (`0x0250ADC0`, stride `0x34`, **110 slots**, live bit `+0x30`; resolver `FUN_008DCB10`, `_stricmp` on `+0x00`). This is the table `spec-save-format.md` §10.3/§16 ties to save-file weapon-inventory ids via the item's `Name` hash (`spec-tables-weapons-combat.md` §16.3).
+Loader `FUN_008dc8c0`. Array anchor already known from `spec-tables-weapons-combat.md` §1.6 (`0x0250ADC0`, stride `0x34`, **110 slots**, live bit `+0x30`; resolver `FUN_008DCB10`, `_stricmp` on `+0x00`). This is the table `spec-save-format.md` §10.3 ties to save-file weapon-inventory ids via the item's `Name` hash (`spec-tables-weapons-combat.md` §16.3).
 
 ### 15.1 Record layout (`0x34` = 52 bytes)
 
@@ -593,7 +593,7 @@ Ghidra dumps: `tools/as_xrefs1.txt` (all 24 string cross-references), `tools/as_
 
 | From (table.field) | To | How resolved |
 |---|---|---|
-| `vi_enter/exit/ride.*` | `vehicle_interaction_info.Seat_Info/Element/{Enter,Exit,Ride}_Animations` | CRC hash, linear scan of the loaded array (§2, §3) |
+| `vehicle_interaction_info.Seat_Info/Element/{Enter,Exit,Ride}_Animations` | `vi_enter/exit/ride.*` | CRC hash, linear scan of the loaded array (§2, §3) |
 | `vehicle_interaction_info.Seat_Info/Element/Interaction_Point_Set` | `vehicle_interaction_point_sets.xtbl` rows | CRC hash, linear scan (§3, §4) |
 | `vehicle_interaction_info.Seat_Info/Element/{Seat,Primary_Access_Seat,Secondary_Access_Seat}` | the shared 8-seat resolver (`FUN_00AC1BA0`) also used by `spec-vehicle-data.md` §7.3/§7.4's `ProhibitedGunfireSeats`/`Seat_Specific_Data` | `_stricmp` against two parallel 8-name tables |
 | `vehicle_wheel_groups.{Front,Rear}_{Rim,Spinner}` | `externalized_vehicle_components.xtbl` `Slot` rows | CRC hash, linear scan (§5, §7) |
@@ -607,7 +607,7 @@ Ghidra dumps: `tools/as_xrefs1.txt` (all 24 string cross-references), `tools/as_
 | `level_objects.Death_Explosion` | `explosions.xtbl` (`spec-tables-weapons-combat.md` §10.1) | CRC `FUN_00590D20` (§12) |
 | `level_objects.Collision_Sound/FoleyCollision` | foley-collision records (`spec-tables-weapons-combat.md` §1.6's `FUN_00561370`) | Wwise-style id compare (§12) |
 | `level_objects.Emitting_Sound`, `contacts_sr3.Persona`, `triggers.Foley` | audio middleware string→id (`FUN_00462960`) | same resolver reused across three of this group's tables (§12, §14, §17) |
-| `triggers.Name` | a runtime trigger-instance hash table (pre-populated elsewhere — see §22 for the `.czn_pc` note) | multiply-by-33 bucket hash (`FUN_00DAB330`, modulus 20) (§14) |
+| `triggers.Name` | a runtime trigger-instance hash table (pre-populated elsewhere — see §21.1 for the `.czn_pc` note) | multiply-by-33 bucket hash (`FUN_00DAB330`, modulus 20) (§14) |
 | `weapons.Name`, `weapons.Projectile_Info/Model` (`spec-tables-weapons-combat.md` §15.3) | `items_3d.xtbl` / `items_inventory.xtbl` | CRC / `_stricmp` (§15, §16) |
 | save-file weapon inventory ids (`spec-save-format.md` §10.3) | `items_inventory.xtbl` rows (via `Name` hash) | CRC, seed 0 (§15) — cross-reference confirmed by `spec-tables-weapons-combat.md` §16.3's save-id match |
 | `activity_player_persona_replacement.Activity_Persona_Replacement/Name` | the activity-name resolver also used by `props.xtbl`'s literal-name match | `FUN_00614d70` vs. a fixed `_stricmp` list (§13, §18 — not the *same* table, but the same "named activity" family) |
@@ -627,7 +627,7 @@ All figures below are from `tools/harnesses/as_validate.py` run against the real
 | `vi_enter.xtbl` | 106 / 657 Elements | Name+Animation present, ≤6 sequential ParameterN | 657/657, 657/657 |
 | `vi_exit.xtbl` | 99 / 813 Elements | same | 813/813, 813/813 |
 | `vi_ride.xtbl` | 69 / 454 Elements | same | 454/454, 454/454 |
-| `vehicle_interaction_info.xtbl` | 51 / 209 Seat_Info Elements | `Seat` text recognised by the 8-seat resolver | 209/209 (once checked against the real `<Seat>` tag, §3.3) |
+| `vehicle_interaction_info.xtbl` | 51 (base copy; the `patch_compressed.vpp_pc` copy has 52, §3.3) / 209 Seat_Info Elements | `Seat` text recognised by the 8-seat resolver | 209/209 (once checked against the real `<Seat>` tag, §3.3) |
 | `vehicle_interaction_point_sets.xtbl` | 130 / 843 Set_Elements | `Interaction_Point_Type` ∈ 18 literals | 843/843 |
 | `vehicle_wheel_groups.xtbl` | 7 / 51 Rim_Element | (structural; 0 spinners in base data) | n/a |
 | `vehicle_cust_slots.xtbl` | 144 | `SlotType` ∈ 5; `Vehicle_Component_Type` ∈ 6 (6 present) | 144/144; 6/6 |
@@ -666,3 +666,7 @@ No confirmed fact in this document was invented past what the disassembly or the
 ## 24. Artifacts
 
 Ghidra project copy: `tools/gp_as1` (disposable, robocopied from `tools/ghidra_projects`). New Ghidra script: `tools/scripts/AsPtrStrs.java` (dereferences a literal-pointer table to its ASCIIZ strings — reusable by later agents; `AfStrXrefs.java`, `AfDec.java`, `AfMem.java` reused unchanged from agent AF's toolkit). Dumps: `tools/as_xrefs1.txt`, `tools/as_dec1.txt`…`as_dec5.txt`, `tools/as_ptrstrs1.txt`, `tools/as_strs1.txt`, `tools/as_strs2.txt`. Harnesses: `tools/harnesses/as_extract.py` (base-row extractor for all 24 tables, `tools/as_base_xtbl/`), `tools/harnesses/as_validate.py` (the §22 predicates). The parked `.czn_pc` interior was not touched (§21.1, §23 item 6).
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): qualified §6/§7 in the §1.1 coverage table (not structurally validated / `Component` record OPEN); fixed 3 cross-references (weapons-combat §14.5→§14.4, save-format §10.3/§16→§10.3, §22→§21.1); swapped the reversed From/To of the `vi_*` row in §21; added the 52-row patch-copy caveat to the §22 `vehicle_interaction_info` row.
