@@ -55,7 +55,7 @@ The literal column is the address of the NUL-delimited filename string in the im
 
 Every loader here has the same shape, built from the same six shared functions in `0x00DAB9D0`–`0x00DAD460` (the XML accessor library `spec-vehicle-data.md` §7.2 first catalogued):
 
-1. **Open:** `0x00DAC9A0(filename, 0, 1)` parses the named table from the virtual file system and returns the document's **`Table`** element (`0` on failure; the failure message is the literal "The table file "%s" is missing or invalid - parser error: %s."). Optional tables are first tested with the file-exists helper `0x00DA90D0(filename)` and silently skipped when absent.
+1. **Open:** `0x00DAC9A0(filename, 0, 1)` parses the named table from the virtual file system and returns the document's **`Table`** element (`0` on failure; on failure it prints a formatted "table file missing or invalid" message carrying the file name and the parser error). Optional tables are first tested with the file-exists helper `0x00DA90D0(filename)` and silently skipped when absent.
 2. **Count / iterate:** `0x00DAB9E0`'s siblings — `0x00DABA00(node, "Name")` = number of children with that name; `0x00DAB9E0(node, "Name")` = first child with that name; `0x00DAB9F0(parent, node, "Name")` = next sibling with that name — walk the row elements. **All name comparisons are case-insensitive** (`_stricmp`).
 3. **Read the row** with the accessors of §1.4.
 4. **Close:** `0x00DAB9D0(doc)` frees the parsed document.
@@ -866,3 +866,4 @@ Because `0x00DAB9E0(lod, "Distance")` (and `"Spawning"`, `"Update"`) finds no su
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 9 cross-references (§17.10→§17.8 ×6, §17.7→§17.6 ×2, §17.8→§17.7; dropped a dangling §17.9) and 1 external ref (`spec-xtbl-format.md` §8→§2–§3); marked resolved: §11.7 heading (§17.4), §12.2 flag map and `Vehicle_Aims` base (§17.5), §16 items 2 and 10; corrected the camera_free/decal "same convention" slip (decal takes the cosine, §17.3, §14.2); reworded 2 `param_1` tokens.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 2 `HANDOFF.md` §27.x references to the archived headings (§27.2/§27.1 → §30; header and §16); 0 left (see review).
 - 2026-09-30 (cloud, manager ruling): shortened a `PersistFilename` example in §17 to its file name (`…\ui_cell_frame_left.tga`); the developer's local machine path prefix is omitted. Rule: no developer machine paths or usernames in specs.
+- 2026-09-30 (cloud): §1.3: the loader's failure message is paraphrased instead of quoted verbatim (manager clean-room line).
