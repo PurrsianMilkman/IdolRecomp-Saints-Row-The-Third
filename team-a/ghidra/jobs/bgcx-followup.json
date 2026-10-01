@@ -1,0 +1,16 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to bgcx — bodies of the 20 remaining bare globals of 0x00e0f900, the RNG ring seeding, and 0x00fccb70",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/roster", "func", "depth:1", "maxfuncs:12", "maxinsn:1500",
+            "0x00e0f140", "0x00e0f180", "0x00e0f1c0", "0x00e0f210", "0x00e0f260", "0x00e0f3a0", "0x00e0f400", "0x00e0f2c0", "0x00e0f330",
+            "0x00e0f580", "0x00e0f5c0", "0x00e0f080", "0x00e0f610", "0x00e0f650", "0x00e0f680", "0x00e0f0d0", "0x00e0f740", "0x00e0f830"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/rng", "func", "depth:1", "maxfuncs:20", "maxinsn:1500", "0x00dab5a0", "0x00dab810", "0x00dab830", "0x00fccb70"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/rngxref", "xref", "xrefs:120", "0x013214d0", "0x013214d4", "0x010145e1"]}
+ ],
+ "collect": ["**/*.txt"]
+}
