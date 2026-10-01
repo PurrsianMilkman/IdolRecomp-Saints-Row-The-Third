@@ -184,7 +184,7 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
 
 - Merged spec syncs: fxo/zone/geometry/save (`84e2ef6`), save/vertex/audio/foliage (`dc22cd1`).
 - Zone: "97 of 928" comments now cite the 1,002/1,002 tiling, 115 padded blocks (§10.8) (`c8711c6`).
-  Save: no player-authored strings anywhere in `team-b` (standing rule: none in code, tests, comments
+  Save: no player-authored strings anywhere in `team-b` (standing rule at the time, WITHDRAWN 2026-10-01 by owner decision, TEAMS.md "Data and content rules": none in code, tests, comments
   or this file).
 - `lua_host_run_integration_py` ctest (`8e9509b`): synthetic 2-archive cache, _start ok / OPEN refusal /
   Lua error / syntax error, and run-vs-run `bridge_diff.py` determinism.
@@ -438,6 +438,10 @@ and independent verification (fresh rebuild + full rerun) of any agent's work be
 root-causing hard bugs that resisted a first attempt (e.g. the clmesh NaN/`Fog_dist` artifact) and tricky
 validation discrepancies in bridge results; `haiku` — greps, censuses, summarising large bridge outputs.
 Verify with an equal-or-stronger model; escalate one tier after two failed attempts.**
+**Data rule (owner decision 2026-10-01, TEAMS.md "Data and content rules", approved directly by the owner in
+this session): the owner's saves, profiles, typed text, machine paths and PC outputs may be used and committed;
+still excluded: verbatim game content (script/UI/dialogue text, bulk string dumps) and third parties' personal
+data.**
 **Standing rule (manager, 2026-09-30): pre-existing code that rests on a spec section now marked "NOT yet
 cleared for implementation" gets the label "implemented pre-review, pending clearance", with NO behaviour
 change, until the clearance lands. No new work from such a section.**

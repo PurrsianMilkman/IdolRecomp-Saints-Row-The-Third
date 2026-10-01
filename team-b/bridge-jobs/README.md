@@ -80,3 +80,12 @@ Excluded on purpose:
 - Need a hand-made input file that is not committed: `mission_package_census` (start-stems file),
   `lua_bare_reference_census` and `xtbl_name_grep` (needles file).
 - Need a GPU/display: `golden_scene_check`, `sr3_viewer`, `tree_baseline_render`, `prototype_*`.
+
+### 10h: saves and profile (added 2026-10-01)
+
+The owner approved using their saves and profiles in bridge jobs (TEAMS.md "Data and content rules",
+2026-10-01, and direct approval in the Team B session). Job 10h adds the save/profile validators to the
+baseline: `validate_save_crc`, `validate_save_snapshot`, `validate_save_summary` and `validate_profile` (each
+with its own default folders on the PC: Documents, LocalAppData, cloud-sync backup),
+`validate_save_activity_names` over its 20 default archives, and `validate_xtbl_population --saves <each save
+folder>` over all 38 archives. The earlier exclusion of these tools in the 10a-10g notes is withdrawn.
