@@ -7,6 +7,48 @@
 
 The pause banner below is historical (see `TEAMS.md`). Newest entry first.
 
+### 2026-10-01, WRAP-UP (the owner is moving the project to their own PC); exact state at hand-over
+
+**Branch `claude/crreish-team-b`**: clean, everything pushed. GCC Release and Debug+ASan/UBSan both build and
+pass **ctest 48/48** locally. CI result per push is in GitHub Actions ("team-b portable build"). No half-applied
+change on the branch.
+
+**Done in the 2026-10-01 batch** (spec answers from Team A; evidence in each commit message):
+- Integration sync merged: 3657d53, and again b4b65ec (adds the newer §26.24–§26.26 text, NOT yet implemented, see below).
+- `spec-lua-bindings.md` §16.1/§16.4 preload routing is now the default in `lua_host_run`
+  (`--preload-states=tag` gives the old routing). `lua_include_census` + job 11 (`ufxq`): 0 `include` calls in
+  804 scripts, so §16.4 residue 1 is closed (0d7370d, 98f68a3).
+- Fade state machine (§26.24), zscene truth table (§26.25), `vint_is_std_res`/`vint_get_safe_frame` shape
+  (§26.26), co-op/tutorial/vehicle-store start-up state and the 210-entry tutorial table (§26.28, §3.1, §6.19,
+  §8.27, §10.x): 1228056, merged ca6ce39. New files `src/lua_screen_fade.cpp`, `src/lua_tutorial_names.cpp`.
+  `lua_host_run` prints `fade_completion_path=` and `open_state_slots_with_values_at_start=` (15/40 on the fixture).
+- 24 bare globals in both states (§26.27, bindings §13.2/§16.3/§16.4), only base+coroutine libraries opened
+  (§16.1 step 3), 0x00ea2596 truncates toward zero (§4.1), `rand_int`/`rand_float` draw `lo` until a fill
+  (fill OPEN; `--host-rng[=SEED]` is the opt-in HYPOTHESIS host generator): 7894c96, 5b755ad, eea97d5, merged 410577e.
+- Engine-state prep: `applySpecInitialState()` (`src/lua_spec_initial_state.cpp`) is the one place confirmed
+  initial values go; `EngineState::openSlotInventory()` → `verdict_open_state.tsv`; job template `02f`.
+
+**Pending bridge job:** `20261001T221335-team-b-cchj` (job `02g`): mission drive on 410577e, preload default
+(`{OUT}/default`) and `--preload-states=tag` (`{OUT}/tag`). When it lands: `tools/bridge_diff.py` against
+`20261001T114145-team-b-onbs` (9/49 past `_start`, the pre-batch baseline); report the pass-`_start` count and the
+new top first errors. Expect the first new error to be `thread_new` called from a mission hook (raises: no
+current script thread; see request 11, last bullet).
+
+**Not started / next, in order:**
+1. The newer §26.24–§26.26 text merged at b4b65ec: zscene pending→loaded auto-promotion (closes the OPEN refusal
+   that still blocks fixture mission `dlc1_mm_06`), the exact safe-frame constants, the cutscene state machine
+   (the fade host frame stops at the mode gate today), the `.cte_xtbl` fields. A follow-up was started in an agent
+   worktree and stopped at wrap-up before any commit; nothing of it is on the branch. Start it fresh.
+2. `spec-lua-api-behaviour.md` §27/§28, cleared (52 entries, 29 CONFIRMED, 23 CORRECTED): follow the CORRECTED
+   text (incl. `game_get_coop_friendly_fire`, `crib_weapon_add_disable`).
+3. Table fixes tagged "FOR TEAM B": tables-progression (synced), then tables-environment, vehicle-world, ui-controls.
+   Re-run the 10a baseline after.
+4. Mission re-run after 1–2 (job template `02f`/`02g`), diffed against `cchj`.
+
+**Open requests to Team A:** items 1–11 under "Requests to Team A" below. New today: item 10 (save §10.7 drift
+and the statistic 163/164 contradiction) and item 11 (batch spec issues; whether mission hooks run inside a
+script-thread record).
+
 ### 2026-09-30, cloud stretch 1
 
 **Done (all pushed, evidence in each commit message):**
@@ -415,6 +457,29 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    yet statistic 164 = 3 while the stunt-jump counter at 0x3F8 = 4 (statistic 163 = barnstorms = 2). The claim
    "statistic 164 == 0x3F8 in all 16" fails on a save the table already counts. Please re-check which value §12.6.1
    meant, or whether the two counters can legitimately differ.
+
+11. **Spec text issues found while implementing the 2026-10-01 batch** (`spec-lua-api-behaviour.md` §26.24–§26.28, §4.1;
+   `spec-lua-bindings.md` §13.2/§16). Implementation followed the CONFIRMED text in each case and refuses as OPEN where two
+   readings disagree.
+   - §26.28 "What single-player startup leaves it as" still says "runs the installer 0x0087efe0"; later text calls
+     0x0087efe0 the shutdown and 0x0087c340 the installer.
+   - §26.28 review status still lists the tutorial name list (kyoi) as OPEN, though the list is in the section.
+   - §26.28 tutorial entries 189–209 = state 1: the fill values are CONFIRMED but when the fill runs is OPEN (before it
+     every entry is 0). Implemented as 1 at start, commented; `tutorial_advance` is false either way.
+   - §26.28 "three writers, now CONFIRMED" for the vehicle-store flag: only `store_vehicle_change_mode` is a Lua native
+     and its argument shape is not given; the other two triggers are OPEN.
+   - §26.24 "reset all four fade stamps" does not name them; implemented as 0x012e6aac/ab0/ab4/ab8.
+   - §26.27: the shared paragraph says every numeric wrapper narrows each argument to float, but the `rand_int` and
+     `thread_check_done` entries describe plain `lua_tonumber` + 0x00ea2596. Implemented only where both readings agree
+     (so `rand_int(x, 2147483647)` refuses).
+   - bindings §13.2 (after the roster table) still says the math-named bodies are OPEN and 0x00fccb70 is HYPOTHESIS;
+     §26.27/§16.1 settle both.
+   - `include`: bindings §16.4 calls the queue CONFIRMED; §26.27 still lists the `include` re-read as OPEN.
+   - Needed: do mission hooks (`<stem>_start` etc.) run inside a script-thread record? §16.2/§26.23 suggest the engine
+     runs hooks through the same allocator/runner as `thread_new`. Today the host calls hooks outside any thread, so
+     `thread_new` from a hook raises (the engine reads a null current thread there).
+     **Manager ruling 2026-10-01:** keep the current behaviour (no thread record for hooks) unless §16.2/§26.23
+     CONFIRM one. Open question for Team A.
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 

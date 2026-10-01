@@ -76,7 +76,12 @@ jobs:
         # Lua has been built as C++ since 2010a95; jklk ran with Lua built as C
         # (longjmp), so the Lua build file is taken from a403a75 as well.
         shell: bash
-        run: git checkout a403a75 -- team-b/src team-b/include team-b/third_party/lua51/CMakeLists.txt
+        # The rest of team-b (build files, tests) is pinned to 0d7370d, the last
+        # commit whose build files and stress test still match a403a75's
+        # sources (later commits add sources a403a75 does not have).
+        run: |
+          git checkout 0d7370d -- team-b
+          git checkout a403a75 -- team-b/src team-b/include team-b/third_party/lua51/CMakeLists.txt
       - name: Configure
         run: cmake -S team-b -B build -A x64
       - name: Build the stress test

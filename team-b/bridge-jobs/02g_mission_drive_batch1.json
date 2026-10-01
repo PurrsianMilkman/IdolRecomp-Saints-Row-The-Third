@@ -1,0 +1,40 @@
+{
+  "title": "team-b: mission drive after the Sec26.24-28/Sec26.27/Sec16 batch (410577e), preload default and --preload-states=tag",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "lua_host_run"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "lua_host_run",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{SRC}/team-b/tools/lua_all_registered_1490_tagged.txt",
+        "{OUT}/default"
+      ],
+      "timeout": 14400
+    },
+    {
+      "kind": "run",
+      "tool": "lua_host_run",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{SRC}/team-b/tools/lua_all_registered_1490_tagged.txt",
+        "{OUT}/tag",
+        "--preload-states=tag"
+      ],
+      "timeout": 14400
+    }
+  ],
+  "collect": [
+    "default/*.tsv",
+    "default/*.txt",
+    "tag/*.tsv",
+    "tag/*.txt"
+  ]
+}
