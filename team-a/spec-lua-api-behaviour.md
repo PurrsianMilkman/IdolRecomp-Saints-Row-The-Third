@@ -3645,7 +3645,7 @@ Subsystem: cutscene/zone-transition streaming ("Z-scene"). **[CONFIRMED — disa
 lookup, and gate structure; ~~HIGH CONFIDENCE — inferred that `0x0101b530`/`0x00721c20` actually begin a
 load, from the function's own registered name, since neither was opened this pass.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`: the load-start reading is contradicted by the executable (see the correction above). CONFIRMED — disassembly for the gate, the stub, the teardown and the pending slot.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — hash, lookup, gate, constant extra values, stub `0x0101b530`, teardown `0x00721c20`, pending-slot write; ~~HYPOTHESIS — `0x0153b556` as a bypass toggle; OPEN — who promotes pending to current and completes the load (`0x00720410`, `0x007285c0` and their callers), and who fills the scene table (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: `0x0153b556` is the `skip_all_cutscenes` option (CONFIRMED — disassembly); promotion `0x00720410` has the single caller `0x007258a0` (HIGH CONFIDENCE: the cutscene load step; its body OPEN), completion `0x007285c0` runs from the per-frame cutscene state machine `0x0072d660`, and the table is the parsed `cutscene.xtbl` (capacity 200) — all CONFIRMED — disassembly except where marked (§26.25). OPEN — the body of `0x007258a0`, the xtbl field parse.]**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — hash, lookup, gate, constant extra values, stub `0x0101b530`, teardown `0x00721c20`, pending-slot write; ~~HYPOTHESIS — `0x0153b556` as a bypass toggle; OPEN — who promotes pending to current and completes the load (`0x00720410`, `0x007285c0` and their callers), and who fills the scene table (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: `0x0153b556` is the `skip_all_cutscenes` option (CONFIRMED — disassembly); promotion `0x00720410` has the single caller `0x007258a0` (HIGH CONFIDENCE: the cutscene load step; its body OPEN), completion `0x007285c0` runs from the per-frame cutscene state machine `0x0072d660`, and the table is the parsed `cutscene.xtbl` (capacity 200) — all CONFIRMED — disassembly except where marked (§26.25). ~~OPEN — the body of `0x007258a0`, the xtbl field parse.~~]** **[Review status updated 2026-10-01, job `20261001T122853-team-a-nnlt`: the body of `0x007258a0` is read (CONFIRMED — disassembly) — it promotes a pending entry every frame in cutscene states 0 and 2, so a prep made from Lua alone is promoted by the engine on the next frame (CONFIRMED when no scene was current before; HIGH CONFIDENCE after a previous scene). Correction: `cutscene.xtbl` supplies only the scene names; each entry's fields (kind from `CutsceneType`, request-group handles, lightset, soundtrack) come from the per-scene `<name>.cte_xtbl` through `0x0073ada0` (CONFIRMED — disassembly); capacity = accepted names + 12, capped at 200. §26.25.]**
 
 ### 8.22 `game_audio_get_audio_id` (`0x008437e0`)
 
@@ -6539,7 +6539,7 @@ re-derived.
 
 **Side effects/subsystem:** none (pure query). Cutscene/zscene subsystem. **[CONFIRMED — disassembly for the two-tier dispatch ~~and the named fast-path's exact state test~~; ~~OPEN — the real-world meaning of state codes `1`/`2` in the broader fallback, and the apparent sense-inversion between the two tiers.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`. Resulting behaviour, CONFIRMED — disassembly: with no name, true iff byte `0x0153b556` is set or the load state `0x0153b51c` equals 2. With a name: true if the name is not in the table or its entry is not kind 1; otherwise true if `0x0153b556` is set; otherwise false if the entry is not the current scene (`0x0153b530`); otherwise true iff the load state equals 2. The state codes: 2 = loaded is CONFIRMED (the value tested); 1 = loading and 0 = idle are HIGH CONFIDENCE (from the writers `0x00720410` and the two teardown paths, whose bodies were not dumped). The sense-inversion item is closed. See §26.25.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both tiers and their composition, state 2 = loaded; ~~HIGH CONFIDENCE — 1 = loading, 0 = idle; OPEN — what drives the state to 1 and 2 (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: all three state codes CONFIRMED — disassembly; state 1 is written by the promotion `0x00720410` (single caller `0x007258a0`, body OPEN) and state 2 by `0x007285c0`, run from the per-frame cutscene state machine `0x0072d660`; byte `0x0153b556` is the `skip_all_cutscenes` option (§26.25).]**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both tiers and their composition, state 2 = loaded; ~~HIGH CONFIDENCE — 1 = loading, 0 = idle; OPEN — what drives the state to 1 and 2 (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: all three state codes CONFIRMED — disassembly; state 1 is written by the promotion `0x00720410` (single caller `0x007258a0`, ~~body OPEN~~ **[job `20261001T122853-team-a-nnlt`: body read — it promotes in cutscene states 0 and 2 every frame, so a Lua-only `zscene_prep` reaches state 1 on the next frame; CONFIRMED with no previous scene, HIGH CONFIDENCE after one; §26.25]**) and state 2 by `0x007285c0`, run from the per-frame cutscene state machine `0x0072d660`; byte `0x0153b556` is the `skip_all_cutscenes` option (§26.25).]**
 
 ### 14.24 `vehicle_speed_cancel` (`0x00a635f0`) — 16 calls
 
@@ -10066,7 +10066,8 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 ### 26.24 Screen fade state machine (exe-derived 2026-10-01)
 
-Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao` (Lua entries `fade_out`, `fade_in`,
+Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ ~~bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao`~~ bridge jobs `20261001T020200-team-a-nzxf`, `20261001T114101-team-a-mnao` and
+`20261001T122853-team-a-nnlt` (Lua entries `fade_out`, `fade_in`,
 `fade_is_fully_faded_out`, `fade_is_fully_faded_in`, `sfx_faded_out`; function listings of 0x0059f8c0,
 0x0059fc40, 0x005a0270, 0x005a0400; reference lists of the globals). Wrapper-level detail lives in §2.9,
 §8.13, §26.9, §26.10; this unit gathers the shared machinery. Labels as in the rest of this document.
@@ -10092,7 +10093,8 @@ disassembly** for every row: the reference lists give every reader and writer in
 | 0x013effc5 | 0 | byte: last opcode-0x53 record was a fade-out (1) or fade-in (0) | 0x005a0270 (:= 1), 0x005a0400 (:= 0), 0x0059fa20 (:= 0) |
 | 0x012e6abc | -1 | auto-save indicator stamp: now + 3000 ms when the indicator is shown | 0x0059fe70 |
 | 0x013effd4 | 0 | auto-save counter; > 0 shows the indicator | 0x0059faf0 (inc/dec/zero), read by 0x0059fb20 |
-| 0x0149365c | 0 | byte: show load-screen images (`sfx_use_load_images`) | 0x005d1a30 |
+| 0x0149365c | 0 | ~~byte: show load-screen images (`sfx_use_load_images`)~~ **[superseded, job `20261001T122853-team-a-nnlt`: next row]** | 0x005d1a30 |
+| 0x0149365c | 0 (start-up writes 1) | byte: packfile/shipping mode, set to 1 unconditionally by the engine start-up 0x005d1a30 and never cleared; `sfx_use_load_images` returns it, so the load-images step always runs in the retail executable | 0x005d1a30 only |
 
 **State encoding of 0x012e6aa4** — **CONFIRMED — disassembly**:
 
@@ -10193,13 +10195,23 @@ tween ends). Its body:
 The native never starts a transition. A request that was parked (target differs from the settled
 state) is replayed by the per-frame routine below.
 
-**Per-frame routine 0x0059fe70** (callers 0x005d14b0 and 0x007a82c0). **CONFIRMED — disassembly,
-full listing.** Each frame, in this order:
+~~**Per-frame routine 0x0059fe70** (callers 0x005d14b0 and 0x007a82c0). **CONFIRMED — disassembly,
+full listing.** Each frame, in this order:~~ **[Superseded, job `20261001T122853-team-a-nnlt`:]**
+**Per-frame routine 0x0059fe70.** **CONFIRMED — disassembly, full listing.** It is called once per
+frame by the main loop's system update 0x005d14b0 (unconditionally, before the mode stack is
+pumped) and a second time by the mode callback 0x007a82c0 while mode 5 is on the mode stack
+(HYPOTHESIS: the loading screen); the second call changes nothing because the routine only acts on
+clock stamps. Each frame, in this order:
 - Auto-save indicator: counter 0x013effd4 > 0 and stamp 0x012e6abc unset → stamp := now + 3000 ms
   and call `screen_fade_auto_save_show()`; counter ≤ 0 and stamp reached → call
   `screen_fade_auto_save_hide()` and reset the stamp.
+- ~~Mode gate: if the top of the mode stack (0x00706ab0: 0x01503b50 indexed by 0x012f4a80) is 4,
+  reset all four fade stamps and stop (OPEN: what mode 4 is).~~ **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
 - Mode gate: if the top of the mode stack (0x00706ab0: 0x01503b50 indexed by 0x012f4a80) is 4,
-  reset all four fade stamps and stop (OPEN: what mode 4 is).
+  reset all four fade stamps and stop. The mode stack is pumped by 0x00706be0 (push/pop requests
+  queued at 0x012f4a94; per-mode enter/leave/may-leave callbacks in the 9-dword records at
+  0x01503bc0; a mode already on the stack is not pushed twice; a pop waits while the top mode's
+  may-leave predicate is false). OPEN: which mode is 4 (no dump names the modes).
 - Loading logo: if 0x012e6aac is set and reached and the cutscene state 0x0153b520 is not 10..13:
   reset 0x012e6aac, 0x012e6ab0 := now + 1000 ms, 0x012e6ab4 := now + 6000 ms when 0x0149365c is
   set, 0x012e6ab8 := -1; unless one of the ids 0x35/0x36/0x37 is active in the set at 0x012fced8
@@ -10217,7 +10229,11 @@ full listing.** Each frame, in this order:
 All script calls go to the UI Lua state in the context of the `screen_fade` document (0x013effc0)
 and take no arguments.
 
-**Init 0x0059fa30 / shutdown 0x0059faa0.** **CONFIRMED — disassembly.** Init loads the named UI
+~~**Init 0x0059fa30 / shutdown 0x0059faa0.** **CONFIRMED — disassembly.** Init loads~~ **[Superseded, job `20261001T122853-team-a-nnlt`:]**
+**Init 0x0059fa30 / shutdown 0x0059faa0.** **CONFIRMED — disassembly.** Init
+runs once from the front-end bring-up 0x005d2400, after the UI Lua state (0x00e0d0b0), the UI
+subsystem init 0x008489e0 and the "main" interface pack are up and before the "save_warning"
+document is loaded. It loads the named UI
 document "screen_fade" (0x007b1cb0, mode 1; its id goes to 0x012e6aa0, -1 on failure), looks the
 document up (0x00e1f2f0) and, if found, stores its handle in 0x013effc0 and sets state := 2,
 target := 2, flag := 1. Shutdown destroys the document (0x00e1f330 → 0x00e20f60), clears
@@ -10241,6 +10257,15 @@ target := 2, flag := 1. Shutdown destroys the document (0x00e1f330 → 0x00e20f6
   250 ms once the state has settled.
 - `fade_is_fully_faded_out()` and `sfx_faded_out()` are true when the state is 3;
   `fade_is_fully_faded_in()` when it is 2.
+- `sfx_use_load_images()` is always true (the byte it returns is fixed at 1 at start-up), so a
+  host that models the loading-logo schedule must also model the load-images step. **[added, job `20261001T122853-team-a-nnlt`]**
+
+**Who requests fades (CONFIRMED — disassembly).** **[added, job `20261001T122853-team-a-nnlt`]** Apart from the Lua wrappers, the executable
+requests a fade-out from the cutscene start 0x00725df0 (500 ms or the value at 0x012f5d28) and a
+fade-in from the cutscene machine's state-0x13 case (§26.25): 0x0059fc40(0x012f5d28, 0, 1) when
+the finished record was a zscene (byte 0x0153b6b4), else 0x0059fc40(500, 0, 0), and only when the
+byte 0x0153b6b5 was set at state 0x10 (0x0153b4d0 and 0x01503eba both set). The callers of the
+per-frame routine and of init request nothing.
 
 **HOST-SIDE SUBSTITUTE (not engine behaviour):** a host that does not run the shipped UI scripts may
 complete the transition itself after `durationMs` milliseconds. ~~It sets the state to the target, calls
@@ -10255,16 +10280,21 @@ scripts gets completion from the script's own call of `Screen_fade_transition_co
 no substitute; any other completion path is this host-side substitute and must be labelled as such.
 
 **OPEN — next dump** ~~(from the interpretation of job `20261001T020200-team-a-nzxf`)~~ **[list replaced
-from the interpretation of job `20261001T114101-team-a-mnao`; the struck items were run in that job]**:
+from the interpretation of job `20261001T114101-team-a-mnao`; the struck items were run in that job]**
+**[list replaced again from the interpretation of job `20261001T122853-team-a-nnlt`; the struck items were run in that job or are restated below]**:
 - ~~Fade completion: `func 0x005a0110`. If Ghidra has no function there, run `xref 0x005a0110` and
   `func 0x005a01d0` to read the registered name string, then `lua <that name>`. Also `lua sfx_faded_in`
   to confirm 0x0059fb60.~~
 - ~~Fade per-frame and init: `func 0x0059fe70 0x0059fa30 0x0059faa0 0x0059fa20 0x0059f9c0 0x0059f9f0
   0x0059fb90 0x00e0cba0`; `xref 0x0059fe70 0x0059fa30 0x013effc0 0x012e6ab0`.~~
 - ~~Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.~~
-- `func 0x005d14b0 0x007a82c0 0x005d2400 0x005d1a30 0x0059faf0 0x0059fb20 0x00706be0` (callers
-  of the per-frame routine and init; the load-images byte; the auto-save counter; the mode stack).
-- Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.
+- ~~`func 0x005d14b0 0x007a82c0 0x005d2400 0x005d1a30 0x0059faf0 0x0059fb20 0x00706be0` (callers
+  of the per-frame routine and init; the load-images byte; the auto-save counter; the mode stack).~~
+- ~~Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.~~
+- `func 0x0059fa10` (the "fade settled" predicate used by the cutscene machine and 0x007a82c0). **[queued in `team-a/ghidra/jobs/nnlt-followup.json`]**
+- `func 0x00706a40`; `xref 0x00706a40` (mode registrations, to name mode 4); `func 0x005d7d10 0x007068d0`.
+  **[`func 0x00706a40` queued in `team-a/ghidra/jobs/nnlt-followup.json`; `xref 0x00706a40` and `func 0x005d7d10 0x007068d0` not yet queued]**
+- Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`. **[not yet queued]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
 CONFIRMED parts — globals and initial values, state encoding, both request helpers, both broadcast
@@ -10272,17 +10302,29 @@ helpers, the three queries, the location of the completion stores; HIGH CONFIDEN
 UI-registered native 0x005a0110, the co-op purpose of 0x53; HYPOTHESIS — audio-id posts, 0x0059fe70 as
 the per-frame update; OPEN — the name and full body of 0x005a0110, the body of 0x0059fe70.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`): CONFIRMED parts — globals and initial values, state encoding, both
 request helpers, both broadcast helpers, the four UI natives including
 `Screen_fade_transition_complete`, the completion body, the per-frame routine, init/shutdown;
 HIGH CONFIDENCE — the document-id/handle labels of 0x012e6aa0/0x013effc0, the co-op purpose of
 0x53, the script calling the completion native; HYPOTHESIS — audio-id posts, the auto-save
-counter's meaning; OPEN — mode 4 of the mode stack, the callers of the per-frame routine.**
+counter's meaning; OPEN — mode 4 of the mode stack, the callers of the per-frame routine.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — globals and
+initial values, state encoding, both request helpers, both broadcast helpers, the four UI natives
+including `Screen_fade_transition_complete`, the completion body, the per-frame routine and its two
+callers, init/shutdown and the init's place in start-up, the fixed value of 0x0149365c, the
+mode-stack mechanics, the engine-side fade requesters; HIGH CONFIDENCE — the document-id/handle
+labels of 0x012e6aa0/0x013effc0, the co-op purpose of 0x53, the script calling the completion
+native, 0x0149365c as a shipping-mode byte; HYPOTHESIS — audio-id posts, the auto-save counter's
+meaning, 0x007a82c0 as the loading-screen callback; OPEN — which mode is 4, the body of
+0x0059fa10.**
 
 ### 26.25 zscene lifecycle (exe-derived 2026-10-01)
 
-Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao` (Lua entries `zscene_prep`, `zscene_is_loaded`;
+Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ ~~bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao`~~ bridge jobs `20261001T020200-team-a-nzxf`, `20261001T114101-team-a-mnao` and
+`20261001T122853-team-a-nnlt` (Lua entries `zscene_prep`, `zscene_is_loaded`;
 listings of 0x007232e0, 0x00721be0, 0x00721c20, 0x00721db0, 0x00723d20, 0x0101b530; reference lists).
 Wrapper detail lives in §8.21 and §14.23.
 
@@ -10291,7 +10333,8 @@ Wrapper detail lives in §8.21 and §14.23.
 | Address | Role | Written by |
 |---|---|---|
 | 0x0153b294 / 0x0153b29c | ~~scene table base / count; entries 0xf8 bytes~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x007231e0, 0x00723d60, 0x00723e40 |
-| 0x0153b294 / 0x0153b29c / 0x0153b298 | scene table base / count / capacity (≤ 200); entries 0xf8 bytes, parsed from cutscene.xtbl | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
+| 0x0153b294 / 0x0153b29c / 0x0153b298 | ~~scene table base / count / capacity (≤ 200); entries 0xf8 bytes, parsed from cutscene.xtbl~~ **[superseded, job `20261001T122853-team-a-nnlt`: next row; cutscene.xtbl gives only the names]** | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
+| 0x0153b294 / 0x0153b29c / 0x0153b298 | scene table base / count / capacity; entries 0xf8 bytes; capacity = number of accepted "main" names in cutscene.xtbl + 12, capped at 200 (the spare slots take the per-container patch tables) | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
 | 0x0153b530 | current scene entry | cleared by 0x00720320 and one path of 0x00721c20; set by 0x00720410 (from the pending slot), 0x00722f10, 0x007231e0, 0x00728440 |
 | 0x0153b538 | pending (requested) entry | set by prep's gate 0x007232e0; cleared by 0x00720410; 0x00720320 copies the current entry into it |
 | 0x0153b51c | load state: 0 idle, 1 loading, 2 loaded | := 0 by 0x00720320 and 0x00721c20; := 1 by 0x00720410; := 2 by 0x007285c0; also written by 0x00722f10, 0x007231e0 |
@@ -10303,7 +10346,12 @@ Wrapper detail lives in §8.21 and §14.23.
 | 0x0153b534 | object obtained from slot +0x5c of the service-9 object when the load completes (HYPOTHESIS: a world-side object for the scene); released on teardown | 0x007285c0 (set), 0x00721c20 (cleared) |
 | 0x0153b541 / 0x0153b542 | ~~bytes set on teardown~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x00721c20, 0x00720320, 0x00722f10 |
 | 0x0153b541 / 0x0153b542 | bytes: "auto-select the nearest scene when idle" enable, and "re-queue the current entry on reset" | 0x00721c20, 0x00720320, 0x00722f10 |
-| 0x0153b71c / 0x0153b720 / 0x0153b724 | transition stream started at promotion from the entry's +0xf4 handle, its secondary handle, and its 1000-unit timer; completion waits until it ends (status 0x66) or 5 s pass | 0x007315a0, 0x007317a0, 0x007316a0 |
+| 0x0153b71c / 0x0153b720 / 0x0153b724 | ~~transition stream started at promotion from the entry's +0xf4 handle, its secondary handle, and its 1000-unit timer; completion waits until it ends (status 0x66) or 5 s pass~~ **[superseded, job `20261001T122853-team-a-nnlt`: next row]** | 0x007315a0, 0x007317a0, 0x007316a0 |
+| 0x0153b71c / 0x0153b720 / 0x0153b724 | the scene's soundtrack stream (started at promotion from the entry's +0xf4 audio id on the pool 0x0153b730), its secondary handle, and its 1000-unit timer; completion waits until it ends (status 0x66) or 5 s pass | 0x007315a0, 0x007317a0, 0x007316a0, 0x00731600 (stop) |
+| 0x0153b525 / 0x0153b526 | bytes rewritten every frame by 0x007258a0: "a cutscene is playing" (state 10..13) and "a cutscene is in progress" (state ≥ 2 with a manager); getters 0x00720780 / 0x00720790 **[added, job `20261001T122853-team-a-nnlt`]** | 0x007258a0 |
+| 0x0153b543 | byte: the preload packfiles are mounted (set in cutscene state 4, cleared at 0x10/0x11) **[added, job `20261001T122853-team-a-nnlt`]** | 0x007258a0, 0x0072d660 |
+| 0x0153b52c | the next cutscene to chain into (copied from the manager at state 13; consumed at state 15) **[added, job `20261001T122853-team-a-nnlt`]** | 0x0072d660, 0x00729150 (cleared) |
+| 0x0153ba00 / 0x0153ba01 / 0x0153ba02 | parser option bytes: no female variant (+0x10 := +0xc); female variant only (+0xc := +0x10); treat "Zscene" scenes as story cutscenes (kind 2). All zero; no writer dumped **[added, job `20261001T122853-team-a-nnlt`]** | — |
 
 ~~State code: 2 = loaded is **CONFIRMED** (the value tested). 1 = loading and 0 = idle are **HIGH
 CONFIDENCE**: they are read from which routines write each value, but the bodies of 0x00720410 and
@@ -10316,17 +10364,41 @@ disassembly.**
 - `+0x0`: pointer to the entry's name (a heap copy made by 0x00723e40). **[added, job `20261001T114101-team-a-mnao`]**
 - `+0x4`: CRC-32 of the lower-cased name (0x00d9e8b0, seed 0); the lookup key used by 0x00721be0, a
   linear scan.
-- `+0x8`: kind; 1 marks an entry that can be prepared and loaded. Nothing dumped writes it.
-- `+0xc`: primary resource handle.
-- `+0x10`: alternate handle. It is used when the primary is not live (the handle query 0x00dafbb0
+- ~~`+0x8`: kind; 1 marks an entry that can be prepared and loaded. Nothing dumped writes it.~~ **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
+- `+0x8`: kind, from the scene file's `CutsceneType`: "Zscene" → 1 (2 when 0x0153ba02 is set),
+  "Story" → 2, "Designer" → 0, any other text → 2. Only kind 1 can be prepared by `zscene_prep` and
+  the auto-prep; kind 2 is a story cutscene. **CONFIRMED — disassembly** (0x0073ada0).
+- ~~`+0xc`: primary resource handle.~~
+- ~~`+0x10`: alternate handle. It is used when the primary is not live (the handle query 0x00dafbb0
   returns ≤ 0), or when the local player's byte `+0xa41` is 1. HYPOTHESIS: a gender variant (cf.
-  §28.21).
-- `+0xac`: "has a lightset" byte.
-- `+0xad`: lightset file name. It is looked up by CRC in the lightset cache and removed from it on
-  teardown.
-- `+0xf4`: handle of a transition stream started at promotion (HYPOTHESIS: a sound or video played
-  over the load). **[added, job `20261001T114101-team-a-mnao`]**
+  §28.21).~~ **[Superseded, job `20261001T122853-team-a-nnlt`: next two bullets.]**
+- `+0xc`: handle of the streaming request group for `<name>` (the scene resource, type 0x12 for a
+  story cutscene / 0x13 otherwise, plus the `.cte_xtbl` file and every lightset, texture, effect,
+  animation and item mesh the scene file names). **CONFIRMED** for the data path (0x006f6c20 /
+  0x006f7330 / 0x006f6f10 in 0x0073bfb0); HIGH CONFIDENCE for the label "request group".
+- `+0x10`: the same for `<name>_f`, built with animation file names prefixed `f_` where such files
+  exist — the female-player variant. For a "Designer" scene (or when 0x0153ba00 is set) it is a
+  copy of +0xc. It is selected when the primary is not live and either it is live or the local
+  player's byte `+0xa41` is 1 (HIGH CONFIDENCE: the player's female flag).
+- ~~`+0xac`: "has a lightset" byte.~~
+- ~~`+0xad`: lightset file name. It is looked up by CRC in the lightset cache and removed from it on
+  teardown.~~ **[Superseded, job `20261001T122853-team-a-nnlt`: next two bullets.]**
+- `+0xac`: "has a lightset" byte, 1 when the scene file has a `SceneLightset` element.
+- `+0xad`: the `SceneLightset` text (strncpy, 64 bytes); looked up by CRC in the lightset cache and
+  removed from it on teardown.
+- ~~`+0xf4`: handle of a transition stream started at promotion (HYPOTHESIS: a sound or video played
+  over the load).~~ **[added, job `20261001T114101-team-a-mnao`]** **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
+- `+0xf0` / `+0xf4`: the two halves of the scene file's `Soundtrack` text, split at the first
+  `:` (one character is dropped on each side of the colon, i.e. the form `left : right`), each
+  passed through 0x00462960 (HIGH CONFIDENCE: name → audio id). Both 0 when absent. +0xf4 is the
+  stream started at promotion (the soundtrack); +0xf0 is not read by anything dumped.
 - `+0x18` / `+0x1c`: the two per-object parameters copied in at promotion. **[added, job `20261001T114101-team-a-mnao`]**
+- `+0x20` / `+0x24` / `+0x28`: array pointer, capacity and count of the resources of a story
+  cutscene's `Characters`/`Character` (its `Mesh` and `Killbane` names, or the three fixed names
+  when `IsAngel` is set) and `Vehicles`/`Vehicle` (the `Variant` id); the cutscene loader starts
+  all of them (0x00722f10). Empty for a zscene. **[added, job `20261001T122853-team-a-nnlt`]**
+- Fields not listed here are written by the entry constructor 0x007233c0 or at run time
+  (**OPEN**). **[added, job `20261001T122853-team-a-nnlt`]**
 
 **Lifecycle** (CONFIRMED — disassembly unless marked):
 1. `zscene_prep(name)` runs the gate 0x007232e0, which returns 0 in three cases: byte 0x0153b556 is
@@ -10355,8 +10427,18 @@ disassembly.**
    the pending entry's live handle (+0xc, else +0x10 by the variant rule) and starts its load through
    the handle manager's 0x00dafea0, starts the entry's +0xf4 stream (0x007315a0), copies
    0x0153b568/0x0153b56c into the entry's +0x18/+0x1c, makes the entry current, clears the pending
-   slot and writes state := 1. Its only caller is 0x007258a0 (not dumped; HIGH CONFIDENCE: the
-   cutscene machine's load step; OPEN: its body and callers).
+   slot and writes state := 1. ~~Its only caller is 0x007258a0 (not dumped; HIGH CONFIDENCE: the
+   cutscene machine's load step; OPEN: its body and callers).~~ **[Superseded, job `20261001T122853-team-a-nnlt`:]**
+   Its only caller is **0x007258a0** (**CONFIRMED — disassembly**): the cutscene machine's second
+   per-frame step, called from the same two drivers as 0x0072d660 (0x00702a50 … 0x00703121 and
+   0x00bdbc54 … 0x00bdc0ef, HIGH CONFIDENCE once per frame, after 0x0072d660). In cutscene states 0
+   and 2 it calls the reset-check 0x00720320 and, when that returns true, promotes. 0x00720320 returns
+   true when there is no current entry (it then sets 0x0153b541 := 1), when the current entry's
+   selected handle has class 1 (it then resets state := 0, current := 0, re-queues the entry when
+   0x0153b542 is set), or when the handle is live and 0x0153b541 is set. So a bare Lua `zscene_prep`
+   (cutscene state 0) **is promoted by the engine on the next frame** — CONFIRMED when no scene was
+   current before, HIGH CONFIDENCE otherwise (it depends on the released handle classifying as class
+   1; OPEN: 0x00dafad0's effect on the flag word).
    The load completes in 0x007285c0 (**CONFIRMED — disassembly**), called only by the cutscene
    state machine 0x0072d660 (per frame, in two of its state cases): when the state is 1 it
    classifies the current entry's selected handle (0x00dafb60); class 3 (resident) together with a
@@ -10372,51 +10454,106 @@ disassembly.**
 5. ~~Who fills the scene table is **OPEN**. The only writers of its base and count are 0x007231e0,
    0x00723d60 and 0x00723e40, none of them dumped. Which data file feeds it cannot be answered from
    this job.~~
-   **[Replaced, job `20261001T114101-team-a-mnao`:]** The scene table is the parsed **`cutscene.xtbl`** (inside
+   **[Replaced, job `20261001T114101-team-a-mnao`:]** ~~The scene table is the parsed **`cutscene.xtbl`** (inside
    `cutscene_tables.vpp`): the cutscene init 0x0072d330 hands that file, the container name
    "cutscene_containers" and the element name "main" to the parser 0x0073bfb0, which is the only
    caller of the allocator 0x00723d60 (capacity capped at 200) and the appender 0x00723e40 (name copy
    at +0x0, CRC at +0x4). **CONFIRMED — disassembly** for the call chain; **OPEN**: the per-field
    parse (kind, handles, lightset, stream). 0x007231e0 is the table's destructor (releases every
-   entry's handles and clears the cutscene manager), called from 0x00707170 (not dumped).
+   entry's handles and clears the cutscene manager), called from 0x00707170 (not dumped).~~
+   **[Replaced, job `20261001T122853-team-a-nnlt`: the call chain above stands; "parsed cutscene.xtbl" is corrected —
+   that file gives only the names, the fields come from `<name>.cte_xtbl`:]**
+   The scene table is built by 0x0073bfb0 from **`cutscene.xtbl`** (inside `cutscene_tables.vpp`)
+   and one **`<name>.cte_xtbl`** file per scene. **CONFIRMED — disassembly, full listing.**
+   `cutscene.xtbl` contributes only the names: each `cutscene` element's `name` child; for the
+   "main" container the names starting with "dlc" or "patch" are skipped, for a patch container
+   only the names starting with the container's name are taken; at most 200. The table is
+   allocated for the "main" call with capacity = accepted names + 12 (capped at 200); patch
+   containers append. For each name the scene file `<name>.cte_xtbl` is opened (a missing file
+   means no entry); its `Cutscene` element is parsed by 0x0073ada0 into the entry fields listed
+   above (`CutsceneType` → +0x8, `SceneLightset` → +0xac/+0xad, `Soundtrack` → +0xf0/+0xf4,
+   `Characters`/`Vehicles` → the +0x20 list) and into two streaming request groups whose handles
+   become +0xc and +0x10. The `CameraScript` and per-shot character/vehicle animation requests are
+   skipped when the shipping-mode byte 0x0149365c is set — always, in the retail executable.
+   0x007231e0 is the table's destructor, called from 0x00707170 (not dumped).
+6. **[added, job `20261001T122853-team-a-nnlt`]** The cutscene machine proper. **CONFIRMED — disassembly** for the state table of 0x0072d660
+   (jump table at 0x0072defc, 20 entries; the last four read by elimination, HIGH CONFIDENCE) and
+   the five cases of 0x007258a0: 0 idle; 1 → 3 ("CS_STATE_FADING_OUT"); 2 waits for the zscene to
+   load, then 0x00725df0 continues; 3 → 4 once the player-side checks pass; 4: 0x007258a0 mounts
+   `preload_items.vpp` / `preload_effects.vpp` and sets 0x0153b543, then 0x0072d660 → 5; 5:
+   0x007258a0 starts the resource loads (0x00722f10: the shared `npc_basehead` resource, the
+   manager's handle, every +0x20 resource, the +0xf4 soundtrack; a 120 s stamp at 0x012f5d30) → 6,
+   or for a loaded zscene → 7; 6, 7, 8: 0x0072c790 / 0x0072bff0 / 0x00720200 + 0x0072c260; 9:
+   playback start 0x00729150; 10, 11, 12: playing (0x0072c980); 13: "CS_STATE_STOP", the manager's
+   +0x35cc becomes the chain target 0x0153b52c; 14 → 15 when 0x00722e00; 15: 0x007258a0 either
+   chains into 0x0153b52c (manager rebuilt by 0x00725670 → 5) or begins teardown → 0x10; 0x10:
+   memory unlock stage (0x00a747a0) → 0x11; 0x11: "CS_STATE_STOPPED" → 0x12; 0x12:
+   "CS_STATE_FINAL_STREAMING", world objects re-streamed → 0x13; 0x13: fade-in request, manager and
+   `cutscene_virtual_pool` freed → 0. The state names are the strings the machine passes to the
+   marker routine 0x00707410 (HYPOTHESIS: a profiling scope). OPEN: the writers of 1, 9, 12, 14 and
+   the bodies of the loading/playback helpers.
 
 **Host summary.**
 - `zscene_prep(name)`: if the name resolves to a kind-1 entry and the bypass byte **[job `20261001T114101-team-a-mnao`: the
   `skip_all_cutscenes` option]** is clear, release the
   current scene's resources, set the state to 0 and make the entry pending.
 - `zscene_is_loaded` follows §14.23.
-- A host that loads scenes itself may promote a pending entry at once (state 1) and mark it loaded
+- ~~A host that loads scenes itself may promote a pending entry at once (state 1) and mark it loaded
   (state 2) when its resources are in; the engine does this only from the cutscene state machine,
-  whose load step (0x007258a0) is not yet read. **[added, job `20261001T114101-team-a-mnao`]**
+  whose load step (0x007258a0) is not yet read.~~ **[added, job `20261001T114101-team-a-mnao`]** **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
+- A host runs, every frame: promotion of a pending entry (the 0x00720320 rule, cutscene state 0 or
+  2), then completion (0x007285c0: handle resident and soundtrack ended or 5 s → state 2). The
+  engine does exactly this from 0x007258a0 and 0x0072d660; nothing else promotes.
 
 **OPEN — next dump** ~~(from the interpretation of job `20261001T020200-team-a-nzxf`)~~ **[list replaced
 from the interpretation of job `20261001T114101-team-a-mnao`; the struck items were run in that job]**:
 - ~~`func 0x00720410 0x007285c0 0x00720320 0x00722f10 0x007231e0 0x00723d60 0x00723e40 0x00725df0
   0x00737780 0x0072d660 0x007203e0 0x0072df50 0x0072d330`.~~
 - ~~`xref 0x0153b534 0x0153b541 0x01180120`.~~
-- `func 0x007258a0 0x0073bfb0 0x00707170`; `xref 0x007258a0`; the 20 jump-table dwords at
-  0x0072defc (raw data read).
+- ~~`func 0x007258a0 0x0073bfb0 0x00707170`; `xref 0x007258a0`; the 20 jump-table dwords at
+  0x0072defc (raw data read).~~ **[run in job `20261001T122853-team-a-nnlt` except `func 0x00707170`, restated below; list replaced from that job's interpretation]**
+- `ptrs count:20 0x0072defc`; `func 0x00702a50 0x00bdbf30 0x007233c0 0x00dafad0 0x00dafb60
+  0x00462960 0x007315a0`; `xref 0x0153ba00 0x0153ba01 0x0153ba02`; `xref xrefs:200 0x0153b520`;
+  `func 0x0072c790 0x0072bff0 0x0072c260 0x0072c980 0x0072d030 0x00729150 0x00720040 0x00722e00`;
+  `func 0x00707170`.
+  **[queued in `team-a/ghidra/jobs/nnlt-followup.json`: the `ptrs` read, `func 0x00702a50 0x00bdbf30 0x007233c0 0x00dafad0
+  0x00dafb60 0x00462960`, both `xref` items. Not yet queued: `func 0x007315a0`, the eight cutscene
+  helper bodies, `func 0x00707170`.]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
 CONFIRMED parts — prep gate, stub, teardown, pending slot, entry offsets, `zscene_is_loaded` truth
 table, state 2 = loaded; HIGH CONFIDENCE — state 1 = loading, 0 = idle; HYPOTHESIS — bypass byte, gender
 variant, cutscene guard; OPEN — load start and completion drivers, table source.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`): CONFIRMED parts — prep gate, stub, teardown, pending slot, entry
 offsets, `zscene_is_loaded` truth table, all three state codes, promotion and completion bodies,
 the `skip_all_cutscenes` byte, the table's allocation/append/destroy and its source file
 `cutscene.xtbl`; HIGH CONFIDENCE — the labels of 0x0153b541/0x0153b542, the resident/failed handle
 classes, the cutscene machine as the per-frame driver; HYPOTHESIS — gender variant, cutscene
 guard, the transition stream's nature, 0x0153b534's nature; OPEN — the promoter's caller
-0x007258a0, the xtbl field parse.**
+0x007258a0, the xtbl field parse.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — prep gate, stub,
+teardown, pending slot, entry offsets, `zscene_is_loaded` truth table, all three state codes,
+promotion and completion bodies, the promoter 0x007258a0 and its rule, the `skip_all_cutscenes`
+byte, the table's allocation/append/destroy, the two-file parse (`cutscene.xtbl` names,
+`<name>.cte_xtbl` fields), the `CutsceneType` → kind mapping, the cutscene state table for states
+0..0xf; HIGH CONFIDENCE — the labels of 0x0153b541/0x0153b542, the resident/failed handle
+classes, the female variant (+0x10, `+0xa41`), +0xf4 as the soundtrack, the request-group label of
++0xc/+0x10, states 0x10..0x13 by elimination, promotion of a Lua-only prep after a previous scene;
+HYPOTHESIS — cutscene guard, 0x0153b534's nature, the marker routine, the parser option bytes'
+purpose; OPEN — the entry constructor and unlisted fields, the loading/playback helper bodies, the
+released handle's class.**
 
 ### 26.26 UI resolution queries `vint_is_std_res` / `vint_get_safe_frame` (exe-derived 2026-10-01)
 
 Note: this document had no earlier entry for either function. Their registrations are recorded in
 `spec-lua-bindings.md` §13.7 (UI registrar 0x00e1dfb0); this unit adds the behaviour from ~~bridge job
-`20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and
-`20261001T114101-team-a-mnao`. Both exist only in the UI Lua state.
+`20261001T020200-team-a-nzxf`~~ ~~bridge jobs `20261001T020200-team-a-nzxf` and
+`20261001T114101-team-a-mnao`.~~ bridge jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao` and `20261001T122853-team-a-nnlt`. Both exist only in the UI Lua state.
 
 **`vint_is_std_res` (0x00e1a150).** Arguments: none (`lua_gettop` is called and its result
 ignored). Return: 1 boolean. **CONFIRMED — disassembly.**
@@ -10430,10 +10567,26 @@ ignored). Return: 1 boolean. **CONFIRMED — disassembly.**
   disassembly**), which forms a / b in single precision and sets the mode to -1, then raises it
   through strict tests: > 2.48 → 0, > 3.18 → 1, > 3.72 → 2, > 4.77 → 3, > 5.58 → 4 (2.48 is the
   single at 0x01256908; the four doubles at 0x01256900/0x012568f8/0x012568f0/0x012568e8 are
-  HIGH CONFIDENCE as rendered). Its callers 0x00e23a20 and 0x00e23910 were not dumped.
+  HIGH CONFIDENCE as rendered). ~~Its callers 0x00e23a20 and 0x00e23910 were not dumped.~~
+  **[job `20261001T122853-team-a-nnlt`:]** Its two callers are the UI subsystem init 0x00e23910 and the resolution-change path
+  0x00e23a20 (below).
+- ~~0x00e236f0 returns a per-thread 12-byte record (thread context +0x670, allocated on first use
+  from the pool at 0x02a5a090 and zeroed); the two integers are the record's second and third
+  dwords (**CONFIRMED — disassembly**). Their writers were not dumped.~~ **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
 - 0x00e236f0 returns a per-thread 12-byte record (thread context +0x670, allocated on first use
   from the pool at 0x02a5a090 and zeroed); the two integers are the record's second and third
-  dwords (**CONFIRMED — disassembly**). Their writers were not dumped.
+  dwords, copies of the global **width 0x02a5a180 and height 0x02a5a184** (**CONFIRMED —
+  disassembly**). Writers: the UI subsystem init 0x00e23910 (called by 0x008489e0 during front-end
+  bring-up; it takes the pair from its second argument and copies it into the calling thread's
+  record with 0x00e237f0) and 0x00e23a20(width, height) (caller 0x005df6e0, not dumped;
+  HYPOTHESIS: the display-mode/resize handler), which does nothing when the pair is unchanged and
+  otherwise stores both globals and the record copy. Both then recompute the mode through
+  0x00e23000 and the C-side standard-resolution test 0x00e2ad30 (the same rule as this function:
+  width / height < 1.5 or mode 2), whose result becomes the layout index 0x0132c0ac (1 = standard,
+  0 = wide; HIGH CONFIDENCE for the label). On a change 0x00e23a20 also calls the Lua global
+  `vint_lib_init_constants()` if it is a function, and, when the standard/wide class flipped, calls
+  `<document name>_reset()` for every loaded UI document that defines it (0x00e21670). The record is
+  filled only on the thread that ran the writer (HIGH CONFIDENCE: the UI thread).
 
 Reading (**HIGH CONFIDENCE**; the struct is unlabelled in the dump): the two integers are the screen
 width and height. The function therefore reports a "standard (non-wide) resolution": 4:3 and 5:4
@@ -10458,33 +10611,57 @@ disassembly** for the shape:
 
 The order is (c1·a, c1·b, c2·a, c2·b), with a = `+0x8` and b = `+0xc` (**HIGH CONFIDENCE**; the
 x87 operand order is ambiguous). ~~**OPEN**: the two constants; only their low dwords appear in the dump,
-and 0x0116dfc0's matches a widened 0.1f.~~ **[Superseded, job `20261001T114101-team-a-mnao`:]** **OPEN**: the two
+and 0x0116dfc0's matches a widened 0.1f.~~ **[Superseded, job `20261001T114101-team-a-mnao`:]** ~~**OPEN**: the two
 constants; both dumps print only their low dwords (0x40000000 and 0xa0000000, the patterns of
 single-precision literals widened to double — 0xa0000000 fits 0.1f, 0x40000000 fits 0.85f, 0.15f or
 0.075f), and both are shared literals used by unrelated routines, so a raw 8-byte read is needed.
 **HYPOTHESIS**: the four values are the left/top and
-right/bottom safe-frame edges in pixels.
+right/bottom safe-frame edges in pixels.~~ **[Superseded, job `20261001T122853-team-a-nnlt`:]**
+The two constants (**CONFIRMED — disassembly**, read as two dwords each): 0x0115ba60 =
+0x3FB3333340000000 = 0.07500000298023224 (the single 0.075f widened to double) and 0x0116dfc0 =
+0x3FED9999A0000000 = 0.925000011920929 (0.925f widened). The function therefore returns
+round(0.075 × a), round(0.075 × b), round(0.925 × a), round(0.925 × b) with the widened single
+values — the left, top, right and bottom edges of the central 85 % of the screen (**HIGH
+CONFIDENCE** for the edge reading; it rests on a = width, b = height). Host: multiply by 0.075f and
+0.925f promoted to double (not by the decimals 0.075 / 0.925) and round to nearest; with the
+widened constants no integer dimension below 2^23 produces a tie, whereas the decimals tie at
+dimensions ≡ 20 (mod 40) and would differ under round-half-to-even (e.g. 1440 × 900: engine
+(108, 68, 1332, 833)). Worked values: 1280 × 720 → (96, 54, 1184, 666); 1920 × 1080 → (144, 81,
+1776, 999).
 
 **OPEN — next dump:** **[list replaced from the interpretation of job `20261001T114101-team-a-mnao`; the struck
-items were run in that job or are restated below]**
+items were run in that job or are restated below]** **[list replaced again from the interpretation of
+job `20261001T122853-team-a-nnlt`; the struck items were run in that job]**
 - ~~`func 0x00e23000 0x00e236f0`; `xref 0x0132bd80` (the meaning of the display-mode values, and what
   0x00e236f0 returns).~~
 - ~~The 8 bytes at 0x0115ba60 and 0x0116dfc0.~~
-- `func 0x00e23a20 0x00e23910 0x00e230a0 0x00e23770 0x00e237b0 0x00e237c0 0x00e237f0` (who writes
-  the width/height record and sets the mode).
-- A raw 8-byte read of 0x0115ba60 and 0x0116dfc0 (the `xref` mode prints only the first dword).
+- ~~`func 0x00e23a20 0x00e23910 0x00e230a0 0x00e23770 0x00e237b0 0x00e237c0 0x00e237f0` (who writes
+  the width/height record and sets the mode).~~
+- ~~A raw 8-byte read of 0x0115ba60 and 0x0116dfc0 (the `xref` mode prints only the first dword).~~
+- `func 0x005df6e0` (what triggers 0x00e23a20); `func 0x00e230a0 0x00e2a980` (the mode reader and
+  the layout-count writer). **[`func 0x005df6e0` queued in `team-a/ghidra/jobs/nnlt-followup.json`; `func 0x00e230a0 0x00e2a980`
+  not yet queued]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
 CONFIRMED parts — both argument/return shapes, the `vint_is_std_res` decision rule, the
 `vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order; HYPOTHESIS —
 safe-frame edge meaning; OPEN — display-mode values, the two scale constants.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`): CONFIRMED parts — both argument/return shapes, the
 `vint_is_std_res` decision rule, the mode ladder of 0x00e23000, the per-thread record of 0x00e236f0,
 the `vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order, the
 four double thresholds; HYPOTHESIS — multi-monitor meaning of the mode, safe-frame edge meaning;
-OPEN — the record's writers, the two scale constants.**
+OPEN — the record's writers, the two scale constants.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — both
+argument/return shapes, the `vint_is_std_res` decision rule, the mode ladder of 0x00e23000 and its
+two callers, the per-thread record of 0x00e236f0 and its writers, the global width/height, the
+change-time Lua calls, the `vint_get_safe_frame` data path and both constants; HIGH CONFIDENCE —
+width/height reading, output order, the four double thresholds, the safe-frame edge reading, the
+layout index 0x0132c0ac; HYPOTHESIS — multi-monitor meaning of the mode, 0x005df6e0 as the resize
+handler; OPEN — what triggers a resolution change.**
 
 ### 26.27 Bare globals registered by 0x00e0f900 (exe-derived 2026-10-01)
 
@@ -11977,3 +12154,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, executable re-derivation of §27/§28 from bridge jobs `20261001T021703-team-a-pwgq` (entries, wrappers, registrar names) and `20261001T021707-team-a-jxxz` (callees, global xrefs); §27.2 also uses `20261001T021721-team-a-hjzz`): §27 — 14 CONFIRMED, 12 CORRECTED (0x00a525a0 registered twice, §27.2 marker resolved; 0x00a9b080's 2nd argument is the preset-name hash; §27.7 wrapper 0x008410f0; §27.8 wrapper pinned; §27.11 +0x114 field, timer predicates, Lua-state accessor, +0x13c origin; §27.18–§27.20 operands are jump stubs — always true / nothing registered; 0x0101b4a0–0x0101bac0, 0x00d34dd0, 0x00d2f540, 0x00d34d40 are `return 1` stubs; §27.26 observations rewritten). §28 — 15 CONFIRMED, 11 CORRECTED (§28.2 copy target and mode; §28.3 no rounding; §28.5 failure returns 0; §28.9 target name, fixed icon effect, return value; §28.11 row method; §28.16 one global state; §28.17 kind predicates and slot counts; §28.19 bit 0x200000; §28.20 0x00853b30 is a descriptor-bit test; §28.23 'Cell Phone Answer'). Added callee bodies throughout, a re-derivation summary under each heading and a 2026-10-01 review status to every entry (CONFIRMED/CORRECTED entries cleared for implementation, residual OPEN sub-items not). Collateral corrections at §1.12, §2.6, §2.10, §4.7, §8.12, §13.24, §20.14, §22.24 and §23.13 not applied. Old text struck or annotated in place.
 - 2026-10-01 (cloud, knock-on corrections from the §27/§28 executable re-derivation, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): §20.14 — address-conflict marker struck, 0x00a525a0 is one function registered as `mission_is_complete` and `cell_is_mission_complete` (as §27.2), body confirmed; §23.13 — jump-stub direction corrected (0x0086fde0 is a `JMP` to 0x008703c0, the Steam logged-on check); §8.12/§13.24/§22.24 — 0x00d2f540, 0x0101b4f0, 0x0101b570 are inert `return 1` stubs (§13.24's call site not in the stub's reference list, OPEN); §22.24 reconciled with §28.16 (one global continuous-explosion flag 0x012ec964); §4.7 — 0x00853b30 is a descriptor-bit-by-index test, 0x1e = bit 0x40@+9; §2.10 — 0x008788e0 is a thiscall with one byte argument, called at 0x006df33a (receiver OPEN); §2.6 — getter 0x005bc5d0, no direct writer of 0x0141250d; §1.12 — 0x0093bfc0 is a trigger method (ECX) with one point argument, arg roles HIGH CONFIDENCE swapped. Review-status lines added to all nine.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T124128-team-a-jfue`, follow-up `team-a/ghidra/jobs/jfue-followup.json`): §26.28 — the installer `0x0087c340` has no reference anywhere (CONFIRMED negative; when it runs stays OPEN); `0x0087d1d0` is the session constructor, a default session is one-member, offline, capacity 1, local = host, single call site in `0x0087f1b0` (CONFIRMED); host pointer reassigned only by slot-table event `0x40` in `0x0087c430`, so an installed single-player session would answer `game_get_is_host` true (CONFIRMED mechanism; single player still OPEN, implement false); mode-manager state machine and network init/shutdown callers (CONFIRMED); second session pointer `0x024d8538` used by the lifecycle steps (CONFIRMED access, role HYPOTHESIS); `0x00715f20` called from `0x005d2400`; state 3 = active by the name `tutorial_active`; `0x007171c0` is the `tutorial_start` record receiver and the gdhw serialiser pairing is withdrawn; entries 0–188 save-persisted as a flat 189-dword array; next-dump list re-pointed. §8.27 — host-shaped default session, still implement false. §10.1 — the three store-flag trigger heads (use, walk-in, drive-in) and their HUD-message gates. §10.4 — export/import pair, active state, initialiser note. §20.5 — state 3 = active, review status added. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T122853-team-a-nnlt`, follow-up `team-a/ghidra/jobs/nnlt-followup.json`): §26.24 — 0x0149365c is a shipping-mode byte set to 1 unconditionally by the start-up 0x005d1a30, so `sfx_use_load_images` is always true; per-frame routine callers (main-loop system update 0x005d14b0; mode callback 0x007a82c0 while mode 5 is stacked); init runs from the front-end bring-up 0x005d2400; mode-stack pump 0x00706be0 mechanics (mode 4 still OPEN); none of the six callers requests a fade, the engine-side requesters are 0x00725df0 and cutscene state 0x13. §26.25 — the promoter 0x007258a0 read: a bare Lua `zscene_prep` is promoted on the next frame in cutscene state 0 (CONFIRMED with no previous scene, HIGH CONFIDENCE after one); `cutscene.xtbl` gives only names, each entry's fields come from `<name>.cte_xtbl` through 0x0073ada0 (corrects the mnao "parsed from cutscene.xtbl" wording); entry field mapping (`CutsceneType` → +0x8 with Zscene 1 / Story 2 / Designer 0 / other 2, request groups +0xc/+0x10 with the `_f` female variant, `SceneLightset` → +0xac/+0xad, `Soundtrack` → +0xf0/+0xf4, story-cutscene resource list +0x20/+0x24/+0x28); capacity = names + 12 capped at 200; cutscene state table 0–0x13 with phases (0x10–0x13 HIGH CONFIDENCE); new globals rows; host rule. §26.26 — width/height masters 0x02a5a180/0x02a5a184, init path 0x00e23910 and change path 0x00e23a20 (which calls `vint_lib_init_constants()` and the per-document `<name>_reset()` on a standard/wide flip); safe-frame constants CONFIRMED as 0.075f and 0.925f widened to double, results round(0.075·w), round(0.075·h), round(0.925·w), round(0.925·h), with the host note on widened constants (1440 × 900 → 833). Next-dump lists marked queued/not yet queued against the follow-up job; review statuses updated; §8.21 and §14.23 annotated. Old text struck or annotated in place.
