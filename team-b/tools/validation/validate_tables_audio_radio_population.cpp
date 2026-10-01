@@ -320,6 +320,8 @@ int main(int argc, char** argv) {
                 std::optional<tar::AudioConstants> ac = tar::ParseAudioConstants(g_keepAlive.back());
                 if (ac) {
                     any = true;
+                    // spec-tables-audio-radio.md §3: PlayTimers has 12 values (count corrected from 11 by desk review
+                    // 2026-09-30); real-data leaf presence was counted only for these two (spec §3 validation note).
                     std::printf("  PlayTimers.BrassCollision=%g VehicleImpactDistance=%g LargeDeformation=%g (spec 3: 200 / 12 / 1000)\n",
                                 ac->playTimerBrassCollision.value, ac->playTimerVehicleImpactDistance.value, ac->playTimerLargeDeformation.value);
                     GATE(ac->playTimerBrassCollision.present && ac->playTimerLargeDeformation.present,
@@ -366,6 +368,9 @@ int main(int argc, char** argv) {
     if (!lineTags.empty()) {
         // spec 5: the loop breaks once the stored count EXCEEDS 0x76 (118) - i.e. after storing index 118
         // (the 119th entry, 0-based), an effective cap of 119 out of a 120-slot allocation.
+        // LABEL: spec-tables-audio-radio.md §5, [OPEN - desk review 2026-09-30]: the 119-cap break condition is
+        // not settled against the executable (119 vs 120); the 4,507/4,626 figure below is spec-derived
+        // arithmetic, not an observation of the cap.
         constexpr size_t kEffectiveCap = 119;
         const size_t reachable = lineTags.size() < kEffectiveCap ? lineTags.size() : kEffectiveCap;
         const size_t unreachable = lineTags.size() - reachable;
@@ -403,6 +408,8 @@ int main(int argc, char** argv) {
                 if (!seenWwiseIds.insert(*p.wwiseId).second) ++duplicateWwiseIds;
             }
         }
+        // LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: case sensitivity of the
+        // suffix-match helper FUN_00EA48B0 is OPEN (never decompiled); our matcher is case-sensitive by assumption.
         std::printf("  %zu rows; demographic-suffix matches: %lld (spec 6.1: 233/265, 88%%); age-token matches: %lld (spec 6.1: 84/265, 32%%)\n",
                     personas.size(), suffixMatch, ageMatch);
         for (auto& kv : suffixCounts) std::printf("    suffix %-4s x%lld\n", kv.first.c_str(), kv.second);

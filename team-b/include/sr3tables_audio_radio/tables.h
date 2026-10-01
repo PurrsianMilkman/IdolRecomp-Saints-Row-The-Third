@@ -226,7 +226,8 @@ std::vector<AudioBank> ParseAudioBanksTable(const Document& doc);
 // optional<T>, including the PlayTimers/OnFootSettings/DrivingSettings/Wind groups the spec's own prose calls
 // "if present" while citing the ALWAYS-write accessor addresses.
 struct AudioConstants {
-    // PlayTimers (11 f32)
+    // PlayTimers (12 f32 - spec-tables-audio-radio.md §3: count corrected from 11 to 12 by desk review
+    // 2026-09-30, the 12 listed names; review status DESK-PASS, text fixes applied)
     Always<float> playTimerBrassCollision;
     Always<float> playTimerGlassShatter;
     Always<float> playTimerBulletImpactHuman;
@@ -316,6 +317,9 @@ struct AudioLineTag {
                                        // the real shipped file has 4,626 rows against this 119 cap, a CONFIRMED
                                        // 4,507/4,626 (97%) unreachable-row mismatch (spec 5.1) reproduced by
                                        // tools/validation/validate_tables_audio_radio_population.cpp.
+                                       // LABEL: spec-tables-audio-radio.md §5, [OPEN - desk review 2026-09-30]:
+                                       // the 119-cap break condition (119 vs 120 stored) is not settled; no
+                                       // behaviour here depends on it.
 };
 AudioLineTag ParseAudioLineTag(const Node* row);
 // Row `<Audio_line>` directly under `<Table>` (CONFIRMED not nested, spec 5).
@@ -332,6 +336,10 @@ std::vector<AudioLineTag> ParseAudioLineTagsTable(const Document& doc);
 // exact-case (case-SENSITIVE) substring search, since the spec explicitly calls it "a plain substring search"
 // with no case-folding mentioned (unlike the element-NAME lookups the shared family documents as
 // case-insensitive) - a JUDGMENT CALL, flagged honestly.
+// LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: whether FUN_00EA48B0 matches
+// case-sensitively (and whether it searches the full Name or the 0x20-byte truncated copy) is NOT established -
+// its body was never decompiled. The CONFIRMED label covers FUN_00709F40's body only. Case-sensitive matching
+// is OUR ASSUMPTION; no behaviour change.
 inline constexpr std::array<std::string_view, 8> kAudioPersonaDemographicSuffixes = {
     "_WM", "_WF", "_BM", "_BF", "_HM", "_HF", "_AM", "_AF",
 };
@@ -415,6 +423,10 @@ struct FoleyTouch {
                                        // CRC-32 SIBLING ENTRY POINT `FUN_00D9E7E0` - the ONE table in this whole
                                        // group whose row-name key is CASE-SENSITIVE (NOT lower-cased), unlike every
                                        // other engine-CRC-32 Name hash in this group (spec 1.3 item 2 / 9).
+    // LABEL: spec-tables-audio-radio.md §9 / §1.3 item 2, [OPEN - desk review 2026-09-30]: the seed passed to
+    // FUN_00D9E7E0 at the foley_touch call site (FUN_00561AB0), and whether a final XOR applies, are not stated
+    // (the spec gives seed 0 for another table's call site only). Seed 0 here is OUR ASSUMPTION (the helper's
+    // default); no behaviour change.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHashCaseSensitive(*name) : 0; }
 
     // TouchFoleySet - only the FIRST such child is read (same caveat as foley_collision.xtbl, spec 9).
@@ -451,11 +463,15 @@ struct FoleyEngine {
                                             // use for the same sentinel) -> +0x0D
     int8_t DlcFrameworkIdOrDefault() const { return dlcFrameworkId.value_or(static_cast<int8_t>(0xFF)); }
 
-    // CROSS-REFERENCE (spec 10/18.4, HIGH CONFIDENCE not fully closed): a vehicle record's own Foley/Engine field
-    // (u16 at +0x7AC, spec-vehicle-data.md 7.3/7.4) is very likely a POSITIONAL INDEX into this table's own row
-    // order (a pointer array DAT_013BB8A0, indices assigned in file/load order across the base game and any DLC
-    // frameworks, NOT by any hash) rather than a hash like its sibling Foley fields - that index is not itself a
-    // field of THIS row and so is not modelled here. This table's own row order, as parsed, IS that index space.
+    // CROSS-REFERENCE (spec 10/18.4, [HIGH CONFIDENCE - inferred] and [OPEN - desk review 2026-09-30]; NOT
+    // CONFIRMED): the spec's reading is that a vehicle record's own Foley/Engine field (u16 at +0x7AC,
+    // spec-vehicle-data.md 7.3/7.4) may index this table's pointer array DAT_013BB8A0 by row position (indices
+    // assigned in file/load order across the base game and any DLC frameworks). It was never traced from the
+    // vehicle side, and the spec flags it as in tension with spec-vehicle-data.md's "u16 sound id" wording and
+    // with this table's own +0x00 name hash (a hash/name lookup vs positional index; DLC load order would matter
+    // if positional). Which mechanism applies is OPEN, to be settled against the executable. That value is not a
+    // field of THIS row and is not modelled here; row order as parsed is merely the parse order, NOT a confirmed
+    // index space.
 };
 FoleyEngine ParseFoleyEngine(const Node* row);
 // Row `<Engine>` directly under `<Table>`; DLC-aware (spec 10). Records are individually heap-allocated,
@@ -562,6 +578,8 @@ struct RadioEvent {
     std::optional<std::string> name;  // Name (REQUIRED - the real loader skips the rest of THIS row silently via
                                        // a 0-length hash if absent, not traced further, spec 14) -> +0x08 engine
                                        // CRC-32, LOWER-CASED
+    // LABEL: spec-tables-audio-radio.md §14, [OPEN - desk review 2026-09-30]: the CRC-32 seed passed for Name is
+    // not stated. Seed 0 is OUR ASSUMPTION (the helper's default); no behaviour change.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHash(*name) : 0; }
 
     std::optional<std::string> eventType;  // EventType (direct child) -> +0x0C enum index via
@@ -582,8 +600,8 @@ struct RadioEvent {
     // FUN_0055E470, the same "hash -> small index" resolver commercials.xtbl uses - spec 16) is written to
     // +0x2C; its exact consuming structure was not traced, and the Wwise/AK hash step is third-party (not
     // reproduced) - not modelled here.
-    // NOTE (spec 14): the RUNTIME record this row feeds is only ~17 of its own 52 bytes written by this reader;
-    // the remaining ~35 bytes are genuine uninitialised heap memory in the real engine (the allocator's memset
+    // NOTE (spec 14): the RUNTIME record this row feeds has 16 of its own 52 bytes written by this reader (spec
+    // 14, corrected by desk review 2026-09-30 from ~17); the remaining 36 bytes (was ~35) are genuine uninitialised heap memory in the real engine (the allocator's memset
     // only clears a count-scaled PREFIX of the whole buffer, not each record). This is a fact about the runtime
     // record's memory layout, not about this table's own XML schema, and is not modelled as a struct field.
 };
@@ -601,6 +619,8 @@ struct CommercialEvent {
     std::optional<std::string> name;  // Name -> engine CRC-32 (FUN_00D9E740), LOWER-CASED; stored into slot
                                        // DAT_013BBB08[EventValue]'s first dword - ONLY if EventValue < 30 (spec
                                        // 15) - that gate is NOT enforced here, see EventValue below.
+    // LABEL: spec-tables-audio-radio.md §15, [OPEN - desk review 2026-09-30]: the CRC-32 seed is not stated.
+    // Seed 0 is OUR ASSUMPTION (the helper's default); no behaviour change.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHash(*name) : 0; }
 
     Always<int32_t> eventValue;  // EventValue (s32, the shared "always" reader FUN_00DABC70) - the slot index.
@@ -650,6 +670,9 @@ std::vector<Commercial> ParseCommercialsTable(const Document& doc);
 // values - a linear scan, first match wins, requiring that matching row's own EventValue to be present. Returns
 // the matching row's EventValue if found, else -1 (the loader's own "not found" sentinel, spec 16). This is the
 // CONFIRMED, disassembly-traced mechanism (spec 16), empirically an exhaustive 100% match on real data (spec 16.1).
+// LABEL: spec-tables-audio-radio.md §16, [OPEN - desk review 2026-09-30]: the CRC-32 seed for EnableEvent/
+// DisableEvent is not stated (the 100% match holds for any seed shared by both sides). Seed 0 on both sides is
+// OUR ASSUMPTION; the VALIDATED-BY-DATA result does not depend on it.
 int32_t ResolveCommercialEventValue(const std::string& eventName, const std::vector<CommercialEvent>& commercialEvents);
 
 // ===========================================================================

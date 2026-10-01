@@ -128,6 +128,8 @@ Normals ParseNormals(const Node* row);
 // Stops after the 8th accepted row (the real loader's hard cap, §9.2) -
 // not modelled as an error, only as a stopping point (same convention as
 // items.h's 858-row cap).
+// LABEL: spec-tables-customization.md §9.2 / §21 mark the compare operator [OPEN]; `>= 8` is our assumption and
+// this is the one cap that can change a result on real data (the shipped file has exactly 8 rows).
 std::vector<Normals> ParseCustomizationNormalsTable(const Document& doc);
 
 // ===========================================================================

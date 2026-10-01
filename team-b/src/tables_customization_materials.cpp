@@ -106,6 +106,11 @@ std::vector<Normals> ParseCustomizationNormalsTable(const Document& doc) {
     std::vector<Normals> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Normals"); row; row = NextSibling(wrap, row, "Normals")) {
+        // LABEL: spec-tables-customization.md §9.2, [OPEN - desk review 2026-09-30 / §21 "[OPEN: compare
+        // operator, §9.2]"]: the compare operator is not given; `>= 8` is our assumption. THIS IS THE ONE CAP
+        // THAT CAN CHANGE A RESULT ON REAL DATA: the shipped file has exactly 8 Normals rows, i.e. it sits
+        // exactly at the cap, so a different operator/ordering would keep a different row count. Every other
+        // cap in this reader is well above its real row count.
         if (out.size() >= 8) break;  // hard cap (§9.2)
         out.push_back(ParseNormals(row));
     }
@@ -140,6 +145,9 @@ std::vector<CompositeLayer> ParseCustomizationCompositingTable(const Document& d
     std::vector<CompositeLayer> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Composite_Layer"); row; row = NextSibling(wrap, row, "Composite_Layer")) {
+        // LABEL: spec-tables-customization.md §9.3, [OPEN - desk review 2026-09-30]: whether the test runs
+        // before or after a row is stored is not pinned; `>= 600` is our assumption. Real data has 374 rows,
+        // so this operator cannot change a result on real data.
         if (out.size() >= 600) break;  // hard cap (§9.3)
         out.push_back(ParseCompositeLayer(row));
     }
