@@ -1,18 +1,17 @@
 {
  "team": "team-a",
- "title": "Team A: desk-review NEEDS-EXE batch 4 \u2014 the 10 spec-tables-* (record layouts, defaults, caps, reader flavours)",
+ "title": "Team A: desk-review NEEDS-EXE batch 4 \u2014 the 10 spec-tables-* (record layouts, defaults, caps, reader flavours) [re-run 2026-10-01: depth 0, 40 functions per step]",
  "ref": "auto",
  "steps": [
   {
    "kind": "ghidra",
    "script": "team-a/ghidra/CrreishDump.java",
-   "timeout": 7200,
+   "timeout": 3600,
    "args": [
     "{OUT}/func1",
     "func",
-    "depth:1",
-    "maxfuncs:8",
-    "maxinsn:800",
+    "depth:0",
+    "maxinsn:2000",
     "0x0045b3a0",
     "0x0045ba50",
     "0x0045bab0",
@@ -52,7 +51,18 @@
     "0x004f29b0",
     "0x004f2b50",
     "0x00553580",
-    "0x005590c0",
+    "0x005590c0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func2",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x005591b0",
     "0x0055bd30",
     "0x0055bde0",
@@ -92,7 +102,18 @@
     "0x005bf2f0",
     "0x005c1860",
     "0x005c3e70",
-    "0x005c4b10",
+    "0x005c4b10"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func3",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x005ce140",
     "0x005d1a30",
     "0x005d25f0",
@@ -132,7 +153,18 @@
     "0x006b8620",
     "0x006b89d0",
     "0x006b95a0",
-    "0x006ba4e0",
+    "0x006ba4e0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func4",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x006bc970",
     "0x006bd3c0",
     "0x006bd920",
@@ -169,22 +201,21 @@
     "0x007dfd80",
     "0x007ef040",
     "0x007ef180",
-    "0x007ef3a0"
+    "0x007ef3a0",
+    "0x007ef4e0",
+    "0x008023d0",
+    "0x00802a70"
    ]
   },
   {
    "kind": "ghidra",
    "script": "team-a/ghidra/CrreishDump.java",
-   "timeout": 7200,
+   "timeout": 3600,
    "args": [
-    "{OUT}/func2",
+    "{OUT}/func5",
     "func",
-    "depth:1",
-    "maxfuncs:8",
-    "maxinsn:800",
-    "0x007ef4e0",
-    "0x008023d0",
-    "0x00802a70",
+    "depth:0",
+    "maxinsn:2000",
     "0x00802f60",
     "0x0080c330",
     "0x0080e930",
@@ -224,7 +255,18 @@
     "0x008f08a0",
     "0x008fb6b0",
     "0x008fb6fd",
-    "0x00904c10",
+    "0x00904c10"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func6",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x00904d10",
     "0x00905630",
     "0x0091d4c0",
@@ -264,7 +306,18 @@
     "0x00a94d10",
     "0x00a96040",
     "0x00a96130",
-    "0x00a971f0",
+    "0x00a971f0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func7",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x00a973e0",
     "0x00a9aef0",
     "0x00ac1ba0",
@@ -304,7 +357,18 @@
     "0x00be1d80",
     "0x00be29c0",
     "0x00be4120",
-    "0x00be4da0",
+    "0x00be4da0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func8",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x00be5300",
     "0x00be5960",
     "0x00d9e7e0",
