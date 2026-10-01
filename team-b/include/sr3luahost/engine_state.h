@@ -626,6 +626,24 @@ public:
     // only the bits a confirmed writer has written are known (open_state.h).
     OpenBits32& missionFlagsWord() { return missionFlagsWord_; }
 
+    // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
+
+    // One row per OPEN engine-state slot the stubs read, grouped by the area
+    // Team A is answering (co-op, tutorial, vehicle-store, zscene, fade, other).
+    // `known` is "value set" for a scalar, "every bit known" for a bit word;
+    // `knownKeys` counts set keys for a per-name map (scalars: 0/1). lua_host_run
+    // writes it as verdict_open_state.tsv, so a re-run shows which slots a
+    // newly implemented answer filled.
+    struct OpenSlotStatus {
+        std::string area;
+        std::string global;
+        std::string spec;
+        std::string kind; // "value", "per-name map" or "bit word"
+        bool known = false;
+        size_t knownKeys = 0;
+    };
+    std::vector<OpenSlotStatus> openSlotInventory() const;
+
 private:
     std::unordered_map<std::string, CharacterState> characters_;
     OpenValue<bool> coopActive_{"co-op session (0x0087ba20 non-null + session counter check)", "spec-lua-api-behaviour.md Sec3.1"};
@@ -639,7 +657,7 @@ private:
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
     // above for citation/reasoning. ---
-    OpenValue<bool> vehicleStoreActive_{"vehicle-store active state", "spec-lua-api-behaviour.md Sec10.1"};
+    OpenValue<bool> vehicleStoreActive_{"vehicle-store active flag (0x022cdf08)", "spec-lua-api-behaviour.md Sec10.1"};
     OpenValue<bool> isHost_{"host check (0x0087ba20: +0x5c == +0x58)", "spec-lua-api-behaviour.md Sec10.2/Sec8.27"};
     OpenValue<bool> hasLocalPlayer_{"local player exists (0x009da4e0)", "spec-lua-api-behaviour.md Sec10.3"};
     int hudInventoryRefreshCount_ = 0;                         // Sec10.3
@@ -664,5 +682,9 @@ private:
     int screenFadeOpcode53Count_ = 0;
     OpenBits32 missionFlagsWord_{"0x014c848c", "spec-lua-api-behaviour.md Sec15.23"};
 };
+
+// Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).
+// Host's constructor calls it once; slots it does not set stay OPEN.
+void applySpecInitialState(EngineState& es);
 
 } // namespace sr3luahost

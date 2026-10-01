@@ -83,6 +83,13 @@ def main(argv):
         check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
         check(summary.get("real_luaL_loadbuffer_ok", "").startswith("5/6"), "5/6 scripts load")
         check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "6/6", "sr3lua agrees on 6/6")
+        check(summary.get("open_state_slots_with_values_at_start", "").startswith("0/"),
+              f"no OPEN slot has a value at start: {summary.get('open_state_slots_with_values_at_start')}")
+        slots = read_tsv(os.path.join(out1, "verdict_open_state.tsv"))
+        areas = {r["area"] for r in slots}
+        check({"co-op", "tutorial", "vehicle-store", "zscene", "fade"} <= areas, f"open-state areas: {sorted(areas)}")
+        check(any("0x00723d20" in r["global"] for r in slots), "zscene per-name state listed")
+        check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots), "every listed slot OPEN at start")
         drive = read_kv(os.path.join(out1, "verdict_mission_drive_summary.txt"))
         check(re.match(r"^3/\d+$", drive.get("missions_with_script_found", "")) is not None, "3 missions found")
         check(re.match(r"^1/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "1 _start ok")

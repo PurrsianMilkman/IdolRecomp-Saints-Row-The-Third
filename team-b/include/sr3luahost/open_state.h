@@ -99,6 +99,9 @@ public:
     }
     void set(const std::string& key, const T& v) { values_[key] = v; }
     void forget(const std::string& key) { values_.erase(key); }
+    size_t knownCount() const { return values_.size(); }
+    const char* what() const { return what_; }
+    const char* spec() const { return spec_; }
 
 private:
     const char* what_;

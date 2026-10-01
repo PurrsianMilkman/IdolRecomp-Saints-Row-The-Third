@@ -840,6 +840,7 @@ add_library(sr3luahost STATIC
     src/lua_hook_registry.cpp
     src/lua_thread_scheduler.cpp
     src/lua_engine_state.cpp
+    src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)

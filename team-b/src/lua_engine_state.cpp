@@ -111,4 +111,37 @@ std::string EngineState::zsceneTableKey(const std::string& name) {
     return lowercased(name);
 }
 
+std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const {
+    std::vector<OpenSlotStatus> out;
+    auto value = [&](const char* area, const auto& v) {
+        out.push_back({area, v.global(), v.spec(), "value", v.known(), v.known() ? 1u : 0u});
+    };
+    auto map = [&](const char* area, const auto& m) {
+        out.push_back({area, m.what(), m.spec(), "per-name map", false, m.knownCount()});
+    };
+    value("co-op", coopActive_);
+    value("co-op", isHost_);
+    value("co-op", coopJoinType_);
+    map("tutorial", tutorialResolves_);
+    value("vehicle-store", vehicleStoreActive_);
+    map("zscene", zsceneNameState_);
+    value("zscene", zsceneBusyFlag_);
+    value("zscene", zsceneStateCode_);
+    map("zscene", zsceneTableResolves_);
+    value("fade", fadeState_.g012e6aa0);
+    value("fade", fadeState_.g012e6aa4);
+    value("fade", fadeState_.g012e6aa8);
+    value("fade", fadeState_.g013effc8);
+    value("fade", fadeState_.g013effcc);
+    value("fade", fadeState_.g013effd0);
+    value("other", hasLocalPlayer_);
+    value("other", currentDefaultDocHandle_);
+    map("other", objectResolves_);
+    size_t knownBits = 0;
+    for (uint32_t m = missionFlagsWord_.knownMask(); m != 0; m &= m - 1) ++knownBits;
+    out.push_back({"other", missionFlagsWord_.global(), missionFlagsWord_.spec(), "bit word",
+                   missionFlagsWord_.knownMask() == 0xFFFFFFFFu, knownBits});
+    return out;
+}
+
 } // namespace sr3luahost

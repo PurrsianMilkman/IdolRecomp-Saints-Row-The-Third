@@ -136,6 +136,7 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // "gameplay").
     specUiNames.push_back("coop_is_active");
 
+    applySpecInitialState(engineState_);
     registerSpecConfirmedStubs(gameplay_, engineState_, hitLog_, "gameplay", specGameplayNames);
     registerSpecConfirmedStubs(ui_, engineState_, hitLog_, "ui", specUiNames);
     registerStubs(gameplay_, gameplayNames, hitLog_, "gameplay");

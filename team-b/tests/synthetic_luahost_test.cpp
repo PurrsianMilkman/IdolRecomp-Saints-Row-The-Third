@@ -1247,6 +1247,38 @@ int main() {
         }
     }
 
+    // --- OPEN-slot inventory and applySpecInitialState (manager prep 2026-10-01).
+    // Every slot is OPEN in the synced specs, so applySpecInitialState sets
+    // nothing yet. When a Team A answer is implemented there, move its slot
+    // from expectOpen to an explicit value check here.
+    {
+        sr3luahost::EngineState es;
+        sr3luahost::applySpecInitialState(es);
+        const auto inv = es.openSlotInventory();
+        CHECK(inv.size() == 19);
+        std::unordered_map<std::string, int> perArea;
+        for (const auto& r : inv) {
+            ++perArea[r.area];
+            CHECK(!r.known && r.knownKeys == 0); // expectOpen: nothing confirmed yet
+            CHECK(!r.global.empty() && r.spec.rfind("spec-", 0) == 0);
+        }
+        CHECK(perArea["co-op"] == 3 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
+        CHECK(perArea["zscene"] == 4 && perArea["fade"] == 6 && perArea["other"] == 4);
+        // The inventory follows writes: a value, a per-name key, and bits.
+        es.vehicleStoreActive().set(false);
+        es.zsceneNameState().set("scene_a", 1);
+        es.missionFlagsWord().setBits(0x14, 0x4);
+        for (const auto& r : es.openSlotInventory()) {
+            if (r.global.find("0x022cdf08") != std::string::npos) CHECK(r.known && r.knownKeys == 1);
+            if (r.global.find("0x00723d20") != std::string::npos) CHECK(!r.known && r.knownKeys == 1);
+            if (r.global == "0x014c848c") CHECK(!r.known && r.knownKeys == 2);
+        }
+        // Host applies the same initial state: the stubs still refuse on OPEN slots.
+        sr3luahost::Host h({});
+        CHECK(!h.engineState().vehicleStoreActive().known());
+        CHECK(!h.engineState().coopActive().known());
+    }
+
     if (g_failures == 0) {
         std::cout << "ALL sr3luahost SYNTHETIC TESTS PASSED\n";
         return 0;

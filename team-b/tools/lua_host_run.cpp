@@ -807,6 +807,23 @@ int main(int argc, char** argv) {
               << "sr3luahost::ThreadScheduler - see include/sr3luahost/thread_scheduler.h for the "
               << "real evidence this was built from and the honest scope limits.\n";
 
+    // --- OPEN engine-state slots at start (after applySpecInitialState) -----
+    // verdict_open_state.tsv: which slots a synced Team A answer has filled.
+    std::string openStateSummary;
+    {
+        std::ofstream os(outDir / "verdict_open_state.tsv");
+        os << "area\tglobal\tspec\tkind\tknown\tknown_keys\n";
+        size_t known = 0, total = 0;
+        for (const auto& r : host.engineState().openSlotInventory()) {
+            os << r.area << '\t' << r.global << '\t' << r.spec << '\t' << r.kind << '\t' << (r.known ? 1 : 0) << '\t'
+               << r.knownKeys << '\n';
+            ++total;
+            known += (r.known || r.knownKeys > 0) ? 1 : 0;
+        }
+        openStateSummary = std::to_string(known) + "/" + std::to_string(total) +
+                           " (slots with any value at start; per slot: verdict_open_state.tsv)";
+    }
+
     // --- The confirmed/pattern-based hook census this run fires ----------
     const std::vector<HookSpec>& hooks = confirmedHooks();
     {
@@ -1494,6 +1511,7 @@ int main(int argc, char** argv) {
     auto line = [&](const std::string& s) { summary << s << "\n"; std::cout << s << "\n"; };
     line("\n=== POPULATION SUMMARY (lua_host_run) ===");
     line("archives_scanned=" + std::to_string(archives.size()));
+    line("open_state_slots_with_values_at_start=" + openStateSummary);
     line("total_bytes_read=" + std::to_string(grandBytes));
     line("total_directory_entries=" + std::to_string(st.stats.entries));
     line("real_lua_scripts_found(name ends '.lua')=" + std::to_string(st.found.size()));
