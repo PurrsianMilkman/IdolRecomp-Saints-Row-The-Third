@@ -65,7 +65,7 @@ to back). The primitives identified and reused across this cluster:
   is not resolved; treated here only as "the flags/number extractor," not attributed to a specific
   named public function.]**~~ **RESOLVED, §4.1 ~~(also independently re-confirmed under emulation,
   §5.3 below)~~ (§5.3 emulates `0x00dab330`, not these primitives): `0x00dfe160` is the real public `lua_tonumber(L, idx)`; `0x00ea2596` is not a second
-  Lua stack accessor at all, it is the compiler's own inlined float64-to-int64 rounding cast, called
+  Lua stack accessor at all, it is the compiler's own inlined float64-to-int64 ~~rounding~~ **[truncating, §4.1, settled 2026-10-01]** cast, called
   immediately after and operating only on the x87 register `lua_tonumber` left behind. [CONFIRMED —
   disassembly, §4.1.]**
 
@@ -500,7 +500,7 @@ used for `lua_pushcclosure`/`lua_setfield`/`luaI_openlib`):
   **`lua_tonumber`** line-for-line. **[CONFIRMED — disassembly. This resolves §1's own explicitly OPEN
   item about this same address: it is `lua_tonumber`, not an unidentified "flags/number extractor."]**
 - **`0x00ea2596()`** — a zero-`lua_State`-argument float64-to-int64 rounding routine matching the
-  classic compiler-generated (MSVC) round-half-correcting float-to-integer conversion helper (exact rounding semantics OPEN, see §4.1), always
+  classic compiler-generated (MSVC) ~~round-half-correcting~~ float-to-integer conversion helper ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1), always
   seen immediately after a `0x00dfe160` (`lua_tonumber`) call still holding its result in the FPU
   register. This is **not** a distinct Lua API entry point — it is the compiler's own emitted cast code
   for a source-level `(int)lua_tonumber(L, idx)` expression (or the real public `lua_tointeger`, which
@@ -993,8 +993,8 @@ against real Lua 5.1 source structure line-for-line, not merely by call shape.]*
 second half is also resolved here (used once in this cluster, `ai_add_enemy_target`, §3.9): `0x00ea2596`
 takes no `lua_State` argument because it isn't a Lua binding call at all — it reads the x87
 floating-point unit's top-of-stack register left behind by the immediately preceding
-`0x00dfe160`/`lua_tonumber` call and performs a banker's-rounding float→int64 conversion (exact rounding semantics OPEN, see §4.1). This is
-the compiler's own inlined `(long long)round(...)` helper, not a distinct engine or Lua-facing
+`0x00dfe160`/`lua_tonumber` call and performs a ~~banker's-rounding~~ float→int64 conversion ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1). This is
+the compiler's own inlined ~~`(long long)round(...)`~~ truncating integer-cast helper, not a distinct engine or Lua-facing
 primitive. **[CONFIRMED — disassembly; the front matter's OPEN flag on this pair is resolved.]**
 
 **Name-resolution sentinels, applies to every function below that takes an object-name argument:**
@@ -1222,7 +1222,7 @@ player damage" flag (both setter calls pass a hardcoded `0`) on whichever kind t
 name, or the reserved sentinel `#CLOSEST_PLAYER#` — checked via `__stricmp` directly inside the
 target resolver `0x00a3d180`, falling back to the generic character-resolve chain
 (`0x00a281a0`) if the literal doesn't match). Arg 3 mandatory number, read via `lua_tonumber`
-(`0x00dfe160`) immediately truncated by the compiler's own float→int64 rounding helper (exact rounding semantics OPEN, see §4.1)
+(`0x00dfe160`) immediately truncated by the compiler's own float→int64 ~~rounding~~ conversion helper ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1)
 (`0x00ea2596`, resolved above to be a codegen artifact, not a distinct API). Arg 4 optional
 boolean, standard nil-gated idiom, defaulting to `false`.
 
@@ -1461,7 +1461,7 @@ including the polarity flip, the default, and the record-and-replicate branch.]*
 
 ## 4. Vehicle/spawn-region/inventory/world-interaction cluster — 11 functions, all in the 1,014-entry gameplay table (`0x00a20840`)
 
-**Review status summary (2026-09-30):** adversarial desk review of the 14 units of §4 (preamble, 4.1-4.13): 4 DESK-PASS (preamble, 4.6, 4.10, 4.11), 2 DESK-PASS with text fixes applied (4.2, 4.7), 8 NEEDS-EXE (4.1 for `0x00ea2596` only, 4.3, 4.4, 4.5, 4.8, 4.9, 4.12, 4.13). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-lua3-5.json`) is read.
+**Review status summary (2026-09-30):** adversarial desk review of the 14 units of §4 (preamble, 4.1-4.13): 4 DESK-PASS (preamble, 4.6, 4.10, 4.11), 2 DESK-PASS with text fixes applied (4.2, 4.7), 8 NEEDS-EXE (4.1 for `0x00ea2596` only **[settled 2026-10-01, job `20261001T020218-team-a-bgcx`; see §4.1]**, 4.3, 4.4, 4.5, 4.8, 4.9, 4.12, 4.13). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-lua3-5.json`) is read.
 
 **Scope note:** this cluster's assignment was 11 specific names from the task brief's own high
 real-script-call-count list (`get_dist` 217 calls/35 scripts down to `on_vehicle_enter` 76/14). All
@@ -1530,12 +1530,14 @@ already used and had accepted for `lua_pushcclosure`/`lua_setfield`. This upgrad
   immediately followed by a call to `0x00ea2596` is not a second, distinct stack-accessor pair —
   decompiling `0x00ea2596` itself shows it takes no `lua_State`/index argument at all; it operates
   purely on the x87 floating-point register left behind by the immediately preceding `lua_tonumber`
-  call, performing a round-to-nearest double-to-64-bit-integer conversion (**[OPEN — rounding semantics: §2's method note, §3's preamble and §3.9 describe this same helper as truncation, round-half-correcting or banker's rounding; the descriptions disagree and the exact semantics is OPEN pending a re-read of `0x00ea2596`'s body. This entry is the single point of reference; other sites point here.]**). **[OPEN — desk review 2026-09-30: still undecided between round-half-even, round-to-nearest and truncation (MSVC `_ftol2`-style), and it affects every integer-coerced argument in this document; to be settled against the executable.]** This is a shared/compiler-
+  call, performing a ~~round-to-nearest~~ double-to-64-bit-integer conversion (~~**[OPEN — rounding semantics: §2's method note, §3's preamble and §3.9 describe this same helper as truncation, round-half-correcting or banker's rounding; the descriptions disagree and the exact semantics is OPEN pending a re-read of `0x00ea2596`'s body. This entry is the single point of reference; other sites point here.]**~~). ~~**[OPEN — desk review 2026-09-30: still undecided between round-half-even, round-to-nearest and truncation (MSVC `_ftol2`-style), and it affects every integer-coerced argument in this document; to be settled against the executable.]**~~ **[SETTLED 2026-10-01, job `20261001T020218-team-a-bgcx` (full body of `0x00ea2596` in `named/rand_int_0.txt`): the conversion is truncation toward zero, whatever the FPU rounding mode. The helper stores the x87 value to a 64-bit integer under the current rounding mode, reloads it, takes the difference from the original, and moves the result one step back toward zero whenever the stored integer went past the original value in the away-from-zero direction. Net effect: the MSVC run-time's ordinary C integer cast. So 2.9 becomes 2, -2.9 becomes -2, 0.5 becomes 0. Every integer-coerced argument in this document that goes through `lua_tonumber` + `0x00ea2596` truncates; the "round-to-nearest", "round-half-correcting" and "banker's rounding" descriptions elsewhere are struck. Do not confuse it with `0x00dad900` (cited in §16.2 and §22 as "round to integer"), which really rounds, half away from zero (§26.27). CONFIRMED — disassembly.]** This is a shared/compiler-
   provided numeric cast helper, not a Lua C API entry point. **Resolved: this pair is simply
   `lua_tonumber(L, idx)` with its result immediately rounded to an integer — not a second Lua stack
   accessor.** **[CONFIRMED — disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: rounding semantics of `0x00ea2596` — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`): CONFIRMED — `0x00ea2596` truncates toward zero (the NEEDS-EXE item is closed); `0x00dfe160` (`lua_tonumber`), `0x00dfde50` (`lua_gettop`) and `0x00dfe3a0` (`lua_pushnumber`) bodies match their identities; the other primitives of this entry were not re-read.**
 
 ### 4.2 `get_dist` (`0x00a4bdb0`) — 217 calls / 35 scripts
 
@@ -10096,6 +10098,155 @@ CONFIRMED parts — both argument/return shapes, the `vint_is_std_res` decision 
 `vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order; HYPOTHESIS —
 safe-frame edge meaning; OPEN — display-mode values, the two scale constants.**
 
+### 26.27 Bare globals registered by 0x00e0f900 (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020218-team-a-bgcx` (Team B request 9), with the body of the state
+creator 0x00e0e0b0 taken from sibling job `20261001T021641-team-a-yduu`. Registration details are in
+`spec-lua-bindings.md` §13.2 and §16.4; this unit records what a host must provide and the behaviour
+of the four bodies the job dumped. This document had no earlier entry for any of these names except
+the shared stub 0x007c9f50 (§6.1, §24.2, §27.17).
+
+**For hosts, in one paragraph.** The 24 names below are **bare globals**, not fields of a `math`
+table. The registrar 0x00e0f900 binds each one with a push-closure / set-field pair at the globals
+pseudo-index. Its only caller is the generic Lua-state creator 0x00e0e0b0, which runs it
+unconditionally for every state it makes, so **both the interface state and the gameplay state get
+all 24**. They are registered before `system_lib.lua` loads and before every other registrar. A host
+must therefore define all 24 in both states before running any preload file. **CONFIRMED —
+disassembly.** Whether the stock `math` table also exists depends on 0x00fccb70, called just before
+the registrar; that it opens the stock libraries is a **HYPOTHESIS**.
+
+**Roster, in registration order.** **CONFIRMED — disassembly** for name, order and native address.
+"Standard math" describes the name only; those bodies were not dumped.
+
+| # | Lua global | Native | Standard math or engine |
+|---|---|---|---|
+| 1 | `abs` | 0x00e0f140 | standard math |
+| 2 | `acos` | 0x00e0f180 | standard math |
+| 3 | `cos` | 0x00e0f1c0 | standard math |
+| 4 | `sin` | 0x00e0f210 | standard math |
+| 5 | `ceil` | 0x00e0f260 | standard math |
+| 6 | `debug_print` | 0x007c9f50 | engine (shared no-op stub) |
+| 7 | `assert_msg` | 0x007c9f50 | engine (same stub) |
+| 8 | `floor` | 0x00e0f3a0 | standard math |
+| 9 | `get_frame_time` | 0x00e0f400 | engine |
+| 10 | `include` | 0x00e0f010 | engine (`spec-lua-bindings.md` §16.3) |
+| 11 | `max` | 0x00e0f2c0 | standard math |
+| 12 | `min` | 0x00e0f330 | standard math |
+| 13 | `rand_float` | 0x00e0f430 | engine |
+| 14 | `rand_int` | 0x00e0f4c0 | engine |
+| 15 | `round` | 0x00e0f530 | engine |
+| 16 | `sizeof_table` | 0x00e0f580 | engine |
+| 17 | `sqrt` | 0x00e0f5c0 | standard math |
+| 18 | `strstr` | 0x00e0f080 | engine (C-library name) |
+| 19 | `thread_check_done` | 0x00e0f610 | engine |
+| 20 | `thread_kill` | 0x00e0f650 | engine |
+| 21 | `thread_new` | 0x00e0f680 | engine |
+| 22 | `thread_yield` | 0x00e0f0d0 | engine |
+| 23 | `closest_point_on_line_segment` | 0x00e0f740 | engine |
+| 24 | `which_side_of_2d_line` | 0x00e0f830 | engine |
+
+9 standard-math names, 15 engine functions.
+
+**Shared argument handling (the four dumped bodies).** Each reads the argument count with
+`lua_gettop` (0x00dfde50), then reads argument 1 (and argument 2 where used) with `lua_tonumber`
+(0x00dfe160) at a negative index counted from the top. None checks the count or the types, and none
+raises an error; a nil or non-numeric argument reads as 0. **CONFIRMED.** What happens when fewer
+arguments are passed than the function reads (the index then lands at or past the top of the stack)
+depends on the index resolver 0x00dfdc60, which was not dumped. Stock Lua 5.1 suggests a stale slot or
+nil. **HYPOTHESIS.** A host may treat a missing argument as 0; `rand_int(5)` is unspecified in the
+engine.
+
+**`rand_int(a, b)` (0x00e0f4c0).** **CONFIRMED — disassembly.**
+- Both arguments are converted to 32-bit integers by 0x00ea2596, which **truncates toward zero**
+  (§4.1).
+- If the second integer is smaller than the first, the two are swapped, so arguments may come in
+  **either order**: `rand_int(10, 1)` behaves like `rand_int(1, 10)`.
+- The draw helper 0x00dab660(lo, hi) returns `lo + (r mod (hi - lo + 1))`, using an unsigned 32-bit
+  modulus. The range is **inclusive at both ends**.
+- Examples: `rand_int(1.9, 3.9)` draws from {1, 2, 3}, and `rand_int(-1.5, 1.5)` from {-1, 0, 1}.
+- If `hi - lo + 1` overflows to 0 (only possible for the full 32-bit range), the engine divides by
+  zero. A host need not reproduce this.
+- Return: one Lua number (`lua_pushnumber`, 0x00dfe3a0).
+
+**`rand_float(a, b)` (0x00e0f430).**
+- Both arguments are read as numbers and immediately narrowed to **single precision**. **CONFIRMED.**
+- They are compared as floats and swapped when the second is strictly less than the first, so
+  `lo = min`, `hi = max`. A NaN comparison takes the no-swap path. **CONFIRMED.**
+- The draw helper 0x00dab6a0 takes the next ring value `r` (see below) as an unsigned 32-bit integer.
+  It multiplies `r` by a double constant at 0x0111e4c0 and narrows the product to a single-precision
+  `u`. It returns `lo + (hi - lo) * u`, narrowed to single precision, which is then pushed as a Lua
+  number. **CONFIRMED — disassembly** for the steps and the narrowings. The constant is 2^-32
+  (the dump shows only its low dword; that value is the only one that fits the unsigned fix-up
+  beside it): **HIGH CONFIDENCE.**
+- Range: `u` is nominally in [0, 1), but values of `r` close to 2^32 round `u` up to exactly 1.0 in
+  single precision. Treat the range as **[lo, hi], with `hi` reachable but rare**, and produce
+  single-precision values. **CONFIRMED** (the narrowings are in the listing).
+- Return: one Lua number.
+
+**`round(x)` (0x00e0f530).** **CONFIRMED — disassembly.**
+- The argument is read as a number and narrowed to single precision first, so 16777217 becomes
+  16777216 before rounding.
+- The helper 0x00dad900 then rounds **half away from zero**: for `x >= 0` it adds 0.5 in double
+  precision and truncates; otherwise it subtracts 0.5 and truncates.
+- Examples: `round(2.5) = 3`, `round(3.5) = 4`, `round(-2.5) = -3`, `round(-0.5) = -1`,
+  `round(0.4) = 0`, `round(-0.4) = 0` (integer zero, never negative zero). It is neither banker's
+  rounding nor `floor(x + 0.5)`.
+- Edge cases: NaN, and any value whose magnitude falls outside the 32-bit range, give -2147483648.
+  `round(nil)` returns 0.
+- Return: one Lua number holding the 32-bit integer.
+- This same helper is the "round to integer" cited in §16.2 and §22. It is not 0x00ea2596, which
+  truncates (§4.1).
+
+**`debug_print(...)` and `assert_msg(...)` (both 0x007c9f50).** **CONFIRMED — disassembly.**
+- The body reads the argument count, discards it, and returns 0 values. It reads no argument, does
+  not log, and has no side effect.
+- It accepts any number of arguments of any type. `assert_msg` does not assert.
+- The same stub serves many other registered names in at least nine registering functions (for
+  example `set_mission_author` §6.1, `bink_play` §24.2, `game_send_party_invites` §27.17); the
+  reference list in the dump is capped, so the full set is larger.
+- Host: bind both names to a function that accepts anything and returns nothing. Logging the
+  arguments for the host's own diagnostics is harmless, since scripts cannot observe it.
+
+**The shared random ring.** **CONFIRMED — disassembly** (shape).
+- Neither random function runs a generator. Every draw reads the next 32-bit value from a **ring of
+  8192 pre-filled entries at 0x013214d4** (0x013214d4..0x013294d3), indexed by a **cursor at
+  0x013214d0**.
+- After each read the cursor advances by one and wraps to 0 at 8192 (0x2000), so the sequence
+  repeats every 8192 draws.
+- The cursor is shared engine-wide. Besides the two draw helpers used here (0x00dab660 for
+  `rand_int`, 0x00dab6a0 for `rand_float`), the sibling routines 0x00dab5b0, 0x00dab5e0 and
+  0x00dab630 advance the same cursor. 0x00dab660 alone has at least 30 callers (list capped).
+  **Lua's random numbers are not isolated from the engine's.**
+- **OPEN — seeding and filling.** The only writer of the ring's contents in the reference list is
+  code at 0x010145e1..0x010145f0 that is not inside a recognised function. Whether the 8192 values
+  are a fixed table, a generator run at start-up or a time-seeded fill is not known. Three routines
+  that take the cursor's address (0x00dab5a0, 0x00dab810, 0x00dab830) look like save, restore or
+  reseed helpers; they were not dumped.
+- Host: until the fill is read, use the host's own generator behind the same contracts, and do not
+  promise sequence equality with the game.
+
+**OPEN — the remaining bodies.** The job did not dump the other 18 natives of the roster, and the
+following are therefore OPEN:
+- the nine standard-math names (`abs`, `acos`, `cos`, `sin`, `ceil`, `floor`, `max`, `min`, `sqrt`):
+  argument count, NaN handling, and whether `max`/`min` take more than two arguments;
+- `get_frame_time`, `sizeof_table`, `strstr`, the four `thread_*` names, and the two geometry
+  helpers;
+- a re-read of `include` (0x00e0f010; its desk-level description is in `spec-lua-bindings.md` §16.3).
+
+Stock `math.*` semantics is the obvious **HYPOTHESIS** for the math names. Note, though, that stock
+`math.max` is variadic and errors on a non-number, while all four dumped bodies skip checks and read a
+bad argument as 0. The ring fill/seed and 0x00fccb70 are OPEN as well. All of these are settled in the
+follow-up job `team-a/ghidra/jobs/bgcx-followup.json`.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`, with
+`20261001T021641-team-a-yduu` for 0x00e0e0b0): CONFIRMED — the roster, bare-global binding and
+both-states registration before any preload; `rand_int` (truncated arguments, either order,
+inclusive range); `rand_float` shape and single-precision narrowing; `round` half away from zero and
+its edge values; `debug_print`/`assert_msg` no-op; the ring, cursor and wrap and the shared cursor.
+HIGH CONFIDENCE — the 2^-32 scale constant. HYPOTHESIS — missing-argument behaviour; 0x00fccb70
+opens the stock libraries. OPEN — ring seeding, the 18 undumped bodies and the `include` re-read
+(job `bgcx-followup.json`).**
+
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
 Fourth part of a fresh four-part tranche, "ranks 551-650" (informal name; real TSV ranks span roughly 563-665). 11 of the 25 names resolve in the 311-entry UI-wrapper cluster anchored at 0x008430f0; the other 14 resolve in the 113-entry loop registrar at 0x00845aa0. All 25 open with the same shared `lua_CFunction` prologue idiom already established in this document's own front matter (`lua_gettop`=0x00dfde50, `lua_type`=0x00dfe040, `lua_toboolean`=0x00dfe1e0, `lua_tolstring`=0x00dfe210, `lua_tonumber`+round-cast=0x00dfe160+0x00ea2596, `lua_pushnumber`=0x00dfe3a0, `lua_pushstring`=0x00dfe420, `lua_pushboolean`=0x00dfe590) — cited by reference, not re-derived.
@@ -10734,3 +10885,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-09-30 (cloud, desk adversarial review of §27/§28): added a review-status line to every §27.N/§28.N entry (§27: 11 DESK-PASS, 10 with text fixes, 5 NEEDS-EXE; §28: 9, 11, 6) and a review-status summary under each heading (desk pass does not clear an entry; executable re-derivation queued); recorded the §27.2/§20.14 0x00a525a0 conflict's most likely reading as HYPOTHESIS in its marker; applied text fixes in place with strike-through/annotation (wrong §/WALLS.md citations, e.g. §19.6 in §27.5, §25.12/§25.25→§16.2/§25.13, WALLS.md→§26.2/§26.23; resolved the false 0x00853b10 polarity worry in §27.5; count slips in §27.20/§27.26/§28.17/§28.26; "new/second" claims annotated as already recorded, e.g. 0x00e0cef0 §8.13, 0x00e0ceb0 §1.9/§8.24, 0x007c9f50 §6.1/§24.2, bit 0x40@+9 §15.28, 0x005c50b0, 0x00d9e8b0 out-buffer; stub-reading qualifications on the 0x0101bxxx/0xd34xxx notes); added OPEN markers at 11 NEEDS-EXE claims plus 4 unstated details (§27.8 wrapper, §27.16 default, §28.3 conversion, §28.6 gate bit).
 - 2026-09-30 (cloud, desk adversarial review of §1-§5): added a review-status line to every §1-§5 unit and a summary under each heading (§1: 5 DESK-PASS, 4 with text fixes, 5 NEEDS-EXE; §2: 3/4/6; §3: 6/7/6; §4: 4/2/8; §5: 2/1/0); corrected the §2 registrar attribution per `spec-lua-bindings.md` §13.5, §1.9's callee roles per §21.27/§22.29/§28.18, §2.7's `9000` (bucket count, §5.3), §2.9's opcode `0x53` (§8.13), §4.2's `0x004dcf00` role (§20.24), §4.7's entry/forwarder split and count/cross-reference slips (§1.4, §1.13, §2.3, §2.5, §3.13, §3.18); added §10.8's `+0x1f00`/`+0xf8` hook sub-record bases to §3.2/§3.3/§3.12/§3.13 and `0x0094cc60`'s role to §3.6; added OPEN markers at every NEEDS-EXE claim; noted the §5 recomputations (hash initial value 0, not stated in `spec-texture-format.md` §8.2). Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020200-team-a-nzxf`): corrected §2.9/§8.13/§26.10/§26.23 (fade request helper order is `(durationMs, callback, flag)`, `screen_fade_do` is a direct Lua call in the UI state, not a command queue; the opcode-0x53 record layout), §8.21 (prep tears down the current scene and fills the pending slot; it does not start a load; the extra values are constants; `0x0101b530` is a stub), §14.23 (fast-path polarity; the sense-inversion item is closed); added to §26.9; added §26.24 (screen fade state machine), §26.25 (zscene lifecycle) and §26.26 (`vint_is_std_res`/`vint_get_safe_frame`, no earlier entry here), each with a next-dump list. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26.27 (the 24 bare globals of `0x00e0f900`: roster, both-states registration, `rand_int`/`rand_float`/`round`/`debug_print`/`assert_msg` behaviour, the shared 8192-entry random ring; seeding and the 18 undumped bodies OPEN, follow-up job `bgcx-followup.json`). Old text struck or annotated in place.

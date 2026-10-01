@@ -10,7 +10,7 @@
 
 **Review status summary (2026-09-30).** A desk adversarial review checked every unit of this spec against the other specs (and, for §12–§17, against Team B's name and data files); nothing was re-derived from the executable. §1–§11 (24 units): 7 DESK-PASS, 9 DESK-PASS with text fixes applied, 8 NEEDS-EXE. §12–§17 (33 units): 9 DESK-PASS, 12 DESK-PASS with text fixes applied, 12 NEEDS-EXE. Each unit ends with its own review-status line. **A desk pass does not clear a unit for implementation; clearing needs re-derivation against the executable.** High-impact findings for implementers:
 (a) the 8 dual-registered names of §13.5 (`audio_object_post_event`, `audio_stop`, `coop_is_active`, `game_is_active_input_gamepad`, `hud_display_set_element`, `hud_display_create_state`, `hud_display_commit_state`, `hud_display_remove_state`) are registered into BOTH Lua states, although the single-tag name lists (`lua_all_registered_1430/1435/1490_tagged.txt`) tag all 8 `gameplay` only;
-(b) the 24-pair bare-global block registered by `0x00e0f900` (§13.2, §16.3) is Lua-visible but outside the 1,490 count, and it is not pure standard library (§16.3: it includes the engine primitive `FUN_00e0f010`); Team B's `lua_reconciliation_called_not_registered_101.tsv` shows real scripts calling bare globals absent from every census file — `debug_print` 816 calls, `max` 704, `floor` 449, `rand_int` 166, `abs` 97, `min` 87, `rand_float` 84, `round` 37, `ceil` 28 — but which of these are among the 24 pairs, and which state receives the block, is OPEN (§13.2);
+(b) the 24-pair bare-global block registered by `0x00e0f900` (§13.2, §16.3) is Lua-visible but outside the 1,490 count, and it is not pure standard library (§16.3: it includes the engine primitive `FUN_00e0f010`); Team B's `lua_reconciliation_called_not_registered_101.tsv` shows real scripts calling bare globals absent from every census file — `debug_print` 816 calls, `max` 704, `floor` 449, `rand_int` 166, `abs` 97, `min` 87, `rand_float` 84, `round` 37, `ceil` 28 — ~~but which of these are among the 24 pairs, and which state receives the block, is OPEN (§13.2)~~ **[Settled 2026-10-01, job `20261001T020218-team-a-bgcx`: all nine of these names are among the 24, and 15 of the 24 are engine functions, not standard math; the 24 are bare globals, registered into BOTH Lua states by the generic state creator `0x00e0e0b0` before `system_lib.lua` and before every other registrar. CONFIRMED — disassembly. Roster: §13.2; behaviour of `rand_int`, `rand_float`, `round`, `debug_print`/`assert_msg`: `spec-lua-api-behaviour.md` §26.27.]**;
 (c) other fixes: `DAT_02319570` is `game_peg_load_with_cb`'s request-slot table, not a mission trigger table (§8.5); the `0x0087ba20` gate is the co-op host check, not "mission active" (§12.5, §13.6); the §9.3/§12.7 setter-slot orientation is still unresolved.
 
 ---
@@ -1030,8 +1030,62 @@ reuse the same literal name strings as the MSVC CRT's own `___libm_error_support
 those exact strings are *also* independently used as real Lua-visible global names by a 24-pair block inside
 one of this section's own registration wrappers (`0x00e0f900`), confirmed by reading that wrapper's own
 `lua_pushcclosure`/`lua_setfield` call pair sequence directly rather than trusting the string coincidence —
-this is Lua's own `math` library, registered by hand rather than via a static table, and is not counted
-further here since it is standard-library, not new API surface. **[⚠ Qualified §16.3: one of these 24 pairs is `FUN_00e0f010`, an engine "mark library opened" primitive, so the block is not pure standard library; and these names are bound as bare globals, not into a `math` table. Team B's `lua_reconciliation_called_not_registered_101.tsv` shows real scripts calling bare globals absent from every census file (e.g. `max` 704 calls, `floor` 449, `rand_int` 166, `rand_float` 84, `round` 37, `debug_print` 816); which of them are among the 24 pairs is not established.]** **[OPEN — desk review 2026-09-30: the 62-site budget does not close: 4 base-library sites + the `0x00e0f900` block + ~57 wrapper sites leaves no room for the `0x00e0ef80` (§13.6) and `0x00e1e445` (§13.7) sites, and §17 partitions the 62 differently (57 `LUA_GLOBALSINDEX` = 55 closure + 2 base, plus 5 other); list all 62 sites of `0x00dfe830` with containing function, index and pushed value type, and dump the 24 pairs of `0x00e0f900`; to be settled against the executable.]**
+~~this is Lua's own `math` library, registered by hand rather than via a static table, and is not counted
+further here since it is standard-library, not new API surface.~~ **[Corrected 2026-10-01, job `20261001T020218-team-a-bgcx`: the block is registered by hand (one push-closure/set-field pair per name, 24 iterations), but it is not Lua's `math` library. Only 9 of the 24 names are standard math names, and 15 are engine functions; all 24 are bound as bare globals, not into a table. It is API surface a host must provide. Full roster below. CONFIRMED — disassembly.]** **[⚠ Qualified §16.3: one of these 24 pairs is `FUN_00e0f010`, an engine "mark library opened" primitive, so the block is not pure standard library; and these names are bound as bare globals, not into a `math` table. Team B's `lua_reconciliation_called_not_registered_101.tsv` shows real scripts calling bare globals absent from every census file (e.g. `max` 704 calls, `floor` 449, `rand_int` 166, `rand_float` 84, `round` 37, `debug_print` 816); ~~which of them are among the 24 pairs is not established.~~ **[2026-10-01, job `20261001T020218-team-a-bgcx`: all six are among the 24 (roster below). CONFIRMED — disassembly.]**]** **[OPEN — desk review 2026-09-30: the 62-site budget does not close: 4 base-library sites + the `0x00e0f900` block + ~57 wrapper sites leaves no room for the `0x00e0ef80` (§13.6) and `0x00e1e445` (§13.7) sites, and §17 partitions the 62 differently (57 `LUA_GLOBALSINDEX` = 55 closure + 2 base, plus 5 other); list all 62 sites of `0x00dfe830` with containing function, index and pushed value type, and ~~dump the 24 pairs of `0x00e0f900`~~ **[done 2026-10-01, job `20261001T020218-team-a-bgcx`; roster below]**; to be settled against the executable. **[Still OPEN 2026-10-01: the 62-site budget itself; this job shows only that the registrar contributes one call site (inside its loop) and does not list all 62.]**]**
+
+**The 24 bare globals of `0x00e0f900` (re-derived from the executable 2026-10-01, job `20261001T020218-team-a-bgcx`).**
+`0x00e0f900` takes the Lua state as its only argument. It fills a local array of 24 name/function
+pairs, then loops 24 times; each pass pushes the function as a closure with no upvalues
+(`lua_pushcclosure`, `0x00dfe4f0`) and stores it under its name in the globals table (`lua_setfield`,
+`0x00dfe830`, at the globals pseudo-index -10002). No table is created first. This is the
+`lua_register` idiom of §13.1, so **the 24 names are bare globals**: a script that calls `floor` gets
+`0x00e0f3a0`, and `math.floor` (if the stock library is opened) is a separate binding. **CONFIRMED —
+disassembly.** Five of the names are three-letter strings that the dump shows only as raw dwords; they
+decode to `abs`, `cos`, `sin`, `max` and `min`. **CONFIRMED.**
+
+| # | Lua global | Native | Kind |
+|---|---|---|---|
+| 1 | `abs` | `0x00e0f140` | standard math name |
+| 2 | `acos` | `0x00e0f180` | standard math name |
+| 3 | `cos` | `0x00e0f1c0` | standard math name |
+| 4 | `sin` | `0x00e0f210` | standard math name |
+| 5 | `ceil` | `0x00e0f260` | standard math name |
+| 6 | `debug_print` | `0x007c9f50` | engine (shared no-op stub, §13.6) |
+| 7 | `assert_msg` | `0x007c9f50` | engine (same stub) |
+| 8 | `floor` | `0x00e0f3a0` | standard math name |
+| 9 | `get_frame_time` | `0x00e0f400` | engine |
+| 10 | `include` | `0x00e0f010` | engine ("mark library opened", §16.3) |
+| 11 | `max` | `0x00e0f2c0` | standard math name |
+| 12 | `min` | `0x00e0f330` | standard math name |
+| 13 | `rand_float` | `0x00e0f430` | engine |
+| 14 | `rand_int` | `0x00e0f4c0` | engine |
+| 15 | `round` | `0x00e0f530` | engine |
+| 16 | `sizeof_table` | `0x00e0f580` | engine |
+| 17 | `sqrt` | `0x00e0f5c0` | standard math name |
+| 18 | `strstr` | `0x00e0f080` | engine (C-library name) |
+| 19 | `thread_check_done` | `0x00e0f610` | engine |
+| 20 | `thread_kill` | `0x00e0f650` | engine |
+| 21 | `thread_new` | `0x00e0f680` | engine |
+| 22 | `thread_yield` | `0x00e0f0d0` | engine |
+| 23 | `closest_point_on_line_segment` | `0x00e0f740` | engine |
+| 24 | `which_side_of_2d_line` | `0x00e0f830` | engine |
+
+Names, order and native addresses: **CONFIRMED — disassembly.** "Standard math name" describes the
+name only; the nine math-named bodies were not dumped, so whether they behave like stock `math.*` is
+**OPEN** (follow-up job `team-a/ghidra/jobs/bgcx-followup.json`). The libm name-string coincidence
+noted above is real, but the binding is too, because the registrar stores the function pointers
+itself. All six script-called names Team B listed (`max`, `floor`, `rand_int`, `rand_float`, `round`,
+`debug_print`) are in the roster, as are `abs`, `min` and `ceil`. **CONFIRMED.**
+
+**Which state.** `0x00e0f900` has exactly one caller in the binary, a plain call inside the generic
+state creator `0x00e0e0b0` (§16.1 step 1(a), §16.2). That creator calls it unconditionally for every
+state it makes: after it creates the raw state and calls `0x00fccb70`, and before it loads
+`system_lib.lua`. Its two callers are the interface bring-up (`0x00e1e460`) and the gameplay bring-up
+(`0x00a1fa10`). **Both Lua states therefore get all 24 bare globals, before any preload file and before
+every other registrar.** **CONFIRMED — disassembly** (this job's xref of `0x00e0f900`; the body of
+`0x00e0e0b0` from sibling job `20261001T021641-team-a-yduu`). That `0x00fccb70` opens the stock
+standard libraries is **HYPOTHESIS** (position only; body not dumped). Behaviour of the dumped
+functions: `spec-lua-api-behaviour.md` §26.27.
 
 The remaining ~57 sites, spread across 43 distinct, otherwise-unrelated engine functions between `0x005a01d0`
 and `0x00bcd240`, each push one real C function pointer via `lua_pushcclosure` (`nup`=0) and bind it to one
@@ -1110,6 +1164,8 @@ those carry addresses and decompiler artifacts and must stay Team-A-internal. Al
 names-only file instead.**
 
 **Review status (2026-09-30): NEEDS-EXE: 42 wrappers vs 49 calls, the 43-function count, and the 62-site partition — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): partly re-derived from the executable (job `20261001T020218-team-a-bgcx`): the `0x00e0f900` block — CONFIRMED: 24 pairs, names, order, addresses, bare-global binding, registered in both states by `0x00e0e0b0`; the "Lua's own `math` library" framing is corrected (15 of 24 are engine functions); HYPOTHESIS: `0x00fccb70` opens the stock libraries; OPEN: the 20 undumped bodies, and still NEEDS-EXE for the 42/49 wrapper count, the 43-function count and the 62-site partition.**
 
 ### 13.3 What this settles
 
@@ -1411,9 +1467,11 @@ The top-level UI/engine bring-up (`FUN_008489e0`, real boot caller `0x005d245c` 
 
 ### 16.3 `FUN_00e0f010` ("Lua chunk-name builder," §14.8) — re-examined fully, is NOT part of either preload sequence
 
-**Its only reference anywhere in the binary is a DATA reference, never a CALL** — it is itself one of the 24 `{namePtr,funcPtr}` pairs the hand-rolled `math`-library registrar (`FUN_00e0f900`, §13.2) registers, i.e. a Lua-CALLABLE function, not a native helper invoked during bring-up. **This is the exact "registrar-array entry vs. real call" trap `WALLS.md` already warns about — caught here on a second, independent instance.** Its real body: reads its Lua-stack string argument, checks case-insensitively whether it already contains `".lua"`, appends the suffix if not, then passes the result to `FUN_00e0e140` — a fixed 64-slot "has this library name already been opened" bookkeeping list, with exactly 2 callers (both inside `FUN_00e0f010`) and no connection to the real file-loading path (`FUN_00e0d800`/`FUN_00e0df90`, both fully traced). **Correction to §14.8's own characterization: this is a Lua-callable "mark library opened" primitive, not a chunk-name builder invoked during native bring-up — it plays no role in either state's preload sequence.**
+**Its only reference anywhere in the binary is a DATA reference, never a CALL** — it is itself one of the 24 `{namePtr,funcPtr}` pairs the hand-rolled ~~`math`-library~~ **[bare-globals; not a `math` library, corrected 2026-10-01, §13.2]** registrar (`FUN_00e0f900`, §13.2) registers, i.e. a Lua-CALLABLE function **[2026-10-01, job `20261001T020218-team-a-bgcx`: it is pair #10, bound to the bare Lua global `include`; its only reference is the data store at `0x00e0f9a8` inside the registrar. CONFIRMED — disassembly. The body described below was not re-read by that job.]**, not a native helper invoked during bring-up. **This is the exact "registrar-array entry vs. real call" trap `WALLS.md` already warns about — caught here on a second, independent instance.** Its real body: reads its Lua-stack string argument, checks case-insensitively whether it already contains `".lua"`, appends the suffix if not, then passes the result to `FUN_00e0e140` — a fixed 64-slot "has this library name already been opened" bookkeeping list, with exactly 2 callers (both inside `FUN_00e0f010`) and no connection to the real file-loading path (`FUN_00e0d800`/`FUN_00e0df90`, both fully traced). **Correction to §14.8's own characterization: this is a Lua-callable "mark library opened" primitive, not a chunk-name builder invoked during native bring-up — it plays no role in either state's preload sequence.**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): partly re-derived from the executable (job `20261001T020218-team-a-bgcx`): CONFIRMED — `0x00e0f010` is the Lua global `include` (pair #10 of `0x00e0f900`) and its only reference is the registrar's data store; the "mark library opened" body is not re-read (still desk-level).**
 
 ### 16.4 Bottom line for a peer Lua host
 
@@ -1421,7 +1479,7 @@ The top-level UI/engine bring-up (`FUN_008489e0`, real boot caller `0x005d245c` 
 - Preload into the gameplay state, in order: `system_lib.lua`, `game_lib.lua`.
 - A per-mission secondary file (`<mission-stem>.lua`) also loads into the gameplay state at a separate, later (non-boot) trigger point, firing `<stem>_init` then `<stem>_main` afterward if defined — real and confirmed, exact stem-source chain not fully traced to its ultimate origin. **[⚠ also see §14.5: each `<mission>.lua` also exists as a type-32 "Mission LUA script" resource; the two loads are not reconciled (§16.2 OPEN note).]**
 - **[Added, desk review 2026-09-30:]** Register the 8 dual-registered names of §13.5 (`audio_object_post_event`, `audio_stop`, `coop_is_active`, `game_is_active_input_gamepad`, `hud_display_set_element`, `hud_display_create_state`, `hud_display_commit_state`, `hud_display_remove_state`) into BOTH states, even though the tagged name files show them as `gameplay` only.
-- **[Added, desk review 2026-09-30:]** The 24 bare globals registered by `0x00e0f900` (§13.2, §16.3) are Lua-visible and outside the 1,490 count; which state receives them is not stated, and which script-called bare names (e.g. `max`, `floor`, `rand_int`, `round`, `debug_print`) are among them is OPEN (§13.2).
+- **[Added, desk review 2026-09-30:]** The 24 bare globals registered by `0x00e0f900` (§13.2, §16.3) are Lua-visible and outside the 1,490 count; ~~which state receives them is not stated, and which script-called bare names (e.g. `max`, `floor`, `rand_int`, `round`, `debug_print`) are among them is OPEN (§13.2).~~ **[Settled 2026-10-01, job `20261001T020218-team-a-bgcx`:]** they are **bare globals** (not a `math` table), registered into **BOTH** Lua states by the generic state creator `0x00e0e0b0`, after the raw state is created and before `system_lib.lua` and every other registrar. A host must define all 24 (§13.2 roster) as globals in both states before running any preload file, so `system_lib.lua` may use them at top level. All of `max`, `floor`, `rand_int`, `rand_float`, `round`, `debug_print`, `abs`, `min` and `ceil` are among them. Per-state order: (stock libraries, HYPOTHESIS) → the 24 bare globals → `system_lib.lua` → that state's own registrars and files (§16.1/§16.2). Contracts: `rand_int(a, b)` is inclusive at both ends, truncates both arguments toward zero and accepts them in either order; `round(x)` rounds half away from zero; `debug_print`/`assert_msg` accept anything and return nothing (`spec-lua-api-behaviour.md` §26.27). **CONFIRMED — disassembly.**
 
 **Team B request 8 (2026-09-30): does each preload run ONLY in its named state?** Team B's mission run (bridge job `…-knyf`) found that all 9 missions that get past `_start` stop on an attempt to call the nil global `vint_is_std_res` at `vint_lib.lua` line 96. That happens because their host runs `vint_lib.lua` in both states, while the `vint_*` natives are registered only in the interface state (§13.7).
 
@@ -1438,6 +1496,8 @@ The top-level UI/engine bring-up (`FUN_008489e0`, real boot caller `0x005d245c` 
 *How it will be settled:* exe job `team-a/ghidra/jobs/teamb-request-8-preloads.json`. It lists every use of each preload file-name string and every caller of the state-creation and file-load functions, and dumps both bring-up bodies.
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): partly re-derived from the executable (job `20261001T020218-team-a-bgcx`): CONFIRMED — the bare-globals bullet (both states, before any preload, all script-called names present); the other bullets and the Team B request 8 answer are unchanged by this job.**
 
 ## 17. `ID_MISSIONS` and the cell-phone UI enum — not a missing native registration, a real cross-document Lua dependency; and a genuine negative on native-pushed global constants (2026-09-30)
 
@@ -1464,3 +1524,4 @@ Once this chunk has run once in a given Lua state, these 11 names sit as ordinar
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 2 left (see review).
 - 2026-09-30 (cloud, desk adversarial review of §1–§17, `review/spec-consistency.md`): added a review-status line to all 57 reviewed units (§1–§11: 7 DESK-PASS, 9 with text fixes, 8 NEEDS-EXE; §12–§17: 9, 12, 12) and a review-status summary after the front matter; applied text fixes in place (1,325→1,490 pointers in §1/§11, §7.4 0x2cc→0x4cc, §8.5 two→three functions, §10.1 six→seven helpers, §13.5 `game_coop_*` 7→5, §17 three→six preload files, §12.9 banner 155 again, §14.5 55/12/12 manifest split, §13.4 arithmetic and post-1490 residual); closed the §7.2/§9.2 third-hash OPEN (CRC-32 `0x00d9e740`, `spec-tables-environment.md` §1.4); marked the `DAT_02319570` mission-trigger reading superseded by `spec-lua-api-behaviour.md` §8.24 (§8.5, §10.2, §11, §12.7, §14.9) and the `0x0087ba20` "mission active"/"head/tail-list-empty" wording superseded by §6.22/§8.27 (§12.5, §13.6, §14.5); added OPEN notes for every NEEDS-EXE finding, including §4's CONFIRMED label.
 - 2026-09-30 (cloud, Team B request 8): §16.4 answers "does each preload run only in its named state" at desk level (HIGH CONFIDENCE: `vint_lib`/UI preloads interface-only, `game_lib` gameplay-only, `system_lib` both; the whole-binary negative is OPEN), with exe job `teamb-request-8-preloads.json`.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu` for the body of `0x00e0e0b0`): §13.2 — struck the "Lua's own `math` library, not counted" framing (15 of the 24 pairs are engine functions), added the full 24-name roster and the state answer (both states, from the generic state creator, before any preload); §16.3 — `0x00e0f010` is the Lua global `include`; §16.4 — bare-globals bullet settled; front matter item (b) annotated. Old text struck or annotated in place.

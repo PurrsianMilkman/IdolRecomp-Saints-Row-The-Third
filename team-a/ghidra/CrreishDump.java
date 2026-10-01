@@ -15,6 +15,8 @@
 //                      raw little-endian immediate/displacement scan), with its containing function.
 //   str   <text ...>   find each exact NUL-terminated ASCII string and report its uses, like `lua`
 //                      without dumping the candidates.
+//   ptrs  <addr ...>   read count:N consecutive dwords of a static pointer table at each address and print,
+//                      per index, the value and the string it points to (if any). Read-only, like the rest.
 //
 // Options (write them as key:value in bridge jobs; key=value is split apart by the Windows batch launcher):
 //   depth=N      callee recursion depth for dumps (default 1; 0 = only the named functions)
@@ -23,6 +25,7 @@
 //   xrefs=N      per-global cap on reference sites listed inside a dump (default 25)
 //   window=N     instructions scanned after a name-string use for code pointers (default 6)
 //   nodecomp=1   skip the decompiler (listing only)
+//   count=N      ptrs mode: number of dwords to read (default 16)
 //
 // @category Crreish
 
@@ -63,7 +66,7 @@ import java.util.TreeSet;
 
 public class CrreishDump extends GhidraScript {
 
-    private int depth = 1, maxFuncs = 40, maxInsn = 600, xrefCap = 25, window = 6;
+    private int depth = 1, maxFuncs = 40, maxInsn = 600, xrefCap = 25, window = 6, count = 16;
     private boolean decompile = true;
     private DecompInterface decomp;
     private Listing listing;
@@ -97,6 +100,7 @@ public class CrreishDump extends GhidraScript {
                     case "xrefs": xrefCap = Integer.parseInt(v); break;
                     case "window": window = Integer.parseInt(v); break;
                     case "nodecomp": decompile = !"1".equals(v); break;
+                    case "count": count = Integer.parseInt(v); break;
                     default: items.add(a); // not an option key: keep it as a search item (e.g. a name containing ':')
                 }
             } else {
@@ -123,6 +127,7 @@ public class CrreishDump extends GhidraScript {
                     case "str": doLua(item, false); break;
                     case "func": doFunc(item); break;
                     case "xref": doXref(item); break;
+                    case "ptrs": doPtrs(item); break;
                     default: index.println("unknown mode " + mode); return;
                 }
             } catch (Exception e) {
@@ -343,6 +348,27 @@ public class CrreishDump extends GhidraScript {
         describeGlobal(w, a, Integer.MAX_VALUE);
         w.close();
         index.println("  xref_" + sanitize(item) + ".txt");
+    }
+
+    // ptrs: read `count` consecutive little-endian dwords starting at the item address (a static pointer
+    // table) and print, per index, the dword and, when it points into initialized memory, the string there.
+    private void doPtrs(String item) throws Exception {
+        Address a = toAddr(item);
+        PrintWriter w = writer("ptrs_" + sanitize(item) + ".txt");
+        w.println("@ " + a + " block " + blockName(a) + (fileBacked(a) ? " file-backed" : " NOT file-backed (zero-fill/runtime)") + ", " + count + " dwords");
+        for (int i = 0; i < count; i++) {
+            Address e = a.add(4L * i);
+            long v = mem.getInt(e) & 0xffffffffL;
+            String txt = "";
+            try {
+                Address t = toAddr(v);
+                MemoryBlock b = mem.getBlock(t);
+                if (b != null && b.isInitialized()) txt = describeData(t);
+            } catch (Exception ex) { /* not an address */ }
+            w.println(String.format("%4d  %s  0x%08x%s", i, e, v, txt));
+        }
+        w.close();
+        index.println("  ptrs_" + sanitize(item) + ".txt");
     }
 
     private void describeGlobal(PrintWriter w, Address a, int cap) throws Exception {
