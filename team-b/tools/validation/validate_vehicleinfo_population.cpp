@@ -609,7 +609,10 @@ int main(int argc, char** argv) {
     std::printf("  Max_Hitpoints present:          %lld / %lld\n", veh.haveMaxHitpoints, veh.vehicles);
     std::printf("  Static_Load_Friction present:    %lld / %lld\n", veh.haveStaticLoadFriction, veh.vehicles);
     std::printf("  Normal_Spin_Damping present:      %lld / %lld\n", veh.haveNormalSpinDamping, veh.vehicles);
-    GATE(veh.vehicles == 0 || veh.haveMass == veh.vehicles, "Mass is supplied by every real vehicle (spec 7.7's DLC finding, at full scale): %lld / %lld",
+    // Spec 7.7's "every vehicle supplies Mass" was a DLC-sample result; spec
+    // 7.11 (2026-09-30) records the full-data figure: absent in 3/123.
+    GATE(veh.vehicles == 0 || veh.vehicles - veh.haveMass == 3,
+         "Mass absent in exactly 3 real vehicles (spec 7.11 full-data figure; 7.7's DLC-only 'every' superseded): present %lld / %lld",
          veh.haveMass, veh.vehicles);
     for (const std::string& s : veh.massAbsent) std::printf("    Mass absent: %s\n", s.c_str());
 
@@ -635,8 +638,11 @@ int main(int argc, char** argv) {
     GATE(veh.downshiftCountOver5 == 0, "<= 5 downshifts in every vehicle: violations %lld", veh.downshiftCountOver5);
     std::printf("  downshift count == gear count - 1: mismatches %lld / %lld checked (informational, spec 7.7 found 12/12 held on the DLC sample)\n",
                 veh.downshiftGearPairsMismatch, veh.downshiftGearPairsChecked);
-    GATE(veh.rawSpeedOver100 == 0, "Maximum_Speed[_With_Nitrous] <= 100 (the mph cap) in raw XML text: violations %lld / %lld", veh.rawSpeedOver100,
-         veh.rawSpeedChecked);
+    // Spec 7.11: in the full data, 2/210 raw values exceed the 100 mph cap
+    // (300, clamped on load per 7.3); 7.7's "all <= 100" was DLC-only.
+    GATE(veh.rawSpeedOver100 == 2,
+         "Maximum_Speed[_With_Nitrous] over the 100 mph cap in raw XML text in exactly 2 occurrences (spec 7.11; clamped on load, 7.3): violations %lld / %lld",
+         veh.rawSpeedOver100, veh.rawSpeedChecked);
     for (const std::string& s : veh.speedViolations) std::printf("    speed cap violation: %s\n", s.c_str());
     GATE(veh.idOver255 == 0, "ID fits u8 (raw text <= 255): violations %lld / %lld", veh.idOver255, veh.idChecked);
     {
