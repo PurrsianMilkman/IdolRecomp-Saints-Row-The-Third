@@ -258,6 +258,12 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   OPEN-state refusals, whole run: co-op session 876, vehicle-store active 565, tutorial table 173,
   named-object resolution 138, character max HP 120, character ignore-AI 120, Wwise ids 6, key bindings 5,
   co-op join type 1. **This ranking is the list of engine values the next specs should give.**
+- **`--preload-states=spec16.4-highconf`** (manager ruling 2026-09-30, after Team A's desk answer to request 8):
+  opt-in `lua_host_run` flag, **HYPOTHESIS, off by default**. It runs the §16.4 preloads only in the state
+  §16.4 names (UI: `vint_lib`/`game_ui_globals`/`vdo_base_object`/`vdo_anim_object`/`vdo_input_tracker`;
+  gameplay: `game_lib`; both: `system_lib`). §16.4 is HIGH CONFIDENCE (desk), NOT cleared ("never loaded into
+  the other state" OPEN until Team A's exe job). This is an evidence run only; it becomes the default once
+  §16.4 is cleared. Job 02d runs the mission drive with it, diffed against `tkjl` (jklk has no output).
 - **06 `20260930T231306-team-b-epre`** (CTAB census, for Team A's render-pipeline re-derivation): 38 archives,
   844 `.fxo_pc`, **7,276 blobs** (= §9.98), 7,276 CTAB well-formed, 0 malformed, 0 disassembly failures;
   3,731 VS / 3,545 PS; 52,990 constants (float4 43,501, sampler 9,359, bool 130). **Every** VS constant
