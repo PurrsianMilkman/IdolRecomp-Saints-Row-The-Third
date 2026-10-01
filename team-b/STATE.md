@@ -1,4 +1,4 @@
-# STATE — real denominators, updated as of 2026-09-30 (cloud phase; see HANDOFF.md resume note)
+# STATE — real denominators, updated as of 2026-10-01 (wrap-up; see HANDOFF.md resume block, 2026-10-01 WRAP-UP)
 
 **Cloud phase 2026-09-30:** portable GCC build + CI (45 ctest suites), fuzzing (16 harnesses, 5 allocation bugs fixed), 105 validation tools built on Linux, `sr3vintdoc` CONFIRMED-scope reader, Lua host with no invented engine values (OPEN-state refusals). See HANDOFF's cloud entries. **Correction:** see the mission-driving row — the `vint_is_std_res` claim, and its first correction, were both partly wrong. **Implemented pre-review, pending exe re-clearance** (manager decision 2026-09-30, option (a): kept working, no behaviour change; fixed or reverted to a labelled stub when Team A's re-derivation lands): `game_UI_audio_play` (§2.2), `game_get_key_name` (§2.3), `coop_is_active` (§3.1), `set_ignore_ai_flag` (§3.4), `ai_add_enemy_target` (§3.9), `on_take_damage` (§3.13). No new work from §1-§5 until cleared.
 
@@ -10,6 +10,18 @@ file does not re-derive or re-argue anything, it just makes the numbers scannabl
 this file whenever a HANDOFF §9.xx entry changes one of these counts; if this file and HANDOFF.md ever
 disagree, HANDOFF.md is authoritative (this is an index, same relationship as `MEMORY.md` to memory
 files elsewhere).
+
+## Lua host status at wrap-up (2026-10-01)
+
+| item | state |
+|---|---|
+| ctest (GCC Release, Debug+ASan/UBSan) | 48/48 |
+| preload routing | §16.4 per-state routing is the default; `include` census: 0 calls in 804 scripts |
+| bare globals | 24 in both states; base+coroutine only; truncating conversion; `rand_int` draws `lo` (fill OPEN) |
+| fade / zscene / co-op / tutorial / store | implemented per §26.24–§26.28 as first synced; newer §26.24–26.26 text not yet implemented |
+| engine-state slots with a value at start | 15/40 on the integration fixture |
+| last mission run with a result | `onbs` (pre-batch): 9/49 past `_start` |
+| pending mission run | `20261001T221335-team-b-cchj` (post-batch; preload default and tag) |
 
 ## Binary/container format readers (`include/sr3*` domain libraries, excluding the xtbl-table-group
 libraries below and the render-side libraries, which get their own tables)
@@ -31,6 +43,7 @@ against. Per-tool counts: `team-b/results/baseline_2026-10-01.md` (aggregate cou
 | `20261001T010408-team-b-zsqd` | lua_host_run + 4 Lua censuses | 5 | all exit 0 |
 | `20261001T015049-team-b-hzim` | saves + profile (owner-approved 2026-10-01) | 6 | save CRC (16 snapshots / 4 directories), summary, activity names, profile (3 distinct, all gates), xtbl with `--saves` (13 snapshots: 4,056/4,056 unlockable ids, 130/130 cheat ids) pass; `validate_save_snapshot` 2 gates fail because the save set has changed since the spec's §10.7 table (corrected by nnyi: the drifted snapshot is LocalAppData slot 00, saved 2026-09-25; 15/16 rows; non-zero bytes 201,281 vs 201,363). Separately, Documents slot 04 (a 2011 save matching §10.7 row 4) has statistic 164 = 3 vs 4 stunt jumps found, which contradicts the spec rather than drifting (HANDOFF Requests to Team A, item 10); the tool now gates format invariants only and reports §10.7 and other save-set figures as a historical sample with snapshot ids (`--strict` keeps the old gates); re-run `20261001T015631-team-b-nnyi` (10i): default mode exit 0 (all format gates pass; historical sample 15 match / 3 drift), `--strict` exit 1 as designed |
 | `20261001T114145-team-b-onbs` | mission drive baseline before Team A's answers (9de679b, job 02f) | 2 | exit 0, 285 s; `bridge_diff` ugaa → onbs: 9/49 past `_start`, no per-mission changes; `open_state_slots_with_values_at_start=0/19`; the only refusal-key change is the relabel of the vehicle-store flag (now named 0x022cdf08, 565 hits, as before) |
+| `20261001T170101-team-b-ufxq` | `lua_include_census` (job 11, spec-lua-bindings §16.4 OPEN residue 1) | 2 | 38 archives, 804 scripts: **0** `include` calls, so no shipped script queues a preload into another state; residue 1 closed (no) |
 
 Excluded on purpose: one-off probes/dumps, GPU render tools, 3 tools needing uncommitted input lists (`team-b/bridge-jobs/README.md`).
 
