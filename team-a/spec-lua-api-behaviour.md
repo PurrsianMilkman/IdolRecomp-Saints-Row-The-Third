@@ -3806,9 +3806,12 @@ installer (`0x0087efe0`) stores zero and is the subsystem shutdown; no resolved 
 session pointer (the installer is undefined code at `0x0087c341`/`0x0087c359`). Whether single player has a
 session, and so whether this function is true in single player, remains OPEN; implement false. Teardown
 (`0x0087e670`) zeroes `+0x5c` before the singleton is cleared, so during a session's wind-down this
-function is false. CONFIRMED — disassembly.]**
+function is false. CONFIRMED — disassembly.]** **[2026-10-01, job `20261001T121532-team-a-gdhw`: the installer is `0x0087c340`. It
+stores the session pointer into `0x024d8534` and publishes this same `+0x5c` = `+0x58` test as global flag 4
+(`0x00905ec0`/`0x00905ea0`). It has no caller in defined code, so the single-player answer stays OPEN;
+implement false. The network module init `0x008675c0` does not create a session. CONFIRMED — disassembly.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `0x0087efe0` is the shutdown, not an installer; false during a session's wind-down. Still OPEN — the installer (undefined code at `0x0087c341`/`0x0087c359`); implement false.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `0x0087efe0` is the shutdown, not an installer; false during a session's wind-down. Still OPEN — ~~the installer (undefined code at `0x0087c341`/`0x0087c359`)~~; implement false. Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the installer is `0x0087c340` and the network module init `0x008675c0` creates no session. Still OPEN — the installer has no defined caller, so the single-player answer is unknown; implement false. Next dumps: follow-up job `team-a/ghidra/jobs/gdhw-followup.json` (§26.28).**
 
 ### 8.28 Cross-function observations
 
@@ -4804,7 +4807,20 @@ vehicle-driven store exit — it requires the player's current vehicle to be the
 location and vehicle (`0x022cf8d4`, `0x022cf8dc`, `0x022cf948/4c`), runs the post-store cleanup
 `0x00820480` and the same UI call, and sets the flag to 0 only if that UI call succeeds. CONFIRMED —
 disassembly. Their game-level triggers are OPEN: `0x005fa820` is called from `0x0080e2f0` and two undefined
-sites (`0x005fb406`, `0x005fbdd5`); `0x00820cd0` from one undefined site (`0x005fc207`).]]** a Lua-reachable writer,
+sites (`0x005fb406`, `0x005fbdd5`); `0x00820cd0` from one undefined site (`0x005fc207`). [2026-10-01, job `20261001T121532-team-a-gdhw`: the
+three undefined sites were range-disassembled and are function tails. Both `0x005fa820` callers copy the
+handle pair (`+0x8`/`+0xc`) of an object they hold into a local pair and pass its address; by
+`0x005fa820`'s own class test that object is the store-location object (HIGH CONFIDENCE). The first
+(`0x005fb406`) then sets store state `0x014a1ce4` = 4 and returns true; it has a sibling exit that sets state
+4 and returns true without entering the store. The second (`0x005fbdd5`) is the end of a loop that enters the
+store at the first object for which `0x005fb930` returns a positive value. The `0x00820cd0` caller
+(`0x005fc207`) first writes the store-target globals itself (`0x014a1dc4` = the location object,
+`0x014a1dc8/cc` = the vehicle's handle pair), then passes the result of `0x005f91c0` on the location to
+`0x00820cd0`. So the exit routine's location and vehicle checks are met by construction, and its real gates
+are its own vehicle test (`0x00a367f0`) and `0x005fbae0`. The heads of all three functions lie before the
+dumped windows, so the triggers stay OPEN. CONFIRMED — disassembly for the tails. Next dumps (follow-up job
+`team-a/ghidra/jobs/gdhw-followup.json`): range `0x005fb200`–`0x005fb3e0`, `0x005fbc80`–`0x005fbdb0`, `0x005fbdf0`–`0x005fc2c0`;
+function bodies `0x005fb930` and `0x0080e2f0`.]]]** a Lua-reachable writer,
 `0x00815120` — itself one of this same UI wrapper's own 8 registered sibling functions (registered
 name `store_vehicle_change_mode`, read directly off `.rdata`, not part of this tranche). That
 function sets the flag to `0` when transitioning to mode `0` (a close/exit path that also runs
@@ -4831,7 +4847,7 @@ do not start in Lua (for example, entering or leaving a store) **[HYPOTHESIS]**.
 The other two writers are the non-Lua entry and exit paths described above; whether their callers are
 Lua-reachable is OPEN (one defined caller, `0x0080e2f0`, not yet read).
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — ~~when `0x005fa820` and `0x00820cd0` run~~. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the bodies and preconditions of `0x005fa820` and `0x00820cd0`. OPEN — their callers (`0x0080e2f0`; undefined code at `0x005fb406`, `0x005fbdd5`, `0x005fc207`).**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — ~~when `0x005fa820` and `0x00820cd0` run~~. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the bodies and preconditions of `0x005fa820` and `0x00820cd0`. OPEN — ~~their callers (`0x0080e2f0`; undefined code at `0x005fb406`, `0x005fbdd5`, `0x005fc207`)~~. Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the tail behaviour of the three undefined call sites (`0x005fb406`, `0x005fbdd5`, `0x005fc207`). OPEN — their callers: `0x0080e2f0` unread; the three undefined sites are read as tails and need the function heads (`range 0x005fb200–0x005fb3e0`, `0x005fbc80–0x005fbdb0`, `0x005fbdf0–0x005fc2c0`; follow-up job `team-a/ghidra/jobs/gdhw-followup.json`), so every trigger stays OPEN.**
 
 ### 10.2 `Completion_is_client` (`0x007bfbc0`) — 589 runtime calls
 
@@ -4913,7 +4929,7 @@ object's `+0x14` field, with no indexing by the resolved table entry at all** (u
 bounds/~~tag~~ state read just described, which genuinely is per-entry, indexed off ~~the table base~~
 `0x0151d60c` by `index × 9` — **`0x0151d60c` is entry 0's `+0x0c` field; the base is `0x0151d600`, job
 `20261001T020213-team-a-dksj`**). **[Re-derived 2026-10-01: the value stored into the message's `+0x14` is the *contents* of
-the global `0x0151d5a8` (zero at load, written only by `0x00715f20`), not its address.]**
+the global `0x0151d5a8` (zero at load, written only by `0x00715f20`), not its address.]** **[2026-10-01, job `20261001T121532-team-a-gdhw`: the writer of `0x0151d5a8`, `0x00715f20`, is the tutorial subsystem initialiser: its first action is the table fill `0x007178c0` (§26.28) and it then creates the handle. CONFIRMED — xref; when it runs is OPEN.]**
 
 **Side effects/subsystem:** on a recognized ~~, correctly-tagged~~ tutorial entry in state 3, opens a named
 event/telemetry-shaped scope ~~carrying that entry's own identifier~~ **[corrected 2026-10-01, job
@@ -4925,7 +4941,7 @@ no separate display-dispatch call (unlike `tutorial_start`'s own `0x00715bf0`/`0
 reached anywhere in this body.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the OPEN item is narrowed to
 HYPOTHESIS — a named UI message — until `0x00e0c720` is read.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — ~~what state 3 means and who sets it (§6.19)~~ what state 3 means and who sets it. Narrowed by job `20261001T114716-team-a-fvfp`: no defined function writes the literal 3; the generic setter `0x007163e0` reaches only entries 189–195 (through the 7-id table `0x0152145c`) with values supplied by its single caller `0x00b9ae60`; for entries 0–188 the only candidate is the undefined code before the function tail at `0x00717363` (which stores a register value and then arms a timer), inside the undefined region `0x00717240`–`0x0071738f` that is probably the rest of `0x00717020`. HYPOTHESIS — 3 = displayed and waiting for the player.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — ~~what state 3 means and who sets it (§6.19)~~ what state 3 means and who sets it. Narrowed by job `20261001T114716-team-a-fvfp`: no defined function writes the literal 3; the generic setter `0x007163e0` reaches only entries 189–195 (through the 7-id table `0x0152145c`) with values supplied by its single caller `0x00b9ae60`; ~~for entries 0–188 the only candidate is the undefined code before the function tail at `0x00717363` (which stores a register value and then arms a timer), inside the undefined region `0x00717240`–`0x0071738f` that is probably the rest of `0x00717020`.~~ Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): for entries 0–188 no writer of 3 has been found. The region `0x00717240`–`0x0071738f` is not part of `0x00717020` (which ends at `0x0071716a` and is the serialiser of the queued-prompt list) but the tail of the matching stream receiver, and both of its state stores (`0x00717311`, `0x00717363`) write the literal 4; the second follows an "already 4?" test and is followed by arming the global 1-second timer `0x012f58ec` (CONFIRMED — disassembly). For entries 189–195 the generic setter `0x007163e0` is fed by the save loader `0x00b9ae60` (section 5 of a version-gated save block: (name hash, state) pairs at `+0x18acc`), so their states are save-persisted and could be 3 only if the save side ever stored 3 (CONFIRMED — the feed; the save-side values OPEN). `0x007178c0` is called once, from the tutorial initialiser `0x00715f20` (CONFIRMED — xref). The only unread direct references to the state field are in undefined code at `0x00716385`/`0x007163b5`, between the state getter and the generic setter. OPEN — who writes 3; next dumps in follow-up job `team-a/ghidra/jobs/gdhw-followup.json` (§26.28). HYPOTHESIS — 3 = displayed and waiting for the player.**
 
 ### 10.5 `minimap_icon_add_do` (`0x00a53f90`) — 42 runtime calls
 
@@ -10878,9 +10894,24 @@ functions store **zero**: `0x0087d8a0` is the session subsystem's initialiser (i
 session to go idle, then clears the singleton if it pointed at that session), and `0x0087efe0` is the
 subsystem shutdown (it destroys every pooled session, flushes the deferred-callback queue headed at
 `0x024e4d80`, clears the singleton and frees the pool). **[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]** No
-resolved code installs a session. The only other references, at `0x0087c341`/`0x0087c359`, are in code
+resolved code installs a session. ~~The only other references, at `0x0087c341`/`0x0087c359`, are in code
 the disassembler never defined and are, by elimination, where a session pointer is stored **[HIGH
-CONFIDENCE — by elimination; OPEN until that code is disassembled]**.
+CONFIDENCE — by elimination; OPEN until that code is disassembled]**.~~
+**[2026-10-01, job `20261001T121532-team-a-gdhw`:]** The only other references, at `0x0087c341`/`0x0087c359`, are the load and
+store of the **session installer `0x0087c340`**, a short routine in code the disassembler never defined, read
+with the range mode of this job. Given one session pointer, it does nothing if that pointer is already the
+installed one. Otherwise, when a session is currently installed, it first runs the deferred-callback flush
+`0x00894430` (the old session is not destroyed here; only its pending callbacks run), then stores the new
+pointer into `0x024d8534`. If the new pointer is non-null it then publishes the host answer once, as flag 4
+of a global flag table: `0x00905ec0` with 4 when the session's `+0x5c` equals its `+0x58`, `0x00905ea0` with 4
+otherwise. Called with null, it acts as a clear. It is the only code in the executable that can store a
+non-null session. **[CONFIRMED — disassembly, job `20261001T121532-team-a-gdhw`; that flag 4 means "local machine is host" is
+HYPOTHESIS, the two callees were not dumped.]** It has no caller in defined code (an earlier reference
+search for `0x0087c340` was empty and no function dumped by this job calls it), so its callers are
+themselves undefined code and **when it runs is OPEN**. The best places to look are the undefined
+lifecycle blocks `0x0088b4c0`–`0x0088b5a0`, `0x0088b7c0`–`0x0088b8a0` and `0x0088cac0`–`0x0088cb60`
+**[HIGH CONFIDENCE as the place to look; no call is shown yet]**. The three Lua queries do not read flag 4;
+they re-derive the answer from the session object on every call.
 `coop_is_active` also stays false whenever a session has fewer than 2 members (member count at session
 `+0x60`, §3.1). **[CONFIRMED — disassembly.]**
 
@@ -10896,6 +10927,20 @@ CONFIDENCE — by elimination; OPEN until that code is disassembled]**.
 pointer `+0x5c`. The engine holds at most two session objects at once (pool at `0x024d8544`, capacity 2).
 **[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]**
 
+**[Added 2026-10-01, job `20261001T121532-team-a-gdhw`.]** The network module is brought up by `0x008675c0`, once (guarded by the
+byte `0x024d4464`). It switches the mode global `0x024d4470` to 1 through `0x00867400`, which selects the
+provider object `0x01495f70` into `0x01493978`, sets `0x01302868` = 1 and `0x01302860` = `0x01302864` = 2,
+and enables the names `coop-mp`, `multiplayer` and `deltacomp_global` with `0x00dcdbc0`. It then sets the
+module bytes `0x024d4461`/`0x024d4462` to 1, allocates the message, payload and member pools (`0x0086ab70`,
+`0x00878bc0`), builds the two-slot session pool (`0x0087d8a0`, which clears the singleton) and runs a
+handful of one-time inits. It never creates or installs a session. `0x008676f0` is the matching shutdown:
+it destroys every pooled session (`0x0087efe0`), frees the pools, drains the receive queue, switches the
+mode back to 0 (disabling the names `multiplayer` and `deltacomp_global`) and clears the four module bytes
+`0x024d4461`/`0x024d4462`/`0x024d4464`/`0x024d4466`. Init is called from `0x00872760` and `0x0088c090`;
+shutdown from the guarded wrapper `0x00867740` and from undefined code at `0x0088b560`. The module byte
+`0x024d4461` is the engine-wide "network module up" test (47 reading functions). **[CONFIRMED — disassembly
+and xref, job `20261001T121532-team-a-gdhw`; when those callers run is OPEN.]**
+
 **What single-player startup leaves it as: OPEN.** The executable starts at 0, but whether starting a
 single-player game runs the installer `0x0087efe0` and creates a one-member session (the local player
 as its only member and host) cannot be read from these dumps. This decides `game_get_is_host`: false
@@ -10903,9 +10948,15 @@ with no session, true with a one-member host session. `coop_is_active` is false 
 `Completion_is_client` is false in both cases. **HYPOTHESIS (do not implement):** single player keeps
 a one-member host session. ~~Follow-up job `20261001T114716-team-a-fvfp` dumps the installer
 `0x0087efe0`. Until it lands, a host should start with no session.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`:]**
-the job showed that `0x0087efe0` is the shutdown, not the installer; the installer is in undefined code at
+the job showed that `0x0087efe0` is the shutdown, not the installer; ~~the installer is in undefined code at
 `0x0087c341`/`0x0087c359`, so whether a single-player start creates a one-member host session cannot be
-read yet. The HYPOTHESIS above (single player keeps a one-member host session) stays a hypothesis. A host
+read yet.~~ **[2026-10-01, job `20261001T121532-team-a-gdhw`:]** the installer `0x0087c340` has now been read but has no caller in
+defined code, so whether a single-player start creates a one-member host session still cannot be read.
+Two further facts bear on it without settling it. The host-session constructor is `0x0087d1d0`: it stores one
+new member into both `+0x5c` and `+0x58` **[HIGH CONFIDENCE — from an earlier field census; its body was not
+dumped]**. Session objects carry an *offline* bit (byte `+0x4e`, bit `0x40`); when it is set, no Steam
+identity is fetched and no leave event is sent **[CONFIRMED — disassembly for the bit's gating role; that
+single player uses an offline session is HYPOTHESIS]**. `game_get_is_host` in single player stays OPEN. The HYPOTHESIS above (single player keeps a one-member host session) stays a hypothesis. A host
 starts with no session: `game_get_is_host` false, `coop_is_active` false, `Completion_is_client` false.
 
 **Tutorial table.** ~~The 210-entry table at `0x0151d600` (36-byte entries, §6.19) is zero at load, so
@@ -10917,7 +10968,39 @@ when that runs is OPEN.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-f
 40-byte descriptor into a run-time descriptor array at `0x0151f388`, points the entry's `+0x08` at it, and
 sets the state to 0 for entries 0–188 and to **1** for entries 189–209. **[CONFIRMED — disassembly and
 xref, job `20261001T114716-team-a-fvfp`.]** So after the fill, entries 189–209 are already armed; no entry is in state 3, so
-`tutorial_advance` returns false for every name on a fresh process. When `0x007178c0` runs is OPEN.
+`tutorial_advance` returns false for every name on a fresh process. ~~When `0x007178c0` runs is OPEN.~~
+**[2026-10-01, job `20261001T121532-team-a-gdhw`:]** `0x007178c0` is called exactly once, as the first action of `0x00715f20`,
+the tutorial subsystem initialiser, which also creates the tutorial UI handle `0x0151d5a8` (§10.4); when
+`0x00715f20` runs is OPEN. The 210 records are compiled-in constants, each built from immediate values: body
+and title localisation keys, a pointer to an empty string, a default of 2 at `+0x20` and flags at `+0x24`.
+After the last fill, `0x007178c0` stores the CRC-32 name hashes (`0x00d9e8b0`, lower-cased, seed 0) of the
+seven names at `0x012f5c24`, which are the names at indices 189–195, into the 7-dword id table `0x0152145c`.
+The generic setter `0x007163e0` matches against those hashes. **[CONFIRMED — disassembly and xref, job
+`20261001T121532-team-a-gdhw`.]**
+
+**Tutorial state 3 (job `20261001T121532-team-a-gdhw`).** The undefined region `0x00717240`–`0x0071738f` is not part of
+`0x00717020`, which ends with a return at `0x0071716a` and is the serialiser of the queued-prompt list. The
+region is the tail of the matching receiver, which rebuilds one queued tutorial from a stream. Both of its
+state stores (`0x00717311`, `0x00717363`) write the literal **4**, not 3. **[CONFIRMED — disassembly; the
+serialiser/receiver pairing is HIGH CONFIDENCE from the matching field order.]** The generic setter
+`0x007163e0` is fed by `0x00b9ae60`, which applies a loaded save block in version-gated sections. Its
+section 5 passes the block's (name hash, state) pairs at `+0x18acc` (count at `+0x18ac8`) to the setter,
+so the states of entries 189–195 are save-persisted. **[CONFIRMED — disassembly for the feed; that
+`0x00b9ae60` is the save loader is HIGH CONFIDENCE; the save-side writer and the values it stores are
+OPEN.]** No code read so far writes 3. The only unread direct references to the state field are in
+undefined code at `0x00716385`/`0x007163b5`, between the state getter `0x00716360` and the generic setter.
+**Who writes state 3 is OPEN.**
+
+**Next dumps (job `20261001T121532-team-a-gdhw`, queued as follow-up `team-a/ghidra/jobs/gdhw-followup.json`).** In order of payoff: (1) range dumps
+of the undefined lifecycle blocks `0x0088b480`–`0x0088b5a0`, `0x0088b7c0`–`0x0088b8a0` and
+`0x0088cac0`–`0x0088cb60`, looking for calls to `0x0087c340` and `0x0087d1d0`, plus function and reference
+dumps of `0x0087d1d0`, `0x0088c090`, `0x00872760`, `0x00867740`, `0x0088b570`, `0x0088b9f0` and
+`0x0088c750`; (2) a range dump of `0x0087c390`–`0x0087c560` (the client-side host assignment), references to
+`0x02609398` and the bodies of `0x00905ec0`/`0x00905ea0` (who consumes flag 4), and `0x0087f1d0` (offline
+identity); (3) range dumps of `0x00716360`–`0x007163e0` and `0x0071716b`–`0x00717240`, function and reference
+dumps of `0x007162a0`, `0x00715f20` and `0x008ba5d0`, the queue consumers `0x00715a30`, `0x00715ad0`,
+`0x00715f60`, `0x00716000`, `0x00716220`, `0x007161e0`, and references to `0x0118c08c` (the callback table
+holding `0x00b9ae60`); (4) the store-flag function heads (§10.1).
 
 **Tutorial names.** The name list comes from the static, file-backed pointer table `0x012f5930` (210
 pointers to strings, searched case-insensitively by `0x00717780`, −1 on a miss). **[CONFIRMED —
@@ -11002,7 +11085,7 @@ job `20261001T114802-team-a-kyoi` and will be added here when it lands.**~~ **Fu
 `0.0` at startup and stays 0 until `store_vehicle_change_mode` opens a store or one of the other two
 writers runs (§10.1). **[CONFIRMED — disassembly.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — ~~whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`)~~ whether single-player startup installs a session (the installer is undefined code at `0x0087c341`; needs a range-disassembly dump); the full tutorial name list (job `20261001T114802-team-a-kyoi`); ~~the two undefined references at `0x0087c341`/`0x0087c359`~~ (merged into the item above). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the three resolved singleton writers all clear it; the session pool holds two 0x2d0-byte objects; tutorial table filled by `0x007178c0`, entries 189–209 start in state 1. HIGH CONFIDENCE (by elimination) — the installer is the undefined code at `0x0087c341`/`0x0087c359`.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — ~~whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`)~~ ~~whether single-player startup installs a session (the installer is undefined code at `0x0087c341`; needs a range-disassembly dump)~~; the full tutorial name list (job `20261001T114802-team-a-kyoi`); ~~the two undefined references at `0x0087c341`/`0x0087c359`~~ (merged into the item above). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the three resolved singleton writers all clear it; the session pool holds two 0x2d0-byte objects; tutorial table filled by `0x007178c0`, entries 189–209 start in state 1. ~~HIGH CONFIDENCE (by elimination) — the installer is the undefined code at `0x0087c341`/`0x0087c359`.~~ Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the installer is `0x0087c340` (stores the session pointer into `0x024d8534` and publishes the host answer as global flag 4); the network module init/shutdown pair `0x008675c0`/`0x008676f0` is the module bring-up and teardown and never creates a session; `0x007178c0` is called once, from the tutorial initialiser `0x00715f20`; the region `0x00717240`–`0x0071738f` writes only state 4; entries 189–195 are restored from the save block by `0x00b9ae60` section 5; the offline-session bit `+0x4e` & `0x40` gates Steam identity and leave events. HIGH CONFIDENCE — `0x0087d1d0` is the host-session constructor. HYPOTHESIS — flag 4 means "local machine is host"; single player uses an offline session. OPEN — whether single-player startup installs a session: the installer `0x0087c340` is read but its callers are undefined code (`0x0088b4c0`–`0x0088cb60` region); `game_get_is_host` in single player (implement false); who writes tutorial state 3 (leads `0x00716385`/`0x007163b5`); the save-side values for entries 189–195; the store-flag triggers: the three undefined call sites are function tails (`0x005fb3e0`, `0x005fbdb0`, `0x005fc1e0` windows) whose heads need range dumps (§10.1). Next dumps: follow-up job `team-a/ghidra/jobs/gdhw-followup.json`.**
 
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
@@ -11648,3 +11731,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, bridge job `20261001T114716-team-a-fvfp`): §26.28 — corrected the co-op session writers: `0x0087efe0` is the subsystem shutdown and stores zero (not the installer), `0x0087d8a0` is init, `0x0087ed70` destroys one session; no resolved code installs a session, so the installer is, by elimination, the undefined code at `0x0087c341`/`0x0087c359` (HIGH CONFIDENCE; OPEN until read); single player stays "no session, all three queries false"; added the idle predicate `0x0059fbe0` and the two-slot pool; tutorial table filled by `0x007178c0` → `0x00715850` with entries 189–209 starting in state 1. §3.1 — client-side gate = "not idle and not flagged for destruction". §6.19 — fill routine and starting states. §8.27 — shutdown correction; false during wind-down. §10.1 — bodies of the store-flag writers `0x005fa820` (entry, sets 1) and `0x00820cd0` (exit, sets 0 only when the UI call succeeds); callers OPEN. §10.4 — starting states after the fill; state-3 writer narrowed (`0x007163e0` reaches only entries 189–195; tail at `0x00717363`), meaning still OPEN.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114555-team-a-lgdz`, follow-up `bgcx-followup.json`): §26.27 only — added behaviour entries for the 18 undumped bare globals (`max`/`min` strictly binary with second-argument wins on tie or NaN; `floor`/`ceil` via 32-bit truncating conversion; `acos` clamp; `strstr` boolean; `sizeof_table` pair count with `n` override; `get_frame_time` global 0x0132a0b0, default 1/30; the four `thread_*` functions with the 256-record thread table, its runner and the current-thread stack; the two geometry helpers), single-precision narrowing for all numeric wrappers, the random-source object and its fill (ring and cursor zero in the file image, draws return `lo` until the first fill), 0x00fccb70 = base plus `coroutine` only (no `math` table), the 2^-32 constant raised to CONFIRMED, a host paragraph and a new review status; `include` stays OPEN. Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114101-team-a-mnao`, follow-up `nzxf-followup.json`): §26.24 — fade completion CONFIRMED: 0x005a0110 is the UI-state global `Screen_fade_transition_complete` (flips 0→2 / 1→3, calls the parked callback with the target, never starts a request; the earlier "sets the state to the target and starts the deferred request" reading struck); per-frame routine 0x0059fe70 (auto-save indicator, mode gate, loading logo/load-image schedule, replay of a deferred request with a fixed 250 ms); init/shutdown and the "screen_fade" UI document; `sfx_faded_in` = 0x0059fb60 CONFIRMED; host-side substitute note amended. §26.25 — state codes 0/1/2 CONFIRMED; promotion 0x00720410 (single caller 0x007258a0, HIGH CONFIDENCE cutscene load step, body OPEN); completion from the cutscene state machine 0x0072d660; table = parsed `cutscene.xtbl` (cap 200); 0x0153b556 = `skip_all_cutscenes`; transition-stream globals. §26.26 — display-mode ladder of 0x00e23000 and the per-thread record of 0x00e236f0; safe-frame constants still OPEN. Annotated §2.9, §8.13, §8.21, §14.23 and §26.9 with pointers and review-status updates. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T121532-team-a-gdhw`, follow-up `team-a/ghidra/jobs/gdhw-followup.json`): §26.28 — the session installer is `0x0087c340` (undefined code, read with the range mode; stores the session pointer into `0x024d8534` and publishes the host answer as global flag 4, CONFIRMED; no caller in defined code, so when it runs and whether single player installs a session stay OPEN); network module init `0x008675c0` / shutdown `0x008676f0` described (CONFIRMED; never create a session); host-session constructor `0x0087d1d0` (HIGH CONFIDENCE); offline-session bit `+0x4e` & `0x40` (gating CONFIRMED, single-player use HYPOTHESIS); `0x007178c0` called once from the tutorial initialiser `0x00715f20`; region `0x00717240`–`0x0071738f` writes state 4, not 3; entries 189–195 save-persisted through `0x00b9ae60` section 5; writer of state 3 OPEN; next-dump list. §8.27 — installer note, single player still OPEN, implement false. §10.1 — tails of the three undefined store-flag call sites (CONFIRMED), triggers OPEN. §10.4 — state-3 candidate withdrawn, save feed, initialiser note. Old text struck or annotated in place.
