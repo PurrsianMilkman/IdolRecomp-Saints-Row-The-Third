@@ -1,0 +1,5 @@
+0x004f2650 /root/crreish-bus/results/20261001T123128-team-a-dvje/func1/func_0x004f2650.txt
+0x004f29b0 /root/crreish-bus/results/20261001T123128-team-a-dvje/func1/func_0x004f29b0.txt
+0x004f2b50 /root/crreish-bus/results/20261001T123128-team-a-dvje/func1/func_0x004f2b50.txt
+0x0135bfc8 /root/crreish-bus/results/20261001T123128-team-a-dvje/glob/xref_0x0135bfc8.txt
+0x013617c8 /root/crreish-bus/results/20261001T123128-team-a-dvje/glob/xref_0x013617c8.txt
