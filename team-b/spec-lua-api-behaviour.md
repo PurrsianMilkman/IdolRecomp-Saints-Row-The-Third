@@ -10263,11 +10263,22 @@ pseudo-index. Its only caller is the generic Lua-state creator 0x00e0e0b0, which
 unconditionally for every state it makes, so **both the interface state and the gameplay state get
 all 24**. They are registered before `system_lib.lua` loads and before every other registrar. A host
 must therefore define all 24 in both states before running any preload file. **CONFIRMED —
-disassembly.** Whether the stock `math` table also exists depends on 0x00fccb70, called just before
-the registrar; that it opens the stock libraries is a **HYPOTHESIS**.
+disassembly.** ~~Whether the stock `math` table also exists depends on 0x00fccb70, called just before
+the registrar; that it opens the stock libraries is a **HYPOTHESIS**.~~ [Settled by job
+`20261001T114555-team-a-lgdz`:] 0x00fccb70, called just before the registrar, is the stock base-library
+opener. It calls 0x00fcca70, which installs the base functions (the 23-entry table at 0x01293410), `_G`,
+`_VERSION` (`"Lua 5.1"`), `pairs`/`ipairs` and `newproxy`, then registers the six-entry `coroutine` table
+(0x012934e8), and returns 2. It opens nothing else. **There is no `math`, `string`, `table`, `os` or `io`
+table in either state when `system_lib.lua` runs (CONFIRMED — disassembly), and no later registrar adds
+one (HIGH CONFIDENCE: the later registrars are engine-name registrars, not re-checked in this job).**
+So `math.floor` indexes nil, and the 24 bare names are the whole arithmetic surface.
 
 **Roster, in registration order.** **CONFIRMED — disassembly** for name, order and native address.
-"Standard math" describes the name only; those bodies were not dumped.
+"Standard math" describes the name only; ~~those bodies were not dumped.~~ [job
+`20261001T114555-team-a-lgdz`:] the nine "standard math" rows are engine wrappers that share only the
+name with Lua's `math` library. Each narrows to single precision, `max`/`min` are strictly binary,
+`floor`/`ceil` return 32-bit integers and `acos` clamps its argument. Their behaviour is given below.
+`include` is unchanged (`spec-lua-bindings.md` §16.3; its re-read is still OPEN).
 
 | # | Lua global | Native | Standard math or engine |
 |---|---|---|---|
@@ -10298,7 +10309,8 @@ the registrar; that it opens the stock libraries is a **HYPOTHESIS**.
 
 9 standard-math names, 15 engine functions.
 
-**Shared argument handling (the four dumped bodies).** Each reads the argument count with
+**Shared argument handling (~~the four dumped bodies~~ all 21 bodies other than `include` and the
+shared stub, after job `20261001T114555-team-a-lgdz`).** Each reads the argument count with
 `lua_gettop` (0x00dfde50), then reads argument 1 (and argument 2 where used) with `lua_tonumber`
 (0x00dfe160) at a negative index counted from the top. None checks the count or the types, and none
 raises an error; a nil or non-numeric argument reads as 0. **CONFIRMED.** What happens when fewer
@@ -10306,6 +10318,16 @@ arguments are passed than the function reads (the index then lands at or past th
 depends on the index resolver 0x00dfdc60, which was not dumped. Stock Lua 5.1 suggests a stale slot or
 nil. **HYPOTHESIS.** A host may treat a missing argument as 0; `rand_int(5)` is unspecified in the
 engine.
+[Added from job `20261001T114555-team-a-lgdz`, CONFIRMED from the index arithmetic in every listing:]
+argument `k` is read at index `k − 1 − n`, where `n` is the argument count, so the first argument sits
+at `−n`. Arguments beyond a function's fixed arity are therefore ignored from the end: `max(a, b, c)`
+uses `a` and `b`. A string argument (`strstr`, `thread_new`) is read with `lua_tolstring` (0x00dfe210):
+a number is converted to its string form, any other type reads as a null pointer. Every numeric
+wrapper stores each argument into a single-precision float immediately after reading it, computes on
+those floats, and stores its result as a single-precision float that is widened to double only for
+the push (**CONFIRMED**: the 32-bit stores are in each listing). So `max(0.1, 0)` gives
+0.10000000149011612 and `abs(16777217)` gives 16777216. Return counts are one value, except
+`closest_point_on_line_segment` (two), `thread_kill` (none) and `thread_yield` (yields) (**CONFIRMED**).
 
 **`rand_int(a, b)` (0x00e0f4c0).** **CONFIRMED — disassembly.**
 - Both arguments are converted to 32-bit integers by 0x00ea2596, which **truncates toward zero**
@@ -10328,7 +10350,8 @@ engine.
   `u`. It returns `lo + (hi - lo) * u`, narrowed to single precision, which is then pushed as a Lua
   number. **CONFIRMED — disassembly** for the steps and the narrowings. The constant is 2^-32
   (the dump shows only its low dword; that value is the only one that fits the unsigned fix-up
-  beside it): **HIGH CONFIDENCE.**
+  beside it): ~~**HIGH CONFIDENCE.**~~ **CONFIRMED** (job `20261001T114555-team-a-lgdz`: the decompile
+  of 0x00dab810 in that job reads the full 8 bytes at 0x0111e4c0 as 2.3283064e-10, which is 2^-32).
 - Range: `u` is nominally in [0, 1), but values of `r` close to 2^32 round `u` up to exactly 1.0 in
   single precision. Treat the range as **[lo, hi], with `hi` reachable but rare**, and produce
   single-precision values. **CONFIRMED** (the narrowings are in the listing).
@@ -10347,6 +10370,227 @@ engine.
 - Return: one Lua number holding the 32-bit integer.
 - This same helper is the "round to integer" cited in §16.2 and §22. It is not 0x00ea2596, which
   truncates (§4.1).
+
+**The other 18 bodies (job `20261001T114555-team-a-lgdz`, roster order).** In each entry, "the float"
+means the argument after narrowing to single precision; a nil or non-numeric argument reads as 0 before
+narrowing, and nothing raises unless stated.
+
+**`abs(x)` (0x00e0f140).** Clears the sign bit of the float (one x87 absolute-value step, no C run-time
+call). `abs(-0)` is 0, `abs(nil)` is 0, a NaN keeps NaN with its sign cleared. One number.
+**CONFIRMED — disassembly.**
+
+**`acos(x)` (0x00e0f180).**
+- The float is handed to 0x00e0f0f0 (whose only caller is `acos`), which clamps it into [-1, 1] before
+  calling the C run-time arc-cosine 0x00ea2b90: at or below -1 it becomes -1, at or above 1 it becomes
+  1. The result is narrowed to single precision. **CONFIRMED — disassembly** for the clamp (two
+  compares against ±1 that overwrite the argument on the out-of-range paths); **HIGH CONFIDENCE** that
+  0x00ea2b90 is the run-time arc-cosine (dispatcher shape, leaf not dumped).
+- Units: **radians**, result in [0, π]; `acos(-1)` is 3.1415927 in single precision.
+- `acos(2)` = 0, `acos(-5)` = π, `acos(0)` = `acos(nil)` = π/2.
+- `acos(NaN)` = π: the first compare is unordered, and the clamp treats that case like "below -1".
+  **CONFIRMED** from the status-word mask.
+- One number.
+
+**`cos(x)` and `sin(x)` (0x00e0f1c0, 0x00e0f210).** The float goes, with no scaling of any kind, to the
+C run-time dispatchers 0x00ea3a70 (`cos`) and 0x00ea2470 (`sin`). Each takes an SSE2 leaf when the
+run-time's SSE2 flag at 0x035213c4 is set and the default exception masks are in force, else an x87
+leaf. The result is narrowed to single precision. Units: **radians**, as in stock Lua; a script that
+passes degrees gets the wrong answer. `cos(nil)` = 1, `sin(nil)` = 0. One number each. **CONFIRMED —
+disassembly** that there is no unit conversion; **HIGH CONFIDENCE** that the callees are the run-time
+sine and cosine (leaves not dumped).
+
+**`ceil(x)` and `floor(x)` (0x00e0f260, 0x00e0f3a0).**
+- The float is widened and passed to the C run-time ceil (0x00ea4d60) or floor (0x00ea4e80); both
+  bodies were read and give the exact mathematical ceiling or floor. The result is narrowed to single
+  precision (exact for an integral value) and then **converted to a 32-bit integer** by 0x00ea2560,
+  which takes a truncating SSE2 conversion when the run-time flag at 0x035213c8 is set and otherwise
+  falls into the x87 truncation helper 0x00ea2596 (§4.1). The integer is pushed as a number.
+  **CONFIRMED — disassembly.**
+- Semantics: `floor` returns the largest integer not above the float, `ceil` the smallest integer not
+  below it; the result is always integer-valued and never negative zero. `floor(2.5)` = 2,
+  `floor(-2.5)` = -3, `ceil(2.1)` = 3, `ceil(-2.1)` = -2, `ceil(-0.5)` = 0, `floor(nil)` = 0,
+  `floor("3.7")` = 3. **CONFIRMED.**
+- Narrowing happens first: `floor(0.99999999)` = 1 (the double rounds to the float 1.0),
+  `floor(-1e-9)` = -1, `floor(16777217)` = 16777216. **CONFIRMED** (the 32-bit store comes before the
+  call).
+- Out of range: an argument of 2147483584 or more (it rounds to the float 2^31), anything below -2^31,
+  and NaN overflow the conversion; on the SSE2 path, which any SSE2-capable PC takes, the result is
+  -2147483648. **HIGH CONFIDENCE** (the flag's writer was not dumped; the x87 fallback would give a
+  different value). No script should depend on it.
+- One number each.
+
+**`get_frame_time()` (0x00e0f400).** Reads no argument; returns the single-precision float held at the
+engine global 0x0132a0b0, widened. That global is 1/30 in the file image (0.03333333507180214 as the
+double a script sees), so before the first update the function returns one 30 Hz frame. **CONFIRMED —
+disassembly** (load and push) and from the data header. It is read by many engine systems (43 uses in
+30 functions, capped), so it is the engine's **frame delta in seconds**: **HIGH CONFIDENCE**. Its
+writer, and so whether it is the measured delta or a clamped or fixed step, is **OPEN**. One number.
+
+**`max(a, b)` and `min(a, b)` (0x00e0f2c0, 0x00e0f330).** **CONFIRMED — disassembly.**
+- **Strictly binary.** Exactly two arguments are read; there is no loop over the count. `max(1, 2, 3)`
+  is **2** and `min(3, 2, 1)` is **2**.
+- Both arguments are narrowed to single precision and compared once.
+- `max` returns the first argument only when the second is less than the first as an ordered
+  comparison; `min` returns the first argument only when the first is less than the second. In every
+  other case, **ties and NaN included, the second argument is returned**:
+
+  | case | `max(a, b)` | `min(a, b)` |
+  |---|---|---|
+  | a < b | b | a |
+  | a > b | a | b |
+  | a = b (including 0 against -0) | b | b |
+  | either is NaN | b | b |
+
+- So `max(NaN, 1)` is 1, `max(1, NaN)` is NaN and `max(0, -0)` is -0. Values equal after narrowing
+  count as ties: `max(16777217, 16777216)` is 16777216.
+- Non-numbers read as 0 and compete as 0: `max(nil, -3)` = 0; strings convert, so `max("7", 2)` = 7.
+- One number.
+
+**`sizeof_table(t)` (0x00e0f580).** Passes the state, the argument count and 0 to the shared engine
+helper 0x0083dff0 (13 callers in the binary) and pushes its integer result. One number. The helper,
+read in full (**CONFIRMED — disassembly**):
+1. No argument, or a nil first argument: **-1**.
+2. Otherwise it looks up the key `"n"` in the table (a metamethod-honouring keyed read). If that value
+   is a number, the result is that number truncated toward zero, and nothing is counted:
+   `sizeof_table({n = 2.9})` = 2 and `sizeof_table({1, 2, 3, n = 0})` = 0.
+3. Otherwise it walks the table with the next-pair primitive and counts **every key/value pair**,
+   array part and hash part alike; holes do not stop the count. `sizeof_table({1, 2, nil, 4})` = 3,
+   `sizeof_table({a = 1, b = 2})` = 2, `sizeof_table({})` = 0.
+
+This is **not** the length operator `#t`. A non-table argument reaches the keyed read and raises the
+VM's usual "attempt to index" error (strings have no index metamethod here, since no `string` table
+exists): **HIGH CONFIDENCE**, the raise site was not dumped. A host should raise, or return -1.
+
+**`sqrt(x)` (0x00e0f5c0).** The float goes to 0x00ea3f60, which calls the C run-time square root; the
+result is narrowed to single precision. No guard for a negative argument, which therefore gives the
+run-time's NaN. `sqrt(nil)` = 0. One number. **CONFIRMED** for the wrapper's shape and the absence of a
+guard; **HIGH CONFIDENCE** that 0x00ea3f60 is the run-time square root and on the NaN (inner bodies not
+dumped).
+
+**`strstr(s, sub)` (0x00e0f080).** **CONFIRMED — disassembly.**
+- Both arguments are read as strings (numbers are converted). The two pointers go, `s` first, to the C
+  run-time substring search 0x00ea48b0, a byte-wise search.
+- The function returns a **boolean**: true when the search found `sub` in `s`, false otherwise
+  (push-boolean 0x00dfe590). There is no position, no nil and no Lua pattern matching; the test is
+  case-sensitive.
+- `strstr("abc", "")` is true, `strstr("", "a")` is false, `strstr(123, "2")` is true.
+- A nil, boolean, table or function argument reads as a null pointer, and neither the wrapper nor the
+  search tests for null, so the engine **crashes**. **CONFIRMED** (no null check on the path). A host
+  should raise an error (or return false); no working script relies on this.
+- One boolean.
+
+**The script-thread table (used by the four `thread_*` names).**
+- The engine keeps fixed **32-byte thread records at 0x02a42d10**, with the count at 0x02a44d58. The
+  allocators compare the count with 256, so the capacity is **256** (**HIGH CONFIDENCE**: allocators
+  0x00e0c720/0x00e0c8f0 not dumped).
+- Record fields read in the dumps (**CONFIRMED** for each):
+
+  | offset | size | meaning |
+  |---|---|---|
+  | +0x00 | 16-bit | thread id, the handle scripts hold |
+  | +0x04 | pointer | the coroutine (a Lua thread state) |
+  | +0x08 | 32-bit | key inherited from the parent record; selects an error callback (0x00e0d070) |
+  | +0x0c | byte | not-yet-started flag |
+  | +0x10 | pointer | name of the global Lua function the thread runs |
+  | +0x14 | 32-bit | context value inherited from the parent (the `+0x14` of §8.24/§23.15) |
+  | +0x18 | 16-bit | flags: bit 0 started, bit 2 (0x4) killed, bit 4 (0x10) a further "do not run" state never set in these dumps |
+  | +0x1c | 32-bit | number of arguments handed to the coroutine |
+
+- A **current-thread stack** of up to 16 record pointers sits at 0x02a44d14, depth at 0x02a44d10.
+  0x00e0ceb0 returns the record on top, or null when the depth is 0 or above 16. So 0x00e0ceb0 is "the
+  thread record now being resumed", and its `+0x14` is a per-thread context that child threads inherit.
+  **CONFIRMED — disassembly** (both bodies).
+- **The runner 0x00e0cba0** (CONFIRMED except where labelled) takes the address of a record pointer:
+  1. A record with bit 4 set is reported not alive and left alone.
+  2. A killed record (or one an optional engine hook at 0x02a44d60 rejects) skips to release (step 7).
+  3. A record already being resumed (or one a second hook at 0x02a44d64 rejects) is reported alive
+     without a resume; this guards against re-entry.
+  4. A record not yet started first gets the global named at `+0x10` placed below its arguments on the
+     coroutine's stack, and the flag is cleared (the field-read and stack-insert primitives 0x00dfe610
+     and 0x00dfdf00 are **HIGH CONFIDENCE** identities).
+  5. It sets bit 0, pushes the record on the current-thread stack, **resumes the coroutine with the
+     stored argument count** (0x00e00080, **HIGH CONFIDENCE** resume identity; a status above 1 is
+     treated as an error), and pops the stack.
+  6. Yielded without error: alive. Finished without error: release. Error: call the error callback
+     found by the `+0x08` key with the record, then release.
+  7. Release (0x00e0c650, not dumped) receives the address of the record pointer and reports not alive;
+     that it nulls the caller's pointer is **HIGH CONFIDENCE**.
+- The runner's other callers are 0x00e0cd00, 0x00e0cf50 and 0x006280d0. Which of them is the per-frame
+  scheduler, and so **how often a yielded thread is resumed, is OPEN** (HYPOTHESIS: once per frame).
+
+**`thread_check_done(id)` (0x00e0f610).** The number is truncated toward zero (0x00ea2596) and reduced
+to its low 16 bits. The finder 0x00e0caa0 looks for a record that is not killed, still alive (not yet
+started, or with an active call frame, or with a non-empty stack) and carries that id. The function
+returns **true when no such record exists**: the thread finished, was killed, never existed, or the
+number is no valid handle. `thread_check_done(nil)` tests id 0. One boolean. **CONFIRMED** (the
+call-frame probe 0x00e01710 is a **HIGH CONFIDENCE** identity).
+
+**`thread_kill(id)` (0x00e0f650).** Finds the record as `thread_check_done` does and **sets the killed
+bit**; nothing else happens at that moment. The coroutine is never resumed again: at its next scheduled
+resume the runner sees the bit and releases the record. Right after the call `thread_check_done(id)` is
+true, and killing a finished, unknown or already killed id does nothing. A thread that kills itself
+keeps running until its next `thread_yield`. **No return value.** **CONFIRMED.**
+
+**`thread_new(name, ...)` (0x00e0f680).** **CONFIRMED** unless labelled.
+1. Reads `name` as a string (a number is converted) and fetches the current thread record
+   (0x00e0ceb0). It later reads that record's `+0x08` and `+0x14` without a null check, so calling
+   `thread_new` when no script thread is current makes the engine read through a null pointer
+   (**CONFIRMED — disassembly**). All engine code that can reach `thread_new` must therefore run inside
+   a thread record; the top-level entry that pushes the first record is **OPEN**. A host should give
+   the same guarantee or raise.
+2. A `name` that is neither string nor number gives **65535**.
+3. The script-defined global `_GetAnyGlobalSilent` is called with `name` (0x00e0cef0, as in
+   `spec-lua-bindings.md` §8.1), and the result must be a function; otherwise 65535. That global must
+   exist before any `thread_new` (HYPOTHESIS: defined by `system_lib.lua`).
+4. A record is allocated through 0x00e0ca80 → 0x00e0c720 (creates the coroutine, stores the name and
+   assigns the id: **HIGH CONFIDENCE**, allocator not dumped). A full table gives 65535.
+5. The parent's `+0x14` is copied into the new record.
+6. The remaining arguments (all but `name`) are moved in order from the caller's stack to the
+   coroutine's stack by 0x00dfdd80, and their count is stored at `+0x1c`.
+7. The runner starts the thread **immediately**: the global function named `name` is looked up at that
+   moment and runs synchronously until its first `thread_yield` or its end.
+8. If the thread is still suspended afterwards, the 16-bit id is returned; if it completed or raised an
+   error during that first run, **65535** is returned (**HIGH CONFIDENCE** that completion is what
+   nulls the pointer).
+
+One number. The id assignment policy is **OPEN**; 65535 means "no thread".
+
+**`thread_yield(...)` (0x00e0f0d0).** Discards its arguments and yields the current coroutine **with no
+values** (the stock yield primitive 0x00dffb20). The runner sees the yield and keeps the thread alive.
+**CONFIRMED.** Called outside a coroutine, it raises the "attempt to yield across metamethod/C-call
+boundary" error (**HIGH CONFIDENCE**, stock Lua 5.1 behaviour). What the call evaluates to when the
+thread resumes is **OPEN**, because the runner resumes with the record's original argument count each
+time; scripts should treat it as returning nothing.
+
+**`closest_point_on_line_segment(px, py, ax, ay, bx, by)` (0x00e0f740).** Six numbers: a point P =
+(px, py) and a segment from A = (ax, ay) to B = (bx, by). The helper 0x00db96b0 returns the point of
+the **closed** segment nearest to P:
+- if A and B are equal in both components, A;
+- otherwise A + t(B − A) with t = ((P − A)·(B − A)) / |B − A|², clamped to [0, 1]; a t that compares as
+  NaN clamps to 0.
+
+The components of B − A, the numerator, the denominator, the quotient and each output component are
+each rounded to single precision. **Returns two numbers**, x then y. **CONFIRMED — disassembly.**
+
+**`which_side_of_2d_line(a1, a2, a3, a4, a5, a6)` (0x00e0f830).** Returns, rounded once to single
+precision from x87 extended precision,
+
+  (a2 − a4)(a5 − a3) − (a1 − a3)(a6 − a4).
+
+**CONFIRMED — disassembly** for the formula. With P = (a1, a2) and a directed line from A = (a3, a4) to
+B = (a5, a6), this is the 2-D cross product (B − A) × (P − A): positive when P lies left of A→B (x to
+the right, y up), negative on the right, zero on the line, and its magnitude is twice the area of
+triangle A, B, P. That role assignment is **HIGH CONFIDENCE** (by analogy with the sibling above); a host
+that uses the formula literally in a1…a6 is correct either way. One number.
+
+**For a host: the surprising contracts.** These differ from what a Lua programmer would assume.
+`max(1, 2, 3)` returns 2, because `max` and `min` compare only their first two arguments and return the
+second on a tie or NaN. `strstr` returns a boolean, not a position or nil. `sizeof_table` counts every
+key/value pair (or returns a numeric `n` field), not `#t`. Every numeric argument is narrowed to
+single-precision float before use and every numeric result is single precision. One effect is that
+`floor` of a value just below an integer can round up: `floor(0.99999999)` is 1. There is no `math`
+table, so the bare names are the only maths functions. `thread_new` runs the new thread at once and
+returns 65535 if it finishes in that first run.
 
 **`debug_print(...)` and `assert_msg(...)` (both 0x007c9f50).** **CONFIRMED — disassembly.**
 - The body reads the argument count, discards it, and returns 0 values. It reads no argument, does
@@ -10368,35 +10612,81 @@ engine.
   `rand_int`, 0x00dab6a0 for `rand_float`), the sibling routines 0x00dab5b0, 0x00dab5e0 and
   0x00dab630 advance the same cursor. 0x00dab660 alone has at least 30 callers (list capped).
   **Lua's random numbers are not isolated from the engine's.**
-- **OPEN — seeding and filling.** The only writer of the ring's contents in the reference list is
+- ~~**OPEN — seeding and filling.** The only writer of the ring's contents in the reference list is
   code at 0x010145e1..0x010145f0 that is not inside a recognised function. Whether the 8192 values
   are a fixed table, a generator run at start-up or a time-seeded fill is not known. Three routines
   that take the cursor's address (0x00dab5a0, 0x00dab810, 0x00dab830) look like save, restore or
-  reseed helpers; they were not dumped.
-- Host: until the fill is read, use the host's own generator behind the same contracts, and do not
-  promise sequence equality with the game.
+  reseed helpers; they were not dumped.~~ [Superseded by job `20261001T114555-team-a-lgdz`, next
+  bullets.]
+- **The random-source object (CONFIRMED — disassembly).** 0x013214d0 is the base of an object, not a
+  bare cursor: the cursor at +0 (0x013214d0), the 8192-entry ring at +4 (0x013214d4..0x013294d3) and
+  a generator state at +0x8004 (0x013294d4).
+- **Filling (CONFIRMED — disassembly).** 0x00dab5a0(seed) calls the fill method 0x00dab4d0. When the
+  seed is non-zero it first reseeds the generator (0x00dab370, not dumped; **HIGH CONFIDENCE** on the
+  role); it then resets the cursor to 0 and regenerates all 8192 entries, in order, from the generator
+  step 0x00dab3c0. A zero seed continues the generator's current sequence. The ring is thus a cache of
+  real generator output, refilled whole, never piecemeal.
+- **Before the first fill.** The cursor and the first ring entry are 0 in the file image
+  (**CONFIRMED**, data headers), and the whole ring is zero (**HIGH CONFIDENCE**). Until the first fill
+  every draw yields 0, so `rand_int(lo, hi)` and `rand_float(lo, hi)` both return `lo`.
+- **Who fills.** 0x00dab5a0 has three callers, 0x00dd98f0, 0x009c1ff0 and 0x005d25f0 (not dumped). The
+  fill method also has callers 0x00599c20 and 0x00dab720, which may act on other instances of the same
+  object type (**OPEN**).
+- **Cursor writers (CONFIRMED, complete reference list: 18 uses in 8 functions).** The five draw
+  routines (0x00dab5b0, 0x00dab5e0, 0x00dab630, 0x00dab660, 0x00dab6a0) and the two vector helpers each
+  advance it by one and wrap it to 0 at 8192; the fill resets it to 0. Nothing else writes it: there is
+  no save or restore. The vector helpers are 0x00dab810 (one uniform value in [0, 1), computed as the
+  unsigned ring value times 2^-32, copied into all four lanes of a 16-byte vector) and 0x00dab830 (the
+  lane-wise interpolation a + (b − a)u between two vectors with one uniform u). Each consumes one entry.
+- **OPEN:** the generator algorithm (0x00dab3c0, 0x00dab370), the seeds the three callers pass, and
+  the undisassembled store at 0x010145e1 (its own reference list is empty; dead code, an inlined copy
+  or a second filler).
+- Host: ~~until the fill is read,~~ use the host's own generator behind the same contracts (a ring of
+  8192 values, a cursor that wraps at 8192 and resets on refill), and do not promise sequence equality
+  with the game until the generator is read. A host that never refills matches the engine's shape.
 
-**OPEN — the remaining bodies.** The job did not dump the other 18 natives of the roster, and the
-following are therefore OPEN:
-- the nine standard-math names (`abs`, `acos`, `cos`, `sin`, `ceil`, `floor`, `max`, `min`, `sqrt`):
-  argument count, NaN handling, and whether `max`/`min` take more than two arguments;
-- `get_frame_time`, `sizeof_table`, `strstr`, the four `thread_*` names, and the two geometry
-  helpers;
-- a re-read of `include` (0x00e0f010; its desk-level description is in `spec-lua-bindings.md` §16.3).
+~~**OPEN — the remaining bodies.** The job did not dump the other 18 natives of the roster, and the
+following are therefore OPEN:~~
+- ~~the nine standard-math names (`abs`, `acos`, `cos`, `sin`, `ceil`, `floor`, `max`, `min`, `sqrt`):
+  argument count, NaN handling, and whether `max`/`min` take more than two arguments;~~
+- ~~`get_frame_time`, `sizeof_table`, `strstr`, the four `thread_*` names, and the two geometry
+  helpers;~~
+- ~~a re-read of `include` (0x00e0f010; its desk-level description is in `spec-lua-bindings.md` §16.3).~~
 
-Stock `math.*` semantics is the obvious **HYPOTHESIS** for the math names. Note, though, that stock
+~~Stock `math.*` semantics is the obvious **HYPOTHESIS** for the math names. Note, though, that stock
 `math.max` is variadic and errors on a non-number, while all four dumped bodies skip checks and read a
 bad argument as 0. The ring fill/seed and 0x00fccb70 are OPEN as well. All of these are settled in the
-follow-up job `team-a/ghidra/jobs/bgcx-followup.json`.
+follow-up job `team-a/ghidra/jobs/bgcx-followup.json`.~~ [Settled by job `20261001T114555-team-a-lgdz`
+(`bgcx-followup.json`): the 18 bodies are described above, after `round`; the stock-`math` hypothesis is
+wrong (binary `max`/`min`, no type errors, single precision, and no `math` table exists); the ring fill
+and 0x00fccb70 are in the ring block and the host paragraph.]
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`, with
+**OPEN:** re-read of `include` (0x00e0f010; desk-level description in `spec-lua-bindings.md` §16.3) —
+not in job `lgdz` either.
+
+~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`, with
 `20261001T021641-team-a-yduu` for 0x00e0e0b0): CONFIRMED — the roster, bare-global binding and
 both-states registration before any preload; `rand_int` (truncated arguments, either order,
 inclusive range); `rand_float` shape and single-precision narrowing; `round` half away from zero and
 its edge values; `debug_print`/`assert_msg` no-op; the ring, cursor and wrap and the shared cursor.
 HIGH CONFIDENCE — the 2^-32 scale constant. HYPOTHESIS — missing-argument behaviour; 0x00fccb70
 opens the stock libraries. OPEN — ring seeding, the 18 undumped bodies and the `include` re-read
-(job `bgcx-followup.json`).**
+(job `bgcx-followup.json`).**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020218-team-a-bgcx`,
+with `20261001T021641-team-a-yduu` for 0x00e0e0b0, and `20261001T114555-team-a-lgdz`): CONFIRMED — the
+roster, bare-global binding and both-states registration before any preload; argument handling,
+single-precision narrowing and return counts of all 22 dumped bodies; `rand_int`; `rand_float` shape
+and the 2^-32 constant; `round`; `debug_print`/`assert_msg` no-op; `max`/`min` binary, second-wins
+rule; `floor`/`ceil` integer results; the `acos` clamp; `abs`; `get_frame_time`'s global and its 1/30
+default; `sizeof_table`; `strstr` boolean; the four `thread_*` functions against the thread table and
+its runner; both geometry formulas; the ring object, its fill and the cursor rules; 0x00fccb70 opens
+base plus `coroutine` only, so no `math` table at state creation. HIGH CONFIDENCE — the C run-time
+identities behind `sqrt`/`sin`/`cos`/`acos`; frame-time unit and role; the -2147483648 overflow result;
+`thread_new` returning 65535 on first-run completion; thread capacity 256; the role assignment of
+`which_side_of_2d_line`; the whole ring being zero in the file; no later registrar adding `math`.
+HYPOTHESIS — missing-argument behaviour. OPEN — the generator and its seeds; thread scheduling cadence
+and id policy; the writer of 0x0132a0b0; `thread_yield`'s value on resumption; the `include` re-read.**
 
 ### 26.28 Co-op session, tutorial table and vehicle-store state at startup (exe-derived 2026-10-01)
 
@@ -11186,3 +11476,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020213-team-a-dksj`): §3.1 — replaced the head/tail description with the confirmed body (host test on `+0x5c`/`+0x58` first, list head `+0x54`, member count `+0x60` must be ≥ 2, slot check `0x00877a90`); §8.27/§10.2 confirmed, no session → false; §10.1 — three writers of `0x022cdf08`, not one, initial value 0; §6.19/§10.4 — table base `0x0151d600`, `+0x08` is a descriptor pointer, `+0x0c` is a per-entry state 0–4 rather than a kind, descriptor `+0x24` bits, the dispatcher order, `tutorial_advance` true only in state 3; annotated the same table references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
 - 2026-10-01 (cloud, bridge job `20261001T114802-team-a-kyoi`): §26.28 — the 210-entry tutorial name table from the static pointer table `0x012f5930` (209 names resolved; index 176's string at `0x01124348` not resolved by the dump, OPEN).
 - 2026-10-01 (cloud, bridge job `20261001T114716-team-a-fvfp`): §26.28 — corrected the co-op session writers: `0x0087efe0` is the subsystem shutdown and stores zero (not the installer), `0x0087d8a0` is init, `0x0087ed70` destroys one session; no resolved code installs a session, so the installer is, by elimination, the undefined code at `0x0087c341`/`0x0087c359` (HIGH CONFIDENCE; OPEN until read); single player stays "no session, all three queries false"; added the idle predicate `0x0059fbe0` and the two-slot pool; tutorial table filled by `0x007178c0` → `0x00715850` with entries 189–209 starting in state 1. §3.1 — client-side gate = "not idle and not flagged for destruction". §6.19 — fill routine and starting states. §8.27 — shutdown correction; false during wind-down. §10.1 — bodies of the store-flag writers `0x005fa820` (entry, sets 1) and `0x00820cd0` (exit, sets 0 only when the UI call succeeds); callers OPEN. §10.4 — starting states after the fill; state-3 writer narrowed (`0x007163e0` reaches only entries 189–195; tail at `0x00717363`), meaning still OPEN.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114555-team-a-lgdz`, follow-up `bgcx-followup.json`): §26.27 only — added behaviour entries for the 18 undumped bare globals (`max`/`min` strictly binary with second-argument wins on tie or NaN; `floor`/`ceil` via 32-bit truncating conversion; `acos` clamp; `strstr` boolean; `sizeof_table` pair count with `n` override; `get_frame_time` global 0x0132a0b0, default 1/30; the four `thread_*` functions with the 256-record thread table, its runner and the current-thread stack; the two geometry helpers), single-precision narrowing for all numeric wrappers, the random-source object and its fill (ring and cursor zero in the file image, draws return `lo` until the first fill), 0x00fccb70 = base plus `coroutine` only (no `math` table), the 2^-32 constant raised to CONFIRMED, a host paragraph and a new review status; `include` stays OPEN. Old text struck or annotated in place.
