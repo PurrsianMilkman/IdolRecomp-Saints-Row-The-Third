@@ -110,20 +110,24 @@ def main(argv):
         if failures:
             print(report)
 
-        # --preload-states=spec16.4-highconf (HYPOTHESIS opt-in): off by default;
-        # with it, game_lib.lua (OPEN-tagged here) runs in the gameplay state only.
-        check(read_kv(os.path.join(out1, "verdict_summary.txt")).get("preload_states_option", "").startswith("off"),
-              "preload_states_option off by default")
+        # Sec16.4 preload routing (CONFIRMED, cleared 2026-10-01) is the default:
+        # game_lib.lua runs in the gameplay state only. --preload-states=tag restores
+        # the old per-script tag routing (game_lib.lua is OPEN-tagged here: both states).
+        opt1 = read_kv(os.path.join(out1, "verdict_summary.txt")).get("preload_states_option", "")
+        check(opt1.startswith("spec16.4 (default") and opt1.endswith("scripts_rerouted=1"), f"default line: {opt1}")
         out3 = os.path.join(tmp, "run3")
-        run_host(host, reglist, cache, out3, "--preload-states=spec16.4-highconf")
+        run_host(host, reglist, cache, out3, "--preload-states=tag")
         opt = read_kv(os.path.join(out3, "verdict_summary.txt")).get("preload_states_option", "")
-        check(opt.startswith("spec16.4-highconf (HYPOTHESIS") and opt.endswith("scripts_rerouted=1"),
-              f"opt-in line: {opt}")
+        check(opt.startswith("tag (opt-in") and opt.endswith("scripts_rerouted=0"), f"tag line: {opt}")
         s3 = {r["entry_name"]: r for r in read_tsv(os.path.join(out3, "verdict_per_script.tsv"))}
         s1 = scripts
-        check(s1.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "1", "default: game_lib also run in ui")
-        check(s3.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "0", "opt-in: game_lib not run in ui")
-        check(s3.get("game_lib.lua", {}).get("gameplay_runChunk_attempted") == "1", "opt-in: game_lib run in gameplay")
+        check(s1.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "0", "default: game_lib not run in ui")
+        check(s1.get("game_lib.lua", {}).get("gameplay_runChunk_attempted") == "1", "default: game_lib run in gameplay")
+        check(s3.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "1", "tag: game_lib also run in ui")
+        out5 = os.path.join(tmp, "run5")
+        run_host(host, reglist, cache, out5, "--preload-states=spec16.4-highconf")
+        check(read_kv(os.path.join(out5, "verdict_summary.txt")).get("preload_states_option", "").startswith("spec16.4 (default"),
+              "old flag name accepted as an alias")
         bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True)
         check(bad.returncode != 0, "unknown option rejected")
 

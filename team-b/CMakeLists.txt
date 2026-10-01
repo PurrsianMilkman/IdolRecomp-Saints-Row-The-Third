@@ -907,6 +907,10 @@ add_executable(xtbl_name_grep tools/xtbl_name_grep.cpp)
 target_link_libraries(xtbl_name_grep PRIVATE vpp_container)
 add_executable(lua_dynamic_dispatch_grep tools/lua_dynamic_dispatch_grep.cpp)
 target_link_libraries(lua_dynamic_dispatch_grep PRIVATE vpp_container)
+# include( census (spec-lua-bindings.md Sec16.4 OPEN residue 1): which scripts call the bare global
+# `include`, and with which names; flags calls naming a preload file.
+add_executable(lua_include_census tools/lua_include_census.cpp)
+target_link_libraries(lua_include_census PRIVATE vpp_container)
 
 # Call-SITE census (HANDOFF Sec9.121): for every real <stem>_start/_run/
 # _success/_init/_cleanup definition, who calls it (same script/other

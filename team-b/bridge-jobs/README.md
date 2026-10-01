@@ -111,3 +111,10 @@ globals (`rand_int` first), then fade / zscene, then the §16.4 preloads. For ea
 The run's `verdict_open_state.tsv` and the `open_state_slots_with_values_at_start=` summary line show which slots
 are now filled. Diff it against the previous mission run with `tools/bridge_diff.py`. The baseline for the first
 answer is `20261001T003228-team-b-ugaa`, or `20261001T000923-team-b-hxmr` with `--preload-states=spec16.4-highconf`.
+
+### 11: include( census (added 2026-10-01)
+
+`spec-lua-bindings.md` §16.4 leaves one item for Team B to check (OPEN residue 1): does any shipped script call the
+bare global `include` with a preload name? Such a call in a gameplay-side script would load that file into the
+gameplay state. `lua_include_census` lists every `include` call (script, line, literal argument or
+`<non-literal>`) and flags the ones that name a preload file. It writes no script text.

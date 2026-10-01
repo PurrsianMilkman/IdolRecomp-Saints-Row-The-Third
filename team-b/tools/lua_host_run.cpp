@@ -760,21 +760,24 @@ MissionStartResult callMissionStart(lua_State* L, const std::string& funcName, d
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "usage: lua_host_run <cache_dir> <registered_tagged.txt> <out_dir> [max_scripts_to_run]\n"
-                     "                    [--preload-states=spec16.4-highconf]\n"
-                     "  --preload-states=spec16.4-highconf  HYPOTHESIS, evidence-gathering only, off by default:\n"
-                     "      run the spec-lua-bindings.md Sec16.4 preloads only in the state Sec16.4 names\n"
-                     "      (vint_lib/game_ui_globals/vdo_base_object/vdo_anim_object/vdo_input_tracker: ui only;\n"
-                     "      game_lib: gameplay only; system_lib: both). Sec16.4 is HIGH CONFIDENCE (desk), NOT\n"
-                     "      cleared; becomes the default only once Team A clears it.\n";
+                     "                    [--preload-states=spec16.4|tag]\n"
+                     "  --preload-states=spec16.4  (default) run the spec-lua-bindings.md Sec16.4 preloads only in\n"
+                     "      the state Sec16.4 names (vint_lib/game_ui_globals/vdo_base_object/vdo_anim_object/\n"
+                     "      vdo_input_tracker: ui only; game_lib: gameplay only; system_lib: both). CONFIRMED and\n"
+                     "      cleared for implementation 2026-10-01 (Sec16.1/Sec16.4). spec16.4-highconf is accepted\n"
+                     "      as an alias.\n"
+                     "  --preload-states=tag  the old behaviour: these files follow the per-script state tag like\n"
+                     "      any other script (both states when the tag is OPEN).\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
     // positional (if any) is max_scripts_to_run.
-    bool preloadStatesSpec164 = false;
+    bool preloadStatesSpec164 = true; // Sec16.1/Sec16.4, CONFIRMED and cleared 2026-10-01
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
-        if (arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
+        if (arg == "--preload-states=spec16.4" || arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
+        else if (arg == "--preload-states=tag") preloadStatesSpec164 = false;
         else if (arg.rfind("--", 0) == 0) {
             std::cerr << "unknown option: " << arg << "\n";
             return 1;
@@ -970,10 +973,10 @@ int main(int argc, char** argv) {
 
     // --- Real, disassembly-confirmed preload order for both states
     // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30).
-    // IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30):
-    // Sec16.1 is NEEDS-EXE and Sec16.1/Sec16.4 are "NOT yet cleared for
-    // implementation". Kept working, behaviour unchanged, until Team A
-    // clears it (team-b/HANDOFF.md Requests to Team A, item 8). Before this,
+    // CONFIRMED and CLEARED for implementation 2026-10-01 (Sec16.1/Sec16.4
+    // re-derived from the executable; HANDOFF Requests to Team A item 8
+    // answered). Per Sec16.1 a failed preload is silent and later preloads
+    // still run, which is what this sequence does. Before this,
     // this host only ever preloaded game_lib.lua, alone, into gameplay -
     // missing system_lib.lua on BOTH states and the entire UI-state chain.
     //   UI state, in order:       system_lib.lua -> vint_lib.lua ->
@@ -1257,9 +1260,9 @@ int main(int argc, char** argv) {
                       (tag == statetag::Tag::Conflict);
         bool fireUi = (tag == statetag::Tag::Ui) || (tag == statetag::Tag::Open) ||
                       (tag == statetag::Tag::Conflict);
-        // --preload-states=spec16.4-highconf (HYPOTHESIS, opt-in, manager
-        // ruling 2026-09-30): the Sec16.4 preloads run only in the state
-        // Sec16.4 names, overriding the per-script tag. Off by default.
+        // Sec16.4 (CONFIRMED, cleared 2026-10-01; default, --preload-states=tag
+        // restores the old behaviour): the preloads run only in the state
+        // Sec16.4 names, overriding the per-script tag.
         if (preloadStatesSpec164) {
             std::string lower = toLower(s.entryName);
             static const char* const kUiOnly[] = {"vint_lib.lua", "game_ui_globals.lua", "vdo_base_object.lua",
@@ -1586,9 +1589,8 @@ int main(int argc, char** argv) {
          "baseline's own formula)=" + std::to_string(toRun * hooks.size() * 2));
     line("\n=== STATE-TAG RESTRICTION SUMMARY (this task; spec-lua-bindings.md Sec14.5) ===");
     line(std::string("preload_states_option=") +
-         (preloadStatesSpec164 ? "spec16.4-highconf (HYPOTHESIS: Sec16.4 HIGH CONFIDENCE desk answer, NOT cleared; "
-                                 "evidence run, not default behaviour)"
-                               : "off (default)") +
+         (preloadStatesSpec164 ? "spec16.4 (default; Sec16.1/Sec16.4 CONFIRMED, cleared 2026-10-01)"
+                               : "tag (opt-in old behaviour: preload files follow the per-script state tag)") +
          " scripts_rerouted=" + std::to_string(spec164Overrides));
     line("real_population_split(of " + std::to_string(st.found.size()) + " found scripts)=ui:" +
          std::to_string(tagUi) + " gameplay:" + std::to_string(tagGameplay) + " OPEN:" + std::to_string(tagOpen) +
