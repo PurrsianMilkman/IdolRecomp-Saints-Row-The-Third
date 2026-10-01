@@ -264,6 +264,13 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   gameplay: `game_lib`; both: `system_lib`). §16.4 is HIGH CONFIDENCE (desk), NOT cleared ("never loaded into
   the other state" OPEN until Team A's exe job). This is an evidence run only; it becomes the default once
   §16.4 is cleared. Job 02d runs the mission drive with it, diffed against `tkjl` (jklk has no output).
+- **02d `20261001T000923-team-b-hxmr`** (at `5fcec37`, `--preload-states=spec16.4-highconf`, HYPOTHESIS
+  evidence run): OK, 285 s, `scripts_rerouted=6`. `bridge_diff` tkjl → hxmr: still 9/49 past `_start`, first
+  errors unchanged (the OPEN co-op/tutorial refusals come first), but in **48/49 missions the first missing
+  global changes from `vint_is_std_res` to `rand_int`**. `rand_int` is one of the 24 bare globals of §13.2,
+  deliberately unregistered until their roster is specced. So with `vint_lib` UI-only, the next gap is the
+  bare-global roster (Requests to Team A, item 9). Refusals barely move (co-op 876→874, vehicle store 565→564,
+  tutorial 173→168).
 - **06 `20260930T231306-team-b-epre`** (CTAB census, for Team A's render-pipeline re-derivation): 38 archives,
   844 `.fxo_pc`, **7,276 blobs** (= §9.98), 7,276 CTAB well-formed, 0 malformed, 0 disassembly failures;
   3,731 VS / 3,545 PS; 52,990 constants (float4 43,501, sampler 9,359, bool 130). **Every** VS constant
@@ -350,6 +357,10 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    is each of the six §16.4 UI preloads (and `game_lib.lua`) loaded ONLY into the state §16.4 names, never the
    other? If cleared, the host restricts them to that state and a mission re-run measures it against `jklk`.
    (Note: the host's existing §16.4 preload step predates the review; it came with the initial import.)
+9. **The §13.2/§16.3 bare-global roster, starting with `rand_int`.** With `vint_lib.lua` UI-only (opt-in run
+   `20261001T000923-team-b-hxmr`), 48/49 missions' first missing global is `rand_int`, one of the 24 bare
+   globals registered by `0x00e0f900` (§13.2: which 24, which state, and their bodies are OPEN). Needed: the 24
+   names, the state(s) that receive them, and behaviour entries, `rand_int` first.
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
