@@ -15,14 +15,19 @@
 //                      raw little-endian immediate/displacement scan), with its containing function.
 //   str   <text ...>   find each exact NUL-terminated ASCII string and report its uses, like `lua`
 //                      without dumping the candidates.
+//   ptrs  <addr ...>   read count:N consecutive dwords of a static pointer table at each address and print,
+//                      per index, the value and the string it points to (if any). Read-only, like the rest.
+//   range <0xS-0xE ...> disassemble [S, E] in this session (not saved) and list every instruction with its
+//                      references; for code Ghidra never defined.
 //
-// Options:
+// Options (write them as key:value in bridge jobs; key=value is split apart by the Windows batch launcher):
 //   depth=N      callee recursion depth for dumps (default 1; 0 = only the named functions)
 //   maxfuncs=N   cap on functions dumped per item (default 40)
 //   maxinsn=N    functions longer than this are listed but not dumped when reached as callees (default 600)
 //   xrefs=N      per-global cap on reference sites listed inside a dump (default 25)
 //   window=N     instructions scanned after a name-string use for code pointers (default 6)
 //   nodecomp=1   skip the decompiler (listing only)
+//   count=N      ptrs mode: number of dwords to read (default 16)
 //
 // @category Crreish
 
@@ -63,7 +68,7 @@ import java.util.TreeSet;
 
 public class CrreishDump extends GhidraScript {
 
-    private int depth = 1, maxFuncs = 40, maxInsn = 600, xrefCap = 25, window = 6;
+    private int depth = 1, maxFuncs = 40, maxInsn = 600, xrefCap = 25, window = 6, count = 16;
     private boolean decompile = true;
     private DecompInterface decomp;
     private Listing listing;
@@ -84,7 +89,10 @@ public class CrreishDump extends GhidraScript {
         List<String> items = new ArrayList<>();
         for (int i = 2; i < args.length; i++) {
             String a = args[i];
+            // ':' is accepted as well as '=': the PC agent starts Ghidra through analyzeHeadless.bat,
+            // and cmd.exe splits arguments at '=', so 'depth=2' arrives as two items there.
             int eq = a.indexOf('=');
+            if (eq < 0) eq = a.indexOf(':');
             if (eq > 0 && a.substring(0, eq).matches("[a-z]+")) {
                 String k = a.substring(0, eq), v = a.substring(eq + 1);
                 switch (k) {
@@ -94,7 +102,8 @@ public class CrreishDump extends GhidraScript {
                     case "xrefs": xrefCap = Integer.parseInt(v); break;
                     case "window": window = Integer.parseInt(v); break;
                     case "nodecomp": decompile = !"1".equals(v); break;
-                    default: printerr("unknown option " + k);
+                    case "count": count = Integer.parseInt(v); break;
+                    default: items.add(a); // not an option key: keep it as a search item (e.g. a name containing ':')
                 }
             } else {
                 items.add(a);
@@ -120,6 +129,8 @@ public class CrreishDump extends GhidraScript {
                     case "str": doLua(item, false); break;
                     case "func": doFunc(item); break;
                     case "xref": doXref(item); break;
+                    case "ptrs": doPtrs(item); break;
+                    case "range": doRange(item); break;
                     default: index.println("unknown mode " + mode); return;
                 }
             } catch (Exception e) {
@@ -340,6 +351,63 @@ public class CrreishDump extends GhidraScript {
         describeGlobal(w, a, Integer.MAX_VALUE);
         w.close();
         index.println("  xref_" + sanitize(item) + ".txt");
+    }
+
+    // range: item "0xSTART-0xEND". Disassembles from START in this read-only session (nothing is saved, as
+    // with createFunction above) and lists every instruction in [START, END] with its references, so code
+    // Ghidra never defined (no function, no instructions) can be read.
+    private void doRange(String item) throws Exception {
+        String[] se = item.split("-", 2);
+        Address start = toAddr(se[0]), end = toAddr(se[1]);
+        long span = end.subtract(start);
+        if (span < 0 || span > 0x10000) {
+            index.println("  range refused: " + item + " spans " + span + " bytes (limit 0x10000; END must not precede START)");
+            return;
+        }
+        PrintWriter w = writer("range_" + sanitize(item) + ".txt");
+        w.println("@ " + start + " - " + end + " block " + blockName(start));
+        Address a = start;
+        while (a != null && a.compareTo(end) <= 0) {
+            if (monitor.isCancelled()) throw new RuntimeException("cancelled");
+            Instruction ins = listing.getInstructionAt(a);
+            if (ins == null) { disassemble(a); ins = listing.getInstructionAt(a); }
+            if (ins == null) {
+                byte b = mem.getByte(a);
+                w.println(String.format("  %s  db 0x%02x", a, b & 0xff));
+                a = a.next();
+                continue;
+            }
+            StringBuilder sb = new StringBuilder("  " + ins.getAddress() + "  " + ins);
+            for (Reference r : ins.getReferencesFrom()) {
+                Function tf = getFunctionContaining(r.getToAddress());
+                sb.append("  -> ").append(r.getToAddress()).append(tf == null ? "" : " [" + fname(tf) + "]").append(describeData(r.getToAddress()));
+            }
+            w.println(sb);
+            a = ins.getMaxAddress().next();
+        }
+        w.close();
+        index.println("  range_" + sanitize(item) + ".txt");
+    }
+
+    // ptrs: read `count` consecutive little-endian dwords starting at the item address (a static pointer
+    // table) and print, per index, the dword and, when it points into initialized memory, the string there.
+    private void doPtrs(String item) throws Exception {
+        Address a = toAddr(item);
+        PrintWriter w = writer("ptrs_" + sanitize(item) + ".txt");
+        w.println("@ " + a + " block " + blockName(a) + (fileBacked(a) ? " file-backed" : " NOT file-backed (zero-fill/runtime)") + ", " + count + " dwords");
+        for (int i = 0; i < count; i++) {
+            Address e = a.add(4L * i);
+            long v = mem.getInt(e) & 0xffffffffL;
+            String txt = "";
+            try {
+                Address t = toAddr(v);
+                MemoryBlock b = mem.getBlock(t);
+                if (b != null && b.isInitialized()) txt = describeData(t);
+            } catch (Exception ex) { /* not an address */ }
+            w.println(String.format("%4d  %s  0x%08x%s", i, e, v, txt));
+        }
+        w.close();
+        index.println("  ptrs_" + sanitize(item) + ".txt");
     }
 
     private void describeGlobal(PrintWriter w, Address a, int cap) throws Exception {

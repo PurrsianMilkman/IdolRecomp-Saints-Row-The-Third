@@ -90,3 +90,10 @@ instead of retrying on the same model.
   allowed, even as full lists.
 - **Still excluded, as third parties' personal data:** developer usernames, developer machine paths, and real
   people's names found in the files.
+
+## Reporting (owner decision, 2026-10-01)
+
+Teams report to the manager with status only: done (with commit ids and test results), in progress, and
+blocked (and on what). Technical detail stays in specs, HANDOFF, STATE.md and commit messages. Decisions and
+reviews still go to the manager straight away. The manager gives the owner an overall project status, not
+per-item detail.

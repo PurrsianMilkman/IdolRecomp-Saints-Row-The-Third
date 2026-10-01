@@ -30,10 +30,13 @@ C
 (cd "$T/proj" && git checkout -qb claude/team-b-work && git add -A && git commit -qm init && git push -q origin claude/team-b-work)
 REF=$(git -C "$T/proj" rev-parse HEAD)
 
+mkdir -p "$T/notes/sub" "$T/secret"; printf 'old team a notes' > "$T/notes/sub/n.md"; printf 'a\0b' > "$T/notes/blob.md"
+printf 'outside' > "$T/secret/s.md"; ln -s "$T/secret/s.md" "$T/notes/link.md"
 mkdir -p "$T/game"; printf 'hello game' > "$T/game/data.vpp_pc"; mkdir -p "$T/game/sub"; printf x > "$T/game/sub/a.str2_pc"
 cat > "$T/pc_config.json" <<J
 {"bus_url": "$T/bus.git", "project_url": "$T/project.git", "game_dir": "$T/game", "work_dir": "$T/work",
- "cmake_configure_args": [], "build_config": "Release", "poll_seconds": 1}
+ "cmake_configure_args": [], "build_config": "Release", "poll_seconds": 1,
+ "read_roots": {"notes": {"path": "$T/notes", "teams": ["team-a"]}}}
 J
 
 # cloud side (as team-b)
@@ -71,4 +74,13 @@ python3 "$HERE/bridge_client.py" list >/dev/null
 ! git -C "$T/cloudbus" branch -r | grep -q team-a
 ! git -C "$T/cloudbus" cat-file -e "origin/team-a" 2>/dev/null
 HOME="$T/homeA" python3 "$HERE/bridge_client.py" show "$AJ" | grep -q "\[OK\]"
+# files step: team-a may read its whitelisted root; team-b may not; links out of the root are skipped
+FA=$(HOME="$T/homeA" bash -c 'echo "{\"title\":\"notes\",\"steps\":[{\"kind\":\"files\",\"root\":\"notes\",\"pattern\":\"**/*\"}]}" | python3 "$0/bridge_client.py" submit -' "$HERE")
+FB=$(echo '{"title":"notes-b","steps":[{"kind":"files","root":"notes"}]}' | python3 "$HERE/bridge_client.py" submit -)
+python3 "$HERE/pc_agent.py" --config "$T/pc_config.json" --once >> "$T/agent.log" 2>&1
+RA=$(HOME="$T/homeA" python3 "$HERE/bridge_client.py" show "$FA" || true)
+grep -q "\[OK\]" <<<"$RA"; grep -q "_files/notes/sub/n.md" <<<"$RA"; grep -q "blob.md: binary content" <<<"$RA"
+! grep -q "link.md" <<<"$RA"
+test "$(cat "$T/cloudbusA/results/$FA/_files/notes/sub/n.md")" = "old team a notes"
+RB=$(python3 "$HERE/bridge_client.py" show "$FB" || true); grep -q "REJECTED" <<<"$RB"; grep -q "not enabled for team-b" <<<"$RB"
 echo "SELFTEST PASS"

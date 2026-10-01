@@ -28,6 +28,7 @@ your PC is code that has already been pushed to `Project-Crreish`, where you can
 | `run` | runs a built tool (or one you configured under `tools`) with the job's arguments | both teams |
 | `ghidra` | runs a Ghidra script from `team-a/` at the job's ref, headless and `-readOnly`, against your Ghidra project | Team A only |
 | `ls` | lists files in the game folder (names and sizes) | both teams |
+| `files` | lists a folder you whitelisted under `read_roots` and returns its text files | only the teams you name for that folder |
 
 Arguments can use placeholders: `{GAME}` (game folder), `{OUT}` (a fresh output folder for this job),
 `{SRC}`, `{BUILD}`, and `{EXE}` (the game executable, Team A only).
@@ -40,6 +41,21 @@ everything that is uploaded.
 
 **Clean room:** each team has its own bus branch. Team B sessions only clone the `team-b` branch, so they
 never see Team A's disassembly output. Ghidra jobs and `{EXE}` are refused on the `team-b` branch.
+
+### Sharing other folders (`read_roots`)
+
+To let a team read a folder on your PC (for example Team A's old working folder), add it to `pc_config.json`:
+
+```json
+"read_roots": {
+  "teama-pc": {"path": "D:/Project Crreish/TEAM A", "teams": ["team-a"]}
+}
+```
+
+A job step `{"kind": "files", "root": "teama-pc", "pattern": "**/*.md"}` then lists that folder and returns its
+text files (same extension list, binary filter and size limits as other results). Only folders you list are
+reachable, only by the teams you name, and links that point outside the folder are ignored. Keep Team A's
+folders `team-a` only: Team B must never see them.
 
 ## Setting it up on your PC (once, about 10 minutes)
 

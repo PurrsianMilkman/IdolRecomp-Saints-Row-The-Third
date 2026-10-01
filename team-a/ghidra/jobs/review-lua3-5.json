@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/func",
     "func",
-    "depth=1",
-    "maxfuncs=8",
-    "maxinsn=800",
+    "depth:1",
+    "maxfuncs:8",
+    "maxinsn:800",
     "0x004584e0",
     "0x004588f0",
     "0x004bf810",

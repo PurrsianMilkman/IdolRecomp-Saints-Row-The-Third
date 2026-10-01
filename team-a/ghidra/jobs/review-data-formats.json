@@ -1,18 +1,17 @@
 {
  "team": "team-a",
- "title": "Team A: desk-review NEEDS-EXE batch 5 \u2014 customization-data, vehicle-data, mission-packages, resource-dispatch, ai-behavior, low-mips, extensionless, ctorless, format-inventory (terrain-format exe items held: they touch the on-hold .czn_pc interior)",
+ "title": "Team A: desk-review NEEDS-EXE batch 5 \u2014 customization-data, vehicle-data, mission-packages, resource-dispatch, ai-behavior, low-mips, extensionless, ctorless, format-inventory (terrain-format exe items held: they touch the on-hold .czn_pc interior) [re-run 2026-10-01: depth 0, 40 functions per step]",
  "ref": "auto",
  "steps": [
   {
    "kind": "ghidra",
    "script": "team-a/ghidra/CrreishDump.java",
-   "timeout": 7200,
+   "timeout": 3600,
    "args": [
-    "{OUT}/func",
+    "{OUT}/func1",
     "func",
-    "depth=1",
-    "maxfuncs=8",
-    "maxinsn=800",
+    "depth:0",
+    "maxinsn:2000",
     "0x004593a0",
     "0x004f2650",
     "0x004f29b0",
@@ -52,7 +51,18 @@
     "0x00a9afb0",
     "0x00ab06c0",
     "0x00ab1080",
-    "0x00ac17b0",
+    "0x00ac17b0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func2",
+    "func",
+    "depth:0",
+    "maxinsn:2000",
     "0x00ac1ba0",
     "0x00ac2400",
     "0x00ac92d0",
@@ -90,7 +100,7 @@
    "args": [
     "{OUT}/glob",
     "xref",
-    "xrefs=60",
+    "xrefs:60",
     "0x0124afec",
     "0x0124b000",
     "0x0130df84",

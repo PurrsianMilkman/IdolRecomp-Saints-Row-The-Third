@@ -10,7 +10,7 @@
    "args": [
     "{OUT}/callees",
     "func",
-    "depth=0",
+    "depth:0",
     "0x00458230",
     "0x0059f8c0",
     "0x005a0580",
@@ -113,7 +113,7 @@
    "args": [
     "{OUT}/globals",
     "xref",
-    "xrefs=40",
+    "xrefs:40",
     "0x00eaa178",
     "0x012f44fc",
     "0x012f4500",

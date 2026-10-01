@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/func",
     "func",
-    "depth=1",
-    "maxfuncs=12",
-    "maxinsn=400",
+    "depth:1",
+    "maxfuncs:12",
+    "maxinsn:400",
     "0x007bd240",
     "0x00a525a0",
     "0x007bfc10",
@@ -72,7 +72,7 @@
    "args": [
     "{OUT}/wrap",
     "func",
-    "depth=0",
+    "depth:0",
     "0x007bd280",
     "0x0083bd90",
     "0x007c04b0",

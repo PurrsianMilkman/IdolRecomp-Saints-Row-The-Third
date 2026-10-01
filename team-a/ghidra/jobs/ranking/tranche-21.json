@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "gang_customization_select_gang_sign",
     "gang_customization_revert_vehicle",
     "gang_customization_revert_gang_sign",

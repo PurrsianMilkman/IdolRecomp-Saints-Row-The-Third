@@ -18,7 +18,8 @@ results/<id>/.
 Job fields: team, title, ref (project-repo branch or commit; 'auto' = the
 current branch of the project checkout, which must be pushed), steps, collect.
 Step kinds: build {targets}, run {tool, args, timeout, continue_on_error},
-ghidra {script (under team-a/), args} (Team A only), ls {pattern}.
+ghidra {script (under team-a/), args} (Team A only), ls {pattern},
+files {root, pattern, max_files} (a folder the owner whitelisted in read_roots).
 Arg placeholders: {GAME} game install, {OUT} per-job output dir (files matched
 by 'collect' globs come back), {SRC} checkout root, {BUILD} build dir,
 {EXE} game executable (Team A only).

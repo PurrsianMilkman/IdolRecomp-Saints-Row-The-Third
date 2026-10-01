@@ -65,7 +65,7 @@ to back). The primitives identified and reused across this cluster:
   is not resolved; treated here only as "the flags/number extractor," not attributed to a specific
   named public function.]**~~ **RESOLVED, §4.1 ~~(also independently re-confirmed under emulation,
   §5.3 below)~~ (§5.3 emulates `0x00dab330`, not these primitives): `0x00dfe160` is the real public `lua_tonumber(L, idx)`; `0x00ea2596` is not a second
-  Lua stack accessor at all, it is the compiler's own inlined float64-to-int64 rounding cast, called
+  Lua stack accessor at all, it is the compiler's own inlined float64-to-int64 ~~rounding~~ **[truncating, §4.1, settled 2026-10-01]** cast, called
   immediately after and operating only on the x87 register `lua_tonumber` left behind. [CONFIRMED —
   disassembly, §4.1.]**
 
@@ -500,7 +500,7 @@ used for `lua_pushcclosure`/`lua_setfield`/`luaI_openlib`):
   **`lua_tonumber`** line-for-line. **[CONFIRMED — disassembly. This resolves §1's own explicitly OPEN
   item about this same address: it is `lua_tonumber`, not an unidentified "flags/number extractor."]**
 - **`0x00ea2596()`** — a zero-`lua_State`-argument float64-to-int64 rounding routine matching the
-  classic compiler-generated (MSVC) round-half-correcting float-to-integer conversion helper (exact rounding semantics OPEN, see §4.1), always
+  classic compiler-generated (MSVC) ~~round-half-correcting~~ float-to-integer conversion helper ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1), always
   seen immediately after a `0x00dfe160` (`lua_tonumber`) call still holding its result in the FPU
   register. This is **not** a distinct Lua API entry point — it is the compiler's own emitted cast code
   for a source-level `(int)lua_tonumber(L, idx)` expression (or the real public `lua_tointeger`, which
@@ -851,13 +851,13 @@ colour-state setter (`0x005d9120`, itself scaling each 0–255-range component b
 further internal call) — read as setting the screen-fade overlay's colour. Then, gated independently
 by each bit of the (possibly-defaulted) flags argument: bit `0x1` scales the duration argument by a
 fixed literal `1000.0` (a seconds→milliseconds conversion) and passes it into a helper (`0x0059f8c0`)
-that manages a small phase state machine and, in the branch this call reaches, queues an internal
-engine UI-command-queue message literally named `"screen_fade_do"` (read directly as a string
+that manages a small phase state machine and, in the branch this call reaches, ~~queues an internal
+engine UI-command-queue message literally named~~ calls the Lua global named `"screen_fade_do"` (read directly as a string
 constant used in the command's own lookup call) carrying the scaled duration and a fixed target alpha
-of `1.0` — i.e. queuing the actual timed fade-to-opaque-colour transition. Bit `0x2` independently
+of `1.0` — i.e. queuing the actual timed fade-to-opaque-colour transition. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: there is no command queue. `0x0059f8c0` is the fade-out request helper and takes its stack arguments in the order `(durationMs, completionCallback, flag)`; this wrapper passes `(trunc(duration × 1000.0), 0, 0)`, the `1000.0` being the double at `0x012a2d90`. When the helper starts a transition it calls the Lua global `screen_fade_do` directly in the interface (UI) Lua state, and only if that global is a function, with three numbers in this order: `flag` (0 here), the target alpha `1.0`, and `durationMs`. The C side never animates the fade; the transition is completed from the UI script side (§26.24). CONFIRMED — disassembly.]** **[2026-10-01, job `20261001T114101-team-a-mnao`: the UI script completes it by calling the UI-state global `Screen_fade_transition_complete` (0x005a0110), which turns state 1 into 3 and calls the parked callback with the target; it never starts a request. A request parked meanwhile is replayed by the per-frame routine 0x0059fe70 with a fixed 250 ms (§26.24). CONFIRMED — disassembly.]** Bit `0x2` independently
 triggers a second, more complex helper (`0x005a0270`) that ~~queues a *different* UI-command-queue
 message (referenced only by a numeric opcode, `0x53`, not a literal name) whose own downstream effect
-was not traced further in this pass~~ **[Superseded by §8.13: opens a host-gated (`0x0087ba20`) opcode-`0x53` record carrying the duration and the flags byte — the fade broadcast, not a UI-command-queue message.]**
+was not traced further in this pass~~ **[Superseded by §8.13: opens a host-gated (`0x0087ba20`) opcode-`0x53` record carrying the duration and the flags byte — the fade broadcast, not a UI-command-queue message.]** **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the record does not carry the flags argument. `0x005a0270` writes a 1-bit direction flag (1 = fade out), then the current overlay colour read back as 4 bytes, then 16 bits of `durationMs`, then 8 bits of its own second argument (always 0 from Lua), and sets byte `0x013effc5` := 1. A fourth float argument (1.0) is pushed by this wrapper but never read by the helper. CONFIRMED — disassembly. Full layout: §26.24.]**
 
 **Side effects / subsystem:** sets the engine's screen-fade overlay colour (from an optional RGB
 table, defaulting to black) and, depending on the flags argument (which defaults to "both"), queues one
@@ -868,9 +868,11 @@ counterpart implied by this cluster's `game_letterbox_fade_out` sibling name alr
 `spec-lua-bindings.md` §13.5, though that is a separate, differently-named registration this task did
 not decompile. **[CONFIRMED — disassembly for argument reading (including the table-as-colour shape
 and both defaults), the colour-setter call, and the `"screen_fade_do"` command-queue trigger and its
-gating bit; ~~OPEN for the identity/effect of the second, opcode-`0x53` command gated by the other bit.~~]** **[Resolved: see §8.13 — host-gated fade duration+flags broadcast.]**
+gating bit; ~~OPEN for the identity/effect of the second, opcode-`0x53` command gated by the other bit.~~]** **[Resolved: see §8.13 — host-gated fade duration+flags broadcast.]** **[2026-10-01, job `20261001T020200-team-a-nzxf`: argument reading, both defaults, the colour setter (`0x005d9120`, scaling by the `1/255` constant at `0x012a2e48`, applied to the overlay object at `0x0351f91c` through `0x00e4ae90`) and both bit gates re-confirmed: CONFIRMED — disassembly. The "UI/HUD command queue" subsystem wording above is superseded: bit `0x1` is a direct Lua call into the UI state (§26.24).]**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading and defaults, colour setter, both bit gates, request-helper signature and its `screen_fade_do(flag, 1.0, durationMs)` call, the `0x53` record layout; ~~OPEN parts — the registered name of the completion native `0x005a0110` and the per-frame helper `0x0059fe70` (§26.24);~~ the audio-id post inside the helper is HYPOTHESIS.** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: the completion native (`Screen_fade_transition_complete`) and the per-frame routine 0x0059fe70 are now CONFIRMED — disassembly (§26.24); no OPEN part remains in this unit.]**
 
 ### 2.10 `audio_conversation_play` (`0x00a3c9d0`) — 129 calls / 41 scripts
 
@@ -991,8 +993,8 @@ against real Lua 5.1 source structure line-for-line, not merely by call shape.]*
 second half is also resolved here (used once in this cluster, `ai_add_enemy_target`, §3.9): `0x00ea2596`
 takes no `lua_State` argument because it isn't a Lua binding call at all — it reads the x87
 floating-point unit's top-of-stack register left behind by the immediately preceding
-`0x00dfe160`/`lua_tonumber` call and performs a banker's-rounding float→int64 conversion (exact rounding semantics OPEN, see §4.1). This is
-the compiler's own inlined `(long long)round(...)` helper, not a distinct engine or Lua-facing
+`0x00dfe160`/`lua_tonumber` call and performs a ~~banker's-rounding~~ float→int64 conversion ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1). This is
+the compiler's own inlined ~~`(long long)round(...)`~~ truncating integer-cast helper, not a distinct engine or Lua-facing
 primitive. **[CONFIRMED — disassembly; the front matter's OPEN flag on this pair is resolved.]**
 
 **Name-resolution sentinels, applies to every function below that takes an object-name argument:**
@@ -1026,15 +1028,47 @@ all, consistent with a genuine zero-argument query rather than an unused/ignored
 
 **Return:** 1 boolean, pushed via the shared push primitive (`0x00dfe590`).
 
-**Body:** queries ~~a co-op session object~~ the session-singleton accessor (`0x0087ba20`, global `0x024d8534`, §8.2); if present, compares its head/tail
-member-list pointers and a small state counter **[OPEN — desk review 2026-09-30: no field offsets are given, so the claim of §6.22/§8.27 that these are other fields than the `+0x58`/`+0x5c` host pair cannot be checked; `0x00681370` and `0x00877a90` are not identified elsewhere; to be settled against the executable.]**, and additionally checks a network-match-state
-accessor (`0x00681370`) before walking the member list once (comparing each entry against a
+**Body:** queries ~~a co-op session object~~ the session-singleton accessor (`0x0087ba20`, global `0x024d8534`, §8.2); if present, ~~compares its head/tail
+member-list pointers and a small state counter~~ **[OPEN — desk review 2026-09-30: no field offsets are given, so the claim of §6.22/§8.27 that these are other fields than the `+0x58`/`+0x5c` host pair cannot be checked; `0x00681370` and `0x00877a90` are not identified elsewhere; to be settled against the executable.]** **[Settled 2026-10-01 by job `20261001T020213-team-a-dksj`: there is no head/tail pair — see the corrected body below.]**, and additionally checks ~~a network-match-state
+accessor~~ (`0x00681370`, **corrected: a one-instruction reader of session `+0x60`, the member count**) before walking the member list once (comparing each entry against a
 per-entry validity test, `0x00877a90`).
+
+**Corrected body (re-derived from the executable 2026-10-01, job `20261001T020213-team-a-dksj`).** The Lua function pushes
+the result of a core predicate at `0x00867830`. That predicate answers true only when all four of
+these hold:
+
+1. the session pointer (accessor `0x0087ba20`, global `0x024d8534`) is non-null — with no session the
+   answer is false;
+2. either the local machine is the host — session `+0x5c` equals session `+0x58`, the same pair §8.27
+   and §10.2 test, and it is the *first* test in the body — or a client-side gate passes: (session
+   `+0xf4` ≥ 2, or session `+0x224` ≠ 0, or session `+0xf4` ≠ session `+0xf8`) and the byte at session
+   `+0xfd` is 0; **[2026-10-01, job `20261001T114716-team-a-fvfp`: this client-side gate is exactly "the session is not idle
+   (the idle test `0x0059fbe0` is false) and is not flagged for destruction (byte `+0xfd` clear)", §26.28.
+   CONFIRMED — disassembly: its three terms are the negation of `0x0059fbe0`'s three terms.]**
+3. the member count at session `+0x60` (read through `0x00681370`) is **at least 2** — the comparison is
+   unsigned, so a count of 0 or 1 fails;
+4. every member other than the local one passes the per-member slot check `0x00877a90`. The walk
+   starts at the list head, session `+0x54`, follows the next pointer at node `+0xb28c`, and stops at a
+   null pointer or on returning to the head; the node equal to session `+0x5c` is skipped. The slot
+   check uses the node's byte at `+0x158` as an index into a 5-byte-stride array at (session
+   `+0x50`)`+0xc`, whose element count is at (session `+0x50`)`+0x10`; a node passes when the index is
+   in range, the element's byte `+2` is non-zero and the element's byte `+0`, taken as a signed char,
+   is at least 1. An out-of-range slot counts as −1 and fails.
+
+**[CONFIRMED — disassembly: the four conditions, the ≥ 2 member rule and the walk, from the bodies of
+`0x00a42bd0`, `0x00867830`, `0x00681370` and `0x00877a90`.]** Field meanings: `+0x54` is the
+member-list head, `+0x58` and `+0x5c` are member records (`+0x5c` the local member, since the walk
+skips it; `+0x58` the host member), `+0x60` is the member count **[HIGH CONFIDENCE — from how the
+fields are used, not from names]**; `+0xf4`/`+0xf8`/`+0xfd`/`+0x224` form a client-side
+connection-state gate **[OPEN — only their gating role is confirmed]**. Consequence: a session with
+fewer than 2 members is never "active", whether or not the local machine is the host (§26.28).
 
 **Side effects / subsystem:** none — pure query. Subsystem: co-op/session state. **[CONFIRMED —
 disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: head/tail field offsets not given, so the §6.22/§8.27 host-pair reconciliation cannot be checked (accessor wording fixed) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the four-condition body, host test first on `+0x5c`/`+0x58`, the member count at `+0x60` must be ≥ 2, the walk from `+0x54` skipping `+0x5c`, the slot check, no session → false. HIGH CONFIDENCE — field meanings (head, local/host member records, count). OPEN — the meaning of the client-side gate fields `+0xf4`/`+0xf8`/`+0xfd`/`+0x224`. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `+0xf4`/`+0xf8` are the current/target connection state, `+0x224` a pending transition object, `+0xfd` a destroy-on-shutdown byte; the gate is "not idle and not flagged for destruction".**
 
 ### 3.2 `on_death` (`0x00a57c80`) — 386 calls / 37 scripts
 
@@ -1220,7 +1254,7 @@ player damage" flag (both setter calls pass a hardcoded `0`) on whichever kind t
 name, or the reserved sentinel `#CLOSEST_PLAYER#` — checked via `__stricmp` directly inside the
 target resolver `0x00a3d180`, falling back to the generic character-resolve chain
 (`0x00a281a0`) if the literal doesn't match). Arg 3 mandatory number, read via `lua_tonumber`
-(`0x00dfe160`) immediately truncated by the compiler's own float→int64 rounding helper (exact rounding semantics OPEN, see §4.1)
+(`0x00dfe160`) immediately truncated by the compiler's own float→int64 ~~rounding~~ conversion helper ~~(exact rounding semantics OPEN, see §4.1)~~ (settled 2026-10-01, job `20261001T020218-team-a-bgcx`: truncation toward zero, see §4.1)
 (`0x00ea2596`, resolved above to be a codegen artifact, not a distinct API). Arg 4 optional
 boolean, standard nil-gated idiom, defaulting to `false`.
 
@@ -1459,7 +1493,7 @@ including the polarity flip, the default, and the record-and-replicate branch.]*
 
 ## 4. Vehicle/spawn-region/inventory/world-interaction cluster — 11 functions, all in the 1,014-entry gameplay table (`0x00a20840`)
 
-**Review status summary (2026-09-30):** adversarial desk review of the 14 units of §4 (preamble, 4.1-4.13): 4 DESK-PASS (preamble, 4.6, 4.10, 4.11), 2 DESK-PASS with text fixes applied (4.2, 4.7), 8 NEEDS-EXE (4.1 for `0x00ea2596` only, 4.3, 4.4, 4.5, 4.8, 4.9, 4.12, 4.13). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-lua3-5.json`) is read.
+**Review status summary (2026-09-30):** adversarial desk review of the 14 units of §4 (preamble, 4.1-4.13): 4 DESK-PASS (preamble, 4.6, 4.10, 4.11), 2 DESK-PASS with text fixes applied (4.2, 4.7), 8 NEEDS-EXE (4.1 for `0x00ea2596` only **[settled 2026-10-01, job `20261001T020218-team-a-bgcx`; see §4.1]**, 4.3, 4.4, 4.5, 4.8, 4.9, 4.12, 4.13). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-lua3-5.json`) is read.
 
 **Scope note:** this cluster's assignment was 11 specific names from the task brief's own high
 real-script-call-count list (`get_dist` 217 calls/35 scripts down to `on_vehicle_enter` 76/14). All
@@ -1528,12 +1562,14 @@ already used and had accepted for `lua_pushcclosure`/`lua_setfield`. This upgrad
   immediately followed by a call to `0x00ea2596` is not a second, distinct stack-accessor pair —
   decompiling `0x00ea2596` itself shows it takes no `lua_State`/index argument at all; it operates
   purely on the x87 floating-point register left behind by the immediately preceding `lua_tonumber`
-  call, performing a round-to-nearest double-to-64-bit-integer conversion (**[OPEN — rounding semantics: §2's method note, §3's preamble and §3.9 describe this same helper as truncation, round-half-correcting or banker's rounding; the descriptions disagree and the exact semantics is OPEN pending a re-read of `0x00ea2596`'s body. This entry is the single point of reference; other sites point here.]**). **[OPEN — desk review 2026-09-30: still undecided between round-half-even, round-to-nearest and truncation (MSVC `_ftol2`-style), and it affects every integer-coerced argument in this document; to be settled against the executable.]** This is a shared/compiler-
+  call, performing a ~~round-to-nearest~~ double-to-64-bit-integer conversion (~~**[OPEN — rounding semantics: §2's method note, §3's preamble and §3.9 describe this same helper as truncation, round-half-correcting or banker's rounding; the descriptions disagree and the exact semantics is OPEN pending a re-read of `0x00ea2596`'s body. This entry is the single point of reference; other sites point here.]**~~). ~~**[OPEN — desk review 2026-09-30: still undecided between round-half-even, round-to-nearest and truncation (MSVC `_ftol2`-style), and it affects every integer-coerced argument in this document; to be settled against the executable.]**~~ **[SETTLED 2026-10-01, job `20261001T020218-team-a-bgcx` (full body of `0x00ea2596` in `named/rand_int_0.txt`): the conversion is truncation toward zero, whatever the FPU rounding mode. The helper stores the x87 value to a 64-bit integer under the current rounding mode, reloads it, takes the difference from the original, and moves the result one step back toward zero whenever the stored integer went past the original value in the away-from-zero direction. Net effect: the MSVC run-time's ordinary C integer cast. So 2.9 becomes 2, -2.9 becomes -2, 0.5 becomes 0. Every integer-coerced argument in this document that goes through `lua_tonumber` + `0x00ea2596` truncates; the "round-to-nearest", "round-half-correcting" and "banker's rounding" descriptions elsewhere are struck. Do not confuse it with `0x00dad900` (cited in §16.2 and §22 as "round to integer"), which really rounds, half away from zero (§26.27). CONFIRMED — disassembly.]** This is a shared/compiler-
   provided numeric cast helper, not a Lua C API entry point. **Resolved: this pair is simply
   `lua_tonumber(L, idx)` with its result immediately rounded to an integer — not a second Lua stack
   accessor.** **[CONFIRMED — disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: rounding semantics of `0x00ea2596` — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`): CONFIRMED — `0x00ea2596` truncates toward zero (the NEEDS-EXE item is closed); `0x00dfe160` (`lua_tonumber`), `0x00dfde50` (`lua_gettop`) and `0x00dfe3a0` (`lua_pushnumber`) bodies match their identities; the other primitives of this entry were not re-read.**
 
 ### 4.2 `get_dist` (`0x00a4bdb0`) — 217 calls / 35 scripts
 
@@ -2173,9 +2209,71 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **Return:** none (`return 0;`).
 
-**Body:** arg 1 resolves through a dedicated, 210-entry (`0xd2`) fixed name table (`0x00717780`, case-insensitive linear scan, returning the matched index or `-1`) — a name space entirely separate from the notoriety-family resolvers elsewhere in this cluster. On success, the index and the four remaining arguments (with a literal `1` inserted as an internal fourth value not exposed to the Lua-visible signature) are handed to a single large dispatcher, `0x00717780`'s sibling `0x007169e0`. That dispatcher consults a matching 210-entry descriptor table (`0x0151d608`, 36 bytes per entry) and, per an entry-specific flag bit, either issues a simple prompt (`0x00715bf0`) or assembles and dispatches a richer animated/video tutorial widget (`0x00715760`→`0x007fc560`); separately, when running as the sole/local co-op authority (the same `0x0087ba20` check used throughout this cluster) and a further per-entry flag bit (or the hardcoded internal literal `1` above) permits it, the event is additionally funnelled through the SAME record-and-replicate triplet as elsewhere in this document, tagged with yet another new opcode, `0x54`.
+**Body:** arg 1 resolves through a dedicated, 210-entry (`0xd2`) fixed name table (`0x00717780`, case-insensitive linear scan, returning the matched index or `-1`) — a name space entirely separate from the notoriety-family resolvers elsewhere in this cluster. On success, the index and the four remaining arguments (with a literal `1` inserted as an internal fourth value not exposed to the Lua-visible signature) are handed to a single large dispatcher, `0x00717780`'s sibling `0x007169e0`. That dispatcher consults a matching 210-entry ~~descriptor table (`0x0151d608`, 36 bytes per entry)~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: a 210-entry run-time table based at `0x0151d600`, 36 bytes per entry; `0x0151d608` is entry 0's `+0x08` field, a pointer to that entry's separately allocated descriptor record — see the re-derivation below]** and, per an entry-specific flag bit, either issues a simple prompt (`0x00715bf0`) or assembles and dispatches a richer animated/video tutorial widget (`0x00715760`→`0x007fc560`); separately, when running as the sole/local co-op authority (the same `0x0087ba20` check used throughout this cluster) and a further per-entry flag bit (or the hardcoded internal literal `1` above) permits it, the event is additionally funnelled through the SAME record-and-replicate triplet as elsewhere in this document, tagged with yet another new opcode, `0x54`.
 
-**Side effects/subsystem:** dispatches a named tutorial/hint prompt (simple or richly-animated per a per-entry flag), optionally network-replicated. Subsystem: tutorial/HUD-hint scripting. **[CONFIRMED — disassembly for the resolver, the two display-style branches, and the record-and-replicate opcode; OPEN — the precise real-world meaning of args 2-5 and of several internal per-entry flag bits and threshold constants (e.g. a repeated `0xbc` split between two id ranges) were not independently re-derived past their own gating role.]**
+**Side effects/subsystem:** dispatches a named tutorial/hint prompt (simple or richly-animated per a per-entry flag), optionally network-replicated. Subsystem: tutorial/HUD-hint scripting. **[CONFIRMED — disassembly for the resolver, the two display-style branches, and the record-and-replicate opcode; OPEN — the precise real-world meaning of args 2-5 and of several internal per-entry flag bits and threshold constants (e.g. a repeated `0xbc` split between two id ranges) were not independently re-derived past their own gating role.]** **[Partly settled 2026-10-01, job `20261001T020213-team-a-dksj`: the flag bits and the `0xbc` split are described below; the meanings of several globals stay OPEN.]**
+
+**Re-derivation from the executable (2026-10-01, job `20261001T020213-team-a-dksj`).**
+
+*The table.* It is run-time state, zero at load (a `.data` block that is not file-backed), not static
+data. Base `0x0151d600`, 36-byte entries (index × 9 dwords), 210 entries. Only the name list is static:
+a file-backed table of 210 string pointers at `0x012f5930`, searched by `0x00717780` (§26.28).
+**[CONFIRMED — disassembly.]** Entry layout:
+
+| offset | content | label |
+|---|---|---|
+| `+0x00` / `+0x04` | next / previous links in a circular doubly-linked list of queued simple prompts (head global `0x0151d588`) | CONFIRMED |
+| `+0x08` | pointer to the entry's descriptor record; written only by `0x00715850`, which also sets the state to 0 or 1 **[2026-10-01, job `20261001T114716-team-a-fvfp`: the table is filled by `0x007178c0` through 210 calls to `0x00715850`; `0x007178c0` also writes the 7-id table `0x0152145c`; entries 189–209 start in state 1, entries 0–188 in state 0]** | CONFIRMED |
+| `+0x0c` | per-entry **state**, 0–4 (not a kind) | CONFIRMED |
+| `+0x10` | not touched by the dumped code | OPEN |
+| `+0x14` | argument 2 (the number) | CONFIRMED |
+| `+0x18` | 0 if argument 5 is true, else the descriptor's `+0x20` dword | CONFIRMED |
+| `+0x1c` | the hidden literal 1 | CONFIRMED |
+| `+0x20` | not touched by the dumped code | OPEN |
+
+*Descriptor record* (what `+0x08` points at, only where read): `+0x00` a default widget source;
+`+0x14` an optional builder function pointer (called with the descriptor when non-null); `+0x20` a
+default parameter copied into entry `+0x18`; `+0x24` flag bits — `0x04` use the rich (animated/video)
+widget instead of the simple prompt, `0x08` allowed while a mission is active, `0x10` host-only
+(suppressed on a co-op client). **[CONFIRMED — disassembly for the bit tests; HIGH CONFIDENCE for the
+bit names, taken from what each bit gates.]**
+
+*States.* 0 = untouched (zero-fill); 1 = armed/enabled (the dispatcher proceeds from it); 2 = queued as
+a simple prompt; 4 = rich widget issued. **[CONFIRMED — disassembly, from the writers.]** No code writes
+the literal 3; it can only come from the generic setter `0x007163e0` or from undefined code at
+`0x00717363`. **[OPEN — what state 3 means. HYPOTHESIS: displayed, waiting for the player to finish the
+step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
+
+*Dispatcher order* (`0x007169e0`; A = index, N = argument 2, F = argument 3, B4/B5 = arguments 4/5, P4
+= the hidden 1). Each "stop" means do nothing:
+
+1. A < 189 and the global byte `0x0151d5a6` is non-zero → stop (indices 189 and up bypass this byte).
+2. The global `0x029443bc` is 1, 2 or 3 → stop. **[OPEN — what that global is.]**
+3. A > 209 → stop.
+4. A < 189, a session exists, the local machine is not the host (`+0x5c` ≠ `+0x58`) and the
+   descriptor has bit `0x10` → stop.
+5. `0x00706ab0` returns 6 → stop. **[OPEN — meaning.]**
+6. If the byte `0x014f3d34` is non-zero, continue only for A = 188 or 196 ≤ A ≤ 201. If it is zero,
+   continue when the descriptor has bit `0x08`, or otherwise only when no mission object is live
+   (`0x006d2910` returns −1). **[OPEN — what the `0x014f3d34` mode is.]**
+7. A = 76 and the byte `0x0141250d` is zero → A becomes 73. **[OPEN — meaning.]**
+8. A ≥ 189 → set state 1 (through `0x00716170`, itself gated on `0x0151d5a6` being zero).
+9. F true, `0x0151d5a6` zero and state 0 → set state 1.
+10. Continue only if state = 1, or (B4 true and state = 4), or A ≥ 189.
+11. Descriptor bit `0x04` set → build the rich widget (`0x00715760` then `0x007fc560`), keep its
+    handle in `0x0151d5b4`, set state 4. Otherwise `0x00715bf0`: if the entry is not already queued,
+    link it at the tail of the prompt list, set state 2 and fill `+0x14`/`+0x18`/`+0x1c` as in the
+    table above.
+12. A session exists and the local machine is the host, and (descriptor bit `0x10` or P4 = 1, which
+    is always true from Lua) → write an opcode `0x54` record: byte 1, A, a dword from `0x0086be20`,
+    P4 (byte), N, B5 (byte); commit and close. A host therefore always replicates `tutorial_start`;
+    a client or a machine with no session never does.
+
+**[CONFIRMED — disassembly for steps 1–12 as control flow; the meanings of the globals in steps 1, 2,
+5, 6 and 7 are OPEN as marked.]** The "repeated `0xbc` split" above is the boundary between 188
+(`0xbc`) and the range from 189 (`0xbd`) up, which skips the suppression byte and the state gate.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — table base `0x0151d600`, 36-byte stride, 210 entries, zero at load; `+0x08` descriptor pointer; `+0x0c` state 0–4 with states 0/1/2/4 from their writers; the descriptor `+0x24` bit tests; the 12-step order; host-only `0x54` replication. HIGH CONFIDENCE — the names of bits `0x04`/`0x08`/`0x10`. HYPOTHESIS — state 3 = waiting for the player. OPEN — what state 3 means and who sets it; the globals in steps 2, 5, 6, 7; where `0x00715850` gets the descriptors. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the fill is `0x007178c0` → `0x00715850` (40-byte descriptors copied to `0x0151f388`); entries 189–209 start in state 1. HIGH CONFIDENCE — the descriptors are compiled-in constants. OPEN — when `0x007178c0` runs; state 3 (see §10.4).**
 
 ### 6.20 `mission_end_to_activity` (`0x00a53890`)
 
@@ -2205,7 +2303,7 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **The record-and-replicate idiom (`spec-lua-api-behaviour.md` §4.13) is confirmed to extend to three further opcode values not previously on record there** — `0x3f` (the five notoriety value-setters, §6.3/§6.5/§6.7/§6.11/§6.16, each with its own inner sub-type tag `2`-`5`), `0x40` (`waypoint_remove`, §6.17), and `0x54` (`tutorial_start`, §6.19) — all using the exact same "begin/commit/end" triplet (`0x0086f5f0`→`0x0086f110`→`0x0086eb20`) §4.13 already confirmed. This extends, and does not contradict, §4.13's own opcode census. **Cross-reference, added after review, 2026-09-29: opcode `0x40` is NOT unique to `waypoint_remove` — §9.20 (`inv_weapon_disable_all_slots`) independently uses the identical literal opcode `0x40` for a completely unrelated record. Both individual claims are correct (verified by decompile, `0x007dd5d0`/`0x007f4890` respectively); this document's opcode census is not a claim of uniqueness per name, only that each opcode's use is confirmed wherever cited.**
 
-**A real, confirmed variation on how the record-and-replicate idiom decides "am I the sole/local authority":** §3.7/§3.14/§3.16/§3.17/§4.5/§4.6/§4.10 (already on record) gate that decision on an internal pair, `0x008ae480`/`0x008837a0`. Every record-and-replicate call site newly traced in THIS cluster (the five notoriety setters, `tutorial_start`) instead gates on the SAME accessor, `0x0087ba20`, `spec-lua-api-behaviour.md` §3.1 already established for `coop_is_active`'s own pure query. **Correction, after independent re-verification (2026-09-29): the specific field pair this gate tests, `+0x58`/`+0x5c`, is NOT a previously-unspecified head/tail-member-list-empty pair as an earlier pass in this section claimed — it is the exact same field pair §8.27 (`game_get_is_host`) independently identifies, by the engine's own naming of that accessor, as the "is this machine the network host" check.** §3.1's own head/tail member-list-empty description covers OTHER fields of the same session-context singleton, not this pair — see §8.27 for the correct reading. This is still a genuine, checked difference between subsystems in how the same underlying "am I authoritative" decision is reached (a host-check here, vs. the internal gate pair in §3/§4's own cluster), not a contradiction of §3.7/§4.13's own findings — flagged here because the task brief asked this pass to actively check for exactly this kind of cross-section inconsistency, and the correction above is exactly such a check catching a real one.
+**A real, confirmed variation on how the record-and-replicate idiom decides "am I the sole/local authority":** §3.7/§3.14/§3.16/§3.17/§4.5/§4.6/§4.10 (already on record) gate that decision on an internal pair, `0x008ae480`/`0x008837a0`. Every record-and-replicate call site newly traced in THIS cluster (the five notoriety setters, `tutorial_start`) instead gates on the SAME accessor, `0x0087ba20`, `spec-lua-api-behaviour.md` §3.1 already established for `coop_is_active`'s own pure query. **Correction, after independent re-verification (2026-09-29): the specific field pair this gate tests, `+0x58`/`+0x5c`, is NOT a previously-unspecified head/tail-member-list-empty pair as an earlier pass in this section claimed — it is the exact same field pair §8.27 (`game_get_is_host`) independently identifies, by the engine's own naming of that accessor, as the "is this machine the network host" check.** ~~§3.1's own head/tail member-list-empty description covers OTHER fields of the same session-context singleton, not this pair~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: §3.1 has no head/tail pair; `coop_is_active` tests this same `+0x58`/`+0x5c` pair first and then uses the list head `+0x54` and count `+0x60` — see §3.1]** — see §8.27 for the correct reading. This is still a genuine, checked difference between subsystems in how the same underlying "am I authoritative" decision is reached (a host-check here, vs. the internal gate pair in §3/§4's own cluster), not a contradiction of §3.7/§4.13's own findings — flagged here because the task brief asked this pass to actively check for exactly this kind of cross-section inconsistency, and the correction above is exactly such a check catching a real one.
 
 **Two more members of the type-gated-by-name resolver family (`spec-lua-api-behaviour.md` §3's front matter / §4.13) were newly catalogued this pass:** bit `0x20` at descriptor-row offset `+0xa` (`0x005eab60`, used by both `guardian_angel_register_script_group` and `guardian_angel_unregister_script_group`, §6.6/§6.8) and bit `0x4` at descriptor-row offset `+0xc` (`0x005f4c30`, used by `mission_end_to_activity`, §6.20) — both structurally identical wrapper bodies over the same shared generic resolver `0x004588f0` and the same shared class-descriptor table `0x02cc9900` already established elsewhere in this document, extending that family from four/five previously-catalogued members to six (correction: `0x005eab60`/bit `0x20`@`+0xa` was already in §4.13/§4.7, so only `0x005f4c30` is newly catalogued here — five/six, one new).
 
@@ -3297,16 +3395,16 @@ bit-for-bit: bit `0x1` scales the duration by a fixed constant (the same role §
 as a seconds-to-milliseconds `×1000.0` scale, not independently re-read as a literal by this pass) and
 calls `0x0059fc40` (a sibling of `fade_out`'s own `0x0059f8c0`); bit `0x2` calls `0x005a0400` (a sibling
 of `fade_out`'s own `0x005a0270`). `0x0059fc40`'s own body manages the same phase-state-machine shape
-already described for `fade_out`'s bit-`0x1` path and, when not already idle/faded, queues the exact
+already described for `fade_out`'s bit-`0x1` path and, ~~when not already idle/faded, queues~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: unless the fade is already fully in, a fade-out is still running (state 1), or one of the hold timestamps `0x012e6ab0`/`0x012e6ab8` is set and not yet reached (in the last two cases the request is parked in the deferred slot `0x013effd0`); otherwise it calls directly, with no queue,]** **[2026-10-01, job `20261001T114101-team-a-mnao`: a parked request is not started by the completion native; the per-frame routine 0x0059fe70 replays it with a fixed 250 ms, not with this call's duration, once the state has settled and the holds have passed (§26.24). CONFIRMED — disassembly.]** the exact
 same literally-named `"screen_fade_do"` command (looked up via `0x00e0cef0`/`0x00e0ca80`, the low-level
 pair actually behind that string lookup — not independently traced by §2.9, opened here for the first
 time), passing the scaled duration and a literal `0` in the argument slot §2.9 already documented
 `fade_out` filling with `1.0` — **the complementary "fade to transparent" counterpart of `fade_out`'s
-own "fade to opaque"**. `0x005a0400`'s own body uses the **same host-check gate** §8.2/§8.5/§8.18
+own "fade to opaque"**. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the helper's stack order is `(durationMs, completionCallback, flag)` and this wrapper passes `(trunc(duration × 1000.0), 0, 0)`, the `1000.0` now read as the double at `0x012a2d90`; the Lua call is `screen_fade_do(flag, 0.0, durationMs)` in the UI Lua state. On starting, the helper also resets the companion timestamps `0x012e6aac`/`0x012e6ab4` to -1, sets the state to 0 (fading in), parks the callback, and posts the id `0xa577ee9c` through `0x0045d990` (HYPOTHESIS: an audio event). CONFIRMED — disassembly, except where marked. Full state machine: §26.24.]** `0x005a0400`'s own body uses the **same host-check gate** §8.2/§8.5/§8.18
 share (`0x0087ba20`/`0x024d8534`, `+0x5c`==`+0x58`) before opening an opcode-`0x53` record — **the
 exact same opcode `fade_out`'s own bit-`0x2` path (`0x005a0270`) already left unidentified** (§2.9's own
 OPEN item) — carrying the duration (16 bits) and a flags byte (8 bits) via the bit-granularity writer
-`0x00881110`.
+`0x00881110`. **[Corrected 2026-10-01 (job `20261001T020200-team-a-nzxf`): the record starts with a 1-bit direction flag (0 = fade in) before the 16-bit duration, and the 8-bit value is the helper's own second argument (always 0 from Lua), not the Lua flags argument; it also sets byte `0x013effc5` := 0. CONFIRMED — disassembly.]**
 
 **Side effects / subsystem:** the fade-in counterpart of `fade_out` (§2.9): sets the screen-fade
 overlay to transition toward transparent over the given duration (immediate local `"screen_fade_do"`
@@ -3318,6 +3416,8 @@ command queue plus screen-overlay rendering state (same subsystem as §2.9). **[
 disassembly for the argument reading, both bit-gated call paths, the `"screen_fade_do"` payload value
 contrast with §2.9's own 1.0, and the opcode-`0x53`/host-gate identity; HIGH CONFIDENCE — inferred for
 the co-op-replication reading of opcode `0x53`'s purpose, since its consumer was not traced.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both bit gates, the `1000.0` scale, the request helper's signature, gating and deferral rules, the `screen_fade_do(flag, 0.0, durationMs)` call, the `0x53` record layout and host gate; HIGH CONFIDENCE — the co-op replication purpose of `0x53` (consumer still untraced); ~~OPEN — what completes the fade from the executable side (§26.24).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: completion is CONFIRMED — disassembly: the UI script's call of `Screen_fade_transition_complete` (0x005a0110); deferred requests are replayed by 0x0059fe70 with 250 ms (§26.24).]**
 
 ### 8.14 `hud_bar_off` (`0x00a47010`)
 
@@ -3524,16 +3624,18 @@ literal. **[CONFIRMED — disassembly, direct structural match against §8.14.]*
 (`0x00d9e8b0` — carrying a decompiler-database comment left by a prior pass of this project
 identifying it project-wide, not conversation-specific, `spec-extensionless-types.md` §4) and looked up
 in a fixed `0xf8`-byte-stride table (base `0x0153b294`, count `0x0153b29c`) via `0x00721be0`. If found,
-`0x007232e0` gates on a busy flag (`0x0153b556`) and a "this is a real scene entry, kind `1`" field
-check; when clear and matching, it stores the resolved entry pointer plus two caller-relayed values
-(`0x0153b538`/`0x0153b568`/`0x0153b56c`) as the "current" scene, and calls `0x0101b530` plus
-`0x00721c20(1,0,0)`.
+`0x007232e0` gates on a ~~busy flag~~ byte (`0x0153b556`; **[2026-10-01, job `20261001T020200-team-a-nzxf`: the "busy" label is unsupported — when set, prep refuses and `zscene_is_loaded` reports true, and its address is handed out by `0x0072d330`; HYPOTHESIS: a bypass toggle]** **[job `20261001T114101-team-a-mnao`: CONFIRMED — disassembly, it is the `skip_all_cutscenes` option registered by `0x0072d330`, §26.25]**) and a "this is a real scene entry, kind `1`" field
+check; when clear and matching, it stores the resolved entry pointer plus two ~~caller-relayed values~~
+(`0x0153b538`/`0x0153b568`/`0x0153b56c`) as the ~~"current"~~ scene, and calls `0x0101b530` plus
+`0x00721c20(1,0,0)`. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the two extra values are constants, the `.rdata` dwords at `0x01180120`/`0x01180124`, both 0 in the file. The entry goes into the **pending** slot `0x0153b538`, not the current slot `0x0153b530`. If the entry already is the current scene the gate returns 1 with no change. `0x0101b530` is a stub that returns 1 and does nothing. `0x00721c20(1,0,0)` tears down the *current* scene (releases its handle, its secondary handle and its lightset, and sets the load state `0x0153b51c` to 0); it is called before the pending slot is written. CONFIRMED — disassembly. Lifecycle: §26.25.]**
 
-**Side effects / subsystem:** resolves a named scene entry and, if none is already in progress, latches
-it as the current scene and kicks off a load/prepare sequence via `0x0101b530`/`0x00721c20`.
+**Side effects / subsystem:** resolves a named scene entry and, if none is already in progress, ~~latches
+it as the current scene and kicks off a load/prepare sequence via `0x0101b530`/`0x00721c20`~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: tears down the previous scene (load state 0) and parks the new entry as pending; nothing in this call starts the load — the promotion to current (state 1) and the load completion (state 2) happen elsewhere, §26.25]**.
 Subsystem: cutscene/zone-transition streaming ("Z-scene"). **[CONFIRMED — disassembly for the hash,
-lookup, and gate structure; HIGH CONFIDENCE — inferred that `0x0101b530`/`0x00721c20` actually begin a
-load, from the function's own registered name, since neither was opened this pass.]**
+lookup, and gate structure; ~~HIGH CONFIDENCE — inferred that `0x0101b530`/`0x00721c20` actually begin a
+load, from the function's own registered name, since neither was opened this pass.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`: the load-start reading is contradicted by the executable (see the correction above). CONFIRMED — disassembly for the gate, the stub, the teardown and the pending slot.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — hash, lookup, gate, constant extra values, stub `0x0101b530`, teardown `0x00721c20`, pending-slot write; ~~HYPOTHESIS — `0x0153b556` as a bypass toggle; OPEN — who promotes pending to current and completes the load (`0x00720410`, `0x007285c0` and their callers), and who fills the scene table (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: `0x0153b556` is the `skip_all_cutscenes` option (CONFIRMED — disassembly); promotion `0x00720410` has the single caller `0x007258a0` (HIGH CONFIDENCE: the cutscene load step; its body OPEN), completion `0x007285c0` runs from the per-frame cutscene state machine `0x0072d660`, and the table is the parsed `cutscene.xtbl` (capacity 200) — all CONFIRMED — disassembly except where marked (§26.25). OPEN — the body of `0x007258a0`, the xtbl field parse.]**
 
 ### 8.22 `game_audio_get_audio_id` (`0x008437e0`)
 
@@ -3694,7 +3796,22 @@ readings describe different fields/uses of the one singleton object, not competi
 same field. Subsystem: networking/co-op session state. **[CONFIRMED — disassembly, full body read;
 the object's own class and the individual plain-English meaning of `+0x5c`/`+0x58` beyond "host-check
 inputs" remain OPEN, per §3.1's own already-recorded caution against asserting a field's meaning from
-offset alone (`WALLS.md`).]**
+offset alone (`WALLS.md`).]** **[Re-derived 2026-10-01, job `20261001T020213-team-a-dksj`: the body matches; with no
+session object (global `0x024d8534` zero) it pushes false. `+0x58` and `+0x5c` are member records —
+`+0x5c` the local member, `+0x58` the host member — HIGH CONFIDENCE from §3.1's member walk. The
+parenthetical above about §3.1's "head/tail member-list pointers" is superseded: §3.1 uses the list
+head `+0x54` and count `+0x60`, and tests this same pair first. Whether a single-player game has a
+session at all is OPEN (§26.28).]** **[2026-10-01, job `20261001T114716-team-a-fvfp`: the function dksj took for the session
+installer (`0x0087efe0`) stores zero and is the subsystem shutdown; no resolved code stores a non-null
+session pointer (the installer is undefined code at `0x0087c341`/`0x0087c359`). Whether single player has a
+session, and so whether this function is true in single player, remains OPEN; implement false. Teardown
+(`0x0087e670`) zeroes `+0x5c` before the singleton is cleared, so during a session's wind-down this
+function is false. CONFIRMED — disassembly.]** **[2026-10-01, job `20261001T121532-team-a-gdhw`: the installer is `0x0087c340`. It
+stores the session pointer into `0x024d8534` and publishes this same `+0x5c` = `+0x58` test as global flag 4
+(`0x00905ec0`/`0x00905ea0`). It has no caller in defined code, so the single-player answer stays OPEN;
+implement false. The network module init `0x008675c0` does not create a session. CONFIRMED — disassembly.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `0x0087efe0` is the shutdown, not an installer; false during a session's wind-down. Still OPEN — ~~the installer (undefined code at `0x0087c341`/`0x0087c359`)~~; implement false. Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the installer is `0x0087c340` and the network module init `0x008675c0` creates no session. Still OPEN — the installer has no defined caller, so the single-player answer is unknown; implement false. Next dumps: follow-up job `team-a/ghidra/jobs/gdhw-followup.json` (§26.28).**
 
 ### 8.28 Cross-function observations
 
@@ -4677,7 +4794,33 @@ literal `return 1;`.
 
 **Body:** reads one global flag (`0x022cdf08`) and pushes `0.0` if it reads `0`, else pushes the
 exact IEEE-754 double bit pattern for `1.0`. **The global's own writer was traced and is a genuine,
-confirmed getter/setter pair, not a guess:** `0x022cdf08` has exactly one writer function,
+confirmed getter/setter pair, not a guess:** `0x022cdf08` has ~~exactly one writer function~~
+**[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: three writer functions, not one — `0x00815120` (below),
+`0x005fa820` (writes 1) and `0x00820cd0` (writes 0); ~~the conditions of the last two are OPEN, they were
+not dumped~~ [2026-10-01, job `20261001T114716-team-a-fvfp`: both read. `0x005fa820` is the handle-driven store entry — given a
+live object of the store-location class, it finishes any interaction left in store state 3, fills the
+store-target block (`0x014a1dc0`..`0x014a1dcc`, with the vehicle handle reset to null), clears and
+replicates the player's last-vehicle handle (opcode `0x46`), sets the flag to 1 unconditionally, runs the
+store UI call `0x0080cc90` on `0x022cde10`, and sets store state `0x014a1ce4` to 4. `0x00820cd0` is the
+vehicle-driven store exit — it requires the player's current vehicle to be the store's vehicle
+(`0x014a1dc8/cc`) at the current store location (`0x014a1dc4`) and `0x005fbae0` to accept it, records the
+location and vehicle (`0x022cf8d4`, `0x022cf8dc`, `0x022cf948/4c`), runs the post-store cleanup
+`0x00820480` and the same UI call, and sets the flag to 0 only if that UI call succeeds. CONFIRMED —
+disassembly. Their game-level triggers are OPEN: `0x005fa820` is called from `0x0080e2f0` and two undefined
+sites (`0x005fb406`, `0x005fbdd5`); `0x00820cd0` from one undefined site (`0x005fc207`). [2026-10-01, job `20261001T121532-team-a-gdhw`: the
+three undefined sites were range-disassembled and are function tails. Both `0x005fa820` callers copy the
+handle pair (`+0x8`/`+0xc`) of an object they hold into a local pair and pass its address; by
+`0x005fa820`'s own class test that object is the store-location object (HIGH CONFIDENCE). The first
+(`0x005fb406`) then sets store state `0x014a1ce4` = 4 and returns true; it has a sibling exit that sets state
+4 and returns true without entering the store. The second (`0x005fbdd5`) is the end of a loop that enters the
+store at the first object for which `0x005fb930` returns a positive value. The `0x00820cd0` caller
+(`0x005fc207`) first writes the store-target globals itself (`0x014a1dc4` = the location object,
+`0x014a1dc8/cc` = the vehicle's handle pair), then passes the result of `0x005f91c0` on the location to
+`0x00820cd0`. So the exit routine's location and vehicle checks are met by construction, and its real gates
+are its own vehicle test (`0x00a367f0`) and `0x005fbae0`. The heads of all three functions lie before the
+dumped windows, so the triggers stay OPEN. CONFIRMED — disassembly for the tails. Next dumps (follow-up job
+`team-a/ghidra/jobs/gdhw-followup.json`): range `0x005fb200`–`0x005fb3e0`, `0x005fbc80`–`0x005fbdb0`, `0x005fbdf0`–`0x005fc2c0`;
+function bodies `0x005fb930` and `0x0080e2f0`.]]]** a Lua-reachable writer,
 `0x00815120` — itself one of this same UI wrapper's own 8 registered sibling functions (registered
 name `store_vehicle_change_mode`, read directly off `.rdata`, not part of this tranche). That
 function sets the flag to `0` when transitioning to mode `0` (a close/exit path that also runs
@@ -4692,6 +4835,19 @@ consumer.]**
 **Side effects/subsystem:** none — pure query. Subsystem: vehicle-store UI state. The very high
 runtime count (620, the highest of this tranche) is consistent with a value polled once per UI
 frame/tick while the vehicle store screen is open, not a one-shot check.
+
+**Additions (re-derived 2026-10-01, job `20261001T020213-team-a-dksj`).** The flag's initial value is **0** (a `.data`
+block that is not file-backed), so this getter returns `0.0` until a writer runs. **[CONFIRMED —
+disassembly.]** `store_vehicle_change_mode` (`0x00815120`) returns at once, with no effect, when the
+flag already equals the requested mode number — so mode 1 while the flag is 1 does nothing, but mode 2
+while the flag is 1 runs. On the close path (mode 0) it also sets the store sub-state global
+`0x022cdf0c` to 8; on an open whose `0x005fa760` check fails it sets that sub-state to 10 and leaves the
+flag unchanged. **[CONFIRMED — disassembly.]** ~~The other two writers may set the flag from paths that
+do not start in Lua (for example, entering or leaving a store) **[HYPOTHESIS]**.~~ **[2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+The other two writers are the non-Lua entry and exit paths described above; whether their callers are
+Lua-reachable is OPEN (one defined caller, `0x0080e2f0`, not yet read).
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — ~~when `0x005fa820` and `0x00820cd0` run~~. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the bodies and preconditions of `0x005fa820` and `0x00820cd0`. OPEN — ~~their callers (`0x0080e2f0`; undefined code at `0x005fb406`, `0x005fbdd5`, `0x005fc207`)~~. Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the tail behaviour of the three undefined call sites (`0x005fb406`, `0x005fbdd5`, `0x005fc207`). OPEN — their callers: `0x0080e2f0` unread; the three undefined sites are read as tails and need the function heads (`range 0x005fb200–0x005fb3e0`, `0x005fbc80–0x005fbdb0`, `0x005fbdf0–0x005fc2c0`; follow-up job `team-a/ghidra/jobs/gdhw-followup.json`), so every trigger stays OPEN.**
 
 ### 10.2 `Completion_is_client` (`0x007bfbc0`) — 589 runtime calls
 
@@ -4714,6 +4870,8 @@ literal complement in the no-session case but is the only sensible reading of "a
 there is no session to be a client of).]** This is a clean, direct confirmation that
 `Completion_is_client` means exactly what its name says: "is there an active co-op session AND is
 this machine NOT the host."
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the body as described (the accessor is called twice); no session → false; true iff a session exists and `+0x5c` ≠ `+0x58`. Note "active" in the sentence above means "a session object exists" — it does not require `coop_is_active` (§3.1) to be true. With no session at startup this returns false (§26.28).**
 
 ### 10.3 `game_hud_update_inventory` (`0x00841dc0`) — 259 runtime calls
 
@@ -4741,32 +4899,49 @@ identifier.
 
 **Body:** resolves arg 1 through the **exact same** 210-entry (`0xd2`), 36-byte-stride,
 case-insensitive tutorial-descriptor table `tutorial_start` (§6.19) already established at
-`0x00717780`/`0x0151d608` — confirmed here as the same table by direct re-decompilation of the
+`0x00717780`/`0x0151d608` **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: the table base is `0x0151d600`;
+`0x0151d608` is entry 0's `+0x08` descriptor pointer — §6.19]** — confirmed here as the same table by direct re-decompilation of the
 resolver's own callee, `0x00716440`, which independently reads the identical bounds check
 (index `< 0xd2`) and the identical `×9`-dword (`×36`-byte) stride. **This is a distinct function
 from `tutorial_start` (§6.19), per this task's own note — confirmed by address (`0x00a600b0` vs.
 `0x00a603f0`) and by which callee it reaches (`0x00716440`, not `tutorial_start`'s own
-`0x007169e0`).** `0x00716440` additionally requires one further per-entry table field (at table
-base `+4`, i.e. `0x0151d60c`, a new field-layout detail this table had not previously had recorded
-against it) to equal the literal `3` — a per-entry kind/type tag not shared by every entry — before
-doing anything; entries failing either the bounds check or this tag check make `tutorial_advance`
-return `false` with no other effect. On success, the function opens what reads as a named
-event/profiling scope, literally tagged with this function's own registered name
+`0x007169e0`).** `0x00716440` additionally requires one further per-entry table field (~~at table
+base `+4`~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: entry `+0x0c` of the table at `0x0151d600`]**, i.e. `0x0151d60c`, a new field-layout detail this table had not previously had recorded
+against it) to equal the literal `3` — ~~a per-entry kind/type tag not shared by every entry~~
+**[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: this is not a kind; it is the entry's run-time **state** (0–4,
+§6.19), zero at load, and `tutorial_advance` is true only while the entry is in state 3]** — before
+doing anything; entries failing either the bounds check or this ~~tag~~ state check make `tutorial_advance`
+return `false` with no other effect. ~~On a fresh process every entry is in state 0, so it returns
+false for every name until something puts an entry into state 3 (§26.28).~~ **[2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+On a fresh process every entry is in state 0; after the registration routine `0x007178c0` fills the table,
+entries 0–188 are in state 0 and entries 189–209 in state 1; either way no entry is in state 3, so it
+returns false for every name until something writes 3 (§26.28). **[CONFIRMED —
+disassembly.]** The entry's state is not changed by `tutorial_advance`. **[CONFIRMED — disassembly.]** On success, the function opens what reads as a named
+event/profiling scope **[refined 2026-10-01, job `20261001T020213-team-a-dksj`: it builds a named message through the
+UI-context helpers (`0x00e1a1b0`, `0x00e0ca80` → `0x00e0c720`) and dispatches it with `0x00e0cd00`, which
+sends only when the message has a target and that target's `+0x18` bit `0x10` is clear; HYPOTHESIS —
+a named UI event sent to the tutorial UI document whose handle is `0x0151d5a8`, not telemetry]**, literally tagged with this function's own registered name
 (`"tutorial_advance"`, the identical string passed as a literal argument, read directly off
 `.rdata`) and stashes one further global value into it, then returns `true`. **Correction
 (adversarial review, same day): the value stashed is not "per-entry" as originally worded here —
 `0x00716440`'s own body writes the fixed absolute address `0x0151d5a8` into its own argument
 object's `+0x14` field, with no indexing by the resolved table entry at all** (unlike the
-bounds/tag read just described, which genuinely is per-entry, indexed off the table base
-`0x0151d60c` by `index × 9`).
+bounds/~~tag~~ state read just described, which genuinely is per-entry, indexed off ~~the table base~~
+`0x0151d60c` by `index × 9` — **`0x0151d60c` is entry 0's `+0x0c` field; the base is `0x0151d600`, job
+`20261001T020213-team-a-dksj`**). **[Re-derived 2026-10-01: the value stored into the message's `+0x14` is the *contents* of
+the global `0x0151d5a8` (zero at load, written only by `0x00715f20`), not its address.]** **[2026-10-01, job `20261001T121532-team-a-gdhw`: the writer of `0x0151d5a8`, `0x00715f20`, is the tutorial subsystem initialiser: its first action is the table fill `0x007178c0` (§26.28) and it then creates the handle. CONFIRMED — xref; when it runs is OPEN.]**
 
-**Side effects/subsystem:** on a recognized, correctly-tagged tutorial entry, opens a named
-event/telemetry-shaped scope carrying that entry's own identifier. Subsystem: tutorial-hint
+**Side effects/subsystem:** on a recognized ~~, correctly-tagged~~ tutorial entry in state 3, opens a named
+event/telemetry-shaped scope ~~carrying that entry's own identifier~~ **[corrected 2026-10-01, job
+`20261001T020213-team-a-dksj`: a named message carrying the global `0x0151d5a8`, see above]**. Subsystem: tutorial-hint
 tracking. **[CONFIRMED — disassembly for the bounds/tag gate and the literal self-name string;
 OPEN — whether the named scope this function opens is genuine telemetry, a different kind of
 state-advance record, or something else, was not resolved further; deliberately not guessed, since
 no separate display-dispatch call (unlike `tutorial_start`'s own `0x00715bf0`/`0x007fc560` pair) is
-reached anywhere in this body.]**
+reached anywhere in this body.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the OPEN item is narrowed to
+HYPOTHESIS — a named UI message — until `0x00e0c720` is read.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — ~~what state 3 means and who sets it (§6.19)~~ what state 3 means and who sets it. Narrowed by job `20261001T114716-team-a-fvfp`: no defined function writes the literal 3; the generic setter `0x007163e0` reaches only entries 189–195 (through the 7-id table `0x0152145c`) with values supplied by its single caller `0x00b9ae60`; ~~for entries 0–188 the only candidate is the undefined code before the function tail at `0x00717363` (which stores a register value and then arms a timer), inside the undefined region `0x00717240`–`0x0071738f` that is probably the rest of `0x00717020`.~~ Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): for entries 0–188 no writer of 3 has been found. The region `0x00717240`–`0x0071738f` is not part of `0x00717020` (which ends at `0x0071716a` and is the serialiser of the queued-prompt list) but the tail of the matching stream receiver, and both of its state stores (`0x00717311`, `0x00717363`) write the literal 4; the second follows an "already 4?" test and is followed by arming the global 1-second timer `0x012f58ec` (CONFIRMED — disassembly). For entries 189–195 the generic setter `0x007163e0` is fed by the save loader `0x00b9ae60` (section 5 of a version-gated save block: (name hash, state) pairs at `+0x18acc`), so their states are save-persisted and could be 3 only if the save side ever stored 3 (CONFIRMED — the feed; the save-side values OPEN). `0x007178c0` is called once, from the tutorial initialiser `0x00715f20` (CONFIRMED — xref). The only unread direct references to the state field are in undefined code at `0x00716385`/`0x007163b5`, between the state getter and the generic setter. OPEN — who writes 3; next dumps in follow-up job `team-a/ghidra/jobs/gdhw-followup.json` (§26.28). HYPOTHESIS — 3 = displayed and waiting for the player.**
 
 ### 10.5 `minimap_icon_add_do` (`0x00a53f90`) — 42 runtime calls
 
@@ -6317,9 +6492,11 @@ re-derived.
 
 **Return:** 1 boolean.
 
-**Body:** if given, a fast path (`0x00723d20`) checks a per-name cutscene state and returns true immediately if its state field reads exactly `1` ("loaded"). Otherwise (name absent, or the fast path didn't confirm state `1`), falls through to a broader check (`0x00721db0`): true immediately if a global flag (`0x0153b556`) is set; else, if a name was given and resolves through a hash lookup (`0x00d9e8b0`→`0x00721be0`) to a record distinct from a fixed "current" sentinel (`0x0153b530`), true unless that record's state field equals `1` (**note the apparently INVERTED sense relative to the fast path above — read directly but not independently reconciled, OPEN**); else falls back to a global state code (`0x0153b51c`) equal to `2`.
+**Body:** ~~if given, a fast path (`0x00723d20`) checks a per-name cutscene state and returns true immediately if its state field reads exactly `1` ("loaded"). Otherwise (name absent, or the fast path didn't confirm state `1`), falls through~~ **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the polarity was misread. The fast path `0x00723d20(name)` reports whether the name hashes to a table entry whose field `+8` equals 1; that field is an entry **kind** (1 = a loadable zscene), not a load state. When the fast path reports **false** the function pushes **true** at once (nothing to load); when it reports true the function falls through to the broader check below. With no name (or a non-string, non-number argument) the fast path is skipped. CONFIRMED — disassembly.]** falls through to a broader check (`0x00721db0`): true immediately if a global flag (`0x0153b556`) is set; else, if a name was given and resolves through a hash lookup (`0x00d9e8b0`→`0x00721be0`) to a record distinct from a fixed "current" sentinel (`0x0153b530`), true unless that record's ~~state~~ kind field equals `1` (~~**note the apparently INVERTED sense relative to the fast path above — read directly but not independently reconciled, OPEN**~~ **[2026-10-01, job `20261001T020200-team-a-nzxf`: no inversion — both tiers test the same kind field the same way; for an entry that passed the fast path this branch yields false]**); else falls back to a global state code (`0x0153b51c`) equal to `2`.
 
-**Side effects/subsystem:** none (pure query). Cutscene/zscene subsystem. **[CONFIRMED — disassembly for the two-tier dispatch and the named fast-path's exact state test; OPEN — the real-world meaning of state codes `1`/`2` in the broader fallback, and the apparent sense-inversion between the two tiers.]**
+**Side effects/subsystem:** none (pure query). Cutscene/zscene subsystem. **[CONFIRMED — disassembly for the two-tier dispatch ~~and the named fast-path's exact state test~~; ~~OPEN — the real-world meaning of state codes `1`/`2` in the broader fallback, and the apparent sense-inversion between the two tiers.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`. Resulting behaviour, CONFIRMED — disassembly: with no name, true iff byte `0x0153b556` is set or the load state `0x0153b51c` equals 2. With a name: true if the name is not in the table or its entry is not kind 1; otherwise true if `0x0153b556` is set; otherwise false if the entry is not the current scene (`0x0153b530`); otherwise true iff the load state equals 2. The state codes: 2 = loaded is CONFIRMED (the value tested); 1 = loading and 0 = idle are HIGH CONFIDENCE (from the writers `0x00720410` and the two teardown paths, whose bodies were not dumped). The sense-inversion item is closed. See §26.25.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both tiers and their composition, state 2 = loaded; ~~HIGH CONFIDENCE — 1 = loading, 0 = idle; OPEN — what drives the state to 1 and 2 (§26.25).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: all three state codes CONFIRMED — disassembly; state 1 is written by the promotion `0x00720410` (single caller `0x007258a0`, body OPEN) and state 2 by `0x007285c0`, run from the per-frame cutscene state machine `0x0072d660`; byte `0x0153b556` is the `skip_all_cutscenes` option (§26.25).]**
 
 ### 14.24 `vehicle_speed_cancel` (`0x00a635f0`) — 16 calls
 
@@ -7122,7 +7299,7 @@ First part of the four-way split covering ranks 251-350 (peer TSV: `D:\Project C
 
 **Return:** none.
 
-**Body:** the name is looked up case-insensitively (`__stricmp`) against a fixed 210-entry (`0xd2`) table, `0x00717780` — the same kind of table `tutorial_start`/`tutorial_get_case`/`tutorial_lock` (§6.19 and siblings) plausibly share, not independently cross-checked this pass (**[Resolved: §10.4 confirms `0x00717780`/`0x0151d608` is `tutorial_start`/`tutorial_advance`'s table.]**). If found, `0x00716ed0` writes state code `4` ("stopped") into a per-tutorial-state array at `0x0151d60c` (stride 9, indexed `[id*9]`). If additionally inside a coordinated co-op session (the SAME session-state check `0x0087ba20` + head/tail comparison §3.1/§7.7/§7.8 already document) and not already inside a replicated-apply context (`0x00bc55a0`) and a further predicate `0x007157c0` is truthy, opens a network record: opcode `0x54` (~~a NEW opcode~~ a further site of an existing opcode, §6.22), payload a boolean plus the tutorial id (via `0x00711560`).
+**Body:** the name is looked up case-insensitively (`__stricmp`) against a fixed 210-entry (`0xd2`) table, `0x00717780` — the same kind of table `tutorial_start`/`tutorial_get_case`/`tutorial_lock` (§6.19 and siblings) plausibly share, not independently cross-checked this pass (**[Resolved: §10.4 confirms `0x00717780`/`0x0151d608` is `tutorial_start`/`tutorial_advance`'s table.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the table base is `0x0151d600` (36-byte entries); `0x0151d60c` below is entry `+0x0c`, the per-entry state, and `0x00716ed0` is one of the state-4 writers — §6.19.]**). If found, `0x00716ed0` writes state code `4` ("stopped") into a per-tutorial-state array at `0x0151d60c` (stride 9, indexed `[id*9]`). If additionally inside a coordinated co-op session (the SAME session-state check `0x0087ba20` + head/tail comparison §3.1/§7.7/§7.8 already document) and not already inside a replicated-apply context (`0x00bc55a0`) and a further predicate `0x007157c0` is truthy, opens a network record: opcode `0x54` (~~a NEW opcode~~ a further site of an existing opcode, §6.22), payload a boolean plus the tutorial id (via `0x00711560`).
 
 **Side effects / subsystem:** tutorial-state tracking array, conditionally network-replicated in coordinated co-op sessions only. **[CONFIRMED — disassembly for the lookup/write/gate structure; OPEN — the shared tutorial-name table's own row count/contents beyond this pass's own use, and `0x007157c0`/`0x00711560`'s own bodies.]**
 
@@ -7778,9 +7955,9 @@ Regardless of the record, when the vehicle has a live sub-object at +0x1e00 with
 
 **Return:** 1 boolean, pushed via lua_pushboolean (0x00dfe590) — always exactly 1 value, both branches push.
 
-**Body:** the name is linear-scanned (case-insensitive) against a fixed 210-entry string-pointer table (0x012f5930) via 0x00717780, yielding an index or -1. On a valid index, reads a per-tutorial-entry byte from a stride-9 table (0x0151d60c, at index*9) and tests whether it equals 3, pushing that as the boolean ("is this tutorial currently in the active state"); on no match, pushes false.
+**Body:** the name is linear-scanned (case-insensitive) against a fixed 210-entry string-pointer table (0x012f5930) via 0x00717780, yielding an index or -1. On a valid index, reads a per-tutorial-entry byte from a stride-9 table (0x0151d60c, at index*9) **[2026-10-01, job `20261001T020213-team-a-dksj`: this is entry `+0x0c`, the per-entry state, of the 36-byte table based at 0x0151d600; the state readers dumped in that job compare it as a dword — §6.19]** and tests whether it equals 3, pushing that as the boolean ("is this tutorial currently in the active state"); on no match, pushes false.
 
-**Side effects/subsystem:** none (pure query). **[CONFIRMED — disassembly, full body read; OPEN — what states 0/1/2/3/... in that stride-9 table mean beyond "3 = active."]**
+**Side effects/subsystem:** none (pure query). **[CONFIRMED — disassembly, full body read; OPEN — what states 0/1/2/3/... in that stride-9 table mean beyond "3 = active."]** **[Partly settled 2026-10-01, job `20261001T020213-team-a-dksj`: 0 = untouched, 1 = armed, 2 = queued simple prompt, 4 = rich widget issued, CONFIRMED from their writers (§6.19); what 3 means stays OPEN.]**
 
 ### 20.6 `team_make_allies` (0x00a60600)
 
@@ -9701,15 +9878,21 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 **Side effects/subsystem:** none (pure read). Audio/screen-fade state query. **[CONFIRMED — disassembly, 2-instruction body; the shared-global identification confirmed by independently decompiling 0x0059f8c0 this same pass, not inferred from the name alone.]**
 
+**Addition 2026-10-01 (bridge job `20261001T020200-team-a-nzxf`):** the test is identical to `fade_is_fully_faded_out` (`0x00a49790`, via `0x0059fa10`): both read 0x012e6aa4 and compare with 3, and state 3 means "fully faded out" (encoding in §26.24). `fade_is_fully_faded_in` (`0x00a49760`, via `0x0059fa00`) compares the same dword with 2. None of the three takes an argument. CONFIRMED — disassembly. The next function in the same UI wrapper, 0x0059fb60, compares the state with 2 and is ~~almost certainly `sfx_faded_in` (HIGH CONFIDENCE; its registered name was not dumped)~~ `sfx_faded_in` **[CONFIRMED — disassembly, job `20261001T114101-team-a-mnao`]**. The slot before this one in the wrapper registers 0x005a0110, the fade-completion native (§26.24) **[job `20261001T114101-team-a-mnao`: registered as `Screen_fade_transition_complete`]**.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — body, return, identity with `fade_is_fully_faded_out`; ~~HIGH CONFIDENCE — 0x0059fb60 is `sfx_faded_in`; OPEN — registered name of 0x005a0110 (§26.24).~~** **[Review status updated 2026-10-01, job `20261001T114101-team-a-mnao`: 0x0059fb60 = `sfx_faded_in` and 0x005a0110 = `Screen_fade_transition_complete`, both CONFIRMED — disassembly; nothing OPEN in this unit.]**
+
 ### 26.10 `pause_menu_quit_game_internal` (0x007e0470) — 311-entry UI-wrapper table, wrapper 0x007e18e0 (the same wrapper §16.11-§16.13 document for the sibling `pause_menu_*` functions)
 
 **Arguments:** none. **Return:** none.
 
-**Body:** calls the same screen-fade-request primitive (0x0059f8c0) with 3 confirmed-explicit arguments (0, callbackAt0x007e0450, 0) — a fade mode/duration of 0 and a real completion callback.
+**Body:** calls the same screen-fade-request primitive (0x0059f8c0) with 3 confirmed-explicit arguments (0, callbackAt0x007e0450, 0) — ~~a fade mode/duration of 0~~ a fade-out of duration 0 and a real completion callback. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: with the helper's stack order `(durationMs, completionCallback, flag)`, this is a zero-millisecond fade-out request with flag 0. If the screen is already fully faded out the helper calls the callback at once with 3; otherwise the callback is parked (in-flight or deferred, §26.24) and runs when the fade completes. CONFIRMED — disassembly for the helper; the callback chain as described below.]**
 
 **The callback target 0x007e0450, independently disassembled to confirm it's a genuine separate function and not a boundary artifact:** confirmed real — its own body sets a global flag (0x01503ea4 = 1), calls two further functions (0x00877410, then 0x00707880 with a literal 0), and **tail-jumps** (not calls) into 0x00554270. This is very plausibly the real "now actually quit/shut down" logic, deferred until after the requested fade completes — a fade-to-black-then-quit sequence, matching the name precisely. Not decompiled past this shape (0x00554270/0x00877410/0x00707880 all OPEN).
 
 **Side effects/subsystem:** requests a screen fade, then (once it completes) sets a shutdown-request flag and jumps into a shared shutdown path. Pause-menu / application-exit lifecycle. **[CONFIRMED — disassembly, full body of both the wrapper and its callback target's own top-level shape.]**
+
+**Review status (2026-10-01): re-derived from the executable for the fade-request side only (job `20261001T020200-team-a-nzxf`): CONFIRMED — the argument order and the helper's behaviour; not re-derived — the callback target 0x007e0450 and its callees (0x00554270/0x00877410/0x00707880 still OPEN).**
 
 ### 26.11 `pcu_wear_current_clothing` (0x0082f7d0) — 311-entry UI-wrapper table, wrapper 0x00830230 ("pcu")
 
@@ -9816,8 +9999,8 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 ### 26.23 Cross-function observations
 
-- **Major new shared-primitive resolution: the 0x00e0xxxx "builder/named-callback" family, previously left OPEN at §19.5 as "a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record."** This pass fully decompiled 8 of its members (0x00e1a1b0, 0x00e0ca80, 0x00e0ce40, 0x00e0ce60, 0x00e0cfb0, 0x00e0ce00, 0x00e0cd00, 0x00e0ce20) and can now characterize it precisely: 0x00e1a1b0 is a zero-real-argument accessor always returning one fixed global "value-list builder" singleton object; 0x00e0ca80(targetNameString, builderHandle) "opens"/resolves a **named Lua-side callback target** (its own real signature takes 2 more arguments that, at every observed call site in this tranche, are confirmed via disassembly to be leftover 0/0 values from the immediately-preceding builder-accessor call, not garbage); and the remaining members are thin wrappers around the ALREADY-established `lua_push*` primitives (`lua_pushnumber` for both the double- and float-taking variants, an unnamed `lua_pushnil`-shaped call for the "nil" pushes, `lua_pushstring` for the string-or-nil variant, `lua_pushboolean`), each incrementing a running pushed-value count on the builder object, with a final "finalize/dispatch" call (0x00e0cd00 → 0x00e0cba0, OPEN) that fires the resolved named callback with the accumulated argument list. In other words: **this whole family is a generic "call a named Lua callback with N arguments" mechanism, layered on top of this document's own already-documented `lua_push*` primitives — not a separate network-record system.** This resolves/upgrades §19.5's own OPEN characterization directly. Used by 3 of this tranche's own functions (`pcu_report_item_colors`, `pcu_get_categories_in_area`, `pcu_get_areas`) and also found, independently, inside the newly-decompiled screen-fade primitive below.
-- **A second major new-primitive resolution: 0x0059f8c0, previously cited only as "conditionally calls 0x0059f8c0/0x008b7260" at §16.9 with no characterization, is a screen-fade-request primitive** with the real signature (fadeMode, completionCallback, duration), backed by a small state machine (globals 0x012e6aa0/0x012e6aa4/0x012e6aa8/0x013effc8/0x013effcc/0x013effd0) and internally using the SAME 0x00e0xxxx builder family to fire a named `"screen_fade_do"` callback with 3 numeric parameters. **This directly explains `sfx_faded_out`'s own query field (0x012e6aa4 == 3) as literally the same fade-state global this primitive itself drives** — a concrete, disassembly-confirmed link between two functions in this very tranche (§26.9/§26.10/§26.6 all touch this one mechanism from different sides).
+- **Major new shared-primitive resolution: the 0x00e0xxxx "builder/named-callback" family, previously left OPEN at §19.5 as "a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record."** This pass fully decompiled 8 of its members (0x00e1a1b0, 0x00e0ca80, 0x00e0ce40, 0x00e0ce60, 0x00e0cfb0, 0x00e0ce00, 0x00e0cd00, 0x00e0ce20) and can now characterize it precisely: 0x00e1a1b0 is a zero-real-argument accessor always returning ~~one fixed global "value-list builder" singleton object~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: the interface (UI) Lua state at 0x02a45450, as `spec-lua-bindings.md` §14.1 says; the builder object is what 0x00e0ca80 returns. This settles the conflict that spec flags between §26.23 and §14.1]**; 0x00e0ca80(targetNameString, builderHandle) "opens"/resolves a **named Lua-side callback target** (its own real signature takes 2 more arguments that, at every observed call site in this tranche, are confirmed via disassembly to be leftover 0/0 values from the immediately-preceding builder-accessor call, not garbage); and the remaining members are thin wrappers around the ALREADY-established `lua_push*` primitives (`lua_pushnumber` for both the double- and float-taking variants, an unnamed `lua_pushnil`-shaped call for the "nil" pushes, `lua_pushstring` for the string-or-nil variant, `lua_pushboolean`), each incrementing a running pushed-value count on the builder object, with a final "finalize/dispatch" call (0x00e0cd00 → 0x00e0cba0, OPEN) that fires the resolved named callback with the accumulated argument list. In other words: **this whole family is a generic "call a named Lua callback with N arguments" mechanism, layered on top of this document's own already-documented `lua_push*` primitives — not a separate network-record system.** This resolves/upgrades §19.5's own OPEN characterization directly. Used by 3 of this tranche's own functions (`pcu_report_item_colors`, `pcu_get_categories_in_area`, `pcu_get_areas`) and also found, independently, inside the newly-decompiled screen-fade primitive below.
+- **A second major new-primitive resolution: 0x0059f8c0, previously cited only as "conditionally calls 0x0059f8c0/0x008b7260" at §16.9 with no characterization, is a screen-fade-request primitive** with the real signature ~~(fadeMode, completionCallback, duration)~~ **(durationMs, completionCallback, flag)** **[corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`, read off the raw stack offsets: the integer millisecond duration is the first argument and the flag (stored in 0x013effc8 and passed to Lua first) the third. CONFIRMED — disassembly]**, backed by a small state machine (globals 0x012e6aa0/0x012e6aa4/0x012e6aa8/0x013effc8/0x013effcc/0x013effd0) and internally using the SAME 0x00e0xxxx builder family to fire a named `"screen_fade_do"` callback with 3 numeric parameters. **[2026-10-01, job `20261001T020200-team-a-nzxf`: globals list CONFIRMED and extended with 0x013effc0, 0x012e6aac/0x012e6ab0/0x012e6ab4/0x012e6ab8 and 0x013effc5; the three parameters are `(flag, targetAlpha, durationMs)`. Full state machine in §26.24.]** **This directly explains `sfx_faded_out`'s own query field (0x012e6aa4 == 3) as literally the same fade-state global this primitive itself drives** — a concrete, disassembly-confirmed link between two functions in this very tranche (§26.9/§26.10/§26.6 all touch this one mechanism from different sides).
 - **A repeated, newly-identified decompiler-rendering gap, distinct from this document's already-established register-forwarding hidden-argument convention:** at least 4 separate call sites across 3 functions in this tranche (0x00822040 and 0x00746770 inside `pcu_report_item_colors`; 0x00822000 inside `pcu_get_categories_in_area`; 0x007f3520 inside `game_use_radial_menu_item`) show a genuine, single, explicitly-`PUSH`ed stack argument in the raw disassembly that the decompiler's own pseudocode rendering shows as a bare zero-argument call. Unlike the established register-forwarding idiom (where no push exists at all), these ARE real pushes — just dropped from the decompiled text entirely. Worth flagging as its own distinct artifact category for future tranches working in this same address neighborhood (the 0x0082xxxx/0x0084xxxx PCU/radial-menu regions).
 - **A second new hidden-argument variant, found in `pcr_strip_clothing`: a real argument reaching a callee not via a register, but via a stale, not-yet-cleaned stack slot left over from an immediately preceding, separately-called function** (the compiler had combined/deferred the two calls' stack cleanups into one `ADD ESP` after the second call). This is mechanically different from both the already-established register-forwarding convention AND the "decompiler silently drops a real push" pattern above — a third distinct flavor of hidden-argument bug this cluster's address range exhibits, all found only by going to raw disassembly.
 - **The single clearest and most consequential hidden-argument catch this pass: `game_set_equipped_grenade`.** Its decompiled pseudocode makes the function look almost like a no-op (argument computed and apparently unused; current-player call's result apparently discarded), which would have been easy to mis-report as "another hardcoded stub" by analogy with §26.3/§26.8 of this same tranche — but raw disassembly proves it forwards a real hidden `this` pointer (player + 0x1b78, the SAME quick-item sub-object §26.18's own slot-12 special case touches) and a real adjusted argument into a genuine, meaningful equip-grenade setter. A caution for future passes: an apparently-unused decompiled value in THIS specific cluster is not reliable evidence of dead code — check the raw disassembly before concluding a stub, even when the surface pattern looks identical to a confirmed real stub elsewhere in the same tranche.
@@ -9827,6 +10010,1082 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 - **A third global identified in the area-state cluster already tracked at §19.1** (0x022ffd40, alongside the already-known 0x022ffd44/0x022ffd48/0x022ffd4c), feeding a shared UI-refresh notifier (0x0082dc40) called identically by this tranche's own `pcu_get_areas` and (indirectly, via the shared revalidate-everything primitive 0x0082e210) `pcu_wear_current_clothing`/`pcu_discard_slot`.
 - **A fourth confirmed direct consumer of the exact §16.16/§19.16 shared 63-slot PCR composite-item list**: `pcr_change_eye_color`, joining `pcr_change_composite`/`pcr_set_random_composite`/`pcr_change_skin_color` already on record.
 - No opcode/network-replicate record-and-replicate idiom (the 0x00710cb0 pattern) was found in any of these 22 — consistent with §19.16's own observation that the UI/customization cluster doesn't use that idiom; the closest analogue here is the newly-resolved 0x00e0xxxx named-callback builder family, which is a genuinely different mechanism.
+
+**Review status (2026-10-01): the two fade/builder bullets above re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED — helper signature, globals, the 0x00e1a1b0 role; OPEN — 0x00e0cba0 (the dispatch's inner call). The other bullets were not re-derived in this job.**
+
+### 26.24 Screen fade state machine (exe-derived 2026-10-01)
+
+Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao` (Lua entries `fade_out`, `fade_in`,
+`fade_is_fully_faded_out`, `fade_is_fully_faded_in`, `sfx_faded_out`; function listings of 0x0059f8c0,
+0x0059fc40, 0x005a0270, 0x005a0400; reference lists of the globals). Wrapper-level detail lives in §2.9,
+§8.13, §26.9, §26.10; this unit gathers the shared machinery. Labels as in the rest of this document.
+
+**Globals** (initial value = the file-backed value the executable starts with). **CONFIRMED —
+disassembly** for every row: the reference lists give every reader and writer in the binary.
+
+| Address | Initial | Role | Written by |
+|---|---|---|---|
+| 0x012e6aa4 | 2 | fade **state** (encoding below) | 0x0059f8c0 (:= 1), 0x0059fc40 (:= 0), init/shutdown pair 0x0059fa30/0x0059faa0, completion code at 0x005a0136 (:= 3) and 0x005a0159 (:= 2) **[job `20261001T114101-team-a-mnao`: this code is the body of `Screen_fade_transition_complete`, 0x005a0110]** |
+| 0x012e6aa8 | 2 | requested **target**: 3 = out, 2 = in | 0x0059f8c0 (:= 3), 0x0059fc40 (:= 2), 0x0059fa30, 0x0059faa0 |
+| 0x012e6aa0 | -1 | ~~handle set up at init; while it is -1 no Lua call is made~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0059fa30 only |
+| 0x012e6aa0 | -1 | id of the loaded "screen_fade" UI document record (0x007b1cb0); while it is -1 no Lua call is made | 0x0059fa30 only |
+| 0x013effc8 | 0 (init writes 1) | third argument (`flag`) of the last request; passed to Lua | 0x0059f8c0, 0x0059fc40, 0x0059fa30 |
+| 0x013effcc | 0 | completion callback of the transition in flight | 0x0059f8c0, 0x0059fc40, completion code (0x005a01bd) |
+| 0x013effd0 | 0 | **deferred** callback: a request that could not start yet | 0x0059f8c0, 0x0059fc40, completion code (cleared at 0x005a01b1) |
+| 0x013effc0 | 0 | ~~object handle placed in the Lua call builder before `screen_fade_do` is called~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0059fa30 (set), 0x0059faa0 (cleared) |
+| 0x013effc0 | 0 | handle of the "screen_fade" UI document (its +0x580, found by 0x00e1f2f0); placed in the Lua call builder so the calls run in that document | 0x0059fa30 (set), 0x0059faa0 (cleared) |
+| 0x012e6ab0, 0x012e6ab8 | -1, -1 | ~~two "hold until" millisecond timestamps that block a fade-in~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0059fe70, completion code |
+| 0x012e6ab0, 0x012e6ab8 | -1, -1 | "hold fade-in until" stamps: now + 1000 ms when the loading logo is shown, now + 1500 ms when the load images are shown | 0x0059fe70, completion native (reset) |
+| 0x012e6aac, 0x012e6ab4 | -1, -1 | ~~two companion timestamps, reset to -1 when a fade-in starts~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0059fc40, 0x0059fe70, completion code |
+| 0x012e6aac, 0x012e6ab4 | -1, -1 | "show the loading logo at" (fade-out completion + 1000 ms) and "show the load images at" (logo + 6000 ms, only when 0x0149365c is set); both reset to -1 when a fade-in starts | 0x0059fc40, 0x0059fe70, completion native |
+| 0x013effc5 | 0 | byte: last opcode-0x53 record was a fade-out (1) or fade-in (0) | 0x005a0270 (:= 1), 0x005a0400 (:= 0), 0x0059fa20 (:= 0) |
+| 0x012e6abc | -1 | auto-save indicator stamp: now + 3000 ms when the indicator is shown | 0x0059fe70 |
+| 0x013effd4 | 0 | auto-save counter; > 0 shows the indicator | 0x0059faf0 (inc/dec/zero), read by 0x0059fb20 |
+| 0x0149365c | 0 | byte: show load-screen images (`sfx_use_load_images`) | 0x005d1a30 |
+
+**State encoding of 0x012e6aa4** — **CONFIRMED — disassembly**:
+
+| Value | Meaning |
+|---|---|
+| 0 | fading in (transition toward transparent running) |
+| 1 | fading out (transition toward opaque running) |
+| 2 | fully faded in, screen visible — the start-up state |
+| 3 | fully faded out, screen covered |
+
+~~Queries: `fade_is_fully_faded_out` and `sfx_faded_out` are true when the state is 3;
+`fade_is_fully_faded_in` when it is 2 (§26.9). **CONFIRMED.**~~ **[Superseded, job `20261001T114101-team-a-mnao`:]**
+Queries: `fade_is_fully_faded_out` and `sfx_faded_out` are true when the state is 3;
+`fade_is_fully_faded_in` and `sfx_faded_in` (0x0059fb60) when it is 2 (§26.9). `sfx_use_load_images`
+(0x0059fb90) returns the byte 0x0149365c. All four UI-state natives are registered by 0x005a01d0.
+**CONFIRMED — disassembly.**
+
+**Request helpers** — 0x0059f8c0 (fade out) and 0x0059fc40 (fade in), both taking
+`(durationMs, completionCallback, flag)`. **CONFIRMED — disassembly, full bodies.** Both Lua wrappers
+pass `(trunc(seconds × 1000), 0, 0)`; §26.10 passes `(0, callback, 0)`.
+
+Fade-out request:
+1. Posts the 32-bit id 0x5c0b1b1a through 0x0045d990 (via 0x005542f0). HYPOTHESIS: an audio event.
+2. If the state and the target are both 3, it calls the callback (if any) with 3 and stops.
+3. Otherwise it sets the target to 3 and stores `flag` in 0x013effc8.
+4. If a fade-in is running (state 0), it parks the callback in the deferred slot 0x013effd0 and stops.
+   The state is left alone and no Lua call is made.
+5. Otherwise, if 0x012e6aa0 is not -1 and the UI Lua state defines `screen_fade_do` as a function,
+   it calls `screen_fade_do(flag, 1.0, durationMs)` in that state.
+6. It sets the state to 1 and stores the callback in 0x013effcc.
+
+Fade-in request, the mirror image:
+1. Posts id 0xf0493dc8 when two engine conditions are false (HYPOTHESIS: an audio event).
+2. If the state and the target are both 2, it calls the callback with 2 and stops.
+3. It sets the target to 2 and stores `flag`.
+4. It defers (callback into 0x013effd0, then stops) in two cases:
+   - a fade-out is running (state 1);
+   - either hold timestamp 0x012e6ab0/0x012e6ab8 is set (value ≥ 0) and the millisecond clock at
+     0x01320d9c has not passed it yet (the comparison tolerates a 900,000,000 ms wrap).
+5. Otherwise it resets 0x012e6aac/0x012e6ab4 to -1 and makes the same Lua call with
+   `(flag, 0.0, durationMs)`.
+6. It sets the state to 0, stores the callback, and posts id 0xa577ee9c.
+
+The C side therefore never animates anything. It sets the direction (state 1 or 0), asks the UI script
+to run the transition, and parks a callback. A "queued on a UI command queue" reading (2026-09-30) is
+superseded: this is a direct call of a Lua global.
+
+**Broadcast helpers** — 0x005a0270 (out) and 0x005a0400 (in). **CONFIRMED — disassembly.** Both do
+nothing unless the host gate holds: the session object (0x0087ba20 → 0x024d8534) exists and its
+`+0x5c` equals its `+0x58`. Each then opens an opcode-0x53 record (0x0086f5f0) and writes:
+- a 1-bit direction flag (1 = out, 0 = in);
+- for fade-out only, the current overlay colour as 4 bytes;
+- 16 bits of `durationMs`;
+- 8 bits of the helper's second argument (0 from Lua).
+
+The record goes to the session's peers (0x0086f1b0) and is closed (0x0086eb20). Each helper also sets
+0x013effc5. HIGH CONFIDENCE: the record replicates the fade to co-op clients (the consumer is not traced).
+
+~~**What completes a fade.**~~ **[Superseded by job `20261001T114101-team-a-mnao`: the struck block below is replaced by the text that follows it. Corrections: the native flips the state by its current value (0 → 2, 1 → 3) rather than setting it to the target; callbacks receive the target; and it never starts the deferred request — the per-frame routine 0x0059fe70 replays it with a fixed 250 ms.]**
+- ~~**CONFIRMED — disassembly:**~~
+  - ~~Apart from the init/shutdown pair, the only stores of 3 and 2 into the state are at 0x005a0136 and
+    0x005a0159. They sit in code that Ghidra has not made into a function; its references run from
+    0x005a011a to 0x005a01bd.~~
+  - ~~That code reads the target, the in-flight callback and the deferred callback. It clears the
+    deferred slot, rewrites the in-flight slot, and writes the hold and companion timestamps.~~
+  - ~~The UI wrapper 0x005a01d0 registers the code pointer 0x005a0110 in the slot just before
+    `sfx_faded_out`, so 0x005a0110 is a Lua-callable native in the UI state.~~
+  - ~~No C routine in the dumps advances the fade per frame or compares elapsed time with the duration;
+    the duration is only ever passed to Lua.~~
+- ~~**HIGH CONFIDENCE** (the body at 0x005a0110 appears only as scattered reference lines):~~
+  - ~~A fade completes when the UI script calls the native at 0x005a0110 after `screen_fade_do` has
+    finished its transition.~~
+  - ~~That native sets the state to the target (3 after a fade-out, 2 after a fade-in) and fires the
+    parked callback.~~
+  - ~~If the opposite direction was requested in the meantime (deferred slot non-zero, target different
+    from the new state), it starts that request.~~
+- ~~**HYPOTHESIS:** 0x0059fe70 is the per-frame fade update that re-issues deferred requests once the
+  hold timestamps expire. It is the only caller of both request helpers and the only setter of the hold
+  timestamps.~~
+
+**What completes a fade: `Screen_fade_transition_complete` (0x005a0110).** **CONFIRMED —
+disassembly, full listing.** The UI wrapper 0x005a01d0 registers this native in the UI Lua state,
+next to `sfx_faded_out`, `sfx_faded_in` and `sfx_use_load_images`. It takes no arguments and
+returns nothing. Apart from init/shutdown it holds the only stores of 2 and 3 into the state, so a
+fade completes exactly when the UI script calls it (HIGH CONFIDENCE: when `screen_fade_do`'s
+tween ends). Its body:
+1. If the state is 0 it becomes 2. If the state is 1 it becomes 3, the logo stamp 0x012e6aac is set
+   to now + 1000 ms and 0x012e6ab0/0x012e6ab4/0x012e6ab8 are reset to -1. A state of 2 or 3 is
+   left alone. The target is not consulted here.
+2. If the in-flight callback 0x013effcc is set it is called with the **target** (2 or 3) as its
+   only argument; the slot is re-read afterwards.
+3. If the state now equals the target and the deferred slot 0x013effd0 is set: when it holds the
+   same function as the in-flight slot, both are cleared (the function has just been called) and
+   the native returns; otherwise the deferred function is called with the target and the slot is
+   cleared.
+4. The in-flight slot is cleared (and the deferred slot too when the two were equal).
+
+The native never starts a transition. A request that was parked (target differs from the settled
+state) is replayed by the per-frame routine below.
+
+**Per-frame routine 0x0059fe70** (callers 0x005d14b0 and 0x007a82c0). **CONFIRMED — disassembly,
+full listing.** Each frame, in this order:
+- Auto-save indicator: counter 0x013effd4 > 0 and stamp 0x012e6abc unset → stamp := now + 3000 ms
+  and call `screen_fade_auto_save_show()`; counter ≤ 0 and stamp reached → call
+  `screen_fade_auto_save_hide()` and reset the stamp.
+- Mode gate: if the top of the mode stack (0x00706ab0: 0x01503b50 indexed by 0x012f4a80) is 4,
+  reset all four fade stamps and stop (OPEN: what mode 4 is).
+- Loading logo: if 0x012e6aac is set and reached and the cutscene state 0x0153b520 is not 10..13:
+  reset 0x012e6aac, 0x012e6ab0 := now + 1000 ms, 0x012e6ab4 := now + 6000 ms when 0x0149365c is
+  set, 0x012e6ab8 := -1; unless one of the ids 0x35/0x36/0x37 is active in the set at 0x012fced8
+  (0x007b3ba0), post the id 0x4c0db2a9 through 0x0045d990 (HYPOTHESIS: a sound); call
+  `screen_fade_logo_show()`; stop.
+- Holds: if 0x012e6ab0 is set and not reached, stop. If 0x012e6ab4 is set and reached: reset it,
+  0x012e6ab8 := now + 1500 ms, call `screen_fade_images_show()`, stop. If 0x012e6ab8 is set and
+  not reached, stop.
+- Replay: if the target is 2 and the state is 3, call the fade-in helper 0x0059fc40(250,
+  deferred callback, flag 0x013effc8); if the target is 3 and the state is 2, call the fade-out
+  helper 0x0059f8c0(250, deferred callback, flag). A parked request is therefore replayed with a
+  fixed 250 ms duration, and only once the state has settled at the opposite end and the holds
+  have passed.
+
+All script calls go to the UI Lua state in the context of the `screen_fade` document (0x013effc0)
+and take no arguments.
+
+**Init 0x0059fa30 / shutdown 0x0059faa0.** **CONFIRMED — disassembly.** Init loads the named UI
+document "screen_fade" (0x007b1cb0, mode 1; its id goes to 0x012e6aa0, -1 on failure), looks the
+document up (0x00e1f2f0) and, if found, stores its handle in 0x013effc0 and sets state := 2,
+target := 2, flag := 1. Shutdown destroys the document (0x00e1f330 → 0x00e20f60), clears
+0x013effc0, unloads the record (0x007b1420) and sets state and target to 2.
+
+**Host summary (for Team B).**
+- Keep one state dword with the encoding above; start it at 2.
+- `fade_out(d, colour, flags)`: set the overlay colour. If `flags & 1`, run the fade-out request with
+  `trunc(d × 1000)` ms. If `flags & 2` and this machine is the co-op host, emit the 0x53 record (single
+  player can ignore it).
+- `fade_in(d, flags)` works the same way, with no colour.
+- ~~A request only flips the state to 1 (out) or 0 (in) and calls `screen_fade_do(flag, alpha, ms)` in
+  the UI Lua state, and only if that global is a function. If it is not defined, the real engine never
+  completes the fade either, so a script that busy-polls `fade_is_fully_faded_out()` never returns.~~
+  **[Superseded, job `20261001T114101-team-a-mnao`: next bullet.]**
+- A request only flips the state to 1 (out) or 0 (in) and calls `screen_fade_do(flag, alpha, ms)`
+  in the UI Lua state, and only if that global is a function. Completion is the script's call of
+  `Screen_fade_transition_complete()`. If `screen_fade_do` is not defined, the real engine never
+  completes the fade either, so a script that busy-polls `fade_is_fully_faded_out()` never returns.
+  A request parked while the opposite transition ran is replayed by the per-frame routine with
+  250 ms once the state has settled.
+- `fade_is_fully_faded_out()` and `sfx_faded_out()` are true when the state is 3;
+  `fade_is_fully_faded_in()` when it is 2.
+
+**HOST-SIDE SUBSTITUTE (not engine behaviour):** a host that does not run the shipped UI scripts may
+complete the transition itself after `durationMs` milliseconds. ~~It sets the state to the target, calls
+and clears the in-flight callback, and then issues the deferred request if the deferred slot is set and
+the target differs from the new state. The engine does none of this in C; this only stands in for the
+UI script's call to the native at 0x005a0110.~~ **[Superseded, job `20261001T114101-team-a-mnao`: the struck sentences
+described the completion step wrongly.]** It then runs the body of `Screen_fade_transition_complete`
+(flip 0→2 or 1→3, call the in-flight callback with the target, handle the deferred slot as described)
+and, on a later frame, the per-frame replay rule (250 ms toward the target once the state is settled).
+Only the timer is a substitute; the two bodies are engine behaviour. A host that runs the shipped UI
+scripts gets completion from the script's own call of `Screen_fade_transition_complete()` and needs
+no substitute; any other completion path is this host-side substitute and must be labelled as such.
+
+**OPEN — next dump** ~~(from the interpretation of job `20261001T020200-team-a-nzxf`)~~ **[list replaced
+from the interpretation of job `20261001T114101-team-a-mnao`; the struck items were run in that job]**:
+- ~~Fade completion: `func 0x005a0110`. If Ghidra has no function there, run `xref 0x005a0110` and
+  `func 0x005a01d0` to read the registered name string, then `lua <that name>`. Also `lua sfx_faded_in`
+  to confirm 0x0059fb60.~~
+- ~~Fade per-frame and init: `func 0x0059fe70 0x0059fa30 0x0059faa0 0x0059fa20 0x0059f9c0 0x0059f9f0
+  0x0059fb90 0x00e0cba0`; `xref 0x0059fe70 0x0059fa30 0x013effc0 0x012e6ab0`.~~
+- ~~Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.~~
+- `func 0x005d14b0 0x007a82c0 0x005d2400 0x005d1a30 0x0059faf0 0x0059fb20 0x00706be0` (callers
+  of the per-frame routine and init; the load-images byte; the auto-save counter; the mode stack).
+- Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.
+
+~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — globals and initial values, state encoding, both request helpers, both broadcast
+helpers, the three queries, the location of the completion stores; HIGH CONFIDENCE — completion via the
+UI-registered native 0x005a0110, the co-op purpose of 0x53; HYPOTHESIS — audio-id posts, 0x0059fe70 as
+the per-frame update; OPEN — the name and full body of 0x005a0110, the body of 0x0059fe70.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`): CONFIRMED parts — globals and initial values, state encoding, both
+request helpers, both broadcast helpers, the four UI natives including
+`Screen_fade_transition_complete`, the completion body, the per-frame routine, init/shutdown;
+HIGH CONFIDENCE — the document-id/handle labels of 0x012e6aa0/0x013effc0, the co-op purpose of
+0x53, the script calling the completion native; HYPOTHESIS — audio-id posts, the auto-save
+counter's meaning; OPEN — mode 4 of the mode stack, the callers of the per-frame routine.**
+
+### 26.25 zscene lifecycle (exe-derived 2026-10-01)
+
+Source: ~~bridge job `20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and `20261001T114101-team-a-mnao` (Lua entries `zscene_prep`, `zscene_is_loaded`;
+listings of 0x007232e0, 0x00721be0, 0x00721c20, 0x00721db0, 0x00723d20, 0x0101b530; reference lists).
+Wrapper detail lives in §8.21 and §14.23.
+
+**Globals.** **CONFIRMED — disassembly** for the addresses and writers; roles as labelled.
+
+| Address | Role | Written by |
+|---|---|---|
+| 0x0153b294 / 0x0153b29c | ~~scene table base / count; entries 0xf8 bytes~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x007231e0, 0x00723d60, 0x00723e40 |
+| 0x0153b294 / 0x0153b29c / 0x0153b298 | scene table base / count / capacity (≤ 200); entries 0xf8 bytes, parsed from cutscene.xtbl | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
+| 0x0153b530 | current scene entry | cleared by 0x00720320 and one path of 0x00721c20; set by 0x00720410 (from the pending slot), 0x00722f10, 0x007231e0, 0x00728440 |
+| 0x0153b538 | pending (requested) entry | set by prep's gate 0x007232e0; cleared by 0x00720410; 0x00720320 copies the current entry into it |
+| 0x0153b51c | load state: 0 idle, 1 loading, 2 loaded | := 0 by 0x00720320 and 0x00721c20; := 1 by 0x00720410; := 2 by 0x007285c0; also written by 0x00722f10, 0x007231e0 |
+| 0x0153b556 | ~~byte; when set, prep refuses and `zscene_is_loaded` reports true (HYPOTHESIS: a bypass toggle)~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0072df50; its address is handed out by 0x0072d330 |
+| 0x0153b556 | byte: the "skip_all_cutscenes" option (registered by 0x0072d330 through 0x0086d770); when set, prep refuses, zscene_is_loaded reports true and cutscene starts do nothing | 0x0072df50 (the skip/play command) |
+| 0x0153b568 / 0x0153b56c | ~~two values prep stores (always 0 from Lua)~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x007232e0; read and re-stored by 0x00720410 |
+| 0x0153b568 / 0x0153b56c | per-object parameters passed to prep (object +0x8/+0xc by the auto-prep path; zero constants from Lua — 0x01180120/0x01180124, §8.21 — and from cutscene starts — 0x01146600/0x01146604); copied into the entry's +0x18/+0x1c at promotion, which then resets both to the 0x01146600/0x01146604 constants | 0x007232e0; 0x00720410 |
+| 0x0153b534 | ~~secondary handle, released on teardown through service 9~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | set by 0x007285c0, cleared by 0x00721c20 |
+| 0x0153b534 | object obtained from slot +0x5c of the service-9 object when the load completes (HYPOTHESIS: a world-side object for the scene); released on teardown | 0x007285c0 (set), 0x00721c20 (cleared) |
+| 0x0153b541 / 0x0153b542 | ~~bytes set on teardown~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x00721c20, 0x00720320, 0x00722f10 |
+| 0x0153b541 / 0x0153b542 | bytes: "auto-select the nearest scene when idle" enable, and "re-queue the current entry on reset" | 0x00721c20, 0x00720320, 0x00722f10 |
+| 0x0153b71c / 0x0153b720 / 0x0153b724 | transition stream started at promotion from the entry's +0xf4 handle, its secondary handle, and its 1000-unit timer; completion waits until it ends (status 0x66) or 5 s pass | 0x007315a0, 0x007317a0, 0x007316a0 |
+
+~~State code: 2 = loaded is **CONFIRMED** (the value tested). 1 = loading and 0 = idle are **HIGH
+CONFIDENCE**: they are read from which routines write each value, but the bodies of 0x00720410 and
+0x007285c0 were not dumped.~~ **[Superseded, job `20261001T114101-team-a-mnao`:]**
+State code: 0 = idle, 1 = loading (written by the promotion 0x00720410 when it starts the resource
+load), 2 = loaded (written by 0x007285c0 when the handle is resident). **CONFIRMED —
+disassembly.**
+
+**Scene entry (stride 0xf8).** **CONFIRMED** for the offsets:
+- `+0x0`: pointer to the entry's name (a heap copy made by 0x00723e40). **[added, job `20261001T114101-team-a-mnao`]**
+- `+0x4`: CRC-32 of the lower-cased name (0x00d9e8b0, seed 0); the lookup key used by 0x00721be0, a
+  linear scan.
+- `+0x8`: kind; 1 marks an entry that can be prepared and loaded. Nothing dumped writes it.
+- `+0xc`: primary resource handle.
+- `+0x10`: alternate handle. It is used when the primary is not live (the handle query 0x00dafbb0
+  returns ≤ 0), or when the local player's byte `+0xa41` is 1. HYPOTHESIS: a gender variant (cf.
+  §28.21).
+- `+0xac`: "has a lightset" byte.
+- `+0xad`: lightset file name. It is looked up by CRC in the lightset cache and removed from it on
+  teardown.
+- `+0xf4`: handle of a transition stream started at promotion (HYPOTHESIS: a sound or video played
+  over the load). **[added, job `20261001T114101-team-a-mnao`]**
+- `+0x18` / `+0x1c`: the two per-object parameters copied in at promotion. **[added, job `20261001T114101-team-a-mnao`]**
+
+**Lifecycle** (CONFIRMED — disassembly unless marked):
+1. `zscene_prep(name)` runs the gate 0x007232e0, which returns 0 in three cases: byte 0x0153b556 is
+   set, the entry is missing, or the entry's kind is not 1. If the entry is already the current scene,
+   it returns 1 and changes nothing. Otherwise it:
+   - calls the do-nothing stub 0x0101b530;
+   - tears the current scene down with 0x00721c20(1, 0, 0);
+   - writes the entry to the pending slot and the two zero constants to 0x0153b568/0x0153b56c.
+2. The teardown 0x00721c20(a, b, c):
+   - **Cutscene guard.** It does nothing if the cutscene manager (*0x0153b528) exists with `+8` == 1
+     and the cutscene state 0x0153b520 is between 7 and 13 (HYPOTHESIS: never unload under a playing
+     cutscene). It also does nothing if there is no current scene.
+   - **Handle not live.** It only acts when the handle classifier 0x00dafb60 reports class 1 and `c`
+     is non-zero (prep passes 0). Then it releases 0x0153b71c/0x0153b720, clears the current pointer
+     and the state, and sets 0x0153b541.
+   - **Handle live.** It releases the secondary handle 0x0153b534 through service 9 and drops the
+     lightset if `+0xac` is set. Then it releases the selected handle (0x00dafad0) and, if `a` is
+     non-zero, calls 0x007317a0(1). Last, it sets 0x0153b541 := 0, 0x0153b542 := `b` and the state
+     := 0. The current pointer is left as it was.
+3. ~~Promotion from pending to current, with state := 1, is done by 0x00720410. The load completes with
+   state := 2 in 0x007285c0, which also sets 0x0153b534. **OPEN**: who calls them. Candidates from the
+   reference lists are 0x00725df0 (it calls the gate, the teardown and the fade-out request 0x0059f8c0),
+   0x00737780 (it calls the gate) and 0x0072d660 (it tests state == 2).~~
+   **[Replaced, job `20261001T114101-team-a-mnao`:]** Promotion from pending to current is 0x00720410 (**CONFIRMED —
+   disassembly**): it waits until any previous transition stream has finished (0x007316a0), selects
+   the pending entry's live handle (+0xc, else +0x10 by the variant rule) and starts its load through
+   the handle manager's 0x00dafea0, starts the entry's +0xf4 stream (0x007315a0), copies
+   0x0153b568/0x0153b56c into the entry's +0x18/+0x1c, makes the entry current, clears the pending
+   slot and writes state := 1. Its only caller is 0x007258a0 (not dumped; HIGH CONFIDENCE: the
+   cutscene machine's load step; OPEN: its body and callers).
+   The load completes in 0x007285c0 (**CONFIRMED — disassembly**), called only by the cutscene
+   state machine 0x0072d660 (per frame, in two of its state cases): when the state is 1 it
+   classifies the current entry's selected handle (0x00dafb60); class 3 (resident) together with a
+   finished or 5-second-old transition stream gives state := 2 and 0x0153b534; class 5 (failed)
+   runs the teardown 0x00721c20(1, 0, 0); other classes wait. When the state is 0 it runs the idle
+   driver 0x00728440: with 0x0153b541 set it finds the nearest scene-bearing world object (list
+   at 0x03171a64) and preps that object's entry through 0x00737780 → 0x007232e0(entry, obj +0x8,
+   obj +0xc); otherwise it runs the reset 0x00720320. Cutscene starts (0x00725df0, "cutscene_play")
+   use the same prep gate with the zero constants and then request a 500 ms fade-out; the
+   cutscene end state requests a 500 ms fade-in.
+4. `zscene_is_loaded(name)` turns true once the entry is current and the state is 2 (full truth table
+   in §14.23).
+5. ~~Who fills the scene table is **OPEN**. The only writers of its base and count are 0x007231e0,
+   0x00723d60 and 0x00723e40, none of them dumped. Which data file feeds it cannot be answered from
+   this job.~~
+   **[Replaced, job `20261001T114101-team-a-mnao`:]** The scene table is the parsed **`cutscene.xtbl`** (inside
+   `cutscene_tables.vpp`): the cutscene init 0x0072d330 hands that file, the container name
+   "cutscene_containers" and the element name "main" to the parser 0x0073bfb0, which is the only
+   caller of the allocator 0x00723d60 (capacity capped at 200) and the appender 0x00723e40 (name copy
+   at +0x0, CRC at +0x4). **CONFIRMED — disassembly** for the call chain; **OPEN**: the per-field
+   parse (kind, handles, lightset, stream). 0x007231e0 is the table's destructor (releases every
+   entry's handles and clears the cutscene manager), called from 0x00707170 (not dumped).
+
+**Host summary.**
+- `zscene_prep(name)`: if the name resolves to a kind-1 entry and the bypass byte **[job `20261001T114101-team-a-mnao`: the
+  `skip_all_cutscenes` option]** is clear, release the
+  current scene's resources, set the state to 0 and make the entry pending.
+- `zscene_is_loaded` follows §14.23.
+- A host that loads scenes itself may promote a pending entry at once (state 1) and mark it loaded
+  (state 2) when its resources are in; the engine does this only from the cutscene state machine,
+  whose load step (0x007258a0) is not yet read. **[added, job `20261001T114101-team-a-mnao`]**
+
+**OPEN — next dump** ~~(from the interpretation of job `20261001T020200-team-a-nzxf`)~~ **[list replaced
+from the interpretation of job `20261001T114101-team-a-mnao`; the struck items were run in that job]**:
+- ~~`func 0x00720410 0x007285c0 0x00720320 0x00722f10 0x007231e0 0x00723d60 0x00723e40 0x00725df0
+  0x00737780 0x0072d660 0x007203e0 0x0072df50 0x0072d330`.~~
+- ~~`xref 0x0153b534 0x0153b541 0x01180120`.~~
+- `func 0x007258a0 0x0073bfb0 0x00707170`; `xref 0x007258a0`; the 20 jump-table dwords at
+  0x0072defc (raw data read).
+
+~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — prep gate, stub, teardown, pending slot, entry offsets, `zscene_is_loaded` truth
+table, state 2 = loaded; HIGH CONFIDENCE — state 1 = loading, 0 = idle; HYPOTHESIS — bypass byte, gender
+variant, cutscene guard; OPEN — load start and completion drivers, table source.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`): CONFIRMED parts — prep gate, stub, teardown, pending slot, entry
+offsets, `zscene_is_loaded` truth table, all three state codes, promotion and completion bodies,
+the `skip_all_cutscenes` byte, the table's allocation/append/destroy and its source file
+`cutscene.xtbl`; HIGH CONFIDENCE — the labels of 0x0153b541/0x0153b542, the resident/failed handle
+classes, the cutscene machine as the per-frame driver; HYPOTHESIS — gender variant, cutscene
+guard, the transition stream's nature, 0x0153b534's nature; OPEN — the promoter's caller
+0x007258a0, the xtbl field parse.**
+
+### 26.26 UI resolution queries `vint_is_std_res` / `vint_get_safe_frame` (exe-derived 2026-10-01)
+
+Note: this document had no earlier entry for either function. Their registrations are recorded in
+`spec-lua-bindings.md` §13.7 (UI registrar 0x00e1dfb0); this unit adds the behaviour from ~~bridge job
+`20261001T020200-team-a-nzxf`~~ bridge jobs `20261001T020200-team-a-nzxf` and
+`20261001T114101-team-a-mnao`. Both exist only in the UI Lua state.
+
+**`vint_is_std_res` (0x00e1a150).** Arguments: none (`lua_gettop` is called and its result
+ignored). Return: 1 boolean. **CONFIRMED — disassembly.**
+- It reads two signed 32-bit integers at the pointer returned by 0x00e237e0 (0x00e236f0()'s result
+  + 4) and divides the first by the second in double precision.
+- If the quotient is below 1.5 (the double at 0x012a2d30), the result is true.
+- Otherwise the result is true only when the dword at 0x0132bd80 equals 2.
+- ~~0x0132bd80 starts at -1 in the file. Its only writer is 0x00e23000, which stores -1, 0, 1, 2, 3 or 4.~~
+  **[Superseded, job `20261001T114101-team-a-mnao`: next two bullets.]**
+- 0x0132bd80 starts at -1 in the file. Its only writer is 0x00e23000(a, b) (**CONFIRMED —
+  disassembly**), which forms a / b in single precision and sets the mode to -1, then raises it
+  through strict tests: > 2.48 → 0, > 3.18 → 1, > 3.72 → 2, > 4.77 → 3, > 5.58 → 4 (2.48 is the
+  single at 0x01256908; the four doubles at 0x01256900/0x012568f8/0x012568f0/0x012568e8 are
+  HIGH CONFIDENCE as rendered). Its callers 0x00e23a20 and 0x00e23910 were not dumped.
+- 0x00e236f0 returns a per-thread 12-byte record (thread context +0x670, allocated on first use
+  from the pool at 0x02a5a090 and zeroed); the two integers are the record's second and third
+  dwords (**CONFIRMED — disassembly**). Their writers were not dumped.
+
+Reading (**HIGH CONFIDENCE**; the struct is unlabelled in the dump): the two integers are the screen
+width and height. The function therefore reports a "standard (non-wide) resolution": 4:3 and 5:4
+qualify, 16:10 and 16:9 do not. ~~Display mode 2 at 0x0132bd80 forces the standard layout whatever the
+aspect ratio. Host: true when `width / height < 1.5` or the display mode is 2; with no display-mode
+concept, just the aspect test.~~ **[Superseded, job `20261001T114101-team-a-mnao`:]**
+**HYPOTHESIS** for the mode: the thresholds classify multi-monitor spans of the full render
+surface (a single display of any aspect stays at -1; two 4:3 panels → 0; two 16:10/16:9 panels →
+1; three 4:3 or 5:4 panels → 2; three 16:10/16:9 panels → 3; wider → 4), so mode 2 — three 4:3
+panels — is the one wide span whose per-panel aspect is standard, which is why it forces the
+standard layout. Host: true when `width / height < 1.5` or the display mode is 2; with no
+display-mode concept, just the aspect test.
+
+**`vint_get_safe_frame` (0x00e1b570).** Arguments: none. Return: 4 numbers. **CONFIRMED —
+disassembly** for the shape:
+- It fetches the per-thread context (TLS slot 0x02cc4700, then `+0x674`) and takes the object at its
+  `+0x14`.
+- It reads the integers at that object's `+0x8` and `+0xc`.
+- It multiplies each by one of two double constants (0x0115ba60 and 0x0116dfc0) and rounds, giving
+  four integers.
+- It pushes each one as a numeric value through 0x00e1a420.
+
+The order is (c1·a, c1·b, c2·a, c2·b), with a = `+0x8` and b = `+0xc` (**HIGH CONFIDENCE**; the
+x87 operand order is ambiguous). ~~**OPEN**: the two constants; only their low dwords appear in the dump,
+and 0x0116dfc0's matches a widened 0.1f.~~ **[Superseded, job `20261001T114101-team-a-mnao`:]** **OPEN**: the two
+constants; both dumps print only their low dwords (0x40000000 and 0xa0000000, the patterns of
+single-precision literals widened to double — 0xa0000000 fits 0.1f, 0x40000000 fits 0.85f, 0.15f or
+0.075f), and both are shared literals used by unrelated routines, so a raw 8-byte read is needed.
+**HYPOTHESIS**: the four values are the left/top and
+right/bottom safe-frame edges in pixels.
+
+**OPEN — next dump:** **[list replaced from the interpretation of job `20261001T114101-team-a-mnao`; the struck
+items were run in that job or are restated below]**
+- ~~`func 0x00e23000 0x00e236f0`; `xref 0x0132bd80` (the meaning of the display-mode values, and what
+  0x00e236f0 returns).~~
+- ~~The 8 bytes at 0x0115ba60 and 0x0116dfc0.~~
+- `func 0x00e23a20 0x00e23910 0x00e230a0 0x00e23770 0x00e237b0 0x00e237c0 0x00e237f0` (who writes
+  the width/height record and sets the mode).
+- A raw 8-byte read of 0x0115ba60 and 0x0116dfc0 (the `xref` mode prints only the first dword).
+
+~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — both argument/return shapes, the `vint_is_std_res` decision rule, the
+`vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order; HYPOTHESIS —
+safe-frame edge meaning; OPEN — display-mode values, the two scale constants.**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`): CONFIRMED parts — both argument/return shapes, the
+`vint_is_std_res` decision rule, the mode ladder of 0x00e23000, the per-thread record of 0x00e236f0,
+the `vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order, the
+four double thresholds; HYPOTHESIS — multi-monitor meaning of the mode, safe-frame edge meaning;
+OPEN — the record's writers, the two scale constants.**
+
+### 26.27 Bare globals registered by 0x00e0f900 (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020218-team-a-bgcx` (Team B request 9), with the body of the state
+creator 0x00e0e0b0 taken from sibling job `20261001T021641-team-a-yduu`. Registration details are in
+`spec-lua-bindings.md` §13.2 and §16.4; this unit records what a host must provide and the behaviour
+of the four bodies the job dumped. This document had no earlier entry for any of these names except
+the shared stub 0x007c9f50 (§6.1, §24.2, §27.17).
+
+**For hosts, in one paragraph.** The 24 names below are **bare globals**, not fields of a `math`
+table. The registrar 0x00e0f900 binds each one with a push-closure / set-field pair at the globals
+pseudo-index. Its only caller is the generic Lua-state creator 0x00e0e0b0, which runs it
+unconditionally for every state it makes, so **both the interface state and the gameplay state get
+all 24**. They are registered before `system_lib.lua` loads and before every other registrar. A host
+must therefore define all 24 in both states before running any preload file. **CONFIRMED —
+disassembly.** ~~Whether the stock `math` table also exists depends on 0x00fccb70, called just before
+the registrar; that it opens the stock libraries is a **HYPOTHESIS**.~~ [Settled by job
+`20261001T114555-team-a-lgdz`:] 0x00fccb70, called just before the registrar, is the stock base-library
+opener. It calls 0x00fcca70, which installs the base functions (the 23-entry table at 0x01293410), `_G`,
+`_VERSION` (`"Lua 5.1"`), `pairs`/`ipairs` and `newproxy`, then registers the six-entry `coroutine` table
+(0x012934e8), and returns 2. It opens nothing else. **There is no `math`, `string`, `table`, `os` or `io`
+table in either state when `system_lib.lua` runs (CONFIRMED — disassembly), and no later registrar adds
+one (HIGH CONFIDENCE: the later registrars are engine-name registrars, not re-checked in this job).**
+So `math.floor` indexes nil, and the 24 bare names are the whole arithmetic surface.
+
+**Roster, in registration order.** **CONFIRMED — disassembly** for name, order and native address.
+"Standard math" describes the name only; ~~those bodies were not dumped.~~ [job
+`20261001T114555-team-a-lgdz`:] the nine "standard math" rows are engine wrappers that share only the
+name with Lua's `math` library. Each narrows to single precision, `max`/`min` are strictly binary,
+`floor`/`ceil` return 32-bit integers and `acos` clamps its argument. Their behaviour is given below.
+`include` is unchanged (`spec-lua-bindings.md` §16.3; its re-read is still OPEN).
+
+| # | Lua global | Native | Standard math or engine |
+|---|---|---|---|
+| 1 | `abs` | 0x00e0f140 | standard math |
+| 2 | `acos` | 0x00e0f180 | standard math |
+| 3 | `cos` | 0x00e0f1c0 | standard math |
+| 4 | `sin` | 0x00e0f210 | standard math |
+| 5 | `ceil` | 0x00e0f260 | standard math |
+| 6 | `debug_print` | 0x007c9f50 | engine (shared no-op stub) |
+| 7 | `assert_msg` | 0x007c9f50 | engine (same stub) |
+| 8 | `floor` | 0x00e0f3a0 | standard math |
+| 9 | `get_frame_time` | 0x00e0f400 | engine |
+| 10 | `include` | 0x00e0f010 | engine (`spec-lua-bindings.md` §16.3) |
+| 11 | `max` | 0x00e0f2c0 | standard math |
+| 12 | `min` | 0x00e0f330 | standard math |
+| 13 | `rand_float` | 0x00e0f430 | engine |
+| 14 | `rand_int` | 0x00e0f4c0 | engine |
+| 15 | `round` | 0x00e0f530 | engine |
+| 16 | `sizeof_table` | 0x00e0f580 | engine |
+| 17 | `sqrt` | 0x00e0f5c0 | standard math |
+| 18 | `strstr` | 0x00e0f080 | engine (C-library name) |
+| 19 | `thread_check_done` | 0x00e0f610 | engine |
+| 20 | `thread_kill` | 0x00e0f650 | engine |
+| 21 | `thread_new` | 0x00e0f680 | engine |
+| 22 | `thread_yield` | 0x00e0f0d0 | engine |
+| 23 | `closest_point_on_line_segment` | 0x00e0f740 | engine |
+| 24 | `which_side_of_2d_line` | 0x00e0f830 | engine |
+
+9 standard-math names, 15 engine functions.
+
+**Shared argument handling (~~the four dumped bodies~~ all 21 bodies other than `include` and the
+shared stub, after job `20261001T114555-team-a-lgdz`).** Each reads the argument count with
+`lua_gettop` (0x00dfde50), then reads argument 1 (and argument 2 where used) with `lua_tonumber`
+(0x00dfe160) at a negative index counted from the top. None checks the count or the types, and none
+raises an error; a nil or non-numeric argument reads as 0. **CONFIRMED.** What happens when fewer
+arguments are passed than the function reads (the index then lands at or past the top of the stack)
+depends on the index resolver 0x00dfdc60, which was not dumped. Stock Lua 5.1 suggests a stale slot or
+nil. **HYPOTHESIS.** A host may treat a missing argument as 0; `rand_int(5)` is unspecified in the
+engine.
+[Added from job `20261001T114555-team-a-lgdz`, CONFIRMED from the index arithmetic in every listing:]
+argument `k` is read at index `k − 1 − n`, where `n` is the argument count, so the first argument sits
+at `−n`. Arguments beyond a function's fixed arity are therefore ignored from the end: `max(a, b, c)`
+uses `a` and `b`. A string argument (`strstr`, `thread_new`) is read with `lua_tolstring` (0x00dfe210):
+a number is converted to its string form, any other type reads as a null pointer. Every numeric
+wrapper stores each argument into a single-precision float immediately after reading it, computes on
+those floats, and stores its result as a single-precision float that is widened to double only for
+the push (**CONFIRMED**: the 32-bit stores are in each listing). So `max(0.1, 0)` gives
+0.10000000149011612 and `abs(16777217)` gives 16777216. Return counts are one value, except
+`closest_point_on_line_segment` (two), `thread_kill` (none) and `thread_yield` (yields) (**CONFIRMED**).
+
+**`rand_int(a, b)` (0x00e0f4c0).** **CONFIRMED — disassembly.**
+- Both arguments are converted to 32-bit integers by 0x00ea2596, which **truncates toward zero**
+  (§4.1).
+- If the second integer is smaller than the first, the two are swapped, so arguments may come in
+  **either order**: `rand_int(10, 1)` behaves like `rand_int(1, 10)`.
+- The draw helper 0x00dab660(lo, hi) returns `lo + (r mod (hi - lo + 1))`, using an unsigned 32-bit
+  modulus. The range is **inclusive at both ends**.
+- Examples: `rand_int(1.9, 3.9)` draws from {1, 2, 3}, and `rand_int(-1.5, 1.5)` from {-1, 0, 1}.
+- If `hi - lo + 1` overflows to 0 (only possible for the full 32-bit range), the engine divides by
+  zero. A host need not reproduce this.
+- Return: one Lua number (`lua_pushnumber`, 0x00dfe3a0).
+
+**`rand_float(a, b)` (0x00e0f430).**
+- Both arguments are read as numbers and immediately narrowed to **single precision**. **CONFIRMED.**
+- They are compared as floats and swapped when the second is strictly less than the first, so
+  `lo = min`, `hi = max`. A NaN comparison takes the no-swap path. **CONFIRMED.**
+- The draw helper 0x00dab6a0 takes the next ring value `r` (see below) as an unsigned 32-bit integer.
+  It multiplies `r` by a double constant at 0x0111e4c0 and narrows the product to a single-precision
+  `u`. It returns `lo + (hi - lo) * u`, narrowed to single precision, which is then pushed as a Lua
+  number. **CONFIRMED — disassembly** for the steps and the narrowings. The constant is 2^-32
+  (the dump shows only its low dword; that value is the only one that fits the unsigned fix-up
+  beside it): ~~**HIGH CONFIDENCE.**~~ **CONFIRMED** (job `20261001T114555-team-a-lgdz`: the decompile
+  of 0x00dab810 in that job reads the full 8 bytes at 0x0111e4c0 as 2.3283064e-10, which is 2^-32).
+- Range: `u` is nominally in [0, 1), but values of `r` close to 2^32 round `u` up to exactly 1.0 in
+  single precision. Treat the range as **[lo, hi], with `hi` reachable but rare**, and produce
+  single-precision values. **CONFIRMED** (the narrowings are in the listing).
+- Return: one Lua number.
+
+**`round(x)` (0x00e0f530).** **CONFIRMED — disassembly.**
+- The argument is read as a number and narrowed to single precision first, so 16777217 becomes
+  16777216 before rounding.
+- The helper 0x00dad900 then rounds **half away from zero**: for `x >= 0` it adds 0.5 in double
+  precision and truncates; otherwise it subtracts 0.5 and truncates.
+- Examples: `round(2.5) = 3`, `round(3.5) = 4`, `round(-2.5) = -3`, `round(-0.5) = -1`,
+  `round(0.4) = 0`, `round(-0.4) = 0` (integer zero, never negative zero). It is neither banker's
+  rounding nor `floor(x + 0.5)`.
+- Edge cases: NaN, and any value whose magnitude falls outside the 32-bit range, give -2147483648.
+  `round(nil)` returns 0.
+- Return: one Lua number holding the 32-bit integer.
+- This same helper is the "round to integer" cited in §16.2 and §22. It is not 0x00ea2596, which
+  truncates (§4.1).
+
+**The other 18 bodies (job `20261001T114555-team-a-lgdz`, roster order).** In each entry, "the float"
+means the argument after narrowing to single precision; a nil or non-numeric argument reads as 0 before
+narrowing, and nothing raises unless stated.
+
+**`abs(x)` (0x00e0f140).** Clears the sign bit of the float (one x87 absolute-value step, no C run-time
+call). `abs(-0)` is 0, `abs(nil)` is 0, a NaN keeps NaN with its sign cleared. One number.
+**CONFIRMED — disassembly.**
+
+**`acos(x)` (0x00e0f180).**
+- The float is handed to 0x00e0f0f0 (whose only caller is `acos`), which clamps it into [-1, 1] before
+  calling the C run-time arc-cosine 0x00ea2b90: at or below -1 it becomes -1, at or above 1 it becomes
+  1. The result is narrowed to single precision. **CONFIRMED — disassembly** for the clamp (two
+  compares against ±1 that overwrite the argument on the out-of-range paths); **HIGH CONFIDENCE** that
+  0x00ea2b90 is the run-time arc-cosine (dispatcher shape, leaf not dumped).
+- Units: **radians**, result in [0, π]; `acos(-1)` is 3.1415927 in single precision.
+- `acos(2)` = 0, `acos(-5)` = π, `acos(0)` = `acos(nil)` = π/2.
+- `acos(NaN)` = π: the first compare is unordered, and the clamp treats that case like "below -1".
+  **CONFIRMED** from the status-word mask.
+- One number.
+
+**`cos(x)` and `sin(x)` (0x00e0f1c0, 0x00e0f210).** The float goes, with no scaling of any kind, to the
+C run-time dispatchers 0x00ea3a70 (`cos`) and 0x00ea2470 (`sin`). Each takes an SSE2 leaf when the
+run-time's SSE2 flag at 0x035213c4 is set and the default exception masks are in force, else an x87
+leaf. The result is narrowed to single precision. Units: **radians**, as in stock Lua; a script that
+passes degrees gets the wrong answer. `cos(nil)` = 1, `sin(nil)` = 0. One number each. **CONFIRMED —
+disassembly** that there is no unit conversion; **HIGH CONFIDENCE** that the callees are the run-time
+sine and cosine (leaves not dumped).
+
+**`ceil(x)` and `floor(x)` (0x00e0f260, 0x00e0f3a0).**
+- The float is widened and passed to the C run-time ceil (0x00ea4d60) or floor (0x00ea4e80); both
+  bodies were read and give the exact mathematical ceiling or floor. The result is narrowed to single
+  precision (exact for an integral value) and then **converted to a 32-bit integer** by 0x00ea2560,
+  which takes a truncating SSE2 conversion when the run-time flag at 0x035213c8 is set and otherwise
+  falls into the x87 truncation helper 0x00ea2596 (§4.1). The integer is pushed as a number.
+  **CONFIRMED — disassembly.**
+- Semantics: `floor` returns the largest integer not above the float, `ceil` the smallest integer not
+  below it; the result is always integer-valued and never negative zero. `floor(2.5)` = 2,
+  `floor(-2.5)` = -3, `ceil(2.1)` = 3, `ceil(-2.1)` = -2, `ceil(-0.5)` = 0, `floor(nil)` = 0,
+  `floor("3.7")` = 3. **CONFIRMED.**
+- Narrowing happens first: `floor(0.99999999)` = 1 (the double rounds to the float 1.0),
+  `floor(-1e-9)` = -1, `floor(16777217)` = 16777216. **CONFIRMED** (the 32-bit store comes before the
+  call).
+- Out of range: an argument of 2147483584 or more (it rounds to the float 2^31), anything below -2^31,
+  and NaN overflow the conversion; on the SSE2 path, which any SSE2-capable PC takes, the result is
+  -2147483648. **HIGH CONFIDENCE** (the flag's writer was not dumped; the x87 fallback would give a
+  different value). No script should depend on it.
+- One number each.
+
+**`get_frame_time()` (0x00e0f400).** Reads no argument; returns the single-precision float held at the
+engine global 0x0132a0b0, widened. That global is 1/30 in the file image (0.03333333507180214 as the
+double a script sees), so before the first update the function returns one 30 Hz frame. **CONFIRMED —
+disassembly** (load and push) and from the data header. It is read by many engine systems (43 uses in
+30 functions, capped), so it is the engine's **frame delta in seconds**: **HIGH CONFIDENCE**. Its
+writer, and so whether it is the measured delta or a clamped or fixed step, is **OPEN**. One number.
+
+**`max(a, b)` and `min(a, b)` (0x00e0f2c0, 0x00e0f330).** **CONFIRMED — disassembly.**
+- **Strictly binary.** Exactly two arguments are read; there is no loop over the count. `max(1, 2, 3)`
+  is **2** and `min(3, 2, 1)` is **2**.
+- Both arguments are narrowed to single precision and compared once.
+- `max` returns the first argument only when the second is less than the first as an ordered
+  comparison; `min` returns the first argument only when the first is less than the second. In every
+  other case, **ties and NaN included, the second argument is returned**:
+
+  | case | `max(a, b)` | `min(a, b)` |
+  |---|---|---|
+  | a < b | b | a |
+  | a > b | a | b |
+  | a = b (including 0 against -0) | b | b |
+  | either is NaN | b | b |
+
+- So `max(NaN, 1)` is 1, `max(1, NaN)` is NaN and `max(0, -0)` is -0. Values equal after narrowing
+  count as ties: `max(16777217, 16777216)` is 16777216.
+- Non-numbers read as 0 and compete as 0: `max(nil, -3)` = 0; strings convert, so `max("7", 2)` = 7.
+- One number.
+
+**`sizeof_table(t)` (0x00e0f580).** Passes the state, the argument count and 0 to the shared engine
+helper 0x0083dff0 (13 callers in the binary) and pushes its integer result. One number. The helper,
+read in full (**CONFIRMED — disassembly**):
+1. No argument, or a nil first argument: **-1**.
+2. Otherwise it looks up the key `"n"` in the table (a metamethod-honouring keyed read). If that value
+   is a number, the result is that number truncated toward zero, and nothing is counted:
+   `sizeof_table({n = 2.9})` = 2 and `sizeof_table({1, 2, 3, n = 0})` = 0.
+3. Otherwise it walks the table with the next-pair primitive and counts **every key/value pair**,
+   array part and hash part alike; holes do not stop the count. `sizeof_table({1, 2, nil, 4})` = 3,
+   `sizeof_table({a = 1, b = 2})` = 2, `sizeof_table({})` = 0.
+
+This is **not** the length operator `#t`. A non-table argument reaches the keyed read and raises the
+VM's usual "attempt to index" error (strings have no index metamethod here, since no `string` table
+exists): **HIGH CONFIDENCE**, the raise site was not dumped. A host should raise, or return -1.
+
+**`sqrt(x)` (0x00e0f5c0).** The float goes to 0x00ea3f60, which calls the C run-time square root; the
+result is narrowed to single precision. No guard for a negative argument, which therefore gives the
+run-time's NaN. `sqrt(nil)` = 0. One number. **CONFIRMED** for the wrapper's shape and the absence of a
+guard; **HIGH CONFIDENCE** that 0x00ea3f60 is the run-time square root and on the NaN (inner bodies not
+dumped).
+
+**`strstr(s, sub)` (0x00e0f080).** **CONFIRMED — disassembly.**
+- Both arguments are read as strings (numbers are converted). The two pointers go, `s` first, to the C
+  run-time substring search 0x00ea48b0, a byte-wise search.
+- The function returns a **boolean**: true when the search found `sub` in `s`, false otherwise
+  (push-boolean 0x00dfe590). There is no position, no nil and no Lua pattern matching; the test is
+  case-sensitive.
+- `strstr("abc", "")` is true, `strstr("", "a")` is false, `strstr(123, "2")` is true.
+- A nil, boolean, table or function argument reads as a null pointer, and neither the wrapper nor the
+  search tests for null, so the engine **crashes**. **CONFIRMED** (no null check on the path). A host
+  should raise an error (or return false); no working script relies on this.
+- One boolean.
+
+**The script-thread table (used by the four `thread_*` names).**
+- The engine keeps fixed **32-byte thread records at 0x02a42d10**, with the count at 0x02a44d58. The
+  allocators compare the count with 256, so the capacity is **256** (**HIGH CONFIDENCE**: allocators
+  0x00e0c720/0x00e0c8f0 not dumped).
+- Record fields read in the dumps (**CONFIRMED** for each):
+
+  | offset | size | meaning |
+  |---|---|---|
+  | +0x00 | 16-bit | thread id, the handle scripts hold |
+  | +0x04 | pointer | the coroutine (a Lua thread state) |
+  | +0x08 | 32-bit | key inherited from the parent record; selects an error callback (0x00e0d070) |
+  | +0x0c | byte | not-yet-started flag |
+  | +0x10 | pointer | name of the global Lua function the thread runs |
+  | +0x14 | 32-bit | context value inherited from the parent (the `+0x14` of §8.24/§23.15) |
+  | +0x18 | 16-bit | flags: bit 0 started, bit 2 (0x4) killed, bit 4 (0x10) a further "do not run" state never set in these dumps |
+  | +0x1c | 32-bit | number of arguments handed to the coroutine |
+
+- A **current-thread stack** of up to 16 record pointers sits at 0x02a44d14, depth at 0x02a44d10.
+  0x00e0ceb0 returns the record on top, or null when the depth is 0 or above 16. So 0x00e0ceb0 is "the
+  thread record now being resumed", and its `+0x14` is a per-thread context that child threads inherit.
+  **CONFIRMED — disassembly** (both bodies).
+- **The runner 0x00e0cba0** (CONFIRMED except where labelled) takes the address of a record pointer:
+  1. A record with bit 4 set is reported not alive and left alone.
+  2. A killed record (or one an optional engine hook at 0x02a44d60 rejects) skips to release (step 7).
+  3. A record already being resumed (or one a second hook at 0x02a44d64 rejects) is reported alive
+     without a resume; this guards against re-entry.
+  4. A record not yet started first gets the global named at `+0x10` placed below its arguments on the
+     coroutine's stack, and the flag is cleared (the field-read and stack-insert primitives 0x00dfe610
+     and 0x00dfdf00 are **HIGH CONFIDENCE** identities).
+  5. It sets bit 0, pushes the record on the current-thread stack, **resumes the coroutine with the
+     stored argument count** (0x00e00080, **HIGH CONFIDENCE** resume identity; a status above 1 is
+     treated as an error), and pops the stack.
+  6. Yielded without error: alive. Finished without error: release. Error: call the error callback
+     found by the `+0x08` key with the record, then release.
+  7. Release (0x00e0c650, not dumped) receives the address of the record pointer and reports not alive;
+     that it nulls the caller's pointer is **HIGH CONFIDENCE**.
+- The runner's other callers are 0x00e0cd00, 0x00e0cf50 and 0x006280d0. Which of them is the per-frame
+  scheduler, and so **how often a yielded thread is resumed, is OPEN** (HYPOTHESIS: once per frame).
+
+**`thread_check_done(id)` (0x00e0f610).** The number is truncated toward zero (0x00ea2596) and reduced
+to its low 16 bits. The finder 0x00e0caa0 looks for a record that is not killed, still alive (not yet
+started, or with an active call frame, or with a non-empty stack) and carries that id. The function
+returns **true when no such record exists**: the thread finished, was killed, never existed, or the
+number is no valid handle. `thread_check_done(nil)` tests id 0. One boolean. **CONFIRMED** (the
+call-frame probe 0x00e01710 is a **HIGH CONFIDENCE** identity).
+
+**`thread_kill(id)` (0x00e0f650).** Finds the record as `thread_check_done` does and **sets the killed
+bit**; nothing else happens at that moment. The coroutine is never resumed again: at its next scheduled
+resume the runner sees the bit and releases the record. Right after the call `thread_check_done(id)` is
+true, and killing a finished, unknown or already killed id does nothing. A thread that kills itself
+keeps running until its next `thread_yield`. **No return value.** **CONFIRMED.**
+
+**`thread_new(name, ...)` (0x00e0f680).** **CONFIRMED** unless labelled.
+1. Reads `name` as a string (a number is converted) and fetches the current thread record
+   (0x00e0ceb0). It later reads that record's `+0x08` and `+0x14` without a null check, so calling
+   `thread_new` when no script thread is current makes the engine read through a null pointer
+   (**CONFIRMED — disassembly**). All engine code that can reach `thread_new` must therefore run inside
+   a thread record; the top-level entry that pushes the first record is **OPEN**. A host should give
+   the same guarantee or raise.
+2. A `name` that is neither string nor number gives **65535**.
+3. The script-defined global `_GetAnyGlobalSilent` is called with `name` (0x00e0cef0, as in
+   `spec-lua-bindings.md` §8.1), and the result must be a function; otherwise 65535. That global must
+   exist before any `thread_new` (HYPOTHESIS: defined by `system_lib.lua`).
+4. A record is allocated through 0x00e0ca80 → 0x00e0c720 (creates the coroutine, stores the name and
+   assigns the id: **HIGH CONFIDENCE**, allocator not dumped). A full table gives 65535.
+5. The parent's `+0x14` is copied into the new record.
+6. The remaining arguments (all but `name`) are moved in order from the caller's stack to the
+   coroutine's stack by 0x00dfdd80, and their count is stored at `+0x1c`.
+7. The runner starts the thread **immediately**: the global function named `name` is looked up at that
+   moment and runs synchronously until its first `thread_yield` or its end.
+8. If the thread is still suspended afterwards, the 16-bit id is returned; if it completed or raised an
+   error during that first run, **65535** is returned (**HIGH CONFIDENCE** that completion is what
+   nulls the pointer).
+
+One number. The id assignment policy is **OPEN**; 65535 means "no thread".
+
+**`thread_yield(...)` (0x00e0f0d0).** Discards its arguments and yields the current coroutine **with no
+values** (the stock yield primitive 0x00dffb20). The runner sees the yield and keeps the thread alive.
+**CONFIRMED.** Called outside a coroutine, it raises the "attempt to yield across metamethod/C-call
+boundary" error (**HIGH CONFIDENCE**, stock Lua 5.1 behaviour). What the call evaluates to when the
+thread resumes is **OPEN**, because the runner resumes with the record's original argument count each
+time; scripts should treat it as returning nothing.
+
+**`closest_point_on_line_segment(px, py, ax, ay, bx, by)` (0x00e0f740).** Six numbers: a point P =
+(px, py) and a segment from A = (ax, ay) to B = (bx, by). The helper 0x00db96b0 returns the point of
+the **closed** segment nearest to P:
+- if A and B are equal in both components, A;
+- otherwise A + t(B − A) with t = ((P − A)·(B − A)) / |B − A|², clamped to [0, 1]; a t that compares as
+  NaN clamps to 0.
+
+The components of B − A, the numerator, the denominator, the quotient and each output component are
+each rounded to single precision. **Returns two numbers**, x then y. **CONFIRMED — disassembly.**
+
+**`which_side_of_2d_line(a1, a2, a3, a4, a5, a6)` (0x00e0f830).** Returns, rounded once to single
+precision from x87 extended precision,
+
+  (a2 − a4)(a5 − a3) − (a1 − a3)(a6 − a4).
+
+**CONFIRMED — disassembly** for the formula. With P = (a1, a2) and a directed line from A = (a3, a4) to
+B = (a5, a6), this is the 2-D cross product (B − A) × (P − A): positive when P lies left of A→B (x to
+the right, y up), negative on the right, zero on the line, and its magnitude is twice the area of
+triangle A, B, P. That role assignment is **HIGH CONFIDENCE** (by analogy with the sibling above); a host
+that uses the formula literally in a1…a6 is correct either way. One number.
+
+**For a host: the surprising contracts.** These differ from what a Lua programmer would assume.
+`max(1, 2, 3)` returns 2, because `max` and `min` compare only their first two arguments and return the
+second on a tie or NaN. `strstr` returns a boolean, not a position or nil. `sizeof_table` counts every
+key/value pair (or returns a numeric `n` field), not `#t`. Every numeric argument is narrowed to
+single-precision float before use and every numeric result is single precision. One effect is that
+`floor` of a value just below an integer can round up: `floor(0.99999999)` is 1. There is no `math`
+table, so the bare names are the only maths functions. `thread_new` runs the new thread at once and
+returns 65535 if it finishes in that first run.
+
+**`debug_print(...)` and `assert_msg(...)` (both 0x007c9f50).** **CONFIRMED — disassembly.**
+- The body reads the argument count, discards it, and returns 0 values. It reads no argument, does
+  not log, and has no side effect.
+- It accepts any number of arguments of any type. `assert_msg` does not assert.
+- The same stub serves many other registered names in at least nine registering functions (for
+  example `set_mission_author` §6.1, `bink_play` §24.2, `game_send_party_invites` §27.17); the
+  reference list in the dump is capped, so the full set is larger.
+- Host: bind both names to a function that accepts anything and returns nothing. Logging the
+  arguments for the host's own diagnostics is harmless, since scripts cannot observe it.
+
+**The shared random ring.** **CONFIRMED — disassembly** (shape).
+- Neither random function runs a generator. Every draw reads the next 32-bit value from a **ring of
+  8192 pre-filled entries at 0x013214d4** (0x013214d4..0x013294d3), indexed by a **cursor at
+  0x013214d0**.
+- After each read the cursor advances by one and wraps to 0 at 8192 (0x2000), so the sequence
+  repeats every 8192 draws.
+- The cursor is shared engine-wide. Besides the two draw helpers used here (0x00dab660 for
+  `rand_int`, 0x00dab6a0 for `rand_float`), the sibling routines 0x00dab5b0, 0x00dab5e0 and
+  0x00dab630 advance the same cursor. 0x00dab660 alone has at least 30 callers (list capped).
+  **Lua's random numbers are not isolated from the engine's.**
+- ~~**OPEN — seeding and filling.** The only writer of the ring's contents in the reference list is
+  code at 0x010145e1..0x010145f0 that is not inside a recognised function. Whether the 8192 values
+  are a fixed table, a generator run at start-up or a time-seeded fill is not known. Three routines
+  that take the cursor's address (0x00dab5a0, 0x00dab810, 0x00dab830) look like save, restore or
+  reseed helpers; they were not dumped.~~ [Superseded by job `20261001T114555-team-a-lgdz`, next
+  bullets.]
+- **The random-source object (CONFIRMED — disassembly).** 0x013214d0 is the base of an object, not a
+  bare cursor: the cursor at +0 (0x013214d0), the 8192-entry ring at +4 (0x013214d4..0x013294d3) and
+  a generator state at +0x8004 (0x013294d4).
+- **Filling (CONFIRMED — disassembly).** 0x00dab5a0(seed) calls the fill method 0x00dab4d0. When the
+  seed is non-zero it first reseeds the generator (0x00dab370, not dumped; **HIGH CONFIDENCE** on the
+  role); it then resets the cursor to 0 and regenerates all 8192 entries, in order, from the generator
+  step 0x00dab3c0. A zero seed continues the generator's current sequence. The ring is thus a cache of
+  real generator output, refilled whole, never piecemeal.
+- **Before the first fill.** The cursor and the first ring entry are 0 in the file image
+  (**CONFIRMED**, data headers), and the whole ring is zero (**HIGH CONFIDENCE**). Until the first fill
+  every draw yields 0, so `rand_int(lo, hi)` and `rand_float(lo, hi)` both return `lo`.
+- **Who fills.** 0x00dab5a0 has three callers, 0x00dd98f0, 0x009c1ff0 and 0x005d25f0 (not dumped). The
+  fill method also has callers 0x00599c20 and 0x00dab720, which may act on other instances of the same
+  object type (**OPEN**).
+- **Cursor writers (CONFIRMED, complete reference list: 18 uses in 8 functions).** The five draw
+  routines (0x00dab5b0, 0x00dab5e0, 0x00dab630, 0x00dab660, 0x00dab6a0) and the two vector helpers each
+  advance it by one and wrap it to 0 at 8192; the fill resets it to 0. Nothing else writes it: there is
+  no save or restore. The vector helpers are 0x00dab810 (one uniform value in [0, 1), computed as the
+  unsigned ring value times 2^-32, copied into all four lanes of a 16-byte vector) and 0x00dab830 (the
+  lane-wise interpolation a + (b − a)u between two vectors with one uniform u). Each consumes one entry.
+- **OPEN:** the generator algorithm (0x00dab3c0, 0x00dab370), the seeds the three callers pass, and
+  the undisassembled store at 0x010145e1 (its own reference list is empty; dead code, an inlined copy
+  or a second filler).
+- Host: ~~until the fill is read,~~ use the host's own generator behind the same contracts (a ring of
+  8192 values, a cursor that wraps at 8192 and resets on refill), and do not promise sequence equality
+  with the game until the generator is read. A host that never refills matches the engine's shape.
+
+~~**OPEN — the remaining bodies.** The job did not dump the other 18 natives of the roster, and the
+following are therefore OPEN:~~
+- ~~the nine standard-math names (`abs`, `acos`, `cos`, `sin`, `ceil`, `floor`, `max`, `min`, `sqrt`):
+  argument count, NaN handling, and whether `max`/`min` take more than two arguments;~~
+- ~~`get_frame_time`, `sizeof_table`, `strstr`, the four `thread_*` names, and the two geometry
+  helpers;~~
+- ~~a re-read of `include` (0x00e0f010; its desk-level description is in `spec-lua-bindings.md` §16.3).~~
+
+~~Stock `math.*` semantics is the obvious **HYPOTHESIS** for the math names. Note, though, that stock
+`math.max` is variadic and errors on a non-number, while all four dumped bodies skip checks and read a
+bad argument as 0. The ring fill/seed and 0x00fccb70 are OPEN as well. All of these are settled in the
+follow-up job `team-a/ghidra/jobs/bgcx-followup.json`.~~ [Settled by job `20261001T114555-team-a-lgdz`
+(`bgcx-followup.json`): the 18 bodies are described above, after `round`; the stock-`math` hypothesis is
+wrong (binary `max`/`min`, no type errors, single precision, and no `math` table exists); the ring fill
+and 0x00fccb70 are in the ring block and the host paragraph.]
+
+**OPEN:** re-read of `include` (0x00e0f010; desk-level description in `spec-lua-bindings.md` §16.3) —
+not in job `lgdz` either.
+
+~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020218-team-a-bgcx`, with
+`20261001T021641-team-a-yduu` for 0x00e0e0b0): CONFIRMED — the roster, bare-global binding and
+both-states registration before any preload; `rand_int` (truncated arguments, either order,
+inclusive range); `rand_float` shape and single-precision narrowing; `round` half away from zero and
+its edge values; `debug_print`/`assert_msg` no-op; the ring, cursor and wrap and the shared cursor.
+HIGH CONFIDENCE — the 2^-32 scale constant. HYPOTHESIS — missing-argument behaviour; 0x00fccb70
+opens the stock libraries. OPEN — ring seeding, the 18 undumped bodies and the `include` re-read
+(job `bgcx-followup.json`).**~~
+
+**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020218-team-a-bgcx`,
+with `20261001T021641-team-a-yduu` for 0x00e0e0b0, and `20261001T114555-team-a-lgdz`): CONFIRMED — the
+roster, bare-global binding and both-states registration before any preload; argument handling,
+single-precision narrowing and return counts of all 22 dumped bodies; `rand_int`; `rand_float` shape
+and the 2^-32 constant; `round`; `debug_print`/`assert_msg` no-op; `max`/`min` binary, second-wins
+rule; `floor`/`ceil` integer results; the `acos` clamp; `abs`; `get_frame_time`'s global and its 1/30
+default; `sizeof_table`; `strstr` boolean; the four `thread_*` functions against the thread table and
+its runner; both geometry formulas; the ring object, its fill and the cursor rules; 0x00fccb70 opens
+base plus `coroutine` only, so no `math` table at state creation. HIGH CONFIDENCE — the C run-time
+identities behind `sqrt`/`sin`/`cos`/`acos`; frame-time unit and role; the -2147483648 overflow result;
+`thread_new` returning 65535 on first-run completion; thread capacity 256; the role assignment of
+`which_side_of_2d_line`; the whole ring being zero in the file; no later registrar adding `math`.
+HYPOTHESIS — missing-argument behaviour. OPEN — the generator and its seeds; thread scheduling cadence
+and id policy; the writer of 0x0132a0b0; `thread_yield`'s value on resumption; the `include` re-read.**
+
+### 26.28 Co-op session, tutorial table and vehicle-store state at startup (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020213-team-a-dksj` (Team B request 9). This unit states what a single-player host must
+hold at startup for the three pieces of engine state behind `coop_is_active` (§3.1),
+`game_get_is_host` (§8.27), `Completion_is_client` (§10.2), `tutorial_start`/`tutorial_advance`
+(§6.19/§10.4) and `store_vehicle_get_state` (§10.1).
+
+**Co-op session.** The game starts with **no co-op session**: the singleton global `0x024d8534` lives
+in a `.data` block that is not file-backed, so it is zero at load, and its accessor `0x0087ba20` is a
+plain load with no side effects. **[CONFIRMED — disassembly.]** With no session, `coop_is_active`,
+`game_get_is_host` and `Completion_is_client` all return false. **[CONFIRMED — disassembly.]**
+~~Of the references the disassembler resolved, one function can install a session (`0x0087efe0`) and two
+clear it (`0x0087d8a0`, `0x0087ed70`) **[CONFIRMED — disassembly for the reference set]**; two more
+references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further writers **[OPEN]**.~~
+**[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`: `0x0087efe0` is not an installer.]** All three resolved writer
+functions store **zero**: `0x0087d8a0` is the session subsystem's initialiser (it builds a two-slot pool of
+0x2d0-byte session objects and clears the singleton), `0x0087ed70` destroys one session (it waits for the
+session to go idle, then clears the singleton if it pointed at that session), and `0x0087efe0` is the
+subsystem shutdown (it destroys every pooled session, flushes the deferred-callback queue headed at
+`0x024e4d80`, clears the singleton and frees the pool). **[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]** No
+resolved code installs a session. ~~The only other references, at `0x0087c341`/`0x0087c359`, are in code
+the disassembler never defined and are, by elimination, where a session pointer is stored **[HIGH
+CONFIDENCE — by elimination; OPEN until that code is disassembled]**.~~
+**[2026-10-01, job `20261001T121532-team-a-gdhw`:]** The only other references, at `0x0087c341`/`0x0087c359`, are the load and
+store of the **session installer `0x0087c340`**, a short routine in code the disassembler never defined, read
+with the range mode of this job. Given one session pointer, it does nothing if that pointer is already the
+installed one. Otherwise, when a session is currently installed, it first runs the deferred-callback flush
+`0x00894430` (the old session is not destroyed here; only its pending callbacks run), then stores the new
+pointer into `0x024d8534`. If the new pointer is non-null it then publishes the host answer once, as flag 4
+of a global flag table: `0x00905ec0` with 4 when the session's `+0x5c` equals its `+0x58`, `0x00905ea0` with 4
+otherwise. Called with null, it acts as a clear. It is the only code in the executable that can store a
+non-null session. **[CONFIRMED — disassembly, job `20261001T121532-team-a-gdhw`; that flag 4 means "local machine is host" is
+HYPOTHESIS, the two callees were not dumped.]** It has no caller in defined code (an earlier reference
+search for `0x0087c340` was empty and no function dumped by this job calls it), so its callers are
+themselves undefined code and **when it runs is OPEN**. The best places to look are the undefined
+lifecycle blocks `0x0088b4c0`–`0x0088b5a0`, `0x0088b7c0`–`0x0088b8a0` and `0x0088cac0`–`0x0088cb60`
+**[HIGH CONFIDENCE as the place to look; no call is shown yet]**. The three Lua queries do not read flag 4;
+they re-derive the answer from the session object on every call.
+`coop_is_active` also stays false whenever a session has fewer than 2 members (member count at session
+`+0x60`, §3.1). **[CONFIRMED — disassembly.]**
+
+| session state | `coop_is_active` | `game_get_is_host` | `Completion_is_client` |
+|---|---|---|---|
+| none (global = 0) | false | false | false |
+| host (`+0x5c` = `+0x58`) | true only with ≥ 2 members, all other members passing the slot check | true | false |
+| client (`+0x5c` ≠ `+0x58`) | true only if the client gate passes and the same member rule holds | false | true |
+
+**[Added 2026-10-01, job `20261001T114716-team-a-fvfp`.]** A session's connection state is the pair `+0xf4` (current) / `+0xf8`
+(target) plus a pending transition object at `+0x224`; `0x0059fbe0` reports the session *idle* when
+`+0xf4` < 2, `+0x224` is null and `+0xf4` == `+0xf8`; teardown zeroes both state words and the local member
+pointer `+0x5c`. The engine holds at most two session objects at once (pool at `0x024d8544`, capacity 2).
+**[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]**
+
+**[Added 2026-10-01, job `20261001T121532-team-a-gdhw`.]** The network module is brought up by `0x008675c0`, once (guarded by the
+byte `0x024d4464`). It switches the mode global `0x024d4470` to 1 through `0x00867400`, which selects the
+provider object `0x01495f70` into `0x01493978`, sets `0x01302868` = 1 and `0x01302860` = `0x01302864` = 2,
+and enables the names `coop-mp`, `multiplayer` and `deltacomp_global` with `0x00dcdbc0`. It then sets the
+module bytes `0x024d4461`/`0x024d4462` to 1, allocates the message, payload and member pools (`0x0086ab70`,
+`0x00878bc0`), builds the two-slot session pool (`0x0087d8a0`, which clears the singleton) and runs a
+handful of one-time inits. It never creates or installs a session. `0x008676f0` is the matching shutdown:
+it destroys every pooled session (`0x0087efe0`), frees the pools, drains the receive queue, switches the
+mode back to 0 (disabling the names `multiplayer` and `deltacomp_global`) and clears the four module bytes
+`0x024d4461`/`0x024d4462`/`0x024d4464`/`0x024d4466`. Init is called from `0x00872760` and `0x0088c090`;
+shutdown from the guarded wrapper `0x00867740` and from undefined code at `0x0088b560`. The module byte
+`0x024d4461` is the engine-wide "network module up" test (47 reading functions). **[CONFIRMED — disassembly
+and xref, job `20261001T121532-team-a-gdhw`; when those callers run is OPEN.]**
+
+**What single-player startup leaves it as: OPEN.** The executable starts at 0, but whether starting a
+single-player game runs the installer `0x0087efe0` and creates a one-member session (the local player
+as its only member and host) cannot be read from these dumps. This decides `game_get_is_host`: false
+with no session, true with a one-member host session. `coop_is_active` is false and
+`Completion_is_client` is false in both cases. **HYPOTHESIS (do not implement):** single player keeps
+a one-member host session. ~~Follow-up job `20261001T114716-team-a-fvfp` dumps the installer
+`0x0087efe0`. Until it lands, a host should start with no session.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+the job showed that `0x0087efe0` is the shutdown, not the installer; ~~the installer is in undefined code at
+`0x0087c341`/`0x0087c359`, so whether a single-player start creates a one-member host session cannot be
+read yet.~~ **[2026-10-01, job `20261001T121532-team-a-gdhw`:]** the installer `0x0087c340` has now been read but has no caller in
+defined code, so whether a single-player start creates a one-member host session still cannot be read.
+Two further facts bear on it without settling it. The host-session constructor is `0x0087d1d0`: it stores one
+new member into both `+0x5c` and `+0x58` **[HIGH CONFIDENCE — from an earlier field census; its body was not
+dumped]**. Session objects carry an *offline* bit (byte `+0x4e`, bit `0x40`); when it is set, no Steam
+identity is fetched and no leave event is sent **[CONFIRMED — disassembly for the bit's gating role; that
+single player uses an offline session is HYPOTHESIS]**. `game_get_is_host` in single player stays OPEN. The HYPOTHESIS above (single player keeps a one-member host session) stays a hypothesis. A host
+starts with no session: `game_get_is_host` false, `coop_is_active` false, `Completion_is_client` false.
+
+**Tutorial table.** ~~The 210-entry table at `0x0151d600` (36-byte entries, §6.19) is zero at load, so
+every entry starts in state 0 and `tutorial_advance` returns false on a fresh process for every name.
+**[CONFIRMED — disassembly.]** The entries' descriptor pointers (`+0x08`) are filled by `0x00715850`;
+when that runs is OPEN.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`.]** The 210-entry table at `0x0151d600`
+(36-byte entries, §6.19) is zero at load. It is filled in one pass by the registration routine
+`0x007178c0`, which calls `0x00715850` once per entry (210 straight-line call sites); each call copies a
+40-byte descriptor into a run-time descriptor array at `0x0151f388`, points the entry's `+0x08` at it, and
+sets the state to 0 for entries 0–188 and to **1** for entries 189–209. **[CONFIRMED — disassembly and
+xref, job `20261001T114716-team-a-fvfp`.]** So after the fill, entries 189–209 are already armed; no entry is in state 3, so
+`tutorial_advance` returns false for every name on a fresh process. ~~When `0x007178c0` runs is OPEN.~~
+**[2026-10-01, job `20261001T121532-team-a-gdhw`:]** `0x007178c0` is called exactly once, as the first action of `0x00715f20`,
+the tutorial subsystem initialiser, which also creates the tutorial UI handle `0x0151d5a8` (§10.4); when
+`0x00715f20` runs is OPEN. The 210 records are compiled-in constants, each built from immediate values: body
+and title localisation keys, a pointer to an empty string, a default of 2 at `+0x20` and flags at `+0x24`.
+After the last fill, `0x007178c0` stores the CRC-32 name hashes (`0x00d9e8b0`, lower-cased, seed 0) of the
+seven names at `0x012f5c24`, which are the names at indices 189–195, into the 7-dword id table `0x0152145c`.
+The generic setter `0x007163e0` matches against those hashes. **[CONFIRMED — disassembly and xref, job
+`20261001T121532-team-a-gdhw`.]**
+
+**Tutorial state 3 (job `20261001T121532-team-a-gdhw`).** The undefined region `0x00717240`–`0x0071738f` is not part of
+`0x00717020`, which ends with a return at `0x0071716a` and is the serialiser of the queued-prompt list. The
+region is the tail of the matching receiver, which rebuilds one queued tutorial from a stream. Both of its
+state stores (`0x00717311`, `0x00717363`) write the literal **4**, not 3. **[CONFIRMED — disassembly; the
+serialiser/receiver pairing is HIGH CONFIDENCE from the matching field order.]** The generic setter
+`0x007163e0` is fed by `0x00b9ae60`, which applies a loaded save block in version-gated sections. Its
+section 5 passes the block's (name hash, state) pairs at `+0x18acc` (count at `+0x18ac8`) to the setter,
+so the states of entries 189–195 are save-persisted. **[CONFIRMED — disassembly for the feed; that
+`0x00b9ae60` is the save loader is HIGH CONFIDENCE; the save-side writer and the values it stores are
+OPEN.]** No code read so far writes 3. The only unread direct references to the state field are in
+undefined code at `0x00716385`/`0x007163b5`, between the state getter `0x00716360` and the generic setter.
+**Who writes state 3 is OPEN.**
+
+**Next dumps (job `20261001T121532-team-a-gdhw`, queued as follow-up `team-a/ghidra/jobs/gdhw-followup.json`).** In order of payoff: (1) range dumps
+of the undefined lifecycle blocks `0x0088b480`–`0x0088b5a0`, `0x0088b7c0`–`0x0088b8a0` and
+`0x0088cac0`–`0x0088cb60`, looking for calls to `0x0087c340` and `0x0087d1d0`, plus function and reference
+dumps of `0x0087d1d0`, `0x0088c090`, `0x00872760`, `0x00867740`, `0x0088b570`, `0x0088b9f0` and
+`0x0088c750`; (2) a range dump of `0x0087c390`–`0x0087c560` (the client-side host assignment), references to
+`0x02609398` and the bodies of `0x00905ec0`/`0x00905ea0` (who consumes flag 4), and `0x0087f1d0` (offline
+identity); (3) range dumps of `0x00716360`–`0x007163e0` and `0x0071716b`–`0x00717240`, function and reference
+dumps of `0x007162a0`, `0x00715f20` and `0x008ba5d0`, the queue consumers `0x00715a30`, `0x00715ad0`,
+`0x00715f60`, `0x00716000`, `0x00716220`, `0x007161e0`, and references to `0x0118c08c` (the callback table
+holding `0x00b9ae60`); (4) the store-flag function heads (§10.1).
+
+**Tutorial names.** The name list comes from the static, file-backed pointer table `0x012f5930` (210
+pointers to strings, searched case-insensitively by `0x00717780`, −1 on a miss). **[CONFIRMED —
+disassembly.]** Index 0 is `save` and index 1 is `autosave`. ~~**The full index → name list is pending
+job `20261001T114802-team-a-kyoi` and will be added here when it lands.**~~ **Full list (2026-10-01, bridge job `20261001T114802-team-a-kyoi`, CrreishDump `ptrs` mode over the 210 file-backed pointers at `0x012f5930`):** the index is the table index the resolver `0x00717780` returns and the per-entry state table at `0x0151d600` uses. **[CONFIRMED — disassembly (static data) for 209 names; index 176 OPEN.]** These are functional identifiers that scripts pass to `tutorial_start`/`tutorial_advance` and that the engine resolves by name (owner's content ruling, 2026-10-01).
+
+| # | name | # | name | # | name |
+|--:|---|--:|---|--:|---|
+| 0 | `save` | 70 | `human_shield` | 140 | `div_intro_survival` |
+| 1 | `autosave` | 71 | `quick_kill` | 141 | `div_survival_started` |
+| 2 | `notoriety_gang` | 72 | `throw_kill` | 142 | `div_intro_barnstorming` |
+| 3 | `notoriety_police` | 73 | `improvised_weapons` | 143 | `hitman_new` |
+| 4 | `notoriety_forgive` | 74 | `minimap_icons` | 144 | `chopshop` |
+| 5 | `crib_receive` | 75 | `combat_ranged` | 145 | `act_fraud_first_hit` |
+| 6 | `crib_customize` | 76 | `combat_weapons` | 146 | `act_fraud_first_hit_pc` |
+| 7 | `crib_garage` | 77 | `combat_grenades` | 147 | `act_fraud_adrenaline` |
+| 8 | `crib_cash` | 78 | `combat_grenades_pc` | 148 | `mis_02_skydive_flip` |
+| 9 | `crib_closet` | 79 | `combat_swords` | 149 | `mis_02_skydive_flip_pc` |
+| 10 | `crib_weapons` | 80 | `combat_fineaim` | 150 | `game_complete` |
+| 11 | `crib_newspaper` | 81 | `jump_climb` | 151 | `notoriety_decreases` |
+| 12 | `combat` | 82 | `crouch` | 152 | `weap_airstrike` |
+| 13 | `busted` | 83 | `driving_stunts` | 153 | `weap_alt_fire` |
+| 14 | `smoked` | 84 | `shooting_stunts` | 154 | `weap_charge_weapon` |
+| 15 | `homie_revive` | 85 | `ambulance_shock_paddles` | 155 | `weap_drone` |
+| 16 | `waypoint` | 86 | `ambulance_cpr` | 156 | `weap_rc_vehicle` |
+| 17 | `explore` | 87 | `cruise_control_completed` | 157 | `weap_rc_vehicle_upgraded` |
+| 18 | `stronghold_start` | 88 | `helicopter_control` | 158 | `weap_temp_weapon` |
+| 19 | `stronghold_respect` | 89 | `helicopter_control_pc` | 159 | `weap_zoom` |
+| 20 | `act_intro_crowd_control` | 90 | `airplane_control` | 160 | `weap_dlc_genki_gun` |
+| 21 | `act_intro_drug_trafficking` | 91 | `airplane_control_alt` | 161 | `weap_dlc_shotgun` |
+| 22 | `act_intro_escort` | 92 | `airplane_control_alt_pc` | 162 | `weap_dlc_sniper` |
+| 23 | `act_intro_escort_tiger` | 93 | `vtol_control` | 163 | `combat_melee_bash` |
+| 24 | `act_intro_fight_club` | 94 | `mission_checkpoint` | 164 | `upgrade_store` |
+| 25 | `act_intro_fuzz` | 95 | `taunting` | 165 | `weapon_upgrades` |
+| 26 | `act_intro_heli_assault` | 96 | `respect_meter` | 166 | `recieve_crib` |
+| 27 | `act_intro_human_torch` | 97 | `health_sprint_meter` | 167 | `flashpoint` |
+| 28 | `act_intro_ins_fraud` | 98 | `pause_map` | 168 | `player_choice` |
+| 29 | `act_intro_mayhem` | 99 | `minimap` | 169 | `rank_up` |
+| 30 | `act_intro_piracy` | 100 | `recruiting` | 170 | `car_shooting` |
+| 31 | `act_intro_septic_truck` | 101 | `diversion_hud` | 171 | `vehicle_turret` |
+| 32 | `act_intro_snatch` | 102 | `hud_text` | 172 | `secret_locations` |
+| 33 | `act_intro_snatch_kinzie` | 103 | `unlockables` | 173 | `sprint_recharge` |
+| 34 | `act_crowd_control_throwing` | 104 | `store_ownership` | 174 | `radio_control` |
+| 35 | `act_crowd_control_grab` | 105 | `gang_customize` | 175 | `human_shield_general` |
+| 36 | `escort_minigame` | 106 | `shortcut_splines` | 176 | *(OPEN: string at 0x01124348 not resolved by the dump, shorter than 4 characters or non-ASCII)* |
+| 37 | `fight_club_neck_breaker` | 107 | `satchel_charges` | 177 | `dlc_mancannon` |
+| 38 | `fight_club_opponent_down` | 108 | `ar50` | 178 | `nag_change_clothes` |
+| 39 | `activity_complete` | 109 | `annihilator` | 179 | `nag_crib_stash` |
+| 40 | `div_intro_ambulance` | 110 | `np_car_controls` | 180 | `city_takeover` |
+| 41 | `div_intro_fire_truck` | 111 | `np_motorcycle_controls` | 181 | `nag_upgrade_store` |
+| 42 | `div_available_flashing` | 112 | `np_motorcycle_controls_pc` | 182 | `challenges` |
+| 43 | `div_intro_hoing` | 113 | `np_boat_controls` | 183 | `nitrous` |
+| 44 | `div_intro_hostage` | 114 | `np_heli_weapon_controls` | 184 | `low_ammo` |
+| 45 | `div_intro_mugging` | 115 | `np_tank_controls` | 185 | `TUT_SIXAXIS_BOAT` |
+| 46 | `div_intro_racing` | 116 | `np_tank_controls_pc` | 186 | `TUT_SIXAXIS_PLANE` |
+| 47 | `div_available_streaking` | 117 | `div_intro_coop_death_tag` | 187 | `TUT_SIXAXIS_HELICOPTER` |
+| 48 | `div_available_streaking_pc` | 118 | `div_intro_coop_cat_and_mouse` | 188 | `horde_mode_pickup` |
+| 49 | `div_intro_streaking` | 119 | `territory_` | 189 | `dlc1_act_genki_escort_into` |
+| 50 | `div_intro_tagging` | 120 | `tss02_complete_` | 190 | `dlc1_act_panda_blazing` |
+| 51 | `div_intro_taxi` | 121 | `sprint` | 191 | `dlc1_act_ball_mayhem` |
+| 52 | `div_intro_tow_truck` | 122 | `vehicle entry` | 192 | `dlc2_near_crash` |
+| 53 | `div_intro_base_jumping` | 123 | `act_intro_tank_mayhem` | 193 | `dlc2_alien_aircraft` |
+| 54 | `diversion_complete` | 124 | `act_tank_mayhem_hvt` | 194 | `dlc1_act_ball_mayhem_shockwave` |
+| 55 | `collection_collectible` | 125 | `act_tank_mayhem_repair` | 195 | `airplane_control_pc` |
+| 56 | `collection_stunt_jump` | 126 | `act_intro_guardian_angel` | 196 | `horde_mode_new_wave` |
+| 57 | `store_intro_clothes` | 127 | `act_intro_running_man` | 197 | `horde_mode_challenge_wave` |
+| 58 | `store_intro_mechanic` | 128 | `act_intro_cyber_blazing` | 198 | `horde_mode_weapon_upgrade` |
+| 59 | `store_intro_weapons` | 129 | `escort_minigame` | 199 | `horde_mode_kill_all_enemies` |
+| 60 | `store_intro_melee_weapons` | 130 | `final_act_level_complete` | 200 | `horde_mode_unlimited_ammo` |
+| 61 | `store_intro_liquor` | 131 | `diversion_respect_cap` | 201 | `horde_mode_invulnerability` |
+| 62 | `store_intro_fnf` | 132 | `div_intro_taunting` | 202 | `mis_21_ride_killbane` |
+| 63 | `store_intro_music` | 133 | `div_intro_holdup` | 203 | `mis_21_ride_killbane_pc` |
+| 64 | `store_intro_surgeon` | 134 | `div_intro_hitman` | 204 | `mis_undercover` |
+| 65 | `store_intro_food` | 135 | `div_hitman_started` | 205 | `mis_16_avatar_attacks` |
+| 66 | `store_intro_tattoo` | 136 | `div_hitman_gps` | 206 | `mis_22_oleg_follow` |
+| 67 | `store_intro_jewelry` | 137 | `div_intro_chop_shop` | 207 | `dlc3_m03_super_powers` |
+| 68 | `store_intro_mechanic_large` | 138 | `div_chop_shop_vehicle_damage` | 208 | `dlc2_win` |
+| 69 | `store_intro_vehicle_dealer` | 139 | `div_chop_shop_gps` | 209 | `dlc3_win` |
+
+
+**Vehicle-store state.** The flag `0x022cdf08` is zero at load, so `store_vehicle_get_state` returns
+`0.0` at startup and stays 0 until `store_vehicle_change_mode` opens a store or one of the other two
+writers runs (§10.1). **[CONFIRMED — disassembly.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — ~~whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`)~~ ~~whether single-player startup installs a session (the installer is undefined code at `0x0087c341`; needs a range-disassembly dump)~~; the full tutorial name list (job `20261001T114802-team-a-kyoi`); ~~the two undefined references at `0x0087c341`/`0x0087c359`~~ (merged into the item above). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the three resolved singleton writers all clear it; the session pool holds two 0x2d0-byte objects; tutorial table filled by `0x007178c0`, entries 189–209 start in state 1. ~~HIGH CONFIDENCE (by elimination) — the installer is the undefined code at `0x0087c341`/`0x0087c359`.~~ Updated 2026-10-01 (job `20261001T121532-team-a-gdhw`): CONFIRMED — the installer is `0x0087c340` (stores the session pointer into `0x024d8534` and publishes the host answer as global flag 4); the network module init/shutdown pair `0x008675c0`/`0x008676f0` is the module bring-up and teardown and never creates a session; `0x007178c0` is called once, from the tutorial initialiser `0x00715f20`; the region `0x00717240`–`0x0071738f` writes only state 4; entries 189–195 are restored from the save block by `0x00b9ae60` section 5; the offline-session bit `+0x4e` & `0x40` gates Steam identity and leave events. HIGH CONFIDENCE — `0x0087d1d0` is the host-session constructor. HYPOTHESIS — flag 4 means "local machine is host"; single player uses an offline session. OPEN — whether single-player startup installs a session: the installer `0x0087c340` is read but its callers are undefined code (`0x0088b4c0`–`0x0088cb60` region); `game_get_is_host` in single player (implement false); who writes tutorial state 3 (leads `0x00716385`/`0x007163b5`); the save-side values for entries 189–195; the store-flag triggers: the three undefined call sites are function tails (`0x005fb3e0`, `0x005fbdb0`, `0x005fc1e0` windows) whose heads need range dumps (§10.1). Next dumps: follow-up job `team-a/ghidra/jobs/gdhw-followup.json`.**
 
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
@@ -10465,3 +11724,11 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).
 - 2026-09-30 (cloud, desk adversarial review of §27/§28): added a review-status line to every §27.N/§28.N entry (§27: 11 DESK-PASS, 10 with text fixes, 5 NEEDS-EXE; §28: 9, 11, 6) and a review-status summary under each heading (desk pass does not clear an entry; executable re-derivation queued); recorded the §27.2/§20.14 0x00a525a0 conflict's most likely reading as HYPOTHESIS in its marker; applied text fixes in place with strike-through/annotation (wrong §/WALLS.md citations, e.g. §19.6 in §27.5, §25.12/§25.25→§16.2/§25.13, WALLS.md→§26.2/§26.23; resolved the false 0x00853b10 polarity worry in §27.5; count slips in §27.20/§27.26/§28.17/§28.26; "new/second" claims annotated as already recorded, e.g. 0x00e0cef0 §8.13, 0x00e0ceb0 §1.9/§8.24, 0x007c9f50 §6.1/§24.2, bit 0x40@+9 §15.28, 0x005c50b0, 0x00d9e8b0 out-buffer; stub-reading qualifications on the 0x0101bxxx/0xd34xxx notes); added OPEN markers at 11 NEEDS-EXE claims plus 4 unstated details (§27.8 wrapper, §27.16 default, §28.3 conversion, §28.6 gate bit).
 - 2026-09-30 (cloud, desk adversarial review of §1-§5): added a review-status line to every §1-§5 unit and a summary under each heading (§1: 5 DESK-PASS, 4 with text fixes, 5 NEEDS-EXE; §2: 3/4/6; §3: 6/7/6; §4: 4/2/8; §5: 2/1/0); corrected the §2 registrar attribution per `spec-lua-bindings.md` §13.5, §1.9's callee roles per §21.27/§22.29/§28.18, §2.7's `9000` (bucket count, §5.3), §2.9's opcode `0x53` (§8.13), §4.2's `0x004dcf00` role (§20.24), §4.7's entry/forwarder split and count/cross-reference slips (§1.4, §1.13, §2.3, §2.5, §3.13, §3.18); added §10.8's `+0x1f00`/`+0xf8` hook sub-record bases to §3.2/§3.3/§3.12/§3.13 and `0x0094cc60`'s role to §3.6; added OPEN markers at every NEEDS-EXE claim; noted the §5 recomputations (hash initial value 0, not stated in `spec-texture-format.md` §8.2). Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020200-team-a-nzxf`): corrected §2.9/§8.13/§26.10/§26.23 (fade request helper order is `(durationMs, callback, flag)`, `screen_fade_do` is a direct Lua call in the UI state, not a command queue; the opcode-0x53 record layout), §8.21 (prep tears down the current scene and fills the pending slot; it does not start a load; the extra values are constants; `0x0101b530` is a stub), §14.23 (fast-path polarity; the sense-inversion item is closed); added to §26.9; added §26.24 (screen fade state machine), §26.25 (zscene lifecycle) and §26.26 (`vint_is_std_res`/`vint_get_safe_frame`, no earlier entry here), each with a next-dump list. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26.27 (the 24 bare globals of `0x00e0f900`: roster, both-states registration, `rand_int`/`rand_float`/`round`/`debug_print`/`assert_msg` behaviour, the shared 8192-entry random ring; seeding and the 18 undumped bodies OPEN, follow-up job `bgcx-followup.json`). Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020213-team-a-dksj`): §3.1 — replaced the head/tail description with the confirmed body (host test on `+0x5c`/`+0x58` first, list head `+0x54`, member count `+0x60` must be ≥ 2, slot check `0x00877a90`); §8.27/§10.2 confirmed, no session → false; §10.1 — three writers of `0x022cdf08`, not one, initial value 0; §6.19/§10.4 — table base `0x0151d600`, `+0x08` is a descriptor pointer, `+0x0c` is a per-entry state 0–4 rather than a kind, descriptor `+0x24` bits, the dispatcher order, `tutorial_advance` true only in state 3; annotated the same table references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
+- 2026-10-01 (cloud, bridge job `20261001T114802-team-a-kyoi`): §26.28 — the 210-entry tutorial name table from the static pointer table `0x012f5930` (209 names resolved; index 176's string at `0x01124348` not resolved by the dump, OPEN).
+- 2026-10-01 (cloud, bridge job `20261001T114716-team-a-fvfp`): §26.28 — corrected the co-op session writers: `0x0087efe0` is the subsystem shutdown and stores zero (not the installer), `0x0087d8a0` is init, `0x0087ed70` destroys one session; no resolved code installs a session, so the installer is, by elimination, the undefined code at `0x0087c341`/`0x0087c359` (HIGH CONFIDENCE; OPEN until read); single player stays "no session, all three queries false"; added the idle predicate `0x0059fbe0` and the two-slot pool; tutorial table filled by `0x007178c0` → `0x00715850` with entries 189–209 starting in state 1. §3.1 — client-side gate = "not idle and not flagged for destruction". §6.19 — fill routine and starting states. §8.27 — shutdown correction; false during wind-down. §10.1 — bodies of the store-flag writers `0x005fa820` (entry, sets 1) and `0x00820cd0` (exit, sets 0 only when the UI call succeeds); callers OPEN. §10.4 — starting states after the fill; state-3 writer narrowed (`0x007163e0` reaches only entries 189–195; tail at `0x00717363`), meaning still OPEN.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114555-team-a-lgdz`, follow-up `bgcx-followup.json`): §26.27 only — added behaviour entries for the 18 undumped bare globals (`max`/`min` strictly binary with second-argument wins on tie or NaN; `floor`/`ceil` via 32-bit truncating conversion; `acos` clamp; `strstr` boolean; `sizeof_table` pair count with `n` override; `get_frame_time` global 0x0132a0b0, default 1/30; the four `thread_*` functions with the 256-record thread table, its runner and the current-thread stack; the two geometry helpers), single-precision narrowing for all numeric wrappers, the random-source object and its fill (ring and cursor zero in the file image, draws return `lo` until the first fill), 0x00fccb70 = base plus `coroutine` only (no `math` table), the 2^-32 constant raised to CONFIRMED, a host paragraph and a new review status; `include` stays OPEN. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114101-team-a-mnao`, follow-up `nzxf-followup.json`): §26.24 — fade completion CONFIRMED: 0x005a0110 is the UI-state global `Screen_fade_transition_complete` (flips 0→2 / 1→3, calls the parked callback with the target, never starts a request; the earlier "sets the state to the target and starts the deferred request" reading struck); per-frame routine 0x0059fe70 (auto-save indicator, mode gate, loading logo/load-image schedule, replay of a deferred request with a fixed 250 ms); init/shutdown and the "screen_fade" UI document; `sfx_faded_in` = 0x0059fb60 CONFIRMED; host-side substitute note amended. §26.25 — state codes 0/1/2 CONFIRMED; promotion 0x00720410 (single caller 0x007258a0, HIGH CONFIDENCE cutscene load step, body OPEN); completion from the cutscene state machine 0x0072d660; table = parsed `cutscene.xtbl` (cap 200); 0x0153b556 = `skip_all_cutscenes`; transition-stream globals. §26.26 — display-mode ladder of 0x00e23000 and the per-thread record of 0x00e236f0; safe-frame constants still OPEN. Annotated §2.9, §8.13, §8.21, §14.23 and §26.9 with pointers and review-status updates. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T121532-team-a-gdhw`, follow-up `team-a/ghidra/jobs/gdhw-followup.json`): §26.28 — the session installer is `0x0087c340` (undefined code, read with the range mode; stores the session pointer into `0x024d8534` and publishes the host answer as global flag 4, CONFIRMED; no caller in defined code, so when it runs and whether single player installs a session stay OPEN); network module init `0x008675c0` / shutdown `0x008676f0` described (CONFIRMED; never create a session); host-session constructor `0x0087d1d0` (HIGH CONFIDENCE); offline-session bit `+0x4e` & `0x40` (gating CONFIRMED, single-player use HYPOTHESIS); `0x007178c0` called once from the tutorial initialiser `0x00715f20`; region `0x00717240`–`0x0071738f` writes state 4, not 3; entries 189–195 save-persisted through `0x00b9ae60` section 5; writer of state 3 OPEN; next-dump list. §8.27 — installer note, single player still OPEN, implement false. §10.1 — tails of the three undefined store-flag call sites (CONFIRMED), triggers OPEN. §10.4 — state-3 candidate withdrawn, save feed, initialiser note. Old text struck or annotated in place.

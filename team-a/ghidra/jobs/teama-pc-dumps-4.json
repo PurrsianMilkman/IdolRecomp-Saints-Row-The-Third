@@ -1,0 +1,13 @@
+{
+ "team": "team-a",
+ "title": "Team A: fetch PC-era TEAM A tools/[s-z]*.txt dumps (part 4/4) via read_root teama-pc",
+ "steps": [
+  {
+   "kind": "files",
+   "root": "teama-pc",
+   "pattern": "tools/[s-z]*.txt",
+   "max_files": 5000
+  }
+ ],
+ "collect": []
+}

@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "pause_menu_common_top_finished_loading",
     "pause_menu_cat_mouse_active",
     "pause_menu_cant_retry_because_host_in_creation",

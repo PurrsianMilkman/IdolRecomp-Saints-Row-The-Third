@@ -1,15 +1,49 @@
 {
  "team": "team-a",
- "title": "Team A: Team B request 9 — the 24 bare globals of registrar 0x00e0f900 (roster, state, behaviour of rand_int / rand_float / round / debug_print)",
+ "title": "Team A: Team B request 9 \u2014 the 24 bare globals of registrar 0x00e0f900 (roster, state, behaviour of rand_int / rand_float / round / debug_print)",
  "ref": "auto",
  "steps": [
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
-   "args": ["{OUT}/registrar", "func", "depth=1", "maxfuncs=40", "maxinsn=1500", "0x00e0f900"]},
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
-   "args": ["{OUT}/callers", "xref", "0x00e0f900"]},
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
-   "args": ["{OUT}/named", "lua", "depth=2", "maxfuncs=12", "maxinsn=900",
-            "rand_int", "rand_float", "round", "debug_print"]}
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/registrar",
+    "func",
+    "depth:1",
+    "maxfuncs:40",
+    "maxinsn:1500",
+    "0x00e0f900"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/callers",
+    "xref",
+    "0x00e0f900"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/named",
+    "lua",
+    "depth:2",
+    "maxfuncs:12",
+    "maxinsn:900",
+    "rand_int",
+    "rand_float",
+    "round",
+    "debug_print"
+   ]
+  }
  ],
- "collect": ["**/*.txt"]
+ "collect": [
+  "**/*.txt"
+ ]
 }

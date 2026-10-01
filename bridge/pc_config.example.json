@@ -28,5 +28,9 @@
     "program": "SaintsRowTheThird.exe"
   },
 
+  "read_roots": {
+    "teama-pc": {"path": "D:/Project Crreish/TEAM A", "teams": ["team-a"]}
+  },
+
   "tools": {}
 }

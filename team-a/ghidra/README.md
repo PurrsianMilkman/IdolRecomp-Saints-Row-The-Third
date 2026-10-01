@@ -12,3 +12,8 @@ private bus repository and is **never committed here**; specs describe the findi
 
 Checked locally only for Java syntax/typing against API stubs (no Ghidra in the cloud container); the
 first live run is its real test.
+
+## Before submitting a job
+
+Run `python3 team-a/ghidra/check_jobs.py <job.json>` first. The PC agent starts Ghidra through `analyzeHeadless.bat`, so an argument containing a character cmd.exe interprets (`% ^ & | < > ! " ( )` or a newline) or splits arguments on (`= , ;`, spaces, tabs) makes the launch fail before Ghidra starts (job `gdvf`, 2026-10-01). Search strings that need such characters cannot be passed as `str` items; find them through the function that uses them instead.
+Write CrreishDump options as `key:value` (for example `depth:2`); `key=value` is split into two items by the batch launcher, so the option is silently lost and both halves are treated as search items (all jobs up to 2026-10-01 ran with the defaults depth 1, maxfuncs 40, maxinsn 600, xrefs 25).

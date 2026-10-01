@@ -1,0 +1,16 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to gdhw — who runs the co-op session installer (single player?), tutorial state-3 writer, store-flag triggers",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/range", "range", "0x0088b480-0x0088b5a0", "0x0088b7c0-0x0088b8a0", "0x0088cac0-0x0088cb60", "0x0087c390-0x0087c560",
+            "0x00716360-0x007163e0", "0x0071716b-0x00717240", "0x005fb200-0x005fb3e0", "0x005fbc80-0x005fbdb0", "0x005fbdf0-0x005fc2c0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:15", "maxinsn:2000",
+            "0x0087d1d0", "0x0088c090", "0x00872760", "0x00867740", "0x007162a0", "0x00715f20", "0x008ba5d0", "0x005fb930", "0x0080e2f0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/xref", "xref", "xrefs:120", "0x0087c340", "0x0087d1d0", "0x0088c090", "0x00872760", "0x00867740", "0x02609398", "0x007162a0", "0x00715f20", "0x0151d588"]}
+ ],
+ "collect": ["**/*.txt"]
+}
