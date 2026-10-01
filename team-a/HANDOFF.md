@@ -2053,6 +2053,14 @@ The owner un-paused the project for cloud work (`TEAMS.md`). This session is **T
 
   Interpret dumps on Fable, per the model table.
 
+- **2026-10-01 stretch (cloud):**
+  - **Desk review of the 20 remaining specs** (all 10 `spec-tables-*`, customization-data, vehicle-data, mission-packages, resource-dispatch, ai-behavior, terrain, low-mips, extensionless, ctorless, format-inventory) — done, one commit per spec; table, findings and the Team B risk list in `review/spec-consistency.md` "Second batch (2026-10-01)". Every spec in `team-a/` now carries review-status lines.
+  - **Team B data relays applied** (`a9977df`): render §20.12.5/§20.12.9 register assignment back to CONFIRMED (empirical) on Team B's CTAB census `…-epre` (semantics stay HYPOTHESIS); vint-doc §3.1 note corrected from `…-puhd` (u32 at `0x1E` ∈ {1,256,257}, bytes `0x1E`/`0x1F` each 0/1).
+  - **Manager rulings:** the bridge queue is taken in id order (re-order by `bridge_client.py cancel` + resubmit); a full name→kind list of a script-looked-up table (e.g. the 210-entry tutorial table) is an allowed functional-identifier table — prose, UI/dialogue text, comments and authored content are not.
+  - **New exe jobs:** `teamb-request-9-coop-tutorial-store.json` (co-op session singleton `0x024d8534`, tutorial table `0x0151d608`, vehicle-store flag `0x022cdf08`: initial values and writers — Team B mission run `tkjl` refusals 876/565/173); `teamb-request-9b-bare-globals.json` (registrar `0x00e0f900`'s 24 bare globals; `rand_int` is now the first missing global in 48/49 missions); `review-tables.json` and `review-data-formats.json` (the batch NEEDS-EXE work of the 20 specs; terrain-only addresses held because they touch the on-hold `.czn_pc` interior).
+  - **Queue order now (all team-a, all still queued; Ghidra not yet configured on the PC):** `jzak` (fade/zscene/vint_is_std_res) → `vmgr` (requests 1–4 supplement) → `alal` (#8 preloads) → `svpg` (co-op/tutorial/store) → `prjl` (24 bare globals) → `naez`/`bqlh` (§27/§28) → `wtlc`, `yvzc`, `wzea`, `ssma`, `epke`, `kbww`, `jadp` (earlier NEEDS-EXE batches) → `idek`, `mkan` (this stretch's batches) → `rowu`, `fven`, `ykdl`, `pziy` (ranking tranches 2–5). Tranches 06–25 still unsubmitted.
+  - **When results land, write up in this order:** svpg (co-op state, tutorial name→kind table, store flag) and prjl (24-name roster with states, then `rand_int`, `rand_float`, `round`, `debug_print`) — Team B's missions stop on these now; then fade, zscene, `vint_is_std_res`, `.vint_doc`, #8 preloads; then §27/§28 and the NEEDS-EXE batches. Interpret dumps on Fable.
+
 **Blocked:** every executable question waits on the PC agent. Check with `python3 bridge/bridge_client.py status`, then `list` / `show <id>`.
 
 **Next, in Team B's priority order (their requests are under "Requests to Team A" at the top of `team-b/HANDOFF.md` on the integration branch):**
