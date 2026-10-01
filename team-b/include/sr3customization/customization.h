@@ -228,7 +228,7 @@ struct CustomizationVariant {
     // holds the text").
     std::vector<std::string> materials;
 
-    std::optional<std::string> shaderType;  // Shader_Type, e.g. "ir_sr3pccloth"
+    std::optional<std::string> shaderType;  // Shader_Type, e.g. "ir_sr3pccloth". LABEL: parent [OPEN] per spec-customization-data.md §2.1 / spec-tables-customization.md §4.3; read as a Variant child here (the tables reader uses Material_Element)
 
     DefaultColorsGrid defaultColorsGrid;  // Default_Colors_Grid (this Variant's own)
 };

@@ -121,6 +121,11 @@ CustomizationVariant ParseVariant(const Node* n) {
     r.meshVariantName = OptText(mvi, "Variant_Name");
     r.variantId = ReadInt32Always(mvi, "VariantID");
     r.materials = ReadNestedTextList(FindChild(n, "Material_List"), "Material_Element", "Material");
+    // LABEL: spec-customization-data.md §2.1 (Variants row) "[OPEN - desk review 2026-09-30: the parent of
+    // `Shader_Type` is ambiguous in this cell (a `Variant` child, or a `Material_Element` sibling of ...)]";
+    // spec-tables-customization.md §4.3 marks the same parent [OPEN]. This reader takes it as a Variant child;
+    // sr3tables_customization (tables_customization_items.cpp ParseMaterialElement) reads it under
+    // Material_Element. The two sites are inconsistent by design until the parent is settled; no behaviour change.
     r.shaderType = OptText(n, "Shader_Type");
     r.defaultColorsGrid = ParseDefaultColorsGrid(n);
     return r;

@@ -523,6 +523,9 @@ ActionNodeGroup ParseActionNodeGroup(const Node* row) {
     g.referenceObject = getText(row, "Reference_object");
     g.referenceObjectPresent = FindChild(row, "Reference_object") != nullptr;
     g.spawnTimer = ReadInt32Always(row, "Spawn_Timer");
+    // LABEL: spec-tables-traffic-ai.md s13.1 (+0x2C/+0x2E) "signed -> stored as a byte; default -1 ...
+    // [OPEN - desk review 2026-09-30: which accessor reads these is not stated (the unsigned 0x00DAC1D0 would
+    // read `-1` as 0); to be settled against the executable (0x008C9760)]". Signed-byte read kept; not changed.
     g.instanceCap = GetInt8(row, "Instance_Cap");
     g.maxSpawns = GetInt8(row, "MaxSpawns");
 
@@ -945,7 +948,9 @@ std::optional<EscortConstants> ParseEscortConstants(const Document& doc) {
 
     const Node* vehicles = FindChild(penalties, "Vehicles");
     c.vehicles.present = vehicles != nullptr;
-    c.vehicles.vehicleDamagePenaltyMs = ReadFloatAlways(vehicles, "Vehicle_Damage_Penalty_MS");
+    // spec-tables-traffic-ai.md s19: "Vehicle_Damage_Penalty_MS 0x014BB25C 4000 (u32)" under the section's
+    // [CONFIRMED - disassembly, read in full] marker (the other leaves' reader types are OPEN there, so they stay float).
+    c.vehicles.vehicleDamagePenaltyMs = ReadUInt32Always(vehicles, "Vehicle_Damage_Penalty_MS");
     c.vehicles.vehicleDamageThreshold = ReadFloatAlways(vehicles, "Vehicle_Damage_Threshold");
     c.vehicles.vehicleDamageCooldownMs = ReadFloatAlways(vehicles, "Vehicle_Damage_Cooldown_MS");
 

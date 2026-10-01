@@ -570,7 +570,7 @@ struct ActionNodeGroup {
     Text referenceObject;           // Reference_object: text -> CRC
     bool referenceObjectPresent = false;
     Always<int32_t> spawnTimer;     // Spawn_Timer: s32; engine forces any value < 60 to -1 (not applied here)
-    std::optional<int8_t> instanceCap; // Instance_Cap: signed, stored as a byte; explicit default -1 when absent
+    std::optional<int8_t> instanceCap; // Instance_Cap: signed, stored as a byte; explicit default -1 when absent. LABEL: spec-tables-traffic-ai.md s13.1 table row +0x2C "[OPEN - desk review 2026-09-30: which accessor reads these is not stated ... the unsigned 0x00DAC1D0 would read -1 as 0]" - the spec's type is a SIGNED byte (not u32), so the signed GetInt8 read is kept, unverified
     std::optional<int8_t> maxSpawns;   // MaxSpawns: same
     std::vector<Text> npcList;      // npc_list/npc* (text = an action_node_npcs.xtbl row Name, §13.3); engine keeps at most 4
     Text notorietyInfo;             // Notoriety_Info: text -> action_node_notoriety.xtbl row (§13.2, CRC match)
@@ -897,7 +897,7 @@ struct EscortRage {
 };
 struct EscortVehiclesPenalty {
     bool present = false;
-    Always<float> vehicleDamagePenaltyMs;  // image default 4000
+    Always<uint32_t> vehicleDamagePenaltyMs;  // u32 (spec-tables-traffic-ai.md s19: "Vehicle_Damage_Penalty_MS 0x014BB25C 4000 (u32)", CONFIRMED - disassembly); image default 4000
     Always<float> vehicleDamageThreshold;  // image default 50.0
     Always<float> vehicleDamageCooldownMs; // image default 250
 };

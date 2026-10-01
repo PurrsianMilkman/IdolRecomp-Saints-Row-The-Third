@@ -420,6 +420,25 @@ void testVehicleMissingOptional() {
     CHECK(e.wheelSizeRange.maxWidth0 == 2 && e.wheelSizeRange.maxWidth1 == 2);
 }
 
+// Mass is absent in 3/123 real vehicles (spec-vehicle-data.md s7.11, labelled
+// OPEN for its accessor kind in s7.2): a row without <Mass> must read as
+// ABSENT, never as a defaulted value, while a present Mass still reads.
+void testMassAbsentNotDefaulted() {
+    const char* xml =
+        "<root><Table><Vehicle><Name>no_mass</Name><Max_Hitpoints>500</Max_Hitpoints>"
+        "<Value>10000</Value></Vehicle></Table></root>";
+    Document doc = P(xml);
+    VehicleEntry e = ParseVehicleEntry(FirstVehicle(doc));
+    CHECK(e.maxHitpoints.present);
+    CHECK(!e.mass.present);
+    CHECK(e.mass.value == 0.0f);
+
+    const char* xml2 = "<root><Table><Vehicle><Name>has_mass</Name><Mass>15000</Mass></Vehicle></Table></root>";
+    Document doc2 = P(xml2);
+    VehicleEntry e2 = ParseVehicleEntry(FirstVehicle(doc2));
+    CHECK(e2.mass.present && e2.mass.value == 15000.0f);
+}
+
 // ---------------------------------------------------------------------------
 // mph->m/s with the 100mph cap (spec 7, "Units"): Maximum_Speed is capped
 // BEFORE conversion, and Maximum_Speed_With_Nitrous is then raised to at
@@ -566,6 +585,7 @@ int main() {
     testHelicopterVariant();
     testWatercraftVariant();
     testVehicleMissingOptional();
+    testMassAbsentNotDefaulted();
     testSpeedCapAndNitrousRaise();
     testDegToRadCase();
     testAiMaxSpeedSteeringNotConverted();

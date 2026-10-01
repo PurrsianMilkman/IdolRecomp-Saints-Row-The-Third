@@ -42,7 +42,9 @@ MaterialElementEntry ParseMaterialElement(const Node* row) {
     m.material = OptText(row, "Material");
     // LABEL: spec-tables-customization.md §4.3, [OPEN - desk review 2026-09-30]: whether Shader_Type is a
     // child of Material_Element or of Variant is unsettled (spec-customization-data.md §2.1 lists it at
-    // variant level). Read under Material_Element here as our assumption; no behaviour change.
+    // variant level; conflict, see its §2.1 Variants row "[OPEN - desk review 2026-09-30: the parent of
+    // `Shader_Type` is ambiguous ...]"). Read under Material_Element here as our assumption; the other site is
+    // src/customization.cpp ParseVariant (reads it as a Variant child). No behaviour change.
     m.shaderType = OptText(row, "Shader_Type");
     return m;
 }
@@ -68,7 +70,12 @@ WearOptionEntry ParseWearOptionAccepted(const Node* row) {
     // LABEL: spec-tables-customization.md §4.2, [OPEN - desk review 2026-09-30]: that section names only
     // Male_Mesh_Filename, while spec-customization-data.md §2.1/§5.2 also documents Female_Mesh_Filename >
     // Filename (it drives the custmesh_<N>f bundle). Only the male name is read here pending the executable
-    // check; no behaviour change.
+    // check; no behaviour change. Also: spec-tables-customization.md §4.2 review status "NEEDS-EXE: ...
+    // `Female_Mesh_Filename` handling". spec-customization-data.md §2.1 lists the element under a
+    // "[CONFIRMED - empirical]" scope that is narrowed to "the elements exist with the names shown" (one
+    // sample row) and §5.2 says the composer registers custmesh_<N>f "only if the wear option has a
+    // <Female_Mesh_Filename>"; neither says the 0x28 wear-option record loader (FUN_00829650) reads it, so it
+    // is NOT added to this typed reader (sr3customization::MeshInformation, a different layer, does read it).
     w.maleMeshFilename = OptText(FindChild(meshInformation, "Male_Mesh_Filename"), "Filename");
     w.activeFlags = ReadFlagRefList(FindChild(row, "Active_Flags"), "Active_Flag");
     w.requiredFlags = ReadFlagRefList(FindChild(row, "Required_Flags"), "Required_Flag");

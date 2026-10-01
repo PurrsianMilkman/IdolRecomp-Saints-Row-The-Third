@@ -673,6 +673,10 @@ VehicleEntry ParseVehicleEntry(const Node* row) {
 
     // --- Mass/economy ---
     e.maxHitpoints = ReadUInt32Always(row, "Max_Hitpoints");
+    // LABEL: spec-vehicle-data.md s7.2 / s7.3 "[OPEN ... which accessor each field uses (in particular
+    // `Mass`, absent in 3/123 real vehicles, §7.11)]" and "NEEDS-EXE: accessor kind per field (notably
+    // `Mass`)". Mass is therefore reported as ABSENT (present == false) when the element is missing; no
+    // default is invented (the always-write accessor leaves an UNSPECIFIED value, s7.2 CORRECTED note).
     e.mass = ReadFloatAlways(row, "Mass");
     e.componentDensity = ReadFloatAlways(row, "Component_Density");
     e.playerDamageMultiplier = ReadFloatAlways(row, "Player_Damage_Multiplier");
