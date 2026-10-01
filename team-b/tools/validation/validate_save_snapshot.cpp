@@ -1,4 +1,4 @@
-// Gate: numeric claims of spec-save-format.md Sec3/Sec6/Sec9/Sec10/Sec12 that can be checked
+// Gate: format claims of spec-save-format.md Sec3/Sec6/Sec9/Sec10/Sec12 that can be checked
 // on the real snapshots with this project's own reader (include/sr3save/save_snapshot.h) and
 // a transcription of the Sec6.4 region map. Everything is counted with its denominator; where
 // a claim could not be reproduced the difference is printed, not smoothed over.
@@ -11,9 +11,17 @@
 //  E. Sec10.7 per-sample table reproduced as a multiset (10 columns, 16 rows)
 //  F. small claims: level-22 pair difference, cheats-used flag vs cash, difficulty range, ...
 //
+// Two kinds of check (manager ruling 2026-10-01, after bridge job 20261001T015049-team-b-hzim):
+//  - [ok  ]/[FAIL] format gates: invariants of the format itself. Only these decide the exit status.
+//  - [match]/[DRIFT] historical sample: figures that describe the save set the spec was written
+//    from (the Sec10.7 table, build-stamp distribution, worked values, sample counts). The owner
+//    keeps playing and saving, so these drift; drift is reported with the snapshot ids (#n, listed
+//    at load) so Team A can refresh the spec, and never fails the run. --strict turns them back
+//    into gates (the old behaviour).
+//
 // STRICTLY READ-ONLY on the save files.
 //
-// usage: validate_save_snapshot [folder ...]
+// usage: validate_save_snapshot [--strict] [folder ...]
 
 #include <algorithm>
 #include <cmath>
@@ -48,9 +56,17 @@ uint32_t rd32(const std::vector<uint8_t>& b, size_t o) {
 }
 
 int g_unexpected = 0;
+bool g_strict = false;
+int g_sampleMatch = 0, g_sampleDrift = 0;
 void gate(bool ok, const char* what) {
     std::printf("  [%s] %s\n", ok ? "ok  " : "FAIL", what);
     if (!ok) ++g_unexpected;
+}
+// Historical-sample comparison: reports match or drift; fails the run only with --strict.
+void sample(bool ok, const char* what) {
+    std::printf("  [%s] historical sample: %s\n", ok ? "match" : "DRIFT", what);
+    (ok ? g_sampleMatch : g_sampleDrift)++;
+    if (!ok && g_strict) ++g_unexpected;
 }
 
 struct Span {
@@ -117,9 +133,14 @@ bool countedArrayOk(const std::vector<uint8_t>& b, size_t countOff, size_t base,
 
 int main(int argc, char** argv) {
     std::vector<std::pair<std::string, fs::path>> folders;
-    if (argc > 1) {
-        for (int i = 1; i < argc; ++i) folders.push_back({argv[i], argv[i]});
-    } else {
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--strict") == 0) g_strict = true;
+        else if (std::strncmp(argv[i], "--", 2) == 0) {
+            std::fprintf(stderr, "unknown option %s\nusage: validate_save_snapshot [--strict] [folder ...]\n", argv[i]);
+            return 2;
+        } else folders.push_back({argv[i], argv[i]});
+    }
+    if (folders.empty()) {
         folders = {
             {"Documents", "C:/Users/Purrsian/Documents/Saints Row The Third"},
             {"LocalAppData", "C:/Users/Purrsian/AppData/Local/Saints Row The Third"},
@@ -149,6 +170,20 @@ int main(int argc, char** argv) {
         std::printf("NO REAL SNAPSHOTS FOUND\n");
         return 2;
     }
+    std::printf("mode: %s\n", g_strict ? "--strict (historical-sample drift fails the run)" : "default (historical-sample drift is reported, not failed)");
+    // snapshot ids used in every drift line below
+    auto id = [&](const Snap& s) { return static_cast<int>(&s - snaps.data()); };
+    for (auto& s : snaps) {
+        const auto& t = s.s.timestamp();
+        std::printf("  #%-2d %-40s level %2u  %6u s  saved 20%02d-%02d-%02d %02d:%02d\n", id(s), s.where.c_str(), s.s.playerLevel(),
+                    s.s.playTimeSeconds(), t.year2, t.month, t.day, t.hour, t.minute);
+    }
+    auto listIds = [&](const char* label, auto pred) {
+        std::printf("    %s:", label);
+        int n = 0;
+        for (auto& s : snaps) if (pred(s)) { std::printf(" #%d", id(s)); ++n; }
+        std::printf(n ? "\n" : " none\n");
+    };
 
     // ---------------------------------------------------------------- A. header
     std::printf("\n== A. header ==\n");
@@ -171,16 +206,20 @@ int main(int argc, char** argv) {
         std::printf("  build stamp (0x010):");
         for (auto& kv : stamps) std::printf(" %08X x%d", kv.first, kv.second);
         std::printf("   (spec: 000F0F6E x14, 000EA708 x1, 000E8CE7 x1)\n");
-        gate(stamps[0x000F0F6E] == 14 && stamps[0x000EA708] == 1 && stamps[0x000E8CE7] == 1, "build stamp distribution 14/1/1");
+        bool stampOk = stamps[0x000F0F6E] == 14 && stamps[0x000EA708] == 1 && stamps[0x000E8CE7] == 1;
+        sample(stampOk, "build stamp distribution 14/1/1");
+        if (!stampOk) listIds("snapshots with a stamp other than 000F0F6E", [&](const Snap& s) { return s.s.buildStamp() != 0x000F0F6E; });
         std::printf("  sub-version word 0x11D88:");
         for (auto& kv : sub) std::printf(" %u x%d", kv.first, kv.second);
         std::printf("   (spec: 9 x14, 8 x1, 0 x1)\n");
-        gate(sub[9] == 14 && sub[8] == 1 && sub[0] == 1, "0x11D88 distribution 9:14 / 8:1 / 0:1");
+        bool subOk = sub[9] == 14 && sub[8] == 1 && sub[0] == 1;
+        sample(subOk, "0x11D88 distribution 9:14 / 8:1 / 0:1");
+        if (!subOk) listIds("snapshots with a sub-version other than 9", [&](const Snap& s) { return rd32(s.b, 0x11D88) != 9; });
         // the two oldest saves are exactly those with the non-standard stamp and sub-version
         int oldPair = 0;
         for (auto& s : snaps)
             if (s.s.buildStamp() != 0x000F0F6E && rd32(s.b, 0x11D88) != 9) ++oldPair;
-        gate(oldPair == 2, "the two non-standard build stamps are the same two files as the non-9 sub-versions");
+        sample(oldPair == 2, "the two non-standard build stamps are the same two files as the non-9 sub-versions");
         std::printf("  zone names:");
         std::set<std::string> zones;
         for (auto& s : snaps) zones.insert(s.s.levelName());
@@ -220,6 +259,13 @@ int main(int argc, char** argv) {
             if (sec == 39688) gate(s.s.playTimeMinutes() == 661, "39688 s -> 661 min");
             if (sec == 39857) gate(s.s.playTimeMinutes() == 664, "39857 s -> 664 min");
             if (sec == 150778) gate(s.s.playTimeMinutes() == 2512, "150778 s -> 2512 min");
+        }
+        // the conversion is gated above when a worked value is present; whether the values are present is the sample
+        for (uint32_t want : {39688u, 39857u, 150778u, 948u}) {
+            bool present = std::any_of(snaps.begin(), snaps.end(), [&](const Snap& s) { return s.s.playTimeSeconds() == want; });
+            char what[96];
+            std::snprintf(what, sizeof what, "a snapshot with the spec's worked play time %u s is present", want);
+            sample(present, what);
         }
         (void)minutesOk;
     }
@@ -277,7 +323,11 @@ int main(int argc, char** argv) {
                     r154, N, act60, N, mis113, N, trg113, N, cap80, N, cap74, N);
         gate(r154 == N && act60 == N && mis113 == N && trg113 == N, "literal counts 154 / 60 / 113 / 113 in every snapshot");
         std::printf("  (spec: collectibles reach the 80 cap in 6 samples, owned outfits reach 74 in 6 samples)\n");
-        gate(cap80 == 6 && cap74 == 6, "collectible cap reached in 6 samples and outfit cap in 6 samples");
+        sample(cap80 == 6 && cap74 == 6, "collectible cap reached in 6 samples and outfit cap in 6 samples");
+        if (cap80 != 6 || cap74 != 6) {
+            listIds("collectible count == 80", [&](const Snap& s) { return rd32(s.b, 0x3FC) == 80; });
+            listIds("owned-outfit count == 74", [&](const Snap& s) { return s.b[0x9098] == 74; });
+        }
     }
 
     // ---------------------------------------------------------------- D. region map
@@ -333,9 +383,8 @@ int main(int argc, char** argv) {
         size_t nz = 0;
         for (auto& s : snaps) for (uint8_t v : s.b) nz += v != 0;
         std::printf("  total non-zero bytes over all snapshots: %zu (spec: 201,363)\n", nz);
-        if (nz != 201363) {
-            std::printf("  *** DIFFERS from the spec's 201,363 (%+lld) ***\n", static_cast<long long>(nz) - 201363);
-        }
+        sample(nz == 201363, "total non-zero bytes over all snapshots == 201,363");
+        if (nz != 201363) std::printf("    difference %+lld (a sum over the whole set; the Sec10.7 drift below names the snapshots)\n", static_cast<long long>(nz) - 201363);
         // shifted maps: the boundaries must carry information
         std::printf("  shifted-map controls (non-zero bytes outside): ");
         bool allPos = true;
@@ -357,10 +406,10 @@ int main(int argc, char** argv) {
     }
 
     // ---------------------------------------------------------------- E. Sec10.7 table
-    std::printf("\n== E. Sec10.7 per-sample table (10 columns) as a multiset ==\n");
+    std::printf("\n== E. Sec10.7 per-sample table (10 columns), historical sample ==\n");
+    std::printf("  The table describes the save set the spec was written from; rows drift when the owner saves again.\n");
     {
-        std::vector<Row> mine;
-        for (auto& s : snaps) {
+        auto rowOf = [&](const Snap& s) {
             Row r;
             r.lvl = s.s.playerLevel();
             r.cheat = s.s.cheatsUsed() ? 1 : 0;
@@ -372,46 +421,72 @@ int main(int argc, char** argv) {
             r.items = rd32(s.b, 0x4F6C);
             r.outfO = s.b[0x9098];
             r.outfS = rd32(s.b, 0xB31C);
-            mine.push_back(r);
+            return r;
+        };
+        auto fmt = [](const Row& r) {
+            char t[160];
+            std::snprintf(t, sizeof t, "lvl %u cheat %u cash %u barn %u stunt %u coll %u wpn %u items %u outf %u/%u", r.lvl, r.cheat,
+                          r.cash, r.barn, r.stunt, r.coll, r.wpn, r.items, r.outfO, r.outfS);
+            return std::string(t);
+        };
+        std::vector<Row> mine;
+        for (auto& s : snaps) mine.push_back(rowOf(s));
+        const std::vector<Row> spec(std::begin(kSpec107), std::end(kSpec107));
+        // greedy multiset match in spec-row order; mineFor[k] = snapshot index matched to spec row k, or -1
+        auto match = [&](const std::vector<Row>& rows, std::vector<int>& mineFor) {
+            std::vector<bool> used(rows.size(), false);
+            mineFor.assign(spec.size(), -1);
+            size_t m = 0;
+            for (size_t k = 0; k < spec.size(); ++k)
+                for (size_t i = 0; i < rows.size(); ++i)
+                    if (!used[i] && rows[i] == spec[k]) { used[i] = true; mineFor[k] = static_cast<int>(i); ++m; break; }
+            return m;
+        };
+        std::vector<int> mineFor;
+        const size_t matched = match(mine, mineFor);
+        std::printf("  per spec row (row numbers as in Sec10.7):\n");
+        for (size_t k = 0; k < spec.size(); ++k) {
+            if (mineFor[k] >= 0) std::printf("    row %2zu  match  #%-2d %s\n", k + 1, mineFor[k], snaps[mineFor[k]].where.c_str());
+            else std::printf("    row %2zu  DRIFT  no snapshot has  %s\n", k + 1, fmt(spec[k]).c_str());
         }
-        std::vector<Row> spec(std::begin(kSpec107), std::end(kSpec107));
-        std::sort(mine.begin(), mine.end());
-        std::sort(spec.begin(), spec.end());
-        size_t matched = 0;
-        std::vector<bool> used(mine.size(), false);
-        for (auto& sr : spec) {
-            for (size_t i = 0; i < mine.size(); ++i) {
-                if (!used[i] && mine[i] == sr) { used[i] = true; ++matched; break; }
+        std::vector<bool> usedMine(mine.size(), false);
+        for (int i : mineFor) if (i >= 0) usedMine[static_cast<size_t>(i)] = true;
+        for (size_t i = 0; i < mine.size(); ++i) {
+            if (usedMine[i]) continue;
+            std::printf("    DRIFT  #%-2zu %s  has  %s", i, snaps[i].where.c_str(), fmt(mine[i]).c_str());
+            const auto& t = snaps[i].s.timestamp();
+            std::printf("  (saved 20%02d-%02d-%02d)\n", t.year2, t.month, t.day);
+            // the nearest spec row: fewest differing columns, named for Team A
+            size_t best = 0; int bestDiff = 99;
+            for (size_t k = 0; k < spec.size(); ++k) {
+                const Row& r = spec[k]; const Row& m = mine[i];
+                int d = (r.lvl != m.lvl) + (r.cheat != m.cheat) + (r.cash != m.cash) + (r.barn != m.barn) + (r.stunt != m.stunt) +
+                        (r.coll != m.coll) + (r.wpn != m.wpn) + (r.items != m.items) + (r.outfO != m.outfO) + (r.outfS != m.outfS);
+                if (mineFor[k] < 0 && d < bestDiff) { bestDiff = d; best = k; }
             }
+            if (bestDiff < 99) std::printf("           nearest unmatched spec row %zu (%d of 10 columns differ)\n", best + 1, bestDiff);
         }
-        std::printf("  spec rows reproduced: %zu/%zu (my snapshots: %zu)\n", matched, spec.size(), mine.size());
-        if (matched != spec.size() || mine.size() != spec.size()) {
-            std::printf("  unmatched spec rows / unmatched mine:\n");
-            for (auto& sr : spec) {
-                bool f = false;
-                for (auto& m : mine) f = f || m == sr;
-                if (!f) std::printf("    spec  lvl %u cheat %u cash %u barn %u stunt %u coll %u wpn %u items %u outf %u/%u\n", sr.lvl, sr.cheat, sr.cash, sr.barn, sr.stunt, sr.coll, sr.wpn, sr.items, sr.outfO, sr.outfS);
-            }
-            for (size_t i = 0; i < mine.size(); ++i) {
-                if (!used[i]) {
-                    auto& m = mine[i];
-                    std::printf("    mine  lvl %u cheat %u cash %u barn %u stunt %u coll %u wpn %u items %u outf %u/%u\n", m.lvl, m.cheat, m.cash, m.barn, m.stunt, m.coll, m.wpn, m.items, m.outfO, m.outfS);
-                }
-            }
+        std::printf("  spec rows reproduced: %zu/%zu (snapshots: %zu)\n", matched, spec.size(), mine.size());
+        sample(matched == spec.size() && mine.size() == spec.size(), "all 16 rows of the Sec10.7 table reproduced by the current save set");
+        // control: perturbing one cell of a MATCHED row must drop the match count by exactly one
+        int victim = -1;
+        // (a matched row with no spare identical copy among the snapshots, so the drop is guaranteed)
+        for (int i : mineFor) {
+            if (i < 0) continue;
+            const Row& r = mine[static_cast<size_t>(i)];
+            if (std::count(mine.begin(), mine.end(), r) <= std::count(spec.begin(), spec.end(), r)) { victim = i; break; }
         }
-        gate(matched == spec.size(), "all 16 rows of the Sec10.7 table reproduced");
-        // control: perturb one cell of my rows, the multiset match must drop
-        size_t matchedPert = 0;
-        {
+        if (victim < 0) {
+            std::printf("  control: not run (no spec row matched, nothing to perturb)\n");
+        } else {
             std::vector<Row> pert = mine;
-            pert[0].cash += 1;
-            std::vector<bool> u2(pert.size(), false);
-            for (auto& sr : spec)
-                for (size_t i = 0; i < pert.size(); ++i)
-                    if (!u2[i] && pert[i] == sr) { u2[i] = true; ++matchedPert; break; }
+            pert[static_cast<size_t>(victim)].cash += 1;
+            std::vector<int> tmp;
+            size_t matchedPert = match(pert, tmp);
+            std::printf("  control: one cash value of #%d off by 1 -> %zu/%zu rows reproduced (must be %zu)\n", victim, matchedPert,
+                        spec.size(), matched - 1);
+            gate(matchedPert == matched - 1, "control: the multiset comparison detects a single-cell change");
         }
-        std::printf("  control: one cash value off by 1 -> %zu/%zu rows reproduced (must be %zu)\n", matchedPert, spec.size(), spec.size() - 1);
-        gate(matchedPert == spec.size() - 1, "control: the multiset comparison detects a single-cell change");
     }
 
     // ---------------------------------------------------------------- F. small claims
@@ -426,15 +501,18 @@ int main(int argc, char** argv) {
             }
         }
         std::printf("  level-22 saves: %d; total - inLevel == 73,095: %d/%d (spec: two saves, both 73,095)\n", pairs, diffOk, pairs);
-        gate(pairs == 2 && diffOk == 2, "level-22 pair: respect difference 73,095 in both");
+        sample(pairs == 2 && diffOk == 2, "level-22 pair: respect difference 73,095 in both");
+        if (pairs != 2 || diffOk != 2) listIds("level-22 snapshots", [&](const Snap& s) { return s.s.playerLevel() == 22; });
         // level 0: total == in-level (1080); cap: in-level 0
         int l0 = 0, l0ok = 0, cap = 0, capOk = 0;
         for (auto& s : snaps) {
             if (s.s.playerLevel() == 0) { ++l0; l0ok += s.s.respectTotal() == s.s.respectInLevel() && s.s.respectTotal() == 1080; }
             if (s.s.playerLevel() == 50) { ++cap; capOk += s.s.respectInLevel() == 0; }
         }
-        gate(l0 == 1 && l0ok == 1, "level 0: total == in-level == 1080");
-        gate(cap >= 1 && cap == capOk, "level 50 (cap): respect-in-level == 0");
+        sample(l0 == 1 && l0ok == 1, "one level-0 snapshot, with total == in-level == 1080");
+        if (l0 != 1 || l0ok != 1) listIds("level-0 snapshots", [&](const Snap& s) { return s.s.playerLevel() == 0; });
+        gate(cap == capOk, "level 50 (cap): respect-in-level == 0 in every level-50 snapshot");
+        sample(cap >= 1, "a level-50 snapshot is present");
         // cheats-used flag == cash >= 1.66e9 raw
         int cheatIff = 0, cheats = 0;
         for (auto& s : snaps) {
@@ -443,7 +521,11 @@ int main(int argc, char** argv) {
             cheats += s.s.cheatsUsed();
         }
         std::printf("  cheats-used flag == (cash >= 1.66e9): %d/%zu; flag set in %d samples (spec: exactly 4)\n", cheatIff, N, cheats);
-        gate(cheatIff == static_cast<int>(N) && cheats == 4, "cheats-used flag set exactly for the 4 high-cash saves");
+        sample(cheatIff == static_cast<int>(N) && cheats == 4, "cheats-used flag set exactly for the 4 high-cash saves");
+        if (cheatIff != static_cast<int>(N) || cheats != 4) {
+            listIds("cheats-used flag set", [&](const Snap& s) { return s.s.cheatsUsed(); });
+            listIds("cash >= 1.66e9", [&](const Snap& s) { return s.s.cashRaw() >= 1660000000; });
+        }
         // difficulty range, level range, cash within clamp
         int d = 0, l = 0, c = 0, pct = 0;
         for (auto& s : snaps) {
@@ -453,7 +535,11 @@ int main(int argc, char** argv) {
             pct += s.s.completionPercent() >= 1 && s.s.completionPercent() <= 78;
         }
         std::printf("  difficulty in 0..2: %d/%zu; level <= 50: %d/%zu; cash within [0, 2e9]: %d/%zu; completion in 1..78: %d/%zu\n", d, N, l, N, c, N, pct, N);
-        gate(d == static_cast<int>(N) && l == static_cast<int>(N) && c == static_cast<int>(N) && pct == static_cast<int>(N), "difficulty / level / cash / completion ranges");
+        gate(d == static_cast<int>(N) && l == static_cast<int>(N) && c == static_cast<int>(N), "difficulty / level / cash ranges");
+        // 1..78 is the range observed in the spec's set, not a format bound
+        sample(pct == static_cast<int>(N), "completion percent within the observed 1..78");
+        if (pct != static_cast<int>(N))
+            listIds("completion outside 1..78", [&](const Snap& s) { return s.s.completionPercent() < 1 || s.s.completionPercent() > 78; });
         // controlled-region counts
         std::vector<uint32_t> flagged;
         for (auto& s : snaps) flagged.push_back(s.s.controlledRegionCount());
@@ -533,7 +619,8 @@ int main(int argc, char** argv) {
         std::printf("  numerator <= denominator for the seven ids other than 102: %zu/%zu comparisons; id 102 (rpg hit pct) exceeds its denominator in %zu/%zu snapshots (spec: 4/16, a finding not an error)\n",
                     cmpOk, cmpTotal, rpgOver, rpgTotal);
         gate(cmpOk == cmpTotal, "numerator <= denominator on 7 of the 8 hit-percent statistics in every snapshot");
-        gate(rpgOver == 4, "id 102 exceeds its denominator in exactly 4 of 16 snapshots");
+        sample(rpgOver == 4, "id 102 exceeds its denominator in exactly 4 of 16 snapshots");
+        if (rpgOver != 4) listIds("id 102 > id 101", [&](const Snap& s) { return s.s.statistic(102)->asInt() > s.s.statistic(101)->asInt(); });
         // control: the wrong stride (4 bytes) must destroy the aux pattern
         size_t badStride = 0;
         for (auto& s : snaps) {
@@ -554,26 +641,34 @@ int main(int argc, char** argv) {
             stunt += s.s.statistic(164)->rawValue == s.s.stuntJumpsFound();
         }
         std::printf("  statistic 163 == barnstorms found (0x3F0): %zu/%zu; statistic 164 == stunt jumps found (0x3F8): %zu/%zu\n", barn, N, stunt, N);
+        // equal in the spec's set; two separately stored counters, so not treated as a format invariant
+        sample(barn == N && stunt == N, "statistics 163/164 equal the 0x3F0/0x3F8 counters in every snapshot");
         for (auto& s : snaps) {
             if (s.s.statistic(164)->rawValue != s.s.stuntJumpsFound() || s.s.statistic(163)->rawValue != s.s.barnstormsFound())
-                std::printf("    mismatch in %s (level %u, %u s): stat163=%u barnstorms(0x3F0)=%u  stat164=%u stunt jumps(0x3F8)=%u\n",
-                            s.where.c_str(), s.s.playerLevel(), s.s.playTimeSeconds(), s.s.statistic(163)->rawValue,
+                std::printf("    mismatch in #%d %s (level %u, %u s): stat163=%u barnstorms(0x3F0)=%u  stat164=%u stunt jumps(0x3F8)=%u\n",
+                            id(s), s.where.c_str(), s.s.playerLevel(), s.s.playTimeSeconds(), s.s.statistic(163)->rawValue,
                             s.s.barnstormsFound(), s.s.statistic(164)->rawValue, s.s.stuntJumpsFound());
         }
         // the spec's worked example (level-50 / 78% snapshot)
+        bool workedPresent = false;
         for (auto& s : snaps) {
             if (s.s.playerLevel() == 50 && s.s.completionPercent() == 78) {
+                workedPresent = true;
+                std::printf("  #%d", id(s));
                 std::printf("  level-50 / 78%% snapshot: id 93=%d id 94=%d (aux %u) id 122=%d id 125=%d id 163=%d id 164=%d  (spec: 533, 367 (aux 93), 292, 292, 6, 8)\n",
                             s.s.statistic(93)->asInt(), s.s.statistic(94)->asInt(), s.s.statistic(94)->denominatorStatId,
                             s.s.statistic(122)->asInt(), s.s.statistic(125)->asInt(), s.s.statistic(163)->asInt(),
                             s.s.statistic(164)->asInt());
-                gate(s.s.statistic(93)->asInt() == 533 && s.s.statistic(94)->asInt() == 367 && s.s.statistic(122)->asInt() == 292 &&
+                sample(s.s.statistic(93)->asInt() == 533 && s.s.statistic(94)->asInt() == 367 && s.s.statistic(122)->asInt() == 292 &&
                          s.s.statistic(125)->asInt() == 292 && s.s.statistic(163)->asInt() == 6 && s.s.statistic(164)->asInt() == 8,
                      "spec's worked example for the level-50 snapshot reproduced");
             }
         }
+        if (!workedPresent) sample(false, "the spec's level-50 / 78% snapshot is present");
     }
 
-    std::printf("\nRESULT: %s (%d unexpected)\n", g_unexpected == 0 ? "ALL GATES AS EXPECTED" : "DISAGREEMENT", g_unexpected);
+    std::printf("\nhistorical sample: %d match, %d drift%s\n", g_sampleMatch, g_sampleDrift,
+                g_sampleDrift ? (g_strict ? " (counted as failures: --strict)" : " (reported only; Team A can refresh the spec from the ids above)") : "");
+    std::printf("RESULT: %s (%d unexpected)\n", g_unexpected == 0 ? "ALL GATES AS EXPECTED" : "DISAGREEMENT", g_unexpected);
     return g_unexpected == 0 ? 0 : 1;
 }
