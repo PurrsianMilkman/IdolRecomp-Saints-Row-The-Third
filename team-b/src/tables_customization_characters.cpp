@@ -69,6 +69,9 @@ std::vector<CharacterType> ParseCharacterTypesTable(const Document& doc) {
     std::vector<CharacterType> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Type"); row; row = NextSibling(wrap, row, "Type")) {
+        // LABEL: spec-tables-customization.md §13.2, [OPEN - desk review 2026-09-30]: the compare operator is
+        // not given (119 vs 120 rows kept); `>= 120` is our assumption. Real data has 96 rows, so it cannot
+        // change a result on real data.
         if (out.size() >= 120) break;  // hard cap 0x78 (§13.2)
         out.push_back(ParseCharacterType(row));
     }

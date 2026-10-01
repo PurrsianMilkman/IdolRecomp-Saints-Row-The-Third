@@ -1,0 +1,57 @@
+{
+  "title": "team-b: real-data regression after the fuzz fixes (container decode, clmesh, mesh vs HANDOFF baselines)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "validate_container_decode",
+        "validate_clmesh",
+        "validate_mesh"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "validate_container_decode",
+      "args": [
+        "{GAME}/packfiles/pc/cache/dlc1.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc2.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc3.vpp_pc",
+        "{GAME}/packfiles/pc/cache/vehicles.vpp_pc",
+        "{GAME}/packfiles/pc/cache/misc.vpp_pc",
+        "{GAME}/packfiles/pc/cache/misc_tables.vpp_pc",
+        "{GAME}/packfiles/pc/cache/interface_startup.vpp_pc",
+        "{GAME}/packfiles/pc/cache/interface.vpp_pc",
+        "{GAME}/packfiles/pc/cache/soundboot.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_clmesh",
+      "args": [
+        "{GAME}/packfiles/pc/cache/dlc1.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc2.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc3.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_mesh",
+      "args": [
+        "{GAME}/packfiles/pc/cache/dlc1.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc2.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc3.vpp_pc",
+        "{GAME}/packfiles/pc/cache/vehicles.vpp_pc",
+        "{GAME}/packfiles/pc/cache/sr3_city_0.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}

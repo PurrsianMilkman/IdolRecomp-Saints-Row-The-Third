@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 20 (names 426-450 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "homie_mission_lock",
+    "helicopter_set_large_dspiral",
+    "helicopter_set_dont_move_in_combat",
+    "helicopter_set_dont_explode_in_air",
+    "helicopter_land",
+    "helicopter_enter_dropoff",
+    "helicopter_clear_max_bank_angle",
+    "guardian_angel_start_zone_pinning",
+    "guardian_angel_release_attack_groups",
+    "guardian_angel_clear_zone_pinning",
+    "group_create_hidden_do",
+    "group_create_do",
+    "get_world_income_dollars",
+    "get_stag_active",
+    "get_localized_string_for_tag",
+    "get_closest_object",
+    "get_char_in_string",
+    "garage_vehicle_load_pending",
+    "garage_remove_vehicle",
+    "garage_get_garage_type",
+    "garage_clear_new",
+    "garage_can_delete",
+    "garage_can_customize",
+    "garage_back_to_customize",
+    "gang_customization_select_vehicle"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

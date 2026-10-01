@@ -621,6 +621,35 @@ int main(int argc, char** argv) {
                  {"name", "animation_state", "return_action", "player_combo_time_ms", "npc_combo_min_time_ms",
                   "npc_combo_max_time_ms"});
     reportSimple("aim_drift.xtbl", "Profile", {"name", "turn_speed", "bullet_miss", "explosive_miss"});
+    // aim_drift.xtbl: spec section 8 [OPEN / NEEDS-EXE] "`Recovery` in 0/20 real rows
+    // (section 18.6) and five undocumented elements in 20/20 (Team B 9.83)"; spec
+    // section 18.6 [corrected 2026-09-30]: row-level MinTime/MaxTime in 19 of the 20
+    // real Profile rows (was 20/20). Printed, not gated: the spec marks these OPEN.
+    if (const Item* it = findExact("aim_drift.xtbl")) {
+        Document doc = ParseDocument(it->data.data(), it->data.size());
+        auto rows = rowsOf(doc, "Profile");
+        long long n = static_cast<long long>(rows.size());
+        long long recoveryReports = 0, minTime = 0, maxTime = 0, penalties = 0, bonuses = 0, lagAmount = 0, lagTime = 0,
+                  vertOffset = 0;
+        for (const Node* r : rows) {
+            for (const std::string& d : sr3tables_weapons::ParseAimDriftProfile(r).diagnostics)
+                if (d == sr3tables_weapons::kAimDriftRecoveryEmptyDiagnostic) ++recoveryReports;
+            if (ChildText(r, "MinTime")) ++minTime;
+            if (ChildText(r, "MaxTime")) ++maxTime;
+            if (FindChild(r, "Penalties")) ++penalties;
+            if (FindChild(r, "Bonuses")) ++bonuses;
+            if (FindChild(r, "lag_amount")) ++lagAmount;
+            if (FindChild(r, "lag_time")) ++lagTime;
+            if (FindChild(r, "vertical_offset")) ++vertOffset;
+        }
+        std::printf("  aim_drift.xtbl REPORT '%s' (spec section 8 NEEDS-EXE; spec 18.6: Recovery in 0/20 rows): %lld / %lld rows\n",
+                    sr3tables_weapons::kAimDriftRecoveryEmptyDiagnostic, recoveryReports, n);
+        std::printf("  aim_drift.xtbl row-level MinTime: %lld / %lld, MaxTime: %lld / %lld (spec 18.6 current figure: 19/20)\n", minTime, n,
+                    maxTime, n);
+        std::printf("  aim_drift.xtbl undocumented (spec section 8 OPEN, 20/20): Penalties %lld, Bonuses %lld, lag_amount %lld, "
+                    "lag_time %lld, vertical_offset %lld (each / %lld)\n",
+                    penalties, bonuses, lagAmount, lagTime, vertOffset, n);
+    }
     reportSimple("aim_assist.xtbl", "Aiming", {"name", "steering", "slowing"});
     reportSimple("explosions.xtbl", "Explosion",
                  {"name", "panic_reaction", "radius", "decal_radius_override", "cone_angle", "fireradius",

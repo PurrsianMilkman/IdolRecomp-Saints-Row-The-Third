@@ -96,6 +96,12 @@
 //           its frequency, and the 530/6 split that frequency implies, are
 //           contradicted.
 //
+//           SPEC SYNCED 2026-09-30: spec-audio-format.md Sec4.2/Sec4.3/Sec10
+//           now mark the "usually zero" and 530/536 / "exactly 6" text
+//           superseded and cite the figures above (255/536 clean, 281
+//           broken, 91.8% extra != 0). The spec text quoted in this note is
+//           the pre-review wording, kept as history.
+//
 //           NOTE on which middle field is which: the chain rule adds `size`
 //           and `extra`, so it cannot distinguish {offset, extra, size} from
 //           {offset, size, extra} - both replay 536/536 identically. What
@@ -122,8 +128,9 @@
 // Sec4.2 states "Record 0's offset is always 0x800 - the first 0x800-byte
 // block after the header region". The general sentence is right; the literal
 // constant is not. Measured directly over the same 536-file population
-// (tools/validation/diag_media_bank_first_offset.cpp, all four mode-(b)
-// archives):
+// (tools/validation/diag_media_bank_first_offset.cpp, all four raw (flags
+// 0x0) audio archives - the spec's "mode-(b) archives", label corrected
+// 2026-09-30):
 //
 //   offset[0] == 0x800                                    278 / 536
 //   offset[0] == round_up(0x20 + recordCount*16, 0x800)   536 / 536

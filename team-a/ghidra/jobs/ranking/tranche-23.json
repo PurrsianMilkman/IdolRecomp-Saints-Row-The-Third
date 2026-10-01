@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 23 (names 501-525 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "dialog_pause_unpause",
+    "dialog_box_create_internal",
+    "cutscene_play_do",
+    "cutscene_play_check_done",
+    "crib_purchasing_unlock",
+    "crib_purchase_purchase_crib",
+    "crib_is_stronghold",
+    "crib_is_garage_disabled",
+    "crib_get_cash_stash",
+    "continuous_explosion_follow_target_remove",
+    "completion_call_callback",
+    "community_login_open",
+    "city_load_img_load_complete",
+    "cinema_editor_save_clip",
+    "character_use_synced_finishers",
+    "character_take_human_shield_do",
+    "character_set_over_the_shoulder",
+    "character_prevent_kneecapping",
+    "character_parachute_play_action",
+    "character_parachute_open",
+    "character_is_on_fire",
+    "character_is_combat_ready",
+    "character_fake_revival_start",
+    "character_check_resource_loaded",
+    "cell_playlist_save_list"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

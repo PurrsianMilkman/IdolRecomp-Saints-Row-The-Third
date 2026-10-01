@@ -148,6 +148,8 @@ std::vector<AudioLineTag> ParseAudioLineTagsTable(const Document& doc) {
 // ===========================================================================
 namespace {
 // spec 6: fixed priority order, first substring match wins; case-SENSITIVE (see tables.h's judgment-call note).
+// LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: case sensitivity of the helper
+// FUN_00EA48B0 is OPEN (never decompiled); case-sensitive is our assumption, no behaviour change.
 int findSuffixIndex(const std::string& name) {
     if (name.find('_') == std::string::npos) return -1;  // "searched only after first confirming an underscore"
     for (size_t i = 0; i < kAudioPersonaDemographicSuffixes.size(); ++i) {
@@ -381,6 +383,8 @@ std::vector<Commercial> ParseCommercialsTable(const Document& doc) {
 }
 
 int32_t ResolveCommercialEventValue(const std::string& eventName, const std::vector<CommercialEvent>& commercialEvents) {
+    // LABEL: spec-tables-audio-radio.md §16, [OPEN - desk review 2026-09-30]: the CRC-32 seed is not stated;
+    // seed 0 (NameHash's default) on both sides is our assumption.
     const uint32_t hash = sr3xtbl::NameHash(eventName);
     for (const CommercialEvent& ce : commercialEvents) {
         if (!ce.name || !ce.eventValue.present) continue;

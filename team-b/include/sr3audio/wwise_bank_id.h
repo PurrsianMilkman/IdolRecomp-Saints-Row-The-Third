@@ -61,7 +61,9 @@ struct WwiseBankHeaderPrefix {
 };
 
 // True when the first 4 bytes are the `BKHD` magic. Never throws - false for
-// a short buffer. Sec2: every entry across the four mode-(b) archives is
+// a short buffer. Sec2: every entry across the four raw (flags 0x0) audio
+// archives (the spec's "mode-(b) archives"; its mode letters were corrected
+// 2026-09-30 - 0x4803 is the real mode (b)) is
 // either this shape or the `VWSBPC` wrapper, 805/805 directory entries.
 bool hasWwiseBankMagic(ByteView content);
 

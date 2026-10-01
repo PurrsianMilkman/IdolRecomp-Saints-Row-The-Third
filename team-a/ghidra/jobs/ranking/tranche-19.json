@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 19 (names 401-425 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "main_menu_money_shot_check",
+    "main_menu_maybe_show_voice_dialog",
+    "main_menu_matchmaking",
+    "main_menu_continue",
+    "main_menu_check_open_nat",
+    "main_menu_check_online_privilege",
+    "main_menu_check_messages",
+    "main_menu_check_chat_priv",
+    "los_check_do",
+    "light_group_detach_from_camera",
+    "light_group_attach_to_camera",
+    "level_light_enable_all_do",
+    "is_syn_tower_destroyed",
+    "is_a_vehicle",
+    "inv_item_get_weapon_slot",
+    "inv_item_get_anim_group",
+    "inv_item_dual_wield",
+    "human_downed_set_mars_kb_interactable",
+    "human_being_revived_by",
+    "human_being_revived",
+    "hud_x_of_y_update",
+    "hud_x_of_y_add",
+    "hud_pop_screen",
+    "hud_get_proto_selection",
+    "homie_mission_unlock"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

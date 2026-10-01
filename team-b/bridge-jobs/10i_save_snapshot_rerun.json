@@ -1,0 +1,30 @@
+{
+  "title": "team-b: validate_save_snapshot re-run after the gate/sample split (format gates decide; Sec10.7 drift reported with snapshot ids)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "validate_save_snapshot"
+      ],
+      "timeout": 7200
+    },
+    {
+      "kind": "run",
+      "tool": "validate_save_snapshot",
+      "args": [],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_save_snapshot",
+      "args": [
+        "--strict"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}

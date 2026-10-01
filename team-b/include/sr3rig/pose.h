@@ -101,7 +101,11 @@ std::array<float, 3> rotate(const Rotation3& r, const std::array<float, 3>& v);
 // exactly the l-/r- bones that could have told them apart. This function
 // is kept as-is so every pre-Sec9.62 harness and render reproduces its
 // recorded numbers; the palette path uses sr3rig::rigToMeshSpaceInverted()
-// from sr3rig/bone_palette.h and is opt-in (`--bone-palette`).
+// from sr3rig/bone_palette.h and has been the default since HANDOFF
+// Sec9.63.9 (this line said "opt-in" until 2026-09-30). spec-vertex-format.md
+// Sec9 step 7b now also retracts (x, -y, -z) + direct indices in favour of
+// the palette + (-x, -y, -z) (spec-rig-format.md Sec11.15), so this function
+// is the RETRACTED reading: legacy and comparison use only.
 std::array<float, 3> rigToMeshSpace(const std::array<float, 3>& rigSpacePosition);
 
 // Computes one skinning matrix per bone for a hierarchical skeleton.

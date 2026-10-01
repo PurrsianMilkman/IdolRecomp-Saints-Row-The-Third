@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 13 (names 251-275 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "flee",
+    "flashpoint_mission_status",
+    "dialog_option_end_kbd_input",
+    "dialog_option_accept_kbd_input",
+    "dialog_close_finished",
+    "dialog_box_set_current_option",
+    "debris_flow_set_inactive",
+    "cutscene_was_skipped",
+    "cutscene_check_exiting",
+    "customization_swap_player_rig",
+    "cinema_editor_create_camera_zone",
+    "character_take_human_shield_check_done",
+    "character_set_cannot_exit_rc_vehicle",
+    "character_hidden",
+    "character_fake_revival_end",
+    "cellphone_dial",
+    "cellphone_animate_stop_do",
+    "cell_camera_enable",
+    "camera_script_enable",
+    "camera_script_disable",
+    "boss_battle_mars_killbane_active",
+    "boss_battle_kb_enable",
+    "autil_hud_mayhem_init",
+    "audio_suppress_ambient_player_lines",
+    "ambient_gang_spawn_enable"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

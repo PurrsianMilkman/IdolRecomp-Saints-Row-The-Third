@@ -1,0 +1,128 @@
+# Team B portable build: every platform-independent library, tool and
+# synthetic test suite under team-b/, built with GCC on Linux (the D3D11
+# renderer and sr3_viewer stay behind if(WIN32) in team-b/CMakeLists.txt, so
+# Linux skips them), plus an MSVC Release build of the whole tree on Windows.
+# The tests use synthetic inputs only - no game data.
+name: team-b portable build
+
+on:
+  push:
+    paths: ['team-b/**', '.github/workflows/team-b-portable.yml']
+  pull_request:
+    paths: ['team-b/**', '.github/workflows/team-b-portable.yml']
+  workflow_dispatch:
+
+jobs:
+  gcc:
+    name: GCC ${{ matrix.build_type }}${{ matrix.sanitize && ' + ASan/UBSan' || '' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_type: Release
+            sanitize: false
+          - build_type: Debug
+            sanitize: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      - name: Configure
+        run: |
+          FLAGS=""
+          if [ "${{ matrix.sanitize }}" = "true" ]; then
+            FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer"
+          fi
+          cmake -S team-b -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_FLAGS="$FLAGS" -DCMAKE_CXX_FLAGS="$FLAGS" \
+            -DCMAKE_EXE_LINKER_FLAGS="$FLAGS"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j4
+
+  msvc:
+    # MSVC (/EHsc, the CMake default; CMake's default Visual Studio generator,
+    # whichever version the runner image ships) Release on Windows: the whole tree,
+    # D3D11 renderer and sr3_viewer included, and every ctest suite (the
+    # lua_host_run integration test and the spec-stub refusal stress test
+    # among them). Added after bridge job 20260930T225845-team-b-jklk crashed
+    # with 0xC0000374 on MSVC only (Lua errors longjmp-ing across C++ frames).
+    name: MSVC Release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S team-b -B build -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure -j4
+
+  msvc-jklk-repro:
+    # Informational: rebuilds the refusal stress test against the sources of
+    # a403a75 (the commit bridge job jklk crashed on, before fix 88cbe87) to
+    # see whether MSVC reproduces the heap corruption. Always green; the
+    # outcome is the REPRODUCED / NOT REPRODUCED line in the log.
+    name: MSVC jklk repro (a403a75 sources, informational)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Swap in a403a75's library sources (and its C-language Lua build)
+        # Lua has been built as C++ since 2010a95; jklk ran with Lua built as C
+        # (longjmp), so the Lua build file is taken from a403a75 as well.
+        shell: bash
+        run: git checkout a403a75 -- team-b/src team-b/include team-b/third_party/lua51/CMakeLists.txt
+      - name: Configure
+        run: cmake -S team-b -B build -A x64
+      - name: Build the stress test
+        run: cmake --build build --config Release --target sr3luahost_refusal_stress_tests
+      - name: Run it
+        # PowerShell keeps the full 32-bit exit code (a heap corruption is
+        # 0xC0000374); a missing executable fails this step instead of being
+        # misread as a crash.
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter sr3luahost_refusal_stress_tests.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error "stress test executable not found under build/"; exit 1 }
+          Write-Host "running $($exe.FullName)"
+          & $exe.FullName 300
+          $code = $LASTEXITCODE
+          $hex = '0x{0:X8}' -f $code
+          if ($code -eq 0) { Write-Host "jklk repro: NOT REPRODUCED (exit 0)" }
+          else { Write-Host "jklk repro: REPRODUCED (exit $code = $hex)" }
+          exit 0
+
+  fuzz-smoke:
+    name: libFuzzer smoke (Clang, ASan/UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja and the libFuzzer runtime
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-18 libclang-rt-18-dev
+      - name: Configure
+        run: |
+          FLAGS="-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined"
+          cmake -S team-b -B build-fuzz -G Ninja -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DCRREISH_FUZZ=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_FLAGS="$FLAGS" -DCMAKE_CXX_FLAGS="$FLAGS"
+      - name: Build
+        run: cmake --build build-fuzz
+      - name: Replay fixed-bug reproducers
+        run: |
+          for d in team-b/fuzz/regressions/*/; do
+            t=$(basename "$d")
+            ./build-fuzz/fuzz_$t -malloc_limit_mb=1024 -rss_limit_mb=2048 "$d"*
+          done
+      - name: Fuzz each target for 20 seconds
+        run: FUZZ_JOBS=4 team-b/fuzz/run_fuzz.sh build-fuzz 20 fuzz-work
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz-work/artifacts

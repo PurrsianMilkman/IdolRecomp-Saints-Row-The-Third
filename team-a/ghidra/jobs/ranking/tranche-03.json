@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 03 (names 1-25 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "character_dont_regenerate",
+    "character_clear_combat_move",
+    "boss_battle_matt_set_player_as_avatar",
+    "boss_battle_matt_hide_wings",
+    "auto_pickup_enable",
+    "audio_ambient_emitter_resume",
+    "audio_ambient_emitter_pause",
+    "ai_suggest_action",
+    "ai_do_scripted_advance",
+    "vehicle_stop_do",
+    "vehicle_set_special_override_never_ghost",
+    "vehicle_set_malfunctioning",
+    "vehicle_set_invulnerable_to_player_explosives",
+    "vehicle_set_2d_tank_controls",
+    "vehicle_rc_get_signal_strength",
+    "vehicle_pathfind_to_do",
+    "vehicle_is_vtol",
+    "vehicle_exit_group_do",
+    "vehicle_exit_group_check_done",
+    "vehicle_disable_explosion_and_damage_vfx",
+    "vehicle_component_detach",
+    "vehicle_clear_all_radio_locks",
+    "turn_to_do",
+    "teleport_vehicle_to_object",
+    "team_make_unfriendly"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

@@ -105,11 +105,15 @@ NormalMapSettings ParseNormalMapSettings(const Node* row) {
     n.bodyTypeIndex = MatchName(n.name, kBodyTypeNames.data(), kBodyTypeNames.size());
     const Node* slidersWrap = FindChild(row, "Morph_Sliders");
     for (const Node* s = FindChild(slidersWrap, "Morph_Slider"); s; s = NextSibling(slidersWrap, s, "Morph_Slider")) {
+        // LABEL: spec-tables-customization.md §15.1, [OPEN - desk review 2026-09-30]: no compare operator is
+        // given for either cap below (4 sliders/type, 8 keys/slider); both `>=` are our assumption. The
+        // reviewer's finding is that only the normals cap (materials.cpp, §9.2) can change a real result.
         if (n.morphSliders.size() >= 4) break;  // cap 4 sliders/type (§15.1)
         MorphSlider slider;
         slider.sliderName = OptText(s, "Slider_Name");
         const Node* keysWrap = FindChild(s, "Slider_Keys");
         for (const Node* k = FindChild(keysWrap, "Slider_Key"); k; k = NextSibling(keysWrap, k, "Slider_Key")) {
+            // LABEL: spec-tables-customization.md §15.1, [OPEN - desk review 2026-09-30]: see the note above.
             if (slider.sliderKeys.size() >= 8) break;  // cap 8 keys/slider (§15.1)
             SliderKey key;
             key.sliderPosition = ReadFloatAlways(k, "Slider_Position");

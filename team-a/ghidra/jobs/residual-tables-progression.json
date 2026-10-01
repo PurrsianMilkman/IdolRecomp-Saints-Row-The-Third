@@ -1,0 +1,62 @@
+{
+ "team": "team-a",
+ "title": "Team A: tables-progression \u2014 residual NEEDS-EXE next dumps (2026-10-01 re-derivation)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/func1",
+    "func",
+    "depth:1",
+    "maxfuncs:6",
+    "maxinsn:2000",
+    "0x00dab850",
+    "0x00daba70",
+    "0x00975170",
+    "0x006174c0",
+    "0x00dc5a10",
+    "0x00713bb0",
+    "0x009dc780",
+    "0x007cfb60",
+    "0x00b97340",
+    "0x00712330",
+    "0x00712380",
+    "0x00710cb0",
+    "0x0071b070",
+    "0x00b982b0",
+    "0x00b99810",
+    "0x0071c6e0",
+    "0x00bb6400",
+    "0x00ba5da0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/xref",
+    "xref",
+    "xrefs:200",
+    "0x0118cf40"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/range",
+    "range",
+    "0x01312708-0x01312720",
+    "0x022cd108-0x022ce000"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

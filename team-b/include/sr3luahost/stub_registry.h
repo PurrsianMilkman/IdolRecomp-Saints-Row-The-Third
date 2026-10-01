@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // Generic, self-logging Lua stub registration - the scaffold's core piece
 // (see the task this was built for: a Lua 5.1 host scaffold registering
 // every real engine-provided name from the current tagged registration

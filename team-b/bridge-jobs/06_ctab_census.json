@@ -1,0 +1,27 @@
+{
+  "title": "team-b: CTAB constant census over every shipped D3D9 shader (name -> register set/index/count, samplers included)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "ctab_census"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "ctab_census",
+      "args": [
+        "{OUT}",
+        "--cache-dir",
+        "{GAME}/packfiles/pc/cache"
+      ],
+      "timeout": 14400
+    }
+  ],
+  "collect": [
+    "*.tsv",
+    "*.txt"
+  ]
+}

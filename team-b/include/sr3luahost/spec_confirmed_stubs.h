@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The 22 Lua-visible names this task promotes from stub_registry.h's
 // generic "log and return nil" behavior to real, spec-confirmed behavior,
 // backed by engine_state.h (13 as of the original pass below, +9 more from
@@ -30,9 +37,38 @@
 // lua_spec_confirmed_stubs.cpp's own functions 14-22 for each one's full
 // citation/reasoning, and engine_state.h for the new fields/structs
 // (CharacterState::onRevivedCallback/minimapIcons/objectIndicators;
-// EngineState::vehicleStoreActive_/isHost_/hasLocalPlayer_/
+// EngineState::vehicleStoreActive_/hasLocalPlayer_/
 // hudInventoryRefreshCount_/tutorialAdvanceCounts_/
 // qteAnimationTriggerCallback_/coopJoinType_) backing them.
+//
+// Cloud phase (2026-09-30): +1, zscene_is_loaded (spec-lua-api-behaviour.md
+// Sec14.23), one of the HANDOFF Sec9.143 mission-driving blockers. Its OPEN
+// per-record branch is a labelled stub - see its own doc comment. The other
+// Sec9.143 blockers (fade_is_fully_faded_out/_in, vint_is_std_res) have no
+// behaviour spec yet and stay generic stubs (requested from Team A).
+//
+// Batch 2026-10-01: +9 from spec-lua-api-behaviour.md Sec26.24-Sec26.28 -
+// fade_in, fade_is_fully_faded_out, fade_is_fully_faded_in, sfx_faded_in,
+// Screen_fade_transition_complete (screen fade, Sec26.24), zscene_prep
+// (Sec26.25), game_get_is_host (Sec8.27/Sec26.28), vint_is_std_res and
+// vint_get_safe_frame (Sec26.26); zscene_is_loaded, fade_out, sfx_faded_out,
+// coop_is_active, Completion_is_client, tutorial_advance and
+// store_vehicle_get_state follow the corrected specs. Registering
+// Screen_fade_transition_complete in a state also makes that state the
+// screen_fade UI state and runs the fade init there (see the .cpp).
+//
+// IMPLEMENTED PRE-REVIEW, PENDING EXE RE-CLEARANCE (2026-09-30): the desk
+// review now marks spec-lua-api-behaviour.md §1-§5 "NOT yet cleared for
+// implementation". Six functions here come from those sections and were
+// implemented pre-pause, when they counted as reviewed:
+//   game_UI_audio_play (§2.2, NEEDS-EXE), game_get_key_name (§2.3,
+//   NEEDS-EXE), coop_is_active (§3.1, NEEDS-EXE), set_ignore_ai_flag
+//   (§3.4, NEEDS-EXE: 0x004e2050's `this` and the read bit's mask),
+//   ai_add_enemy_target (§3.9, DESK-PASS), on_take_damage (§3.13,
+//   DESK-PASS).
+// They are kept working (manager decision pending; option (a) = label, no
+// behaviour change) and nothing new is implemented from §1-§5 until Team A's
+// executable re-derivation clears it.
 //
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
@@ -94,5 +130,20 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
 // test) can filter them out of the generic tagged-registration-list split
 // without duplicating the literal list a second time.
 const std::vector<std::string>& specConfirmedStubNames();
+
+// Bare globals registered outside the tagged registration list
+// (spec-lua-bindings.md Sec13.2/Sec16.3/Sec16.4: the 24 names registered by
+// 0x00e0f900). Answered 2026-10-01 (jobs 20261001T020218-team-a-bgcx,
+// 20261001T114555-team-a-lgdz): all 24, into BOTH states, before any preload.
+// Each row is also in specConfirmedStubNames(); Host registers the rows
+// through registerBareGlobals() (bare_globals.h) into the states they name,
+// before every other registration.
+struct SpecBareGlobal {
+    std::string name;
+    bool gameplay = false;
+    bool ui = false;
+    std::string spec; // section that confirms the state(s)
+};
+const std::vector<SpecBareGlobal>& specBareGlobals();
 
 } // namespace sr3luahost

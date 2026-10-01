@@ -42,7 +42,12 @@ namespace {
 std::vector<uint8_t> readFile(const std::string& path) {
     std::vector<uint8_t> buf;
     FILE* f = nullptr;
+#ifdef _MSC_VER
     if (fopen_s(&f, path.c_str(), "rb") != 0 || f == nullptr) return buf;
+#else
+    f = std::fopen(path.c_str(), "rb");
+    if (f == nullptr) return buf;
+#endif
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);

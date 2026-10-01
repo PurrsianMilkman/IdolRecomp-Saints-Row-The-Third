@@ -1,0 +1,147 @@
+{
+  "title": "team-b: MSVC build + synthetic suites, part 1/3 (19 suites; checks the portable-build change did not break Windows)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "ALL_BUILD"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "vpp_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "content_validation_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3save_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3asm_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3fxo_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3effects_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3xtbl_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_trafficai_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_weapons_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_progression_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_environment_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_animation_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_audio_radio_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_ui_controls_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_vehicle_world_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_diversions_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3tables_customization_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3d3d9bc_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "sr3d3d9bc_ctab_tests",
+      "args": [],
+      "timeout": 600,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}

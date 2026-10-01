@@ -1,0 +1,99 @@
+{
+ "team": "team-a",
+ "title": "Team A: \u00a727/\u00a728 residual OPEN items \u2014 next dumps from the 2026-10-01 re-derivation",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func1",
+    "func",
+    "depth:1",
+    "maxfuncs:6",
+    "maxinsn:2000",
+    "0x00a3c9d0",
+    "0x008788e0",
+    "0x0088e690",
+    "0x0088dfd0",
+    "0x0088e040",
+    "0x00870810",
+    "0x00a9b080",
+    "0x00a9afd0",
+    "0x00853ea0",
+    "0x006f8370",
+    "0x00b94ff0",
+    "0x007c3310",
+    "0x007c18a0",
+    "0x007c2ac0",
+    "0x007c3d80",
+    "0x007c4c90",
+    "0x0086f1b0",
+    "0x008779b0",
+    "0x00877860",
+    "0x006fd4f0",
+    "0x006fbc90",
+    "0x00778bc0",
+    "0x00dbdc90",
+    "0x00dbe2a0",
+    "0x00dbe050",
+    "0x00ad3b40",
+    "0x00ad3c50",
+    "0x00ad4040",
+    "0x006d2910",
+    "0x00614cb0",
+    "0x00d34d40",
+    "0x00943a20",
+    "0x004b1b90",
+    "0x00b98d00",
+    "0x005eea30",
+    "0x005e8fb0",
+    "0x007161a0",
+    "0x005f1690",
+    "0x005f1750",
+    "0x00a79470"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func2",
+    "func",
+    "depth:1",
+    "maxfuncs:6",
+    "maxinsn:2000",
+    "0x004dcf00",
+    "0x0062a190",
+    "0x00a281e0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/glob",
+    "xref",
+    "xrefs:200",
+    "0x02289c28",
+    "0x02289b94",
+    "0x02282d10",
+    "0x02282d14",
+    "0x014c2d10",
+    "0x024d78e0",
+    "0x012fcadc",
+    "0x0290ceca",
+    "0x0229a317",
+    "0x014ff6c1",
+    "0x014ff6c2",
+    "0x012f3b48"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

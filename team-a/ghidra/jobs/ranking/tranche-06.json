@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 06 (names 76-100 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "vehicle_hidden",
+    "vehicle_forced_corpse_removal_enabled",
+    "vehicle_exit_guardian_angel",
+    "vehicle_enter_guardian_angel",
+    "vehicle_enter_group_do",
+    "vehicle_enter_group_check_done",
+    "vehicle_enter_do",
+    "vehicle_engine_start",
+    "vehicle_engine_check_running",
+    "vehicle_disable_weapon_physics",
+    "vehicle_delete_all_corpses",
+    "vehicle_anim_playing",
+    "vcust_purchase_wheels",
+    "vcust_preview_wheel_sizing",
+    "vcust_preview_palette",
+    "vcust_preview_color",
+    "tutorial_visible",
+    "tutorial_get_case",
+    "team_make_hostile",
+    "store_weapon_purchase_ammo",
+    "store_weapon_process_post_bg_covered",
+    "store_weapon_change_weapon",
+    "store_vehicle_selection_should_lock_controls",
+    "store_vehicle_retrieve_car_and_exit",
+    "store_vehicle_change_mode"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

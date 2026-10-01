@@ -1,0 +1,88 @@
+{
+ "team": "team-a",
+ "title": "Team A: Team B mission-run refusals (job tkjl) \u2014 co-op session state (lua-api \u00a73.1/\u00a78.27), tutorial table (\u00a710.4/\u00a76.19), vehicle-store flag (\u00a710.1): initial values and writers",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/globals",
+    "xref",
+    "0x024d8534",
+    "0x0151d608",
+    "0x0151d60c",
+    "0x0151d5a8",
+    "0x012f5930",
+    "0x022cdf08"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/coop",
+    "func",
+    "depth:1",
+    "maxfuncs:12",
+    "maxinsn:900",
+    "0x0087ba20",
+    "0x00a42bd0",
+    "0x00681370",
+    "0x00877a90",
+    "0x008440a0",
+    "0x007bfbc0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/tutorial",
+    "func",
+    "depth:1",
+    "maxfuncs:12",
+    "maxinsn:900",
+    "0x00717780",
+    "0x00716440",
+    "0x007169e0",
+    "0x00716360",
+    "0x00a600b0",
+    "0x00a603f0"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/store",
+    "func",
+    "depth:1",
+    "maxfuncs:8",
+    "maxinsn:900",
+    "0x00815120",
+    "0x005fa760"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/callers",
+    "xref",
+    "0x0087ba20",
+    "0x00717780",
+    "0x00716440",
+    "0x00815120"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

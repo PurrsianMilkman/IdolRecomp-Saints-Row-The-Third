@@ -3,6 +3,419 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## ☁ CLOUD PHASE (un-paused 2026-09-30, Team B session on `claude/crreish-team-b`) — read this first
+
+The pause banner below is historical (see `TEAMS.md`). Newest entry first.
+
+### 2026-09-30, cloud stretch 1
+
+**Done (all pushed, evidence in each commit message):**
+1. **Portable build + CI.** Every non-`WIN32` target now builds with GCC 13.3 on Linux; **ctest 42/42 pass**
+   (43/43 after `sr3vintdoc` below), Release and Debug+ASan/UBSan, no sanitizer reports.
+   `.github/workflows/team-b-portable.yml` runs both configs on every push touching `team-b/`. Fixes:
+   `zlibstatic` is built directly from the vendored sources (upstream's `add_subdirectory` needed
+   `win32/zlib1.rc`/`zlib.map`, which the public export dropped, so configure failed on **every**
+   platform, Windows included, from this repo); `user32` linked only on `WIN32`; `game_get_key_name`'s
+   `GetKeyNameTextW` path behind `_WIN32` (off Windows it returns `""`, the existing failed-lookup
+   result); `fopen_s` only under `_MSC_VER` in 3 probe tools. **MSVC re-verified by bridge** (not in the
+   cloud): jobs `01a/01b/01c` (`ymee`/`jpsf`/`qqyx`, at `d0e6843`) — 42/42 suites pass under MSVC 17.14 (stretch 5b).
+2. **`zscene_is_loaded`** (§9.143 blocker, `spec-lua-api-behaviour.md` §14.23): CONFIRMED two-tier
+   dispatch implemented in `sr3luahost` with opaque `EngineState` fields and test-only setters; the OPEN
+   per-record branch is a labelled stub returning `false` and is counted (`lua_host_run` prints
+   `zscene_is_loaded_open_branch_hits`). 20 new checks, 5 mutants all killed. **It will not by itself
+   unblock the busy-poll**: nothing in the host sets the scene state yet, because the writers
+   (`zscene_prep`'s load sequence) and initial values are not specced — see request 2.
+   `lua_host_run` now finds its `tools/` inputs next to the registration list, so it runs from the bridge.
+3. **`sr3vintdoc`** (§C brief): CONFIRMED-scope reader (`include/sr3vintdoc/vint_doc.h` top note lists
+   exactly what is and isn't implemented), `tests/synthetic_vintdoc_test.cpp`, and
+   `tools/vintdoc_validate.cpp` (reproduces the spec's population figures per archive; scores 12
+   candidate walk layouts as a labelled HYPOTHESIS test with ambiguity counts). **No full-document walk
+   yet** — request 3. Smoke-tested end to end on a synthetic `.vpp_pc`. The pre-pause probe tools in
+   `tools/validation/probe_vintdoc_*.cpp` were read: they hypothesised `+0x16` = absolute offset of the
+   critical-resource section but recorded no result; the validator's grid includes that candidate (`A-*`).
+
+**Bus live (2026-09-30, manager):** `bridge_client.py setup` done (fetches only `team-b*`/`status*`; no Team A
+branch on disk). Integration branch merged (spec-lua-bindings §17 rewording, values unchanged, no code impact).
+**Submitted, queued until the PC agent reports in** (all from `d0e6843`): `20260930T213035-team-b-ymee` (01a),
+`20260930T213037-team-b-jpsf` (01b), `20260930T213040-team-b-qqyx` (01c), `20260930T213043-team-b-knyf` (02
+mission re-run), `20260930T213047-team-b-zlbw` (03 vintdoc sweep). Read results with
+`python3 bridge/bridge_client.py wait <id>` / `show <id>`.
+**Earlier:** the bus repo wasn't set up, so nothing had run on real data. Jobs queued in
+`team-b/bridge-jobs/` (see its README; all pass `pc_agent.py`'s own `validate()`): `01a-c` MSVC build +
+42 suites, `02` mission-driving re-run, `03` `sr3vintdoc` sweep over `interface_startup.vpp_pc` +
+`interface.vpp_pc`. **Job 03's `--dump` JSON contains game text: read it from the bus, never commit it.**
+
+### 2026-09-30, cloud stretch 1b: consistency-review merge (`b243443`, 44 spec copies)
+
+Changelogs checked for the specs current code depends on (lua-api-behaviour, lua-bindings, vint-doc-format,
+vpp-container, xtbl-format, audio-format). **One code impact:** `spec-lua-api-behaviour.md` §4.1 now marks
+`0x00ea2596`'s rounding mode OPEN (the §2/§3/§3.9 descriptions disagree); 8 stub call sites relied on it and
+3 comments called banker's rounding CONFIRMED. All now go through `roundToIntOpenMode()` (CHOSEN
+round-half-to-even, unchanged behaviour) — `f35b1ab`. Documentation-only: two `sr3audio` header comments said
+"four mode-(b) archives" (the corrected spec says those are the four raw `0x0` archives); fixed. No impact:
+§14.23 (`zscene_is_loaded`) unchanged; vint-doc (only §8 item 6 marked resolved); vpp-container/xtbl
+(supersession annotations; `sr3xtbl` already treats whitespace-only text as absent, so the 2-space
+indentation note changes nothing); lua-bindings (cross-refs, §17 rewording). ctest 43/43 after the merge.
+
+### 2026-09-30, cloud stretch 1c: self-containment spec sync (`f29438b`, 32 specs)
+
+Merged (fast-forward). **No code impact, and none of this stretch's stubbed gaps closed**:
+`spec-vint-doc-format.md` is not in the sync; `spec-lua-api-behaviour.md`/`spec-lua-bindings.md` restate 0 facts
+(HANDOFF-reference repoints only), so fade/zscene/`vint_is_std_res`/the `0x00ea2596` rounding mode/the three
+vint_doc walk gaps all remain open requests. Restated facts in the other specs (physics material records +
+`+0x78` gated pair, vehicle-geometry high16, rig palette retraction, render-pipeline D3D9 notes) either describe
+what the readers already implement or concern nothing implemented; e.g. `sr3clmesh` already follows
+§4.4.6(f), which superseded the restated `kGatedPairBytes` placeholder. ctest 43/43.
+
+### 2026-09-30, cloud stretch 2: `verdict_stub_hits_with_missions.tsv` worked down (manager task)
+
+Every still-stubbed name in the ranking was checked against `spec-lua-api-behaviour.md`.
+**Batch 1 implemented** (`sr3luahost`, 38 new checks, 9/9 mutants killed): `set_mission_author` (§6.1, inert),
+`fade_out` (§2.9: colour setter, `screen_fade_do` request recorded with ms duration + alpha 1.0, opcode-0x53
+counted), `mission_end_silently` (§15.23, **partial**: only the CONFIRMED unconditional mission-flags-word write;
+the rest is gated on unmodelled state).
+
+Mission-path re-run submitted at `4591785`: job `20260930T215300-team-b-tdpr` (supersedes `knyf` for comparison).
+
+**Skipped, CONFIRMED behaviour depends on engine state the host doesn't model** (not faked):
+- `fade_in` (§8.13): queues only "when not already idle/faded" — needs the fade state machine (request 1).
+- `zscene_prep` (§8.21): needs the scene table and the entry's "kind" field (request 2).
+- `audio_object_post_event` (§2.4): success depends on the Wwise string→ID resolver (a stated gap in
+  `game_audio_get_audio_id` too); the object/position resolvers are unmodelled.
+- `player_controls_disable` (§7.22): whether the bit is written locally depends on the replicated-apply gate
+  `0x008addb0`, and §7.7 says which branch dominates in single-player "is not established".
+- `mesh_mover_hide`/`_show` (§9.16/§9.17): push a boolean whose value the spec never states; mesh movers,
+  the `0x006434a0` resolver and the secondary renderable are unmodelled.
+- `city_zone_swap` (§1.9): debug/dev gates + zone-streaming entries unmodelled.
+- `character_ragdoll_set_last_resort_position` (§7.18), `traffic_disable_lanes` (§12.19),
+  `sidewalk_disable_nodes` (§15.3), `party_dismiss_all` (§14.17), `customization_outfit_wear` (§13.4),
+  `mission_autosave` (§17.23), `mission_set_next_mission` (§25.4): each acts only through a resolver, roster,
+  outfit table, save chain or mission-system gate the host doesn't model; no Lua-visible result.
+
+**Skipped pending a decision — CONFIRMED but in §27/§28 (ranks 551-650)**, which carry no adversarial-review
+marker (the pre-pause rule was not to implement from unreviewed sections): `game_get_coop_friendly_fire`
+(§27.16, pure remap 0→2/1→0/2→1 of a raw mode) and `crib_weapon_add_disable` (§28.14, shared setter with 0).
+Both are trivial once cleared.
+**Manager decision 2026-09-30: §27/§28 NOT cleared** — don't implement from them until Team A's adversarial review lands (requested). Batch 1 merged to integration. Standing by for specs / PC job results.
+
+**No behaviour spec at all** (request 5 below): the `vint_*` names in the ranking —
+`vint_internal_dataresponder_request` (282M calls) and `vint_dataresponder_finished` (282M, a UI busy-poll
+pair as big as the fade one), `vint_set_property`, `vint_get_property`, `vint_get_time_index`,
+`vint_get_safe_frame`, `vint_dataitem_get`, `vint_object_first_child`, `vint_object_clone` — plus
+`pause_map_stag_current_district_control`, `mip_streaming_pause`, `object_spawn_pause`,
+`customization_create_character`, `customization_creation_is_open`, `customization_screen_is_ready`,
+`player_parachute_has_backpack`.
+
+### 2026-09-30, cloud stretch 3: manager's standing no-data queue (fuzzing, diff tooling, OPEN-state scaffolding, Linux tools)
+
+**Item 1, fuzzing — DONE (`49c4782`).** `team-b/fuzz/` (see its README): 16 libFuzzer harnesses (ASan/UBSan) for
+every reader of untrusted bytes, seeded from the synthetic suites by link-time `--wrap` capture (tests unchanged),
+CI `fuzz-smoke` job (replays `fuzz/regressions/`, then 20 s/target). **5 real bugs, one class — allocation sized
+by an untrusted count — all fixed with a unit test that fails without the fix** (`tests/alloc_guard.h`):
+`MaterialBlock::parse` (~94 GB), `Container::decompressEntry` (~3 GB; now bounded by DEFLATE's 1032:1 maximum),
+`Container` ctor (~1.4 GB), `MeshBlock::decodeChannel` (~500 GB, and a zero stride looped `elementCount` times —
+now a stride shorter than the layout's fixed fields is refused with `FormatError`). **After all five fixes, a 120 s/target pass over all 16 targets found 0 (≈28M executions).** **The mesh stride refusal is
+the one behaviour change a real file could in principle hit**; bridge job 05 re-runs `validate_mesh`/
+`validate_clmesh`/`validate_container_decode` against HANDOFF's baselines to confirm it doesn't.
+
+**Item 2, diff tooling.** `tools/bridge_diff.py` (+ `tests/bridge_diff_test.py`, in ctest): before/after
+Markdown of mission-drive per-mission changes, summary `key=value` lines, stub-hit deltas and vint_doc per-file
+layout results. Usage in `bridge-jobs/README.md`. Jobs 04 (cache listing) and 05 (real-data regression) written. **Submitted at `baecf76`:** 04 `…-hvcv`, 05 `…-dzdq`, mission re-run `…-grso` (all `20260930T2248xx-team-b-*`).
+
+**Item 3, OPEN-state scaffolding.** `include/sr3luahost/open_state.h`: `OpenValue<T>` / `OpenValueMap<T>` /
+`OpenBits32` — a named engine global (address + spec section) that starts OPEN and throws `OpenStateError` on
+read until set. Stubs turn that into a Lua error naming the global, counted in the HitLog as
+`<name>:OPEN_STATE`. **This replaced my own earlier chosen defaults** (zscene busy flag false / state code 0 /
+empty scene table; mission-flags word 0), which the manager's rule ("no invented initial values") forbids:
+`zscene_is_loaded` now errors "0x0153b556 is OPEN" instead of looping on a made-up `false`, so the next mission
+run will say exactly which value blocks it. The mission-flags word knows only bits 0x4/0x10. The six fade
+state-machine globals §26.23 names are declared; `sfx_faded_out` (§26.9, `0x012e6aa4 == 3`) implemented on them.
+Earlier sessions' stand-in defaults (`coopActive_`, `isHost_`, `hasLocalPlayer_`, `coopJoinType_`,
+`vehicleStoreActive_`, EngineState §10.x) are **not** converted yet — they predate this rule and change mission
+behaviour; listed here for the manager to decide.
+
+**Item 4, Linux tools.** Every `tools/validation/*.cpp` harness plus `clmesh_lead_probe` is now a CMake target
+(`CRREISH_VALIDATION_TOOLS`, default ON — the portable equivalent of `build_one.bat`, linking every reader
+library), so the PC bridge can build any of them by name and the Linux CI job compiles all 105. Windows-only
+(D3D/`sr3_viewer`): `d3dctest_semantics{,_sm4}`, `validate_d3d9bc_hlsl{,_sm4}_population`,
+`validate_peg_population`, `golden_scene_check`, `tree_baseline_render`, the `prototype_*` renderers.
+
+**Registration corrections (manager, from the specs):**
+- **`vint_*` (§13.7):** the host built from the 1,490 list already registers all 58 `vint_*` names (55 from
+  §13.7's registrar) as stubs in the UI state only — no fix needed. The §9.143/§9.108 wording "`vint_is_std_res`
+  genuinely missing" came from the older 1,430 roster; and the committed
+  `results/verdict_stub_hits_with_missions.tsv` shows all 739 `vint_is_std_res` calls in the UI state with
+  **0 from the mission pass**, so "the 9/49 missions uniformly hit `vint_is_std_res` next" is not supported by
+  that file. The queued mission re-runs will settle it (per-mission `first_error_message`).
+  **[Settled by `knyf`, stretch 5c: the 9 DO hit it, as a nil global in the gameplay state; this entry's
+  "not supported" was wrong. Likely a host artifact of running OPEN-tagged `vint_lib.lua` in both states.]**
+- **§13.5 dual registration:** confirmed all 8 are in both states (host override of the tag file);
+  `tools/LUA_ROSTER_NOTES.md` now annotates the tag files/tsvs; pinned by the new
+  `tests/synthetic_luahost_roster_test.cpp` (real 1,490 list).
+- **24 bare globals (§13.2/§16.3):** not registered, flagged PENDING in the notes and the roster test — not
+  treated as Lua stdlib.
+- **Hook names (§4 desk review):** every Group 1 hook now carries an evidence label; 42 rest on §4's scan
+  only (pending recheck), 5 are §14.3-refuted (still fired, labelled). Output column added to
+  `verdict_hook_fires_by_hook.tsv`.
+
+### 2026-09-30, cloud stretch 4: invented engine values removed; review-status labels
+
+**Invented values removed (`a403a75`, manager ruling "no invented values, even old ones").** Every engine value
+a stub reads that no spec gives is now OPEN state (co-op session, host check, local player, vehicle store, co-op
+join type, default vint document, per-character ignore-AI/state enum/threat ref/hit points/override, tutorial
+and object resolution) and refuses reads with a Lua error naming it; the always-true returns and the invented
+0/"" results are gone. All 27 spec stubs go through one `openGuard<>` trampoline. Opaque handle counters and
+request logs are kept as stand-ins (identities/recordings, not engine values). **Measured, not guessed:** mission
+re-run before = `20260930T224835-team-b-grso` (`baecf76`), after = `20260930T225845-team-b-jklk` (`a403a75`);
+compare with `tools/bridge_diff.py`.
+
+**§1-§5 desk review:** the 6 already-implemented functions from those sections (game_UI_audio_play §2.2,
+game_get_key_name §2.3, coop_is_active §3.1, set_ignore_ai_flag §3.4 — NEEDS-EXE; ai_add_enemy_target §3.9,
+on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and labelled
+(`spec_confirmed_stubs.h`) — **manager approved option (a), 2026-09-30:** each is "implemented pre-review, pending exe re-clearance"; when Team A's re-derivation lands, a changed spec gets fixed and a refuted one reverts to a labelled stub. Nothing new from §1-§5.
+
+**Spec sync `982e688` (5 format specs):** vint-doc answers walk question (a) as HIGH CONFIDENCE (`+0x16` = absolute section offset), (b)/(c) HYPOTHESIS — `vint_doc.h` notes updated, full walk stays behind the validator's labelled grid (job 03 settles it). Effects: `sr3effects` already did not enforce `root+0x38 == size-root` (its own 1,468/1,812 measurement caused the downgrade; one stale "CONFIRMED" comment fixed) and never used the refuted abstract-base-class idea. Render pipeline: the 7 sites filling `projTM` (c28) / `world2view` (c48) — `sr3_viewer` vehicle path and 6 prototypes — are labelled HYPOTHESIS-based, STATE row added; `ctab_census`'s summary now lists which names sit at VS c28/c48 across every shader (job 06).
+
+**Fuzz coverage (`7891af0`):** the four lowest-coverage harnesses now drive the decode paths, not just `parse()` — coverage fxo 37→259, anim 53→118, texture 131→241, geometry 109→148 edges; a 5-minute run each with value profiling found 0 issues.
+
+**Bridge-results readiness (`b128350`):** `bridge_diff.py` exercised end to end on a real before/after pair of `lua_host_run` builds (`baecf76` vs HEAD) over a synthetic cache; it now shows first-error text, ignores `elapsed_seconds`, and rolls up `OPEN_STATE:` hits. Every queued job's outputs checked against the agent's 4 MB/file and 24 MB/job upload limits (`bridge-jobs/README.md`): `ctab_census` now shards its constants table (job 06 re-submitted as `…-epre`; ignore `nxrt`/`bujl`); `lua_host_run`'s hook-detail TSV (~34 MB) is skipped by design.
+
+### 2026-09-30, cloud stretch 5: spec syncs, lua_host_run integration test, no-palette refusal
+
+- Merged spec syncs: fxo/zone/geometry/save (`84e2ef6`), save/vertex/audio/foliage (`dc22cd1`).
+- Zone: "97 of 928" comments now cite the 1,002/1,002 tiling, 115 padded blocks (§10.8) (`c8711c6`).
+  Save: no player-authored strings anywhere in `team-b` (standing rule at the time, WITHDRAWN 2026-10-01 by owner decision, TEAMS.md "Data and content rules": none in code, tests, comments
+  or this file).
+- `lua_host_run_integration_py` ctest (`8e9509b`): synthetic 2-archive cache, _start ok / OPEN refusal /
+  Lua error / syntax error, and run-vs-run `bridge_diff.py` determinism.
+- Vertex §9 step 7b (retracted, now rig §11.15): the palette default already matched it. Audio 255/536
+  figures in comments and validator output. STATE vehicle row now uses our own 372/372, 9,536 parts
+  (`946c64a`). Vertex §6.6 HYPOTHESIS: `kTexcoordScale` labelled for vehicle codes 100/101 (`96be8ae`).
+- **Behaviour change (manager ruling):** `sr3_viewer pose`/`animpose` now REFUSE a mesh with no bone
+  palette declared (`kRefuseNoPalette`) instead of silently using the retracted direct-index +
+  (x,-y,-z) reading; `--legacy-skinning` still forces that reading, labelled debugging-only.
+  Golden impact: only `brad` skins, and its baseline records the palette path (56 entries), so no
+  golden baseline depends on the no-palette path; no job submitted, nothing re-frozen. No synthetic
+  test covers `resolveSkinningMode` (viewer is Windows-only); the extracted function was compiled and
+  run on Linux: no palette → refusal, `--legacy-skinning` → the labelled retracted reading.
+
+### 2026-09-30, cloud stretch 5b: first real bridge results (PC agent live)
+
+- **01a/01b/01c OK** (`20260930T213035-team-b-ymee`, `…213037-team-b-jpsf`, `…213040-team-b-qqyx`, all at
+  `d0e6843`): MSVC 17.14 Release build of ALL_BUILD exit 0; 19 + 19 + 4 = **42/42 synthetic suites pass on
+  Windows**, every step exit 0. The portable (GCC/Linux) build change did not break MSVC. Only third-party
+  warnings (zlib C4244/C4127, lua51 C4334/C4324).
+- Still queued in PC order: `knyf` and `tdpr` (older mission runs, superseded by `grso`/`jklk` but will
+  run), `zlbw` (03 vintdoc), `hvcv` (04), `dzdq` (05), `grso`/`jklk` (02 before/after), `nxrt`/`bujl`
+  (superseded by `epre`), `epre` (06 CTAB census).
+
+### 2026-09-30, cloud stretch 5c: bridge results 03/04/05 (and 02 knyf)
+
+- **05 `20260930T224833-team-b-dzdq`** (at `baecf76`, real-data regression after the fuzz fixes): container
+  decode over 9 archives, 1,690 containers: mode (a) 1,562/1,562 Ok, mode (b) 23,349/23,349 Ok; clmesh
+  dlc1-3 **4,232/4,232** land exactly on EOF (the recorded baseline), header rejected 0; `validate_mesh` over
+  dlc1-3 + vehicles + sr3_city_0: 300/300 parsed, **0 failed** (the new stride check refused nothing),
+  g-length 300/300, stride law 337/337, 912,594/912,594 unit normals and finite positions. Every fuzz fix can
+  only change output by refusing input, and nothing was refused, so real-data output is unchanged. No
+  pre-fix run exists on these same archives (the validator targets were added in the same commit as the
+  fixes), so this is reasoned from zero refusals, not a before/after diff. Noted:
+  `validate_mesh`'s "indices < vertex count" 1,898,653/2,009,874 tests every index against channel 0 only,
+  which is wrong for multi-channel meshes (§8: the draw range's `high16` picks the channel); a validator
+  scoping gap in code unchanged since the initial import, not a reader fault.
+- **04 `20260930T224830-team-b-hvcv`**: 38 archives in `packfiles/pc/cache` (names and sizes in the result).
+- **02-old `20260930T213043-team-b-knyf`** (at `d0e6843`, before the invented values were removed; superseded
+  by `grso`/`jklk` but real): 38 archives, 804/804 scripts load, sr3lua agrees 804/804, 49/49 missions found,
+  **9/49** `_start` ok, 40/49 stopped by the watchdog in `game_lib.lua` busy-polls (lines 2269 ×37, 2246 ×2,
+  1 other); `fade_is_fully_faded_out` 30,833,183 calls, `fade_is_fully_faded_in` 1,666,655, `zscene_is_loaded`
+  714,285 — reproduces §9.143 exactly. The 9 that pass `_start` all stop first on
+  "attempt to call global `vint_is_std_res` (a nil value)" at `vint_lib.lua:96`. `vint_lib.lua` is
+  OPEN-tagged (no container), so the host runs it in both states; §16.4 lists it as a UI preload and `vint_*`
+  is UI-only (§13.7). **Question for the manager:** restrict the §16.4-named preload scripts to the state
+  §16.4 names (a behaviour change in `lua_host_run`)? Not done without a ruling.
+- **02 before `20260930T224835-team-b-grso`** (at `baecf76`), `bridge_diff.py` against `knyf`: only `mm_p_01`
+  changes — it used to spin in `zscene_is_loaded` (714,285 calls) until the watchdog, and now stops on the
+  first call with the OPEN-state refusal naming `0x00723d20` (Sec14.23), as designed (`zscene_is_loaded` 714,285
+  → 1, `thread_yield` −714,285). Still 9/49 past `_start`; the fade busy-polls still loop at this commit (their
+  OPEN conversion is in `jklk`). Summaries otherwise unchanged.
+- **02 after `20260930T225845-team-b-jklk`** (at `a403a75`): **FAILED**, exit `0xC0000374` (Windows
+  STATUS_HEAP_CORRUPTION) in `lua_host_run`'s 804-script loop, ~170 s in; only the state-tag TSV came back.
+  Most likely cause (not reproducible on Linux): `a403a75` wrapped every spec stub in `openGuard`, a
+  try/catch frame holding a `std::string`, and 3 stubs raised Lua errors (`longjmp`) from inside it
+  (`zscene_is_loaded`, `sfx_faded_out` via `lua_error`; `fade_out` via `lua_gettable`). MSVC's `longjmp`
+  unwinds C++ frames using EH tables built under `/EHsc` on the assumption that `extern "C"` never throws,
+  so it can destroy a live string twice. glibc's `longjmp` does not unwind: Linux ASan stayed clean even
+  on a stress cache calling every stub ×13 argument shapes. **Fixed in `88cbe87`** (no Lua error may cross a
+  C++ frame: refusals thrown as C++ exceptions, `fade_out`'s indexing under its own `lua_pcall`, `lua_error`
+  only from a frame with no C++ state). Re-run submitted as job 02c `20260930T235551-team-b-tkjl`; the
+  grso→after diff waits on it.
+- **02c `20260930T235551-team-b-tkjl`** (at `88cbe87`, the heap-corruption fix): **OK**, exit 0, 270 s; jklk
+  crashed at `a403a75` on the same input, so the fix holds on MSVC. `bridge_diff` grso → tkjl (the effect of
+  removing every invented engine value): still **9/49** past `_start`, but **no mission hits the watchdog any
+  more** (`fade_is_fully_faded_out` 30,833,183 calls → 0; `thread_yield` −30.8M). Each mission now stops on a
+  NAMED OPEN engine value instead of looping: 36 on the co-op session (`0x0087ba20`, §3.1), 10 (incl. the 9
+  that pass `_start`) on the tutorial-table lookup (`0x00717780`, §10.4). `m03`'s top-level code calls
+  `coop_is_active`, so `m03_start` is never defined (start_existed 49 → 48). UI top-level pcall 736 → 725/737.
+  OPEN-state refusals, whole run: co-op session 876, vehicle-store active 565, tutorial table 173,
+  named-object resolution 138, character max HP 120, character ignore-AI 120, Wwise ids 6, key bindings 5,
+  co-op join type 1. **This ranking is the list of engine values the next specs should give.**
+- **`--preload-states=spec16.4-highconf`** (manager ruling 2026-09-30, after Team A's desk answer to request 8):
+  opt-in `lua_host_run` flag, **HYPOTHESIS, off by default**. It runs the §16.4 preloads only in the state
+  §16.4 names (UI: `vint_lib`/`game_ui_globals`/`vdo_base_object`/`vdo_anim_object`/`vdo_input_tracker`;
+  gameplay: `game_lib`; both: `system_lib`). §16.4 is HIGH CONFIDENCE (desk), NOT cleared ("never loaded into
+  the other state" OPEN until Team A's exe job). This is an evidence run only; it becomes the default once
+  §16.4 is cleared. Job 02d runs the mission drive with it, diffed against `tkjl` (jklk has no output).
+- **02d `20261001T000923-team-b-hxmr`** (at `5fcec37`, `--preload-states=spec16.4-highconf`, HYPOTHESIS
+  evidence run): OK, 285 s, `scripts_rerouted=6`. `bridge_diff` tkjl → hxmr: still 9/49 past `_start`, first
+  errors unchanged (the OPEN co-op/tutorial refusals come first), but in **48/49 missions the first missing
+  global changes from `vint_is_std_res` to `rand_int`**. `rand_int` is one of the 24 bare globals of §13.2,
+  deliberately unregistered until their roster is specced. So with `vint_lib` UI-only, the next gap is the
+  bare-global roster (Requests to Team A, item 9). Refusals barely move (co-op 876→874, vehicle store 565→564,
+  tutorial 173→168).
+- **06 `20260930T231306-team-b-epre`** (CTAB census, for Team A's render-pipeline re-derivation): 38 archives,
+  844 `.fxo_pc`, **7,276 blobs** (= §9.98), 7,276 CTAB well-formed, 0 malformed, 0 disassembly failures;
+  3,731 VS / 3,545 PS; 52,990 constants (float4 43,501, sampler 9,359, bool 130). **Every** VS constant
+  covering c28 is `projTM` ×4 (3,398/3,731 VS) and every one covering c48 is `IR_World2View` ×3 (2,203): no
+  other name ever occupies them. This confirms the CTAB names only. The 7 projTM/world2view sites keep their
+  HYPOTHESIS labels until Team A's re-derivation covers what they hold. TSVs stay on the bus.
+- **03b `20260930T234543-team-b-puhd`**: raw u32 at `0x1E` per file, see Requests to Team A item 7.
+- **03 `20260930T213047-team-b-zlbw`** (vintdoc sweep): header CONFIRMED checks reproduce spec §2 exactly;
+  §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
+  the raw u32 at `0x1E` recorded per file.
+
+### 2026-10-01, cloud stretch 5d: long fuzz campaign, Lua-as-C++ evaluation
+
+- **Long fuzz campaign** (16 targets × 600 s, plus the 4 deepened harnesses, Clang 18 libFuzzer with
+  ASan/UBSan, `FUZZ_JOBS=3`): **0 findings**, ~194M executions in total. Per target: anim 37.2M (cov 118),
+  asm 7.3M (257), clmesh 23.0M (363), d3d9bc 0.47M (2,131), fxo 15.6M (300), geometry 11.7M (148), lua
+  (sr3lua parser) 3.0M (853), mesh 13.8M (463), rig 17.9M (163), save 1.2M (370), texture 11.8M (241),
+  vintdoc 12.9M (185), vpp 3.0M (575), xtbl 47,742 (641; slow harness, the weakest coverage), zonegeom
+  2.4M (443), zoneheader 14.9M (138); deep_anim/fxo/geometry/texture 9.5M/4.2M/3.8M/4.4M.
+- **Lua 5.1 compiled as C++** (manager's question after jklk; measured in a scratch tree, NOT adopted):
+  `luaconf.h` switches `LUAI_THROW`/`LUAI_TRY` to `throw`/`try-catch(...)` under `__cplusplus`, so a Lua error
+  unwinds C++ frames with their destructors (the jklk class becomes correct code, not UB). The change is
+  two lines of CMake (compile the 29 `.c` as CXX) plus dropping the `extern "C"` wrapper in `lua_c_api.h`;
+  no Lua source edits. All 47 ctest suites pass. Timing (Release, 3 runs each): resume/yield 5M 0.39 → 0.32
+  s (−18%); pcall without error, 5M, 0.26 → 0.26 s; pcall with error, 1M, 0.6 → 3.0 s (+2.4 µs per
+  error); refusal stress 3,000 rounds 2.4 → 4.2 s. On the real mission run (284M yields, ~13k errors) that is
+  a net saving of seconds. Recommendation to the manager: adopt it AND keep the no-Lua-error-across-a-C++-frame
+  rule plus the stress test. **Adopted** (manager ruling, `2010a95`): the `third_party/lua51` sources stay unmodified,
+  only the build language changed. Mission re-run `20261001T003228-team-b-ugaa` (at `d71c92c`) against `tkjl`
+  (`bridge_diff`): **identical** (no per-mission changes, 850,090,555 stub calls on both sides, same OPEN refusals);
+  the only new line is the opt-in's `preload_states_option=off`. Wall time 302.4 s vs 270.1 s (+12%), from one
+  run each on a shared PC, so not attributable to the language switch (the microbenchmark predicted a small saving).
+- **UB found by the stress test under Clang UBSan** (`d71c92c`): `game_get_key_name` and `roundToIntOpenMode`
+  cast out-of-range/NaN doubles to integers (UB); they now refuse them as OPEN (in-range behaviour unchanged).
+  Upstream Lua's own `lua_number2int` cast is exempted from float-cast-overflow for the `lua51` target only.
+- **CI:** fuzz-smoke had been red since the roster test (seed-capture builds lacked `CRREISH_TOOLS_DIR`), fixed in
+  `92022be`. New `msvc` (windows-latest) job: first green build, then `bridge_diff_py` failed on cp1252 stdout,
+  fixed in `6dd064d` (reproduced locally with `PYTHONIOENCODING=cp1252`). The `msvc-jklk-repro` job's first
+  "REPRODUCED (exit 127)" was bash's command-not-found, not a crash; the step now runs in PowerShell and prints
+  the full exit code.
+- **xtbl fuzz harness:** inputs capped at 2 KB in `run_fuzz.sh` (140,530 execs in 30 s, was 47,742 in 600 s).
+
+### 2026-10-01, cloud stretch 5e: table-spec batches (agents, verified) and their real-data checks
+
+- Table review items done by 3 agents in separate worktrees, each verified here (fresh Release + ASan builds,
+  ctest 47/47; the progression fix independently mutation-checked) and cherry-picked: progression
+  notoriety_spawn now reads §14.6's nested tree (CONFIRMED-empirical) instead of the struck §6.3 flat tree;
+  weapons aim_drift reports "Recovery empty - spec path suspect (NEEDS-EXE)"; customization/audio/ui/
+  environment/vehicle items labelled; PlayTimers already read 12 (test added); ui-controls validator gates
+  41/22. STATE weapons row: the 22nd table is a lightset consumer.
+- **Job 07 `20261001T003803-team-b-upsq`** (at `c2d60f5`): notoriety_spawn via §14.6 nesting gives **80 / 254 /
+  263** level_info / group_info / group_details records, exactly the spec's §14.6 text; 25/25 rows nested,
+  each yields ≥ 1 level_info, 0 unrecognised elements, all gates pass. aim_drift: Recovery-empty report on
+  **20/20** rows; MinTime/MaxTime 19/20 (spec §18.6); Penalties/Bonuses/lag_amount/lag_time/vertical_offset in
+  20/20 (spec §8 OPEN).
+- **Job 08 `20261001T004133-team-b-kmsh`** (at `b7a55c0`): anim_files.xtbl `<Trigger>` shape (§3.1 text vs §3.2
+  Name child): **7,060 elements, Name child 7,060, direct text 0, both 0, neither 0**, so §3.2's shape is the real
+  one and the reader drops nothing (0 unread). Every Trigger also has a **`Frame`** child (7,060/7,060), which
+  the spec does not mention. Diversions: Horde_Mode_Identifier 32, gate PASS.
+
+### 2026-10-01, cloud stretch 5f: jklk cause CONFIRMED; CI all green
+
+- **jklk root cause CONFIRMED on MSVC.** CI run 88 (`abb12d9`), job `msvc-jklk-repro`: the refusal stress test built
+  against `a403a75`'s sources with its C-language Lua build exits **-1073740940 = 0xC0000374** (STATUS_HEAP_CORRUPTION),
+  the same code bridge job jklk hit. The current code (frame rule `88cbe87` + Lua as C++ `2010a95`) passes the same
+  stress test in the `msvc` job. So "most likely cause" is now confirmed: Lua errors longjmp-ing across C++ frames
+  under MSVC.
+- **CI run 88: all 5 jobs green** for the first time (GCC Release, GCC ASan/UBSan, Clang libFuzzer smoke, MSVC
+  Release full tree + ctest 47/47, repro).
+- Second review batch (`c348984`, agent, verified: spec labels checked, Release + ASan ctest 47/47):
+  `Vehicle_Damage_Penalty_MS` read as u32 (traffic-ai §19 CONFIRMED); Mass absent stays absent (test);
+  `Instance_Cap` stays a signed byte (§13.1 says signed; labelled OPEN, the reviewer's u32 was not in the spec);
+  Female_Mesh_Filename and both Shader_Type sites labelled OPEN; no code relies on "never filename-resolved".
+
+### Requests to Team A (relay via the manager)
+
+1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
+   busy-poll calls, the top two mission blockers): no behaviour entry exists. Need args/return/body, and
+   the screen-fade state machine they read: the globals §26.23 names for `0x0059f8c0`
+   (`0x012e6aa0`/`0x012e6aa4`/`0x012e6aa8`/`0x013effc8`/`0x013effcc`/`0x013effd0`) — their initial values,
+   every phase value and transition, and **what completes a fade** (a timer tick? the Lua `screen_fade_do`
+   callback returning? a completion callback?). §26.9 gives `sfx_faded_out` = `0x012e6aa4 == 3`; is
+   `fade_is_fully_faded_out` the same test, and what does `fade_in`'s `0x0059fc40` write? (`sfx_faded_in`
+   is also unspecced.)
+2. **`zscene` lifecycle** (for `zscene_is_loaded` to ever return true in the host): what `zscene_prep`'s
+   `0x0101b530`/`0x00721c20(1,0,0)` do to the per-name state that tier 1 (`0x00723d20`) reads, the busy
+   flag `0x0153b556` and the state code `0x0153b51c` (initial values, who writes `1`/`2` and when); whether
+   tier 1's per-name state is the same record `0x00721be0` returns; reconcile §14.23's OPEN sense
+   inversion; and where the `0x0153b294` scene table's entries come from (which data file).
+3. **`spec-vint-doc-format.md` walk gaps** (implementing it hit these; no guessing done):
+   (a) where the critical-resource section starts — §3.2 says "after the string-offset array" but §3.1
+   puts the string bytes at that same position; is header `+0x16` an absolute offset to it?
+   (b) §5's baseline/override "byte-offset": absolute, or relative to what? After the selected list is
+   read, where does the main cursor resume for the element's children (after the override header, or
+   after the list's terminator)? (c) property-record byte order: tag byte, then u32 name hash, then value
+   (what `sr3vintdoc` assumes), or hash first? The bridge sweep (job 03) will report which candidate lands
+   on EOF across the population, but that is evidence, not the disassembly answer.
+4. **`vint_is_std_res`** (UI registrar, 55-name `vint_*` family): no behaviour entry. Need args/return/body.
+   *(Its "next blocker for the 9/49 missions" framing was wrong — see the stretch-3 correction.)*
+5. **Behaviour entries for the next still-unspecced names in `verdict_stub_hits_with_missions.tsv`**, in
+   ranking order: `vint_internal_dataresponder_request` + `vint_dataresponder_finished` (282M calls each, a UI
+   busy-poll pair), `vint_set_property`, `vint_get_property`, `vint_get_time_index`, `vint_get_safe_frame`,
+   `vint_dataitem_get`, `vint_object_first_child`, `vint_object_clone`, `pause_map_stag_current_district_control`,
+   then the mission-path singles `mip_streaming_pause`, `object_spawn_pause`, `customization_create_character`,
+   `customization_creation_is_open`, `customization_screen_is_ready`, `player_parachute_has_backpack`.
+6. **Review status of §27/§28** of `spec-lua-api-behaviour.md`: are they cleared for implementation?
+   (`game_get_coop_friendly_fire`, `crib_weapon_add_disable` are waiting on it.)
+7. **`spec-vint-doc-format.md` §3.1 string table contradicted by real data** (bridge job
+   `20260930T213047-team-b-zlbw`, `interface_startup.vpp_pc` + `interface.vpp_pc`; 777 rows = 159 distinct
+   documents repeated). The header checks reproduce §2 exactly (magic 159/159, versions 4/155, `+0x0A` zero
+   154/159, `+0x16` < size 159/159, every count range and median). But §3.1's CONFIRMED "u32 count N at
+   `0x1E`, then N u32 offsets":
+   - the u32 at `0x1E` is only ever **1, 256 or 257**: re-run `20260930T234543-team-b-puhd` over the 159
+     distinct `interface_startup` documents gives v1: 1×3, 256×1; v2: 1×71, 256×39, 257×45 (159/159). The
+     13 that "failed to parse" also hold 256/257, in files too small for that many entries (job 03's "68 rows
+     too large" wording was wrong). As bytes: `0x1E` ∈ {0,1}, `0x1F` ∈ {0,1}, `0x20`–`0x21` = 0, every file;
+   - the values read as "offsets" include float-like words (e.g. `0x3F800000`), not pool offsets;
+   - §3.2's own refutation test `hdr[0x16] < 0x22 + 4N` fails on **23/159** distinct documents (`puhd`);
+   - **0** files resolve ≥ 90% of entries to clean text (the spec's pass: 74/159).
+   Is the u32 at `0x1E` really N? Is the offset array really at `0x22`? Please re-read the string-array read
+   in the binary loader. `sr3vintdoc::parseStringTable` stays as the spec states it, labelled disputed;
+   the 12-combo walk grid landed on 0 files. A re-run with the raw u32 at `0x1E` per file is queued (job 03b).
+8. **Clear `spec-lua-bindings.md` §16.1/§16.4 (preload states) for implementation.** Bridge job
+   `20260930T213043-team-b-knyf`: the 9/49 missions that pass `_start` stop on "attempt to call global
+   `vint_is_std_res` (a nil value)" at `vint_lib.lua:96`. `vint_lib.lua` has no container, so its state tag is
+   OPEN (§14.5) and `lua_host_run`'s main loop runs it in both states; `vint_*` is UI-only (§13.7). §16.1 labels
+   the interface-state preload order CONFIRMED (disassembly), but §16.1 is NEEDS-EXE and §16.1/§16.4 are "NOT
+   yet cleared for implementation", so per the manager's ruling (2026-09-30) the host is unchanged. Needed:
+   is each of the six §16.4 UI preloads (and `game_lib.lua`) loaded ONLY into the state §16.4 names, never the
+   other? If cleared, the host restricts them to that state and a mission re-run measures it against `jklk`.
+   (Note: the host's existing §16.4 preload step predates the review; it came with the initial import.)
+9. **The §13.2/§16.3 bare-global roster, starting with `rand_int`.** With `vint_lib.lua` UI-only (opt-in run
+   `20261001T000923-team-b-hxmr`), 48/49 missions' first missing global is `rand_int`, one of the 24 bare
+   globals registered by `0x00e0f900` (§13.2: which 24, which state, and their bodies are OPEN). Needed: the 24
+   names, the state(s) that receive them, and behaviour entries, `rand_int` first.
+10. **`spec-save-format.md` §10.7 table and the §10.3/§12.6.1 statistic 163/164 cross-check** (bridge job
+   `20261001T015631-team-b-nnyi`, `validate_save_snapshot` after the gate/sample split; all format gates pass).
+   (a) Save-set drift: spec row 8 (lvl 49, cash 4,765,260, barn 3, items 525) is no longer present; snapshot #6
+   `LocalAppData/sr3save_00` (saved 2026-09-25) now has lvl 49, cash 4,642,350, barn 4, items 521 (3 of 10
+   columns differ). The 201,363 total non-zero bytes moves with it (now 201,281). Refresh §10.7 from the current
+   set if wanted. (b) Not drift: snapshot #3 `Documents/sr3save_04` (saved 2011-12-20) matches §10.7 row 4 exactly,
+   yet statistic 164 = 3 while the stunt-jump counter at 0x3F8 = 4 (statistic 163 = barnstorms = 2). The claim
+   "statistic 164 == 0x3F8 in all 16" fails on a save the table already counts. Please re-check which value §12.6.1
+   meant, or whether the two counters can legitimately differ.
+
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
 **The user asked both teams to pause (relayed via `purrsian-44`). No new agent dispatching, no new work,
@@ -26,10 +439,25 @@ would look bad public even though the technical content itself (real addresses/o
 A's clean-room disassembly) was already a deliberate publish decision, not mine to second-guess.
 
 ### A. Working mode (standing, confirmed 2026-09-12/09-20, boundary sharpened 2026-09-29)
+**Cloud-phase update (2026-09-30, owner via manager): pick each subagent's model by task (Agent tool
+`model`), replacing the "dispatch Sonnet agents" habit below. Full table: `TEAMS.md` "Which model for which
+job". For Team B: `sonnet` — CONFIRMED-spec Lua functions with unit tests, fuzz harnesses, tool ports, CI,
+result-comparison scripts, bridge job files; `opus` — new format readers, engine-state modelling in the host,
+and independent verification (fresh rebuild + full rerun) of any agent's work before recording it; `fable` —
+root-causing hard bugs that resisted a first attempt (e.g. the clmesh NaN/`Fog_dist` artifact) and tricky
+validation discrepancies in bridge results; `haiku` — greps, censuses, summarising large bridge outputs.
+Verify with an equal-or-stronger model; escalate one tier after two failed attempts.**
+**Data rule (owner decision 2026-10-01, TEAMS.md "Data and content rules", approved directly by the owner in
+this session): the owner's saves, profiles, typed text, machine paths and PC outputs may be used and committed;
+still excluded: verbatim game content (script/UI/dialogue text, bulk string dumps) and third parties' personal
+data.**
+**Standing rule (manager, 2026-09-30): pre-existing code that rests on a spec section now marked "NOT yet
+cleared for implementation" gets the label "implemented pre-review, pending clearance", with NO behaviour
+change, until the clearance lands. No new work from such a section.**
 Don't ask permission needlessly; work when the orchestrator peer (`purrsian-44`) says so. Standing goal: FULL RECOMP, autonomous. Only `spec-*.md` implemented from; NEVER the exe/disassembly (Team A's side). **`D:\SR3RTXREMIXCOMP` is OFF-LIMITS — do not open any path under it, even though it's listed as a working directory** (a real boundary crossing happened there 2026-09-29, caught by the orchestrator, corrected in place, memory saved: `feedback_cleanroom-boundary-scope.md`). If a spec cites a path under that folder as evidence, use only the fact the spec states, never open the path. Process: dispatch Sonnet 5 agents with precise context → **I independently rebuild from FRESH objects and rerun the agent's FULL verification plan myself before recording anything or touching `build_verify/`** — non-negotiable, has caught real mistakes repeatedly. Real canonical-file fixes are an authorized exception to "agents don't touch canonical files" given a real regression plan (precedent §9.68/§9.87/§9.105/§9.111). **When relaying new info to an ALREADY-running agent, always use `SendMessage` to its own agent-id — NEVER a fresh `Agent` call** (a fresh call spawns a contextless duplicate risking a file collision; happened once this session, caught via `TaskStop` before any edit, 0 harm — see the memory this created).
 
 ### B. DONE, compact citations (full narrative in each §9.xx — do not re-derive)
-§9.69-§9.95: containers/materials/rig/tree/cutscene/save/foliage/fxo fixed; `sr3xtbl` foundation; 10 domain table-reader libraries; `sr3zone` extended. §9.97-§9.100: `sr3d3d9bc` D3D9 disassembler + SM3→SM4/5 HLSL translator. §9.101-§9.109: real shaderHash→filename join; per-range multi-shader vehicle draw; real vehicle paint colour (`Base_Paint_Color`); G-buffer/light-register CTAB census; first real per-pixel-lit car render. §9.110-§9.124: golden-scene harness built (`brad`/2 vehicles/`zone_tile`/`tree`, 5 scenes); real embedded Lua 5.1.5 host scaffold (1,430 names, 804/804 load-tested); 138-hook firing pass + `thread_*` scheduler; entry-point/call-site/bare-reference censuses (all negative on "what calls `_start`"); tree re-frozen with all 3 LOD slots. §9.125-§9.132: mission-package census (805/805 manifests, 49/54 `_start`-covered stems — the real population §C's mission task uses); zone-tile texturing chased to TWO confirmed dead ends (vehicle-style `0x424BD00D` GeometryBlock, cc:0-stem hash join) — `.czn_pc` zone terrain is NOT where textured buildings come from; `hN` fine cells confirmed 100% `.clmesh_pc`/`.glmesh_pc`, 0% `.czn_pc`. §9.133: **the real answer** — `.clmesh_pc` level-mesh props render with REAL per-material textures (own `0x4fe66afa` magic, `MaterialRecord::hash0`→`.fxo_pc` stem CRC-32 join, 81/81). §9.134-§9.136: 9-function Lua batch DONE; 2 Lua fixes (+21,041 ok combined); clmesh 6th golden scene (`airport_controltower`, real textured building); hN-cell placement CLEANLY REFUTED (35.5% base rate beats every candidate) — honest local-origin fallback built. §9.137: Team A found the real `.czn_pc` top-level walker (overturns a stale negative) — its `0x2237` Region record's inline material-set is a **NEW LEAD UNDER ACTIVE HOLD, see §C**. §9.138: clmesh-batch command + 20 individually-viewable prop renders, all correctly textured. §9.139: deferred-lit rendering extended `.clmesh_pc`→city props — shaderHash census 81/81 (100%), but only 2/19 tower materials had a real `_v`/`_mv` VS file — honest sparse dark-silhouette result (1.15% coverage), new 8th golden scene frozen. §9.140: per-script real Lua-state tagging (`.asm_pc` container-kind/type, `spec-lua-bindings.md` §14.5) — real split ui:727/gameplay:67/OPEN:10/conflict:0; found+fixed a real `backingStem()` bug; folded in 7 more dual-registrations — **12,687 ok/14,485 erred** (was 21,041/32,852), bit-identical on my own independent rebuild+rerun. Honest non-result: the 14-hook wrong-state class is NOT fully closed (4/14 clean, not 3/14 — drift corrected), traced concretely to `runChunk()`'s own dual-state execution still leaking definitions — **this became §C's step-0 task.** §9.141: both §9.139's OPEN leads chased — VS/PS resolution generalized beyond `_v`/`_mv` suffix search (population 44/81→58/81), and `sr3clmesh::LevelMesh::materialShaderConstants()` added (95/95 real B-hash→CTAB matches) — real recognizable tower render achieved (14.15% coverage, was 1.15%), with an honestly-relabelled remaining artifact ("position-correlated colour," NOT rim lighting — both `purrsian-44` and I independently re-read the image the same way). §9.142: diagnostic follow-up — `eyePos` EMPIRICALLY REFUTED as the cause (real A/B test, byte-identical output), traced to `Fog_dist`-driven NaN-clamping instead; true root cause stays genuinely OPEN, correctly not chased past scope. §9.143: the mission-driving run (`aaca1d21c38ac6fa5`'s completed-but-unverified-at-pause-time work) verified after the pause — genuinely DONE, real results, not re-dispatched. **Step 0** (`runChunk` restriction): 12,157 ok/12,545 erred (was 12,687/14,485 pre-restriction) — closes the wrong-state leak for several classic hooks (`city_load_hide_images`/`whored_countdown_timer_update`/`hud_msg_hide_region`/`screen_fade_auto_save_hide` now show `defined_in=0` in their own wrong state, where they used to leak) but reveals a handful (`store_lock_controls`/`store_unlock_controls`/`screen_fade_auto_save_show`/`screen_fade_do`) have a REAL, separate error in their own correct state that the wrong-state noise had been masking — a genuinely different, smaller remaining problem than §9.140 left it. **Step 1** (mission-driving): real population 49/49 (dedup+filter exactly matches the cited "49/54"), all 49 found+`_start`-called; only 9/49 get past `_start` without erroring — the other 40/49 hit a genuine watchdog-caught infinite loop in NEVER-BEFORE-EXERCISED `game_lib.lua` code, traced to real busy-poll stubs that never return true: `fade_is_fully_faded_out` (30.8M calls this run), `fade_is_fully_faded_in` (1.67M), `zscene_is_loaded` (714K) — a concrete, high-value next-implementation target, surfaced for the first time by this run. The 9/49 that DO get past the fade/scene wait uniformly hit the SAME next blocker, `vint_is_std_res` (genuinely missing) — a second, singular, high-confidence target. New `verdict_stub_hits_with_missions.tsv` ranking written — this is the tsv Team A's next spec tranches should follow, per `purrsian-44`'s own framing. This was MY OWN directly-run verification (not a delegated agent result needing separate reverification) — output lives in `build_myverify_statetag/pause_verify_out/` if anyone wants the raw tsvs.
+§9.69-§9.95: containers/materials/rig/tree/cutscene/save/foliage/fxo fixed; `sr3xtbl` foundation; 10 domain table-reader libraries; `sr3zone` extended. §9.97-§9.100: `sr3d3d9bc` D3D9 disassembler + SM3→SM4/5 HLSL translator. §9.101-§9.109: real shaderHash→filename join; per-range multi-shader vehicle draw; real vehicle paint colour (`Base_Paint_Color`); G-buffer/light-register CTAB census; first real per-pixel-lit car render. §9.110-§9.124: golden-scene harness built (`brad`/2 vehicles/`zone_tile`/`tree`, 5 scenes); real embedded Lua 5.1.5 host scaffold (1,430 names, 804/804 load-tested); 138-hook firing pass + `thread_*` scheduler; entry-point/call-site/bare-reference censuses (all negative on "what calls `_start`"); tree re-frozen with all 3 LOD slots. §9.125-§9.132: mission-package census (805/805 manifests, 49/54 `_start`-covered stems — the real population §C's mission task uses); zone-tile texturing chased to TWO confirmed dead ends (vehicle-style `0x424BD00D` GeometryBlock, cc:0-stem hash join) — `.czn_pc` zone terrain is NOT where textured buildings come from; `hN` fine cells confirmed 100% `.clmesh_pc`/`.glmesh_pc`, 0% `.czn_pc`. §9.133: **the real answer** — `.clmesh_pc` level-mesh props render with REAL per-material textures (own `0x4fe66afa` magic, `MaterialRecord::hash0`→`.fxo_pc` stem CRC-32 join, 81/81). §9.134-§9.136: 9-function Lua batch DONE; 2 Lua fixes (+21,041 ok combined); clmesh 6th golden scene (`airport_controltower`, real textured building); hN-cell placement CLEANLY REFUTED (35.5% base rate beats every candidate) — honest local-origin fallback built. §9.137: Team A found the real `.czn_pc` top-level walker (overturns a stale negative) — its `0x2237` Region record's inline material-set is a **NEW LEAD UNDER ACTIVE HOLD, see §C**. §9.138: clmesh-batch command + 20 individually-viewable prop renders, all correctly textured. §9.139: deferred-lit rendering extended `.clmesh_pc`→city props — shaderHash census 81/81 (100%), but only 2/19 tower materials had a real `_v`/`_mv` VS file — honest sparse dark-silhouette result (1.15% coverage), new 8th golden scene frozen. §9.140: per-script real Lua-state tagging (`.asm_pc` container-kind/type, `spec-lua-bindings.md` §14.5) — real split ui:727/gameplay:67/OPEN:10/conflict:0; found+fixed a real `backingStem()` bug; folded in 7 more dual-registrations — **12,687 ok/14,485 erred** (was 21,041/32,852), bit-identical on my own independent rebuild+rerun. Honest non-result: the 14-hook wrong-state class is NOT fully closed (4/14 clean, not 3/14 — drift corrected), traced concretely to `runChunk()`'s own dual-state execution still leaking definitions — **this became §C's step-0 task.** §9.141: both §9.139's OPEN leads chased — VS/PS resolution generalized beyond `_v`/`_mv` suffix search (population 44/81→58/81), and `sr3clmesh::LevelMesh::materialShaderConstants()` added (95/95 real B-hash→CTAB matches) — real recognizable tower render achieved (14.15% coverage, was 1.15%), with an honestly-relabelled remaining artifact ("position-correlated colour," NOT rim lighting — both `purrsian-44` and I independently re-read the image the same way). §9.142: diagnostic follow-up — `eyePos` EMPIRICALLY REFUTED as the cause (real A/B test, byte-identical output), traced to `Fog_dist`-driven NaN-clamping instead; true root cause stays genuinely OPEN, correctly not chased past scope. §9.143: the mission-driving run (`aaca1d21c38ac6fa5`'s completed-but-unverified-at-pause-time work) verified after the pause — genuinely DONE, real results, not re-dispatched. **Step 0** (`runChunk` restriction): 12,157 ok/12,545 erred (was 12,687/14,485 pre-restriction) — closes the wrong-state leak for several classic hooks (`city_load_hide_images`/`whored_countdown_timer_update`/`hud_msg_hide_region`/`screen_fade_auto_save_hide` now show `defined_in=0` in their own wrong state, where they used to leak) but reveals a handful (`store_lock_controls`/`store_unlock_controls`/`screen_fade_auto_save_show`/`screen_fade_do`) have a REAL, separate error in their own correct state that the wrong-state noise had been masking — a genuinely different, smaller remaining problem than §9.140 left it. **Step 1** (mission-driving): real population 49/49 (dedup+filter exactly matches the cited "49/54"), all 49 found+`_start`-called; only 9/49 get past `_start` without erroring — the other 40/49 hit a genuine watchdog-caught infinite loop in NEVER-BEFORE-EXERCISED `game_lib.lua` code, traced to real busy-poll stubs that never return true: `fade_is_fully_faded_out` (30.8M calls this run), `fade_is_fully_faded_in` (1.67M), `zscene_is_loaded` (714K) — a concrete, high-value next-implementation target, surfaced for the first time by this run. The 9/49 that DO get past the fade/scene wait uniformly hit the SAME next blocker, `vint_is_std_res` (genuinely missing) — a second, singular, high-confidence target. **[CORRECTED TWICE, 2026-09-30, cloud phase: the first correction ("not supported, 0 mission-pass calls") was itself wrong — the stub-hit ranking only counts calls that reach a registered stub. Bridge job `20260930T213043-team-b-knyf` (at `d0e6843`) gives each mission's `first_error_message`: all 9 hit "attempt to call global `vint_is_std_res` (a nil value)" at `vint_lib.lua:96`. It is registered in the UI state (§13.7); `vint_lib.lua` has no container, so its state tag is OPEN and the host runs it in BOTH states, defining its functions in the gameplay state where `vint_*` does not exist. So the call is real in the host, but very likely an artifact of dual-state execution of OPEN-tagged scripts, not a missing engine function. See the cloud stretch 5c entry.]** New `verdict_stub_hits_with_missions.tsv` ranking written — this is the tsv Team A's next spec tranches should follow, per `purrsian-44`'s own framing. This was MY OWN directly-run verification (not a delegated agent result needing separate reverification) — output lives in `build_myverify_statetag/pause_verify_out/` if anyone wants the raw tsvs.
 
 **Every §9.xx through 143 independently rebuilt from fresh objects and reverified by me before being recorded — trust the citation, don't re-derive. Full blow-by-blow narrative for every item lives in that item's own §9.xx section in this file's body.**
 

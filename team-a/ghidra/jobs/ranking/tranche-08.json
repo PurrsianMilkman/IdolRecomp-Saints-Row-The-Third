@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 08 (names 126-150 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "radio_set_sing_along_allowed_during_missions",
+    "radio_get_station",
+    "projectile_fire_from_navpoint",
+    "players_in_weird_camera_mode",
+    "player_override_set_sprint_recharge",
+    "player_override_set_sprint_delay",
+    "player_override_set_sprint",
+    "player_override_clear_sprint_recharge",
+    "player_override_clear_sprint_delay",
+    "player_override_clear_sprint",
+    "pcu_wear_store_outfit",
+    "pcu_wear_outfit",
+    "pcu_set_slots_empty",
+    "pcu_report_outfits",
+    "pcu_remove_clothing",
+    "pcu_purchase_slot",
+    "pcu_purchase_outfit",
+    "pcu_is_underwear_category",
+    "pcu_is_item_needed_for_outfit",
+    "pcu_is_current_item_worn",
+    "pcu_is_bra_category",
+    "pcu_get_wear_options",
+    "pcu_get_variants",
+    "pcu_get_owned_item_info",
+    "pcu_get_num_items_owned"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

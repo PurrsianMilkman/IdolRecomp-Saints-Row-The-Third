@@ -1,0 +1,10 @@
+{
+ "team": "team-a",
+ "title": "Team A: the 210 tutorial names from the static pointer table 0x012f5930 (needs CrreishDump ptrs mode, pending review)",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/names", "ptrs", "count:210", "nodecomp:1", "0x012f5930"]}
+ ],
+ "collect": ["**/*.txt"]
+}

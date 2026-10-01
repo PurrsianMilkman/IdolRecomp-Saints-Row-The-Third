@@ -1,0 +1,26 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 25 (names 551-554 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "airplane_fly_to_do",
+    "add_object_indicator_to_closest_npc",
+    "action_play_custom_do",
+    "Screen_fade_transition_complete"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

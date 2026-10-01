@@ -164,4 +164,13 @@ private:
 // tracking added to registerStubs(), stub_registry.h/.cpp, same day).
 void registerThreadScheduler(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag);
 
+// thread_close only (2026-10-01). thread_new/thread_yield/thread_kill/
+// thread_check_done are now the CONFIRMED bare globals of 0x00e0f900
+// (bare_globals.h, spec-lua-api-behaviour.md Sec26.27), which Host registers
+// instead of this scaffold's versions. thread_close is not in that roster nor
+// in the 1,490-name registration list, so whether the engine provides it at
+// all is OPEN; Host keeps this scaffold's thread_close (a no-op on any id the
+// bare-global thread table hands out, since the two tables are separate).
+void registerThreadClose(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag);
+
 } // namespace sr3luahost

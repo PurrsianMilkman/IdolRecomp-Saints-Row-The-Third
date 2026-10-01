@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 04 (names 26-50 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "store_interface_is_active",
+    "spawn_region_max_spawn_dist_reset",
+    "spawn_region_max_spawn_dist",
+    "skydive_setup_tank_bailout",
+    "shop_enable_nearest",
+    "set_trailing_aim_flag",
+    "set_time_of_day",
+    "set_seatbelt_flag",
+    "set_ped_override_density",
+    "set_never_turn_on_player",
+    "satellite_weapon_mode_exit",
+    "radio_set_station",
+    "qte_human_is_used",
+    "player_warp_to_shore_disable",
+    "player_revive",
+    "pause_map_tutorial_mode",
+    "party_add_do",
+    "object_indicator_remove_do",
+    "object_destroy",
+    "npc_is_in_party",
+    "npc_go_idle",
+    "minimap_icon_remove_do",
+    "item_show",
+    "item_anim_play",
+    "helicopter_shoot_vehicle"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

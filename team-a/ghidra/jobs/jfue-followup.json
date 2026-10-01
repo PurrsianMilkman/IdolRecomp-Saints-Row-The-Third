@@ -1,0 +1,15 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to jfue — raw call scan for the co-op session installer and other reference-less entry points; mode-manager state table; network lifecycle callers",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/calls", "calls", "0x0087c340", "0x0087f1b0", "0x00716380", "0x007163b0", "0x007171c0", "0x005fb330", "0x005fbd10", "0x005fbf60", "0x005fc230"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:10", "maxinsn:2000",
+            "0x0087f1b0", "0x0087ba50", "0x0087ba40", "0x0087c520", "0x0088cf70", "0x0088bb00", "0x0088c1d0", "0x007ade60", "0x007ae950", "0x00715c80", "0x00a29be0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/statetab", "ptrs", "count:32", "nodecomp:1", "0x01304a30"]}
+ ],
+ "collect": ["**/*.txt"]
+}

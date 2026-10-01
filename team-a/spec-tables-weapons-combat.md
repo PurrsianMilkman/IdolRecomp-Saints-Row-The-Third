@@ -1,11 +1,13 @@
 # Saints Row: The Third — Weapons and Combat Data Tables: XML Schemas Recovered from the Loaders
 
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process), agent AH
-**Phase:** Schema-from-loader campaign (`HANDOFF.md` §27.2) — group "weapons and combat"
-**Scope:** For each `.xtbl` gameplay table of the weapons/combat group whose literal filename appears in the executable: the loader, the element tree its reader accepts, each element's type and destination offset in the runtime record, defaults and required-vs-optional behaviour, unit conversions, name-hash keys, cross-table references and fixed capacities. Base-game *values* are out of scope (the compressed base-game containers are not read here — see §1.1).
+**Phase:** Schema-from-loader campaign (`HANDOFF.md` §30, archived §27.2) — group "weapons and combat"
+**Scope:** For each `.xtbl` gameplay table of the weapons/combat group whose literal filename appears in the executable: the loader, the element tree its reader accepts, each element's type and destination offset in the runtime record, defaults and required-vs-optional behaviour, unit conversions, name-hash keys, cross-table references and fixed capacities. Base-game *values* are out of scope (the compressed base-game containers are not read here — see §1.1). *[Superseded 2026-09-23: the base tables have since been read and validated, §18.]*
 **Method:** Exact filename literals were located by a raw scan of the executable and followed by string cross-reference in Ghidra 12.1.3 (project copy `tools/gp_tbl1`) to each table's loader; the per-row reader and its callees were decompiled and read to the end; the shared XML accessor helpers were read once and are documented in §1. The three raw-stored DLC archives (`dlc1/2/3.vpp_pc`, 142 `.xtbl` files) supplied real rows to validate against (§16). No whole-binary predicate search was used; negative claims ("the reader never reads element X") rest on a complete read of the reader body and its callees plus a case-insensitive whole-image literal scan (harness `tools/harnesses/tbl_exe_lit.py`).
 **Cleanroom compliance:** No decompiled code is reproduced and no original internal identifiers are used. XML table/element names, enum literals and flag literals are *data* and are listed; offsets, sizes, strides, constants and function addresses are evidence anchors. Function addresses use the form `FUN_00XXXXXX` for the image address only.
 **Confidence key:** CONFIRMED — disassembly (read directly from the reader's code) / CONFIRMED — empirical (checked against real shipped rows) / HIGH CONFIDENCE — inferred / HYPOTHESIS — unconfirmed / OPEN / UNKNOWN.
+
+**Review status summary (2026-09-30).** An adversarial desk review (no executable, no game data; Team B's `team-b/HANDOFF.md` §9.83 used as the independent real-data source) covered 42 units: **DESK-PASS 16**, **DESK-PASS, text fixes applied 15**, **NEEDS-EXE 9**, **NEEDS-DATA 1**, **VALIDATED-BY-DATA 1**. A desk pass alone does not clear a unit: it means the text is internally consistent and its arithmetic reproduces, not that it was re-derived from the executable. Only the VALIDATED-BY-DATA unit (§2.4, flag-literal membership) is already backed by Team B's full-population run, and that run checks element names and literal membership only, never offsets, defaults or unit conversions. Units awaiting the executable: §1.2, §1.5, §2 (loader chain / DLC slots), §2.2 (offset half), §4.2, §5, §7.1, §8, §11.2; awaiting real data: §10.2. The OPEN items the review added inside DESK-PASS units are collected in §17 item 12. Three §18 claims were downgraded or corrected against Team B's full-population counts (§18.5 "clean" for ammo/melee/aim_drift; §18.6 `MinTime`/`MaxTime` 20/20 → 19/20; §18.6 `Beat_Down_Kill` shape → OPEN).
 
 ---
 
@@ -13,13 +15,19 @@
 
 ### 1.1 What this document is, and its boundary
 
-Every table in this group is an ordinary `<root><Table><Row>…` document (`spec-xtbl-format.md` §2–§3). Each is read at start-up by a small dedicated loader that opens the file by name, walks the rows and fills a runtime array. This document recovers those loaders' *vocabulary*. The base-game `.xtbl` files themselves are inside compressed containers this project cannot decode past entry 0 and nothing here attempts to; the only raw-readable rows are the DLC ones, used for validation (§16). **[CONFIRMED — disassembly for every reader claim below unless marked.]**
+Every table in this group is an ordinary `<root><Table><Row>…` document (`spec-xtbl-format.md` §2–§3). Each is read at start-up by a small dedicated loader that opens the file by name, walks the rows and fills a runtime array. This document recovers those loaders' *vocabulary*. The base-game `.xtbl` files themselves are inside compressed containers this project cannot decode past entry 0 and nothing here attempts to; the only raw-readable rows are the DLC ones, used for validation (§16). *[Superseded 2026-09-23: the base tables have since been read and validated, §18.]* **[CONFIRMED — disassembly for every reader claim below unless marked.]**
 
 All 22 tables assigned to this group have their exact filename literal in the executable, each with exactly the number of code cross-references listed in §15 — none had to be skipped. The DLC archives carry **no** raw `weapon_upgrades`, `ammo`, `melee`, `aim_*`, `combat_*` etc. tables; the only weapon-group DLC files are `dlc2_weapons.xtbl` (6 rows), `dlc3_weapons.xtbl` (3 rows), `dlc2_weapon_tracers.xtbl` and `dlc1/2/3_explosions.xtbl`.
 
+*(Desk review 2026-09-30: "none had to be skipped" refers to locating the literals and loaders. Only 21 of the 22 carry a weapon-group schema in this document; the 22nd, `store_weapon_lightset.xtbl`, is a lightset consumer whose document schema belongs to the shared lightset reader (§13.3).)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied — desk review (not re-derived from the executable).**
+
 ### 1.2 The XML node model **[CONFIRMED — disassembly]**
 
-The parsed document is a tree of nodes with this layout: **`+0x00` name pointer, `+0x04` next-sibling pointer, `+0x08` first-child pointer, `+0x0C` text pointer** (NULL when the element has no text). Every lookup is a linear walk and every name comparison is **case-insensitive** (`_stricmp`). The document is opened by `FUN_00DAC9A0(filename, pool, 1)`, which parses the file through `FUN_00DC5AC0` and returns the **`Table`** child of the root (failure text: `The table file "%s" is missing or invalid - parser error: %s.`); the in-memory twin is `FUN_00DACA90` (`spec-xtbl-format.md` §6.2). The document is released with `FUN_00DAB960` (thunk `FUN_00DAB9D0`). The sibling metadata blocks `TableTemplates`, `TableDescription`, `EntryCategories` and per-row `_Editor` are never visited by row readers (one loader, weapon upgrades, does look for an `_Editor` child — §4).
+The parsed document is a tree of nodes with this layout: **`+0x00` name pointer, `+0x04` next-sibling pointer, `+0x08` first-child pointer, `+0x0C` text pointer** (NULL when the element has no text). Every lookup is a linear walk and every name comparison is **case-insensitive** (`_stricmp`). The document is opened by `FUN_00DAC9A0(filename, pool, 1)`, which parses the file through `FUN_00DC5AC0` and returns the **`Table`** child of the root (on failure it prints a formatted "table file missing or invalid" message carrying the file name and the parser error); the in-memory twin is `FUN_00DACA90` (`spec-xtbl-format.md` §6.2). The document is released with `FUN_00DAB960` (thunk `FUN_00DAB9D0`). The sibling metadata blocks `TableTemplates`, `TableDescription`, `EntryCategories` and per-row `_Editor` are never visited by row readers (one loader, weapon upgrades, does look for an `_Editor` child — §4). **[OPEN — desk review 2026-09-30: the `+0x00/+0x04/+0x08/+0x0C` node layout and the open/parse chain cannot be reproduced at the desk (a re-implementation with its own XML parser does not depend on them); to be settled against the executable (`FUN_00DC4FF0`, `FUN_00DC5030`, `FUN_00DC5150`, `FUN_00DC5AC0`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: node layout and parser entry points not reproducible at the desk — desk review (not re-derived from the executable).**
 
 ### 1.3 The shared accessor family (documented once; siblings cross-reference this section) **[CONFIRMED — disassembly]**
 
@@ -36,7 +44,7 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | `bool`| `FUN_00DAC480` | `FUN_00DAC510` |
 | `f32` | `FUN_00DACCB0` | `FUN_00DACD40` |
 
-- **The "always" flavour does not initialise its 1 KB scratch buffer on the absent path** — when the child is missing it parses whatever was on the stack. (`spec-vehicle-data.md` §7.2 describes this flavour as "always write, 0 if absent"; the disassembly of `FUN_00DACCB0` shows no clearing of the buffer, so "0 if absent" is not guaranteed. Shipped data always supplies these elements. **[CONFIRMED — disassembly of the entry sequence; behaviour on absent path is therefore unspecified; a re-implementation should treat absent as 0.]**)
+- **The "always" flavour does not initialise its 1 KB scratch buffer on the absent path** — when the child is missing it parses whatever was on the stack. (`spec-vehicle-data.md` §7.2 describes this flavour as "always write, 0 if absent"; the disassembly of `FUN_00DACCB0` shows no clearing of the buffer, so "0 if absent" is not guaranteed. Shipped data always supplies these elements. **[CONFIRMED — disassembly of the entry sequence; behaviour on absent path is therefore unspecified; a re-implementation should treat absent as 0.]**) **[Desk review 2026-09-30: this bullet is the single statement of the absent-child behaviour for the whole document. The "zero if absent" wording in §2.3 (`Ragdoll_Info`, `Charge_Release_Info`, `Overheat_Info`), §12.1 (`Ricochet_velocity_scale`), §14.1 (`Left_Limit`/`Right_Limit`) and the "empty scratch buffer" wording in §12.2 hold only if the enclosing block is skipped or the destination was pre-zeroed; read them through this bullet. OPEN — to be settled against the executable: one call site of `FUN_00DACCB0` with a NULL parent, and the buffer set-up at its entry.]**
 - Integer text parser `FUN_00DAB8B0`: `0x`/`0X` prefix → hexadecimal, else decimal digits, stopping at the first non-digit; the signed variants strip one leading `-` first. `u8`/`u16` variants parse to 32 bits and **truncate**. Boolean parser `FUN_00DAB850`: case-insensitive whole-string match, `true`/`yes` → 1, everything else (including `false`, `no`, unrecognised text) → 0.
 - Float grammar `FUN_00DACB20` (`spec-vehicle-data.md` §7.2): optional `-`, integer part, optional `.digits`, optional exponent; a leading `.` is accepted; **a leading `0x` yields exactly 0.0**.
 - Text getters `FUN_00DABA10`, `FUN_00DABA40` → pointer to a child's text or NULL; bounded string copies `FUN_00DABA70` (void) and `FUN_00DABAB0` (returns present); heap-duplicating readers `FUN_00DABAF0`/`FUN_00DABBB0`.
@@ -47,9 +55,13 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 - **vec3**: `FUN_00DACF20`, `FUN_00DACF60`, `FUN_00DACFB0` — children named `X`, `Y`, `Z` (all "always" floats).
 - **`Filename` child getters**: `FUN_00DAC880`, `FUN_00DAC8C0` (text), `FUN_00DAC900`, `FUN_00DAC950` (copy).
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (absent-child behaviour reconciled into one statement; the behaviour itself NEEDS-EXE) — desk review (not re-derived from the executable).**
+
 ### 1.4 Name hashing **[CONFIRMED — disassembly]**
 
-`FUN_00D9E8B0(out, string, seed, maxlen)` and `FUN_00D9E740(string, seed)` are the engine's table-driven CRC-32 (reflected, table at `0x01320DA0`, input lower-cased, **no final XOR**). Every weapon-group caller passes **seed 0** (the vehicle spec, `spec-vehicle-data.md` §7.1, reports the same; `spec-conversation-format.md` §6 reports seed `0xFFFFFFFF` for another caller — the seed is a parameter). A NULL name hashes to 0. The multiply-by-33 bucket hash `FUN_00DAB330(name, 0x80)` is used for camera-shake names. Sound-event names go to the audio middleware's own string-to-id function through `FUN_00462960` (the literal `none` and an empty string give 0).
+`FUN_00D9E8B0(out, string, seed, maxlen)` and `FUN_00D9E740(string, seed)` are the engine's table-driven CRC-32 (reflected, table at `0x01320DA0`, input lower-cased, **no final XOR**). Every weapon-group caller passes **seed 0** (the vehicle spec, `spec-vehicle-data.md` §7.1, reports the same; `spec-conversation-format.md` §6 reports seed `0xFFFFFFFF` for another caller — the seed is a parameter). A NULL name hashes to 0. The multiply-by-33 bucket hash `FUN_00DAB330(name, 0x80)` is used for camera-shake names. Sound-event names go to the audio middleware's own string-to-id function through `FUN_00462960` (the literal `none` and an empty string give 0). **[OPEN — desk review 2026-09-30: whether `maxlen` truncates the hashed input is not stated (§10.1 feeds the hash from 0x20/0x40-byte bounded copies), and the multiply-by-33 hash and the `none` = 0 audio rule cannot be checked at the desk; to be settled against the executable (`FUN_00D9E8B0`, `FUN_00DAB330`, `FUN_00462960`). The CRC-32 convention itself was reproduced at the desk on all six §16.3 values.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (CRC convention reproduced; `maxlen`, multiply-33 hash and audio-id rule NEEDS-EXE) — desk review (not re-derived from the executable).**
 
 ### 1.5 Loader idioms common to the whole group **[CONFIRMED — disassembly]**
 
@@ -58,11 +70,15 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 3. **Record flags at record `+0x18`, bit 2 = "loaded"** (weapons; and other tables use analogous live bits).
 4. **`Name`** (`0x0129EE6C`) is the row key. Records are found by linear scan with `_stricmp` (weapons, ammo, aim-drift profiles, melee-attack sets) or by CRC (effects, explosions, tracers, `items_3d`).
 
+**[OPEN — desk review 2026-09-30: the refresh-path semantics (item 2) and the consumer of the weapon `Is_DLC` gate byte (item 1; not traced for weapons, so whether `0x00` hides a weapon is not stated) are to be settled against the executable (`FUN_00B83390`, `FUN_00B82200`). §18.4 data (`Is_DLC` true on 5/82 base rows, `Framework` absent on 82/82) supports the two gates being independent.]**
+
+**Review status (2026-09-30): NEEDS-EXE: refresh semantics and gate-byte consumer — desk review (not re-derived from the executable).**
+
 ### 1.6 Cross-table name resolvers used by this group (addresses are evidence anchors) **[CONFIRMED — disassembly]**
 
 | Resolver | Target | How the key is matched |
 |---|---|---|
-| `FUN_00B81220` | weapons array (`0x028DC4DC`, count `0x028DC4E0`, stride `0x7EC`) | `_stricmp` on record `+0x00`, only records with `+0x18` bit 2 |
+| `FUN_00B81220` | weapons array (`0x028DC4DC`, count `0x028DC4E0` *(per §2.1 this is the capacity, base rows + 12; loaded count `0x028DC4E4`)*, stride `0x7EC`) | `_stricmp` on record `+0x00`, only records with `+0x18` bit 2 |
 | `FUN_00B6E4E0` | ammo records (`DAT_028CDC4C`, count `DAT_028CDC48`, stride `0x30`) | `_stricmp` on record `+0x00` → record address (0 if none) |
 | `FUN_00B6C320` | aim-drift profiles (`0x028CD2B8`, count `0x028CDBD4`, stride `0x48`, max 24) | `_stricmp` on `+0x00` |
 | `FUN_004CCE70` | animation-group name array (`DAT_03519838`, count `DAT_03171C1C`) | `_stricmp`; returns the index, **−1 if none; not NULL-safe** |
@@ -71,12 +87,16 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | `FUN_00590D20` → `FUN_00590CE0` | explosion records (`0x013CF5C0`, stride `0xEC`, count `0x013CF504`) | CRC(name) compared with the record dword at `+0x20`; 0 if none |
 | `FUN_005A2FD0` | tracer records (`0x014033E0`, stride `0x2C`, count `0x014033D4`) | CRC(name) compared with the dword at `+0x04`; 0 if none |
 | `FUN_00904C10` | `items_3d` records (`0x025F5B98`, stride `0xB8`, count `0x025F5B8C`) | CRC(name) at `+0x04` |
-| `FUN_008DCB10` | `items_inventory` records (`0x0250ADC0`, stride `0x34`, 110 slots, live bit in byte `+0x30`) | `_stricmp` on `+0x00` |
+| `FUN_008DCB10` | `items_inventory` records (`0x0250ADC0`, stride `0x34`, 110 slots, live bit in byte `+0x30` **[Conflict: `spec-save-format.md` §10.3 (entry 1 weapon-inventory row) says bit 0 of the byte at `+0x2C` = valid; not re-checked which is right — see the matching marker there]**) | `_stricmp` on `+0x00` |
 | `FUN_0058BF30` | brass records (`0x013CF220`, stride `0x0C`, count `0x013CF280`) | `_stricmp`; stores the record address |
 | `FUN_0057BEE0` | camera-shake table (`0x012E4620`, indexed) | multiply-33 hash → index via `FUN_0057BC70`; 0 if none |
 | `FUN_00561370` | foley-collision records (`0x013C85B0`, stride 20 bytes, count = `u16` at `0x013C85B4`) | Wwise-style id compared with the record's first dword |
-| `FUN_006F76F0` | 33 physical-material names (`0x0113DF70`) | `_stricmp`; **index 31 (`0x1F`) if no match** |
+| `FUN_006F76F0` | 33 physical-material names (`0x0113DF70`) *(the 33 names, slot 0…32, are listed in `spec-tables-environment.md` §11.6, `bitmap_materials.xtbl`, from the same list at `0x0113DF70`; index 31 there is `not set`)* | `_stricmp`; **index 31 (`0x1F`) if no match** |
 | `FUN_009828F0` | melee attack table | CRC(name) → `FUN_00982780`; **`0xFFFF` if NULL/none** |
+
+**[OPEN — desk review 2026-09-30: the `items_inventory` live-bit conflict above (byte `+0x30` here vs bit 0 of byte `+0x2C` in `spec-save-format.md` §10.3) is not settled by either spec; to be settled against the executable (`FUN_008DCB10`, the byte it tests).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (material-name cross-reference added; `items_inventory` live bit NEEDS-EXE) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -84,9 +104,11 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 
 **Loader chain [CONFIRMED — disassembly].** `FUN_005D25F0` (game init) → `FUN_00B85400` (the weapon subsystem initialiser: reads `weapon_categories.xtbl` (§3), then calls) → **`FUN_00B834C0(refresh)`**, which: loads `aim_drift.xtbl` (§8) and `weapon_melee_attacks.xtbl` (§6) first; opens **`weapons.xtbl`** (literal `0x01184E58`, three code xrefs: the loader's row-count pass, its call that hands the name to the row walker at `0x00B835BC`, and the preload pass `FUN_00AD0180`); counts the `<Weapon>` rows whose `Framework` is absent/`main`; sets the capacity to **count + 12** (`0x028DC4E0`) and allocates `capacity × 0x7EC` bytes at **`0x028DC4DC`**; clears the loaded bit of every slot; then `FUN_00B83390` walks the rows and calls the per-row reader **`FUN_00B82200(record, ctx, row, refresh)`** for each base-game row, ORing `4` into record `+0x18` and counting them at `0x028DC4E4`. A final pass resolves `Base_Version` names to pointers (§2.2). The 12 spare slots are for DLC rows, filled by the DLC handler below.
 
-**DLC rows [CONFIRMED — disassembly].** The `weapon` entry of the DLC content registry (§15.2) is **`FUN_00B835E0(packages)`** (its unload twin is `FUN_00B837E0`). Ghidra had no function at either address (the code is reached only through the registry's function-pointer words, so string cross-references from it were invisible to the first xref pass; both were disassembled by hand for this pass). For each DLC package it: (1) builds `<framework>_items_inventory.xtbl` (`FUN_0045BA50`, §10.1), finds the first `Inventory_Item` row of that framework, reads its **`Info_Slot_Index`** (`u32`, default 0) and hands both to the `items_inventory` DLC loader `FUN_008DC8C0`; (2) builds **`<framework>_weapons.xtbl`**, finds the **first `Weapon` row whose `Framework` equals the package's framework name and reads *its* `Info_Slot_Index` (`u32`, default 0)**; (3) calls the row walker `FUN_00B83390` with that value as the **starting slot index** and the package's framework string, so the framework's `Weapon` rows are read into consecutive slots **from `Info_Slot_Index`** (stopping at the capacity); (4) runs the post-pass that resolves `Base_Version` names. The two raw DLC files agree: `dlc2_weapons.xtbl`'s first row carries `Info_Slot_Index` **82** (six rows → slots 82–87) and `dlc3_weapons.xtbl`'s **89** (three rows → 89–91); with capacity = base count + 12 this is consistent with ~~a base-game count of 82 weapons and DLC slots 82–93 (HIGH CONFIDENCE — the base file is not readable; 82 + 12 = 94 = `0x5E`, the first DLC `items_inventory` slot the unload routine clears, which supports the reading)~~ **a base-game count of 82 weapons and DLC slots 82–93 — CONFIRMED — empirical, 2026-09-23: the real base `weapons.xtbl` (`misc_tables.vpp_pc` entry 344) has exactly 82 `<Weapon>` rows, every one with `Framework` absent; capacity 94 = 82 + 12 is therefore exact, not inferred (§18.4).** The unload routine `FUN_00B837E0` clears the loaded bit of the last 12 slots (decrementing `0x028DC4E4`) and unloads `items_inventory` slots `0x5E…0x6D`. `Info_Slot_Index` is therefore **consumed by the DLC handler, never by the row reader** (`FUN_00B82200` ignores it, as do rows after the first of a framework).
+**DLC rows [CONFIRMED — disassembly].** The `weapon` entry of the DLC content registry (§15.2) is **`FUN_00B835E0(packages)`** (its unload twin is `FUN_00B837E0`). Ghidra had no function at either address (the code is reached only through the registry's function-pointer words, so string cross-references from it were invisible to the first xref pass; both were disassembled by hand for this pass). For each DLC package it: (1) builds `<framework>_items_inventory.xtbl` (`FUN_0045BA50`, §10.1), finds the first `Inventory_Item` row of that framework, reads its **`Info_Slot_Index`** (`u32`, default 0) and hands both to the `items_inventory` DLC loader `FUN_008DC8C0`; (2) builds **`<framework>_weapons.xtbl`**, finds the **first `Weapon` row whose `Framework` equals the package's framework name and reads *its* `Info_Slot_Index` (`u32`, default 0)**; (3) calls the row walker `FUN_00B83390` with that value as the **starting slot index** and the package's framework string, so the framework's `Weapon` rows are read into consecutive slots **from `Info_Slot_Index`** (stopping at the capacity); (4) runs the post-pass that resolves `Base_Version` names. The two raw DLC files agree: `dlc2_weapons.xtbl`'s first row carries `Info_Slot_Index` **82** (six rows → slots 82–87) and `dlc3_weapons.xtbl`'s **89** (three rows → 89–91); with capacity = base count + 12 this is consistent with ~~a base-game count of 82 weapons and DLC slots 82–93 (HIGH CONFIDENCE — the base file is not readable; 82 + 12 = 94 = `0x5E`, the first DLC `items_inventory` slot the unload routine clears, which supports the reading)~~ **a base-game count of 82 weapons and DLC slots 82–93 — CONFIRMED — empirical, 2026-09-23: the real base `weapons.xtbl` (`misc_tables.vpp_pc` entry 344) has exactly 82 `<Weapon>` rows, every one with `Framework` absent; capacity 94 = 82 + 12 is therefore exact, not inferred (§18.4).** The unload routine `FUN_00B837E0` clears the loaded bit of the last 12 slots (decrementing `0x028DC4E4`) and unloads `items_inventory` slots `0x5E…0x6D`. `Info_Slot_Index` is therefore **consumed by the DLC handler, never by the row reader** (`FUN_00B82200` ignores it, as do rows after the first of a framework). **[OPEN — desk review 2026-09-30: the unload routine is stated to clear the last 12 weapon slots but 16 `items_inventory` slots (`0x5E…0x6D`); the two arrays are different, so the numeric coincidence 82 + 12 = `0x5E` is not evidence, and the 12-vs-16 difference is unexplained. "Consecutive slots" holds within one framework only (DLC2 uses 82–87, DLC3 starts at 89, slot 88 is unused). To be settled against the executable (`FUN_00B835E0`, `FUN_00B837E0`, `FUN_008DC8C0`) and the real data (first-row `Info_Slot_Index` of `dlc2_`/`dlc3_items_inventory.xtbl` vs 82/89).]**
 
 **A second reader of the same file:** `FUN_00AD0180` re-opens `weapons.xtbl` and, for each row that has a `Vehicle_Weapon` element and a `Name`, gathers up to 16 effect handles for preloading: the effects named by `Explosion`, `Underwater_Explosion` and `Penetrating_End_Point_Explosion` (each resolved through the explosion table to that explosion's effect) and the `Effect` of every child of `Effect_Situations`; the list is registered against the weapon name. (Preload bookkeeping only; nothing is stored in the weapon record.)
+
+**Review status (2026-09-30): NEEDS-EXE: DLC slot start and the 12-vs-16 unload clear — desk review (not re-derived from the executable).**
 
 ### 2.1 Storage
 
@@ -98,9 +120,11 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | Loaded bit | record `+0x18` bit 2 |
 | Consistency check | the last field read ends at `+0x7EC` exactly (`Blood_Decal_Delay`, §2.3), matching the stride |
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 2.2 Record layout — top level **[CONFIRMED — disassembly; offsets are record-relative]**
 
-"Rd" = reader family from §1.3 (a/i = always/if-present). "Init" = value when the element is absent on first load (the record is zero-filled first, so unlisted defaults are 0). Effects are `s32` handles (−1 = none); explosions/ammo/tracers/brass are record **pointers** (0 = none).
+"Rd" = reader family from §1.3 (a/i = always/if-present). "Init" = value when the element is absent on first load (the record is zero-filled first, so unlisted defaults are 0). Effects are `s32` handles (−1 = none); explosions/ammo/tracers/brass are record **pointers** (0 = none). *(Desk review 2026-09-30, range notation: a range `+A…+B` in this document runs from the start of the first field either to the last byte (e.g. `+0x8C…+0xBB`, `+0x210…+0x24B`) or to the start of the last field (e.g. `+0x130…+0x13C`, `+0x710…+0x774`, `+0x798…+0x7AC`); the two are not distinguished in the text. Take block spans from the sizes in §4.3, not from these ranges.)*
 
 | Offset | Element (XML) | Type / reader | Default / behaviour | Notes |
 |---|---|---|---|---|
@@ -121,7 +145,7 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | `+0x4C` | `Weapon_Class` | `s32` enum | −1 if absent | 23 names, §2.5 |
 | `+0x50` | `Category` | `s32` enum | written only if present; else 0 | 7 `WPNCAT_*` names, §2.5 |
 | `+0x54` | `Inv_Slot` | `u8` enum | −1 → `0xFF` if absent | 11 names, §2.5 |
-| `+0x58` / `+0x5C` | *(weapon `Name`)* | `items_3d` / `items_inventory` record pointers | first load only. **Missing entry ⇒ the diagnostic "Weapon parse can't find matching entry ITEMS_3D.XTBL / ITEMS_INVENTORY.XTBL for '…'" is printed and global byte `0x028DC4F1` is set** | so every weapon must have a same-named row in `items_3d.xtbl` and `items_inventory.xtbl` |
+| `+0x58` / `+0x5C` | *(weapon `Name`)* | `items_3d` / `items_inventory` record pointers | first load only. **Missing entry ⇒ a diagnostic naming the two tables (`items_3d` / `items_inventory`) and the weapon is printed and global byte `0x028DC4F1` is set** | so every weapon must have a same-named row in `items_3d.xtbl` and `items_inventory.xtbl` |
 | `+0x60` | `Muzzle_Flash` | — | element is fetched and discarded; field forced to −1 | legacy element, no effect |
 | `+0x64` / `+0x68` / `+0x6C` | `Muzzle_Effect` / `Alt_Muzzle_Effect` / `Melee_Effect` | effect handle | −1 if absent | resolver `FUN_005C50B0` |
 | `+0x70` | `Fire_Cone_Impact_Effect` | effect handle | −1 if absent | |
@@ -158,7 +182,7 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | `+0x188` | `Wieldable_Prop_Death_VFX` | effect handle | **read only when `Special_Case_Type` = 8 (`Wieldable Prop Weapon`)**; −1 if absent; otherwise 0 | |
 | `+0x18C` | `Wieldable_Prop_Hits_Allowed` | `u16` (i) | same condition | |
 | `+0x190`…`+0x1A0` | `Flat_Spread_Metrics` | §2.3 | `+0x190` = 0 if absent | |
-| `+0x1A4` | `Fire_Cone_Angle` (degrees) | `f32` | default 1.0; if present the stored value is **cos(½ × angle)** (HIGH CONFIDENCE that the transcendental is cosine) | |
+| `+0x1A4` | `Fire_Cone_Angle` (degrees) | `f32` | default 1.0; if present the stored value is **cos(½ × angle)** (HIGH CONFIDENCE that the transcendental is cosine) | **[OPEN — desk review 2026-09-30: the reader flavour (always / if present) is not given, and `Fire_Cone_Metrics` (§2.3) also writes `+0x1A4`; which write wins when both are present is not stated. To be settled against the executable (`FUN_00B82200`, order of the two writes).]** |
 | `+0x1A8` | `Fire_Cone_Length` | `f32` (i) | 0 | |
 | `+0x1AC`…`+0x208` | `Fire_Cone_Metrics` | §2.3 | | |
 | `+0x20C` | `Shots_Per_Round` | `u8` (i) | 1 | |
@@ -189,9 +213,13 @@ All helpers take `(destination, parent-node, child-name)`; **passing a NULL chil
 | `+0x7E4` | `Blood_Decal_Scale` | `f32` (i) | 1.0 | |
 | `+0x7E8` | `Blood_Decal_Delay` | `s32` (i) | −1 | record ends at `+0x7EC` |
 
+*(Desk review 2026-09-30: the bytes `+0x55…+0x57` (after the `u8` `Inv_Slot`), `+0x18E…+0x18F` (after the `u16` at `+0x18C`) and `+0x37A…+0x37B` (inside `Projectile_Info`, after the `u16` at `+0x378`) are not element-driven; they are presumably alignment padding (not traced). Several rows above (`Fire_Cone_Angle` here; `Charge_Release_Info` fields in §2.3) give a default but no reader flavour.)*
+
+**Review status (2026-09-30): NEEDS-EXE: element-tree half desk-consistent, but the offset half (offsets, reader flavours, the double write of `+0x1A4`, default order of the animation-group fallbacks) rests on one decompile pass and Team B's run validates element names only — desk review (not re-derived from the executable).**
+
 ### 2.3 Sub-blocks **[CONFIRMED — disassembly]**
 
-**`Time_Management` / `Alt_Time_Management`** (reader `FUN_00B7E7B0`; block at `+0x130` and `+0x13E`, seven `u16` slots + a `u8`):
+**`Time_Management` / `Alt_Time_Management`** (reader `FUN_00B7E7B0`; block at `+0x130` and `+0x13E`, ~~seven `u16` slots + a `u8`~~ **six `u16` slots + a `u8` + 1 pad byte = `0x0E` bytes** *(desk review 2026-09-30: the table below lists six `u16` slots `+0x00…+0x0A` and the `u8` at `+0x0C`; size `0x0E` agrees with §4.3)*):
 
 | Block offset | Element | Notes |
 |---|---|---|
@@ -219,13 +247,15 @@ The `min`/`max` children placed **directly** under `Time_Management` in shipped 
 
 Every multiplier is an "if present" float, so a value placed one level too shallow (as in the DLC row for `bike_jet03_w`, which puts `Movement_Multiplier_Vehicle` directly under `SpreadMinMax` and directly under `PlayerWeaponSpread`) is **not read** and the default 1.0 stands.
 
+**[OPEN — desk review 2026-09-30: the NPC block leaves `+0x1C` and `+0x38` (the player block's `Fine_Aim` positions) unassigned; whether they hold 1.0, 0 or stay untouched is not stated. To be settled against the executable (`FUN_00B80140`).]**
+
 **`Target_Lockon`** (`+0xE0` = 1 when present): `Lockon_Time_MS` `+0xE4` (`s32`), `Locking_Size_Multiplier` `+0xE8`, `Locked_Size_Multiplier` `+0xEC`, `Beep_Timing_Slowest` `+0xF0`, `Beep_Timing_Fastest` `+0xF4`, `Angle_From_Reticle` `+0xF8`, `Angle_From_Reticle_Lose_Target` `+0xFC`, `Locking_Rotation_Furthest_Angle` `+0x100` (degrees → radians), `flags`/`flag` `+0x104` `u8` (bit 0 = `enemy aircraft only`). All floats "always".
 
 **`Flat_Spread_Metrics`** (`+0x190` = 1 when present; angles ×π/180): `Flat_Spread_Width_Angle` `+0x194`, `Flat_Spread_Height_Angle` `+0x198`, `Flat_Spread_Rotation` `+0x19C`, `Flat_Spread_Rotation_Per_Shot` `+0x1A0`.
 
-**`Fire_Cone_Metrics`** (`FUN_00B7FC20`; children `Metric_Type` → either `Angle` → `Angle` or `Min_Max` → `Near_Radius`/`Far_Radius`; `+0x1AC`/`+0x1B0` zero on first load). `Angle` form: `+0x1A4` = cos(½ × angle rad) (HIGH CONFIDENCE, cosine). `Min_Max` form: `+0x1AC` Near, `+0x1B0` Far; `+0x1A4` = `Fire_Cone_Length ÷ √(length² + (Far−Near)²)`; `+0x208` = 7; `+0x1B4…+0x1BC` = 0; six ring points at 60° steps (`vec3` each, 12 bytes, from `+0x1C0`) with radius `(Far − Near)` and z = `Fire_Cone_Length`. The reader returns whether `Fire_Cone_Metrics` existed.
+**`Fire_Cone_Metrics`** (`FUN_00B7FC20`; children `Metric_Type` → either `Angle` → `Angle` or `Min_Max` → `Near_Radius`/`Far_Radius`; `+0x1AC`/`+0x1B0` zero on first load). `Angle` form: `+0x1A4` = cos(½ × angle rad) (HIGH CONFIDENCE, cosine). `Min_Max` form: `+0x1AC` Near, `+0x1B0` Far; `+0x1A4` = `Fire_Cone_Length ÷ √(length² + (Far−Near)²)`; `+0x208` = 7; `+0x1B4…+0x1BC` = 0; six ring points at 60° steps (`vec3` each, 12 bytes, from `+0x1C0`) with radius `(Far − Near)` and z = `Fire_Cone_Length`. The reader returns whether `Fire_Cone_Metrics` existed. **[OPEN — desk review 2026-09-30: what the value 7 at `+0x208` counts (six ring points are written) is not stated, nor which of this block's and `Fire_Cone_Angle`'s (§2.2) writes to `+0x1A4` is last; to be settled against the executable (`FUN_00B7FC20`, `FUN_00B82200`).]**
 
-**`Ragdoll_Info`** (all "always" `f32`; zero if absent): `Chance` `+0x328`, `Death_Velocity_Horizontal` `+0x32C`, `Death_Velocity_Vertical` `+0x330`, `Death_Point_Velocity` `+0x334`, `Death_Angular_Velocity_Horizontal` `+0x338`, `Death_Angular_Velocity_Vertical` `+0x33C`, `Death_Range_Min` `+0x340`, `Death_Range_Max` `+0x344`.
+**`Ragdoll_Info`** (all "always" `f32`; zero if absent *(see §1.3 for the absent-child caveat)*): `Chance` `+0x328`, `Death_Velocity_Horizontal` `+0x32C`, `Death_Velocity_Vertical` `+0x330`, `Death_Point_Velocity` `+0x334`, `Death_Angular_Velocity_Horizontal` `+0x338`, `Death_Angular_Velocity_Vertical` `+0x33C`, `Death_Range_Min` `+0x340`, `Death_Range_Max` `+0x344`.
 
 **`Projectile_Info`** (`FUN_00B804D0`; the whole block is skipped if absent; returns failure — and the weapon row fails — **if `Model` is present but not found in `items_3d.xtbl`**):
 
@@ -240,7 +270,7 @@ Every multiplier is an "if present" float, so a value placed one level too shall
 | `+0x368` | `Creation_Effect` | effect handle, −1 |
 | `+0x36C` | `Attached_Effect_Prop_Point` | heap string, first load only |
 | `+0x370` / `+0x372` | `Fuse_Time` / `NPC_Fuse_Time` | `u16`; presence of `Fuse_Time` sets flag bit `0x10000`; NPC defaults to the plain fuse |
-| `+0x374` | `Fade_Out_Time` (seconds) | `u16` ms (×1000); 0 if absent or negative |
+| `+0x374` | `Fade_Out_Time` (seconds) | `u16` ms (×1000); 0 if absent or negative **[OPEN — desk review 2026-09-30: behaviour above 65.535 s (wrap or clamp) not stated; to be settled against the executable (`FUN_00B804D0`) / real data (max authored value).]** |
 | `+0x376` | `Projectile_Ignition_Delay_MS` | `s16` (i) |
 | `+0x378` | `AI_Can_Guide` | `u16` (i), default 0 |
 | `+0x37C` | `Mass` | `f32` (a) |
@@ -257,15 +287,17 @@ The DLC rows place `X`/`Y`/`Z` and a `Foley_Name` **directly** under `Projectile
 
 **`Waterspray_info`** (`+0x444`…): `Water_stream_force` `+0x444`, `Refill_rate_per_Second` `+0x448`, `Radius_Expansion_Rate` `+0x44C` (all "always"), `Waterspray_Effect` `+0x45C` (CRC of name), `Pressure_Increase_Rate` `+0x450` (if present: sets flag-A bit `0x8000000` and reads `Pressure_Decrease_Rate` `+0x454`, `Pressure_Restore_Time` `+0x458`; if absent the bit is cleared).
 
-**`Charge_Release_Info`** (`FUN_00B80D40`; zero if absent): `Charge_Time_sec` → `+0x460` = **1 ÷ seconds**; `Min_Charge_Percent` `+0x464` (default 1.0), `Charge_Base` `+0x468`, `Auto_Release` `+0x46C` (bool), `Min_Range` `+0x470` (default −1.0), `Pre_Charge_Delay` `+0x474`, `Charge_Cooldown_Time` → `+0x478` = 1 ÷ seconds (and flag word `+0x484` bit 1 set), `Charging_Camera_Shake` `+0x47C`, `Charged_Camera_Shake` `+0x480`, `Charge_Flags`/`Flag` = `Show HUD on charge` → `+0x484` bit 0.
+**`Charge_Release_Info`** (`FUN_00B80D40`; zero if absent *(see §1.3)*; **[OPEN — desk review 2026-09-30: the reader flavour of each field is not given; the stated defaults (1.0, −1.0) imply "if present" reads but this is not stated; to be settled against the executable (`FUN_00B80D40`).]**): `Charge_Time_sec` → `+0x460` = **1 ÷ seconds**; `Min_Charge_Percent` `+0x464` (default 1.0), `Charge_Base` `+0x468`, `Auto_Release` `+0x46C` (bool), `Min_Range` `+0x470` (default −1.0), `Pre_Charge_Delay` `+0x474`, `Charge_Cooldown_Time` → `+0x478` = 1 ÷ seconds (and flag word `+0x484` bit 1 set), `Charging_Camera_Shake` `+0x47C`, `Charged_Camera_Shake` `+0x480`, `Charge_Flags`/`Flag` = `Show HUD on charge` → `+0x484` bit 0.
 
-**`Vehicle_Weapon`** (`FUN_00B7E670`; block base `+0x488`; children `Primary_Weapons` and `Alt_Weapons`, each a list of `Weapon`; **at most 4 each**). Primary components at `+0x488 + 0x50·i`, count at **`+0x5C8`**; alt components at `+0x5CC + 0x50·j`, count at **`+0x70C`**. **Component record (`FUN_00B7E3A0`, 0x50 bytes):** `+0x00` `UID` (`u32` "always"), `+0x04` `Weapon_Class` (23-name enum), `+0x08` flags (`Target reticule` = 1, `Enable physics` = 2), `+0x0C` `Muzzle_Explosion` (explosion pointer), then two 32-byte turret parts — `Middle_Component` at `+0x10`, `Top_Component` at `+0x30` — each: `+0x00` flags (`Don't reset angle when unmanned` = 1), `+0x04` `Min_Angle`, `+0x08` `Max_Angle`, `+0x0C` `Max_Speed`, `+0x10` `Damp_Angle`, `+0x14` `Unmanned_Speed` (all degrees → radians), `+0x18` `Firing_Angle_Speed` (degrees → radians; **defaults to `Max_Speed`**), `+0x1C` `Max_Force` (**× 4.448221683502197**, a pound-force → newton factor).
+**`Vehicle_Weapon`** (`FUN_00B7E670`; block base `+0x488`; children `Primary_Weapons` and `Alt_Weapons`, each a list of `Weapon`; **at most 4 each**). Primary components at `+0x488 + 0x50·i`, count at **`+0x5C8`**; alt components at `+0x5CC + 0x50·j`, count at **`+0x70C`**. **Component record (`FUN_00B7E3A0`, 0x50 bytes):** `+0x00` `UID` (`u32` "always"), `+0x04` `Weapon_Class` (23-name enum), `+0x08` flags (`Target reticule` = 1, `Enable physics` = 2), `+0x0C` `Muzzle_Explosion` (explosion pointer), then two 32-byte turret parts — `Middle_Component` at `+0x10`, `Top_Component` at `+0x30` — each: `+0x00` flags (`Don't reset angle when unmanned` = 1), `+0x04` `Min_Angle`, `+0x08` `Max_Angle`, `+0x0C` `Max_Speed`, `+0x10` `Damp_Angle`, `+0x14` `Unmanned_Speed` (all degrees → radians), `+0x18` `Firing_Angle_Speed` (degrees → radians; **defaults to `Max_Speed`**), `+0x1C` `Max_Force` (**× 4.448221683502197**, a pound-force → newton factor). **[OPEN — desk review 2026-09-30: whether the multiply is done in `f32` or `f64` (last-bit difference) is not stated; to be settled against the executable (`FUN_00B7E3A0`).]**
 
 **`Camera_Info`** (`FUN_00B809A0`; intensities default 1.0; the names below in order): `Primary_Fire_Camera_Shake` `+0x710` (+ `_Intensity` `+0x714`), `Primary_Fine_Aim_Camera_Shake` `+0x718` (+ `Primary_Fire_Fine_Aim_Camera_Shake_Intensity` `+0x71C`), `Secondary_Fire_Camera_Shake` `+0x720` (+`_Intensity` `+0x724`), `Secondary_Fire_Fine_Aim_Camera_Shake` `+0x728` (+`…_Intensity` `+0x72C`), `Melee_Hard_Camera_Shake` `+0x730` (+`_Intensity` `+0x734`), `Melee_Soft_Camera_Shake` `+0x738` (+`_Intensity` `+0x73C`), `Player_Hit_Camera_Shake` `+0x740` (+`_Intensity` `+0x744`) — shake names resolve through `FUN_0057BEE0`; `Primary_Recoil_Multiplier` `+0x748`, `Primary_Fine_Aim_Recoil_Multiplier` `+0x74C`, `Primary_Recoil_Delay_ms` `+0x750` (`s32`), `Primary_Recoil_Ramped` `+0x754` (bool, default true), `Secondary_Recoil_Multiplier` `+0x758`, `Secondary_Fine_Aim_Recoil_Multiplier` `+0x75C`, `Zoom_Type` `+0x760` (`progressive` 0, `non-progressive` 1; written only if present), `Minimum_FOV` `+0x764`, `Maximum_FOV` `+0x768`, `Zoom_Steps` `+0x76C`, `FOV_Rate` `+0x770` (all "if present" floats).
 
-**`Overheat_Info`** (zero if absent): `Percent_Increase_Per_Shot` `+0x798`, `Percent_Decrease_Per_Second` `+0x79C`, `Percent_Decrease_Per_Reload` `+0x7A0`, `Percent_Decrease_Per_Second_Overheated` `+0x7A4`, `Percent_Decrease_Per_Reload_Overheated` `+0x7A8`; `Overheat_Flags`/`Flag` → byte `+0x7AC`: `applies to primary` 1, `applies to alt fire` 2, `play reload anim` 4.
+**`Overheat_Info`** (zero if absent *(see §1.3)*): `Percent_Increase_Per_Shot` `+0x798`, `Percent_Decrease_Per_Second` `+0x79C`, `Percent_Decrease_Per_Reload` `+0x7A0`, `Percent_Decrease_Per_Second_Overheated` `+0x7A4`, `Percent_Decrease_Per_Reload_Overheated` `+0x7A8`; `Overheat_Flags`/`Flag` → byte `+0x7AC`: `applies to primary` 1, `applies to alt fire` 2, `play reload anim` 4.
 
 **`Effect_Situations`** (`FUN_00B7E300`; **positional**): the first four *children*, whatever their tag (the shipped rows use `Situation`, and the parent's tag is not checked), each read as `Situation` (enum, 25 names, §2.5) → `+0x7B0 + 8·i` and `Effect` (effect handle) → `+0x7B4 + 8·i`; all eight words start at −1. A fifth and later child is ignored.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (`Time_Management` slot count corrected; NPC spread slots `+0x1C`/`+0x38`, `+0x208` = 7, reader flavours and the `Max_Force` constant width NEEDS-EXE) — desk review (not re-derived from the executable).**
 
 ### 2.4 The `Flags` vocabularies **[CONFIRMED — disassembly; machine-readable list `tools/ah_flags_w.txt`]**
 
@@ -297,6 +329,10 @@ Word C (`+0x18`): `0x1` no bullet decal, `0x2` manned turret, `0x4` = record loa
 
 **`Projectile_Flags`** (24 literals → `+0x3AC`): `has light attached` `0x1`, `rocket flight` `0x2`, `sticky` `0x4`, `harpoon` `0x8`, `satchel charge` `0x10`, `guided` `0x20`, `guided on fine aim` `0x40`, `attach effect after ignition` `0x80`, `detonate on vehicle collision` `0x100`, `detonate on human collision` `0x200`, `use bullet collision quality` `0x400`, `orient projectile to velocity` `0x800`, `dont detonate from explosion` `0x1000`, `seek to target pos` `0x2000`, `seek to target pos (npc only)` `0x4000`, `does not fire from muzzle` `0x8000`, *(`0x10000` set by `Fuse_Time` presence)*, `swarm` `0x20000`, `vehicle rc` `0x40000`, `teleport to target` `0x80000`, `rc self destruct` `0x100000`, `rc military allowed` `0x200000`, `play attach sound on vehicles only` `0x400000`, `show hud indicator` `0x800000`, `genki` `0x1000000`.
 
+*(Desk review 2026-09-30: the tables give 30 + 31 + 2 = 63 literals, reproducing the count; word B has no literal at bit `0x4000`, unexplained. Literal membership is backed by Team B's full-population run — `team-b/HANDOFF.md` §9.83, "all 472 top-level + 133 projectile flag literals matched". That run proves membership only; the bit value assigned to each literal is still disassembly-only, from `tools/ah_flags_w.txt`.)*
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: literal membership, 472/472 top-level and 133/133 projectile flag texts in 82 real rows (Team B §9.83); bit positions NEEDS-EXE — desk review (not re-derived from the executable).**
+
 ### 2.5 Enumerations **[CONFIRMED — disassembly]**
 
 - **`Weapon_Class`** (23 literals, index = stored value): `pistol` 0, `smg` 1, `rifle` 2, `shotgun` 3, `launcher` 4, `thrown` 5, `knife` 6, `nightstick` 7, `stungun` 8, `bat` 9, `sword` 10, `pimp slap` 11, `video camera` 12, `knuckles` 13, `flamethrower` 14, `cutscene only` 15, `man cannon` 16, `minigun` 17, `pepper spray` 18, `chainsaw` 19, `waterspray` 20, `script` 21, `vehicle` 22. (The same table is used by the vehicle-weapon components.)
@@ -308,9 +344,15 @@ Word C (`+0x18`): `0x1` no bullet decal, `0x2` manned turret, `0x4` = record loa
 - **`Effect_Situations`/`Situation`** (25): `muzzle flash` 0, `alt muzzle flash` 1, `tracer` 2, `alt tracer` 3, `bullet impact override` 4, `alt bullet impact override` 5, `overheat` 6, `player flashlight` 7, `npc flashlight` 8, `charge release charging muzzle` 9, `charge release charging ribbon` 10, `charge release charging target` 11, `laser cutter ribbon` 12, `laser cutter target near` 13, `laser cutter target far` 14, `laser guide ribbon` 15, `laser guide target` 16, `projectile` 17, `projectile ignite` 18, `projectile post ignition` 19, `projectile create` 20, `sonic hit effect` 21, `sonic scan charging` 22, `sonic scan charged` 23, `genki fire` 24.
 - **`Constant_Effect`/`Condition`**: see §2.2.
 
+*(Desk review 2026-09-30: every count reproduces from the listed indices. The used values are data-covered by this document's own 82-row run (§18.4); `team-b/HANDOFF.md` §9.83 gives no separate enum-membership figure. The index order of values never seen in data (9 of 23 `Weapon_Class`, 3 of 14 `Special_Case_Type`) rests on the disassembled literal tables alone.)*
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 2.6 Elements the reader never asks for, in real rows **[CONFIRMED — disassembly + case-insensitive whole-image scan]**
 
 Of **199** distinct element tags in the 9 DLC rows, 7 are not among the reader's literals (§16): `_Editor` (read only by the weapon-upgrade loader, §4, never here), `Info_Slot_Index` (consumed by the DLC handler, §2), `Effect_Situation` (the per-situation *row tag*; the positional read makes its name irrelevant), `Projectile_Flags` (a false alarm of the automatic check: the literal sits in the helper `FUN_00B7DB30`, string at `0x01189D9C`), and **three with no literal anywhere in the image** (case-insensitive raw scan, exact and embedded): `Hit_Wall_Sound` and `Spinning_Snd_Pitch_End` (both under `Audio`) and `Foley_Name` (under `Projectile_Info`; the reader asks for `FoleyCollision`). The `Condition` text `always on` (DLC3) is a *value*, not an element (§2.2). **Independent cross-check:** each raw DLC weapons file carries its own `TableDescription` block declaring **376 elements**; only **five** of those names are not accounted for by the row reader — `Info_Slot_Index` (DLC handler), `Projectile_Flags` and `Effect_Situation` (false alarms above), and two that are **read nowhere** (no literal in the image, case-insensitive): **`Fire_Damage_Per_Second`** and **`Alt_Time_Management` → `npc_burst_time`**. The `Audio` children `Hit_Wall_Sound`/`Spinning_Snd_Pitch_End` are not even declared by that description — stale row data.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 3. weapon_categories.xtbl
 
@@ -326,9 +368,11 @@ Of **199** distinct element tags in the 9 DLC rows, 7 are not among the reader's
 | Stored value | the category's display-name text handle (HIGH CONFIDENCE that it is the CRC of the row's `Name`; the helper returns it in a register the decompile does not show) |
 | Validation | **none** — a `Name` that matches no `WPNCAT_*` literal gives *k* = −1 and the store lands one slot before the array; the loader trusts the data |
 
-Nothing else in the row is read; the shipped table is therefore a seven-row list of category names whose only runtime effect is to attach a display string to each category. **[CONFIRMED — the whole loader body was read.]**
+Nothing else in the row is read; the shipped table is therefore a seven-row list of category names whose only runtime effect is to attach a display string to each category. **[CONFIRMED — the whole loader body was read.]** *(Desk review 2026-09-30: this label covers the loader body; the "Stored value" row above stays HIGH CONFIDENCE — the return value of `FUN_0084A1B0` is NEEDS-EXE.)*
 
-After the categories, `FUN_00B85400` also (a) calls the weapon loader (§2), (b) zeroes an `0x54`-byte block at `0x028DC488` and sets `0x028DC55C` to point at it with two constants (`0x028DC560` = 7, `0x028DC564` = 12 — i.e. 7 slots of 12 bytes, one per category by size; the block's use was not traced), (c) initialises a small list object at `0x0130F078`, and (d) calls the weapon-upgrade initialiser `FUN_00B7C5A0` (§4). No DLC archive carries a `weapon_categories.xtbl`, so this section has no empirical cross-check beyond the DLC weapons' `Category` values, which are all in the seven-name set (§16).
+After the categories, `FUN_00B85400` also (a) calls the weapon loader (§2), (b) zeroes an `0x54`-byte block at `0x028DC488` and sets `0x028DC55C` to point at it with two constants (`0x028DC560` = 7, `0x028DC564` = 12 — i.e. 7 slots of 12 bytes, one per category by size; the block's use was not traced), (c) initialises a small list object at `0x0130F078`, and (d) calls the weapon-upgrade initialiser `FUN_00B7C5A0` (§4). No DLC archive carries a `weapon_categories.xtbl`, so this section has no empirical cross-check beyond the DLC weapons' `Category` values, which are all in the seven-name set (§16). *(Since validated against the real base rows: §18.5, 7/7.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (stored-value label scoped) — desk review (not re-derived from the executable).**
 
 ## 4. weapon_upgrades.xtbl — per-weapon upgrade patches
 
@@ -348,6 +392,10 @@ After the categories, `FUN_00B85400` also (a) calls the weapon loader (§2), (b)
 
 **Upgrade order = row order** for a given weapon; a weapon's upgrade *level* *n* is bit *n* of the mask below.
 
+*(Desk review 2026-09-30: `0x028DC46C`, `0x028DC470` and `0x028DC474` are consecutive 4-byte globals, so each is a single pointer to a heap array — the upgrade pool, the weapon-instance table of §4.2 and the per-weapon table — not the array itself; see the matching note in §4.2.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (pointer-global wording) — desk review (not re-derived from the executable).**
+
 ### 4.2 The patch mechanism **[CONFIRMED — disassembly]**
 
 For each override element the reader starts from the **base weapon record** (a scratch copy), parses the row's element with the *same* readers §2 documents (the "if present" flavours and the sub-block readers, so units are converted exactly as in §2), and — **only when the element is present** — builds a **patch record (0x14 bytes)** with helpers `FUN_00B76A40` / `FUN_00B769D0` (4-byte and 2-byte aligned copies):
@@ -357,14 +405,16 @@ For each override element the reader starts from the **base weapon record** (a s
 | `+0x00` `u16` | **destination offset inside the weapon record** (§2.2) |
 | `+0x04` pointer | heap copy of the new bytes |
 | `+0x08` `u16` | number of bytes |
-| `+0x0C` `s32` | **operation mode** from the sibling `<name>_OM` (`FUN_00DAC830`-style match, case-insensitive) — table at `0x011888BC`: `OM_REPLACE` **−1**, `OM_ADDITIVE` **0**, `OM_MULTIPLICATIVE` **1**, `OM_REMOVAL` **2**; absent or unmatched ⇒ **−1** (replace) |
+| `+0x0C` `s32` | **operation mode** from the sibling `<name>_OM` (`FUN_00DAC830`-style match, case-insensitive) — table at `0x011888BC`: `OM_REPLACE` **−1**, `OM_ADDITIVE` **0**, `OM_MULTIPLICATIVE` **1**, `OM_REMOVAL` **2**; absent or unmatched ⇒ **−1** (replace) **[OPEN — desk review 2026-09-30: the enum reader returns −1 for "no match", so if `OM_REPLACE` were itself a table literal its match would return its position, not −1; either `OM_REPLACE` is not in the table or the mapping differs. "Absent/unmatched ⇒ replace" holds either way. To be settled against the executable (table dump at `0x011888BC`, `FUN_00B76B20`) and real data (histogram of `_OM` texts over the 64 rows).]** |
 | `+0x10` `s32` | **value type** from a fixed per-field choice, table at `0x011888DC`: `ubyte` 0, `ushort` 1, `int` 2, `float` 3 (composite blocks and handles use −1 / their own size) |
 
-Applying a patch (`FUN_00B76B20` with helpers `FUN_00B76600` / `FUN_00B76690`) to a weapon instance: mode 0 **adds** the value to the field, mode 1 **multiplies**, any other mode (−1, 2, composite types) **copies the bytes over** the destination; the additive/multiplicative forms are defined for `ubyte`/`ushort`/`int`/`float` fields only. (`OM_REMOVAL` has no arithmetic path of its own — it is treated as a byte copy of the value carried by the patch; **whether the shipped data uses it to mean "clear the field" was not determinable without the base rows** — OPEN.)
+Applying a patch (`FUN_00B76B20` with helpers `FUN_00B76600` / `FUN_00B76690`) to a weapon instance: mode 0 **adds** the value to the field, mode 1 **multiplies**, any other mode (−1, 2, composite types) **copies the bytes over** the destination; the additive/multiplicative forms are defined for `ubyte`/`ushort`/`int`/`float` fields only. (`OM_REMOVAL` has no arithmetic path of its own — it is treated as a byte copy of the value carried by the patch; **whether the shipped data uses it to mean "clear the field" was not determinable without the base rows** — OPEN; the 64 real base rows are now available (§18.5) but their `_OM` values were not counted there.)
 
 The `Flags` element is handled specially: the three flag words (`+0x10`) of the scratch record are compared with the base's and, **if any differs**, one 12-byte patch at offset `0x10` carrying all three words is created (replace semantics).
 
-**Weapon instances** (`0x028DC470`): a two-entry pointer table; each entry points to an array of `capacity × 0x7F8` bytes — the per-weapon *instance* used while playing, one array per player slot (index from `FUN_008ADFF0`, a byte value 0/1 — HYPOTHESIS: the two sets are the two co-op players; the function was not read). An instance is `{ u32 applied-upgrade bitmask ; 0x7EC-byte weapon-record copy ; 2 words }`. The current level of a weapon is the highest set bit (`FUN_00B76950`). The reload routine `FUN_00B7C680` re-parses the file, refreshes each instance's record copy from the base record, and re-applies every upgrade whose bit was set.
+**Weapon instances** (`0x028DC470`): a two-entry pointer table *(desk review 2026-09-30: `0x028DC470` sits 4 bytes below the per-weapon table pointer `0x028DC474` (§4.1), so the global is a pointer to this two-entry table, not the 8-byte table itself)*; each entry points to an array of `capacity × 0x7F8` bytes — the per-weapon *instance* used while playing, one array per player slot (index from `FUN_008ADFF0`, a byte value 0/1 — HYPOTHESIS: the two sets are the two co-op players; the function was not read). An instance is `{ u32 applied-upgrade bitmask ; 0x7EC-byte weapon-record copy ; 2 words }`. The current level of a weapon is the highest set bit (`FUN_00B76950`). The reload routine `FUN_00B7C680` re-parses the file, refreshes each instance's record copy from the base record, and re-applies every upgrade whose bit was set.
+
+**Review status (2026-09-30): NEEDS-EXE: `OM_REPLACE` encoding and `OM_REMOVAL` semantics (`FUN_00B76B20`, tables `0x011888BC`/`0x011888DC`) — desk review (not re-derived from the executable).**
 
 ### 4.3 Override vocabulary and destination offsets **[CONFIRMED — disassembly; machine-readable `tools/ah_upg_offsets.txt` from `tools/harnesses/tbl_upgrade_offsets.py`]**
 
@@ -384,7 +434,9 @@ Every name below is accepted in a `Weapon_Upgrade` row together with its `_OM` c
 | `Camera_Info` `+0x710` (0x64) · `Burst_Fire_Info` `+0x774` (8) · `Override_Bullet_Impact_Effect` `+0x780` · `Alt_Override_Bullet_Impact_Effect` `+0x784` · `Penetrating_End_Point_Explosion` `+0x790` · `Alt_Penetrating_End_Point_Explosion` `+0x794` · `Overheat_Info` `+0x798` (0x18) · `Effect_Situations` one 8-byte patch per situation at `+0x7B0 + 8·i` |
 | `Melee_Damage_Overrides` `+0x20` (0x10) · `Flags` `+0x10` (0x0C, all three words) |
 
-Elements of §2 that are **not in this reader's vocabulary** (so cannot be patched): `Weapon_Class`, `Category`, `Inv_Slot`, `Grenade_Type`, `Special_Case_Type`, `Base_Version`, `Warmup_Delay`, `Cooldown_Delay`, `Reload_override_time_sec`, `Ammo_per_Shot`, `Ammo_Regeneration`, `AI_Ideal_Range_Min`/`Max`, `Offhand_Weapon_Mesh`, the `Audio` block (except `Sound_Radius`), `Alt_Explosion`, `NPC_Explosion`, `NPC_Alt_Explosion`, the `…_NPC` bullet-impact overrides, `Riot_Shield_Damage_Multiplier`, `Operator_Damage_Multiplier`, `Diversion_Kill_Multiplier`, `Waterspray_info`, `Vehicle_Weapon`, `Max_Melee_Impacts`, `Blood_Decal_Scale`/`Blood_Decal_Delay`, `NPC_Desired_Burst_Size`, `Wieldable_Prop_*`. **[CONFIRMED for "no such literal in the reader" — the reader body was read completely and its literal list extracted in full; a name assembled at run time cannot be excluded but none is built.]** No DLC archive carries a `weapon_upgrades.xtbl`, so §4 has no empirical row cross-check; the structural cross-check above stands in for it.
+Elements of §2 that are **not in this reader's vocabulary** (so cannot be patched): `Weapon_Class`, `Category`, `Inv_Slot`, `Grenade_Type`, `Special_Case_Type`, `Base_Version`, `Warmup_Delay`, `Cooldown_Delay`, `Reload_override_time_sec`, `Ammo_per_Shot`, `Ammo_Regeneration`, `AI_Ideal_Range_Min`/`Max`, `Offhand_Weapon_Mesh`, the `Audio` block (except `Sound_Radius`), `Alt_Explosion`, `NPC_Explosion`, `NPC_Alt_Explosion`, the `…_NPC` bullet-impact overrides, `Riot_Shield_Damage_Multiplier`, `Operator_Damage_Multiplier`, `Diversion_Kill_Multiplier`, `Waterspray_info`, `Vehicle_Weapon`, `Max_Melee_Impacts`, `Blood_Decal_Scale`/`Blood_Decal_Delay`, `NPC_Desired_Burst_Size`, `Wieldable_Prop_*`. **[CONFIRMED for "no such literal in the reader" — the reader body was read completely and its literal list extracted in full; a name assembled at run time cannot be excluded but none is built.]** No DLC archive carries a `weapon_upgrades.xtbl`, so §4 has no empirical row cross-check; the structural cross-check above stands in for it. *(Since validated against 64 real base rows: §18.5.)*
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 5. ammo.xtbl
 
@@ -405,9 +457,13 @@ Elements of §2 that are **not in this reader's vocabulary** (so cannot be patch
 | `+0x28` | `store` → `cost` | `u32` "always" | left as allocated (not written) if `store` is absent |
 | `+0x2C` | `store` → `clip_size` | `u32` "always" | same |
 
+**[OPEN — desk review 2026-09-30, Team B real-data finding not reconciled here: `team-b/HANDOFF.md` §9.83 (the "Correction (2026-09-24)" paragraph) reports row-level `cost` present "**31/35**" outside `<store>`, differing from `store/cost` in "**13/35**", and the 35th row, `DLC3_BeeGun_Projectile`, has "no `<store>` at all"; the same section's item (1) also reports undocumented `<ammo_icon>`/`<display_name>` inside `<store>`. `cost` and `clip_size` are reader literals, so the row-level copies are dead only if the reader never looks at the row for them. Also not stated: whether the ammo array is zero-filled at allocation, i.e. what `+0x28`/`+0x2C` hold for the row without `<store>`. To be settled against the executable (`FUN_00B6E530` child path for `cost`/`clip_size`; `FUN_00B6F0A0` allocation).]**
+
 **`Flag` literals** (case-insensitive, first match wins; unrecognised text ignored): `drops with weapon` `0x1`, `thrown` `0x2`, `lethal` `0x4`, `bullet` `0x8`, `projectile` `0x10`, `fire` `0x20`, `water` `0x40`, `sewage` `0x80`, `incendiary` `0x100`, `penetrating` `0x200`, `laser` `0x400`, `armor piercing` `0x800`. The DLC weapons name ammo types such as `Bullet Rifle` (§16) — those rows live in the base `ammo.xtbl`, which has no raw copy in any DLC archive.
 
-The `Upgradable_Ammo` triple is how ammo capacity grows with weapon upgrades (level 2/3/4 amounts for the named weapon — HIGH CONFIDENCE from the element names; the consuming code was not read). No DLC archive carries `ammo.xtbl`; §5 has no empirical row cross-check.
+The `Upgradable_Ammo` triple is how ammo capacity grows with weapon upgrades (level 2/3/4 amounts for the named weapon — HIGH CONFIDENCE from the element names; the consuming code was not read). No DLC archive carries `ammo.xtbl`; §5 has no empirical row cross-check. *(Since validated against the 35-row patch copy: §18.5.)*
+
+**Review status (2026-09-30): NEEDS-EXE: row-level `cost`/`clip_size` in 31/35 real rows (Team B §9.83) vs the `store` path, and allocation zero-fill — desk review (not re-derived from the executable).**
 
 ## 6. weapon_melee_attacks.xtbl
 
@@ -435,6 +491,8 @@ The `Upgradable_Ammo` triple is how ammo capacity grows with weapon upgrades (le
 | `+0x20` | `Target_Search_Range` | `f32` "always" |
 
 A weapon whose `Melee_Attack_Info` is absent or names no set uses the built-in default record at `0x0130F04C` (§2.2); the same lookup is what `weapon_upgrades` patches at weapon offset `+0x440` (§4). The reader touches exactly these 15 element names besides the row's `Name`; the whole body was read. No DLC archive carries this table.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 7. melee.xtbl and melee_transition_states.xtbl
 
@@ -466,6 +524,10 @@ Two tables, both loaded from `FUN_00983490` / `FUN_00981DE0`, describe melee att
 | `+0x10C` | `Combo` → `End_Pose` | index of a transition state (§7.2, by `_stricmp` on its name); −1 if `End_Pose` is absent. **Only assigned when `Combo` exists** (see below) |
 | `+0x110` / `+0x114` | `Blood_Effect` → `Effect` / `Repeat_Cooldown` | effect handle (−1) / `f32` (default −1.0) |
 
+*(Desk review 2026-09-30: `+0x2A…+0x2F` (after the `u16` `SyncedMove` at `+0x28`) and `+0x118…+0x11B` (after `Repeat_Cooldown`; stride `0x11C`) are not accounted for by any row above — padding or an untraced field, not stated.)*
+
+**[OPEN — desk review 2026-09-30, Team B real-data finding not reconciled here: `team-b/HANDOFF.md` §9.83, "Spec disagreements found against real base-game rows" item (2), reports that "**273/336** ALSO carry a top-level (non-nested) copy of `ImpactDir`/`ImpactForce`/`AttackLimb`" (205/336 row-level `ImpactFX`, 70/336 `Impact_Human_Effect`), with `ImpactForce` differing in "**242/336**" and `AttackLimb` text in "**173/336**". The table above places these only under `Impact`. Because they are reader literals, the row-level copies are not provably dead: the reader may read the row-level copy, or fall back to it. To be settled against the executable (`FUN_00982920`: the parent node passed for `ImpactFX`, `Impact_Human_Effect`, `ImpactDir`, `ImpactForce`, `AttackLimb`, `AttackLimbNPC`).]**
+
 **Flag word `+0xF8`** (case-insensitive literals):
 - `Processing_flags`/`Flag`: `anim state attack` `0x1`, `two-handed attack` `0x20`, `dont_play_weapon_sound` `0x40`, `unblockable` `0x80`, `allow synced incapacitated victim` `0x400000`, `attacker should not flinch` `0x1000000`. The element `Testicular_Assault` (bool, row level) sets `0x800000`.
 - `Attack_is_for`/`Flag`: `Hard hit (LT)` `0x2`, `Victim is Blocking` `0x4`, `Victim is Crouched` `0x8`, `Victim is Prone/Ragdolled` `0x10`, `Attacker is Player Only` `0x1000`, `Attacker is Homie Only` `0x2000`, `Attacker is Brute` `0x4000`, `Attacker is Killbane` `0x8000`, `Attacker is Avatar` `0x10000`, `Attacker is Running` `0x20000`, `Attacker is Walking` `0x40000`, `Attacker is Sprinting` `0x80000`, `Requires Previous Move Hit` `0x100000`, `Victim is Not Ally` `0x200000`.
@@ -473,6 +535,8 @@ Two tables, both loaded from `FUN_00983490` / `FUN_00981DE0`, describe melee att
 - `0x2000000` also set by `Active_Attack_Infos` having children (above).
 
 **`Combo`** (optional row child): `Anim_group_grid` → repeated `Anim_group_ref` — each ref's own text names an animation group; the move's index is appended to that group's slot list in `DAT_0262BA44` (the guard allows one slot too many: `< 0x29` against a 0x28-slot row — HIGH CONFIDENCE off-by-one, benign only while data stays under 40). `Start_Pose` names a transition state (§7.2) into whose list of *entry moves* this move's index is appended (state record `+0x34…`, count at `+0x84`, max 0x28). `End_Pose` → record `+0x10C`. If `Combo` is absent `+0x10C` is left as it was (zero on a fresh array — HIGH CONFIDENCE the array is zero-filled; the allocation flags were not decoded).
+
+**Review status (2026-09-30): NEEDS-EXE: parent node of the impact elements vs the 273/336 real rows with a row-level copy (Team B §9.83); untiled bytes — desk review (not re-derived from the executable).**
 
 ### 7.2 `melee_transition_states.xtbl` — the `Melee_Transition_State` record
 
@@ -489,6 +553,8 @@ Two tables, both loaded from `FUN_00983490` / `FUN_00981DE0`, describe melee att
 | `+0x84` | *(count of the above, zeroed by this loader)* | |
 
 The table is cross-referenced from §7.1 (`Start_Pose`/`End_Pose`); the loader order (transition states must exist before `melee.xtbl` registers into them) is respected by the caller, which was not traced. No DLC archive carries either table.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 8. aim_drift.xtbl
 
@@ -524,6 +590,10 @@ The table is cross-referenced from §7.1 (`Start_Pose`/`End_Pose`); the loader o
 
 The parents `Bullet_miss`, `Aiming`, `Firing` and `Explosive_Miss` are **not** null-checked (an "always" read under a missing parent parses stack garbage, §1.3), so a well-formed profile must carry all four. No DLC archive carries this table (the DLC weapons name profiles such as `VehicleMGTurret`, which live in the base file).
 
+**[OPEN — desk review 2026-09-30, real data does not match this reader model: §18.6 reports the `Recovery` wrapper in 0 of the 20 real profiles, and `team-b/HANDOFF.md` §9.83 (item (5) and the "Correction (2026-09-23)" paragraph) reports five elements this section never names — wrappers `Penalties`, `Bonuses` and `lag_amount`, `lag_time`, `vertical_offset` — "really are 20/20 (confirmed exact)", measured per row. A wrapper the reader asks for that occurs in 0/20 rows, beside five undocumented elements that occur in 20/20, may mean the `Bullet_miss → Recovery` path was mis-associated rather than that the data is dead. To be settled against the executable (`FUN_00B6C370`: every literal it references and the parent node of each, in particular `recover_penalty`, `recover_time`, `bullets_to_unsteady`; a whole-image scan for `Penalties`, `Bonuses`, `lag_amount`, `lag_time`, `vertical_offset`) and real data (the parent of `recover_*` in each of the 20 rows).]**
+
+**Review status (2026-09-30): NEEDS-EXE: `Recovery` in 0/20 real rows (§18.6) and five undocumented elements in 20/20 (Team B §9.83) — desk review (not re-derived from the executable).**
+
 ## 9. aim_assist.xtbl
 
 **Loader [CONFIRMED — disassembly].** `aim_assist.xtbl` (literal `0x01176794`, one xref at `0x009EB23E`) is read by the initialiser `FUN_009EB000`. It first writes defaults into **five global blocks**, then reads the table: rows are **`Aiming`**, matched by their `Name` (case-insensitive) to a block; **rows with any other name are skipped**, and a row is applied to its block by `FUN_009EACE0`.
@@ -557,13 +627,17 @@ The parents `Bullet_miss`, `Aiming`, `Firing` and `Explosive_Miss` are **not** n
 
 A block has two independent parts — a *steering* pull towards the target and a *slowing* of the reticle near it — each with a capsule-shaped acquisition distance model (`dist`). The reader's whole body (`FUN_009EACE0`, `FUN_009EAC80`, `FUN_009EAC20`) was read; those are all the elements it asks for. No DLC archive carries this table.
 
+**[OPEN — desk review 2026-09-30: the "…" rows from `+0x40` (`fade_in_rate`, `fade_out_rate`, `Capsule_*`, `Use_Cylinder`) do not say whether their parent is `steering`/`slowing` or `steering`/`slowing` → `dist`; the bytes `+0x54…+0x5F`, `+0x68…+0x6F` and `+0x94…+0x9F` are not assigned. To be settled against real data (parent of these names in the 5 rows) or the executable (`FUN_009EAC80`, `FUN_009EAC20`).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (element-path ambiguity marked OPEN) — desk review (not re-derived from the executable).**
+
 ## 10. explosions.xtbl and continuous_explosions.xtbl
 
 ### 10.1 `explosions.xtbl`
 
-**Loader [CONFIRMED — disassembly].** The literal `explosions.xtbl` (`0x0111D46C`) has three code xrefs: the base initialiser `FUN_00590B50` (which calls the table loader with `EAX` = the literal and the framework name `main`), the DLC handler `FUN_00590DA0`, and a preload pass `FUN_00ACF740` (see below). The table loader is **`FUN_00590630(filename, framework, first)`**: opens the file, and for each **`Explosion`** row whose `Framework` (default `main`) matches `framework` (`_stricmp`) calls the row reader **`FUN_00590050(record, row)`** and increments the count at `0x013CF504`; `first` zeroes the count. Records are stored at `0x013CF5C0`, **stride `0xEC`**, keyed by CRC (seed 0) of the name **stored at record `+0x20`** (resolver `FUN_00590D20` → `FUN_00590CE0`, §1.6). No capacity check exists in the loader (the backing region's extent was not determined — OPEN).
+**Loader [CONFIRMED — disassembly].** The literal `explosions.xtbl` (`0x0111D46C`) has three code xrefs: the base initialiser `FUN_00590B50` (which calls the table loader with `EAX` = the literal and the framework name `main`), the DLC handler `FUN_00590DA0`, and a preload pass `FUN_00ACF740` (see below). The table loader is **`FUN_00590630(filename, framework, first)`**: opens the file, and for each **`Explosion`** row whose `Framework` (default `main`) matches `framework` (`_stricmp`) calls the row reader **`FUN_00590050(record, row)`** and increments the count at `0x013CF504`; `first` zeroes the count. Records are stored at `0x013CF5C0`, **stride `0xEC`**, keyed by CRC (seed 0) of the name **stored at record `+0x20`** (resolver `FUN_00590D20` → `FUN_00590CE0`, §1.6). No capacity check exists in the loader (the backing region's extent was not determined — OPEN). *(Desk review 2026-09-30: lower bound only — with all three DLCs present the loader writes 93 base (§18.2) + 7 DLC (§16) = 100 records, `100 × 0xEC` bytes, into this region; the upper extent remains OPEN.)*
 
-**DLC handler [CONFIRMED — disassembly].** `FUN_00590DA0(packages)` is registered as the `explosions` handler of the DLC content registry (§15.2). For each package whose flags say it carries DLC data (byte `+0x101` non-zero and not `0xFF`, and bit 1 of byte `+0x103`) it builds the file name with `FUN_0045BA50` — **`<framework>_explosions.xtbl`** (`"%s_%s"`, 0x40-character buffer; the plain name when package flag bit 2 is set or the framework is empty) — and calls `FUN_00590630(name, package+0x80, 0)`, i.e. the same row reader with the package's framework string. This is how `dlcN_explosions.xtbl` rows are appended. **The same three-step pattern (registry entry → `FUN_0045BA50` → the table's row loader with the package framework) is used by the fifteen DLC handlers that call `FUN_0045BA50` (§15.2); the weapon handler adds a slot-index step (§2).**
+**DLC handler [CONFIRMED — disassembly].** `FUN_00590DA0(packages)` is registered as the `explosions` handler of the DLC content registry (§15.2). For each package whose flags say it carries DLC data (byte `+0x101` non-zero and not `0xFF`, and bit 1 of byte `+0x103`) it builds the file name with `FUN_0045BA50` — **`<framework>_explosions.xtbl`** (`"%s_%s"`, 0x40-character buffer; the plain name when package flag bit 2 is set or the framework is empty) — and calls `FUN_00590630(name, package+0x80, 0)`, i.e. the same row reader with the package's framework string. This is how `dlcN_explosions.xtbl` rows are appended. **The same three-step pattern (registry entry → `FUN_0045BA50` → the table's row loader with the package framework) is used by the fifteen DLC handlers that call `FUN_0045BA50` (§15.2); the weapon handler adds a slot-index step (§2).** *(Desk review 2026-09-30: "fifteen" is not reproducible from the §15.2 list — see the note there.)*
 
 **Preload pass.** `FUN_00ACF740` re-opens `explosions.xtbl` and, for every `Explosion` row that has an `Effect` child, registers `(Name, heap copy of the Effect text)` with a resource-preload list — nothing is stored in the explosion record.
 
@@ -606,6 +680,8 @@ A block has two independent parts — a *steering* pull towards the target and a
 
 Flag literals (case-insensitive, first match wins): `Causes Player Tinnitus`, `Causes Electric Ragdoll`, `Causes Vomit`, `Penetrates World`, `No Ragdoll`. Before the flag loop the reader zeroes `+0xD8…+0xDB` (one dword), `+0xDC…+0xDD` (one word) and `+0xDE`, so all five flag bytes start at 0 on every (re)load.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (storage lower bound stated; `Tint` reader, `Panic_Reaction`/`Groundfire` tables and region extent NEEDS-EXE) — desk review (not re-derived from the executable).**
+
 ### 10.2 `continuous_explosions.xtbl` **[CONFIRMED — disassembly]**
 
 The literal (`0x011260E4`) is referenced by the loader `FUN_005EB2F0` (through a one-word pointer stored at `0x012EC8E0`) — it is the *first* entry of a small static table: `0x012EC8E0` file-name pointer, then the three **target-type** names `default` (`0x012EC8E4`), `in_car`, `in_aircraft`. Rows are **`Continuous_explosion`**, **at most 3 accepted**, stored at `0x014A0310`, **stride `0x64`**, count at `0x014A02F0`. The row reader `FUN_005EAE80` **rejects the whole row (returns failure, so it is not counted)** on any failed range check below.
@@ -625,6 +701,10 @@ The literal (`0x011260E4`) is referenced by the loader `FUN_005EB2F0` (through a
 | `+0x20` | … `Avg_Length` | `f32` if, 0 |
 
 The table drives a scripted "continuous explosion" effect (an explosion spawned repeatedly around a target, e.g. the `Whiz` sound and approach geometry suggest a passing-shell barrage — HYPOTHESIS about purpose; every number above is from the reader). No DLC archive carries this table.
+
+**[OPEN — desk review 2026-09-30: §18.5 checks only the row count and `Target_Type` values of the 3 real rows; none of the reject rules above was applied to them, so whether all 3 load is not shown. `team-b/HANDOFF.md` §9.83 ("Correction (2026-09-24)") reports "7 unrecognised lowercase elements (`radius_min`, `cooldown_max`, etc.)" in the `Daedalus` row only; the name compare here is case-insensitive, so case alone does not make them unknown — their parent level decides. To be settled against real data (apply each rule to the 3 rows; list the `Daedalus` names with their parents) and the executable (`FUN_005EAE80`).]**
+
+**Review status (2026-09-30): NEEDS-DATA: reject rules never applied to the 3 real rows; `Daedalus` element placement — desk review (not re-derived from the executable).**
 
 ## 11. combat_actions.xtbl and combat_tricks.xtbl
 
@@ -673,6 +753,8 @@ Two data-driven tuning tables for the AI/combat layer. Both are read once at sta
 
 No DLC archive carries this table.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 11.2 `combat_tricks.xtbl`
 
 **Loader [CONFIRMED — disassembly].** `combat_tricks.xtbl` (literal `0x0113675C`, one xref at `0x006A1742`) is read by **`FUN_006A1730`**, a method of the combat-tricks manager object. The file has a single **`Combat_Tricks`** row (the first one is used). Time values are **seconds in the file; the engine stores milliseconds by multiplying by 1000 and truncating toward zero** (the conversion runs with the FPU in truncate mode — the disassembly sets the round-toward-zero control bits, although the decompile prints `ROUND`).
@@ -686,11 +768,15 @@ No DLC archive carries this table.
 
 Then **one child per trick type, 18 in this fixed order** (the reader looks the child up by name; a missing child leaves that trick unconfigured): `Gang_Kill`, `Gang_Vehicle_Kill`, `One_Hit_Kill`, `Human_Shield_Kill`, `Head_Shot_Kill`, `Nut_Shot_Kill`, `Throwing`, `Multi_Kill`, `Specialist_Kill`, `Brute_Beat_Kill`, `Brute_Kill`, `STAG_Kill`, `Explosive_Kill`, `Testicular_Assault`, `Sprint_Attack`, `STAG_Vehicle_Kill`, `Heli_Or_Vtol_Kill`, `Tank_Kill` (trick id = index 0…17). Each child yields a **7-field descriptor** handed to that trick's handler object through a virtual call: trick id; `Duration` (`f32` if, seconds → ms; **default = `Default_Duration`**); `Max_Respect` (`s32` always); `Max_Lifetime_Respect` (`s32` always); `Max_Cash` (`f32` always); `Min_Value`, `Max_Value` (`f32` always); and, **for `Multi_Kill` only**, `Kill_Duration` (seconds → ms). Each trick also has a fixed localisation key in the engine (`DIVERSION_COMBAT_TRICKS_<NAME>`, e.g. `..._GANG_KILL`, `..._TESTICLE_KILL` for `Testicular_Assault`, `..._HELI_KILL` for `Heli_Or_Vtol_Kill`) and a fixed numeric id in the static table at `0x01136540` (five dwords per trick: element name, key, id, two spare `s32`). The meaning of `Min_Value`/`Max_Value` was not traced (the handlers were not read). No DLC archive carries this table.
 
+**[OPEN — desk review 2026-09-30: the real row's extra child `Beat_Down_Kill` is read differently by the two teams — §18.6 gives it 5 fields with no `Duration`; `team-b/HANDOFF.md` §9.83 item (4) says "same 6-field shape as the documented 18". Whether the static table at `0x01136540` has 18 or 19 rows, and which trick the `..._BEAT_DOWN_KILL` key belongs to, are also unsettled. To be settled against real data (print the children of `Beat_Down_Kill` and `Brute_Beat_Kill`) and the executable (loop bound of `FUN_006A1730`; dump of the five-dword rows at `0x01136540`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: `Beat_Down_Kill` field count (5 here vs 6 in Team B §9.83) and the static-table row count — desk review (not re-derived from the executable).**
+
 ## 12. weapon_tracers.xtbl and weapon_tracer_materials.xtbl
 
 ### 12.1 `weapon_tracers.xtbl`
 
-**Loader [CONFIRMED — disassembly].** The literal `weapon_tracers.xtbl` (`0x0111E6D4`) has two code xrefs: the base initialiser `FUN_005A2E30` and the DLC handler `FUN_005A2F10` (registry entry `tracers`, §15.2 — it builds `<framework>_weapon_tracers.xtbl` with `FUN_0045BA50`, exactly as §10.1). Both call **`FUN_005A2BC0(filename, framework, ctx, refresh)`**. Rows are **`Weapon_Tracers`**, framework-filtered like §1.5; the loaded count is `0x014033D4`; **capacity 20 records** (`< 0x14`, checked — extra rows are dropped), stored at **`0x014033E0`, stride `0x2C`**. On refresh (`refresh` non-zero) rows are matched to records by CRC of the name and the loader aborts with the diagnostic *"refresh failed, you either added, removed, or renamed an entry"* if a name is not found.
+**Loader [CONFIRMED — disassembly].** The literal `weapon_tracers.xtbl` (`0x0111E6D4`) has two code xrefs: the base initialiser `FUN_005A2E30` and the DLC handler `FUN_005A2F10` (registry entry `tracers`, §15.2 — it builds `<framework>_weapon_tracers.xtbl` with `FUN_0045BA50`, exactly as §10.1). Both call **`FUN_005A2BC0(filename, framework, ctx, refresh)`**. Rows are **`Weapon_Tracers`**, framework-filtered like §1.5; the loaded count is `0x014033D4`; **capacity 20 records** (`< 0x14`, checked — extra rows are dropped), stored at **`0x014033E0`, stride `0x2C`**. On refresh (`refresh` non-zero) rows are matched to records by CRC of the name and the loader aborts with a diagnostic (to the effect that a refresh cannot cope with an entry having been added, removed or renamed) if a name is not found.
 
 **Record (`0x2C` bytes) [CONFIRMED — disassembly]:**
 
@@ -698,21 +784,25 @@ Then **one child per trick type, 18 in this fixed order** (the reader looks the 
 |---|---|---|---|
 | `+0x00` | `Name` | heap `char*` (first load) | |
 | `+0x04` | *(CRC of `Name`, seed 0)* | `u32` — the key used by the resolver `FUN_005A2FD0` (§1.6) | |
-| `+0x08` | `Effect` | effect handle (`FUN_005C50B0`); a row without `Effect` passes NULL to the resolver | |
+| `+0x08` | `Effect` | effect handle (`FUN_005C50B0`); a row without `Effect` passes NULL to the resolver | *(OPEN — desk review 2026-09-30: the resolver's result for a NULL name is not stated; `FUN_005C50B0`)* |
 | `+0x0C` | `Emitter_Effect` | effect handle | −1 if absent |
 | `+0x10` | `Max_Particles` | `s32` always | |
 | `+0x14` | `Lifetime` | `f32` always | |
 | `+0x18` | `Ricochet` → `Chance` | `f32` if | 0 (zeroed first, so all three ricochet fields are 0 without a `Ricochet` element) |
 | `+0x1C` | `Ricochet` → `Distance` | `f32` if | 0 |
 | `+0x20` | `Velocity_Scale` | `f32` always | |
-| `+0x24` | `Ricochet` → `Ricochet_velocity_scale` | `f32` always (inside `Ricochet`) | 0 |
+| `+0x24` | `Ricochet` → `Ricochet_velocity_scale` | `f32` always (inside `Ricochet`) | 0 **[OPEN — desk review 2026-09-30: §18.6 finds `Ricochet` in 0 of the 13 base rows, so the absent-parent path is the only one shipped data exercises; "0" holds only if the always-read is skipped when `Ricochet` is absent (§1.3). To be settled against the executable (`FUN_005A2BC0` around the `Ricochet` lookup).]** |
 | `+0x28` | `Hot_Length_Size` | `f32` if | **−1.0** |
 
 A weapon selects a tracer with `Tracer_Info` → `Tracer` / `Tracer_NPC` / `Alt_Tracer` / `Alt_Tracer_NPC` (§2.2) and the tracer's `Tracer_Frequency` (`+0x88`) sets how often one is drawn. **Real-data note:** two of the four DLC rows write `<Chance>` **directly under the row**, not inside a `Ricochet` wrapper; the reader only looks inside `Ricochet`, so that value is ignored and the field stays 0 (the shipped value is `0.0`, so nothing changes). Empirically validated against the DLC archive's four rows and its `TableDescription` (12 declared elements, all accounted for — §16).
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (absent-`Ricochet` path and NULL `Effect` marked OPEN; shipped diagnostic paraphrased) — desk review (not re-derived from the executable).**
+
 ### 12.2 `weapon_tracer_materials.xtbl`
 
-**Loader [CONFIRMED — disassembly].** Literal `0x0111E5EC`, one xref at `0x005A2806`, read by **`FUN_005A2800`** from the tracer initialiser (§12.1). A table of **33 `f32` dampeners at `0x01403348`** — one per physical-material name (the same 33-name table the weapon `melee_material_effects` uses, `FUN_006F76F0`, §1.6) — is first filled with 1.0. Rows are **`Tracer_Material`**: `Name` (physical-material name; **an unmatched name maps to index 31**, so it silently overwrites that material's slot) and `Tracer_Dampener` (`f32`, "always" — the code presets 1.0 in the local variable, but the always-reader overwrites it with the parse of an empty scratch buffer when the child is missing, §1.3; supply the element). The result is stored at `0x01403348 + 4·index`. No DLC archive carries this table.
+**Loader [CONFIRMED — disassembly].** Literal `0x0111E5EC`, one xref at `0x005A2806`, read by **`FUN_005A2800`** from the tracer initialiser (§12.1). A table of **33 `f32` dampeners at `0x01403348`** — one per physical-material name (the same 33-name table the weapon `melee_material_effects` uses, `FUN_006F76F0`, §1.6) — is first filled with 1.0. Rows are **`Tracer_Material`**: `Name` (physical-material name; **an unmatched name maps to index 31**, so it silently overwrites that material's slot) and `Tracer_Dampener` (`f32`, "always" — the code presets 1.0 in the local variable, but the always-reader overwrites it with the parse of an empty scratch buffer when the child is missing, §1.3; supply the element) *(desk review 2026-09-30: "empty scratch buffer" asserts a defined value that §1.3 says is not guaranteed — the scratch buffer is not initialised on the absent path; read this through §1.3)*. The result is stored at `0x01403348 + 4·index`. No DLC archive carries this table. *(The 33 material names, slot 0…32, are listed in `spec-tables-environment.md` §11.6.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (absent-child wording pointed to §1.3; material-name cross-reference) — desk review (not re-derived from the executable).**
 
 ## 13. crib_weapons.xtbl, store_weapons.xtbl, store_weapon_lightset.xtbl
 
@@ -720,9 +810,11 @@ A weapon selects a tracer with `Tracer_Info` → `Tracer` / `Tracer_NPC` / `Alt_
 
 Literal `0x011264BC`, one xref at `0x005EE598`, read by **`FUN_005EE590`**. Structure: `Crib_Weapons` → `Weapons_List` → repeated **`Entry`**. Each entry reads `Weapon` (a weapon name, resolved with `FUN_00B81220`; **the result is used without a NULL test — an unknown name would fault**) and `Unlocked` (bool "always"). The effect is to **set or clear bit 31 (`0x80000000`) of the weapon's flag word A (weapon record `+0x10`, §2.2)**, i.e. the runtime "unlocked" bit — the crib's starting weapon inventory. This bit is not one of the 63 `Flag` literals of §2.4; among the loaders read in this pass it is set only from here. No DLC archive carries this table.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 13.2 `store_weapons.xtbl` **[CONFIRMED — disassembly]**
 
-The literal sits in a small static descriptor table at `0x01300A2C` (a code xref at `0x00817FA0` reads it, and the descriptor table itself is a data reference): the descriptor holds the file name and the element names the loader uses, in order — `Store_Weapons`, `Weapons_List`, `Entry`, `Mission`, `Num_Hoods`, `Weapon`, `Angle`, `Distance`, `Offset`, `Unlocked`, followed by ammo names (`Bullet Pistol`, `Bullet SMG`, `Bullet Shotgun`, …). The loader **`FUN_00817F90`** reads **`Store_Weapons` → `Weapons_List` → repeated `Entry`** and uses only three children of each entry:
+The literal ~~sits in~~ *is pointed to by (desk review 2026-09-30: the string itself is at `0x0115E740`, §15.1; the descriptor's first word is the data reference to it)* a small static descriptor table at `0x01300A2C` (a code xref at `0x00817FA0` reads it, and the descriptor table itself is a data reference): the descriptor holds the file name and the element names the loader uses, in order — `Store_Weapons`, `Weapons_List`, `Entry`, `Mission`, `Num_Hoods`, `Weapon`, `Angle`, `Distance`, `Offset`, `Unlocked`, followed by ammo names (`Bullet Pistol`, `Bullet SMG`, `Bullet Shotgun`, …). The loader **`FUN_00817F90`** reads **`Store_Weapons` → `Weapons_List` → repeated `Entry`** and uses only three children of each entry:
 
 | Child | Stored where | Behaviour |
 |---|---|---|
@@ -732,9 +824,15 @@ The literal sits in a small static descriptor table at `0x01300A2C` (a code xref
 
 `Num_Hoods`, `Angle`, `Distance` and `Offset` are in the same descriptor table but **are not read by this loader** (their consumers, presumably the store's display code, were not traced — OPEN). The descriptor pattern is the same one `continuous_explosions.xtbl` uses (§10.2). No DLC archive carries this table.
 
+*(Desk review 2026-09-30: `0x022CE91C`, `0x022CE920` and `0x022CE924` are consecutive 4-byte globals; read "16 bytes at `0x022CE91C`" and "8 bytes per entry at `0x022CE920`" as the record sizes of heap arrays those globals point to, with the count at `0x022CE924` — not as arrays stored at those addresses.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (descriptor-vs-literal and pointer-global wording) — desk review (not re-derived from the executable).**
+
 ### 13.3 `store_weapon_lightset.xtbl` — not a weapon-schema table **[CONFIRMED — disassembly]**
 
 Literal `0x0115E7D8`, one xref at `0x0081630A`, in **`FUN_008162F0`**. This routine does **not** parse the file itself: it asks the *lightset cache* (`FUN_005990C0`: CRC of the name, then a scan of the 16-byte-per-entry lightset cache at `0x013DE2C8`, falling back to the lightset loader `FUN_005984C0`) for the lightset called `store_weapon_lightset.xtbl`. **The document schema is therefore the shared lightset schema** (the same one the `*-lightset.xtbl` files in the DLC archives use — e.g. `dlc1_gb_in-lightset.xtbl`), whose reader belongs to the environment/lighting group and is not decoded here. `FUN_008162F0(store)` then **overwrites each loaded light** (`0x70`-byte records; count at lightset `+0x08`, records at lightset `+0x04`): the light's position vector (record `+0x30`, 16 bytes) is recomputed from the store object's position (or from the entity referenced at store `+0x2098`/`+0x209C`), with a fixed offset added when neither is present, and the 48 bytes at record `+0x40` are set from static constants at `0x012490C0`…`0x012490EC`. Practical meaning: the file supplies the *number and types* of lights; the game places them relative to the weapon display at run time. **[The lightset schema itself: OPEN here — belongs to another group.]**
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 14. strafe_angles, taunting, hostage, windshield_cannon
 
@@ -757,6 +855,10 @@ Literal `0x01171610`, one xref at `0x00955F07`, read by **`FUN_00955F00`**. Rows
 | `+0x5C` | `Use_Turn_Limits` → `Left_Limit` | stored as **−(360 − value)°** in radians; 0 if `Use_Turn_Limits` is absent |
 | `+0x60` | `Use_Turn_Limits` → `Right_Limit` | degrees → radians; 0 if absent |
 
+*(Desk review 2026-09-30: "0 if absent" for the two limits holds only if their always-reads are skipped when `Use_Turn_Limits` is absent — see §1.3. `value` in the `Left_Limit` rule is the authored degrees.)*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (absent-child pointer; storage extent still OPEN) — desk review (not re-derived from the executable).**
+
 ### 14.2 `taunting.xtbl` **[CONFIRMED — disassembly]**
 
 Literal `0x0113988C`, one xref at `0x006C3070`, read by **`FUN_006C3060`**: a single **`Taunting`** row into globals starting at `0x014C76D0`.
@@ -775,6 +877,8 @@ Literal `0x0113988C`, one xref at `0x006C3070`, read by **`FUN_006C3060`**: a si
 | `First_Taunt_Respect` | `0x014C76F8` | `s32`, ≥ 0 |
 | `Max_Lifetime_Respect` | `0x014C76FC` | `s32`, ≥ 0 |
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 14.3 `hostage.xtbl` **[CONFIRMED — disassembly]**
 
 Literal `0x01138020`, one xref at `0x006B6321`, read by **`FUN_006B6310`**: a single **`Hostage`** row. `Min_Notoriety` (`s32` → `0x012F03E0`; **a value outside 0…5 becomes 3**), `Max_Lifetime_Respect` (`s32` ≥ 0 → `0x014C7190`), then `Vehicle_Classes` → repeated **`Vehicle_Class`**: `Class_Name` ∈ {`Compact` 0, `Sedan` 1, `Luxury` 2, `Exotic` 3, `SUV` 4, `Truck` 5} (`FUN_006B6250`; the same six names as the vehicle's `Hostage_Vehicle_Class`, `spec-vehicle-data.md` §7.3; an unmatched or absent name skips the class) → `Difficulty_Levels` → repeated **`Difficulty_Level`**:
@@ -790,9 +894,13 @@ Literal `0x01138020`, one xref at `0x006B6321`, read by **`FUN_006B6310`**: a si
 
 Storage: `0x014C71C0`, **18 slots × `0x18` bytes**, slot index `(Num_Hostages − 1) + 3 × class`; slot: `+0x00` `Num_Hostages` (0 = unused), `+0x04` Min evasion ms, `+0x08` Max evasion ms, `+0x0C` notoriety/second, `+0x10` respect, `+0x14` cash. **A level with `Respect` < 1 and `Cash` ≤ 0 is erased back to "unused"** (a hostage grab that pays nothing is not a defined reward).
 
+**Review status (2026-09-30): DESK-PASS (the erase rule was not checked against the 18 real levels) — desk review (not re-derived from the executable).**
+
 ### 14.4 `windshield_cannon.xtbl` **[CONFIRMED — disassembly]**
 
 Literal `0x01139C20`, one xref at `0x006C605B`, read by **`FUN_006C6050`**: a single **`Windshield_Cannon`** row into globals at `0x014C7760`. `Max_Distance` `0x014C7760` and `Min_Distance` `0x014C7764` (`f32` always; **both forced to 0 if `Max ≤ 0` or `Max < Min`**); `Record_Threshold` `0x014C7768` (`f32` always, ≥ 0, ÷ 100); `Record_Display_Time` `0x014C776C` and `Record_Queue_Time` `0x014C7770` (`f32` if present, ≥ 0, seconds → ms, default 0); `Max_Respect` `0x014C7774` and `Max_Lifetime_Respect` `0x014C7778` (`s32`, ≥ 0); `Max_Cash` `0x014C777C` (`f32`, ≥ 0). The three `Record_*` elements are the same trio the combat-tricks table uses (§11.2): the on-screen "record" of the stunt. No DLC archive carries these four tables.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 15. Literal-and-loader index, DLC content registry, and cross-table reference map
 
@@ -825,6 +933,8 @@ Every literal below was verified by a raw scan of the executable as an exact NUL
 | `hostage.xtbl` | `0x01138020` | 1 (`FUN_006B6310`) | `FUN_006B6310` | 14 |
 | `windshield_cannon.xtbl` | `0x01139C20` | 1 (`FUN_006C6050`) | `FUN_006C6050` | 14 |
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 15.2 The DLC content registry **[CONFIRMED — disassembly + static data; new finding, useful to every table group]**
 
 The DLC handlers that append `dlcN_<table>.xtbl` rows are **not called directly**: they are function-pointer words in a static registry of **21 entries, 5 dwords each, from `0x0118D1F8`** — `{ handler name (string pointer), 0, load function, unload function, 0 }` — which is why the DLC handlers have no callers in a cross-reference listing. A handler receives an object holding an array of *package* pointers (array pointer at `+0x00`, count at `+0x08`). A package record supplies: the **framework name string at `+0x80`** (`dlc1`, `dlc2`, `dlc3`); byte `+0x101` (non-zero and not `0xFF` ⇒ the package is present); byte `+0x103` — **bit 1 (`0x02`) "carries DLC table data"**, **bit 2 (`0x04`) "use unprefixed file names"**. The file name is built by `FUN_0045BA50` as **`<framework>_<table>.xtbl`** (unless bit 2 is set or the framework string is empty). Registry contents (handler name → load / unload):
@@ -843,7 +953,9 @@ The DLC handlers that append `dlcN_<table>.xtbl` rows are **not called directly*
 | `vehicle` | `0x00ACE890` | `0x00AC98A0` | | `cloth_sim` | `0x007414D0` | `0x00740140` |
 | `customize_item` | `0x00822540` | `0x008226E0` | | | | |
 
-A second group of registry entries follows (`weapon_key`, `vehicle_key`, `customize_composite_key`, `customize_item_key`, `cheat_key`, `homies_key`, `mission_key`, `customize_category_key`, `unlockable_edit`), each with three function pointers — presumably per-family key/lookup helpers; not decoded. Fifteen of the load handlers call `FUN_0045BA50` with the literal filename of the table they extend (`refraction_situations`, `achievements`, `tweak_table`, `unlockables`, `ui_images`, `homies`, `customization_items`, `customization_outfits`, `contacts_sr3`, `level_objects`, `items_3d`, `character_definitions`/`character`/`char_cust_cats`, `explosions`, `weapon_tracers`); the vehicle handler is `FUN_00ACE890` (`spec-vehicle-data.md` §7.1); the weapon handler is described in §2.
+A second group of registry entries follows (`weapon_key`, `vehicle_key`, `customize_composite_key`, `customize_item_key`, `cheat_key`, `homies_key`, `mission_key`, `customize_category_key`, `unlockable_edit`), each with three function pointers — presumably per-family key/lookup helpers; not decoded. Fifteen of the load handlers call `FUN_0045BA50` with the literal filename of the table they extend (`refraction_situations`, `achievements`, `tweak_table`, `unlockables`, `ui_images`, `homies`, `customization_items`, `customization_outfits`, `contacts_sr3`, `level_objects`, `items_3d`, `character_definitions`/`character`/`char_cust_cats`, `explosions`, `weapon_tracers`); the vehicle handler is `FUN_00ACE890` (`spec-vehicle-data.md` §7.1); the weapon handler is described in §2. **[OPEN — desk review 2026-09-30: "fifteen" cannot be reproduced from this list, which names 16 table files in 14 list entries (one entry groups three character tables), mapping plausibly onto 13 registry handlers (`refraction_sitations`, `achievements`, `tweak`, `unlockables`, `ui`, `homies`, `customize_item`, `contacts`, `level_objects`, `items`, `characters`, `explosions`, `tracers`); the weapon handler (§2) also calls `FUN_0045BA50`, and whether the vehicle handler does is not stated. To be settled against the executable (scan the 21 load functions for calls to `FUN_0045BA50` and list them by handler).]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (handler count marked OPEN) — desk review (not re-derived from the executable).**
 
 ### 15.3 Cross-table reference map (which table's field names which other table's rows)
 
@@ -874,6 +986,8 @@ A second group of registry entries follows (`weapon_key`, `vehicle_key`, `custom
 | vehicle entry `Weapon_Link` (`spec-vehicle-data.md` §7.3, `+0xAD0`) | `weapons.xtbl` | `FUN_00B81220` (callers in the vehicle code, e.g. `FUN_00AC9060`) |
 | `hostage.Vehicle_Class/Class_Name` | the vehicle `Hostage_Vehicle_Class` enum | six literals |
 | save-file weapon inventory ids (`spec-save-format.md` §10.3) | `items_inventory` record table (`0x0250ADC0`, 52-byte stride) | CRC (seed 0) of the item name — §16 |
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 16. Validation against real DLC rows and independent cross-checks
 
@@ -916,13 +1030,15 @@ The weapon-upgrade reader (§4) was written by different code and builds patches
 
 ~~No DLC archive carries `weapon_categories`, `weapon_upgrades`, `ammo`, `weapon_melee_attacks`, `melee`, `melee_transition_states`, `aim_drift`, `aim_assist`, `combat_actions`, `combat_tricks`, `weapon_tracer_materials`, `store_weapons`, `crib_weapons`, `continuous_explosions`, `strafe_angles`, `taunting`, `hostage` or `windshield_cannon`; their schemas rest on complete reads of the loader bodies (and, for §4, the structural cross-check above), not on real rows.~~ **RESOLVED 2026-09-23 — all of these now have real base rows, validated in §18 (the DLC-only limitation this sentence described no longer applies).** No consumer of any table was read: field *names* are the authors' labels and the semantic glosses in this document are marked HIGH CONFIDENCE or HYPOTHESIS accordingly.
 
+**Review status (2026-09-30): DESK-PASS (§16.1–§16.5; §16.3 hashes reproduced at the desk) — desk review (not re-derived from the executable).**
+
 ## 17. Open items, artifacts, and status
 
 Status at checkpoint (2026-09-20): **all 22 assigned tables have a loader-derived schema; `weapons.xtbl` is complete to the element level; none was skipped.** What is *not* done is listed here. Running list, kept current as work proceeded.
 
 1. ~~**Base-game values** — unchanged: the base `.xtbl` containers are the parked mode-(a) limitation; every schema here decodes a recovered base file directly. Not touched.~~ **RESOLVED 2026-09-23 — the mode-(a) container limitation was lifted project-wide 2026-09-20 (`spec-vpp-container.md` §7); base-game values for all 22 tables in this group were extracted and validated against the schemas above — see §18.**
 2. **No consumer was read.** For every table the loader vocabulary (element names, types, offsets, units, defaults, limits) is confirmed; what the game *does* with the numbers (e.g. the meaning of `Min_Value`/`Max_Value` in `combat_tricks`, the `Fire_Cone` cosine test, `Effect_Situations` semantics, per-category block at `0x028DC488`) is HIGH CONFIDENCE from names only.
-3. **Weapon record leftovers.** (a) The four words `+0x7D4…+0x7E0` are initialised (0, 0.0, 0, −1) but never element-driven by the weapons reader; the upgrade reader (§4.3) writes display-name text (`+0x7D4`), its handle (`+0x7D8`), description (`+0x7DC`) and bitmap (`+0x7E0`) there — the *base* rows leave them at those defaults (HIGH CONFIDENCE). (b) `Muzzle_Flash` is read and discarded. (c) The precise transcendental in `Fire_Cone_Angle`/`Fire_Cone_Metrics` (cosine assumed). (d) `FUN_008ADFF0`, the selector of the two weapon-instance arrays (co-op player HYPOTHESIS). (e) `OM_REMOVAL` semantics in upgrades.
+3. **Weapon record leftovers.** (a) The four words `+0x7D4…+0x7E0` are initialised (0, 0.0, 0, −1) but never element-driven by the weapons reader; the upgrade reader (§4.3) writes display-name text (`+0x7D4`), its handle (`+0x7D8`), description (`+0x7DC`) and bitmap (`+0x7E0`) there — the *base* rows leave them at those defaults (HIGH CONFIDENCE). (b) `Muzzle_Flash` is read and discarded. (c) The precise transcendental in `Fire_Cone_Angle`/`Fire_Cone_Metrics` (cosine assumed). (d) `FUN_008ADFF0`, the selector of the two weapon-instance arrays (co-op player HYPOTHESIS). (e) `OM_REMOVAL` semantics in upgrades *(base rows now available, §18.5; not checked there)*.
 4. **Unbounded loops** worth a re-implementation guard: `Constant_Effect` > 4 rows (§2.2), `Small_Sticky_Effects` > 4 (§10.1), > 10 upgrades per weapon (§4.1), `Strafe_Angles` and `explosions` row counts (no capacity check found), `Categories` `Name` not in the seven-name set (§3).
 5. **The "always" accessors and absent elements** (§1.3): the disassembly shows no clearing of the scratch buffer; `spec-vehicle-data.md` §7.2 describes the same helper as "0 if absent". Not edited there (not this pass's file); a reader relying on that wording should treat it as unverified. A run-time experiment (or the stack layout at the call sites) would settle what an absent element actually yields.
 6. **Tables adjacent to this group found but not specced** (outside the assignment): `anim_synced.xtbl` (`FUN_0095DE40`/`FUN_0095DAA0`, loaded by the melee loader), `dof_situations.xtbl` (`FUN_0058EC80`; contains `Blur_Radius`), the lightset schema behind `store_weapon_lightset.xtbl`, the brass table (`0x013CF220`), the animation-group and animation-state name tables, the panic-reaction and groundfire tables `explosions.xtbl` names (`FUN_004EEE40`, `FUN_005FD830`), `items_3d`/`items_inventory` (`FUN_00904C10`, `FUN_008DCB10` resolvers only), and the nine `*_key` registry entries of §15.2.
@@ -931,12 +1047,15 @@ Status at checkpoint (2026-09-20): **all 22 assigned tables have a loader-derive
 9. **Registry package record** (§15.2): only the bytes the handlers touch (`+0x80`, `+0x101`, `+0x103`) are known.
 10. **Explosion/strafe/tracer storage extents** other than the tracer capacity (20) and aim-drift capacity (24).
 11. ~~**DLC weapon slot arithmetic** assumes a base count of 82 (§2) — consistent with two DLC first-row values and the unload range, not directly observable until the base `weapons.xtbl` is readable.~~ **RESOLVED 2026-09-23 — the base `weapons.xtbl` is now readable and has exactly 82 `<Weapon>` rows (§18.4); the slot arithmetic is CONFIRMED — empirical, not inferred.**
+12. **Added by the desk review (2026-09-30)** — OPEN items marked in place: the absent-child behaviour of the "always" readers (§1.3); the order of the two `+0x1A4` writes and the reader flavours of `Fire_Cone_Angle`/`Charge_Release_Info` (§2.2, §2.3); NPC spread slots `+0x1C`/`+0x38` and `+0x208` = 7 (§2.3); ammo row-level `cost`/`clip_size` and allocation zero-fill (§5); melee row-level impact copies (§7.1); the aim-drift `Recovery` path vs the real rows (§8); `Beat_Down_Kill` field count (§11.2, §18.6); the continuous-explosion reject rules vs the 3 real rows (§10.2); the count of handlers calling `FUN_0045BA50` (§15.2).
 
 **Artifacts.** Ghidra post-scripts (`tools/scripts/`): `AhTab.java` (dump pointer/string tables), `AhAsm.java` (disassembly with string annotation), `AhDecMk.java` (disassemble + create function + decompile — needed for the DLC handlers, which are reached only through function-pointer words); reused `AfDec.java`, `AfDecRange.java`, `AfMem.java`, `AfStrXrefs.java`, `AfCallers.java`, `AfAsm.java`. Runner: `tools/run_tbl.ps1` (project copy `tools/gp_tbl1`, disposable). Dumps: `tools/ah_w*.txt` (weapon reader), `ah_u*.txt` (upgrades/ammo), `ah_me*.txt` (melee), `ah_o*.txt`, `ah_x*.txt` (explosions/tracers), `ah_s*.txt` (store/crib), `ah_dl*.txt` (DLC handlers), `ah_t*.txt` (static tables), `ah_flags_w.txt`, `ah_upg_offsets.txt`, `ah_validate_weapons.txt`, `ah_fn_xrefs.txt`. Harnesses (`tools/harnesses/`): `tbl_dlc_list.py`, `tbl_dec_compact.py`, `tbl_flagpairs.py`, `tbl_upgrade_offsets.py`, `tbl_weapons_validate.py`, `tbl_expl_validate.py`, `tbl_desc_compare.py`, `tbl_exe_lit.py`, `tbl_findptr.py`, `tbl_save_weapon_ids.py`, `tbl_append.py`. The parked mode-(a) decompression question and the `.czn_pc` interior were not touched.
 
+**Review status (2026-09-30): DESK-PASS (item 12 appended for the review's new OPEN items) — desk review (not re-derived from the executable).**
+
 ## 18. Validation against real base-game tables (2026-09-23)
 
-**Prepared by:** SPEC TEAM, follow-up validation pass, 2026-09-23 (`HANDOFF.md` §27.2 queue item 0). This section validates §1–§17 (written from loader disassembly + 9 DLC rows, §16) against the now-readable real base-game tables, per `spec-vpp-container.md` §7/§8 and `spec-xtbl-format.md` §7.
+**Prepared by:** SPEC TEAM, follow-up validation pass, 2026-09-23 (`HANDOFF.md` §31, archived §27.2 queue item 0). This section validates §1–§17 (written from loader disassembly + 9 DLC rows, §16) against the now-readable real base-game tables, per `spec-vpp-container.md` §7/§8 and `spec-xtbl-format.md` §7.
 
 ### 18.1 Method and sources
 
@@ -975,7 +1094,7 @@ Coverage/value-range checks for `weapons.xtbl` extend `tools/harnesses/tbl_weapo
 
 ### 18.3 `weapons.xtbl` coverage check — 82 real base rows
 
-Extending §16.1's 9-DLC-row predicates: **240 distinct element tags** occur across the 82 real rows (vs. 199 in the 9 DLC rows). Of those 240, **8 are not reader literals** — and they are **exactly** the set §2.6 already named from the DLC sample plus its `TableDescription` cross-check, with **zero new surprises**: `_Editor` (82), `Effect_Situation` (32, the per-situation row tag), `Projectile_Flags` (31, the false-alarm literal that actually belongs to helper `FUN_00B7DB30`), `Info_Slot_Index` (0 — never appears in the base file at all, consistent with it being DLC-only, §18.4), `Hit_Wall_Sound` (56), `Spinning_Snd_Pitch_End` (81), `Foley_Name` (13), `Fire_Damage_Per_Second` (4) and `Alt_Time_Management/npc_burst_time` (1). **[CONFIRMED — empirical, real base data; the DLC-only inference in §2.6 is fully reproduced at 9× the sample size with no additions or contradictions.]**
+Extending §16.1's 9-DLC-row predicates: **240 distinct element tags** occur across the 82 real rows (vs. 199 in the 9 DLC rows). Of those 240, **8 are not reader literals** *(nine names are listed below because `Info_Slot_Index` is included for completeness; it occurs 0 times, so it is not one of the 8)* — and they are **exactly** the set §2.6 already named from the DLC sample plus its `TableDescription` cross-check, with **zero new surprises**: `_Editor` (82), `Effect_Situation` (32, the per-situation row tag), `Projectile_Flags` (31, the false-alarm literal that actually belongs to helper `FUN_00B7DB30`), `Info_Slot_Index` (0 — never appears in the base file at all, consistent with it being DLC-only, §18.4), `Hit_Wall_Sound` (56), `Spinning_Snd_Pitch_End` (81), `Foley_Name` (13), `Fire_Damage_Per_Second` (4) and `Alt_Time_Management/npc_burst_time` (1). **[CONFIRMED — empirical, real base data; the DLC-only inference in §2.6 is fully reproduced at 9× the sample size with no additions or contradictions.]**
 
 ### 18.4 `weapons.xtbl` value-range and structural check — 82 real base rows
 
@@ -1011,10 +1130,10 @@ Every table below was checked against this document's own already-published elem
 | `weapon_categories.xtbl` | 7 | clean (only `Name` read, as documented) | all 7 `Name` values are exact `WPNCAT_*` matches | **7/7 — the "seven-row list" claim is now an exact count, not an assumption** |
 | `weapon_upgrades.xtbl` | 64 (22 distinct weapons) | clean except 2 authoring typos, §18.6 | override elements all within the §4.3 vocabulary | max upgrades for any one weapon = **3** (cap is 10, far from being hit) |
 | `weapon_melee_attacks.xtbl` | 25 | clean (only the 15 documented slot names + `Name`) | — | — |
-| `ammo.xtbl` (35-row patch copy) | 35 | clean | `Inv_Slot` **23/23** in the 11-set; `Flag` **all** in the 12-set; `Upgradable_Ammo/Weapon` values are plausible weapon names | — |
-| `melee.xtbl` | 336 | clean except dead elements, §18.6 | `AttackLimb`/`AttackLimbNPC` **all** in the 6-name set (only 5 of 6 values actually used; `Weapon` never appears) | `Combo` present on **336/336** rows (100%); `Explosion` (CRC-only) on 6 |
+| `ammo.xtbl` (35-row patch copy) | 35 | ~~clean~~ **OPEN (desk review 2026-09-30): not clean — row-level `cost` in 31/35 rows, differing from `store/cost` in 13/35 (`team-b/HANDOFF.md` §9.83, "Correction (2026-09-24)"); see §5.1** | `Inv_Slot` **23/23** in the 11-set; `Flag` **all** in the 12-set; `Upgradable_Ammo/Weapon` values are plausible weapon names | — |
+| `melee.xtbl` | 336 | ~~clean except dead elements, §18.6~~ **OPEN (desk review 2026-09-30): a row-level copy of `ImpactDir`/`ImpactForce`/`AttackLimb` in 273/336 rows, not listed in §18.6 (`team-b/HANDOFF.md` §9.83, "Spec disagreements found against real base-game rows" item (2)); see §7.1** | `AttackLimb`/`AttackLimbNPC` **all** in the 6-name set (only 5 of 6 values actually used; `Weapon` never appears) | `Combo` present on **336/336** rows (100%); `Explosion` (CRC-only) on 6 |
 | `melee_transition_states.xtbl` | 19 | clean | — | `Return_Action` authored in **0/19** real rows (always defaults to −1 in the shipped game) |
-| `aim_drift.xtbl` | 20 | clean except dead elements, §18.6 | — | 20 profiles, well under the 24-profile cap; see §18.6 for the `Recovery`-wrapper finding |
+| `aim_drift.xtbl` | 20 | ~~clean except dead elements, §18.6~~ **OPEN (desk review 2026-09-30): `Penalties`, `Bonuses`, `lag_amount`, `lag_time`, `vertical_offset` occur in 20/20 rows, measured per row, and are not listed in §18.6 (`team-b/HANDOFF.md` §9.83, "Correction (2026-09-23)": "really are 20/20 (confirmed exact)"); see §8** | — | 20 profiles, well under the 24-profile cap; see §18.6 for the `Recovery`-wrapper finding |
 | `aim_assist.xtbl` | 5 | clean | `Name` values are **exactly** `{Normal, Combat Ready, Fine Aim, Tank Skydiving, Zoomed}` — 5/5, no extra/unrecognised rows | — |
 | `explosions.xtbl` | 93 | clean except `Blur_Radius` (§18.6, already flagged by §16.2) | `Flags/Flag` in the 5-name set; numeric fields parse | — |
 | `continuous_explosions.xtbl` (3-row patch copy) | 3 | clean | `Target_Type` values seen: `default`, `in_aircraft` — both in the 3-name set, no duplicates/unknowns | row count **3 = the loader's own cap exactly** |
@@ -1029,21 +1148,21 @@ Every table below was checked against this document's own already-published elem
 | `hostage.xtbl` | 1 (6×3 slots) | clean except 1 dead element per slot, §18.6 | 6 `Vehicle_Class/Class_Name` values are **exactly** the six-name set | **18 = 6 classes × 3 difficulty levels, exactly the documented "18 slots" storage claim** |
 | `windshield_cannon.xtbl` | 1 | clean | — | — |
 
-**[CONFIRMED — empirical for every row above.]**
+**[CONFIRMED — empirical for every row above.]** *(Desk review 2026-09-30: except the three coverage cells downgraded to OPEN above (ammo, melee, aim_drift), which Team B's full-population counts refute. Two further Team B findings qualify "clean" without a count that settles them: every singleton table here (`Crib_Weapons`, `Store_Weapons`, `Taunting`, `Hostage`, `Windshield_Cannon`, `Combat_Tricks`) carries a row-level `<Name>` that §11.2/§13/§14 do not mention (`team-b/HANDOFF.md` §9.83 item (7)); and the `continuous_explosions` `Daedalus` row carries 7 lower-case element names Team B's reader did not recognise (§10.2) — OPEN.)*
 
 ### 18.6 Findings only visible with real base data (the DLC-only pass could not have made these)
 
 Each dead-element claim below is an exhaustive case-insensitive whole-executable literal scan (`tools/harnesses/tbl_exe_lit.py`), not a comparison against a known-field list — the project's standing bar for a negative claim.
 
 - **`hostage.xtbl`:** every one of the 18 real `Difficulty_Level` rows carries a sibling element `Vehicle_Classs` (note the extra "s") whose value exactly mirrors that slot's own `Num_Hostages` (1/2/3). `Vehicle_Classs` has **zero** exact literal hits anywhere in the executable; the correctly-spelled `Vehicle_Class` (the wrapper the reader actually uses, one level up in the tree) **is** an exact literal — a positive control confirming the scan is discriminating, not just silent.
-- **`aim_drift.xtbl`:** every one of the 20 real `Profile` rows carries row-level `MinTime`/`MaxTime` children directly under `Profile` (e.g. `2000`/`4000` on the `Default` profile) — neither name is documented anywhere in §8, and neither is an exact literal anywhere in the executable. Separately, every profile's `Aiming` block carries a dead duplicate `Bounces_per_secxxx` beside the real `Bounces_per_sec` (also confirmed dead). Most significantly: **the `Recovery` wrapper this document's §8 says the reader requires around `recover_penalty`/`recover_time`/`bullets_to_unsteady` (defaulting to 1.0/500.0/−1.0 if absent) has zero occurrences anywhere in the real 20-profile file** — every real base aim-drift profile authors these three fields as direct children of `Aiming` instead, so every real profile silently gets the reader's hardcoded defaults for all three, never its own authored values. No DLC archive carries `aim_drift.xtbl` at all, so nothing short of the real base file could have shown this.
+- **`aim_drift.xtbl`:** ~~every one of the 20 real `Profile` rows carries~~ **19 of the 20 real `Profile` rows carry** *(corrected by the desk review 2026-09-30 from a per-row count: `team-b/HANDOFF.md` §9.83, "Correction (2026-09-23)": "they're **19/20**"; one row has neither)* row-level `MinTime`/`MaxTime` children directly under `Profile` (e.g. `2000`/`4000` on the `Default` profile) — neither name is documented anywhere in §8, and neither is an exact literal anywhere in the executable. Separately, every profile's `Aiming` block carries a dead duplicate `Bounces_per_secxxx` beside the real `Bounces_per_sec` (also confirmed dead). Most significantly: **the `Recovery` wrapper this document's §8 says the reader requires around `recover_penalty`/`recover_time`/`bullets_to_unsteady` (defaulting to 1.0/500.0/−1.0 if absent) has zero occurrences anywhere in the real 20-profile file** — every real base aim-drift profile authors these three fields as direct children of `Aiming` instead, so every real profile silently gets the reader's hardcoded defaults for all three, never its own authored values. No DLC archive carries `aim_drift.xtbl` at all, so nothing short of the real base file could have shown this. *(Desk review 2026-09-30: this bullet does not mention the five elements Team B measured in 20/20 rows — `Penalties`, `Bonuses`, `lag_amount`, `lag_time`, `vertical_offset`; whether the reader really looks for `Recovery`, or the path was mis-associated, is OPEN — see §8.)*
 - **`melee.xtbl`:** three per-move elements that read like an alternate combo-chaining scheme — `NextPrimary` (57/336 rows), `NextSecondary` (55), `NextSpecial` (71), each wrapping a `<MeleeMove>` child that names another move by name — and three per-move gating elements — `victim_pre_condition`, `victim_post_condition`, `req_prev_hits` (273 each) — have **zero** exact literal hits anywhere in the executable. The reader's actual, documented chaining mechanism (`Combo`/`Anim_group_grid` + `Start_Pose`/`End_Pose`, §7.1) is present on all 336 rows, but at least one real row (`Avatar-P_Attack_A`) has an **empty** `<Combo></Combo>` while its only authored follow-up information is the dead `NextPrimary`/`NextSecondary` pair (naming `punch1L`) — that move's intended chain-out is expressed exclusively through a mechanism the row reader never touches. Whether some other, non-table-driven system (not read in this pass — no consumer of any table was read, §16.5) resolves the chain another way is **OPEN**.
-- **`combat_actions.xtbl`:** 42/67 rows carry a free-text `Notes` child (e.g. `"get out of the leaders way"`) and 8/67 carry an (empty, in every real instance) `Prerequis` child; neither is an exact literal anywhere in the executable.
+- **`combat_actions.xtbl`:** 42/67 rows carry a free-text `Notes` child (short designer remarks in plain English) and 8/67 carry an (empty, in every real instance) `Prerequis` child; neither is an exact literal anywhere in the executable.
 - **`crib_weapons.xtbl`:** every one of the 7 real `Entry` rows carries a `Num_Cribs` element (values 1, 1, 3, 4, 4, 5, 5 — reads like a progression-tier hint) and the single `Crib_Weapons` row carries a `MagazineScalar` element; neither is an exact literal anywhere in the executable.
-- **`combat_tricks.xtbl`:** the one real row carries, alongside the correctly-named `Brute_Beat_Kill` (confirmed an exact reader literal, 1 hit), a second, differently-spelled child `Beat_Down_Kill` — **confirmed 2026-09-23 (re-checked by the orchestrator directly against the executable, prompted by Team B's independent validation flagging this as "a 19th trick"): `Beat_Down_Kill` has ZERO exact literal occurrences anywhere in the executable (vs. `Brute_Beat_Kill`'s 1), so it is never read by name — this part of the original finding stands.** ~~though it appears embedded in a static localisation-key string `DIVERSION_COMBAT_TRICKS_BEAT_DOWN_KILL`, suggesting the trick was renamed at some point and the old element name survives as inert data.~~ **The "renamed, old element survives" story is downgraded from stated-as-fact to HYPOTHESIS — it was never confirmed by tracing which trick's id the localisation key resolves to.** What IS confirmed directly from the real data: `Beat_Down_Kill` is not a stub or an empty leftover — it carries its own genuinely distinct 5-field record (`Max_Value=9, Min_Value=0, Max_Respect=90, Max_Lifetime_Respect=10000, Max_Cash=180`, no `Duration`), different in shape and every value from `Brute_Beat_Kill`'s own record (`Duration=2.0, Max_Value=1, Min_Value=0, Max_Respect=100, Max_Lifetime_Respect=3000, Max_Cash=150`) — so whatever `Beat_Down_Kill` originally was, it was authored as a real, separate trick definition, not a copy-paste duplicate of `Brute_Beat_Kill`. It is simply never reached by any exact-literal reader lookup found in this pass.
+- **`combat_tricks.xtbl`:** the one real row carries, alongside the correctly-named `Brute_Beat_Kill` (confirmed an exact reader literal, 1 hit), a second, differently-spelled child `Beat_Down_Kill` — **confirmed 2026-09-23 (re-checked by the orchestrator directly against the executable, prompted by Team B's independent validation flagging this as "a 19th trick"): `Beat_Down_Kill` has ZERO exact literal occurrences anywhere in the executable (vs. `Brute_Beat_Kill`'s 1), so it is never read by name — this part of the original finding stands.** ~~though it appears embedded in a static localisation-key string `DIVERSION_COMBAT_TRICKS_BEAT_DOWN_KILL`, suggesting the trick was renamed at some point and the old element name survives as inert data.~~ **The "renamed, old element survives" story is downgraded from stated-as-fact to HYPOTHESIS — it was never confirmed by tracing which trick's id the localisation key resolves to.** ~~What IS confirmed directly from the real data: `Beat_Down_Kill` is not a stub or an empty leftover — it carries its own genuinely distinct 5-field record (`Max_Value=9, Min_Value=0, Max_Respect=90, Max_Lifetime_Respect=10000, Max_Cash=180`, no `Duration`), different in shape and every value from~~ **[Downgraded to OPEN by the desk review 2026-09-30: the field count conflicts with Team B's reading of the same single element — `team-b/HANDOFF.md` §9.83 item (4): "same 6-field shape as the documented 18". One of the two readings is wrong about whether `Duration` is present; the values above are this pass's reading and stand only as such until the element's children are printed again (§11.2). Both readings agree that it is distinct from `Brute_Beat_Kill`.]** Team A's reading: `Beat_Down_Kill` carries a 5-field record (`Max_Value=9, Min_Value=0, Max_Respect=90, Max_Lifetime_Respect=10000, Max_Cash=180`, no `Duration`), different in shape and every value from `Brute_Beat_Kill`'s own record (`Duration=2.0, Max_Value=1, Min_Value=0, Max_Respect=100, Max_Lifetime_Respect=3000, Max_Cash=150`) — so whatever `Beat_Down_Kill` originally was, it was authored as a real, separate trick definition, not a copy-paste duplicate of `Brute_Beat_Kill`. It is simply never reached by any exact-literal reader lookup found in this pass.
 - **`weapon_tracers.xtbl`** (generalising a DLC-only observation, §16.2, to the full population): **0 of the 13 real base rows** wrap `Chance` in a `Ricochet` element — every real base row, like 2 of the 4 DLC rows, puts `Chance` directly under `Weapon_Tracers`, where the reader never looks. The `Ricochet` wrapper §12.1 says the reader requires is, across the entire shipped game (base + DLC), **never actually used**; the field always evaluates to the reader's default (0).
 - **`explosions.xtbl`:** `Screen_Effects/Blur_Radius` — already identified by the DLC `TableDescription` cross-check (§16.2) as belonging to `dof_situations.xtbl`'s reader, not this one — is confirmed present in **6 of the 93** real base rows, not just a DLC edge case.
-- **`weapons.xtbl`:** the 8 dead elements already named in §18.3 are all confirmed at 9×-larger sample size with the same, unchanged membership — no table in this group turned up a *newly*-dead top-level `weapons.xtbl` element beyond what §2.6 already found from 9 DLC rows.
+- **`weapons.xtbl`:** the 8 ~~dead elements~~ non-literal tags already named in §18.3 *(only 5 of them are genuinely unread — `Hit_Wall_Sound`, `Spinning_Snd_Pitch_End`, `Foley_Name`, `Fire_Damage_Per_Second`, `npc_burst_time`; `_Editor`, `Effect_Situation` and `Projectile_Flags` are handled or false alarms, §2.6)* are all confirmed at 9×-larger sample size with the same, unchanged membership — no table in this group turned up a *newly*-dead top-level `weapons.xtbl` element beyond what §2.6 already found from 9 DLC rows.
 
 ### 18.7 What remains open after this pass
 
@@ -1052,3 +1171,13 @@ Each dead-element claim below is an exhaustive case-insensitive whole-executable
 - `store_weapon_lightset.xtbl`'s own schema (§13.3, the shared lightset reader) remains out of this group's scope, unaffected by this pass.
 - Exact storage extents for `explosions`/`strafe_angles`/tracer-adjacent tables beyond the already-documented caps (§17 item 10) — the real row counts (93, 8, 13) are comfortably under any plausible extent and provide no new pressure to determine it.
 - Whether `ammo.xtbl`'s `Upgradable_Ammo/Weapon` values (`Special-Drone`, `Special-Airstrike`, `Special-RCVehicleGun`, `satchel`) resolve against real `weapons.xtbl` `Name` values was spot-checked for plausibility only, not exhaustively cross-joined against all 82 real weapon names.
+- *(Added by the desk review 2026-09-30)* **Team B reconciliation.** Team B's independent run (`team-b/HANDOFF.md` §9.83) disagrees with this section on: `aim_drift` `MinTime`/`MaxTime` (19/20, corrected in §18.6); the "clean" coverage of `ammo`, `melee` and `aim_drift` (downgraded to OPEN in §18.5); the shape of `Beat_Down_Kill` (5 vs 6 fields, OPEN in §11.2/§18.6); row-level `<Name>` on the singleton tables and the `Daedalus` row's lower-case names (OPEN, §18.5 note). The dead-element claims of §18.6 rest on a literal scan, which is sound for names with no literal anywhere but cannot decide names that are reader literals at another level (`cost`, `clip_size`, `ImpactFX`, `ImpactDir`, `ImpactForce`, `AttackLimb`, `Chance`) — for those only the parent node the reader passes decides.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (`MinTime`/`MaxTime` corrected to 19/20; three "clean" cells and the `Beat_Down_Kill` shape downgraded to OPEN against Team B's counts; shipped note text paraphrased) — desk review (not re-derived from the executable).**
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the "base tables unreadable" and "no empirical cross-check" statements superseded by §18 (header, §1.1, §3, §4.3, §5); noted §18.5 availability for the `OM_REMOVAL` question (§4.2, §17 item 3e); aligned §1.6 weapons-array "count" with §2.1 capacity; added a conflict marker for the `items_inventory` live-bit offset (§1.6, vs `spec-save-format.md` §10.3); fixed tag counts in §18.3 (9 listed / 8 occurring) and §18.6 (5 genuinely unread of 8).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 2 `HANDOFF.md` §27.x references to the archived headings (§27.2 → §30 header, §27.2 queue item 0 → §31, §18); 0 left (see review).
+- 2026-09-30 (cloud): §1: the table loader's failure message is paraphrased instead of quoted verbatim (manager clean-room line).
+- 2026-09-30 (cloud desk review, `review/adv_tables-weapons-combat.md`): added a review status line to each of 42 units and a front-matter summary (16 DESK-PASS, 15 with text fixes, 9 NEEDS-EXE, 1 NEEDS-DATA, 1 VALIDATED-BY-DATA); corrected `Time_Management` "seven `u16`" to six + `u8` + pad (§2.3) and `aim_drift` `MinTime`/`MaxTime` 20/20 to 19/20 (§18.6, Team B §9.83); downgraded to OPEN the §18.5 "clean" cells for ammo/melee/aim_drift and the §18.6 `Beat_Down_Kill` 5-field reading, against Team B's counts; added OPEN notes for Team B's ammo/melee/aim_drift findings (§5, §7.1, §8), the absent-child behaviour (one statement in §1.3, pointers from §2.3/§12.1/§12.2/§14.1), the `+0x1A4` double write, NPC spread slots, `+0x208` = 7, `OM_REPLACE`, the `FUN_0045BA50` handler count and others (§17 item 12); cross-referenced the 33 material names to `spec-tables-environment.md` §11.6 (§1.6, §12.2); clarified range notation, pointer-global wording (§4.1/§4.2/§13.2) and the explosion storage lower bound (§10.1); paraphrased three verbatim shipped strings (§2.2 diagnostic, §12.1 diagnostic, §18.6 `Notes` example).

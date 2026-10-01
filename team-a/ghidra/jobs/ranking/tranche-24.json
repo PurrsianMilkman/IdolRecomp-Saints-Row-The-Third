@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 24 (names 526-550 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "cell_music_menu_toggle_station",
+    "cell_machinima_is_recording",
+    "cell_is_map_disabled",
+    "cell_is_closing",
+    "cell_debug_all_enabled",
+    "cell_cheats_unlock_cheat",
+    "cell_cheats_activate_cheat",
+    "cell_camera_is_enabled",
+    "cell_allow_camera",
+    "camera_script_is_finished",
+    "camera_look_through_do",
+    "building_purchase_is_crib_being_purchased",
+    "boss_battle_matt_set_phase",
+    "boss_battle_matt_qte_begin",
+    "autil_mashing_minigame_faded_out",
+    "audio_play_id_for_navpoint_do",
+    "audio_play_id_for_character_do",
+    "audio_play_id_do",
+    "audio_play_for_mover_do",
+    "audio_play_for_character_weapon_do",
+    "audio_play_for_character_do",
+    "audio_play_do",
+    "assert_screen_is_faded_out",
+    "airplane_takeoff_do",
+    "airplane_land_do"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

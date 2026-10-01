@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The confirmed engine->Lua hook name census this project fires as real
 // calls, built ONLY from spec-lua-bindings.md Sec8.2-8.4 and Sec12.2-12.9
 // (read in full before writing this file - not worked from a summary).
@@ -143,9 +150,22 @@ struct HookArg {
 
 // One confirmed (or pattern-based) hook name this project fires against a
 // loaded script's Lua state.
+// How firmly a Group 1 name is established as a real Lua hook
+// (spec-lua-bindings.md desk review, 2026-09-30, on §4). Every hook is still
+// fired exactly as before; this label only says how far to trust a result
+// that depends on it. Groups 2/3 carry their own group-level status.
+enum class HookEvidence {
+    Sec8Confirmed,           // re-confirmed by the §8 method (§8.2 table), or by §14.4/§14.6
+    Sec4ScanPendingRecheck,  // only in §4's automated-scan table; OPEN until re-checked against the exe
+    RefutedSec14_3,          // §14.3: not a Lua-hook dispatcher call (a different native mechanism)
+    GroupLevel,              // Group 2 / Group 3: see hookGroupNote()
+};
+const char* hookEvidenceLabel(HookEvidence e);
+
 struct HookSpec {
     std::string name;
     HookGroup group;
+    HookEvidence evidence = HookEvidence::GroupLevel;
 
     // Real per-hook argument list this firing pass pushes before
     // lua_pcall, IN ORDER - EMPTY for every hook except the small,

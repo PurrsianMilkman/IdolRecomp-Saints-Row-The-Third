@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 16 (names 326-350 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "store_vehicle_do_return_to_crib",
+    "store_vehicle_allow_garage",
+    "store_stronghold_upgrade_end_flyby",
+    "store_stronghold_game_purchase_upgrade",
+    "store_gang_is_unlocked",
+    "store_gang_bg_covered",
+    "store_gang_begin_exit",
+    "store_gallery_upload_character",
+    "store_gallery_download_show_list",
+    "store_gallery_display_character",
+    "store_crib_init_crib_garage",
+    "squad_enable",
+    "spawning_boats",
+    "spawn_region_min_spawn_dist_reset",
+    "spawn_region_min_spawn_dist",
+    "spawn_override_set_override_category_for_hood",
+    "spawn_override_clear_override_for_hood",
+    "spawn_global_override_set_category",
+    "spawn_global_override_clear_category",
+    "skydive_move_to_check_done",
+    "shop_purchase_purchase_shop",
+    "sfx_use_load_images",
+    "set_char_in_string",
+    "set_attack_peds_flag",
+    "screen_capture_preview_should_upload"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

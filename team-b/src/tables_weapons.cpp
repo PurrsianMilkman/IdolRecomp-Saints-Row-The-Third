@@ -303,6 +303,10 @@ ProjectileInfo ParseProjectileInfo(const Node* row) {
     return r;
 }
 
+// [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+// to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
+// `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
+// as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
 std::vector<std::pair<std::string, std::optional<std::string>>> ParseMeleeMaterialEffects(const Node* row) {
     std::vector<std::pair<std::string, std::optional<std::string>>> out;
     const Node* wrap = FindChild(row, "melee_material_effects");
@@ -560,6 +564,11 @@ Weapon ParseWeapon(const Node* row) {
     w.flatSpreadMetrics = ParseFlatSpreadMetrics(row);
 
     {
+        // [HIGH CONFIDENCE - spec-tables-weapons-combat.md 2.2 (`+0x1A4` Fire_Cone_Angle): "the stored
+        // value is cos(1/2 x angle) (HIGH CONFIDENCE that the transcendental is cosine)"; also
+        // 2.3 Fire_Cone_Metrics `Angle` form. Same row: [OPEN] the reader flavour (always / if
+        // present) and which of the two `+0x1A4` writes wins are not stated. Conversion kept
+        // as-is; not CONFIRMED.]
         Always<float> angle = ReadFloatAlways(row, "Fire_Cone_Angle");
         if (angle.present) {
             w.fireConeAngleCos.value = std::cos(angle.value * 0.5f * kDegToRad);
@@ -1002,7 +1011,11 @@ AimDriftProfile ParseAimDriftProfile(const Node* row) {
     r.bulletMissAimingFarAccuracy = ReadFloatAlways(aiming, "Far_accuracy");
     r.bulletMissAimingBouncesPerSec = ReadFloatAlways(aiming, "Bounces_per_sec");
     r.bulletMissAimingSpeedMultipler = ReadFloatAlways(aiming, "Speed_multipler");
+    // [OPEN / NEEDS-EXE - spec-tables-weapons-combat.md section 8: "Recovery in
+    // 0/20 real rows (section 18.6) and five undocumented elements in 20/20"].
+    // Spec path kept unchanged; the empty case is reported, not hidden.
     const Node* recovery = FindChild(bm, "Recovery");
+    if (!recovery) r.diagnostics.push_back(kAimDriftRecoveryEmptyDiagnostic);
     r.recoveryPenalty = ReadFloatAlways(recovery, "recover_penalty");
     r.recoveryTime = ReadFloatAlways(recovery, "recover_time");
     r.recoveryBulletsToUnsteady = ReadFloatAlways(recovery, "bullets_to_unsteady");

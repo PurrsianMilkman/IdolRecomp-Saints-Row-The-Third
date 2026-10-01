@@ -605,28 +605,109 @@ void testSpawnInfo() {
 }
 
 // ===========================================================================
-// notoriety_spawn.xtbl (spec S6.3) - <Table>-nested rows, spawn_flags list
+// notoriety_spawn.xtbl (spec S6.3, element tree corrected by S14.6) -
+// <Table>-nested rows; level_info / group_info / group_details are each ONE
+// wrapper whose same-named children are the records (S14.6, CONFIRMED -
+// empirical); spawn_flags list. Values are synthetic, not real data.
 // ===========================================================================
 void testNotorietySpawn() {
     Document d = P(
         "<root><Table>"
         "<Table><Name>police</Name>"
-        "<level_info><level>0</level><min_spawn_time>2</min_spawn_time><max_spawn_time>5</max_spawn_time></level_info>"
-        "<group_info><level>0</level><chance>0.5</chance><tag_name>cop1</tag_name><vehicle_name>Bootlegger</vehicle_name></group_info>"
-        "<group_details><tag_name>cop1</tag_name><seat_name>Driver</seat_name><npc_name>cop_npc</npc_name></group_details>"
+        "<level_info>"
+        "<level_info><level>2</level><min_spawn_time>7</min_spawn_time><max_spawn_time>9</max_spawn_time>"
+        "<veh_min_spawn_time>3</veh_min_spawn_time><veh_max_spawn_time>4</veh_max_spawn_time>"
+        "<max_vehicle_occupants>2</max_vehicle_occupants><max_vehicles>1</max_vehicles><npc_cap>6</npc_cap>"
+        "<specialist_cap>1</specialist_cap><brute_cap>0</brute_cap></level_info>"
+        "<level_info><level>3</level><min_spawn_time>5</min_spawn_time></level_info>"
+        "</level_info>"
+        "<group_info>"
+        "<group_info><level>2</level><chance>0.5</chance><tag_name>cop1</tag_name><vehicle_name>Bootlegger</vehicle_name>"
+        "<variant_name>v1</variant_name></group_info>"
+        "<group_info><level>2</level><chance>0.25</chance><tag_name>cop2</tag_name></group_info>"
+        "<group_info><level>3</level><chance>1.0</chance><tag_name>cop1</tag_name></group_info>"
+        "</group_info>"
+        "<group_details>"
+        "<group_details><tag_name>cop1</tag_name><seat_name>Driver</seat_name><npc_name>cop_npc</npc_name>"
+        "<outside_seat>true</outside_seat></group_details>"
+        "<group_details><tag_name>cop1</tag_name><seat_name>Passenger 1</seat_name></group_details>"
+        "</group_details>"
+        "<override_group>police_motorcycle</override_group>"
         "<spawn_flags><Flag>Spawn on Land</Flag><Flag>Force No Ram</Flag></spawn_flags>"
         "</Table>"
         "</Table></root>");
     std::vector<NotorietySpawnRow> rows = ParseNotorietySpawnTable(d);
     CHECK(rows.size() == 1);
     CHECK(rows[0].name == "police");
-    CHECK(rows[0].levelInfos.size() == 1 && rows[0].levelInfos[0].minSpawnTime.value == 2);
-    CHECK(rows[0].groupInfos.size() == 1 && *rows[0].groupInfos[0].vehicleName == "Bootlegger");
-    CHECK(rows[0].groupDetails.size() == 1 && *rows[0].groupDetails[0].seatName == "Driver");
+    // Inner records only: the wrapper itself is NOT a record.
+    CHECK(rows[0].levelInfos.size() == 2);
+    if (rows[0].levelInfos.size() == 2) {
+        const SpawnLevelInfo& l = rows[0].levelInfos[0];
+        CHECK(l.level.present && l.level.value == 2);
+        CHECK(l.minSpawnTime.value == 7 && l.maxSpawnTime.value == 9);
+        CHECK(l.vehMinSpawnTime.value == 3 && l.vehMaxSpawnTime.value == 4);
+        CHECK(l.maxVehicleOccupants.value == 2 && l.maxVehicles.value == 1 && l.npcCap.value == 6);
+        CHECK(l.specialistCap.value == 1 && l.bruteCap.present && l.bruteCap.value == 0);
+        CHECK(rows[0].levelInfos[1].level.value == 3 && rows[0].levelInfos[1].minSpawnTime.value == 5);
+        CHECK(!rows[0].levelInfos[1].npcCap.present);
+    }
+    CHECK(rows[0].groupInfos.size() == 3);
+    if (rows[0].groupInfos.size() == 3) {
+        CHECK(rows[0].groupInfos[0].level.value == 2 && rows[0].groupInfos[0].chance.value == 0.5f);
+        CHECK(*rows[0].groupInfos[0].vehicleName == "Bootlegger" && *rows[0].groupInfos[0].variantName == "v1");
+        CHECK(*rows[0].groupInfos[1].tagName == "cop2" && !rows[0].groupInfos[1].vehicleName);
+        CHECK(rows[0].groupInfos[2].level.value == 3);
+    }
+    CHECK(rows[0].groupDetails.size() == 2);
+    if (rows[0].groupDetails.size() == 2) {
+        CHECK(*rows[0].groupDetails[0].seatName == "Driver" && *rows[0].groupDetails[0].npcName == "cop_npc");
+        CHECK(rows[0].groupDetails[0].outsideSeat && !rows[0].groupDetails[0].meleeBruteSeat);
+        CHECK(*rows[0].groupDetails[1].seatName == "Passenger 1");
+    }
+    CHECK(rows[0].overrideGroup && *rows[0].overrideGroup == "police_motorcycle");
     CHECK(rows[0].spawnOnLand && rows[0].forceNoRam);
     CHECK(!rows[0].spawnOnWater && !rows[0].attackHelicopter);
     CHECK(std::string(kNotorietySpawnGroupNames[0]) == "police");
     CHECK(std::string(kNotorietySpawnGroupNames[23]) == "survival_bums");
+}
+
+// S6.3's flat repeated-sibling tree is STRUCK ("do not implement from the block
+// below", superseded by S14.6): records placed directly under the row, with no
+// wrapper, are not read - no record is synthesised from them.
+void testNotorietySpawnStruckFlatTreeNotRead() {
+    Document d = P(
+        "<root><Table>"
+        "<Table><Name>police</Name>"
+        "<level_info><level>2</level><min_spawn_time>7</min_spawn_time></level_info>"
+        "<level_info><level>3</level><min_spawn_time>5</min_spawn_time></level_info>"
+        "<group_info><level>2</level><chance>0.5</chance><tag_name>cop1</tag_name></group_info>"
+        "<group_details><tag_name>cop1</tag_name><seat_name>Driver</seat_name></group_details>"
+        "</Table>"
+        "</Table></root>");
+    std::vector<NotorietySpawnRow> rows = ParseNotorietySpawnTable(d);
+    CHECK(rows.size() == 1);
+    CHECK(rows[0].name == "police");
+    CHECK(rows[0].levelInfos.empty());
+    CHECK(rows[0].groupInfos.empty());
+    CHECK(rows[0].groupDetails.empty());
+}
+
+// Only the FIRST wrapper of each name is read (S6.3 corrected tree: "ONE
+// wrapper"); a wrapper with no same-named children yields no records.
+void testNotorietySpawnFirstWrapperOnly() {
+    Document d = P(
+        "<root><Table>"
+        "<Table><Name>stag</Name>"
+        "<level_info><level_info><level>5</level></level_info></level_info>"
+        "<level_info><level_info><level>4</level></level_info></level_info>"
+        "<group_info></group_info>"
+        "</Table>"
+        "</Table></root>");
+    std::vector<NotorietySpawnRow> rows = ParseNotorietySpawnTable(d);
+    CHECK(rows.size() == 1);
+    CHECK(rows[0].levelInfos.size() == 1);
+    if (rows[0].levelInfos.size() == 1) CHECK(rows[0].levelInfos[0].level.value == 5);
+    CHECK(rows[0].groupInfos.empty() && rows[0].groupDetails.empty());
 }
 
 // ===========================================================================
@@ -768,6 +849,8 @@ int main() {
     run("mission_help", testMissionHelp);
     run("spawn_info", testSpawnInfo);
     run("notoriety_spawn", testNotorietySpawn);
+    run("notoriety_spawn_struck_flat_tree_not_read", testNotorietySpawnStruckFlatTreeNotRead);
+    run("notoriety_spawn_first_wrapper_only", testNotorietySpawnFirstWrapperOnly);
     run("drunk_levels", testDrunkLevels);
     run("rank_reactions", testRankReactions);
     run("default_global", testDefaultGlobal);

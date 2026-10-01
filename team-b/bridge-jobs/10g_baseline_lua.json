@@ -1,0 +1,86 @@
+{
+  "title": "team-b: post-review real-data baseline 7/7 - lua scripts",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "lua_host_run",
+        "lua_mission_ui_census",
+        "lua_entrypoint_census",
+        "lua_callsite_census",
+        "lua_dynamic_dispatch_grep"
+      ],
+      "timeout": 7200
+    },
+    {
+      "kind": "run",
+      "tool": "lua_host_run",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{SRC}/team-b/tools/lua_all_registered_1490_tagged.txt",
+        "{OUT}"
+      ],
+      "timeout": 14400,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "lua_mission_ui_census",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{OUT}"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "lua_entrypoint_census",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{OUT}"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "lua_callsite_census",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{OUT}"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "lua_dynamic_dispatch_grep",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{OUT}"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    }
+  ],
+  "collect": [
+    "verdict_*.txt",
+    "verdict_mission_drive.tsv",
+    "verdict_per_script.tsv",
+    "verdict_stub_hits*.tsv",
+    "verdict_hook_fires_by_hook.tsv",
+    "verdict_hook_error_messages.tsv",
+    "verdict_script_state_tags.tsv",
+    "population_summary.txt",
+    "engine_provided_names.tsv",
+    "prefix_groups.tsv",
+    "per_script_usage.tsv",
+    "parse_failures.tsv",
+    "script_defined_names.tsv",
+    "entrypoint_*.tsv",
+    "callsite_classification.tsv",
+    "dynamic_dispatch_matches.tsv"
+  ]
+}

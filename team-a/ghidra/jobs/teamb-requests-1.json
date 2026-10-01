@@ -1,0 +1,45 @@
+{
+ "team": "team-a",
+ "title": "Team A: Team B requests 1-4 supplement (sfx_faded_in, .vint_doc loader via magic 0x3027 and extension string)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:2",
+    "maxfuncs:30",
+    "sfx_faded_in"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/str",
+    "str",
+    "vint_doc",
+    ".vint_doc",
+    "vint_doc_pc",
+    "critical"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/magic",
+    "xref",
+    "0x00003027"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

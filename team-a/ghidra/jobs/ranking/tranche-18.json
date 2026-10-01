@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 18 (names 376-400 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "pause_menu_common_top_finished_loading",
+    "pause_menu_cat_mouse_active",
+    "pause_menu_cant_retry_because_host_in_creation",
+    "pause_map_stag_takeover_do_reward",
+    "pause_map_is_tutorial_mode",
+    "pause_map_is_stag_mode",
+    "pause_map_drag_map",
+    "party_dismiss_do",
+    "options_display_pc_set_options",
+    "open_vint_dialog_do",
+    "object_indicator_init_lua",
+    "npc_is_in_brute_grab_qte",
+    "npc_dont_auto_equip_or_unequip_weapons",
+    "npc_brute_set_no_downed_finisher",
+    "npc_aim_at_point",
+    "notoriety_get",
+    "msn_killbane_selected_option",
+    "mission_maybe_uncomplete_m22",
+    "minimap_icon_remove_radius_do",
+    "minimap_icon_add_radius_do",
+    "message_remove",
+    "mesh_mover_reset_by_zone",
+    "melee_get_move_id_from_name",
+    "main_menu_video_has_stopped",
+    "main_menu_restart_video"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

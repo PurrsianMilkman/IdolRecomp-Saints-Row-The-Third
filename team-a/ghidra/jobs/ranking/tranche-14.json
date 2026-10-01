@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 14 (names 276-300 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "ambient_cop_spawn_enable",
+    "ai_force_team_idle",
+    "action_sequence_setup",
+    "action_sequence_is_playing",
+    "action_sequence_advance",
+    "action_nodes_shouldnt_flee",
+    "action_nodes_restrict_spawning",
+    "world_despawn_all_vehicles",
+    "world_despawn_all_pedestrians",
+    "whored_countdown_finished",
+    "waypoint_is_placed",
+    "vtol_flyby_animation_for_m18",
+    "vint_options_remap_reset_bindings",
+    "vehicle_turret_base_to_do",
+    "vehicle_tire_indicators_alive",
+    "vehicle_set_use_short_cuts",
+    "vehicle_set_tire_durability",
+    "vehicle_set_tire_damage_multiplier",
+    "vehicle_set_sirens",
+    "vehicle_set_radio_controls_locked",
+    "vehicle_set_obey_traffic_lights",
+    "vehicle_set_npc_engine_audio",
+    "vehicle_set_kneecappers_damage",
+    "vehicle_lights_on",
+    "vehicle_is_invulnerable"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

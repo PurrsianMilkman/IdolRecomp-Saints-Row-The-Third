@@ -1,0 +1,36 @@
+{
+  "_readme": "Copy to pc_config.json (git-ignored) and edit. Use forward slashes or doubled backslashes in paths.",
+
+  "bus_url": "https://github.com/PurrsianMilkman/Project-Crreish-bus.git",
+  "project_url": "https://github.com/PurrsianMilkman/Project-Crreish.git",
+
+  "game_dir": "D:/Project Crreish/Saints Row 3 CRREISH",
+  "_exe_note": "Team A analyses the DX9 executable SaintsRowTheThird.exe only; all spec addresses are for it, not SaintsRowTheThird_DX11.exe.",
+  "exe_path": "D:/Project Crreish/Saints Row 3 CRREISH/SaintsRowTheThird.exe",
+  "work_dir": "D:/crreish-bridge-work",
+
+  "teams": ["team-a", "team-b"],
+  "allowed_ref_patterns": ["claude/*", "main"],
+  "cmake_source_subdir": "team-b",
+  "cmake_configure_args": ["-G", "Visual Studio 17 2022", "-A", "x64"],
+  "build_config": "Release",
+
+  "poll_seconds": 30,
+  "heartbeat_minutes": 15,
+  "default_timeout_seconds": 3600,
+  "max_timeout_seconds": 21600,
+  "artifact_extensions": [".txt", ".tsv", ".csv", ".json", ".md", ".log", ".hlsl", ".asm"],
+
+  "ghidra": {
+    "analyze_headless": "C:/ghidra/support/analyzeHeadless.bat",
+    "project_dir": "D:/SR3-Ghidra",
+    "project_name": "SR3",
+    "program": "SaintsRowTheThird.exe"
+  },
+
+  "read_roots": {
+    "teama-pc": {"path": "D:/Project Crreish/TEAM A", "teams": ["team-a"]}
+  },
+
+  "tools": {}
+}

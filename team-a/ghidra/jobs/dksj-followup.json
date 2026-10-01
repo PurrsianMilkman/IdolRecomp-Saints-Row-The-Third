@@ -1,0 +1,18 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to dksj — co-op session installer/clearers and callers, tutorial descriptor writer and state setter, vehicle-store flag writers",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/coop", "func", "depth:1", "maxfuncs:25", "maxinsn:1500", "0x0087efe0", "0x0087d8a0", "0x0087ed70", "0x0087c341", "0x0087c359"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/coopcallers", "xref", "xrefs:120", "0x0087efe0", "0x0087d8a0", "0x0087ed70"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/tutorial", "func", "depth:1", "maxfuncs:25", "maxinsn:1500", "0x00715850", "0x007163e0", "0x00717363"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/tutxref", "xref", "xrefs:120", "0x00715850", "0x007163e0", "0x0151d600"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/store", "func", "depth:1", "maxfuncs:15", "0x005fa820", "0x00820cd0"]}
+ ],
+ "collect": ["**/*.txt"]
+}

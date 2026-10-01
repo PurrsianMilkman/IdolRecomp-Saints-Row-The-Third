@@ -10,8 +10,33 @@ endif()
 
 # Vendored zlib (spec Sec3: standard RFC 1950 zlib-wrapped DEFLATE) - used
 # as an off-the-shelf, unmodified library per task scope, not reimplemented.
-set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/zlib)
+#
+# Built here as a static library straight from the vendored sources rather
+# than via add_subdirectory(third_party/zlib): upstream's CMakeLists also
+# defines the shared `zlib` DLL target, whose win32/zlib1.rc and zlib.map
+# inputs are not in the published repo, so configure failed on every
+# platform (cloud phase, 2026-09-30). Only `zlibstatic` was ever linked.
+# zconf.h is generated into the same binary dir as before, so the existing
+# include paths below are unchanged.
+enable_language(C)
+include(CheckIncludeFile)
+check_include_file(unistd.h Z_HAVE_UNISTD_H)
+set(ZLIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib)
+configure_file(${ZLIB_DIR}/zconf.h.cmakein
+    ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib/zconf.h @ONLY)
+add_library(zlibstatic STATIC
+    ${ZLIB_DIR}/adler32.c  ${ZLIB_DIR}/compress.c ${ZLIB_DIR}/crc32.c
+    ${ZLIB_DIR}/deflate.c  ${ZLIB_DIR}/gzclose.c  ${ZLIB_DIR}/gzlib.c
+    ${ZLIB_DIR}/gzread.c   ${ZLIB_DIR}/gzwrite.c  ${ZLIB_DIR}/inflate.c
+    ${ZLIB_DIR}/infback.c  ${ZLIB_DIR}/inftrees.c ${ZLIB_DIR}/inffast.c
+    ${ZLIB_DIR}/trees.c    ${ZLIB_DIR}/uncompr.c  ${ZLIB_DIR}/zutil.c
+)
+target_include_directories(zlibstatic PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib ${ZLIB_DIR})
+if(MSVC)
+    target_compile_definitions(zlibstatic PRIVATE
+        _CRT_SECURE_NO_DEPRECATE _CRT_NONSTDC_NO_DEPRECATE)
+endif()
 
 # Vendored, real, unmodified Lua 5.1.5 (lua.org's own official release -
 # see third_party/lua51/CMakeLists.txt's own top comment for provenance and
@@ -815,14 +840,43 @@ add_library(sr3luahost STATIC
     src/lua_hook_registry.cpp
     src/lua_thread_scheduler.cpp
     src/lua_engine_state.cpp
+    src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
+    src/lua_screen_fade.cpp
+    src/lua_tutorial_names.cpp
+    src/lua_bare_globals.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
-target_link_libraries(sr3luahost PUBLIC lua51 user32)
+target_link_libraries(sr3luahost PUBLIC lua51)
+if(WIN32)
+    target_link_libraries(sr3luahost PUBLIC user32)
+endif()
 
 add_executable(sr3luahost_tests tests/synthetic_luahost_test.cpp)
 target_link_libraries(sr3luahost_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
+
+# Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
+# only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
+# bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
+# The 24 bare globals of 0x00e0f900 (include/sr3luahost/bare_globals.h,
+# spec-lua-api-behaviour.md Sec26.27, spec-lua-bindings.md Sec13.2/Sec16.4).
+add_executable(sr3luahost_bare_globals_tests tests/synthetic_luahost_bare_globals_test.cpp)
+target_link_libraries(sr3luahost_bare_globals_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_bare_globals_test COMMAND sr3luahost_bare_globals_tests)
+
+add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
+target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
+target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+add_test(NAME synthetic_luahost_roster_test COMMAND sr3luahost_roster_tests)
+
+# Refusal stress (cloud phase 2026-09-30, after bridge job jklk's MSVC heap
+# corruption): every spec stub refusing many times, in both states. Mainly an
+# MSVC regression check - see the test's top comment.
+add_executable(sr3luahost_refusal_stress_tests tests/synthetic_luahost_refusal_stress_test.cpp)
+target_link_libraries(sr3luahost_refusal_stress_tests PRIVATE sr3luahost)
+target_compile_definitions(sr3luahost_refusal_stress_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+add_test(NAME synthetic_luahost_refusal_stress_test COMMAND sr3luahost_refusal_stress_tests)
 
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
@@ -837,6 +891,13 @@ add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
 # tools/lua_host_run.cpp's own `statetag` namespace for the full method.
 add_executable(lua_host_run tools/lua_host_run.cpp)
 target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm)
+
+# Integration check (cloud phase 2026-09-30): lua_host_run end to end on a
+# synthetic two-archive cache written by tests/lua_host_run_fixture.cpp
+# (mission _start success, OPEN-state refusal, Lua runtime error, syntax
+# error), and two runs diffed with tools/bridge_diff.py for determinism.
+add_executable(lua_host_run_fixture tests/lua_host_run_fixture.cpp)
+target_link_libraries(lua_host_run_fixture PRIVATE vpp_container)
 
 # Per-script entry-point naming census (HANDOFF Sec9.118): for each real
 # script, every TOP-LEVEL global function named "<scriptStem>_<suffix>",
@@ -855,6 +916,10 @@ add_executable(xtbl_name_grep tools/xtbl_name_grep.cpp)
 target_link_libraries(xtbl_name_grep PRIVATE vpp_container)
 add_executable(lua_dynamic_dispatch_grep tools/lua_dynamic_dispatch_grep.cpp)
 target_link_libraries(lua_dynamic_dispatch_grep PRIVATE vpp_container)
+# include( census (spec-lua-bindings.md Sec16.4 OPEN residue 1): which scripts call the bare global
+# `include`, and with which names; flags calls naming a preload file.
+add_executable(lua_include_census tools/lua_include_census.cpp)
+target_link_libraries(lua_include_census PRIVATE vpp_container)
 
 # Call-SITE census (HANDOFF Sec9.121): for every real <stem>_start/_run/
 # _success/_init/_cleanup definition, who calls it (same script/other
@@ -876,3 +941,82 @@ target_link_libraries(lua_bare_reference_census PRIVATE sr3lua vpp_container)
 # which of the 54 real _start-defining stems it covers.
 add_executable(mission_package_census tools/mission_package_census.cpp)
 target_link_libraries(mission_package_census PRIVATE sr3asm vpp_container)
+
+# .vint_doc UI document reader (spec-vint-doc-format.md), cloud phase
+# 2026-09-30. CONFIRMED header/string-table/record shapes only - no
+# full-document walk yet (three layout facts are OPEN; see
+# include/sr3vintdoc/vint_doc.h). vintdoc_validate is the real-data
+# population sweep run through the PC bridge
+# (bridge-jobs/03_vintdoc_validate.json); it also scores the OPEN layout
+# candidates as a labelled hypothesis test.
+add_library(sr3vintdoc STATIC src/vint_doc.cpp)
+target_include_directories(sr3vintdoc PUBLIC include)
+target_link_libraries(sr3vintdoc PUBLIC vpp_container)
+
+add_executable(sr3vintdoc_tests tests/synthetic_vintdoc_test.cpp)
+target_link_libraries(sr3vintdoc_tests PRIVATE sr3vintdoc)
+add_test(NAME synthetic_vintdoc_test COMMAND sr3vintdoc_tests)
+
+add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
+target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)
+
+# CTAB constant census over every shipped D3D9 shader (bridge job 06):
+# per-constant name -> register set/index/count TSV.
+add_executable(ctab_census tools/ctab_census.cpp)
+target_link_libraries(ctab_census PRIVATE sr3d3d9bc sr3fxo vpp_container)
+
+# libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.
+option(CRREISH_FUZZ "Build the libFuzzer harnesses (Clang)" OFF)
+if(CRREISH_FUZZ)
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "CRREISH_FUZZ needs Clang (libFuzzer)")
+    endif()
+    include(fuzz/fuzz.cmake)
+endif()
+
+# Bridge-result diff tool (tools/bridge_diff.py) unit test, when Python is available.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME bridge_diff_py COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_diff_test.py)
+    add_test(NAME lua_host_run_integration_py
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/lua_host_run_integration_test.py
+                     $<TARGET_FILE:lua_host_run_fixture> $<TARGET_FILE:lua_host_run>
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/lua_all_registered_1490_tagged.txt
+                     ${CMAKE_CURRENT_SOURCE_DIR}/tools/bridge_diff.py)
+endif()
+
+# Real-data validation harnesses (tools/validation/*.cpp), plus two loose
+# tools, as CMake targets - the portable equivalent of
+# tools/validation/build_one.bat, which links every harness against every
+# reader library. Cloud phase 2026-09-30: lets the PC bridge build them by
+# target name and keeps them compiling in Linux CI. Harnesses that need D3D
+# (d3dcompiler/d3d11) or sr3render stay Windows-only.
+option(CRREISH_VALIDATION_TOOLS "Build tools/validation harnesses" ON)
+if(CRREISH_VALIDATION_TOOLS)
+    set(CRREISH_ALL_READER_LIBS vpp_container sr3save sr3asm sr3fxo sr3effects sr3xtbl
+        sr3tables_trafficai sr3tables_weapons sr3tables_progression sr3tables_environment
+        sr3tables_animation sr3tables_audio_radio sr3tables_ui_controls sr3tables_vehicle_world
+        sr3tables_diversions sr3tables_customization sr3d3d9bc sr3vehicleinfo sr3customization
+        sr3texture sr3geometry sr3anim sr3morph sr3foliage sr3conversation sr3cutscene sr3mesh
+        sr3vehicle sr3rig sr3zone sr3audio sr3clmesh sr3tree sr3lua sr3luahost sr3vintdoc)
+    set(CRREISH_WINDOWS_ONLY_VALIDATION d3dctest_semantics d3dctest_semantics_sm4
+        validate_d3d9bc_hlsl_population validate_d3d9bc_hlsl_sm4_population validate_peg_population
+        golden_scene_check) # drives the D3D11 sr3_viewer.exe
+    file(GLOB CRREISH_VALIDATION_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/tools/validation/*.cpp)
+    list(APPEND CRREISH_VALIDATION_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/golden_scene_check.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools/clmesh_lead_probe.cpp)
+    foreach(src ${CRREISH_VALIDATION_SOURCES})
+        get_filename_component(name ${src} NAME_WE)
+        if(NOT WIN32 AND name IN_LIST CRREISH_WINDOWS_ONLY_VALIDATION)
+            continue()
+        endif()
+        add_executable(${name} ${src})
+        target_link_libraries(${name} PRIVATE ${CRREISH_ALL_READER_LIBS} zlibstatic)
+        target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/zlib
+            ${CMAKE_CURRENT_BINARY_DIR}/third_party/zlib)
+        if(WIN32 AND name IN_LIST CRREISH_WINDOWS_ONLY_VALIDATION)
+            target_link_libraries(${name} PRIVATE d3dcompiler d3d11 dxgi)
+        endif()
+    endforeach()
+endif()

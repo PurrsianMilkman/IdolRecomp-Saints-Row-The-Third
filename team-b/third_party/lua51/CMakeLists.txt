@@ -22,7 +22,16 @@
 #
 # LUA_BUILD_AS_DLL is deliberately left undefined (luaconf.h: LUA_API then
 # expands to plain `extern`), matching a static-library embed, not a DLL.
-project(lua51 C)
+#
+# BUILT AS C++ (cloud phase 2026-10-01, manager ruling after bridge job jklk's
+# MSVC heap corruption): every source below is compiled with the C++
+# compiler (LANGUAGE CXX), which selects luaconf.h's own documented
+# `__cplusplus` branch - LUAI_THROW/LUAI_TRY become `throw` / `try { } catch
+# (...)` instead of longjmp/setjmp, so a Lua error unwinds C++ frames with
+# their destructors. The sources stay unmodified; only the build language
+# changed. Measured (HANDOFF cloud stretch 5d): resume/yield -18%, pcall
+# without error unchanged, ~+2.4 us per raised error.
+project(lua51 C CXX)
 
 add_library(lua51 STATIC
     src/lapi.c
@@ -56,6 +65,8 @@ add_library(lua51 STATIC
     src/linit.c
 )
 target_include_directories(lua51 PUBLIC src)
+get_target_property(_lua51_sources lua51 SOURCES)
+set_source_files_properties(${_lua51_sources} PROPERTIES LANGUAGE CXX)
 
 if(MSVC)
     # Upstream Lua 5.1 assumes a C89/C99 Unix toolchain and triggers MSVC's

@@ -434,7 +434,7 @@ int main(int argc, char** argv) {
         std::printf("--- horde_mode_text.xtbl ---\n");
         std::vector<sd::HordeModeIdentifier> rows = sd::ParseHordeModeTextTable(*doc);
         std::printf("  Horde_Mode_Identifier rows found: %zu\n", rows.size());
-        GATE(rows.size() == 28, "Horde_Mode_Identifier count == 28 (spec 8.2)");
+        GATE(rows.size() == 32, "Horde_Mode_Identifier count == 32 (spec 8.2 corrected 2026-09-30 to this project's measured 32, HANDOFF 9.94; was 28)");
     }
 
     if (const sr3xtbl::Document* doc = firstDoc("fraud_globals.xtbl")) {

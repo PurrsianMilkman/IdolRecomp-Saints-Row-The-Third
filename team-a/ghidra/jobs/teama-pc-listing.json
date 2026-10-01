@@ -1,0 +1,8 @@
+{
+ "team": "team-a",
+ "title": "Team A: list the PC-era TEAM A folder (read_root teama-pc), names and sizes only",
+ "steps": [
+  {"kind": "files", "root": "teama-pc", "pattern": "**/*", "max_files": 0}
+ ],
+ "collect": []
+}

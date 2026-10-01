@@ -1,0 +1,49 @@
+{
+ "team": "team-a",
+ "title": "Team A: next unspecced names from Team B's mission-driving ranking (vint_* UI core, pause/customization queries)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/vint",
+    "lua",
+    "depth:1",
+    "maxfuncs:25",
+    "vint_internal_dataresponder_request",
+    "vint_dataresponder_finished",
+    "vint_object_find",
+    "vint_set_property",
+    "vint_get_property",
+    "vint_get_time_index",
+    "vint_get_safe_frame",
+    "vint_dataitem_get",
+    "vint_object_first_child",
+    "vint_object_clone"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/misc",
+    "lua",
+    "depth:1",
+    "maxfuncs:25",
+    "pause_map_stag_current_district_control",
+    "mip_streaming_pause",
+    "object_spawn_pause",
+    "customization_create_character",
+    "customization_creation_is_open",
+    "customization_screen_is_ready",
+    "player_parachute_has_backpack"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

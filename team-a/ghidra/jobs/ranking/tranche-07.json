@@ -1,0 +1,47 @@
+{
+ "team": "team-a",
+ "title": "Team A: ranking tranche 07 (names 101-125 of the 554 unspecced, by Team B call-count order)",
+ "ref": "auto",
+ "steps": [
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 14400,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
+    "store_gang_show_question_marks",
+    "store_gallery_download_hide_list",
+    "store_dlc_queue_icon",
+    "store_dlc_is_offer_free",
+    "store_common_rotate_mouse_drag",
+    "store_clothing_get_store_id",
+    "store_character_lineup_loaded",
+    "spotlight_heli_laser_size",
+    "spawning_allow_gang_ambient_spawns",
+    "spawn_region_enable_los",
+    "skydive_move_to_do",
+    "set_unrecruitable_flag",
+    "set_unjackable_by_ai_flag",
+    "set_stag_notoriety_area_active",
+    "set_saints_hated",
+    "set_cower_variant",
+    "set_cops_shooting_from_vehicles",
+    "save_system_save_game",
+    "save_system_load_game",
+    "save_system_cancel_coop_load",
+    "roadblock_destroy",
+    "roadblock_create",
+    "rc_set_max_signal_range",
+    "rappel_exit",
+    "rappel_enter"
+   ]
+  }
+ ],
+ "collect": [
+  "**/*.txt"
+ ]
+}

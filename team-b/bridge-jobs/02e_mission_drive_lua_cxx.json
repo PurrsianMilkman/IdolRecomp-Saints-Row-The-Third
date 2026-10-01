@@ -1,0 +1,27 @@
+{
+  "title": "team-b: mission drive with Lua built as C++ (d71c92c; expect identical to tkjl apart from timing)",
+  "ref": "d71c92c",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "lua_host_run"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "lua_host_run",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{SRC}/team-b/tools/lua_all_registered_1490_tagged.txt",
+        "{OUT}"
+      ],
+      "timeout": 14400
+    }
+  ],
+  "collect": [
+    "*.tsv",
+    "*.txt"
+  ]
+}

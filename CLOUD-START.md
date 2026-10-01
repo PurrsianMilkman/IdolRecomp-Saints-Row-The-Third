@@ -16,7 +16,10 @@ You do **not** have, and must never try to obtain, download or reconstruct:
 - the game's archives (`.vpp_pc`, `.str2_pc`) or any extracted game files;
 - Team A's Ghidra project and dumps.
 
-Those stay on the owner's PC. So in the cloud:
+Those stay on the owner's PC. **Since 2026-09-30 the PC can be reached through `bridge/`** (see
+`bridge/README.md` and `TEAMS.md`): a session pushes its branch and posts a job, the owner's PC builds it,
+runs it against the real game files (or runs a Team A Ghidra script headless), and sends text results back.
+When the PC agent is offline (`python3 bridge/bridge_client.py status`), the following holds in the cloud:
 
 - Nothing can be checked against real game data. Every tool that takes a game path will have nothing
   to point at.

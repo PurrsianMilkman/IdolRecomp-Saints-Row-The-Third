@@ -5,9 +5,11 @@
 **Scope:** The `.anim_pc` animation file: its header, the root-motion transform it carries, its optional-section mechanism, and the relationship between the **two** distinct registered loaders that both claim this extension.
 **Method:** Combined pass, in the pattern that resolved `.rig_pc` — disassembly of both registered constructors and the shared acceptance function they hand into, cross-checked against **bulk statistical analysis of all 4,209 real `.anim_pc` files** shipped in `preload_anim.vpp_pc`. Every structural claim below is stated against that full population, not a handful of samples, and the central claim is validated against two independent control baselines (§4).
 **Extraction reliability:** `preload_anim.vpp_pc` stores all 4,209 entries **raw/uncompressed** (every entry carries the `0xFFFFFFFF` raw sentinel), so extraction is fully reliable and none of the container format's mode-(a) limitations apply. This required a correction to this project's own container tooling — see §7.
-**Cleanroom compliance:** No decompiled code or original internal identifiers appear below. The magic number and field offsets are load-bearing literal format data and are stated freely. Function addresses are cited as evidence, not reproduced as identifiers. Real animation filenames quoted (e.g. `rope_run.anim_pc`) are ordinary shipped data.
+**Cleanroom compliance:** No decompiled code ~~or original internal identifiers~~ appears below. **[Corrected 2026-09-30 (desk review): the text does use auto-generated disassembler labels (`FUN_xxxxxxxx`, `DAT_xxxxxxxx`) as address citations throughout, plus a few register names and one instruction mnemonic in §10; none of these are original (source-level) identifiers, but the earlier wording "no original internal identifiers" read as if no internal labels at all appear.]** The magic number and field offsets are load-bearing literal format data and are stated freely. Function addresses are cited as evidence, not reproduced as identifiers. Real animation filenames quoted (e.g. `rope_run.anim_pc`) are ordinary shipped data.
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+
+**Review status summary (2026-09-30).** An adversarial desk review (reading only this spec, the other specs and Team B's published results; nothing re-derived from the executable) covered 27 units. Verdicts: **DESK-PASS 7** (§1, §6, §6.1, §6.2, §9.1 as superseded text, §9.2, §10.5); **DESK-PASS, text fixes applied 4** (§6a, §6c.4, §6c.6, §8); **NEEDS-EXE 6** (§5, §6c.2, §9.4, §10.1, §10.2, §10.3); **NEEDS-DATA 2** (§2, §6c.3); **VALIDATED-BY-DATA 8** (§3, §4, §6b, §6c.1, §6c.5 for the decode, §7, §9.3, §10.4). The front matter's clean-room sentence was also corrected. A desk pass alone does **not** clear a unit: it only means the text is internally consistent. VALIDATED-BY-DATA units are already backed by Team B's full-population run over the same 4,209 clips (cited at each unit). **Awaiting the executable:** §5 (constructors and acceptance function), §6c.2 (permutation direction, step-table order, SCALE closed form), §6c.5's role (translation absolute or additive to the rig offset), §9.4, §10.1, §10.2 (is the `+0x0A` add conditional?), §10.3 (address only). **Awaiting data:** §2 (`+0x2C` / `+0x34` words, `+0x06` vs Team B §9.47), §6c.3 item 3 (replay of the 4 flags-`0x0C`/`0x1C` clips with the extra rotation byte). Not edited here, listed for its own spec: `spec-rig-format.md` open item 8 (~l.194) still says the anim index map "lives inside the undecoded track payload", which §6b superseded.
 
 ---
 
@@ -16,13 +18,16 @@
 > **2026-09-11 — the keyframe payload is resolved (§6c).** Stream layout, rotation
 > samples (smallest-three quaternions with an adaptive per-axis step) and
 > translation samples (`base/64 + delta/4000`) are all decoded. What flags bit
-> `0x40` adds to the payload is the main remaining gap (§6c.4).
+> `0x40` adds to the payload is the main remaining gap (§6c.4). **[Resolved: see §10
+> — a per-track layer-override table, 518 / 518.]**
 
 - The format has a clean four-byte ASCII magic, **`ANIM`**, present in **4,209 / 4,209** real files. **[CONFIRMED — empirical, whole population.]**
 - **The two separately-registered types that both claim `.anim_pc` are the same format**, not two formats sharing an extension — they are two *entry points* into one shared animation subsystem. This was the specific open question raised by `spec-format-inventory.md` §3, and it's now answered with evidence rather than assumption (§5).
 - Both loaders key on a **`.animx`** runtime name rather than the on-disk `.anim_pc` — an authoring-name/shipped-name split of the same kind already documented for `_cust.xtbl` → `.cvtf_pc` (`spec-geometry-format.md` §5). **[CONFIRMED — disassembly.]**
 - The header carries a **root-motion delta transform**: a unit quaternion plus a translation vector, confirmed at **4,209 / 4,209** against **0 / 4,209** and **0 / 12,177** on two independent controls (§4). This is the single most decisive structural confirmation in this project to date.
-- The per-keyframe/per-track payload itself is **not** resolved (§6). An honest negative: the obvious uniform layout model is measurably wrong.
+- ~~The per-keyframe/per-track payload itself is **not** resolved (§6).~~ **[Superseded: resolved in §6c (stream layout, rotation and translation samples); flags bit `0x40`'s extra table in §10.]** An honest negative: the obvious uniform layout model is measurably wrong.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ## 2. Header layout
 
@@ -32,8 +37,8 @@ All offsets are from the start of the file. Field names are this document's own 
 |---|---|---|---|
 | `+0x00` | 4 | Magic `ANIM` (ASCII, bytes `41 4E 49 4D`) | **[CONFIRMED — empirical, 4209/4209.]** |
 | `+0x04` | 1 | **Version. Must be exactly `14` (`0x0E`).** | **[CONFIRMED — both ways: the loader rejects anything not exactly equal to 14, and all 4,209 real files read exactly 14.]** |
-| `+0x05` | 1 | **Flags bitfield.** Bit `0x08` is set in every file; bit `0x01` in nearly all. **Bit `0x10` gates the optional section at `+0x40`** (§3). Observed values: `0x09` (2167), `0x0d` (1308), `0x49` (320), `0x4d` (182), `0x1d` (87), `0x19` (60), `0x8d` (51), `0x59` (15), and four rarer values — *counts over the 4,197 files with a full `0x48`-byte header; the 12 shorter files all read `0x09`, so over all 4,209 the `0x09` count is 2,179.* | **[CONFIRMED — disassembly for bit `0x10`'s exact role; CONFIRMED — empirical for the value distribution. OPEN — the meaning of bits `0x01`, `0x04`, `0x08`, `0x40`, `0x80`.]** |
-| `+0x06` | 2 | A `u16` count. Range `2`–`1099`, mean ~81, 365 distinct values; scales with file size. Plausibly a frame or key count, **but see §6 — the arithmetic does not support the obvious reading.** | **[CONFIRMED — present and varying; HYPOTHESIS — that it is specifically a frame count.]** |
+| `+0x05` | 1 | **Flags bitfield.** Bit `0x08` is set in every file; bit `0x01` in nearly all *(desk review 2026-09-30: bit `0x01` is clear in exactly **4** files — the rare values `0x0c` and `0x1c`, 2 files each; the four rare values are `0x0c`, `0x1c`, `0x5d`, `0x9d`, per Team B `team-b/HANDOFF.md` l.1391 and l.4539, and 2+2+1+2 = 7 = 4,197 − 4,190 fits this row's counts)*. **Bit `0x10` gates the optional section at `+0x40`** (§3). Observed values: `0x09` (2167), `0x0d` (1308), `0x49` (320), `0x4d` (182), `0x1d` (87), `0x19` (60), `0x8d` (51), `0x59` (15), and four rarer values — *counts over the 4,197 files with a full `0x48`-byte header; the 12 shorter files all read `0x09`, so over all 4,209 the `0x09` count is 2,179.* | **[CONFIRMED — disassembly for bit `0x10`'s exact role; CONFIRMED — empirical for the value distribution. OPEN — the meaning of bits `0x01`, `0x04`, `0x08`, `0x40`, `0x80`.]** **[Partly resolved: `0x01` selects the rotation mode (§6c.3 item 3); `0x80` widens the per-track counts (§6c.1); `0x40` adds a per-track layer-override table (§10). `0x04`, `0x08` remain OPEN.]** |
+| `+0x06` | 2 | A `u16` count. Range `2`–`1099`, mean ~81, 365 distinct values; scales with file size. Plausibly a frame or key count, **but see §6 — the arithmetic does not support the obvious reading.** | **[CONFIRMED — present and varying; HYPOTHESIS — that it is specifically a frame count.]** **[Team B result, not a Team A confirmation (desk review 2026-09-30): `team-b/HANDOFF.md` §9.47 (l.5519–5541) finds `+0x06` equals the per-clip sum `S` of the per-key duration bytes (§6c.6 item 2) in 40.98% of 2,950 clips (0.10% shuffled control) and 81.46% of the 1,483 clips whose tracks agree on `S`; caveat: `S` reaches 2,016 while `+0x06` never exceeds 1,099, and §9.47.1 (l.5717–5733) shows only 4 of the 275 tight-stratum mismatches have `S > 1099` — the other 271 are an unexplained second effect. Label here left unchanged.]** |
 | `+0x08` | 1 | Small count, range `0`–`20` | **[CONFIRMED present; OPEN — meaning.]** |
 | `+0x09` | 1 | Small count, range `0`–`20` | **[CONFIRMED present; OPEN — meaning.]** |
 | `+0x0A` | 1 | **Number of animated bones (tracks).** Equals `+0x0B` exactly on prop rigs (`+0x0B` = 2, 3, 7, 11, 13 → same value), is ~46 of 65–77 on humanoid rigs, and varies per clip (45/47/48/49 variants of the same character). `≤ +0x0B` in 99.4%. | **[HIGH CONFIDENCE — inferred from the subset relationship, §6a.]** |
@@ -42,12 +47,15 @@ All offsets are from the start of the file. Field names are this document's own 
 | `+0x18` | 4 | **Root-motion rotation: quaternion `w`** (`f32`) | **[CONFIRMED — empirical, see §4.]** |
 | `+0x1C` | 12 | **Root-motion translation: `x`, `y`, `z`** (3 × `f32`). **Exactly zero in 1,953 / 4,209 files** (in-place animations), with a further 7 within `1e-4` (largest `9e-5`, e.g. `gml1_fl_bk_getup.anim_pc`) — numerically zero for any practical purpose; median magnitude `0.12`; max `261.6`. *(An earlier version of this table said 1,954 — that figure came from a `< 1e-6` threshold that admitted one file at `1.000e-06`; the clean team's independent count of 1,953 exact is the correct one, and reconciles exactly with a `< 1e-4` count of 1,960.)* | **[CONFIRMED — empirical for the field; HIGH CONFIDENCE — inferred that it is specifically root translation, from the zero-for-in-place-animations pattern and the §4 pairing with the rotation.]** |
 | `+0x28` | 4 | **Track-to-bone table offset, file-relative — and the header size.** Zero means the identity mapping (track *i* animates bone *i*); non-zero points at a byte table of `+0x0A` entries, one per track, each a bone index with **255 meaning "unused"**. Its value is **`(flags & 0x10) ? 0x48 : 0x38`** in **394 / 394** clips that have one — i.e. the table sits immediately after the header, whose length depends on whether `+0x40`/`+0x44` are present. **So the keyframe payload begins after the TABLE, not at a fixed `0x48`.** *(Previously recorded here as "observed zero in every sample inspected, OPEN" — true, and the 90% case mistaken for the only case: 3,803 of 4,209 clips use the identity mapping.)* | **[CONFIRMED — disassembly + empirical, see §6b.]** |
-| `+0x30` | 4 | **An in-file offset.** `≤ file size` in 4,209 / 4,209. Points near, but not at, end of file; the gap varies widely (2, 10, 12, 122, 230 … bytes). | **[CONFIRMED — empirical, that it is an in-file offset; OPEN — what it points at.]** |
-| `+0x34` | 12 | Not characterized | **[OPEN.]** |
+| `+0x2C` | 4 | *Row missing from this table until 2026-09-30: the rows above end at `+0x2B` and the next begins at `+0x30`.* Not characterized (possibly the paired high/zero word for `+0x28`, as `+0x44` is for `+0x40` — unverified). | **[OPEN — desk review 2026-09-30: contents of `+0x2C..+0x2F` never stated; to be settled against real data (u32 histogram at `+0x2C`) / the executable.]** |
+| `+0x30` | 4 | **An in-file offset.** `≤ file size` in 4,209 / 4,209. Points near, but not at, end of file; the gap varies widely (2, 10, 12, 122, 230 … bytes). | **[CONFIRMED — empirical, that it is an in-file offset; OPEN — what it points at.]** **[Resolved: the end of the keyframe payload — §6c.1, §8 item 3.]** |
+| `+0x34` | 12 | Not characterized. *(Desk review 2026-09-30: 12 bytes is only right when flags bit `0x10` is set. Per the `+0x28` row and §6b the header is `0x38` bytes when bit `0x10` is clear, so in those files only `+0x34..+0x37` (4 bytes) is header and `+0x38` onward is the track table or payload; in bit-`0x10` files `+0x34..+0x3F` is header.)* | **[OPEN.]** **[OPEN — desk review 2026-09-30: what `+0x34` (and `+0x38..+0x3F` in long-header files) holds; to be settled against real data / the executable.]** |
 | `+0x40` | 4 | **Optional file-relative offset, present only when flags bit `0x10` is set** (§3). Fixed up to an absolute pointer at load; `-1` means null. | **[CONFIRMED — disassembly and empirical, see §3.]** |
 | `+0x44` | 4 | Paired high/zero word for `+0x40`, zeroed by the loader during fixup | **[CONFIRMED — disassembly.]** |
 
 **On `+0x0A` / `+0x0B` — corrected reading:** an earlier version of this paragraph read these as "translation-track count ≤ rotation-track count." The rig population (`spec-rig-format.md` v2) settles it differently: `+0x0B` is the target rig's **total** bone count (confirmed per character), and `+0x0A` is the **animated subset** — every bone on simple prop rigs, ~46 of 65–77 on humanoids, varying per clip. The `≤` relation (4,172 / 4,197) is the subset relation. See §6a.
+
+**Review status (2026-09-30): NEEDS-DATA: contents of `+0x2C` and `+0x34` (and `+0x38..+0x3F` in long-header files) never measured; `+0x06` reading now rests on Team B §9.47 / §9.47.1 with an unexplained 271-clip residue; the acceptance function holding the version and flag-`0x10` checks is not cited by address — desk review (not re-derived from the executable).**
 
 ## 3. The optional section at `+0x40`, and a clean confirmation of the flag that gates it
 
@@ -61,6 +69,8 @@ That gating claim is independently confirmed empirically, with the ungated files
 | Files **without** it (4,030) | 137 / 4,030 — 3.4% |
 
 **[CONFIRMED — empirical.]** The 3.4% is the by-chance rate for arbitrary bytes happening to fall in `0..size`; the gated population's 100% against it is decisive. Two further internal-consistency checks both pass: **no** file too short to contain `+0x40` has the flag set (0 / 12 of the sub-`0x48`-byte files), and **every** file that does set the flag is at least 284 bytes. The format never declares a field it doesn't have room for.
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B reproduces 167 / 167 and 137 (3.4%) over 4,209 files (`team-b/HANDOFF.md` l.1386–1387); what the `+0x40` pointer points at is still unidentified — desk review (not re-derived from the executable).**
 
 ## 4. The root-motion transform — the decisive confirmation
 
@@ -80,6 +90,8 @@ Paired with the translation vector immediately following it at `+0x1C` — zero 
 
 This is directly load-bearing for any reimplementation: root motion is what makes a character actually traverse the world rather than sliding in place.
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B reproduces the quaternion norm test 4,209 / 4,209 (`team-b/HANDOFF.md` l.1385); the root-motion meaning, its frame and its interaction with the root bone's own track remain inferred — desk review (not re-derived from the executable).**
+
 ## 5. Two registered loaders, one format
 
 `spec-format-inventory.md` §3 flagged that types **21 (`Anim File`)** and **41 (`Animation file`)** both register `.anim_pc` with completely different constructor and destructor addresses, and warned against assuming one parser covers both. Tracing both settles it:
@@ -91,21 +103,25 @@ This is directly load-bearing for any reimplementation: root motion is what make
 
 **[CONFIRMED — disassembly.]** So: **one file format, two entry paths**, differing in how the resource is addressed rather than in how its bytes are laid out. The `spec-format-inventory.md` warning was correct to raise the question, and the answer is that a single parser *does* cover both — but that is now a traced fact rather than an assumption.
 
-Supporting detail: loaded animations are tracked in a **handle table** of 36-byte (`0x24`) slots with a separate count global, carrying per-slot flags, a data pointer, and a payload pointer. The acceptance function refuses out-of-range handles and won't re-bind a slot that is already claimed. **[CONFIRMED — disassembly.]**
+Supporting detail: loaded animations are tracked in a **handle table** of 36-byte (`0x24`) slots with a separate count global, carrying per-slot flags, a data pointer, and a payload pointer. The acceptance function refuses out-of-range handles and won't re-bind a slot that is already claimed. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: no constructor or acceptance-function address is cited in this section (the inventory spec gives the constructors), and §10.1 finds the registry's buffer pointer at slot `+0x20`, distinct from a `+0x10` field, so which slot field is the "data pointer" and which the "payload pointer" is unsettled; to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: disassembly-only claims, no address for the shared acceptance function, slot-field offsets unreconciled with §10.1 — desk review (not re-derived from the executable).**
 
 ## 6. The keyframe payload — the obvious model is measurably wrong
 
 > **Superseded in part by §6c (2026-09-11): the payload's stream layout is now
 > resolved, and rotation samples are decoded.** This section is kept because its
 > *refutations* are what forced the method change that worked — and §6.2's entropy
-> measurement correctly predicted the mechanism §6c found. Translation samples
-> remain undecoded.
+> measurement correctly predicted the mechanism §6c found. ~~Translation samples
+> remain undecoded.~~ **[Resolved: decoded in §6c.5.]**
 
 The natural first guess for the bulk of the file is a uniform `frames × tracks × bytes_per_key` array, using `+0x06` as the frame count and `+0x0A`/`+0x0B` as track counts. **Tested against the whole population, that model does not hold.** Computing `(payload_extent) / (f06 × (b0A + b0B))` across all 4,197 full-header files gives a median of **0.55** with a standard deviation of **0.34** and quartiles of 0.35 / 0.55 / 0.78 — i.e. no consistent bytes-per-key value, and a nominal figure of roughly *half a byte* per frame-track, which cannot be a literal uncompressed key.
 
 **[CONFIRMED — empirical, that the uniform-array model is wrong.]** The spread is consistent with **sparse or compressed keyframe storage** — only keyed frames stored rather than one key per frame per track, and/or quantised key data — which is entirely standard for shipped animation data, but means the payload cannot be decoded by arithmetic alone. **[HYPOTHESIS — sparse/compressed storage as the explanation; OPEN — the actual per-track encoding.]**
 
 Reaching it needs the code that *samples* animations at runtime, not the code that loads them — a substantially larger subsystem than the loader traced here, and a separate target to scope deliberately rather than drift into.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ### 6.1 A direct attempt on the payload (2026-09-11): partial, with three models refuted
 
@@ -135,6 +151,8 @@ So the records above are **not** laid out as a uniform array, and the bulk of th
 
 **Routes ruled out for finding the sampler:** the `ANIM` magic appears as an immediate in **no** instruction in the binary, so there is no magic-compare to anchor on. Walking callers of the loader hand-off (`FUN_004bea70` / `FUN_004bec10` / `FUN_004beb00`) reaches only loader-side code and one large asset-enumeration routine (`FUN_004aea30`, a 30 KB-stack manifest/debug walker) — **not** the sampler. The loader hands the buffer to an animation manager and never parses the payload, so the loader chain does not lead to the decoder.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 6.2 The unexplained bulk is **structured, not compressed** — which decides what to look for
 
 Before assuming the payload needs a decompressor, it is worth measuring. Byte entropy over 116 clips, with the file header and the identified keyframe runs as known-structured reference points:
@@ -151,6 +169,8 @@ Before assuming the payload needs a decompressor, it is worth measuring. Byte en
 
 **Where a next attempt should start:** the animation *manager* that receives the buffer, found from the other side — the per-frame update that consumes a clip and a time value and writes bone transforms — rather than from the file loader. That is a runtime-subsystem trace, not a format walk. With §6.2 in hand it is also a *narrower* trace than it looked: the decoder being sought reads structured records, so the target is a field-walking loop, not a bit-reader.
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ## 6a. How tracks bind to bones — what the population rules out
 
 With `+0x0A` animated bones out of `+0x0B`, each clip must say *which* bones it animates. Three mechanisms were tested against all 4,209 clips, each with a control:
@@ -158,14 +178,16 @@ With `+0x0A` animated bones out of `+0x0B`, each clip must say *which* bones it 
 | Mechanism | Result | Control |
 |---|---|---|
 | **By name hash** — the rig's per-bone hash table (`spec-rig-format.md` §5) uses the engine-wide string hash; do clips contain those `u32`s? | **No.** 2 / 4,209 clips contain any of the 764 shipped bone hashes — chance-level single hits. | 0 / 12,000 random words |
-| **By explicit index list** — a strictly ascending run of `+0x0A` byte or `u16` indices all `< +0x0B`, anywhere in the first 16 KiB | **No.** Present in 362 / 4,179 (8.7%), at scattered payload offsets, and 319 of those are the identity `0..n−1` — a structure, but not the binding. | 3 / 5,960 random positions |
-| **By presence bitmask** — a header window of ⌈`+0x0B`/8⌉ bytes with popcount `+0x0A` | **No — and this one looked positive until controlled.** 2,005 / 4,053 clips have such a window somewhere in the first 256 bytes, but the per-window chance rate is 0.3% and ~240 windows were scanned per clip, so chance predicts ~53% of clips; observed 49%, no dominant offset. | 14 / 4,500 random windows |
+| **By explicit index list** — a strictly ascending run of `+0x0A` byte or `u16` indices all `< +0x0B`, anywhere in the first 16 KiB | **No.** Present in 362 / 4,179 (8.7%; *the 4,179 denominator is not explained in this section — desk review 2026-09-30*), at scattered payload offsets, and 319 of those are the identity `0..n−1` — a structure, but not the binding. | 3 / 5,960 random positions |
+| **By presence bitmask** — a header window of ⌈`+0x0B`/8⌉ bytes with popcount `+0x0A` | **No — and this one looked positive until controlled.** 2,005 / 4,053 clips (*denominator not explained — desk review 2026-09-30*) have such a window somewhere in the first 256 bytes, but the per-window chance rate is 0.3% and ~240 windows were scanned per clip, so chance predicts ~53% of clips; observed 49%, no dominant offset. | 14 / 4,500 random windows |
 
 **[CONFIRMED — empirical, all three negatives.]** Conclusion: **tracks are bound to bones by index, not by name** (no hash binding exists).
 
 > **⚠ The rest of this section's conclusion was WRONG and is superseded by §6b.** It read: *"the index mapping is **not** stored as a separate list or mask — it is carried inside the track payload itself … answerable only by the runtime sampling code."* **The mapping is a separate list, exactly where a separate list would be**, and it is readable without decoding the payload at all.
 >
 > **Why this pass missed it, which is the instructive part:** the "explicit index list" test above searched for a strictly **ascending** run of indices. The real table is a **permutation** — `[0, 1, 3, 4, 2, 6, 7, 5, 9, 10, 8, 14]` — so an ascending-run search can never match it. The test was hunting the right object with the wrong predicate, and its negative result was then written down as *"no such list exists"* rather than *"no **ascending** list exists"*. **A negative result is only as broad as its predicate; record the predicate alongside it.**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (unexplained denominators flagged; conclusion already superseded by §6b) — desk review (not re-derived from the executable).**
 
 ## 6b. Track-to-bone mapping — resolved (2026-09-11)
 
@@ -181,7 +203,7 @@ else:
 
 **Found in the disassembly**, in the routine that answers *"does this clip animate bone N?"*: it reads `u32(clip + 0x28)` and, when non-zero, scans that byte array for an entry equal to `N`, bounded by `clip[+0x0A]`; when zero it simply tests `N < clip[+0x0A]`. Located by intersecting the clip-registry consumers with functions that read both `+0x0A` and `+0x0B` as bytes. **[CONFIRMED — disassembly.]**
 
-**Validated across all 4,209 clips:**
+**Validated across all 4,209 clips:** *(Arithmetic corrected 2026-09-30, desk review: the rows below sum to 3,803 + 394 = **4,197**, not 4,209 — 12 clips are excluded, per the note after the table; the heading should read "all 4,197 clips remaining after 12 exclusions".)*
 
 | Test | Result |
 |---|---|
@@ -194,11 +216,13 @@ else:
 
 **[CONFIRMED — empirical, controlled.]**
 
-**Independently reproduced by the clean team** from their own header data, payload untouched: the same 394 non-zero split, non-zero values **only ever `0x38` or `0x48`** (the two header sizes), and a permutation test on the table bytes passing **355 / 394 against a control of 35 / 394**. *(Their zero count is 3,815 against this document's 3,803 — the difference is 12 clips this team excluded for having a zero track or bone count, not a disagreement.)* It also caught a false comment in their own reader claiming the field was "observed zero everywhere, not read".
+**Independently reproduced by the clean team** from their own header data, payload untouched: the same 394 non-zero split, non-zero values **only ever `0x38` or `0x48`** (the two header sizes), and a permutation test on the table bytes passing **355 / 394 against a control of 35 / 394**. *(Their zero count is 3,815 against this document's 3,803 — the difference is 12 clips this team excluded for having a zero track or bone count, not a disagreement.)* *(Desk review 2026-09-30: 3,803 + 12 = 3,815 fits Team B's count over all 4,209 (`team-b/HANDOFF.md` l.3804); whether these 12 are the same 12 sub-`0x48`-byte files of §2 / §8 item 6 is not stated. **[OPEN — to be settled against real data.]**)* It also caught a false comment in their own reader claiming the field was "observed zero everywhere, not read".
 
 **Consequences.** Tracks can be bound to bones without decoding the payload, so the binding question is closed independently of §6. And because `+0x28` is the header size, **the payload starts after the table**, not at a fixed `0x48` — any payload-extent arithmetic assuming `0x48` is slightly wrong for the 394 clips that carry a table.
 
 The bitmask row is the methodology point: a 49% hit rate is meaningless until multiplied out against the per-trial chance rate and the number of trials. Recorded in `HANDOFF.md` §5.
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B `validate_anim_field28` finds 394 non-zero, values only `0x38` (382) / `0x48` (12), permutation test 355 / 394 vs 35 / 394 (`team-b/HANDOFF.md` l.3802–3806), and walks the payload from after the table (4,086 / 4,209); row-sum slip (4,197 vs 4,209) annotated — desk review (not re-derived from the executable).**
 
 ## 6c. The keyframe payload — stream layout resolved (2026-09-11)
 
@@ -227,13 +251,17 @@ p += n * 4
 p += rotKeys * 3                      // rotation samples, one byte per axis
                                       // (+ rotKeys more in a second runtime
                                       //  mode that shipped data does not use)
+                                      // [desk review 2026-09-30: "does not use"
+                                      //  is contradicted - the 4 flags-0x0C/0x1C
+                                      //  clips have bit 0x01 clear; where the extra
+                                      //  bytes sit is OPEN - see 6c.3 item 3]
 
 // translation control records
-if (f & 0x20) == 0:  p = align2(p+1)
+if (f & 0x20) == 0:  p = alignUp2(p)     // (first written as align2(p+1), same meaning)
                      m = 0; acc = 0
                      while acc < transKeys:  acc += u16(p + m*8);   m += 1
                      p += m * 8
-else:                p = align4(p+3)
+else:                p = alignUp4(p)     // (first written as align4(p+3), same meaning)
                      m = 0; acc = 0
                      while acc < transKeys:  acc += i32(p + m*16);  m += 1
                      p += m * 16
@@ -256,8 +284,8 @@ p += transKeys                        // one more byte per translation key
 > flags bit `0x40` separates them almost perfectly, and stratifying raises the
 > clean rate to **99.89%** while isolating the entire residual. The original
 > figure was not wrong, it was **diluted** — the same error shape as the morph
-> control diluted by single-element records (§13) and the vehicle equality test
-> diluted by a wrong denominator (§26.9).
+> control diluted by single-element records (`HANDOFF.md` §13) and the vehicle equality test
+> diluted by a wrong denominator (`HANDOFF.md` §26.9).
 
 The endpoint test is the strong one: `+0x30` is an oracle **the file itself
 declares**, not a boundary chosen to make the walk look right, and the residual
@@ -268,6 +296,21 @@ The two shape bits are real and both ship: `0x80` (wide counts) in 53 clips,
 `0x20` (wide translation records) in none of this archive, `0x10` (long header)
 in 167. **The `0x20` branch is therefore disassembly-only** — no sample exercises
 it. **[CONFIRMED — disassembly; unexercised in shipped data.]**
+
+*Desk review 2026-09-30 notes.* (a) The 4-clip residual in the bit-`0x40`-clear
+row (3,687 / 3,691) is exactly the 4 clips with flags `0x0C` / `0x1C` — Team B:
+"100.00% on every flags population except `0x0C` and `0x1C`, which are 0/2 each
+and are the entire 4-clip residual" (`team-b/HANDOFF.md` l.4538–4540). Those are
+the only shipped values with bit `0x01` clear, i.e. the clips §6c.3 item 3 says
+take the extra-rotation-byte branch; see that item. (b) Team B scored the
+`alignUp2`/`alignUp4` rounding as a **file offset** and reproduced every figure
+in the table above (`team-b/HANDOFF.md` l.4520–4536); the pseudocode does not say
+file-relative explicitly. **[Team B result; not re-derived here.]** (c) Neither
+the overshoot case (last run's span carries `acc` past `rotKeys`) nor a
+translation span of 0 is specified. **[OPEN — desk review 2026-09-30: overshoot
+and span-0 handling; to be settled against the executable (`FUN_004c1020`).]**
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B independently reproduces 4,086 / 4,209 walked, 123 failed, 3,687 landing with bit `0x40` clear and 0 / 518 with it set (`team-b/HANDOFF.md` l.4530–4536); the flag-`0x20` and flag-`0x01`-clear branches are not validated by any landing clip — desk review (not re-derived from the executable).**
 
 ### 6c.2 Rotation samples are smallest-three quaternions
 
@@ -308,6 +351,12 @@ reconstructed:
   `[3,0,1,2]`, `[0,3,1,2]`, `[0,1,3,2]`, `[0,1,2,3]` — i.e. "insert the
   reconstructed component at position *k*". This is the canonical
   smallest-three arrangement.
+  **[OPEN — desk review 2026-09-30: the direction is not stated. Read as a gather
+  (`q[i] = lanes[row[i]]`) row 0 puts the reconstructed lane at *x*; read as a
+  scatter it lands at *z*. Row 3 is the same either way and carries most keys, so
+  the aggregate tests below barely see the difference. Team B implemented the
+  gather reading (`team-b/src/payload.cpp` l.314–328). To be settled against the executable (the rotation decoder's
+  permutation step).]**
 - **The fourth component** is `sqrt(K - (x² + y² + z²))` with `K` read from the
   binary as exactly **1.0**, clamped so the argument cannot go negative — unit
   quaternion reconstruction.
@@ -385,8 +434,12 @@ axis_j  = (mult_j * delta_j + base_j * 64) * 4 * SCALE
 ```
 
 Note a free consistency check falling out of this: the base term alone spans
-±8192 × SCALE = **±0.7072**, which is ±1/√2 — exactly the range a smallest-three
-component occupies. The scale constant and the field widths agree with each other
+±8192 × SCALE = **±0.7072**, which is ±1/√2 — ~~exactly~~ the range a smallest-three
+component occupies. *(Corrected 2026-09-30, desk review: not exact. From this
+section's own constant, 8192 × 8.6327287135645750e-05 = **0.707193** against
+1/√2 = **0.707107**, i.e. **+0.0122%** high (8192 × √2 × SCALE = 1.000122). The
+agreement is close but approximate and does not give SCALE's closed form, which
+stays OPEN below.)* The scale constant and the field widths agree with each other
 independently of any test below.
 
 **First attempt was near-vacuous and is reported as such.** The intended oracle was
@@ -425,6 +478,16 @@ pin the bit packing. Status therefore moved from *"inferred, never replayed"* to
 > independently-written decoders now agree on real data, which is the confirmation the
 > weak byte-shift controls could not supply. The residual median difference (34.40 vs
 > 31.16) is unexplained and small; it is recorded rather than smoothed over.
+>
+> **Qualified 2026-09-30 (desk review).** The two decoders agree on the maximum
+> (180.00°) and on sample count (2,963,687 in both), but **not** on the median
+> (34.40° vs 31.16°, +3.24°) or p90 (83.69° vs 80.40°, +3.29°) — Team B's figures,
+> `team-b/HANDOFF.md` l.4646–4647 and l.4695–4697. A near-constant ~3.3° offset at
+> both quantiles over the same samples is a systematic difference, not noise, so
+> "agree" holds for the maximum and the smoothness tests, not for the whole
+> distribution. Label left unchanged. **[OPEN — desk review 2026-09-30: the cause
+> (candidates: permutation direction for codes 0–2, angle formula, clip set); to be
+> settled by a per-sample diff of the two decoders on real data.]**
 
 **What would settle it:** compare a decoded rotation against an orientation known
 independently of this decode — the rig's bind pose, or the same named pose appearing
@@ -438,7 +501,11 @@ all of which were read out of the executable image rather than inferred. The
 **numeric assembly of a component from its base, multiplier and delta is
 [HIGH CONFIDENCE — inferred]**: it was read from one decompiled branch and has
 not been replayed against file bytes, so the field widths within a sample byte
-are not yet independently confirmed.
+are not yet independently confirmed. **[Superseded: the numeric assembly was replayed
+later in this subsection and upgraded to [CONFIRMED — disassembly + empirical] by
+independent-decoder agreement — see the 2026-09-11 upgrade note above.]**
+
+**Review status (2026-09-30): NEEDS-EXE: permutation direction, 64-entry step-table order and SCALE's closed form rest on disassembly with no cited address; the two decoders differ by ~3.3° at median and p90 (Team B l.4695–4697) — desk review (not re-derived from the executable).**
 
 ### 6c.3 What is still open in the payload
 
@@ -452,7 +519,8 @@ are not yet independently confirmed.
    superseded; see §9.1 for the split and §6c.4's inline correction). What the
    third sub-population (55 clips) carries beyond the declared tracks is
    characterised, with several models refuted, in **§9.1**; still **[OPEN]**
-   overall.
+   overall. **[Resolved: see §10 — skipping the layer-override table makes 518 / 518
+   land; §10.5.]**
 3. ~~**The second rotation mode.**~~ — **RESOLVED (§9.1's disassembly side
    trip).** A runtime flag adds one more byte per rotation key; shipped data
    does not use it (replaying with it on drops the walk to 6.6%). **What
@@ -461,11 +529,32 @@ are not yet independently confirmed.
    bit `0x01` **clear** takes the extra-byte branch, bit `0x01` **set** (true
    of nearly every shipped file, per §2's value table — hence unexercised)
    skips it. **[CONFIRMED — disassembly.]**
+   **[Contradicted in part — desk review 2026-09-30.]** The branch *selection*
+   (bit `0x01` clear → extra byte) is the disassembly claim and is not disputed
+   here. "Shipped data does not use it" / "unexercised" is contradicted by this
+   spec's own counts plus Team B's: bit `0x01` is clear in exactly 4 shipped files
+   (flags `0x0c` and `0x1c`, 2 each — `team-b/HANDOFF.md` l.1391), and those 4 are
+   exactly the entire residual that fails to land on `+0x30` among bit-`0x40`-clear
+   clips (§6c.4: 2 walk-but-miss + 2 fail; Team B: "`0x0C` and `0x1C`, which are 0/2
+   each and are the entire 4-clip residual", `team-b/HANDOFF.md` l.4538–4540). The
+   6.6% replay turned the extra byte on for the whole population, where 99.9% of
+   clips have bit `0x01` set, so it could not show the branch is unused. The branch
+   is therefore very probably **exercised by those 4 clips**. **[OPEN — desk review
+   2026-09-30: where the extra `rotKeys` bytes sit in the block (after the rotation
+   samples, after the control records, or interleaved) is not stated; to be
+   settled against real data and the executable (`FUN_004c1020` / `FUN_004c1260`).]**
+   *Data check:* replay §6c.1 on the 4 flags-`0x0C`/`0x1C` clips adding `rotKeys`
+   bytes after the rotation samples (then, if that fails, after the control
+   records); the prediction is 4 / 4 land on `+0x30`. Then replay the whole
+   population with the extra bytes applied only where bit `0x01` is clear.
 4. **The rotation control record's remaining bits** — byte 3 is fully accounted
    for (2 bits permutation + 6 bits span), bytes 0–2 give 2 bits each to the
    step-size index, and the remaining 6 bits per byte are the sample bases.
    Consistent, but only the span field is empirically confirmed. **[HIGH
-   CONFIDENCE — inferred.]**
+   CONFIDENCE — inferred.]** *(See also §6c.2's 2026-09-11 upgrade note on the
+   numeric decode.)*
+
+**Review status (2026-09-30): NEEDS-DATA: item 3's "unexercised" is contradicted by the 4 bit-`0x01`-clear clips (Team B l.1391, l.4538–4540); the 4-clip replay with the extra rotation byte has not been run — desk review (not re-derived from the executable).**
 
 ### 6c.4 The residual has a single DISCRIMINATOR, flags bit `0x40` — but not a single MECHANISM (superseded in part, see §9)
 
@@ -474,7 +563,7 @@ are not yet independently confirmed.
 > below said **"They are not two mechanisms. They are one."** That is now known to
 > be wrong: §9 characterises **three** sub-populations within the bit-`0x40` set
 > (334 continuation-explained, 55 walk-cleanly-but-never-land, ~129 outright
-> failures), and the 55 do not share the CONT population's mechanism — that is the
+> failures — *= 121 FAIL + 8 LONG in §9.1's stratum table*), and the 55 do not share the CONT population's mechanism — that is the
 > entire subject of §9.1. **What survives, and is why the heading is corrected
 > rather than deleted:** flags bit `0x40` genuinely is the discriminator that
 > separates this residual from the clean population (the table below is
@@ -489,7 +578,7 @@ bit-carrying side is not internally one mechanism; §9 splits it further**:
 
 | Population | lands on `+0x30` | walks but misses | fails the walk |
 |---|---|---|---|
-| flags bit `0x40` **clear** (3,691 clips) | **3,687** | 2 | 2 |
+| flags bit `0x40` **clear** (3,691 clips) | **3,687** | 2 | 2 *(desk review 2026-09-30: these 2 + 2 are the 4 clips with flags `0x0C` / `0x1C`, i.e. bit `0x01` clear — `team-b/HANDOFF.md` l.4538–4540; see §6c.3 item 3)* |
 | flags bit `0x40` **set** (518 clips) | **0** | 397 | 121 |
 
 A clip without the bit lands on the declared endpoint **99.89%** of the time; a
@@ -520,19 +609,23 @@ and what is wrong is only how many blocks to walk.
 > number already in hand. Note the numerator moved too: **re-measuring** on the
 > restricted population gives 334, not 335, since one of those two non-bit clips
 > was inside the original count. **Re-dividing 335 by 397 would have carried the
-> error forward** — a corrected denominator needs a re-measurement, not arithmetic. But the extra count is
+> error forward** — a corrected denominator needs a re-measurement, not arithmetic.
+
+But the extra count is
 **not** any header field tested — it is 39 blocks for 310 of them and varies
 otherwise (74, 113, 90, …), and matches neither `+0x0B`, nor `+0x06`, nor twice
 the track count (≤ 0.3% each). **So this is not yet "the track count is wrong";
 it is "there is more payload after the tracks, and walking it as though it were
 more tracks usually lands right."** Those are different claims and only the first
-is measured. **[OPEN — what flags bit `0x40` adds to the payload.]**
+is measured. **[OPEN — what flags bit `0x40` adds to the payload.]** **[Resolved: see §10.]**
 
 **Why this matters beyond the residual:** the clips carrying the bit are
 disproportionately vehicle-occupant and layered-action animations by name
 (`auto_drv_*`, `auto_ridel_*`), which is consistent with an additive or secondary
 channel set — but that is a **[HYPOTHESIS — unconfirmed]** from filenames, which
 this project does not treat as evidence on its own.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (arithmetic checks; superseded by §10; bit-clear residual attributed to flags `0x0C`/`0x1C`) — desk review (not re-derived from the executable).**
 
 ### 6c.5 Translation samples — decoded
 
@@ -580,6 +673,18 @@ insensitive because many axes are genuinely near zero under any nearby reading.
 
 **[CONFIRMED — disassembly + empirical.]** Harness `anim_trans.py`.
 
+*Desk review 2026-09-30 notes.* Team B replayed the same 86,051 records
+independently but reports different figures for the real alignment (median
+0.232 vs 0.203, p90 2.40 vs 2.02, within 1.0 77.8% vs 79.5%) while matching the
+`+2` p90 (88.22 vs 88.2) — `team-b/HANDOFF.md` l.4545–4555. The "magnitude" the
+table reports is not defined here (Euclidean norm? largest axis?), so the table
+cannot be reproduced from the text. **[OPEN — desk review 2026-09-30: whether the
+decoded value replaces the rig bone's local offset or is added to it, and the
+metric behind this table; to be settled against the executable (`FUN_004c21a0`'s
+pose accumulation, the translation decoder `FUN_004c9b90`) and real data.]**
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: decode replicated by Team B on the same 86,051 records (`team-b/HANDOFF.md` l.4545–4555), with differing summary statistics; absolute-vs-additive role and the 16-byte (`0x20`) record's scaling are unvalidated — desk review (not re-derived from the executable).**
+
 ### 6c.6 What remains open after the translation decode
 
 1. ~~**Whether the per-key delta is measured from the record's base or
@@ -595,6 +700,15 @@ insensitive because many axes are genuinely near zero under any nearby reading.
    assembled from a different field than the other three. Read as *(x, y, z)* plus
    a fourth value, the three that this project tested behave correctly; what the
    fourth carries is unread. **[OPEN.]**
+   **[Team B result, not a Team A confirmation (desk review 2026-09-30):**
+   `team-b/HANDOFF.md` §9.43 (l.5242–5257) finds the extra byte after each
+   translation key is a **per-key duration**: per-track byte sums agree within a
+   clip (median relative spread 0.0057 over 2,950 clips, against 0.3670
+   cross-clip and 1.4041 same-shape controls), labelled there CONFIRMED —
+   empirical, not disassembly-checked. §9.47 (l.5519–5541) then matches the
+   per-clip total to header `+0x06` (see §2's `+0x06` row for the 2,016-vs-1,099
+   caveat and §9.47.1's 271-clip residue). Whether the decoder's fourth output
+   lane *is* that byte is not shown. Label here left OPEN.**]**
 3. **Interpolation between records.** The decoder loads 16 bytes where a record is
    8, which is consistent with fetching two consecutive records to blend between
    them, but the SSE shuffle sequence was not traced far enough to assert it.
@@ -612,7 +726,9 @@ insensitive because many axes are genuinely near zero under any nearby reading.
    record without observably touching a second record's fields) — narrowing
    *where* a resolution lives in code without settling the question. **Status:
    [OPEN]** — recorded as a real null result, not forced to a verdict.
-4. **The rotation path's replay is PARTIAL** (§6c.2, updated 2026-09-11). It now
+4. **[Superseded 2026-09-11: upgraded to [CONFIRMED — disassembly + empirical] by
+   independent-decoder agreement, and the clamp-breach test was run — both in §6c.2.
+   Text below kept as written.]** **The rotation path's replay is PARTIAL** (§6c.2, updated 2026-09-11). It now
    has one — bounded and smooth, 2.6–3.3× better than controls — but with weak
    controls, so it stays **[HIGH CONFIDENCE — inferred; replay consistent]** rather
    than confirmed. The asymmetry with translation is narrowed, not closed, and is
@@ -625,8 +741,10 @@ insensitive because many axes are genuinely near zero under any nearby reading.
    which is the silently-plausible failure in its purest form: it renders, it moves,
    it reviews as "close enough", and nothing forces a second look. Treat the
    rotation arithmetic as unverified until the clamp-breach test in `HANDOFF.md`
-   §27.1(b) has been run — that test needs no new disassembly and the oracle is
+   §27.1(b) (that HANDOFF item has since been rewritten; the test itself is in §6c.2's numeric replay) has been run — that test needs no new disassembly and the oracle is
    already in the data (`x² + y² + z² ≤ 1` must hold almost everywhere).
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (item 2 annotated with Team B §9.43 / §9.47; items 1 and 3 already agree with Team B §9.39 and §9.41.2) — desk review (not re-derived from the executable).**
 
 ## 7. A correction to this project's container tooling, found by this pass
 
@@ -634,15 +752,19 @@ insensitive because many axes are genuinely near zero under any nearby reading.
 
 **The per-entry raw sentinel must take precedence over the container-level flag.** With that ordering corrected, all 4,209 entries extract cleanly. **[CONFIRMED — empirical.]** A survey across five archives shows the two signals genuinely are independent: `characters.vpp_pc`, `customize_item.vpp_pc` and `sr3_city_0.vpp_pc` have flag `0x0` with all entries raw; `preload_anim.vpp_pc` has flag `0x2` with all entries raw; `misc_tables.vpp_pc` has flag `0x4801` with *no* raw entries (it is the mode-(a) archive whose non-first-entry decoding remains the project's long-standing parked limitation). This refines, but does not contradict, `spec-vpp-container.md` — worth folding into that document's compression-mode section.
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B's locator reads the per-entry sentinel first and extracts all 4,209 raw entries from the flag-`0x2` container (`team-b/HANDOFF.md` l.1157–1159) — desk review (not re-derived from the executable).**
+
 ## 8. Open Items
 
-1. **The keyframe/track payload encoding** (§6) — the single most valuable remaining gap, and the one thing standing between this spec and a usable animation reimplementation. Needs the runtime sampling code, not the loader.
-2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `FUN_004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
-3. ~~**What `+0x30` points at**~~ — **RESOLVED (§6c.1): it is the end of the keyframe payload.** The per-track walk lands on it exactly in 3,687 of 4,086 clips. *(Previously: "a valid in-file offset in every file, target unidentified.")*
-4. **`+0x06`, `+0x08`, `+0x09`** — confirmed present and varying; `+0x06`'s frame-count reading is actively undermined by §6. *(`+0x0A`/`+0x0B` are now resolved — see §2 and §6a.)*
-5. **`+0x28` and `+0x34`** — zero or unexamined in every sample checked.
-6. **The 12 sub-`0x48`-byte files** — all static prop poses (doors, barriers, crates), all flags `0x09`, all with an identity-ish transform. They parse consistently but represent a minimal-case shape not separately characterized.
+1. ~~**The keyframe/track payload encoding** (§6) — the single most valuable remaining gap,~~ **[Resolved: §6c; the `0x40` extra table in §10.]** and the one thing standing between this spec and a usable animation reimplementation. Needs the runtime sampling code, not the loader.
+2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **[`0x01` resolved since: rotation-mode select, §6c.3 item 3.]** **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `FUN_004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
+3. ~~**What `+0x30` points at**~~ — **RESOLVED (§6c.1): it is the end of the keyframe payload.** The per-track walk lands on it exactly in 3,687 of 4,086 clips *(diluted figure, corrected in §6c.1: 3,687 / 3,691 with flags bit `0x40` clear; 518 / 518 with it set once the §10 table is skipped)*. *(Previously: "a valid in-file offset in every file, target unidentified.")*
+4. **`+0x06`, `+0x08`, `+0x09`** — confirmed present and varying; `+0x06`'s frame-count reading is actively undermined by §6. **[Team B result, not a Team A confirmation (desk review 2026-09-30): `team-b/HANDOFF.md` §9.47 reads `+0x06` as the clip's total duration (sum of per-key duration bytes, 81.46% exact in the tracks-agree stratum) and argues §6's refutation concerns the uniform-array model only; §9.47.1 records a 271-clip residue not explained by the 1,099 ceiling. See §2's `+0x06` row. `+0x08`, `+0x09` still OPEN.]** *(`+0x0A`/`+0x0B` are now resolved — see §2 and §6a.)*
+5. **`+0x28` and `+0x34`** — zero or unexamined in every sample checked. **[`+0x28` resolved since: track-to-bone table offset, §6b. `+0x34` still OPEN.]**
+6. **The 12 sub-`0x48`-byte files** — all static prop poses (doors, barriers, crates), all flags `0x09`, all with an identity-ish transform. They parse consistently but represent a minimal-case shape not separately characterized. *(Desk review 2026-09-30: "parse consistently" is not backed by any walk statistic in this spec, and whether they are the 12 clips excluded from §6b's 3,803 + 394 = 4,197 is not stated.)*
 7. **Cross-archive validation** — all 4,209 samples come from a single archive (`preload_anim.vpp_pc`). Other archives ship `.anim_pc` files too; none were checked. Consistent with this project's standing rule, this is flagged rather than generalized.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (items 4 and 6 annotated; item 4 points to Team B §9.47) — desk review (not re-derived from the executable).**
 
 ## 9. Flags bit `0x40`'s third sub-population, an empty-block audit, and two closed/OPEN items from the translation decode
 
@@ -669,6 +791,10 @@ insensitive because many axes are genuinely near zero under any nearby reading.
 > `AnimFindLayerSetup.java`.
 
 ### 9.1 The third population: BOUNDED between 55/135 and 69/121, not settled — plus a live retraction of the continuation search's own evidential weight
+
+> **⚠ SUPERSEDED 2026-09-12 by §10:** there is no third sub-population; skipping the
+> layer-override table makes 518 / 518 bit-`0x40` clips land (§10, §10.5). All of §9.1
+> below, including its closing verdict, is kept as written.
 
 > **Target size is bounded, not corrected — a second mid-pass revision, and it
 > demotes the first one.** This subsection was drafted twice already: the task
@@ -757,7 +883,7 @@ pass's own reimplementation — not the shipping reader; see below.]**
 > restricted to the 397 clips where landing is not already precluded by
 > construction, the real alignment clearly dominates.~~
 >
-> **⚠ THAT DILUTION RECONCILIATION IS REFUTED (2026-09-12) — a feasibility bound kills it outright.** Our 397 is a strict subset of their 518 (their extra 121 being the outright walk failures). Under `+7`, ours finds **37 of 397**. If both implementations agreed on the 397 shared clips, their total could be **at most 37 + 121 = 158**, even granting that every one of the extra 121 hit spuriously. **They report 333. 333 > 158.** No population composition reconciles that — dilution is arithmetically impossible as an explanation. **At least one of the two shift-control implementations is not measuring what its description says.** The likely divergence is one of two one-line choices: what exactly is shifted (our `+7` displaces the payload start; theirs may displace a different anchor), or what counts as a hit (ours requires landing exactly on `u32(+0x30)`; theirs may count a clip merely for completing the walk without landing on that target — which would also explain their observed near-identity, since "completes" is plausibly insensitive to start while "lands on a specific offset" is not). **Next step: diff the two control implementations on those two points before trusting either verdict.** Until that is done, the status of this measurement is **UNKNOWN, not confirmed and not refuted** — the 334/397 real-vs-shifted separation stands as a measurement, but no inference from it (narrower or otherwise) should be treated as settled. **[STATUS: RESOLVED 2026-09-12, `CONFIRMED — empirical` — Team B's shift control had the wrong anchor (payload start, corrupting the declared-track walk itself, rather than `end_of_declared_walk`); rebuilt correctly it converges with this measurement within 4 clips, and a desync-rate diagnostic confirms the mechanism (2.04% completion under the correct anchor's shift vs 5.92–6.27% at the real start / wrong-anchor start). Full resolution in `HANDOFF.md` §27.2 item 1. **This settles that the continuation evidence for extra payload is real; it does not settle what flag `0x40` means at runtime, which stays OPEN.**]** What it shows: landing at the *correct*, byte-precise
+> **⚠ THAT DILUTION RECONCILIATION IS REFUTED (2026-09-12) — a feasibility bound kills it outright.** Our 397 is a strict subset of their 518 (their extra 121 being the outright walk failures). Under `+7`, ours finds **37 of 397**. If both implementations agreed on the 397 shared clips, their total could be **at most 37 + 121 = 158**, even granting that every one of the extra 121 hit spuriously. **They report 333. 333 > 158.** No population composition reconciles that — dilution is arithmetically impossible as an explanation. **At least one of the two shift-control implementations is not measuring what its description says.** The likely divergence is one of two one-line choices: what exactly is shifted (our `+7` displaces the payload start; theirs may displace a different anchor), or what counts as a hit (ours requires landing exactly on `u32(+0x30)`; theirs may count a clip merely for completing the walk without landing on that target — which would also explain their observed near-identity, since "completes" is plausibly insensitive to start while "lands on a specific offset" is not). **Next step: diff the two control implementations on those two points before trusting either verdict.** Until that is done, the status of this measurement is **UNKNOWN, not confirmed and not refuted** — the 334/397 real-vs-shifted separation stands as a measurement, but no inference from it (narrower or otherwise) should be treated as settled. **[STATUS: RESOLVED 2026-09-12, `CONFIRMED — empirical` — Team B's shift control had the wrong anchor (payload start, corrupting the declared-track walk itself, rather than `end_of_declared_walk`); rebuilt correctly it converges with this measurement within 4 clips, and a desync-rate diagnostic confirms the mechanism (2.04% completion under the correct anchor's shift vs 5.92–6.27% at the real start / wrong-anchor start). Full resolution in `HANDOFF.md` §27.2 item 1. **This settles that the continuation evidence for extra payload is real; it does not settle what flag `0x40` means at runtime, which stays OPEN.** **[Resolved: §10.3.]**]** What it shows: landing at the *correct*, byte-precise
 > alignment is far more likely than landing at a nearby wrong one, for this
 > specific population — consistent with *some* real, byte-precise structure
 > being there for a walk-shaped parser to lock onto. **It does not show that
@@ -891,7 +1017,7 @@ candidates are tried that some will land by chance regardless of where the walk
 begins. **[REFUTED — empirical; kept in the harness (`anim_flag40j.py` /
 `anim_flag40k.py`) rather than deleted, per this project's standing rule on
 vacuous tests, so the weak version cannot be rediscovered and quoted.]**
-**§5-worthy methodology note:** this is the ambiguity-count safeguard's own
+**`HANDOFF.md` §5-worthy methodology note:** this is the ambiguity-count safeguard's own
 failure mode — ambiguity-1 is only informative when the candidate space searched
 is narrow enough that landing at all is informative; a wide enough search makes
 ambiguity-1 achievable almost anywhere.
@@ -921,7 +1047,7 @@ than a finding: `cop_ps_aim_alta_trn90_lft` and its mirrored pair
 repeating 4×`i16` (8-byte) period in which the 4th lane is a **constant −19**
 across at least four consecutive groups in both files. That is a real,
 reproduced-across-a-mirrored-pair regularity, and it is exactly the kind of
-single/paired-sample observation this project's own rules (§5, "don't generalize
+single/paired-sample observation this project's own rules (`HANDOFF.md` §5, "don't generalize
 from one small sample") say not to promote further without a population test —
 which, given the exhaustive-search vacuity result immediately above, was not run
 for this specific record shape in this pass. **[HYPOTHESIS — unconfirmed; a
@@ -960,7 +1086,8 @@ per this project's own standing rule:
   trailing bytes was not traced — [OPEN], and is the most direct remaining
   lead**: it requires reading the callers of the whole layer-blend chain (two
   found, `FUN_004c7640` and `FUN_004bd0b0`, decompiled but not yet read for this
-  question) to see how a layer's override-array fields get set.
+  question) to see how a layer's override-array fields get set. **[Resolved: §10.2 —
+  parsed fresh from the clip's own bytes on every call.]**
 
 **Three independent lines now converge on a leading reading worth stating
 explicitly, though not as settled: there may be no `0x40`-keyed extra-block
@@ -1014,7 +1141,7 @@ but did not read for this question.
 **The partner team's per-frame-root-orientation hypothesis, tested and labelled —
 on two different populations, kept distinct.** First, this reimplementation's 55,
 measured independently against every bit-`0x40` sibling stratum (not only the
-clean population, closing the §5-style objection that a trait checked only
+clean population, closing the `HANDOFF.md` §5-style objection that a trait checked only
 against the target is not yet a discriminator):
 
 | Population | n | name contains `trn` | median root angle (`+0x0C`) | p90 |
@@ -1068,6 +1195,8 @@ to, but evidently not identical to, the confirmed rotation stream) remains the
 leading unconfirmed candidate, and the disassembly lead most likely to settle it
 — the layer-override array's population — was identified but not completed in
 this pass.
+
+**Review status (2026-09-30): DESK-PASS (whole subsection superseded by §10; arithmetic consistent; nothing here should be coded from) — desk review (not re-derived from the executable).**
 
 ### 9.2 Empty-block audit — run population-wide, as the gate this project's own rules require
 
@@ -1146,6 +1275,8 @@ reading is correct, so it is retracted as support for that reading (joining the
 continuation search itself, retracted in §9.1 for the same underlying reason:
 a measurement that cannot fail is not evidence, however it is dressed).
 
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
 ### 9.3 §6c.6 item 1 CLOSED: the per-key translation delta is from-base, not accumulating
 
 **[CONFIRMED — empirical.]** Attributed to the partner team; recorded here
@@ -1182,6 +1313,8 @@ real but far weaker and does not improve with length the same way.
 "[OPEN]" wording per this project's standing rule on corrections) rather than
 silently marked done.
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B §9.39 (`team-b/HANDOFF.md` l.4891) independently resolves "from the base"; the dose-response rows for spans 2–4 and 5+ give no n — desk review (not re-derived from the executable).**
+
 ### 9.4 The 16-byte-load-over-8-byte-record question — answered as an OPEN null, not resolved either way
 
 > **Lead with the authoritative result; this pass's disassembly is a
@@ -1197,11 +1330,11 @@ silently marked done.
 > not discriminate cleanly; attributed to the partner team.]**
 >
 > **The number that would have been published wrong if not stratified, kept
-> here as the sharpest §5 lesson this task produced:** pooled and unstratified,
+> here as the sharpest `HANDOFF.md` §5 lesson this task produced:** pooled and unstratified,
 > this same data reads **9.89× vs 7.34× favouring BLEND** — a clean-looking
 > confirmation of the wrong answer, produced by exactly the kind of
 > mixed-population dilution this project has hit repeatedly (§6c.4's own
-> original 90.2% figure, §13's morph records, §26.9's vehicle equality test).
+> original 90.2% figure, `HANDOFF.md` §13's morph records, `HANDOFF.md` §26.9's vehicle equality test).
 > **One weak directional lean, stated as weak and not as a verdict:** a true
 > blend-toward-the-next-record decoder should get *better* as its prediction
 > weight approaches the next record's own value at long spans, not roughly 3×
@@ -1222,7 +1355,7 @@ resolution would have to be found in code, which is offered here as the
 concrete next step rather than as a competing verdict.
 
 **Disassembly of `FUN_004c9b90`** (the translation decoder) shows **two** distinct
-16-byte (SSE, `undefined1 [16]`) loads, doing two different jobs:
+16-byte (SSE) loads, doing two different jobs:
 
 1. **Over the sample-byte stream.** The decoder holds a cursor to the 3-byte
    per-key delta stream (state offset `+0x2b8`, written by the stream-setup
@@ -1280,6 +1413,8 @@ would produce") is true but incomplete — continuity is *also* exactly what a
 correct non-blended decoder run over smooth authored motion would produce, so it
 cannot be used to choose between the two.
 
+**Review status (2026-09-30): NEEDS-EXE: the two 16-byte loads in `FUN_004c9b90` (transKeys > 1 branch) and whether the single-record fast path's 8-byte over-read can run past the file end; the null is agreed by Team B §9.41.2 — desk review (not re-derived from the executable).**
+
 ## 10. Flags bit `0x40`'s runtime consumer, found: a layer-override table parsed fresh from the clip's own bytes -- the third-sub-population thread closes
 
 > **Scope.** This section answers the item HANDOFF.md flagged as the single
@@ -1309,7 +1444,7 @@ cannot be used to choose between the two.
 
 ### 10.1 What `FUN_004c21a0` actually reads the override data from
 
-`FUN_004c21a0` is a `thiscall` function; its receiver (`ECX`, called `param_1`
+`FUN_004c21a0` is a `thiscall` function; its receiver (`ECX`, argument 1
 below) is a per-call **blend/evaluator context**, not the clip buffer. Reading
 its body in full, the fields actually touched are:
 
@@ -1360,6 +1495,8 @@ that track; any larger count defers to a separate function, `FUN_004ca010`,
 **not traced in this pass** (see §10.5). **[CONFIRMED -- disassembly, all of
 the above, from a full read of `FUN_004c21a0`'s decompilation.]**
 
+**Review status (2026-09-30): NEEDS-EXE: layer-record offsets are given relative to a loop pointer at record `+0x10` (clip index at record `+0x00`, bucket `+0x10`, weight `+0x20` in record terms); the value table is called `i32` in §10.1 and `f32`-sized in §10.2; registry buffer pointer `+0x20` vs `+0x10` unreconciled with §5 — desk review (not re-derived from the executable).**
+
 ### 10.2 Traced to source: the override table is parsed fresh from the clip's own file bytes, on every call
 
 `FUN_004c21a0` has exactly two callers (already found by the prior pass,
@@ -1376,7 +1513,16 @@ x86 instead:
 `hs` is `0x38`, or `0x48` if the clip's own flags byte (`+0x05`) has bit
 `0x10` set (`EBP` is first loaded as `clip + 0x38`, then bumped by a further
 `0x10` when that bit is set) -- then adds the clip's own
-track count (`byte` at `+0x0A`) to it. It then calls `FUN_004c1190` as
+track count (`byte` at `+0x0A`) to it. **[CONFLICT — desk review 2026-09-30:
+§6b says the payload starts after the track table only when `u32(+0x28) != 0`;
+for the 3,803 identity-mapped clips (`+0x28 == 0`, no table) it starts at `hs`
+with no `+0x0A` added, and §6c.1's 3,687 / 3,691 landings were walked that way.
+An *unconditional* `+0x0A` add therefore cannot equal `payload_start` for those
+clips, as the next sentence claims. Either the add is conditional on
+`[clip+0x28] != 0` and the word "unconditionally" is wrong, or the identity case
+is handled elsewhere. Team B's reader adds `+0x0A` only when a table is present
+(`team-b/src/payload.cpp`, `Payload::walk`) and its probe reproduced §10.4's
+518 / 518. OPEN — to be settled against the executable (`0x004c1260`–`0x004c12fc`).]** It then calls `FUN_004c1190` as
 `(ECX = bind-context slot, EDX = track count, stack: [clip pointer, EBP])`.
 **That `EBP` value is exactly `clip + payload_start(clip)`** in this project's
 own established sense -- the identical address `anim_layout.payload_start()`
@@ -1427,6 +1573,8 @@ possibly genuinely keyed off the declared end of the keyframe payload rather
 than its start. **[OPEN / UNKNOWN -- not traced this pass, named so it is not
 lost.]**
 
+**Review status (2026-09-30): NEEDS-EXE: whether the `+0x0A` add at `0x004c1260`–`0x004c12fc` is conditional (conflict with §6b above); `FUN_004c1190`'s wide branches, alignment base and element types; `FUN_004c1300` and its callers — desk review (not re-derived from the executable).**
+
 ### 10.3 The direct bit-`0x40` test in the populate direction -- the loop closes
 
 `FUN_004c1190` opens by reading the clip's flags byte (`+0x05`) into register
@@ -1451,6 +1599,8 @@ correlation.** `0x40` is not a payload-location flag and never was; it is a
 genuine runtime layering flag whose file-side footprint (a small table
 inserted before the keyframe payload) is a side effect of the mechanism, not
 the mechanism itself.
+
+**Review status (2026-09-30): NEEDS-EXE for the instruction address only; the behaviour is validated through §10.4's Control C — desk review (not re-derived from the executable).**
 
 ### 10.4 Empirical confirmation, with the controls the Figure Rule requires
 
@@ -1510,6 +1660,8 @@ mode's shared track index against the rig's track-to-bone table for a handful
 of clips, to see whether it consistently names the root/pelvis bone the
 turn-in-place hypothesis already points at).
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B §9.54 reproduces 518 / 518, controls 2 / 518, 0 / 518 and 1 / 3,691 from this prose alone (`team-b/HANDOFF.md` l.6258–6262); the wide branches (flags `0x80`, `0x02`) are exercised by no shipped clip — desk review (not re-derived from the executable).**
+
 ### 10.5 What this closes, and what is still open
 
 **Closed.** The `[55, 69]` bound, the three-way `CONT`/outright-`FAIL`/
@@ -1554,16 +1706,24 @@ not.
   this project's own methodology asks for; a dynamic breakpoint on
   `FUN_004c21a0` would only reconfirm what the byte-level test already shows.
 
-**§5-worthy methodology note.** A decompiled call site showing zero visible
+**`HANDOFF.md` §5-worthy methodology note.** A decompiled call site showing zero visible
 arguments is not evidence the callee takes none -- under `-noanalysis`,
 register-passed arguments that the immediate caller never itself reads (only
 forwards) are invisible to the decompiler's pseudocode, even though the
 callee's own decompilation correctly recovers a full parameter list. The
 tell was a genuine four-parameter callee (`FUN_004c1190`) reached by an
-apparent zero-argument call (`FUN_004c1260`'s `FUN_004c1190();`); the fix was
+apparent zero-argument call (`FUN_004c1260`'s call to `FUN_004c1190`, printed with no arguments); the fix was
 reading raw disassembly at the specific call site rather than trusting the
 decompiler's account of it. This is the same shape as the project's standing
 rule about auditing an instrument's whole output list once it is shown wrong
 at one point -- here inverted usefully: a decompiled call that *looks*
 information-free is exactly the place to go back to raw instructions before
 concluding a function has no traceable inputs.
+
+**Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
+
+## Changelog
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 14 stale OPEN/superseded statements resolved in place with pointers (§1 banner and headline, §2 flags and `+0x30` rows, §6 banner, §6c.2 closing label, §6c.3 items 2/4, §6c.4, §6c.6 item 4, §8 items 1/2/3/5, §9.1 superseded banner, §9.1 L760, §9.1 override-array lead); rewrote §6c.1 translation-branch `align2(p+1)`/`align4(p+3)` as the defined `alignUp2(p)`/`alignUp4(p)`; annotated the ~129 figure (= 121 FAIL + 8 LONG); split a blockquote that swallowed body text (§6c.4); qualified 9 bare `§5`/`§13`/`§26.9`/`§27.1` refs as `HANDOFF.md`; reworded 3 decompiler-shaped tokens (`undefined1 [16]`, `param_1`, a pseudocode call).
+- 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 3 left (§6c.6 `HANDOFF.md` §27.1(b), §9.1 and §10.5 `HANDOFF.md` §27.2 item 1: no archived §27 copy from 2026-09-11/12 survives) (see review).
+- 2026-09-30 (format-spec desk review, `review/adv_anim.md`): added the review status summary and a status line per unit (27 units); corrected the front matter's clean-room claim (`FUN_`/`DAT_` labels are used); added the missing `+0x2C` row and scoped the `+0x34` row to the 0x38/0x48 header sizes (both OPEN); annotated bit `0x01` as clear in exactly 4 files; marked §6c.3 item 3's "unexercised" as contradicted by the 4-clip `0x0C`/`0x1C` residual (byte position OPEN, replay added as a data check) and noted this in §6c.1 and §6c.4; qualified §6c.2's two-decoder agreement with the median/p90 gaps and corrected "±1/√2 exactly" to +0.0122%; flagged §6c.2's permutation direction OPEN; marked §10.2's unconditional `+0x0A` add as a CONFLICT with §6b; fixed §6b's 3,803 + 394 = 4,197 arithmetic; annotated §2 `+0x06`, §6c.6 item 2 and §8 item 4 with Team B §9.43 / §9.47 / §9.47.1 as Team B results (labels unchanged); no confidence label raised or lowered.

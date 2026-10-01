@@ -570,8 +570,8 @@ int main(int argc, char** argv) {
     }
 
     // ------------------------------------------------------------------
-    // credits_pc.xtbl (spec 13) - "7 Credits sections, 37 headings, 1,047
-    // items; type values used: Music, Name - Role, Centered Single Line
+    // credits_pc.xtbl (spec 13) - "7 Credits sections, 41 heading rows (37 titled
+    // + 4 titleless), 1,047 items; type values used: Music, Name - Role, Centered Single Line
     // (3 of 4 defined)".
     // ------------------------------------------------------------------
     std::printf("\n=== credits_pc.xtbl (spec 13) ===\n");
@@ -592,14 +592,12 @@ int main(int argc, char** argv) {
         }
         std::printf("  %zu Credits sections, %lld headings, %lld items\n", sections.size(), headings, items);
         GATE(sections.size() == 7, "7 Credits sections (spec 13, 16): %zu", sections.size());
-        // FINDING (confirmed by hand-probe, not a reader bug - every section
-        // has exactly one <headings> wrapper, 0 parse warnings, and the
-        // per-section counts sum exactly to 41: 1+10+13+11+3+2+1): the real
-        // archive has 41 headings, not the 37 spec-tables-ui-controls.md 13/16
-        // states. Left as a failing gate deliberately, so this harness does
-        // not silently paper over a spec-vs-data mismatch it found - see the
-        // delivery report for this file.
-        GATE(headings == 37, "37 headings (spec 13, 16) - SEE NOTE ABOVE, real data has 41 per a hand-verified section-by-section count: %lld", headings);
+        // spec-tables-ui-controls.md 13 / 16 [CONFIRMED - empirical, "confirmed by direct
+        // count"]: "7 Credits sections, 41 heading rows (37 titled + 4 titleless -
+        // corrected from an original undifferentiated '37'), 1,047 items". Gate updated
+        // from the superseded 37 to the spec's current 41 (this harness's own hand count
+        // of 1+10+13+11+3+2+1 = 41 already agreed).
+        GATE(headings == 41, "41 headings (spec 13, 16: 37 titled + 4 titleless): %lld", headings);
         GATE(items == 1047, "1047 items (spec 13, 16): %lld", items);
         GATE(usesNameRole && usesMusic && usesCentered, "type values used include Name - Role, Music, Centered Single Line (spec 13, 16)");
         GATE(!usesImage, "\"Image\" (the 4th type) is unused in the shipped file (spec 13, 16)");
@@ -608,7 +606,7 @@ int main(int argc, char** argv) {
     }
 
     // ------------------------------------------------------------------
-    // control_filters.xtbl + control_parameters.xtbl (spec 14) - "23 rows,
+    // control_filters.xtbl + control_parameters.xtbl (spec 14) - "22 rows,
     // non-<Table> <root><control_filters> shape" for control_filters.xtbl;
     // no exact count stated for control_parameters.xtbl.
     // ------------------------------------------------------------------
@@ -618,12 +616,10 @@ int main(int argc, char** argv) {
         GATE(doc.table() == nullptr, "control_filters.xtbl has NO <Table> element (spec 14's non-<Table> shape)");
         auto filters = ParseControlFiltersTable(doc);
         std::printf("  %zu <control_filter> rows\n", filters.size());
-        // FINDING (confirmed by hand-probe, not a reader bug - the wrapper's
-        // 22 children are ALL <control_filter>, 0 parse warnings, 0 other
-        // element names present): the real archive has 22 control_filter
-        // rows, not the 23 spec-tables-ui-controls.md 14/16 states. Left as
-        // a failing gate deliberately - see the delivery report for this file.
-        GATE(filters.size() == 23, "23 control_filter rows (spec 14, 16) - SEE NOTE ABOVE, real data has 22 (hand-verified, 0 other element names in the wrapper): %zu", filters.size());
+        // spec-tables-ui-controls.md 14 / 16 [CONFIRMED - empirical]: "22 rows in the real file
+        // (corrected 2026-09-28, Team B: this document originally said 23, an off-by-one;
+        // re-verified ... 22/22 exact)". Gate updated from the superseded 23 to 22.
+        GATE(filters.size() == 22, "22 control_filter rows (spec 14, 16, corrected from 23): %zu", filters.size());
         std::set<std::string> types;
         for (auto& f : filters)
             if (f.type) types.insert(*f.type);

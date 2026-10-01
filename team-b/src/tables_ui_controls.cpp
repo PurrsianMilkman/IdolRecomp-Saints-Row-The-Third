@@ -237,6 +237,11 @@ QteSequence ParseQteSequence(const Node* row) {
     s.viewRemotely = ReadBoolAlways(row, "View_Remotely");
     s.playerWeapon = getText(row, "Player_Weapon");
     const Node* succesState = FindChild(row, "Succes_State");  // sic: one 's' - see 7.1
+    // [OPEN - spec-tables-ui-controls.md 7.1 (+ 7.2 note): "`FUN_0095DA50` is a name->`u16`
+    // index resolver into `anim_synced.xtbl` by CRC ..., so `Synced_Animation` text here is a
+    // name, not a number; ... to be settled against the executable" - Review status 7.2:
+    // "NEEDS-EXE: `Synced_Animation` resolver conflict". Kept as the numeric read; a name is
+    // NOT resolved here and the reading is not CONFIRMED either way.]
     s.successAnimation = GetUInt16(succesState, "Synced_Animation");
     s.successPlayerIsAttacker = ReadBoolAlways(succesState, "Player_Is_Attacker");
     const Node* animatedNpcs = FindChild(row, "Animated_NPCs");
@@ -282,6 +287,10 @@ VehicleCameraFields ParseVehicleCameraFields(const Node* row) {
     f.cameraRollTypeText = getText(cameraRoll, "Roll_Type");
     f.cameraRollIntensityMultiplier = GetFloat(cameraRoll, "Intensity_Multiplier");
 
+    // [OPEN - spec-tables-ui-controls.md 8.1: "whether `skip_camera_transition`/
+    // `use_alt_freckle_cam` are row attributes or child elements is not checked against the
+    // real file; ... to be settled against the executable" - Review status 8.1: NEEDS-EXE.
+    // Attribute reading kept, not CONFIRMED.]
     // Row ATTRIBUTES, not child elements (8.1). Node::attribute() matches the
     // attribute NAME case-insensitively; the spec does not state the VALUE
     // comparison's case-sensitivity, so this reader compares case-insensitively
