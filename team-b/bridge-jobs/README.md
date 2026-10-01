@@ -45,3 +45,38 @@ python3 team-b/tools/bridge_diff.py <before dir or .tsv> ~/crreish-bus/results/<
 summary `key=value` lines, stub-hit deltas, vint_doc per-file layout results). For the first mission
 re-run, use `team-b/results/verdict_stub_hits_with_missions.tsv` as the "before" (the only §9.143 output
 in the repo). Plain-stdout validators (job 05): `diff` the two runs' `step*.stdout.txt`.
+
+## Post-review real-data baseline (jobs 10a-10g)
+
+One full real-data run of every population validator, so later changes can be diffed against it
+(`diff` the per-step `step*.stdout.txt`; `bridge_diff.py` for the Lua and vint-doc outputs). Submit them in
+any order; each is independent, every run step is `continue_on_error`, and archive lists are explicit
+because the agent does not glob. "ALL" = all 38 archives in `packfiles/pc/cache`; the HANDOFF-recorded
+subset is used where one is recorded (clmesh = dlc1-3 + sr3_city_0/1, §"go/no-go"; tree = sr3_city_0/dlc2/dlc3,
+§9.67; media bank = the four audio archives, §9.57; zone = the ten archives of spec Sec9.4/10; bone palette and
+palette set = characters+preload_rigs+dlc1-3, §9.63.6; binding roles = §9.69; vintdoc = interface_startup +
+interface, §C; anim = preload_anim, §4.3). Tables and the other population walkers use ALL ("against all 38
+real archives", §9.82-§9.97).
+
+| File | Steps | Covers |
+|---|---|---|
+| `10a_baseline_tables.json` | 14 | the ten `validate_tables_*_population`, `validate_xtbl_population` (no `--saves`), `validate_vehicleinfo_population`, `validate_customization_population` |
+| `10b_baseline_geometry_mesh.json` | 11 | mesh, material binding/map, group search, material-id packing, binding roles, pipeline, vehicle, vehicle runs, morph |
+| `10c_baseline_world_zone_cutscene.json` | 12 | clmesh, tree, tree wind/LOD, foliage, foliage LOD, zone, zone chain, zone-header extension, asm, cutscene sampler, ctdg/csc |
+| `10d_baseline_anim_rig.json` | 12 | anim field28/payload, anim-vs-rig cross-format and stratified (each over preload_rigs and characters), rig, rotfield, bone palette, palette set, pose |
+| `10e_baseline_effects_shaders.json` | 8 | fxo header, cefct (collects the occurrence TSV), D3D9 disassembly/CTAB/HLSL SM3 and SM4 populations (the two HLSL ones and peg are Windows-only targets: d3dcompiler, no GPU), `ctab_census` (collects its TSVs) |
+| `10f_baseline_containers_textures_audio_ui.json` | 6 | container decode/offsets, peg textures (Windows-only), media bank, `vintdoc_validate` (no `--dump`) |
+| `10g_baseline_lua.json` | 6 | `lua_host_run` (tagged list 1490; `verdict_hook_fires_detail.tsv` not collected, too big), and the lua mission/UI, entrypoint, call-site and dynamic-dispatch censuses |
+
+Excluded on purpose:
+- Player data: `validate_save_*`, `validate_profile` (default inputs are the owner's save/profile folders);
+  `validate_xtbl_population` is included but never given `--saves`.
+- One-off investigation tools: `probe_*`, `diag_*`, `measure_*`, `precheck_topology`, `clmesh_probe`,
+  `clmesh_lead_probe` (hard-coded Windows cache path, no argv), `tile1018_list`, `tile1018_placement_probe`,
+  and the `d3dctest_semantics*` compile probes.
+- Not population runs: `validate_animated_pose` (synthetic, no archive input), `numeric_verify_hlsl*` (embedded
+  shaders), the single-file `*_dump`/`dump_*`/`list_*`/`match_anim_rig`/`find_small_shaders`/`rank_shaders_*`
+  helpers, `smoke_sample`, `vpp_dump`/`vpp_extract`/`save_browser`.
+- Need a hand-made input file that is not committed: `mission_package_census` (start-stems file),
+  `lua_bare_reference_census` and `xtbl_name_grep` (needles file).
+- Need a GPU/display: `golden_scene_check`, `sr3_viewer`, `tree_baseline_render`, `prototype_*`.

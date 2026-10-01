@@ -1,0 +1,136 @@
+{
+  "title": "team-b: post-review real-data baseline 4/7 - animation, rig, skinning",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "validate_anim_field28",
+        "validate_anim_payload",
+        "validate_anim_rig_crossformat",
+        "validate_anim_rig_stratified",
+        "validate_rig",
+        "validate_rotfield",
+        "validate_bone_palette",
+        "validate_palette_set_field",
+        "validate_pose"
+      ],
+      "timeout": 7200
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_field28",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_payload",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_rig_crossformat",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc",
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_rig_crossformat",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc",
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_rig_stratified",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc",
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_anim_rig_stratified",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_anim.vpp_pc",
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_rig",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc",
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_rotfield",
+      "args": [
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc",
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_bone_palette",
+      "args": [
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc",
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc1.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc2.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc3.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_palette_set_field",
+      "args": [
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc",
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc1.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc2.vpp_pc",
+        "{GAME}/packfiles/pc/cache/dlc3.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_pose",
+      "args": [
+        "{GAME}/packfiles/pc/cache/characters.vpp_pc",
+        "{GAME}/packfiles/pc/cache/preload_rigs.vpp_pc"
+      ],
+      "timeout": 7200,
+      "continue_on_error": true
+    }
+  ],
+  "collect": []
+}
