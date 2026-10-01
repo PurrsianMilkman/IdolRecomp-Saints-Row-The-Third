@@ -384,7 +384,7 @@ object's exact class/subsystem identity.]** **[Resolved by §3: `0x005e4dd0` is 
 ### 1.12 `object_is_in_trigger` (`0x00a57720`) — 86 calls / 19 scripts
 
 **Arguments:** 2 mandatory strings, both read unconditionally: arg 1 an object name, arg 2 a
-trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]**
+trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]** **[Narrowed 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.7's re-derivation): the containment test `0x0093bfc0` takes its object in ECX and exactly one 4-byte stack argument (it pops 4 bytes on return), and branches on that object's `+0x8c` shape code — 0, 1 or 2 select one of three geometric tests (`0x00dbdc90` / `0x00dbe2a0` / `0x00dbe050`) built from the object's own `+0x40` position and its `+0x58`/`+0x5c`/`+0x60`/`+0x90`/`+0x94` extents; any other code returns false. CONFIRMED — disassembly for `0x0093bfc0`. So the ECX object is the trigger volume and the stack argument is the point tested (§28.7 calls it with receiver = the trigger and argument = a candidate's `+0x40` position). It follows that arg 1 (resolved through `0x005e4e30`) is the trigger and arg 2 (the `0x00a455a0` position) is the object: the desk review's reading. HIGH CONFIDENCE — `0x00a57720` itself is not in these dumps, so the register load at its call site is not read; box/sphere/cylinder names for the three shapes are HYPOTHESIS.]**
 
 **Return:** 1 Lua value (boolean-shaped) — a real `0x00dfe590` push followed by a literal
 `return 1;`.
@@ -402,12 +402,14 @@ precondition failed.
 **Side effects / subsystem:** none (a pure query; no state-mutating call was found in the body).
 Answers "is the named object currently inside the named trigger volume." Subsystem: mission/trigger
 state (read-only query). **[CONFIRMED — disassembly for the full gating logic and call graph;
-OPEN — the exact contents of the two records `0x00a455a0` produces, and why the containment test
+OPEN — the exact contents of the two records `0x00a455a0` produces~~, and why the containment test
 `0x0093bfc0` is passed only the first record with no other argument visible in the decompilation
 (a hidden calling-convention argument, e.g. the resolved object handle carried in a register, is
-the likely explanation but was not independently confirmed).]**
+the likely explanation but was not independently confirmed)~~.]** **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: the hidden argument is confirmed on the callee side — `0x0093bfc0` reads its trigger object from ECX and pops one stack argument, the point; see the Arguments note above. CONFIRMED — disassembly for `0x0093bfc0`; the call site in `0x00a57720` is HIGH CONFIDENCE until that entry is dumped.]**
 
 **Review status (2026-09-30): NEEDS-EXE: argument roles probably swapped (arg 1 trigger, arg 2 object); record OPEN partly closed (text fixes applied) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01):** callee side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`, via §28.7): `0x0093bfc0` is a trigger-object method (ECX) with one stack argument, the point — CONFIRMED; arg 1 = trigger / arg 2 = object is HIGH CONFIDENCE. Still NEEDS-EXE for the entry `0x00a57720` itself; NOT yet cleared for implementation.
 
 ### 1.13 Cross-function observations
 
@@ -761,9 +763,9 @@ engine state is read or written.
 
 **Side effects / subsystem:** none — a pure read of a single global input-mode flag: whether the
 currently active input device is a gamepad (as opposed to keyboard/mouse). Subsystem: input. The
-flag's own writer was not located within this task's scope — the only reference this pass found to
-`0x0141250d` anywhere in the binary is this function's own read; **[OPEN — writer not located; does
-not affect the confirmed read-only contract of this function itself.]**
+flag's own writer was not located within this task's scope — ~~the only reference this pass found to
+`0x0141250d` anywhere in the binary is this function's own read~~; **[OPEN — writer not located; does
+not affect the confirmed read-only contract of this function itself.]** **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.9): `0x005bc5d0` is a one-instruction getter that loads the byte `0x0141250d` and returns it, and it has many callers (30 call sites listed before the dump's cap; §28.9's `effect_play_finisher` uses it to pick the gamepad or PC icon effect). The byte lives in zero-filled `.data` (initial value 0), and the global's cross-reference listing shows exactly one direct use, the read inside `0x005bc5d0` — no direct writer in defined code, so the writer stays OPEN (it may write through a pointer or from undefined code). CONFIRMED — disassembly. That single direct use also means this function's "reads the byte directly" is most likely a call to `0x005bc5d0` that the earlier pass read through; HYPOTHESIS — `0x00842270` is not in these dumps. The read-only contract is unchanged either way.]**
 
 **Dual registration (task brief's own flagged item):** this exact function pointer, `0x00842270`, is
 registered under the identical name in **both** Lua-state registrars — the 1,014-entry gameplay table
@@ -776,6 +778,8 @@ instance of the same pattern (both registrars' pairs resolve to `0x00a3cb00`). *
 disassembly, both raw array walks read directly for both names.]**
 
 **Review status (2026-09-30): DESK-PASS — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01):** flag side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): getter `0x005bc5d0`, zero initial value and no direct writer of `0x0141250d` — CONFIRMED; whether `0x00842270` reads the byte directly or through `0x005bc5d0` is HYPOTHESIS (entry not dumped). Behaviour contract unchanged; still NOT cleared for implementation until the entry is dumped.
 
 ### 2.7 `game_peg_unload` (`0x00845650`) — 122 calls / 41 scripts
 
@@ -890,8 +894,8 @@ queue path was taken, it also looks up whatever conversation object is currently
 (`0x006de8a0`); if one exists, marks a byte flag on it and, if a second byte flag on it is already
 set, calls an interrupt/stop pair (`0x0070ba80`/`0x0046a3f0`) — read as stopping/replacing whatever
 conversation is already active before the new one starts. The same mode byte's bit `0x2` additionally
-triggers one more direct call (`0x008788e0`) with the conversation id, as an apparent fallback/parallel
-dispatch alongside the command-queue path.
+triggers one more direct call (`0x008788e0`) ~~with the conversation id~~, as an apparent fallback/parallel
+dispatch alongside the command-queue path. **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.4): `0x008788e0` reads its object from ECX from its first use and pops exactly one 4-byte stack argument, so every call to it — including this one, which its reference list places at `0x006df33a` inside the helper `0x006df210` — carries a hidden `this`. Its body: when the object's `+4` record is enabled and the byte argument is not `0x81`, it stores that byte in the record, sends a type-4 message carrying it (`0x008779b0`, then `0x00877860`), and logs "Changed your state to %u." through the no-op stub `0x00754410`; §27.4 passes the state 1 ("done viewing"). CONFIRMED — disassembly for the signature and body. A plain call "with the conversation id" cannot run this body as written; what object is in ECX at `0x006df33a`, and which byte is pushed there, are OPEN until `0x006df210` is dumped.]**
 
 **Side effects / subsystem:** queues (and/or directly dispatches, depending on internal queue state) a
 request to start the given scripted conversation by numeric id, interrupting whatever conversation is
@@ -902,6 +906,8 @@ distinct roles of the command-queue path versus the direct `0x008788e0` fallback
 appear to fire under the same condition in this build.]**
 
 **Review status (2026-09-30): NEEDS-EXE: opcode-`0x51` path and the `0x008788e0` call shape (§27.4 hidden `this`) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01):** `0x008788e0` re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): thiscall with one byte argument at every site, body as annotated above — CONFIRMED. Still NEEDS-EXE: the receiver and argument at `0x006df33a` (inside `0x006df210`) and the opcode-`0x51` path. NOT yet cleared for implementation.
 
 ### 2.11 Cross-function observations
 
@@ -1738,14 +1744,16 @@ zeroes/defaults the WHOLE slot regardless of the boolean; the boolean is consult
 narrower path, ONLY when the slot's own activity marker was already non-zero, via a further call to
 `0x005ec5a0`. There, per currently-tracked spawned-entity in that region's own linked list, the
 boolean selects between virtual method slots `+0x58` and `+0x5c` of each entity's own vtable (with a
-further per-entity gate, `0x00853b30(obj, 0x1e)`, that can force the `+0x58` path even when the
-boolean is false). **OPEN, narrower than before but still open:** the plain-English identity of
+further ~~per-entity gate~~ test, `0x00853b30(obj, 0x1e)`, that can force the `+0x58` path even when the
+boolean is false). **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.20): `0x00853b30(obj, n)` is not a per-entity gate but a test of bit n of the object's kind descriptor: it returns 0 for a null object, otherwise 1 exactly when bit `n & 7` of the byte at offset `+6 + (n >> 3)` of the `0x02cc9900` row selected by the object's `+0x34` kind byte is set. With n = `0x1e` that is bit `0x40` of the row's `+0x9` byte, so the forced `+0x58` path applies to every entity whose kind has descriptor bit `0x40@+9` (the bit §15.28 ties to parachutes). CONFIRMED — disassembly for `0x00853b30`; the `0x005ec5a0` call site was not re-dumped.]** **OPEN, narrower than before but still open:** the plain-English identity of
 vtable slots `+0x58`/`+0x5c` (which live entity class(es) they belong to was not re-derived this
 pass) — resolving that needs the entity class's own RTTI/vtable owner identified, not just the
 call site, and depends on a live spawned-entity list this static trace correctly declined to
 fabricate. Not pursued further under emulation for exactly this reason — see §5.2.**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01):** `0x00853b30` re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): descriptor-bit-by-index test, `0x1e` = bit `0x40@+9` — CONFIRMED. The vtable `+0x58`/`+0x5c` identities stay OPEN; NOT yet cleared for implementation.
 
 ### 4.8 `continuous_spawn_start` (~~`0x00a21b36`~~ **`0x00a435a0`**, corrected §5.2) — 85 calls / 20 scripts
 
@@ -3351,7 +3359,7 @@ name.
 
 **Body:** a guard starts `true`, and the local setter always runs FIRST regardless of arg 2 — one of
 two local setters, `0x0057a780` (clear) or `0x0057a760` (set, with a further call to `0x00d2f540` the
-first time it transitions), depending on the active flag. **Corrected after independent
+first time it transitions), depending on the active flag. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.23): `0x00d2f540` is a two-instruction `return 1` stub (load 1, return) with many unrelated callers, one of them inside `0x0057a760`; the call has no effect, so the set path is just the flag write. CONFIRMED — disassembly.]** **Corrected after independent
 re-verification (2026-09-29): whether the record-and-replicate path ALSO fires depends specifically on
 what arg 2 resolves to, and the "arg 2 absent" and "arg 2 resolves to current player" cases are NOT
 the same case — an earlier pass in this section wrongly combined them.** Concretely:
@@ -3381,6 +3389,8 @@ identity. **[CONFIRMED — disassembly for the full branch structure, the shared
 identity (citing `spec-lua-api-behaviour.md` §4.13 directly, not re-derived), and the opcode/commit
 call identities; HIGH CONFIDENCE — inferred for "restriction" as the local flag's role, from the
 registered name.]**
+
+**Review status (2026-10-01):** only the helper `0x00d2f540` was re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): a `return 1` stub, inert — CONFIRMED. The rest of the entry has not been re-derived from the executable; NOT yet cleared for implementation.
 
 ### 8.13 `fade_in` (`0x00a49a50`)
 
@@ -6176,9 +6186,11 @@ in this front matter instead, a real structural inconsistency against the other 
 
 **Return:** none (`return 0;`).
 
-**Body:** unconditionally calls a zero-argument helper `0x0101b4f0` (not decompiled), then writes the boolean into a single global, `0x014a0f89`.
+**Body:** unconditionally calls a zero-argument helper `0x0101b4f0` (not decompiled), then writes the boolean into a single global, `0x014a0f89`. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.21/§27.22): `0x0101b4f0` is a two-instruction `return 1` stub, like every member of the `0x0101b4a0`–`0x0101bac0` range; the call is inert and the only effect is the global write. CONFIRMED — disassembly for the stub. Caveat: the stub's reference list in job `…-jxxz` is complete (16 call sites, below the dump's cap) and contains no site inside `0x00a42c60`, so the helper address cited here could not be cross-checked; OPEN until `0x00a42c60` is dumped. If the entry in fact calls a different helper, that helper's effect is unknown.]**
 
-**Side effects/subsystem:** a pure global on/off switch (same simplicity class as `action_nodes_enable`/`set_ped_density`), disabling the "crib" (safehouse customization) UI. **[CONFIRMED — disassembly, full body read; OPEN — `0x0101b4f0`'s own role.]**
+**Side effects/subsystem:** a pure global on/off switch (same simplicity class as `action_nodes_enable`/`set_ped_density`), disabling the "crib" (safehouse customization) UI. **[CONFIRMED — disassembly, full body read; ~~OPEN — `0x0101b4f0`'s own role.~~ `0x0101b4f0` is an inert `return 1` stub (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly); OPEN — the call-site cross-check noted above.]**
+
+**Review status (2026-10-01):** helper re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): `0x0101b4f0` is a `return 1` stub — CONFIRMED; the entry `0x00a42c60` was not dumped and the stub's reference list does not show a call from it, so NEEDS-EXE for the entry; NOT yet cleared for implementation.
 
 ### 13.25 `character_ragdoll_set_last_valid_position` (`0x00a45f50`)
 
@@ -8061,7 +8073,7 @@ Authoritative branch: populates a shared per-slot QTE-context array family alrea
 
 **Side effects/subsystem:** sets the active mission's "enemy team" id, gated on mission-active state — a bare global setter, no object resolver, no record. **[CONFIRMED — disassembly, full body read.]**
 
-### 20.14 `mission_is_complete` (0x00a525a0) **[OPEN — address conflict with §20.14/§27.2, to be re-derived]**
+### 20.14 `mission_is_complete` (0x00a525a0) ~~**[OPEN — address conflict with §20.14/§27.2, to be re-derived]**~~ **[Resolved 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (with `20261001T021721-team-a-hjzz` for the name strings, as §27.2): 0x00a525a0 is one function registered under two names — `mission_is_complete` in the gameplay registrar 0x00a20840 (pair stored at 0x00a233ca/0x00a233d5) and `cell_is_mission_complete` in the cellphone wrapper 0x0083bd90 (pair stored at 0x0083bdc2/0x0083bdca; §27.2). Its reference list holds exactly those two data references. The heading address is right. CONFIRMED — disassembly.]**
 
 **Arguments:** 1 mandatory string (mission name).
 
@@ -8069,7 +8081,9 @@ Authoritative branch: populates a shared per-slot QTE-context array family alrea
 
 **Body:** resolves via the already-established mission-name resolver 0x005f4c30 (§15.9/§15.10/§15.29's own citation — bit 0x4 at descriptor-row offset +0xc of 0x02cc9900), liveness-gated. On success, reads bit 0x4 of the resolved mission record's own +0x88 status byte and returns it directly.
 
-**Side effects/subsystem:** none (pure query). A clean, further confirmed consumer of the already-catalogued mission resolver family. **[CONFIRMED — disassembly, full body read.]**
+**Side effects/subsystem:** none (pure query). A clean, further confirmed consumer of the already-catalogued mission resolver family. **[CONFIRMED — disassembly, full body read.]** **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: the body text is confirmed as written, with one precision: the entry itself is short — it fetches the string, calls 0x006d6f30, and pushes the low byte of the result as a boolean — and the resolve, liveness gate and `+0x88` bit-0x4 read described above are 0x006d6f30's body (null name → false; resolver 0x005f4c30 on the object table 0x02442750). §27.2 describes the same code without the callee inlined; both readings agree. CONFIRMED — disassembly.]**
+
+**Review status (2026-10-01):** re-derived from the executable (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): CONFIRMED — address conflict resolved (one function, two names), body as written. Cleared for implementation.
 
 ### 20.15 `light_group_use_intensity` (0x00a51fe0)
 
@@ -8893,9 +8907,11 @@ Second part of the fresh four-part "ranks 351-450" tranche's own gameplay side (
 
 **Return:** none.
 
-**Body:** unconditionally calls 0x005eae60, which calls an un-decompiled zero-argument helper, 0x0101b570, then clears a global, 0x012ec964, to 0.
+**Body:** unconditionally calls 0x005eae60, which calls an ~~un-decompiled~~ zero-argument helper, 0x0101b570, then clears a global, 0x012ec964, to 0. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: 0x0101b570 is a two-instruction `return 1` stub (one of its listed call sites is inside 0x005eae60); the call is inert, so the only effect is the clear of 0x012ec964. CONFIRMED — disassembly.]**
 
-**Side effects/subsystem:** unconditionally stops/clears the continuous-explosion system's state, regardless of any argument. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly — genuinely zero-argument-sensitive.]**
+**Side effects/subsystem:** unconditionally stops/clears the continuous-explosion system's state, regardless of any argument. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly — genuinely zero-argument-sensitive.]** **[Reconciled with §28.16, 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: there is a single global continuous explosion, not one per instance. Its start (0x005eb6c0, §28.16) acts only while the byte 0x012ec964 is 0 and then sets it to 1, so a second start while one runs is ignored; this stop clears the same byte, which re-enables the next start. CONFIRMED — disassembly for the start side as read in §28.16. The stop does not reset the definition row (0x012ec8f0) or the position (0x012ec950); the start overwrites them.]**
+
+**Review status (2026-10-01):** helper and shared state re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): 0x0101b570 is an inert stub; 0x012ec964 is the one global running flag shared with §28.16 — CONFIRMED. The entry 0x00a42b30 and 0x005eae60 were not re-dumped (0x005eae60 is attested only as a caller of the stub); NOT yet cleared for implementation.
 
 ### 22.25 `check_animation_state` (0x00a433e0)
 
@@ -9086,9 +9102,11 @@ After the tracker-transition step, the new category is stored into 0x01300d90 an
 
 **Arguments:** none. **Return:** 1 boolean.
 
-**A minor finding worth citing precisely:** the decompiled pseudocode labels the query call as a thunk sharing the same displayed name as a separate already-catalogued accessor, but the actual instruction at this call site is `CALL 0x0086fde0` — the REAL target address, not the thunk's own displayed entry point at 0x008703c0. (Per this project's own standing caution about not citing a setter/thunk's own address as if it were the real target — the same principle, here applied to a thunk rather than a setter.)
+**A minor finding worth citing precisely:** ~~the decompiled pseudocode labels the query call as a thunk sharing the same displayed name as a separate already-catalogued accessor, but the actual instruction at this call site is `CALL 0x0086fde0` — the REAL target address, not the thunk's own displayed entry point at 0x008703c0. (Per this project's own standing caution about not citing a setter/thunk's own address as if it were the real target — the same principle, here applied to a thunk rather than a setter.)~~ **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.18/§27.19/§27.26): the direction was backwards. The call operand 0x0086fde0 is a one-instruction jump stub (a single `JMP 0x008703c0`), and 0x008703c0 is the function that runs; the decompiler's thunk label named it correctly. 0x008703c0 fetches the Steam user interface through the import at 0x0101c54c, returns false when it is null, otherwise calls the interface's second virtual method (vtable `+4`, the logged-on query) and returns true only when that reports true. Its siblings 0x0086fdd0 and 0x0086fdf0 are likewise jump stubs (to 0x008703b0 and 0x00db60a0). Cite the jump target, not the stub. CONFIRMED — disassembly.]**
 
-**Body:** trivial passthrough of 0x0086fde0()'s boolean result via `lua_pushboolean`. **[CONFIRMED — disassembly.]** **Side effects/subsystem:** none (pure query) — platform online-service connectivity check.
+**Body:** trivial passthrough of ~~0x0086fde0()'s~~ the boolean result of 0x008703c0 (reached through the jump stub 0x0086fde0) via `lua_pushboolean`. **[CONFIRMED — disassembly.]** **Side effects/subsystem:** none (pure query) — platform online-service connectivity check~~.~~: on PC, "a Steam user interface exists and reports logged on" (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly for 0x008703c0).
+
+**Review status (2026-10-01):** callee re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): jump-stub direction corrected; 0x008703c0's body — CONFIRMED. The entry 0x008428e0 was not re-dumped (its call site is not among the 30 references the stub's capped listing shows); NOT yet cleared for implementation.
 
 ### 23.14 `game_interface_effect_end` (0x00841ef0) — same registrar
 
@@ -9168,7 +9186,7 @@ If arg2 was given (not -1), opens a targeted opcode-tagged record via 0x00710cb0
 4. **0x007ac460 (§19.7's "configure interface effect" primitive, 2 numeric parameters) is confirmed reused, not re-implemented, by `game_interface_effect_end` (item 23.14)** — "ending" an effect is just "configure with param1=0."
 5. **The shared class-descriptor table (0x02cc9900), bit 0x80 at row offset +6 ("is a vehicle-kind object")**, already established at multiple sites across §17/§19.10 and elsewhere, is independently reconfirmed a further time in `garage_get_repair_cost` (item 23.10) — now spanning the garage subsystem as well as vcust/vehicle-paint and general gameplay call sites.
 6. **The shared liveness gate 0x00853b10** is reconfirmed once more (item 23.10) as a fully generic, object-kind-agnostic check, consistent with this document's own standing characterization.
-7. **A thunk/symbol-label caution, parallel to (but distinct from) the project's existing setter-vs-global caution:** `game_is_connected_to_service` (item 23.13) decompiles with a call labeled as a thunk, but the real disassembled call target is a different address, 0x0086fde0 (the decompiler's displayed thunk entry point, 0x008703c0, is not the real target). Likewise `pcr_set_voice` (item 23.1) shows a call the decompiler labels identically to an earlier 0x00462960 call, but which raw disassembly proves is actually a call to 0x0070a2c0. **Lesson for future passes: a decompiler-displayed thunk/shared symbol name is not proof the call target is the address it appears to name — always check the literal disassembled `CALL` operand.**
+7. **A thunk/symbol-label caution, parallel to (but distinct from) the project's existing setter-vs-global caution:** `game_is_connected_to_service` (item 23.13) decompiles with a call labeled as a thunk, ~~but the real disassembled call target is a different address, 0x0086fde0 (the decompiler's displayed thunk entry point, 0x008703c0, is not the real target).~~ *(Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq`/`…-jxxz`, as in §23.13: the literal call goes to 0x0086fde0, which is a one-instruction jump stub to 0x008703c0, so 0x008703c0 IS the function that runs; the decompiler's label was right. The general lesson — check the literal CALL operand, and also follow one-instruction jump stubs to their target — still stands.)* Likewise `pcr_set_voice` (item 23.1) shows a call the decompiler labels identically to an earlier 0x00462960 call, but which raw disassembly proves is actually a call to 0x0070a2c0. **Lesson for future passes: a decompiler-displayed thunk/shared symbol name is not proof the call target is the address it appears to name — always check the literal disassembled `CALL` operand.**
 8. **New, previously-uncatalogued fields/globals confirmed this pass:** the 63-slot PCR list's per-character "variant" byte array (0x026535b0, parallel to the already-tracked 0x026533ac); the tint-storage dword's (0x026534b0) own alpha byte (+3, i.e. 0x026534b3) used standalone as an intensity value; the garage "currently selected vehicle" 2-part identity pair (0x014a1d28/0x014a1d2c); the per-player garage-vehicle-list pointer field (+0x209c); the dialog self-consistency record array (0x02282d40, 0x184-byte stride, 4 slots, self-id at +0x12c) sitting inside the 0x02282d* region §16.9 already references generically; and the hair-color table's own name field (within the already-tracked 0x48-byte-stride table at 0x02300868).
 9. No opcode/network-replicate 0x00710cb0-style record found in 14 of these 22 — only `game_award_cash` (item 23.16, opcode 0xa0) opens one directly; items 23.3/23.4 use the structurally DIFFERENT, still-not-fully-traced 0x00e0xxxx event-report family (§19.5's own open item, now touched by 3 more functions this pass without being further resolved; **[Resolved: §26.23]**).
 
@@ -11841,3 +11859,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T114101-team-a-mnao`, follow-up `nzxf-followup.json`): §26.24 — fade completion CONFIRMED: 0x005a0110 is the UI-state global `Screen_fade_transition_complete` (flips 0→2 / 1→3, calls the parked callback with the target, never starts a request; the earlier "sets the state to the target and starts the deferred request" reading struck); per-frame routine 0x0059fe70 (auto-save indicator, mode gate, loading logo/load-image schedule, replay of a deferred request with a fixed 250 ms); init/shutdown and the "screen_fade" UI document; `sfx_faded_in` = 0x0059fb60 CONFIRMED; host-side substitute note amended. §26.25 — state codes 0/1/2 CONFIRMED; promotion 0x00720410 (single caller 0x007258a0, HIGH CONFIDENCE cutscene load step, body OPEN); completion from the cutscene state machine 0x0072d660; table = parsed `cutscene.xtbl` (cap 200); 0x0153b556 = `skip_all_cutscenes`; transition-stream globals. §26.26 — display-mode ladder of 0x00e23000 and the per-thread record of 0x00e236f0; safe-frame constants still OPEN. Annotated §2.9, §8.13, §8.21, §14.23 and §26.9 with pointers and review-status updates. Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T121532-team-a-gdhw`, follow-up `team-a/ghidra/jobs/gdhw-followup.json`): §26.28 — the session installer is `0x0087c340` (undefined code, read with the range mode; stores the session pointer into `0x024d8534` and publishes the host answer as global flag 4, CONFIRMED; no caller in defined code, so when it runs and whether single player installs a session stay OPEN); network module init `0x008675c0` / shutdown `0x008676f0` described (CONFIRMED; never create a session); host-session constructor `0x0087d1d0` (HIGH CONFIDENCE); offline-session bit `+0x4e` & `0x40` (gating CONFIRMED, single-player use HYPOTHESIS); `0x007178c0` called once from the tutorial initialiser `0x00715f20`; region `0x00717240`–`0x0071738f` writes state 4, not 3; entries 189–195 save-persisted through `0x00b9ae60` section 5; writer of state 3 OPEN; next-dump list. §8.27 — installer note, single player still OPEN, implement false. §10.1 — tails of the three undefined store-flag call sites (CONFIRMED), triggers OPEN. §10.4 — state-3 candidate withdrawn, save feed, initialiser note. Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation of §27/§28 from bridge jobs `20261001T021703-team-a-pwgq` (entries, wrappers, registrar names) and `20261001T021707-team-a-jxxz` (callees, global xrefs); §27.2 also uses `20261001T021721-team-a-hjzz`): §27 — 14 CONFIRMED, 12 CORRECTED (0x00a525a0 registered twice, §27.2 marker resolved; 0x00a9b080's 2nd argument is the preset-name hash; §27.7 wrapper 0x008410f0; §27.8 wrapper pinned; §27.11 +0x114 field, timer predicates, Lua-state accessor, +0x13c origin; §27.18–§27.20 operands are jump stubs — always true / nothing registered; 0x0101b4a0–0x0101bac0, 0x00d34dd0, 0x00d2f540, 0x00d34d40 are `return 1` stubs; §27.26 observations rewritten). §28 — 15 CONFIRMED, 11 CORRECTED (§28.2 copy target and mode; §28.3 no rounding; §28.5 failure returns 0; §28.9 target name, fixed icon effect, return value; §28.11 row method; §28.16 one global state; §28.17 kind predicates and slot counts; §28.19 bit 0x200000; §28.20 0x00853b30 is a descriptor-bit test; §28.23 'Cell Phone Answer'). Added callee bodies throughout, a re-derivation summary under each heading and a 2026-10-01 review status to every entry (CONFIRMED/CORRECTED entries cleared for implementation, residual OPEN sub-items not). Collateral corrections at §1.12, §2.6, §2.10, §4.7, §8.12, §13.24, §20.14, §22.24 and §23.13 not applied. Old text struck or annotated in place.
+- 2026-10-01 (cloud, knock-on corrections from the §27/§28 executable re-derivation, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): §20.14 — address-conflict marker struck, 0x00a525a0 is one function registered as `mission_is_complete` and `cell_is_mission_complete` (as §27.2), body confirmed; §23.13 — jump-stub direction corrected (0x0086fde0 is a `JMP` to 0x008703c0, the Steam logged-on check); §8.12/§13.24/§22.24 — 0x00d2f540, 0x0101b4f0, 0x0101b570 are inert `return 1` stubs (§13.24's call site not in the stub's reference list, OPEN); §22.24 reconciled with §28.16 (one global continuous-explosion flag 0x012ec964); §4.7 — 0x00853b30 is a descriptor-bit-by-index test, 0x1e = bit 0x40@+9; §2.10 — 0x008788e0 is a thiscall with one byte argument, called at 0x006df33a (receiver OPEN); §2.6 — getter 0x005bc5d0, no direct writer of 0x0141250d; §1.12 — 0x0093bfc0 is a trigger method (ECX) with one point argument, arg roles HIGH CONFIDENCE swapped. Review-status lines added to all nine.
