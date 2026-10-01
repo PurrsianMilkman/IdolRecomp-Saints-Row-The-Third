@@ -97,7 +97,7 @@ public class CrreishDump extends GhidraScript {
                     case "xrefs": xrefCap = Integer.parseInt(v); break;
                     case "window": window = Integer.parseInt(v); break;
                     case "nodecomp": decompile = !"1".equals(v); break;
-                    default: printerr("unknown option " + k);
+                    default: items.add(a); // not an option key: keep it as a search item (e.g. a name containing ':')
                 }
             } else {
                 items.add(a);
