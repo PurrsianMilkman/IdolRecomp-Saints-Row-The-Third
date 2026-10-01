@@ -599,7 +599,14 @@ int main() {
         // "none"/"" sentinel ->0.
         {
             auto r = host.runChunk(ui,
-                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n" // round-to-nearest then mask
+                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n"
+                // 0x00ea2596 truncates toward zero (Sec4.1, settled 2026-10-01):
+                // 70000.9 -> 70000 (not 70001), -1.5 -> -1 -> 0xFFFF (not -2 -> 0xFFFE),
+                // 2.5 -> 2 and 3.5 -> 3 (not round-half-even's 2 and 4).
+                "assert(game_audio_get_audio_id(70000.9) == (70000 % 65536))\n"
+                "assert(game_audio_get_audio_id(-1.5) == 65535)\n"
+                "assert(game_audio_get_audio_id(-0.9) == 0)\n"
+                "assert(game_audio_get_audio_id(2.5) == 2 and game_audio_get_audio_id(3.5) == 3)\n"
                 "assert(game_audio_get_audio_id() == 0)\n"
                 "assert(game_audio_get_audio_id('none') == 0)\n"
                 "assert(game_audio_get_audio_id('') == 0)\n"
@@ -653,8 +660,8 @@ int main() {
         }
 
         // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, the integral priority (the rounding mode of
-        // non-integral values is OPEN, Sec4.1, so only an integer is tested), and the always-true
+        // bit, arg4's bit, the priority (truncated toward zero by 0x00ea2596,
+        // Sec4.1 settled 2026-10-01: 7.9 keys as "7"), and the always-true
         // resolve-success return (this project's own minimal registry -
         // see EnemyTargetRecord's own doc comment).
         {
@@ -677,6 +684,10 @@ int main() {
             CHECK(rec.priorityOrId == 5);
             CHECK(rec.arg4Flag == true);
             CHECK(rec.sentinelMatchFlag == true);
+            auto rt = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 7.9) == true)", "enemy_trunc.lua");
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(actor.enemyTargets.count("7") == 1 && actor.enemyTargets.count("8") == 0);
+            if (actor.enemyTargets.count("7")) CHECK(actor.enemyTargets.at("7").priorityOrId == 7);
         }
 
         // 8. on_take_damage (Sec3.13): the callback name lands on the
@@ -747,6 +758,10 @@ int main() {
             auto r3 = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp3.lua"); // untouched
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("hero").isDeadHighConfidence == false);
+
+            auto rt = host.runChunk(gp, "set_current_hit_points('hero', 50.9)", "hp_trunc.lua"); // truncation (Sec4.1)
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 50);
 
             auto r4 = host.runChunk(gp, "set_current_hit_points('hero', 999)", "hp4.lua"); // clamp to cap
             CHECK(r4.loadOk && r4.pcallOk);
