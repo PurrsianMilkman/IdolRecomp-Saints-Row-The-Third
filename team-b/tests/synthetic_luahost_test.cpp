@@ -51,6 +51,16 @@ using sr3luahost::RegisteredName;
 using sr3luahost::loadTaggedRegistrationList;
 using sr3luahost::registerStubs;
 
+// A string global's value ("" when absent or not a string) - used where a test
+// would otherwise need the `string` library, which host states do not have.
+std::string globalString(lua_State* L, const char* name) {
+    lua_getglobal(L, name);
+    const char* v = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : nullptr;
+    std::string out = v ? v : "";
+    lua_pop(L, 1);
+    return out;
+}
+
 // One real (name, cluster) row per one of the 22 names spec_confirmed_stubs.cpp
 // implements, mirroring the exact tags this project's own
 // tools/lua_all_registered_1490_tagged.txt carries (grepped directly, not
@@ -362,50 +372,29 @@ int main() {
         CHECK(after.loadOk && after.pcallOk);
     }
 
-    // --- thread_* scheduler: real Lua 5.1 coroutine primitives, minimal
-    // documented scope (thread_scheduler.h). -----------------------------
+    // --- thread_* (2026-10-01): thread_new/thread_yield/thread_kill/
+    // thread_check_done are now bare globals of 0x00e0f900 with the
+    // CONFIRMED Sec26.27 behaviour (bare_globals.h; full tests in
+    // tests/synthetic_luahost_bare_globals_test.cpp). thread_close stays the
+    // ThreadScheduler scaffold's (not in the engine roster; OPEN). ---------
     {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
-
-        // thread_new returns a real Lua number (matches real game_lib.lua
-        // call-site usage: `type(threads) == "number"`, grepped directly).
         auto r1 = host.runChunk(L,
-            "H = thread_new('some_engine_routine', 'arg1')\n"
-            "assert(type(H) == 'number')",
+            "thread_close(5)\n"                         // scaffold no-op
+            "assert(select('#', thread_kill(65535)) == 0)\n" // no thread: nothing happens, no result
+            "assert(thread_check_done(1) == true)",      // no such record -> done
             "thread1.lua");
         CHECK(r1.loadOk && r1.pcallOk);
-
-        // thread_check_done: this pass's own minimal thread_new() never
-        // attaches a body and nothing ever resumes it, so by the real Lua
-        // 5.1 status/stack/top idiom this reads as done immediately - see
-        // ThreadScheduler::isDone()'s own doc comment.
-        auto r2 = host.runChunk(L, "assert(thread_check_done(H) == true)", "thread2.lua");
-        CHECK(r2.loadOk && r2.pcallOk);
-
-        // thread_kill/thread_close: real calls, no error, idempotent, and
-        // silently no-op on an unknown handle.
-        auto r3 = host.runChunk(L,
-            "thread_kill(H)\n"
-            "thread_close(H)\n"        // identical op (see header note) - must not error when called again
-            "thread_kill(99999999)",   // unknown handle - silent no-op, must not error
-            "thread3.lua");
-        CHECK(r3.loadOk && r3.pcallOk);
-
-        // thread_yield: real no-op on the main thread (no active
-        // coroutine) - must not error or hang.
+        // thread_yield outside any coroutine: stock Lua's yield error (Sec26.27,
+        // HIGH CONFIDENCE), no longer the scaffold's silent no-op.
         auto r4 = host.runChunk(L, "thread_yield()", "thread4.lua");
-        CHECK(r4.loadOk && r4.pcallOk);
-
-        // All 5 thread_* calls above must fold into the SAME HitLog
-        // ranking every other generic stub uses (host.h/stub_registry.h).
-        CHECK(host.hitLog().hits().count("thread_new") == 1);
-        CHECK(host.hitLog().hits().count("thread_check_done") == 1);
-        CHECK(host.hitLog().hits().count("thread_kill") == 1);
-        CHECK(host.hitLog().hits().count("thread_close") == 1);
-        CHECK(host.hitLog().hits().count("thread_yield") == 1);
-        CHECK(host.hitLog().hits().at("thread_kill").callCount == 2); // thread_kill(H) + thread_kill(99999999)
+        CHECK(r4.loadOk && !r4.pcallOk);
+        CHECK(r4.pcallError.find("attempt to yield across metamethod/C-call boundary") != std::string::npos);
+        // All of them fold into the same HitLog ranking.
+        for (const char* n : {"thread_close", "thread_kill", "thread_check_done", "thread_yield"})
+            CHECK(host.hitLog().hits().count(n) == 1);
     }
 
     // --- confirmedHooks(): the real 138-entry static table (133 original
@@ -652,7 +641,14 @@ int main() {
         // "none"/"" sentinel ->0.
         {
             auto r = host.runChunk(ui,
-                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n" // round-to-nearest then mask
+                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n"
+                // 0x00ea2596 truncates toward zero (Sec4.1, settled 2026-10-01):
+                // 70000.9 -> 70000 (not 70001), -1.5 -> -1 -> 0xFFFF (not -2 -> 0xFFFE),
+                // 2.5 -> 2 and 3.5 -> 3 (not round-half-even's 2 and 4).
+                "assert(game_audio_get_audio_id(70000.9) == (70000 % 65536))\n"
+                "assert(game_audio_get_audio_id(-1.5) == 65535)\n"
+                "assert(game_audio_get_audio_id(-0.9) == 0)\n"
+                "assert(game_audio_get_audio_id(2.5) == 2 and game_audio_get_audio_id(3.5) == 3)\n"
                 "assert(game_audio_get_audio_id() == 0)\n"
                 "assert(game_audio_get_audio_id('none') == 0)\n"
                 "assert(game_audio_get_audio_id('') == 0)\n"
@@ -706,8 +702,8 @@ int main() {
         }
 
         // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, the integral priority (the rounding mode of
-        // non-integral values is OPEN, Sec4.1, so only an integer is tested), and the always-true
+        // bit, arg4's bit, the priority (truncated toward zero by 0x00ea2596,
+        // Sec4.1 settled 2026-10-01: 7.9 keys as "7"), and the always-true
         // resolve-success return (this project's own minimal registry -
         // see EnemyTargetRecord's own doc comment).
         {
@@ -730,6 +726,10 @@ int main() {
             CHECK(rec.priorityOrId == 5);
             CHECK(rec.arg4Flag == true);
             CHECK(rec.sentinelMatchFlag == true);
+            auto rt = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 7.9) == true)", "enemy_trunc.lua");
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(actor.enemyTargets.count("7") == 1 && actor.enemyTargets.count("8") == 0);
+            if (actor.enemyTargets.count("7")) CHECK(actor.enemyTargets.at("7").priorityOrId == 7);
         }
 
         // 8. on_take_damage (Sec3.13): the callback name lands on the
@@ -800,6 +800,10 @@ int main() {
             auto r3 = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp3.lua"); // untouched
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("hero").isDeadHighConfidence == false);
+
+            auto rt = host.runChunk(gp, "set_current_hit_points('hero', 50.9)", "hp_trunc.lua"); // truncation (Sec4.1)
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 50);
 
             auto r4 = host.runChunk(gp, "set_current_hit_points('hero', 999)", "hp4.lua"); // clamp to cap
             CHECK(r4.loadOk && r4.pcallOk);
@@ -1297,14 +1301,20 @@ int main() {
             // (long) scene name, keep their exact message (jklk regression).
             {
                 auto r = host.runChunk(gp,
+                    // No `string` library in a host state (spec-lua-bindings.md
+                    // Sec16.4): every message must equal the first, whose prefix
+                    // is checked from C++ below.
                     "for i = 1, 200 do\n"
                     "  local ok, m = pcall(zscene_is_loaded, 'a_scene_name_well_past_the_small_string_buffer')\n"
-                    "  assert(not ok and string.find(m, '^zscene_is_loaded: engine state '))\n"
+                    "  assert(not ok and type(m) == 'string')\n"
+                    "  GUARD_MSG = GUARD_MSG or m\n"
+                    "  assert(m == GUARD_MSG)\n"
                     "  ok = pcall(fade_out, 1, 5)\n"
                     "  assert(not ok)\n"
                     "end", "guard_loop.lua");
                 CHECK(r.loadOk && r.pcallOk);
                 if (!r.pcallOk) std::cerr << r.pcallError << "\n";
+                CHECK(globalString(gp, "GUARD_MSG").rfind("zscene_is_loaded: engine state ", 0) == 0);
             }
 
             // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
@@ -1358,8 +1368,10 @@ int main() {
             refusesOpen(gp, "fade_is_fully_faded_in()", "0x012e6aa4");
             auto rl = host.runChunk(ui,
                 "for i = 1, 200 do local ok, m = pcall(sfx_faded_out)\n"
-                "  assert(not ok and string.find(m, '^sfx_faded_out: engine state ')) end", "sfo_loop.lua");
+                "  assert(not ok and type(m) == 'string'); SFO_MSG = SFO_MSG or m\n"
+                "  assert(m == SFO_MSG) end", "sfo_loop.lua");
             CHECK(rl.loadOk && rl.pcallOk);
+            CHECK(globalString(ui, "SFO_MSG").rfind("sfx_faded_out: engine state ", 0) == 0);
             es.screenFade().state.set(2);
         }
 
@@ -1762,14 +1774,16 @@ int main() {
             if (r.global.find("0x00723d20") != std::string::npos) CHECK(!r.known && r.knownKeys == 1);
             if (r.global == "0x014c848c") CHECK(!r.known && r.knownKeys == 2);
         }
-        // Bare-global table (Sec13.2): each row must be a spec-confirmed stub
-        // registered into at least one state.
+        // Bare-global table (Sec13.2/Sec16.4, answered 2026-10-01): all 24
+        // names, each into BOTH states, each also a spec-confirmed name.
         for (const auto& bg : sr3luahost::specBareGlobals()) {
             CHECK(bg.gameplay || bg.ui);
             const auto& n = sr3luahost::specConfirmedStubNames();
             CHECK(std::find(n.begin(), n.end(), bg.name) != n.end());
             CHECK(bg.spec.rfind("spec-", 0) == 0);
         }
+        CHECK(sr3luahost::specBareGlobals().size() == 24);
+        for (const auto& bg : sr3luahost::specBareGlobals()) CHECK(bg.gameplay && bg.ui);
         // Host applies the same initial state. With no UI state holding
         // Screen_fade_transition_complete, the fade init does not run.
         sr3luahost::Host h({});

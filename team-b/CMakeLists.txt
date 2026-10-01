@@ -844,6 +844,7 @@ add_library(sr3luahost STATIC
     src/lua_spec_confirmed_stubs.cpp
     src/lua_screen_fade.cpp
     src/lua_tutorial_names.cpp
+    src/lua_bare_globals.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
 target_link_libraries(sr3luahost PUBLIC lua51)
@@ -858,6 +859,12 @@ add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
 # Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
 # only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
 # bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
+# The 24 bare globals of 0x00e0f900 (include/sr3luahost/bare_globals.h,
+# spec-lua-api-behaviour.md Sec26.27, spec-lua-bindings.md Sec13.2/Sec16.4).
+add_executable(sr3luahost_bare_globals_tests tests/synthetic_luahost_bare_globals_test.cpp)
+target_link_libraries(sr3luahost_bare_globals_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_bare_globals_test COMMAND sr3luahost_bare_globals_tests)
+
 add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
 target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
 target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")

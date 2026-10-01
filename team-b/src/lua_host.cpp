@@ -2,31 +2,61 @@
 
 namespace sr3luahost {
 
+namespace {
+
+// Stock-library opening, spec-lua-bindings.md Sec16.1 creator step 3 /
+// Sec16.4 and spec-lua-api-behaviour.md Sec26.27 (CONFIRMED - disassembly,
+// jobs 20261001T021641-team-a-yduu and 20261001T114555-team-a-lgdz): the
+// engine's state creator opens the base library and the `coroutine` table
+// and NO other stock library - no math, string, table, io, os, debug or
+// package in either state. Stock Lua 5.1's luaopen_base
+// (third_party/lua51/src/lbaselib.c) installs the base functions, _G,
+// _VERSION, ipairs/pairs and newproxy and then registers `coroutine`
+// itself, so it is the whole opener. Run through lua_cpcall, as stock
+// linit.c does, so a failure is a status code, never an error crossing the
+// constructor's C++ frame.
+// OPEN (spec-lua-bindings.md Sec13.1): the engine's base table at
+// 0x01293410 has 23 entries against stock 5.1's 24; which stock entry is
+// missing is not specced, so the stock set is kept.
+int openEngineStockLibs(lua_State* L) {
+    lua_pushcfunction(L, luaopen_base);
+    lua_pushstring(L, "");
+    lua_call(L, 1, 0);
+    return 0;
+}
+
+} // namespace
+
 Host::Host(const std::vector<RegisteredName>& allNames) {
     gameplay_ = luaL_newstate();
     ui_ = luaL_newstate();
-    luaL_openlibs(gameplay_); // real Lua 5.1 stdlib (base/string/table/math/io/os/debug/package)
-    luaL_openlibs(ui_);
+    lua_cpcall(gameplay_, openEngineStockLibs, nullptr);
+    lua_cpcall(ui_, openEngineStockLibs, nullptr);
 
-    // thread_new/thread_yield/thread_kill/thread_check_done/thread_close -
-    // real, extensively-called globals confirmed absent from BOTH the
-    // tagged registration list (checked against the original 1,430-name
-    // file and, same-day, the corrected 1,435-name file - still absent
-    // from both) and game_lib.lua's own real text (see
-    // thread_scheduler.h's own top comment). Registered into BOTH states:
-    // no cluster/state assignment for these 5 names is confirmed anywhere
-    // (they are not present in the tagged registration list this
-    // constructor otherwise splits on), and game_lib.lua - loaded only
-    // into the gameplay state - is not the only real caller (the
-    // reconciliation census counting 94/113/85/33/1 distinct calling
-    // scripts covers far more than one file), so registering into only
-    // one state risked silently breaking scripts in the other rather than
-    // letting them make forward progress. Stated plainly: which real
-    // state(s) the real engine itself registers these into is UNCONFIRMED
-    // - this is this project's own deliberate, documented choice, not a
-    // measured fact.
-    registerThreadScheduler(gameplay_, threadScheduler_, hitLog_, "gameplay");
-    registerThreadScheduler(ui_, threadScheduler_, hitLog_, "ui");
+    // The 24 bare globals of 0x00e0f900 (spec-lua-bindings.md Sec13.2/Sec16.4,
+    // spec-lua-api-behaviour.md Sec26.27, CONFIRMED): bare globals, into BOTH
+    // states, right after the stock libraries and before every other
+    // registration and any preload. They come from specBareGlobals() (each row
+    // names its states) and are never generic stubs; thread_new/thread_yield/
+    // thread_kill/thread_check_done are among them and replace the
+    // ThreadScheduler scaffold's versions.
+    {
+        std::vector<std::string> bareGameplay, bareUi;
+        for (const auto& bg : specBareGlobals()) {
+            if (bg.gameplay) bareGameplay.push_back(bg.name);
+            if (bg.ui) bareUi.push_back(bg.name);
+        }
+        registerBareGlobals(gameplay_, bareGlobals_, hitLog_, "gameplay", bareGameplay);
+        registerBareGlobals(ui_, bareGlobals_, hitLog_, "ui", bareUi);
+        bareGlobalCount_ = bareGameplay.size() + bareUi.size();
+    }
+
+    // thread_close: the pre-spec ThreadScheduler scaffold's version, kept into
+    // both states. It is neither one of the 24 bare globals nor in the
+    // registration list, so whether the engine provides it is OPEN (see
+    // thread_scheduler.h's registerThreadClose()).
+    registerThreadClose(gameplay_, threadScheduler_, hitLog_, "gameplay");
+    registerThreadClose(ui_, threadScheduler_, hitLog_, "ui");
 
     // The 13 names promoted to real, spec-confirmed behavior
     // (spec_confirmed_stubs.h/.cpp) are filtered OUT of the generic
@@ -136,11 +166,7 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // "gameplay").
     specUiNames.push_back("coop_is_active");
 
-    // Bare globals outside the tagged list (Sec13.2), into the state(s) the spec names.
-    for (const auto& bg : specBareGlobals()) {
-        if (bg.gameplay) specGameplayNames.push_back(bg.name);
-        if (bg.ui) specUiNames.push_back(bg.name);
-    }
+    // Bare globals (specBareGlobals()) were registered first, above.
     applySpecInitialState(engineState_);
     registerSpecConfirmedStubs(gameplay_, engineState_, hitLog_, "gameplay", specGameplayNames);
     registerSpecConfirmedStubs(ui_, engineState_, hitLog_, "ui", specUiNames);
@@ -178,6 +204,12 @@ Host::RunResult Host::runChunk(lua_State* L, const std::string& source, const st
         lua_pop(L, 1);
     } else {
         r.pcallOk = true;
+        // The deferred include queue (spec-lua-bindings.md Sec16.4, CONFIRMED
+        // mechanism): a successful load drains it into the same state. On a
+        // failed load it is left for the next successful one (the file
+        // loader); a caller modelling the buffer loader, which discards it on
+        // failure, calls discardIncludeQueue().
+        bareGlobals_.includeQueue().drain(L, L == gameplay_ ? "gameplay" : (L == ui_ ? "ui" : "other"));
     }
     // Clear the stack (return values, if any) so the next chunk run
     // against this same persistent state starts clean. Globals live in

@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 
+#include "sr3luahost/bare_globals.h"
 #include "sr3luahost/engine_state.h"
 #include "sr3luahost/hook_registry.h"
 #include "sr3luahost/lua_c_api.h"
@@ -32,9 +33,9 @@ namespace sr3luahost {
 class Host {
 public:
     // Splits `allNames` by its own cluster tag ("gameplay" vs "ui") and
-    // builds two fresh Lua 5.1 states (luaL_newstate + luaL_openlibs - the
-    // real standard library, unmodified, matching spec Sec1's own "genuine
-    // unmodified Lua 5.1 interpreter" finding), registering each half's
+    // builds two fresh Lua 5.1 states (luaL_newstate + the stock base library
+    // and `coroutine` table only - spec-lua-bindings.md Sec16.1 step 3 /
+    // Sec16.4: no math/string/table/io/os/debug/package), registering each half's
     // stubs into its matching state via registerStubs(). Any cluster tag
     // other than the two the file is documented to use is treated as
     // "gameplay" (a deliberately narrow fallback - the file is pre-verified
@@ -142,6 +143,28 @@ public:
     // existing per-Host-instance convention.
     EngineState& engineState() { return engineState_; }
 
+    // The 24 bare globals' shared state (bare_globals.h): frame time, the
+    // random ring, the include queue and the script-thread table.
+    BareGlobalsState& bareGlobals() { return bareGlobals_; }
+    // Registrations made by registerBareGlobals() over both states (24 + 24).
+    size_t bareGlobalCount() const { return bareGlobalCount_; }
+
+    // HYPOTHESIS / HOST SUBSTITUTE, opt-in only: rand_int/rand_float draw
+    // from a ring filled once by a deterministic host generator seeded with
+    // `seed`, instead of the CONFIRMED file-image ring (every draw = lo until
+    // a fill; the engine generator and its fill are OPEN, Sec26.27). Values
+    // are not the game's. Call before any script draws.
+    void useHostRng(uint64_t seed) { bareGlobals_.random().useHostRng(seed); }
+
+    // The include queue's file source (spec-lua-bindings.md Sec16.4): maps a
+    // file name (".lua" appended when missing) to its source text; false =
+    // cannot be opened (ignored, as the engine ignores it). Without a
+    // resolver every queued include fails silently and is logged in
+    // bareGlobals().includeQueue().log().
+    void setIncludeResolver(IncludeQueue::Resolver r) { bareGlobals_.includeQueue().setResolver(std::move(r)); }
+    // The buffer loader's behaviour on a failed load (Sec16.4): drop the queue.
+    void discardIncludeQueue() { bareGlobals_.includeQueue().discard(); }
+
 private:
     lua_State* gameplay_ = nullptr;
     lua_State* ui_ = nullptr;
@@ -150,6 +173,8 @@ private:
     size_t uiStubCount_ = 0;
     ThreadScheduler threadScheduler_;
     EngineState engineState_;
+    BareGlobalsState bareGlobals_;
+    size_t bareGlobalCount_ = 0;
 };
 
 } // namespace sr3luahost

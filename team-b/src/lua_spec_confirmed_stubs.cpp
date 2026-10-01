@@ -1,5 +1,7 @@
 #include "sr3luahost/spec_confirmed_stubs.h"
 
+#include "sr3luahost/bare_globals.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -62,26 +64,30 @@ bool caseInsensitiveEquals(const std::string& a, const std::string& b) {
     return true;
 }
 
-// lua_tonumber + 0x00ea2596, the engine's double->int64 conversion. Its
-// rounding mode is OPEN (spec-lua-api-behaviour.md Sec4.1 after the
-// 2026-09-30 consistency review: Sec2/Sec3/Sec3.9 describe it as
-// truncation, round-half-correcting or banker's rounding, pending a re-read).
-// Every call site goes through this one function so the choice is made once:
-// this project's own CHOSEN stand-in is round-half-to-even (std::nearbyint
-// under the default FE_TONEAREST mode), kept from before the review. It only
-// matters for non-integral arguments.
+// lua_tonumber + 0x00ea2596, the engine's double->int64 conversion.
+// SETTLED (spec-lua-api-behaviour.md Sec4.1, 2026-10-01, job
+// 20261001T020218-team-a-bgcx, CONFIRMED - disassembly): truncation toward
+// zero whatever the FPU rounding mode (the MSVC run-time's ordinary C
+// integer cast): 2.9 -> 2, -2.9 -> -2, 0.5 -> 0. It replaces this project's
+// earlier stand-in (round-half-to-even via std::nearbyint), chosen while
+// the mode was OPEN.
 //
 // A NaN, an infinity or a value outside int64 range has no specified result
-// (and the C++ cast would be undefined behaviour - found by the refusal
-// stress test under Clang UBSan, 2026-10-01), so it is refused as OPEN.
-int64_t roundToIntOpenMode(lua_Number v) {
-    double r = std::nearbyint(v);
+// (Sec4.1 does not settle it, and the C++ cast would be undefined behaviour -
+// found by the refusal stress test under Clang UBSan, 2026-10-01), so it is
+// refused as OPEN.
+int64_t truncateEa2596(lua_Number v) {
+    double r = std::trunc(v);
     if (!(r >= -9223372036854775808.0 && r < 9223372036854775808.0)) {
         throw OpenStateError("0x00ea2596 conversion of a non-finite or out-of-range number",
                              "spec-lua-api-behaviour.md Sec4.1");
     }
     return static_cast<int64_t>(r);
 }
+
+// Former name, kept only so concurrent edits of the call sites below merge
+// cleanly; the conversion is no longer OPEN (Sec4.1). Prefer truncateEa2596.
+int64_t roundToIntOpenMode(lua_Number v) { return truncateEa2596(v); }
 
 // Small helper matching this batch's own recurring "mandatory string,
 // read via lua_tolstring, NULL-safe" shape.
@@ -213,7 +219,7 @@ int stub_game_audio_get_audio_id(lua_State* L) {
         int t = lua_type(L, 1);
         if (t == LUA_TNUMBER) {
             double raw = lua_tonumber(L, 1);
-            int64_t rounded = roundToIntOpenMode(raw); // "round-to-int pair"; rounding mode OPEN, see roundToIntOpenMode
+            int64_t rounded = truncateEa2596(raw); // the lua_tonumber + 0x00ea2596 pair: truncation toward zero (Sec4.1)
             result = static_cast<double>(static_cast<uint32_t>(rounded) & 0xFFFFu); // masked to 16 bits, CONFIRMED
         } else if (t == LUA_TSTRING) {
             std::string s = argString(L, 1);
@@ -284,7 +290,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
     req.requestName = name;
 
     double nRaw = lua_tonumber(L, 2);
-    int64_t count = roundToIntOpenMode(nRaw);
+    int64_t count = truncateEa2596(nRaw);
     if (count >= 1 && count <= 6) {
         for (int64_t i = 0; i < count; ++i) {
             int argIndex = 3 + static_cast<int>(i);
@@ -305,8 +311,7 @@ int stub_game_peg_load_with_cb(lua_State* L) {
 // ---------------------------------------------------------------------
 // 7. ai_add_enemy_target (Sec3.9)
 // Arguments: 4 (acting character, target name or "#CLOSEST_PLAYER#",
-// priority/id number [rounded via 0x00ea2596, mode OPEN since the 2026-09-30 review; was labelled CONFIRMED per the primitive-
-// upgrade note], optional bool default false). Return: 1 boolean
+// priority/id number [converted by 0x00ea2596: truncation toward zero, Sec4.1 settled 2026-10-01], optional bool default false). Return: 1 boolean
 // (resolve-and-add success/failure - always true in this minimal
 // registry, see engine_state.h's own EnemyTargetRecord doc comment).
 // ---------------------------------------------------------------------
@@ -315,7 +320,7 @@ int stub_ai_add_enemy_target(lua_State* L) {
     std::string actor = argString(L, 1);
     std::string target = argString(L, 2);
     double priorityRaw = lua_tonumber(L, 3);
-    int64_t priority = roundToIntOpenMode(priorityRaw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
+    int64_t priority = truncateEa2596(priorityRaw); // 0x00ea2596: truncation toward zero (Sec4.1)
     bool arg4 = false;
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) arg4 = lua_toboolean(L, 4) != 0;
     bool sentinelMatch = caseInsensitiveEquals(target, "#CLOSEST_PLAYER#");
@@ -426,7 +431,7 @@ int stub_set_current_hit_points(lua_State* L) {
 
     CharacterState& character = upState(L)->getOrCreateCharacter(name);
     int32_t cap = character.maxHitPoints.get(); // CONFIRMED cross-check: same field get_max_hit_points reads; OPEN until set
-    int64_t rounded = roundToIntOpenMode(raw); // 0x00ea2596; rounding mode OPEN, see roundToIntOpenMode
+    int64_t rounded = truncateEa2596(raw); // 0x00ea2596: truncation toward zero (Sec4.1)
     int64_t clampedWide = std::max<int64_t>(0, std::min<int64_t>(rounded, cap));
     int32_t clamped = static_cast<int32_t>(clampedWide);
 
@@ -597,7 +602,7 @@ int stub_minimap_icon_add_do(lua_State* L) {
     if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) rec.group = argString(L, 3);
     if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.param4 = lua_tonumber(L, 4);
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) {
-        rec.flag5 = roundToIntOpenMode(lua_tonumber(L, 5));
+        rec.flag5 = truncateEa2596(lua_tonumber(L, 5));
     }
     CharacterState& obj = upState(L)->getOrCreateCharacter(objectName);
     obj.minimapIcons.push_back(std::move(rec));
@@ -634,9 +639,9 @@ int stub_object_indicator_add_do(lua_State* L) {
     logCall(L, upLog(L), "object_indicator_add_do", upStateTag(L));
     std::string objectName = argString(L, 1);
     ObjectIndicatorRecord rec;
-    rec.arg2 = roundToIntOpenMode(lua_tonumber(L, 2)); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
-    rec.arg3 = roundToIntOpenMode(lua_tonumber(L, 3)); // same, CONFIRMED no nil gate
-    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = roundToIntOpenMode(lua_tonumber(L, 4));
+    rec.arg2 = truncateEa2596(lua_tonumber(L, 2)); // CONFIRMED: no nil/absence gate - real API: absent -> 0.0 via lua_tonumber's own real nil-handling
+    rec.arg3 = truncateEa2596(lua_tonumber(L, 3)); // same, CONFIRMED no nil gate
+    if (lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL) rec.arg4 = truncateEa2596(lua_tonumber(L, 4));
     if (lua_gettop(L) >= 5 && lua_type(L, 5) != LUA_TNIL) rec.arg5 = lua_tonumber(L, 5);
     // Result = whether arg 1 resolves (Sec10.6); OPEN state here, so the
     // earlier always-true is gone.
@@ -1071,9 +1076,16 @@ void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::strin
 } // namespace
 
 const std::vector<SpecBareGlobal>& specBareGlobals() {
-    static const std::vector<SpecBareGlobal> rows = {
-        // OPEN - awaiting Team A (answer order 2: the 24 bare globals, rand_int first).
-    };
+    // The 24 bare globals of 0x00e0f900, in roster order, into BOTH states
+    // (spec-lua-bindings.md Sec13.2/Sec16.4 "Which state", CONFIRMED -
+    // disassembly, job 20261001T020218-team-a-bgcx). Bodies:
+    // lua_bare_globals.cpp (spec-lua-api-behaviour.md Sec26.27).
+    static const std::vector<SpecBareGlobal> rows = [] {
+        std::vector<SpecBareGlobal> out;
+        for (const auto& e : bareGlobalRoster())
+            out.push_back({e.name, true, true, "spec-lua-bindings.md Sec13.2/Sec16.4; spec-lua-api-behaviour.md Sec26.27"});
+        return out;
+    }();
     return rows;
 }
 
@@ -1136,7 +1148,17 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "vint_is_std_res",
         "vint_get_safe_frame",
     };
-    return names;
+    // The 24 bare globals (specBareGlobals(), lua_bare_globals.cpp) are spec
+    // functions too, so tools and tests that walk this list (the refusal
+    // stress test) cover them; Host registers them through
+    // registerBareGlobals(), never as generic stubs, and
+    // registerSpecConfirmedStubs() leaves them alone.
+    static const std::vector<std::string> all = [] {
+        std::vector<std::string> out = names;
+        for (const auto& e : bareGlobalRoster()) out.push_back(e.name);
+        return out;
+    }();
+    return all;
 }
 
 void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
