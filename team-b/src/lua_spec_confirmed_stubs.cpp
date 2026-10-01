@@ -91,16 +91,15 @@ std::string argString(lua_State* L, int idx) {
 }
 
 // ---------------------------------------------------------------------
-// 1. coop_is_active (spec-lua-api-behaviour.md Sec3.1)
+// 1. coop_is_active (spec-lua-api-behaviour.md Sec3.1, Sec26.28)
 // Arguments: none (the shared prologue calls lua_gettop but never uses
-// it - CONFIRMED). Return: 1 boolean, pure query. This task's 12
-// in-scope functions include no setter for the underlying co-op session
-// state (EngineState::setCoopActive is a C++-only, test-only entry
-// point - see engine_state.h).
+// it - CONFIRMED). Return: 1 boolean, pure query: the core predicate
+// 0x00867830 (EngineState::coopIsActive, CONFIRMED four conditions). With
+// no session - the CONFIRMED start-up state (Sec26.28) - false.
 // ---------------------------------------------------------------------
 int stub_coop_is_active(lua_State* L) {
     logCall(L, upLog(L), "coop_is_active", upStateTag(L));
-    lua_pushboolean(L, upState(L)->coopActive().get() ? 1 : 0); // OPEN until set (open_state.h)
+    lua_pushboolean(L, upState(L)->coopIsActive() ? 1 : 0); // per-session fields OPEN until set
     return 1;
 }
 
@@ -494,11 +493,9 @@ int stub_vint_object_find(lua_State* L) {
 // Arguments: none (CONFIRMED - shared lua_gettop prologue result never
 // read again, same shape as coop_is_active/§3.1 above). Return: 1 number
 // (NOT a boolean - lua_pushnumber, CONFIRMED), 0.0 or 1.0 mirroring
-// global flag 0x022cdf08. Pure query; this task's 9 in-scope functions
-// include no real setter (the real writer, store_vehicle_change_mode, is
-// a different, out-of-scope registered name) - EngineState::
-// setVehicleStoreActiveForTesting() is a C++-only test entry point, same
-// precedent as setCoopActive().
+// global flag 0x022cdf08. Pure query. The flag is 0 at load (CONFIRMED,
+// Sec26.28), so this returns 0.0 at start-up; its writers are not
+// implemented (see EngineState::vehicleStoreActive).
 // ---------------------------------------------------------------------
 int stub_store_vehicle_get_state(lua_State* L) {
     logCall(L, upLog(L), "store_vehicle_get_state", upStateTag(L));
@@ -513,14 +510,15 @@ int stub_store_vehicle_get_state(lua_State* L) {
 // against game_get_is_host's/Sec8.27's own already-decompiled body,
 // which is OUT of this task's scope but already exists as a documented
 // citation in the spec): "is there an active co-op session AND is this
-// machine NOT the host" - isCoopActive() && !isHost(); returns false
+// machine NOT the host" - EngineState::coopLocalIsClient(); returns false
 // (not the literal complement of game_get_is_host) when no session
-// exists at all.
+// exists at all, which is the CONFIRMED start-up state (Sec26.28).
 // ---------------------------------------------------------------------
 int stub_Completion_is_client(lua_State* L) {
     logCall(L, upLog(L), "Completion_is_client", upStateTag(L));
-    bool result = upState(L)->coopActive().get() && !upState(L)->isHost().get(); // both OPEN until set; && order as before
-    lua_pushboolean(L, result ? 1 : 0);
+    // Batch 2026-10-01 (Sec10.2 review status): "active" means "a session
+    // object exists", not coop_is_active. No session (start-up) -> false.
+    lua_pushboolean(L, upState(L)->coopLocalIsClient() ? 1 : 0);
     return 1;
 }
 
@@ -543,34 +541,32 @@ int stub_game_hud_update_inventory(lua_State* L) {
 }
 
 // ---------------------------------------------------------------------
-// 17. tutorial_advance (Sec10.4)
+// 17. tutorial_advance (Sec10.4, Sec6.19, Sec26.28; batch 2026-10-01)
 // Arguments: 1 mandatory string, read unconditionally with no nil/
-// absence gate (CONFIRMED) - a tutorial/hint id. Return: 1 boolean
-// (CONFIRMED). Real body resolves the id through the SAME 210-entry
-// tutorial-descriptor table tutorial_start (Sec6.19) uses, gated on a
-// bounds check AND a per-entry kind/type-tag==3 check (CONFIRMED,
-// Sec10.4) - this codebase has no reader/table for that real xtbl-driven
-// data anywhere (checked directly: no tutorial-descriptor table exists
-// in this project), so re-deriving the real bounds/tag gate is out of
-// scope. Explicit, stated simplification (NOT a claim of having the real
-// table, per this task's own brief): any non-empty string id resolves
-// (returns true); an empty/absent id does not (returns false). On a
-// resolved id, this project's own no-op stand-in for the real named
-// event/telemetry-shaped scope the real function opens (OPEN tier,
-// Sec10.4) is a plain per-id call counter, EngineState::
-// recordTutorialAdvance()/tutorialAdvanceCount().
+// absence gate (CONFIRMED) - a tutorial/hint id (a non-string reads as ""
+// here). Return: 1 boolean (CONFIRMED). Body (CONFIRMED): the resolver
+// 0x00717780 (EngineState::tutorialLookup over the 210-name table), then
+// 0x00716440: index in range and the entry's STATE (+0x0c) == 3, else
+// false with no other effect; the state is not changed. On success a named
+// UI message is built and dispatched (HYPOTHESIS target; counted only) and
+// the result is true. Index 176's name is OPEN: a call whose answer would
+// differ if the name were entry 176 is refused.
 // ---------------------------------------------------------------------
 int stub_tutorial_advance(lua_State* L) {
     logCall(L, upLog(L), "tutorial_advance", upStateTag(L));
-    std::string id = argString(L, 1);
-    // Resolution through the 210-entry tutorial table is OPEN state (the
-    // table is not loaded here); the earlier "any non-empty id resolves"
-    // stand-in is gone.
-    bool resolved = upState(L)->tutorialResolves().get(id);
-    if (resolved) {
-        upState(L)->recordTutorialAdvance(id);
+    EngineState* es = upState(L);
+    const std::string id = argString(L, 1);
+    const EngineState::TutorialLookup lk = EngineState::tutorialLookup(id);
+    auto inState3 = [es](int index) {
+        return es->tutorialState().get(EngineState::tutorialStateKey(index)) == 3;
+    };
+    const bool result = lk.index >= 0 && inState3(lk.index);
+    if (lk.couldBeIndex176 && inState3(176) != result) {
+        throw OpenStateError("tutorial name of entry 176 (0x012f5930[176], string OPEN) vs '" + id + "'",
+                             "spec-lua-api-behaviour.md Sec26.28");
     }
-    lua_pushboolean(L, resolved ? 1 : 0);
+    if (result) es->recordTutorialAdvance(lk.index);
+    lua_pushboolean(L, result ? 1 : 0);
     return 1;
 }
 
@@ -709,7 +705,7 @@ int stub_on_revived(lua_State* L) {
 // real, host-authoritative, network-replicated global (CONFIRMED, the
 // global's sole writer traced and gated on the identical host-check
 // singleton §8.27 establishes). This project builds no real networking
-// layer (explicit, standing project convention, same as coopActive_/
+// layer (explicit, standing project convention, same as coopSession_/
 // replicateStateChange) - EngineState::coopJoinType() is this project's
 // own minimal int stand-in, default 0, test-only setter (no real setter
 // is in scope - the real writer is a different, out-of-scope function).
@@ -741,6 +737,18 @@ struct PendingLuaError {
     std::string message;
 };
 
+// trunc(seconds x 1000.0) to the helpers' integer millisecond argument
+// (Sec2.9/Sec8.13: the double at 0x012a2d90). A NaN, an infinity or a value
+// outside int32 has no specified result: refused as OPEN.
+int32_t fadeDurationMs(lua_Number seconds) {
+    const double ms = seconds * 1000.0;
+    if (!(ms > -2147483649.0 && ms < 2147483648.0)) {
+        throw OpenStateError("trunc(seconds x 1000.0) of a non-finite or out-of-range fade duration",
+                             "spec-lua-api-behaviour.md Sec2.9/Sec26.24");
+    }
+    return static_cast<int32_t>(ms);
+}
+
 [[noreturn]] void throwOpenState(lua_State* L, const char* fn, const OpenStateError& e) {
     std::string tag = std::string(fn) + ":OPEN_STATE";
     logCall(L, upLog(L), tag.c_str(), upStateTag(L));
@@ -748,31 +756,25 @@ struct PendingLuaError {
 }
 
 // ---------------------------------------------------------------------
-// 23. zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23)
-// Arguments: 1 optional string, standard nil-gated idiom, default absent
-// (CONFIRMED). Return: 1 boolean (CONFIRMED). Pure query.
-// CONFIRMED: the two-tier dispatch and every test in it, implemented in
-// order over EngineState's OPEN-state containers. OPEN: every value those
-// tests read (no initial values or writers are specced) and the sense of
-// the tier-2 per-record test. Any OPEN read -> Lua error naming it.
-// Reaching the per-record branch is also counted.
-// Added in the cloud phase (2026-09-30) as a mission-driving blocker
-// (HANDOFF Sec9.143: 714K busy-poll calls in the first mission run).
+// 23. zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23, Sec26.25;
+// batch 2026-10-01)
+// Arguments: 1 optional name, standard nil-gated idiom (CONFIRMED); a
+// string or a number counts as a name, anything else skips the fast path
+// like no name. Return: 1 boolean (CONFIRMED). Pure query over the
+// corrected truth table (EngineState::zsceneIsLoaded): no name -> skip byte
+// or state == 2; a name -> true unless it is a kind-1 table entry, then
+// skip byte, then false unless it is the current entry, then state == 2.
+// No sense inversion. OPEN reads refuse; so does a named entry that is
+// pending (its promotion is OPEN).
 // ---------------------------------------------------------------------
 int zsceneIsLoadedEval(lua_State* L) {
     logCall(L, upLog(L), "zscene_is_loaded", upStateTag(L));
     EngineState* es = upState(L);
-    bool hasName = lua_gettop(L) >= 1 && lua_type(L, 1) != LUA_TNIL;
+    const int t = lua_gettop(L) >= 1 ? lua_type(L, 1) : LUA_TNONE;
+    const bool hasName = t == LUA_TSTRING || t == LUA_TNUMBER;
     std::string name = hasName ? argString(L, 1) : std::string();
     try {
-        if (hasName && es->zsceneNameState().get(name) == 1) return 1;   // tier 1 (0x00723d20)
-        if (es->zsceneBusyFlag().get()) return 1;                         // tier 2: 0x0153b556
-        if (hasName && es->zsceneTableResolves().get(EngineState::zsceneTableKey(name))) {
-            es->recordZsceneOpenBranchHit();                              // per-record test: sense OPEN
-            throw OpenStateError("zscene per-record state test (sense unreconciled)",
-                                 "spec-lua-api-behaviour.md Sec14.23");
-        }
-        return es->zsceneStateCode().get() == 2 ? 1 : 0;                  // 0x0153b51c == 2
+        return es->zsceneIsLoaded(hasName, name) ? 1 : 0;
     } catch (const OpenStateError& e) {
         throwOpenState(L, "zscene_is_loaded", e);
     }
@@ -785,6 +787,25 @@ int stub_zscene_is_loaded(lua_State* L) {
 }
 
 // ---------------------------------------------------------------------
+// zscene_prep (spec-lua-api-behaviour.md Sec8.21, Sec26.25; batch
+// 2026-10-01). Arguments: 1 mandatory string, read unconditionally (a
+// non-string reads as "" here). Return: none. Body (CONFIRMED,
+// EngineState::zscenePrep): the gate 0x007232e0, the teardown
+// 0x00721c20(1, 0, 0) of the current scene, the entry made pending. The
+// load itself is started elsewhere (Sec26.25), not here.
+// ---------------------------------------------------------------------
+int stub_zscene_prep(lua_State* L) {
+    logCall(L, upLog(L), "zscene_prep", upStateTag(L));
+    std::string name = argString(L, 1);
+    try {
+        upState(L)->zscenePrep(name);
+    } catch (const OpenStateError& e) {
+        throwOpenState(L, "zscene_prep", e);
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
 // 24. set_mission_author (Sec6.1): CONFIRMED fully inert - the prologue's
 // lua_gettop result is never used, nothing is read, pushed or touched.
 // ---------------------------------------------------------------------
@@ -794,7 +815,7 @@ int stub_set_mission_author(lua_State* L) {
 }
 
 // ---------------------------------------------------------------------
-// 25. fade_out (Sec2.9)
+// 25. fade_out (Sec2.9, Sec26.24)
 // Arg 1: number, read unconditionally via lua_tonumber (absent -> 0).
 // Arg 2: optional; if present and non-nil it is indexed as t[1], t[2],
 // t[3] with lua_gettable (so a non-table value raises the ordinary Lua
@@ -803,13 +824,10 @@ int stub_set_mission_author(lua_State* L) {
 // Arg 3: optional flags via lua_tonumber, default 3. (The number->int
 // conversion before the bit tests is not described; roundToIntOpenMode.)
 // Colour setter with alpha 255, each scaled by 1/255 - unconditional.
-// Bit 0x1: "screen_fade_do" with duration x 1000.0 and target alpha 1.0.
-// Bit 0x2: the opcode-0x53 command. Return: none. All CONFIRMED.
+// Bit 0x1: the fade-out request helper 0x0059f8c0(trunc(d x 1000), 0, 0)
+// (EngineState::screenFadeRequest). Bit 0x2: the broadcast helper
+// 0x005a0270 (host-gated opcode-0x53 record). Return: none. All CONFIRMED.
 // ---------------------------------------------------------------------
-// Runs under fade_out's own lua_pcall: indexes its one argument as t[1],
-// t[2], t[3] with lua_gettable (the ordinary Lua error on a non-table, or
-// from an __index metamethod, lands in that lua_pcall, never across a C++
-// frame) and returns the three raw values. No C++ object in this frame.
 int fadeOutReadColour(lua_State* L) {
     for (int k = 1; k <= 3; ++k) {
         lua_pushnumber(L, k);
@@ -840,6 +858,10 @@ int stub_fade_out(lua_State* L) {
     }
     int64_t flags = 3;
     if (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) flags = roundToIntOpenMode(lua_tonumber(L, 3));
+    // Read before anything is written: the duration conversion and the
+    // broadcast's host gate (Sec26.24: session present and +0x5c == +0x58).
+    const int32_t durationMs = (flags & 0x1) ? fadeDurationMs(duration) : 0;
+    const bool broadcast = (flags & 0x2) && es->coopLocalIsHost();
 
     EngineState::ScreenFadeColour c;
     c.r = rgb[0] / 255.0f;
@@ -847,12 +869,128 @@ int stub_fade_out(lua_State* L) {
     c.b = rgb[2] / 255.0f;
     c.a = 255.0f / 255.0f;
     es->setScreenFadeColour(c);
-    if (flags & 0x1) es->recordScreenFadeRequest({duration * 1000.0, 1.0f});
-    if (flags & 0x2) {
-        es->recordScreenFadeOpcode53();
-        EngineState::replicateStateChange("fade_out_opcode_0x53", "");
+    if (flags & 0x1) {
+        es->screenFadeRequest(true, durationMs, nullptr, 0);
+        es->recordScreenFadeRequest({static_cast<double>(durationMs), 1.0f});
     }
+    if (broadcast) es->screenFadeBroadcast(true);
     return 0;
+}
+
+// ---------------------------------------------------------------------
+// fade_in (Sec8.13, Sec26.24; batch 2026-10-01)
+// Arg 1: number, mandatory, read unconditionally (lua_tonumber). Arg 2:
+// optional flags, standard nil-gated, default 3 (number->int conversion
+// as fade_out's). Bit 0x1: the fade-in request helper
+// 0x0059fc40(trunc(d x 1000), 0, 0); bit 0x2: the broadcast helper
+// 0x005a0400. No colour. Return: none. All CONFIRMED.
+// ---------------------------------------------------------------------
+int stub_fade_in(lua_State* L) {
+    logCall(L, upLog(L), "fade_in", upStateTag(L));
+    EngineState* es = upState(L);
+    lua_Number duration = lua_tonumber(L, 1);
+    int64_t flags = 3;
+    if (lua_gettop(L) >= 2 && lua_type(L, 2) != LUA_TNIL) flags = roundToIntOpenMode(lua_tonumber(L, 2));
+    const int32_t durationMs = (flags & 0x1) ? fadeDurationMs(duration) : 0;
+    const bool broadcast = (flags & 0x2) && es->coopLocalIsHost();
+    if (flags & 0x1) {
+        es->screenFadeRequest(false, durationMs, nullptr, 0);
+        es->recordScreenFadeRequest({static_cast<double>(durationMs), 0.0f});
+    }
+    if (broadcast) es->screenFadeBroadcast(false);
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// The fade-state queries (Sec26.9, Sec26.24, CONFIRMED): no arguments, one
+// boolean - state 0x012e6aa4 == 3 (fade_is_fully_faded_out, sfx_faded_out)
+// or == 2 (fade_is_fully_faded_in, sfx_faded_in). The start-up state is 2.
+// ---------------------------------------------------------------------
+template <uint32_t Wanted>
+int fadeStateIsEval(lua_State* L, const char* fn) {
+    logCall(L, upLog(L), fn, upStateTag(L));
+    try {
+        return upState(L)->screenFade().state.get() == Wanted ? 1 : 0;
+    } catch (const OpenStateError& e) {
+        throwOpenState(L, fn, e);
+    }
+}
+
+int stub_fade_is_fully_faded_out(lua_State* L) {
+    lua_pushboolean(L, fadeStateIsEval<3>(L, "fade_is_fully_faded_out"));
+    return 1;
+}
+
+int stub_fade_is_fully_faded_in(lua_State* L) {
+    lua_pushboolean(L, fadeStateIsEval<2>(L, "fade_is_fully_faded_in"));
+    return 1;
+}
+
+int stub_sfx_faded_in(lua_State* L) {
+    lua_pushboolean(L, fadeStateIsEval<2>(L, "sfx_faded_in"));
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// Screen_fade_transition_complete (0x005a0110, Sec26.24, CONFIRMED): the
+// UI-state native the screen_fade script calls when its transition ends.
+// No arguments, nothing returned. Runs the completion body (flip 0 -> 2 /
+// 1 -> 3, in-flight callback, deferred slot); counted as the real path.
+// ---------------------------------------------------------------------
+int stub_Screen_fade_transition_complete(lua_State* L) {
+    logCall(L, upLog(L), "Screen_fade_transition_complete", upStateTag(L));
+    upState(L)->screenFadeCompletionNative();
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// game_get_is_host (0x008440a0, Sec8.27, Sec26.28; batch 2026-10-01): no
+// arguments used; 1 boolean: a session exists and +0x5c == +0x58. No
+// session (the CONFIRMED start-up state) -> false. With a session the host
+// pair is OPEN state here (nothing installs one).
+// ---------------------------------------------------------------------
+int stub_game_get_is_host(lua_State* L) {
+    logCall(L, upLog(L), "game_get_is_host", upStateTag(L));
+    lua_pushboolean(L, upState(L)->coopLocalIsHost() ? 1 : 0);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_is_std_res (0x00e1a150, Sec26.26; batch 2026-10-01): lua_gettop
+// called and ignored; 1 boolean (CONFIRMED). Rule (CONFIRMED):
+// first / second < 1.5, or display mode 0x0132bd80 == 2
+// (EngineState::vintIsStdRes). Its inputs are OPEN state here.
+// ---------------------------------------------------------------------
+int stub_vint_is_std_res(lua_State* L) {
+    logCall(L, upLog(L), "vint_is_std_res", upStateTag(L));
+    lua_pushboolean(L, upState(L)->vintIsStdRes() ? 1 : 0);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_get_safe_frame (0x00e1b570, Sec26.26; batch 2026-10-01): no
+// arguments; 4 numbers (CONFIRMED shape): the integers a = +0x8 and
+// b = +0xc of (thread context +0x674)+0x14 times two double constants,
+// rounded, in the order (c1*a, c1*b, c2*a, c2*b) (HIGH CONFIDENCE). The
+// constants and a, b are OPEN state here; the rounding mode is not stated,
+// so a non-integral product is refused too.
+// ---------------------------------------------------------------------
+int stub_vint_get_safe_frame(lua_State* L) {
+    logCall(L, upLog(L), "vint_get_safe_frame", upStateTag(L));
+    EngineState* es = upState(L);
+    const double a = es->vintSafeFrameA().get();
+    const double b = es->vintSafeFrameB().get();
+    const double c1 = es->vintSafeFrameScale1().get();
+    const double c2 = es->vintSafeFrameScale2().get();
+    const double products[4] = {c1 * a, c1 * b, c2 * a, c2 * b}; // HIGH CONFIDENCE order
+    for (double v : products) {
+        if (!(v == std::floor(v)) || !(std::fabs(v) < 2147483648.0)) {
+            throw OpenStateError("rounding of a non-integral or out-of-range safe-frame product (mode not stated)",
+                                 "spec-lua-api-behaviour.md Sec26.26");
+        }
+    }
+    for (double v : products) lua_pushnumber(L, v);
+    return 4;
 }
 
 // ---------------------------------------------------------------------
@@ -874,23 +1012,13 @@ int stub_mission_end_silently(lua_State* L) {
 }
 
 // ---------------------------------------------------------------------
-// 27. sfx_faded_out (Sec26.9): no arguments; 1 boolean, true iff the
-// fade-state global 0x012e6aa4 equals 3 (CONFIRMED, 2-instruction body).
-// That global is OPEN state (EngineState::FadeStateMachine): until a spec
-// gives its value or writer, a call raises the OPEN-state Lua error.
+// 27. sfx_faded_out (Sec26.9, Sec26.24): no arguments; 1 boolean, true iff
+// the fade-state global 0x012e6aa4 equals 3 (CONFIRMED, 2-instruction
+// body). The state starts at 2 (CONFIRMED) and is driven by the fade
+// request helpers and Screen_fade_transition_complete.
 // ---------------------------------------------------------------------
-int sfxFadedOutEval(lua_State* L) {
-    logCall(L, upLog(L), "sfx_faded_out", upStateTag(L));
-    try {
-        return upState(L)->fadeState().g012e6aa4.get() == 3u ? 1 : 0;
-    } catch (const OpenStateError& e) {
-        throwOpenState(L, "sfx_faded_out", e);
-    }
-}
-
 int stub_sfx_faded_out(lua_State* L) {
-    int r = sfxFadedOutEval(L);
-    lua_pushboolean(L, r);
+    lua_pushboolean(L, fadeStateIsEval<3>(L, "sfx_faded_out"));
     return 1;
 }
 
@@ -993,6 +1121,20 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "mission_end_silently",
         // Item-3 scaffolding (2026-09-30): Sec26.9, `ui` (tagged list line 1251).
         "sfx_faded_out",
+        // Batch 2026-10-01 (fade Sec26.24, zscene Sec26.25, UI resolution
+        // Sec26.26, co-op Sec26.28). Tags in tools/lua_all_registered_1490_
+        // tagged.txt: fade_in / fade_is_fully_faded_out / fade_is_fully_faded_in /
+        // zscene_prep `gameplay`; sfx_faded_in / Screen_fade_transition_complete /
+        // game_get_is_host / vint_is_std_res / vint_get_safe_frame `ui`.
+        "fade_in",
+        "fade_is_fully_faded_out",
+        "fade_is_fully_faded_in",
+        "sfx_faded_in",
+        "Screen_fade_transition_complete",
+        "zscene_prep",
+        "game_get_is_host",
+        "vint_is_std_res",
+        "vint_get_safe_frame",
     };
     return names;
 }
@@ -1038,6 +1180,28 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("fade_out")) registerOne(L, state, log, stateTag, "fade_out", openGuard<stub_fade_out>);
     if (wants("mission_end_silently")) registerOne(L, state, log, stateTag, "mission_end_silently", openGuard<stub_mission_end_silently>);
     if (wants("sfx_faded_out")) registerOne(L, state, log, stateTag, "sfx_faded_out", openGuard<stub_sfx_faded_out>);
+    if (wants("fade_in")) registerOne(L, state, log, stateTag, "fade_in", openGuard<stub_fade_in>);
+    if (wants("fade_is_fully_faded_out")) registerOne(L, state, log, stateTag, "fade_is_fully_faded_out", openGuard<stub_fade_is_fully_faded_out>);
+    if (wants("fade_is_fully_faded_in")) registerOne(L, state, log, stateTag, "fade_is_fully_faded_in", openGuard<stub_fade_is_fully_faded_in>);
+    if (wants("sfx_faded_in")) registerOne(L, state, log, stateTag, "sfx_faded_in", openGuard<stub_sfx_faded_in>);
+    if (wants("Screen_fade_transition_complete")) {
+        registerOne(L, state, log, stateTag, "Screen_fade_transition_complete",
+                    openGuard<stub_Screen_fade_transition_complete>);
+        // The state that gets the completion native is the UI state the
+        // engine calls screen_fade_do in (Sec26.24). This host has no UI
+        // document loader: that state stands in for the "screen_fade"
+        // document, and the init 0x0059fa30 (CONFIRMED writes: document id
+        // set, state 2, target 2, flag 1) is taken as run with the document
+        // found, here, before any script - a host choice (when the engine
+        // runs init is not in the spec). Whether screen_fade_do exists is
+        // still checked at every request.
+        state.attachScreenFadeUiState(L);
+        state.screenFadeInit(true);
+    }
+    if (wants("zscene_prep")) registerOne(L, state, log, stateTag, "zscene_prep", openGuard<stub_zscene_prep>);
+    if (wants("game_get_is_host")) registerOne(L, state, log, stateTag, "game_get_is_host", openGuard<stub_game_get_is_host>);
+    if (wants("vint_is_std_res")) registerOne(L, state, log, stateTag, "vint_is_std_res", openGuard<stub_vint_is_std_res>);
+    if (wants("vint_get_safe_frame")) registerOne(L, state, log, stateTag, "vint_get_safe_frame", openGuard<stub_vint_get_safe_frame>);
 }
 
 } // namespace sr3luahost

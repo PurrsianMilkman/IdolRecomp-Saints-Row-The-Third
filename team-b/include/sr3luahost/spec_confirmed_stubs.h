@@ -37,7 +37,7 @@
 // lua_spec_confirmed_stubs.cpp's own functions 14-22 for each one's full
 // citation/reasoning, and engine_state.h for the new fields/structs
 // (CharacterState::onRevivedCallback/minimapIcons/objectIndicators;
-// EngineState::vehicleStoreActive_/isHost_/hasLocalPlayer_/
+// EngineState::vehicleStoreActive_/hasLocalPlayer_/
 // hudInventoryRefreshCount_/tutorialAdvanceCounts_/
 // qteAnimationTriggerCallback_/coopJoinType_) backing them.
 //
@@ -46,6 +46,16 @@
 // per-record branch is a labelled stub - see its own doc comment. The other
 // Sec9.143 blockers (fade_is_fully_faded_out/_in, vint_is_std_res) have no
 // behaviour spec yet and stay generic stubs (requested from Team A).
+//
+// Batch 2026-10-01: +9 from spec-lua-api-behaviour.md Sec26.24-Sec26.28 -
+// fade_in, fade_is_fully_faded_out, fade_is_fully_faded_in, sfx_faded_in,
+// Screen_fade_transition_complete (screen fade, Sec26.24), zscene_prep
+// (Sec26.25), game_get_is_host (Sec8.27/Sec26.28), vint_is_std_res and
+// vint_get_safe_frame (Sec26.26); zscene_is_loaded, fade_out, sfx_faded_out,
+// coop_is_active, Completion_is_client, tutorial_advance and
+// store_vehicle_get_state follow the corrected specs. Registering
+// Screen_fade_transition_complete in a state also makes that state the
+// screen_fade UI state and runs the fade init there (see the .cpp).
 //
 // IMPLEMENTED PRE-REVIEW, PENDING EXE RE-CLEARANCE (2026-09-30): the desk
 // review now marks spec-lua-api-behaviour.md §1-§5 "NOT yet cleared for
