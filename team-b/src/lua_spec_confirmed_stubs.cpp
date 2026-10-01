@@ -70,8 +70,17 @@ bool caseInsensitiveEquals(const std::string& a, const std::string& b) {
 // this project's own CHOSEN stand-in is round-half-to-even (std::nearbyint
 // under the default FE_TONEAREST mode), kept from before the review. It only
 // matters for non-integral arguments.
+//
+// A NaN, an infinity or a value outside int64 range has no specified result
+// (and the C++ cast would be undefined behaviour - found by the refusal
+// stress test under Clang UBSan, 2026-10-01), so it is refused as OPEN.
 int64_t roundToIntOpenMode(lua_Number v) {
-    return static_cast<int64_t>(std::nearbyint(v));
+    double r = std::nearbyint(v);
+    if (!(r >= -9223372036854775808.0 && r < 9223372036854775808.0)) {
+        throw OpenStateError("0x00ea2596 conversion of a non-finite or out-of-range number",
+                             "spec-lua-api-behaviour.md Sec4.1");
+    }
+    return static_cast<int64_t>(r);
 }
 
 // Small helper matching this batch's own recurring "mandatory string,
@@ -117,6 +126,12 @@ int stub_coop_is_active(lua_State* L) {
 int stub_game_get_key_name(lua_State* L) {
     logCall(L, upLog(L), "game_get_key_name", upStateTag(L));
     lua_Number n = lua_tonumber(L, 1); // real API: an absent/non-number arg 1 reads as 0 here, never an error - matches the spec's own "no absence/nil gate" text.
+    // Truncation of a NaN or an out-of-int32-range number has no specified
+    // result (and the cast would be undefined behaviour): refused as OPEN.
+    if (!(n > -2147483649.0 && n < 2147483648.0)) {
+        throw OpenStateError("key code truncation of a non-finite or out-of-range number",
+                             "spec-lua-api-behaviour.md Sec2.3");
+    }
     int32_t code = static_cast<int32_t>(n);
     if (code == -1) {
         lua_pushstring(L, "PC_UNBOUND_KEY");
