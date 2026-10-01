@@ -406,6 +406,15 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    `20261001T000923-team-b-hxmr`), 48/49 missions' first missing global is `rand_int`, one of the 24 bare
    globals registered by `0x00e0f900` (§13.2: which 24, which state, and their bodies are OPEN). Needed: the 24
    names, the state(s) that receive them, and behaviour entries, `rand_int` first.
+10. **`spec-save-format.md` §10.7 table and the §10.3/§12.6.1 statistic 163/164 cross-check** (bridge job
+   `20261001T015631-team-b-nnyi`, `validate_save_snapshot` after the gate/sample split; all format gates pass).
+   (a) Save-set drift: spec row 8 (lvl 49, cash 4,765,260, barn 3, items 525) is no longer present; snapshot #6
+   `LocalAppData/sr3save_00` (saved 2026-09-25) now has lvl 49, cash 4,642,350, barn 4, items 521 (3 of 10
+   columns differ). The 201,363 total non-zero bytes moves with it (now 201,281). Refresh §10.7 from the current
+   set if wanted. (b) Not drift: snapshot #3 `Documents/sr3save_04` (saved 2011-12-20) matches §10.7 row 4 exactly,
+   yet statistic 164 = 3 while the stunt-jump counter at 0x3F8 = 4 (statistic 163 = barnstorms = 2). The claim
+   "statistic 164 == 0x3F8 in all 16" fails on a save the table already counts. Please re-check which value §12.6.1
+   meant, or whether the two counters can legitimately differ.
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
