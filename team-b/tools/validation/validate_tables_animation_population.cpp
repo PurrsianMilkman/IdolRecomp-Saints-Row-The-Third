@@ -513,6 +513,38 @@ int main(int argc, char** argv) {
         std::printf("  anim_files.xtbl Voice_Lines: present in %lld rows, %lld of those carry a child "
                     "(spec 3.2/3.5 says this should be 0 in the base game)\n", rowsWithVoiceLines,
                     voiceLinesWithChildren);
+
+        // <Trigger> shape census (spec 3.1 direct text vs 3.2 Name child; OPEN,
+        // NEEDS-DATA). Raw tree, independent of the reader, plus the reader's
+        // own unread count.
+        long long trig = 0, withName = 0, withText = 0, both = 0, neither = 0, otherChildren = 0;
+        long long readerRead = 0, readerUnread = 0;
+        std::map<std::string, long long> childNames;
+        for (const Node* row : located.at("anim_files.xtbl").rows) {
+            for (const Node* t : sr3xtbl::Children(sr3xtbl::FindChild(row, "Triggers"), "Trigger")) {
+                ++trig;
+                bool name = sr3xtbl::FindChild(t, "Name") != nullptr;
+                const std::string* tx = t->text();
+                bool text = tx && tx->find_first_not_of(" \t\r\n") != std::string::npos;
+                for (const Node* c : t->children()) {
+                    ++childNames[c->name()];
+                    if (c->name() != "Name") ++otherChildren;
+                }
+                if (name && text) ++both;
+                else if (name) ++withName;
+                else if (text) ++withText;
+                else ++neither;
+            }
+            sr3tables_animation::AnimFile f = sr3tables_animation::ParseAnimFile(row);
+            readerRead += static_cast<long long>(f.triggerNames.size());
+            readerUnread += static_cast<long long>(f.triggerElementsUnread);
+        }
+        std::printf("  anim_files.xtbl Trigger shape (spec 3.1 text vs 3.2 Name child, OPEN): %lld elements: "
+                    "Name child only %lld, direct text only %lld, both %lld, neither %lld; other child "
+                    "elements %lld\n", trig, withName, withText, both, neither, otherChildren);
+        std::printf("    child element names:");
+        for (const auto& kv : childNames) std::printf(" %s x%lld", kv.first.c_str(), kv.second);
+        std::printf("\n    reader: %lld read (Name child), %lld counted unread\n", readerRead, readerUnread);
     }
     if (located.count("anim_ik_situation.xtbl")) {
         long long hardCoded = 0;
