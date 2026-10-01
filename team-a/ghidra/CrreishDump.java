@@ -19,6 +19,8 @@
 //                      per index, the value and the string it points to (if any). Read-only, like the rest.
 //   range <0xS-0xE ...> disassemble [S, E] in this session (not saved) and list every instruction with its
 //                      references; for code Ghidra never defined.
+//   calls <addr ...>   raw byte scan for CALL/JMP rel32, indirect [abs32] and plain dwords targeting each
+//                      address; finds callers inside code Ghidra never disassembled.
 //
 // Options (write them as key:value in bridge jobs; key=value is split apart by the Windows batch launcher):
 //   depth=N      callee recursion depth for dumps (default 1; 0 = only the named functions)
@@ -131,6 +133,7 @@ public class CrreishDump extends GhidraScript {
                     case "xref": doXref(item); break;
                     case "ptrs": doPtrs(item); break;
                     case "range": doRange(item); break;
+                    case "calls": doCalls(item); break;
                     default: index.println("unknown mode " + mode); return;
                 }
             } catch (Exception e) {
@@ -351,6 +354,47 @@ public class CrreishDump extends GhidraScript {
         describeGlobal(w, a, Integer.MAX_VALUE);
         w.close();
         index.println("  xref_" + sanitize(item) + ".txt");
+    }
+
+    // calls: raw byte scan of every initialized block for E8/E9 rel32 (CALL/JMP) and FF 15/FF 25 [abs32]
+    // whose target is the item address, plus any dword equal to it (pointer tables). Finds callers in code
+    // Ghidra never disassembled, which the reference manager cannot see.
+    private void doCalls(String item) throws Exception {
+        Address target = toAddr(item);
+        long t = target.getOffset();
+        PrintWriter w = writer("calls_" + sanitize(item) + ".txt");
+        w.println("@ " + target + " raw call/jmp/pointer scan");
+        int hits = 0;
+        for (MemoryBlock b : mem.getBlocks()) {
+            if (!b.isInitialized()) continue;
+            long size = b.getSize();
+            byte[] buf = new byte[(int) Math.min(size, Integer.MAX_VALUE)];
+            mem.getBytes(b.getStart(), buf);
+            long base = b.getStart().getOffset();
+            for (int i = 0; i + 4 < buf.length; i++) {
+                if (monitor.isCancelled()) throw new RuntimeException("cancelled");
+                int op = buf[i] & 0xff;
+                if ((op == 0xE8 || op == 0xE9) && i + 5 <= buf.length) {
+                    long rel = (buf[i + 1] & 0xffL) | (buf[i + 2] & 0xffL) << 8 | (buf[i + 3] & 0xffL) << 16 | ((long) buf[i + 4]) << 24;
+                    if (((base + i + 5 + rel) & 0xffffffffL) == t) {
+                        Address at = b.getStart().add(i);
+                        Function f = getFunctionContaining(at);
+                        w.println("  " + (op == 0xE8 ? "CALL" : "JMP ") + " rel32 at " + at + " block " + b.getName() + " in " + fname(f) + (listing.getInstructionAt(at) == null ? " (undefined code)" : ""));
+                        hits++;
+                    }
+                }
+                long dw = (buf[i] & 0xffL) | (buf[i + 1] & 0xffL) << 8 | (buf[i + 2] & 0xffL) << 16 | (buf[i + 3] & 0xffL) << 24;
+                if (dw == t) {
+                    Address at = b.getStart().add(i);
+                    String kind = (i >= 2 && (buf[i - 2] & 0xff) == 0xFF && ((buf[i - 1] & 0xff) == 0x15 || (buf[i - 1] & 0xff) == 0x25)) ? "indirect CALL/JMP [abs32]" : "dword";
+                    w.println("  " + kind + " at " + at + " block " + b.getName() + " in " + fname(getFunctionContaining(at)));
+                    hits++;
+                }
+            }
+        }
+        w.println("hits: " + hits);
+        w.close();
+        index.println("  calls_" + sanitize(item) + ".txt (" + hits + " hits)");
     }
 
     // range: item "0xSTART-0xEND". Disassembles from START in this read-only session (nothing is saved, as
