@@ -14,7 +14,14 @@ JOBS=${FUZZ_JOBS:-$(nproc)}
 run_one() {
     t=$1; name=${t#fuzz_}
     mkdir -p "$WORK/corpus/$name" "$WORK/artifacts/$name"
-    "$BUILD/$t" "$WORK/corpus/$name" -max_total_time="$SECS" -timeout=10 -rss_limit_mb=2048 \
+    # Per-target input cap. xtbl: the captured seeds run to 90 KB of XML and
+    # cost ~146 ms each under ASan/UBSan (5-10 ms in Release: the parser is
+    # linear, the sanitizers make big inputs slow), so a 10-minute run got
+    # only ~48k executions. Capping at 2 KB gives ~4,150 exec/s (31x) while
+    # keeping 623 of 641 coverage points.
+    extra=""
+    case "$name" in xtbl) extra="-max_len=2048" ;; esac
+    "$BUILD/$t" "$WORK/corpus/$name" -max_total_time="$SECS" -timeout=10 -rss_limit_mb=2048 $extra \
         -malloc_limit_mb=1024 -print_final_stats=1 -artifact_prefix="$WORK/artifacts/$name/" \
         > "$WORK/logs/$name.log" 2>&1
     rc=$?
