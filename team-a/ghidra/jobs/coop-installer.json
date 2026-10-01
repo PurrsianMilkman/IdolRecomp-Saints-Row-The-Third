@@ -1,0 +1,14 @@
+{
+ "team": "team-a",
+ "title": "Team A: co-op session installer — disassemble the undefined region 0x0087ba70-0x0087c390 (needs CrreishDump range mode, pending review); callers of session init/shutdown",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/range", "range", "0x0087ba70-0x0087c390", "0x00717240-0x0071738f", "0x005fb3e0-0x005fb420", "0x005fbdb0-0x005fbdf0", "0x005fc1e0-0x005fc220"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/callers", "xref", "xrefs:120", "0x008675c0", "0x008676f0", "0x007178c0", "0x00b9ae60"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:20", "maxinsn:1500", "0x008675c0", "0x008676f0", "0x007178c0", "0x00b9ae60", "0x00717020"]}
+ ],
+ "collect": ["**/*.txt"]
+}
