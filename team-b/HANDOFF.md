@@ -248,6 +248,16 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   C++ frame: refusals thrown as C++ exceptions, `fade_out`'s indexing under its own `lua_pcall`, `lua_error`
   only from a frame with no C++ state). Re-run submitted as job 02c `20260930T235551-team-b-tkjl`; the
   grso→after diff waits on it.
+- **02c `20260930T235551-team-b-tkjl`** (at `88cbe87`, the heap-corruption fix): **OK**, exit 0, 270 s; jklk
+  crashed at `a403a75` on the same input, so the fix holds on MSVC. `bridge_diff` grso → tkjl (the effect of
+  removing every invented engine value): still **9/49** past `_start`, but **no mission hits the watchdog any
+  more** (`fade_is_fully_faded_out` 30,833,183 calls → 0; `thread_yield` −30.8M). Each mission now stops on a
+  NAMED OPEN engine value instead of looping: 36 on the co-op session (`0x0087ba20`, §3.1), 10 (incl. the 9
+  that pass `_start`) on the tutorial-table lookup (`0x00717780`, §10.4). `m03`'s top-level code calls
+  `coop_is_active`, so `m03_start` is never defined (start_existed 49 → 48). UI top-level pcall 736 → 725/737.
+  OPEN-state refusals, whole run: co-op session 876, vehicle-store active 565, tutorial table 173,
+  named-object resolution 138, character max HP 120, character ignore-AI 120, Wwise ids 6, key bindings 5,
+  co-op join type 1. **This ranking is the list of engine values the next specs should give.**
 - **06 `20260930T231306-team-b-epre`** (CTAB census, for Team A's render-pipeline re-derivation): 38 archives,
   844 `.fxo_pc`, **7,276 blobs** (= §9.98), 7,276 CTAB well-formed, 0 malformed, 0 disassembly failures;
   3,731 VS / 3,545 PS; 52,990 constants (float4 43,501, sampler 9,359, bool 130). **Every** VS constant
