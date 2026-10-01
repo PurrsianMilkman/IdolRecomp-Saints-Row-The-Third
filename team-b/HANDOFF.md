@@ -416,6 +416,27 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    "statistic 164 == 0x3F8 in all 16" fails on a save the table already counts. Please re-check which value §12.6.1
    meant, or whether the two counters can legitimately differ.
 
+11. **Spec text issues found while implementing the 2026-10-01 batch** (`spec-lua-api-behaviour.md` §26.24–§26.28, §4.1;
+   `spec-lua-bindings.md` §13.2/§16). Implementation followed the CONFIRMED text in each case and refuses as OPEN where two
+   readings disagree.
+   - §26.28 "What single-player startup leaves it as" still says "runs the installer 0x0087efe0"; later text calls
+     0x0087efe0 the shutdown and 0x0087c340 the installer.
+   - §26.28 review status still lists the tutorial name list (kyoi) as OPEN, though the list is in the section.
+   - §26.28 tutorial entries 189–209 = state 1: the fill values are CONFIRMED but when the fill runs is OPEN (before it
+     every entry is 0). Implemented as 1 at start, commented; `tutorial_advance` is false either way.
+   - §26.28 "three writers, now CONFIRMED" for the vehicle-store flag: only `store_vehicle_change_mode` is a Lua native
+     and its argument shape is not given; the other two triggers are OPEN.
+   - §26.24 "reset all four fade stamps" does not name them; implemented as 0x012e6aac/ab0/ab4/ab8.
+   - §26.27: the shared paragraph says every numeric wrapper narrows each argument to float, but the `rand_int` and
+     `thread_check_done` entries describe plain `lua_tonumber` + 0x00ea2596. Implemented only where both readings agree
+     (so `rand_int(x, 2147483647)` refuses).
+   - bindings §13.2 (after the roster table) still says the math-named bodies are OPEN and 0x00fccb70 is HYPOTHESIS;
+     §26.27/§16.1 settle both.
+   - `include`: bindings §16.4 calls the queue CONFIRMED; §26.27 still lists the `include` re-read as OPEN.
+   - Needed: do mission hooks (`<stem>_start` etc.) run inside a script-thread record? §16.2/§26.23 suggest the engine
+     runs hooks through the same allocator/runner as `thread_new`. Today the host calls hooks outside any thread, so
+     `thread_new` from a hook raises (the engine reads a null current thread there).
+
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
 **The user asked both teams to pause (relayed via `purrsian-44`). No new agent dispatching, no new work,
