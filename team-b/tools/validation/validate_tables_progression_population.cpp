@@ -432,7 +432,7 @@ int main(int argc, char** argv) {
         std::printf("=== notoriety_spawn.xtbl ===\n");
         Document doc = ParseDocument(it->data.data(), it->data.size());
         std::vector<sr3tables_progression::NotorietySpawnRow> rows = sr3tables_progression::ParseNotorietySpawnTable(doc);
-        std::printf("  rows (children literally named 'Table', spec 6.3's HIGH-CONFIDENCE shape): %zu / expected 24\n", rows.size());
+        std::printf("  rows (children literally named 'Table', spec 6.3, confirmed on real data per S14.6): %zu (spec 6.3 lists 24 names; S14.6 reports 25 real rows)\n", rows.size());
         long long matched = 0;
         for (auto& r : rows) {
             bool found = false;
@@ -442,6 +442,58 @@ int main(int argc, char** argv) {
             else std::printf("      unmatched row Name: \"%s\"\n", r.name.c_str());
         }
         std::printf("    row Name matches one of the 24 static group names: %lld / %zu\n", matched, rows.size());
+
+        // Records via spec S14.6's nested shape (one wrapper per kind whose
+        // same-named children are the records; S6.3's flat tree is struck).
+        // S14.6 states totals of 80 level_info / 254 group_info / 263
+        // group_details across 25 groups, but the spec's own desk review marks
+        // the 80 as OPEN (conflicts with "22/25 groups cover levels 2-5") - so
+        // these are REPORTED, not gated.
+        long long totLi = 0, totGi = 0, totGd = 0, rowsWithLi = 0;
+        std::printf("    per-row records via the S14.6 nested reader (level_info / group_info / group_details):\n");
+        for (auto& r : rows) {
+            std::printf("      %-22s %zu / %zu / %zu", r.name.c_str(), r.levelInfos.size(), r.groupInfos.size(), r.groupDetails.size());
+            if (!r.levelInfos.empty())
+                std::printf("   levels %d..%d", r.levelInfos.front().level.value, r.levelInfos.back().level.value);
+            std::printf("\n");
+            totLi += static_cast<long long>(r.levelInfos.size());
+            totGi += static_cast<long long>(r.groupInfos.size());
+            totGd += static_cast<long long>(r.groupDetails.size());
+            if (!r.levelInfos.empty()) ++rowsWithLi;
+        }
+        std::printf("    TOTAL records via S14.6 nesting: level_info %lld, group_info %lld, group_details %lld (spec S14.6 text: 80 / 254 / 263; the 80 is OPEN per the spec's desk review)\n",
+                    totLi, totGi, totGd);
+        GATE(rows.empty() || rowsWithLi == static_cast<long long>(rows.size()),
+             "every notoriety_spawn row yields >= 1 level_info record via the S14.6 nested reader: %lld / %zu", rowsWithLi, rows.size());
+
+        // Shape audit on the raw tree: for each kind, how many rows carry a
+        // wrapper with >= 1 same-named child (S14.6 shape) vs. a wrapper with
+        // NO same-named child (would be the struck S6.3 flat shape or empty).
+        // Also: leaf elements inside inner records that the reader does not name.
+        std::vector<const Node*> rowNodes = rowsNamed(doc, "Table");
+        const char* kinds[3] = {"level_info", "group_info", "group_details"};
+        const std::set<std::string> knownLeaves[3] = {
+            {"level", "min_spawn_time", "max_spawn_time", "veh_min_spawn_time", "veh_max_spawn_time",
+             "max_vehicle_occupants", "max_vehicles", "npc_cap", "specialist_cap", "brute_cap"},
+            {"level", "chance", "tag_name", "vehicle_name", "variant_name"},
+            {"tag_name", "seat_name", "npc_name", "melee_brute_seat", "weapons_brute_seat", "rollerbladers_seat", "outside_seat"},
+        };
+        for (int k = 0; k < 3; ++k) {
+            long long withWrap = 0, nested = 0, notNested = 0, multiWrap = 0;
+            std::vector<const Node*> inner;
+            for (const Node* row : rowNodes) {
+                const Node* w = FindChild(row, kinds[k]);
+                if (!w) continue;
+                ++withWrap;
+                if (sr3xtbl::NextSibling(row, w, kinds[k])) ++multiWrap;
+                const Node* c = FindChild(w, kinds[k]);
+                if (c) ++nested; else ++notNested;
+                for (; c; c = sr3xtbl::NextSibling(w, c, kinds[k])) inner.push_back(c);
+            }
+            std::printf("    shape: %s wrapper present in %lld / %zu rows; nested (S14.6) %lld, NOT nested %lld; rows with a 2nd same-named wrapper (unread) %lld\n",
+                        kinds[k], withWrap, rowNodes.size(), nested, notNested, multiWrap);
+            reportUnknownChildren(kinds[k], inner, knownLeaves[k]);
+        }
     } else {
         std::printf("notoriety_spawn.xtbl: NOT FOUND in the given archives - no population data (spec 6.4: no DLC/save sample exists either).\n");
     }

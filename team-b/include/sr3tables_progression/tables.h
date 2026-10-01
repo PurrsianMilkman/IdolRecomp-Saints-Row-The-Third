@@ -9,7 +9,7 @@
 //   tables_core.h   - stats.xtbl (S2), achievements.xtbl (S3), unlockables.xtbl
 //                      / patch_unlockables.xtbl / *_unlockables.xtbl (S4)
 //   tables_world.h  - respect_levels.xtbl (S5), notoriety.xtbl (S6.1),
-//                      notoriety_levels.xtbl (S6.2), notoriety_spawn.xtbl (S6.3),
+//                      notoriety_levels.xtbl (S6.2), notoriety_spawn.xtbl (S6.3, tree per S14.6),
 //                      difficulty_levels.xtbl (S7), cheats.xtbl (S8),
 //                      collectibles.xtbl (S9)
 //   tables_rules.h  - store_discounts.xtbl, gameplay_constants.xtbl,

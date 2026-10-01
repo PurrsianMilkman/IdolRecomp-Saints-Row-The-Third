@@ -480,7 +480,7 @@ NotorietyLevelsTable ParseNotorietyLevelsTable(const Document& doc) {
 }
 
 // ===========================================================================
-// notoriety_spawn.xtbl - spec-tables-progression.md S6.3
+// notoriety_spawn.xtbl - spec-tables-progression.md S6.3 (element tree corrected by S14.6)
 // ===========================================================================
 
 const char* const kNotorietySpawnGroupNames[24] = {
@@ -491,10 +491,25 @@ const char* const kNotorietySpawnGroupNames[24] = {
     "whored_two", "survival_bikers", "survival_mascots", "survival_bums",
 };
 
+// spec-tables-progression.md S6.3's flat element tree is STRUCK ("SUPERSEDED by
+// S14.6 ... do not implement from the block below"). S14.6's structural
+// correction is labelled "[CONFIRMED - empirical, from-scratch stack trace of
+// the raw file around several rows.]": level_info, group_info and group_details
+// are each ONE wrapper child of the row whose own children carry the same tag
+// name and are the records:
+//   <level_info><level_info>...</level_info><level_info>...</level_info></level_info>
+// (likewise for the other two). Leaf names/types are unchanged from S6.3 (its
+// corrected tree: "leaf names, types and conversions unchanged"). Only the
+// FIRST wrapper of each name is read (the corrected tree says "ONE wrapper");
+// record-shaped elements sitting directly under the row (the struck flat
+// shape) are NOT records any more. S6.3's own review status is NEEDS-EXE for
+// the 24-vs-25 loop bound only, which this per-row reader does not depend on.
 NotorietySpawnRow ParseNotorietySpawnRow(const Node* row) {
     NotorietySpawnRow r;
     if (const std::string* n = ChildText(row, "Name")) r.name = *n;
-    for (const Node* li = FindChild(row, "level_info"); li; li = NextSibling(row, li, "level_info")) {
+    const Node* liWrap = FindChild(row, "level_info");
+    for (const Node* li = liWrap ? FindChild(liWrap, "level_info") : nullptr; li;
+         li = NextSibling(liWrap, li, "level_info")) {
         SpawnLevelInfo l;
         l.level = ReadInt32Always(li, "level");
         l.minSpawnTime = ReadInt32Always(li, "min_spawn_time");
@@ -508,7 +523,9 @@ NotorietySpawnRow ParseNotorietySpawnRow(const Node* row) {
         l.bruteCap = ReadInt32Always(li, "brute_cap");
         r.levelInfos.push_back(l);
     }
-    for (const Node* gi = FindChild(row, "group_info"); gi; gi = NextSibling(row, gi, "group_info")) {
+    const Node* giWrap = FindChild(row, "group_info");
+    for (const Node* gi = giWrap ? FindChild(giWrap, "group_info") : nullptr; gi;
+         gi = NextSibling(giWrap, gi, "group_info")) {
         SpawnGroupInfo g;
         g.level = ReadInt32Always(gi, "level");
         g.chance = ReadFloatAlways(gi, "chance");
@@ -517,7 +534,9 @@ NotorietySpawnRow ParseNotorietySpawnRow(const Node* row) {
         g.variantName = OptText(gi, "variant_name");
         r.groupInfos.push_back(g);
     }
-    for (const Node* gd = FindChild(row, "group_details"); gd; gd = NextSibling(row, gd, "group_details")) {
+    const Node* gdWrap = FindChild(row, "group_details");
+    for (const Node* gd = gdWrap ? FindChild(gdWrap, "group_details") : nullptr; gd;
+         gd = NextSibling(gdWrap, gd, "group_details")) {
         SpawnGroupDetail d;
         d.tagName = OptText(gd, "tag_name");
         d.seatName = OptText(gd, "seat_name");
