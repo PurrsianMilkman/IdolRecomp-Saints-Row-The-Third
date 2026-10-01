@@ -127,6 +127,17 @@ def main(argv):
         bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True)
         check(bad.returncode != 0, "unknown option rejected")
 
+        # --host-rng (HYPOTHESIS / host substitute): off unless explicitly given.
+        rng1 = read_kv(os.path.join(out1, "verdict_summary.txt")).get("host_rng_option", "")
+        check(rng1.startswith("off (default"), f"host_rng_option off by default: {rng1}")
+        out5 = os.path.join(tmp, "run5")
+        run_host(host, reglist, cache, out5, "--host-rng=7")
+        rng5 = read_kv(os.path.join(out5, "verdict_summary.txt")).get("host_rng_option", "")
+        check(rng5.startswith("on seed=7 (HYPOTHESIS"), f"host_rng_option with --host-rng=7: {rng5}")
+        badseed = subprocess.run([host, cache, reglist, os.path.join(tmp, "run6"), "--host-rng=abc"],
+                                 capture_output=True, text=True)
+        check(badseed.returncode != 0, "bad --host-rng seed rejected")
+
     print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))
     return 1 if failures else 0
 

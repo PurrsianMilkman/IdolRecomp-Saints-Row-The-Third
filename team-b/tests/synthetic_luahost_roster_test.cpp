@@ -9,12 +9,13 @@
 //    records one cluster per name (gameplay) - the host adds the UI side.
 //  * §13.2/§16.3: the 24 bare globals of the 0x00e0f900 registrar are not
 //    in the 1,490 list and not stock Lua 5.1 either (bare max/floor/abs,
-//    rand_int, rand_float, round, debug_print are called by scripts). Their
-//    exact roster is pending a Team A job, so they are deliberately NOT
-//    registered; this test pins that they stay nil until specced.
+//    rand_int, rand_float, round, debug_print are called by scripts). The
+//    roster is CONFIRMED since 2026-10-01 (Sec13.2/Sec16.4): all 24 are
+//    registered into BOTH states, and only base + coroutine are opened.
 #include <iostream>
 #include <string>
 
+#include "sr3luahost/bare_globals.h"
 #include "sr3luahost/host.h"
 
 using namespace sr3luahost;
@@ -82,10 +83,21 @@ int main() {
         CHECK(typeOf(L, "_VERSION") == "string");
     }
 
-    for (const char* n : {"rand_int", "rand_float", "round", "debug_print", "max", "floor", "abs"}) {
-        CHECK(typeOf(gp, n) == "nil");
-        CHECK(typeOf(ui, n) == "nil");
+    // The 24 bare globals of 0x00e0f900 (Sec13.2/Sec16.4, CONFIRMED
+    // 2026-10-01): functions in BOTH states, none in the tagged list, and the
+    // spec bodies rather than generic stubs (a generic stub returns nothing).
+    CHECK(bareGlobalRoster().size() == 24);
+    for (const auto& e : bareGlobalRoster()) {
+        CHECK(typeOf(gp, e.name) == "function");
+        CHECK(typeOf(ui, e.name) == "function");
+        for (const auto& n : names) CHECK(n.name != e.name);
     }
+    for (lua_State* L : {gp, ui}) {
+        CHECK(typeOf(L, "max(1, 2, 3)") == "number");
+        CHECK(typeOf(L, "strstr('abc', 'b')") == "boolean");
+        CHECK(typeOf(L, "rand_int(1, 1)") == "number");
+    }
+    CHECK(host.bareGlobalCount() == 48);
 
     if (g_failures == 0) {
         std::cout << "ALL sr3luahost ROSTER TESTS PASSED\n";

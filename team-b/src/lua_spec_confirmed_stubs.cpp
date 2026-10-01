@@ -1,5 +1,7 @@
 #include "sr3luahost/spec_confirmed_stubs.h"
 
+#include "sr3luahost/bare_globals.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -946,9 +948,16 @@ void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::strin
 } // namespace
 
 const std::vector<SpecBareGlobal>& specBareGlobals() {
-    static const std::vector<SpecBareGlobal> rows = {
-        // OPEN - awaiting Team A (answer order 2: the 24 bare globals, rand_int first).
-    };
+    // The 24 bare globals of 0x00e0f900, in roster order, into BOTH states
+    // (spec-lua-bindings.md Sec13.2/Sec16.4 "Which state", CONFIRMED -
+    // disassembly, job 20261001T020218-team-a-bgcx). Bodies:
+    // lua_bare_globals.cpp (spec-lua-api-behaviour.md Sec26.27).
+    static const std::vector<SpecBareGlobal> rows = [] {
+        std::vector<SpecBareGlobal> out;
+        for (const auto& e : bareGlobalRoster())
+            out.push_back({e.name, true, true, "spec-lua-bindings.md Sec13.2/Sec16.4; spec-lua-api-behaviour.md Sec26.27"});
+        return out;
+    }();
     return rows;
 }
 
@@ -997,7 +1006,17 @@ const std::vector<std::string>& specConfirmedStubNames() {
         // Item-3 scaffolding (2026-09-30): Sec26.9, `ui` (tagged list line 1251).
         "sfx_faded_out",
     };
-    return names;
+    // The 24 bare globals (specBareGlobals(), lua_bare_globals.cpp) are spec
+    // functions too, so tools and tests that walk this list (the refusal
+    // stress test) cover them; Host registers them through
+    // registerBareGlobals(), never as generic stubs, and
+    // registerSpecConfirmedStubs() leaves them alone.
+    static const std::vector<std::string> all = [] {
+        std::vector<std::string> out = names;
+        for (const auto& e : bareGlobalRoster()) out.push_back(e.name);
+        return out;
+    }();
+    return all;
 }
 
 void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,

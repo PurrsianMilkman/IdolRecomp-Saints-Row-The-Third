@@ -352,50 +352,29 @@ int main() {
         CHECK(after.loadOk && after.pcallOk);
     }
 
-    // --- thread_* scheduler: real Lua 5.1 coroutine primitives, minimal
-    // documented scope (thread_scheduler.h). -----------------------------
+    // --- thread_* (2026-10-01): thread_new/thread_yield/thread_kill/
+    // thread_check_done are now bare globals of 0x00e0f900 with the
+    // CONFIRMED Sec26.27 behaviour (bare_globals.h; full tests in
+    // tests/synthetic_luahost_bare_globals_test.cpp). thread_close stays the
+    // ThreadScheduler scaffold's (not in the engine roster; OPEN). ---------
     {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
-
-        // thread_new returns a real Lua number (matches real game_lib.lua
-        // call-site usage: `type(threads) == "number"`, grepped directly).
         auto r1 = host.runChunk(L,
-            "H = thread_new('some_engine_routine', 'arg1')\n"
-            "assert(type(H) == 'number')",
+            "thread_close(5)\n"                         // scaffold no-op
+            "assert(select('#', thread_kill(65535)) == 0)\n" // no thread: nothing happens, no result
+            "assert(thread_check_done(1) == true)",      // no such record -> done
             "thread1.lua");
         CHECK(r1.loadOk && r1.pcallOk);
-
-        // thread_check_done: this pass's own minimal thread_new() never
-        // attaches a body and nothing ever resumes it, so by the real Lua
-        // 5.1 status/stack/top idiom this reads as done immediately - see
-        // ThreadScheduler::isDone()'s own doc comment.
-        auto r2 = host.runChunk(L, "assert(thread_check_done(H) == true)", "thread2.lua");
-        CHECK(r2.loadOk && r2.pcallOk);
-
-        // thread_kill/thread_close: real calls, no error, idempotent, and
-        // silently no-op on an unknown handle.
-        auto r3 = host.runChunk(L,
-            "thread_kill(H)\n"
-            "thread_close(H)\n"        // identical op (see header note) - must not error when called again
-            "thread_kill(99999999)",   // unknown handle - silent no-op, must not error
-            "thread3.lua");
-        CHECK(r3.loadOk && r3.pcallOk);
-
-        // thread_yield: real no-op on the main thread (no active
-        // coroutine) - must not error or hang.
+        // thread_yield outside any coroutine: stock Lua's yield error (Sec26.27,
+        // HIGH CONFIDENCE), no longer the scaffold's silent no-op.
         auto r4 = host.runChunk(L, "thread_yield()", "thread4.lua");
-        CHECK(r4.loadOk && r4.pcallOk);
-
-        // All 5 thread_* calls above must fold into the SAME HitLog
-        // ranking every other generic stub uses (host.h/stub_registry.h).
-        CHECK(host.hitLog().hits().count("thread_new") == 1);
-        CHECK(host.hitLog().hits().count("thread_check_done") == 1);
-        CHECK(host.hitLog().hits().count("thread_kill") == 1);
-        CHECK(host.hitLog().hits().count("thread_close") == 1);
-        CHECK(host.hitLog().hits().count("thread_yield") == 1);
-        CHECK(host.hitLog().hits().at("thread_kill").callCount == 2); // thread_kill(H) + thread_kill(99999999)
+        CHECK(r4.loadOk && !r4.pcallOk);
+        CHECK(r4.pcallError.find("attempt to yield across metamethod/C-call boundary") != std::string::npos);
+        // All of them fold into the same HitLog ranking.
+        for (const char* n : {"thread_close", "thread_kill", "thread_check_done", "thread_yield"})
+            CHECK(host.hitLog().hits().count(n) == 1);
     }
 
     // --- confirmedHooks(): the real 138-entry static table (133 original
@@ -1306,15 +1285,16 @@ int main() {
             if (r.global.find("0x00723d20") != std::string::npos) CHECK(!r.known && r.knownKeys == 1);
             if (r.global == "0x014c848c") CHECK(!r.known && r.knownKeys == 2);
         }
-        // Bare-global table (Sec13.2): empty until Team A names the 24 globals.
-        // Each row must be a spec-confirmed stub registered into at least one state.
+        // Bare-global table (Sec13.2/Sec16.4, answered 2026-10-01): all 24
+        // names, each into BOTH states, each also a spec-confirmed name.
         for (const auto& bg : sr3luahost::specBareGlobals()) {
             CHECK(bg.gameplay || bg.ui);
             const auto& n = sr3luahost::specConfirmedStubNames();
             CHECK(std::find(n.begin(), n.end(), bg.name) != n.end());
             CHECK(bg.spec.rfind("spec-", 0) == 0);
         }
-        CHECK(sr3luahost::specBareGlobals().empty()); // flip when the first answer lands
+        CHECK(sr3luahost::specBareGlobals().size() == 24);
+        for (const auto& bg : sr3luahost::specBareGlobals()) CHECK(bg.gameplay && bg.ui);
         // Host applies the same initial state: the stubs still refuse on OPEN slots.
         sr3luahost::Host h({});
         CHECK(!h.engineState().vehicleStoreActive().known());
