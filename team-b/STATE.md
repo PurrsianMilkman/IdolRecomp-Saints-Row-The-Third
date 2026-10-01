@@ -14,6 +14,24 @@ files elsewhere).
 ## Binary/container format readers (`include/sr3*` domain libraries, excluding the xtbl-table-group
 libraries below and the render-side libraries, which get their own tables)
 
+## Post-review real-data baseline (2026-10-01, at `f890b52`)
+
+Every population validator run once on the PC after the spec reviews: the single baseline to diff future changes
+against. Per-tool counts: `team-b/results/baseline_2026-10-01.md` (aggregate counts only); full stdout on the bus.
+
+| Job | Group | Tools | Result |
+|---|---|---|---|
+| `20261001T010351-team-b-mlvi` | tables + typed readers | 13 | 12 exit 0 (gates pass); `validate_vehicleinfo_population` 2 stale gates failed: Mass 120/123 and 2/210 raw speeds over 100 mph are the spec's own full-data figures (§7.11), gates now match them |
+| `20261001T010355-team-b-axix` | geometry, mesh, vehicle, morph | 10 | all exit 0 |
+| `20261001T010357-team-b-npkp` | world, zone, tree, foliage, asm, cutscene | 11 | all exit 0 |
+| `20261001T010400-team-b-inji` | animation, rig, skinning | 11 | all exit 0 (4,209 clips) |
+| `20261001T010402-team-b-meqi` | effects, shaders (incl. Windows HLSL translators, CTAB census) | 7 | all exit 0 |
+| `20261001T010405-team-b-dpix` | containers, textures, audio, vint_doc | 5 | all exit 0 |
+| `20261001T010408-team-b-zsqd` | lua_host_run + 4 Lua censuses | 5 | all exit 0 |
+
+Excluded on purpose: save/profile tools (owner's saves hold player-authored data), one-off probes/dumps, GPU
+render tools, 3 tools needing uncommitted input lists (`team-b/bridge-jobs/README.md`).
+
 | Format | Status | Real-data validation | HANDOFF |
 |---|---|---|---|
 | `.vpp_pc`/`.str2_pc` container | Complete | after the container-offset fix every entry decodes: mode (a) 4,272/4,272 (was 9) + mode (b) 385,168/385,168 = **389,440** entries; the 76 PEG c-files and 847 `.fxo_pc_dx11` that were unreachable are inside those totals (the old "76+847+…" added subsets) | §9.78 |
