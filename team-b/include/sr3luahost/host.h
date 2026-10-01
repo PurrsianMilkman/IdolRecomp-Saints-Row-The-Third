@@ -32,9 +32,9 @@ namespace sr3luahost {
 class Host {
 public:
     // Splits `allNames` by its own cluster tag ("gameplay" vs "ui") and
-    // builds two fresh Lua 5.1 states (luaL_newstate + luaL_openlibs - the
-    // real standard library, unmodified, matching spec Sec1's own "genuine
-    // unmodified Lua 5.1 interpreter" finding), registering each half's
+    // builds two fresh Lua 5.1 states (luaL_newstate + the stock base library
+    // and `coroutine` table only - spec-lua-bindings.md Sec16.1 step 3 /
+    // Sec16.4: no math/string/table/io/os/debug/package), registering each half's
     // stubs into its matching state via registerStubs(). Any cluster tag
     // other than the two the file is documented to use is treated as
     // "gameplay" (a deliberately narrow fallback - the file is pre-verified

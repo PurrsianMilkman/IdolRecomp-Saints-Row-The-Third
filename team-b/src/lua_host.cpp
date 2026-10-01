@@ -2,11 +2,36 @@
 
 namespace sr3luahost {
 
+namespace {
+
+// Stock-library opening, spec-lua-bindings.md Sec16.1 creator step 3 /
+// Sec16.4 and spec-lua-api-behaviour.md Sec26.27 (CONFIRMED - disassembly,
+// jobs 20261001T021641-team-a-yduu and 20261001T114555-team-a-lgdz): the
+// engine's state creator opens the base library and the `coroutine` table
+// and NO other stock library - no math, string, table, io, os, debug or
+// package in either state. Stock Lua 5.1's luaopen_base
+// (third_party/lua51/src/lbaselib.c) installs the base functions, _G,
+// _VERSION, ipairs/pairs and newproxy and then registers `coroutine`
+// itself, so it is the whole opener. Run through lua_cpcall, as stock
+// linit.c does, so a failure is a status code, never an error crossing the
+// constructor's C++ frame.
+// OPEN (spec-lua-bindings.md Sec13.1): the engine's base table at
+// 0x01293410 has 23 entries against stock 5.1's 24; which stock entry is
+// missing is not specced, so the stock set is kept.
+int openEngineStockLibs(lua_State* L) {
+    lua_pushcfunction(L, luaopen_base);
+    lua_pushstring(L, "");
+    lua_call(L, 1, 0);
+    return 0;
+}
+
+} // namespace
+
 Host::Host(const std::vector<RegisteredName>& allNames) {
     gameplay_ = luaL_newstate();
     ui_ = luaL_newstate();
-    luaL_openlibs(gameplay_); // real Lua 5.1 stdlib (base/string/table/math/io/os/debug/package)
-    luaL_openlibs(ui_);
+    lua_cpcall(gameplay_, openEngineStockLibs, nullptr);
+    lua_cpcall(ui_, openEngineStockLibs, nullptr);
 
     // thread_new/thread_yield/thread_kill/thread_check_done/thread_close -
     // real, extensively-called globals confirmed absent from BOTH the

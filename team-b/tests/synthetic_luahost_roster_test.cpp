@@ -67,6 +67,21 @@ int main() {
         CHECK(typeOf(ui, n) == "function");
     }
 
+    // Stock libraries (spec-lua-bindings.md Sec16.1 creator step 3 / Sec16.4,
+    // spec-lua-api-behaviour.md Sec26.27): the base library and `coroutine`
+    // only, in both states.
+    for (lua_State* L : {gp, ui}) {
+        for (const char* lib : {"math", "string", "table", "io", "os", "debug", "package"})
+            CHECK(typeOf(L, lib) == "nil");
+        CHECK(typeOf(L, "require") == "nil" && typeOf(L, "module") == "nil");
+        CHECK(typeOf(L, "coroutine") == "table");
+        CHECK(typeOf(L, "coroutine.resume") == "function" && typeOf(L, "coroutine.yield") == "function");
+        for (const char* base : {"pcall", "pairs", "ipairs", "setmetatable", "getfenv", "setfenv", "tostring",
+                                 "rawget", "newproxy", "_G"})
+            CHECK(typeOf(L, base) != "nil");
+        CHECK(typeOf(L, "_VERSION") == "string");
+    }
+
     for (const char* n : {"rand_int", "rand_float", "round", "debug_print", "max", "floor", "abs"}) {
         CHECK(typeOf(gp, n) == "nil");
         CHECK(typeOf(ui, n) == "nil");

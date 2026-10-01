@@ -51,6 +51,16 @@ using sr3luahost::RegisteredName;
 using sr3luahost::loadTaggedRegistrationList;
 using sr3luahost::registerStubs;
 
+// A string global's value ("" when absent or not a string) - used where a test
+// would otherwise need the `string` library, which host states do not have.
+std::string globalString(lua_State* L, const char* name) {
+    lua_getglobal(L, name);
+    const char* v = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : nullptr;
+    std::string out = v ? v : "";
+    lua_pop(L, 1);
+    return out;
+}
+
 // One real (name, cluster) row per one of the 22 names spec_confirmed_stubs.cpp
 // implements, mirroring the exact tags this project's own
 // tools/lua_all_registered_1490_tagged.txt carries (grepped directly, not
@@ -1164,14 +1174,20 @@ int main() {
             // (long) scene name, keep their exact message (jklk regression).
             {
                 auto r = host.runChunk(gp,
+                    // No `string` library in a host state (spec-lua-bindings.md
+                    // Sec16.4): every message must equal the first, whose prefix
+                    // is checked from C++ below.
                     "for i = 1, 200 do\n"
                     "  local ok, m = pcall(zscene_is_loaded, 'a_scene_name_well_past_the_small_string_buffer')\n"
-                    "  assert(not ok and string.find(m, '^zscene_is_loaded: engine state '))\n"
+                    "  assert(not ok and type(m) == 'string')\n"
+                    "  GUARD_MSG = GUARD_MSG or m\n"
+                    "  assert(m == GUARD_MSG)\n"
                     "  ok = pcall(fade_out, 1, 5)\n"
                     "  assert(not ok)\n"
                     "end", "guard_loop.lua");
                 CHECK(r.loadOk && r.pcallOk);
                 if (!r.pcallOk) std::cerr << r.pcallError << "\n";
+                CHECK(globalString(gp, "GUARD_MSG").rfind("zscene_is_loaded: engine state ", 0) == 0);
             }
 
             // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
@@ -1207,8 +1223,10 @@ int main() {
             // Repeated through openGuard with the exact message (jklk regression).
             auto rl = host.runChunk(ui,
                 "for i = 1, 200 do local ok, m = pcall(sfx_faded_out)\n"
-                "  assert(not ok and string.find(m, '^sfx_faded_out: engine state ')) end", "sfo_loop.lua");
+                "  assert(not ok and type(m) == 'string'); SFO_MSG = SFO_MSG or m\n"
+                "  assert(m == SFO_MSG) end", "sfo_loop.lua");
             CHECK(rl.loadOk && rl.pcallOk);
+            CHECK(globalString(ui, "SFO_MSG").rfind("sfx_faded_out: engine state ", 0) == 0);
             es.fadeState().g012e6aa4.set(3);
             auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
             CHECK(r1.loadOk && r1.pcallOk);
