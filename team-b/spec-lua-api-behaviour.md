@@ -1042,7 +1042,9 @@ these hold:
 2. either the local machine is the host — session `+0x5c` equals session `+0x58`, the same pair §8.27
    and §10.2 test, and it is the *first* test in the body — or a client-side gate passes: (session
    `+0xf4` ≥ 2, or session `+0x224` ≠ 0, or session `+0xf4` ≠ session `+0xf8`) and the byte at session
-   `+0xfd` is 0;
+   `+0xfd` is 0; **[2026-10-01, job `20261001T114716-team-a-fvfp`: this client-side gate is exactly "the session is not idle
+   (the idle test `0x0059fbe0` is false) and is not flagged for destruction (byte `+0xfd` clear)", §26.28.
+   CONFIRMED — disassembly: its three terms are the negation of `0x0059fbe0`'s three terms.]**
 3. the member count at session `+0x60` (read through `0x00681370`) is **at least 2** — the comparison is
    unsigned, so a count of 0 or 1 fails;
 4. every member other than the local one passes the per-member slot check `0x00877a90`. The walk
@@ -1066,7 +1068,7 @@ disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: head/tail field offsets not given, so the §6.22/§8.27 host-pair reconciliation cannot be checked (accessor wording fixed) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the four-condition body, host test first on `+0x5c`/`+0x58`, the member count at `+0x60` must be ≥ 2, the walk from `+0x54` skipping `+0x5c`, the slot check, no session → false. HIGH CONFIDENCE — field meanings (head, local/host member records, count). OPEN — the meaning of the client-side gate fields `+0xf4`/`+0xf8`/`+0xfd`/`+0x224`.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the four-condition body, host test first on `+0x5c`/`+0x58`, the member count at `+0x60` must be ≥ 2, the walk from `+0x54` skipping `+0x5c`, the slot check, no session → false. HIGH CONFIDENCE — field meanings (head, local/host member records, count). OPEN — the meaning of the client-side gate fields `+0xf4`/`+0xf8`/`+0xfd`/`+0x224`. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `+0xf4`/`+0xf8` are the current/target connection state, `+0x224` a pending transition object, `+0xfd` a destroy-on-shutdown byte; the gate is "not idle and not flagged for destruction".**
 
 ### 3.2 `on_death` (`0x00a57c80`) — 386 calls / 37 scripts
 
@@ -2221,7 +2223,7 @@ a file-backed table of 210 string pointers at `0x012f5930`, searched by `0x00717
 | offset | content | label |
 |---|---|---|
 | `+0x00` / `+0x04` | next / previous links in a circular doubly-linked list of queued simple prompts (head global `0x0151d588`) | CONFIRMED |
-| `+0x08` | pointer to the entry's descriptor record; written only by `0x00715850`, which also sets the state to 0 or 1 | CONFIRMED |
+| `+0x08` | pointer to the entry's descriptor record; written only by `0x00715850`, which also sets the state to 0 or 1 **[2026-10-01, job `20261001T114716-team-a-fvfp`: the table is filled by `0x007178c0` through 210 calls to `0x00715850`; `0x007178c0` also writes the 7-id table `0x0152145c`; entries 189–209 start in state 1, entries 0–188 in state 0]** | CONFIRMED |
 | `+0x0c` | per-entry **state**, 0–4 (not a kind) | CONFIRMED |
 | `+0x10` | not touched by the dumped code | OPEN |
 | `+0x14` | argument 2 (the number) | CONFIRMED |
@@ -2271,7 +2273,7 @@ step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
 5, 6 and 7 are OPEN as marked.]** The "repeated `0xbc` split" above is the boundary between 188
 (`0xbc`) and the range from 189 (`0xbd`) up, which skips the suppression byte and the state gate.
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — table base `0x0151d600`, 36-byte stride, 210 entries, zero at load; `+0x08` descriptor pointer; `+0x0c` state 0–4 with states 0/1/2/4 from their writers; the descriptor `+0x24` bit tests; the 12-step order; host-only `0x54` replication. HIGH CONFIDENCE — the names of bits `0x04`/`0x08`/`0x10`. HYPOTHESIS — state 3 = waiting for the player. OPEN — what state 3 means and who sets it; the globals in steps 2, 5, 6, 7; where `0x00715850` gets the descriptors.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — table base `0x0151d600`, 36-byte stride, 210 entries, zero at load; `+0x08` descriptor pointer; `+0x0c` state 0–4 with states 0/1/2/4 from their writers; the descriptor `+0x24` bit tests; the 12-step order; host-only `0x54` replication. HIGH CONFIDENCE — the names of bits `0x04`/`0x08`/`0x10`. HYPOTHESIS — state 3 = waiting for the player. OPEN — what state 3 means and who sets it; the globals in steps 2, 5, 6, 7; where `0x00715850` gets the descriptors. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the fill is `0x007178c0` → `0x00715850` (40-byte descriptors copied to `0x0151f388`); entries 189–209 start in state 1. HIGH CONFIDENCE — the descriptors are compiled-in constants. OPEN — when `0x007178c0` runs; state 3 (see §10.4).**
 
 ### 6.20 `mission_end_to_activity` (`0x00a53890`)
 
@@ -3799,9 +3801,14 @@ session object (global `0x024d8534` zero) it pushes false. `+0x58` and `+0x5c` a
 `+0x5c` the local member, `+0x58` the host member — HIGH CONFIDENCE from §3.1's member walk. The
 parenthetical above about §3.1's "head/tail member-list pointers" is superseded: §3.1 uses the list
 head `+0x54` and count `+0x60`, and tests this same pair first. Whether a single-player game has a
-session at all is OPEN (§26.28).]**
+session at all is OPEN (§26.28).]** **[2026-10-01, job `20261001T114716-team-a-fvfp`: the function dksj took for the session
+installer (`0x0087efe0`) stores zero and is the subsystem shutdown; no resolved code stores a non-null
+session pointer (the installer is undefined code at `0x0087c341`/`0x0087c359`). Whether single player has a
+session, and so whether this function is true in single player, remains OPEN; implement false. Teardown
+(`0x0087e670`) zeroes `+0x5c` before the singleton is cleared, so during a session's wind-down this
+function is false. CONFIRMED — disassembly.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28).**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `0x0087efe0` is the shutdown, not an installer; false during a session's wind-down. Still OPEN — the installer (undefined code at `0x0087c341`/`0x0087c359`); implement false.**
 
 ### 8.28 Cross-function observations
 
@@ -4786,8 +4793,18 @@ literal `return 1;`.
 exact IEEE-754 double bit pattern for `1.0`. **The global's own writer was traced and is a genuine,
 confirmed getter/setter pair, not a guess:** `0x022cdf08` has ~~exactly one writer function~~
 **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: three writer functions, not one — `0x00815120` (below),
-`0x005fa820` (writes 1) and `0x00820cd0` (writes 0); the conditions of the last two are OPEN, they were
-not dumped]** a Lua-reachable writer,
+`0x005fa820` (writes 1) and `0x00820cd0` (writes 0); ~~the conditions of the last two are OPEN, they were
+not dumped~~ [2026-10-01, job `20261001T114716-team-a-fvfp`: both read. `0x005fa820` is the handle-driven store entry — given a
+live object of the store-location class, it finishes any interaction left in store state 3, fills the
+store-target block (`0x014a1dc0`..`0x014a1dcc`, with the vehicle handle reset to null), clears and
+replicates the player's last-vehicle handle (opcode `0x46`), sets the flag to 1 unconditionally, runs the
+store UI call `0x0080cc90` on `0x022cde10`, and sets store state `0x014a1ce4` to 4. `0x00820cd0` is the
+vehicle-driven store exit — it requires the player's current vehicle to be the store's vehicle
+(`0x014a1dc8/cc`) at the current store location (`0x014a1dc4`) and `0x005fbae0` to accept it, records the
+location and vehicle (`0x022cf8d4`, `0x022cf8dc`, `0x022cf948/4c`), runs the post-store cleanup
+`0x00820480` and the same UI call, and sets the flag to 0 only if that UI call succeeds. CONFIRMED —
+disassembly. Their game-level triggers are OPEN: `0x005fa820` is called from `0x0080e2f0` and two undefined
+sites (`0x005fb406`, `0x005fbdd5`); `0x00820cd0` from one undefined site (`0x005fc207`).]]** a Lua-reachable writer,
 `0x00815120` — itself one of this same UI wrapper's own 8 registered sibling functions (registered
 name `store_vehicle_change_mode`, read directly off `.rdata`, not part of this tranche). That
 function sets the flag to `0` when transitioning to mode `0` (a close/exit path that also runs
@@ -4809,10 +4826,12 @@ disassembly.]** `store_vehicle_change_mode` (`0x00815120`) returns at once, with
 flag already equals the requested mode number — so mode 1 while the flag is 1 does nothing, but mode 2
 while the flag is 1 runs. On the close path (mode 0) it also sets the store sub-state global
 `0x022cdf0c` to 8; on an open whose `0x005fa760` check fails it sets that sub-state to 10 and leaves the
-flag unchanged. **[CONFIRMED — disassembly.]** The other two writers may set the flag from paths that
-do not start in Lua (for example, entering or leaving a store) **[HYPOTHESIS]**.
+flag unchanged. **[CONFIRMED — disassembly.]** ~~The other two writers may set the flag from paths that
+do not start in Lua (for example, entering or leaving a store) **[HYPOTHESIS]**.~~ **[2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+The other two writers are the non-Lua entry and exit paths described above; whether their callers are
+Lua-reachable is OPEN (one defined caller, `0x0080e2f0`, not yet read).
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — when `0x005fa820` and `0x00820cd0` run.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — ~~when `0x005fa820` and `0x00820cd0` run~~. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the bodies and preconditions of `0x005fa820` and `0x00820cd0`. OPEN — their callers (`0x0080e2f0`; undefined code at `0x005fb406`, `0x005fbdd5`, `0x005fc207`).**
 
 ### 10.2 `Completion_is_client` (`0x007bfbc0`) — 589 runtime calls
 
@@ -4876,8 +4895,11 @@ against it) to equal the literal `3` — ~~a per-entry kind/type tag not shared 
 **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: this is not a kind; it is the entry's run-time **state** (0–4,
 §6.19), zero at load, and `tutorial_advance` is true only while the entry is in state 3]** — before
 doing anything; entries failing either the bounds check or this ~~tag~~ state check make `tutorial_advance`
-return `false` with no other effect. On a fresh process every entry is in state 0, so it returns
-false for every name until something puts an entry into state 3 (§26.28). **[CONFIRMED —
+return `false` with no other effect. ~~On a fresh process every entry is in state 0, so it returns
+false for every name until something puts an entry into state 3 (§26.28).~~ **[2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+On a fresh process every entry is in state 0; after the registration routine `0x007178c0` fills the table,
+entries 0–188 are in state 0 and entries 189–209 in state 1; either way no entry is in state 3, so it
+returns false for every name until something writes 3 (§26.28). **[CONFIRMED —
 disassembly.]** The entry's state is not changed by `tutorial_advance`. **[CONFIRMED — disassembly.]** On success, the function opens what reads as a named
 event/profiling scope **[refined 2026-10-01, job `20261001T020213-team-a-dksj`: it builds a named message through the
 UI-context helpers (`0x00e1a1b0`, `0x00e0ca80` → `0x00e0c720`) and dispatches it with `0x00e0cd00`, which
@@ -4903,7 +4925,7 @@ no separate display-dispatch call (unlike `tutorial_start`'s own `0x00715bf0`/`0
 reached anywhere in this body.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the OPEN item is narrowed to
 HYPOTHESIS — a named UI message — until `0x00e0c720` is read.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — what state 3 means and who sets it (§6.19).**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — ~~what state 3 means and who sets it (§6.19)~~ what state 3 means and who sets it. Narrowed by job `20261001T114716-team-a-fvfp`: no defined function writes the literal 3; the generic setter `0x007163e0` reaches only entries 189–195 (through the 7-id table `0x0152145c`) with values supplied by its single caller `0x00b9ae60`; for entries 0–188 the only candidate is the undefined code before the function tail at `0x00717363` (which stores a register value and then arms a timer), inside the undefined region `0x00717240`–`0x0071738f` that is probably the rest of `0x00717020`. HYPOTHESIS — 3 = displayed and waiting for the player.**
 
 ### 10.5 `minimap_icon_add_do` (`0x00a53f90`) — 42 runtime calls
 
@@ -10387,9 +10409,18 @@ hold at startup for the three pieces of engine state behind `coop_is_active` (§
 in a `.data` block that is not file-backed, so it is zero at load, and its accessor `0x0087ba20` is a
 plain load with no side effects. **[CONFIRMED — disassembly.]** With no session, `coop_is_active`,
 `game_get_is_host` and `Completion_is_client` all return false. **[CONFIRMED — disassembly.]**
-Of the references the disassembler resolved, one function can install a session (`0x0087efe0`) and two
+~~Of the references the disassembler resolved, one function can install a session (`0x0087efe0`) and two
 clear it (`0x0087d8a0`, `0x0087ed70`) **[CONFIRMED — disassembly for the reference set]**; two more
-references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further writers **[OPEN]**.
+references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further writers **[OPEN]**.~~
+**[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`: `0x0087efe0` is not an installer.]** All three resolved writer
+functions store **zero**: `0x0087d8a0` is the session subsystem's initialiser (it builds a two-slot pool of
+0x2d0-byte session objects and clears the singleton), `0x0087ed70` destroys one session (it waits for the
+session to go idle, then clears the singleton if it pointed at that session), and `0x0087efe0` is the
+subsystem shutdown (it destroys every pooled session, flushes the deferred-callback queue headed at
+`0x024e4d80`, clears the singleton and frees the pool). **[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]** No
+resolved code installs a session. The only other references, at `0x0087c341`/`0x0087c359`, are in code
+the disassembler never defined and are, by elimination, where a session pointer is stored **[HIGH
+CONFIDENCE — by elimination; OPEN until that code is disassembled]**.
 `coop_is_active` also stays false whenever a session has fewer than 2 members (member count at session
 `+0x60`, §3.1). **[CONFIRMED — disassembly.]**
 
@@ -10399,18 +10430,34 @@ references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further
 | host (`+0x5c` = `+0x58`) | true only with ≥ 2 members, all other members passing the slot check | true | false |
 | client (`+0x5c` ≠ `+0x58`) | true only if the client gate passes and the same member rule holds | false | true |
 
+**[Added 2026-10-01, job `20261001T114716-team-a-fvfp`.]** A session's connection state is the pair `+0xf4` (current) / `+0xf8`
+(target) plus a pending transition object at `+0x224`; `0x0059fbe0` reports the session *idle* when
+`+0xf4` < 2, `+0x224` is null and `+0xf4` == `+0xf8`; teardown zeroes both state words and the local member
+pointer `+0x5c`. The engine holds at most two session objects at once (pool at `0x024d8544`, capacity 2).
+**[CONFIRMED — disassembly, job `20261001T114716-team-a-fvfp`.]**
+
 **What single-player startup leaves it as: OPEN.** The executable starts at 0, but whether starting a
 single-player game runs the installer `0x0087efe0` and creates a one-member session (the local player
 as its only member and host) cannot be read from these dumps. This decides `game_get_is_host`: false
 with no session, true with a one-member host session. `coop_is_active` is false and
 `Completion_is_client` is false in both cases. **HYPOTHESIS (do not implement):** single player keeps
-a one-member host session. Follow-up job `20261001T114716-team-a-fvfp` dumps the installer
-`0x0087efe0`. Until it lands, a host should start with no session.
+a one-member host session. ~~Follow-up job `20261001T114716-team-a-fvfp` dumps the installer
+`0x0087efe0`. Until it lands, a host should start with no session.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`:]**
+the job showed that `0x0087efe0` is the shutdown, not the installer; the installer is in undefined code at
+`0x0087c341`/`0x0087c359`, so whether a single-player start creates a one-member host session cannot be
+read yet. The HYPOTHESIS above (single player keeps a one-member host session) stays a hypothesis. A host
+starts with no session: `game_get_is_host` false, `coop_is_active` false, `Completion_is_client` false.
 
-**Tutorial table.** The 210-entry table at `0x0151d600` (36-byte entries, §6.19) is zero at load, so
+**Tutorial table.** ~~The 210-entry table at `0x0151d600` (36-byte entries, §6.19) is zero at load, so
 every entry starts in state 0 and `tutorial_advance` returns false on a fresh process for every name.
 **[CONFIRMED — disassembly.]** The entries' descriptor pointers (`+0x08`) are filled by `0x00715850`;
-when that runs is OPEN.
+when that runs is OPEN.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`.]** The 210-entry table at `0x0151d600`
+(36-byte entries, §6.19) is zero at load. It is filled in one pass by the registration routine
+`0x007178c0`, which calls `0x00715850` once per entry (210 straight-line call sites); each call copies a
+40-byte descriptor into a run-time descriptor array at `0x0151f388`, points the entry's `+0x08` at it, and
+sets the state to 0 for entries 0–188 and to **1** for entries 189–209. **[CONFIRMED — disassembly and
+xref, job `20261001T114716-team-a-fvfp`.]** So after the fill, entries 189–209 are already armed; no entry is in state 3, so
+`tutorial_advance` returns false for every name on a fresh process. When `0x007178c0` runs is OPEN.
 
 **Tutorial names.** The name list comes from the static, file-backed pointer table `0x012f5930` (210
 pointers to strings, searched case-insensitively by `0x00717780`, −1 on a miss). **[CONFIRMED —
@@ -10495,7 +10542,7 @@ job `20261001T114802-team-a-kyoi` and will be added here when it lands.**~~ **Fu
 `0.0` at startup and stays 0 until `store_vehicle_change_mode` opens a store or one of the other two
 writers runs (§10.1). **[CONFIRMED — disassembly.]**
 
-**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`); the full tutorial name list (job `20261001T114802-team-a-kyoi`); the two undefined references at `0x0087c341`/`0x0087c359`.**
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — ~~whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`)~~ whether single-player startup installs a session (the installer is undefined code at `0x0087c341`; needs a range-disassembly dump); the full tutorial name list (job `20261001T114802-team-a-kyoi`); ~~the two undefined references at `0x0087c341`/`0x0087c359`~~ (merged into the item above). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the three resolved singleton writers all clear it; the session pool holds two 0x2d0-byte objects; tutorial table filled by `0x007178c0`, entries 189–209 start in state 1. HIGH CONFIDENCE (by elimination) — the installer is the undefined code at `0x0087c341`/`0x0087c359`.**
 
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
@@ -11138,3 +11185,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26.27 (the 24 bare globals of `0x00e0f900`: roster, both-states registration, `rand_int`/`rand_float`/`round`/`debug_print`/`assert_msg` behaviour, the shared 8192-entry random ring; seeding and the 18 undumped bodies OPEN, follow-up job `bgcx-followup.json`). Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020213-team-a-dksj`): §3.1 — replaced the head/tail description with the confirmed body (host test on `+0x5c`/`+0x58` first, list head `+0x54`, member count `+0x60` must be ≥ 2, slot check `0x00877a90`); §8.27/§10.2 confirmed, no session → false; §10.1 — three writers of `0x022cdf08`, not one, initial value 0; §6.19/§10.4 — table base `0x0151d600`, `+0x08` is a descriptor pointer, `+0x0c` is a per-entry state 0–4 rather than a kind, descriptor `+0x24` bits, the dispatcher order, `tutorial_advance` true only in state 3; annotated the same table references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
 - 2026-10-01 (cloud, bridge job `20261001T114802-team-a-kyoi`): §26.28 — the 210-entry tutorial name table from the static pointer table `0x012f5930` (209 names resolved; index 176's string at `0x01124348` not resolved by the dump, OPEN).
+- 2026-10-01 (cloud, bridge job `20261001T114716-team-a-fvfp`): §26.28 — corrected the co-op session writers: `0x0087efe0` is the subsystem shutdown and stores zero (not the installer), `0x0087d8a0` is init, `0x0087ed70` destroys one session; no resolved code installs a session, so the installer is, by elimination, the undefined code at `0x0087c341`/`0x0087c359` (HIGH CONFIDENCE; OPEN until read); single player stays "no session, all three queries false"; added the idle predicate `0x0059fbe0` and the two-slot pool; tutorial table filled by `0x007178c0` → `0x00715850` with entries 189–209 starting in state 1. §3.1 — client-side gate = "not idle and not flagged for destruction". §6.19 — fill routine and starting states. §8.27 — shutdown correction; false during wind-down. §10.1 — bodies of the store-flag writers `0x005fa820` (entry, sets 1) and `0x00820cd0` (exit, sets 0 only when the UI call succeeds); callers OPEN. §10.4 — starting states after the fill; state-3 writer narrowed (`0x007163e0` reaches only entries 189–195; tail at `0x00717363`), meaning still OPEN.
