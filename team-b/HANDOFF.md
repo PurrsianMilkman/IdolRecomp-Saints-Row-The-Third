@@ -275,6 +275,24 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   §3.1's string table is contradicted by the data. See Requests to Team A, item 7. Job 03b re-runs with
   the raw u32 at `0x1E` recorded per file.
 
+### 2026-10-01, cloud stretch 5d: long fuzz campaign, Lua-as-C++ evaluation
+
+- **Long fuzz campaign** (16 targets × 600 s, plus the 4 deepened harnesses, Clang 18 libFuzzer with
+  ASan/UBSan, `FUZZ_JOBS=3`): **0 findings**, ~194M executions in total. Per target: anim 37.2M (cov 118),
+  asm 7.3M (257), clmesh 23.0M (363), d3d9bc 0.47M (2,131), fxo 15.6M (300), geometry 11.7M (148), lua
+  (sr3lua parser) 3.0M (853), mesh 13.8M (463), rig 17.9M (163), save 1.2M (370), texture 11.8M (241),
+  vintdoc 12.9M (185), vpp 3.0M (575), xtbl 47,742 (641; slow harness, the weakest coverage), zonegeom
+  2.4M (443), zoneheader 14.9M (138); deep_anim/fxo/geometry/texture 9.5M/4.2M/3.8M/4.4M.
+- **Lua 5.1 compiled as C++** (manager's question after jklk; measured in a scratch tree, NOT adopted):
+  `luaconf.h` switches `LUAI_THROW`/`LUAI_TRY` to `throw`/`try-catch(...)` under `__cplusplus`, so a Lua error
+  unwinds C++ frames with their destructors (the jklk class becomes correct code, not UB). The change is
+  two lines of CMake (compile the 29 `.c` as CXX) plus dropping the `extern "C"` wrapper in `lua_c_api.h`;
+  no Lua source edits. All 47 ctest suites pass. Timing (Release, 3 runs each): resume/yield 5M 0.39 → 0.32
+  s (−18%); pcall without error, 5M, 0.26 → 0.26 s; pcall with error, 1M, 0.6 → 3.0 s (+2.4 µs per
+  error); refusal stress 3,000 rounds 2.4 → 4.2 s. On the real mission run (284M yields, ~13k errors) that is
+  a net saving of seconds. Recommendation to the manager: adopt it AND keep the no-Lua-error-across-a-C++-frame
+  rule plus the stress test. Waiting on the manager's call.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
