@@ -214,6 +214,17 @@ provenance note, and unlabelled ones are now marked HYPOTHESIS: §20.12.12 (`Tin
 §23.6, §23.6.1 and §23.11 (render-target formats). The light-shader register numbers in §23.6/§23.6.1 were
 independently re-derived by Team B's CTAB census, so they do not depend on the capture.
 
+**Restorations (2026-10-01).** Team B's CTAB census (bridge job `20260930T231306-team-b-epre`: 38 archives,
+844 `.fxo_pc`, 7,276 blobs, 3,731 VS) re-derives part of the render-pipeline §20.12.5 and §20.12.9 claims from a
+clean source:
+- **Register assignment and counts.** Every VS constant at c28 is `projTM` ×4 (3,398 VS) and every VS constant
+  at c48 is `IR_World2View` ×3 (2,203 VS). This part is restored to CONFIRMED (empirical), citing the job.
+- **Still HYPOTHESIS:**
+  - the fused view-projection versus pure-view semantics, and the prototype upload advice;
+  - the `objTM`@c32 ×2,357 figure.
+
+  These still need the VS bytecode or the executable.
+
 ## Desk adversarial review of the Lua and format specs (2026-09-30, evening)
 
 The manager asked for a second pass after the consistency review. Every unit in the two Lua specs, and in
