@@ -359,6 +359,11 @@ public class CrreishDump extends GhidraScript {
     private void doRange(String item) throws Exception {
         String[] se = item.split("-", 2);
         Address start = toAddr(se[0]), end = toAddr(se[1]);
+        long span = end.subtract(start);
+        if (span < 0 || span > 0x10000) {
+            index.println("  range refused: " + item + " spans " + span + " bytes (limit 0x10000; END must not precede START)");
+            return;
+        }
         PrintWriter w = writer("range_" + sanitize(item) + ".txt");
         w.println("@ " + start + " - " + end + " block " + blockName(start));
         Address a = start;
