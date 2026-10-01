@@ -158,6 +158,33 @@ void testAudioConstants() {
     CHECK(ac.has_value());
     CHECK(ac->playTimerBrassCollision.present && ac->playTimerBrassCollision.value == 200.0f);
     CHECK(ac->playTimerLargeDeformation.value == 1000.0f);
+    // spec 3 (count corrected 11 -> 12 by desk review 2026-09-30): ALL 12 PlayTimers values are read, each
+    // distinguishable. Distinct values 101..112 in spec order prove no slot is dropped or shifted.
+    {
+        Document pt = P(R"(<root><Table><AudioConstants><PlayTimers>
+          <BrassCollision>101</BrassCollision><GlassShatter>102</GlassShatter><BulletImpactHuman>103</BulletImpactHuman>
+          <BulletImpactWall>104</BulletImpactWall><ObjectDebris>105</ObjectDebris><VehicleImpactCollision>106</VehicleImpactCollision>
+          <VehicleImpactDistance>107</VehicleImpactDistance><VehicleScrapeCollision>108</VehicleScrapeCollision>
+          <VehicleScrapeDistance>109</VehicleScrapeDistance><RagdollBoneImpactCollision>110</RagdollBoneImpactCollision>
+          <SmallDeformation>111</SmallDeformation><LargeDeformation>112</LargeDeformation>
+        </PlayTimers></AudioConstants></Table></root>)");
+        std::optional<AudioConstants> p = ParseAudioConstants(pt);
+        CHECK(p.has_value());
+        const Always<float>* slots[12] = {
+            &p->playTimerBrassCollision,           &p->playTimerGlassShatter,
+            &p->playTimerBulletImpactHuman,        &p->playTimerBulletImpactWall,
+            &p->playTimerObjectDebris,             &p->playTimerVehicleImpactCollision,
+            &p->playTimerVehicleImpactDistance,    &p->playTimerVehicleScrapeCollision,
+            &p->playTimerVehicleScrapeDistance,    &p->playTimerRagdollBoneImpactCollision,
+            &p->playTimerSmallDeformation,         &p->playTimerLargeDeformation,
+        };
+        int presentCount = 0;
+        for (int i = 0; i < 12; ++i) {
+            if (slots[i]->present) ++presentCount;
+            CHECK(slots[i]->value == static_cast<float>(101 + i));
+        }
+        CHECK(presentCount == 12);
+    }
     CHECK(ac->playTimerVehicleImpactDistance.value == 12.0f);
     CHECK(near(ac->PlayTimerVehicleImpactDistanceSquared(), 144.0f, 1e-3f));  // spec 3: squared in place
     CHECK(near(ac->PlayTimerVehicleScrapeDistanceSquared(), 16.0f, 1e-3f));

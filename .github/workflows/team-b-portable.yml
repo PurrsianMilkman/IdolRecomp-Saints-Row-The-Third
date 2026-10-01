@@ -2,8 +2,7 @@
 # synthetic test suite under team-b/, built with GCC on Linux (the D3D11
 # renderer and sr3_viewer stay behind if(WIN32) in team-b/CMakeLists.txt, so
 # Linux skips them), plus an MSVC Release build of the whole tree on Windows.
-# The tests use synthetic inputs only - no game data. (Under bash on Windows a
-# crash's exit status is truncated to 8 bits, e.g. 0xC0000374 -> 0x74.)
+# The tests use synthetic inputs only - no game data.
 name: team-b portable build
 
 on:
@@ -73,24 +72,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Swap in a403a75's library sources
+      - name: Swap in a403a75's library sources (and its C-language Lua build)
+        # Lua has been built as C++ since 2010a95; jklk ran with Lua built as C
+        # (longjmp), so the Lua build file is taken from a403a75 as well.
         shell: bash
-        run: git checkout a403a75 -- team-b/src team-b/include
+        run: git checkout a403a75 -- team-b/src team-b/include team-b/third_party/lua51/CMakeLists.txt
       - name: Configure
         run: cmake -S team-b -B build -A x64
       - name: Build the stress test
         run: cmake --build build --config Release --target sr3luahost_refusal_stress_tests
       - name: Run it
-        shell: bash
+        # PowerShell keeps the full 32-bit exit code (a heap corruption is
+        # 0xC0000374); a missing executable fails this step instead of being
+        # misread as a crash.
+        shell: pwsh
         run: |
-          set +e
-          ./build/Release/sr3luahost_refusal_stress_tests.exe 300
-          code=$?
-          if [ $code -eq 0 ]; then
-            echo "jklk repro: NOT REPRODUCED (exit 0)"
-          else
-            printf 'jklk repro: REPRODUCED (exit %d = 0x%X)\n' $code $code
-          fi
+          $exe = Get-ChildItem -Path build -Recurse -Filter sr3luahost_refusal_stress_tests.exe | Select-Object -First 1
+          if (-not $exe) { Write-Error "stress test executable not found under build/"; exit 1 }
+          Write-Host "running $($exe.FullName)"
+          & $exe.FullName 300
+          $code = $LASTEXITCODE
+          $hex = '0x{0:X8}' -f $code
+          if ($code -eq 0) { Write-Host "jklk repro: NOT REPRODUCED (exit 0)" }
+          else { Write-Host "jklk repro: REPRODUCED (exit $code = $hex)" }
           exit 0
 
   fuzz-smoke:

@@ -576,6 +576,9 @@ int main() {
             // No OS key-name source off Windows: OPEN, not an invented "".
             refusesOpen(ui, "game_get_key_name(0x1E)", "GetKeyNameTextW");
 #endif
+            // Out-of-int32-range / NaN key codes: truncation unspecified -> OPEN (was UB).
+            refusesOpen(ui, "game_get_key_name(1e300)", "key code truncation");
+            refusesOpen(ui, "game_get_key_name(0/0)", "key code truncation");
         }
 
         // 3. game_UI_audio_play (Sec2.2): a handle is ALWAYS returned,
@@ -1128,6 +1131,14 @@ int main() {
             // lua_pcall, fix for bridge job jklk): __index metamethods are
             // honoured, and an error inside one is an ordinary Lua error.
             check("fade_out(1, setmetatable({}, {__index = function(t, k) return k * 10 end}), 0)", "fo8.lua");
+            // Out-of-range / non-finite numbers through the 0x00ea2596 conversion
+            // (fade_out's flags argument) are refused as OPEN, not cast (UB).
+            {
+                auto r = host.runChunk(gp, "fade_out(1, nil, 1e300)", "fo10.lua");
+                CHECK(r.loadOk && !r.pcallOk && r.pcallError.find("0x00ea2596") != std::string::npos);
+                auto r2 = host.runChunk(gp, "fade_out(1, nil, 0/0)", "fo11.lua");
+                CHECK(r2.loadOk && !r2.pcallOk && r2.pcallError.find("0x00ea2596") != std::string::npos);
+            }
             CHECK(es.screenFadeColour().r == 10.0f / 255.0f && es.screenFadeColour().b == 30.0f / 255.0f);
             {
                 auto r = host.runChunk(gp, "fade_out(1, setmetatable({}, {__index = function() error('boom') end}), 0)", "fo9.lua");

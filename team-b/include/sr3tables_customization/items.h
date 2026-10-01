@@ -46,6 +46,8 @@
 //     spec-customization-data.md). Not modelled here since THIS spec's text
 //     never confirms it - may simply be a gap in this pass's decompile
 //     rather than a real absence.
+//     LABEL: spec-tables-customization.md §4.2 marks this [OPEN - desk review 2026-09-30] (conflict with
+//     spec-customization-data.md §2.1/§5.2, which documents Female_Mesh_Filename > Filename).
 //  2. Shader_Type: §4.3's own sentence structure ("Material_List >
 //     Material_Element[] (each: Material name ... ; Shader_Type, plus a
 //     hardcoded ...)") reads Shader_Type as a PER-Material_Element field.
@@ -53,6 +55,8 @@
 //     VARIANT level. This header follows §4.3's literal text (per
 //     MaterialElementEntry, not per VariantEntry) - a documented judgement
 //     call, not a certainty either way.
+//     LABEL: spec-tables-customization.md §4.3 marks the Shader_Type parent [OPEN - desk review 2026-09-30]
+//     (spec-customization-data.md §2.1 lists it at variant level).
 //  3. Default_Colors_Grid: §4.4 describes this ONLY at the ITEM level
 //     ("per-item preset colour slots"); a Variant's own Material_List is
 //     described as supplying a colour-SLOT COUNT used to clamp the item's
@@ -248,6 +252,9 @@ CustomizationItemEntry ParseCustomizationItem(const Node* row);
 // this reader does not reproduce the cap as an error, only as a stopping
 // point, matching how sr3tables_environment treats its own hard-capped
 // tables (e.g. lens_flares.xtbl, camera_shake.xtbl).
+// LABEL: spec-tables-customization.md §4.1 (and §5.2 for the store caps 255/73): the compare operator is
+// [OPEN - desk review 2026-09-30]; the `>= N` coding is our assumption (see LABEL comments in the .cpp). Only
+// the normals cap (materials.h, §9.2) can change a result on real data.
 std::vector<CustomizationItemEntry> ParseCustomizationItemsTable(const Document& doc);
 
 // ===========================================================================

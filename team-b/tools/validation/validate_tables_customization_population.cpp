@@ -185,7 +185,7 @@ const std::vector<TableCheck>& tableChecks() {
         {"items_color_pool.xtbl", {}, "Item_Color", 30, "spec 3.1 (#160)", true, Counter(ParseItemsColorPoolTable)},
         {"npc_color_palette.xtbl", {}, "Palette", 34, "spec 3.2 (#191)", true, Counter(ParseNpcColorPaletteTable)},
         // --- §4/§5 ---
-        {"customization_items.xtbl", {}, "Customization_Item", 574, "spec 21 (858-row cap, 67% full)", true,
+        {"customization_items.xtbl", {}, "Customization_Item", 574, "spec 21 (858-row cap [compare operator OPEN, spec 4.1], 67% full)", true,
          Counter(ParseCustomizationItemsTable)},
         {"customization_outfits.xtbl", {}, "Outfit", 70, "spec 5.1 (#102) - covered by sr3customization, not this library; raw count only", false, nullptr},
         {"customization_stores.xtbl", {}, "Store", 15, "spec 5.2 (#105)", true, Counter(ParseCustomizationStoresTable)},
@@ -205,8 +205,8 @@ const std::vector<TableCheck>& tableChecks() {
          Counter(ParseCustomizationDefaultItemsTable)},
         // --- §9 ---
         {"customization_materials.xtbl", {}, "Cust_Material", 7, "spec 9.1 (#100)", true, Counter(ParseCustomizationMaterialsTable)},
-        {"customization_normals.xtbl", {}, "Normals", 8, "spec 9.2 (#101) - AT the 8-row cap", true, Counter(ParseCustomizationNormalsTable)},
-        {"customization_compositing.xtbl", {}, "Composite_Layer", 374, "spec 9.3 (#95, 600-row cap)", true,
+        {"customization_normals.xtbl", {}, "Normals", 8, "spec 9.2 (#101) - AT the 8-row cap [compare operator OPEN, spec 9.2 / 21; the only cap that can change a real result]", true, Counter(ParseCustomizationNormalsTable)},
+        {"customization_compositing.xtbl", {}, "Composite_Layer", 374, "spec 9.3 (#95, 600-row cap [compare operator OPEN, spec 9.3])", true,
          Counter(ParseCustomizationCompositingTable)},
         // --- §10/§11 ---
         {"gang_customization.xtbl", {}, "GangCustomization", 1, "spec 10 (#141) - sentinel-gated singleton", true,
@@ -217,7 +217,7 @@ const std::vector<TableCheck>& tableChecks() {
         {"character_height.xtbl", {}, "Height_Class", 3, "spec 12.2 (#74)", true, Counter(ParseCharacterHeightTable)},
         {"character_customization_categories.xtbl", {}, "category", 16, "spec 13.1 (#72) - row locator only, no field schema", true,
          [](const Document& d) { return FindCharacterCustomizationCategoryRows(d).size(); }},
-        {"character_types.xtbl", {}, "Type", 96, "spec 13.2 (#75, 120-row cap)", true, Counter(ParseCharacterTypesTable)},
+        {"character_types.xtbl", {}, "Type", 96, "spec 13.2 (#75, 120-row cap [compare operator OPEN, spec 13.2])", true, Counter(ParseCharacterTypesTable)},
         {"character.xtbl", {}, "Character", 382, "spec 13.3 (#70) - row locator only, no field schema; SAME tag as character_definitions.xtbl but a separate file", true,
          [](const Document& d) { return FindCharacterRows(d).size(); }},
         // --- §14-17 player creation subsystem ---

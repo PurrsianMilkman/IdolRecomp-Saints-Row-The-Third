@@ -117,6 +117,20 @@ void testAnimFile() {
     CHECK(f1.triggerNames.empty() && f1.iks.empty() && f1.sounds.empty());
     CHECK(!f1.voiceLinesPresent && !f1.miscPresent);
     CHECK(f1.flags == 0);
+    CHECK(f0.triggerElements == 2 && f0.triggerElementsUnread == 0);
+    CHECK(f1.triggerElements == 0 && f1.triggerElementsUnread == 0);
+
+    // Trigger shape is OPEN (spec 3.1 direct text vs 3.2 Name child): a
+    // direct-text Trigger is not read as a name, but it is counted, never
+    // dropped silently.
+    Document d2 = P(R"(<root><Table><Files><Anim_files><Anim_file>
+        <Triggers><Trigger>text_shaped</Trigger><Trigger><Name>named</Name></Trigger><Trigger/></Triggers>
+      </Anim_file></Anim_files></Files></Table></root>)");
+    std::vector<AnimFile> rows2 = ParseAnimFilesTable(d2);
+    CHECK(rows2.size() == 1);
+    CHECK(rows2[0].triggerElements == 3);
+    CHECK(rows2[0].triggerNames.size() == 1 && rows2[0].triggerNames[0] == "named");
+    CHECK(rows2[0].triggerElementsUnread == 2);
 }
 
 // ===========================================================================

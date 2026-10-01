@@ -127,14 +127,25 @@ struct NotorietyLevelsTable {
 NotorietyLevelsTable ParseNotorietyLevelsTable(const Document& doc);
 
 // ===========================================================================
-// notoriety_spawn.xtbl - spec-tables-progression.md S6.3
+// notoriety_spawn.xtbl - spec-tables-progression.md S6.3, element tree
+// corrected by S14.6
 //
-// HIGH CONFIDENCE / no real or DLC sample exists for this table (spec 6.4:
-// "no DLC or save sample exists"); the row shape ("each spawn definition is
-// a child element literally called `Table`") is itself HIGH CONFIDENCE, not
-// CONFIRMED. This reader follows the spec's element tree as given but
-// carries the same confidence level - flagged here rather than silently
-// assumed solid.
+// Row shape: each spawn definition is a child of the outer <Table> literally
+// named `Table` (S6.3: "confirmed on real data, S14.6").
+// Record shape: S6.3's original flat tree (level_info / group_info /
+// group_details as repeated siblings of <Name>) is STRUCK - "SUPERSEDED by
+// S14.6 ... do not implement from the block below". S14.6's structural
+// correction, labelled [CONFIRMED - empirical, from-scratch stack trace of the
+// raw file around several rows.], is what this reader follows: each of the
+// three is ONE wrapper child of the row whose children of the SAME name are
+// the records, e.g.
+//   <level_info><level_info><level/>...</level_info>...</level_info>
+// Leaf element names and types are unchanged from S6.3. Records placed
+// directly under the row in the old flat shape are not read.
+// Still OPEN / not implemented: the 24-vs-25 row loop bound (S6.3 review
+// status NEEDS-EXE; real data has a 25th row `stag_speedboat`, S14.6), the
+// vehicle-resolution early return, and S14.6's per-group record totals
+// (S14 review status NEEDS-DATA).
 // ===========================================================================
 
 // The 24 static group names of spec 6.3 (table at 0x013080F8, row index =
@@ -142,7 +153,7 @@ NotorietyLevelsTable ParseNotorietyLevelsTable(const Document& doc);
 extern const char* const kNotorietySpawnGroupNames[24];
 constexpr size_t kNotorietySpawnGroupCount = 24;
 
-// spec 6.3 <level_info> (times are the raw XML seconds value; engine: x1000 -> ms, spec table).
+// spec 6.3 leaves of one inner <level_info> record (S14.6 nesting; times are the raw XML seconds value; engine: x1000 -> ms, spec table).
 struct SpawnLevelInfo {
     Always<int32_t> level;
     Always<int32_t> minSpawnTime;      // raw seconds; engine x1000 -> ms
@@ -156,7 +167,7 @@ struct SpawnLevelInfo {
     Always<int32_t> bruteCap;
 };
 
-// spec 6.3 <group_info>; consecutive rows sharing <level/> form that level's group list.
+// spec 6.3 leaves of one inner <group_info> record (S14.6 nesting); consecutive rows sharing <level/> form that level's group list.
 struct SpawnGroupInfo {
     Always<int32_t> level;
     Always<float> chance;
@@ -165,7 +176,7 @@ struct SpawnGroupInfo {
     std::optional<std::string> variantName;
 };
 
-// spec 6.3 <group_details>; consecutive rows sharing <tag_name/> form one group.
+// spec 6.3 leaves of one inner <group_details> record (S14.6 nesting); consecutive rows sharing <tag_name/> form one group.
 // `seatName` raw text: "Default | Driver | Passenger 1 .. Passenger 7" -> -1, 0, 1..7 (spec table); kept as text.
 struct SpawnGroupDetail {
     std::optional<std::string> tagName;
@@ -174,7 +185,7 @@ struct SpawnGroupDetail {
     bool meleeBruteSeat = false, weaponsBruteSeat = false, rollerbladersSeat = false, outsideSeat = false; // bools -> 4 flag bits
 };
 
-// spec-tables-progression.md S6.3. One row (a child literally named `Table`, per spec's HIGH CONFIDENCE reading).
+// spec-tables-progression.md S6.3/S14.6. One row (a child literally named `Table`, confirmed on real data per S14.6).
 struct NotorietySpawnRow {
     std::string name; // <Name>, matched case-sensitively against kNotorietySpawnGroupNames by the real loader
     std::vector<SpawnLevelInfo> levelInfos;
@@ -186,7 +197,10 @@ struct NotorietySpawnRow {
     bool attackHelicopter = false, forceNoRam = false, activeWithStag = false;
 };
 
-// Parses one row (a <Table> child of the outer <Table>, per spec 6.3's HIGH CONFIDENCE shape).
+// Parses one row (a <Table> child of the outer <Table>). levelInfos /
+// groupInfos / groupDetails are the same-named children of the row's FIRST
+// <level_info> / <group_info> / <group_details> wrapper (spec S14.6
+// structural correction, CONFIRMED - empirical; S6.3's flat tree is struck).
 NotorietySpawnRow ParseNotorietySpawnRow(const Node* row);
 
 // All row-shaped children literally named "Table" under the outer <Table> (spec 6.3).

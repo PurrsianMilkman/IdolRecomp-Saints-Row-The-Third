@@ -298,7 +298,52 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   s (−18%); pcall without error, 5M, 0.26 → 0.26 s; pcall with error, 1M, 0.6 → 3.0 s (+2.4 µs per
   error); refusal stress 3,000 rounds 2.4 → 4.2 s. On the real mission run (284M yields, ~13k errors) that is
   a net saving of seconds. Recommendation to the manager: adopt it AND keep the no-Lua-error-across-a-C++-frame
-  rule plus the stress test. Waiting on the manager's call.
+  rule plus the stress test. **Adopted** (manager ruling, `2010a95`): the `third_party/lua51` sources stay unmodified,
+  only the build language changed. Mission re-run `20261001T003228-team-b-ugaa` (at `d71c92c`) against `tkjl`
+  (`bridge_diff`): **identical** (no per-mission changes, 850,090,555 stub calls on both sides, same OPEN refusals);
+  the only new line is the opt-in's `preload_states_option=off`. Wall time 302.4 s vs 270.1 s (+12%), from one
+  run each on a shared PC, so not attributable to the language switch (the microbenchmark predicted a small saving).
+- **UB found by the stress test under Clang UBSan** (`d71c92c`): `game_get_key_name` and `roundToIntOpenMode`
+  cast out-of-range/NaN doubles to integers (UB); they now refuse them as OPEN (in-range behaviour unchanged).
+  Upstream Lua's own `lua_number2int` cast is exempted from float-cast-overflow for the `lua51` target only.
+- **CI:** fuzz-smoke had been red since the roster test (seed-capture builds lacked `CRREISH_TOOLS_DIR`), fixed in
+  `92022be`. New `msvc` (windows-latest) job: first green build, then `bridge_diff_py` failed on cp1252 stdout,
+  fixed in `6dd064d` (reproduced locally with `PYTHONIOENCODING=cp1252`). The `msvc-jklk-repro` job's first
+  "REPRODUCED (exit 127)" was bash's command-not-found, not a crash; the step now runs in PowerShell and prints
+  the full exit code.
+- **xtbl fuzz harness:** inputs capped at 2 KB in `run_fuzz.sh` (140,530 execs in 30 s, was 47,742 in 600 s).
+
+### 2026-10-01, cloud stretch 5e: table-spec batches (agents, verified) and their real-data checks
+
+- Table review items done by 3 agents in separate worktrees, each verified here (fresh Release + ASan builds,
+  ctest 47/47; the progression fix independently mutation-checked) and cherry-picked: progression
+  notoriety_spawn now reads §14.6's nested tree (CONFIRMED-empirical) instead of the struck §6.3 flat tree;
+  weapons aim_drift reports "Recovery empty - spec path suspect (NEEDS-EXE)"; customization/audio/ui/
+  environment/vehicle items labelled; PlayTimers already read 12 (test added); ui-controls validator gates
+  41/22. STATE weapons row: the 22nd table is a lightset consumer.
+- **Job 07 `20261001T003803-team-b-upsq`** (at `c2d60f5`): notoriety_spawn via §14.6 nesting gives **80 / 254 /
+  263** level_info / group_info / group_details records, exactly the spec's §14.6 text; 25/25 rows nested,
+  each yields ≥ 1 level_info, 0 unrecognised elements, all gates pass. aim_drift: Recovery-empty report on
+  **20/20** rows; MinTime/MaxTime 19/20 (spec §18.6); Penalties/Bonuses/lag_amount/lag_time/vertical_offset in
+  20/20 (spec §8 OPEN).
+- **Job 08 `20261001T004133-team-b-kmsh`** (at `b7a55c0`): anim_files.xtbl `<Trigger>` shape (§3.1 text vs §3.2
+  Name child): **7,060 elements, Name child 7,060, direct text 0, both 0, neither 0**, so §3.2's shape is the real
+  one and the reader drops nothing (0 unread). Every Trigger also has a **`Frame`** child (7,060/7,060), which
+  the spec does not mention. Diversions: Horde_Mode_Identifier 32, gate PASS.
+
+### 2026-10-01, cloud stretch 5f: jklk cause CONFIRMED; CI all green
+
+- **jklk root cause CONFIRMED on MSVC.** CI run 88 (`abb12d9`), job `msvc-jklk-repro`: the refusal stress test built
+  against `a403a75`'s sources with its C-language Lua build exits **-1073740940 = 0xC0000374** (STATUS_HEAP_CORRUPTION),
+  the same code bridge job jklk hit. The current code (frame rule `88cbe87` + Lua as C++ `2010a95`) passes the same
+  stress test in the `msvc` job. So "most likely cause" is now confirmed: Lua errors longjmp-ing across C++ frames
+  under MSVC.
+- **CI run 88: all 5 jobs green** for the first time (GCC Release, GCC ASan/UBSan, Clang libFuzzer smoke, MSVC
+  Release full tree + ctest 47/47, repro).
+- Second review batch (`c348984`, agent, verified: spec labels checked, Release + ASan ctest 47/47):
+  `Vehicle_Damage_Penalty_MS` read as u32 (traffic-ai §19 CONFIRMED); Mass absent stays absent (test);
+  `Instance_Cap` stays a signed byte (§13.1 says signed; labelled OPEN, the reviewer's u32 was not in the spec);
+  Female_Mesh_Filename and both Shader_Type sites labelled OPEN; no code relies on "never filename-resolved".
 
 ### Requests to Team A (relay via the manager)
 

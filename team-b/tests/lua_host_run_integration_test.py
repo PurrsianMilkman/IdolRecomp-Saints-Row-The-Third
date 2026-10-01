@@ -93,7 +93,7 @@ def main(argv):
               "zscene_is_loaded OPEN refusal logged once")
 
         # Determinism: a second run on the same cache diffs clean.
-        r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True)
+        r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True, encoding="utf-8")
         report = r.stdout
         check(r.returncode == 0, "bridge_diff exit status")
         check("No per-mission changes." in report, "no per-mission changes between runs")

@@ -201,6 +201,12 @@ struct AnimFile {
                                               // per-trigger data is written into the Anim_file record" -
                                               // kept here as real, present XML data, not as stored engine
                                               // state
+    // SHAPE OPEN (spec-tables-animation.md Sec3.1 draws `<Trigger>` with direct
+    // text, Sec3.2 says its `Name` child is hashed; NEEDS-DATA). triggerNames
+    // keeps the Name-child reading; every Trigger element without a Name child
+    // is COUNTED here instead of being dropped silently (bridge job settles it).
+    size_t triggerElements = 0;              // all Triggers/Trigger elements in this row
+    size_t triggerElementsUnread = 0;        // of those, no Name child (not in triggerNames)
     std::vector<AnimFileIk> iks;             // IKs/IK (repeated)
     std::vector<AnimFileSound> sounds;       // Sounds/Sound (repeated)
     bool voiceLinesPresent = false;          // Voice_Lines - CONFIRMED always empty in the base game

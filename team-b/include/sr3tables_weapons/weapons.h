@@ -529,6 +529,8 @@ struct Weapon {
 
     FlatSpreadMetrics flatSpreadMetrics;      // Flat_Spread_Metrics (+0x190..+0x1A0)
 
+    // [HIGH CONFIDENCE (cosine) / OPEN (reader flavour, write order vs Fire_Cone_Metrics) -
+    // spec-tables-weapons-combat.md 2.2 `+0x1A4`; see tables_weapons.cpp]
     Always<float> fireConeAngleCos;   // Fire_Cone_Angle (+0x1A4): stored value is cos(half the authored degrees); documented default 1.0
     std::optional<float> fireConeLength;  // Fire_Cone_Length (+0x1A8, i); default 0
     FireConeMetrics fireConeMetrics;        // Fire_Cone_Metrics (+0x1AC..)
@@ -546,6 +548,10 @@ struct Weapon {
 
     ProjectileInfo projectileInfo;   // Projectile_Info (+0x348..+0x3AC)
 
+    // [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+    // to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
+    // `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
+    // as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
     // melee_material_effects (+0x3B0..+0x433): the engine indexes 33 slots
     // by a physical-material name table (FUN_006F76F0) this spec never
     // enumerates (only referenced, section 1.6) - stored as raw

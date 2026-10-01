@@ -532,6 +532,15 @@ void testEscortConstants() {
     CHECK(!c->vehicles.present);                // whole group absent
     CHECK(!c->vehicles.vehicleDamagePenaltyMs.present);
 
+    // Vehicle_Damage_Penalty_MS is a u32 (spec s19): fraction text is truncated by the integer grammar.
+    sr3xtbl::Document u = P(
+        "<root><Table><Escort_Constants><Tiger_Constants><Penalties><Vehicles>"
+        "<Vehicle_Damage_Penalty_MS>4500.75</Vehicle_Damage_Penalty_MS>"
+        "</Vehicles></Penalties></Tiger_Constants></Escort_Constants></Table></root>");
+    auto cu = ParseEscortConstants(u);
+    CHECK(cu.has_value() && cu->vehicles.vehicleDamagePenaltyMs.present);
+    CHECK(cu->vehicles.vehicleDamagePenaltyMs.value == 4500u);
+
     sr3xtbl::Document absent = P("<root><Table></Table></root>");
     CHECK(!ParseEscortConstants(absent).has_value());
 }

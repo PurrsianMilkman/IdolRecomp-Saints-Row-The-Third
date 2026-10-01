@@ -531,9 +531,35 @@ void testHostageNestedEnumAndLevels() {
     CHECK(r.vehicleClasses[0].difficultyLevels[1].respect.value() == 30);
 }
 
+// spec section 8 [OPEN / NEEDS-EXE]: a profile with no Bullet_miss/Recovery child
+// must be REPORTED (diagnostics), and one with the child must not be.
+void testAimDriftRecoveryReport() {
+    const char* withoutRecovery =
+        "<root><Table><Profile><Name>Default</Name><turn_speed>1</turn_speed>"
+        "<Bullet_miss><Aiming><Close_range>1</Close_range></Aiming><Firing/></Bullet_miss>"
+        "<Explosive_Miss/></Profile></Table></root>";
+    Document d1 = P(withoutRecovery);
+    auto v1 = ParseAllAimDriftProfiles(d1);
+    CHECK(v1.size() == 1);
+    CHECK(v1[0].diagnostics.size() == 1);
+    CHECK(!v1[0].diagnostics.empty() && v1[0].diagnostics[0] == "aim_drift Recovery empty - spec path suspect (NEEDS-EXE)");
+    CHECK(!v1[0].recoveryTime.present);
+
+    const char* withRecovery =
+        "<root><Table><Profile><Name>X</Name>"
+        "<Bullet_miss><Aiming/><Recovery><recover_time>700</recover_time></Recovery><Firing/></Bullet_miss>"
+        "<Explosive_Miss/></Profile></Table></root>";
+    Document d2 = P(withRecovery);
+    auto v2 = ParseAllAimDriftProfiles(d2);
+    CHECK(v2.size() == 1);
+    CHECK(v2[0].diagnostics.empty());
+    CHECK(v2[0].recoveryTime.present && near(v2[0].recoveryTime.value, 700.0f, 1e-4f));
+}
+
 }  // namespace
 
 int main() {
+    testAimDriftRecoveryReport();
     testWeaponNormalRow();
     testWeaponMissingOptional();
     testWeaponFlagsAndSpecialCases();
