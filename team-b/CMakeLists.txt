@@ -860,6 +860,14 @@ target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
 target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
 add_test(NAME synthetic_luahost_roster_test COMMAND sr3luahost_roster_tests)
 
+# Refusal stress (cloud phase 2026-09-30, after bridge job jklk's MSVC heap
+# corruption): every spec stub refusing many times, in both states. Mainly an
+# MSVC regression check - see the test's top comment.
+add_executable(sr3luahost_refusal_stress_tests tests/synthetic_luahost_refusal_stress_test.cpp)
+target_link_libraries(sr3luahost_refusal_stress_tests PRIVATE sr3luahost)
+target_compile_definitions(sr3luahost_refusal_stress_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+add_test(NAME synthetic_luahost_refusal_stress_test COMMAND sr3luahost_refusal_stress_tests)
+
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
 # stub environment above, reporting real luaL_loadbuffer/lua_pcall

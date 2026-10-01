@@ -485,6 +485,15 @@ int main() {
         CHECK(EngineState::multiply33XorHashBucket("", 0x20) == 0x0);
         CHECK(EngineState::multiply33XorHashBucket("SAINTS_ROW_THE_THIRD", 0x100) == 0x7d);
         CHECK(EngineState::multiply33XorHashBucket("a", 0x20) == 0x1);
+        // Sec8.2 (2026-09-30): modulo and char signedness are OPEN, so a
+        // bucket is only unambiguous for ASCII names, and for a
+        // non-power-of-two count only when the hash is below 2^31.
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("tex_a.cvbm_pc", 1024));  // power of two
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("tex_a.cvbm_pc", 9000)); // 0xd80fcd8f
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("tex_b.cvbm_pc", 9000));  // 0x4010c64c
+        CHECK(EngineState::multiply33XorHashBucketUnambiguous("", 9000));
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("a\xe9", 0x20));        // byte >= 0x80
+        CHECK(!EngineState::multiply33XorHashBucketUnambiguous("a\x80", 9000));
     }
 
     // --- The 12 spec-confirmed names promoted from a generic logged-nil
@@ -624,8 +633,13 @@ int main() {
             CHECK(req.requestName == "req1");
             CHECK(req.filenames.size() == 2);
             CHECK(req.filenames[0].name == "tex_a.cvbm_pc");
-            CHECK(req.filenames[0].bucketIndex == EngineState::multiply33XorHashBucket("tex_a.cvbm_pc", 9000));
+            // tex_a hashes to 0xd80fcd8f (>= 2^31): with 9000 buckets signed and
+            // unsigned modulo disagree, both OPEN in Sec8.2 -> index stays OPEN.
+            CHECK(!req.filenames[0].bucketIndex.known());
             CHECK(req.filenames[1].name == "tex_b.cvbm_pc");
+            // tex_b hashes to 0x4010c64c (< 2^31): every reading agrees.
+            CHECK(req.filenames[1].bucketIndex.known());
+            CHECK(req.filenames[1].bucketIndex.get() == 0x4010c64cu % 9000u);
 
             // Count out of the confirmed 1..6 range -> no filenames read,
             // even though more string args were supplied.
@@ -1104,8 +1118,34 @@ int main() {
             CHECK(es.screenFadeRequests().size() == 4 && es.screenFadeRequests()[3].durationMs == 0.0);
             // A non-table colour argument is indexed like the real call: Lua error.
             {
+                size_t before = es.screenFadeRequests().size();
                 auto r = host.runChunk(gp, "fade_out(1, 5)", "fo7.lua");
                 CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find("attempt to index") != std::string::npos);
+                CHECK(es.screenFadeRequests().size() == before); // nothing applied
+            }
+            // lua_gettable semantics kept (it now runs under fade_out's own
+            // lua_pcall, fix for bridge job jklk): __index metamethods are
+            // honoured, and an error inside one is an ordinary Lua error.
+            check("fade_out(1, setmetatable({}, {__index = function(t, k) return k * 10 end}), 0)", "fo8.lua");
+            CHECK(es.screenFadeColour().r == 10.0f / 255.0f && es.screenFadeColour().b == 30.0f / 255.0f);
+            {
+                auto r = host.runChunk(gp, "fade_out(1, setmetatable({}, {__index = function() error('boom') end}), 0)", "fo9.lua");
+                CHECK(r.loadOk && !r.pcallOk);
+                CHECK(r.pcallError.find("boom") != std::string::npos);
+            }
+            // Refusals raised repeatedly through openGuard, with a heap-allocated
+            // (long) scene name, keep their exact message (jklk regression).
+            {
+                auto r = host.runChunk(gp,
+                    "for i = 1, 200 do\n"
+                    "  local ok, m = pcall(zscene_is_loaded, 'a_scene_name_well_past_the_small_string_buffer')\n"
+                    "  assert(not ok and string.find(m, '^zscene_is_loaded: engine state '))\n"
+                    "  ok = pcall(fade_out, 1, 5)\n"
+                    "  assert(not ok)\n"
+                    "end", "guard_loop.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << r.pcallError << "\n";
             }
 
             // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
@@ -1138,6 +1178,11 @@ int main() {
         {
             auto r0 = host.runChunk(ui, "sfx_faded_out()", "sfo0.lua");
             CHECK(r0.loadOk && !r0.pcallOk && r0.pcallError.find("0x012e6aa4") != std::string::npos);
+            // Repeated through openGuard with the exact message (jklk regression).
+            auto rl = host.runChunk(ui,
+                "for i = 1, 200 do local ok, m = pcall(sfx_faded_out)\n"
+                "  assert(not ok and string.find(m, '^sfx_faded_out: engine state ')) end", "sfo_loop.lua");
+            CHECK(rl.loadOk && rl.pcallOk);
             es.fadeState().g012e6aa4.set(3);
             auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
             CHECK(r1.loadOk && r1.pcallOk);

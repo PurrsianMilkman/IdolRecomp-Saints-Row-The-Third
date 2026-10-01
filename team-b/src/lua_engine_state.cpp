@@ -88,6 +88,17 @@ uint32_t EngineState::multiply33XorHashBucket(const std::string& name, uint32_t 
     return hash % bucketCount;
 }
 
+bool EngineState::multiply33XorHashBucketUnambiguous(const std::string& name, uint32_t bucketCount) {
+    uint32_t hash = 0;
+    for (unsigned char c : name) {
+        if (c >= 0x80) return false;
+        unsigned char lower = static_cast<unsigned char>(std::tolower(c));
+        hash = (hash * 0x21u) ^ lower;
+    }
+    if (bucketCount != 0 && (bucketCount & (bucketCount - 1)) == 0) return true;
+    return hash < 0x80000000u;
+}
+
 namespace {
 std::string lowercased(const std::string& s) {
     std::string out(s);

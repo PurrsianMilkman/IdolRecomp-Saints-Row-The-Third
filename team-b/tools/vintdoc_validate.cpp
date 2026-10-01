@@ -294,7 +294,7 @@ int main(int argc, char** argv) {
     auto line = [&](const std::string& s) { summary << s << "\n"; std::cout << s << "\n"; };
     std::ofstream tsv(outDir / "vintdoc_per_file.tsv");
     tsv << "archive\tentry\tsize\tmagic_ok\tversion\treserved04\tfield0A\tmeta\tcrit\tsec16\tsec16_lt_size\telems\tanims"
-           "\tstr_count\tstr_resolved\tstr_clean\tstr_clean_lt_90pct";
+           "\tu32_1E\tstr_count\tstr_resolved\tstr_clean\tstr_clean_lt_90pct";
     for (auto& c : combos) tsv << "\t" << c.label();
     tsv << "\tcombos_landed\n";
 
@@ -332,6 +332,11 @@ int main(int argc, char** argv) {
         long parsed = 0, notMagic = 0, headerFail = 0, tableFail = 0;
         long magicOk = 0, reservedZero = 0, v1 = 0, v2 = 0, vOther = 0, f0aZero = 0, sec16Lt = 0, cleanLt90 = 0;
         std::map<uint32_t, int> f0aValues;
+        // Raw u32 at 0x1E (Sec3.1's string-offset count) per version, and the
+        // Sec3.2 refutation test "hdr[0x16] < 0x22 + 4N" (bridge job zlbw found
+        // only 1/256/257 there; recorded raw so Team A can read the pattern).
+        std::map<std::pair<uint16_t, uint32_t>, long> u32At1E;
+        long sec16BeforeBase = 0;
         std::vector<uint32_t> metas, crits;
         std::vector<uint16_t> elems, anims;
         std::map<std::string, long> comboWalked, comboLanded, comboType, comboElems, comboMetaIn, comboMeta;
@@ -367,6 +372,15 @@ int main(int argc, char** argv) {
             tsv << "\t1\t" << h.version << "\t" << h.reserved04 << "\t" << f0a << "\t" << h.metadataCount << "\t"
                 << h.criticalResourceCount << "\t" << h.secondaryOffsetRaw << "\t"
                 << (h.secondaryOffsetRaw < d.bytes.size()) << "\t" << h.elementCount << "\t" << h.animationCount;
+            {
+                uint32_t raw = v.size() >= kHeaderSize + 4 ? v.readU32LE(kHeaderSize) : 0;
+                ++u32At1E[{h.version, raw}];
+                char rb[16];
+                std::snprintf(rb, sizeof rb, "0x%08X", raw);
+                tsv << "\t" << (v.size() >= kHeaderSize + 4 ? rb : "short");
+                if (v.size() >= kHeaderSize + 4 && static_cast<uint64_t>(h.secondaryOffsetRaw) < 0x22ull + 4ull * raw)
+                    ++sec16BeforeBase;
+            }
 
             StringTable st;
             try {
@@ -455,6 +469,17 @@ int main(int argc, char** argv) {
         line("critical-resource count: " + rangeMedian(crits) + "   spec: 0-8, median 1");
         line("top-level elements: " + rangeMedian(elems) + "   spec: 0-18, median 1");
         line("top-level animations: " + rangeMedian(anims) + "   spec: 0-58, median 1");
+        {
+            std::string vals;
+            for (auto& kv : u32At1E) {
+                char b[64];
+                std::snprintf(b, sizeof b, " v%u:0x%08X x%ld", kv.first.first, kv.first.second, kv.second);
+                vals += b;
+            }
+            line("raw u32 at 0x1E (Sec3.1 string-offset count N), version:value x files:" + vals);
+            line("Sec3.2 refutation test, hdr[0x16] < 0x22 + 4N: " + frac(sec16BeforeBase, n) +
+                 "   (spec: a single file refutes 'N at 0x1E' + 'absolute +0x16' together)");
+        }
         line("files with < 90% of string entries resolving to clean printable text: " + frac(cleanLt90, parsed) +
              "   spec: 85/159 (this tool's criterion: NUL found, non-empty, all bytes 0x20-0x7E)");
 

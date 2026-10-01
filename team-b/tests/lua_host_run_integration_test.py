@@ -41,8 +41,8 @@ def read_kv(path):
     return out
 
 
-def run_host(host, reglist, cache, out):
-    r = subprocess.run([host, cache, reglist, out], capture_output=True, text=True, timeout=600)
+def run_host(host, reglist, cache, out, *extra):
+    r = subprocess.run([host, cache, reglist, out, *extra], capture_output=True, text=True, timeout=600)
     check(r.returncode == 0, f"lua_host_run exit status {r.returncode}: {r.stderr[-2000:]}")
 
 
@@ -102,6 +102,23 @@ def main(argv):
             check(marker not in report, f"second run differs: '{marker}' in diff report")
         if failures:
             print(report)
+
+        # --preload-states=spec16.4-highconf (HYPOTHESIS opt-in): off by default;
+        # with it, game_lib.lua (OPEN-tagged here) runs in the gameplay state only.
+        check(read_kv(os.path.join(out1, "verdict_summary.txt")).get("preload_states_option", "").startswith("off"),
+              "preload_states_option off by default")
+        out3 = os.path.join(tmp, "run3")
+        run_host(host, reglist, cache, out3, "--preload-states=spec16.4-highconf")
+        opt = read_kv(os.path.join(out3, "verdict_summary.txt")).get("preload_states_option", "")
+        check(opt.startswith("spec16.4-highconf (HYPOTHESIS") and opt.endswith("scripts_rerouted=1"),
+              f"opt-in line: {opt}")
+        s3 = {r["entry_name"]: r for r in read_tsv(os.path.join(out3, "verdict_per_script.tsv"))}
+        s1 = scripts
+        check(s1.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "1", "default: game_lib also run in ui")
+        check(s3.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "0", "opt-in: game_lib not run in ui")
+        check(s3.get("game_lib.lua", {}).get("gameplay_runChunk_attempted") == "1", "opt-in: game_lib run in gameplay")
+        bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True)
+        check(bad.returncode != 0, "unknown option rejected")
 
     print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))
     return 1 if failures else 0

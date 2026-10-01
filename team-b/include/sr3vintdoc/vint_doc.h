@@ -8,7 +8,10 @@
 //    OPEN (+0x0A, +0x16);
 //  * the string-offset array right after the header (u32 count, count x
 //    u32) and the string-pool base = the cursor position right after that
-//    array - NOT header +0x16 (Sec3.1);
+//    array - NOT header +0x16 (Sec3.1). DOWNGRADED 2026-09-30: the spec now
+//    labels this layout HYPOTHESIS, contradicted by this project's sweep
+//    (bridge jobs zlbw/puhd); parseStringTable() is kept unchanged as the
+//    pre-review reading, see its own note;
 //  * the per-record shapes, as positioned decoders over a caller-owned
 //    Cursor: critical-resource entry (Sec3.2), metadata entry (Sec3.2),
 //    element-record head (Sec4), property-block override header and its
@@ -22,9 +25,11 @@
 //    suffix sharing, OPEN), so a caller must treat a failed or odd string
 //    as expected, not as a parse error.
 //
-// UPDATE 2026-09-30 (spec desk review, synced): the spec now answers item 1
+// UPDATE 2026-09-30 (spec desk review, synced): the spec answered item 1
 // below as HIGH CONFIDENCE (inferred): header +0x16 is the ABSOLUTE file
-// offset of the first critical-resource entry. Items 2 and 3 remain
+// offset of the first critical-resource entry. DOWNGRADED the same day to
+// HYPOTHESIS (that answer rests on Sec3.1's string-array layout, which real
+// data contradicts - Requests to Team A, item 7). Items 2 and 3 remain
 // HYPOTHESIS; item 3's text tension is acknowledged there in favour of the
 // reading this library already uses (tag, hash, value). The full walk stays
 // behind the labelled HYPOTHESIS grid in tools/vintdoc_validate.cpp (combos
@@ -101,7 +106,7 @@ struct Header {
     uint32_t field0ARaw = 0;            // +0x0A, OPEN (0 on 154/159, float-like otherwise)
     uint32_t metadataCount = 0;         // +0x0E
     uint32_t criticalResourceCount = 0; // +0x12
-    uint32_t secondaryOffsetRaw = 0;    // +0x16: absolute offset of the critical-resource section, HIGH CONFIDENCE (spec §3.2, 2026-09-30); < file size on 159/159; NOT the string-pool base
+    uint32_t secondaryOffsetRaw = 0;    // +0x16: absolute offset of the critical-resource section is the spec's HYPOTHESIS (§3.2, downgraded from HIGH CONFIDENCE 2026-09-30); < file size on 159/159; NOT the string-pool base
     uint16_t elementCount = 0;          // +0x1A, top-level elements
     uint16_t animationCount = 0;        // +0x1C, top-level animations
 };
@@ -118,9 +123,19 @@ struct StringTable {
 
 // Reads the string-offset array at kHeaderSize. Throws FormatError if the
 // count-driven array runs past the end of `bytes`.
+//
+// DISPUTED BY REAL DATA (bridge jobs 20260930T213047-team-b-zlbw and
+// 20260930T234543-team-b-puhd, 159 distinct files): the spec labels "u32 N
+// at 0x1E, then N u32 offsets" CONFIRMED (Sec3.1), but the u32 at 0x1E is
+// only ever 1, 256 or 257 (159/159; 13 files are too small for 256/257
+// entries), the "offsets" include values like 0x3F800000, 23/159 fail
+// Sec3.2's own refutation test (hdr[0x16] < 0x22 + 4N), and 0 files resolve
+// >= 90% clean strings (spec: 74/159). Kept as the spec states it, unchanged, pending Team A's answer
+// (team-b/HANDOFF.md "Requests to Team A", item 7). Do not build on it.
 StringTable parseStringTable(vpp::ByteView bytes);
 
-// HIGH CONFIDENCE, not CONFIRMED (Sec3.1): the string at base +
+// HIGH CONFIDENCE, not CONFIRMED (Sec3.1), and it rests on the string-array
+// layout downgraded to HYPOTHESIS 2026-09-30 (see parseStringTable): the string at base +
 // offsets[index], read up to its NUL. Returns false (and leaves `out`
 // empty) for an index out of range, a start position outside the file, or
 // no NUL before end-of-file.
@@ -154,6 +169,8 @@ struct ElementHead {
 };
 ElementHead readElementHead(Cursor& c);
 
+// Implemented pre-review, pending clearance: spec-lua-bindings.md Sec9.1 is
+// "NOT yet cleared for implementation" (manager rule 2026-09-30); unchanged.
 // spec-lua-bindings.md Sec9.1: the 13 registered element type names (13/13
 // registration call sites read directly).
 extern const char* const kRegisteredElementTypes[13];

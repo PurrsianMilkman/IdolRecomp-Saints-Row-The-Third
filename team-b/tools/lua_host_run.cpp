@@ -1,3 +1,10 @@
+// IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30): the
+// spec-lua-api-behaviour.md / spec-lua-bindings.md sections this file rests on
+// are marked "NOT yet cleared for implementation" by the 2026-09-30 desk
+// review (115/122 and 57/58 review-status lines). Kept working, behaviour
+// unchanged, until Team A clears them; no new behaviour from those sections
+// before then (team-b/HANDOFF.md section A, standing rule).
+//
 // The Lua 5.1 host scaffold's VERDICT TOOL: loads game_lib.lua for real and
 // attempts to load/run real shipped mission/UI Lua scripts against the
 // stub environment built by sr3luahost (include/sr3luahost/host.h), then
@@ -752,8 +759,26 @@ MissionStartResult callMissionStart(lua_State* L, const std::string& funcName, d
 
 int main(int argc, char** argv) {
     if (argc < 4) {
-        std::cerr << "usage: lua_host_run <cache_dir> <registered_tagged.txt> <out_dir> [max_scripts_to_run]\n";
+        std::cerr << "usage: lua_host_run <cache_dir> <registered_tagged.txt> <out_dir> [max_scripts_to_run]\n"
+                     "                    [--preload-states=spec16.4-highconf]\n"
+                     "  --preload-states=spec16.4-highconf  HYPOTHESIS, evidence-gathering only, off by default:\n"
+                     "      run the spec-lua-bindings.md Sec16.4 preloads only in the state Sec16.4 names\n"
+                     "      (vint_lib/game_ui_globals/vdo_base_object/vdo_anim_object/vdo_input_tracker: ui only;\n"
+                     "      game_lib: gameplay only; system_lib: both). Sec16.4 is HIGH CONFIDENCE (desk), NOT\n"
+                     "      cleared; becomes the default only once Team A clears it.\n";
         return 1;
+    }
+    // Optional flags anywhere after the 3 positionals; the remaining
+    // positional (if any) is max_scripts_to_run.
+    bool preloadStatesSpec164 = false;
+    std::vector<std::string> extraPositional;
+    for (int a = 4; a < argc; ++a) {
+        std::string arg = argv[a];
+        if (arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
+        else if (arg.rfind("--", 0) == 0) {
+            std::cerr << "unknown option: " << arg << "\n";
+            return 1;
+        } else extraPositional.push_back(arg);
     }
     fs::path cacheDir = argv[1];
     std::string registrationListPath = argv[2];
@@ -764,7 +789,7 @@ int main(int argc, char** argv) {
     // resolve). Unchanged for the usual `tools/lua_all_registered_*.txt` run
     // from team-b/.
     fs::path toolsDir = fs::path(registrationListPath).parent_path();
-    uint64_t maxScriptsToRun = (argc >= 5) ? std::stoull(argv[4]) : UINT64_MAX;
+    uint64_t maxScriptsToRun = extraPositional.empty() ? UINT64_MAX : std::stoull(extraPositional[0]);
     fs::create_directories(outDir);
 
     auto t0 = std::chrono::steady_clock::now();
@@ -927,7 +952,11 @@ int main(int argc, char** argv) {
     std::cout << "Wrote " << (outDir / "verdict_script_state_tags.tsv").string() << "\n";
 
     // --- Real, disassembly-confirmed preload order for both states
-    // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30): before this,
+    // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30).
+    // IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30):
+    // Sec16.1 is NEEDS-EXE and Sec16.1/Sec16.4 are "NOT yet cleared for
+    // implementation". Kept working, behaviour unchanged, until Team A
+    // clears it (team-b/HANDOFF.md Requests to Team A, item 8). Before this,
     // this host only ever preloaded game_lib.lua, alone, into gameplay -
     // missing system_lib.lua on BOTH states and the entire UI-state chain.
     //   UI state, in order:       system_lib.lua -> vint_lib.lua ->
@@ -1156,6 +1185,7 @@ int main(int argc, char** argv) {
     // resolved statetag pointed at the OTHER state - the new, parallel
     // restriction to the hook-firing skip counters just above.
     uint64_t skippedGpRunChunkCount = 0, skippedUiRunChunkCount = 0;
+    uint64_t spec164Overrides = 0;
 
     // Real aggregate over every real hook-call error string this run
     // actually captures (gh.callError/uh.callError below), keyed by the
@@ -1210,6 +1240,21 @@ int main(int argc, char** argv) {
                       (tag == statetag::Tag::Conflict);
         bool fireUi = (tag == statetag::Tag::Ui) || (tag == statetag::Tag::Open) ||
                       (tag == statetag::Tag::Conflict);
+        // --preload-states=spec16.4-highconf (HYPOTHESIS, opt-in, manager
+        // ruling 2026-09-30): the Sec16.4 preloads run only in the state
+        // Sec16.4 names, overriding the per-script tag. Off by default.
+        if (preloadStatesSpec164) {
+            std::string lower = toLower(s.entryName);
+            static const char* const kUiOnly[] = {"vint_lib.lua", "game_ui_globals.lua", "vdo_base_object.lua",
+                                                  "vdo_anim_object.lua", "vdo_input_tracker.lua"};
+            bool uiOnly = false;
+            for (const char* n : kUiOnly) uiOnly = uiOnly || lower == n;
+            if (uiOnly && (fireGp || !fireUi)) { fireGp = false; fireUi = true; ++spec164Overrides; }
+            if (lower == "game_lib.lua" && (fireUi || !fireGp)) { fireUi = false; fireGp = true; ++spec164Overrides; }
+            // system_lib.lua: both states, which is what an OPEN/conflict tag already gives;
+            // forced here so the assignment is exactly Sec16.4's whatever the tag says.
+            if (lower == "system_lib.lua" && !(fireGp && fireUi)) { fireGp = fireUi = true; ++spec164Overrides; }
+        }
         if (!fireGp) { skippedGpFireCount++; skippedGpRunChunkCount++; }
         if (!fireUi) { skippedUiFireCount++; skippedUiRunChunkCount++; }
 
@@ -1522,6 +1567,11 @@ int main(int argc, char** argv) {
          "this run WOULD have attempted with no per-script state restriction, matching every prior "
          "baseline's own formula)=" + std::to_string(toRun * hooks.size() * 2));
     line("\n=== STATE-TAG RESTRICTION SUMMARY (this task; spec-lua-bindings.md Sec14.5) ===");
+    line(std::string("preload_states_option=") +
+         (preloadStatesSpec164 ? "spec16.4-highconf (HYPOTHESIS: Sec16.4 HIGH CONFIDENCE desk answer, NOT cleared; "
+                                 "evidence run, not default behaviour)"
+                               : "off (default)") +
+         " scripts_rerouted=" + std::to_string(spec164Overrides));
     line("real_population_split(of " + std::to_string(st.found.size()) + " found scripts)=ui:" +
          std::to_string(tagUi) + " gameplay:" + std::to_string(tagGameplay) + " OPEN:" + std::to_string(tagOpen) +
          " conflict:" + std::to_string(tagConflict));

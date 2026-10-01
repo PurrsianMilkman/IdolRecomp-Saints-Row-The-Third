@@ -113,8 +113,14 @@ struct Element {
     // +6: CONFIRMED - the vertex index into the base mesh (Sec5).
     uint16_t vertexIndex = 0;
 
-    uint16_t field_8 = 0;  // +8, OPEN - not characterized
-    uint16_t field_10 = 0; // +10, CONFIRMED < 4096 in 10,415,507/10,415,507; OPEN meaning
+    // SUPERSEDED READING, kept unchanged (spec-morph-format.md desk review
+    // 2026-09-30): the spec's final element layout (Sec13.2, NEEDS-EXE, u8
+    // decode from disassembly only) is +8/+9/+10 u8 biased normal delta and
+    // +11 unused (zero); its "+10 is a 2-byte field < 4096" row is RETIRED (the
+    // bound is a side effect of +11 being zero). These two raw u16 views are
+    // the pre-review reading - implemented pre-review, no behaviour change.
+    uint16_t field_8 = 0;  // +8..+9 raw u16 (Sec13.2: u8 +8, u8 +9)
+    uint16_t field_10 = 0; // +10..+11 raw u16 (Sec13.2: u8 +10, +11 zero); < 4096 in 10,415,507/10,415,507
 };
 
 class MorphFile {
