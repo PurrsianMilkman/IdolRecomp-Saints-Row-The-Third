@@ -1273,6 +1273,15 @@ int main() {
             if (r.global.find("0x00723d20") != std::string::npos) CHECK(!r.known && r.knownKeys == 1);
             if (r.global == "0x014c848c") CHECK(!r.known && r.knownKeys == 2);
         }
+        // Bare-global table (Sec13.2): empty until Team A names the 24 globals.
+        // Each row must be a spec-confirmed stub registered into at least one state.
+        for (const auto& bg : sr3luahost::specBareGlobals()) {
+            CHECK(bg.gameplay || bg.ui);
+            const auto& n = sr3luahost::specConfirmedStubNames();
+            CHECK(std::find(n.begin(), n.end(), bg.name) != n.end());
+            CHECK(bg.spec.rfind("spec-", 0) == 0);
+        }
+        CHECK(sr3luahost::specBareGlobals().empty()); // flip when the first answer lands
         // Host applies the same initial state: the stubs still refuse on OPEN slots.
         sr3luahost::Host h({});
         CHECK(!h.engineState().vehicleStoreActive().known());

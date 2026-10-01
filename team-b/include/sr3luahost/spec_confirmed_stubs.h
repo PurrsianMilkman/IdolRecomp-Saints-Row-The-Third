@@ -121,4 +121,19 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
 // without duplicating the literal list a second time.
 const std::vector<std::string>& specConfirmedStubNames();
 
+// Bare globals registered outside the tagged registration list
+// (spec-lua-bindings.md Sec13.2/Sec16.3: the 24 names registered by
+// 0x00e0f900, rand_int among them). Which names, which state(s) and their
+// bodies are OPEN (HANDOFF Requests to Team A, item 9), so the table is empty.
+// For each answered name: add a row here naming its state(s), add the name to
+// specConfirmedStubNames() with its body, and Host registers it into those
+// states only.
+struct SpecBareGlobal {
+    std::string name;
+    bool gameplay = false;
+    bool ui = false;
+    std::string spec; // section that confirms the state(s)
+};
+const std::vector<SpecBareGlobal>& specBareGlobals();
+
 } // namespace sr3luahost

@@ -136,6 +136,11 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // "gameplay").
     specUiNames.push_back("coop_is_active");
 
+    // Bare globals outside the tagged list (Sec13.2), into the state(s) the spec names.
+    for (const auto& bg : specBareGlobals()) {
+        if (bg.gameplay) specGameplayNames.push_back(bg.name);
+        if (bg.ui) specUiNames.push_back(bg.name);
+    }
     applySpecInitialState(engineState_);
     registerSpecConfirmedStubs(gameplay_, engineState_, hitLog_, "gameplay", specGameplayNames);
     registerSpecConfirmedStubs(ui_, engineState_, hitLog_, "ui", specUiNames);

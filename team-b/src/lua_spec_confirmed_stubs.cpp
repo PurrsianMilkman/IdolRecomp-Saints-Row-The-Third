@@ -942,6 +942,13 @@ void registerOne(lua_State* L, EngineState& state, HitLog& log, const std::strin
 
 } // namespace
 
+const std::vector<SpecBareGlobal>& specBareGlobals() {
+    static const std::vector<SpecBareGlobal> rows = {
+        // OPEN - awaiting Team A (answer order 2: the 24 bare globals, rand_int first).
+    };
+    return rows;
+}
+
 const std::vector<std::string>& specConfirmedStubNames() {
     static const std::vector<std::string> names = {
         "coop_is_active",
