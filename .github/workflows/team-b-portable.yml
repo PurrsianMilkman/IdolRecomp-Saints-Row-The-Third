@@ -1,7 +1,9 @@
 # Team B portable build: every platform-independent library, tool and
-# synthetic test suite under team-b/, built with GCC on Linux. The D3D11
-# renderer and sr3_viewer stay behind if(WIN32) in team-b/CMakeLists.txt,
-# so they are skipped here. The tests use synthetic inputs only - no game data.
+# synthetic test suite under team-b/, built with GCC on Linux (the D3D11
+# renderer and sr3_viewer stay behind if(WIN32) in team-b/CMakeLists.txt, so
+# Linux skips them), plus an MSVC Release build of the whole tree on Windows.
+# The tests use synthetic inputs only - no game data. (Under bash on Windows a
+# crash's exit status is truncated to 8 bits, e.g. 0xC0000374 -> 0x74.)
 name: team-b portable build
 
 on:
@@ -41,6 +43,54 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure -j4
+
+  msvc:
+    # MSVC (/EHsc, the CMake default) Release on Windows: the whole tree,
+    # D3D11 renderer and sr3_viewer included, and every ctest suite (the
+    # lua_host_run integration test and the spec-stub refusal stress test
+    # among them). Added after bridge job 20260930T225845-team-b-jklk crashed
+    # with 0xC0000374 on MSVC only (Lua errors longjmp-ing across C++ frames).
+    name: MSVC Release (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S team-b -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure -j4
+
+  msvc-jklk-repro:
+    # Informational: rebuilds the refusal stress test against the sources of
+    # a403a75 (the commit bridge job jklk crashed on, before fix 88cbe87) to
+    # see whether MSVC reproduces the heap corruption. Always green; the
+    # outcome is the REPRODUCED / NOT REPRODUCED line in the log.
+    name: MSVC jklk repro (a403a75 sources, informational)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Swap in a403a75's library sources
+        shell: bash
+        run: git checkout a403a75 -- team-b/src team-b/include
+      - name: Configure
+        run: cmake -S team-b -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build the stress test
+        run: cmake --build build --config Release --target sr3luahost_refusal_stress_tests
+      - name: Run it
+        shell: bash
+        run: |
+          set +e
+          ./build/Release/sr3luahost_refusal_stress_tests.exe 300
+          code=$?
+          if [ $code -eq 0 ]; then
+            echo "jklk repro: NOT REPRODUCED (exit 0)"
+          else
+            printf 'jklk repro: REPRODUCED (exit %d = 0x%X)\n' $code $code
+          fi
+          exit 0
 
   fuzz-smoke:
     name: libFuzzer smoke (Clang, ASan/UBSan)
