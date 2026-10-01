@@ -842,6 +842,8 @@ add_library(sr3luahost STATIC
     src/lua_engine_state.cpp
     src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
+    src/lua_screen_fade.cpp
+    src/lua_tutorial_names.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
 target_link_libraries(sr3luahost PUBLIC lua51)

@@ -78,10 +78,15 @@ int main(int argc, char** argv) {
             }
             auto f = host.runChunk(L, "fade_out(1, 5)", "f.lua");
             if (hasGlobal(L, "fade_out")) CHECK(f.loadOk && !f.pcallOk);
-            auto s = host.runChunk(L, "sfx_faded_out()", "s.lua");
-            if (hasGlobal(L, "sfx_faded_out")) {
-                CHECK(s.loadOk && !s.pcallOk);
-                CHECK(s.pcallError.rfind("sfx_faded_out: engine state ", 0) == 0);
+            // The fade state has a CONFIRMED start-up value since batch
+            // 2026-10-01 (Sec26.24): sfx_faded_out answers; zscene_prep still
+            // refuses on the OPEN scene table.
+            auto s = host.runChunk(L, "assert(type(sfx_faded_out()) == 'boolean')", "s.lua");
+            if (hasGlobal(L, "sfx_faded_out")) CHECK(s.loadOk && s.pcallOk);
+            auto p = host.runChunk(L, "zscene_prep('" + longName + "')", "p.lua");
+            if (hasGlobal(L, "zscene_prep")) {
+                CHECK(p.loadOk && !p.pcallOk);
+                CHECK(p.pcallError.rfind("zscene_prep: engine state ", 0) == 0);
             }
             if (g_failures) break;
         }

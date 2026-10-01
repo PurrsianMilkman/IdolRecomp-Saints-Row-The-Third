@@ -1817,6 +1817,12 @@ int main(int argc, char** argv) {
     constexpr int kMissionTickBudget = 20; // CHOSEN - see this block's own top comment for the reasoning
     constexpr double kMissionStartCheckpoint = 0.0; // CHOSEN literal, not recovered
     constexpr bool kMissionStartIsRestart = false;  // CHOSEN literal, not recovered
+    // Screen fade host clock (batch 2026-10-01, spec-lua-api-behaviour.md
+    // Sec26.24): each mission tick is one host frame of this many ms
+    // (EngineState::screenFadeHostFrame). CHOSEN: about a third of a second,
+    // and not a divisor of the engine's 1000/1500/3000/6000 ms stamp offsets,
+    // so a stamp never lands exactly on a frame (that comparison is OPEN).
+    constexpr int64_t kFadeHostMsPerTick = 333;
 
     struct MissionResult {
         std::string stem, entryName, containerName;
@@ -1891,6 +1897,7 @@ int main(int argc, char** argv) {
             bool havePrevSig = false;
             bool stopped = false;
             for (int tick = 1; tick <= kMissionTickBudget; ++tick) {
+                host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
                 auto tickHooks = host.fireConfirmedHooks(host.gameplayState(), hooks, script.entryName);
                 TickSig sig;
                 bool newWatchdogThisTick = false;
@@ -2012,6 +2019,7 @@ int main(int argc, char** argv) {
           std::to_string(kMissionTickBudget) + ", start_checkpoint_arg=" + std::to_string(kMissionStartCheckpoint) +
           ", start_is_restart_arg=" + std::string(kMissionStartIsRestart ? "true" : "false") +
           ", watchdog_instruction_budget=" + std::to_string(kMissionWatchdogInstructionBudget) +
+          ", fade_host_ms_per_tick=" + std::to_string(kFadeHostMsPerTick) +
           " (same constant as host.h's own kHookWatchdogInstructionBudget, not independently chosen)");
     mline("missions_with_script_found=" + std::to_string(missionsFoundCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_existed=" + std::to_string(missionsStartExistedCount) + "/" + std::to_string(missions.size()));
@@ -2023,8 +2031,25 @@ int main(int argc, char** argv) {
     mline("total_ticks_survived_across_all_missions=" + std::to_string(ticksSum));
     mline("total_stub_calls_this_step_contributed(ALL-INCLUSIVE minus pre-step-1 snapshot, real HitLog delta)=" +
           std::to_string(missionIncrementalTotal));
-    mline("zscene_is_loaded_open_branch_hits(whole run, Sec14.23's OPEN per-record branch, stubbed false)=" +
-          std::to_string(host.engineState().zsceneOpenBranchHits()));
+    mline("zscene_is_loaded_pending_promotion_refusals(whole run, Sec26.25: promotion 0x00720410 OPEN)=" +
+          std::to_string(host.engineState().zscenePendingPromotionRefusals()));
+    {
+        // Screen fade (Sec26.24): which path completed each transition. real =
+        // the UI script called Screen_fade_transition_complete; fallback_* =
+        // the labelled HOST-SIDE SUBSTITUTE timer (screen_fade_do undefined /
+        // called but never completing). Also appended to verdict_summary.txt.
+        const auto& fc = host.engineState().screenFadeCounters();
+        std::string fadeLine = "fade_completion_path=" + host.engineState().screenFadeCompletionPathSummary();
+        std::string fadeDetail = "fade_detail=screen_fade_do_calls:" + std::to_string(fc.screenFadeDoCalls) +
+                                 " screen_fade_do_errors:" + std::to_string(fc.screenFadeDoErrors) +
+                                 " host_frames:" + std::to_string(fc.framesRun) +
+                                 " frames_blocked_on_open:" + std::to_string(fc.framesBlockedOnOpen) +
+                                 (fc.lastFrameBlocker.empty() ? std::string() : " last_blocker=[" + fc.lastFrameBlocker + "]");
+        mline(fadeLine);
+        mline(fadeDetail);
+        std::ofstream summaryAppend(outDir / "verdict_summary.txt", std::ios::app);
+        summaryAppend << fadeLine << "\n" << fadeDetail << "\n";
+    }
     mline("\n--- Per-mission detail (also in verdict_mission_drive.tsv) ---");
     for (auto& mr : missionResults) {
         std::ostringstream row;

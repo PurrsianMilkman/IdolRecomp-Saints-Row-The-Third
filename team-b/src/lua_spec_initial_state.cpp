@@ -8,33 +8,68 @@
 // bridge-jobs/02f_mission_drive_after_answer.json. lua_host_run's
 // verdict_open_state.tsv then shows the slot as known.
 //
-// Nothing is set yet: every slot below is OPEN in the synced specs (only
-// CONFIRMED values may go here; HYPOTHESIS/OPEN stay unset).
+// Only CONFIRMED values go here; HYPOTHESIS/OPEN stay unset.
 #include "sr3luahost/engine_state.h"
 
 namespace sr3luahost {
 
 void applySpecInitialState(EngineState& es) {
-    (void)es;
+    // 1. co-op session (spec-lua-api-behaviour.md Sec26.28, CONFIRMED -
+    //    disassembly): the singleton 0x024d8534 is zero at load and no
+    //    resolved code installs a session; "a host starts with no session".
+    //    So coop_is_active, game_get_is_host and Completion_is_client all
+    //    answer false. The per-session fields are read only with a session
+    //    and stay OPEN, as does the co-op join type 0x012f44fc (Sec10.9) and
+    //    whether single player installs a one-member host session (Sec26.28).
+    es.coopSession().present.set(false);
 
-    // 1. co-op session object 0x0087ba20 (spec-lua-api-behaviour.md Sec3.1,
-    //    Sec8.27, Sec10.2, Sec10.9): es.coopActive(), es.isHost(),
-    //    es.coopJoinType(). OPEN - awaiting Team A (answer order 1).
+    // 2. tutorial table 0x0151d600 (Sec6.19, Sec10.4, Sec26.28, CONFIRMED -
+    //    disassembly): zero at load; the registration routine 0x007178c0 fills
+    //    it in one pass, entries 0-188 in state 0 and 189-209 in state 1. These
+    //    are the values after that fill. When the tutorial initialiser
+    //    0x00715f20 runs is OPEN; before it every entry is 0. Either way no
+    //    entry is in state 3, so tutorial_advance is false for every name on a
+    //    fresh process (Sec10.4). Entry 176 is set too: its STATE is
+    //    confirmed by the fill; only its name is OPEN.
+    for (int i = 0; i < EngineState::kTutorialEntryCount; ++i) {
+        es.tutorialState().set(EngineState::tutorialStateKey(i), i <= 188 ? 0 : 1);
+    }
 
-    // 2. tutorial table 0x00717780 (Sec10.4, Sec6.19): es.tutorialResolves()
-    //    per id. If the answer is a rule rather than a list, the resolver
-    //    goes in the tutorial stubs instead. OPEN - awaiting Team A (order 1).
+    // 3. vehicle-store flag 0x022cdf08 (Sec10.1, Sec26.28, CONFIRMED -
+    //    disassembly): 0 at load, so store_vehicle_get_state returns 0.0.
+    es.vehicleStoreActive().set(false);
 
-    // 3. vehicle-store active flag 0x022cdf08 (Sec10.1): es.vehicleStoreActive().
-    //    OPEN - awaiting Team A (order 1).
+    // 4. zscene (Sec26.25, Sec14.23, Sec8.21): no start-up value is given for
+    //    the skip byte 0x0153b556, the current / pending entries, the load
+    //    state 0x0153b51c, or the cutscene.xtbl-backed table (field parse
+    //    OPEN). All stay OPEN.
 
-    // 4. zscene (Sec14.23, Sec8.21): es.zsceneBusyFlag() 0x0153b556,
-    //    es.zsceneStateCode() 0x0153b51c, es.zsceneNameState() 0x00723d20,
-    //    es.zsceneTableResolves() 0x00721be0. OPEN - awaiting Team A (order 3).
+    // 5. screen fade (Sec26.24, CONFIRMED - disassembly, "Globals" table: the
+    //    file-backed values the executable starts with). The init 0x0059fa30
+    //    later writes state 2 / target 2 / flag 1 and the document id; the
+    //    host runs it when it registers Screen_fade_transition_complete in the
+    //    UI state (lua_spec_confirmed_stubs.cpp). The completion callbacks
+    //    0x013effcc / 0x013effd0 are 0 (EngineState::ScreenFade defaults).
+    //    The mode-stack top and the cutscene state 0x0153b520 that the
+    //    per-frame routine reads stay OPEN.
+    EngineState::ScreenFade& f = es.screenFade();
+    f.state.set(2);                // 0x012e6aa4: fully faded in, the start-up state
+    f.target.set(2);               // 0x012e6aa8
+    f.flag.set(0);                 // 0x013effc8 (init writes 1)
+    f.documentLoaded.set(false);   // 0x012e6aa0 = -1
+    f.logoAt.set(-1);              // 0x012e6aac
+    f.holdLogoUntil.set(-1);       // 0x012e6ab0
+    f.imagesAt.set(-1);            // 0x012e6ab4
+    f.holdImagesUntil.set(-1);     // 0x012e6ab8
+    f.autoSaveStamp.set(-1);       // 0x012e6abc
+    f.autoSaveCounter.set(0);      // 0x013effd4
+    f.useLoadImages.set(false);    // 0x0149365c
+    f.lastBroadcastWasOut.set(false); // 0x013effc5
 
-    // 5. screen-fade state machine 0x0059f8c0 (Sec26.23, Sec26.9):
-    //    es.fadeState().g012e6aa0 / g012e6aa4 / g012e6aa8 / g013effc8 /
-    //    g013effcc / g013effd0. OPEN - awaiting Team A (order 3).
+    // 6. UI resolution (Sec26.26): the display mode 0x0132bd80 is -1 in the
+    //    file, but its writer 0x00e23000 runs from callers not dumped, so the
+    //    value scripts see is OPEN; the width/height record's writers and the
+    //    safe-frame constants are OPEN too. Nothing set.
 }
 
 } // namespace sr3luahost

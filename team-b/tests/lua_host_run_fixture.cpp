@@ -91,10 +91,14 @@ int main(int argc, char** argv) {
         {"system_lib.lua", "-- synthetic preload\n"},
     };
     const std::vector<Entry> dlc1 = {
-        // Blocks on OPEN engine state: zscene per-name state (Sec14.23).
+        // Blocks on OPEN engine state: whether 'scene_a' is a kind-1 entry of
+        // the cutscene.xtbl scene table (Sec14.23/Sec26.25: field parse OPEN).
         {"dlc1_mm_06.lua", "function dlc1_mm_06_start(cp, restart)\n  helper_wait_scene('scene_a')\nend\n"},
-        // A CONFIRMED stub with no engine-state read: _start succeeds.
-        {"dlc1_mm_05.lua", "function dlc1_mm_05_start(cp, restart)\n  set_mission_author()\nend\n"},
+        // CONFIRMED stubs only: _start succeeds. fade_out(0) starts a fade-out
+        // (Sec26.24); no UI script defines screen_fade_do here, so the host's
+        // labelled fallback completes it on the first mission tick.
+        {"dlc1_mm_05.lua",
+         "function dlc1_mm_05_start(cp, restart)\n  set_mission_author()\n  fade_out(0)\nend\n"},
         // A plain Lua runtime error inside _start.
         {"dlc1_mm_04.lua", "function dlc1_mm_04_start(cp, restart)\n  local t = nil\n  return t.field\nend\n"},
         // Not loadable: both real Lua and sr3lua must reject it.
