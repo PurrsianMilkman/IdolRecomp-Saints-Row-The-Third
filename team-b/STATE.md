@@ -1,4 +1,4 @@
-# STATE — real denominators, updated as of 2026-09-30 (cloud phase; see HANDOFF.md resume note)
+# STATE — real denominators, updated as of 2026-10-01 (wrap-up; see HANDOFF.md resume block, 2026-10-01 WRAP-UP)
 
 **Cloud phase 2026-09-30:** portable GCC build + CI (45 ctest suites), fuzzing (16 harnesses, 5 allocation bugs fixed), 105 validation tools built on Linux, `sr3vintdoc` CONFIRMED-scope reader, Lua host with no invented engine values (OPEN-state refusals). See HANDOFF's cloud entries. **Correction:** see the mission-driving row — the `vint_is_std_res` claim, and its first correction, were both partly wrong. **Implemented pre-review, pending exe re-clearance** (manager decision 2026-09-30, option (a): kept working, no behaviour change; fixed or reverted to a labelled stub when Team A's re-derivation lands): `game_UI_audio_play` (§2.2), `game_get_key_name` (§2.3), `coop_is_active` (§3.1), `set_ignore_ai_flag` (§3.4), `ai_add_enemy_target` (§3.9), `on_take_damage` (§3.13). No new work from §1-§5 until cleared.
 
@@ -10,6 +10,18 @@ file does not re-derive or re-argue anything, it just makes the numbers scannabl
 this file whenever a HANDOFF §9.xx entry changes one of these counts; if this file and HANDOFF.md ever
 disagree, HANDOFF.md is authoritative (this is an index, same relationship as `MEMORY.md` to memory
 files elsewhere).
+
+## Lua host status at wrap-up (2026-10-01)
+
+| item | state |
+|---|---|
+| ctest (GCC Release, Debug+ASan/UBSan) | 48/48 |
+| preload routing | §16.4 per-state routing is the default; `include` census: 0 calls in 804 scripts |
+| bare globals | 24 in both states; base+coroutine only; truncating conversion; `rand_int` draws `lo` (fill OPEN) |
+| fade / zscene / co-op / tutorial / store | implemented per §26.24–§26.28 as first synced; newer §26.24–26.26 text not yet implemented |
+| engine-state slots with a value at start | 15/40 on the integration fixture |
+| last mission run with a result | `onbs` (pre-batch): 9/49 past `_start` |
+| pending mission run | `20261001T221335-team-b-cchj` (post-batch; preload default and tag) |
 
 ## Binary/container format readers (`include/sr3*` domain libraries, excluding the xtbl-table-group
 libraries below and the render-side libraries, which get their own tables)
