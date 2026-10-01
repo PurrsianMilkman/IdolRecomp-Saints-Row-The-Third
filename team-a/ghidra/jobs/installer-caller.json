@@ -1,0 +1,14 @@
+{
+ "team": "team-a",
+ "title": "Team A: the co-op session installer's only caller (CALL at 0x0088cd4f in undefined code) — read the enclosing routine and find who reaches it",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/range", "range", "0x0088cb60-0x0088cf70"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:10", "maxinsn:2000", "0x0088cf70", "0x0088bb30"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/statetab", "ptrs", "count:48", "nodecomp:1", "0x01304a30"]}
+ ],
+ "collect": ["**/*.txt"]
+}
