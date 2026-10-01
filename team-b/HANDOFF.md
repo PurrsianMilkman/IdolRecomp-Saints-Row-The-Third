@@ -478,6 +478,8 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
    - Needed: do mission hooks (`<stem>_start` etc.) run inside a script-thread record? §16.2/§26.23 suggest the engine
      runs hooks through the same allocator/runner as `thread_new`. Today the host calls hooks outside any thread, so
      `thread_new` from a hook raises (the engine reads a null current thread there).
+     **Manager ruling 2026-10-01:** keep the current behaviour (no thread record for hooks) unless §16.2/§26.23
+     CONFIRM one. Open question for Team A.
 
 ## ⏸ PROJECT PAUSED 2026-09-30 — read this before doing ANYTHING
 
