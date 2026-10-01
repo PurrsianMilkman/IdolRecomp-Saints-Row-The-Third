@@ -47,7 +47,11 @@ J
 JID=$(python3 "$HERE/bridge_client.py" submit "$T/job.json")
 BAD=$(echo '{"title":"bad","ref":"'$REF'","steps":[{"kind":"run","tool":"count_bytes","args":["{EXE}"]}]}' | python3 "$HERE/bridge_client.py" submit -)
 
+CJ=$(echo '{"title":"to cancel","steps":[{"kind":"ls"}]}' | python3 "$HERE/bridge_client.py" submit -)
+python3 "$HERE/bridge_client.py" cancel "$CJ" >/dev/null
 python3 "$HERE/pc_agent.py" --config "$T/pc_config.json" --once > "$T/agent.log" 2>&1 || { cat "$T/agent.log"; exit 1; }
+! grep -q "$CJ" "$T/agent.log"                        # cancelled job never started
+R=$(python3 "$HERE/bridge_client.py" show "$CJ" || true); grep -q "CANCELLED" <<<"$R"
 
 OUT=$(python3 "$HERE/bridge_client.py" wait "$JID" --timeout 30) || { echo "$OUT"; cat "$T/agent.log"; exit 1; }
 echo "$OUT"

@@ -4,21 +4,25 @@
 **Phase:** 1, target selected from `spec-format-inventory.md` §6 — flagged open in both `spec-customization-data.md` and `spec-geometry-format.md`, and the last unresolved piece of the character pipeline alongside the already-documented mesh (`spec-geometry-format.md`), skeleton (`spec-rig-format.md`) and animation (`spec-anim-format.md`) formats.
 **Scope:** The `.cmorph_pc` morph-target (blend-shape) file: its two-tier header, the target directory, the per-target descriptor records, the inline quantised delta payload, the trailing sentinel, the declared-but-unused `.gmorph_pc` GPU side, and the relationship between the **three** registered loaders that claim this extension pair.
 **Method:** Disassembly of all three registered constructors and the two magic-number validators they lead to, cross-checked against **every `.cmorph_pc` file shipped in the game** — 2,946 entries across seven archives, 1,541 unique by name+size after removing loose/bundled duplicates. The loader-derived structural model was then *replayed* against all 1,541 files, and it reproduces every file's exact byte size. Every population-level claim below is stated against that full set; the two decisive claims are validated against built-in control baselines (§4, §5).
-**Cleanroom compliance:** No decompiled code or original identifiers appear below. Magic numbers, offsets, strides and alignments are load-bearing literal format data and are stated freely. One literal engine error string is quoted because it is the format's own self-identification (the same convention used for the "Mesh" block in `spec-geometry-format.md` §4.1.1). Function addresses are cited as evidence, not reproduced as identifiers. Real filenames quoted are ordinary shipped data.
+**Cleanroom compliance:** No decompiled code or original identifiers appear below. Magic numbers, offsets, strides and alignments are load-bearing literal format data and are stated freely. ~~One literal engine error string is quoted because it is the format's own self-identification (the same convention used for the "Mesh" block in `spec-geometry-format.md` §4.1.1).~~ *(Desk review 2026-09-30: the two engine error sentences formerly quoted verbatim, §1 and §16.2, are now paraphrased, matching the geometry spec's later clean-room fix; only the block's name "Morph" is kept literally.)* Function addresses are cited as evidence, not reproduced as identifiers. Real filenames quoted are ordinary shipped data.
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+
+**Review status summary (2026-09-30).** Adversarial desk review (no executable, no game data) of 43 units: **9 VALIDATED-BY-DATA** (§2, §3 intro, §3.1, §3.2, §3.4, §3.5, §3.6, §4, §5 — the container, backed by Team B's full-population run on the 1,541 unique files, `team-b/HANDOFF.md` l.1455-1466), **12 DESK-PASS** (3 of them with text fixes applied: §1, §13.4, §15.6–§15.7), **4 NEEDS-DATA**, **18 NEEDS-EXE**. A desk pass alone does not clear a unit: it means the text is internally consistent, not that it was re-derived; only the VALIDATED-BY-DATA units are already backed by Team B's full-population run. **Everything from §12 on (dequantisation, renormalisation / 1/512 bias, slider remap, Pcust stash map) has no Team B implementation** (`team-b/STATE.md` l.25, l.113) and no label in it was raised. Awaiting the executable: §6 (mode-0/2 descriptor, `FUN_00e71940`), §12.2, §12.3, §13.1, §13.2, §13.3, §14.1, §14.2, §14.3, §14.4, §14.5, §14.6, §16.1–§16.2, §16.3, §16.4, §16.5, §16.6, §16.7. Awaiting real data: §3.3 (`n` histogram), §12.1 (population label; 80% `max|q|` gap), §15.1–§15.3 (8 vs 30 trials), §15.4–§15.5 (95 vs 100 denominator; head-region conflict).
 
 ---
 
 ## 1. Headline results
 
 - **The complete container structure is proven**: a loader-derived model reproduces the **exact byte size of 1,541 / 1,541** real files with zero residual, and every file ends in the expected trailing sentinel (§3, §4). **[CONFIRMED — empirical, whole population.]**
-- Two developer-joke magic numbers, both constant across the population and both enforced by the loader: **`0x1337BEEF`** (outer, version 5) and **`0x0BADBEEF`** (inner, version 3). The inner block is the engine's literally-named **"Morph" block** — its parser carries the error string *"Morph version is (%d).  Expecting current version is (%d)."* — and it is **shared engine infrastructure**, living in the same module as the "Mesh" block already documented for `.ccmesh_pc`. **[CONFIRMED — disassembly + empirical.]**
+- Two developer-joke magic numbers, both constant across the population and both enforced by the loader: **`0x1337BEEF`** (outer, version 5) and **`0x0BADBEEF`** (inner, version 3). The inner block is the engine's literally-named **"Morph" block** — its parser carries a version-mismatch error message that names the block "Morph" and reports the found and the expected version numbers *(paraphrased 2026-09-30, clean-room)* — and it is **shared engine infrastructure**, living in the same module as the "Mesh" block already documented for `.ccmesh_pc`. **[CONFIRMED — disassembly + empirical.]**
 - **Zero `.gmorph_pc` files ship anywhere in the game** (2,946 `.cmorph_pc`, 0 `.gmorph_pc`), even though the registration declares that secondary extension. §6 explains exactly why: the block supports a GPU-side payload (modes 0 and 2), but every shipped file uses **mode 1**, which stores its payload inline. **[CONFIRMED — disassembly + empirical, whole population.]**
-- The payload is **sparse and quantised**, not raw floats: each affected vertex is a 12-byte element carrying a vertex index (confirmed at **25,789 / 25,789** records, §5) plus three quantised components, decoded via per-target parameters in a 40-byte descriptor. ~~The exact dequantisation formula is **not** resolved (§7).~~ **Corrected 2026-09-12: this bullet was written before §12–§13 and is now false as stated — the formula IS resolved, from the runtime applier rather than the loader. `pos += (i16/32767.0)·w·A[axis]`, `nrm += ((u8/255.0)·2.0−1.0)·w·B[axis]`, confirmed on 21,104,267 elements. See §13 (formula) and §14 (the slider weight `w` and the renormalisation that follows it). §7 is kept as the superseded pre-resolution record.**
+- The payload is **sparse and quantised**, not raw floats: each affected vertex is a 12-byte element carrying a vertex index (confirmed at **25,789 / 25,789** records, §5) plus three quantised components, decoded via per-target parameters in a 40-byte descriptor. ~~The exact dequantisation formula is **not** resolved (§7).~~ **Corrected 2026-09-12: this bullet was written before §12–§13 and is now false as stated — the formula IS resolved, from the runtime applier rather than the loader. `pos += (i16/32767.0)·w·A[axis]`, `nrm += ((u8/255.0)·2.0−1.0)·w·B[axis]`, confirmed on 21,104,267 elements. **[Scope of "confirmed", desk review 2026-09-30: by §13.4's own text the 21,104,267-element measurements confirm the element *layout* (byte `+11` zero) and show the decoded magnitudes are *plausible and range-consistent* (the `max(B)` match is, in §13.4's words, "forced by" the decode and "costs nothing"); the formula itself rests on disassembly (§13.3, CONFIRMED — disassembly). The 21,104,267 population is not stated and is not the 1,541-unique set Team B measured (10,415,507 elements, `team-b/HANDOFF.md` l.1466) — OPEN. Team B has not implemented the decode (`team-b/STATE.md` l.25, l.113).]** See §13 (formula) and §14 (the slider weight `w` and the renormalisation that follows it). §7 is kept as the superseded pre-resolution record.**
 - **The three-loader question is answered** (§8): one format, one parser; the two "Pcust" loaders don't parse at all — they stash the name and buffers into the customization system for deferred use.
 - **Renormalisation and the slider→weight remap are resolved from raw disassembly (§14, 2026-09-12).** Renormalisation runs exactly once per vertex, on the fully-accumulated `(base + all active sliders' deltas)` vector, at the point of encoding to the output vertex buffer — never per-contribution. **[CONFIRMED — disassembly.]** The slider remap is the `lo`/`hi`/`hi2`/`flags` linear-clamp formula already stated in §13.3, now read from the complete kernel rather than a partial view, and — as the task that produced it states explicitly — this half **cannot reach CONFIRMED — empirical**, since no shipped file carries a live slider value.
-- **Vertex-index correspondence to the paired `.ccmesh_pc`/`.gcmesh_pc` is RESOLVED (§15, 2026-09-13): the direct reading holds.** A morph index `i` addresses index `i` in the paired mesh's own real vertex array — no offset, remap table, or different-array indirection. Confirmed at population scale (34,068 targets, 11.3M elements, 100.0000% in-bounds against the real decoded mesh vs. 66.8% under a shuffled wrong-mesh control) and by two geometric case studies with shuffled-index controls, one of which (`cm_pc_fac.cmorph_pc`, the 95-slider player face file) has no filename or bundling relationship to its mesh at all and still resolves cleanly, down to visible bilateral left/right vertex-cluster pairs decoded from raw positions alone. **[CONFIRMED — empirical.]**
+- **Vertex-index correspondence to the paired `.ccmesh_pc`/`.gcmesh_pc` is RESOLVED (§15, 2026-09-13): the direct reading holds.** A morph index `i` addresses index `i` in the paired mesh's own real vertex array — no offset, remap table, or different-array indirection. Confirmed at population scale (34,068 targets, 11.3M elements *[population: the 1,606 mesh-paired bundles of §15.2, not the 1,541 unique files of §2 — label added 2026-09-30]*, 100.0000% in-bounds against the real decoded mesh vs. 66.8% under a shuffled wrong-mesh control) and by two geometric case studies with shuffled-index controls, one of which (`cm_pc_fac.cmorph_pc`, the 95-slider player face file) has no filename or bundling relationship to its mesh at all and still resolves cleanly, down to visible bilateral left/right vertex-cluster pairs decoded from raw positions alone. **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (error string paraphrased; the "confirmed on 21,104,267 elements" label scoped to layout/plausibility per §13.4; element/target populations labelled) — desk review (not re-derived from the executable).**
 
 ## 2. Population facts
 
@@ -31,9 +35,15 @@
 | Size range | 324 bytes (a hat) … 805,236 bytes (a full DLC body suit) |
 | Most common size | **17,220 bytes × 218 unique files** — every NPC `*_head.cmorph_pc`. Identical size implies identical layout: one target, 1,426 affected vertices, max index 1,425. **[HIGH CONFIDENCE — inferred]**: every NPC head shares one base-head topology. |
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: Team B measured 2946 / 1541 entries/unique, 0 `.gmorph_pc`, sizes 324 … 805,236, 17,220 × 218, all 1,541 mode 1 (`team-b/HANDOFF.md` l.1458-1464); the 52-distinct-counts histogram and the 7,342 / 9,702 per-target statistics (§5) were not re-measured — desk review (not re-derived from the executable).**
+
 ## 3. Layout
 
 All offsets from file start. Alignment is **8-byte** within the header/directory and **16-byte** around each bulk run, using the conditional form (pad 0 when already aligned — the loader's own arithmetic shows this explicitly, so the mandatory-pad rule of `spec-geometry-format.md` §3.1.1 does *not* apply here).
+
+**Team B walk results (Team B implementation evidence, not a Team A CONFIRMED; added 2026-09-30 desk review).** Team B's reader, which lands on EOF + sentinel for **1,541 / 1,541** unique files (`team-b/HANDOFF.md` l.1460; walk summarised at l.1415-1419), makes two layout choices this section's text leaves implicit: **(a)** the descriptor records of *all* targets are **contiguous**, `Σn × 0x28` bytes immediately after the whole directory — the directory is walked first summing every entry's `n`, then every descriptor is read from one base in directory order, not interleaved per target (`team-b/src/morph_file.cpp` l.84-127); **(b)** the 16-byte alignment before *and* after each bulk run is applied for **every** descriptor, **including those with `N = 0`** (`morph_file.cpp` l.129-142). Both readings are therefore consistent with every shipped file; whether any shipped file actually discriminates (b) from a "skip alignment when `N = 0`" variant was not measured. **(c)** Alignments are on absolute file offsets for standalone files; how an embedded vehicle Morph block (§6) aligns was not walked by Team B, which checked only the morph offset (`team-b/HANDOFF.md` l.3377).
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: 1,541 / 1,541 exact-size replay by Team B (`team-b/HANDOFF.md` l.1460), with the contiguity and `N = 0` alignment readings above recorded as Team B results — desk review (not re-derived from the executable).**
 
 ### 3.1 Outer header (`0x10` bytes)
 
@@ -42,6 +52,8 @@ All offsets from file start. Alignment is **8-byte** within the header/directory
 | `+0x00` | 4 | Magic **`0x1337BEEF`** | **[CONFIRMED — loader requires it; 1,541/1,541.]** |
 | `+0x04` | 4 | Version, must be **`5`** | **[CONFIRMED — loader requires exactly 5; 1,541/1,541.]** |
 | `+0x08` | 8 | Two runtime pointer slots, zero on disk; the loader zeroes them and fills the first with an allocated GPU-side object when the block has any targets | **[CONFIRMED — disassembly.]** |
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: magic and version enforced on 1,541 / 1,541 by Team B's parser (`team-b/HANDOFF.md` l.1415-1416, l.1459); the zero runtime slots are not asserted by Team B — desk review (not re-derived from the executable).**
 
 ### 3.2 "Morph" block header (`0x18` bytes at `+0x10`)
 
@@ -53,9 +65,15 @@ All offsets from file start. Alignment is **8-byte** within the header/directory
 | `+0x1C` | 4 | **Target count** — number of directory entries. Observed 1…214; 52 distinct values (6 ×588, 1 ×239, 9 ×137, 7 ×83, 119 ×69, 96 ×56, …). | **[CONFIRMED — disassembly, drives the directory walk.]** |
 | `+0x20` | 8 | Runtime directory-pointer slot, zero on disk | **[CONFIRMED — disassembly.]** |
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: 1541 mode 1, counts decoded on every file (`team-b/HANDOFF.md` l.1464) — desk review (not re-derived from the executable).**
+
 ### 3.3 Directory (`count × 0x10` at `+0x28`)
 
 One 16-byte entry per target: `{ u32 id, u32 n, u32 runtime_ptr(=0 on disk), u32 0 }`. `id` is a 32-bit value unique per target that **recurs across files sharing the same target** (the player face morph and the base NPC head carry identical `id`s in the same positions) — **[HIGH CONFIDENCE — inferred: a hash of the target's name.]** `n` is the number of descriptor records for that target — `1` in every entry inspected; the loader supports more. **[CONFIRMED — disassembly for the walk; OPEN — whether `n > 1` ever occurs.]**
+
+*(Desk review 2026-09-30: Team B's walk sums `n` over every directory entry (`team-b/src/morph_file.cpp` l.85-92) and so reads **45,243** descriptor records over the 1,541 unique files (`team-b/HANDOFF.md` l.1465, l.1488); the exact-size replay therefore validates Σ`n`, but per-entry `n` was never tabulated — if the summed target count over the same files equals 45,243, `n = 1` everywhere. **[OPEN — desk review 2026-09-30: histogram of `n` and Σ targets vs 45,243 not measured; to be settled against real data.]**)*
+
+**Review status (2026-09-30): NEEDS-DATA: per-entry `n` histogram / Σ targets vs 45,243, and `id` against a name-hash function (§11 item 5); the Σ`n` walk itself is backed by the 1,541 / 1,541 replay — desk review (not re-derived from the executable).**
 
 ### 3.4 Descriptor records (mode 1: `n × 0x28` per target, immediately after the directory)
 
@@ -68,20 +86,28 @@ One 16-byte entry per target: `{ u32 id, u32 n, u32 runtime_ptr(=0 on disk), u32
 | `+0x14` | 12 | Three floats, larger (e.g. `1.72, 1.52, 1.23`); tiny for subtle targets | **[HIGH CONFIDENCE — inferred: dequantisation parameters, see §7.]** — **RESOLVED, §13.3: `B`, the normal-delta scale.** |
 | `+0x20` | 8 | Runtime bulk-pointer slot, zero on disk; the loader writes the absolute address of this record's bulk run here | **[CONFIRMED — disassembly.]** |
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: `N` drives the 1,541 / 1,541 replay and `+0x06` equals the maximum index on 45,243 / 45,243 records (`team-b/HANDOFF.md` l.1460, l.1465); 19,454 `N = 0` records reproduced (l.1488); `+0x00` and `+0x20` being zero are not asserted by Team B — desk review (not re-derived from the executable).**
+
 ### 3.5 Bulk runs (mode 1, inline)
 
 For each descriptor record in order: align to 16, then **`N` elements of 12 bytes**, then align to 16. Element layout:
 
+**Final element layout (§13.2; this note added 2026-09-30 desk review so a top-down reader does not take the superseded grouping):** `+0`/`+2`/`+4` `i16` position delta; `+6` `u16` vertex index; `+8`/`+9`/`+10` `u8` biased normal delta; `+11` unused (zero). The table below is the original 2026-09-10 reading; its `+0`, `+8` and `+10` rows are **SUPERSEDED** and their original cells are struck.
+
 | Element offset | Size | Content | Confidence |
 |---|---|---|---|
-| `+0` `+2` `+4` | 3 × 2 | Three quantised components. Values are strongly bimodal, piling up near `0` and near `65535` — the signature of small signed deltas stored as biased / two's-complement 16-bit integers. | **[CONFIRMED — the distribution; HIGH CONFIDENCE — that they are quantised position deltas; OPEN — exact decode.]** — **RESOLVED, §13.2/§13.3: two's-complement `i16` position delta, divided by `32767.0` and scaled by `A`; the values use the full `int16` range (§12.1), not only small deltas.** |
+| `+0` `+2` `+4` | 3 × 2 | **SUPERSEDED (§13.2):** ~~Three quantised components. Values are strongly bimodal, piling up near `0` and near `65535` — the signature of small signed deltas stored as biased / two's-complement 16-bit integers.~~ | ~~**[CONFIRMED — the distribution; HIGH CONFIDENCE — that they are quantised position deltas; OPEN — exact decode.]**~~ — **RESOLVED, §13.2/§13.3: two's-complement `i16` position delta, divided by `32767.0` and scaled by `A`; the values use the full `int16` range (§12.1), not only small deltas.** |
 | `+6` | 2 | **Vertex index** (§5) | **[CONFIRMED — empirical, 25,789/25,789.]** |
-| `+8` | 2 | Not characterized | **[OPEN.]** — **RETIRED, corrected by §13.2: `+8`/`+9`/`+10` are three `u8` biased normal-delta bytes; `+11` is zero padding.** |
-| `+10` | 2 | Always `< 4096` (10,415,507 / 10,415,507 elements) | **[CONFIRMED — the bound; OPEN — meaning.]** — **RETIRED, corrected by §13.2: not a 2-byte field; the bound is a side effect of `+11` being zero.** |
+| `+8` | 2 | **SUPERSEDED (§13.2):** ~~Not characterized~~ | ~~**[OPEN.]**~~ — **RETIRED, corrected by §13.2: `+8`/`+9`/`+10` are three `u8` biased normal-delta bytes; `+11` is zero padding.** |
+| `+10` | 2 | **SUPERSEDED (§13.2):** ~~Always `< 4096`~~ (10,415,507 / 10,415,507 elements — the measured bound still stands, `team-b/HANDOFF.md` l.1466) | ~~**[CONFIRMED — the bound; OPEN — meaning.]**~~ — **RETIRED, corrected by §13.2: not a 2-byte field; the bound is a side effect of `+11` being zero.** |
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: stride and alignment reproduce 1,541 / 1,541 and `+6` is ascending/unique/max-matching on 45,243 / 45,243 (`team-b/HANDOFF.md` l.1460, l.1465); text fixes applied (superseded rows marked in the main column). Byte `+11 == 0` has not been measured by Team B (its reader exposes `+8`/`+10` as `u16`) — desk review (not re-derived from the executable).**
 
 ### 3.6 Trailer
 
 Align to 4, then a `u32` that must equal **`0x0BADBEEF`** — a bookend sentinel the loader re-checks before accepting the block. Present in **1,541 / 1,541** files, and it is the last thing in the file. **[CONFIRMED — disassembly + empirical.]**
+
+**Review status (2026-09-30): VALIDATED-BY-DATA: sentinel at the predicted end on 1,541 / 1,541 (`team-b/HANDOFF.md` l.1460); the align-4 step is vacuous after a 16-aligned cursor — desk review (not re-derived from the executable).**
 
 ## 4. The structural proof: exact-size replay
 
@@ -97,6 +123,8 @@ The loader's walk (§3.1–§3.6) was re-implemented from the disassembly and ru
 
 A first-pass model that omitted the bulk-run pass had reproduced **0 / 1,541** with residuals of exactly `N × 12 (+ padding + 4)` — which is how the bulk stride and the trailer were pinned down: the residual *was* the missing structure.
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: 1,541 / 1,541 exact size, re-checked on every parse by Team B (`team-b/HANDOFF.md` l.1438-1446, l.1460) — desk review (not re-derived from the executable).**
+
 ## 5. The vertex index — and the control that placed it
 
 The 12-byte element's meaning was tested by hypothesis, with the population as the arbiter:
@@ -110,6 +138,8 @@ Additionally, at `+6` every index is unique within its record (25,789 / 25,789).
 
 **Consequence:** morph targets are **sparse**. Only affected vertices are stored, each tagged with its index into the base mesh. This is consistent with the `size / count` ratio being highly variable across files (median 7,342 bytes per target, standard deviation 9,702) — subtle targets touch few vertices, full-body targets touch thousands.
 
+**Review status (2026-09-30): VALIDATED-BY-DATA: `+6` ascending/unique/max-matching on 45,243 / 45,243 records (all records, so vacuous for `N < 2`; `team-b/HANDOFF.md` l.1465) and the corrected control 2 / 25,467 reproduced independently (l.1468-1486); the 7,342 / 9,702 size statistics were not re-measured — desk review (not re-derived from the executable).**
+
 ## 6. Modes, and why `.gmorph_pc` never ships
 
 The "Morph" block parser takes **two** buffer/cursor pairs — the primary (`c`-file) and a secondary one — exactly as the generic dispatcher hands every paired type both files (`spec-resource-dispatch.md` §4). The mode field decides which buffer the bulk lives in:
@@ -120,9 +150,11 @@ The "Morph" block parser takes **two** buffer/cursor pairs — the primary (`c`-
 | 0 | `0x18` | secondary buffer (`.gmorph_pc`) | 12 | `0x0BADBEEF` before *and* after each target's run on the secondary side |
 | 2 | `0x18` | secondary buffer (`.gmorph_pc`) | 8 | as mode 0 |
 
-**[CONFIRMED — disassembly, all three paths read in full.]** Mode 2's 8-byte element (vs. 12) reads as a more compact quantisation for the GPU-resident variant. **[HYPOTHESIS.]**
+**[CONFIRMED — disassembly, all three paths read in full.]** Mode 2's 8-byte element (vs. 12) reads as a more compact quantisation for the GPU-resident variant. **[HYPOTHESIS.]** **[OPEN — desk review 2026-09-30: the `0x18`-byte mode-0/2 descriptor is a stride only — the mode-1 descriptor spends `0x20` bytes on fields before its 8-byte runtime slot (zero dword, `N`/max-index pair, `A` triple, `B` triple, §3.4), so a `0x18`-byte record cannot hold both float triples plus `N` and the maximum index; which fields a mode-0/2 descriptor carries, where the dequantisation parameters of mode-0 (vehicle) morphs live, and whether the bookends sit per descriptor or per directory entry are not stated. NEEDS-EXE: the mode-0/2 branches of `FUN_00e71940`; to be settled against the executable / real data (the vehicle Morph blocks).]**
 
 Since **every one of the 1,541 shipped standalone files is mode 1**, the secondary buffer is never read for them, and no `.gmorph_pc` needs to exist. **Mode 0 is, however, exercised — by the Morph blocks embedded inside vehicle geometry** (`spec-vehicle-geometry.md` §7): there the `g`-file role is played by `.gcar_pc`, and the mode-0 per-target `0x0BADBEEF` bookend sits at exactly the `.gcar_pc` offset the vehicle header supplies, in **326 / 326** files against **0 / 2,400** random offsets. **[CONFIRMED — empirical.]** So the mode-0 layout in the table above is now observed, not merely read from the loader — which is exactly what the game ships: **2,946 `.cmorph_pc`, 0 `.gmorph_pc`**. The registration's secondary extension is real capability, not vestigial, just never exercised on PC. **[CONFIRMED — empirical + disassembly.]** This is also a useful data point for `spec-resource-dispatch.md`: the paired-file resolver must tolerate the secondary file being absent, since it is absent for every morph in the game.
+
+**Review status (2026-09-30): NEEDS-EXE: mode-0/2 descriptor field layout and bookend placement (`FUN_00e71940` mode-0/2 paths); mode 1 is validated by Team B, which deliberately rejects modes 0/2 (`team-b/HANDOFF.md` l.1448-1452) and checked only the vehicle morph offset (315 / 315, l.3377), not the descriptors — desk review (not re-derived from the executable).**
 
 ## 7. The dequantisation as it looked before resolution — refuted readings and the sanity check that mattered (SUPERSEDED by §13)
 
@@ -144,6 +176,8 @@ The bulk is provably not raw floats — read as `f32`, the three leading compone
 
 Closing this needs the code that *applies* a morph to a mesh at runtime (the GPU-side object the outer validator hands the block to, §3.1), not the loader — a separate, scoped target. — **That code was found and read: §12.2 shows the GPU-side object named here is actually dead code for every shipped file (mode 1 only), and §13 recovers the real applier, `FUN_009f6d30`, reached from the customization assembler instead. The "separate, scoped target" this paragraph called for is exactly §12–§13's subject.**
 
+**Review status (2026-09-30): DESK-PASS — historical record, kept in place by house style (the review's suggestion to move it to an appendix was not applied: no restructuring); the `+11`-zero figure quoted above carries the population caveat of §13.2 — desk review (not re-derived from the executable).**
+
 ## 8. Three registered loaders, one format, one parser
 
 *(Pattern note, 2026-09-10: the "stash-only" constructors found here at types 11/12 are not a morph quirk — `.csc_pc` (type 24) does the same thing, storing its buffer to a global that a separate subsystem later parses. When a registered constructor's body is a handful of instructions, the parser lives elsewhere and the global it writes is the trail. See `spec-cutscene-camera-format.md` §1, §8.)*
@@ -155,10 +189,14 @@ Closing this needs the code that *applies* a morph to a mesh at runtime (the GPU
 
 So the answer to the inventory's implicit question — "do three loaders mean three formats?" — is **no**: one format, parsed in exactly one place, plus two entry points that record where a morph *is* for later. The inventory's warning is resolved rather than assumed away.
 
+**Review status (2026-09-30): DESK-PASS — consistent with `spec-format-inventory.md` and §16.1 — desk review (not re-derived from the executable).**
+
 ## 9. Semantics (inferred, stated as such)
 
 - **Target count = number of morph targets (blend shapes).** The player face file (`cm_pc_fac.cmorph_pc`) carries **95**; full bodies carry 118–119; NPC heads carry **1**; hats and accessories 5–9. 95 targets on the player face is the character creator's slider set. **[HIGH CONFIDENCE — inferred from the counts alone.]**
 - The 218 identical NPC head files (§2) each hold one target over the same 1,426 vertices with the same maximum index — one shared base head. **[HIGH CONFIDENCE — inferred.]**
+
+**Review status (2026-09-30): DESK-PASS — labelled inferred — desk review (not re-derived from the executable).**
 
 ## 10. Methodology notes worth keeping
 
@@ -166,6 +204,8 @@ So the answer to the inventory's implicit question — "do three loaders mean th
 2. **Exact-size arithmetic proves stride, not type.** The `N × 12` replay matched every file, which felt like confirmation of "float3 deltas." A cheap sanity check on the float magnitudes killed that reading outright. Structure and encoding are separate claims and need separate tests.
 3. **A residual is a measurement.** The first replay's `0 / 1,541` result, with residuals of exactly `N × 12 + pad + 4`, located the missing bulk pass and the trailer more precisely than any amount of reading would have.
 4. **A control over records where the predicate cannot fail dilutes itself** *(added 2026-09-10 from Team B's replay, re-verified).* The `+0` control's 1.3% was 322 single-element records passing "strictly ascending" vacuously plus 2 real coincidences. Restricting the denominator to `N ≥ 2` gives 0.008% — the finding was already right, but the contrast was understated ~160×. Before quoting a rate, count only the trials that could have gone either way.
+
+**Review status (2026-09-30): DESK-PASS — methodology, not format data — desk review (not re-derived from the executable).**
 
 ## 11. Open Items
 
@@ -180,6 +220,8 @@ pointer.)*
 5. **Directory `id` as a name hash** (§3.3) — consistent with the evidence, not confirmed against a known hash function.
 6. ~~**Vertex-index correspondence to `.ccmesh_pc`** (§7).~~ **RESOLVED, §15.** A morph index addresses the same position in the paired mesh's own vertex array -- confirmed at population scale (34,068 targets / 11.3M elements, 100.0000% in-bounds against the real decoded mesh vs. 66.8% under a shuffled wrong-mesh control) and by two geometric case studies with shuffled-index controls, including one file (`cm_pc_fac.cmorph_pc`) with no filename/bundling link to its mesh at all. No offset, remap table, or different-array indirection. No longer open.
 7. **Mode 2** — fully read from the loader, never exercised by any shipped file; unverifiable empirically on this build. *(Mode 0 was closed by the vehicle-geometry pass — see §6.)*
+
+**Review status (2026-09-30): DESK-PASS — item statuses agree with the body (items 3, 4, 5, 7 still open; see also the mode-0 descriptor-layout OPEN added at §6) — desk review (not re-derived from the executable).**
 
 
 ## 12. The dequantisation pass (2026-09-11, user-authorised) — architecture found, formula resolved next in §13
@@ -203,7 +245,7 @@ needs — none of which this document previously recorded (it named no addresses
 §7 proposed that the two float triples are per-axis dequantisation parameters. Rather
 than test candidate formulas and keep the best score, the relation between them and the
 actual quantised range was measured over **56,822 descriptors with `N > 0` (170,466 axis
-samples)**, looking for an exact algebraic identity:
+samples)**, *[population not stated — OPEN, desk review 2026-09-30: the 1,541 unique files hold only 25,789 descriptors with `N > 0` (§5; `team-b/HANDOFF.md` l.1486), and 56,822 / 25,789 ≈ 2.20, so this count is over some non-deduplicated set (plausibly the 2,946 entries, ratio 1.91, but that does not match either); the arithmetic 56,822 × 3 = 170,466 checks]* looking for an exact algebraic identity:
 
 | Candidate identity | Result |
 |---|---|
@@ -217,10 +259,14 @@ small**: `max|q|` reaches **≥ 32,000 in 136,804 of 170,466 axis samples (80%)*
 full `int16` range is in use and the decode is not a small-delta-times-scale form.
 **[CONFIRMED — empirical.]** Harness `morph_dequant.py`.
 
+**[OPEN — desk review 2026-09-30: 136,804 / 170,466 = 80.3% checks, but the other 33,662 axis samples (19.7%) are unexplained. If `A` (§13.3) were the per-target, per-axis maximum absolute delta, every axis with any movement would reach 32,767 (100%); the shortfall must be axes with no movement (`A = 0`?) or an `A` that is not the per-axis maximum. Not tested; to be settled against real data (split axes by `A[axis] = 0` and report `max|q|` per group).]**
+
 *Predicate stated, per this project's rule: this rules out those three algebraic
 relations between the descriptor triples and the quantised range. It does not rule out
 a formula involving both triples together, a per-file constant, or a form where the
 triples are consumed by different stages.*
+
+**Review status (2026-09-30): NEEDS-DATA: population of the 56,822 / 170,466 figures unlabelled, and the 80% vs expected-100% `max|q|` gap unexplained (see the two OPEN notes above); Team B has not measured the triples — desk review (not re-derived from the executable).**
 
 ### 12.2 The GPU-side class is the mode 0/2 path ONLY — dead code for every shipped file
 
@@ -247,6 +293,8 @@ implement this class at all — with zero `.gmorph_pc` shipping (§1), it is unr
 §7's instruction to find "the GPU-side object the outer validator hands the block to" was
 pointing at the wrong object; that is corrected here rather than left to be rediscovered.
 
+**Review status (2026-09-30): NEEDS-EXE: disassembly only; the dead-code claim rests on the four slots read — list the rest of vtable `0x012a09cc` and re-read `0x00483560`/`0x00483610`/`0x00483630`/`0x004836b0` and allocator `0x004834f0` — desk review (not re-derived from the executable).**
+
 ### 12.3 The mode-1 consumer chain, with addresses
 
 | Thing | Address / offset |
@@ -264,6 +312,9 @@ pointing at the wrong object; that is corrected here rather than left to be redi
 and the full mesh machinery, then loads the morph through `FUN_0074e580`, but performs
 **14 float operations and no integer-to-float conversion at all** — so the arithmetic is
 not in it. **[CONFIRMED — disassembly.]**
+ *[OPEN — desk review 2026-09-30: the scope of this negative is not stated — the struck text of §14.5 item 3 records that an earlier pass had decompiled only the first 90 of this function's ~600 decompiled lines (3,706-byte body); whether the float-operation count covers the whole body is to be settled against the executable.]*
+
+**Review status (2026-09-30): NEEDS-EXE: single-source disassembly (`FUN_0074e500`, `FUN_0074e580`, `FUN_00e71940`, `FUN_009f36d0`, `DAT_0263e0f4`); stale rows already struck and corrected by §16.1. Cross-spec (listed, not edited here): `spec-rig-format.md` l.2611 still says "14 users" in its main text, with the 17-user correction only bracketed — desk review (not re-derived from the executable).**
 
 ### 12.4 What the next pass should do — DONE, see §13; the specific leads named here did not pan out
 
@@ -294,11 +345,15 @@ list, which the compiler wrote. **This part held up: the pool-name string and th
 actually identified the dispatcher and then the kernel (§13.1) — the failure was in the
 guessed signature/callees above, not in this strategy.**
 
+**Review status (2026-09-30): DESK-PASS — historical; the wrong leads are struck — desk review (not re-derived from the executable).**
+
 ## 13. The dequantisation — RESOLVED from the runtime applier (2026-09-11, user-authorised)
 
 **RESOLVED.** The dequantisation is fully recovered from the runtime applier, and the
 12-byte element layout is settled — correcting two earlier field readings. This closes the
 item §7 left open and §12 could not reach from the loader side.
+
+*(Desk review 2026-09-30: Team B never implemented anything in §12–§16 — its reader exposes the raw element bytes and treats the dequantisation as OPEN (`team-b/HANDOFF.md` l.1421-1429, l.1201-1202; `team-b/STATE.md` l.25, l.113). No unit from here on has a Team B full-population validation; the "RESOLVED" above is a disassembly result.)*
 
 ### 13.1 The chain to the kernel
 
@@ -311,6 +366,8 @@ item §7 left open and §12 could not reach from the loader side.
 The dispatcher's pool name and its `× 0xC` loop stride identify the path beyond doubt, and
 the kernel's last parameter being a **float weight** is the slider value.
 **[CONFIRMED — disassembly.]**
+
+**Review status (2026-09-30): NEEDS-EXE: single-source disassembly; re-read the prologues of `FUN_009f9020` / `FUN_009f6d30` (argument order and types) — desk review (not re-derived from the executable).**
 
 ### 13.2 The element layout — corrected
 
@@ -333,6 +390,10 @@ the kernel's last parameter being a **float weight** is the slider value.
 > **Predicted before measuring and confirmed: byte `+11` is zero in
 > 21,104,267 / 21,104,267 elements (100.0000%).**
 
+*[Desk review 2026-09-30: the 21,104,267-element population is not stated and differs from the 1,541-unique set Team B measured (10,415,507 elements, `team-b/HANDOFF.md` l.1466; ratio ≈ 2.03) — OPEN. The `+11 = 0` result is layout evidence (three bytes plus a zero pad); that the three bytes are `u8` decoded as `(u8/255)·2−1` rests on the disassembly constants of §13.3, not on this count. Team B's `+10 < 4096` result does not test `+11`.]*
+
+**Review status (2026-09-30): NEEDS-EXE: the `u8` decode is from disassembly only; data checks also pending (byte `+11 = 0` over the 1,541 unique files / 10,415,507 elements; histogram of bytes `+8`..`+10`) — desk review (not re-derived from the executable).**
+
 ### 13.3 The formula
 
 ```
@@ -353,6 +414,8 @@ nrm[v].axis += ( (u8(elem + 8,9,10) / 255.0) * 2.0 - 1.0 )      * w * B[axis]
 All four constants were read from the image as **exactly** `32767.0`, `255.0`, `2.0`,
 `1.0`; the sign-flip mask is `0x80000000`. **[CONFIRMED — disassembly.]**
 
+**[OPEN — desk review 2026-09-30: for a bit-exact implementation the formula leaves unstated: the decode of `i16 = −32768` (gives −1.00003 under `/32767.0`); the operation order and precision (§14.3 says each contribution is computed in double precision and added to a float accumulator; this block does not); behaviour when `hi = lo` or `hi2 = lo` (division by zero) and NaN handling in `clamp01`; and whether the kernel loops over all `n` descriptor records of a directory entry when `n > 1`. To be settled against the executable (`FUN_009f6d30`).]**
+
 **So §7's question about the two float triples is answered, and the answer is why it was
 hard: they are not two parameters of one quantity.** `A` scales **position**, `B` scales
 **normal**. `(min, extent)`, `(offset, scale)` and `(scale, center)` were all wrong
@@ -360,7 +423,11 @@ because they all presume one quantity. **§12.1's search for an algebraic identi
 the triples correctly found none — there is no relation to find**, which retrospectively
 validates that negative rather than merely excusing it.
 
+**Review status (2026-09-30): NEEDS-EXE: formula from disassembly only (CONFIRMED — disassembly, not raised); bit-exactness details above open; no Team B implementation or full-population test — desk review (not re-derived from the executable).**
+
 ### 13.4 Empirical confirmation over 21,104,267 elements
+
+*[Scope, desk review 2026-09-30 (heading kept for citation stability): per this section's own text the table shows **layout** (`+11` zero) and **plausibility / range-consistency** of the decoded magnitudes — the `max(B)` identity is "forced by" the decode and "costs nothing" — not a discriminating test of the formula. Population of 21,104,267: see the note at §13.2 (OPEN).]*
 
 | Measurement | Result |
 |---|---|
@@ -379,6 +446,10 @@ delta's maximum equals `max(B)` exactly, which is forced by
 position term been `i16 × A` without the `/32767`, the same data would yield deltas up to
 **110,117 units**. **[CONFIRMED — disassembly + empirical.]** Harness `morph_decode.py`.
 
+*[Scope, desk review 2026-09-30: the empirical half of this label covers the range check only — it refutes the unscaled `i16 × A` alternative (110,117 / 32,767 = 3.3606, consistent with the 3.36 maximum) and does not discriminate the formula from other scalings of similar magnitude.]*
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (evidence scoped to layout/plausibility; population flagged OPEN) — desk review (not re-derived from the executable).**
+
 ### 13.5 What remains open
 
 1. **The slider→weight remap is read but not empirically verified** — no shipped file
@@ -395,6 +466,8 @@ position term been `i16 × A` without the `/32767`, the same data would yield de
 3. **The 43% of descriptors with `N = 0`** remain as §3.4 describes — declared targets
    touching no vertices. Unchanged by this pass. **Still open — not addressed by §14
    either.**
+
+**Review status (2026-09-30): DESK-PASS — consistent with §14/§15 statuses — desk review (not re-derived from the executable).**
 
 ## 14. Renormalisation order and the slider-to-weight remap, resolved from raw disassembly (2026-09-12)
 
@@ -440,75 +513,33 @@ callee is known to take one pointer argument, printed with none, is not merely u
 it is proof the call site's argument-loading instruction was not attributed to the call,
 which raw disassembly can recover directly.
 
+**Review status (2026-09-30): NEEDS-EXE: callee lists and call-site counts of `FUN_009f9020`, `FUN_009f7690`, `FUN_00da05a0`, `FUN_0047fec0` (disassembly only; no Team B implementation) — desk review (not re-derived from the executable).**
+
 ### 14.2 The raw assembly at the call site — renormalisation settled, and the bias constant closed
 
 Ghidra script `MorphAsmProbe.java` (pre-existing, written but never run by the died
-session; run this session) dumped the instruction stream around every call to
-`0x00da05a0`, `0x0047fec0` and `0x009f5e10` inside `FUN_009f7690`. The block below is
-**the complete, address-contiguous instruction stream** from the `CALL 0x00da05a0`
-through the `CALL 0x0047fec0` — every instruction in this range is shown, none elided.
-(An earlier draft of this section quoted a hand-picked subset of these same lines and
-presented it as if contiguous; the addresses didn't close and a reviewer caught it. This
-is the full window instead, verified address-by-address against
-`scratchpad\morph\asm_probe.txt`: each address advances by exactly its own instruction's
-length, with no gap anywhere in the range.)
+session; run this session) dumped the complete, address-contiguous instruction window inside
+`FUN_009f7690` from the call to the normalise routine `0x00da05a0` through the call to the
+pack routine `0x0047fec0` — `0x009f7ebc`–`0x009f7f3c`, verified address-by-address against
+`scratchpad\morph\asm_probe.txt` with no gap. (An earlier draft quoted a hand-picked subset
+of that window as if contiguous; a reviewer caught it from the addresses, §14.7.)
+*(Rewritten 2026-09-30, desk review, clean-room: the per-instruction, register-level
+walk-through that stood here was replaced by this prose summary; the addresses are kept as
+citations.)* In order, the window shows:
 
-**One thing has to be flagged before reading it, or the second half looks like it reads
-from nowhere: a stack-pointer adjustment of `0x10` at `0x009f7f0d` shifts the frame.** Every `[ESP+n]`
-reference *after* that instruction is `0x10` lower in physical memory than the same
-offset would have been *before* it — so `[ESP+0x68]`/`[0x6c]`/`[0x70]`, read after the
-`SUB`, are the exact same three stack addresses as `[ESP+0x58]`/`[0x5c]`/`[0x60]`, read
-before it. That is not a coincidence of naming; it is the compiler building the next
-call's argument frame directly underneath the buffer it just finished with.
-
-The trace runs address-contiguously from `0x009f7ebc` to `0x009f7f3c` with every
-instruction in that range accounted for and none elided:
-
-- `0x009f7ebc`–`0x009f7ec6`: the code takes the address of a 3-float stack buffer (at
-  `ESP+0x58`) as the normalise routine's argument, first writing the accumulated Z normal
-  component into the buffer's third slot, then calling `0x00da05a0` (the normalise
-  routine) on that buffer in place — after the call the buffer holds the normalised X/Y/Z.
-- `0x009f7ecb`: an x87 `0.0` is pushed; it survives untouched on the x87 stack until it
-  becomes the fourth argument of the pack call at the very end.
-- `0x009f7ecd`–`0x009f7eea`: the normalised X component is reloaded from the buffer into
-  `XMM0`, widened to double precision into `XMM1`, added (in double precision) to a bias
-  constant loaded once from `0x01176dd8` (exactly `0.001953125`, i.e. `1/512`) into `XMM0`,
-  narrowed back to single precision, and written back over the same buffer slot.
-- `0x009f7ef0`–`0x009f7f01`: the identical widen/add-bias/narrow sequence runs for the
-  normalised Y component, reusing the same bias value still held in `XMM0` from the X step
-  rather than reloading it.
-- `0x009f7f0d`: the stack pointer is adjusted down by `0x10` bytes to build the next call's
-  own argument frame — from this instruction on, every `[ESP+n]` reference used below is
-  `0x10` lower in physical memory than the same numeric offset used above it, so
-  `[ESP+0x68]`/`[0x6c]`/`[0x70]` after this point are the identical three physical stack
-  addresses as `[ESP+0x58]`/`[0x5c]`/`[0x60]` before it — the compiler building the next
-  call's argument frame directly underneath the buffer it just finished with, not a
-  coincidence of naming.
-- `0x009f7f10`: the pending x87 `0.0` is popped into what becomes the pack call's fourth
-  argument slot.
-- `0x009f7f14`–`0x009f7f1f`: the same widen/add-bias/narrow sequence runs for the Z
-  component, and the biased Z value is stored to the stack (at the address that is,
-  post-shift, the same physical location as the pre-shift `[ESP+0x60]`).
-- `0x009f7f25`–`0x009f7f39`: the three biased components are reloaded from the stack, in
-  the order Z, then Y, then X, and pushed via the x87 stack into the pack call's argument
-  positions in the order X, Y, Z.
-- `0x009f7f3c`: `0x0047fec0` (the byte-biased pack routine) is called with the four
-  arguments just built — biased X, biased Y, biased Z, and the literal `0.0`.
-
-This closes completely, register by register. `XMM1` at `0x009f7ee2` is not
-unexplained: it is set three instructions earlier, at `0x009f7ed7`, when the
-single-precision value just reloaded into `XMM0` from the buffer at `0x009f7ecd` is
-widened to double precision into `XMM1`. The bias is loaded once, as a double, at
-`0x009f7eda`, and stays in `XMM0` across all three axes — `0x009f7ee2`, `0x009f7ef9` and
-`0x009f7f17` all reuse that same register without reloading it. Each axis follows the
-identical shape: widen to double precision, add the double-precision bias, narrow back to
-single precision (using two different narrowing opcodes for the same scalar operation at
-`0x009f7ee6` and at `0x009f7efd`/`0x009f7f1b` — not a discrepancy), write back to the
-buffer slot it came from. The fourth packed argument is a literal `0.0`, produced by an
-x87 push rather than a memory constant; the x87 stack carries that single `0.0`
-untouched the entire time, since no other x87 instruction executes anywhere between the
-push at `0x009f7ecb` and the pop that consumes it at `0x009f7f10` — checked against
-the complete address-by-address account above, not assumed.
+- `0x009f7ebc`–`0x009f7ec6`: the accumulated normal (base plus every summed delta) is
+  completed in a three-float stack buffer, and the normalise routine `0x00da05a0` is called
+  on that buffer, normalising it in place.
+- `0x009f7ecb`: a literal `0.0` is prepared as the pack call's fourth argument; nothing else
+  touches it until it is consumed at `0x009f7f10`.
+- `0x009f7ecd`–`0x009f7f1f`: for X, Y and Z in turn, the normalised component is widened to
+  double precision, the double constant at `0x01176dd8` (`0.001953125` = 1/512; loaded once,
+  at `0x009f7eda`, and reused for all three axes) is added, and the sum is narrowed back to
+  single precision and written back to the buffer slot it came from. A `0x10`-byte stack
+  adjustment at `0x009f7f0d`, part of building the pack call's argument frame, is why the
+  later stack offsets name the same three buffer slots as the earlier ones.
+- `0x009f7f25`–`0x009f7f3c`: the three biased components and the literal `0.0` are passed to
+  the byte-biased pack routine `0x0047fec0`.
 
 **Two separate claims, two labels, on purpose:**
 
@@ -518,13 +549,13 @@ the complete address-by-address account above, not assumed.
   the same three addresses are reread. Since
   `FUN_00da05a0` normalises its argument in place (already fully decompiled,
   `scratchpad\morph\normal_clean.txt`), the values read back are the normalised
-  vector, not the pre-call sum. This claim rests only on the store/`LEA`/`CALL`/reload
+  vector, not the pre-call sum. This claim rests only on the store / take-address / call / reload
   pattern and does not depend on anything past the point the call returns.
 - **Bias — `[CONFIRMED — disassembly.]`** The double constant at `0x01176dd8` —
   **exactly `0.001953125` = 1/512** — is added, in double precision, to each of the
   three *post-normalise* components before they are narrowed back to single and passed
   to `FUN_0047fec0`; the fourth packed argument is a literal `0.0`. This is now shown
-  completely (every register feeding the three `ADDSD`s is accounted for above) rather
+  completely (every input to the three double-precision additions is accounted for in the window above) rather
   than resting on an annotation next to a call whose full argument-build wasn't shown.
 
 **Renormalisation therefore runs exactly once per vertex, on the fully-accumulated
@@ -545,6 +576,8 @@ per-vertex loop contains exactly one call to `0x00da05a0`, gated once per vertex
 conditions together: a per-channel byte flag confirming the channel carries a normal at
 all, and a non-null check on the destination normal-buffer pointer (`consumer_clean.txt`
 line ~633).
+
+**Review status (2026-09-30): NEEDS-EXE: rests on one trace (`0x009f7ebc`–`0x009f7f3c`); the double at `0x01176dd8` (1/512) and the rounding mode of the pack `FUN_0047fec0` (half-up vs half-even, which affects bit-exactness) need re-reading; clean-room fix applied (register-level narrative replaced by prose citing addresses) — desk review (not re-derived from the executable).**
 
 ### 14.3 The accumulation buffer is float end-to-end; the buffer is re-quantised exactly once, on the way out
 
@@ -581,6 +614,10 @@ end, using a scale computed from the accumulated data itself rather than a fixed
 constant. **[CONFIRMED — disassembly; flagged for `spec-vertex-format.md`, not developed
 further here since it is outside this component's scope.]**
 
+**[OPEN — desk review 2026-09-30: (a) orphan claim — `spec-vertex-format.md` has no mention of `DAT_012a2f84`, `DAT_01176de0`, the adaptive scale or morphs at all (grep, 2026-09-30), so this load-bearing claim has no home yet; (b) "≈ 1.0e-5" is not a value an implementer can code, and whether the floor applies before or after the `1/32768` factor is not stated; (c) the scale is per axis (three values) but only two storage offsets, `+0x58`/`+0x60`, are given. To be settled against the executable (`DAT_012a2f84`, `DAT_01176de0`, `FUN_009f5e10`, `FUN_009f7690`).]**
+
+**Review status (2026-09-30): NEEDS-EXE: float accumulation is disassembly only; the position-scale constants, storage offsets and floor order are open (above) — desk review (not re-derived from the executable).**
+
 ### 14.4 The slider→weight remap — the full kernel, not a reconstruction
 
 §13.3 stated the remap formula as recovered from a (correctly identified but partially
@@ -604,6 +641,8 @@ fields alone**, with those fields at exact fixed offsets inside it:
        (0x15..0x3f: 43 bytes not read by this kernel -- OPEN, plausibly a UI label
         or icon reference, not consumed by the deformation path at all)
 ```
+
+**[OPEN — desk review 2026-09-30: the entry does not tile — `+0x10`..`+0x13` (4 bytes, between `hi2` and `flags`) is neither described nor listed as unread; 0x15..0x3f = 43 bytes checks. To be settled against the executable (`FUN_009f6d30`).]**
 
 Argument 2's `+0x28` (a count) and `+0x2c` (a pointer to this array) belong to a
 *different*, enclosing 0x30-byte structure this document calls a **slider slot** (one
@@ -643,6 +682,10 @@ remap: CONFIRMED — disassembly that it is the entire remap.** Between reading 
 reads for the target's own directory entry. There is no call to any table-lookup,
 spline, or easing function on the weight's value path. The two divisions and two
 `clamp01`s are the complete transform.
+
+**[OPEN — desk review 2026-09-30: behaviour when `hi = lo` or `hi2 = lo` (division by zero) is not stated; to be settled against the executable.]**
+
+**Review status (2026-09-30): NEEDS-EXE: `FUN_009f6d30` read once, disassembly only; `+0x10`..`+0x13` untiled and the zero-divide case unstated; no data can exist (no shipped slider values) — desk review (not re-derived from the executable).**
 
 ### 14.5 Where the slider value lives, and what remains genuinely open
 
@@ -763,6 +806,8 @@ path.** **[CONFIRMED — disassembly, for the *mechanism*.]**
    with item 2's own note that some of this subsystem's state is only recoverable at
    runtime. **[OPEN, precisely bounded.]**
 
+**Review status (2026-09-30): NEEDS-EXE: runtime-only remainder (break at `0x009f3e64` and compare against `DAT_0263e0f4`); static sites `0x009f3e5b`/`0x009f3e64`, `0x009f4455`, `0x009f443c`, `0x009f44a0`/`0x009f44a8` single-source — desk review (not re-derived from the executable).**
+
 ### 14.6 What selects which part a morph block applies to, and the contributor bound
 
 **Naming, fixed here because two different structures were both being called "slider
@@ -816,6 +861,8 @@ slot and target loops visit them. **What a bound would have looked like, and doe
 appear anywhere in the three functions read in full:** a comparison of a running
 per-vertex count against a limit, or a fixed-size per-vertex accumulator array with a
 rejection path on overflow.
+
+**Review status (2026-09-30): NEEDS-EXE: strides `0x10`/`0x30`/`0x40` are consistent, but the offset of the `i16 count` inside the `0x10` bucket and the source of the "14" (loop bound in `FUN_009f9020`; `DAT_02652ec0` is runtime-populated) are unstated; "no contributor bound" is a negative over three functions — desk review (not re-derived from the executable).**
 
 ### 14.7 Methodology notes for §5
 
@@ -898,6 +945,8 @@ rejection path on overflow.
   together once, so a reader can check the names against the numbers instead of trusting
   prose continuity.
 
+**Review status (2026-09-30): DESK-PASS — methodology, not format data (the review's suggestion to move it out of the spec was not applied) — desk review (not re-derived from the executable).**
+
 ## 15. Vertex-index correspondence to `.ccmesh_pc`/`.gcmesh_pc` -- RESOLVED empirically (2026-09-13)
 
 **RESOLVED empirically (2026-09-13).** §11 item 6 asked whether a morph record's
@@ -925,7 +974,7 @@ enough that the "if ambiguous, escalate" branch of the task was never reached.
    bounding-box diagonal of `{basePos[i] : i in indices}` under the direct
    mapping, and compare it against a **shuffled control** — the identical `N`,
    but with `indices` replaced by a random sample of that size drawn from the
-   mesh's real vertex range (30 trials, averaged). This is exactly the control
+   mesh's real vertex range (30 trials, averaged). **[CONFLICT — desk review 2026-09-30: §15.3's table says 8 trials per target for the same population test, while §15.5 says 30 trials "same method as §15.3"; which trial count produced §15.3's figures is not recorded — OPEN, to be settled by rerunning against real data.]** This is exactly the control
    the task specified: if the true mapping were an offset, a remap table, or a
    different (e.g. skinning-order) array, then applying the *real* per-vertex
    index values from a `.cmorph_pc` directly against *this* mesh's position
@@ -974,6 +1023,8 @@ mapping (**26,773** target instances across the population), the ratio of
 `extent_direct` to the mean `extent_shuffled` (8 trials/target, same `N`, random
 indices from the same mesh):
 
+*[CONFLICT — desk review 2026-09-30: "8 trials/target" here vs "30 trials, averaged" in §15.1 step 4 — see the note there; OPEN.]*
+
 | Measurement | Result |
 |---|---|
 | ratio, median | **0.6308** |
@@ -992,6 +1043,10 @@ side that a wrong mapping would produce with roughly 50% frequency). This is the
 exact control the task's methodology called for, run at population scale rather
 than on a single hand-picked file.
 
+*[Desk review 2026-09-30: populations — the 34,068 targets / 11,310,109 elements are over the 1,606 mesh-paired bundles (non-deduplicated: NPC head morphs are shared across bundles, §2), a different set from the 1,541 unique files (25,789 `N > 0` records, 10,415,507 elements, `team-b/HANDOFF.md` l.1466, l.1486). 28.16% of the 26,773 compactness targets have ratio ≥ 0.8; that these are whole-body / low-locality sliders is not measured.]*
+
+**Review status (2026-09-30): NEEDS-DATA: 8-vs-30 trial conflict unresolved; Team B can rerun the bounds and compactness tests with its own mesh and morph readers over the 1,606 bundles and report the non-compact fraction by `N` — desk review (not re-derived from the executable).**
+
 ### 15.4 Case study 1 — `cm_body` / `cf_body`, the full player base body mesh
 
 `customize_item.vpp_pc`'s `custmesh_-233129239.str2_pc/cm_body.ccmesh_pc` (male)
@@ -1007,7 +1062,7 @@ positions — no slider names, no id lookups**:
   units (a small fraction of the mesh's own ~2.3-unit diagonal) has its centroid
   in the **top 10–20% of the mesh's own vertical range** — 59/59 on `cm_body`,
   60/60 on `cf_body` — the neck/collar/upper-torso region for a body mesh whose
-  head is otherwise represented by a separate file. **Reproduced independently
+  head is otherwise represented by a separate file. **[CONFLICT — desk review 2026-09-30: §15.5 decodes all 95 face targets onto this same `cm_body` mesh at `Y` ≈ 1.58–1.72, "the head region", with bilateral mirror pairs — so `cm_body` itself contains head vertices, and "head otherwise represented by a separate file" cannot also hold as stated. The index conclusion is unaffected; which reading of the body mesh's upper region is right is OPEN, to be settled against real data.]** **Reproduced independently
   on two unrelated files (male and female base bodies), each with its own
   distinct vertex data.**
 - The handful of genuinely large-extent targets (indices 0–5 on both files)
@@ -1040,7 +1095,7 @@ to lean on. Its global maximum vertex index is **7,976**.
   top ~9% of the standing figure, consistent with a head sitting on a body that
   continues a little above it for hair). The shuffled control (30 trials/target,
   same method as §15.3) gives: **median ratio 0.0514, p90 0.0921, max 0.1319 —
-  100/100 targets below 0.5, 0/100 above 1.0.** Every single target is at least
+  100/100 targets below 0.5, 0/100 above 1.0.** **[CONFLICT — desk review 2026-09-30: the file has 95 targets (above, and §9), so a denominator of 100 cannot be right as stated — either the counts are 95/95 and 0/95 or the figures cover a different set; OPEN, to be settled by rerunning against real data.]** Every single target is at least
   ~7× more compact than a same-size random sample, several ×20 or more.
 - **The decisive, non-statistical piece of evidence**: several target pairs are
   **bilateral mirror images of each other**, visible directly from the decoded
@@ -1055,6 +1110,8 @@ to lean on. Its global maximum vertex index is **7,976**.
   or an indexing error — it requires the indices to be addressing the actual
   left- and right-hand vertices of a real bilaterally-symmetric head mesh.
 
+**Review status (2026-09-30): NEEDS-DATA: §15.5's 100/100 denominator for a 95-target file, and the §15.4 / §15.5 head-region conflict, are unresolved (markers above); the index-bound arithmetic (7,976 = 7,977 − 1; 1,426-vertex base head) checks — desk review (not re-derived from the executable).**
+
 ### 15.6 Conclusion, and the parallel to `spec-rig-format.md` §11.7 item 3
 
 **The direct reading is CONFIRMED — empirical**, at population scale (§15.2,
@@ -1064,7 +1121,7 @@ relationship to its mesh at all, where the correspondence had to be established
 purely from the index-bound coincidence and the geometry it produces. A morph
 record's vertex index `i` addresses index `i` in the paired mesh's own vertex
 array, full stop: no offset, no remap table, no per-channel indirection, and no
-indexing into a different (e.g. skinning-order) array.
+indexing into a different (e.g. skinning-order) array. *[Scope, desk review 2026-09-30: "full stop" means no indirection was observed in any tested set — the population bound, the compactness test (71.84% below 0.8; the ≥ 0.8 remainder is not individually explained) and the two case studies; the label is not changed.]*
 
 This document flagged, per the task brief, whether the same resolution that is
 still open for `spec-rig-format.md` §11.7 item 3 (whether a *different*
@@ -1098,6 +1155,8 @@ purely from the index-bound coincidence and the geometry it produces, not from
 re-deriving the runtime id-lookup path — consistent with it, not a duplicate of
 it.
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied ("full stop" scoped to the tested sets) — desk review (not re-derived from the executable).**
+
 ## 16. Registered types 9–14 traced: the customization current-job record `DAT_0263e0f4`, the logo-record pool `DAT_0263e0e8`, and a corrected field map (2026-09-20)
 
 `spec-format-inventory.md` listed IDs 9 `Pcust mesh`, 10 `Pcust peg` and 14 `Pcust logo peg` as "format yes; this variant's constructor untraced". This pass decompiled each constructor in full and read raw x86 at every call boundary. **Verdict: IDs 9, 10 and 14 are all stash-only — none of them reads a byte of its file.** That puts them in the same class as IDs 11, 12 and 13 (§8, §12.3, `spec-rig-format.md` §12), so the six `Pcust`-family constructors are one uniform "stash now, assemble later" mechanism. Along the way the pass found (a) that §12.3's ID→constructor labels were **shifted by one slot**, (b) that the "customization singleton" `DAT_0263e0f4` is really a **current-job pointer into a 64-entry pool**, not a single object, and (c) that the consumer `spec-rig-format.md` §12 called unidentified for ID 13's stash **is** `FUN_009f36d0`. All three are corrected here. Scripts: `tools/scripts/DecompileTaskS.java` (raw + decompile), `DecompileTaskS2.java` (one-global reference scan), `DecompileTaskS3.java` (linear disassembly of never-boundaried code); outputs `tools/taskS*_out.txt`.
@@ -1123,11 +1182,15 @@ The generic dispatcher `FUN_00dd2e30` calls each constructor as `ctor(name, a2, 
 
 **a2, the argument the constructors gate on, is the streaming *container* being loaded.** The dispatcher's only stack argument is forwarded unchanged to the constructor; its sole caller, the container load step `FUN_00db2ce0`, pushes its own `this` — a push of register `EDI`, followed by loading `ECX` from `ESI` and calling `0x00dd2e30`, at `0x00db2d44`. `spec-resource-dispatch.md` §8.6 calls it the "caller arg"; it is the container object. **[CONFIRMED — disassembly.]**
 
-**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `FUN_009f1730` (the store immediately precedes the container-start call `FUN_00dafea0(job+0x10)`, or `FUN_00daff10` on one path; the same field is later passed to the poll `FUN_00dafb60` (a result of `5` sends the job down the retire path) and the release `FUN_00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `FUN_00db2ce0` reports as `Error calling load() function for streaming file (%s)`. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `FUN_00c9b840` (a 2-instruction identity function returning its argument), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
+**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `FUN_009f1730` (the store immediately precedes the container-start call `FUN_00dafea0(job+0x10)`, or `FUN_00daff10` on one path; the same field is later passed to the poll `FUN_00dafb60` (a result of `5` sends the job down the retire path) and the release `FUN_00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `FUN_00db2ce0` reports as a load-function failure error naming the streaming file *(engine message paraphrased 2026-09-30, clean-room)*. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `FUN_00c9b840` (a 2-instruction identity function returning its argument), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
+
+**Review status (2026-09-30): NEEDS-EXE (§16.1–§16.2): address table consistent with `spec-format-inventory.md` and the back-to-back body sizes check; re-read the registration `FUN_00700780`, the six bodies `0x009f08c0`..`0x009f0a60` and `FUN_00dd2e30`/`FUN_00db2ce0` — desk review (not re-derived from the executable).**
 
 ### 16.3 What `DAT_0263e0f4` is: the current job of a 64-entry pool
 
 `FUN_009f1370` (the subsystem initialiser) builds a pool of **64 job records of `0x224` bytes** at `0x02641720`–`0x0264a020` (`0x8900 / 0x224 = 64` exactly), labelled by the engine's own strings **"pcust comp %d"** and a **"component streaming"** memory pool of `0x450000` bytes. Jobs are chained by links at job`+0x1b4`/`+0x1b8`; `DAT_0263e0fc` is the free-list head, `DAT_0263e0f8` the pending-queue head, and **`DAT_0263e0f4` the *current* job — null while idle**. The scheduler pops the queue head into `DAT_0263e0f4` (when nothing is current), and every retire/cancel path (`FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0`, `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, and the assembler's own tail) releases the container handle (`FUN_00dafad0(job+0x10)`) and nulls `DAT_0263e0f4`; most of them also return the job to the free list. So the earlier "singleton" wording (§12.3, `spec-rig-format.md` §12) should be read as **"the current job record"**. The assembler `FUN_009f36d0` operates on a job passed as its argument 1 and un-registers it with a pointer-identity compare of that argument against `DAT_0263e0f4` followed by a clear at its end (§14.5 item 3); the ctors write through `DAT_0263e0f4`. That the two are the same object at run time remains a runtime fact (§14.5 item 3's bounded gap, unchanged), but the offsets line up field for field — every stash slot a constructor writes is read by the assembler at the identical offset, as a `(pointer, length)` pair. **[CONFIRMED — disassembly for the pool, lists and lifecycle; HIGH CONFIDENCE — inferred for identity of that argument and `DAT_0263e0f4`.]**
+
+**Review status (2026-09-30): NEEDS-EXE: pool arithmetic checks (64 × `0x224` = `0x8900`); `FUN_009f1370`, `FUN_009f1730` and the retire paths single-source — desk review (not re-derived from the executable).**
 
 ### 16.4 Job-record field map (everything with an identified writer or reader)
 
@@ -1154,6 +1217,8 @@ Only the constructors write the stash slots among the direct users of `DAT_0263e
 
 **The undefined code at `0x009f32f0`–`0x009f34a0`.** Ghidra has no function here, which is why the previous "14 users" count missed five of the references. Its first instructions load `DAT_0263e0f4`, gate on the incoming container against job`+0x10`, then add the c-side lengths (`+0x108`, `+0xb0`, `+0x60`) and g-side lengths (`+0x10c`, `+0xb8`, `+0x64`) and compare them against per-type budgets in a table at `0x02668248` (20-byte rows) before setting the ready flag. **It is stored as a function-pointer immediate by `FUN_006ff730` (`0x006ff9a6`) — a *container-type* registration function, sibling of the resource-type registration `FUN_00700780`, which registers named container types through `FUN_00db1c90`.** The record it sits in is named **"Cust_Component"**; the sibling record **"Cust_Logo"** registers `FUN_009f0a50` (a 4-instruction function that stores `2` into the logo record's state field, §16.5), and "Cust_Composite"/"Cust_Shaderball" register other callbacks (`LAB_009f9b30`/`LAB_009f9c50`, `LAB_009f9c00`/`LAB_009f9c50`). `FUN_00db2ce0` invokes the container type's first function pointer with the container once every entry has loaded. So `0x009f32f0` is the **completion callback of container type "Cust_Component"** and `FUN_009f0a50` that of "Cust_Logo". **[CONFIRMED — disassembly for the stores and the strings; HIGH CONFIDENCE — inferred that the first function pointer of a container-type record is the completion callback `FUN_00db2ce0` calls (matching call shape, not read from the registration consumer).]**
 
+**Review status (2026-09-30): NEEDS-EXE: offsets tile only over the listed fields (`0x110`..`0x15b`, `0x1b0`..`0x1b3`, `0x1bd`..`0x223` unaccounted, not claimed); the `0x009f32f0` code and the budget table `0x02668248` single-source — desk review (not re-derived from the executable).**
+
 ### 16.5 The second pointer, `DAT_0263e0e8`: the logo-record pool (ID 14)
 
 `FUN_009f1370` also builds a second pool: **64 records of `0x5c` bytes** at `0x0264a020`–`0x0264b720` (`0x1700 / 0x5c = 64`), links at record`+0x44`/`+0x48`, pending-queue head `DAT_0263e0ec`, free-list head `DAT_0263e0f0`, and **`DAT_0263e0e8` = the current logo record**. Its users (reference manager and a full operand scan agree, 26/26): `FUN_009f07d0` (lookup by the record's first dword over the current record and the pending list), `FUN_009f0a50` (sets `+0x40 = 2`), `FUN_009f0a60` (the ID 14 constructor), `FUN_009f1370`, `FUN_009f1730` (the scheduler, which starts the record's container by name via `FUN_00db3530`), `FUN_009f46f0` (§16.6).
@@ -1170,6 +1235,8 @@ Only the constructors write the stash slots among the direct users of `DAT_0263e
 
 ID 14's constructor has **no container gate and no name copy** — only a null test of `DAT_0263e0e8` — so *any* entry of type 14 that arrives while a logo record is current is stashed. **[CONFIRMED — disassembly.]**
 
+**Review status (2026-09-30): NEEDS-EXE: arithmetic checks (64 × `0x5c` = `0x1700`); the 26/26 reference count cannot be rechecked at desk — desk review (not re-derived from the executable).**
+
 ### 16.6 What consumes each stash — and that it is the *sibling type's own parser*
 
 The consumer of IDs 9–13 is the assembler `FUN_009f36d0` (two callers: `FUN_009f46f0` case 3 and the thin trampoline `FUN_009f4550`; the "PCC_CREATE/DELETE/SWAP/FINALIZE" debug labels in `FUN_009f46f0` name its event kinds). It copies the stashed blobs into two allocations it was handed (all c-side blobs into one, all g-side into the other, later blobs 16-byte-aligned after earlier ones) and then feeds each to the parser its sibling type uses:
@@ -1185,9 +1252,13 @@ The consumer of IDs 9–13 is the assembler `FUN_009f36d0` (two callers: `FUN_00
 
 So **none of IDs 9/10/14 is a distinct format**: each is the sibling format's parse, reached late. IDs 10 and 14 register the peg under a synthesised name (`FUN_00dcefa0` with its flag set first claims a named slot via `FUN_00dcee60`; ID 10's name is the job's `+0x68` string with the slot index appended and the platform `.cpeg_pc` extension; ID 14's is built by `FUN_009ef900` as a `"%s_%d_%d.%s"` composite — its inputs were not traced). The assembled c-side region for one component is `[mesh c][peg c]`, then the morph blob at the next 16-byte boundary; the g-side region holds the mesh g blob, then the morph g blob at a 16-byte boundary (the peg's g bytes are copied to their own place before registration). **[CONFIRMED — disassembly.]**
 
+**Review status (2026-09-30): NEEDS-EXE: stash→parser pairings consistent with `spec-format-inventory.md`, disassembly only (`FUN_009f36d0` and the cited parser chains) — desk review (not re-derived from the executable).**
+
 ### 16.7 The complete list of direct users of `DAT_0263e0f4`
 
 **Seventeen functions, not fourteen** (55 references, reference manager and operand scan agreeing exactly): `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, `FUN_009f07c0` (returns whether a job is current), the five constructors `0x009f08c0`/`0x009f0910`/`0x009f0970`/`0x009f09d0`/`0x009f0a20`, `FUN_009f1370` (pool init), `FUN_009f1730` (scheduler), `FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0` (cancel/retire paths), the undefined `0x009f32f0` completion callback, `FUN_009f36d0` (assembler), `FUN_009f5220` (calls `FUN_009f46f0`, then `FUN_009ed530` when no job is current). The earlier 14 were the ones that were already Ghidra functions; `0x009f08c0` and `0x009f0a20` had no function and `0x009f32f0` still has none. **[CONFIRMED — disassembly.]**
+
+**Review status (2026-09-30): NEEDS-EXE: reference list of `DAT_0263e0f4` (17 functions, 55 references) to be regenerated from the executable — desk review (not re-derived from the executable).**
 
 ### 16.8 What remains open
 
@@ -1196,7 +1267,10 @@ So **none of IDs 9/10/14 is a distinct format**: each is the sibling format's pa
 3. Whether the assembler's argument 1 equals `DAT_0263e0f4` at the moment it runs — a runtime fact (§14.5 item 3, unchanged).
 4. The morph-slider value's home and range (§14.5 item 2) is unaffected by this section.
 
+**Review status (2026-09-30): DESK-PASS — open list accurate — desk review (not re-derived from the executable).**
+
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 6 stale table rows/items resolved in place (§3.4 `+0x08`/`+0x14`, §3.5 `+0`/`+8`/`+10`, §7 vertex-index line → §13.2/§13.3/§15); added a stride pointer to the §13.3 pseudocode (§14.4); added an update note to §15.6 (rig §11.4 retracted, §11.7 item 3 resolved); clarified §14.7 "§5" as `HANDOFF.md` §5 and annotated its textual-scan bullet with the §14.5 item 3(a) refutation; reworded decompiler-shaped text (a decompiled signature, pseudocode calls/conditions/returns, `LAB_` goto, ~25 `param_N` uses) into plain English.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (all 7 `HANDOFF.md` §5 references are methodology/provenance and already state their lesson inline; §5 still exists at that number); repointed 0 `HANDOFF.md` §27.x references to the archived headings (none present); 0 left (see review).
+- 2026-09-30 (adversarial desk review, `review/adv_morph.md`): added per-unit review status lines and a front-matter summary (9 VALIDATED-BY-DATA, 12 DESK-PASS, 4 NEEDS-DATA, 18 NEEDS-EXE); recorded Team B's walk findings (descriptors contiguous after the whole directory; align-16 applied even when `N = 0`) in §3 as Team B results; marked §3.5's `+0`/`+8`/`+10` main-column cells superseded by §13.2; scoped §1/§13.4's "confirmed on 21,104,267 elements" to layout/plausibility and flagged the unlabelled populations (21.1M, 56,822) as OPEN; added OPEN markers for the mode-0/2 descriptor (§6), §12.1's 80% gap, §12.3's float-op negative, §13.3 bit-exactness, §14.3 orphan scale claim, §14.4 untiled `+0x10`..`+0x13` and zero-divide; conflict markers for §15.1/§15.3 trial counts, §15.4/§15.5 head region and §15.5's 100/100 denominator; paraphrased two verbatim engine error strings (§1, §16.2) and replaced §14.2's register-level narrative with prose citing addresses. No label raised.
