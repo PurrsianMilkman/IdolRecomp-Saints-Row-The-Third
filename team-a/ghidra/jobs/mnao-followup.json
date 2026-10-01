@@ -1,0 +1,20 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to mnao — zscene load step 0x007258a0 and cutscene.xtbl field parse, cutscene state-machine jump table, fade callers, UI resolution writers, safe-frame doubles",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/zscene", "func", "depth:1", "maxfuncs:25", "maxinsn:2000", "0x007258a0", "0x0073bfb0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/zxref", "xref", "xrefs:120", "0x007258a0", "0x0072defc"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/jt", "ptrs", "count:16", "nodecomp:1", "0x0072defc"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/fade", "func", "depth:0", "maxfuncs:10", "maxinsn:2000", "0x005d14b0", "0x007a82c0", "0x005d2400", "0x005d1a30", "0x0059faf0", "0x00706be0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/ui", "func", "depth:1", "maxfuncs:15", "0x00e23a20", "0x00e23910", "0x00e23770", "0x00e237f0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/consts", "ptrs", "count:2", "nodecomp:1", "0x0115ba60", "0x0116dfc0"]}
+ ],
+ "collect": ["**/*.txt"]
+}
