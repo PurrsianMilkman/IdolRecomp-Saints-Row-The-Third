@@ -287,8 +287,18 @@ class Agent:
             elif kind == "ls":
                 if not isinstance(s.get("pattern", "*"), str) or ".." in s.get("pattern", ""):
                     raise JobRejected("ls.pattern must be a relative glob without '..'")
+            elif kind == "files":
+                roots = self.cfg.get("read_roots") or {}
+                root = roots.get(s.get("root"))
+                if not root:
+                    raise JobRejected("files.root must be one of the owner's read_roots: %s" % sorted(roots))
+                if team not in root.get("teams", []):
+                    raise JobRejected("read_root '%s' is not enabled for %s" % (s.get("root"), team))
+                pat = s.get("pattern", "**/*")
+                if not isinstance(pat, str) or ".." in pat or os.path.isabs(pat) or pat.startswith(("/", "\\")):
+                    raise JobRejected("files.pattern must be a relative glob without '..'")
             else:
-                raise JobRejected("unknown step kind %r (build, run, ghidra, ls)" % kind)
+                raise JobRejected("unknown step kind %r (build, run, ghidra, ls, files)" % kind)
         collect = job.get("collect", [])
         if not isinstance(collect, list) or any((not isinstance(p, str)) or ".." in p or os.path.isabs(p) for p in collect):
             raise JobRejected("collect must be a list of relative globs inside {OUT}")
@@ -339,6 +349,9 @@ class Agent:
             if step["kind"] == "ls":
                 rec.update(self.do_ls(step.get("pattern", "*")))
                 continue
+            if step["kind"] == "files":
+                rec.update(self.do_files(step, out_dir))
+                continue
             cmd, cwd = self.command_for(team, step, ctx)
             rec["cmd"] = self.scrub(" ".join(cmd))
             rc, out, err, dur = self.execute(cmd, cwd, timeout, os.path.join(out_dir, "_step%02d" % i))
@@ -354,7 +367,7 @@ class Agent:
                 if not step.get("continue_on_error"):
                     break
         result["status"] = status
-        result["_collect"] = job.get("collect", [])
+        result["_collect"] = list(job.get("collect", [])) + (["_files/**/*"] if os.path.isdir(os.path.join(out_dir, "_files")) else [])
 
     def command_for(self, team, step, ctx):
         kind = step["kind"]
@@ -431,6 +444,33 @@ class Agent:
         os.makedirs(os.path.join(out_dir, "_bridge"), exist_ok=True)
         with open(os.path.join(out_dir, "_bridge", name), "w", encoding="utf-8") as f:
             f.write(text)
+
+    def do_files(self, step, out_dir):
+        """List files under an owner-whitelisted folder (pc_config read_roots) and stage the text ones for
+        upload. Upload filtering (extensions, binary, size, budget) and path scrubbing are the same as for
+        any other result file."""
+        name = step["root"]
+        root = os.path.realpath(self.cfg["read_roots"][name]["path"])
+        if not os.path.isdir(root):
+            return {"exit_code": 2, "stdout": "", "stderr": "read_root '%s' does not exist on this PC\n" % name}
+        cap = min(int(step.get("max_files", 500)), 5000)
+        exts = [e.lower() for e in self.cfg["artifact_extensions"]]
+        listed, staged = [], 0
+        for p in sorted(glob.glob(os.path.join(root, step.get("pattern", "**/*")), recursive=True)):
+            rp = os.path.realpath(p)
+            if not os.path.isfile(rp) or os.path.commonpath([root, rp]) != root:
+                continue  # skip directories and anything a link points outside the root
+            rel = os.path.relpath(rp, root).replace("\\", "/")
+            listed.append("%12d  %s" % (os.path.getsize(rp), rel))
+            if staged < cap and os.path.splitext(rel)[1].lower() in exts:
+                dst = os.path.join(out_dir, "_files", name, *rel.split("/"))
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copyfile(rp, dst)
+                staged += 1
+            if len(listed) >= 20000:
+                break
+        return {"exit_code": 0, "stdout": "\n".join(listed) + "\n", "stderr": "",
+                "count": len(listed), "staged": staged}
 
     def do_ls(self, pattern):
         root = os.path.abspath(self.cfg["game_dir"])
