@@ -5,6 +5,12 @@
 #     -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address,undefined"
 # then fuzz/run_fuzz.sh <build dir> <seconds per target>. See fuzz/README.md.
 
+# Upstream Lua 5.1's lua_number2int (luaconf.h) is a plain double->int cast,
+# deliberately fast and undefined for out-of-range values (e.g. a 1e300 table
+# key); Clang's UBSan float-cast-overflow check reports it. The vendored Lua
+# stays unmodified, so that single check is disabled for the lua51 target only.
+target_compile_options(lua51 PRIVATE -fno-sanitize=float-cast-overflow)
+
 set(CRREISH_FUZZ_LIBS vpp_container sr3xtbl sr3texture sr3geometry sr3mesh sr3rig sr3anim
     sr3clmesh sr3zone sr3save sr3fxo sr3d3d9bc sr3lua sr3asm sr3vintdoc)
 
