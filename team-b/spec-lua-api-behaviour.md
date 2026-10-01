@@ -10414,8 +10414,82 @@ when that runs is OPEN.
 
 **Tutorial names.** The name list comes from the static, file-backed pointer table `0x012f5930` (210
 pointers to strings, searched case-insensitively by `0x00717780`, −1 on a miss). **[CONFIRMED —
-disassembly.]** Index 0 is `save` and index 1 is `autosave`. **The full index → name list is pending
-job `20261001T114802-team-a-kyoi` and will be added here when it lands.**
+disassembly.]** Index 0 is `save` and index 1 is `autosave`. ~~**The full index → name list is pending
+job `20261001T114802-team-a-kyoi` and will be added here when it lands.**~~ **Full list (2026-10-01, bridge job `20261001T114802-team-a-kyoi`, CrreishDump `ptrs` mode over the 210 file-backed pointers at `0x012f5930`):** the index is the table index the resolver `0x00717780` returns and the per-entry state table at `0x0151d600` uses. **[CONFIRMED — disassembly (static data) for 209 names; index 176 OPEN.]** These are functional identifiers that scripts pass to `tutorial_start`/`tutorial_advance` and that the engine resolves by name (owner's content ruling, 2026-10-01).
+
+| # | name | # | name | # | name |
+|--:|---|--:|---|--:|---|
+| 0 | `save` | 70 | `human_shield` | 140 | `div_intro_survival` |
+| 1 | `autosave` | 71 | `quick_kill` | 141 | `div_survival_started` |
+| 2 | `notoriety_gang` | 72 | `throw_kill` | 142 | `div_intro_barnstorming` |
+| 3 | `notoriety_police` | 73 | `improvised_weapons` | 143 | `hitman_new` |
+| 4 | `notoriety_forgive` | 74 | `minimap_icons` | 144 | `chopshop` |
+| 5 | `crib_receive` | 75 | `combat_ranged` | 145 | `act_fraud_first_hit` |
+| 6 | `crib_customize` | 76 | `combat_weapons` | 146 | `act_fraud_first_hit_pc` |
+| 7 | `crib_garage` | 77 | `combat_grenades` | 147 | `act_fraud_adrenaline` |
+| 8 | `crib_cash` | 78 | `combat_grenades_pc` | 148 | `mis_02_skydive_flip` |
+| 9 | `crib_closet` | 79 | `combat_swords` | 149 | `mis_02_skydive_flip_pc` |
+| 10 | `crib_weapons` | 80 | `combat_fineaim` | 150 | `game_complete` |
+| 11 | `crib_newspaper` | 81 | `jump_climb` | 151 | `notoriety_decreases` |
+| 12 | `combat` | 82 | `crouch` | 152 | `weap_airstrike` |
+| 13 | `busted` | 83 | `driving_stunts` | 153 | `weap_alt_fire` |
+| 14 | `smoked` | 84 | `shooting_stunts` | 154 | `weap_charge_weapon` |
+| 15 | `homie_revive` | 85 | `ambulance_shock_paddles` | 155 | `weap_drone` |
+| 16 | `waypoint` | 86 | `ambulance_cpr` | 156 | `weap_rc_vehicle` |
+| 17 | `explore` | 87 | `cruise_control_completed` | 157 | `weap_rc_vehicle_upgraded` |
+| 18 | `stronghold_start` | 88 | `helicopter_control` | 158 | `weap_temp_weapon` |
+| 19 | `stronghold_respect` | 89 | `helicopter_control_pc` | 159 | `weap_zoom` |
+| 20 | `act_intro_crowd_control` | 90 | `airplane_control` | 160 | `weap_dlc_genki_gun` |
+| 21 | `act_intro_drug_trafficking` | 91 | `airplane_control_alt` | 161 | `weap_dlc_shotgun` |
+| 22 | `act_intro_escort` | 92 | `airplane_control_alt_pc` | 162 | `weap_dlc_sniper` |
+| 23 | `act_intro_escort_tiger` | 93 | `vtol_control` | 163 | `combat_melee_bash` |
+| 24 | `act_intro_fight_club` | 94 | `mission_checkpoint` | 164 | `upgrade_store` |
+| 25 | `act_intro_fuzz` | 95 | `taunting` | 165 | `weapon_upgrades` |
+| 26 | `act_intro_heli_assault` | 96 | `respect_meter` | 166 | `recieve_crib` |
+| 27 | `act_intro_human_torch` | 97 | `health_sprint_meter` | 167 | `flashpoint` |
+| 28 | `act_intro_ins_fraud` | 98 | `pause_map` | 168 | `player_choice` |
+| 29 | `act_intro_mayhem` | 99 | `minimap` | 169 | `rank_up` |
+| 30 | `act_intro_piracy` | 100 | `recruiting` | 170 | `car_shooting` |
+| 31 | `act_intro_septic_truck` | 101 | `diversion_hud` | 171 | `vehicle_turret` |
+| 32 | `act_intro_snatch` | 102 | `hud_text` | 172 | `secret_locations` |
+| 33 | `act_intro_snatch_kinzie` | 103 | `unlockables` | 173 | `sprint_recharge` |
+| 34 | `act_crowd_control_throwing` | 104 | `store_ownership` | 174 | `radio_control` |
+| 35 | `act_crowd_control_grab` | 105 | `gang_customize` | 175 | `human_shield_general` |
+| 36 | `escort_minigame` | 106 | `shortcut_splines` | 176 | *(OPEN: string at 0x01124348 not resolved by the dump, shorter than 4 characters or non-ASCII)* |
+| 37 | `fight_club_neck_breaker` | 107 | `satchel_charges` | 177 | `dlc_mancannon` |
+| 38 | `fight_club_opponent_down` | 108 | `ar50` | 178 | `nag_change_clothes` |
+| 39 | `activity_complete` | 109 | `annihilator` | 179 | `nag_crib_stash` |
+| 40 | `div_intro_ambulance` | 110 | `np_car_controls` | 180 | `city_takeover` |
+| 41 | `div_intro_fire_truck` | 111 | `np_motorcycle_controls` | 181 | `nag_upgrade_store` |
+| 42 | `div_available_flashing` | 112 | `np_motorcycle_controls_pc` | 182 | `challenges` |
+| 43 | `div_intro_hoing` | 113 | `np_boat_controls` | 183 | `nitrous` |
+| 44 | `div_intro_hostage` | 114 | `np_heli_weapon_controls` | 184 | `low_ammo` |
+| 45 | `div_intro_mugging` | 115 | `np_tank_controls` | 185 | `TUT_SIXAXIS_BOAT` |
+| 46 | `div_intro_racing` | 116 | `np_tank_controls_pc` | 186 | `TUT_SIXAXIS_PLANE` |
+| 47 | `div_available_streaking` | 117 | `div_intro_coop_death_tag` | 187 | `TUT_SIXAXIS_HELICOPTER` |
+| 48 | `div_available_streaking_pc` | 118 | `div_intro_coop_cat_and_mouse` | 188 | `horde_mode_pickup` |
+| 49 | `div_intro_streaking` | 119 | `territory_` | 189 | `dlc1_act_genki_escort_into` |
+| 50 | `div_intro_tagging` | 120 | `tss02_complete_` | 190 | `dlc1_act_panda_blazing` |
+| 51 | `div_intro_taxi` | 121 | `sprint` | 191 | `dlc1_act_ball_mayhem` |
+| 52 | `div_intro_tow_truck` | 122 | `vehicle entry` | 192 | `dlc2_near_crash` |
+| 53 | `div_intro_base_jumping` | 123 | `act_intro_tank_mayhem` | 193 | `dlc2_alien_aircraft` |
+| 54 | `diversion_complete` | 124 | `act_tank_mayhem_hvt` | 194 | `dlc1_act_ball_mayhem_shockwave` |
+| 55 | `collection_collectible` | 125 | `act_tank_mayhem_repair` | 195 | `airplane_control_pc` |
+| 56 | `collection_stunt_jump` | 126 | `act_intro_guardian_angel` | 196 | `horde_mode_new_wave` |
+| 57 | `store_intro_clothes` | 127 | `act_intro_running_man` | 197 | `horde_mode_challenge_wave` |
+| 58 | `store_intro_mechanic` | 128 | `act_intro_cyber_blazing` | 198 | `horde_mode_weapon_upgrade` |
+| 59 | `store_intro_weapons` | 129 | `escort_minigame` | 199 | `horde_mode_kill_all_enemies` |
+| 60 | `store_intro_melee_weapons` | 130 | `final_act_level_complete` | 200 | `horde_mode_unlimited_ammo` |
+| 61 | `store_intro_liquor` | 131 | `diversion_respect_cap` | 201 | `horde_mode_invulnerability` |
+| 62 | `store_intro_fnf` | 132 | `div_intro_taunting` | 202 | `mis_21_ride_killbane` |
+| 63 | `store_intro_music` | 133 | `div_intro_holdup` | 203 | `mis_21_ride_killbane_pc` |
+| 64 | `store_intro_surgeon` | 134 | `div_intro_hitman` | 204 | `mis_undercover` |
+| 65 | `store_intro_food` | 135 | `div_hitman_started` | 205 | `mis_16_avatar_attacks` |
+| 66 | `store_intro_tattoo` | 136 | `div_hitman_gps` | 206 | `mis_22_oleg_follow` |
+| 67 | `store_intro_jewelry` | 137 | `div_intro_chop_shop` | 207 | `dlc3_m03_super_powers` |
+| 68 | `store_intro_mechanic_large` | 138 | `div_chop_shop_vehicle_damage` | 208 | `dlc2_win` |
+| 69 | `store_intro_vehicle_dealer` | 139 | `div_chop_shop_gps` | 209 | `dlc3_win` |
+
 
 **Vehicle-store state.** The flag `0x022cdf08` is zero at load, so `store_vehicle_get_state` returns
 `0.0` at startup and stays 0 until `store_vehicle_change_mode` opens a store or one of the other two
@@ -11063,3 +11137,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020200-team-a-nzxf`): corrected §2.9/§8.13/§26.10/§26.23 (fade request helper order is `(durationMs, callback, flag)`, `screen_fade_do` is a direct Lua call in the UI state, not a command queue; the opcode-0x53 record layout), §8.21 (prep tears down the current scene and fills the pending slot; it does not start a load; the extra values are constants; `0x0101b530` is a stub), §14.23 (fast-path polarity; the sense-inversion item is closed); added to §26.9; added §26.24 (screen fade state machine), §26.25 (zscene lifecycle) and §26.26 (`vint_is_std_res`/`vint_get_safe_frame`, no earlier entry here), each with a next-dump list. Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26.27 (the 24 bare globals of `0x00e0f900`: roster, both-states registration, `rand_int`/`rand_float`/`round`/`debug_print`/`assert_msg` behaviour, the shared 8192-entry random ring; seeding and the 18 undumped bodies OPEN, follow-up job `bgcx-followup.json`). Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020213-team-a-dksj`): §3.1 — replaced the head/tail description with the confirmed body (host test on `+0x5c`/`+0x58` first, list head `+0x54`, member count `+0x60` must be ≥ 2, slot check `0x00877a90`); §8.27/§10.2 confirmed, no session → false; §10.1 — three writers of `0x022cdf08`, not one, initial value 0; §6.19/§10.4 — table base `0x0151d600`, `+0x08` is a descriptor pointer, `+0x0c` is a per-entry state 0–4 rather than a kind, descriptor `+0x24` bits, the dispatcher order, `tutorial_advance` true only in state 3; annotated the same table references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
+- 2026-10-01 (cloud, bridge job `20261001T114802-team-a-kyoi`): §26.28 — the 210-entry tutorial name table from the static pointer table `0x012f5930` (209 names resolved; index 176's string at `0x01124348` not resolved by the dump, OPEN).
