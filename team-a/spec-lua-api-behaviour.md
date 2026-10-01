@@ -1028,15 +1028,45 @@ all, consistent with a genuine zero-argument query rather than an unused/ignored
 
 **Return:** 1 boolean, pushed via the shared push primitive (`0x00dfe590`).
 
-**Body:** queries ~~a co-op session object~~ the session-singleton accessor (`0x0087ba20`, global `0x024d8534`, §8.2); if present, compares its head/tail
-member-list pointers and a small state counter **[OPEN — desk review 2026-09-30: no field offsets are given, so the claim of §6.22/§8.27 that these are other fields than the `+0x58`/`+0x5c` host pair cannot be checked; `0x00681370` and `0x00877a90` are not identified elsewhere; to be settled against the executable.]**, and additionally checks a network-match-state
-accessor (`0x00681370`) before walking the member list once (comparing each entry against a
+**Body:** queries ~~a co-op session object~~ the session-singleton accessor (`0x0087ba20`, global `0x024d8534`, §8.2); if present, ~~compares its head/tail
+member-list pointers and a small state counter~~ **[OPEN — desk review 2026-09-30: no field offsets are given, so the claim of §6.22/§8.27 that these are other fields than the `+0x58`/`+0x5c` host pair cannot be checked; `0x00681370` and `0x00877a90` are not identified elsewhere; to be settled against the executable.]** **[Settled 2026-10-01 by job `20261001T020213-team-a-dksj`: there is no head/tail pair — see the corrected body below.]**, and additionally checks ~~a network-match-state
+accessor~~ (`0x00681370`, **corrected: a one-instruction reader of session `+0x60`, the member count**) before walking the member list once (comparing each entry against a
 per-entry validity test, `0x00877a90`).
+
+**Corrected body (re-derived from the executable 2026-10-01, job `20261001T020213-team-a-dksj`).** The Lua function pushes
+the result of a core predicate at `0x00867830`. That predicate answers true only when all four of
+these hold:
+
+1. the session pointer (accessor `0x0087ba20`, global `0x024d8534`) is non-null — with no session the
+   answer is false;
+2. either the local machine is the host — session `+0x5c` equals session `+0x58`, the same pair §8.27
+   and §10.2 test, and it is the *first* test in the body — or a client-side gate passes: (session
+   `+0xf4` ≥ 2, or session `+0x224` ≠ 0, or session `+0xf4` ≠ session `+0xf8`) and the byte at session
+   `+0xfd` is 0;
+3. the member count at session `+0x60` (read through `0x00681370`) is **at least 2** — the comparison is
+   unsigned, so a count of 0 or 1 fails;
+4. every member other than the local one passes the per-member slot check `0x00877a90`. The walk
+   starts at the list head, session `+0x54`, follows the next pointer at node `+0xb28c`, and stops at a
+   null pointer or on returning to the head; the node equal to session `+0x5c` is skipped. The slot
+   check uses the node's byte at `+0x158` as an index into a 5-byte-stride array at (session
+   `+0x50`)`+0xc`, whose element count is at (session `+0x50`)`+0x10`; a node passes when the index is
+   in range, the element's byte `+2` is non-zero and the element's byte `+0`, taken as a signed char,
+   is at least 1. An out-of-range slot counts as −1 and fails.
+
+**[CONFIRMED — disassembly: the four conditions, the ≥ 2 member rule and the walk, from the bodies of
+`0x00a42bd0`, `0x00867830`, `0x00681370` and `0x00877a90`.]** Field meanings: `+0x54` is the
+member-list head, `+0x58` and `+0x5c` are member records (`+0x5c` the local member, since the walk
+skips it; `+0x58` the host member), `+0x60` is the member count **[HIGH CONFIDENCE — from how the
+fields are used, not from names]**; `+0xf4`/`+0xf8`/`+0xfd`/`+0x224` form a client-side
+connection-state gate **[OPEN — only their gating role is confirmed]**. Consequence: a session with
+fewer than 2 members is never "active", whether or not the local machine is the host (§26.28).
 
 **Side effects / subsystem:** none — pure query. Subsystem: co-op/session state. **[CONFIRMED —
 disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: head/tail field offsets not given, so the §6.22/§8.27 host-pair reconciliation cannot be checked (accessor wording fixed) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the four-condition body, host test first on `+0x5c`/`+0x58`, the member count at `+0x60` must be ≥ 2, the walk from `+0x54` skipping `+0x5c`, the slot check, no session → false. HIGH CONFIDENCE — field meanings (head, local/host member records, count). OPEN — the meaning of the client-side gate fields `+0xf4`/`+0xf8`/`+0xfd`/`+0x224`.**
 
 ### 3.2 `on_death` (`0x00a57c80`) — 386 calls / 37 scripts
 
@@ -2177,9 +2207,71 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **Return:** none (`return 0;`).
 
-**Body:** arg 1 resolves through a dedicated, 210-entry (`0xd2`) fixed name table (`0x00717780`, case-insensitive linear scan, returning the matched index or `-1`) — a name space entirely separate from the notoriety-family resolvers elsewhere in this cluster. On success, the index and the four remaining arguments (with a literal `1` inserted as an internal fourth value not exposed to the Lua-visible signature) are handed to a single large dispatcher, `0x00717780`'s sibling `0x007169e0`. That dispatcher consults a matching 210-entry descriptor table (`0x0151d608`, 36 bytes per entry) and, per an entry-specific flag bit, either issues a simple prompt (`0x00715bf0`) or assembles and dispatches a richer animated/video tutorial widget (`0x00715760`→`0x007fc560`); separately, when running as the sole/local co-op authority (the same `0x0087ba20` check used throughout this cluster) and a further per-entry flag bit (or the hardcoded internal literal `1` above) permits it, the event is additionally funnelled through the SAME record-and-replicate triplet as elsewhere in this document, tagged with yet another new opcode, `0x54`.
+**Body:** arg 1 resolves through a dedicated, 210-entry (`0xd2`) fixed name table (`0x00717780`, case-insensitive linear scan, returning the matched index or `-1`) — a name space entirely separate from the notoriety-family resolvers elsewhere in this cluster. On success, the index and the four remaining arguments (with a literal `1` inserted as an internal fourth value not exposed to the Lua-visible signature) are handed to a single large dispatcher, `0x00717780`'s sibling `0x007169e0`. That dispatcher consults a matching 210-entry ~~descriptor table (`0x0151d608`, 36 bytes per entry)~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: a 210-entry run-time table based at `0x0151d600`, 36 bytes per entry; `0x0151d608` is entry 0's `+0x08` field, a pointer to that entry's separately allocated descriptor record — see the re-derivation below]** and, per an entry-specific flag bit, either issues a simple prompt (`0x00715bf0`) or assembles and dispatches a richer animated/video tutorial widget (`0x00715760`→`0x007fc560`); separately, when running as the sole/local co-op authority (the same `0x0087ba20` check used throughout this cluster) and a further per-entry flag bit (or the hardcoded internal literal `1` above) permits it, the event is additionally funnelled through the SAME record-and-replicate triplet as elsewhere in this document, tagged with yet another new opcode, `0x54`.
 
-**Side effects/subsystem:** dispatches a named tutorial/hint prompt (simple or richly-animated per a per-entry flag), optionally network-replicated. Subsystem: tutorial/HUD-hint scripting. **[CONFIRMED — disassembly for the resolver, the two display-style branches, and the record-and-replicate opcode; OPEN — the precise real-world meaning of args 2-5 and of several internal per-entry flag bits and threshold constants (e.g. a repeated `0xbc` split between two id ranges) were not independently re-derived past their own gating role.]**
+**Side effects/subsystem:** dispatches a named tutorial/hint prompt (simple or richly-animated per a per-entry flag), optionally network-replicated. Subsystem: tutorial/HUD-hint scripting. **[CONFIRMED — disassembly for the resolver, the two display-style branches, and the record-and-replicate opcode; OPEN — the precise real-world meaning of args 2-5 and of several internal per-entry flag bits and threshold constants (e.g. a repeated `0xbc` split between two id ranges) were not independently re-derived past their own gating role.]** **[Partly settled 2026-10-01, job `20261001T020213-team-a-dksj`: the flag bits and the `0xbc` split are described below; the meanings of several globals stay OPEN.]**
+
+**Re-derivation from the executable (2026-10-01, job `20261001T020213-team-a-dksj`).**
+
+*The table.* It is run-time state, zero at load (a `.data` block that is not file-backed), not static
+data. Base `0x0151d600`, 36-byte entries (index × 9 dwords), 210 entries. Only the name list is static:
+a file-backed table of 210 string pointers at `0x012f5930`, searched by `0x00717780` (§26.28).
+**[CONFIRMED — disassembly.]** Entry layout:
+
+| offset | content | label |
+|---|---|---|
+| `+0x00` / `+0x04` | next / previous links in a circular doubly-linked list of queued simple prompts (head global `0x0151d588`) | CONFIRMED |
+| `+0x08` | pointer to the entry's descriptor record; written only by `0x00715850`, which also sets the state to 0 or 1 | CONFIRMED |
+| `+0x0c` | per-entry **state**, 0–4 (not a kind) | CONFIRMED |
+| `+0x10` | not touched by the dumped code | OPEN |
+| `+0x14` | argument 2 (the number) | CONFIRMED |
+| `+0x18` | 0 if argument 5 is true, else the descriptor's `+0x20` dword | CONFIRMED |
+| `+0x1c` | the hidden literal 1 | CONFIRMED |
+| `+0x20` | not touched by the dumped code | OPEN |
+
+*Descriptor record* (what `+0x08` points at, only where read): `+0x00` a default widget source;
+`+0x14` an optional builder function pointer (called with the descriptor when non-null); `+0x20` a
+default parameter copied into entry `+0x18`; `+0x24` flag bits — `0x04` use the rich (animated/video)
+widget instead of the simple prompt, `0x08` allowed while a mission is active, `0x10` host-only
+(suppressed on a co-op client). **[CONFIRMED — disassembly for the bit tests; HIGH CONFIDENCE for the
+bit names, taken from what each bit gates.]**
+
+*States.* 0 = untouched (zero-fill); 1 = armed/enabled (the dispatcher proceeds from it); 2 = queued as
+a simple prompt; 4 = rich widget issued. **[CONFIRMED — disassembly, from the writers.]** No code writes
+the literal 3; it can only come from the generic setter `0x007163e0` or from undefined code at
+`0x00717363`. **[OPEN — what state 3 means. HYPOTHESIS: displayed, waiting for the player to finish the
+step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
+
+*Dispatcher order* (`0x007169e0`; A = index, N = argument 2, F = argument 3, B4/B5 = arguments 4/5, P4
+= the hidden 1). Each "stop" means do nothing:
+
+1. A < 189 and the global byte `0x0151d5a6` is non-zero → stop (indices 189 and up bypass this byte).
+2. The global `0x029443bc` is 1, 2 or 3 → stop. **[OPEN — what that global is.]**
+3. A > 209 → stop.
+4. A < 189, a session exists, the local machine is not the host (`+0x5c` ≠ `+0x58`) and the
+   descriptor has bit `0x10` → stop.
+5. `0x00706ab0` returns 6 → stop. **[OPEN — meaning.]**
+6. If the byte `0x014f3d34` is non-zero, continue only for A = 188 or 196 ≤ A ≤ 201. If it is zero,
+   continue when the descriptor has bit `0x08`, or otherwise only when no mission object is live
+   (`0x006d2910` returns −1). **[OPEN — what the `0x014f3d34` mode is.]**
+7. A = 76 and the byte `0x0141250d` is zero → A becomes 73. **[OPEN — meaning.]**
+8. A ≥ 189 → set state 1 (through `0x00716170`, itself gated on `0x0151d5a6` being zero).
+9. F true, `0x0151d5a6` zero and state 0 → set state 1.
+10. Continue only if state = 1, or (B4 true and state = 4), or A ≥ 189.
+11. Descriptor bit `0x04` set → build the rich widget (`0x00715760` then `0x007fc560`), keep its
+    handle in `0x0151d5b4`, set state 4. Otherwise `0x00715bf0`: if the entry is not already queued,
+    link it at the tail of the prompt list, set state 2 and fill `+0x14`/`+0x18`/`+0x1c` as in the
+    table above.
+12. A session exists and the local machine is the host, and (descriptor bit `0x10` or P4 = 1, which
+    is always true from Lua) → write an opcode `0x54` record: byte 1, A, a dword from `0x0086be20`,
+    P4 (byte), N, B5 (byte); commit and close. A host therefore always replicates `tutorial_start`;
+    a client or a machine with no session never does.
+
+**[CONFIRMED — disassembly for steps 1–12 as control flow; the meanings of the globals in steps 1, 2,
+5, 6 and 7 are OPEN as marked.]** The "repeated `0xbc` split" above is the boundary between 188
+(`0xbc`) and the range from 189 (`0xbd`) up, which skips the suppression byte and the state gate.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — table base `0x0151d600`, 36-byte stride, 210 entries, zero at load; `+0x08` descriptor pointer; `+0x0c` state 0–4 with states 0/1/2/4 from their writers; the descriptor `+0x24` bit tests; the 12-step order; host-only `0x54` replication. HIGH CONFIDENCE — the names of bits `0x04`/`0x08`/`0x10`. HYPOTHESIS — state 3 = waiting for the player. OPEN — what state 3 means and who sets it; the globals in steps 2, 5, 6, 7; where `0x00715850` gets the descriptors.**
 
 ### 6.20 `mission_end_to_activity` (`0x00a53890`)
 
@@ -2209,7 +2301,7 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **The record-and-replicate idiom (`spec-lua-api-behaviour.md` §4.13) is confirmed to extend to three further opcode values not previously on record there** — `0x3f` (the five notoriety value-setters, §6.3/§6.5/§6.7/§6.11/§6.16, each with its own inner sub-type tag `2`-`5`), `0x40` (`waypoint_remove`, §6.17), and `0x54` (`tutorial_start`, §6.19) — all using the exact same "begin/commit/end" triplet (`0x0086f5f0`→`0x0086f110`→`0x0086eb20`) §4.13 already confirmed. This extends, and does not contradict, §4.13's own opcode census. **Cross-reference, added after review, 2026-09-29: opcode `0x40` is NOT unique to `waypoint_remove` — §9.20 (`inv_weapon_disable_all_slots`) independently uses the identical literal opcode `0x40` for a completely unrelated record. Both individual claims are correct (verified by decompile, `0x007dd5d0`/`0x007f4890` respectively); this document's opcode census is not a claim of uniqueness per name, only that each opcode's use is confirmed wherever cited.**
 
-**A real, confirmed variation on how the record-and-replicate idiom decides "am I the sole/local authority":** §3.7/§3.14/§3.16/§3.17/§4.5/§4.6/§4.10 (already on record) gate that decision on an internal pair, `0x008ae480`/`0x008837a0`. Every record-and-replicate call site newly traced in THIS cluster (the five notoriety setters, `tutorial_start`) instead gates on the SAME accessor, `0x0087ba20`, `spec-lua-api-behaviour.md` §3.1 already established for `coop_is_active`'s own pure query. **Correction, after independent re-verification (2026-09-29): the specific field pair this gate tests, `+0x58`/`+0x5c`, is NOT a previously-unspecified head/tail-member-list-empty pair as an earlier pass in this section claimed — it is the exact same field pair §8.27 (`game_get_is_host`) independently identifies, by the engine's own naming of that accessor, as the "is this machine the network host" check.** §3.1's own head/tail member-list-empty description covers OTHER fields of the same session-context singleton, not this pair — see §8.27 for the correct reading. This is still a genuine, checked difference between subsystems in how the same underlying "am I authoritative" decision is reached (a host-check here, vs. the internal gate pair in §3/§4's own cluster), not a contradiction of §3.7/§4.13's own findings — flagged here because the task brief asked this pass to actively check for exactly this kind of cross-section inconsistency, and the correction above is exactly such a check catching a real one.
+**A real, confirmed variation on how the record-and-replicate idiom decides "am I the sole/local authority":** §3.7/§3.14/§3.16/§3.17/§4.5/§4.6/§4.10 (already on record) gate that decision on an internal pair, `0x008ae480`/`0x008837a0`. Every record-and-replicate call site newly traced in THIS cluster (the five notoriety setters, `tutorial_start`) instead gates on the SAME accessor, `0x0087ba20`, `spec-lua-api-behaviour.md` §3.1 already established for `coop_is_active`'s own pure query. **Correction, after independent re-verification (2026-09-29): the specific field pair this gate tests, `+0x58`/`+0x5c`, is NOT a previously-unspecified head/tail-member-list-empty pair as an earlier pass in this section claimed — it is the exact same field pair §8.27 (`game_get_is_host`) independently identifies, by the engine's own naming of that accessor, as the "is this machine the network host" check.** ~~§3.1's own head/tail member-list-empty description covers OTHER fields of the same session-context singleton, not this pair~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: §3.1 has no head/tail pair; `coop_is_active` tests this same `+0x58`/`+0x5c` pair first and then uses the list head `+0x54` and count `+0x60` — see §3.1]** — see §8.27 for the correct reading. This is still a genuine, checked difference between subsystems in how the same underlying "am I authoritative" decision is reached (a host-check here, vs. the internal gate pair in §3/§4's own cluster), not a contradiction of §3.7/§4.13's own findings — flagged here because the task brief asked this pass to actively check for exactly this kind of cross-section inconsistency, and the correction above is exactly such a check catching a real one.
 
 **Two more members of the type-gated-by-name resolver family (`spec-lua-api-behaviour.md` §3's front matter / §4.13) were newly catalogued this pass:** bit `0x20` at descriptor-row offset `+0xa` (`0x005eab60`, used by both `guardian_angel_register_script_group` and `guardian_angel_unregister_script_group`, §6.6/§6.8) and bit `0x4` at descriptor-row offset `+0xc` (`0x005f4c30`, used by `mission_end_to_activity`, §6.20) — both structurally identical wrapper bodies over the same shared generic resolver `0x004588f0` and the same shared class-descriptor table `0x02cc9900` already established elsewhere in this document, extending that family from four/five previously-catalogued members to six (correction: `0x005eab60`/bit `0x20`@`+0xa` was already in §4.13/§4.7, so only `0x005f4c30` is newly catalogued here — five/six, one new).
 
@@ -3702,7 +3794,14 @@ readings describe different fields/uses of the one singleton object, not competi
 same field. Subsystem: networking/co-op session state. **[CONFIRMED — disassembly, full body read;
 the object's own class and the individual plain-English meaning of `+0x5c`/`+0x58` beyond "host-check
 inputs" remain OPEN, per §3.1's own already-recorded caution against asserting a field's meaning from
-offset alone (`WALLS.md`).]**
+offset alone (`WALLS.md`).]** **[Re-derived 2026-10-01, job `20261001T020213-team-a-dksj`: the body matches; with no
+session object (global `0x024d8534` zero) it pushes false. `+0x58` and `+0x5c` are member records —
+`+0x5c` the local member, `+0x58` the host member — HIGH CONFIDENCE from §3.1's member walk. The
+parenthetical above about §3.1's "head/tail member-list pointers" is superseded: §3.1 uses the list
+head `+0x54` and count `+0x60`, and tests this same pair first. Whether a single-player game has a
+session at all is OPEN (§26.28).]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — true iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28).**
 
 ### 8.28 Cross-function observations
 
@@ -4685,7 +4784,10 @@ literal `return 1;`.
 
 **Body:** reads one global flag (`0x022cdf08`) and pushes `0.0` if it reads `0`, else pushes the
 exact IEEE-754 double bit pattern for `1.0`. **The global's own writer was traced and is a genuine,
-confirmed getter/setter pair, not a guess:** `0x022cdf08` has exactly one writer function,
+confirmed getter/setter pair, not a guess:** `0x022cdf08` has ~~exactly one writer function~~
+**[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: three writer functions, not one — `0x00815120` (below),
+`0x005fa820` (writes 1) and `0x00820cd0` (writes 0); the conditions of the last two are OPEN, they were
+not dumped]** a Lua-reachable writer,
 `0x00815120` — itself one of this same UI wrapper's own 8 registered sibling functions (registered
 name `store_vehicle_change_mode`, read directly off `.rdata`, not part of this tranche). That
 function sets the flag to `0` when transitioning to mode `0` (a close/exit path that also runs
@@ -4700,6 +4802,17 @@ consumer.]**
 **Side effects/subsystem:** none — pure query. Subsystem: vehicle-store UI state. The very high
 runtime count (620, the highest of this tranche) is consistent with a value polled once per UI
 frame/tick while the vehicle store screen is open, not a one-shot check.
+
+**Additions (re-derived 2026-10-01, job `20261001T020213-team-a-dksj`).** The flag's initial value is **0** (a `.data`
+block that is not file-backed), so this getter returns `0.0` until a writer runs. **[CONFIRMED —
+disassembly.]** `store_vehicle_change_mode` (`0x00815120`) returns at once, with no effect, when the
+flag already equals the requested mode number — so mode 1 while the flag is 1 does nothing, but mode 2
+while the flag is 1 runs. On the close path (mode 0) it also sets the store sub-state global
+`0x022cdf0c` to 8; on an open whose `0x005fa760` check fails it sets that sub-state to 10 and leaves the
+flag unchanged. **[CONFIRMED — disassembly.]** The other two writers may set the flag from paths that
+do not start in Lua (for example, entering or leaving a store) **[HYPOTHESIS]**.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — initial value 0; three writer functions (`0x00815120`, `0x005fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — when `0x005fa820` and `0x00820cd0` run.**
 
 ### 10.2 `Completion_is_client` (`0x007bfbc0`) — 589 runtime calls
 
@@ -4722,6 +4835,8 @@ literal complement in the no-session case but is the only sensible reading of "a
 there is no session to be a client of).]** This is a clean, direct confirmation that
 `Completion_is_client` means exactly what its name says: "is there an active co-op session AND is
 this machine NOT the host."
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — the body as described (the accessor is called twice); no session → false; true iff a session exists and `+0x5c` ≠ `+0x58`. Note "active" in the sentence above means "a session object exists" — it does not require `coop_is_active` (§3.1) to be true. With no session at startup this returns false (§26.28).**
 
 ### 10.3 `game_hud_update_inventory` (`0x00841dc0`) — 259 runtime calls
 
@@ -4749,32 +4864,46 @@ identifier.
 
 **Body:** resolves arg 1 through the **exact same** 210-entry (`0xd2`), 36-byte-stride,
 case-insensitive tutorial-descriptor table `tutorial_start` (§6.19) already established at
-`0x00717780`/`0x0151d608` — confirmed here as the same table by direct re-decompilation of the
+`0x00717780`/`0x0151d608` **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: the table base is `0x0151d600`;
+`0x0151d608` is entry 0's `+0x08` descriptor pointer — §6.19]** — confirmed here as the same table by direct re-decompilation of the
 resolver's own callee, `0x00716440`, which independently reads the identical bounds check
 (index `< 0xd2`) and the identical `×9`-dword (`×36`-byte) stride. **This is a distinct function
 from `tutorial_start` (§6.19), per this task's own note — confirmed by address (`0x00a600b0` vs.
 `0x00a603f0`) and by which callee it reaches (`0x00716440`, not `tutorial_start`'s own
-`0x007169e0`).** `0x00716440` additionally requires one further per-entry table field (at table
-base `+4`, i.e. `0x0151d60c`, a new field-layout detail this table had not previously had recorded
-against it) to equal the literal `3` — a per-entry kind/type tag not shared by every entry — before
-doing anything; entries failing either the bounds check or this tag check make `tutorial_advance`
-return `false` with no other effect. On success, the function opens what reads as a named
-event/profiling scope, literally tagged with this function's own registered name
+`0x007169e0`).** `0x00716440` additionally requires one further per-entry table field (~~at table
+base `+4`~~ **[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: entry `+0x0c` of the table at `0x0151d600`]**, i.e. `0x0151d60c`, a new field-layout detail this table had not previously had recorded
+against it) to equal the literal `3` — ~~a per-entry kind/type tag not shared by every entry~~
+**[corrected 2026-10-01, job `20261001T020213-team-a-dksj`: this is not a kind; it is the entry's run-time **state** (0–4,
+§6.19), zero at load, and `tutorial_advance` is true only while the entry is in state 3]** — before
+doing anything; entries failing either the bounds check or this ~~tag~~ state check make `tutorial_advance`
+return `false` with no other effect. On a fresh process every entry is in state 0, so it returns
+false for every name until something puts an entry into state 3 (§26.28). **[CONFIRMED —
+disassembly.]** The entry's state is not changed by `tutorial_advance`. **[CONFIRMED — disassembly.]** On success, the function opens what reads as a named
+event/profiling scope **[refined 2026-10-01, job `20261001T020213-team-a-dksj`: it builds a named message through the
+UI-context helpers (`0x00e1a1b0`, `0x00e0ca80` → `0x00e0c720`) and dispatches it with `0x00e0cd00`, which
+sends only when the message has a target and that target's `+0x18` bit `0x10` is clear; HYPOTHESIS —
+a named UI event sent to the tutorial UI document whose handle is `0x0151d5a8`, not telemetry]**, literally tagged with this function's own registered name
 (`"tutorial_advance"`, the identical string passed as a literal argument, read directly off
 `.rdata`) and stashes one further global value into it, then returns `true`. **Correction
 (adversarial review, same day): the value stashed is not "per-entry" as originally worded here —
 `0x00716440`'s own body writes the fixed absolute address `0x0151d5a8` into its own argument
 object's `+0x14` field, with no indexing by the resolved table entry at all** (unlike the
-bounds/tag read just described, which genuinely is per-entry, indexed off the table base
-`0x0151d60c` by `index × 9`).
+bounds/~~tag~~ state read just described, which genuinely is per-entry, indexed off ~~the table base~~
+`0x0151d60c` by `index × 9` — **`0x0151d60c` is entry 0's `+0x0c` field; the base is `0x0151d600`, job
+`20261001T020213-team-a-dksj`**). **[Re-derived 2026-10-01: the value stored into the message's `+0x14` is the *contents* of
+the global `0x0151d5a8` (zero at load, written only by `0x00715f20`), not its address.]**
 
-**Side effects/subsystem:** on a recognized, correctly-tagged tutorial entry, opens a named
-event/telemetry-shaped scope carrying that entry's own identifier. Subsystem: tutorial-hint
+**Side effects/subsystem:** on a recognized ~~, correctly-tagged~~ tutorial entry in state 3, opens a named
+event/telemetry-shaped scope ~~carrying that entry's own identifier~~ **[corrected 2026-10-01, job
+`20261001T020213-team-a-dksj`: a named message carrying the global `0x0151d5a8`, see above]**. Subsystem: tutorial-hint
 tracking. **[CONFIRMED — disassembly for the bounds/tag gate and the literal self-name string;
 OPEN — whether the named scope this function opens is genuine telemetry, a different kind of
 state-advance record, or something else, was not resolved further; deliberately not guessed, since
 no separate display-dispatch call (unlike `tutorial_start`'s own `0x00715bf0`/`0x007fc560` pair) is
-reached anywhere in this body.]**
+reached anywhere in this body.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the OPEN item is narrowed to
+HYPOTHESIS — a named UI message — until `0x00e0c720` is read.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — name lookup, bounds `< 210`, true only in state 3 (entry `+0x0c`, base `0x0151d600`), no state change, false on a fresh process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN — what state 3 means and who sets it (§6.19).**
 
 ### 10.5 `minimap_icon_add_do` (`0x00a53f90`) — 42 runtime calls
 
@@ -7132,7 +7261,7 @@ First part of the four-way split covering ranks 251-350 (peer TSV: `D:\Project C
 
 **Return:** none.
 
-**Body:** the name is looked up case-insensitively (`__stricmp`) against a fixed 210-entry (`0xd2`) table, `0x00717780` — the same kind of table `tutorial_start`/`tutorial_get_case`/`tutorial_lock` (§6.19 and siblings) plausibly share, not independently cross-checked this pass (**[Resolved: §10.4 confirms `0x00717780`/`0x0151d608` is `tutorial_start`/`tutorial_advance`'s table.]**). If found, `0x00716ed0` writes state code `4` ("stopped") into a per-tutorial-state array at `0x0151d60c` (stride 9, indexed `[id*9]`). If additionally inside a coordinated co-op session (the SAME session-state check `0x0087ba20` + head/tail comparison §3.1/§7.7/§7.8 already document) and not already inside a replicated-apply context (`0x00bc55a0`) and a further predicate `0x007157c0` is truthy, opens a network record: opcode `0x54` (~~a NEW opcode~~ a further site of an existing opcode, §6.22), payload a boolean plus the tutorial id (via `0x00711560`).
+**Body:** the name is looked up case-insensitively (`__stricmp`) against a fixed 210-entry (`0xd2`) table, `0x00717780` — the same kind of table `tutorial_start`/`tutorial_get_case`/`tutorial_lock` (§6.19 and siblings) plausibly share, not independently cross-checked this pass (**[Resolved: §10.4 confirms `0x00717780`/`0x0151d608` is `tutorial_start`/`tutorial_advance`'s table.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the table base is `0x0151d600` (36-byte entries); `0x0151d60c` below is entry `+0x0c`, the per-entry state, and `0x00716ed0` is one of the state-4 writers — §6.19.]**). If found, `0x00716ed0` writes state code `4` ("stopped") into a per-tutorial-state array at `0x0151d60c` (stride 9, indexed `[id*9]`). If additionally inside a coordinated co-op session (the SAME session-state check `0x0087ba20` + head/tail comparison §3.1/§7.7/§7.8 already document) and not already inside a replicated-apply context (`0x00bc55a0`) and a further predicate `0x007157c0` is truthy, opens a network record: opcode `0x54` (~~a NEW opcode~~ a further site of an existing opcode, §6.22), payload a boolean plus the tutorial id (via `0x00711560`).
 
 **Side effects / subsystem:** tutorial-state tracking array, conditionally network-replicated in coordinated co-op sessions only. **[CONFIRMED — disassembly for the lookup/write/gate structure; OPEN — the shared tutorial-name table's own row count/contents beyond this pass's own use, and `0x007157c0`/`0x00711560`'s own bodies.]**
 
@@ -7788,9 +7917,9 @@ Regardless of the record, when the vehicle has a live sub-object at +0x1e00 with
 
 **Return:** 1 boolean, pushed via lua_pushboolean (0x00dfe590) — always exactly 1 value, both branches push.
 
-**Body:** the name is linear-scanned (case-insensitive) against a fixed 210-entry string-pointer table (0x012f5930) via 0x00717780, yielding an index or -1. On a valid index, reads a per-tutorial-entry byte from a stride-9 table (0x0151d60c, at index*9) and tests whether it equals 3, pushing that as the boolean ("is this tutorial currently in the active state"); on no match, pushes false.
+**Body:** the name is linear-scanned (case-insensitive) against a fixed 210-entry string-pointer table (0x012f5930) via 0x00717780, yielding an index or -1. On a valid index, reads a per-tutorial-entry byte from a stride-9 table (0x0151d60c, at index*9) **[2026-10-01, job `20261001T020213-team-a-dksj`: this is entry `+0x0c`, the per-entry state, of the 36-byte table based at 0x0151d600; the state readers dumped in that job compare it as a dword — §6.19]** and tests whether it equals 3, pushing that as the boolean ("is this tutorial currently in the active state"); on no match, pushes false.
 
-**Side effects/subsystem:** none (pure query). **[CONFIRMED — disassembly, full body read; OPEN — what states 0/1/2/3/... in that stride-9 table mean beyond "3 = active."]**
+**Side effects/subsystem:** none (pure query). **[CONFIRMED — disassembly, full body read; OPEN — what states 0/1/2/3/... in that stride-9 table mean beyond "3 = active."]** **[Partly settled 2026-10-01, job `20261001T020213-team-a-dksj`: 0 = untouched, 1 = armed, 2 = queued simple prompt, 4 = rich widget issued, CONFIRMED from their writers (§6.19); what 3 means stays OPEN.]**
 
 ### 20.6 `team_make_allies` (0x00a60600)
 
@@ -10247,6 +10376,53 @@ HIGH CONFIDENCE — the 2^-32 scale constant. HYPOTHESIS — missing-argument be
 opens the stock libraries. OPEN — ring seeding, the 18 undumped bodies and the `include` re-read
 (job `bgcx-followup.json`).**
 
+### 26.28 Co-op session, tutorial table and vehicle-store state at startup (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020213-team-a-dksj` (Team B request 9). This unit states what a single-player host must
+hold at startup for the three pieces of engine state behind `coop_is_active` (§3.1),
+`game_get_is_host` (§8.27), `Completion_is_client` (§10.2), `tutorial_start`/`tutorial_advance`
+(§6.19/§10.4) and `store_vehicle_get_state` (§10.1).
+
+**Co-op session.** The game starts with **no co-op session**: the singleton global `0x024d8534` lives
+in a `.data` block that is not file-backed, so it is zero at load, and its accessor `0x0087ba20` is a
+plain load with no side effects. **[CONFIRMED — disassembly.]** With no session, `coop_is_active`,
+`game_get_is_host` and `Completion_is_client` all return false. **[CONFIRMED — disassembly.]**
+Of the references the disassembler resolved, one function can install a session (`0x0087efe0`) and two
+clear it (`0x0087d8a0`, `0x0087ed70`) **[CONFIRMED — disassembly for the reference set]**; two more
+references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further writers **[OPEN]**.
+`coop_is_active` also stays false whenever a session has fewer than 2 members (member count at session
+`+0x60`, §3.1). **[CONFIRMED — disassembly.]**
+
+| session state | `coop_is_active` | `game_get_is_host` | `Completion_is_client` |
+|---|---|---|---|
+| none (global = 0) | false | false | false |
+| host (`+0x5c` = `+0x58`) | true only with ≥ 2 members, all other members passing the slot check | true | false |
+| client (`+0x5c` ≠ `+0x58`) | true only if the client gate passes and the same member rule holds | false | true |
+
+**What single-player startup leaves it as: OPEN.** The executable starts at 0, but whether starting a
+single-player game runs the installer `0x0087efe0` and creates a one-member session (the local player
+as its only member and host) cannot be read from these dumps. This decides `game_get_is_host`: false
+with no session, true with a one-member host session. `coop_is_active` is false and
+`Completion_is_client` is false in both cases. **HYPOTHESIS (do not implement):** single player keeps
+a one-member host session. Follow-up job `20261001T114716-team-a-fvfp` dumps the installer
+`0x0087efe0`. Until it lands, a host should start with no session.
+
+**Tutorial table.** The 210-entry table at `0x0151d600` (36-byte entries, §6.19) is zero at load, so
+every entry starts in state 0 and `tutorial_advance` returns false on a fresh process for every name.
+**[CONFIRMED — disassembly.]** The entries' descriptor pointers (`+0x08`) are filled by `0x00715850`;
+when that runs is OPEN.
+
+**Tutorial names.** The name list comes from the static, file-backed pointer table `0x012f5930` (210
+pointers to strings, searched case-insensitively by `0x00717780`, −1 on a miss). **[CONFIRMED —
+disassembly.]** Index 0 is `save` and index 1 is `autosave`. **The full index → name list is pending
+job `20261001T114802-team-a-kyoi` and will be added here when it lands.**
+
+**Vehicle-store state.** The flag `0x022cdf08` is zero at load, so `store_vehicle_get_state` returns
+`0.0` at startup and stays 0 until `store_vehicle_change_mode` opens a store or one of the other two
+writers runs (§10.1). **[CONFIRMED — disassembly.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020213-team-a-dksj`): CONFIRMED — session singleton zero at load; all three session queries false with no session; `coop_is_active` false below 2 members; tutorial table zero at load, so `tutorial_advance` is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN — whether single-player startup installs a session (job `20261001T114716-team-a-fvfp`); the full tutorial name list (job `20261001T114802-team-a-kyoi`); the two undefined references at `0x0087c341`/`0x0087c359`.**
+
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
 Fourth part of a fresh four-part tranche, "ranks 551-650" (informal name; real TSV ranks span roughly 563-665). 11 of the 25 names resolve in the 311-entry UI-wrapper cluster anchored at 0x008430f0; the other 14 resolve in the 113-entry loop registrar at 0x00845aa0. All 25 open with the same shared `lua_CFunction` prologue idiom already established in this document's own front matter (`lua_gettop`=0x00dfde50, `lua_type`=0x00dfe040, `lua_toboolean`=0x00dfe1e0, `lua_tolstring`=0x00dfe210, `lua_tonumber`+round-cast=0x00dfe160+0x00ea2596, `lua_pushnumber`=0x00dfe3a0, `lua_pushstring`=0x00dfe420, `lua_pushboolean`=0x00dfe590) — cited by reference, not re-derived.
@@ -10886,3 +11062,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-09-30 (cloud, desk adversarial review of §1-§5): added a review-status line to every §1-§5 unit and a summary under each heading (§1: 5 DESK-PASS, 4 with text fixes, 5 NEEDS-EXE; §2: 3/4/6; §3: 6/7/6; §4: 4/2/8; §5: 2/1/0); corrected the §2 registrar attribution per `spec-lua-bindings.md` §13.5, §1.9's callee roles per §21.27/§22.29/§28.18, §2.7's `9000` (bucket count, §5.3), §2.9's opcode `0x53` (§8.13), §4.2's `0x004dcf00` role (§20.24), §4.7's entry/forwarder split and count/cross-reference slips (§1.4, §1.13, §2.3, §2.5, §3.13, §3.18); added §10.8's `+0x1f00`/`+0xf8` hook sub-record bases to §3.2/§3.3/§3.12/§3.13 and `0x0094cc60`'s role to §3.6; added OPEN markers at every NEEDS-EXE claim; noted the §5 recomputations (hash initial value 0, not stated in `spec-texture-format.md` §8.2). Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020200-team-a-nzxf`): corrected §2.9/§8.13/§26.10/§26.23 (fade request helper order is `(durationMs, callback, flag)`, `screen_fade_do` is a direct Lua call in the UI state, not a command queue; the opcode-0x53 record layout), §8.21 (prep tears down the current scene and fills the pending slot; it does not start a load; the extra values are constants; `0x0101b530` is a stub), §14.23 (fast-path polarity; the sense-inversion item is closed); added to §26.9; added §26.24 (screen fade state machine), §26.25 (zscene lifecycle) and §26.26 (`vint_is_std_res`/`vint_get_safe_frame`, no earlier entry here), each with a next-dump list. Old text struck or annotated in place.
 - 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26.27 (the 24 bare globals of `0x00e0f900`: roster, both-states registration, `rand_int`/`rand_float`/`round`/`debug_print`/`assert_msg` behaviour, the shared 8192-entry random ring; seeding and the 18 undumped bodies OPEN, follow-up job `bgcx-followup.json`). Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020213-team-a-dksj`): §3.1 — replaced the head/tail description with the confirmed body (host test on `+0x5c`/`+0x58` first, list head `+0x54`, member count `+0x60` must be ≥ 2, slot check `0x00877a90`); §8.27/§10.2 confirmed, no session → false; §10.1 — three writers of `0x022cdf08`, not one, initial value 0; §6.19/§10.4 — table base `0x0151d600`, `+0x08` is a descriptor pointer, `+0x0c` is a per-entry state 0–4 rather than a kind, descriptor `+0x24` bits, the dispatcher order, `tutorial_advance` true only in state 3; annotated the same table references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
