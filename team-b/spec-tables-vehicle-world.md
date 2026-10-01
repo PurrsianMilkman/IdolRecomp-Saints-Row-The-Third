@@ -7,6 +7,8 @@
 **Cleanroom compliance:** No decompiled code is reproduced and no original internal identifiers are used. XML table/element names, enum literals and flag literals are *data* and are listed; offsets, sizes, strides, constants and function addresses are evidence anchors. Function addresses use the form `FUN_00XXXXXX` for the image address only.
 **Confidence key:** CONFIRMED — disassembly (read directly from the reader's code) / CONFIRMED — empirical (checked against real shipped rows) / HIGH CONFIDENCE — inferred / HYPOTHESIS — unconfirmed / OPEN.
 
+**Review status summary (2026-09-30):** an adversarial desk review (`review/adv_tables-vehicle-world.md`) checked 23 units: 1 DESK-PASS (§8.1), 13 DESK-PASS with text fixes applied (§1, §2, §4, §8.2, §9.2, §10, §13, §15, §17, §18, §19, §20–§21, §22–§23), 9 NEEDS-EXE (§3, §5, §6, §7, §9.1, §11, §12, §14, §16), 0 VALIDATED-BY-DATA. A desk pass alone does not clear a unit: it only means the text is internally consistent. No unit is VALIDATED-BY-DATA because Team B's full-population run (`team-b/HANDOFF.md` section "9.93 `sr3tables_vehicle_world`": "`validate_tables_vehicle_world_population.exe` **ALL GATES PASSED**, every one of the agent's numbers reproduced exactly") checks file location, row counts and parse success only; its scalar readers return 0/absent on a wrong element name, so per-element names, enums and nesting are not data-backed by it, and runtime record offsets are never data-checkable. The row counts quoted in this document are corroborated by that run; the one new real-data figure it adds is the 52-row `patch_compressed.vpp_pc` copy of `vehicle_interaction_info.xtbl` (§3.3). Several defaults and conversions are cited only as `DAT_` globals without a value; three have values in other specs (`DAT_012a2d90` = 1000.0 double, `DAT_01117a4c` = 1.0, `DAT_0125e270` plausibly 0.0 — see §10/§12), the rest are OPEN. Units awaiting the executable: §2 (token-table order), §3, §4 (Direction loop bound), §5, §6, §7, §8.2 (record gap, match key), §9.1, §10 (constants, `Balance_Bar_Params` names), §11, §12, §13 (literal spelling), §14, §15 (live bit), §16, §17 (over-capacity branch), §18, §19 (slope). Units awaiting real data: §3 (52-row copy), §5 (rim name key), §6 (element nesting), §8.2 (`name` key), §10 (`Balance_Bar_Params` child names).
+
 ---
 
 ## 1. Overview, method, and pointers to shared machinery
@@ -24,7 +26,7 @@
 
 ### 1.2 Shared reader grammar — not re-derived, cited
 
-The node model (name/next-sibling/first-child/text pointers, case-insensitive lookup), the scalar accessor family (`always` vs `if-present` flavours for every integer/float/bool type), the float/integer text grammars, the vec3 readers, the `Flag`-list helpers, the name-hash convention (table-driven CRC-32, reflected, table `0x01320DA0`, seed passed per call site, no final XOR, input lower-cased), and the `Framework`/`Is_DLC` two-pass loading idiom are all documented once in `spec-tables-weapons-combat.md` §1 and reused verbatim here; this document only names the specific helper addresses where they matter for a particular field. Sections 1.6 of that document ("cross-table name resolvers") already covers two of *this* group's tables at the resolver level — `items_3d` (`FUN_00904C10`, stride `0xB8`, count `0x025F5B8C`, key CRC at `+0x04`) and `items_inventory` (`FUN_008DCB10`, stride `0x34`, 110 slots, live bit `+0x30`) — those anchors are the starting point for §15–§16 below, not re-derived.
+The node model (name/next-sibling/first-child/text pointers, case-insensitive lookup), the scalar accessor family (`always` vs `if-present` flavours for every integer/float/bool type), the float/integer text grammars, the vec3 readers, the `Flag`-list helpers, the name-hash convention (table-driven CRC-32, reflected, table `0x01320DA0`, seed passed per call site, no final XOR, input lower-cased), and the `Framework`/`Is_DLC` two-pass loading idiom are all documented once in `spec-tables-weapons-combat.md` §1 and reused verbatim here; **[Desk review 2026-09-30: unless a section says otherwise, every `vec3` in this document uses that convention — three always-float children `X`, `Y`, `Z` (`spec-tables-weapons-combat.md` §1.3); the LightSet files of §11 are the stated exception (inline space-separated text).]** this document only names the specific helper addresses where they matter for a particular field. Sections 1.6 of that document ("cross-table name resolvers") already covers two of *this* group's tables at the resolver level — `items_3d` (`FUN_00904C10`, stride `0xB8`, count `0x025F5B8C`, key CRC at `+0x04`) and `items_inventory` (`FUN_008DCB10`, stride `0x34`, 110 slots, live bit `+0x30`) — those anchors are the starting point for §15–§16 below, not re-derived.
 
 ### 1.3 Group-wide literal constants recovered this pass
 
@@ -37,13 +39,15 @@ The node model (name/next-sibling/first-child/text pointers, case-insensitive lo
 Base rows for all 24 tables were pulled from `misc_tables.vpp_pc` (1,342 entries) with the standard pattern:
 
 ```python
-sys.path.insert(0, r'D:\Project Crreish\TEAM A\tools\harnesses')
+sys.path.insert(0, r'tools/harnesses')  # repository-relative; developer machine path removed 2026-09-30 (desk review)
 import mmap, os
 import scan_meshes as sm, vehgeo_bulk as vb, vpp_modea as vm
 # open_archive()/get_table() as in spec-vehicle-data.md §7 / HANDOFF §31 (archived §27.2); extraction rule: spec-vpp-container.md §7, tolerant XML parse: spec-xtbl-format.md §7
 ```
 
 Harness: `tools/harnesses/as_extract.py` (all 24/24 found, byte-length checks all pass — `tools/as_base_xtbl/`). All 24 raw files parsed cleanly with `xml.etree.ElementTree` (none of them is one of the four known-quirky base files from `spec-xtbl-format.md` §7 — mismatched tag, control character `0x1F`, space in an element name — those are in unrelated tables). Validation harness: `tools/harnesses/as_validate.py`; results folded into each table's section and summarised in §22.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (developer machine path in §1.4 replaced with the repository-relative `tools/harnesses`; vec3 convention stated once in §1.2); the 24-table count tiles (19 + 1 + 3 + 1 in §1.1) and matches §20's 24 rows — desk review (not re-derived from the executable).**
 
 ---
 
@@ -65,7 +69,7 @@ Harness: `tools/harnesses/as_extract.py` (all 24/24 found, byte-length checks al
 
 | Offset | Field |
 |---|---|
-| `+0x00`–`+0x14` | **`Parameter1`, `Parameter2`, …** — read sequentially (names built with `"Parameter%d"`) until one is absent; each value is matched (`_stricmp`) against an **83-entry** literal token table (`0x0130e638`; sample of 20 dumped: `none`, `any`, `activate`, `deactivate`, `change seat`, `close`, `enter`, `exit`, `extract`, `open`, `prepare`, `traverse`, `fast`, `prepare lift`, `prepare pull`, `open standard`, `open shady`, `open shopper`, `traverse standard`, `traverse no door` — these read as vehicle-interaction action/state keywords), storing the matched index (0 if no match) into consecutive dwords starting at the record's own base. **No bound check exists** — a 7th `ParameterN` would corrupt the `Animation` field at `+0x18`; the real base data never reaches that (§22 confirms ≤ 6 for all three files). |
+| `+0x00`–`+0x14` | **`Parameter1`, `Parameter2`, …** — read sequentially (names built with `"Parameter%d"`) until one is absent; each value is matched (`_stricmp`) against an **83-entry** literal token table (`0x0130e638`; sample of 20 dumped **[desk review 2026-09-30: a partial sample — 20 of 83, and the text does not say these are the first 20 or give their indices, so the stored index of a token cannot be computed from this list]**: `none`, `any`, `activate`, `deactivate`, `change seat`, `close`, `enter`, `exit`, `extract`, `open`, `prepare`, `traverse`, `fast`, `prepare lift`, `prepare pull`, `open standard`, `open shady`, `open shopper`, `traverse standard`, `traverse no door` — these read as vehicle-interaction action/state keywords), storing the matched index (0 if no match) into consecutive dwords starting at the record's own base. **[Desk review 2026-09-30: if `none` is entry 0, as the sample order suggests, a no-match and an explicit `none` both store 0.]** **[OPEN — desk review 2026-09-30: the full 83-pointer table at `0x0130e638` in index order, and the absence of any loop cap in `FUN_00b07920`; to be settled against the executable.]** **No bound check exists** — a 7th `ParameterN` would corrupt the `Animation` field at `+0x18`; the real base data never reaches that (§22 confirms ≤ 6 for all three files). |
 | `+0x18` | `Animation` — text resolved through the animation-state table (`FUN_004BF810`, the same resolver `spec-tables-weapons-combat.md` §15.3 cites for `melee.AttackAnim`); `−1` if absent |
 | `+0x1C` | pointer to a `Camera_Pos` `vec3` array (from `Animated_Camera_Tests`) |
 | `+0x20` | count of `Camera_Pos` children |
@@ -74,7 +78,9 @@ Harness: `tools/harnesses/as_extract.py` (all 24/24 found, byte-length checks al
 
 ### 2.2 Validation — real base rows
 
-`vi_enter.xtbl` 106 rows / 657 `Element`s, `vi_exit.xtbl` 99 rows / 813 `Element`s, `vi_ride.xtbl` 69 rows / 454 `Element`s. **657/657, 813/813, 454/454 `Element`s have both a `Name` and an `Animation` present, and ≤ 6 sequential `ParameterN` (never hits the unbounded-write hazard).** `Camera_Pos` is rare and file-specific: 21 total in `vi_enter.xtbl`, 0 in `vi_exit.xtbl`/`vi_ride.xtbl`. **[CONFIRMED — empirical, `tools/harnesses/as_validate.py`.]**
+`vi_enter.xtbl` 106 rows / 657 `Element`s, `vi_exit.xtbl` 99 rows / 813 `Element`s, `vi_ride.xtbl` 69 rows / 454 `Element`s. **657/657, 813/813, 454/454 `Element`s have both a `Name` and an `Animation` present, and ≤ 6 sequential `ParameterN` (never hits the unbounded-write hazard).** `Camera_Pos` is rare and file-specific: 21 total in `vi_enter.xtbl`, 0 in `vi_exit.xtbl`/`vi_ride.xtbl`. **[CONFIRMED — empirical, `tools/harnesses/as_validate.py`.]** **[Desk review 2026-09-30: the element path is `Element` → `Animated_Camera_Tests` → repeated `Camera_Pos`, each a §1.2 `X`/`Y`/`Z` vec3 (12-byte array stride implied, not stated); the `Element` counts 657/813/454 are Team A figures — Team B's run reproduced only the row counts 106/99/69.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (83-entry sample labelled partial; `none`/no-match collision noted; Camera_Pos path stated); NEEDS-EXE for the full token table order and the no-cap loop — desk review (not re-derived from the executable).**
 
 ---
 
@@ -92,14 +98,14 @@ Loader `FUN_00b07330`, called last in the `FUN_00b07c40` sequence (§2), after `
 | `+0x40` | `Name` hash `u32` |
 | `+0x44`–`+0x163` | eight **Seat_Info** sub-records, `0x24` (36) bytes each — see §3.2 |
 
-`Seat_Info` → repeated **`Element`**, each keyed by its own `<Seat>` text child (confirmed from real data — see §3.3) through the **same 8-entry seat resolver** used by the vehicle-info table's `ProhibitedGunfireSeats`/`Seat_Specific_Data` (`spec-vehicle-data.md` §7.3/§7.4): `FUN_00AC1BA0`, which accepts either the generic names `driver`/`passenger 1..7` or the vehicle-specific names `front driver`/`front passenger`/`rear driver`/`rear passenger`/`extra 1..4` for the same 8 indices (dumped at `0x0130dfa4`/`0x0130df84`). This is the exact 8-seat convention `spec-vehicle-data.md` documents — confirmed shared, not merely similar.
+`Seat_Info` → repeated **`Element`**, each keyed by its own `<Seat>` text child (confirmed from real data — see §3.3) through the **same 8-entry seat resolver** used by the vehicle-info table's `ProhibitedGunfireSeats`/`Seat_Specific_Data` (`spec-vehicle-data.md` §7.3/§7.4): `FUN_00AC1BA0`, which accepts either the generic names `driver`/`passenger 1..7` or the vehicle-specific names `front driver`/`front passenger`/`rear driver`/`rear passenger`/`extra 1..4` for the same 8 indices (dumped at `0x0130dfa4`/`0x0130df84`). This is the exact 8-seat convention `spec-vehicle-data.md` documents — confirmed shared, not merely similar. **[OPEN — desk review 2026-09-30: conflicts with another spec — `spec-vehicle-data.md` §7.3 (`+0x8B4` `ProhibitedGunfireSeats` row) names the seats `Front Driver Side`, `Front Passenger Side`, `Rear Driver Side`, `Rear Passenger Side`, `Extra 1–4`, never cites `FUN_00AC1BA0` and has no `driver`/`passenger N` set, and `Seat_Specific_Data` is in its §7.3 table, not a §7.4; dump the 16 strings at `0x0130dfa4`/`0x0130df84` and compare with vehicle-data's seat reader; to be settled against the executable.]**
 
 ### 3.2 Per-seat sub-record (`0x24` bytes, base = `record + 0x44 + seatIndex*0x24`)
 
 | Offset | Field |
 |---|---|
 | `+0x00` | `Interaction_Point_Set` — text hashed and matched against `vehicle_interaction_point_sets.xtbl`'s own loaded array (`DAT_02845ca0`, §4); pointer to that row, or NULL |
-| `+0x04` | `Capsule_Shape` — enum, 6 literals (`0x0130e8b8`): `stand`=0, `vehicle`=1, `motorcycle`=2, `boat`=3, `boat stand`=4, `crouch`=5; each maps through a 6-entry indirection table (`0x0116bb20`… values `0x0, 0xF, 0x10, 0x11, 0x12, 0xB` — HYPOTHESIS on their consumer-side meaning) |
+| `+0x04` | `Capsule_Shape` — enum, 6 literals (`0x0130e8b8`): `stand`=0, `vehicle`=1, `motorcycle`=2, `boat`=3, `boat stand`=4, `crouch`=5; each maps through a 6-entry indirection table (`0x0116bb20`… values `0x0, 0xF, 0x10, 0x11, 0x12, 0xB` — HYPOTHESIS on their consumer-side meaning) **[OPEN — desk review 2026-09-30: §15.1 cites the same address `DAT_0116BB20` as `items_inventory`'s `Use_Script` translation table (read at `table[−1]` on no match), so one table serving two unrelated enums, or one of the two addresses being wrong, is unresolved; list the uses of `0x0116bb20` and dump `0x0116bb1c`–`0x0116bb48`; to be settled against the executable.]** |
 | `+0x08` | flags byte 1: bit1 `Mirror Interaction Points`, bit2 `Melee Brute Seat`, bit3 `Weapons Brute Seat`, bit4 `Rollerblader Seat`, bit5 `Riot Shield Seat`, bit6 `Entry Only`, bit7 `Check Point Projection for Usability`; **bit0 is always forced to 1 after any row is read** (a "populated" marker, preserved across a refresh reload rather than reset) |
 | `+0x09` | flags byte 2: bit0 `No Door Required`, bit1 `Ragdoll On Death`, bit2 `Quick Despawn On Death`, bit3 `Ignore Distance Checks`, bit4 `Ignore Team Disposition`, bit5 `Snap Entry Animation`, bit6 `Hide Occupant`, bit7 `Ignore Human Type Check` |
 | `+0x0A` | flags byte 3: bit0 `No AI Exit`, bit1 `Special Entry Only`, bit2 `No Freefall at Altitude`, bit3 `Hold Weapon in Left Hand`, bit4 `No Door Close Anim`, bit5 `Should Hide Backpack`, bit6 `Should Scrunch Hair`, bit7 `Should Hide Big Hats` |
@@ -111,11 +117,13 @@ Loader `FUN_00b07330`, called last in the `FUN_00b07c40` sequence (§2), after `
 | `+0x1C` | `Exit_Animations` — same, against `vi_exit.xtbl`'s array (`DAT_02845c88`) |
 | `+0x20` | `Ride_Animations` — same, against `vi_ride.xtbl`'s array (`DAT_02845c80`) |
 
-All four flags bytes and the `Flags`/`Queue`/`Capsule_Shape` reads are gated on their respective XML children being present; absent → the byte-4/`Capsule_Shape` fields keep whatever a previous refresh left there (only bit0 of byte1 and bit0 of byte4-adjacent field get an explicit unconditional reset before parsing). **[CONFIRMED — disassembly; the full reader `FUN_00b07330` was read to its end.]**
+All four flags bytes and the `Flags`/`Queue`/`Capsule_Shape` reads are gated on their respective XML children being present; absent → the byte-4/`Capsule_Shape` fields keep whatever a previous refresh left there (only bit0 of byte1 and bit0 of byte4-adjacent field get an explicit unconditional reset before parsing). **[OPEN — desk review 2026-09-30: this sentence does not identify the "byte4-adjacent field", and it says absent children keep the previous value while the `+0x0C` row says `Queue` is −1 if absent; which fields persist across a refresh reload is therefore not stated (`FUN_00b07330`); to be settled against the executable.]** **[CONFIRMED — disassembly; the full reader `FUN_00b07330` was read to its end.]**
 
 ### 3.3 Validation — real base rows
 
-51 `Vehicle_Interaction_Info` rows (base copy, `misc_tables.vpp_pc`) — **a real content difference, not a duplicate, found 2026-09-28 by Team B and re-verified: `patch_compressed.vpp_pc` carries a separate top-level copy with 52 rows, one row more than base, unlike this group's other three multi-location tables (`vehicle_surfing_style_two.xtbl`, `items_3d.xtbl`, `contacts_sr3.xtbl`), which are byte-identical duplicates across their own two locations. Per this project's own established archive-precedence finding (`spec-tables-progression.md` §14.2: `patch_compressed.vpp_pc` wins over `misc_tables.vpp_pc` for same-named entries at boot), the 52-row patch copy is very likely the one actually loaded at runtime — not re-extracted or re-validated against the 52-row copy this pass, flagged as a concrete follow-up.** 209 `Seat_Info`/`Element` children in real base data (from the 51-row base copy; not recounted against the 52-row patch copy). The child tag actually used for the seat identifier is **`<Seat>`** (confirmed from the raw file, e.g. `<Seat>Driver</Seat>`, `<Seat>Passenger 1</Seat>`) — matched case-insensitively by `FUN_00AC1BA0`. `Queue` values seen: all 8 (`Queue 1`…`Queue 8`). `Capsule_Shape` values seen in the sample: `stand` (the only one exercised by real rows so far checked). **[CONFIRMED — empirical.]**
+51 `Vehicle_Interaction_Info` rows (base copy, `misc_tables.vpp_pc`) — **a real content difference, not a duplicate, found 2026-09-28 by Team B and re-verified: `patch_compressed.vpp_pc` carries a separate top-level copy with 52 rows, one row more than base, unlike this group's other three multi-location tables (`vehicle_surfing_style_two.xtbl`, `items_3d.xtbl`, `contacts_sr3.xtbl`), which are byte-identical duplicates across their own two locations. Per this project's own established archive-precedence finding (`spec-tables-progression.md` §14.2: `patch_compressed.vpp_pc` wins over `misc_tables.vpp_pc` for same-named entries at boot), the 52-row patch copy is very likely the one actually loaded at runtime — not re-extracted or re-validated against the 52-row copy this pass, flagged as a concrete follow-up.** 209 `Seat_Info`/`Element` children in real base data (from the 51-row base copy; not recounted against the 52-row patch copy). The child tag actually used for the seat identifier is **`<Seat>`** (confirmed from the raw file, e.g. `<Seat>Driver</Seat>`, `<Seat>Passenger 1</Seat>`) — matched case-insensitively by `FUN_00AC1BA0`. `Queue` values seen: all 8 (`Queue 1`…`Queue 8`). `Capsule_Shape` values seen in the sample: `stand` (the only one exercised by real rows so far checked). **[CONFIRMED — empirical.]** **[Desk review 2026-09-30: label scope — the `Capsule_Shape` statement rests on an unquantified sample, not on all 209 elements; the 209/209 seat figure is for the 51-row base copy only.]** **[OPEN — desk review 2026-09-30: re-run the seat, `Queue` and `Capsule_Shape` predicates on the 52-row `patch_compressed.vpp_pc` copy and identify its extra row; to be settled against real data.]**
+
+**Review status (2026-09-30): NEEDS-EXE: shared `0x0116bb20` table (§15.1), seat-name tables vs `spec-vehicle-data.md` §7.3, reset/absent semantics in `FUN_00b07330`; NEEDS-DATA: 52-row patch copy (row count corroborated by Team B `team-b/HANDOFF.md` section "9.93 `sr3tables_vehicle_world`": "`patch_compressed.vpp_pc` has **52**") — desk review (not re-derived from the executable).**
 
 ---
 
@@ -140,7 +148,7 @@ Loader `FUN_00b07090`, loaded first in the `FUN_00b07c40` chain (§2).
 | `+0x00` | `Interaction_Point_Type` — enum, **18 literals** (`0x0130e858`): `None`→`−1`, `Enter Start`→0, `Enter Start Convertible`→1, `Enter Start Lift`→2, `Enter Start Pull`→3, `Enter Start Extract`→4, `Enter Start Extract Convertible`→5, `Enter Traverse End`→6, `Enter Traverse End Extract`→7, `Exit End`→8, `Exit End Convertible`→9, `Exit End Fast Outward`→10, `Exit End Fast Forward`→11, `Exit End Fast Backward`→12, `Exit End At Speed Cruise`→13, `Exit End At Speed Fast`→14, `Exit End At Altitude`→15, `Exit Traverse End`→16 |
 | `+0x04`–`+0x0F` | `Seat_Offset` (`vec3`) |
 | `+0x10` | `Heading` (`f32`, always) |
-| `+0x14` | `Direction` — enum, 7 literals (`0x0130e8a0`): `Left`=0, `Right`=1, `Front`=2, `Front Left`=3, `Front Right`=4, `Back`=5, `stand`=6 (the 7th literal is anomalous — likely table-tail bleed from an adjacent constant, not exercised by real data, see §4.2); `−1` if absent/no match |
+| `+0x14` | `Direction` — enum, 7 literals (`0x0130e8a0`): `Left`=0, `Right`=1, `Front`=2, `Front Left`=3, `Front Right`=4, `Back`=5, `stand`=6 (the 7th literal is anomalous — likely table-tail bleed from an adjacent constant, not exercised by real data, see §4.2); `−1` if absent/no match **[Desk review 2026-09-30, from this document's own addresses: the `Interaction_Point_Type` table `0x0130e858` + 18 × 4 = `0x0130e8a0` (this table's start); 6 pointers end at `0x0130e8a0` + 6 × 4 = `0x0130e8b8`, which is §3.2's `Capsule_Shape` table, whose entry 0 is `stand`. So the authored `Direction` vocabulary is 6 literals and the 7th is `Capsule_Shape[0]` read past the end, as guessed above.]** **[OPEN — desk review 2026-09-30: whether the `Direction` compare loop in `FUN_00b07090` runs 6 or 7 times (if 6, `stand` gives −1; if 7, `stand` gives 6); to be settled against the executable.]** |
 | `+0x18` | `Orient_To_Seat` (bool) |
 | `+0x19` | `Project_Onto_World` (bool) |
 | `+0x1A` | `Orient_To_World` (bool) |
@@ -151,6 +159,8 @@ Loader `FUN_00b07090`, loaded first in the `FUN_00b07c40` chain (§2).
 ### 4.2 Validation — real base rows
 
 130 `Interaction_Point_Set` rows, 843 `Interaction_Point_Set_Element` children. **843/843 have an `Interaction_Point_Type` that matches one of the 18 literals** (`tools/harnesses/as_validate.py`). `Direction` values actually seen: `Back`, `Front`, `Front Left`, `Front Right`, `Left`, `Right` — the anomalous 7th literal (`stand`) is **never used in real data**, consistent with it being a table-layout artefact rather than an authored option. **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (7th `Direction` literal shown to be `Capsule_Shape[0]` by address arithmetic; 0x1C element tiles; 843/843 is a Team A figure, Team B reproduced the 130-row count); NEEDS-EXE for the loop bound — desk review (not re-derived from the executable).**
 
 ---
 
@@ -174,7 +184,7 @@ Loader `FUN_00a973e0`. **Cross-references `spec-vehicle-data.md` §7's already-r
 | `+0x1C` | pointer to the `S_Element` (spinner) array, stride `0x10` (16 bytes) |
 | `+0x20` | spinner count (`u32`) |
 
-`Rims_Grid` → repeated **`Rim_Element`**: `Display_Name` (localized handle), `Front_Rim`/`Rear_Rim` (text, each resolved via `FUN_00A96040` against `externalized_vehicle_components.xtbl`'s loaded array — §7 — confirmed cross-reference). **These three fields are stored as three separate parallel `u32[]` arrays, not one interleaved struct** — a structure-of-arrays layout, unlike almost every other table in this group.
+`Rims_Grid` → repeated **`Rim_Element`**: `Display_Name` (localized handle), `Front_Rim`/`Rear_Rim` (text, each resolved via `FUN_00A96040` against `externalized_vehicle_components.xtbl`'s loaded array — §7 — confirmed cross-reference). **[OPEN — desk review 2026-09-30: whether the resolved handle is an index, a pointer or a hash, and whether rim names match a `Slot` `Name` or a `Component` `Name` (§7 stores only the `Slot` hash; §23 item 4 shows `Component` rows carry their own `Name`) — `FUN_00A96040`; data check: test the 51 `Front_Rim`/`Rear_Rim` values against both name sets; to be settled against the executable.]** **These three fields are stored as three separate parallel `u32[]` arrays, not one interleaved struct** — a structure-of-arrays layout, unlike almost every other table in this group.
 
 `Spinners_Grid` → repeated **`S_Element`** (`0x10`-byte record): `+0x00` `Display_Name` (localized handle), `+0x04` `Price` (`s32`, if-present, default 0), `+0x08` `Front_Spinner` (text, resolved via `FUN_00A96040`; both spinner fields default to 0 if `Front_Spinner` is absent), `+0x0C` `Rear_Spinner` (same resolver, read only if `Front_Spinner` was present).
 
@@ -183,6 +193,8 @@ Loader `FUN_00a973e0`. **Cross-references `spec-vehicle-data.md` §7's already-r
 ### 5.2 Validation — real base rows
 
 7 `Wheel_Group` rows, 51 `Rim_Element` total, **0 `S_Element` (spinner) rows** — the base game ships no spinner customization data (real absence, not a parsing gap). **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): NEEDS-EXE: `FUN_00A96040` return type and target (`Slot` vs `Component` name), `FUN_00a973e0`; spinner path untestable (0 rows); NEEDS-DATA: rim name membership — desk review (not re-derived from the executable).**
 
 ---
 
@@ -200,7 +212,7 @@ Per matched vehicle entry (offsets relative to the vehicle-info entry base, `spe
 |---|---|
 | `+0x484` | `Human_Scale` (`f32`, if-present) |
 | `+0x488`–`+0x493` | `Human_Seat_Offset` (`vec3`) — per-vehicle override; **zeroed (not defaulted to the global) if absent** |
-| `+0x90C` + `seatIndex*0x14` | a per-seat sub-record, `0x14` (20) bytes, for each `<Seat>` matched against exactly **4 named seats**: `driver`=0, `front passenger`=1, `back left passenger`=2, `back right passenger`=3 (a *different*, smaller seat convention than §3's 8-seat one) |
+| `+0x90C` + `seatIndex*0x14` | a per-seat sub-record, `0x14` (20) bytes, for each `<Seat>` matched against exactly **4 named seats**: `driver`=0, `front passenger`=1, `back left passenger`=2, `back right passenger`=3 (a *different*, smaller seat convention than §3's 8-seat one) **[OPEN — desk review 2026-09-30: `spec-vehicle-data.md` §7.3 claims `+0x484` (`+0x480` group pointer, then `+0x494` `Max_Hitpoints`) and `+0x908` `Racing_Selectability` then `+0x9AC` `Suspension_Raise_Max`, so the unclaimed gaps are `+0x484`–`+0x493` (16 bytes = f32 + vec3, consistent) and `+0x90C`–`+0x9AB` (160 bytes = 8 × `0x14`), room for eight seat sub-records, not four; enumerate the seat literal table `FUN_00ac92d0` compares against (count and strings); to be settled against the executable.]** |
 
 Per-seat sub-record (`0x14` bytes):
 
@@ -218,11 +230,13 @@ Each `Weapon_Animation_Groups` → `Weapon_Animation_Group` produces **one base 
 | `+0x04` | `Animation_State` index (`FUN_004BF810`, the animation-state table); `0xFFFFFFFF` for the group-level sub-entry itself (meaning "default state for this weapon category") |
 | `+0x08` | `Human_Seat_Offset` (`vec3`) — per-(weapon-category, animation-state) override, zeroed if absent |
 
-So the override chain is **global → per-vehicle → per-seat → per-weapon-category → per-animation-state**, each level independently overridable — a drive-by/ride animation seat-offset tuning table. **[CONFIRMED — disassembly; `FUN_00ac92d0` was read to its end.]**
+So the override chain is **global → per-vehicle → per-seat → per-weapon-category → per-animation-state**, each level independently overridable — a drive-by/ride animation seat-offset tuning table. **[CONFIRMED — disassembly; `FUN_00ac92d0` was read to its end.]** **[Desk review 2026-09-30: label scope — the 7 weapon-category literals are HIGH CONFIDENCE only (§23 item 5), not covered by this CONFIRMED label; and since per-vehicle/per-seat offsets are zeroed rather than defaulted, what consumes the global `DAT_027C2ECC` default is not stated.]** **[OPEN — desk review 2026-09-30: the element tree under `Vehicle` is not stated — whether `Seat` has a wrapper, whether the seat name is the `Seat` element's own text or a child, and whether `Weapon_Animation_Group`/`Animation_State` names are `Name` children (only §21 implies `/Weapon_Animation_Group/Name`); read the real 5,759-byte file; to be settled against real data.]**
 
 ### 6.2 Validation — real base rows
 
 5,759 bytes of real base data exist for this table (extracted and byte-length-verified, `tools/harnesses/as_extract.py`); structural predicates were not separately re-run against it this pass (small table, already exhaustively read from code) — flagged in §23 as a light gap, not a blocker.
+
+**Review status (2026-09-30): NEEDS-EXE: seat literal table in `FUN_00ac92d0` (4 vs 8), `FUN_00B81900` 7 literals; NEEDS-DATA: element nesting of the real file — desk review (not re-derived from the executable).**
 
 ---
 
@@ -237,16 +251,18 @@ Loader `FUN_00a971f0`. This is the table `vehicle_wheel_groups.xtbl` (§5) resol
 | Offset | Field |
 |---|---|
 | `+0x00` | `Name` hash `u32` (matched by `FUN_00A96040`, §5) |
-| `+0x04` | `Camera_Info` — text hashed; if absent, defaults to a shared "no override" global (`DAT_029C9964`) |
+| `+0x04` | `Camera_Info` — text hashed; if absent, defaults to a shared "no override" global (`DAT_029C9964`) **[desk review 2026-09-30: `spec-tables-progression.md` §4.1 reads `DAT_029C9964` as the invalid-id constant = 0]** |
 | `+0x08` | flag byte, bit3 set unconditionally per slot (marker, not element-driven) |
 | `+0x0C` | count of `Components/Component` children |
-| `+0x10`… | pointer to the `Component` array, `0x3C` (60) bytes per element (only a per-component flag byte at `+0x38` bit3 was traced — set for every parsed component; the remaining fields of the `0x3C`-byte record were not walked this pass, OPEN) |
+| `+0x10`… | pointer to the `Component` array, `0x3C` (60) bytes per element (only a per-component flag byte at `+0x38` bit3 was traced — set for every parsed component; the remaining fields of the `0x3C`-byte record were not walked this pass, OPEN) **[OPEN — desk review 2026-09-30: internal contradiction — a pointer at `+0x10` lies outside a `0x10`-stride record (it would be the next slot's `+0x00`); either the stride is `0x14` or one of the offsets is wrong; to be settled against the executable (`FUN_00a971f0` allocation size, `FUN_00A96040` scan stride).]** |
 
 **[CONFIRMED — disassembly for the `Slot` header fields and the component-array allocation/count; the `Component` record's own internal fields beyond the one flag byte are OPEN — see §23.]**
 
 ### 7.2 Validation — real base rows
 
 133,707 bytes of real base data extracted and byte-length-verified. Not independently structurally validated this pass beyond the byte-length check (§23).
+
+**Review status (2026-09-30): NEEDS-EXE: `Slot` stride (`0x10` vs `0x14`) and pointer offset, `Component` record (§23 item 4), `Slot` vs `Component` name key (§5) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -263,7 +279,9 @@ Loader `FUN_00a971f0`. This is the table `vehicle_wheel_groups.xtbl` (§5) resol
 | `+0x08` | `SlotType` — enum, **5 literals** (`0x01181060`): `body mod`=0, `color`=1, `performance`=2, `wheels`=3, `chassis`=4 |
 | `+0x0C` | `Vehicle_Component_Type` — enum, **6 literals** (`0x01181074`): `front wheels`=0, `rear wheels`=1, `front spinners`=2, `rear spinners`=3, `front rims`=4, `rear rims`=5; `0xFFFFFFFF` if absent |
 
-**[CONFIRMED — disassembly.]** **Validation:** 144 real `Vehicle_slot` rows; **144/144 `SlotType` values and 6/6 present `Vehicle_Component_Type` values** match the literal sets above. **[CONFIRMED — empirical.]**
+**[CONFIRMED — disassembly.]** **Validation:** 144 real `Vehicle_slot` rows; **144/144 `SlotType` values and 6/6 present `Vehicle_Component_Type` values** match the literal sets above. **[CONFIRMED — empirical.]** **[Desk review 2026-09-30: the literal tables tile — `0x01181060` + 5 × 4 = `0x01181074`, the `Vehicle_Component_Type` table; 4 dwords = `0x10`. "6/6" means 6 of the 144 rows carry `Vehicle_Component_Type`. The roles of the two count globals `DAT_027b15dc`/`DAT_027b15e0` are not distinguished.]**
+
+**Review status (2026-09-30): DESK-PASS (144-row count corroborated by Team B `team-b/HANDOFF.md` section "9.93 `sr3tables_vehicle_world`"; enum value checks are Team A only) — desk review (not re-derived from the executable).**
 
 ### 8.2 `vehicle_cust_interface.xtbl` (loader `FUN_00818630`) — the customization-menu category list
 
@@ -271,16 +289,19 @@ Loader `FUN_00a971f0`. This is the table `vehicle_wheel_groups.xtbl` (§5) resol
 
 | Offset | Field |
 |---|---|
-| `+0x00` | `Display_Name` — raw NUL-terminated text copied in place (unbounded copy loop, no length helper) |
+| `+0x00` | `Display_Name` — raw NUL-terminated text copied in place (unbounded copy loop, no length helper; the next field is at `+0x80`, so a name of 128 or more bytes overruns into the hash — desk review 2026-09-30) |
 | `+0x80` | `Name` hash `u32` |
 | `+0x84` | `parent_category` hash `u32` (0 if absent) |
+| `+0x88`–`+0x97` | **not described** — 16 bytes between the parent hash and the count (desk review 2026-09-30; the per-element constructor suggests other members) |
 | `+0x98` | count of `slots/slots` children |
 | `+0x9C` | pointer to a `u32[]` array of resolved slot indices |
-| `+0xA0` | flags byte: bit0 `is_color_menu`, bit1 `is_wheel_menu` (can only be set, never explicitly cleared), bit3 `is_perf_menu` |
+| `+0xA0` | flags byte: bit0 `is_color_menu`, bit1 `is_wheel_menu` (can only be set, never explicitly cleared), bit3 `is_perf_menu` (bit2 not described; `+0xA1`–`+0xA3` padding to `0xA4`) |
 
-`slots` (wrapper) → repeated **`slots`** (same tag name reused for the wrapper *and* each item — an odd doubly-named idiom) → **`name`** (lowercase child, holding the slot-type text) — resolved via `FUN_00A96130` directly against `vehicle_cust_slots.xtbl`'s own loaded array (`DAT_027b15e4`, §8.1) — a **confirmed cross-reference**, correcting an earlier guess in this same investigation that the wrapper's own text was used (it is not; the string dump of `&DAT_012a2558` = `"name"` settled it). **[CONFIRMED — disassembly.]**
+`slots` (wrapper) → repeated **`slots`** (same tag name reused for the wrapper *and* each item — an odd doubly-named idiom) → **`name`** (lowercase child, holding the slot-type text) — resolved via `FUN_00A96130` **[OPEN — desk review 2026-09-30: whether `name` is matched against `vehicle_cust_slots`' `Name` hash (`+0x04`) or its `SlotType` ("slot-type text" suggests the latter); data check: compare the 77 `name` values with both columns; to be settled against the executable.]** directly against `vehicle_cust_slots.xtbl`'s own loaded array (`DAT_027b15e4`, §8.1) — a **confirmed cross-reference**, correcting an earlier guess in this same investigation that the wrapper's own text was used (it is not; the string dump of `&DAT_012a2558` = `"name"` settled it). **[CONFIRMED — disassembly.]**
 
-**Validation:** 4 real `vehicle_cust_interface` rows (this is a short, fixed menu-category list — Color/Wheels/Performance/Body-Mod-ish, matching the 4 flags), all with `Display_Name` present; 77 `slots/slots/name` children total across the 4 rows. **[CONFIRMED — empirical.]**
+**Validation:** 4 real `vehicle_cust_interface` rows (this is a short, fixed menu-category list — ~~Color/Wheels/Performance/Body-Mod-ish, matching the 4 flags~~ **[struck 2026-09-30, desk review: the record names only 3 flag bits (bit0, bit1, bit3), not 4; the category-to-row mapping is a guess, not evidence]**), all with `Display_Name` present; 77 `slots/slots/name` children total across the 4 rows. **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (gap `+0x88`–`+0x97` and padding noted; "4 flags" struck — 3 named; overrun hazard stated); NEEDS-EXE: `FUN_00818630` gap contents and bit2; NEEDS-DATA: `name` match key — desk review (not re-derived from the executable).**
 
 ---
 
@@ -296,7 +317,9 @@ Loader `FUN_00a971f0`. This is the table `vehicle_wheel_groups.xtbl` (§5) resol
 | `+0x04` | `Name` hash `u32` |
 | `+0x08`… | a **shader-value block**: a `Shader_Values` wrapper's children are classified against three special names hashed once per load (`Reflection_Cos_Min_Angles`, `Reflection_Inv_Range_Cos_Angles`, `Glass_Color`) plus a generic ordered list of `Vector_Element` (3 floats each) / `Float_Element` (1 float) values, plus a separate list of *String*-valued shader parameters (materials?) copied into a `0x40`-byte-stride name buffer. **The exact byte offsets inside this block were not fully mapped this pass** (mechanism confirmed from a full read of `FUN_00a94d10`; precise per-field offsets OPEN, see §23). |
 
-**[CONFIRMED — disassembly for `+0x00`/`+0x04` and for the shader-value classification mechanism; OPEN for the exact byte layout of the rest of the `0x24`-byte record beyond `+0x08`.]** (694 real `Color` rows exist — §9.3.)
+**[CONFIRMED — disassembly for `+0x00`/`+0x04` and for the shader-value classification mechanism; OPEN for the exact byte layout of the rest of the `0x24`-byte record beyond `+0x08`.]** (694 real `Color` rows exist — §9.3.) **[Desk review 2026-09-30: the 28 bytes `+0x08`–`+0x23` can hold only counts/pointers, so the `0x40`-stride name buffer and the vector/float lists must be external arrays; the destinations of the three specially hashed names are unknown.]**
+
+**Review status (2026-09-30): NEEDS-EXE: full offset map of `FUN_00a94d10` (`+0x08`–`+0x23`, §23 item 1); 694-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ### 9.2 `vehicle_cust_color_sets.xtbl` (loader `FUN_00a952e0`)
 
@@ -310,11 +333,13 @@ Loader `FUN_00a971f0`. This is the table `vehicle_wheel_groups.xtbl` (§5) resol
 | `+0x0C` | count of `Color_Grid/Color_Element` children |
 | `+0x10` | pointer to a `u32[]` array of resolved colour-pool pointers |
 
-`Color_Grid` → repeated **`Color_Element`** → `Color` (text, hashed and linear-scanned against `vehicle_cust_color_pool.xtbl`'s loaded array, `+0x04` key). **An unresolved colour name is not fatal** — the engine `sprintf`s a diagnostic (`"Could not find the color named '%s'."`) into a global buffer and stores 0. **[CONFIRMED — disassembly.]**
+`Color_Grid` → repeated **`Color_Element`** → `Color` (text, hashed and linear-scanned against `vehicle_cust_color_pool.xtbl`'s loaded array, `+0x04` key). **An unresolved colour name is not fatal** — the engine formats a "colour not found" diagnostic naming the colour into a global buffer and stores 0 (shipped message text paraphrased 2026-09-30, desk review). **[CONFIRMED — disassembly.]**
 
 ### 9.3 Validation — real base rows
 
-694 `Color` rows in `vehicle_cust_color_pool.xtbl`; 29 `Color_Set` rows / 874 `Color_Element` children in `vehicle_cust_color_sets.xtbl`. **874/874 `Color_Element/Color` names resolve to a real row in the colour pool** (case-insensitive match against the 694 pool names) — the cross-table reference is exercised, not dead. **[CONFIRMED — empirical.]**
+694 `Color` rows in `vehicle_cust_color_pool.xtbl`; 29 `Color_Set` rows / 874 `Color_Element` children in `vehicle_cust_color_sets.xtbl`. **874/874 `Color_Element/Color` names resolve to a real row in the colour pool** (case-insensitive match against the 694 pool names) — the cross-table reference is exercised, not dead. **[CONFIRMED — empirical.]** **[Desk review 2026-09-30: the engine matches the CRC of the lower-cased name, the check here used case-insensitive text equality; equal except for CRC collisions. Team B corroborates the 694 and 29 row counts only, not 874.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (copied diagnostic text paraphrased; validation method qualified) for §9.2; §9.3 counts as stated — desk review (not re-derived from the executable).**
 
 ---
 
@@ -324,36 +349,40 @@ Loader `FUN_006c3eb0`. Unlike almost every other table in this group, this is a 
 
 | Element | Destination | Conversion |
 |---|---|---|
-| `Max_Surfing_Time` / `Min_Surfing_Time` (f32, always) | `DAT_014c770c` / `DAT_014c7710` | both forced to 0/0 if `Max ≤ 0` or `Max < Min`; else × a seconds→ticks constant (`DAT_012a2d90`), rounded |
+| `Max_Surfing_Time` / `Min_Surfing_Time` (f32, always) | `DAT_014c770c` / `DAT_014c7710` | both forced to 0/0 if `Max ≤ 0` or `Max < Min`; else × a seconds→ticks constant (`DAT_012a2d90`, = **1000.0** double per `spec-cutscene-camera-format.md` §11.2, read from the image — so "ticks" are milliseconds), rounded |
 | `Max_Handstand_Time` / `Min_Handstand_Time` (f32, always) | `DAT_014c7714` / `DAT_014c7718` | same rule and conversion |
-| `Max_Handstand_Percent_Reward` (f32, always) | `DAT_014c7724` | ÷ a percent→fraction constant (`DAT_012a2dd8`), then clamped to `[0, DAT_01117a4c]` |
-| `Surfing_Min_Speed` (f32, always) | `DAT_014c7728` | clamped ≥ 0, × `0.44704` (mph→m/s, `spec-vehicle-data.md` §7.2's constant), **squared** (stored as a squared-speed threshold) |
+| `Max_Handstand_Percent_Reward` (f32, always) | `DAT_014c7724` | ÷ a percent→fraction constant (`DAT_012a2dd8`), then clamped to `[0, DAT_01117a4c]` (`DAT_01117a4c` = 1.0, byte-confirmed in `spec-lua-api-behaviour.md`) **[OPEN — desk review 2026-09-30: `spec-tables-audio-radio.md` §13 reads `DAT_012A2DD8` as 0 in the static image (set by untraced code), so its run-time value and the rounding mode are not known; to be settled against the executable.]** |
+| `Surfing_Min_Speed` (f32, always) | `DAT_014c7728` | clamped ≥ 0, × `0.44704` (mph→m/s, `spec-vehicle-data.md` §7.2's constant), **squared** (stored as a squared-speed threshold; no upper cap stated) |
 | `Surfing_Timeout` (f32, always) | `DAT_014c7700` | clamped ≥ 0, × ticks constant, rounded |
 | `Start_Time` (f32, always) | `DAT_014c7704` | same |
 | `Max_Speed_Delay` (f32, always) | `DAT_014c7708` | same |
 | `Record_Display_Time` (f32, **if-present**) | `DAT_014c771c` | 0 if absent; else clamped ≥ 0, × ticks constant |
 | `Record_Queue_Time` (f32, if-present) | `DAT_014c7720` | 0 if absent; else same |
 | `Record_Threshold` (f32, always) | `DAT_014c7730` | clamped ≥ 0, ÷ percent constant |
-| `Handstanding_Sensitivity_Multiplier` (f32, always) | `DAT_014c772c` | clamped to a floor `DAT_01117a4c` |
+| `Handstanding_Sensitivity_Multiplier` (f32, always) | `DAT_014c772c` | clamped to a floor `DAT_01117a4c` (= 1.0, as above) |
 | `Max_Respect` (s32, always) | `DAT_014c7734` | clamped ≥ 0 |
 | `Max_Lifetime_Respect` (s32, always) | `DAT_014c7738` | clamped ≥ 0 |
 | `Max_Cash` (f32, always) | `DAT_014c773c` | clamped ≥ 0 |
 
-**The `Record_Display_Time`/`Record_Queue_Time`/`Record_Threshold`/`Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` sextet is the exact same "on-screen stunt record" field group `spec-tables-weapons-combat.md` §14.4 (`windshield_cannon.xtbl`) and §11.2 (`combat_tricks.xtbl`) already document** — confirmed shared idiom, third table using it. A trailing call `FUN_006a4ad0(vehicleSurfingNode)` reads a **nested `Balance_Bar_Params`** block (12 more `f32` fields: `Balanced_Region_Size`, `_Size_Change`, `_Min_Size`, `_Acceleration`, `Balanced_Acceleration_Change`, `_Max`, `Unbalanced_Region_Acceleration`, `Unbalanced_Acceleration_Change`, `_Max`, `Balancing_Acceleration`, `_Change`, `_Max`) into a 22-dword local struct, then does an SR2-legacy-asset lookup (`"sr2_balance_meter"`) unrelated to the XML. **[CONFIRMED — disassembly.]**
+**The `Record_Display_Time`/`Record_Queue_Time`/`Record_Threshold`/`Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` sextet is the exact same "on-screen stunt record" field group `spec-tables-weapons-combat.md` §14.4 (`windshield_cannon.xtbl`) and §11.2 (`combat_tricks.xtbl`) already document** — confirmed shared idiom, third table using it. A trailing call `FUN_006a4ad0(vehicleSurfingNode)` reads a **nested `Balance_Bar_Params`** block (12 more `f32` fields: `Balanced_Region_Size`, `_Size_Change`, `_Min_Size`, `_Acceleration`, `Balanced_Acceleration_Change`, `_Max`, `Unbalanced_Region_Acceleration`, `Unbalanced_Acceleration_Change`, `_Max`, `Balancing_Acceleration`, `_Change`, `_Max`) **[OPEN — desk review 2026-09-30: the names above are abbreviated with a leading underscore and the full element names are not spelled out (a wrong name reads as 0 with the always-float accessor); the 22-dword struct holds 12 named floats, the other 10 dwords are not described; read `FUN_006a4ad0` and the real file's `Balance_Bar_Params` children; to be settled against the executable.]** into a 22-dword local struct, then does an SR2-legacy-asset lookup (`"sr2_balance_meter"`) unrelated to the XML. **[CONFIRMED — disassembly.]** **[Desk review 2026-09-30: the 16 destinations `0x014c7700`–`0x014c773c` tile with no gap or overlap; the placement of `Vehicle_Surfing` (under `Table` or at the root) is not stated.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (constant values imported: 1000.0, 1.0; percent constant flagged); NEEDS-EXE: `DAT_012a2dd8` value, rounding, `FUN_006a4ad0` names; NEEDS-DATA: real `Balance_Bar_Params` child names — desk review (not re-derived from the executable).**
 
 ---
 
 ## 11. The shared "LightSet" table — `Vehicle-Customization-Lightset.xtbl`, `store_gang_lightset.xtbl`, `test_shop_light_01.xtbl`
 
-**These three tables (plus `spec-tables-weapons-combat.md` §17 item 6's still-open `store_weapon_lightset.xtbl`) all share one generic lightset loader**, resolving a previously-undocumented shared schema. Confirmed by code for two of the three consumers here (`FUN_00819210`/`FUN_00810330` for the vehicle-customization file, `FUN_00810280` for `store_gang_lightset.xtbl`, `FUN_008367c0` for `test_shop_light_01.xtbl`), all calling the same pair: `FUN_005990c0(filename)` (resolve-or-create a lightset object by filename hash — registry array `DAT_013de2c8`, stride `0x10`, count `DAT_013de2bc`) then `FUN_00598160(handle, mode, extra)` (per-row activation pass).
+**These three tables (plus `spec-tables-weapons-combat.md` §17 item 6's still-open `store_weapon_lightset.xtbl`) all share one generic lightset loader**, resolving a previously-undocumented shared schema. Confirmed by code for two of the three consumers here **[desk review 2026-09-30: the list that follows names consumer functions for all three files; which one lacks code confirmation is not stated]** (`FUN_00819210`/`FUN_00810330` for the vehicle-customization file, `FUN_00810280` for `store_gang_lightset.xtbl`, `FUN_008367c0` for `test_shop_light_01.xtbl`), all calling the same pair: `FUN_005990c0(filename)` (resolve-or-create a lightset object by filename hash — registry array `DAT_013de2c8`, stride `0x10`, count `DAT_013de2bc`) then `FUN_00598160(handle, mode, extra)` (per-row activation pass).
 
 ### 11.1 What the disassembly confirms — the *runtime activation* record, not the XML schema
 
-Each lightset's row array has stride `0x70` (112 bytes); `FUN_00598160` reads/writes, per row: a mode byte at `+0x14`; a presence flag at `+0x1C` (checked on unload to clear two "any lightset active" globals); a resource pointer at `+0x10` gating a live ambient-probe capture; a float at `+0x20` (with a gating byte at `+0x24`) compared against a threshold (`DAT_0125e270`) to drive a light fade-in; and **two reflection-probe colour quads at `+0x30`–`+0x3C` and `+0x40`–`+0x6C`**, either populated live by an SH-probe capture (`FUN_00DA38E0` + `FUN_004ADD90`) or — for the three consumer functions in *this* group — **immediately overwritten with fixed, per-consumer colour constants** (each consumer supplies its own `0x30`/`0x40`/`0x50`/`0x60` quad of hard-coded globals; `test_shop_light_01.xtbl`'s consumer additionally supports a runtime "gang colour" clone via `FUN_00596ff0`). **This is a real, useful finding, but it is *not* the table's own XML-sourced content** — those `+0x00`–`+0x0F` bytes (and the object-creation path `FUN_005984c0`, not decompiled this pass) are where the real per-row XML fields must live; that function was not traced. **[CONFIRMED — disassembly for everything stated; the XML→struct mapping itself is OPEN, see §23.]**
+Each lightset's row array has stride `0x70` (112 bytes); `FUN_00598160` reads/writes, per row: a mode byte at `+0x14`; a presence flag at `+0x1C` (checked on unload to clear two "any lightset active" globals); a resource pointer at `+0x10` gating a live ambient-probe capture; a float at `+0x20` (with a gating byte at `+0x24`) compared against a threshold (`DAT_0125e270`) to drive a light fade-in; and **two reflection-probe colour quads at `+0x30`–`+0x3C` and `+0x40`–`+0x6C`** **[desk review 2026-09-30: inconsistent with the same paragraph's four 16-byte quads at `+0x30`/`+0x40`/`+0x50`/`+0x60`, which tile `+0x30`–`+0x6F` to the `0x70` stride; `+0x40`–`+0x6C` spans three quads, not one]**, either populated live by an SH-probe capture (`FUN_00DA38E0` + `FUN_004ADD90`) or — for the three consumer functions in *this* group — **immediately overwritten with fixed, per-consumer colour constants** (each consumer supplies its own `0x30`/`0x40`/`0x50`/`0x60` quad of hard-coded globals; `test_shop_light_01.xtbl`'s consumer additionally supports a runtime "gang colour" clone via `FUN_00596ff0`). **This is a real, useful finding, but it is *not* the table's own XML-sourced content** — those `+0x00`–`+0x0F` bytes (and the object-creation path `FUN_005984c0`, not decompiled this pass) are where the real per-row XML fields must live; that function was not traced. **[CONFIRMED — disassembly for everything stated; the XML→struct mapping itself is OPEN, see §23.]**
 
 ### 11.2 What the real base rows confirm — the actual XML vocabulary
 
 All three files were pulled from `misc_tables.vpp_pc` and read raw (they are small, one row each — `Table` → one **`LightSet`** element): `Name`, `StartTime`, `EndTime`, `Exposure`, `RampExposure` (bool), then **`Lights` → repeated `Light`**, each with: `Name`, `Type` (seen: `omni`, `circular spotlight`), `Category_0`..`Category_3` (bool), `CastShadows` (bool), `Color` (three 0–1 floats, space-separated — an inline vec3, *not* `X`/`Y`/`Z` children, unlike almost every other vec3 in this project), `Multiplier` (f32), `Template` (bool), `Position` (inline vec3), `Orientation` (two floats — azimuth/elevation), `Indoor`/`Outdoor` (int flags), `Hotspot` (two floats — spotlight cone angles), `Attenuation` (two floats — near/far falloff), `Slate_Name`, `LightCharacter`, `ShadowCharacter`, `LightLevel`, `ShadowLevel`. **[CONFIRMED — empirical; element vocabulary only, no byte offsets — the reader that consumes this vocabulary (`FUN_00598160`'s missing counterpart, almost certainly inside `FUN_005984c0`) was not decompiled this pass.]** Real row counts: 1 `LightSet` in each of the three files (`tools/harnesses/as_validate.py`).
+
+**Review status (2026-09-30): NEEDS-EXE: XML→struct mapping in `FUN_005984c0` (§23 item 2), quad count; 1 × 3 row counts corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -363,19 +392,21 @@ Loader `FUN_008e8280` (base entry point `FUN_008e8540`; DLC entry point `FUN_008
 
 ### 12.1 Record layout (`0xC8` = 200 bytes)
 
+Row tag: `Table` → repeated **`Level_Object`** (stated in §12.3; added here 2026-09-30, desk review). Offsets `+0x35`–`+0x37`, `+0x70`–`+0x73` and `+0x7C`–`+0x87` are not described below.
+
 | Offset | Field | Notes |
 |---|---|---|
 | `+0x00`–`+0x2F` | `Name` (`char[0x30]`) | row key, also hashed for lookup |
 | `+0x30` | `Hitpoints` (`u32`) | |
 | `+0x34` | `Material` (`u8`) | matched against the **33 physical-material names** (`spec-tables-weapons-combat.md` §1.6's `FUN_006F76F0`); default index **31** (`0x1F`) if no match — confirmed reuse of that exact resolver |
-| `+0x38` | `Lifetime_seconds` → ticks (`s32`) | 0 unless the value is ≥ a small threshold (`DAT_0125e270`); converted `value*ticksPerSec + rounding` |
-| `+0x3C` | `Weight` → scaled `f32` | negative raw values get an unsigned-wraparound correction, then × a unit constant |
-| `+0x40` | `Friction` (f32, if-present) | default `DAT_0126d2cc` |
+| `+0x38` | `Lifetime_seconds` → ticks (`s32`) | 0 unless the value is ≥ a small threshold (`DAT_0125e270`, plausibly 0.0 per `spec-lua-api-behaviour.md`, not byte-confirmed); converted `value*ticksPerSec + rounding` **[OPEN — desk review 2026-09-30: the tick constant and rounding are not given; to be settled against the executable.]** |
+| `+0x3C` | `Weight` → scaled `f32` | negative raw values get an unsigned-wraparound correction, then × a unit constant **[OPEN — desk review 2026-09-30: the correction and the constant are not given, so the stored value cannot be reproduced; to be settled against the executable.]** |
+| `+0x40` | `Friction` (f32, if-present) | default `DAT_0126d2cc` **[OPEN — desk review 2026-09-30: the values of `DAT_0126d2cc`, `DAT_01115d6c`, `DAT_012a2dd0` (this and the next three rows) are not given; to be settled against the executable (.rdata read).]** |
 | `+0x44` | `Restitution` (f32, if-present) | default `DAT_01115d6c` |
 | `+0x48` | `Angular_Damping` (f32, if-present) | default `DAT_01115d6c` |
 | `+0x4C` | `Linear_Damping` (f32, if-present) | default `DAT_012a2dd0` |
 | `+0x50` | `Surface_Velocity` (f32, if-present) | default 0 |
-| `+0x54` | `Buoyancy_Modifier` (f32, if-present) | default `DAT_01117a4c` |
+| `+0x54` | `Buoyancy_Modifier` (f32, if-present) | default `DAT_01117a4c` (= 1.0, byte-confirmed in `spec-lua-api-behaviour.md`) |
 | `+0x58` | `Anchored/Dislodge_Hitpoints` (u32) | only under `Anchored` |
 | `+0x5C` | `Anchored/Dislodge_Effect` → effects CRC | `spec-tables-weapons-combat.md` §1.6's `FUN_005C50B0`; `−1` default |
 | `+0x60` | `Anchored/Coins_Released` (u32, if-present) | |
@@ -390,11 +421,11 @@ Loader `FUN_008e8280` (base entry point `FUN_008e8540`; DLC entry point `FUN_008
 | `+0x94`–`+0x9F` | `Death_Money`'s own `X`/`Y`/`Z` (`vec3`) | read as a "Cash_Out_Point"-labelled vec3 (`FUN_00DACFB0`); confirmed empirically to come from `Death_Money`'s own `X`/`Y`/`Z` children, not a separate wrapper — see §12.3 |
 | `+0xA0` | presence byte for the above vec3 | |
 | `+0xA1` | `Death_Money/Just_Coins` (bool) | |
-| `+0xA4` | `Vehicle_Repulsor_Scale` (f32, if-present) | default `DAT_01117a4c` |
+| `+0xA4` | `Vehicle_Repulsor_Scale` (f32, if-present) | default `DAT_01117a4c` (= 1.0, as above) |
 | `+0xA8`–`+0xB3` | `center_of_mass/com_offset` (`vec3`) | |
 | `+0xB4`–`+0xBF` | `center_of_mass/com_offset_corpse` (`vec3`) | |
 | `+0xC0` | flags dword 1 | bit0-1 `Anchored` present, bit13 `Anchored/Dislodge_On_Death`, bit24 `Movable_By_Humans`, bit25 `Vehicle_Obstacle`=`false`, bit26 `Vehicle_Obstacle`=`unanchored`, bit28 `VehicleIVS` present, bit29 `ObjectMVS` present, bit30 `Anchored/Dislodge_Notoriety`, bit31 `Flag: receives_bullet_impulse` |
-| `+0xC4` | flags dword 2 | bit19 `Anchored` present (secondary marker) + the 26 `Flag` bits, §12.2 |
+| `+0xC4` | flags dword 2 | bit19 `Anchored` present (secondary marker) + the 26 `Flag` bits, §12.2 **[OPEN — desk review 2026-09-30: the bit position of each of the 26 `Flag` literals is not given, so the `+0xC4` map cannot be built; `+0xC0` "bit0-1" does not say whether both bits are set or a 2-bit value is stored; the element paths of `Movable_By_Humans` and `Vehicle_Obstacle` (row children or under `Anchored`) are not stated — `FUN_008e7490`; to be settled against the executable.]** |
 
 `Vehicle_Obstacle` is a 3-literal enum (`true`/`false`/`unanchored`); only the last two set a bit (`true` is the "do nothing extra" default). **[CONFIRMED — disassembly; `FUN_008e7490`, 2,792 decompiled lines, read to its end.]**
 
@@ -406,30 +437,36 @@ Loader `FUN_008e8280` (base entry point `FUN_008e8540`; DLC entry point `FUN_008
 
 149 real `Level_Object` rows: **149/149 have `Name`; all 357 `Flag` children across all rows match one of the 27 literals above (357/357)**; 15 distinct `Material` strings seen (`Cardboard`, `Concrete`, `Cyberspace`, `Electric`, `Flame`, `Glass - Heavy`, `Glass - Medium`, `Metal - Fence`, `Metal - Solid`, `Metal - Thin`, …). `Death_Money`'s `X`/`Y`/`Z` and `Vehicle_Obstacle` were confirmed present with exactly the shapes §12.1 predicts (`<Death_Money><Min>0.0</Min><Max>0.0</Max><Just_Coins>False</Just_Coins><X>0.0</X><Y>0.0</Y><Z>0.0</Z></Death_Money>`, `<Vehicle_Obstacle>true</Vehicle_Obstacle>`). **One dead-element finding**: real `Anchored` blocks carry a `Dislodged_By` wrapper with repeated `Element` children (e.g. `<Dislodged_By><Element>none</Element></Dislodged_By>`) that **`FUN_008e7490`'s full body never reads** — authored data with no consumer in this reader, same family as `spec-tables-weapons-combat.md` §18's dead-element findings. **[CONFIRMED — empirical, `tools/harnesses/as_validate.py`.]**
 
+**Review status (2026-09-30): NEEDS-EXE: `FUN_008e7490` flag bit map, Weight/Lifetime formulas, default values, undescribed gaps; 149-row count corroborated by Team B, 357/357 flag check is Team A only — desk review (not re-derived from the executable).**
+
 ---
 
 ## 13. `props.xtbl` — per-activity decorative-prop counts
 
 Loader `FUN_0060ea40`. **Not a world-placement table** (despite the name) — a tiny fixed configuration table: 14 named activity slots, each with one integer.
 
-`Table` → repeated **`Activity`** → `Name` (bounded string, matched `_stricmp` against a **fixed 14-literal list**), `Num_Props` (`s32`, always). Matched rows store `Num_Props` into a 14-`u32` global block (`DAT_014b02e4`, zeroed with a `memset(…, 0x38)` before parsing — `0x38` = 14×4 bytes, confirming the capacity). The 14 recognised names: `assault_thug`, `assault_killa`, `assault_gangsta`, `assault_kingpin`, `kill_thug`, `kill_killa`, `kill_gangsta`, `kill_kingpin`, `shooting_thug`, `shooting_killa`, `shooting_gangsta`, `shooting_kingpin`, `destroy_gang_car`, `collect_item_pickup`. **[CONFIRMED — disassembly.]**
+`Table` → repeated **`Activity`** → `Name` (bounded string, matched `_stricmp` against a **fixed 14-literal list**), `Num_Props` (`s32`, always). Matched rows store `Num_Props` into a 14-`u32` global block (`DAT_014b02e4`, zeroed with a `memset(…, 0x38)` before parsing — `0x38` = 14×4 bytes, confirming the capacity). The 14 recognised names **[OPEN — desk review 2026-09-30: as transcribed these use underscores, but the real rows (validation below) use spaces and `_stricmp` cannot match both; either the literals have spaces or the match normalises — dump the 14 literals at the `FUN_0060ea40` compare sites. The block index of each name is presumably its position in this list (not stated); to be settled against the executable.]**: `assault_thug`, `assault_killa`, `assault_gangsta`, `assault_kingpin`, `kill_thug`, `kill_killa`, `kill_gangsta`, `kill_kingpin`, `shooting_thug`, `shooting_killa`, `shooting_gangsta`, `shooting_kingpin`, `destroy_gang_car`, `collect_item_pickup`. **[CONFIRMED — disassembly.]**
 
 **Validation:** all 14 real base `Activity` rows are present with exactly these names (space-separated in the XML, e.g. `assault thug`) and all 14 have `Num_Props`. **[CONFIRMED — empirical, 14/14.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (underscore/space contradiction and index order flagged); NEEDS-EXE: literal spelling; 14-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
 ## 14. `triggers.xtbl` — default properties patched onto pre-placed trigger instances
 
-Loader `FUN_0093e0c0`. **This table does not allocate its own row array.** Each row's `Name` is hashed with the **multiply-by-33 bucket hash** (`FUN_00DAB330(name, 0x14)` — the same hash family `spec-tables-weapons-combat.md` §1.4 documents for camera-shake names, here with modulus 20 instead of 128) and looked up in an **already-populated runtime hash table** (buckets/chain-next/comparator/key arrays around `0x02622f0d`/`0x02622f21`/`0x02622f08`/`0x02622f38`) that maps a name to a **pre-existing trigger-instance slot index**. **A row whose name has no match in that table is silently discarded — nothing is stored.** This is a strong, direct structural link to wherever trigger *instances* are placed in the game world and named (almost certainly the zone/level data, i.e. `.czn_pc`'s parked object-placement/property-stream interior — noted here as a cross-reference only, per the standing instruction; that interior was not opened, touched, or acted on).
+Loader `FUN_0093e0c0`. **This table does not allocate its own row array.** Each row's `Name` is hashed with the **multiply-by-33 bucket hash** (`FUN_00DAB330(name, 0x14)` — the same hash family `spec-tables-weapons-combat.md` §1.4 documents for camera-shake names, here with modulus 20 instead of 128) and looked up in an **already-populated runtime hash table** (buckets/chain-next/comparator/key arrays around `0x02622f0d`/`0x02622f21`/`0x02622f08`/`0x02622f38` **[desk review 2026-09-30: two of these are odd, unaligned addresses — unusual as array bases; the layout is OPEN]**) that maps a name to a **pre-existing trigger-instance slot index**. **A row whose name has no match in that table is silently discarded — nothing is stored.** This is a strong, direct structural link to wherever trigger *instances* are placed in the game world and named (almost certainly the zone/level data, i.e. `.czn_pc`'s parked object-placement/property-stream interior — noted here as a cross-reference only, per the standing instruction; that interior was not opened, touched, or acted on).
 
 ### 14.1 Per-instance record (patched fields; base `0x026232A8`, stride `0x24` = 36 bytes, indexed by the matched slot)
+
+Row tag: `Table` → repeated **`Trigger`** (stated in §14.2; added here 2026-09-30, desk review).
 
 | Offset | Field |
 |---|---|
 | `+0x00` | `Effect` → effects CRC (`FUN_005C50B0`) |
 | `+0x04` | `Icon` → a value resolved through `FUN_00802f60` |
 | `+0x08` | `Foley` → audio id (`FUN_00462960`) |
-| `+0x0C` | derived icon-frame index — only computed when `IconType` matches the literal `Store` (see below), from the `+0x04` value's range (`0x18`–`0x21`→7, `0x22`–`0x23`/`<0x24`→8) |
+| `+0x0C` | derived icon-frame index — only computed when `IconType` matches the literal `Store` (see below), from the `+0x04` value's range (`0x18`–`0x21`→7, `0x22`–`0x23`/`<0x24`→8) **[OPEN — desk review 2026-09-30: the rule is garbled — `0x22`–`0x23` and `<0x24` overlap, and values below `0x18` or ≥ `0x24` are not covered (`FUN_0093e0c0`, `FUN_00802f60`); to be settled against the executable.]** |
 | `+0x10` | `UseMessage` → localized-string handle |
 | `+0x20` | flag: `Flags` child present |
 | `+0x21` | flags byte: bit0 `check_npcs`, bit1 `continuous_activation`, bit2 `disabled_for_demo`, bit4 `ignore_vehicles`, bit5 `ignore_on_foot` |
@@ -440,6 +477,8 @@ Loader `FUN_0093e0c0`. **This table does not allocate its own row array.** Each 
 
 20 real `Trigger` rows, all with `Name`; 10 total `Flag` children, **10/10** matching the 5-literal set above. **`IconType` does not appear in any real row** (`0/20` — the literal only appears in the table's own embedded `TableDescription` schema block, not in any authored `Trigger`; consistent with it being a rarely-used field, not a parsing gap). **[CONFIRMED — empirical.]**
 
+**Review status (2026-09-30): NEEDS-EXE: icon-frame rule, `FUN_00802f60` meaning, hash-table layout (low priority); 0x24 record tiles; 20-row count corroborated by Team B — desk review (not re-derived from the executable).**
+
 ---
 
 ## 15. `items_inventory.xtbl` — player inventory item catalogue
@@ -448,11 +487,13 @@ Loader `FUN_008dc8c0`. Array anchor already known from `spec-tables-weapons-comb
 
 ### 15.1 Record layout (`0x34` = 52 bytes)
 
+Row tag: `Table` → repeated **`Inventory_Item`** (stated in §15.2; added here 2026-09-30, desk review).
+
 | Offset | Field | Default if absent |
 |---|---|---|
 | `+0x00` | `Name` → interned string pointer (`FUN_00A74910`) | — (row key) |
 | `+0x04` | `Name` hash `u32` | — |
-| `+0x08` | `DisplayName` → localization handle (`FUN_0084A280`) | placeholder string `&DAT_0111fe04` |
+| `+0x08` | `DisplayName` → localization handle (`FUN_0084A280`; desk review 2026-09-30: this helper appears in no other spec, while §5/§8.1 use `FUN_0084A1B0` — distinct helper or typo is OPEN) | placeholder string `&DAT_0111fe04` |
 | `+0x0C` | `DisplayName` → resolved display string pointer (`FUN_00849FF0`) | 0 |
 | `+0x10` | `Bitmap` → resource handle (`FUN_00E22290`) | `−1` if the `Bitmap` text is empty |
 | `+0x14` | `Impact_shape_min_offset` (f32, if-present) | 0 |
@@ -461,14 +502,16 @@ Loader `FUN_008dc8c0`. Array anchor already known from `spec-tables-weapons-comb
 | `+0x20` | `Max_Inventory` (s32, if-present) | = the resolved `Default_Count` value |
 | `+0x24` | `Description` → resolved string pointer (`FUN_0084A280` + `FUN_00849FF0`) | 0 |
 | `+0x28` | load-order ordinal (`u8`, 0,1,2,… assigned sequentially) | — |
-| `+0x2C` | `Use_Script` (s32) | 0 if the child is absent; else matched against a **single recognised literal `none`**, then indexed into a translation table `DAT_0116BB20` (no-match reads `table[−1]`, i.e. the dword immediately preceding the table — evidently by design, not examined further) |
-| `+0x30` | flags byte, bit0 = **live** (always set for a kept row — matches `spec-tables-weapons-combat.md` §1.6's cited live bit exactly) | — |
+| `+0x2C` | `Use_Script` (s32) | 0 if the child is absent; else matched against a **single recognised literal `none`**, then indexed into a translation table `DAT_0116BB20` (no-match reads `table[−1]`, i.e. the dword immediately preceding the table — evidently by design, not examined further; the same address is §3.2's `Capsule_Shape` indirection table — see the OPEN note there) |
+| `+0x30` | flags byte, bit0 = **live** (always set for a kept row — matches `spec-tables-weapons-combat.md` §1.6's cited live bit exactly) **[OPEN — desk review 2026-09-30: conflict not recorded here — `spec-save-format.md` §10.3 places the valid bit at bit 0 of byte `+0x2C`, and `spec-tables-weapons-combat.md` §1.6 flags that conflict; this reader stores `Use_Script` (s32) at `+0x2C`, which favours `+0x30` but does not close it (`FUN_008DCEC0`, `FUN_008DCB10`); to be settled against the executable.]** | — |
 
 **Row selection differs from the group idiom**: the **base load accepts every row unconditionally, regardless of its `Framework` text** (only a DLC-framework load filters by exact match) — items_inventory does not use the usual base-vs-DLC two-pass `Framework` filter for its *base* pass. **[CONFIRMED — disassembly; `FUN_008dc8c0` read to its end.]**
 
 ### 15.2 Validation — real base rows
 
 94 real `Inventory_Item` rows (against the documented capacity of 110 — 16 slots unused in the base game). **94/94 have `Name`; of the 94 with `Default_Count` present, 94/94 satisfy `Default_Count ≤ Max_Inventory`** (the defaulting rule holds when both are given explicitly, and trivially when `Max_Inventory` is absent). **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (row tag stated; live-bit conflict and shared table recorded); NEEDS-EXE: `+0x2C`/`+0x30` live bit, `FUN_0084A280` identity; 94-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -486,7 +529,9 @@ Real base rows also show elements not traced to any reader in this pass — `Ani
 
 ### 16.2 Validation — real base rows
 
-391 real `Item` rows: **391/391 have `Name`**; 125 have a `Mesh` child, 266 have `character_mesh`, and **all 391 have a `Props` wrapper** (usually empty). **[CONFIRMED — empirical for presence counts; the full per-item byte-offset schema is OPEN, see §23.]**
+391 real `Item` rows: **391/391 have `Name`**; 125 have a `Mesh` child, 266 have `character_mesh`, and **all 391 have a `Props` wrapper** (usually empty). **[CONFIRMED — empirical for presence counts; the full per-item byte-offset schema is OPEN, see §23.]** **[Desk review 2026-09-30: 125 + 266 = 391 implies `Mesh` and `character_mesh` never co-occur in a row; not stated as a rule.]**
+
+**Review status (2026-09-30): NEEDS-EXE: per-row builder `FUN_00904d10` (§23 item 3); 391-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -496,7 +541,7 @@ Loader `FUN_0083b750` (base entry `FUN_0083b870`; DLC entry `FUN_0083b940`, matc
 
 ### 17.1 Record layout
 
-`Table` → repeated **`Contact`** (row tag confirmed empirically, §17.2). Fixed array, capacity **35** (`0x23`, gated in the loader), stride `0x84` (132 bytes):
+`Table` → repeated **`Contact`** (row tag confirmed empirically, §17.2). Fixed array, capacity **35** (`0x23`, gated in the loader), stride `0x84` (132 bytes) **[OPEN — desk review 2026-09-30: what happens to a 36th row (skipped or written past the array) and the compare operator are not stated (`FUN_0083b750`); both 64-byte text fields are unbounded copies, so a value of 64 or more bytes overruns the next field; to be settled against the executable.]**:
 
 | Offset | Field |
 |---|---|
@@ -510,6 +555,8 @@ Loader `FUN_0083b750` (base entry `FUN_0083b870`; DLC entry `FUN_0083b940`, matc
 
 31 real rows (of a capacity of 35 — this is the game's phone-contacts roster, e.g. Kingdom Come Records staff and gang leaders by name), row tag confirmed as `Contact`; **31/31 have `Name`, `Image`, and `Persona`**. **[CONFIRMED — empirical.]**
 
+**Review status (2026-09-30): DESK-PASS, text fixes applied (over-capacity and overrun hazards flagged); 0x84 tiles; 31-row count corroborated by Team B — desk review (not re-derived from the executable).**
+
 ---
 
 ## 18. `activity_player_persona_replacement.xtbl` — per-activity player-persona substitution
@@ -518,18 +565,20 @@ Loader `FUN_00615430`.
 
 ### 18.1 Record layout
 
-`Table` → repeated **`Activity_Persona_Replacement`** → `Name` (resolved via the activity-name resolver `FUN_00614d70`; unmatched names are silently skipped) → `Persona_Replacements` → repeated **`Persona_Replacement`** (`8`-byte record, array per activity, `count`/`pointer` pair in a fixed table indexed by activity):
+`Table` → repeated **`Activity_Persona_Replacement`** → `Name` (resolved via the activity-name resolver `FUN_00614d70`; unmatched names are silently skipped) → `Persona_Replacements` → repeated **`Persona_Replacement`** (`8`-byte record, array per activity, `count`/`pointer` pair in a fixed table indexed by activity) **[OPEN — desk review 2026-09-30: the address and capacity of that per-activity table and the activity-name list of `FUN_00614d70` are not given (`FUN_00615430`); to be settled against the executable.]**:
 
 | Offset | Field |
 |---|---|
 | `+0x00` | `Original` — persona name, resolved via `FUN_0070a2f0` |
-| `+0x04` | `Replacement` — same resolver, if-present; 0 (none) if absent |
+| `+0x04` | `Replacement` — same resolver, if-present; 0 (none) if absent (desk review 2026-09-30: whether 0 can also be a valid persona id, and what `FUN_0070a2f0` returns for an unknown name, is OPEN) |
 
 **[CONFIRMED — disassembly.]**
 
 ### 18.2 Validation — real base rows
 
 3 real `Activity_Persona_Replacement` rows, all with `Name`; 6 total `Persona_Replacement` children, **6/6 with `Original` present**. **[CONFIRMED — empirical.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (missing table base and 0-sentinel ambiguity flagged); NEEDS-EXE: `FUN_00615430` table base/capacity; 3-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -548,11 +597,13 @@ Loader `FUN_00b6a370`. **Not a per-vehicle-class table** — exactly **two** nam
 | `+0x08` | `Offset_Dist` (f32, always) |
 | `+0x0C` | `Speed` (f32, always) |
 
-If a curve has ≥ 2 points, a "slope" value is derived from the first two points' height/distance deltas via a two-argument trig function (`FUN_00dae5b0`, almost certainly `atan2`) and stored as a third global field alongside the curve's own pointer/count — the exact consumer-side meaning of this derived value was not traced (HYPOTHESIS: an approach-angle used to blend/extrapolate beyond the sampled points). **[CONFIRMED — disassembly for the element tree, offsets, and two-curve limitation; HYPOTHESIS for the derived slope's downstream use.]**
+If a curve has ≥ 2 points, a "slope" value is derived from the first two points' height/distance deltas via a two-argument trig function (`FUN_00dae5b0`, almost certainly `atan2`; argument order and units not given — desk review 2026-09-30, OPEN) and stored as a third global field alongside the curve's own pointer/count — the exact consumer-side meaning of this derived value was not traced (HYPOTHESIS: an approach-angle used to blend/extrapolate beyond the sampled points). **[CONFIRMED — disassembly for the element tree, offsets, and two-curve limitation; HYPOTHESIS for the derived slope's downstream use.]**
 
 ### 19.2 Validation — real base rows
 
-Exactly 2 real `Curve_Params` rows, named `Landing` and `Take Off` — **confirming the two-curve limitation empirically, not just from the code path.** 11 total `Point` children across both curves. **[CONFIRMED — empirical.]**
+Exactly 2 real `Curve_Params` rows, named `Landing` and `Take Off` — **confirming the two-curve limitation empirically, not just from the code path.** 11 total `Point` children across both curves. **[CONFIRMED — empirical.]** **[Desk review 2026-09-30: `DAT_028cd29c` and `DAT_028cd2a8` are `0xC` apart, which fits {pointer, count, slope} per curve.]**
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (slope formula flagged OPEN); 0x10 record tiles; 2-row count corroborated by Team B — desk review (not re-derived from the executable).**
 
 ---
 
@@ -574,7 +625,7 @@ Exactly 2 real `Curve_Params` rows, named `Landing` and `Take Off` — **confirm
 | `vi_exit.xtbl` | `0x011866e0` | `FUN_00b07920` (via `FUN_00b07c40`) | 2 |
 | `vi_ride.xtbl` | `0x011866d0` | `FUN_00b07920` (via `FUN_00b07c40`) | 2 |
 | `externalized_vehicle_components.xtbl` | `0x0118167c` | `FUN_00a971f0` | 7 |
-| `level_objects.xtbl` | `0x0116cbf4` | `FUN_008e8540` / DLC `FUN_008e84c0` (row builder `FUN_008e7490`) | 12 |
+| `level_objects.xtbl` | `0x0116cbf4` | `FUN_008e8540` / DLC `FUN_008e84c0` (row builder `FUN_008e7490`; §12 names `FUN_008e8280` as the loader and `FUN_008e8540` as its base entry point — desk review 2026-09-30) | 12 |
 | `props.xtbl` | `0x011290e8` | `FUN_0060ea40` | 13 |
 | `triggers.xtbl` | `0x01170ab0` | `FUN_0093e0c0` | 14 |
 | `items_3d.xtbl` | `0x0114885c` | `FUN_008fa7a0` / DLC `FUN_008fd120` (row builder `FUN_00904d10`) | 16 |
@@ -595,7 +646,7 @@ Ghidra dumps: `tools/as_xrefs1.txt` (all 24 string cross-references), `tools/as_
 |---|---|---|
 | `vehicle_interaction_info.Seat_Info/Element/{Enter,Exit,Ride}_Animations` | `vi_enter/exit/ride.*` | CRC hash, linear scan of the loaded array (§2, §3) |
 | `vehicle_interaction_info.Seat_Info/Element/Interaction_Point_Set` | `vehicle_interaction_point_sets.xtbl` rows | CRC hash, linear scan (§3, §4) |
-| `vehicle_interaction_info.Seat_Info/Element/{Seat,Primary_Access_Seat,Secondary_Access_Seat}` | the shared 8-seat resolver (`FUN_00AC1BA0`) also used by `spec-vehicle-data.md` §7.3/§7.4's `ProhibitedGunfireSeats`/`Seat_Specific_Data` | `_stricmp` against two parallel 8-name tables |
+| `vehicle_interaction_info.Seat_Info/Element/{Seat,Primary_Access_Seat,Secondary_Access_Seat}` | the shared 8-seat resolver (`FUN_00AC1BA0`) also used by `spec-vehicle-data.md` §7.3/§7.4's `ProhibitedGunfireSeats`/`Seat_Specific_Data` **[OPEN — desk review 2026-09-30: not supported by `spec-vehicle-data.md`, see §3.1]** | `_stricmp` against two parallel 8-name tables |
 | `vehicle_wheel_groups.{Front,Rear}_{Rim,Spinner}` | `externalized_vehicle_components.xtbl` `Slot` rows | CRC hash, linear scan (§5, §7) |
 | `vehicle_cust_interface.slots/slots/name` | `vehicle_cust_slots.xtbl` `Vehicle_slot` rows | CRC hash, linear scan (§8) |
 | `vehicle_cust_color_sets.Color_Grid/Color_Element/Color` | `vehicle_cust_color_pool.xtbl` `Color` rows | CRC hash, linear scan (§9) |
@@ -615,6 +666,8 @@ Ghidra dumps: `tools/as_xrefs1.txt` (all 24 string cross-references), `tools/as_
 ### 21.1 The `.czn_pc` connection — noted, not acted on
 
 `triggers.xtbl` (§14) patches default properties onto trigger records that are **already indexed by name in a runtime hash table before this loader runs** — the table itself allocates nothing and discards any row whose name doesn't already have a slot. The most likely source of those pre-existing named slots is the zone/level data (`.czn_pc`'s object-placement/property-stream interior, `HANDOFF.md` §27.3 item 2), since a trigger is a placed, named object in the game world. **This is noted here as a structural observation only.** No `.czn_pc` file was opened, no bytes of its interior were read or touched, and no further investigation toward it was performed, per this project's standing hold on that item. `level_objects.xtbl` (§12) was checked for the same pattern and does **not** show it — its loader builds and owns its own array and does not consult any pre-existing instance table, so it reads more like a stand-alone "object type" catalogue that a placed object could reference *by name* rather than a patch-table over pre-placed instances; whether anything in `.czn_pc` actually holds such a name reference is, again, not investigated.
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (24 index rows; loader/entry naming for `level_objects` reconciled; seat-resolver row marked OPEN) — desk review (not re-derived from the executable).**
 
 ---
 
@@ -644,7 +697,7 @@ All figures below are from `tools/harnesses/as_validate.py` run against the real
 | `items_3d.xtbl` | 391 | Name present | 391/391 |
 | `vehicle_animation_modifiers.xtbl`, `externalized_vehicle_components.xtbl`, the three lightset files | extracted, byte-length-verified | not independently re-derived this pass beyond the disassembly read | — |
 
-No predicate failed. No table's schema was contradicted by real data; three corrections were made *during* validation, before being written above rather than after (the `Seat` vs `Name` child tag in §3, the `name` vs own-text child in §8.2, and the `items_preload_containers`/`items_containers` label-vs-section correction in §16).
+No predicate failed **[desk review 2026-09-30: several predicates are presence-only, and the 4-row (§8.2), 10-flag (§14.2) and 11-point (§19.2) samples support the data facts, not the record offsets; Team B's run corroborates row counts only]**. No table's schema was contradicted by real data; three corrections were made *during* validation, before being written above rather than after (the `Seat` vs `Name` child tag in §3, the `name` vs own-text child in §8.2, and the `items_preload_containers`/`items_containers` label-vs-section correction in §16).
 
 ---
 
@@ -661,6 +714,10 @@ No predicate failed. No table's schema was contradicted by real data; three corr
 
 No confirmed fact in this document was invented past what the disassembly or the real base rows support; where the trail ran out (items 1–4 above), that is recorded as OPEN rather than guessed, per `HANDOFF.md` §36 (archived §27.8).
 
+9. **Added 2026-09-30 (desk review):** the `Direction`/`Capsule_Shape` table overlap and loop bound (§4.1); the shared `0x0116bb20` table (§3.2, §15.1); the `items_inventory` live-bit conflict (§15.1); the `Slot` stride contradiction (§7.1); the 4-vs-8 seat count (§6.1); the underscore/space activity literals (§13); the seat-name conflict with `spec-vehicle-data.md` (§3.1).
+
+**Review status (2026-09-30): DESK-PASS, text fixes applied (predicate scope qualified; open items extended) — desk review (not re-derived from the executable).**
+
 ---
 
 ## 24. Artifacts
@@ -671,3 +728,4 @@ Ghidra project copy: `tools/gp_as1` (disposable, robocopied from `tools/ghidra_p
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): qualified §6/§7 in the §1.1 coverage table (not structurally validated / `Component` record OPEN); fixed 3 cross-references (weapons-combat §14.5→§14.4, save-format §10.3/§16→§10.3, §22→§21.1); swapped the reversed From/To of the `vi_*` row in §21; added the 52-row patch-copy caveat to the §22 `vehicle_interaction_info` row.
 - 2026-09-30 (cloud, self-containment pass): restated 1 load-bearing HANDOFF/WALLS-only facts inline (§1.4: extraction/XML-parse rule now cited to `spec-vpp-container.md` §7 / `spec-xtbl-format.md` §7); repointed 3 `HANDOFF.md` §27.x references to the archived headings (§27.2 ×2 → §31, §27.8 → §36); 0 left (see review).
+- 2026-09-30 (adversarial desk review, `review/adv_tables-vehicle-world.md`): 23 "Review status" lines and a summary after the front matter (1 DESK-PASS, 13 with text fixes, 9 NEEDS-EXE, 0 VALIDATED-BY-DATA); removed a developer machine path (§1.4) and paraphrased a shipped diagnostic string (§9.2); imported constant values `DAT_012a2d90` = 1000.0 and `DAT_01117a4c` = 1.0 from other specs; showed by address arithmetic that the 7th `Direction` literal is `Capsule_Shape[0]` (§4.1); struck "matching the 4 flags" (3 named, §8.2); stated row tags in §12/§14/§15; marked OPEN: shared `0x0116bb20` table, seat-name conflict with `spec-vehicle-data.md`, `Slot` stride, 4-vs-8 seats, `Balance_Bar_Params` names, quad count, flag bit map, defaults, activity literal spelling, icon-frame rule, live bit, capacities; no labels raised.
