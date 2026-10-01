@@ -89,3 +89,13 @@ baseline: `validate_save_crc`, `validate_save_snapshot`, `validate_save_summary`
 with its own default folders on the PC: Documents, LocalAppData, cloud-sync backup),
 `validate_save_activity_names` over its 20 default archives, and `validate_xtbl_population --saves <each save
 folder>` over all 38 archives. The earlier exclusion of these tools in the 10a-10g notes is withdrawn.
+
+### 10i: validate_save_snapshot re-run (added 2026-10-01)
+
+Manager ruling after job hzim: a format validator should not fail because the owner saved again.
+`validate_save_snapshot` now gates only format invariants (`[ok  ]`/`[FAIL]`). The spec's Sec10.7 table and the
+other save-set figures (build-stamp and sub-version distributions, worked values, sample counts, the 201,363
+non-zero-byte total, statistics 163/164 vs the 0x3F0/0x3F8 counters) are a historical sample (`[match]`/`[DRIFT]`).
+They print per-row results with snapshot ids (`#n`, listed at load) and do not fail the run. Job 10i runs the
+tool with the default mode (expected exit 0) and with `--strict` (the old behaviour, expected exit 1 while the
+drift lasts).
