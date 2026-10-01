@@ -72,9 +72,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Swap in a403a75's library sources
+      - name: Swap in a403a75's library sources (and its C-language Lua build)
+        # Lua has been built as C++ since 2010a95; jklk ran with Lua built as C
+        # (longjmp), so the Lua build file is taken from a403a75 as well.
         shell: bash
-        run: git checkout a403a75 -- team-b/src team-b/include
+        run: git checkout a403a75 -- team-b/src team-b/include team-b/third_party/lua51/CMakeLists.txt
       - name: Configure
         run: cmake -S team-b -B build -A x64
       - name: Build the stress test
