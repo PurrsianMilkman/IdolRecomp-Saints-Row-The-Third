@@ -19,7 +19,7 @@ def check(cond, msg):
 
 def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(text)
 
 
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory() as d:
     write(os.path.join(a, "vintdoc_per_file.tsv"), vd_hdr + "i.vpp_pc\ta.vint_doc\t10\tLAND\tLAND\t2\n")
 
     out = subprocess.run([sys.executable, TOOL, b, os.path.join(d, "after"), "--top", "5"],
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, encoding="utf-8")
     t = out.stdout
     check(out.returncode == 0, "exit 0")
     check("before: 3 missions, 1 past `_start` cleanly" in t, "before mission count")
@@ -78,10 +78,10 @@ with tempfile.TemporaryDirectory() as d:
 
     # Single-file mode: historical ranking vs a new one.
     out2 = subprocess.run([sys.executable, TOOL, os.path.join(b, "verdict_stub_hits_with_missions.tsv"),
-                           os.path.join(a, "verdict_stub_hits_with_missions.tsv")], capture_output=True, text=True)
+                           os.path.join(a, "verdict_stub_hits_with_missions.tsv")], capture_output=True, text=True, encoding="utf-8")
     check("## Stub hits" in out2.stdout and "## Mission drive" not in out2.stdout, "single-file mode")
 
-    out3 = subprocess.run([sys.executable, TOOL, d, os.path.join(d, "nothing")], capture_output=True, text=True)
+    out3 = subprocess.run([sys.executable, TOOL, d, os.path.join(d, "nothing")], capture_output=True, text=True, encoding="utf-8")
     check("No comparable files found on both sides." in out3.stdout, "nothing comparable")
 
 if failures:

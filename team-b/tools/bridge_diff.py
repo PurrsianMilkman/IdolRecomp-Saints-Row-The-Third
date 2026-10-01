@@ -233,7 +233,10 @@ def main(argv):
     if args.out:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(text)
-    sys.stdout.write(text)
+    # UTF-8 bytes regardless of the console encoding: the report uses '→' and
+    # Windows' default cp1252 stdout cannot encode it (failed on windows-latest CI).
+    sys.stdout.buffer.write(text.encode("utf-8"))
+    sys.stdout.flush()
     return 0
 
 
