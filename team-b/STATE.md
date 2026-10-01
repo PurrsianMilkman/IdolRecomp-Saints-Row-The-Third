@@ -16,7 +16,7 @@ libraries below and the render-side libraries, which get their own tables)
 
 | Format | Status | Real-data validation | HANDOFF |
 |---|---|---|---|
-| `.vpp_pc`/`.str2_pc` container | Complete | container-offset fix closed 76+847+4,272+385,168 previously-unreachable entries | §9.78 |
+| `.vpp_pc`/`.str2_pc` container | Complete | after the container-offset fix every entry decodes: mode (a) 4,272/4,272 (was 9) + mode (b) 385,168/385,168 = **389,440** entries; the 76 PEG c-files and 847 `.fxo_pc_dx11` that were unreachable are inside those totals (the old "76+847+…" added subsets) | §9.78 |
 | Save data | Complete (confirmed fields only) | 16 real saves, CRC reproduced | §9.74, §9.79 |
 | `.asm_pc` manifest | Complete (non-empty sub-groups) | 805/805 exact | §9.71 |
 | `.fxo_pc`/`.fxo_pc_dx11` shader wrapper | Complete | 844/844 + 847/847 exact | §9.76, §9.77 |
