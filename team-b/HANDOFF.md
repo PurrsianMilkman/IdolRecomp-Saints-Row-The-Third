@@ -331,6 +331,20 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   one and the reader drops nothing (0 unread). Every Trigger also has a **`Frame`** child (7,060/7,060), which
   the spec does not mention. Diversions: Horde_Mode_Identifier 32, gate PASS.
 
+### 2026-10-01, cloud stretch 5f: jklk cause CONFIRMED; CI all green
+
+- **jklk root cause CONFIRMED on MSVC.** CI run 88 (`abb12d9`), job `msvc-jklk-repro`: the refusal stress test built
+  against `a403a75`'s sources with its C-language Lua build exits **-1073740940 = 0xC0000374** (STATUS_HEAP_CORRUPTION),
+  the same code bridge job jklk hit. The current code (frame rule `88cbe87` + Lua as C++ `2010a95`) passes the same
+  stress test in the `msvc` job. So "most likely cause" is now confirmed: Lua errors longjmp-ing across C++ frames
+  under MSVC.
+- **CI run 88: all 5 jobs green** for the first time (GCC Release, GCC ASan/UBSan, Clang libFuzzer smoke, MSVC
+  Release full tree + ctest 47/47, repro).
+- Second review batch (`c348984`, agent, verified: spec labels checked, Release + ASan ctest 47/47):
+  `Vehicle_Damage_Penalty_MS` read as u32 (traffic-ai §19 CONFIRMED); Mass absent stays absent (test);
+  `Instance_Cap` stays a signed byte (§13.1 says signed; labelled OPEN, the reviewer's u32 was not in the spec);
+  Female_Mesh_Filename and both Shader_Type sites labelled OPEN; no code relies on "never filename-resolved".
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
