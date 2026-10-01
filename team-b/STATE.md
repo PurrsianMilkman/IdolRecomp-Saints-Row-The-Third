@@ -46,7 +46,7 @@ attached — zero readers in this project ship without one.**
 | Environment (weather/lighting/VFX) | 26/27 (1 no-loader, correctly skipped) | §9.80 |
 | Progression (economy) | 26/26 | §9.81 |
 | Traffic/ambient/AI | 31/31 | §9.82 |
-| Weapons/combat | 21/22 (1 no-loader) | §9.83 |
+| Weapons/combat | 21/22 weapon-schema tables (the 22nd, `store_weapon_lightset.xtbl`, is a lightset consumer read by the shared lightset reader, spec §13.3 — not a table without a loader) | §9.83 |
 | Animation data | 14/16 (2 no-loader) | §9.90 |
 | Audio/radio/foley | 16/16 | §9.91 |
 | UI/controls/QTE/camera-presets | 17/17 | §9.92 |
