@@ -7,8 +7,7 @@ spec text; every finding that is labelled in a spec cites the bridge job it came
 - `interp_<job>.md` — interpretation of one bridge job (nzxf, dksj, bgcx, yduu, mnao, lgdz, fvfp, gdhw, jfue, nnlt).
 - `rederive_<spec>.md` — NEEDS-EXE re-derivation of one spec against the depth-0 batch dumps
   (`rederive_27.md`/`_28.md` are the §27/§28 re-derivation of spec-lua-api-behaviour).
-  `rederive_tables-vehicle-world.md` was still being written when the cloud phase ended: check it is complete
-  (it ends with a summary table and a next-dump list) before applying it.
+  `rederive_tables-vehicle-world.md` is complete (finished just after the wrap-up) but NOT yet applied to its spec.
 - `nextdump_<spec>.txt` — residual dumps per spec, one `func|xref|range|ptrs` line each; `nd2job.py <name> <file>
   <out.json>` turns one into a bridge job (then run `team-a/ghidra/check_jobs.py`).
 - `exe_index/<spec>.txt` — which dump file in batch jobs `20261001T123123-team-a-ytgi` (tables) /
