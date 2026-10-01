@@ -1,17 +1,28 @@
 {
-  "title": "team-b: progression tables population re-run - notoriety_spawn.xtbl records via spec-tables-progression S14.6 nested level_info/group_info/group_details",
+  "title": "team-b: real-data check of the table HIGH fixes - progression notoriety_spawn via S14.6 nested tree; weapons aim_drift Recovery report",
   "ref": "auto",
   "steps": [
     {
       "kind": "build",
       "targets": [
-        "validate_tables_progression_population"
+        "validate_tables_progression_population",
+        "validate_tables_weapons_population"
       ],
       "timeout": 3600
     },
     {
       "kind": "run",
       "tool": "validate_tables_progression_population",
+      "args": [
+        "{GAME}/packfiles/pc/cache/misc_tables.vpp_pc",
+        "{GAME}/packfiles/pc/cache/patch_compressed.vpp_pc"
+      ],
+      "timeout": 3600,
+      "continue_on_error": true
+    },
+    {
+      "kind": "run",
+      "tool": "validate_tables_weapons_population",
       "args": [
         "{GAME}/packfiles/pc/cache/misc_tables.vpp_pc",
         "{GAME}/packfiles/pc/cache/patch_compressed.vpp_pc"
