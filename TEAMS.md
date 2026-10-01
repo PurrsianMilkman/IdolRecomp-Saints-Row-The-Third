@@ -77,3 +77,16 @@ dispatching every agent on the same model.
 Rules: verification of an agent's work is done by a model at least as capable as the one that did it. When
 a task turns out harder than expected (two failed attempts, or conflicting evidence), escalate it one tier
 instead of retrying on the same model.
+
+## Data and content rules (owner decision, 2026-10-01)
+
+- **The owner's own data is not private.** Their saves and profiles (including anything typed in the game),
+  their machine paths, and bridge outputs from their PC may be used, committed and shared freely. Validation
+  tools that read the saves are allowed in bridge jobs. This replaces the earlier "no player-authored
+  content" rule.
+- **Still excluded, for copyright and clean-room reasons rather than privacy:** verbatim game content (script
+  or source bodies, UI and dialogue text, comments, bulk asset or string dumps). Functional identifiers the
+  engine or scripts resolve by name (function names, table keys, enum and kind values, slot names) remain
+  allowed, even as full lists.
+- **Still excluded, as third parties' personal data:** developer usernames, developer machine paths, and real
+  people's names found in the files.
