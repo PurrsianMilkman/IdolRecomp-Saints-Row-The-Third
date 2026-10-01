@@ -28,9 +28,9 @@ against. Per-tool counts: `team-b/results/baseline_2026-10-01.md` (aggregate cou
 | `20261001T010402-team-b-meqi` | effects, shaders (incl. Windows HLSL translators, CTAB census) | 7 | all exit 0 |
 | `20261001T010405-team-b-dpix` | containers, textures, audio, vint_doc | 5 | all exit 0 |
 | `20261001T010408-team-b-zsqd` | lua_host_run + 4 Lua censuses | 5 | all exit 0 |
+| `20261001T015049-team-b-hzim` | saves + profile (owner-approved 2026-10-01) | 6 | save CRC (16 snapshots / 4 directories), summary, activity names, profile (3 distinct, all gates), xtbl with `--saves` (13 snapshots: 4,056/4,056 unlockable ids, 130/130 cheat ids) pass; `validate_save_snapshot` 2 gates fail because the save set has changed since the spec's §10.7 table: one snapshot (Documents slot 04, level 49) is a 2026 save, so 15/16 rows reproduce, non-zero bytes 201,281 vs 201,363, and that save has statistic 164 = 3 vs 4 stunt jumps found (spec: equal, now 15/16) |
 
-Excluded on purpose: save/profile tools (owner's saves hold player-authored data), one-off probes/dumps, GPU
-render tools, 3 tools needing uncommitted input lists (`team-b/bridge-jobs/README.md`).
+Excluded on purpose: one-off probes/dumps, GPU render tools, 3 tools needing uncommitted input lists (`team-b/bridge-jobs/README.md`).
 
 | Format | Status | Real-data validation | HANDOFF |
 |---|---|---|---|
