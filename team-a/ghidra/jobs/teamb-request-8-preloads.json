@@ -18,8 +18,7 @@
     "vdo_base_object.lua",
     "vdo_anim_object.lua",
     "vdo_input_tracker.lua",
-    "interface",
-    "game play"
+    "interface"
    ]
   },
   {
