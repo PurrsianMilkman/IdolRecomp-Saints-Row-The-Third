@@ -313,6 +313,24 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   the full exit code.
 - **xtbl fuzz harness:** inputs capped at 2 KB in `run_fuzz.sh` (140,530 execs in 30 s, was 47,742 in 600 s).
 
+### 2026-10-01, cloud stretch 5e: table-spec batches (agents, verified) and their real-data checks
+
+- Table review items done by 3 agents in separate worktrees, each verified here (fresh Release + ASan builds,
+  ctest 47/47; the progression fix independently mutation-checked) and cherry-picked: progression
+  notoriety_spawn now reads §14.6's nested tree (CONFIRMED-empirical) instead of the struck §6.3 flat tree;
+  weapons aim_drift reports "Recovery empty - spec path suspect (NEEDS-EXE)"; customization/audio/ui/
+  environment/vehicle items labelled; PlayTimers already read 12 (test added); ui-controls validator gates
+  41/22. STATE weapons row: the 22nd table is a lightset consumer.
+- **Job 07 `20261001T003803-team-b-upsq`** (at `c2d60f5`): notoriety_spawn via §14.6 nesting gives **80 / 254 /
+  263** level_info / group_info / group_details records, exactly the spec's §14.6 text; 25/25 rows nested,
+  each yields ≥ 1 level_info, 0 unrecognised elements, all gates pass. aim_drift: Recovery-empty report on
+  **20/20** rows; MinTime/MaxTime 19/20 (spec §18.6); Penalties/Bonuses/lag_amount/lag_time/vertical_offset in
+  20/20 (spec §8 OPEN).
+- **Job 08 `20261001T004133-team-b-kmsh`** (at `b7a55c0`): anim_files.xtbl `<Trigger>` shape (§3.1 text vs §3.2
+  Name child): **7,060 elements, Name child 7,060, direct text 0, both 0, neither 0**, so §3.2's shape is the real
+  one and the reader drops nothing (0 unread). Every Trigger also has a **`Frame`** child (7,060/7,060), which
+  the spec does not mention. Diversions: Horde_Mode_Identifier 32, gate PASS.
+
 ### Requests to Team A (relay via the manager)
 
 1. **`fade_is_fully_faded_out` / `fade_is_fully_faded_in`** (gameplay registrar; §9.143: 30.8M / 1.67M
