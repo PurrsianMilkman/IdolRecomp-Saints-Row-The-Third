@@ -60,6 +60,8 @@ foreach(src ${CRREISH_SYNTH_TESTS})
         sr3vehicleinfo sr3tables_trafficai sr3tables_weapons sr3tables_progression sr3tables_environment
         sr3tables_animation sr3tables_audio_radio sr3tables_ui_controls sr3tables_vehicle_world
         sr3tables_diversions sr3tables_customization ${CRREISH_FUZZ_LIBS} crreish_seed_capture)
+    # Tests that read the real tools/ lists (roster, refusal stress) need this.
+    target_compile_definitions(seedcap_${stem} PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
     target_link_options(seedcap_${stem} PRIVATE ${CRREISH_WRAP_FLAGS})
     list(APPEND CRREISH_SEEDCAP_TARGETS seedcap_${stem})
 endforeach()
