@@ -1,0 +1,15 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to nnlt — full cutscene state jump table, cutscene load/play helpers, mode 4/5 identity, UI resize caller",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/jt", "ptrs", "count:20", "nodecomp:1", "0x0072defc"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:10", "maxinsn:2000",
+            "0x00702a50", "0x00bdbf30", "0x0059fa10", "0x00706a40", "0x00dafad0", "0x00dafb60", "0x007233c0", "0x00462960", "0x005df6e0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/xref", "xref", "xrefs:200", "0x0153ba00", "0x0153ba01", "0x0153ba02", "0x0153b520"]}
+ ],
+ "collect": ["**/*.txt"]
+}
