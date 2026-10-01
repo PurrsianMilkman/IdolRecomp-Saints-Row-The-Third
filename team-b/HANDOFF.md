@@ -298,7 +298,20 @@ on_take_damage §3.13 — DESK-PASS) are now "NOT yet cleared". Kept working and
   s (−18%); pcall without error, 5M, 0.26 → 0.26 s; pcall with error, 1M, 0.6 → 3.0 s (+2.4 µs per
   error); refusal stress 3,000 rounds 2.4 → 4.2 s. On the real mission run (284M yields, ~13k errors) that is
   a net saving of seconds. Recommendation to the manager: adopt it AND keep the no-Lua-error-across-a-C++-frame
-  rule plus the stress test. Waiting on the manager's call.
+  rule plus the stress test. **Adopted** (manager ruling, `2010a95`): the `third_party/lua51` sources stay unmodified,
+  only the build language changed. Mission re-run `20261001T003228-team-b-ugaa` (at `d71c92c`) against `tkjl`
+  (`bridge_diff`): **identical** (no per-mission changes, 850,090,555 stub calls on both sides, same OPEN refusals);
+  the only new line is the opt-in's `preload_states_option=off`. Wall time 302.4 s vs 270.1 s (+12%), from one
+  run each on a shared PC, so not attributable to the language switch (the microbenchmark predicted a small saving).
+- **UB found by the stress test under Clang UBSan** (`d71c92c`): `game_get_key_name` and `roundToIntOpenMode`
+  cast out-of-range/NaN doubles to integers (UB); they now refuse them as OPEN (in-range behaviour unchanged).
+  Upstream Lua's own `lua_number2int` cast is exempted from float-cast-overflow for the `lua51` target only.
+- **CI:** fuzz-smoke had been red since the roster test (seed-capture builds lacked `CRREISH_TOOLS_DIR`), fixed in
+  `92022be`. New `msvc` (windows-latest) job: first green build, then `bridge_diff_py` failed on cp1252 stdout,
+  fixed in `6dd064d` (reproduced locally with `PYTHONIOENCODING=cp1252`). The `msvc-jklk-repro` job's first
+  "REPRODUCED (exit 127)" was bash's command-not-found, not a crash; the step now runs in PowerShell and prints
+  the full exit code.
+- **xtbl fuzz harness:** inputs capped at 2 KB in `run_fuzz.sh` (140,530 execs in 30 s, was 47,742 in 600 s).
 
 ### Requests to Team A (relay via the manager)
 
