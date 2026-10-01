@@ -152,6 +152,7 @@
 #include "vpp/container.h"
 
 namespace fs = std::filesystem;
+using sr3luahost::bareGlobalRoster;
 using sr3luahost::confirmedHooks;
 using sr3luahost::HookGroup;
 using sr3luahost::hookGroupLabel;
@@ -757,25 +758,48 @@ MissionStartResult callMissionStart(lua_State* L, const std::string& funcName, d
 
 } // namespace
 
+// Globals the host registers beyond the tagged list: the 24 bare globals of
+// 0x00e0f900 (spec-lua-bindings.md Sec13.2) and the scaffold's thread_close.
+const size_t kHostExtraGlobals = 24 + 1;
+
 int main(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "usage: lua_host_run <cache_dir> <registered_tagged.txt> <out_dir> [max_scripts_to_run]\n"
-                     "                    [--preload-states=spec16.4-highconf]\n"
-                     "  --preload-states=spec16.4-highconf  HYPOTHESIS, evidence-gathering only, off by default:\n"
-                     "      run the spec-lua-bindings.md Sec16.4 preloads only in the state Sec16.4 names\n"
-                     "      (vint_lib/game_ui_globals/vdo_base_object/vdo_anim_object/vdo_input_tracker: ui only;\n"
-                     "      game_lib: gameplay only; system_lib: both). Sec16.4 is HIGH CONFIDENCE (desk), NOT\n"
-                     "      cleared; becomes the default only once Team A clears it.\n";
+                     "                    [--preload-states=spec16.4|tag]\n"
+                     "  --preload-states=spec16.4  (default) run the spec-lua-bindings.md Sec16.4 preloads only in\n"
+                     "      the state Sec16.4 names (vint_lib/game_ui_globals/vdo_base_object/vdo_anim_object/\n"
+                     "      vdo_input_tracker: ui only; game_lib: gameplay only; system_lib: both). CONFIRMED and\n"
+                     "      cleared for implementation 2026-10-01 (Sec16.1/Sec16.4). spec16.4-highconf is accepted\n"
+                     "      as an alias.\n"
+                     "  --preload-states=tag  the old behaviour: these files follow the per-script state tag like\n"
+                     "      any other script (both states when the tag is OPEN).\n"
+                     "  --host-rng[=SEED]  HYPOTHESIS / HOST SUBSTITUTE, off by default: rand_int/rand_float draw\n"
+                     "      from a ring filled once by a deterministic host generator (default seed 1) instead of\n"
+                     "      the CONFIRMED file-image ring, where every draw returns lo until a fill (the engine\n"
+                     "      generator and fill are OPEN, spec-lua-api-behaviour.md Sec26.27). Values are not the\n"
+                     "      game's. Recorded as host_rng_option= in verdict_summary.txt.\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
     // positional (if any) is max_scripts_to_run.
-    bool preloadStatesSpec164 = false;
+    bool preloadStatesSpec164 = true; // Sec16.1/Sec16.4, CONFIRMED and cleared 2026-10-01
+    bool hostRng = false;      // --host-rng: only when explicitly given
+    uint64_t hostRngSeed = 1;
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
-        if (arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
-        else if (arg.rfind("--", 0) == 0) {
+        if (arg == "--preload-states=spec16.4" || arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
+        else if (arg == "--preload-states=tag") preloadStatesSpec164 = false;
+        else if (arg == "--host-rng") hostRng = true;
+        else if (arg.rfind("--host-rng=", 0) == 0) {
+            std::string v = arg.substr(11);
+            if (v.empty() || v.find_first_not_of("0123456789") != std::string::npos) {
+                std::cerr << "bad --host-rng seed: " << v << "\n";
+                return 1;
+            }
+            hostRng = true;
+            hostRngSeed = std::stoull(v);
+        } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "unknown option: " << arg << "\n";
             return 1;
         } else extraPositional.push_back(arg);
@@ -798,14 +822,32 @@ int main(int argc, char** argv) {
     std::vector<RegisteredName> allNames = loadTaggedRegistrationList(registrationListPath);
     std::cout << "Loaded " << allNames.size() << " registered names from " << registrationListPath << "\n";
     Host host(allNames);
+    // --host-rng (HYPOTHESIS / host substitute, opt-in): before any script draws.
+    if (hostRng) host.useHostRng(hostRngSeed);
     std::cout << "Host built: gameplay state has " << host.gameplayStubCount()
               << " stubs, UI state has " << host.uiStubCount() << " stubs ("
               << (host.gameplayStubCount() + host.uiStubCount()) << " total, matching the "
               << allNames.size() << "-name input list)\n";
-    std::cout << "  plus 5 real thread_* functions (thread_new/thread_yield/thread_kill/"
-              << "thread_check_done/thread_close) registered into BOTH states via a shared "
-              << "sr3luahost::ThreadScheduler - see include/sr3luahost/thread_scheduler.h for the "
-              << "real evidence this was built from and the honest scope limits.\n";
+    std::cout << "  plus the " << bareGlobalRoster().size() << " bare globals of 0x00e0f900 (spec-lua-bindings.md "
+              << "Sec13.2/Sec16.4, thread_new/_yield/_kill/_check_done among them) and the scaffold's "
+              << "thread_close, all into BOTH states - see include/sr3luahost/bare_globals.h.\n";
+
+    // --- OPEN engine-state slots at start (after applySpecInitialState) -----
+    // verdict_open_state.tsv: which slots a synced Team A answer has filled.
+    std::string openStateSummary;
+    {
+        std::ofstream os(outDir / "verdict_open_state.tsv");
+        os << "area\tglobal\tspec\tkind\tknown\tknown_keys\n";
+        size_t known = 0, total = 0;
+        for (const auto& r : host.engineState().openSlotInventory()) {
+            os << r.area << '\t' << r.global << '\t' << r.spec << '\t' << r.kind << '\t' << (r.known ? 1 : 0) << '\t'
+               << r.knownKeys << '\n';
+            ++total;
+            known += (r.known || r.knownKeys > 0) ? 1 : 0;
+        }
+        openStateSummary = std::to_string(known) + "/" + std::to_string(total) +
+                           " (slots with any value at start; per slot: verdict_open_state.tsv)";
+    }
 
     // --- The confirmed/pattern-based hook census this run fires ----------
     const std::vector<HookSpec>& hooks = confirmedHooks();
@@ -953,10 +995,10 @@ int main(int argc, char** argv) {
 
     // --- Real, disassembly-confirmed preload order for both states
     // (spec-lua-bindings.md Sec16.4, folded in 2026-09-30).
-    // IMPLEMENTED PRE-REVIEW, PENDING CLEARANCE (manager rule 2026-09-30):
-    // Sec16.1 is NEEDS-EXE and Sec16.1/Sec16.4 are "NOT yet cleared for
-    // implementation". Kept working, behaviour unchanged, until Team A
-    // clears it (team-b/HANDOFF.md Requests to Team A, item 8). Before this,
+    // CONFIRMED and CLEARED for implementation 2026-10-01 (Sec16.1/Sec16.4
+    // re-derived from the executable; HANDOFF Requests to Team A item 8
+    // answered). Per Sec16.1 a failed preload is silent and later preloads
+    // still run, which is what this sequence does. Before this,
     // this host only ever preloaded game_lib.lua, alone, into gameplay -
     // missing system_lib.lua on BOTH states and the entire UI-state chain.
     //   UI state, in order:       system_lib.lua -> vint_lib.lua ->
@@ -978,6 +1020,21 @@ int main(int argc, char** argv) {
         bool pcallOk = false;
         std::string loadError, pcallError;
     };
+    // The deferred include queue (spec-lua-bindings.md Sec16.4) loads files by
+    // name after a successful load: resolved here against the walked
+    // scripts, first found instance, case-insensitively - the same
+    // convention as the preloads below (how the engine's file opener treats
+    // case is not specced).
+    host.setIncludeResolver([&st](const std::string& fileName, std::string& source) {
+        std::string want = toLower(fileName);
+        for (const auto& f : st.found) {
+            if (toLower(f.entryName) == want) {
+                source = f.content;
+                return true;
+            }
+        }
+        return false;
+    });
     auto preloadNamed = [&](const std::string& name, lua_State* L, const std::string& stateLabel) -> PreloadResult {
         PreloadResult pr;
         pr.name = name;
@@ -1240,9 +1297,9 @@ int main(int argc, char** argv) {
                       (tag == statetag::Tag::Conflict);
         bool fireUi = (tag == statetag::Tag::Ui) || (tag == statetag::Tag::Open) ||
                       (tag == statetag::Tag::Conflict);
-        // --preload-states=spec16.4-highconf (HYPOTHESIS, opt-in, manager
-        // ruling 2026-09-30): the Sec16.4 preloads run only in the state
-        // Sec16.4 names, overriding the per-script tag. Off by default.
+        // Sec16.4 (CONFIRMED, cleared 2026-10-01; default, --preload-states=tag
+        // restores the old behaviour): the preloads run only in the state
+        // Sec16.4 names, overriding the per-script tag.
         if (preloadStatesSpec164) {
             std::string lower = toLower(s.entryName);
             static const char* const kUiOnly[] = {"vint_lib.lua", "game_ui_globals.lua", "vdo_base_object.lua",
@@ -1494,6 +1551,7 @@ int main(int argc, char** argv) {
     auto line = [&](const std::string& s) { summary << s << "\n"; std::cout << s << "\n"; };
     line("\n=== POPULATION SUMMARY (lua_host_run) ===");
     line("archives_scanned=" + std::to_string(archives.size()));
+    line("open_state_slots_with_values_at_start=" + openStateSummary);
     line("total_bytes_read=" + std::to_string(grandBytes));
     line("total_directory_entries=" + std::to_string(st.stats.entries));
     line("real_lua_scripts_found(name ends '.lua')=" + std::to_string(st.found.size()));
@@ -1544,9 +1602,9 @@ int main(int argc, char** argv) {
     line("total_stub_calls_recorded(TOP-LEVEL-ONLY, historical, matches Sec9.113's original baseline, "
          "both states, whole run)=" + std::to_string(historicalTotal));
     line("distinct_stub_names_that_fired_at_least_once(TOP-LEVEL-ONLY, historical, matches Sec9.113's "
-         "original baseline)=" + std::to_string(historical.size()) + " (of " + std::to_string(allNames.size() + 5) +
-         " registered - the +5 is the new thread_* roster, not in the " + std::to_string(allNames.size()) +
-         "-name registration list file)");
+         "original baseline)=" + std::to_string(historical.size()) + " (of " + std::to_string(allNames.size() + kHostExtraGlobals) +
+         " registered - the +" + std::to_string(kHostExtraGlobals) + " are the 24 bare globals and thread_close, not in the " +
+         std::to_string(allNames.size()) + "-name registration list file)");
     line("elapsed_seconds=" + std::to_string(seconds));
 
     line("\n=== HOOK-FIRING PASS SUMMARY (new this task; spec-lua-bindings.md Sec8.2-8.4/Sec12.2-12.9) ===");
@@ -1567,10 +1625,28 @@ int main(int argc, char** argv) {
          "this run WOULD have attempted with no per-script state restriction, matching every prior "
          "baseline's own formula)=" + std::to_string(toRun * hooks.size() * 2));
     line("\n=== STATE-TAG RESTRICTION SUMMARY (this task; spec-lua-bindings.md Sec14.5) ===");
+    line(std::string("host_rng_option=") +
+         (hostRng ? "on seed=" + std::to_string(hostRngSeed) +
+                        " (HYPOTHESIS / HOST SUBSTITUTE: deterministic host generator fills the 8192-entry ring once; "
+                        "values are not the game's, spec-lua-api-behaviour.md Sec26.27)"
+                  : std::string("off (default: CONFIRMED file-image ring - every rand_int/rand_float draw returns lo; "
+                                "whether the engine fills the ring before scripts draw is OPEN)")) +
+         " draws=" + std::to_string(host.bareGlobals().random().draws()));
+    {
+        size_t resolved = 0, ran = 0;
+        for (const auto& il : host.bareGlobals().includeQueue().log()) {
+            resolved += il.resolved ? 1 : 0;
+            ran += il.runOk ? 1 : 0;
+        }
+        line("include_loads=" + std::to_string(host.bareGlobals().includeQueue().log().size()) +
+             " resolved=" + std::to_string(resolved) + " ran_ok=" + std::to_string(ran) +
+             " (deferred include queue, spec-lua-bindings.md Sec16.4)");
+        line("script_thread_errors=" + std::to_string(host.bareGlobals().threads().errors().size()) +
+             " live_script_threads_at_end=" + std::to_string(host.bareGlobals().threads().liveCount()));
+    }
     line(std::string("preload_states_option=") +
-         (preloadStatesSpec164 ? "spec16.4-highconf (HYPOTHESIS: Sec16.4 HIGH CONFIDENCE desk answer, NOT cleared; "
-                                 "evidence run, not default behaviour)"
-                               : "off (default)") +
+         (preloadStatesSpec164 ? "spec16.4 (default; Sec16.1/Sec16.4 CONFIRMED, cleared 2026-10-01)"
+                               : "tag (opt-in old behaviour: preload files follow the per-script state tag)") +
          " scripts_rerouted=" + std::to_string(spec164Overrides));
     line("real_population_split(of " + std::to_string(st.found.size()) + " found scripts)=ui:" +
          std::to_string(tagUi) + " gameplay:" + std::to_string(tagGameplay) + " OPEN:" + std::to_string(tagOpen) +
@@ -1632,7 +1708,8 @@ int main(int argc, char** argv) {
          "its own total/distinct-name figures are printed above, under their own TOP-LEVEL-ONLY-labeled "
          "lines, not repeated here) ===");
     line("distinct_stub_names_that_fired_at_least_once(ALL-INCLUSIVE)=" + std::to_string(host.hitLog().hits().size()) +
-         " (of " + std::to_string(allNames.size() + 5) + " registered, +5 being the new thread_* roster)");
+         " (of " + std::to_string(allNames.size() + kHostExtraGlobals) + " registered, +" + std::to_string(kHostExtraGlobals) +
+         " being the 24 bare globals and thread_close)");
 
     line("\n=== TOP 25 STUB NAMES BY REAL RUNTIME HIT COUNT - TOP-LEVEL ONLY (historical, matches "
          "Sec9.113's original baseline exactly) ===");
@@ -1797,6 +1874,12 @@ int main(int argc, char** argv) {
     constexpr int kMissionTickBudget = 20; // CHOSEN - see this block's own top comment for the reasoning
     constexpr double kMissionStartCheckpoint = 0.0; // CHOSEN literal, not recovered
     constexpr bool kMissionStartIsRestart = false;  // CHOSEN literal, not recovered
+    // Screen fade host clock (batch 2026-10-01, spec-lua-api-behaviour.md
+    // Sec26.24): each mission tick is one host frame of this many ms
+    // (EngineState::screenFadeHostFrame). CHOSEN: about a third of a second,
+    // and not a divisor of the engine's 1000/1500/3000/6000 ms stamp offsets,
+    // so a stamp never lands exactly on a frame (that comparison is OPEN).
+    constexpr int64_t kFadeHostMsPerTick = 333;
 
     struct MissionResult {
         std::string stem, entryName, containerName;
@@ -1871,6 +1954,7 @@ int main(int argc, char** argv) {
             bool havePrevSig = false;
             bool stopped = false;
             for (int tick = 1; tick <= kMissionTickBudget; ++tick) {
+                host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
                 auto tickHooks = host.fireConfirmedHooks(host.gameplayState(), hooks, script.entryName);
                 TickSig sig;
                 bool newWatchdogThisTick = false;
@@ -1992,6 +2076,7 @@ int main(int argc, char** argv) {
           std::to_string(kMissionTickBudget) + ", start_checkpoint_arg=" + std::to_string(kMissionStartCheckpoint) +
           ", start_is_restart_arg=" + std::string(kMissionStartIsRestart ? "true" : "false") +
           ", watchdog_instruction_budget=" + std::to_string(kMissionWatchdogInstructionBudget) +
+          ", fade_host_ms_per_tick=" + std::to_string(kFadeHostMsPerTick) +
           " (same constant as host.h's own kHookWatchdogInstructionBudget, not independently chosen)");
     mline("missions_with_script_found=" + std::to_string(missionsFoundCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_existed=" + std::to_string(missionsStartExistedCount) + "/" + std::to_string(missions.size()));
@@ -2003,8 +2088,25 @@ int main(int argc, char** argv) {
     mline("total_ticks_survived_across_all_missions=" + std::to_string(ticksSum));
     mline("total_stub_calls_this_step_contributed(ALL-INCLUSIVE minus pre-step-1 snapshot, real HitLog delta)=" +
           std::to_string(missionIncrementalTotal));
-    mline("zscene_is_loaded_open_branch_hits(whole run, Sec14.23's OPEN per-record branch, stubbed false)=" +
-          std::to_string(host.engineState().zsceneOpenBranchHits()));
+    mline("zscene_is_loaded_pending_promotion_refusals(whole run, Sec26.25: promotion 0x00720410 OPEN)=" +
+          std::to_string(host.engineState().zscenePendingPromotionRefusals()));
+    {
+        // Screen fade (Sec26.24): which path completed each transition. real =
+        // the UI script called Screen_fade_transition_complete; fallback_* =
+        // the labelled HOST-SIDE SUBSTITUTE timer (screen_fade_do undefined /
+        // called but never completing). Also appended to verdict_summary.txt.
+        const auto& fc = host.engineState().screenFadeCounters();
+        std::string fadeLine = "fade_completion_path=" + host.engineState().screenFadeCompletionPathSummary();
+        std::string fadeDetail = "fade_detail=screen_fade_do_calls:" + std::to_string(fc.screenFadeDoCalls) +
+                                 " screen_fade_do_errors:" + std::to_string(fc.screenFadeDoErrors) +
+                                 " host_frames:" + std::to_string(fc.framesRun) +
+                                 " frames_blocked_on_open:" + std::to_string(fc.framesBlockedOnOpen) +
+                                 (fc.lastFrameBlocker.empty() ? std::string() : " last_blocker=[" + fc.lastFrameBlocker + "]");
+        mline(fadeLine);
+        mline(fadeDetail);
+        std::ofstream summaryAppend(outDir / "verdict_summary.txt", std::ios::app);
+        summaryAppend << fadeLine << "\n" << fadeDetail << "\n";
+    }
     mline("\n--- Per-mission detail (also in verdict_mission_drive.tsv) ---");
     for (auto& mr : missionResults) {
         std::ostringstream row;

@@ -51,6 +51,16 @@ using sr3luahost::RegisteredName;
 using sr3luahost::loadTaggedRegistrationList;
 using sr3luahost::registerStubs;
 
+// A string global's value ("" when absent or not a string) - used where a test
+// would otherwise need the `string` library, which host states do not have.
+std::string globalString(lua_State* L, const char* name) {
+    lua_getglobal(L, name);
+    const char* v = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : nullptr;
+    std::string out = v ? v : "";
+    lua_pop(L, 1);
+    return out;
+}
+
 // One real (name, cluster) row per one of the 22 names spec_confirmed_stubs.cpp
 // implements, mirroring the exact tags this project's own
 // tools/lua_all_registered_1490_tagged.txt carries (grepped directly, not
@@ -93,8 +103,28 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"fade_out", "gameplay"},
         {"mission_end_silently", "gameplay"},
         {"sfx_faded_out", "ui"},
+        // Batch 2026-10-01 (tagged list: fade_in 294, fade_is_fully_faded_out
+        // 293, fade_is_fully_faded_in 292, zscene_prep 1013 `gameplay`;
+        // sfx_faded_in 1252, Screen_fade_transition_complete 1250,
+        // game_get_is_host 1378, vint_get_safe_frame 1456, vint_is_std_res
+        // 1488 `ui`).
+        {"fade_in", "gameplay"},
+        {"fade_is_fully_faded_out", "gameplay"},
+        {"fade_is_fully_faded_in", "gameplay"},
+        {"zscene_prep", "gameplay"},
+        {"sfx_faded_in", "ui"},
+        {"Screen_fade_transition_complete", "ui"},
+        {"game_get_is_host", "ui"},
+        {"vint_get_safe_frame", "ui"},
+        {"vint_is_std_res", "ui"},
     };
 }
+
+// Completion callbacks for the C++-level fade tests (EngineState::FadeCallback).
+std::vector<std::pair<char, uint32_t>> g_fadeCalls;
+void fadeCbA(EngineState&, uint32_t t) { g_fadeCalls.push_back({'A', t}); }
+void fadeCbB(EngineState&, uint32_t t) { g_fadeCalls.push_back({'B', t}); }
+void fadeCbC(EngineState&, uint32_t t) { g_fadeCalls.push_back({'C', t}); }
 
 } // namespace
 
@@ -342,50 +372,29 @@ int main() {
         CHECK(after.loadOk && after.pcallOk);
     }
 
-    // --- thread_* scheduler: real Lua 5.1 coroutine primitives, minimal
-    // documented scope (thread_scheduler.h). -----------------------------
+    // --- thread_* (2026-10-01): thread_new/thread_yield/thread_kill/
+    // thread_check_done are now bare globals of 0x00e0f900 with the
+    // CONFIRMED Sec26.27 behaviour (bare_globals.h; full tests in
+    // tests/synthetic_luahost_bare_globals_test.cpp). thread_close stays the
+    // ThreadScheduler scaffold's (not in the engine roster; OPEN). ---------
     {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
-
-        // thread_new returns a real Lua number (matches real game_lib.lua
-        // call-site usage: `type(threads) == "number"`, grepped directly).
         auto r1 = host.runChunk(L,
-            "H = thread_new('some_engine_routine', 'arg1')\n"
-            "assert(type(H) == 'number')",
+            "thread_close(5)\n"                         // scaffold no-op
+            "assert(select('#', thread_kill(65535)) == 0)\n" // no thread: nothing happens, no result
+            "assert(thread_check_done(1) == true)",      // no such record -> done
             "thread1.lua");
         CHECK(r1.loadOk && r1.pcallOk);
-
-        // thread_check_done: this pass's own minimal thread_new() never
-        // attaches a body and nothing ever resumes it, so by the real Lua
-        // 5.1 status/stack/top idiom this reads as done immediately - see
-        // ThreadScheduler::isDone()'s own doc comment.
-        auto r2 = host.runChunk(L, "assert(thread_check_done(H) == true)", "thread2.lua");
-        CHECK(r2.loadOk && r2.pcallOk);
-
-        // thread_kill/thread_close: real calls, no error, idempotent, and
-        // silently no-op on an unknown handle.
-        auto r3 = host.runChunk(L,
-            "thread_kill(H)\n"
-            "thread_close(H)\n"        // identical op (see header note) - must not error when called again
-            "thread_kill(99999999)",   // unknown handle - silent no-op, must not error
-            "thread3.lua");
-        CHECK(r3.loadOk && r3.pcallOk);
-
-        // thread_yield: real no-op on the main thread (no active
-        // coroutine) - must not error or hang.
+        // thread_yield outside any coroutine: stock Lua's yield error (Sec26.27,
+        // HIGH CONFIDENCE), no longer the scaffold's silent no-op.
         auto r4 = host.runChunk(L, "thread_yield()", "thread4.lua");
-        CHECK(r4.loadOk && r4.pcallOk);
-
-        // All 5 thread_* calls above must fold into the SAME HitLog
-        // ranking every other generic stub uses (host.h/stub_registry.h).
-        CHECK(host.hitLog().hits().count("thread_new") == 1);
-        CHECK(host.hitLog().hits().count("thread_check_done") == 1);
-        CHECK(host.hitLog().hits().count("thread_kill") == 1);
-        CHECK(host.hitLog().hits().count("thread_close") == 1);
-        CHECK(host.hitLog().hits().count("thread_yield") == 1);
-        CHECK(host.hitLog().hits().at("thread_kill").callCount == 2); // thread_kill(H) + thread_kill(99999999)
+        CHECK(r4.loadOk && !r4.pcallOk);
+        CHECK(r4.pcallError.find("attempt to yield across metamethod/C-call boundary") != std::string::npos);
+        // All of them fold into the same HitLog ranking.
+        for (const char* n : {"thread_close", "thread_kill", "thread_check_done", "thread_yield"})
+            CHECK(host.hitLog().hits().count(n) == 1);
     }
 
     // --- confirmedHooks(): the real 138-entry static table (133 original
@@ -542,16 +551,49 @@ int main() {
             CHECK(r4.loadOk && r4.pcallOk);
         }
 
-        // 1. coop_is_active (Sec3.1): the co-op session state is OPEN until
-        // set (no invented "no session" default); set -> reported as is.
+        // 1. coop_is_active (Sec3.1, Sec26.28): no session at start-up
+        // (CONFIRMED) -> false. With a session: host test first, else the
+        // client gate; >= 2 members (unsigned); every other member passes
+        // the slot check. Per-session fields are OPEN until set.
         {
-            refusesOpen(gp, "coop_is_active()", "co-op session");
-            es.coopActive().set(false);
-            auto r = host.runChunk(gp, "assert(coop_is_active() == false)", "coop1.lua");
-            CHECK(r.loadOk && r.pcallOk);
-            es.coopActive().set(true);
-            auto r2 = host.runChunk(gp, "assert(coop_is_active() == true)", "coop2.lua");
+            auto ok = [&](const char* chunk) {
+                auto r = host.runChunk(gp, chunk, "coop.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+            };
+            ok("assert(coop_is_active() == false)");
+            auto& cs = es.coopSession();
+            cs.present.set(true);
+            refusesOpen(gp, "coop_is_active()", "+0x5c == +0x58");
+            cs.localIsHost.set(true);
+            refusesOpen(gp, "coop_is_active()", "+0x60"); // host: client gate not read
+            cs.memberCount.set(1);
+            ok("assert(coop_is_active() == false)");    // one member: never active
+            cs.memberCount.set(0);
+            ok("assert(coop_is_active() == false)");
+            cs.memberCount.set(2);
+            refusesOpen(gp, "coop_is_active()", "0x00877a90");
+            cs.otherMembersPassSlotCheck.set(true);
+            ok("assert(coop_is_active() == true)");
+            cs.otherMembersPassSlotCheck.set(false);
+            ok("assert(coop_is_active() == false)");
+            cs.localIsHost.set(false);                  // client
+            refusesOpen(gp, "coop_is_active()", "client gate");
+            cs.clientGate.set(false);
+            ok("assert(coop_is_active() == false)");
+            cs.clientGate.set(true);
+            cs.otherMembersPassSlotCheck.set(true);
+            cs.memberCount.set(3);
+            ok("assert(coop_is_active() == true)");
+            auto r2 = host.runChunk(ui, "assert(coop_is_active() == true)", "coop_ui.lua"); // dual-registered
             CHECK(r2.loadOk && r2.pcallOk);
+            // Back to the start-up state; the session fields return to OPEN.
+            cs.present.set(false);
+            cs.localIsHost.forget();
+            cs.clientGate.forget();
+            cs.memberCount.forget();
+            cs.otherMembersPassSlotCheck.forget();
+            ok("assert(coop_is_active() == false)");
         }
 
         // 2. game_get_key_name (Sec2.3): CONFIRMED sentinel -1 -> "PC_UNBOUND_KEY".
@@ -599,7 +641,14 @@ int main() {
         // "none"/"" sentinel ->0.
         {
             auto r = host.runChunk(ui,
-                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n" // round-to-nearest then mask
+                "assert(game_audio_get_audio_id(70000.4) == (70000 % 65536))\n"
+                // 0x00ea2596 truncates toward zero (Sec4.1, settled 2026-10-01):
+                // 70000.9 -> 70000 (not 70001), -1.5 -> -1 -> 0xFFFF (not -2 -> 0xFFFE),
+                // 2.5 -> 2 and 3.5 -> 3 (not round-half-even's 2 and 4).
+                "assert(game_audio_get_audio_id(70000.9) == (70000 % 65536))\n"
+                "assert(game_audio_get_audio_id(-1.5) == 65535)\n"
+                "assert(game_audio_get_audio_id(-0.9) == 0)\n"
+                "assert(game_audio_get_audio_id(2.5) == 2 and game_audio_get_audio_id(3.5) == 3)\n"
                 "assert(game_audio_get_audio_id() == 0)\n"
                 "assert(game_audio_get_audio_id('none') == 0)\n"
                 "assert(game_audio_get_audio_id('') == 0)\n"
@@ -653,8 +702,8 @@ int main() {
         }
 
         // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, the integral priority (the rounding mode of
-        // non-integral values is OPEN, Sec4.1, so only an integer is tested), and the always-true
+        // bit, arg4's bit, the priority (truncated toward zero by 0x00ea2596,
+        // Sec4.1 settled 2026-10-01: 7.9 keys as "7"), and the always-true
         // resolve-success return (this project's own minimal registry -
         // see EnemyTargetRecord's own doc comment).
         {
@@ -677,6 +726,10 @@ int main() {
             CHECK(rec.priorityOrId == 5);
             CHECK(rec.arg4Flag == true);
             CHECK(rec.sentinelMatchFlag == true);
+            auto rt = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 7.9) == true)", "enemy_trunc.lua");
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(actor.enemyTargets.count("7") == 1 && actor.enemyTargets.count("8") == 0);
+            if (actor.enemyTargets.count("7")) CHECK(actor.enemyTargets.at("7").priorityOrId == 7);
         }
 
         // 8. on_take_damage (Sec3.13): the callback name lands on the
@@ -747,6 +800,10 @@ int main() {
             auto r3 = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp3.lua"); // untouched
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("hero").isDeadHighConfidence == false);
+
+            auto rt = host.runChunk(gp, "set_current_hit_points('hero', 50.9)", "hp_trunc.lua"); // truncation (Sec4.1)
+            CHECK(rt.loadOk && rt.pcallOk);
+            CHECK(es.getOrCreateCharacter("hero").currentHitPoints.get() == 50);
 
             auto r4 = host.runChunk(gp, "set_current_hit_points('hero', 999)", "hp4.lua"); // clamp to cap
             CHECK(r4.loadOk && r4.pcallOk);
@@ -839,14 +896,9 @@ int main() {
             CHECK(r5.loadOk && r5.pcallOk);
         }
 
-        // 14. store_vehicle_get_state (Sec10.1): default 0.0 ("not in
-        // vehicle-store UI mode"); real number (not boolean) return;
-        // EngineState::setVehicleStoreActiveForTesting() is a C++-only
-        // test entry point (no Lua setter among these 9, same precedent
-        // as coop_is_active/Sec3.1 above).
+        // 14. store_vehicle_get_state (Sec10.1, Sec26.28): the flag is 0 at
+        // load (CONFIRMED) -> 0.0; a real number, not a boolean.
         {
-            refusesOpen(ui, "store_vehicle_get_state()", "vehicle-store");
-            es.vehicleStoreActive().set(false);
             auto r = host.runChunk(ui,
                 "local v = store_vehicle_get_state()\n"
                 "assert(type(v) == 'number' and v == 0.0)",
@@ -855,27 +907,34 @@ int main() {
             es.vehicleStoreActive().set(true);
             auto r2 = host.runChunk(ui, "assert(store_vehicle_get_state() == 1.0)", "vehiclestore2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
+            es.vehicleStoreActive().set(false);
         }
 
-        // 15. Completion_is_client (Sec10.2): CONFIRMED formula
-        // isCoopActive() && !isHost(); false with no session at all (NOT
-        // the literal complement of the out-of-scope game_get_is_host);
-        // isHost() defaults true (this project's own single-instance
-        // default).
+        // 15. Completion_is_client (Sec10.2) and game_get_is_host (Sec8.27):
+        // no session (CONFIRMED start-up) -> both false; with a session the
+        // host pair +0x5c == +0x58 decides (OPEN until set), and they are
+        // exact opposites.
         {
-            es.coopActive().set(false);
-            auto r = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient1.lua"); // no session: host flag not needed
-            CHECK(r.loadOk && r.pcallOk);
-            es.coopActive().set(true);
-            refusesOpen(ui, "Completion_is_client()", "host check"); // session, host flag OPEN
-            es.isHost().set(true);
-            auto r2 = host.runChunk(ui, "assert(Completion_is_client() == false)", "isclient2.lua"); // session, host
-            CHECK(r2.loadOk && r2.pcallOk);
-            es.isHost().set(false);
-            auto r3 = host.runChunk(ui, "assert(Completion_is_client() == true)", "isclient3.lua"); // session, not host
-            CHECK(r3.loadOk && r3.pcallOk);
-            es.isHost().set(true);
-            es.coopActive().set(false);
+            auto ok = [&](const char* chunk) {
+                auto r = host.runChunk(ui, chunk, "host.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+            };
+            ok("assert(Completion_is_client() == false)");
+            ok("assert(game_get_is_host() == false)");
+            ok("assert(select('#', game_get_is_host()) == 1)");
+            auto r0 = host.runChunk(gp, "assert(game_get_is_host == nil)", "host_gp.lua"); // `ui` only
+            CHECK(r0.loadOk && r0.pcallOk);
+            es.coopSession().present.set(true);
+            refusesOpen(ui, "Completion_is_client()", "host check");
+            refusesOpen(ui, "game_get_is_host()", "host check");
+            es.coopSession().localIsHost.set(true);
+            ok("assert(Completion_is_client() == false and game_get_is_host() == true)");
+            es.coopSession().localIsHost.set(false);
+            ok("assert(Completion_is_client() == true and game_get_is_host() == false)");
+            es.coopSession().present.set(false);
+            es.coopSession().localIsHost.forget();
+            ok("assert(Completion_is_client() == false and game_get_is_host() == false)");
         }
 
         // 16. game_hud_update_inventory (Sec10.3): default hasLocalPlayer
@@ -896,26 +955,65 @@ int main() {
             es.hasLocalPlayer().set(true);
         }
 
-        // 17. tutorial_advance (Sec10.4): this project's own stated
-        // simplification (no real 210-entry table in this codebase) -
-        // any non-empty id resolves (true) and bumps its own counter;
-        // empty id does not resolve (false), no counter bump.
+        // 17. tutorial_advance (Sec10.4, Sec6.19, Sec26.28): the 210-name
+        // resolver (case-insensitive, first match), then entry state == 3.
+        // At start entries 0-188 are in state 0 and 189-209 in state 1, so
+        // every name is false. The state is not changed by the call.
         {
-            CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 0);
-            // Table resolution is OPEN until set (the old "any non-empty id
-            // resolves" stand-in is gone).
-            refusesOpen(gp, "tutorial_advance('hint_grab_weapon')", "tutorial table");
-            CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 0);
-            es.tutorialResolves().set("hint_grab_weapon", true);
-            es.tutorialResolves().set("", false);
-            auto r = host.runChunk(gp, "assert(tutorial_advance('hint_grab_weapon') == true)", "tutadv1.lua");
-            CHECK(r.loadOk && r.pcallOk);
-            CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 1);
-            auto r2 = host.runChunk(gp, "assert(tutorial_advance('hint_grab_weapon') == true)", "tutadv2.lua"); // real, cumulative counter
-            CHECK(r2.loadOk && r2.pcallOk);
-            CHECK(es.tutorialAdvanceCount("hint_grab_weapon") == 2);
-            auto r3 = host.runChunk(gp, "assert(tutorial_advance('') == false)", "tutadv3.lua");
-            CHECK(r3.loadOk && r3.pcallOk);
+            auto ok = [&](const char* chunk) {
+                auto r = host.runChunk(gp, chunk, "tut.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+            };
+            CHECK(std::string(EngineState::tutorialName(0)) == "save");
+            CHECK(std::string(EngineState::tutorialName(1)) == "autosave");
+            CHECK(std::string(EngineState::tutorialName(122)) == "vehicle entry");
+            CHECK(std::string(EngineState::tutorialName(189)) == "dlc1_act_genki_escort_into");
+            CHECK(std::string(EngineState::tutorialName(209)) == "dlc3_win");
+            CHECK(EngineState::tutorialName(176) == nullptr && EngineState::tutorialName(210) == nullptr);
+            int named = 0;
+            for (int i = 0; i < EngineState::kTutorialEntryCount; ++i) named += EngineState::tutorialName(i) ? 1 : 0;
+            CHECK(named == 209);
+            CHECK(EngineState::tutorialLookup("AutoSave").index == 1);
+            CHECK(EngineState::tutorialLookup("escort_minigame").index == 36); // also at 129: first wins
+            CHECK(EngineState::tutorialLookup("TUT_SIXAXIS_BOAT").index == 185);
+            CHECK(EngineState::tutorialLookup("hint_grab_weapon").index == -1);
+            CHECK(!EngineState::tutorialLookup("hint_grab_weapon").couldBeIndex176);
+            CHECK(EngineState::tutorialLookup("ab").couldBeIndex176);                // < 4 characters
+            CHECK(EngineState::tutorialLookup("s\xe9ve_x").couldBeIndex176);         // non-ASCII
+            CHECK(!EngineState::tutorialLookup("save").couldBeIndex176);              // matched before 176
+            CHECK(es.tutorialState().get("0") == 0 && es.tutorialState().get("188") == 0);
+            CHECK(es.tutorialState().get("189") == 1 && es.tutorialState().get("209") == 1);
+
+            ok("assert(tutorial_advance('save') == false)");
+            ok("assert(tutorial_advance('dlc3_win') == false)");               // state 1
+            ok("assert(tutorial_advance('hint_grab_weapon') == false)");       // not in the table
+            ok("assert(tutorial_advance('') == false)");                       // could be 176, state 1 != 3
+            ok("assert(tutorial_advance() == false)");
+            CHECK(es.tutorialAdvanceCount(0) == 0);
+            es.tutorialState().set("0", 3);
+            ok("assert(tutorial_advance('SAVE') == true)");
+            ok("assert(select('#', tutorial_advance('save')) == 1)");
+            CHECK(es.tutorialAdvanceCount(0) == 2);
+            CHECK(es.tutorialState().get("0") == 3); // unchanged by tutorial_advance
+            for (int st : {0, 1, 2, 4}) {
+                es.tutorialState().set("0", st);
+                ok("assert(tutorial_advance('save') == false)");
+            }
+            es.tutorialState().set("0", 0);
+            es.tutorialState().set("129", 3);
+            ok("assert(tutorial_advance('escort_minigame') == false)"); // resolves to 36
+            es.tutorialState().set("36", 3);
+            ok("assert(tutorial_advance('escort_minigame') == true)");
+            es.tutorialState().set("36", 0);
+            es.tutorialState().set("129", 0);
+            // Entry 176's name is OPEN: refused only when the answer depends on it.
+            es.tutorialState().set("176", 3);
+            refusesOpen(gp, "tutorial_advance('ab')", "entry 176");
+            refusesOpen(gp, "tutorial_advance('s\xe9ve_x')", "entry 176");
+            ok("assert(tutorial_advance('hint_grab_weapon') == false)");     // 4+ ASCII: cannot be 176
+            es.tutorialState().set("176", 1);
+            ok("assert(tutorial_advance('ab') == false)");
         }
 
         // 18. minimap_icon_add_do (Sec10.5): CONFIRMED nil-gated defaults
@@ -1017,66 +1115,97 @@ int main() {
             CHECK(r2.loadOk && r2.pcallOk);
         }
 
-        // 23. zscene_is_loaded (Sec14.23) over OPEN state (open_state.h):
-        // nothing is defaulted, so every read of an unset value is a Lua error
-        // naming the global, until a test (or, later, a specced writer) sets it.
+        // 23. zscene_is_loaded (Sec14.23 corrected, Sec26.25) and zscene_prep
+        // (Sec8.21, Sec26.25). Nothing zscene-related has a specced start-up
+        // value, so every first read is OPEN.
         {
             auto check = [&](const char* chunk, const char* tag) {
                 auto r = host.runChunk(gp, chunk, tag);
                 CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
             };
             auto refuses = [&](const char* chunk, const char* needle) {
                 auto r = host.runChunk(gp, chunk, "zsref.lua");
                 CHECK(r.loadOk && !r.pcallOk);
                 CHECK(r.pcallError.find(needle) != std::string::npos);
+                if (r.pcallError.find(needle) == std::string::npos) std::cerr << chunk << ": " << r.pcallError << "\n";
             };
-            check("assert(type(zscene_is_loaded) == 'function')", "zs0a.lua");
+            check("assert(type(zscene_is_loaded) == 'function' and type(zscene_prep) == 'function')", "zs0a.lua");
             {
-                auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil)", "zs0b.lua");
+                auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil and zscene_prep == nil)", "zs0b.lua");
                 CHECK(r.loadOk && r.pcallOk);
             }
-            // All OPEN: the first value each path reads is named.
-            refuses("zscene_is_loaded()", "0x0153b556");              // no name: busy flag first
-            refuses("zscene_is_loaded('m02_scene')", "m02_scene");     // tier-1 per-name state
+            refuses("zscene_is_loaded()", "0x0153b556");          // no name: skip byte first
+            refuses("zscene_is_loaded('Scene_A')", "0x00723d20"); // name: table / kind first
+            refuses("zscene_is_loaded('Scene_A')", "scene_a");    // keyed lower-case
             CHECK(host.hitLog().hits().count("zscene_is_loaded:OPEN_STATE") == 1);
-
-            // Tier 1 (CONFIRMED): per-name state exactly 1 -> true, even with
-            // the rest still OPEN.
-            es.zsceneNameState().set("m02_scene", 1);
-            check("assert(zscene_is_loaded('m02_scene') == true)", "zs5.lua");
-            check("assert(select('#', zscene_is_loaded('m02_scene')) == 1)", "zs4.lua");
-            // Other value -> tier 2, whose busy flag is still OPEN.
-            es.zsceneNameState().set("m02_scene", 2);
-            refuses("zscene_is_loaded('m02_scene')", "0x0153b556");
-            // Busy flag set -> true regardless of name / other state.
-            es.zsceneBusyFlag().set(true);
-            check("assert(zscene_is_loaded() == true)", "zs14.lua");
-            check("assert(zscene_is_loaded('m02_scene') == true)", "zs15.lua");
-            // Busy flag clear, no name -> the state code, still OPEN.
-            es.zsceneBusyFlag().set(false);
+            // Not a kind-1 entry (or missing): true at once - no inversion.
+            es.zsceneLoadable().set("scene_a", false);
+            check("assert(zscene_is_loaded('SCENE_A') == true)", "zs1.lua");
+            check("assert(select('#', zscene_is_loaded('scene_a')) == 1)", "zs1b.lua");
+            // A kind-1 entry: skip byte next.
+            es.zsceneLoadable().set("scene_b", true);
+            refuses("zscene_is_loaded('scene_b')", "0x0153b556");
+            es.zsceneSkipAllCutscenes().set(true);
+            check("assert(zscene_is_loaded('scene_b') == true)", "zs2.lua");
+            check("assert(zscene_is_loaded() == true)", "zs3.lua");
+            es.zsceneSkipAllCutscenes().set(false);
+            refuses("zscene_is_loaded('scene_b')", "0x0153b530"); // then the current entry
+            es.zsceneCurrent().set("");                             // no current scene
+            check("assert(zscene_is_loaded('scene_b') == false)", "zs4.lua"); // not current -> false
+            es.zsceneCurrent().set("scene_b");
+            refuses("zscene_is_loaded('scene_b')", "0x0153b51c");
             refuses("zscene_is_loaded()", "0x0153b51c");
+            for (int code : {0, 1, 3}) {
+                es.zsceneStateCode().set(code);
+                check("assert(zscene_is_loaded('scene_b') == false and zscene_is_loaded() == false)", "zs5.lua");
+            }
+            es.zsceneStateCode().set(2);                            // 2 = loaded
+            check("assert(zscene_is_loaded('Scene_B') == true and zscene_is_loaded() == true)", "zs6.lua");
+            check("assert(zscene_is_loaded(nil) == true and zscene_is_loaded(true) == true)", "zs7.lua"); // no name
+            refuses("zscene_is_loaded(12)", "'12'");                // a number is a name
+            es.zsceneLoadable().set("scene_c", true);
+            check("assert(zscene_is_loaded('scene_c') == false)", "zs8.lua"); // loaded scene is another one
+
+            // zscene_prep: gate, teardown, pending.
+            check("assert(select('#', zscene_prep('scene_a')) == 0)", "zp1.lua"); // not kind 1: nothing
+            CHECK(!es.zscenePending().known());
+            refuses("zscene_prep('unknown_scene')", "unknown_scene");
+            es.zsceneSkipAllCutscenes().set(true);
+            check("zscene_prep('scene_c')", "zp2.lua");               // skip byte: refused
+            CHECK(!es.zscenePending().known());
+            es.zsceneSkipAllCutscenes().set(false);
+            check("zscene_prep('scene_b')", "zp3.lua");               // already current: no change
+            CHECK(!es.zscenePending().known() && es.zsceneStateCode().get() == 2);
+            // Teardown of the current scene reads the cutscene guard, then the
+            // handle class; refused with nothing written.
+            refuses("zscene_prep('scene_c')", "cutscene guard");
+            CHECK(!es.zscenePending().known());
+            es.zsceneTeardownCutsceneGuard().set(true);              // under a cutscene: no teardown
+            check("zscene_prep('SCENE_C')", "zp4.lua");
+            CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 2);
+            es.zscenePending().forget();
+            es.zsceneTeardownCutsceneGuard().set(false);
+            refuses("zscene_prep('scene_c')", "handle class");
+            CHECK(!es.zscenePending().known());
+            es.zsceneCurrentHandleNotLive().set(true);               // not live, c == 0: nothing
+            check("zscene_prep('scene_c')", "zp5.lua");
+            CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 2);
+            es.zsceneCurrentHandleNotLive().set(false);              // live: state := 0
+            check("zscene_prep('scene_c')", "zp6.lua");
+            CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 0);
+            CHECK(es.zsceneCurrent().get() == "scene_b");            // current left as it was
+            // The pending entry is not loaded until promoted; promotion is OPEN.
+            CHECK(es.zscenePendingPromotionRefusals() == 0);
+            refuses("zscene_is_loaded('scene_c')", "promotion");
+            CHECK(es.zscenePendingPromotionRefusals() == 1);
+            check("assert(zscene_is_loaded('scene_b') == false)", "zs9.lua"); // current, state 0
+            check("assert(zscene_is_loaded() == false)", "zs10.lua");
+            // No current scene: prep tears nothing down.
+            es.zsceneCurrent().set("");
             es.zsceneStateCode().set(1);
-            check("assert(zscene_is_loaded() == false)", "zs9.lua");
-            check("assert(zscene_is_loaded(nil) == false)", "zs2.lua");
-            es.zsceneStateCode().set(3);
-            check("assert(zscene_is_loaded() == false)", "zs9b.lua"); // exactly 2, not >= 2
-            es.zsceneStateCode().set(2);
-            check("assert(zscene_is_loaded() == true)", "zs10.lua");
-            // A name whose table resolution is OPEN is refused before the code test.
-            refuses("zscene_is_loaded('m02_scene')", "0x00721be0");
-            // Resolution known false -> the code test.
-            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m02_scene"), false);
-            check("assert(zscene_is_loaded('m02_scene') == true)", "zs11.lua");
-            // Resolution known true -> the per-record branch: sense OPEN, refused
-            // and counted. The table key is case-insensitive; tier 1's is not.
-            es.zsceneNameState().set("M03_Scene", 0);
-            es.zsceneTableResolves().set(sr3luahost::EngineState::zsceneTableKey("m03_scene"), true);
-            CHECK(es.zsceneOpenBranchHits() == 0);
-            refuses("zscene_is_loaded('M03_Scene')", "per-record");
-            CHECK(es.zsceneOpenBranchHits() == 1);
-            check("assert(zscene_is_loaded() == true)", "zs13.lua"); // no name: branch not reached
-            CHECK(es.zsceneOpenBranchHits() == 1);
-            // A Lua error from OPEN state does not wedge the host.
+            check("zscene_prep('scene_b')", "zp7.lua");
+            CHECK(es.zscenePending().get() == "scene_b" && es.zsceneStateCode().get() == 1);
             check("assert(pcall(zscene_is_loaded, 'unset_scene') == false)", "zs16.lua");
         }
 
@@ -1090,9 +1219,11 @@ int main() {
             check("assert(select('#', set_mission_author()) == 0)", "sma1.lua");
             check("assert(select('#', set_mission_author('x', 1, true)) == 0)", "sma2.lua");
 
-            // fade_out (Sec2.9). Before any call: no colour, no requests.
+            // fade_out (Sec2.9, Sec26.24). Before any call: no colour, no
+            // requests, state 2 (start-up) with the init run at registration.
             CHECK(!es.hasScreenFadeColour());
             CHECK(es.screenFadeRequests().empty());
+            CHECK(es.screenFade().state.get() == 2 && es.screenFade().flag.get() == 1);
             check("assert(select('#', fade_out(2.5)) == 0)", "fo1.lua");
             CHECK(es.hasScreenFadeColour());
             CHECK(es.screenFadeColour().r == 0.0f && es.screenFadeColour().g == 0.0f &&
@@ -1100,25 +1231,46 @@ int main() {
             CHECK(es.screenFadeRequests().size() == 1);          // default flags 3: bit 0x1
             CHECK(es.screenFadeRequests()[0].durationMs == 2500.0);
             CHECK(es.screenFadeRequests()[0].targetAlpha == 1.0f);
-            CHECK(es.screenFadeOpcode53Count() == 1);             // default flags 3: bit 0x2
+            CHECK(es.screenFade().state.get() == 1 && es.screenFade().target.get() == 3); // fading out
+            CHECK(es.screenFade().flag.get() == 0);
+            CHECK(es.screenFadeOpcode53Count() == 0);             // bit 0x2, but no session: host gate fails
             // Colour table, one nil component -> 0; flags 1 only.
             check("fade_out(0.5, {255, nil, 51}, 1)", "fo2.lua");
             CHECK(es.screenFadeColour().r == 1.0f && es.screenFadeColour().g == 0.0f &&
                   es.screenFadeColour().b == 51.0f / 255.0f);
             CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeRequests()[1].durationMs == 500.0);
-            CHECK(es.screenFadeOpcode53Count() == 1);
-            // Flags 2 only: no screen_fade_do request; nil table/flags use defaults.
+            CHECK(es.screenFadeOpcode53Count() == 0);
+            // Flags 2 only: no request; the broadcast is host-gated (Sec26.24).
             check("fade_out(1, nil, 2)", "fo3.lua");
-            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeOpcode53Count() == 2);
+            CHECK(es.screenFadeRequests().size() == 2 && es.screenFadeOpcode53Count() == 0);
+            es.coopSession().present.set(true);
+            es.coopSession().localIsHost.set(true);
+            check("fade_out(1, nil, 2)", "fo3b.lua");
+            CHECK(es.screenFadeOpcode53Count() == 1 && es.screenFade().lastBroadcastWasOut.get());
+            es.coopSession().localIsHost.set(false);               // client: no record
+            check("fade_out(1, nil, 2)", "fo3c.lua");
+            CHECK(es.screenFadeOpcode53Count() == 1);
+            es.coopSession().localIsHost.forget();
+            refusesOpen(gp, "fade_out(1, nil, 2)", "host check");   // gate read before any write
+            es.coopSession().present.set(false);
             check("fade_out(1, nil, nil)", "fo4.lua");
-            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
-            // Flags 0: colour still set, nothing queued.
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 1);
+            // Flags 0: colour still set, nothing requested.
             check("fade_out(1, {10, 20, 30}, 0)", "fo5.lua");
             CHECK(es.screenFadeColour().g == 20.0f / 255.0f);
-            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 3);
+            CHECK(es.screenFadeRequests().size() == 3 && es.screenFadeOpcode53Count() == 1);
+            // trunc(seconds x 1000): 0.0015 s -> 1 ms; a non-finite duration is
+            // refused (only when bit 0x1 needs it).
+            check("fade_out(0.0015, nil, 1)", "fo5b.lua");
+            CHECK(es.screenFadeRequests().back().durationMs == 1.0);
+            {
+                auto r = host.runChunk(gp, "fade_out(1/0, nil, 1)", "fo5c.lua");
+                CHECK(r.loadOk && !r.pcallOk && r.pcallError.find("fade duration") != std::string::npos);
+            }
+            check("fade_out(0/0, nil, 0)", "fo5d.lua");
             // Absent duration reads as 0 (lua_tonumber, no gate).
             check("fade_out()", "fo6.lua");
-            CHECK(es.screenFadeRequests().size() == 4 && es.screenFadeRequests()[3].durationMs == 0.0);
+            CHECK(es.screenFadeRequests().size() == 5 && es.screenFadeRequests()[4].durationMs == 0.0);
             // A non-table colour argument is indexed like the real call: Lua error.
             {
                 size_t before = es.screenFadeRequests().size();
@@ -1149,14 +1301,20 @@ int main() {
             // (long) scene name, keep their exact message (jklk regression).
             {
                 auto r = host.runChunk(gp,
+                    // No `string` library in a host state (spec-lua-bindings.md
+                    // Sec16.4): every message must equal the first, whose prefix
+                    // is checked from C++ below.
                     "for i = 1, 200 do\n"
                     "  local ok, m = pcall(zscene_is_loaded, 'a_scene_name_well_past_the_small_string_buffer')\n"
-                    "  assert(not ok and string.find(m, '^zscene_is_loaded: engine state '))\n"
+                    "  assert(not ok and type(m) == 'string')\n"
+                    "  GUARD_MSG = GUARD_MSG or m\n"
+                    "  assert(m == GUARD_MSG)\n"
                     "  ok = pcall(fade_out, 1, 5)\n"
                     "  assert(not ok)\n"
                     "end", "guard_loop.lua");
                 CHECK(r.loadOk && r.pcallOk);
                 if (!r.pcallOk) std::cerr << r.pcallError << "\n";
+                CHECK(globalString(gp, "GUARD_MSG").rfind("zscene_is_loaded: engine state ", 0) == 0);
             }
 
             // mission_end_silently (Sec15.23): bit 0x4 always; 0x10 mirrors
@@ -1185,23 +1343,36 @@ int main() {
             CHECK(r.loadOk && r.pcallOk);
         }
 
-        // 27. sfx_faded_out (Sec26.9): 0x012e6aa4 == 3, OPEN until set.
+        // 27. sfx_faded_out / sfx_faded_in (UI) and fade_is_fully_faded_out /
+        // fade_is_fully_faded_in (gameplay) (Sec26.9, Sec26.24): state == 3 /
+        // state == 2, no arguments, one boolean.
         {
-            auto r0 = host.runChunk(ui, "sfx_faded_out()", "sfo0.lua");
-            CHECK(r0.loadOk && !r0.pcallOk && r0.pcallError.find("0x012e6aa4") != std::string::npos);
-            // Repeated through openGuard with the exact message (jklk regression).
+            auto both = [&](lua_State* st, const char* chunk) {
+                auto r = host.runChunk(st, chunk, "fq.lua");
+                CHECK(r.loadOk && r.pcallOk);
+                if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+            };
+            for (uint32_t st : {0u, 1u, 2u, 3u}) {
+                es.screenFade().state.set(st);
+                const std::string out = st == 3 ? "true" : "false";
+                const std::string in = st == 2 ? "true" : "false";
+                both(ui, ("assert(sfx_faded_out() == " + out + " and sfx_faded_in() == " + in + ")").c_str());
+                both(gp, ("assert(fade_is_fully_faded_out() == " + out + " and fade_is_fully_faded_in() == " + in +
+                          ")").c_str());
+            }
+            both(ui, "assert(select('#', sfx_faded_out()) == 1)");
+            both(gp, "assert(sfx_faded_out == nil and sfx_faded_in == nil and Screen_fade_transition_complete == nil)");
+            both(ui, "assert(fade_is_fully_faded_out == nil and fade_in == nil)");
+            es.screenFade().state.forget();
+            refusesOpen(ui, "sfx_faded_out()", "0x012e6aa4");
+            refusesOpen(gp, "fade_is_fully_faded_in()", "0x012e6aa4");
             auto rl = host.runChunk(ui,
                 "for i = 1, 200 do local ok, m = pcall(sfx_faded_out)\n"
-                "  assert(not ok and string.find(m, '^sfx_faded_out: engine state ')) end", "sfo_loop.lua");
+                "  assert(not ok and type(m) == 'string'); SFO_MSG = SFO_MSG or m\n"
+                "  assert(m == SFO_MSG) end", "sfo_loop.lua");
             CHECK(rl.loadOk && rl.pcallOk);
-            es.fadeState().g012e6aa4.set(3);
-            auto r1 = host.runChunk(ui, "assert(sfx_faded_out() == true)", "sfo1.lua");
-            CHECK(r1.loadOk && r1.pcallOk);
-            es.fadeState().g012e6aa4.set(2);
-            auto r2 = host.runChunk(ui, "assert(sfx_faded_out() == false)", "sfo2.lua");
-            CHECK(r2.loadOk && r2.pcallOk);
-            auto r3 = host.runChunk(gp, "assert(sfx_faded_out == nil)", "sfo3.lua");
-            CHECK(r3.loadOk && r3.pcallOk);
+            CHECK(globalString(ui, "SFO_MSG").rfind("sfx_faded_out: engine state ", 0) == 0);
+            es.screenFade().state.set(2);
         }
 
         // Every one of the 22 calls above must fold into the SAME HitLog
@@ -1216,10 +1387,315 @@ int main() {
                                   "minimap_icon_add_do", "object_indicator_add_do",
                                   "on_qte_animation_trigger", "on_revived", "game_get_coop_join_type",
                                   "zscene_is_loaded", "set_mission_author", "fade_out",
-                                  "mission_end_silently", "sfx_faded_out"}) {
+                                  "mission_end_silently", "sfx_faded_out", "game_get_is_host",
+                                  "zscene_prep", "sfx_faded_in", "fade_is_fully_faded_out",
+                                  "fade_is_fully_faded_in"}) {
             CHECK(host.hitLog().hits().count(name) == 1);
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }
+    }
+
+    // --- Screen fade state machine (spec-lua-api-behaviour.md Sec26.24;
+    // batch 2026-10-01), through Lua: the real completion path (the UI
+    // script calls Screen_fade_transition_complete), the two labelled
+    // host-substitute fallbacks, and the per-frame routine.
+    {
+        Host host(specConfirmedFixtureNames());
+        lua_State* gp = host.gameplayState();
+        lua_State* ui = host.uiState();
+        EngineState& es = host.engineState();
+        auto& f = es.screenFade();
+        auto run = [&](lua_State* st, const std::string& chunk) {
+            auto r = host.runChunk(st, chunk, "fade.lua");
+            CHECK(r.loadOk && r.pcallOk);
+            if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+        };
+        const auto& c = es.screenFadeCounters();
+
+        // Start-up: state 2 (fully in), target 2; init ran at registration
+        // (document found, flag 1); the UI state is the screen_fade state.
+        CHECK(f.state.get() == 2 && f.target.get() == 2 && f.flag.get() == 1 && f.documentLoaded.get());
+        CHECK(es.screenFadeUiState() == ui);
+        run(gp, "assert(fade_is_fully_faded_in() == true and fade_is_fully_faded_out() == false)");
+        run(ui, "assert(sfx_faded_in() == true and sfx_faded_out() == false)");
+        CHECK(es.screenFadeCompletionPathSummary() == "real:0 fallback_undefined:0 fallback_no_callback:0");
+
+        // 1. screen_fade_do undefined -> fallback_undefined after durationMs.
+        run(gp, "fade_out(1.0)");
+        CHECK(f.state.get() == 1 && f.target.get() == 3 && f.flag.get() == 0);
+        CHECK(c.screenFadeDoCalls == 0);
+        es.screenFadeHostFrame(999);
+        CHECK(f.state.get() == 1 && c.fallbackUndefined == 0);
+        es.screenFadeHostFrame(1); // clock 1000 = request + 1000 ms
+        CHECK(f.state.get() == 3 && c.fallbackUndefined == 1);
+        CHECK(f.logoAt.get() == 2000 && f.holdLogoUntil.get() == -1 && f.imagesAt.get() == -1);
+        run(gp, "assert(fade_is_fully_faded_out() == true and fade_is_fully_faded_in() == false)");
+        run(ui, "assert(sfx_faded_out() == true)");
+        // The per-frame routine stops at the OPEN mode-stack top.
+        CHECK(c.framesBlockedOnOpen == 2 && c.lastFrameBlocker.find("mode stack") != std::string::npos);
+        // Already fully out: a fade-out request changes nothing.
+        run(gp, "fade_out(0.5)");
+        CHECK(f.state.get() == 3 && f.target.get() == 3);
+        es.screenFadeHostFrame(1000);
+        CHECK(c.fallbackUndefined == 1);
+
+        // 2. The real path: screen_fade_do(flag, alpha, ms) runs in the UI
+        // state; the script's later call of Screen_fade_transition_complete
+        // completes the fade.
+        run(ui, "fade_log = {}\n"
+                "function screen_fade_do(flag, alpha, ms) fade_log[#fade_log + 1] = {flag, alpha, ms} end");
+        run(gp, "fade_in(0.25)");
+        CHECK(f.state.get() == 0 && f.target.get() == 2 && c.screenFadeDoCalls == 1);
+        CHECK(f.logoAt.get() == -1 && f.imagesAt.get() == -1);  // reset by the fade-in request
+        run(ui, "assert(#fade_log == 1 and fade_log[1][1] == 0 and fade_log[1][2] == 0.0 and fade_log[1][3] == 250)");
+        run(gp, "assert(fade_is_fully_faded_in() == false)");
+        run(ui, "assert(select('#', Screen_fade_transition_complete()) == 0)");
+        CHECK(f.state.get() == 2 && c.realCompletions == 1);
+        run(gp, "assert(fade_is_fully_faded_in() == true)");
+        es.screenFadeHostFrame(1000);                        // the fallback was disarmed
+        CHECK(c.fallbackNoCallback == 0 && c.fallbackUndefined == 1);
+        run(gp, "fade_out(2, {0, 0, 0}, 1)");
+        run(ui, "assert(fade_log[2][1] == 0 and fade_log[2][2] == 1.0 and fade_log[2][3] == 2000)");
+        CHECK(f.state.get() == 1);
+        run(ui, "Screen_fade_transition_complete()");
+        CHECK(f.state.get() == 3 && c.realCompletions == 2);
+        // Called again with nothing running: a settled state is left alone.
+        run(ui, "Screen_fade_transition_complete()");
+        CHECK(f.state.get() == 3 && c.realCompletions == 2);
+        run(gp, "assert(Screen_fade_transition_complete == nil)"); // UI state only
+
+        // 3. A synchronous call from inside screen_fade_do runs before the
+        // request sets the direction, so it completes nothing; the fade is
+        // then completed by fallback_no_callback.
+        run(ui, "function screen_fade_do(flag, alpha, ms) Screen_fade_transition_complete() end");
+        run(gp, "fade_in(0.5)");
+        CHECK(f.state.get() == 0 && c.realCompletions == 2);
+        es.screenFadeHostFrame(500);
+        CHECK(f.state.get() == 2 && c.fallbackNoCallback == 1);
+
+        // 4. An error inside screen_fade_do stays in the UI state.
+        run(ui, "function screen_fade_do() error('fade script boom') end");
+        run(gp, "fade_out(0.1)");
+        CHECK(c.screenFadeDoErrors == 1 && c.lastScreenFadeDoError.find("fade script boom") != std::string::npos);
+        CHECK(f.state.get() == 1);
+        es.screenFadeHostFrame(100);
+        CHECK(f.state.get() == 3 && c.fallbackNoCallback == 2);
+        // A screen_fade_do that never returns is stopped by the UI-call watchdog.
+        run(ui, "function screen_fade_do() while true do end end");
+        run(gp, "fade_in(0.1)");
+        CHECK(c.screenFadeDoErrors == 2 && c.lastScreenFadeDoError.find("watchdog") != std::string::npos);
+        es.screenFadeHostFrame(100);
+        CHECK(f.state.get() == 2 && c.fallbackNoCallback == 3);
+        run(ui, "screen_fade_do = nil");
+
+        // 5. A request parked during the opposite transition is replayed by
+        // the per-frame routine with 250 ms, once the state has settled and
+        // only when the routine is not stopped by OPEN state.
+        run(gp, "fade_out(1)");                               // state 1, target 3
+        run(gp, "fade_in(3)");                                // fade-out running: parked
+        CHECK(f.state.get() == 1 && f.target.get() == 2);
+        CHECK(es.screenFadeRequests().back().durationMs == 3000.0);
+        es.screenFadeHostFrame(1000);                         // fade-out completes (fallback)
+        CHECK(f.state.get() == 3 && f.target.get() == 2);
+        es.screenFadeHostFrame(333);                          // routine blocked: mode stack OPEN
+        CHECK(f.state.get() == 3);
+        f.modeStackTop.set(0);
+        f.cutsceneState.set(0);
+        es.screenFadeHostFrame(333);                          // logo stamp not reached: replay
+        CHECK(f.state.get() == 0 && f.target.get() == 2 && f.logoAt.get() == -1);
+        const int64_t replayAt = es.screenFadeClockMs();
+        es.screenFadeHostFrame(249);
+        CHECK(f.state.get() == 0);
+        es.screenFadeHostFrame(1);                            // 250 ms, not the 3000 asked for
+        CHECK(f.state.get() == 2 && es.screenFadeClockMs() == replayAt + 250);
+
+        // 6. Mode 4 resets the four stamps and stops the routine.
+        run(gp, "fade_out(0)");
+        es.screenFadeHostFrame(1);                            // completes at once (0 ms)
+        CHECK(f.state.get() == 3 && f.logoAt.get() == es.screenFadeClockMs() + 1000);
+        f.modeStackTop.set(4);
+        es.screenFadeHostFrame(1);
+        CHECK(f.logoAt.get() == -1 && f.holdLogoUntil.get() == -1);
+        f.modeStackTop.set(0);
+
+        // 7. Loading logo, holds and load images, with the script hooks
+        // defined in the UI state.
+        run(ui, "shown = {}\n"
+                "function screen_fade_logo_show() shown[#shown + 1] = 'logo' end\n"
+                "function screen_fade_images_show() shown[#shown + 1] = 'images' end");
+        f.useLoadImages.set(true);
+        run(gp, "fade_in(0)");                                 // 3 -> fading in
+        es.screenFadeHostFrame(1);
+        CHECK(f.state.get() == 2);
+        run(gp, "fade_out(0)");
+        es.screenFadeHostFrame(3);
+        const int64_t outDone = es.screenFadeClockMs();
+        CHECK(f.state.get() == 3 && f.logoAt.get() == outDone + 1000);
+        es.screenFadeHostFrame(1001);                          // logo stamp passed
+        const int64_t logoShown = es.screenFadeClockMs();
+        run(ui, "assert(#shown == 1 and shown[1] == 'logo')");
+        CHECK(f.logoAt.get() == -1 && f.holdLogoUntil.get() == logoShown + 1000);
+        CHECK(f.imagesAt.get() == logoShown + 6000 && f.holdImagesUntil.get() == -1);
+        CHECK(c.uiScriptCalls == 1);
+        // A fade-in now is parked by the logo hold (state left at 3).
+        run(gp, "fade_in(1)");
+        CHECK(f.state.get() == 3 && f.target.get() == 2);
+        es.screenFadeHostFrame(999);                           // hold not passed
+        CHECK(f.state.get() == 3);
+        es.screenFadeHostFrame(3);                             // hold passed, images not due: replay
+        CHECK(f.state.get() == 0 && f.imagesAt.get() == -1);   // the fade-in resets the images stamp
+        es.screenFadeHostFrame(250);
+        CHECK(f.state.get() == 2);
+        // Images path: set the stamps directly (values only the routine writes).
+        f.imagesAt.set(es.screenFadeClockMs() - 1);
+        es.screenFadeHostFrame(1);
+        run(ui, "assert(#shown == 2 and shown[2] == 'images')");
+        CHECK(f.imagesAt.get() == -1 && f.holdImagesUntil.get() == es.screenFadeClockMs() + 1500);
+        run(gp, "fade_out(0)");                                // fade-out is not held
+        CHECK(f.state.get() == 1);
+        es.screenFadeHostFrame(1);
+        CHECK(f.state.get() == 3);
+        CHECK(f.holdImagesUntil.get() == -1);                  // the fade-out completion cleared the holds
+        f.holdImagesUntil.set(es.screenFadeClockMs() + 500);
+        run(gp, "fade_in(0)");                                 // held by the images stamp
+        CHECK(f.state.get() == 3 && f.target.get() == 2);
+        // A stamp met by the clock exactly has no specified result: OPEN.
+        f.holdImagesUntil.set(es.screenFadeClockMs());
+        {
+            auto r = host.runChunk(gp, "fade_in(0)", "eq.lua");
+            CHECK(r.loadOk && !r.pcallOk && r.pcallError.find("exact equality") != std::string::npos);
+        }
+        f.holdImagesUntil.set(-1);
+        f.logoAt.set(-1);
+
+        // 8. Durations: trunc(seconds x 1000); non-finite refused before any write.
+        const auto before = es.screenFadeRequests().size();
+        {
+            auto r = host.runChunk(gp, "fade_in(1e300)", "dur.lua");
+            CHECK(r.loadOk && !r.pcallOk && r.pcallError.find("fade duration") != std::string::npos);
+        }
+        CHECK(es.screenFadeRequests().size() == before);
+        run(gp, "fade_in(0/0, 2)");                            // bit 0x1 clear: no conversion
+        run(gp, "assert(select('#', fade_in(0.0019, 1)) == 0)");
+        CHECK(es.screenFadeRequests().back().durationMs == 1.0 && es.screenFadeRequests().back().targetAlpha == 0.0f);
+        // fade_in's broadcast: host-gated like fade_out's.
+        CHECK(es.screenFadeOpcode53Count() == 0);
+        es.coopSession().present.set(true);
+        es.coopSession().localIsHost.set(true);
+        run(gp, "fade_in(1, 2)");
+        CHECK(es.screenFadeOpcode53Count() == 1 && !f.lastBroadcastWasOut.get());
+        es.coopSession().present.set(false);
+
+        CHECK(es.screenFadeCompletionPathSummary() ==
+              "real:" + std::to_string(c.realCompletions) + " fallback_undefined:" +
+                  std::to_string(c.fallbackUndefined) + " fallback_no_callback:" + std::to_string(c.fallbackNoCallback));
+        CHECK(c.realCompletions == 2);
+    }
+
+    // --- Screen fade callbacks (C++ level, Sec26.24): the completion body
+    // calls the in-flight callback with the TARGET, handles the deferred slot,
+    // and a settled request calls back at once. No UI state attached here,
+    // so screen_fade_do counts as undefined.
+    {
+        EngineState es;
+        sr3luahost::applySpecInitialState(es);
+        auto& f = es.screenFade();
+        f.modeStackTop.set(0);
+        f.cutsceneState.set(0);
+        CHECK(!f.documentLoaded.get());
+        g_fadeCalls.clear();
+        es.screenFadeRequest(false, 0, fadeCbC, 7);             // already fully in
+        CHECK(g_fadeCalls.size() == 1 && g_fadeCalls[0] == std::make_pair('C', 2u));
+        CHECK(f.flag.get() == 0);                               // stopped before step 3
+        g_fadeCalls.clear();
+        es.screenFadeRequest(true, 100, fadeCbA, 5);            // out, in flight A
+        CHECK(f.state.get() == 1 && f.inFlight == fadeCbA && f.flag.get() == 5);
+        es.screenFadeRequest(false, 100, fadeCbB, 6);           // parked: deferred B
+        CHECK(f.state.get() == 1 && f.target.get() == 2 && f.deferred == fadeCbB && f.inFlight == fadeCbA);
+        CHECK(es.screenFadeCompletionBody());                   // 1 -> 3; A(target 2)
+        CHECK(f.state.get() == 3 && g_fadeCalls.size() == 1 && g_fadeCalls[0] == std::make_pair('A', 2u));
+        CHECK(f.inFlight == nullptr && f.deferred == fadeCbB);  // 3 != target 2: deferred kept
+        es.screenFadeHostFrame(1);                              // replay with B, 250 ms, flag 6
+        CHECK(f.state.get() == 0 && f.inFlight == fadeCbB && f.flag.get() == 6);
+        CHECK(es.screenFadeCompletionBody());                   // 0 -> 2; B(2); deferred == in-flight: cleared
+        CHECK(g_fadeCalls.size() == 2 && g_fadeCalls[1] == std::make_pair('B', 2u));
+        CHECK(f.inFlight == nullptr && f.deferred == nullptr);
+        CHECK(!es.screenFadeCompletionBody());                  // settled: no flip, nothing called
+        CHECK(g_fadeCalls.size() == 2);
+        // Deferred different from in-flight, settled at the target: both called.
+        g_fadeCalls.clear();
+        es.screenFadeRequest(true, 100, fadeCbA, 0);            // out, A
+        es.screenFadeRequest(false, 100, fadeCbB, 0);           // parked B, target 2
+        es.screenFadeRequest(true, 100, fadeCbC, 0);            // target back to 3; state 1: restarts, C in flight
+        CHECK(f.state.get() == 1 && f.target.get() == 3 && f.inFlight == fadeCbC && f.deferred == fadeCbB);
+        CHECK(es.screenFadeCompletionBody());
+        CHECK(g_fadeCalls.size() == 2 && g_fadeCalls[0] == std::make_pair('C', 3u) &&
+              g_fadeCalls[1] == std::make_pair('B', 3u));
+        CHECK(f.inFlight == nullptr && f.deferred == nullptr && f.state.get() == 3);
+        // The fallback timer only completes the transition it was armed for.
+        // Every flip above came from the body directly: no timer fired.
+        CHECK(es.screenFadeCounters().fallbackUndefined == 0 && es.screenFadeCounters().realCompletions == 0);
+    }
+
+    // --- UI resolution queries (Sec26.26) through Lua.
+    {
+        Host host(specConfirmedFixtureNames());
+        lua_State* gp = host.gameplayState();
+        lua_State* ui = host.uiState();
+        EngineState& es = host.engineState();
+        auto run = [&](const char* chunk) {
+            auto r = host.runChunk(ui, chunk, "vint.lua");
+            CHECK(r.loadOk && r.pcallOk);
+            if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+        };
+        auto refuses = [&](const char* chunk, const char* needle) {
+            auto r = host.runChunk(ui, chunk, "vint_ref.lua");
+            CHECK(r.loadOk && !r.pcallOk && r.pcallError.find(needle) != std::string::npos);
+            if (r.pcallError.find(needle) == std::string::npos) std::cerr << chunk << ": " << r.pcallError << "\n";
+        };
+        {
+            auto r = host.runChunk(gp, "assert(vint_is_std_res == nil and vint_get_safe_frame == nil)", "v0.lua");
+            CHECK(r.loadOk && r.pcallOk);
+        }
+        refuses("vint_is_std_res()", "0x00e236f0");
+        es.vintRecordFirst().set(1024);
+        es.vintRecordSecond().set(768);                       // 1.333 < 1.5: mode not read
+        run("assert(vint_is_std_res() == true and select('#', vint_is_std_res(1, 2)) == 1)");
+        es.vintRecordFirst().set(1280);
+        es.vintRecordSecond().set(1024);                      // 5:4
+        run("assert(vint_is_std_res() == true)");
+        es.vintRecordFirst().set(1920);
+        es.vintRecordSecond().set(1080);
+        refuses("vint_is_std_res()", "0x0132bd80");
+        es.vintDisplayMode().set(-1);
+        run("assert(vint_is_std_res() == false)");
+        es.vintDisplayMode().set(2);
+        run("assert(vint_is_std_res() == true)");
+        for (int mode : {0, 1, 3, 4}) {
+            es.vintDisplayMode().set(mode);
+            run("assert(vint_is_std_res() == false)");
+        }
+        es.vintRecordFirst().set(1500);
+        es.vintRecordSecond().set(1000);                      // exactly 1.5: not below
+        run("assert(vint_is_std_res() == false)");
+        es.vintRecordFirst().set(0);
+        es.vintRecordSecond().set(0);                         // 0/0 = NaN: not below
+        run("assert(vint_is_std_res() == false)");
+        es.vintRecordFirst().set(-5);
+        es.vintRecordSecond().set(0);                         // -inf: below
+        run("assert(vint_is_std_res() == true)");
+
+        refuses("vint_get_safe_frame()", "+0x8");
+        es.vintSafeFrameA().set(1280);
+        es.vintSafeFrameB().set(720);
+        refuses("vint_get_safe_frame()", "0x0115ba60");
+        es.vintSafeFrameScale1().set(0.0625);
+        es.vintSafeFrameScale2().set(0.9375);
+        run("local a, b, c, d = vint_get_safe_frame()\n"
+            "assert(a == 80 and b == 45 and c == 1200 and d == 675)\n"
+            "assert(select('#', vint_get_safe_frame()) == 4)");
+        es.vintSafeFrameScale2().set(1.0 / 3.0);              // 426.67: rounding mode OPEN
+        refuses("vint_get_safe_frame()", "rounding");
     }
 
     // --- Hook evidence labels (spec-lua-bindings.md §4 desk review,
@@ -1245,6 +1721,76 @@ int main() {
             if (h.name == "garage_populate") CHECK(h.evidence == sr3luahost::HookEvidence::RefutedSec14_3);
             if (h.name == "newsticker_populate") CHECK(h.evidence == sr3luahost::HookEvidence::Sec4ScanPendingRecheck);
         }
+    }
+
+    // --- Engine-state slot inventory and applySpecInitialState (batch
+    // 2026-10-01): the CONFIRMED start-up values are set, everything else
+    // stays OPEN.
+    {
+        sr3luahost::EngineState es;
+        sr3luahost::applySpecInitialState(es);
+        const auto inv = es.openSlotInventory();
+        CHECK(inv.size() == 40);
+        std::unordered_map<std::string, int> perArea, knownPerArea;
+        for (const auto& r : inv) {
+            ++perArea[r.area];
+            if (r.known || r.knownKeys > 0) ++knownPerArea[r.area];
+            CHECK(!r.global.empty() && r.spec.rfind("spec-", 0) == 0);
+        }
+        CHECK(perArea["co-op"] == 6 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
+        CHECK(perArea["zscene"] == 7 && perArea["fade"] == 14 && perArea["vint"] == 7 && perArea["other"] == 4);
+        CHECK(knownPerArea["co-op"] == 1 && knownPerArea["tutorial"] == 1 && knownPerArea["vehicle-store"] == 1);
+        CHECK(knownPerArea["zscene"] == 0 && knownPerArea["fade"] == 12 && knownPerArea["vint"] == 0 &&
+              knownPerArea["other"] == 0);
+        for (const auto& r : inv) {
+            if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
+            if (r.global.find("0x0151d600") != std::string::npos) CHECK(r.knownKeys == 210);
+            if (r.global.find("0x022cdf08") != std::string::npos) CHECK(r.known);
+            if (r.global.find("mode stack") != std::string::npos) CHECK(!r.known);
+            if (r.global.find("0x0153b520") != std::string::npos) CHECK(!r.known);
+            if (r.global.find("0x012f44fc") != std::string::npos) CHECK(!r.known);
+        }
+        // Values (spec text): co-op none; store flag 0; fade globals at their
+        // file values; tutorial states after the fill.
+        CHECK(es.coopSession().present.get() == false);
+        CHECK(!es.coopIsActive() && !es.coopLocalIsHost() && !es.coopLocalIsClient());
+        CHECK(es.vehicleStoreActive().get() == false);
+        const auto& f = es.screenFade();
+        CHECK(f.state.get() == 2 && f.target.get() == 2 && f.flag.get() == 0 && !f.documentLoaded.get());
+        CHECK(f.logoAt.get() == -1 && f.holdLogoUntil.get() == -1 && f.imagesAt.get() == -1 &&
+              f.holdImagesUntil.get() == -1 && f.autoSaveStamp.get() == -1);
+        CHECK(f.autoSaveCounter.get() == 0 && !f.useLoadImages.get() && !f.lastBroadcastWasOut.get());
+        CHECK(f.inFlight == nullptr && f.deferred == nullptr);
+        for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
+            CHECK(es.tutorialState().get(EngineState::tutorialStateKey(i)) == (i <= 188 ? 0 : 1));
+        CHECK(!es.zsceneSkipAllCutscenes().known() && !es.zsceneStateCode().known() && !es.zsceneCurrent().known());
+        CHECK(!es.vintDisplayMode().known());
+        // The inventory follows writes: a value, a per-name key, and bits.
+        es.zsceneStateCode().set(2);
+        es.zsceneLoadable().set("scene_a", true);
+        es.missionFlagsWord().setBits(0x14, 0x4);
+        for (const auto& r : es.openSlotInventory()) {
+            if (r.global.find("0x0153b51c") != std::string::npos) CHECK(r.known && r.knownKeys == 1);
+            if (r.global.find("0x00723d20") != std::string::npos) CHECK(!r.known && r.knownKeys == 1);
+            if (r.global == "0x014c848c") CHECK(!r.known && r.knownKeys == 2);
+        }
+        // Bare-global table (Sec13.2/Sec16.4, answered 2026-10-01): all 24
+        // names, each into BOTH states, each also a spec-confirmed name.
+        for (const auto& bg : sr3luahost::specBareGlobals()) {
+            CHECK(bg.gameplay || bg.ui);
+            const auto& n = sr3luahost::specConfirmedStubNames();
+            CHECK(std::find(n.begin(), n.end(), bg.name) != n.end());
+            CHECK(bg.spec.rfind("spec-", 0) == 0);
+        }
+        CHECK(sr3luahost::specBareGlobals().size() == 24);
+        for (const auto& bg : sr3luahost::specBareGlobals()) CHECK(bg.gameplay && bg.ui);
+        // Host applies the same initial state. With no UI state holding
+        // Screen_fade_transition_complete, the fade init does not run.
+        sr3luahost::Host h({});
+        CHECK(h.engineState().vehicleStoreActive().get() == false);
+        CHECK(h.engineState().coopSession().present.get() == false);
+        CHECK(!h.engineState().screenFade().documentLoaded.get());
+        CHECK(h.engineState().screenFadeUiState() == nullptr);
     }
 
     if (g_failures == 0) {

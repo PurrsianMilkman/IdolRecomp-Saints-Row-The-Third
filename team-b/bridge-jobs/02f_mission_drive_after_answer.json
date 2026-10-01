@@ -1,0 +1,27 @@
+{
+  "title": "team-b: mission drive after a Team A answer (fill in: which answer, commit)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "lua_host_run"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "lua_host_run",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{SRC}/team-b/tools/lua_all_registered_1490_tagged.txt",
+        "{OUT}"
+      ],
+      "timeout": 14400
+    }
+  ],
+  "collect": [
+    "*.tsv",
+    "*.txt"
+  ]
+}

@@ -99,3 +99,22 @@ non-zero-byte total, statistics 163/164 vs the 0x3F0/0x3F8 counters) are a histo
 They print per-row results with snapshot ids (`#n`, listed at load) and do not fail the run. Job 10i runs the
 tool with the default mode (expected exit 0) and with `--strict` (the old behaviour, expected exit 1 while the
 drift lasts).
+
+### 02f: mission drive after each Team A answer (template, added 2026-10-01)
+
+Pre-written for Team A's Ghidra answers. They arrive in this order: co-op / tutorial / vehicle-store, then the 24 bare
+globals (`rand_int` first), then fade / zscene, then the §16.4 preloads. For each answer:
+1. Put the confirmed values in `src/lua_spec_initial_state.cpp` (or the stub, for a rule).
+2. Update the inventory test in `tests/synthetic_luahost_test.cpp`.
+3. Push, then set this file's title to name the answer and the commit, and submit it with
+   `bridge_client.py submit`.
+The run's `verdict_open_state.tsv` and the `open_state_slots_with_values_at_start=` summary line show which slots
+are now filled. Diff it against the previous mission run with `tools/bridge_diff.py`. The baseline for the first
+answer is `20261001T003228-team-b-ugaa`, or `20261001T000923-team-b-hxmr` with `--preload-states=spec16.4-highconf`.
+
+### 11: include( census (added 2026-10-01)
+
+`spec-lua-bindings.md` §16.4 leaves one item for Team B to check (OPEN residue 1): does any shipped script call the
+bare global `include` with a preload name? Such a call in a gameplay-side script would load that file into the
+gameplay state. `lua_include_census` lists every `include` call (script, line, literal argument or
+`<non-literal>`) and flags the ones that name a preload file. It writes no script text.

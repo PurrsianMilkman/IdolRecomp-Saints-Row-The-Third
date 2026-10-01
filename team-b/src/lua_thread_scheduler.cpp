@@ -156,4 +156,8 @@ void registerThreadScheduler(lua_State* L, ThreadScheduler& scheduler, HitLog& l
     registerOne(L, scheduler, log, stateTag, "thread_close", stub_thread_close);
 }
 
+void registerThreadClose(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag) {
+    registerOne(L, scheduler, log, stateTag, "thread_close", stub_thread_close);
+}
+
 } // namespace sr3luahost

@@ -1,0 +1,25 @@
+{
+  "title": "team-b: include( census over all scripts (spec-lua-bindings.md Sec16.4 OPEN residue 1)",
+  "ref": "auto",
+  "steps": [
+    {
+      "kind": "build",
+      "targets": [
+        "lua_include_census"
+      ],
+      "timeout": 3600
+    },
+    {
+      "kind": "run",
+      "tool": "lua_include_census",
+      "args": [
+        "{GAME}/packfiles/pc/cache",
+        "{OUT}"
+      ],
+      "timeout": 3600
+    }
+  ],
+  "collect": [
+    "*.tsv"
+  ]
+}

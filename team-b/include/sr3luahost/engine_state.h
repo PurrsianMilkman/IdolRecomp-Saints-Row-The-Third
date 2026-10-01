@@ -55,6 +55,7 @@
 // routine before the parent/document-scoped lookup below. Header-only, no
 // new link dependency (include/ is one shared tree - see this project's
 // own established convention, every library already does this).
+#include "sr3luahost/lua_c_api.h"
 #include "sr3luahost/open_state.h"
 #include "sr3save/save_crc.h"
 
@@ -69,11 +70,9 @@ namespace sr3luahost {
 // spec's own "keyed by the arg-3-derived integer when nonzero, else by
 // object identity alone" text as closely as this minimal registry allows.
 struct EnemyTargetRecord {
-    // int64 of arg 3 via 0x00ea2596. Its rounding mode was labelled
-    // banker's rounding (CONFIRMED) in Sec3's primitive note, but the
-    // 2026-09-30 consistency review found Sec2/Sec3/Sec3.9 disagree and marked
-    // it OPEN (Sec4.1). Converted with roundToIntOpenMode()
-    // (lua_spec_confirmed_stubs.cpp), this project's CHOSEN round-half-to-even.
+    // int64 of arg 3 via 0x00ea2596: truncation toward zero (Sec4.1, settled
+    // 2026-10-01; the earlier banker's/round-to-nearest readings are struck).
+    // Converted with truncateEa2596() (lua_spec_confirmed_stubs.cpp).
     int64_t priorityOrId = 0;
     // Bit 0x04: set from arg 4 (optional bool, default false). CONFIRMED
     // structure (Sec3.9); the real-world MEANING of this bit is HIGH
@@ -335,15 +334,42 @@ public:
     bool hasCharacter(const std::string& name) const;
     size_t characterCount() const { return characters_.size(); }
 
-    // coop_is_active (Sec3.1): a pure query in the real engine (this
-    // task's 12 functions include no setter for it - it queries a real
-    // co-op session object this project does not model). Default false
-    // ("not in a co-op session") - this project's own chosen default for a
-    // single-process reimplementation with no real networking (see this
-    // task's own "no real networking layer" instruction). setCoopActive()
-    // exists only so a test can exercise the true branch directly; no Lua
-    // function among these 12 ever calls it.
-    OpenValue<bool>& coopActive() { return coopActive_; }
+    // --- co-op session (spec-lua-api-behaviour.md Sec26.28, Sec3.1, Sec8.27,
+    // Sec10.2; batch 2026-10-01) -------------------------------------------
+    //
+    // The session singleton 0x024d8534 (accessor 0x0087ba20) and the fields
+    // of the session object the three Lua queries read. CONFIRMED (Sec26.28):
+    // the singleton is zero at load and no resolved code installs a session
+    // ("a host starts with no session"), so `present` starts false
+    // (applySpecInitialState). Every per-session field below is only read
+    // when a session exists; nothing in this host installs one, so they stay
+    // OPEN (tests set them). Whether single player installs a one-member host
+    // session is OPEN (Sec26.28); its HYPOTHESIS is not implemented.
+    struct CoopSession {
+        OpenValue<bool> present{"co-op session singleton 0x024d8534 non-null (0x0087ba20)",
+                                "spec-lua-api-behaviour.md Sec26.28/Sec3.1"};
+        // +0x5c == +0x58: the local member is the host member (Sec8.27).
+        OpenValue<bool> localIsHost{"session host check (+0x5c == +0x58)", "spec-lua-api-behaviour.md Sec8.27/Sec10.2"};
+        // Sec3.1 condition 2, client side: the session is not idle (0x0059fbe0
+        // false: +0xf4/+0xf8/+0x224) and byte +0xfd is clear.
+        OpenValue<bool> clientGate{"session client gate (not idle per 0x0059fbe0, +0xfd clear)",
+                                   "spec-lua-api-behaviour.md Sec3.1/Sec26.28"};
+        // +0x60 via 0x00681370; coop_is_active needs >= 2 (unsigned compare).
+        OpenValue<uint32_t> memberCount{"session member count (+0x60)", "spec-lua-api-behaviour.md Sec3.1"};
+        // Sec3.1 condition 4: every member but the local one passes 0x00877a90.
+        OpenValue<bool> otherMembersPassSlotCheck{"session member walk slot check (0x00877a90)",
+                                                  "spec-lua-api-behaviour.md Sec3.1"};
+    };
+    CoopSession& coopSession() { return coopSession_; }
+    // coop_is_active's core predicate 0x00867830 (Sec3.1, CONFIRMED): session
+    // present; host check first, else the client gate; member count >= 2;
+    // the member walk. Throws OpenStateError on an OPEN read it needs.
+    bool coopIsActive() const;
+    // game_get_is_host (Sec8.27) and the host gate of the 0x53 fade
+    // broadcasts (Sec26.24): session present and +0x5c == +0x58.
+    bool coopLocalIsHost() const;
+    // Completion_is_client (Sec10.2): session present and +0x5c != +0x58.
+    bool coopLocalIsClient() const;
 
     // game_UI_audio_play (Sec2.2): "Returns the resulting voice/play-
     // instance handle as a Lua number" - the spec confirms a handle is
@@ -436,30 +462,13 @@ public:
     // Real body: reads global flag `0x022cdf08`, pushes 0.0 if it reads 0,
     // else 1.0 (CONFIRMED, disassembly); HIGH CONFIDENCE that the flag's
     // real-world meaning is "is the vehicle-store UI currently in an
-    // active (non-default) mode." Pure query in the real engine AND among
-    // this task's 9 in-scope names (no real setter is in scope - the
-    // real writer, `store_vehicle_change_mode`, is a different, out-of-
-    // scope registered name, Sec10.1's own text). Default false ("not in
-    // vehicle-store UI mode" - this project's own chosen default, same
-    // "single-process, nothing active yet" convention as isCoopActive()
-    // above). Test-only setter, matching setCoopActive()'s own precedent.
+    // active (non-default) mode." CONFIRMED (Sec10.1/Sec26.28, 2026-10-01):
+    // the flag is 0 at load (applySpecInitialState). Its three writers
+    // (0x00815120 = store_vehicle_change_mode, 0x005fa820, 0x00820cd0) are
+    // CONFIRMED bodies, but none is implemented here: the Lua argument shape
+    // of store_vehicle_change_mode is not in the spec and the triggers of the
+    // other two are OPEN, so the flag only changes from a test.
     OpenValue<bool>& vehicleStoreActive() { return vehicleStoreActive_; }
-
-    // --- Completion_is_client (Sec10.2) -------------------------------------
-
-    // Real body (CONFIRMED, disassembly, cross-checked directly against
-    // Sec8.27's own already-decompiled `game_get_is_host` body reading the
-    // identical two fields): "is there an active co-op session AND is
-    // this machine NOT the host" - `isCoopActive() && !isHost()`. No
-    // session at all -> false (NOT the literal complement of
-    // game_get_is_host, which is out of this task's scope). This
-    // project's single-process reimplementation has no real multi-machine
-    // session, so `isHost_` defaults true (the natural single-instance
-    // default - matches this project's own "no real networking layer"
-    // convention already established for coopActive_/replicateStateChange
-    // above). Test-only setter; no Lua function among this task's 9
-    // in-scope names ever changes it.
-    OpenValue<bool>& isHost() { return isHost_; }
 
     // --- game_hud_update_inventory (Sec10.3) --------------------------------
 
@@ -482,24 +491,35 @@ public:
 
     // --- tutorial_advance (Sec10.4) -----------------------------------------
 
-    // Real body resolves arg 1 through the SAME 210-entry, 36-byte-stride
-    // tutorial-descriptor table `tutorial_start` (Sec6.19) uses, gated on
-    // a bounds check AND a per-entry kind/type tag equal to the literal
-    // `3` (CONFIRMED, disassembly, Sec10.4) - this project has no real
-    // xtbl-loaded copy of that table anywhere in this codebase (checked:
-    // no reader/table for it exists), so re-deriving the real bounds/tag
-    // gate is out of scope. This project's own stated, explicit
-    // simplification (not a claim of having the real table): treat any
-    // non-empty string id as "resolved" (returns true), any empty/absent
-    // id as "not resolved" (returns false) - honestly modeling the shape
-    // of a resolve gate without fabricating its real content. On a
-    // resolved id, this project's own no-op stand-in for the real
-    // named event/telemetry-shaped scope the real function opens (OPEN,
-    // Sec10.4 - not confirmed to even BE telemetry) is a plain per-id
-    // call counter - `tutorialAdvanceCount()` reads it, defaulting 0 for
-    // any id never advanced.
-    int tutorialAdvanceCount(const std::string& id) const;
-    void recordTutorialAdvance(const std::string& id);
+    // Batch 2026-10-01 (spec-lua-api-behaviour.md Sec10.4, Sec6.19, Sec26.28).
+    // The name resolver 0x00717780 searches the static, file-backed table of
+    // 210 name pointers at 0x012f5930 case-insensitively and returns the
+    // first matching index or -1 (CONFIRMED). The names are the functional
+    // identifiers Sec26.28 lists (owner's content ruling 2026-10-01; kept in
+    // src/lua_tutorial_names.cpp). Index 176's string is OPEN: the spec only
+    // says it is shorter than 4 characters or non-ASCII.
+    static constexpr int kTutorialEntryCount = 210;
+    // The name at `index`, or nullptr for index 176 (OPEN) / out of range.
+    static const char* tutorialName(int index);
+    struct TutorialLookup {
+        int index = -1;           // first known name matching, else -1
+        bool couldBeIndex176 = false; // -1 only because index 176's string is OPEN
+    };
+    // 0x00717780 over the 209 known names. couldBeIndex176 is set when no
+    // known name matches (or one matches only after index 176) and `name`
+    // could be the OPEN string (shorter than 4 characters or non-ASCII).
+    static TutorialLookup tutorialLookup(const std::string& name);
+    // Per-entry run-time STATE (entry +0x0c of the table at 0x0151d600, 0-4,
+    // not a kind - Sec6.19). Keyed by the decimal index. CONFIRMED initial
+    // values (applySpecInitialState): entries 0-188 state 0, 189-209 state 1
+    // after the registration fill 0x007178c0 (Sec26.28).
+    OpenValueMap<int>& tutorialState() { return tutorialState_; }
+    static std::string tutorialStateKey(int index) { return std::to_string(index); }
+    // tutorial_advance's success path builds and dispatches a named UI
+    // message (HYPOTHESIS: to the tutorial UI document); not modelled, only
+    // counted per resolved index.
+    int tutorialAdvanceCount(int index) const;
+    void recordTutorialAdvance(int index);
 
     // --- on_qte_animation_trigger (Sec10.7) ---------------------------------
 
@@ -522,7 +542,7 @@ public:
     // disassembly, full body read). The global's sole writer is real,
     // host-authoritative, and network-replicated (CONFIRMED, Sec10.9) -
     // this project builds no real networking layer (explicit project
-    // convention, same as coopActive_/replicateStateChange above), so
+    // convention, same as coopSession_/replicateStateChange above), so
     // `coopJoinType_` is this project's own minimal `int` stand-in,
     // default 0. Pure query among this task's 9 in-scope names (the real
     // writer is a different, out-of-scope function) - test-only setter.
@@ -530,61 +550,151 @@ public:
 
     // --- name resolution the host does not model (cloud phase 2026-09-30) --
 
-    // Whether a tutorial id resolves in the 210-entry tutorial table
-    // (0x00717780, entry kind == 3; tutorial_advance Sec10.4). The table is
-    // not loaded here, so every id is OPEN until set.
-    OpenValueMap<bool>& tutorialResolves() { return tutorialResolves_; }
     // Whether a name resolves to a live engine object through the resolver
     // the calling function uses (ai_add_enemy_target Sec3.9: "on successful
     // resolution of both names"; object_indicator_add_do Sec10.6). One map
     // for all resolvers - a stated simplification; OPEN until set.
     OpenValueMap<bool>& objectResolves() { return objectResolves_; }
 
-    // --- zscene_is_loaded (spec-lua-api-behaviour.md Sec14.23) --------------
-
-    // Real body: a two-tier dispatch (CONFIRMED, disassembly). Tier 1, only
-    // when a name is given: the scene's per-name state (0x00723d20) reads
-    // exactly 1 -> true. Tier 2 (0x00721db0): the busy flag 0x0153b556 (the
-    // same flag zscene_prep gates on, Sec8.21) set -> true; else, if a name
-    // was given and resolves through the scene-table lookup (0x00d9e8b0 ->
-    // 0x00721be0, a CRC-32 of the lowercased name) to a non-"current"
-    // record, a per-record test whose sense is OPEN; else the global state
-    // code 0x0153b51c == 2.
+    // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
+    // batch 2026-10-01) ------------------------------------------------------
     //
-    // Every one of those values is OPEN state here (open_state.h): no spec
-    // gives an initial value or a writer (zscene_prep's load sequence is
-    // only HIGH CONFIDENCE, Sec8.21), so nothing is defaulted. Reading an
-    // OPEN one throws OpenStateError, which zscene_is_loaded reports as a
-    // Lua error naming the global. Tests (and later, specced writers) set
-    // them. zsceneTableResolves is keyed by the lowercased name; the
-    // per-name state by the exact Lua string (0x00723d20's own lookup is
-    // not described). zsceneOpenBranchHits() counts arrivals at the OPEN
-    // per-record branch, which also refuses.
-    OpenValueMap<int>& zsceneNameState() { return zsceneNameState_; }
-    OpenValue<bool>& zsceneBusyFlag() { return zsceneBusyFlag_; }
+    // Scene identity: the engine keys its scene table (0x0153b294, entries
+    // 0xf8 bytes, parsed from cutscene.xtbl) by the CRC-32 of the lower-cased
+    // name and compares entry POINTERS for "current"/"pending". This host
+    // keys everything by the lower-cased name (zsceneTableKey) - a stated
+    // simplification (two names with equal CRCs would be one entry in the
+    // engine and two here).
+    //
+    // CONFIRMED globals, all OPEN at start: no spec gives their start-up
+    // values, and the per-field parse of cutscene.xtbl (which entries exist,
+    // their kind) is OPEN (Sec26.25).
+    //  - zsceneLoadable[key]: the name is in the table AND its entry kind
+    //    (+0x8) is 1 (0x00721be0 lookup + the 0x00723d20 / 0x007232e0 test).
+    //    "Missing" and "kind != 1" give the same answers in every caller,
+    //    so one bool per name.
+    //  - 0x0153b556 the skip_all_cutscenes byte.
+    //  - 0x0153b530 current entry ("" = null), 0x0153b538 pending entry.
+    //  - 0x0153b51c load state: 0 idle, 1 loading, 2 loaded (all CONFIRMED).
+    //  - the teardown's cutscene guard and the current handle's class
+    //    (0x00721c20), read only when zscene_prep tears a current scene down.
+    OpenValueMap<bool>& zsceneLoadable() { return zsceneLoadable_; }
+    OpenValue<bool>& zsceneSkipAllCutscenes() { return zsceneSkipAllCutscenes_; }
+    OpenValue<std::string>& zsceneCurrent() { return zsceneCurrent_; }
+    OpenValue<std::string>& zscenePending() { return zscenePending_; }
     OpenValue<int>& zsceneStateCode() { return zsceneStateCode_; }
-    OpenValueMap<bool>& zsceneTableResolves() { return zsceneTableResolves_; }
+    OpenValue<bool>& zsceneTeardownCutsceneGuard() { return zsceneTeardownCutsceneGuard_; }
+    OpenValue<bool>& zsceneCurrentHandleNotLive() { return zsceneCurrentHandleNotLive_; }
     static std::string zsceneTableKey(const std::string& name);
-    int zsceneOpenBranchHits() const { return zsceneOpenBranchHits_; }
-    void recordZsceneOpenBranchHit() { ++zsceneOpenBranchHits_; }
+    // zscene_prep (Sec8.21 / Sec26.25 lifecycle step 1-2, CONFIRMED): the gate
+    // 0x007232e0, the stub 0x0101b530 (nothing), the teardown
+    // 0x00721c20(1, 0, 0) of the current scene, then pending := entry and
+    // the two per-object parameters := the zero constants. All reads happen
+    // before any write, so an OPEN read refuses with no partial update.
+    void zscenePrep(const std::string& name);
+    // zscene_is_loaded (Sec14.23 corrected truth table, CONFIRMED). hasName
+    // is true for a string or number argument. Throws OpenStateError on an
+    // OPEN read; also refuses (OPEN) when the named entry is the PENDING one:
+    // its promotion to current (0x00720410, only caller 0x007258a0, body
+    // OPEN) is driven by the cutscene state machine this host does not run,
+    // so "false until promoted" has no modelled end. Counted.
+    bool zsceneIsLoaded(bool hasName, const std::string& name);
+    int zscenePendingPromotionRefusals() const { return zscenePendingPromotionRefusals_; }
 
-    // --- screen-fade state machine (Sec26.23, Sec26.9) ----------------------
-
-    // The globals Sec26.23 names for the screen-fade-request primitive
-    // 0x0059f8c0's state machine. All OPEN (values, types beyond "compared
-    // as an integer", initial state and transitions are unspecced - HANDOFF
-    // request 1). CONFIRMED consumer: sfx_faded_out pushes 0x012e6aa4 == 3
-    // (Sec26.9). fade_out/fade_in drive this machine, but how is not specced,
-    // so they do not write it.
-    struct FadeStateMachine {
-        OpenValue<uint32_t> g012e6aa0{"0x012e6aa0", "spec-lua-api-behaviour.md Sec26.23"};
-        OpenValue<uint32_t> g012e6aa4{"0x012e6aa4", "spec-lua-api-behaviour.md Sec26.9/Sec26.23"};
-        OpenValue<uint32_t> g012e6aa8{"0x012e6aa8", "spec-lua-api-behaviour.md Sec26.23"};
-        OpenValue<uint32_t> g013effc8{"0x013effc8", "spec-lua-api-behaviour.md Sec26.23"};
-        OpenValue<uint32_t> g013effcc{"0x013effcc", "spec-lua-api-behaviour.md Sec26.23"};
-        OpenValue<uint32_t> g013effd0{"0x013effd0", "spec-lua-api-behaviour.md Sec26.23"};
+    // --- screen fade (spec-lua-api-behaviour.md Sec26.24, Sec26.9, Sec2.9,
+    // Sec8.13; batch 2026-10-01; implementation in src/lua_screen_fade.cpp) --
+    //
+    // CONFIRMED (Sec26.24): one state dword 0x012e6aa4 (0 fading in, 1 fading
+    // out, 2 fully in - the start-up state, 3 fully out) and a target
+    // 0x012e6aa8 (3 out, 2 in). The request helpers 0x0059f8c0 (out) and
+    // 0x0059fc40 (in) only set the direction and call the UI-state Lua global
+    // screen_fade_do(flag, alpha, durationMs); a fade completes when the UI
+    // script calls the UI-state native Screen_fade_transition_complete
+    // (0x005a0110), which this host registers in the UI state. A request
+    // parked while the opposite transition runs is replayed by the
+    // per-frame routine 0x0059fe70 with 250 ms.
+    //
+    // Every global below is an OpenValue: applySpecInitialState sets the
+    // file-backed initial values Sec26.24 lists; the mode-stack top and the
+    // cutscene state the per-frame routine reads are OPEN.
+    using FadeCallback = void (*)(EngineState& es, uint32_t target);
+    struct ScreenFade {
+        OpenValue<uint32_t> state{"0x012e6aa4 (fade state)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<uint32_t> target{"0x012e6aa8 (fade target)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<uint32_t> flag{"0x013effc8 (fade flag)", "spec-lua-api-behaviour.md Sec26.24"};
+        // 0x012e6aa0 != -1: the "screen_fade" UI document record is loaded
+        // (its id is HIGH CONFIDENCE as a label). -1 in the file.
+        OpenValue<bool> documentLoaded{"0x012e6aa0 != -1 (screen_fade document id)", "spec-lua-api-behaviour.md Sec26.24"};
+        // Millisecond stamps, -1 = unset (Sec26.24 table).
+        OpenValue<int64_t> logoAt{"0x012e6aac (show loading logo at)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int64_t> holdLogoUntil{"0x012e6ab0 (hold fade-in until, logo)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int64_t> imagesAt{"0x012e6ab4 (show load images at)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int64_t> holdImagesUntil{"0x012e6ab8 (hold fade-in until, images)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int64_t> autoSaveStamp{"0x012e6abc (auto-save indicator stamp)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int32_t> autoSaveCounter{"0x013effd4 (auto-save counter)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<bool> useLoadImages{"0x0149365c (sfx_use_load_images byte)", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<bool> lastBroadcastWasOut{"0x013effc5 (last 0x53 record was a fade-out)", "spec-lua-api-behaviour.md Sec26.24"};
+        // Read by the per-frame routine; OPEN (no spec value).
+        OpenValue<int32_t> modeStackTop{"mode stack top (0x00706ab0: 0x01503b50[0x012f4a80])", "spec-lua-api-behaviour.md Sec26.24"};
+        OpenValue<int32_t> cutsceneState{"0x0153b520 (cutscene state)", "spec-lua-api-behaviour.md Sec26.24/Sec26.25"};
+        // 0x013effcc in-flight and 0x013effd0 deferred completion callbacks:
+        // 0 in the file (CONFIRMED); the Lua wrappers always pass 0.
+        FadeCallback inFlight = nullptr;
+        FadeCallback deferred = nullptr;
     };
-    FadeStateMachine& fadeState() { return fadeState_; }
+    ScreenFade& screenFade() { return screenFade_; }
+    const ScreenFade& screenFade() const { return screenFade_; }
+
+    // The UI Lua state that stands in for the "screen_fade" document: where
+    // screen_fade_do and the other screen_fade_* script globals are looked
+    // up. Set when Screen_fade_transition_complete is registered there.
+    void attachScreenFadeUiState(lua_State* ui) { screenFadeUi_ = ui; }
+    lua_State* screenFadeUiState() const { return screenFadeUi_; }
+    // Init 0x0059fa30 (CONFIRMED body): document found -> id loaded, state :=
+    // 2, target := 2, flag := 1; not found -> id stays -1.
+    void screenFadeInit(bool documentFound);
+
+    // Request helpers 0x0059f8c0 (out = true) / 0x0059fc40 (out = false),
+    // CONFIRMED full bodies, (durationMs, completionCallback, flag). The
+    // audio-id posts are HYPOTHESIS and not modelled. Throws OpenStateError
+    // (before any write) on an OPEN read.
+    void screenFadeRequest(bool out, int32_t durationMs, FadeCallback cb, uint32_t flag);
+    // Body of Screen_fade_transition_complete 0x005a0110 (CONFIRMED).
+    // Returns true when it flipped a running transition (0 -> 2, 1 -> 3).
+    bool screenFadeCompletionBody();
+    // The Lua-visible native: the body, counted as the real completion path.
+    void screenFadeCompletionNative();
+
+    // Host frame. Advances the host's millisecond clock (the engine's clock
+    // 0x01320d9c; this host's clock starts at 0 and moves only here), then:
+    //  1. HOST-SIDE SUBSTITUTE (not engine behaviour; Sec26.24 allows it and
+    //     requires the label): a transition still running durationMs after
+    //     its request started it is completed by running the completion
+    //     body. Only used when screen_fade_do was not a function in the UI
+    //     state (or the document is not loaded) - fallback_undefined - or
+    //     was called but never called Screen_fade_transition_complete -
+    //     fallback_no_callback. The preferred path is the script's own call.
+    //  2. the per-frame routine 0x0059fe70 (CONFIRMED body). An OPEN read
+    //     stops that frame's routine; counted (screenFadeFramesBlockedOnOpen).
+    void screenFadeHostFrame(int64_t elapsedMs);
+    int64_t screenFadeClockMs() const { return screenFadeClockMs_; }
+
+    struct ScreenFadeCounters {
+        uint64_t realCompletions = 0;         // the UI script's own call flipped the state
+        uint64_t fallbackUndefined = 0;       // substitute: screen_fade_do undefined / no document
+        uint64_t fallbackNoCallback = 0;      // substitute: screen_fade_do called, no completion
+        uint64_t screenFadeDoCalls = 0;
+        uint64_t screenFadeDoErrors = 0;      // Lua errors inside screen_fade_do (swallowed)
+        uint64_t uiScriptCalls = 0;           // screen_fade_logo_show/images_show/auto_save_*
+        uint64_t framesRun = 0;
+        uint64_t framesBlockedOnOpen = 0;
+        std::string lastFrameBlocker;         // the OPEN global that last stopped a frame
+        std::string lastScreenFadeDoError;
+    };
+    const ScreenFadeCounters& screenFadeCounters() const { return screenFadeCounters_; }
+    // "real:N fallback_undefined:N fallback_no_callback:N" (lua_host_run's
+    // verdict_summary.txt line fade_completion_path=...).
+    std::string screenFadeCompletionPathSummary() const;
 
     // --- fade_out (spec-lua-api-behaviour.md Sec2.9) ------------------------
 
@@ -600,23 +710,42 @@ public:
     const ScreenFadeColour& screenFadeColour() const { return screenFadeColour_; }
     void setScreenFadeColour(const ScreenFadeColour& c) { screenFadeColour_ = c; hasScreenFadeColour_ = true; }
 
-    // CONFIRMED: flags bit 0x1 queues the engine's "screen_fade_do" UI
-    // command with the duration x 1000.0 (ms) and a target alpha (1.0 from
-    // fade_out). This project has no UI command queue and does not fire the
-    // Lua `screen_fade_do` hook from here (Sec26.23 gives that callback 3
-    // numeric arguments, only 2 of which are known), so each request is just
-    // recorded. What the fade state machine (0x0059f8c0) does with it is the
-    // open Team A request (HANDOFF "Requests to Team A", item 1).
+    // Every request a Lua wrapper (fade_out / fade_in bit 0x1) handed to the
+    // request helper, in call order: trunc(seconds x 1000) and the alpha the
+    // helper passes to screen_fade_do (1.0 out, 0.0 in) - a log for tests.
     struct ScreenFadeRequest {
         double durationMs = 0.0;
         float targetAlpha = 0.0f;
     };
     const std::vector<ScreenFadeRequest>& screenFadeRequests() const { return screenFadeRequests_; }
     void recordScreenFadeRequest(const ScreenFadeRequest& r) { screenFadeRequests_.push_back(r); }
-    // CONFIRMED: flags bit 0x2 queues a separate opcode-0x53 command
-    // (Sec8.13: a host-gated fade broadcast). No networking here; counted.
+    // Bit 0x2: the broadcast helpers 0x005a0270 / 0x005a0400 (CONFIRMED):
+    // nothing unless the host gate holds (session present, +0x5c == +0x58);
+    // then an opcode-0x53 record to the peers (no networking here: counted)
+    // and byte 0x013effc5 := 1 (out) / 0 (in). Throws on an OPEN gate read.
+    void screenFadeBroadcast(bool out);
     int screenFadeOpcode53Count() const { return screenFadeOpcode53Count_; }
-    void recordScreenFadeOpcode53() { ++screenFadeOpcode53Count_; }
+
+    // --- UI resolution queries (spec-lua-api-behaviour.md Sec26.26) ---------
+
+    // vint_is_std_res (0x00e1a150, CONFIRMED rule): the two signed integers
+    // of the per-thread record (0x00e236f0 +4/+8; HIGH CONFIDENCE: width and
+    // height) divided in double precision; < 1.5 -> true, else true only when
+    // the display mode 0x0132bd80 == 2. The record's writers were not dumped
+    // and the mode's writer 0x00e23000 runs from callers not dumped (its file
+    // value -1 is CONFIRMED, but not what scripts see), so all three are OPEN.
+    OpenValue<int32_t>& vintRecordFirst() { return vintRecordFirst_; }
+    OpenValue<int32_t>& vintRecordSecond() { return vintRecordSecond_; }
+    OpenValue<int32_t>& vintDisplayMode() { return vintDisplayMode_; }
+    bool vintIsStdRes() const;
+    // vint_get_safe_frame (0x00e1b570): shape CONFIRMED (4 numbers from the
+    // integers a = +0x8, b = +0xc of (thread context +0x674)+0x14, scaled by
+    // two double constants and rounded); order (c1*a, c1*b, c2*a, c2*b) HIGH
+    // CONFIDENCE. The constants 0x0115ba60 / 0x0116dfc0 are OPEN, as are a, b.
+    OpenValue<int32_t>& vintSafeFrameA() { return vintSafeFrameA_; }
+    OpenValue<int32_t>& vintSafeFrameB() { return vintSafeFrameB_; }
+    OpenValue<double>& vintSafeFrameScale1() { return vintSafeFrameScale1_; }
+    OpenValue<double>& vintSafeFrameScale2() { return vintSafeFrameScale2_; }
 
     // --- mission_end_silently (Sec15.23) ------------------------------------
 
@@ -626,9 +755,28 @@ public:
     // only the bits a confirmed writer has written are known (open_state.h).
     OpenBits32& missionFlagsWord() { return missionFlagsWord_; }
 
+    // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
+
+    // One row per engine-state slot the stubs read, grouped by area (co-op,
+    // tutorial, vehicle-store, zscene, fade, vint, other). Rows stay listed
+    // after a spec answer fills them (known / knownKeys then say so).
+    // `known` is "value set" for a scalar, "every bit known" for a bit word;
+    // `knownKeys` counts set keys for a per-name map (scalars: 0/1). lua_host_run
+    // writes it as verdict_open_state.tsv, so a re-run shows which slots a
+    // newly implemented answer filled.
+    struct OpenSlotStatus {
+        std::string area;
+        std::string global;
+        std::string spec;
+        std::string kind; // "value", "per-name map" or "bit word"
+        bool known = false;
+        size_t knownKeys = 0;
+    };
+    std::vector<OpenSlotStatus> openSlotInventory() const;
+
 private:
     std::unordered_map<std::string, CharacterState> characters_;
-    OpenValue<bool> coopActive_{"co-op session (0x0087ba20 non-null + session counter check)", "spec-lua-api-behaviour.md Sec3.1"};
+    CoopSession coopSession_;
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
 
@@ -639,23 +787,49 @@ private:
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
     // above for citation/reasoning. ---
-    OpenValue<bool> vehicleStoreActive_{"vehicle-store active state", "spec-lua-api-behaviour.md Sec10.1"};
-    OpenValue<bool> isHost_{"host check (0x0087ba20: +0x5c == +0x58)", "spec-lua-api-behaviour.md Sec10.2/Sec8.27"};
+    OpenValue<bool> vehicleStoreActive_{"vehicle-store active flag (0x022cdf08)", "spec-lua-api-behaviour.md Sec10.1/Sec26.28"};
     OpenValue<bool> hasLocalPlayer_{"local player exists (0x009da4e0)", "spec-lua-api-behaviour.md Sec10.3"};
     int hudInventoryRefreshCount_ = 0;                         // Sec10.3
-    std::unordered_map<std::string, int> tutorialAdvanceCounts_; // Sec10.4
+    std::unordered_map<int, int> tutorialAdvanceCounts_;       // Sec10.4, by table index
     std::string qteAnimationTriggerCallback_;                  // Sec10.7
     OpenValue<int> coopJoinType_{"0x012f44fc (co-op join type)", "spec-lua-api-behaviour.md Sec10.9"};
-    OpenValueMap<bool> tutorialResolves_{"tutorial table 0x00717780 lookup", "spec-lua-api-behaviour.md Sec10.4"};
+    OpenValueMap<int> tutorialState_{"tutorial entry state (0x0151d600[i] +0x0c)", "spec-lua-api-behaviour.md Sec6.19/Sec10.4/Sec26.28"};
     OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6"};
 
-    // --- zscene_is_loaded (Sec14.23), see the accessor doc comment above ---
-    OpenValueMap<int> zsceneNameState_{"zscene per-name state (0x00723d20)", "spec-lua-api-behaviour.md Sec14.23"};
-    OpenValue<bool> zsceneBusyFlag_{"0x0153b556", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
-    OpenValue<int> zsceneStateCode_{"0x0153b51c", "spec-lua-api-behaviour.md Sec14.23"};
-    OpenValueMap<bool> zsceneTableResolves_{"zscene table lookup 0x00721be0", "spec-lua-api-behaviour.md Sec14.23/Sec8.21"};
-    int zsceneOpenBranchHits_ = 0;
-    FadeStateMachine fadeState_;
+    // --- zscene (Sec26.25/Sec14.23/Sec8.21), see the accessor doc comment above ---
+    OpenValueMap<bool> zsceneLoadable_{"zscene table entry with kind 1 (0x00721be0 lookup, 0x00723d20 test)",
+                                       "spec-lua-api-behaviour.md Sec26.25/Sec14.23"};
+    OpenValue<bool> zsceneSkipAllCutscenes_{"0x0153b556 (skip_all_cutscenes)", "spec-lua-api-behaviour.md Sec26.25/Sec8.21"};
+    OpenValue<std::string> zsceneCurrent_{"0x0153b530 (current scene entry)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<std::string> zscenePending_{"0x0153b538 (pending scene entry)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<int> zsceneStateCode_{"0x0153b51c (zscene load state)", "spec-lua-api-behaviour.md Sec26.25/Sec14.23"};
+    OpenValue<bool> zsceneTeardownCutsceneGuard_{"zscene teardown cutscene guard (*0x0153b528 +8 == 1, 0x0153b520 in 7..13)",
+                                                 "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> zsceneCurrentHandleNotLive_{"current scene handle class 1 (0x00dafb60)", "spec-lua-api-behaviour.md Sec26.25"};
+    int zscenePendingPromotionRefusals_ = 0;
+
+    // --- screen fade (Sec26.24), see the accessor doc comment above ---
+    ScreenFade screenFade_;
+    lua_State* screenFadeUi_ = nullptr;
+    int64_t screenFadeClockMs_ = 0; // host clock, see screenFadeHostFrame
+    enum class FadeFallbackReason { Undefined, NoCallback };
+    struct FadeFallbackTimer {
+        bool armed = false;
+        int64_t dueMs = 0;
+        FadeFallbackReason reason = FadeFallbackReason::Undefined;
+    } screenFadeFallback_;
+    ScreenFadeCounters screenFadeCounters_;
+    void screenFadeFrameRoutine();
+    bool screenFadeCallUi(const char* name, int nargs, double a0, double a1, double a2, bool* errored);
+
+    // --- vint_is_std_res / vint_get_safe_frame (Sec26.26) ---
+    OpenValue<int32_t> vintRecordFirst_{"per-thread record (0x00e236f0) +4 (HIGH CONFIDENCE: width)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintRecordSecond_{"per-thread record (0x00e236f0) +8 (HIGH CONFIDENCE: height)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintDisplayMode_{"0x0132bd80 (display mode)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintSafeFrameA_{"safe-frame source +0x8 ((context +0x674)+0x14)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintSafeFrameB_{"safe-frame source +0xc ((context +0x674)+0x14)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<double> vintSafeFrameScale1_{"double constant 0x0115ba60", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<double> vintSafeFrameScale2_{"double constant 0x0116dfc0", "spec-lua-api-behaviour.md Sec26.26"};
 
     // --- fade_out (Sec2.9) / mission_end_silently (Sec15.23) ---
     bool hasScreenFadeColour_ = false;
@@ -664,5 +838,9 @@ private:
     int screenFadeOpcode53Count_ = 0;
     OpenBits32 missionFlagsWord_{"0x014c848c", "spec-lua-api-behaviour.md Sec15.23"};
 };
+
+// Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).
+// Host's constructor calls it once; slots it does not set stay OPEN.
+void applySpecInitialState(EngineState& es);
 
 } // namespace sr3luahost

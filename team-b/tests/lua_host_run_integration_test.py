@@ -64,7 +64,7 @@ def main(argv):
         check(m5.get("start_call_ok") == "1", "dlc1_mm_05 _start succeeds")
         check(m6.get("start_call_ok") == "0", "dlc1_mm_06 _start refused")
         check("0x00723d20" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
-              f"dlc1_mm_06 stops on the OPEN zscene state: {m6.get('start_call_error')}")
+              f"dlc1_mm_06 stops on the OPEN zscene table entry: {m6.get('start_call_error')}")
         check(m4.get("start_call_ok") == "0", "dlc1_mm_04 _start fails")
         check("attempt to index local 't'" in m4.get("start_call_error", ""),
               f"dlc1_mm_04 reports the Lua error: {m4.get('start_call_error')}")
@@ -83,6 +83,35 @@ def main(argv):
         check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
         check(summary.get("real_luaL_loadbuffer_ok", "").startswith("5/6"), "5/6 scripts load")
         check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "6/6", "sr3lua agrees on 6/6")
+        # Batch 2026-10-01: the CONFIRMED start-up values (no co-op session,
+        # tutorial states after the fill, store flag 0, the fade globals'
+        # file values) fill 15 of the 40 slots; zscene and vint stay OPEN.
+        check(summary.get("open_state_slots_with_values_at_start", "").startswith("15/40 "),
+              f"slots with a value at start: {summary.get('open_state_slots_with_values_at_start')}")
+        slots = read_tsv(os.path.join(out1, "verdict_open_state.tsv"))
+        areas = {r["area"] for r in slots}
+        check({"co-op", "tutorial", "vehicle-store", "zscene", "fade", "vint"} <= areas,
+              f"open-state areas: {sorted(areas)}")
+        check(any("0x00723d20" in r["global"] for r in slots), "zscene table entry listed")
+
+        def slot(fragment):
+            rows = [r for r in slots if fragment in r["global"]]
+            check(len(rows) == 1, f"one slot matching {fragment}: {len(rows)}")
+            return rows[0] if rows else {}
+
+        check(slot("0x024d8534").get("known") == "1", "co-op session presence known (none)")
+        check(slot("0x0151d600").get("known_keys") == "210", "210 tutorial entry states known")
+        check(slot("0x022cdf08").get("known") == "1", "vehicle-store flag known (0)")
+        check(slot("0x012e6aa4").get("known") == "1", "fade state known (2)")
+        check(slot("mode stack").get("known") == "0", "mode-stack top OPEN")
+        check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots if r["area"] in ("zscene", "vint")),
+              "zscene and vint slots OPEN at start")
+        # Fade completion paths (Sec26.24): dlc1_mm_05's fade_out(0) has no
+        # screen_fade_do to run, so the labelled host fallback completes it.
+        check(summary.get("fade_completion_path") == "real:0 fallback_undefined:1 fallback_no_callback:0",
+              f"fade_completion_path={summary.get('fade_completion_path')}")
+        check(summary.get("fade_detail", "").startswith("screen_fade_do_calls:0 screen_fade_do_errors:0 "),
+              f"fade_detail={summary.get('fade_detail')}")
         drive = read_kv(os.path.join(out1, "verdict_mission_drive_summary.txt"))
         check(re.match(r"^3/\d+$", drive.get("missions_with_script_found", "")) is not None, "3 missions found")
         check(re.match(r"^1/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "1 _start ok")
@@ -103,22 +132,37 @@ def main(argv):
         if failures:
             print(report)
 
-        # --preload-states=spec16.4-highconf (HYPOTHESIS opt-in): off by default;
-        # with it, game_lib.lua (OPEN-tagged here) runs in the gameplay state only.
-        check(read_kv(os.path.join(out1, "verdict_summary.txt")).get("preload_states_option", "").startswith("off"),
-              "preload_states_option off by default")
+        # Sec16.4 preload routing (CONFIRMED, cleared 2026-10-01) is the default:
+        # game_lib.lua runs in the gameplay state only. --preload-states=tag restores
+        # the old per-script tag routing (game_lib.lua is OPEN-tagged here: both states).
+        opt1 = read_kv(os.path.join(out1, "verdict_summary.txt")).get("preload_states_option", "")
+        check(opt1.startswith("spec16.4 (default") and opt1.endswith("scripts_rerouted=1"), f"default line: {opt1}")
         out3 = os.path.join(tmp, "run3")
-        run_host(host, reglist, cache, out3, "--preload-states=spec16.4-highconf")
+        run_host(host, reglist, cache, out3, "--preload-states=tag")
         opt = read_kv(os.path.join(out3, "verdict_summary.txt")).get("preload_states_option", "")
-        check(opt.startswith("spec16.4-highconf (HYPOTHESIS") and opt.endswith("scripts_rerouted=1"),
-              f"opt-in line: {opt}")
+        check(opt.startswith("tag (opt-in") and opt.endswith("scripts_rerouted=0"), f"tag line: {opt}")
         s3 = {r["entry_name"]: r for r in read_tsv(os.path.join(out3, "verdict_per_script.tsv"))}
         s1 = scripts
-        check(s1.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "1", "default: game_lib also run in ui")
-        check(s3.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "0", "opt-in: game_lib not run in ui")
-        check(s3.get("game_lib.lua", {}).get("gameplay_runChunk_attempted") == "1", "opt-in: game_lib run in gameplay")
+        check(s1.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "0", "default: game_lib not run in ui")
+        check(s1.get("game_lib.lua", {}).get("gameplay_runChunk_attempted") == "1", "default: game_lib run in gameplay")
+        check(s3.get("game_lib.lua", {}).get("ui_runChunk_attempted") == "1", "tag: game_lib also run in ui")
+        out5 = os.path.join(tmp, "run5")
+        run_host(host, reglist, cache, out5, "--preload-states=spec16.4-highconf")
+        check(read_kv(os.path.join(out5, "verdict_summary.txt")).get("preload_states_option", "").startswith("spec16.4 (default"),
+              "old flag name accepted as an alias")
         bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True)
         check(bad.returncode != 0, "unknown option rejected")
+
+        # --host-rng (HYPOTHESIS / host substitute): off unless explicitly given.
+        rng1 = read_kv(os.path.join(out1, "verdict_summary.txt")).get("host_rng_option", "")
+        check(rng1.startswith("off (default"), f"host_rng_option off by default: {rng1}")
+        out5 = os.path.join(tmp, "run5")
+        run_host(host, reglist, cache, out5, "--host-rng=7")
+        rng5 = read_kv(os.path.join(out5, "verdict_summary.txt")).get("host_rng_option", "")
+        check(rng5.startswith("on seed=7 (HYPOTHESIS"), f"host_rng_option with --host-rng=7: {rng5}")
+        badseed = subprocess.run([host, cache, reglist, os.path.join(tmp, "run6"), "--host-rng=abc"],
+                                 capture_output=True, text=True)
+        check(badseed.returncode != 0, "bad --host-rng seed rejected")
 
     print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))
     return 1 if failures else 0

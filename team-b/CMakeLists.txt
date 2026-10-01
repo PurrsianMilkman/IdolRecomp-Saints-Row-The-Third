@@ -840,7 +840,11 @@ add_library(sr3luahost STATIC
     src/lua_hook_registry.cpp
     src/lua_thread_scheduler.cpp
     src/lua_engine_state.cpp
+    src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
+    src/lua_screen_fade.cpp
+    src/lua_tutorial_names.cpp
+    src/lua_bare_globals.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
 target_link_libraries(sr3luahost PUBLIC lua51)
@@ -855,6 +859,12 @@ add_test(NAME synthetic_luahost_test COMMAND sr3luahost_tests)
 # Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
 # only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
 # bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
+# The 24 bare globals of 0x00e0f900 (include/sr3luahost/bare_globals.h,
+# spec-lua-api-behaviour.md Sec26.27, spec-lua-bindings.md Sec13.2/Sec16.4).
+add_executable(sr3luahost_bare_globals_tests tests/synthetic_luahost_bare_globals_test.cpp)
+target_link_libraries(sr3luahost_bare_globals_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_bare_globals_test COMMAND sr3luahost_bare_globals_tests)
+
 add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
 target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
 target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
@@ -906,6 +916,10 @@ add_executable(xtbl_name_grep tools/xtbl_name_grep.cpp)
 target_link_libraries(xtbl_name_grep PRIVATE vpp_container)
 add_executable(lua_dynamic_dispatch_grep tools/lua_dynamic_dispatch_grep.cpp)
 target_link_libraries(lua_dynamic_dispatch_grep PRIVATE vpp_container)
+# include( census (spec-lua-bindings.md Sec16.4 OPEN residue 1): which scripts call the bare global
+# `include`, and with which names; flags calls naming a preload file.
+add_executable(lua_include_census tools/lua_include_census.cpp)
+target_link_libraries(lua_include_census PRIVATE vpp_container)
 
 # Call-SITE census (HANDOFF Sec9.121): for every real <stem>_start/_run/
 # _success/_init/_cleanup definition, who calls it (same script/other
