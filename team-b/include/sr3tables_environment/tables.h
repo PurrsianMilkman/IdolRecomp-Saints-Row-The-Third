@@ -459,6 +459,10 @@ struct VfxEffect {
 
     std::optional<std::string> radialBlurEntry;   // Radial_blur/Radial_blur_entry -> radial_blur.xtbl index
 
+    // [OPEN - spec-tables-environment.md 10.2 (vfx.xtbl) LOD rows (Review status: "NEEDS-EXE: `0x005C3E70` with no `LOD`"): the
+    // 1.0e8 / 1.0e10 defaults are stated only for an absent `Spawning`/`Distance` block INSIDE a present `LOD`;
+    // what the fields hold when the whole `LOD` element is absent (401 of 529 real rows, 17.1) is not stated. The
+    // *OrDefault() helpers below apply the defaults in both cases; the whole-LOD-absent case is NOT confirmed.]
     bool lodPresent = false;                       // LOD - presence flag
     std::optional<float> lodSpawningDistance;      // LOD/Spawning/Distance; absent Spawning -> spec default 1.0e8
     float LodSpawningDistanceOrDefault() const { return lodSpawningDistance.value_or(1.0e8f); }

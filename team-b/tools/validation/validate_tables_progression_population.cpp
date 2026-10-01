@@ -679,6 +679,9 @@ int main(int argc, char** argv) {
         long long vehOnly = 0;
         for (auto& g : parsed) vehOnly += g.vehicleOnly;
         std::printf("    vehicle_only rows (spec: dropped by the real loader if they have no Vehicles): %lld / %zu\n", vehOnly, parsed.size());
+        // Spline_Type: spec-tables-progression.md 10.6 [OPEN - list downgraded from CONFIRMED; spec cites
+        // Team B's 58/61 real rows outside the six names ("All Roads" 56, "Surface Roads" 2, 14.12)].
+        // The mismatches printed here are therefore expected and NOT a reader defect.
         checkEnumText("Group", rows, "Spline_Type", {"Highway Only", "Boat", "Offroad", "Indoor", "Baggage", "Taxi"});
         reportUnknownChildren("Group", rows,
             knownLower({"Name", "GeneralFlags", "Team", "Spline_Type", "Characters", "spawn_drunk_pct_day",

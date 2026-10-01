@@ -946,6 +946,10 @@ std::optional<GameplayConstants> ParseGameplayConstants(const Document& doc) {
             c.combatAi.gun.cantFireRepositionMin = ReadUInt32Always(g, "Cant_Fire_Reposition_Min");
             c.combatAi.gun.cantFireRepositionMax = ReadUInt32Always(g, "Cant_Fire_Reposition_Max");
         }
+        // [OPEN - spec-tables-progression.md 10.2 (`Combat_AI` row): "parent of `Pepperspray` - this row
+        // lists it beside `Gun` (a child of `Combat_AI`), 14.9 writes `Combat_AI` -> `Gun` ->
+        // `Pepperspray` (a child of `Gun`); ... to be settled against the executable"; Review
+        // status 10.2: NEEDS-EXE. Coded as a sibling of Gun (the 10.2 table reading); not CONFIRMED.]
         if (const Node* p = FindChild(n, "Pepperspray")) {
             c.combatAi.pepperspray.sprayMin = ReadUInt32Always(p, "Spray_Min");
         }
@@ -1208,6 +1212,8 @@ SpawnGroup ParseSpawnGroup(const Node* row) {
         g.hasDesignatedDriver = HasFlag(gf, "has_designated_driver");
     }
     g.team = OptText(row, "Team");
+    // [OPEN - spec-tables-progression.md 10.6: Spline_Type name list incomplete (58/61 real rows use
+    // "All Roads"/"Surface Roads"); raw text kept, no enum resolution.]
     g.splineType = OptText(row, "Spline_Type");
     if (const Node* chars = FindChild(row, "Characters")) {
         for (const Node* ch = FindChild(chars, "Character"); ch; ch = NextSibling(chars, ch, "Character"))

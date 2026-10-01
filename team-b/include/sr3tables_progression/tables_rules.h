@@ -120,6 +120,8 @@ struct GcHelicopter { GcHelicopterDraft draft; };                               
 struct GcMoneyStorageElement { Always<int32_t> numberOfCribs; Always<int32_t> maxStash; };  // index n
 struct GcCribs { std::vector<GcMoneyStorageElement> moneyStorage; };                        // <Cribs>
 struct GcCombatAiGun { Always<uint32_t> repositionMin, repositionMax, cantFireRepositionMin, cantFireRepositionMax; };
+// [OPEN - spec-tables-progression.md 10.2/14.9: parent of <Pepperspray> (sibling of <Gun> vs child of <Gun>);
+// the reader below looks for it under <Combat_AI> directly. NEEDS-EXE.]
 // spec: the loader reads the element named Spray_Min TWICE (a Spray_Max element is never read).
 struct GcCombatAiPepperspray { Always<uint32_t> sprayMin; };
 struct GcCombatAiGunfireEvade { Always<float> cowerFleeChance; Always<int32_t> cowerFleeMaxRank; };
@@ -305,6 +307,9 @@ struct SpawnCategory {
 SpawnCategory ParseSpawnCategory(const Node* row);
 std::vector<SpawnCategory> ParseSpawnInfoCategoriesTable(const Document& doc);
 
+// [OPEN - spec-tables-progression.md 10.6: the six-name Spline_Type list "label downgraded 2026-09-30 from
+// CONFIRMED to OPEN"; real data uses "All Roads" / "Surface Roads" in 58 of 61 rows (Team B measured
+// 58/61; spec 14.12: 56 + 2). The value is kept as raw text; no name list is enforced.]
 // spec 10.6 <Group> (spawn_info_groups.xtbl). `splineType` raw text: one of
 // "Highway Only"|"Boat"|"Offroad"|"Indoor"|"Baggage"|"Taxi" (-1 if none).
 struct SpawnGroupVehicle { std::optional<std::string> name, variant; }; // FUN_00ACB350(node, "Name", "Variant")

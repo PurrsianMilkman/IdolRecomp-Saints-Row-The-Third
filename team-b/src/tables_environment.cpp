@@ -237,6 +237,9 @@ std::vector<WindStage> ParseWindTable(const Document& doc) {
 RainLevel ParseRainLevel(const Node* row) {
     RainLevel r;
     const Node* params = sr3xtbl::FindChild(row, "Parameters");
+    // [OPEN - spec-tables-environment.md 1.4 (engine integer grammar): "this document does not say which accessor
+    // (signed or unsigned) each integer field below uses (`Density`, `Start_Time`, `On_Time`, ...), so whether a
+    // negative value survives is not pinned; to be settled against the executable". Unsigned read kept.]
     r.densityRaw = sr3xtbl::ReadUInt32Always(params, "Density");
     r.viewRadius = sr3xtbl::ReadFloatAlways(params, "View_Radius");
     r.speed = sr3xtbl::ReadFloatAlways(params, "Speed");
@@ -469,6 +472,8 @@ std::vector<SkyboxEffect> ParseSkyboxEffectsTable(const Document& doc) {
 TimeOfDayObjectType ParseTimeOfDayObjectType(const Node* row) {
     TimeOfDayObjectType t;
     t.name = getText(row, "Name");
+    // [OPEN - spec-tables-environment.md 1.4: accessor signedness of On_Time/Off_Time/Variation not pinned
+    // (ReadUInt32Always kept; a negative text value would not survive).]
     t.onTimeHHMM = sr3xtbl::ReadUInt32Always(row, "On_Time");
     t.offTimeHHMM = sr3xtbl::ReadUInt32Always(row, "Off_Time");
     t.variationMinutes = sr3xtbl::ReadUInt32Always(row, "Variation");
@@ -974,6 +979,8 @@ WeatherTimeOfDayCell ParseWeatherTimeOfDayCell(const Node* stageRow) {
 WeatherTimeSegment ParseWeatherTimeSegment(const Node* row) {
     WeatherTimeSegment seg;
     seg.name = getText(row, "Name");
+    // [OPEN - spec-tables-environment.md 1.4 and the Start_Time row: "which accessor (signed/unsigned) reads `t`";
+    // ReadUInt32Always kept.]
     seg.startTimeHHMM = sr3xtbl::ReadUInt32Always(row, "Start_Time");
     seg.rampOutTimeMinutes = sr3xtbl::ReadUInt32Always(row, "Ramp_Out_Time");
     const Node* weatherStages = sr3xtbl::FindChild(row, "Weather_Stages");

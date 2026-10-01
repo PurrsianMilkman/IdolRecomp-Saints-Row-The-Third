@@ -172,6 +172,12 @@ inline constexpr NamedValue kMouseAxisTable[3] = {
     {"MOUSE X", 0}, {"MOUSE Y", 1}, {"UNBOUND", -1},
 };
 
+// [OPEN - spec-tables-ui-controls.md 4.6: "`STICK_UNBOUND`=0 is the only `UNBOUND` entry with a
+// non-negative value and it collides with both `A` and `L_JOY`; whether the value column was
+// read correctly ... to be settled against the executable"; Review status 4.6: "NEEDS-EXE:
+// `STICK_UNBOUND`=0 collision". The spec gives NO confirmed sentinel for an unbound stick (the
+// other UNBOUND entries are -1), so the 0 below is reproduced as listed, collision included,
+// and no replacement value is invented.]
 // Gamepad-button table - 19 entries at 0x011220C8/0x011220CC (4.6). The last
 // three (L_JOY, R_JOY, STICK_UNBOUND) are a REAL, CONFIRMED value collision
 // with A/B/A respectively - the spec: "consumers must disambiguate by which
@@ -436,6 +442,7 @@ struct QteSequence {  // <QTE> row, 128 (0x80) bytes
     Always<bool> disablePlayer;         // Disable_Player
     Always<bool> viewRemotely;            // View_Remotely
     std::optional<std::string> playerWeapon;  // Player_Weapon -> FUN_00B81220 weapons-array resolver (raw text)
+    // [OPEN: numeric u16 vs name - spec-tables-ui-controls.md 7.1/7.2, NEEDS-EXE; see the .cpp]
     std::optional<uint16_t> successAnimation;  // Succes_State/Synced_Animation (NOTE: "Succes" - one 's' - is the
                                                 // actual, confirmed-real XML tag; not a transcription error, 7.1)
     Always<bool> successPlayerIsAttacker;        // Succes_State/Player_Is_Attacker
@@ -496,6 +503,7 @@ struct VehicleCameraFields {
 
     // Row ATTRIBUTES (not child elements) - "yes" (case-insensitive; the
     // spec's own exact-casing is not stated - see the .cpp).
+    // [OPEN: attribute vs child element - spec-tables-ui-controls.md 8.1, NEEDS-EXE; see the .cpp]
     bool skipCameraTransition = false;  // skip_camera_transition == "yes" (+0x870 bit 0x8000)
     bool useAltFreckleCam = false;      // use_alt_freckle_cam == "yes" (+0x870 bit 0x2000000; inherited from the
                                         // group row when absent, vehicle mode - not modelled, cross-row)

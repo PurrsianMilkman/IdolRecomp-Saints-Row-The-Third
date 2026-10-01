@@ -267,7 +267,23 @@ std::vector<MeleeTransitionState> ParseAllMeleeTransitionStates(const Document& 
 // "Every float is an 'always' read." The parents (Bullet_miss, Aiming,
 // Firing, Explosive_Miss) are not null-checked by the real reader either, so
 // a well-formed profile carries all four (spec section 8) - not enforced here.
+//
+// [OPEN / NEEDS-EXE - spec-tables-weapons-combat.md section 8, "Review status
+// (2026-09-30): NEEDS-EXE: `Recovery` in 0/20 real rows (section 18.6) and five
+// undocumented elements in 20/20 (Team B 9.83)"]. The `Bullet_miss -> Recovery`
+// path below is the spec's reading, but real data carries no `Recovery` element
+// in any of 20 rows while `Penalties`, `Bonuses`, `lag_amount`, `lag_time`,
+// `vertical_offset` occur in 20/20; the spec says the path may have been
+// mis-associated. The reader keeps the spec path (no change to the values) but
+// REPORTS the condition in `diagnostics` instead of silently returning empty
+// recovery fields.
+inline constexpr const char* kAimDriftRecoveryEmptyDiagnostic =
+    "aim_drift Recovery empty - spec path suspect (NEEDS-EXE)";
+
 struct AimDriftProfile {
+    // Holds kAimDriftRecoveryEmptyDiagnostic when `Bullet_miss` has no `Recovery`
+    // child (the three recovery* fields are then not present).
+    std::vector<std::string> diagnostics;
     std::string name;
     Always<float> turnSpeed;                       // turn_speed (row level)
     Always<float> bulletMissAimingCloseRange;         // Bullet_miss/Aiming/Close_range
@@ -276,7 +292,8 @@ struct AimDriftProfile {
     Always<float> bulletMissAimingFarAccuracy;              // .../Far_accuracy
     Always<float> bulletMissAimingBouncesPerSec;              // .../Bounces_per_sec
     Always<float> bulletMissAimingSpeedMultipler;                // .../Speed_multipler (misspelled in the reader itself, per spec)
-    Always<float> recoveryPenalty;                                  // Bullet_miss/Recovery/recover_penalty; documented default 1.0
+    // recovery*: OPEN / NEEDS-EXE (spec section 8 review status; see the note above this struct).
+    Always<float> recoveryPenalty;                            // Bullet_miss/Recovery/recover_penalty; documented default 1.0
     Always<float> recoveryTime;                                       // .../recover_time; documented default 500.0
     Always<float> recoveryBulletsToUnsteady;                            // .../bullets_to_unsteady; documented default -1.0
     Always<float> firingStartBurstBoxPct;                                 // Bullet_miss/Firing/start_burst_box_pct
@@ -518,6 +535,10 @@ std::vector<WeaponTracerRecord> ParseAllWeaponTracers(const Document& doc);
 // ===========================================================================
 // 12.2 weapon_tracer_materials.xtbl (spec section 12.2)
 // ===========================================================================
+// [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+// to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
+// `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
+// as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
 struct TracerMaterialRow {
     std::string materialName;    // Name: a physical-material name; the 33-name resolution table (FUN_006F76F0) is
                                     // never enumerated in this spec (only referenced, section 1.6) - kept as raw text;
