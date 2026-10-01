@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "pause_menu_change_control_scheme",
     "pause_map_zoom",
     "pause_map_set_gps",

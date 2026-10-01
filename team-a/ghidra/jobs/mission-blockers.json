@@ -10,8 +10,8 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=2",
-    "maxfuncs=30",
+    "depth:2",
+    "maxfuncs:30",
     "fade_is_fully_faded_out",
     "fade_is_fully_faded_in",
     "zscene_is_loaded",
@@ -30,8 +30,8 @@
    "args": [
     "{OUT}/func",
     "func",
-    "depth=1",
-    "maxfuncs=20",
+    "depth:1",
+    "maxfuncs:20",
     "0x0059f8c0",
     "0x0059fc40",
     "0x005a0270",

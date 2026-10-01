@@ -16,7 +16,7 @@
 //   str   <text ...>   find each exact NUL-terminated ASCII string and report its uses, like `lua`
 //                      without dumping the candidates.
 //
-// Options:
+// Options (write them as key:value in bridge jobs; key=value is split apart by the Windows batch launcher):
 //   depth=N      callee recursion depth for dumps (default 1; 0 = only the named functions)
 //   maxfuncs=N   cap on functions dumped per item (default 40)
 //   maxinsn=N    functions longer than this are listed but not dumped when reached as callees (default 600)
@@ -84,7 +84,10 @@ public class CrreishDump extends GhidraScript {
         List<String> items = new ArrayList<>();
         for (int i = 2; i < args.length; i++) {
             String a = args[i];
+            // ':' is accepted as well as '=': the PC agent starts Ghidra through analyzeHeadless.bat,
+            // and cmd.exe splits arguments at '=', so 'depth=2' arrives as two items there.
             int eq = a.indexOf('=');
+            if (eq < 0) eq = a.indexOf(':');
             if (eq > 0 && a.substring(0, eq).matches("[a-z]+")) {
                 String k = a.substring(0, eq), v = a.substring(eq + 1);
                 switch (k) {

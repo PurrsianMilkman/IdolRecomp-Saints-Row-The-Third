@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "mesh_mover_set_damaged_by_player_only",
     "mesh_mover_ready",
     "mesh_mover_apply_impulse",

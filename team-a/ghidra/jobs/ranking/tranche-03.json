@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "character_dont_regenerate",
     "character_clear_combat_move",
     "boss_battle_matt_set_player_as_avatar",

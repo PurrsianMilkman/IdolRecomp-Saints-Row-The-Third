@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "flee",
     "flashpoint_mission_status",
     "dialog_option_end_kbd_input",

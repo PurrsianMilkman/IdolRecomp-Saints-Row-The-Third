@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "main_menu_money_shot_check",
     "main_menu_maybe_show_voice_dialog",
     "main_menu_matchmaking",

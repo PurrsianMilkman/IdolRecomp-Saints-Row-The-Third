@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/lua",
     "lua",
-    "depth=1",
-    "maxfuncs=15",
-    "maxinsn=500",
+    "depth:1",
+    "maxfuncs:15",
+    "maxinsn:500",
     "store_interface_is_active",
     "spawn_region_max_spawn_dist_reset",
     "spawn_region_max_spawn_dist",
