@@ -29,9 +29,9 @@
    "args": [
     "{OUT}/func",
     "func",
-    "depth=1",
-    "maxfuncs=10",
-    "maxinsn=900",
+    "depth:1",
+    "maxfuncs:10",
+    "maxinsn:900",
     "0x00e1e460",
     "0x008489e0",
     "0x00a1fa10",

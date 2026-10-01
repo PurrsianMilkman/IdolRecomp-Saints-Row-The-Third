@@ -851,13 +851,13 @@ colour-state setter (`0x005d9120`, itself scaling each 0–255-range component b
 further internal call) — read as setting the screen-fade overlay's colour. Then, gated independently
 by each bit of the (possibly-defaulted) flags argument: bit `0x1` scales the duration argument by a
 fixed literal `1000.0` (a seconds→milliseconds conversion) and passes it into a helper (`0x0059f8c0`)
-that manages a small phase state machine and, in the branch this call reaches, queues an internal
-engine UI-command-queue message literally named `"screen_fade_do"` (read directly as a string
+that manages a small phase state machine and, in the branch this call reaches, ~~queues an internal
+engine UI-command-queue message literally named~~ calls the Lua global named `"screen_fade_do"` (read directly as a string
 constant used in the command's own lookup call) carrying the scaled duration and a fixed target alpha
-of `1.0` — i.e. queuing the actual timed fade-to-opaque-colour transition. Bit `0x2` independently
+of `1.0` — i.e. queuing the actual timed fade-to-opaque-colour transition. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: there is no command queue. `0x0059f8c0` is the fade-out request helper and takes its stack arguments in the order `(durationMs, completionCallback, flag)`; this wrapper passes `(trunc(duration × 1000.0), 0, 0)`, the `1000.0` being the double at `0x012a2d90`. When the helper starts a transition it calls the Lua global `screen_fade_do` directly in the interface (UI) Lua state, and only if that global is a function, with three numbers in this order: `flag` (0 here), the target alpha `1.0`, and `durationMs`. The C side never animates the fade; the transition is completed from the UI script side (§26.24). CONFIRMED — disassembly.]** Bit `0x2` independently
 triggers a second, more complex helper (`0x005a0270`) that ~~queues a *different* UI-command-queue
 message (referenced only by a numeric opcode, `0x53`, not a literal name) whose own downstream effect
-was not traced further in this pass~~ **[Superseded by §8.13: opens a host-gated (`0x0087ba20`) opcode-`0x53` record carrying the duration and the flags byte — the fade broadcast, not a UI-command-queue message.]**
+was not traced further in this pass~~ **[Superseded by §8.13: opens a host-gated (`0x0087ba20`) opcode-`0x53` record carrying the duration and the flags byte — the fade broadcast, not a UI-command-queue message.]** **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the record does not carry the flags argument. `0x005a0270` writes a 1-bit direction flag (1 = fade out), then the current overlay colour read back as 4 bytes, then 16 bits of `durationMs`, then 8 bits of its own second argument (always 0 from Lua), and sets byte `0x013effc5` := 1. A fourth float argument (1.0) is pushed by this wrapper but never read by the helper. CONFIRMED — disassembly. Full layout: §26.24.]**
 
 **Side effects / subsystem:** sets the engine's screen-fade overlay colour (from an optional RGB
 table, defaulting to black) and, depending on the flags argument (which defaults to "both"), queues one
@@ -868,9 +868,11 @@ counterpart implied by this cluster's `game_letterbox_fade_out` sibling name alr
 `spec-lua-bindings.md` §13.5, though that is a separate, differently-named registration this task did
 not decompile. **[CONFIRMED — disassembly for argument reading (including the table-as-colour shape
 and both defaults), the colour-setter call, and the `"screen_fade_do"` command-queue trigger and its
-gating bit; ~~OPEN for the identity/effect of the second, opcode-`0x53` command gated by the other bit.~~]** **[Resolved: see §8.13 — host-gated fade duration+flags broadcast.]**
+gating bit; ~~OPEN for the identity/effect of the second, opcode-`0x53` command gated by the other bit.~~]** **[Resolved: see §8.13 — host-gated fade duration+flags broadcast.]** **[2026-10-01, job `20261001T020200-team-a-nzxf`: argument reading, both defaults, the colour setter (`0x005d9120`, scaling by the `1/255` constant at `0x012a2e48`, applied to the overlay object at `0x0351f91c` through `0x00e4ae90`) and both bit gates re-confirmed: CONFIRMED — disassembly. The "UI/HUD command queue" subsystem wording above is superseded: bit `0x1` is a direct Lua call into the UI state (§26.24).]**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading and defaults, colour setter, both bit gates, request-helper signature and its `screen_fade_do(flag, 1.0, durationMs)` call, the `0x53` record layout; OPEN parts — the registered name of the completion native `0x005a0110` and the per-frame helper `0x0059fe70` (§26.24); the audio-id post inside the helper is HYPOTHESIS.**
 
 ### 2.10 `audio_conversation_play` (`0x00a3c9d0`) — 129 calls / 41 scripts
 
@@ -3297,16 +3299,16 @@ bit-for-bit: bit `0x1` scales the duration by a fixed constant (the same role §
 as a seconds-to-milliseconds `×1000.0` scale, not independently re-read as a literal by this pass) and
 calls `0x0059fc40` (a sibling of `fade_out`'s own `0x0059f8c0`); bit `0x2` calls `0x005a0400` (a sibling
 of `fade_out`'s own `0x005a0270`). `0x0059fc40`'s own body manages the same phase-state-machine shape
-already described for `fade_out`'s bit-`0x1` path and, when not already idle/faded, queues the exact
+already described for `fade_out`'s bit-`0x1` path and, ~~when not already idle/faded, queues~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: unless the fade is already fully in, a fade-out is still running (state 1), or one of the hold timestamps `0x012e6ab0`/`0x012e6ab8` is set and not yet reached (in the last two cases the request is parked in the deferred slot `0x013effd0`); otherwise it calls directly, with no queue,]** the exact
 same literally-named `"screen_fade_do"` command (looked up via `0x00e0cef0`/`0x00e0ca80`, the low-level
 pair actually behind that string lookup — not independently traced by §2.9, opened here for the first
 time), passing the scaled duration and a literal `0` in the argument slot §2.9 already documented
 `fade_out` filling with `1.0` — **the complementary "fade to transparent" counterpart of `fade_out`'s
-own "fade to opaque"**. `0x005a0400`'s own body uses the **same host-check gate** §8.2/§8.5/§8.18
+own "fade to opaque"**. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the helper's stack order is `(durationMs, completionCallback, flag)` and this wrapper passes `(trunc(duration × 1000.0), 0, 0)`, the `1000.0` now read as the double at `0x012a2d90`; the Lua call is `screen_fade_do(flag, 0.0, durationMs)` in the UI Lua state. On starting, the helper also resets the companion timestamps `0x012e6aac`/`0x012e6ab4` to -1, sets the state to 0 (fading in), parks the callback, and posts the id `0xa577ee9c` through `0x0045d990` (HYPOTHESIS: an audio event). CONFIRMED — disassembly, except where marked. Full state machine: §26.24.]** `0x005a0400`'s own body uses the **same host-check gate** §8.2/§8.5/§8.18
 share (`0x0087ba20`/`0x024d8534`, `+0x5c`==`+0x58`) before opening an opcode-`0x53` record — **the
 exact same opcode `fade_out`'s own bit-`0x2` path (`0x005a0270`) already left unidentified** (§2.9's own
 OPEN item) — carrying the duration (16 bits) and a flags byte (8 bits) via the bit-granularity writer
-`0x00881110`.
+`0x00881110`. **[Corrected 2026-10-01 (job `20261001T020200-team-a-nzxf`): the record starts with a 1-bit direction flag (0 = fade in) before the 16-bit duration, and the 8-bit value is the helper's own second argument (always 0 from Lua), not the Lua flags argument; it also sets byte `0x013effc5` := 0. CONFIRMED — disassembly.]**
 
 **Side effects / subsystem:** the fade-in counterpart of `fade_out` (§2.9): sets the screen-fade
 overlay to transition toward transparent over the given duration (immediate local `"screen_fade_do"`
@@ -3318,6 +3320,8 @@ command queue plus screen-overlay rendering state (same subsystem as §2.9). **[
 disassembly for the argument reading, both bit-gated call paths, the `"screen_fade_do"` payload value
 contrast with §2.9's own 1.0, and the opcode-`0x53`/host-gate identity; HIGH CONFIDENCE — inferred for
 the co-op-replication reading of opcode `0x53`'s purpose, since its consumer was not traced.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both bit gates, the `1000.0` scale, the request helper's signature, gating and deferral rules, the `screen_fade_do(flag, 0.0, durationMs)` call, the `0x53` record layout and host gate; HIGH CONFIDENCE — the co-op replication purpose of `0x53` (consumer still untraced); OPEN — what completes the fade from the executable side (§26.24).**
 
 ### 8.14 `hud_bar_off` (`0x00a47010`)
 
@@ -3524,16 +3528,18 @@ literal. **[CONFIRMED — disassembly, direct structural match against §8.14.]*
 (`0x00d9e8b0` — carrying a decompiler-database comment left by a prior pass of this project
 identifying it project-wide, not conversation-specific, `spec-extensionless-types.md` §4) and looked up
 in a fixed `0xf8`-byte-stride table (base `0x0153b294`, count `0x0153b29c`) via `0x00721be0`. If found,
-`0x007232e0` gates on a busy flag (`0x0153b556`) and a "this is a real scene entry, kind `1`" field
-check; when clear and matching, it stores the resolved entry pointer plus two caller-relayed values
-(`0x0153b538`/`0x0153b568`/`0x0153b56c`) as the "current" scene, and calls `0x0101b530` plus
-`0x00721c20(1,0,0)`.
+`0x007232e0` gates on a ~~busy flag~~ byte (`0x0153b556`; **[2026-10-01, job `20261001T020200-team-a-nzxf`: the "busy" label is unsupported — when set, prep refuses and `zscene_is_loaded` reports true, and its address is handed out by `0x0072d330`; HYPOTHESIS: a bypass toggle]**) and a "this is a real scene entry, kind `1`" field
+check; when clear and matching, it stores the resolved entry pointer plus two ~~caller-relayed values~~
+(`0x0153b538`/`0x0153b568`/`0x0153b56c`) as the ~~"current"~~ scene, and calls `0x0101b530` plus
+`0x00721c20(1,0,0)`. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the two extra values are constants, the `.rdata` dwords at `0x01180120`/`0x01180124`, both 0 in the file. The entry goes into the **pending** slot `0x0153b538`, not the current slot `0x0153b530`. If the entry already is the current scene the gate returns 1 with no change. `0x0101b530` is a stub that returns 1 and does nothing. `0x00721c20(1,0,0)` tears down the *current* scene (releases its handle, its secondary handle and its lightset, and sets the load state `0x0153b51c` to 0); it is called before the pending slot is written. CONFIRMED — disassembly. Lifecycle: §26.25.]**
 
-**Side effects / subsystem:** resolves a named scene entry and, if none is already in progress, latches
-it as the current scene and kicks off a load/prepare sequence via `0x0101b530`/`0x00721c20`.
+**Side effects / subsystem:** resolves a named scene entry and, if none is already in progress, ~~latches
+it as the current scene and kicks off a load/prepare sequence via `0x0101b530`/`0x00721c20`~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: tears down the previous scene (load state 0) and parks the new entry as pending; nothing in this call starts the load — the promotion to current (state 1) and the load completion (state 2) happen elsewhere, §26.25]**.
 Subsystem: cutscene/zone-transition streaming ("Z-scene"). **[CONFIRMED — disassembly for the hash,
-lookup, and gate structure; HIGH CONFIDENCE — inferred that `0x0101b530`/`0x00721c20` actually begin a
-load, from the function's own registered name, since neither was opened this pass.]**
+lookup, and gate structure; ~~HIGH CONFIDENCE — inferred that `0x0101b530`/`0x00721c20` actually begin a
+load, from the function's own registered name, since neither was opened this pass.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`: the load-start reading is contradicted by the executable (see the correction above). CONFIRMED — disassembly for the gate, the stub, the teardown and the pending slot.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — hash, lookup, gate, constant extra values, stub `0x0101b530`, teardown `0x00721c20`, pending-slot write; HYPOTHESIS — `0x0153b556` as a bypass toggle; OPEN — who promotes pending to current and completes the load (`0x00720410`, `0x007285c0` and their callers), and who fills the scene table (§26.25).**
 
 ### 8.22 `game_audio_get_audio_id` (`0x008437e0`)
 
@@ -6317,9 +6323,11 @@ re-derived.
 
 **Return:** 1 boolean.
 
-**Body:** if given, a fast path (`0x00723d20`) checks a per-name cutscene state and returns true immediately if its state field reads exactly `1` ("loaded"). Otherwise (name absent, or the fast path didn't confirm state `1`), falls through to a broader check (`0x00721db0`): true immediately if a global flag (`0x0153b556`) is set; else, if a name was given and resolves through a hash lookup (`0x00d9e8b0`→`0x00721be0`) to a record distinct from a fixed "current" sentinel (`0x0153b530`), true unless that record's state field equals `1` (**note the apparently INVERTED sense relative to the fast path above — read directly but not independently reconciled, OPEN**); else falls back to a global state code (`0x0153b51c`) equal to `2`.
+**Body:** ~~if given, a fast path (`0x00723d20`) checks a per-name cutscene state and returns true immediately if its state field reads exactly `1` ("loaded"). Otherwise (name absent, or the fast path didn't confirm state `1`), falls through~~ **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: the polarity was misread. The fast path `0x00723d20(name)` reports whether the name hashes to a table entry whose field `+8` equals 1; that field is an entry **kind** (1 = a loadable zscene), not a load state. When the fast path reports **false** the function pushes **true** at once (nothing to load); when it reports true the function falls through to the broader check below. With no name (or a non-string, non-number argument) the fast path is skipped. CONFIRMED — disassembly.]** falls through to a broader check (`0x00721db0`): true immediately if a global flag (`0x0153b556`) is set; else, if a name was given and resolves through a hash lookup (`0x00d9e8b0`→`0x00721be0`) to a record distinct from a fixed "current" sentinel (`0x0153b530`), true unless that record's ~~state~~ kind field equals `1` (~~**note the apparently INVERTED sense relative to the fast path above — read directly but not independently reconciled, OPEN**~~ **[2026-10-01, job `20261001T020200-team-a-nzxf`: no inversion — both tiers test the same kind field the same way; for an entry that passed the fast path this branch yields false]**); else falls back to a global state code (`0x0153b51c`) equal to `2`.
 
-**Side effects/subsystem:** none (pure query). Cutscene/zscene subsystem. **[CONFIRMED — disassembly for the two-tier dispatch and the named fast-path's exact state test; OPEN — the real-world meaning of state codes `1`/`2` in the broader fallback, and the apparent sense-inversion between the two tiers.]**
+**Side effects/subsystem:** none (pure query). Cutscene/zscene subsystem. **[CONFIRMED — disassembly for the two-tier dispatch ~~and the named fast-path's exact state test~~; ~~OPEN — the real-world meaning of state codes `1`/`2` in the broader fallback, and the apparent sense-inversion between the two tiers.~~]** **[2026-10-01, job `20261001T020200-team-a-nzxf`. Resulting behaviour, CONFIRMED — disassembly: with no name, true iff byte `0x0153b556` is set or the load state `0x0153b51c` equals 2. With a name: true if the name is not in the table or its entry is not kind 1; otherwise true if `0x0153b556` is set; otherwise false if the entry is not the current scene (`0x0153b530`); otherwise true iff the load state equals 2. The state codes: 2 = loaded is CONFIRMED (the value tested); 1 = loading and 0 = idle are HIGH CONFIDENCE (from the writers `0x00720410` and the two teardown paths, whose bodies were not dumped). The sense-inversion item is closed. See §26.25.]**
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — argument reading, both tiers and their composition, state 2 = loaded; HIGH CONFIDENCE — 1 = loading, 0 = idle; OPEN — what drives the state to 1 and 2 (§26.25).**
 
 ### 14.24 `vehicle_speed_cancel` (`0x00a635f0`) — 16 calls
 
@@ -9701,15 +9709,21 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 **Side effects/subsystem:** none (pure read). Audio/screen-fade state query. **[CONFIRMED — disassembly, 2-instruction body; the shared-global identification confirmed by independently decompiling 0x0059f8c0 this same pass, not inferred from the name alone.]**
 
+**Addition 2026-10-01 (bridge job `20261001T020200-team-a-nzxf`):** the test is identical to `fade_is_fully_faded_out` (`0x00a49790`, via `0x0059fa10`): both read 0x012e6aa4 and compare with 3, and state 3 means "fully faded out" (encoding in §26.24). `fade_is_fully_faded_in` (`0x00a49760`, via `0x0059fa00`) compares the same dword with 2. None of the three takes an argument. CONFIRMED — disassembly. The next function in the same UI wrapper, 0x0059fb60, compares the state with 2 and is almost certainly `sfx_faded_in` (HIGH CONFIDENCE; its registered name was not dumped). The slot before this one in the wrapper registers 0x005a0110, the fade-completion native (§26.24).
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED parts — body, return, identity with `fade_is_fully_faded_out`; HIGH CONFIDENCE — 0x0059fb60 is `sfx_faded_in`; OPEN — registered name of 0x005a0110 (§26.24).**
+
 ### 26.10 `pause_menu_quit_game_internal` (0x007e0470) — 311-entry UI-wrapper table, wrapper 0x007e18e0 (the same wrapper §16.11-§16.13 document for the sibling `pause_menu_*` functions)
 
 **Arguments:** none. **Return:** none.
 
-**Body:** calls the same screen-fade-request primitive (0x0059f8c0) with 3 confirmed-explicit arguments (0, callbackAt0x007e0450, 0) — a fade mode/duration of 0 and a real completion callback.
+**Body:** calls the same screen-fade-request primitive (0x0059f8c0) with 3 confirmed-explicit arguments (0, callbackAt0x007e0450, 0) — ~~a fade mode/duration of 0~~ a fade-out of duration 0 and a real completion callback. **[Corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`: with the helper's stack order `(durationMs, completionCallback, flag)`, this is a zero-millisecond fade-out request with flag 0. If the screen is already fully faded out the helper calls the callback at once with 3; otherwise the callback is parked (in-flight or deferred, §26.24) and runs when the fade completes. CONFIRMED — disassembly for the helper; the callback chain as described below.]**
 
 **The callback target 0x007e0450, independently disassembled to confirm it's a genuine separate function and not a boundary artifact:** confirmed real — its own body sets a global flag (0x01503ea4 = 1), calls two further functions (0x00877410, then 0x00707880 with a literal 0), and **tail-jumps** (not calls) into 0x00554270. This is very plausibly the real "now actually quit/shut down" logic, deferred until after the requested fade completes — a fade-to-black-then-quit sequence, matching the name precisely. Not decompiled past this shape (0x00554270/0x00877410/0x00707880 all OPEN).
 
 **Side effects/subsystem:** requests a screen fade, then (once it completes) sets a shutdown-request flag and jumps into a shared shutdown path. Pause-menu / application-exit lifecycle. **[CONFIRMED — disassembly, full body of both the wrapper and its callback target's own top-level shape.]**
+
+**Review status (2026-10-01): re-derived from the executable for the fade-request side only (job `20261001T020200-team-a-nzxf`): CONFIRMED — the argument order and the helper's behaviour; not re-derived — the callback target 0x007e0450 and its callees (0x00554270/0x00877410/0x00707880 still OPEN).**
 
 ### 26.11 `pcu_wear_current_clothing` (0x0082f7d0) — 311-entry UI-wrapper table, wrapper 0x00830230 ("pcu")
 
@@ -9816,8 +9830,8 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 ### 26.23 Cross-function observations
 
-- **Major new shared-primitive resolution: the 0x00e0xxxx "builder/named-callback" family, previously left OPEN at §19.5 as "a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record."** This pass fully decompiled 8 of its members (0x00e1a1b0, 0x00e0ca80, 0x00e0ce40, 0x00e0ce60, 0x00e0cfb0, 0x00e0ce00, 0x00e0cd00, 0x00e0ce20) and can now characterize it precisely: 0x00e1a1b0 is a zero-real-argument accessor always returning one fixed global "value-list builder" singleton object; 0x00e0ca80(targetNameString, builderHandle) "opens"/resolves a **named Lua-side callback target** (its own real signature takes 2 more arguments that, at every observed call site in this tranche, are confirmed via disassembly to be leftover 0/0 values from the immediately-preceding builder-accessor call, not garbage); and the remaining members are thin wrappers around the ALREADY-established `lua_push*` primitives (`lua_pushnumber` for both the double- and float-taking variants, an unnamed `lua_pushnil`-shaped call for the "nil" pushes, `lua_pushstring` for the string-or-nil variant, `lua_pushboolean`), each incrementing a running pushed-value count on the builder object, with a final "finalize/dispatch" call (0x00e0cd00 → 0x00e0cba0, OPEN) that fires the resolved named callback with the accumulated argument list. In other words: **this whole family is a generic "call a named Lua callback with N arguments" mechanism, layered on top of this document's own already-documented `lua_push*` primitives — not a separate network-record system.** This resolves/upgrades §19.5's own OPEN characterization directly. Used by 3 of this tranche's own functions (`pcu_report_item_colors`, `pcu_get_categories_in_area`, `pcu_get_areas`) and also found, independently, inside the newly-decompiled screen-fade primitive below.
-- **A second major new-primitive resolution: 0x0059f8c0, previously cited only as "conditionally calls 0x0059f8c0/0x008b7260" at §16.9 with no characterization, is a screen-fade-request primitive** with the real signature (fadeMode, completionCallback, duration), backed by a small state machine (globals 0x012e6aa0/0x012e6aa4/0x012e6aa8/0x013effc8/0x013effcc/0x013effd0) and internally using the SAME 0x00e0xxxx builder family to fire a named `"screen_fade_do"` callback with 3 numeric parameters. **This directly explains `sfx_faded_out`'s own query field (0x012e6aa4 == 3) as literally the same fade-state global this primitive itself drives** — a concrete, disassembly-confirmed link between two functions in this very tranche (§26.9/§26.10/§26.6 all touch this one mechanism from different sides).
+- **Major new shared-primitive resolution: the 0x00e0xxxx "builder/named-callback" family, previously left OPEN at §19.5 as "a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record."** This pass fully decompiled 8 of its members (0x00e1a1b0, 0x00e0ca80, 0x00e0ce40, 0x00e0ce60, 0x00e0cfb0, 0x00e0ce00, 0x00e0cd00, 0x00e0ce20) and can now characterize it precisely: 0x00e1a1b0 is a zero-real-argument accessor always returning ~~one fixed global "value-list builder" singleton object~~ **[corrected 2026-10-01, job `20261001T020200-team-a-nzxf`: the interface (UI) Lua state at 0x02a45450, as `spec-lua-bindings.md` §14.1 says; the builder object is what 0x00e0ca80 returns. This settles the conflict that spec flags between §26.23 and §14.1]**; 0x00e0ca80(targetNameString, builderHandle) "opens"/resolves a **named Lua-side callback target** (its own real signature takes 2 more arguments that, at every observed call site in this tranche, are confirmed via disassembly to be leftover 0/0 values from the immediately-preceding builder-accessor call, not garbage); and the remaining members are thin wrappers around the ALREADY-established `lua_push*` primitives (`lua_pushnumber` for both the double- and float-taking variants, an unnamed `lua_pushnil`-shaped call for the "nil" pushes, `lua_pushstring` for the string-or-nil variant, `lua_pushboolean`), each incrementing a running pushed-value count on the builder object, with a final "finalize/dispatch" call (0x00e0cd00 → 0x00e0cba0, OPEN) that fires the resolved named callback with the accumulated argument list. In other words: **this whole family is a generic "call a named Lua callback with N arguments" mechanism, layered on top of this document's own already-documented `lua_push*` primitives — not a separate network-record system.** This resolves/upgrades §19.5's own OPEN characterization directly. Used by 3 of this tranche's own functions (`pcu_report_item_colors`, `pcu_get_categories_in_area`, `pcu_get_areas`) and also found, independently, inside the newly-decompiled screen-fade primitive below.
+- **A second major new-primitive resolution: 0x0059f8c0, previously cited only as "conditionally calls 0x0059f8c0/0x008b7260" at §16.9 with no characterization, is a screen-fade-request primitive** with the real signature ~~(fadeMode, completionCallback, duration)~~ **(durationMs, completionCallback, flag)** **[corrected 2026-10-01 from bridge job `20261001T020200-team-a-nzxf`, read off the raw stack offsets: the integer millisecond duration is the first argument and the flag (stored in 0x013effc8 and passed to Lua first) the third. CONFIRMED — disassembly]**, backed by a small state machine (globals 0x012e6aa0/0x012e6aa4/0x012e6aa8/0x013effc8/0x013effcc/0x013effd0) and internally using the SAME 0x00e0xxxx builder family to fire a named `"screen_fade_do"` callback with 3 numeric parameters. **[2026-10-01, job `20261001T020200-team-a-nzxf`: globals list CONFIRMED and extended with 0x013effc0, 0x012e6aac/0x012e6ab0/0x012e6ab4/0x012e6ab8 and 0x013effc5; the three parameters are `(flag, targetAlpha, durationMs)`. Full state machine in §26.24.]** **This directly explains `sfx_faded_out`'s own query field (0x012e6aa4 == 3) as literally the same fade-state global this primitive itself drives** — a concrete, disassembly-confirmed link between two functions in this very tranche (§26.9/§26.10/§26.6 all touch this one mechanism from different sides).
 - **A repeated, newly-identified decompiler-rendering gap, distinct from this document's already-established register-forwarding hidden-argument convention:** at least 4 separate call sites across 3 functions in this tranche (0x00822040 and 0x00746770 inside `pcu_report_item_colors`; 0x00822000 inside `pcu_get_categories_in_area`; 0x007f3520 inside `game_use_radial_menu_item`) show a genuine, single, explicitly-`PUSH`ed stack argument in the raw disassembly that the decompiler's own pseudocode rendering shows as a bare zero-argument call. Unlike the established register-forwarding idiom (where no push exists at all), these ARE real pushes — just dropped from the decompiled text entirely. Worth flagging as its own distinct artifact category for future tranches working in this same address neighborhood (the 0x0082xxxx/0x0084xxxx PCU/radial-menu regions).
 - **A second new hidden-argument variant, found in `pcr_strip_clothing`: a real argument reaching a callee not via a register, but via a stale, not-yet-cleaned stack slot left over from an immediately preceding, separately-called function** (the compiler had combined/deferred the two calls' stack cleanups into one `ADD ESP` after the second call). This is mechanically different from both the already-established register-forwarding convention AND the "decompiler silently drops a real push" pattern above — a third distinct flavor of hidden-argument bug this cluster's address range exhibits, all found only by going to raw disassembly.
 - **The single clearest and most consequential hidden-argument catch this pass: `game_set_equipped_grenade`.** Its decompiled pseudocode makes the function look almost like a no-op (argument computed and apparently unused; current-player call's result apparently discarded), which would have been easy to mis-report as "another hardcoded stub" by analogy with §26.3/§26.8 of this same tranche — but raw disassembly proves it forwards a real hidden `this` pointer (player + 0x1b78, the SAME quick-item sub-object §26.18's own slot-12 special case touches) and a real adjusted argument into a genuine, meaningful equip-grenade setter. A caution for future passes: an apparently-unused decompiled value in THIS specific cluster is not reliable evidence of dead code — check the raw disassembly before concluding a stub, even when the surface pattern looks identical to a confirmed real stub elsewhere in the same tranche.
@@ -9827,6 +9841,260 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 - **A third global identified in the area-state cluster already tracked at §19.1** (0x022ffd40, alongside the already-known 0x022ffd44/0x022ffd48/0x022ffd4c), feeding a shared UI-refresh notifier (0x0082dc40) called identically by this tranche's own `pcu_get_areas` and (indirectly, via the shared revalidate-everything primitive 0x0082e210) `pcu_wear_current_clothing`/`pcu_discard_slot`.
 - **A fourth confirmed direct consumer of the exact §16.16/§19.16 shared 63-slot PCR composite-item list**: `pcr_change_eye_color`, joining `pcr_change_composite`/`pcr_set_random_composite`/`pcr_change_skin_color` already on record.
 - No opcode/network-replicate record-and-replicate idiom (the 0x00710cb0 pattern) was found in any of these 22 — consistent with §19.16's own observation that the UI/customization cluster doesn't use that idiom; the closest analogue here is the newly-resolved 0x00e0xxxx named-callback builder family, which is a genuinely different mechanism.
+
+**Review status (2026-10-01): the two fade/builder bullets above re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED — helper signature, globals, the 0x00e1a1b0 role; OPEN — 0x00e0cba0 (the dispatch's inner call). The other bullets were not re-derived in this job.**
+
+### 26.24 Screen fade state machine (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020200-team-a-nzxf` (Lua entries `fade_out`, `fade_in`,
+`fade_is_fully_faded_out`, `fade_is_fully_faded_in`, `sfx_faded_out`; function listings of 0x0059f8c0,
+0x0059fc40, 0x005a0270, 0x005a0400; reference lists of the globals). Wrapper-level detail lives in §2.9,
+§8.13, §26.9, §26.10; this unit gathers the shared machinery. Labels as in the rest of this document.
+
+**Globals** (initial value = the file-backed value the executable starts with). **CONFIRMED —
+disassembly** for every row: the reference lists give every reader and writer in the binary.
+
+| Address | Initial | Role | Written by |
+|---|---|---|---|
+| 0x012e6aa4 | 2 | fade **state** (encoding below) | 0x0059f8c0 (:= 1), 0x0059fc40 (:= 0), init/shutdown pair 0x0059fa30/0x0059faa0, completion code at 0x005a0136 (:= 3) and 0x005a0159 (:= 2) |
+| 0x012e6aa8 | 2 | requested **target**: 3 = out, 2 = in | 0x0059f8c0 (:= 3), 0x0059fc40 (:= 2), 0x0059fa30, 0x0059faa0 |
+| 0x012e6aa0 | -1 | handle set up at init; while it is -1 no Lua call is made | 0x0059fa30 only |
+| 0x013effc8 | 0 (init writes 1) | third argument (`flag`) of the last request; passed to Lua | 0x0059f8c0, 0x0059fc40, 0x0059fa30 |
+| 0x013effcc | 0 | completion callback of the transition in flight | 0x0059f8c0, 0x0059fc40, completion code (0x005a01bd) |
+| 0x013effd0 | 0 | **deferred** callback: a request that could not start yet | 0x0059f8c0, 0x0059fc40, completion code (cleared at 0x005a01b1) |
+| 0x013effc0 | 0 | object handle placed in the Lua call builder before `screen_fade_do` is called | 0x0059fa30 (set), 0x0059faa0 (cleared) |
+| 0x012e6ab0, 0x012e6ab8 | -1, -1 | two "hold until" millisecond timestamps that block a fade-in | 0x0059fe70, completion code |
+| 0x012e6aac, 0x012e6ab4 | -1, -1 | two companion timestamps, reset to -1 when a fade-in starts | 0x0059fc40, 0x0059fe70, completion code |
+| 0x013effc5 | 0 | byte: last opcode-0x53 record was a fade-out (1) or fade-in (0) | 0x005a0270 (:= 1), 0x005a0400 (:= 0), 0x0059fa20 (:= 0) |
+
+**State encoding of 0x012e6aa4** — **CONFIRMED — disassembly**:
+
+| Value | Meaning |
+|---|---|
+| 0 | fading in (transition toward transparent running) |
+| 1 | fading out (transition toward opaque running) |
+| 2 | fully faded in, screen visible — the start-up state |
+| 3 | fully faded out, screen covered |
+
+Queries: `fade_is_fully_faded_out` and `sfx_faded_out` are true when the state is 3;
+`fade_is_fully_faded_in` when it is 2 (§26.9). **CONFIRMED.**
+
+**Request helpers** — 0x0059f8c0 (fade out) and 0x0059fc40 (fade in), both taking
+`(durationMs, completionCallback, flag)`. **CONFIRMED — disassembly, full bodies.** Both Lua wrappers
+pass `(trunc(seconds × 1000), 0, 0)`; §26.10 passes `(0, callback, 0)`.
+
+Fade-out request:
+1. Posts the 32-bit id 0x5c0b1b1a through 0x0045d990 (via 0x005542f0). HYPOTHESIS: an audio event.
+2. If the state and the target are both 3, it calls the callback (if any) with 3 and stops.
+3. Otherwise it sets the target to 3 and stores `flag` in 0x013effc8.
+4. If a fade-in is running (state 0), it parks the callback in the deferred slot 0x013effd0 and stops.
+   The state is left alone and no Lua call is made.
+5. Otherwise, if 0x012e6aa0 is not -1 and the UI Lua state defines `screen_fade_do` as a function,
+   it calls `screen_fade_do(flag, 1.0, durationMs)` in that state.
+6. It sets the state to 1 and stores the callback in 0x013effcc.
+
+Fade-in request, the mirror image:
+1. Posts id 0xf0493dc8 when two engine conditions are false (HYPOTHESIS: an audio event).
+2. If the state and the target are both 2, it calls the callback with 2 and stops.
+3. It sets the target to 2 and stores `flag`.
+4. It defers (callback into 0x013effd0, then stops) in two cases:
+   - a fade-out is running (state 1);
+   - either hold timestamp 0x012e6ab0/0x012e6ab8 is set (value ≥ 0) and the millisecond clock at
+     0x01320d9c has not passed it yet (the comparison tolerates a 900,000,000 ms wrap).
+5. Otherwise it resets 0x012e6aac/0x012e6ab4 to -1 and makes the same Lua call with
+   `(flag, 0.0, durationMs)`.
+6. It sets the state to 0, stores the callback, and posts id 0xa577ee9c.
+
+The C side therefore never animates anything. It sets the direction (state 1 or 0), asks the UI script
+to run the transition, and parks a callback. A "queued on a UI command queue" reading (2026-09-30) is
+superseded: this is a direct call of a Lua global.
+
+**Broadcast helpers** — 0x005a0270 (out) and 0x005a0400 (in). **CONFIRMED — disassembly.** Both do
+nothing unless the host gate holds: the session object (0x0087ba20 → 0x024d8534) exists and its
+`+0x5c` equals its `+0x58`. Each then opens an opcode-0x53 record (0x0086f5f0) and writes:
+- a 1-bit direction flag (1 = out, 0 = in);
+- for fade-out only, the current overlay colour as 4 bytes;
+- 16 bits of `durationMs`;
+- 8 bits of the helper's second argument (0 from Lua).
+
+The record goes to the session's peers (0x0086f1b0) and is closed (0x0086eb20). Each helper also sets
+0x013effc5. HIGH CONFIDENCE: the record replicates the fade to co-op clients (the consumer is not traced).
+
+**What completes a fade.**
+- **CONFIRMED — disassembly:**
+  - Apart from the init/shutdown pair, the only stores of 3 and 2 into the state are at 0x005a0136 and
+    0x005a0159. They sit in code that Ghidra has not made into a function; its references run from
+    0x005a011a to 0x005a01bd.
+  - That code reads the target, the in-flight callback and the deferred callback. It clears the
+    deferred slot, rewrites the in-flight slot, and writes the hold and companion timestamps.
+  - The UI wrapper 0x005a01d0 registers the code pointer 0x005a0110 in the slot just before
+    `sfx_faded_out`, so 0x005a0110 is a Lua-callable native in the UI state.
+  - No C routine in the dumps advances the fade per frame or compares elapsed time with the duration;
+    the duration is only ever passed to Lua.
+- **HIGH CONFIDENCE** (the body at 0x005a0110 appears only as scattered reference lines):
+  - A fade completes when the UI script calls the native at 0x005a0110 after `screen_fade_do` has
+    finished its transition.
+  - That native sets the state to the target (3 after a fade-out, 2 after a fade-in) and fires the
+    parked callback.
+  - If the opposite direction was requested in the meantime (deferred slot non-zero, target different
+    from the new state), it starts that request.
+- **HYPOTHESIS:** 0x0059fe70 is the per-frame fade update that re-issues deferred requests once the
+  hold timestamps expire. It is the only caller of both request helpers and the only setter of the hold
+  timestamps.
+
+**Host summary (for Team B).**
+- Keep one state dword with the encoding above; start it at 2.
+- `fade_out(d, colour, flags)`: set the overlay colour. If `flags & 1`, run the fade-out request with
+  `trunc(d × 1000)` ms. If `flags & 2` and this machine is the co-op host, emit the 0x53 record (single
+  player can ignore it).
+- `fade_in(d, flags)` works the same way, with no colour.
+- A request only flips the state to 1 (out) or 0 (in) and calls `screen_fade_do(flag, alpha, ms)` in
+  the UI Lua state, and only if that global is a function. If it is not defined, the real engine never
+  completes the fade either, so a script that busy-polls `fade_is_fully_faded_out()` never returns.
+- `fade_is_fully_faded_out()` and `sfx_faded_out()` are true when the state is 3;
+  `fade_is_fully_faded_in()` when it is 2.
+
+**HOST-SIDE SUBSTITUTE (not engine behaviour):** a host that does not run the shipped UI scripts may
+complete the transition itself after `durationMs` milliseconds. It sets the state to the target, calls
+and clears the in-flight callback, and then issues the deferred request if the deferred slot is set and
+the target differs from the new state. The engine does none of this in C; this only stands in for the
+UI script's call to the native at 0x005a0110.
+
+**OPEN — next dump** (from the interpretation of job `20261001T020200-team-a-nzxf`):
+- Fade completion: `func 0x005a0110`. If Ghidra has no function there, run `xref 0x005a0110` and
+  `func 0x005a01d0` to read the registered name string, then `lua <that name>`. Also `lua sfx_faded_in`
+  to confirm 0x0059fb60.
+- Fade per-frame and init: `func 0x0059fe70 0x0059fa30 0x0059faa0 0x0059fa20 0x0059f9c0 0x0059f9f0
+  0x0059fb90 0x00e0cba0`; `xref 0x0059fe70 0x0059fa30 0x013effc0 0x012e6ab0`.
+- Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — globals and initial values, state encoding, both request helpers, both broadcast
+helpers, the three queries, the location of the completion stores; HIGH CONFIDENCE — completion via the
+UI-registered native 0x005a0110, the co-op purpose of 0x53; HYPOTHESIS — audio-id posts, 0x0059fe70 as
+the per-frame update; OPEN — the name and full body of 0x005a0110, the body of 0x0059fe70.**
+
+### 26.25 zscene lifecycle (exe-derived 2026-10-01)
+
+Source: bridge job `20261001T020200-team-a-nzxf` (Lua entries `zscene_prep`, `zscene_is_loaded`;
+listings of 0x007232e0, 0x00721be0, 0x00721c20, 0x00721db0, 0x00723d20, 0x0101b530; reference lists).
+Wrapper detail lives in §8.21 and §14.23.
+
+**Globals.** **CONFIRMED — disassembly** for the addresses and writers; roles as labelled.
+
+| Address | Role | Written by |
+|---|---|---|
+| 0x0153b294 / 0x0153b29c | scene table base / count; entries 0xf8 bytes | 0x007231e0, 0x00723d60, 0x00723e40 |
+| 0x0153b530 | current scene entry | cleared by 0x00720320 and one path of 0x00721c20; set by 0x00720410 (from the pending slot), 0x00722f10, 0x007231e0, 0x00728440 |
+| 0x0153b538 | pending (requested) entry | set by prep's gate 0x007232e0; cleared by 0x00720410; 0x00720320 copies the current entry into it |
+| 0x0153b51c | load state: 0 idle, 1 loading, 2 loaded | := 0 by 0x00720320 and 0x00721c20; := 1 by 0x00720410; := 2 by 0x007285c0; also written by 0x00722f10, 0x007231e0 |
+| 0x0153b556 | byte; when set, prep refuses and `zscene_is_loaded` reports true (HYPOTHESIS: a bypass toggle) | 0x0072df50; its address is handed out by 0x0072d330 |
+| 0x0153b568 / 0x0153b56c | two values prep stores (always 0 from Lua) | 0x007232e0; read and re-stored by 0x00720410 |
+| 0x0153b534 | secondary handle, released on teardown through service 9 | set by 0x007285c0, cleared by 0x00721c20 |
+| 0x0153b541 / 0x0153b542 | bytes set on teardown | 0x00721c20, 0x00720320, 0x00722f10 |
+
+State code: 2 = loaded is **CONFIRMED** (the value tested). 1 = loading and 0 = idle are **HIGH
+CONFIDENCE**: they are read from which routines write each value, but the bodies of 0x00720410 and
+0x007285c0 were not dumped.
+
+**Scene entry (stride 0xf8).** **CONFIRMED** for the offsets:
+- `+0x4`: CRC-32 of the lower-cased name (0x00d9e8b0, seed 0); the lookup key used by 0x00721be0, a
+  linear scan.
+- `+0x8`: kind; 1 marks an entry that can be prepared and loaded. Nothing dumped writes it.
+- `+0xc`: primary resource handle.
+- `+0x10`: alternate handle. It is used when the primary is not live (the handle query 0x00dafbb0
+  returns ≤ 0), or when the local player's byte `+0xa41` is 1. HYPOTHESIS: a gender variant (cf.
+  §28.21).
+- `+0xac`: "has a lightset" byte.
+- `+0xad`: lightset file name. It is looked up by CRC in the lightset cache and removed from it on
+  teardown.
+
+**Lifecycle** (CONFIRMED — disassembly unless marked):
+1. `zscene_prep(name)` runs the gate 0x007232e0, which returns 0 in three cases: byte 0x0153b556 is
+   set, the entry is missing, or the entry's kind is not 1. If the entry is already the current scene,
+   it returns 1 and changes nothing. Otherwise it:
+   - calls the do-nothing stub 0x0101b530;
+   - tears the current scene down with 0x00721c20(1, 0, 0);
+   - writes the entry to the pending slot and the two zero constants to 0x0153b568/0x0153b56c.
+2. The teardown 0x00721c20(a, b, c):
+   - **Cutscene guard.** It does nothing if the cutscene manager (*0x0153b528) exists with `+8` == 1
+     and the cutscene state 0x0153b520 is between 7 and 13 (HYPOTHESIS: never unload under a playing
+     cutscene). It also does nothing if there is no current scene.
+   - **Handle not live.** It only acts when the handle classifier 0x00dafb60 reports class 1 and `c`
+     is non-zero (prep passes 0). Then it releases 0x0153b71c/0x0153b720, clears the current pointer
+     and the state, and sets 0x0153b541.
+   - **Handle live.** It releases the secondary handle 0x0153b534 through service 9 and drops the
+     lightset if `+0xac` is set. Then it releases the selected handle (0x00dafad0) and, if `a` is
+     non-zero, calls 0x007317a0(1). Last, it sets 0x0153b541 := 0, 0x0153b542 := `b` and the state
+     := 0. The current pointer is left as it was.
+3. Promotion from pending to current, with state := 1, is done by 0x00720410. The load completes with
+   state := 2 in 0x007285c0, which also sets 0x0153b534. **OPEN**: who calls them. Candidates from the
+   reference lists are 0x00725df0 (it calls the gate, the teardown and the fade-out request 0x0059f8c0),
+   0x00737780 (it calls the gate) and 0x0072d660 (it tests state == 2).
+4. `zscene_is_loaded(name)` turns true once the entry is current and the state is 2 (full truth table
+   in §14.23).
+5. Who fills the scene table is **OPEN**. The only writers of its base and count are 0x007231e0,
+   0x00723d60 and 0x00723e40, none of them dumped. Which data file feeds it cannot be answered from
+   this job.
+
+**Host summary.**
+- `zscene_prep(name)`: if the name resolves to a kind-1 entry and the bypass byte is clear, release the
+  current scene's resources, set the state to 0 and make the entry pending.
+- `zscene_is_loaded` follows §14.23.
+
+**OPEN — next dump** (from the interpretation of job `20261001T020200-team-a-nzxf`):
+- `func 0x00720410 0x007285c0 0x00720320 0x00722f10 0x007231e0 0x00723d60 0x00723e40 0x00725df0
+  0x00737780 0x0072d660 0x007203e0 0x0072df50 0x0072d330`.
+- `xref 0x0153b534 0x0153b541 0x01180120`.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — prep gate, stub, teardown, pending slot, entry offsets, `zscene_is_loaded` truth
+table, state 2 = loaded; HIGH CONFIDENCE — state 1 = loading, 0 = idle; HYPOTHESIS — bypass byte, gender
+variant, cutscene guard; OPEN — load start and completion drivers, table source.**
+
+### 26.26 UI resolution queries `vint_is_std_res` / `vint_get_safe_frame` (exe-derived 2026-10-01)
+
+Note: this document had no earlier entry for either function. Their registrations are recorded in
+`spec-lua-bindings.md` §13.7 (UI registrar 0x00e1dfb0); this unit adds the behaviour from bridge job
+`20261001T020200-team-a-nzxf`. Both exist only in the UI Lua state.
+
+**`vint_is_std_res` (0x00e1a150).** Arguments: none (`lua_gettop` is called and its result
+ignored). Return: 1 boolean. **CONFIRMED — disassembly.**
+- It reads two signed 32-bit integers at the pointer returned by 0x00e237e0 (0x00e236f0()'s result
+  + 4) and divides the first by the second in double precision.
+- If the quotient is below 1.5 (the double at 0x012a2d30), the result is true.
+- Otherwise the result is true only when the dword at 0x0132bd80 equals 2.
+- 0x0132bd80 starts at -1 in the file. Its only writer is 0x00e23000, which stores -1, 0, 1, 2, 3 or 4.
+
+Reading (**HIGH CONFIDENCE**; the struct is unlabelled in the dump): the two integers are the screen
+width and height. The function therefore reports a "standard (non-wide) resolution": 4:3 and 5:4
+qualify, 16:10 and 16:9 do not. Display mode 2 at 0x0132bd80 forces the standard layout whatever the
+aspect ratio. Host: true when `width / height < 1.5` or the display mode is 2; with no display-mode
+concept, just the aspect test.
+
+**`vint_get_safe_frame` (0x00e1b570).** Arguments: none. Return: 4 numbers. **CONFIRMED —
+disassembly** for the shape:
+- It fetches the per-thread context (TLS slot 0x02cc4700, then `+0x674`) and takes the object at its
+  `+0x14`.
+- It reads the integers at that object's `+0x8` and `+0xc`.
+- It multiplies each by one of two double constants (0x0115ba60 and 0x0116dfc0) and rounds, giving
+  four integers.
+- It pushes each one as a numeric value through 0x00e1a420.
+
+The order is (c1·a, c1·b, c2·a, c2·b), with a = `+0x8` and b = `+0xc` (**HIGH CONFIDENCE**; the
+x87 operand order is ambiguous). **OPEN**: the two constants; only their low dwords appear in the dump,
+and 0x0116dfc0's matches a widened 0.1f. **HYPOTHESIS**: the four values are the left/top and
+right/bottom safe-frame edges in pixels.
+
+**OPEN — next dump:**
+- `func 0x00e23000 0x00e236f0`; `xref 0x0132bd80` (the meaning of the display-mode values, and what
+  0x00e236f0 returns).
+- The 8 bytes at 0x0115ba60 and 0x0116dfc0.
+
+**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
+CONFIRMED parts — both argument/return shapes, the `vint_is_std_res` decision rule, the
+`vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, output order; HYPOTHESIS —
+safe-frame edge meaning; OPEN — display-mode values, the two scale constants.**
 
 ## 27. Ranks 551-650 tranche, part D — 25 UI-cluster functions (2026-09-30)
 
@@ -10465,3 +10733,4 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).
 - 2026-09-30 (cloud, desk adversarial review of §27/§28): added a review-status line to every §27.N/§28.N entry (§27: 11 DESK-PASS, 10 with text fixes, 5 NEEDS-EXE; §28: 9, 11, 6) and a review-status summary under each heading (desk pass does not clear an entry; executable re-derivation queued); recorded the §27.2/§20.14 0x00a525a0 conflict's most likely reading as HYPOTHESIS in its marker; applied text fixes in place with strike-through/annotation (wrong §/WALLS.md citations, e.g. §19.6 in §27.5, §25.12/§25.25→§16.2/§25.13, WALLS.md→§26.2/§26.23; resolved the false 0x00853b10 polarity worry in §27.5; count slips in §27.20/§27.26/§28.17/§28.26; "new/second" claims annotated as already recorded, e.g. 0x00e0cef0 §8.13, 0x00e0ceb0 §1.9/§8.24, 0x007c9f50 §6.1/§24.2, bit 0x40@+9 §15.28, 0x005c50b0, 0x00d9e8b0 out-buffer; stub-reading qualifications on the 0x0101bxxx/0xd34xxx notes); added OPEN markers at 11 NEEDS-EXE claims plus 4 unstated details (§27.8 wrapper, §27.16 default, §28.3 conversion, §28.6 gate bit).
 - 2026-09-30 (cloud, desk adversarial review of §1-§5): added a review-status line to every §1-§5 unit and a summary under each heading (§1: 5 DESK-PASS, 4 with text fixes, 5 NEEDS-EXE; §2: 3/4/6; §3: 6/7/6; §4: 4/2/8; §5: 2/1/0); corrected the §2 registrar attribution per `spec-lua-bindings.md` §13.5, §1.9's callee roles per §21.27/§22.29/§28.18, §2.7's `9000` (bucket count, §5.3), §2.9's opcode `0x53` (§8.13), §4.2's `0x004dcf00` role (§20.24), §4.7's entry/forwarder split and count/cross-reference slips (§1.4, §1.13, §2.3, §2.5, §3.13, §3.18); added §10.8's `+0x1f00`/`+0xf8` hook sub-record bases to §3.2/§3.3/§3.12/§3.13 and `0x0094cc60`'s role to §3.6; added OPEN markers at every NEEDS-EXE claim; noted the §5 recomputations (hash initial value 0, not stated in `spec-texture-format.md` §8.2). Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from bridge job `20261001T020200-team-a-nzxf`): corrected §2.9/§8.13/§26.10/§26.23 (fade request helper order is `(durationMs, callback, flag)`, `screen_fade_do` is a direct Lua call in the UI state, not a command queue; the opcode-0x53 record layout), §8.21 (prep tears down the current scene and fills the pending slot; it does not start a load; the extra values are constants; `0x0101b530` is a stub), §14.23 (fast-path polarity; the sense-inversion item is closed); added to §26.9; added §26.24 (screen fade state machine), §26.25 (zscene lifecycle) and §26.26 (`vint_is_std_res`/`vint_get_safe_frame`, no earlier entry here), each with a next-dump list. Old text struck or annotated in place.

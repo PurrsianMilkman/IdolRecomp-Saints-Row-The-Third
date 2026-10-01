@@ -3,10 +3,35 @@
  "title": "Team A: re-derive facts the spec consistency review found in conflict",
  "ref": "auto",
  "steps": [
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
-   "args": ["{OUT}/lua", "lua", "depth=0", "mission_is_complete", "cell_is_mission_complete"]},
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
-   "args": ["{OUT}/func", "func", "depth=0", "0x00a525a0", "0x00a7a830", "0x005e5af0", "0x008d73d0", "0x00ea2596"]}
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/lua",
+    "lua",
+    "depth:0",
+    "mission_is_complete",
+    "cell_is_mission_complete"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/func",
+    "func",
+    "depth:0",
+    "0x00a525a0",
+    "0x00a7a830",
+    "0x005e5af0",
+    "0x008d73d0",
+    "0x00ea2596"
+   ]
+  }
  ],
- "collect": ["**/*.txt"]
+ "collect": [
+  "**/*.txt"
+ ]
 }

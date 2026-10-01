@@ -10,9 +10,9 @@
    "args": [
     "{OUT}/func",
     "func",
-    "depth=1",
-    "maxfuncs=8",
-    "maxinsn=800",
+    "depth:1",
+    "maxfuncs:8",
+    "maxinsn:800",
     "0x004c9b90",
     "0x004c1020",
     "0x004c1260",
@@ -130,7 +130,7 @@
    "args": [
     "{OUT}/glob",
     "xref",
-    "xrefs=60",
+    "xrefs:60",
     "0x030f0c68",
     "0x0153b8d0",
     "0x0153b8d4",

@@ -2,7 +2,7 @@
 """Pre-submit check for Team A bridge job files.
 
 The PC agent launches Ghidra through analyzeHeadless.bat, so every argument passes through cmd.exe.
-Characters cmd.exe interprets (% ^ & | < > ! " ( ) and newlines) break the launch before Ghidra
+Characters cmd.exe interprets or splits on (% ^ & | < > ! " ( ) = , ; and newlines) break the launch before Ghidra
 starts (job gdvf, 2026-10-01: exit 255, ". was unexpected at this time"). Run this on every job
 file before `bridge_client.py submit`:
 
@@ -12,7 +12,7 @@ With no arguments it checks every job file under team-a/ghidra/jobs/. Exit code 
 """
 import glob, json, re, sys
 
-UNSAFE = re.compile(r'[%^&|<>!"()\r\n]')
+UNSAFE = re.compile(r'[%^&|<>!"()=,;\r\n]')
 
 def check(path):
     bad = []

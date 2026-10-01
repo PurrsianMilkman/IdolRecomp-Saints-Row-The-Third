@@ -1,0 +1,24 @@
+{
+ "team": "team-a",
+ "title": "Team A: follow-up to nzxf — fade completion native and per-frame update, zscene load start/completion and table source, UI resolution mode",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
+   "args": ["{OUT}/fade", "func", "depth:1", "maxfuncs:30", "maxinsn:1500",
+            "0x005a0110", "0x005a01d0", "0x0059fe70", "0x0059fa30", "0x0059faa0", "0x0059fa20", "0x0059f9c0", "0x0059f9f0", "0x0059fb90", "0x00e0cba0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/fadexref", "xref", "xrefs:80", "0x005a0110", "0x0059fe70", "0x0059fa30", "0x013effc0", "0x012e6ab0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/fadelua", "lua", "depth:0", "sfx_faded_in"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 7200,
+   "args": ["{OUT}/zscene", "func", "depth:1", "maxfuncs:30", "maxinsn:1500",
+            "0x00720410", "0x007285c0", "0x00720320", "0x00722f10", "0x007231e0", "0x00723d60", "0x00723e40", "0x00725df0", "0x00737780", "0x0072d660", "0x007203e0", "0x0072df50", "0x0072d330"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/zxref", "xref", "xrefs:80", "0x0153b534", "0x0153b541", "0x01180120", "0x00720410", "0x007285c0", "0x0153b294", "0x0153b29c"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/ui", "func", "depth:1", "maxfuncs:20", "0x00e23000", "0x00e236f0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/uixref", "xref", "xrefs:80", "0x0132bd80", "0x0115ba60", "0x0116dfc0"]}
+ ],
+ "collect": ["**/*.txt"]
+}
