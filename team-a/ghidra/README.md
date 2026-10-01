@@ -12,3 +12,7 @@ private bus repository and is **never committed here**; specs describe the findi
 
 Checked locally only for Java syntax/typing against API stubs (no Ghidra in the cloud container); the
 first live run is its real test.
+
+## Before submitting a job
+
+Run `python3 team-a/ghidra/check_jobs.py <job.json>` first. The PC agent starts Ghidra through `analyzeHeadless.bat`, so an argument containing a character cmd.exe interprets (`% ^ & | < > ! " ( )` or a newline) makes the launch fail before Ghidra starts (job `gdvf`, 2026-10-01). Search strings that need such characters cannot be passed as `str` items; find them through the function that uses them instead.

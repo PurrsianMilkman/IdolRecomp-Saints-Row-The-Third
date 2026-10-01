@@ -1,17 +1,67 @@
 {
  "team": "team-a",
- "title": "Team A: Team B request 8 — which Lua state loads each preload (vint_lib, game_lib, system_lib, UI preloads)",
+ "title": "Team A: Team B request 8 \u2014 which Lua state loads each preload (vint_lib, game_lib, system_lib, UI preloads)",
  "ref": "auto",
  "steps": [
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
-   "args": ["{OUT}/str", "str", "vint_lib.lua", "vint_lib", "game_lib.lua", "system_lib.lua", "game_ui_globals.lua",
-            "vdo_base_object.lua", "vdo_anim_object.lua", "vdo_input_tracker.lua", "Unable to open custom lua library %s\n",
-            "interface", "game play"]},
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
-   "args": ["{OUT}/func", "func", "depth=1", "maxfuncs=10", "maxinsn=900",
-            "0x00e1e460", "0x008489e0", "0x00a1fa10", "0x00e0e0b0", "0x00e0df90", "0x00e0d800", "0x00e0de80", "0x00a1fa90", "0x00a20670"]},
-  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 5400,
-   "args": ["{OUT}/callers", "xref", "0x00e1e460", "0x00e0e0b0", "0x00e0df90", "0x00e0d800", "0x00e0de80", "0x01162da0", "0x02a45450", "0x026e7e6c"]}
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 3600,
+   "args": [
+    "{OUT}/str",
+    "str",
+    "vint_lib.lua",
+    "vint_lib",
+    "game_lib.lua",
+    "system_lib.lua",
+    "game_ui_globals.lua",
+    "vdo_base_object.lua",
+    "vdo_anim_object.lua",
+    "vdo_input_tracker.lua",
+    "interface",
+    "game play"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/func",
+    "func",
+    "depth=1",
+    "maxfuncs=10",
+    "maxinsn=900",
+    "0x00e1e460",
+    "0x008489e0",
+    "0x00a1fa10",
+    "0x00e0e0b0",
+    "0x00e0df90",
+    "0x00e0d800",
+    "0x00e0de80",
+    "0x00a1fa90",
+    "0x00a20670"
+   ]
+  },
+  {
+   "kind": "ghidra",
+   "script": "team-a/ghidra/CrreishDump.java",
+   "timeout": 5400,
+   "args": [
+    "{OUT}/callers",
+    "xref",
+    "0x00e1e460",
+    "0x00e0e0b0",
+    "0x00e0df90",
+    "0x00e0d800",
+    "0x00e0de80",
+    "0x01162da0",
+    "0x02a45450",
+    "0x026e7e6c"
+   ]
+  }
  ],
- "collect": ["**/*.txt"]
+ "collect": [
+  "**/*.txt"
+ ]
 }
