@@ -2030,6 +2030,29 @@ The owner un-paused the project for cloud work (`TEAMS.md`). This session is **T
 
 - **Self-containment pass (manager request, after the review merged as integration `b243443`):** the archived §27 copies were renamed `N.27`, so only the live resume note is `## 27.`. Every spec reference to HANDOFF or WALLS was checked; 6 load-bearing facts were brought into specs and about 75 §27.x references were repointed. See `review/spec-consistency.md`, last section. Open for the owner: the RTTI-names question in `spec-rig-format.md`, which the manager is raising.
 
+- **Desk adversarial review of every spec Team B implements from (manager's standing queue, 2026-09-30 evening).** Scheme: DESK-PASS / DESK-PASS-WITH-FIXES / NEEDS-EXE / NEEDS-DATA / VALIDATED-BY-DATA (backed by a Team B full-population run). **Manager rule: a desk pass alone does not clear a unit for Team B; clearing needs re-derivation against the executable**, as §19–§26 had before the pause.
+  - Every unit of these specs now ends in a "Review status (2026-09-30)" line, with a summary after the front matter:
+    - Lua specs: `spec-lua-api-behaviour` §1–§5 and §27/§28 (§6–§26 keep their pre-pause exe reviews), and `spec-lua-bindings` §1–§17.
+    - Format specs: vint-doc, world-streaming, physics, effects, render-pipeline, vertex, fxo, geometry, zone, save, audio, foliage, texture, vehicle-geometry, rig, anim, xtbl, vpp, tree, morph, asm, conversation and cutscene.
+  - Reviews ran on Sonnet and fixes on Opus, per the model table in `TEAMS.md`. Each fixer verified every finding before applying it, and I read each diff: no label raised, every Team B citation checked.
+  - Rulings applied:
+    - **Provenance:** CONFIRMED labels resting on the out-of-project runtime capture were downgraded to HYPOTHESIS: render §20.12.5, §20.12.9 and the §23.11 addendum, and vertex §6.6. They are listed in `review/spec-consistency.md` "Provenance downgrades".
+    - **Personal data:** no developer machine paths or usernames, and no player- or developer-authored content. Player-typed outfit names were removed from the save spec and from this HANDOFF.
+    - **Strings:** short functional identifiers are fine, but no verbatim script or source text and no bulk dumps of shipped strings. The table loader's error string was paraphrased in four specs.
+  - Real-data contradiction (Team B request 7): `spec-vint-doc-format` §3.1's string-array layout was downgraded to HYPOTHESIS. Walk-question (a) followed it, because its arithmetic used that layout.
+  - Line numbers: the integration merge `4c32510` shifted `team-b/HANDOFF.md` by +236 lines. Today's 135 line citations were remapped in `a922dbf` (plus vpp in `cfdeb87`). **Cite `team-b/HANDOFF.md` by section, or grep for the text, because line numbers move.**
+- **Exe jobs queued (22 in all, including):**
+  - `review-27-28` and its supplement;
+  - `review-bindings-lua1-2` and `review-lua3-5`;
+  - `review-formats-1`, `-2` and `-3` (`…-lyzi`, `…-njwx`, `…-rkat`) and `review-render` (`…-ueqn`);
+  - ranking tranches 03–05. Tranches 06–25 are committed but not yet submitted; feed them in as the queue drains.
+- **PC status:** the agent has been alive since about 23:40Z, but the owner has enabled only team-b for now and Ghidra is not configured. Team-a jobs stay queued until the manager says team-a is enabled. When results land:
+  1. Team B's requests: 1 (fade), 2 (zscene), 4 (`vint_is_std_res`), then 3 and 7 (`.vint_doc`: re-derive the string-array read first).
+  2. The §27/§28 re-derivation.
+  3. The NEEDS-EXE units, per spec.
+
+  Interpret dumps on Fable, per the model table.
+
 **Blocked:** every executable question waits on the PC agent. Check with `python3 bridge/bridge_client.py status`, then `list` / `show <id>`.
 
 **Next, in Team B's priority order (their requests are under "Requests to Team A" at the top of `team-b/HANDOFF.md` on the integration branch):**

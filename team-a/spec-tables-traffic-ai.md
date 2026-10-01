@@ -46,7 +46,7 @@ Every filename was first searched as an exact NUL-delimited string in the exe im
 
 The engine's XML tree node (as walked by every accessor in `0x00DAB9D0`–`0x00DAD000` and `0x00DC4FF0`–`0x00DC5190`) has four fields: `+0x00` element-name `char*`, `+0x04` next-sibling pointer, `+0x08` first-child pointer, `+0x0C` text `char*` (NULL for an element with no text). All name comparisons are **case-insensitive** (`_stricmp`).
 
-**Table loader `0x00DAC9A0(filename, memory-source = 0, 1)`** builds the parse (pool label `"xml_table_parse %s"`), returns the **`Table` child of the document root** (the `<root><Table>` shape of `spec-xtbl-format.md` §2); failure prints the message *"The table file "%s" is missing or invalid - parser error: %s."* and returns 0. **Two files in this group bypass it:** `action_nodes.xtbl` (§13.4) and `node_graph_files.xtbl` (§22) are parsed by the raw-document entry `0x00DC5AC0` and their rows are taken **directly from the document root, with no `Table` wrapper**. The matching release call is `0x00DAB9D0`.
+**Table loader `0x00DAC9A0(filename, memory-source = 0, 1)`** builds the parse (pool label `"xml_table_parse %s"`), returns the **`Table` child of the document root** (the `<root><Table>` shape of `spec-xtbl-format.md` §2); failure prints a formatted "table file missing or invalid" message carrying the file name and the parser error, and returns 0. **Two files in this group bypass it:** `action_nodes.xtbl` (§13.4) and `node_graph_files.xtbl` (§22) are parsed by the raw-document entry `0x00DC5AC0` and their rows are taken **directly from the document root, with no `Table` wrapper**. The matching release call is `0x00DAB9D0`.
 
 ### 1.3 The shared element accessors **[CONFIRMED — disassembly]**
 
@@ -722,3 +722,4 @@ Legend: ✅ = every element name in the real file is in this document's schema (
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked §24.3, the scope header and §25 item 13 superseded/resolved by §26; added pointers from §2 (unit, §25 item 11) and §25 item 8 (real sample exists); corrected the 30-of-31 table count against §26.0 (32/32); fixed 3 cross-references (§26.4→§26.3, §1→§2, roadmap now lists §26).
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 1 `HANDOFF.md` §27.x references to the archived headings (§27.2 → §30, header); 0 left (see review).
+- 2026-09-30 (cloud): §1.2: the loader's failure message is paraphrased instead of quoted verbatim (manager clean-room line).

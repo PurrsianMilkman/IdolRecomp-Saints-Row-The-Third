@@ -213,3 +213,34 @@ Passages that rest on the same capture but never carried a CONFIRMED label were 
 provenance note, and unlabelled ones are now marked HYPOTHESIS: §20.12.12 (`Tint_color` runtime values),
 §23.6, §23.6.1 and §23.11 (render-target formats). The light-shader register numbers in §23.6/§23.6.1 were
 independently re-derived by Team B's CTAB census, so they do not depend on the capture.
+
+## Desk adversarial review of the Lua and format specs (2026-09-30, evening)
+
+The manager asked for a second pass after the consistency review. Every unit in the two Lua specs, and in
+every format spec Team B implements from, now carries a review status line. The verdicts are DESK-PASS,
+DESK-PASS with text fixes, NEEDS-EXE, NEEDS-DATA, and VALIDATED-BY-DATA (backed by a Team B full-population
+run). A summary follows each spec's front matter.
+
+By the manager's rule, a desk pass does not clear a unit for implementation. Clearing needs re-derivation
+against the executable. The executable items are queued as bridge jobs, which are listed in `team-a/HANDOFF.md`
+§27.C.
+
+The pass found three kinds of problem. Each spec's Changelog line and the commit messages list the findings.
+
+1. **Live defects an implementer would have hit:**
+   - vertex-format §9 step 7b still gave the retracted skinning mapping.
+   - vehicle-geometry said paint lives outside the mesh.
+   - save-format §8.1 had the bit-writer remainder in the wrong half.
+   - The Lua specs described the host-check gate as "mission active" or a head/tail check.
+2. **Claims contradicted by Team B's full-population data, now superseded or scoped:**
+   - zone tiling: 928/1,002 files in the spec, against 1,002/1,002 in Team B's data.
+   - audio clean banks: 530/536 in the spec, against 255/536.
+   - effects: the end pointer does not equal EOF in 344 of 1,812 files, and the abstract-base-class idea is refuted by 502 real records.
+   - fxo register label: scoped to exclude Team B's 8 mismatches.
+   - `spec-vint-doc-format` §3.1 string array: see Team B request 7.
+3. **Clean-room and privacy items removed:**
+   - verbatim game Lua;
+   - player-typed save text;
+   - developer machine paths;
+   - verbatim engine error strings;
+   - decompiler pseudocode, raw x86 and bulk string lists.
