@@ -255,3 +255,60 @@ The pass found three kinds of problem. Each spec's Changelog line and the commit
    - developer machine paths;
    - verbatim engine error strings;
    - decompiler pseudocode, raw x86 and bulk string lists.
+
+### Second batch (2026-10-01): the 20 remaining table, data and inventory specs
+
+The manager listed 20 specs that had no review status yet. They were reviewed the same way, on Sonnet, with
+an extra check for table specs: every load-bearing claim was compared with the Team B reader code that cites
+it, and any Team B code that depends on a claim below CONFIRMED was flagged. Fixes ran on Opus. Every diff
+was checked before commit: no label raised, every Team B figure cited by section and quoted phrase.
+
+| Spec | Commit | Units | NEEDS-EXE | NEEDS-DATA | VALIDATED-BY-DATA |
+|---|---|---|---|---|---|
+| tables-customization | `d7f05b5` | 36 | 27 | 1 | 4 |
+| tables-audio-radio | `d98731a` | 23 | 13 | 0 | 1 |
+| tables-ui-controls | `72fa179` | 32 | 18 | 2 | 1 |
+| tables-vehicle-world | `2bf05e9` | 23 | 9 | 0 | 0 |
+| tables-environment | `b24c6ac` | 47 | 6 | 0 | 0 |
+| tables-weapons-combat | `22b6f7a` | 42 | 9 | 1 | 1 |
+| tables-progression | `66083d3` | 38 | 18 | 4 | 1 |
+| tables-diversions | `d25ed65` | 29 | 16 | 2 | 2 |
+| tables-animation | `56ec777` | 22 | 13 | 1 | 1 |
+| tables-traffic-ai | `d776b9b` | 36 | 14 | 0 | 0 |
+| mission-packages | `47f644b` | 8 | 0 | 3 | 1 |
+| resource-dispatch | `48486c5` | 15 | 7 | 1 | 1 |
+| customization-data | `f8b56bc` | 13 | 1 | 0 | 2 |
+| vehicle-data | `05a3c7f` | 15 | 5 | 0 | 2 |
+| terrain-format | `e722b67` | 12 | 2 (both GATED: on-hold interior) | 3 | 1 |
+| low-mips | `dea13f7` | 9 | 1 (+ part of §1) | 2 | 1 (part of §1) |
+| ai-behavior-format | `839d538` | 8 | 0 | 1 | 0 |
+| extensionless-types | `3d8b631` | 12 | 5 | 0 | 0 |
+| ctorless-types | `c8ce944` | 9 | 1 | 1 | 1 |
+| format-inventory | `93202ae` | 11 | 2 | 0 | 1 |
+
+**Contradicted by Team B's full-population data, now downgraded or struck in place:**
+- progression: the `Spline_Type` six-name list (58/61); the flat `notoriety_spawn` tree in §6.3 (the spec's
+  own §14.6 already had the nested tree).
+- weapons-combat: `MinTime`/`MaxTime` in 19/20 rows, not 20/20; the "clean" claims for ammo, melee and
+  aim_drift; the 5-field `Beat_Down_Kill`.
+- traffic-ai: roadblock objects 789 of 850, not 629; three "no undocumented elements" rows.
+- terrain: "every bundle carries a trio" (2,971 pairs vs 1,083 `.gzn_pc`, 81 empty); "code 24 visible shell"
+  narrowed to HIGH CONFIDENCE.
+- low-mips: 67,710 each, not 67,665.
+- extensionless / ctorless / inventory: the "never filename-resolved" conclusion, against
+  `spec-asm-format` §9.3 (those types ship real files picked by manifest type_id).
+
+**Clean-room items removed:** a real person's name, a developer surname used as a test category name,
+developer machine paths, copied tuning values and XML excerpts, verbatim diagnostics, and evidence-dump paths
+that are not in the repo.
+
+**Team B code at risk (sent to the manager):** in order of urgency:
+1. `ParseNotorietySpawnRow` reads the struck flat tree.
+2. The aim_drift `Recovery` path is empty in 20/20 real rows.
+3. The animation reader assumes one of two conflicting `Trigger` shapes, so 2,454 rows could be dropped silently.
+4. Then the MEDIUM and LOW items listed in the manager messages of 2026-10-01: signedness, caps whose compare
+   operator is OPEN, `STICK_UNBOUND`, the stale validator counts and the `Mass` default.
+
+**Executable work:** queued as `team-a/ghidra/jobs/review-tables.json` and `review-data-formats.json`. The
+addresses come mechanically from each review's consolidated list. The 15 terrain-only addresses are held,
+because they read the on-hold `.czn_pc` interior.
