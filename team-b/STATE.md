@@ -22,13 +22,14 @@ against. Per-tool counts: `team-b/results/baseline_2026-10-01.md` (aggregate cou
 | Job | Group | Tools | Result |
 |---|---|---|---|
 | `20261001T010351-team-b-mlvi` | tables + typed readers | 13 | 12 exit 0 (gates pass); `validate_vehicleinfo_population` 2 stale gates failed: Mass 120/123 and 2/210 raw speeds over 100 mph are the spec's own full-data figures (§7.11), gates now match them |
+| `20261001T015114-team-b-fppk` | 10a re-run after the vehicleinfo gate fix | 13 | 13/13 exit 0, all gates pass; vehicleinfo: Mass absent in exactly 3 (120/123), raw speed over the 100 mph cap in exactly 2 of 210 (§7.11) |
 | `20261001T010355-team-b-axix` | geometry, mesh, vehicle, morph | 10 | all exit 0 |
 | `20261001T010357-team-b-npkp` | world, zone, tree, foliage, asm, cutscene | 11 | all exit 0 |
 | `20261001T010400-team-b-inji` | animation, rig, skinning | 11 | all exit 0 (4,209 clips) |
 | `20261001T010402-team-b-meqi` | effects, shaders (incl. Windows HLSL translators, CTAB census) | 7 | all exit 0 |
 | `20261001T010405-team-b-dpix` | containers, textures, audio, vint_doc | 5 | all exit 0 |
 | `20261001T010408-team-b-zsqd` | lua_host_run + 4 Lua censuses | 5 | all exit 0 |
-| `20261001T015049-team-b-hzim` | saves + profile (owner-approved 2026-10-01) | 6 | save CRC (16 snapshots / 4 directories), summary, activity names, profile (3 distinct, all gates), xtbl with `--saves` (13 snapshots: 4,056/4,056 unlockable ids, 130/130 cheat ids) pass; `validate_save_snapshot` 2 gates fail because the save set has changed since the spec's §10.7 table: one snapshot (Documents slot 04, level 49) is a 2026 save, so 15/16 rows reproduce, non-zero bytes 201,281 vs 201,363, and that save has statistic 164 = 3 vs 4 stunt jumps found (spec: equal, now 15/16) |
+| `20261001T015049-team-b-hzim` | saves + profile (owner-approved 2026-10-01) | 6 | save CRC (16 snapshots / 4 directories), summary, activity names, profile (3 distinct, all gates), xtbl with `--saves` (13 snapshots: 4,056/4,056 unlockable ids, 130/130 cheat ids) pass; `validate_save_snapshot` 2 gates fail because the save set has changed since the spec's §10.7 table: one snapshot (Documents slot 04, level 49) is a 2026 save, so 15/16 rows reproduce, non-zero bytes 201,281 vs 201,363, and that save has statistic 164 = 3 vs 4 stunt jumps found (spec: equal, now 15/16); the tool now gates format invariants only and reports §10.7 and other save-set figures as a historical sample with snapshot ids (`--strict` keeps the old gates); re-run is job `20261001T015631-team-b-nnyi` (10i) |
 
 Excluded on purpose: one-off probes/dumps, GPU render tools, 3 tools needing uncommitted input lists (`team-b/bridge-jobs/README.md`).
 
