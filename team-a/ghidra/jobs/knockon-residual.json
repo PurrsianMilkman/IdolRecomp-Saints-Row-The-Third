@@ -1,0 +1,12 @@
+{
+ "team": "team-a",
+ "title": "Team A: residual entries from the §27/§28 knock-on corrections (§1.12, §2.6, §2.10, §13.24 and others)",
+ "ref": "auto",
+ "steps": [
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 3600,
+   "args": ["{OUT}/func", "func", "depth:1", "maxfuncs:8", "maxinsn:2000", "0x00a57720", "0x00842270", "0x006df210", "0x00a42c60", "0x00a42b30", "0x005eae60", "0x008428e0"]},
+  {"kind": "ghidra", "script": "team-a/ghidra/CrreishDump.java", "timeout": 1800,
+   "args": ["{OUT}/xref", "xref", "xrefs:200", "0x0141250d", "0x0101b4f0"]}
+ ],
+ "collect": ["**/*.txt"]
+}
