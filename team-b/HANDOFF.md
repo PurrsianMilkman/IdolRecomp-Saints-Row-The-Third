@@ -3,9 +3,255 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## ⚡ LIVE STATE as of 2026-10-02 ~03:xx — read this block first, it supersedes any stale framing below it
+
+**This project is now a git repo** (`D:\Project Crreish\TEAM B\.git`, init'd 2026-10-01 specifically to fix
+a recurring CMakeLists.txt collision between concurrent agents sharing one live tree). History so far:
+`1b9d645` (baseline) → `9806d94` (reconciled a rate-limit kill, 50/50 tests) → `4cc97e5` (zscene reset-check
+fix) → `2ab2afa`/`5a94270` (Sec27/28, merged) → `6a55293` (spec sync: vehicle-world hold-lift +
+`0x0153b556` confirmation) → `91d04b9`/`875ec66` (vehicle-world Sec5/7/12 fix, merged — **current HEAD of
+`main`**). Item 4 (request-11 + `0x0153b556` code fix) is dispatched in its own worktree, not yet merged —
+see "IN FLIGHT" below. **Use `isolation: "worktree"` for every Agent dispatch** — this is the actual fix for
+the collision, proven repeatedly now.
+
+**DONE, confirmed, don't re-derive:**
+- Post-cloud-phase sync from `D:\Crreish-sync\for-team-b\team-b` (robocopy, 677 files) + fresh MSVC build +
+  the pending bridge job `cchj`/`02g` run (real local baseline: `build_msvc_local/job02g_out/{default,tag}/`,
+  diffed against `onbs` — stub calls 850M→54,625, several OPEN refusals dropped to 0, new blocker found: a
+  `thread_new`-from-mission-hook issue, since answered as request 11, see below).
+- Wrap-up item 3 (table fixes, `spec-tables-environment.md`'s 5 FOR-TEAM-B corrections): **independently
+  CONFIRMED by me from a from-scratch rebuild** — `sr3tables_environment_tests` 212/212, `10a` validator ALL
+  GATES PASSED on the real 38-archive list, every specific number reproduced exactly (305 leading-minus
+  occurrences, 457/589 real vfx LOD-absent rows, 69 submode rows/8 duplicates in both archive copies). DONE.
+- Wrap-up item 1 (zscene/cutscene/safe-frame, `spec-lua-api-behaviour.md` §26.25/§26.26): the FIRST pass
+  (`adf85d0d046510bdf`) reported ALL FOUR sub-items (auto-promotion, cutscene state machine, `.cte_xtbl`,
+  safe-frame constants) already done from an earlier round, found+fixed ONE real bug (the reset-check
+  0x00720320 was skipped whenever nothing was pending — now runs every frame in cutscene states 0/2, per
+  Sec26.25 lifecycle 3), merged clean (ff) as `4cc97e5`. **My own fresh rebuild of merged `main`
+  (`build_verify_main`) succeeded (188 `.exe`s built) — ctest NOT YET RUN by me as of this note, that's the
+  literal next action.** Real-archive numbers to confirm once ctest is run: agent claims `missions_with_
+  start_call_ok=9/49` unchanged before/after its fix, `dlc1_mm_06` past the zscene issue (now blocked on
+  `named-object resolution['Killbane']` instead), only remaining real zscene blocker is `mm_p_01` on
+  `0x0153b556` (`skip_all_cutscenes`, no specced start-up value — OPEN). The other 39/49 real-mission
+  failures are ALL "attempt to yield across metamethod/C-call boundary" — that's request 11 (below), not yet
+  implemented.
+- Request 11 (mission hooks / thread-stack) is ANSWERED (`spec-lua-api-behaviour.md` thread-table section,
+  ~line 10957) — verified by me directly against spec text. CONFIRMED mechanism: exactly two writers of the
+  current-thread stack depth/array (`0x02a44d10`/`0x02a44d14`) exist — the runner itself (push on resume, pop
+  on return) and a one-time startup zero-out. No code anywhere manually constructs a "root" record. HIGH
+  CONFIDENCE fix: route mission-hook invocation through push→resume→pop, not a bare `lua_call`/`lua_pcall` —
+  should remove both the `thread_new`-no-record refusal (738 in the local `02g` run) and the yield-boundary
+  error (~24-39/49 missions depending on how far other fixes get). Exact original SR3 call site stays
+  OPEN/low-priority (doesn't change the fix). **NOT YET IMPLEMENTED** — this is item 4, queued after items 1/2
+  land clean.
+- `spec-tables-vehicle-world.md`'s HOLD IS LIFTED (2026-10-01, `purrsian-d3`: apply complete, checked
+  identical/clean) and **the spec sync itself is now committed** (`6a55293`, together with the
+  `0x0153b556` spec text below — both were sitting uncommitted in the main tree, now safe). 18
+  previously-NEEDS-EXE units cleared (9 CONFIRMED, 9 CORRECTED). §7/§12 corrections verified by me
+  directly against spec text; full text in that commit if re-briefing is ever needed.
+- Request 11's `0x0153b556`/`skip_all_cutscenes` follow-up claim (relayed by `purrsian-d3`) is **VERIFIED,
+  word-for-word, against the actual §26.25 Globals table row** (not just the changelog) — zero-fill `.data`,
+  no static initializer, exactly one direct writer (`0x0072e04d`, clears to 0), registration's 3rd arg is a
+  byte-count not a default value, no second registration exists so the host-branch copy-in never fires.
+  CONFIRMED false at load and through every single-player/mission-reachable path. Committed as part of
+  `6a55293`. Folded into item 4 (below) as its own fix in `src/lua_spec_initial_state.cpp`.
+
+**IN FLIGHT right now, exact next steps:**
+
+Items 1 ("DONE, no further action"), 2 ("Item 2 is DONE") and 3 ("Item 3 is DONE, no further action") above
+are all DONE, independently confirmed, merged — full detail already in the DONE section above, not repeated
+here. All three worktree dirs have been removed.
+
+**2026-10-02 ~07:18, session rate-limit kill + reconciliation** (limit hit ~02:28, reset 06:50, resumed per
+`purrsian-d3` — NOT a strike, standing policy): all three agents below died simultaneously to the same
+session rate limit. Checked each worktree on disk before acting (`git worktree list` + filesystem) rather
+than assume state:
+- **Item 4** (`a835a1150e48bc0b6`) — real uncommitted progress survived (192 insertions/57 deletions across
+  exactly the 6 files expected: `tools/lua_host_run.cpp`, `src/lua_spec_initial_state.cpp`,
+  `tests/lua_host_run_fixture.cpp`, `tests/lua_host_run_integration_test.py`,
+  `tests/synthetic_luahost_cutscene_test.cpp`, `tests/synthetic_luahost_test.cpp`); its last message before
+  dying was mid-verification ("starting the official post-fix run... in parallel"). **Resumed via
+  `SendMessage` to the same agent id** (full context preserved) rather than re-dispatched, per standing
+  "resume don't restart" policy for a worktree that already has real work in it.
+- **Progression** (`a494e593172edfac8`) and **audio-radio** (`a59e8077bdca6668d`) — neither had created a
+  worktree yet (`.claude/worktrees/` only contained item 4's dir) — both died during pure read-only
+  investigation, nothing to preserve. **Re-dispatched fresh** with the identical briefs as new agent ids
+  `ac109887f9f64cb26` (progression) and `a375d661bec8ef7a2` (audio-radio).
+
+All three now running again. Additionally, `purrsian-d3` flagged that `spec-lua-api-behaviour.md` changed in
+the working tree while Team A's own apply is in flight (sitting uncommitted, same as the still-held
+animation/ui-controls specs) — **its §27/§28 area may be mid-update; do not rework the existing §27/§28
+implementation off it until `purrsian-d3` says it's final.** Added this instruction to both re-dispatch
+briefs. Not committing `spec-lua-api-behaviour.md` for the same reason the other on-hold specs aren't
+committed — mid-apply, could still change.
+
+4. Item 4 (request-11 push→resume→pop fix + `0x0153b556` fix + mission re-run vs. local `02g` baseline) —
+   **RESUMED** (agent id `a835a1150e48bc0b6`, worktree `.claude/worktrees/agent-a835a1150e48bc0b6`). Full
+   design worked out and handed to the agent rather than left for it to re-derive: route
+   `tools/lua_host_run.cpp`'s `callMissionStart()` through `BareThreadTable::allocate()`+`run()`
+   (`include/sr3luahost/bare_globals.h`/`src/lua_bare_globals.cpp` — the already-implemented push/resume/pop
+   runner backing `thread_new` et al, confirmed wired to the SAME `gameplay_` state via `Host::bareGlobals()`)
+   instead of a bare `lua_pcall`, with `hasParent=false` (root-level entry, same convention as the existing
+   `startThread()`), watchdog hook moved onto `rec->co` (a separate `lua_State*` from `L` — the existing
+   `lua_sethook(L,...)` would silently stop protecting otherwise), and error-string retrieval via an
+   `errors()` size-diff since `run()` doesn't return one directly. Plus the `0x0153b556` fix in
+   `src/lua_spec_initial_state.cpp` (`es.zsceneSkipAllCutscenes().set(false)`) and its test-expectation flip.
+   Not yet reported.
+5. `spec-tables-progression.md` reader fix — **RE-DISPATCHED** (2026-10-02, own worktree, agent id
+   `ac109887f9f64cb26`; original `a494e593172edfac8` died pre-worktree, nothing lost). Briefed on §10.7
+   (hand-verified: the `Max_Booze_Points`/`Max_Time_Drunk` byte-offset swap is a real-engine-layout-only
+   correction, our reader already reads by XML name correctly, no code change needed there;
+   `Freerunning_fail_pct` confirmed dead data, confirmed not modeled, stays that way) plus told to correlate
+   the rest of the CORRECTED units (§1.3, §1.4/§10.10, §4.3, §10.1, §10.2, §10.3, §10.6) against
+   `src/tables_progression.cpp` itself. Not yet reported.
+6. `spec-tables-audio-radio.md` reader fix — **RE-DISPATCHED** (2026-10-02, own worktree, agent id
+   `a375d661bec8ef7a2`; original `a59e8077bdca6668d` died pre-worktree, nothing lost). Briefed on two
+   hand-verified items: **§13** `radio_activities.xtbl` — denominator global `DAT_012A2DD8` now CONFIRMED
+   100.0 (was OPEN), so `RadioActivity` needs a real fraction accessor (`Percentage/100`), and the
+   `level`-as-slot-index framing in `tables.h`'s own comment is stale (real slot =
+   row order; our reader already stores rows in row order, no indexing bug found, comment-only fix expected).
+   **§17** `voc_sb_line_sit.xtbl` — 0/265 real Soundbank entries pass the `.lm_pc`-open gate at table load;
+   confirm the reader doesn't assume otherwise. Also handed purrsian-d3's own flags for **§12** (1-based
+   station numbers, inclusive-bound off-by-one at `0x0055DFB0`) and **§16** (commercials share the stride-20
+   `0x013BBC18` table with playlists/radio-events, not a separate registry) plus the remaining CORRECTED list
+   (§2, §3, §4, §5, §6, §7, §8, §9, §11, §14, §15) to correlate against `src/tables_audio_radio.cpp`. Not yet
+   reported.
+
+**Standing, unchanged**: `0x2237`/`.czn_pc` object-stream interior stays on hold (user-only gate, not lifted).
+Clean-room boundary unchanged (`spec-*.md` + real game data only, never `TEAM A\tools`). Model-per-task table
+and "verify with an equal-or-stronger model, escalate one tier after two failures" per `TEAMS.md`. A rate-limit
+kill is explicitly, repeatedly NOT a strike — redispatch/resume, don't downgrade or abandon.
+
+**HOLD, narrowed again (2026-10-02, `purrsian-d3`)**: of the 4 table specs that synced mid-apply, **3 are now
+CLEARED**: `spec-tables-progression.md` (32 items), `spec-tables-audio-radio.md` (19 CONFIRMED/14
+CORRECTED/10 OPEN), both committed `6baf813`; and `spec-tables-animation.md` (all 13 NEEDS-EXE units
+re-derived), committed together with `spec-lua-api-behaviour.md`'s finalized §27/§28 area (`e008884` — the
+whole diff for that file is confined to the §27/§28 line range, confirmed via hunk headers before
+committing). **Only `spec-tables-ui-controls.md` remains ON HOLD** (§10-§13 still being applied) — do not
+implement from it until `purrsian-d3` signals its apply is complete. Its own flagged correction for when it
+lands: a scheme row with no `Controls` child hangs the ORIGINAL loader the same way animation's
+`Actions/Action` did; expect the final text to call for guard-and-report, not an actual loop.
+
+**tables-animation reader fix — DISPATCHED** (2026-10-02, own worktree, agent id `a173fdc56446adf12`).
+Headline, hand-verified by me first: `AnimBlendTree` (`include/sr3tables_animation/tables.h` ~line 294,
+`ParseAnimBlendTree` in `src/tables_animation.cpp` ~line 192) has **no `Actions`/`Action` field or parsing at
+all** — the spec's new §7.2 `Action` sub-schema (stride `0x44`, full field list) is entirely unimplemented,
+not just wrong. Briefed on adding it as raw text (same convention as the existing `States/State` field,
+no cross-table resolution — this reader is a tree-walker, not a re-implementation of the original's
+index-walking loader, so the infinite-loop hazard can't actually reproduce here by construction; agent told
+to verify that reasoning itself, not trust it blindly). Also two smaller hand-verified fixes: the
+`controlPoints` cap comment says "10 per State" (now CORRECTED to **5**, no cap check either way), and
+Control_point `Range`/`Value` are now an "always" reader not "if present". Told to correlate the rest
+(§10/§11/§12/§13 named corrections, plus all 13 re-derived units) against the reader. Not yet reported.
+
+**§27/§28 cross-check against the now-final `spec-lua-api-behaviour.md` text** — `purrsian-d3` asked for this
+"when convenient" (not urgent). **Not yet done** — queued behind the 4 agents currently in flight (item 4,
+progression, audio-radio, animation) to avoid over-extending; pick up once some of those land.
+
 ## ☁ CLOUD PHASE (un-paused 2026-09-30, Team B session on `claude/crreish-team-b`) — read this first
 
 The pause banner below is historical (see `TEAMS.md`). Newest entry first.
+
+### 2026-10-01, rate-limit reconciliation + table fixes independently CONFIRMED
+
+Both `a659f8f99b7d3425e` (zscene/cutscene) and `a3872f6eba363370b` (§27/§28) died to the session rate limit
+mid-task (not a strike, reset ~20:10, resumed per `purrsian-d3` at 23:07). Since they'd been editing the
+shared live tree directly (dispatched before the git/worktree setup), reconciled per `purrsian-d3`'s plan:
+`git status`/`diff` against baseline `1b9d645`, fresh configure+build+ctest of the current live-tree state.
+**Everything present built clean and 50/50 tests passed** (was 48/48 — 2 new suites, both green) — nothing
+needed stashing/reverting. One real fix applied directly (test-only, no C++ behaviour change):
+`tests/lua_host_run_integration_test.py`'s `slot("scene table")` fragment filter was ambiguous — it matched
+BOTH a genuinely new table-level open-state slot the zscene agent added (`src/lua_engine_state.cpp`, "scene
+table 0x0153b294...") AND the pre-existing per-entry slot ("zscene table entry with kind 1..."), since both
+legitimately contain the substring "scene table". Retargeted to the unique address `0x0153b294` — both slots
+are real, this was a test-selector specificity bug, not an implementation bug. Committed as `9806d94`.
+
+**Table fixes (§C item 3, `a4cf1926f9282b6ef`) independently CONFIRMED** — fresh rebuild from the reconciled
+tree: `sr3tables_environment_tests.exe` standalone **212/212 passed**, matching the agent's own citation
+exactly; `validate_tables_environment_population` reran against the exact 38-archive `10a` list — **ALL
+GATES PASSED (0 failures)**, and the specific real-data numbers reproduced exactly: 305 leading-minus leaf
+occurrences (same per-field breakdown), 457/589 real vfx rows with no `<LOD>` now correctly getting 0 not
+the 1e8/1e10 defaults, 69 submode rows/8 same-file duplicates in BOTH `misc_tables.vpp_pc` and
+`patch_compressed.vpp_pc` independently. **This item is DONE, confirmed, no further action needed.**
+
+**Re-dispatched, each in its own git worktree (isolated, no shared-tree collision this time)**:
+`adf85d0d046510bdf` (opus, zscene/cutscene/safe-frame — told to inventory the already-committed progress
+first, not assume a blank slate) and `a1793db25f9a2dad5` (sonnet, §27/§28 — told to check which of the 52
+are already implemented+registered via `registerOne(...)`, not just defined). Both branch from `9806d94`.
+Item 4 (request-11 push→resume→pop hook fix + mission re-run vs. the local `02g` baseline) queued for after
+these two land and are independently verified.
+
+**Do not implement from `spec-tables-vehicle-world.md` yet** (2026-10-01, `purrsian-d3`) — it just synced
+mid-apply (Team A's exe re-derivation covers §2-5 so far, rest in progress). No current in-flight work
+touches it (both dispatched agents are scoped to `spec-lua-api-behaviour.md` only). Wait for the
+"apply complete" signal before touching it.
+
+### 2026-10-01, wrap-up list items 1-3 dispatched (parallel agents, own build dirs)
+
+Per `purrsian-d3`'s relay of the owner's "resume" instruction, dispatched the wrap-up "not started / next" list
+items 1-3 in parallel (model per `TEAMS.md`'s table), each grounded directly against the current spec text
+before dispatch:
+- **`a659f8f99b7d3425e`** (opus, `build_zscene`): `spec-lua-api-behaviour.md` §26.25/§26.26's newest CONFIRMED
+  text — zscene per-frame auto-promotion (closes the OPEN refusal blocking fixture mission `dlc1_mm_06`), the
+  cutscene state machine (20-state jump table, CONFIRMED), the `cutscene.xtbl`+`<name>.cte_xtbl` two-file scene
+  table build, and `vint_get_safe_frame`'s exact constants (0.075/0.925 widened-double, worked examples given)
+  + `vint_is_std_res`'s full mode ladder — the latter should also address the new "per-thread record
+  (0x00e236f0)+4" OPEN refusal my own local `02g` run surfaced.
+- **`a3872f6eba363370b`** (sonnet, `build_2728`): `spec-lua-api-behaviour.md` §27/§28 CORRECTED text, 52 entries
+  (confirmed cleared-for-implementation via spot-check, e.g. §27.16 `game_get_coop_friendly_fire`).
+- **`a4cf1926f9282b6ef`** (sonnet, `build_envfix`): the 5 `FOR TEAM B (2026-10-01, CORRECTION)` tags in
+  `spec-tables-environment.md` (float sign handling, `weather_time_of_day` 2400/truncation, `time_of_day_objects`
+  real default read, VFX LOD-absent zeros not large defaults, `submode` degree→radian + duplicate-name
+  last-wins) — `spec-tables-progression.md`'s own 2 tags confirmed already synced/closed, not re-dispatched.
+  Told to re-run the `10a` baseline validators locally (archive list copied from
+  `bridge-jobs/10a_baseline_tables.json`) against its own fix.
+
+**Item 4 scope grew, 2026-10-01**: request 11 is now answered (`spec-lua-api-behaviour.md`'s thread-table
+section, ~line 10957, verified by me directly against the spec text) — CONFIRMED mechanism: mission hooks
+run inside a script-thread record by construction (exhaustive check of every writer of the current-thread
+stack's depth/array fields, `0x02a44d10`/`0x02a44d14`, found exactly two: the runner itself push/pop on
+resume, and a one-time startup zero-out — no code anywhere manually constructs a "root" record). HIGH
+CONFIDENCE fix: route mission-hook invocation through an equivalent push→resume→pop, not a bare
+`lua_call`/`lua_pcall` — should remove both the `thread_new`-with-no-record refusal (738 in today's run) and
+the "yield across C-call boundary" first error (~24/49 missions). The EXACT original SR3 call site for
+mission hooks stays OPEN/low-priority (doesn't change the mechanism or the fix). Supersedes the earlier
+cloud-manager "keep current behaviour" ruling. Folded into item 4 (mission re-run), per `purrsian-d3` — not
+dispatched as a 4th parallel agent (would collide with the zscene agent's own in-progress edits to
+`tools/lua_host_run.cpp`/`include/sr3luahost/`); will implement as part of item 4 once items 1-3 land and are
+independently verified, same pattern as today's `cchj` verification.
+
+### 2026-10-01, back on the local PC (`purrsian-d3` orchestrating): sync + fresh build + job `cchj`/`02g` run
+
+**Synced** from `D:\Crreish-sync\for-team-b\team-b` via `robocopy /E` (no `/MIR`, so build dirs/`test-fixtures`/golden
+PNGs stayed): 677 files copied, 0 failed. Confirmed `src/lua_screen_fade.cpp`, `src/lua_bare_globals.cpp`,
+`bridge-jobs/` present and `HANDOFF.md` starts with "CLOUD PHASE", as expected. **Fresh MSVC build** (CMake
+changed during the cloud phase, so a new dir, `build_msvc_local`, not reused from pre-pause): configure clean,
+Release build clean (0 errors across the full tree incl. the new `vintdoc_validate`/fuzz-adjacent targets),
+**ctest 48/48 pass** — matches the cloud phase's own CI figure exactly.
+
+**Ran the pending job `20261001T221335-team-b-cchj` (bridge-jobs `02g`) locally** — it never ran in the cloud
+phase. Both sub-runs (`lua_host_run` default-preload and `--preload-states=tag`) completed clean, exit 0, same
+pattern both: 49/49 missions found+`_start`-called, **9/49** past `_start` cleanly (matches every prior citation).
+**Diffed the default run against the `onbs` baseline** (`tools/bridge_diff.py`, full report
+`build_msvc_local/bridge_diff_default_vs_onbs.md`) — real, substantial forward progress, not noise:
+- **Total stub calls 850,090,555 → 54,625** (99.99%+ drop) — the busy-poll/watchdog problem is gone; `thread_yield`
+  283.9M→1,141, the two `vint_internal_dataresponder_request`/`vint_dataresponder_finished` busy-polls 282M→~1,100
+  each, `fade_is_fully_faded_in` 1.67M→2.
+- Several OPEN-state refusals that used to block every mission dropped to **0**: co-op session 876→0,
+  vehicle-store-active 565→0, tutorial-table 173→0 (now real values flow instead of invented always-refusing
+  stand-ins, consistent with the 2026-10-01 WRAP-UP batch above).
+- **A NEW blocker surfaced, not present in `onbs`**: a `per-thread record (0x00e236f0)+4` OPEN-state refusal
+  (738 occurrences, 0 before) and `attempt to yield across metamethod/C-call boundary` now the first error in
+  ~24/49 missions (replacing the old co-op-session/tutorial-table refusals those same missions used to stop on
+  first) — this is very likely the already-anticipated issue from Requests to Team A item 11's last bullet
+  (mission hooks calling `thread_new` outside any script-thread record). **Not root-caused or fixed here** —
+  running+diffing+reporting was this task's own scope; flagging for the manager/Team A per the usual request
+  flow, not acted on unilaterally. Full per-mission table and stub-count deltas in the diff report above.
+- `preload_states_option` confirms §16.4 preload routing really is the default now (`spec16.4`,
+  `scripts_rerouted=6`), matching the WRAP-UP note that it was cleared 2026-10-01.
+
+Raw outputs: `build_msvc_local/job02g_out/{default,tag}/*.tsv` + `.txt` (not committed — matches this project's
+own "bridge outputs aren't committed wholesale" convention; available locally if the manager wants them pulled).
 
 ### 2026-10-01, WRAP-UP (the owner is moving the project to their own PC); exact state at hand-over
 

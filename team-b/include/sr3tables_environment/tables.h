@@ -356,6 +356,25 @@ std::vector<SkyboxEffect> ParseSkyboxEffectsTable(const Document& doc);
 // ===========================================================================
 // The 5-name enum table (spec 9.2 / 13): selects which of five fixed runtime
 // records a row writes to.
+//
+// [FOR TEAM B 2026-10-01 CORRECTION, CONFIRMED - disassembly (0x00BA2720): before any row is
+// read, all five runtime records are PRE-SET to an (on, off) pair - this pair is NOT a build
+// constant (an earlier reading of this spec guessed it might be); it is two HHMM integers read
+// from the ACTIVE TIME-OF-DAY-DEFINITION OBJECT at +0x5744/+0x5748 (globally 0x029152F4/
+// 0x029152F8, written only by 0x00BB6400), each converted exactly like Start_Time (3.1). Real
+// base-game data (spec 17.1) confirms `Street Lights` and `Searchlights` NEVER have a row, so
+// those two records run on this data-sourced default pair for the entire base game.
+//
+// THIS IS DELIBERATELY NOT MODELLED HERE, and no default pair is hardcoded anywhere in this
+// reader (verified - grep for "0x5744"/"default pair" finds nothing to remove). The reason is
+// NOT oversight: the TOD-definition object/file itself is still OPEN at the project level -
+// HANDOFF.md / spec 16 open item 4 states plainly it "has no filename literal in this group and
+// was not chased", i.e. which table (if any) actually feeds 0x00BB6400 is unknown. Per this
+// project's no-invented-fixes rule, this struct does NOT guess a source table or a constant for
+// the pair; ParseTimeOfDayObjectsTable only ever returns rows that are REALLY present in the
+// XML (so `Street Lights`/`Searchlights` simply do not appear in the returned vector when, as in
+// every real base file, no row names them - a caller must get their default (on, off) pair from
+// elsewhere, not from this table). Revisit once the TOD-definition file is identified.
 inline constexpr std::array<std::string_view, 5> kTimeOfDayObjectNames = {
     "Street Lights", "Headlights", "Windows", "Distant Vehicle Headlights", "Searchlights",
 };
@@ -459,18 +478,21 @@ struct VfxEffect {
 
     std::optional<std::string> radialBlurEntry;   // Radial_blur/Radial_blur_entry -> radial_blur.xtbl index
 
-    // [OPEN - spec-tables-environment.md 10.2 (vfx.xtbl) LOD rows (Review status: "NEEDS-EXE: `0x005C3E70` with no `LOD`"): the
-    // 1.0e8 / 1.0e10 defaults are stated only for an absent `Spawning`/`Distance` block INSIDE a present `LOD`;
-    // what the fields hold when the whole `LOD` element is absent (401 of 529 real rows, 17.1) is not stated. The
-    // *OrDefault() helpers below apply the defaults in both cases; the whole-LOD-absent case is NOT confirmed.]
+    // [FOR TEAM B 2026-10-01 CORRECTION, CONFIRMED - disassembly (0x005C3E70 in full): the
+    // 1.0e8 / 1.0e10 defaults apply ONLY to an absent `Spawning`/`Distance` block INSIDE a
+    // present `LOD`. When the whole `LOD` element is absent (401 of 529 real rows, 17.1), only
+    // `+0xA0` (lodPresent's own byte) is written to 0 - `+0xA1`-`+0xB0` are left UNTOUCHED (0 in
+    // the zero-filled array), NOT defaulted. The *OrDefault() helpers below now take lodPresent
+    // into account (previously they applied the defaults unconditionally - a bug fixed here -
+    // see the real-data gate in validate_tables_environment_population.cpp).]
     bool lodPresent = false;                       // LOD - presence flag
-    std::optional<float> lodSpawningDistance;      // LOD/Spawning/Distance; absent Spawning -> spec default 1.0e8
-    float LodSpawningDistanceOrDefault() const { return lodSpawningDistance.value_or(1.0e8f); }
+    std::optional<float> lodSpawningDistance;      // LOD/Spawning/Distance; absent Spawning (LOD present) -> spec default 1.0e8
+    float LodSpawningDistanceOrDefault() const { return lodPresent ? lodSpawningDistance.value_or(1.0e8f) : 0.0f; }
     std::optional<bool> lodSpawningView;           // LOD/Spawning/View
-    std::optional<float> lodDistanceFadingStart;   // LOD/Distance/Fading_start; absent Distance -> spec default 1.0e10
-    std::optional<float> lodDistanceFadingEnd;     // LOD/Distance/Fading_end; absent Distance -> spec default 1.0e10
-    float LodFadingStartOrDefault() const { return lodDistanceFadingStart.value_or(1.0e10f); }
-    float LodFadingEndOrDefault() const { return lodDistanceFadingEnd.value_or(1.0e10f); }
+    std::optional<float> lodDistanceFadingStart;   // LOD/Distance/Fading_start; absent Distance (LOD present) -> spec default 1.0e10
+    std::optional<float> lodDistanceFadingEnd;     // LOD/Distance/Fading_end; absent Distance (LOD present) -> spec default 1.0e10
+    float LodFadingStartOrDefault() const { return lodPresent ? lodDistanceFadingStart.value_or(1.0e10f) : 0.0f; }
+    float LodFadingEndOrDefault() const { return lodPresent ? lodDistanceFadingEnd.value_or(1.0e10f) : 0.0f; }
     std::optional<bool> lodDistanceRestore;        // LOD/Distance/Restore
     bool lodUpdatePresent = false;                  // LOD/Update - presence flag
     std::optional<float> lodUpdateMinimumTime;      // LOD/Update/Minimum_time

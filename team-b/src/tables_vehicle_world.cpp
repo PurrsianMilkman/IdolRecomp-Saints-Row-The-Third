@@ -270,7 +270,14 @@ ExternalizedComponentSlot ParseExternalizedComponentSlot(const Node* row) {
     s.name = getText(row, "Name");
     s.cameraInfo = getText(row, "Camera_Info");
     const Node* components = sr3xtbl::FindChild(row, "Components");
-    s.componentCount = sr3xtbl::Children(components, "Component").size();
+    std::vector<const Node*> componentNodes = sr3xtbl::Children(components, "Component");
+    s.componentCount = componentNodes.size();
+    // Component/Name (XML-level raw text only, no byte offset claimed) - the
+    // CONFIRMED match target of Front_Rim/Rear_Rim/Front_Spinner/Rear_Spinner
+    // (spec 5.1/7, CORRECTED 2026-10-02; see the struct comment in tables.h).
+    for (const Node* c : componentNodes) {
+        if (std::optional<std::string> n = getText(c, "Name")) s.componentNames.push_back(*n);
+    }
     return s;
 }
 
@@ -509,9 +516,14 @@ LevelObject ParseLevelObject(const Node* row) {
     o.deathExplosion = getText(row, "Death_Explosion");
 
     const Node* deathMoney = sr3xtbl::FindChild(row, "Death_Money");
+    o.deathMoney.present = deathMoney != nullptr;
     o.deathMoney.min = sr3xtbl::ReadUInt32Always(deathMoney, "Min");
     o.deathMoney.max = sr3xtbl::ReadUInt32Always(deathMoney, "Max");
-    o.deathMoney.point = sr3xtbl::ReadVec3(deathMoney);  // Death_Money's own X/Y/Z children (spec 12.1/12.3)
+    // CORRECTED 2026-10-02 (spec 12.1, Team A exe re-derivation): read from
+    // the Death_Money/Cash_Out_Point CHILD, not Death_Money's own X/Y/Z - see
+    // LevelObjectDeathMoney::point's comment in world_items.h for the full
+    // citation and the still-OPEN no-fallback caveat.
+    o.deathMoney.point = sr3xtbl::ReadVec3Child(deathMoney, "Cash_Out_Point");
     o.deathMoney.justCoins = sr3xtbl::ReadBoolAlways(deathMoney, "Just_Coins");
 
     o.vehicleRepulsorScale = sr3xtbl::GetFloat(row, "Vehicle_Repulsor_Scale");

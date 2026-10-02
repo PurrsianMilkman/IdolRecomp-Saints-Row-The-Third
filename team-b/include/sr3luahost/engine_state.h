@@ -40,6 +40,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -557,34 +558,61 @@ public:
     OpenValueMap<bool>& objectResolves() { return objectResolves_; }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
-    // batch 2026-10-01) ------------------------------------------------------
+    // batch 2026-10-01, lifecycle driver + scene table 2026-10-01 nnlt text;
+    // implementation in src/lua_cutscene.cpp) -------------------------------
     //
     // Scene identity: the engine keys its scene table (0x0153b294, entries
-    // 0xf8 bytes, parsed from cutscene.xtbl) by the CRC-32 of the lower-cased
-    // name and compares entry POINTERS for "current"/"pending". This host
-    // keys everything by the lower-cased name (zsceneTableKey) - a stated
-    // simplification (two names with equal CRCs would be one entry in the
-    // engine and two here).
+    // 0xf8 bytes) by the CRC-32 of the lower-cased name (0x00d9e8b0, seed 0)
+    // and compares entry POINTERS for "current"/"pending". This host names an
+    // entry by its lower-cased name (zsceneTableKey). With the real table
+    // installed (installZsceneTable) a name resolves through the CRC, first
+    // match, like 0x00721be0, so two names with one CRC reach one entry.
     //
-    // CONFIRMED globals, all OPEN at start: no spec gives their start-up
-    // values, and the per-field parse of cutscene.xtbl (which entries exist,
-    // their kind) is OPEN (Sec26.25).
-    //  - zsceneLoadable[key]: the name is in the table AND its entry kind
-    //    (+0x8) is 1 (0x00721be0 lookup + the 0x00723d20 / 0x007232e0 test).
-    //    "Missing" and "kind != 1" give the same answers in every caller,
-    //    so one bool per name.
+    // Scene table (REAL, Sec26.25 item 5): built from cutscene.xtbl (names)
+    // and one <name>.cte_xtbl per scene (fields) by sr3tables_cutscene;
+    // lua_host_run installs it from cutscene_tables.vpp_pc. A name missing
+    // from an installed table is "missing" (REAL). Without an installed table
+    // the per-name map zsceneLoadable[key] is used, OPEN until a test sets it.
+    //
+    // CONFIRMED globals with no specced start-up value - all OPEN at start:
     //  - 0x0153b556 the skip_all_cutscenes byte.
     //  - 0x0153b530 current entry ("" = null), 0x0153b538 pending entry.
     //  - 0x0153b51c load state: 0 idle, 1 loading, 2 loaded (all CONFIRMED).
-    //  - the teardown's cutscene guard and the current handle's class
-    //    (0x00721c20), read only when zscene_prep tears a current scene down.
+    //  - 0x0153b541 / 0x0153b542 (labels HIGH CONFIDENCE).
+    //  - the soundtrack stream 0x0153b71c, its status and its timer 0x0153b724.
+    // OPEN because the host has no streaming, audio or world objects (each a
+    // labelled, test-settable OpenValue; never a silent default):
+    //  - the class 0x00dafb60 gives an entry's selected request-group handle
+    //    (1 not live, 3 resident, 5 failed, anything else: wait). Per entry.
+    //    The selection between +0xc and +0x10 (the female variant) is folded
+    //    into this one "selected handle" class - a stated simplification.
+    //  - whether the soundtrack stream has ended (status 0x66).
+    //  - the nearest scene-bearing world object (list 0x03171a64) the idle
+    //    driver 0x00728440 would auto-prep ("" = none found).
+    struct ZsceneTableRow {
+        std::string name;               // +0x0 as written in cutscene.xtbl
+        uint32_t crc = 0;               // +0x4: NameHash(lower-cased name, 0)
+        std::optional<int> kind;        // +0x8 (nullopt: OPEN, see sr3tables_cutscene)
+        // +0x20 resources (names for the host's 0x00722f10 load log);
+        // nullopt: OPEN (the spec describes the list only for kinds 1 and 2).
+        std::optional<std::vector<std::string>> resources;
+    };
+    void installZsceneTable(std::vector<ZsceneTableRow> rows);
+    bool zsceneTableInstalled() const { return zsceneTableInstalled_; }
+    size_t zsceneTableSize() const { return zsceneTable_.size(); }
+
     OpenValueMap<bool>& zsceneLoadable() { return zsceneLoadable_; }
     OpenValue<bool>& zsceneSkipAllCutscenes() { return zsceneSkipAllCutscenes_; }
     OpenValue<std::string>& zsceneCurrent() { return zsceneCurrent_; }
     OpenValue<std::string>& zscenePending() { return zscenePending_; }
     OpenValue<int>& zsceneStateCode() { return zsceneStateCode_; }
-    OpenValue<bool>& zsceneTeardownCutsceneGuard() { return zsceneTeardownCutsceneGuard_; }
-    OpenValue<bool>& zsceneCurrentHandleNotLive() { return zsceneCurrentHandleNotLive_; }
+    OpenValue<bool>& zsceneAutoSelectNearest() { return zsceneAutoSelectNearest_; }
+    OpenValue<bool>& zsceneRequeueOnReset() { return zsceneRequeueOnReset_; }
+    OpenValueMap<int>& zsceneHandleClass() { return zsceneHandleClass_; }
+    OpenValue<bool>& zsceneSoundtrackActive() { return zsceneSoundtrackActive_; }
+    OpenValue<int64_t>& zsceneSoundtrackStartMs() { return zsceneSoundtrackStartMs_; }
+    OpenValue<bool>& zsceneSoundtrackEnded() { return zsceneSoundtrackEnded_; }
+    OpenValue<std::string>& zsceneNearestWorldObjectScene() { return zsceneNearestWorldObjectScene_; }
     static std::string zsceneTableKey(const std::string& name);
     // zscene_prep (Sec8.21 / Sec26.25 lifecycle step 1-2, CONFIRMED): the gate
     // 0x007232e0, the stub 0x0101b530 (nothing), the teardown
@@ -594,12 +622,74 @@ public:
     void zscenePrep(const std::string& name);
     // zscene_is_loaded (Sec14.23 corrected truth table, CONFIRMED). hasName
     // is true for a string or number argument. Throws OpenStateError on an
-    // OPEN read; also refuses (OPEN) when the named entry is the PENDING one:
-    // its promotion to current (0x00720410, only caller 0x007258a0, body
-    // OPEN) is driven by the cutscene state machine this host does not run,
-    // so "false until promoted" has no modelled end. Counted.
+    // OPEN read. For the PENDING entry the engine answers false until the
+    // per-frame driver promotes it (cutsceneHostFrame); when the host's most
+    // recent cutscene frame stopped on an OPEN read, that promotion cannot
+    // happen in this host, so the call refuses naming that read instead of
+    // returning a false with no modelled end. Counted.
     bool zsceneIsLoaded(bool hasName, const std::string& name);
-    int zscenePendingPromotionRefusals() const { return zscenePendingPromotionRefusals_; }
+    int zscenePendingBlockedRefusals() const { return zscenePendingBlockedRefusals_; }
+
+    // --- cutscene machine (Sec26.25 item 6, "The cutscene machine proper";
+    // src/lua_cutscene.cpp) ---------------------------------------------------
+    //
+    // The engine runs, once per frame, the state machine 0x0072d660 (jump
+    // table of 20 states) and then its second step 0x007258a0 (five cases:
+    // 0, 2, 4, 5, 15). The cutscene state is 0x0153b520 (ScreenFade::
+    // cutsceneState, shared with the fade routine's logo test). States 0..0xf
+    // are CONFIRMED; 0x10..0x13 are HIGH CONFIDENCE (by elimination) and are
+    // refused, as are the states whose helper bodies are OPEN (6..14) and
+    // the continuation of 0x00725df0 after state 2's load wait.
+    struct CutsceneManager { // *0x0153b528
+        OpenValue<bool> present{"*0x0153b528 non-null (cutscene manager)", "spec-lua-api-behaviour.md Sec26.25"};
+        // Host identity of the scene the manager plays (the engine holds it in
+        // the manager object; which field is not specced).
+        OpenValue<std::string> sceneKey{"cutscene manager's scene entry", "spec-lua-api-behaviour.md Sec26.25"};
+        OpenValue<int32_t> field8{"cutscene manager +8", "spec-lua-api-behaviour.md Sec26.25"};
+        OpenValue<std::string> chainTarget{"cutscene manager +0x35cc (next cutscene)", "spec-lua-api-behaviour.md Sec26.25"};
+    };
+    CutsceneManager& cutsceneManager() { return cutsceneManager_; }
+    OpenValue<int32_t>& cutsceneState() { return screenFade_.cutsceneState; }
+    OpenValue<bool>& cutscenePreloadMounted() { return cutscenePreloadMounted_; }   // 0x0153b543
+    OpenValue<std::string>& cutsceneChainTarget() { return cutsceneChainTarget_; }  // 0x0153b52c ("" = none)
+    OpenValue<bool>& cutscenePlayerChecksPass() { return cutscenePlayerChecksPass_; }
+    OpenValue<int64_t>& cutsceneLoadStamp() { return cutsceneLoadStamp_; }          // 0x012f5d30
+    OpenValue<bool>& cutscenePlayingByte() { return cutscenePlayingByte_; }         // 0x0153b525
+    OpenValue<bool>& cutsceneInProgressByte() { return cutsceneInProgressByte_; }   // 0x0153b526
+    // Host logs of what states 4 and 5 started (no packfile mounting or
+    // resource streaming in this host).
+    const std::vector<std::string>& cutsceneMountLog() const { return cutsceneMountLog_; }
+    const std::vector<std::string>& cutsceneLoadLog() const { return cutsceneLoadLog_; }
+
+    // One host frame of the cutscene machine and the zscene lifecycle, in
+    // this order (Sec26.25): 0x0072d660's case for the current state; then
+    // 0x007258a0 (bytes 0x0153b525/0x0153b526, its case: in states 0 and 2
+    // the reset-check 0x00720320 - run whether or not an entry is pending -
+    // and, when it is true, promotion of the pending zscene, mounts in 4,
+    // loads in 5, chain/teardown in 15); then the zscene completion
+    // 0x007285c0. The Host summary of Sec26.25 states "every frame: promotion
+    // ..., then completion"; the engine calls 0x007285c0 from two cases of
+    // 0x0072d660 (which two is not stated), so running it every frame after
+    // the promotion is the host summary's instruction, not a reading of
+    // 0x0072d660. Uses the host clock screenFadeClockMs() (advanced by
+    // screenFadeHostFrame, which lua_host_run calls first each tick). The
+    // first OPEN read stops the frame (each step reads before it writes);
+    // counted, with the blocking global.
+    void cutsceneHostFrame();
+    struct CutsceneCounters {
+        uint64_t framesRun = 0;
+        uint64_t framesBlockedOnOpen = 0;
+        bool lastFrameBlocked = false;
+        std::string lastFrameBlocker;
+        uint64_t stateTransitions = 0;
+        uint64_t zscenePromotions = 0;   // 0x00720410 runs
+        uint64_t zsceneCompletions = 0;  // 0x007285c0: state := 2
+        uint64_t zsceneFailedLoads = 0;  // 0x007285c0: class 5 -> teardown
+        uint64_t zsceneIdleAutoPreps = 0; // 0x00728440 -> 0x007232e0
+    };
+    const CutsceneCounters& cutsceneCounters() const { return cutsceneCounters_; }
+    // "frames:N blocked_on_open:N promotions:N completions:N ..." for lua_host_run.
+    std::string cutsceneFrameSummary() const;
 
     // --- screen fade (spec-lua-api-behaviour.md Sec26.24, Sec26.9, Sec2.9,
     // Sec8.13; batch 2026-10-01; implementation in src/lua_screen_fade.cpp) --
@@ -729,23 +819,71 @@ public:
     // --- UI resolution queries (spec-lua-api-behaviour.md Sec26.26) ---------
 
     // vint_is_std_res (0x00e1a150, CONFIRMED rule): the two signed integers
-    // of the per-thread record (0x00e236f0 +4/+8; HIGH CONFIDENCE: width and
-    // height) divided in double precision; < 1.5 -> true, else true only when
-    // the display mode 0x0132bd80 == 2. The record's writers were not dumped
-    // and the mode's writer 0x00e23000 runs from callers not dumped (its file
-    // value -1 is CONFIRMED, but not what scripts see), so all three are OPEN.
+    // of the per-thread record (0x00e236f0 +4/+8) divided in double
+    // precision; < 1.5 -> true, else true only when the display mode
+    // 0x0132bd80 == 2. CONFIRMED (nnlt): the record's integers are copies of
+    // the global width 0x02a5a180 / height 0x02a5a184, written by the UI
+    // subsystem init 0x00e23910 (front-end bring-up) and the resolution-change
+    // path 0x00e23a20, which both recompute the mode (0x00e23000) and the
+    // layout index 0x0132c0ac. Before either writer runs all of these are
+    // OPEN (the record is allocated zeroed on first use, but scripts only run
+    // after the init). The record is per thread (HIGH CONFIDENCE: filled on
+    // the UI thread only); this host has one thread and one record.
     OpenValue<int32_t>& vintRecordFirst() { return vintRecordFirst_; }
     OpenValue<int32_t>& vintRecordSecond() { return vintRecordSecond_; }
     OpenValue<int32_t>& vintDisplayMode() { return vintDisplayMode_; }
+    OpenValue<int32_t>& vintGlobalWidth() { return vintGlobalWidth_; }
+    OpenValue<int32_t>& vintGlobalHeight() { return vintGlobalHeight_; }
+    OpenValue<int32_t>& vintLayoutIndex() { return vintLayoutIndex_; }
     bool vintIsStdRes() const;
+    // 0x00e23000(a, b) (CONFIRMED ladder): a / b in single precision, mode
+    // -1, raised by strict tests > 2.48 -> 0, > 3.18 -> 1, > 3.72 -> 2,
+    // > 4.77 -> 3, > 5.58 -> 4. 2.48 is the single at 0x01256908 (CONFIRMED);
+    // the four doubles are HIGH CONFIDENCE "as rendered", so a ratio above
+    // 2.48 (where they decide the mode) is refused as OPEN. Every ratio at or
+    // below 2.48 - any single display - gives -1 from CONFIRMED values only.
+    static int32_t vintDisplayModeLadder(int32_t a, int32_t b);
+    // 0x00e2ad30 (CONFIRMED: the same rule as vint_is_std_res on the given
+    // pair and mode): 1 = standard, 0 = wide (labels HIGH CONFIDENCE).
+    static int32_t vintLayoutIndexFor(int32_t width, int32_t height, int32_t mode);
+    // UI subsystem init 0x00e23910 (CONFIRMED, called by 0x008489e0 during
+    // front-end bring-up; the pair comes from its second argument - the
+    // display resolution, a HOST INPUT here: lua_host_run's --display). Stores
+    // the globals and the record copy, then the mode and the layout index.
+    // A ratio the ladder refuses leaves the mode and layout index OPEN.
+    void vintUiSubsystemInit(int32_t width, int32_t height);
+    // 0x00e23a20(width, height) (CONFIRMED; caller 0x005df6e0, HYPOTHESIS the
+    // resize handler; what triggers it is OPEN, so nothing in lua_host_run
+    // calls it). Unchanged pair: nothing, returns false. Otherwise: globals,
+    // record copy, mode, layout index; then the UI-state Lua global
+    // vint_lib_init_constants() if it is a function; and when the
+    // standard/wide class flipped, <document name>_reset() for every loaded
+    // UI document - this host has no UI document list, so those calls are
+    // only counted (vintDocumentResetsNotModelled). Throws before writing on
+    // an OPEN read.
+    bool vintResolutionChange(int32_t width, int32_t height);
+    int vintLibInitConstantsCalls() const { return vintLibInitConstantsCalls_; }
+    int vintDocumentResetsNotModelled() const { return vintDocumentResetsNotModelled_; }
     // vint_get_safe_frame (0x00e1b570): shape CONFIRMED (4 numbers from the
     // integers a = +0x8, b = +0xc of (thread context +0x674)+0x14, scaled by
     // two double constants and rounded); order (c1*a, c1*b, c2*a, c2*b) HIGH
-    // CONFIDENCE. The constants 0x0115ba60 / 0x0116dfc0 are OPEN, as are a, b.
+    // CONFIDENCE. The constants are CONFIRMED (nnlt): 0x0115ba60 =
+    // 0x3FB3333340000000 (0.075f widened), 0x0116dfc0 = 0x3FED9999A0000000
+    // (0.925f widened); applySpecInitialState sets them. a and b stay OPEN:
+    // the object at (context +0x674)+0x14 has no specced writer (reading it
+    // as width/height is HIGH CONFIDENCE only).
     OpenValue<int32_t>& vintSafeFrameA() { return vintSafeFrameA_; }
     OpenValue<int32_t>& vintSafeFrameB() { return vintSafeFrameB_; }
     OpenValue<double>& vintSafeFrameScale1() { return vintSafeFrameScale1_; }
     OpenValue<double>& vintSafeFrameScale2() { return vintSafeFrameScale2_; }
+    // The two constants as their CONFIRMED bit patterns.
+    static constexpr uint64_t kSafeFrameScale1Bits = 0x3FB3333340000000ull; // 0x0115ba60
+    static constexpr uint64_t kSafeFrameScale2Bits = 0x3FED9999A0000000ull; // 0x0116dfc0
+    static double doubleFromBits(uint64_t bits);
+    // round(c * v) to nearest (Sec26.26 "round to nearest"). With the
+    // CONFIRMED constants no integer below 2^23 ties; an exact tie (mode not
+    // stated) or a result outside int32 is refused as OPEN.
+    static double vintSafeFrameRound(double product);
 
     // --- mission_end_silently (Sec15.23) ------------------------------------
 
@@ -754,6 +892,316 @@ public:
     // (meaning of both OPEN). Every other bit, and the initial value, is OPEN:
     // only the bits a confirmed writer has written are known (open_state.h).
     OpenBits32& missionFlagsWord() { return missionFlagsWord_; }
+
+    // --- Batch 2026-10-01, spec-lua-api-behaviour.md Sec27 (25 UI-cluster
+    // functions, "ranks 551-650" tranche part D) / Sec28 (25 gameplay-cluster
+    // functions, part C) - see src/lua_spec_confirmed_stubs.cpp's own per-
+    // function doc comment for each field's full reasoning/citation; only a
+    // short pointer is kept here. Same conventions as every batch above:
+    // OpenValue/OpenValueMap for a real engine slot this project cannot know a
+    // value for (OPEN until a test sets it; applySpecInitialState sets the few
+    // CONFIRMED initial values); a plain field (default member initializer)
+    // for a CONFIRMED initial/file value or a value that is write-only within
+    // this batch's own scope (CHOSEN stand-in, explicitly labelled below).
+    // -------------------------------------------------------------------
+
+    // Sec27.1 `cat_mouse_results_select` / Sec27.25 `game_get_in_progress_type`
+    // (both read the same 0x014c2d10 singleton).
+    struct CatMouseMinigame {
+        OpenValue<bool> present{"0x014c2d10 (cat-and-mouse minigame singleton) non-null",
+                                "spec-lua-api-behaviour.md Sec27.1/Sec27.25"};
+        OpenValue<bool> fieldIc1IsOne{"minigame object +0x1c == 1", "spec-lua-api-behaviour.md Sec27.1"};
+        int32_t selection = 0; // the object's own +0xe0 field this batch writes; CHOSEN, write-only in scope
+        uint64_t sessionMessageCount = 0; // "message to co-op session" (0x0086f1b0) - no real networking layer, counted only
+    };
+    CatMouseMinigame& catMouseMinigame() { return catMouseMinigame_; }
+
+    // Sec27.2 `cell_is_mission_complete` (0x00a525a0, same function as Sec20.14's `mission_is_complete`):
+    // keyed by mission name - the resolved object's own +0x88 bit 0x4 (resolve itself reuses objectResolves()).
+    OpenValueMap<bool>& missionComplete() { return missionComplete_; }
+
+    // Sec27.3 `Completion_should_wait_for_coop` / Sec27.4 `Completion_user_is_done_viewing`.
+    struct CompletionScreen {
+        OpenValue<bool> present{"'completion_screen' UI context resolved (0x00878ca0)",
+                                "spec-lua-api-behaviour.md Sec27.3/Sec27.4"};
+        OpenValue<bool> flagClusterSet{"0x02282282 (completion-screen flag cluster, 3rd member) nonzero",
+                                       "spec-lua-api-behaviour.md Sec27.3"};
+        OpenValue<bool> derefByteAtLeastOne{"resolved context's own double-pointer-deref +4 byte >= 1",
+                                            "spec-lua-api-behaviour.md Sec27.3"};
+        OpenValue<bool> everyPlayerAtThreshold1{
+            "0x00877ca0(context,1): every player's per-slot state >= 1 (per-player walk, abstracted to one flag)",
+            "spec-lua-api-behaviour.md Sec27.3"};
+        OpenValue<bool> recordEnabled{"context +4 record's own +2 byte nonzero (gates Sec27.4's write)",
+                                      "spec-lua-api-behaviour.md Sec27.4"};
+        int32_t lastStateWritten = -1; // Sec27.4's own state byte (always 1 when it writes) - CHOSEN, write-only in scope
+        uint64_t messageSentCount = 0; // Sec27.4's own "sends a message" side effect - counted only
+    };
+    CompletionScreen& completionScreen() { return completionScreen_; }
+
+    // Sec27.5 `vcust_set_camera_pos`.
+    struct VcustCamera {
+        OpenValue<bool> targetPresent{"current vehicle-customization target identity (0x00812e40)",
+                                      "spec-lua-api-behaviour.md Sec27.5"};
+        OpenValue<bool> targetValid{"target capability+class gate (+0x33 bit 0x10 clear AND class bit 0x80@+6 set)",
+                                    "spec-lua-api-behaviour.md Sec27.5"};
+        OpenValue<bool> targetAlive{"0x00853b10 alive (true = alive; see Sec27.5's own resolved polarity note)",
+                                    "spec-lua-api-behaviour.md Sec27.5"};
+        // The real CRC-32 of the preset name (sr3save::nameHash - CONFIRMED match to 0x00d9e8b0, see this
+        // header's own top note); the 0x00a9b080 positioning math itself is OPEN and not simulated - this is
+        // the one real, checkable number this project can reproduce exactly.
+        uint32_t lastAppliedPresetHash = 0;
+        bool isStandardActive = true; // 0x01300b88, CONFIRMED file value 1
+    };
+    VcustCamera& vcustCamera() { return vcustCamera_; }
+
+    // Sec27.6 `pause_menu_has_seen_display_cal_screen`: 0x02297c80, CONFIRMED zero at start; no in-scope setter.
+    bool& pauseMenuSeenDisplayCalScreen() { return pauseMenuSeenDisplayCalScreen_; }
+    // Sec27.7 `msn_text_adventure_set_screen`: 0x01301124, CONFIRMED -1 initial.
+    int32_t& textAdventureScreenIndex() { return textAdventureScreenIndex_; }
+    // Sec27.8 `horde_results_set_end_action`: 0x012f3b48, CONFIRMED initial 2.
+    int32_t& hordeResultsEndAction() { return hordeResultsEndAction_; }
+
+    // Sec27.9 `garage_preview_vehicle`.
+    struct GaragePreview {
+        OpenValueMap<int32_t> vehicleTypeAtIndex{"0x014a1a80[index] (vehicle-type/model id table)",
+                                                 "spec-lua-api-behaviour.md Sec27.9"};
+        OpenValue<int32_t> previewCache{"0x014a1d1c (cached preview model id)", "spec-lua-api-behaviour.md Sec27.9"};
+        uint64_t refreshCount = 0; // times 0x005f8670 would have fired - internals OPEN, counted only
+    };
+    GaragePreview& garagePreview() { return garagePreview_; }
+
+    // Sec27.10 `game_lobby_coop_finished`: 0x0224244c, CONFIRMED zero-filled; reuses the existing
+    // screenFadeRequest()/Sec26.24 mechanism for its own fade-out(-1, null, 1) call.
+    bool& coopLobbyFinished() { return coopLobbyFinished_; }
+
+    // Sec27.11 `dialog_box_force_close`.
+    struct DialogForceClose {
+        OpenValueMap<bool> slotMatchesId{
+            "dialog slot holds this id (self-consistency gate shared with dialog_box_set_result, Sec23.18)",
+            "spec-lua-api-behaviour.md Sec27.11"};
+        OpenValueMap<bool> timerArmedNotExpired{"dialog slot +0xc timer armed and not expired (0x00d9e4c0/0x00d9e400)",
+                                                "spec-lua-api-behaviour.md Sec27.11"};
+        OpenValueMap<bool> alreadyClosing{"dialog slot +0x13b already closing", "spec-lua-api-behaviour.md Sec27.11"};
+        OpenValueMap<bool> hasResultCallback{"dialog slot +0x13c result callback present",
+                                             "spec-lua-api-behaviour.md Sec27.11"};
+        OpenValueMap<bool> callbackNameBlank{"dialog slot +0x140 name blank (0x00da73c0)",
+                                             "spec-lua-api-behaviour.md Sec27.11"};
+        OpenValueMap<bool> fullyRemoved{"dialog slot +0x138 fully removed", "spec-lua-api-behaviour.md Sec27.11"};
+        uint64_t closePendingCount = 0;
+        uint64_t resultCallbackFiredCount = 0;
+        uint64_t namedCallbackDispatchCount = 0;
+        uint64_t slotResetCount = 0;
+    };
+    DialogForceClose& dialogForceClose() { return dialogForceClose_; }
+
+    // Sec27.12 `game_autosave`.
+    struct Autosave {
+        OpenValue<bool> suppressFlag{"0x012fcadc (CONFIRMED file value 1 = suppressed)",
+                                     "spec-lua-api-behaviour.md Sec27.12"};
+        OpenValue<bool> secondFlagSet{"0x0290ceca nonzero", "spec-lua-api-behaviour.md Sec27.12"};
+        OpenValue<bool> missionActive{"0x006cecb0 (mission active)", "spec-lua-api-behaviour.md Sec27.12"};
+        OpenValue<bool> thirdGateBlocks{"0x006f8370 result (itself OPEN per spec)", "spec-lua-api-behaviour.md Sec27.12"};
+        OpenValue<bool> fourthFlagNonzero{"0x0229a317 nonzero", "spec-lua-api-behaviour.md Sec27.12"};
+        uint64_t triggeredCount = 0; // 0x00b94ff0 itself OPEN; counts "every gate passed, would have saved"
+    };
+    Autosave& autosave() { return autosave_; }
+
+    // Sec27.13/Sec27.14/Sec27.21/Sec27.22: all bounds-check against the SAME 0x02289b94 slot count.
+    struct PlayerSlots {
+        OpenValue<uint32_t> count{"0x02289b94 (player slot count)",
+                                  "spec-lua-api-behaviour.md Sec27.13/Sec27.14/Sec27.21/Sec27.22"};
+        OpenValueMap<bool> sendInviteOk{"0x0088e690(record,0) == 0", "spec-lua-api-behaviour.md Sec27.13"};
+        OpenValueMap<bool> canSendInvite{"0x0088dfd0 result", "spec-lua-api-behaviour.md Sec27.14"};
+        OpenValueMap<bool> joinFriendInProgressOk{"0x0088e040 result", "spec-lua-api-behaviour.md Sec27.22"};
+        uint64_t gamercardShownCount = 0; // Sec27.21: 0x00870810 internals OPEN, counted only
+    };
+    PlayerSlots& playerSlots() { return playerSlots_; }
+
+    // Sec27.15 `game_set_coop_friendly_fire` / Sec27.16 `game_get_coop_friendly_fire`:
+    // 0x012f4500, CONFIRMED file value 1. The setter's own host/solo write gate reuses coopSession() above.
+    OpenValue<int32_t>& coopFriendlyFireRaw() { return coopFriendlyFireRaw_; }
+
+    // Sec27.19 `game_is_signed_in`: 0x0086fdd0 -> 0x008703b0, Steam user interface pointer (0x0101c54c) non-null.
+    OpenValue<bool>& steamInterfaceAvailable() { return steamInterfaceAvailable_; }
+
+    // Sec27.20 `game_sign_into_network`: this project has no real platform SDK - only the call's own raw
+    // arguments are recorded, honestly, as "a request" (same convention as MinimapIconRecord/ObjectIndicatorRecord
+    // above), since the real async-callback registration is a confirmed no-op stub on this platform anyway.
+    struct SignInRequest {
+        bool wantSignIn = false;
+        std::string callbackName;
+    };
+    std::vector<SignInRequest>& signInRequests() { return signInRequests_; }
+    uint64_t& signInErrorDialogCount() { return signInErrorDialogCount_; } // CONFIRMED unconditional every call
+
+    // Sec27.23 `game_coop_start_new_live` / Sec27.24 `game_coop_start_new_syslink`:
+    // 0x014ff6c1/0x014ff6c2, CONFIRMED zero-filled, mutually exclusive.
+    bool& coopLiveSessionActive() { return coopLiveSessionActive_; }
+    bool& coopSyslinkSessionActive() { return coopSyslinkSessionActive_; }
+
+    // Sec27.25 `game_get_in_progress_type`'s other two branches (the minigame branch reuses catMouseMinigame()).
+    struct InProgressType {
+        OpenValue<bool> activeMissionPresent{"0x014c8460 non-null and phase 0x014c7a14 != 8",
+                                             "spec-lua-api-behaviour.md Sec27.25"};
+        OpenValue<int32_t> activeMissionType{"active mission's own +0xa0 type field", "spec-lua-api-behaviour.md Sec27.25"};
+        OpenValue<bool> activityPresent{"phase 6/7 with 0x014c8328 non-null", "spec-lua-api-behaviour.md Sec27.25"};
+        OpenValue<int32_t> activityType{"that object's own +0xa0 field", "spec-lua-api-behaviour.md Sec27.25"};
+    };
+    InProgressType& inProgressType() { return inProgressType_; }
+
+    // Sec28.1 `helicopter_set_dont_death_spiral`: the vehicle's own flag this batch writes (gated on
+    // objectResolves()); CHOSEN plain map, write-only in scope (either real write path converges on this one
+    // Lua-visible flag per this batch's own no-networking-layer convention).
+    std::unordered_map<std::string, bool>& helicopterDontDeathSpiral() { return helicopterDontDeathSpiral_; }
+
+    // Sec28.2 `helicopter_fly_to_set_goal_direction`.
+    struct HelicopterFlyTo {
+        OpenValueMap<bool> qualifies{"0x00ad31a0: heli AI record +0x2c in {3,4}", "spec-lua-api-behaviour.md Sec28.2"};
+        OpenValueMap<bool> applyGate{"heli AI record (0x00a79470) +0x4b0 == 1", "spec-lua-api-behaviour.md Sec28.2"};
+        struct Request {
+            std::string targetName;
+            bool useOrientationMode = false;
+            bool applied = false;
+        };
+        // The real position/orientation arithmetic (Sec28.2's own body) is not reproduced - nothing in this
+        // batch's scope reads a computed vector back, so only the real BRANCH taken is recorded, honestly, not
+        // invented numbers (same "record the request" convention as MinimapIconRecord above).
+        std::unordered_map<std::string, Request> lastRequest;
+    };
+    HelicopterFlyTo& helicopterFlyTo() { return helicopterFlyTo_; }
+
+    // Sec28.3 `hdr_bloom_set_multiplier`: 0x012ec280, CONFIRMED initial 1.0.
+    float& hdrBloomMultiplier() { return hdrBloomMultiplier_; }
+
+    // Sec28.4 `guardian_angel_enable_indicators`.
+    struct GuardianAngel {
+        OpenValue<bool> modeIsThree{"0x006d2910 mode == 3 (via 0x00614d00, OPEN what the mode means)",
+                                    "spec-lua-api-behaviour.md Sec28.4"};
+        OpenValue<bool> objectPresent{"0x00614cb0() non-null", "spec-lua-api-behaviour.md Sec28.4"};
+        bool indicatorsEnabled = false; // the object's own +0x57d byte this batch writes; CHOSEN, write-only in scope
+    };
+    GuardianAngel& guardianAngel() { return guardianAngel_; }
+
+    // Sec28.5 `group_get_next_npc` / Sec28.6 `group_get_first_npc`: an empty known string means "no
+    // next/no members" (the real null-pointer/wraparound-stop case); unknown means OPEN.
+    OpenValueMap<std::string>& groupNextNpcName() { return groupNextNpcName_; }   // keyed by current NPC name
+    OpenValueMap<std::string>& groupFirstNpcName() { return groupFirstNpcName_; } // keyed by group name
+
+    // Sec28.7 `get_num_humans_in_trigger`.
+    OpenValueMap<int32_t>& humansInTriggerCount() { return humansInTriggerCount_; }
+
+    // Sec28.8 `get_char_vehicle_is_in_air`.
+    OpenValueMap<bool>& vehicleInAirByCharacter() { return vehicleInAirByCharacter_; }
+
+    // Sec28.9 `effect_play_finisher`.
+    struct EffectFinisher {
+        OpenValue<bool> gamepadMode{"gamepad flag 0x0141250d", "spec-lua-api-behaviour.md Sec28.9"};
+        OpenValueMap<bool> effectIndexValid{"0x005c50b0 icon effect index != -1, keyed by icon name",
+                                            "spec-lua-api-behaviour.md Sec28.9"};
+        OpenValue<double> successReturn{"0x00a48af0's own return value (Sec9.1/Sec12.10/Sec12.12 family, not modelled further)",
+                                        "spec-lua-api-behaviour.md Sec28.9"};
+    };
+    EffectFinisher& effectFinisher() { return effectFinisher_; }
+
+    // Sec28.10 `dlc3_m03_set_sprint_waning`: 0x0263ae3a, CONFIRMED zero at start.
+    bool& dlc3SprintWaning() { return dlc3SprintWaning_; }
+
+    // Sec28.11 `debris_flow_recycle_object`: 0x006fd4f0's own role is HYPOTHESIS ("return object to pool"); only
+    // the real gated call count is modelled, keyed by flow id, not a simulated pool.
+    std::unordered_map<int64_t, int>& debrisFlowRecycleCount() { return debrisFlowRecycleCount_; }
+
+    // Sec28.12 `customization_restore_player_rig` / Sec28.21 `character_get_gender` (characterGender() below,
+    // a SEPARATE per-name map: Sec28.21 resolves by name through the generic chain, Sec28.12 reads a dedicated
+    // "local player 1"/"co-op player" accessor instead - two genuinely different access paths per the spec text).
+    struct PlayerRig {
+        OpenValue<int32_t> localPlayer1Gender{"local player 1's own +0xa41 gender byte (0x009da4e0)",
+                                              "spec-lua-api-behaviour.md Sec28.12"};
+        OpenValue<bool> coopPlayerPresent{"0x009df3d0 non-null (second/co-op player)", "spec-lua-api-behaviour.md Sec28.12"};
+        OpenValue<int32_t> coopPlayerGender{"co-op player's own +0xa41 gender byte", "spec-lua-api-behaviour.md Sec28.12"};
+        uint64_t restorePlayer1Count = 0;
+        uint64_t restoreCoopCount = 0;
+    };
+    PlayerRig& playerRig() { return playerRig_; }
+
+    // Sec28.13 `crib_weapon_add_enable` / Sec28.14 `crib_weapon_add_disable`: 0x012ecb34, CONFIRMED file value 1.
+    bool& cribWeaponAddEnabled() { return cribWeaponAddEnabled_; }
+
+    // Sec28.15 `crib_unlock_strongold`.
+    struct Stronghold {
+        OpenValueMap<bool> stillLocked{"stronghold byte +0x7a bit 0x2 set ('still locked')",
+                                       "spec-lua-api-behaviour.md Sec28.15"};
+        uint64_t unlockedCount = 0;             // host-branch, bit was set
+        uint64_t clientOrSoloRequestCount = 0;  // the "without a session or as client" branch - internals OPEN, counted only
+    };
+    Stronghold& stronghold() { return stronghold_; }
+
+    // Sec28.16 `continuous_explosion_start`: reconciled with Sec22.24 `continuous_explosion_stop`, one global
+    // continuous-explosion state.
+    struct ContinuousExplosion {
+        OpenValueMap<bool> definitionResolves{
+            "continuous-explosion definition row resolves (0x005eb390, NOT the 0x02442750 singleton family)",
+            "spec-lua-api-behaviour.md Sec28.16"};
+        OpenValue<bool> active{"0x012ec964 (continuous explosion global state)", "spec-lua-api-behaviour.md Sec28.16"};
+        std::string lastDefName, lastTargetName; // CHOSEN, test-observable
+        uint64_t startCount = 0;
+    };
+    ContinuousExplosion& continuousExplosion() { return continuousExplosion_; }
+
+    // Sec28.17 `clear_callbacks_for_obj`: the real 6-wrapper/6-sub-record-base dispatch tree (Sec28.17's own
+    // seven hidden-`this` findings) is NOT modelled - only that a call was gated on objectResolves() and
+    // cleared SOMETHING is counted, honestly, per name (same "record the request" convention as
+    // minimap_icon_add_do/object_indicator_add_do above).
+    std::unordered_map<std::string, uint64_t>& callbacksClearedCount() { return callbacksClearedCount_; }
+
+    // Sec28.18 `city_zone_swap_is_active`: 0x0242dc90, a list of active-swap name hashes. Starts empty - the
+    // honest "nothing marked active yet" default (an empty array IS zero entries, not a guess), set by Sec1.9's
+    // `city_zone_swap` (out of this batch's scope) or directly by a test.
+    std::unordered_set<uint32_t>& activeCityZoneSwapHashes() { return activeCityZoneSwapHashes_; }
+
+    // Sec28.19 `character_set_counter_on_grabbed`.
+    struct CounterOnGrabbed {
+        OpenValueMap<bool> gatePasses{
+            "double-gate (0x008ae480/0x008837a0 direct OR 0x008ae3a0 replicate) passes, abstracted to one flag",
+            "spec-lua-api-behaviour.md Sec28.19"};
+        std::unordered_map<std::string, bool> value; // the per-character flag this batch writes; CHOSEN, write-only in scope
+    };
+    CounterOnGrabbed& counterOnGrabbed() { return counterOnGrabbed_; }
+
+    // Sec28.20 `character_remove_child_item_by_name`: this project has no real class-descriptor/children-list
+    // engine data; this is this project's own minimal, directly-editable stand-in for the real +0x1c/+0x20
+    // list, matching the functional contract (remove every item named X, case-insensitively) without simulating
+    // the two descriptor-bit gates (Sec28.20's own corrected 0x00853b30 reading).
+    std::unordered_map<std::string, std::vector<std::string>>& characterChildItems() { return characterChildItems_; }
+
+    // Sec28.21 `character_get_gender`: keyed by character name (see the PlayerRig note above for why this is a
+    // separate map from localPlayer1Gender/coopPlayerGender).
+    OpenValueMap<int32_t>& characterGender() { return characterGender_; }
+
+    // Sec28.22 `character_evacuate_from_all_vehicles`: 0x00af3e10's own occupant-state dispatch (1/2/3) is OPEN
+    // per spec; only the gated call count is modelled, keyed by character name.
+    std::unordered_map<std::string, uint64_t>& evacuateFromVehiclesCount() { return evacuateFromVehiclesCount_; }
+
+    // Sec28.23 `cellphone_animate_start_do`: reuses the existing hasLocalPlayer() above for "player 1 exists".
+    OpenValue<bool>& cellphoneAnimSuppressed() { return cellphoneAnimSuppressed_; } // 0x00943a20(player) result
+    uint64_t& cellphoneAnimPlayedCount() { return cellphoneAnimPlayedCount_; }
+
+    // Sec28.24 `boss_battle_matt_get_cheat` / Sec28.25 `boss_battle_matt_cheats_start`, the Sec24.1
+    // `boss_battle_matt_cheats_stop` cluster (0x012ec71c.. 0x012ec73c).
+    struct BossBattleMatt {
+        // 0x012ec730: the cheat-slot sentinel Sec28.24 reads. Its only writer in any spec read so far is
+        // Sec24.1's `boss_battle_matt_cheats_stop`, out of this batch's own scope - stays OPEN here.
+        OpenValue<int32_t> cheatSlot{"0x012ec730 (cheat-slot sentinel; writer is Sec24.1's cheats_stop, out of this batch's scope)",
+                                     "spec-lua-api-behaviour.md Sec28.24"};
+        // 0x012ec734/0x012ec738/0x012ec73c, CHOSEN, write-only in scope. n2/n3 are stored as the raw lua_tonumber
+        // doubles forwarded to 0x005e59f0 - Sec28.25's own text does not state they are rounded.
+        int32_t lastId = 0;
+        double lastN2 = 0.0, lastN3 = 0.0;
+        bool active = false;                        // 0x012ec724
+        OpenValue<int32_t> retryCounter{"0x012ec720", "spec-lua-api-behaviour.md Sec28.25"};
+        static constexpr int32_t kRetryLimit = 4;     // 0x012ec71c, CONFIRMED static constant
+        int64_t deadlineMs = 0;                       // 0x012ec728, CHOSEN, write-only in scope
+    };
+    BossBattleMatt& bossBattleMatt() { return bossBattleMatt_; }
 
     // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
 
@@ -799,14 +1247,70 @@ private:
     // --- zscene (Sec26.25/Sec14.23/Sec8.21), see the accessor doc comment above ---
     OpenValueMap<bool> zsceneLoadable_{"zscene table entry with kind 1 (0x00721be0 lookup, 0x00723d20 test)",
                                        "spec-lua-api-behaviour.md Sec26.25/Sec14.23"};
+    bool zsceneTableInstalled_ = false;
+    std::vector<ZsceneTableRow> zsceneTable_;
     OpenValue<bool> zsceneSkipAllCutscenes_{"0x0153b556 (skip_all_cutscenes)", "spec-lua-api-behaviour.md Sec26.25/Sec8.21"};
     OpenValue<std::string> zsceneCurrent_{"0x0153b530 (current scene entry)", "spec-lua-api-behaviour.md Sec26.25"};
     OpenValue<std::string> zscenePending_{"0x0153b538 (pending scene entry)", "spec-lua-api-behaviour.md Sec26.25"};
     OpenValue<int> zsceneStateCode_{"0x0153b51c (zscene load state)", "spec-lua-api-behaviour.md Sec26.25/Sec14.23"};
-    OpenValue<bool> zsceneTeardownCutsceneGuard_{"zscene teardown cutscene guard (*0x0153b528 +8 == 1, 0x0153b520 in 7..13)",
-                                                 "spec-lua-api-behaviour.md Sec26.25"};
-    OpenValue<bool> zsceneCurrentHandleNotLive_{"current scene handle class 1 (0x00dafb60)", "spec-lua-api-behaviour.md Sec26.25"};
-    int zscenePendingPromotionRefusals_ = 0;
+    OpenValue<bool> zsceneAutoSelectNearest_{"0x0153b541 (auto-select the nearest scene when idle)",
+                                             "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> zsceneRequeueOnReset_{"0x0153b542 (re-queue the current entry on reset)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValueMap<int> zsceneHandleClass_{"selected request-group handle class (0x00dafb60: 1 not live, 3 resident, 5 failed) of scene entry",
+                                         "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> zsceneSoundtrackActive_{"0x0153b71c (soundtrack stream started, not released)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<int64_t> zsceneSoundtrackStartMs_{"0x0153b724 (soundtrack timer start, host ms)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> zsceneSoundtrackEnded_{"soundtrack stream status 0x66 (ended; no audio in this host)",
+                                           "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<std::string> zsceneNearestWorldObjectScene_{"nearest scene-bearing world object (list 0x03171a64; no world objects in this host)",
+                                                          "spec-lua-api-behaviour.md Sec26.25"};
+    int zscenePendingBlockedRefusals_ = 0;
+
+    // --- cutscene machine (Sec26.25 item 6) ---
+    CutsceneManager cutsceneManager_;
+    OpenValue<bool> cutscenePreloadMounted_{"0x0153b543 (preload packfiles mounted)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<std::string> cutsceneChainTarget_{"0x0153b52c (next cutscene to chain into)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> cutscenePlayerChecksPass_{"cutscene state 3 player-side checks", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<int64_t> cutsceneLoadStamp_{"0x012f5d30 (120 s resource-load stamp)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> cutscenePlayingByte_{"0x0153b525 (a cutscene is playing)", "spec-lua-api-behaviour.md Sec26.25"};
+    OpenValue<bool> cutsceneInProgressByte_{"0x0153b526 (a cutscene is in progress)", "spec-lua-api-behaviour.md Sec26.25"};
+    std::vector<std::string> cutsceneMountLog_;
+    std::vector<std::string> cutsceneLoadLog_;
+    CutsceneCounters cutsceneCounters_;
+
+    // src/lua_cutscene.cpp internals: each "plan" only reads (and may throw
+    // OpenStateError); each "apply" only writes.
+    struct ZsceneResolved {
+        bool found = false;        // a table entry (or, without a table, the per-name map) exists
+        bool loadable = false;     // found and kind == 1
+        std::string key;           // zsceneTableKey of the entry
+    };
+    ZsceneResolved zsceneResolve(const std::string& name) const;
+    enum class TeardownKind { Nothing, NotLive, Live };
+    TeardownKind zsceneTeardownPlan(int c) const;
+    void zsceneTeardownApply(TeardownKind kind, int a, int b);
+    struct ResetPlan { // 0x00720320
+        bool result = false;
+        enum class Write { None, SetAutoSelect, ResetNotLive } write = Write::None;
+        std::string current;
+        bool requeue = false;
+    };
+    ResetPlan zsceneResetPlan() const;
+    void zsceneResetApply(const ResetPlan& plan);
+    bool zsceneCutsceneGuard() const;
+    bool zsceneSoundtrackFinished() const;
+    struct GatePlan {
+        bool proceeds = false;     // false: the gate returns (missing / kind != 1 / skip / already current)
+        std::string key;
+        TeardownKind teardown = TeardownKind::Nothing;
+    };
+    GatePlan zsceneGatePlan(const std::string& name) const;
+    void zsceneGateApply(const GatePlan& plan);
+    void zscenePromotionStep();
+    void zsceneCompletionStep();
+    void cutsceneMachineStep();       // 0x0072d660
+    void cutsceneSecondStep();        // 0x007258a0
+    void cutsceneSetState(int32_t s);
 
     // --- screen fade (Sec26.24), see the accessor doc comment above ---
     ScreenFade screenFade_;
@@ -823,9 +1327,16 @@ private:
     bool screenFadeCallUi(const char* name, int nargs, double a0, double a1, double a2, bool* errored);
 
     // --- vint_is_std_res / vint_get_safe_frame (Sec26.26) ---
-    OpenValue<int32_t> vintRecordFirst_{"per-thread record (0x00e236f0) +4 (HIGH CONFIDENCE: width)", "spec-lua-api-behaviour.md Sec26.26"};
-    OpenValue<int32_t> vintRecordSecond_{"per-thread record (0x00e236f0) +8 (HIGH CONFIDENCE: height)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintRecordFirst_{"per-thread record (0x00e236f0)+4 (copy of width 0x02a5a180; UI init 0x00e23910 not run)",
+                                        "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintRecordSecond_{"per-thread record (0x00e236f0)+8 (copy of height 0x02a5a184; UI init 0x00e23910 not run)",
+                                         "spec-lua-api-behaviour.md Sec26.26"};
     OpenValue<int32_t> vintDisplayMode_{"0x0132bd80 (display mode)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintGlobalWidth_{"0x02a5a180 (display width)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintGlobalHeight_{"0x02a5a184 (display height)", "spec-lua-api-behaviour.md Sec26.26"};
+    OpenValue<int32_t> vintLayoutIndex_{"0x0132c0ac (layout index: 1 standard, 0 wide)", "spec-lua-api-behaviour.md Sec26.26"};
+    int vintLibInitConstantsCalls_ = 0;
+    int vintDocumentResetsNotModelled_ = 0;
     OpenValue<int32_t> vintSafeFrameA_{"safe-frame source +0x8 ((context +0x674)+0x14)", "spec-lua-api-behaviour.md Sec26.26"};
     OpenValue<int32_t> vintSafeFrameB_{"safe-frame source +0xc ((context +0x674)+0x14)", "spec-lua-api-behaviour.md Sec26.26"};
     OpenValue<double> vintSafeFrameScale1_{"double constant 0x0115ba60", "spec-lua-api-behaviour.md Sec26.26"};
@@ -837,6 +1348,60 @@ private:
     std::vector<ScreenFadeRequest> screenFadeRequests_;
     int screenFadeOpcode53Count_ = 0;
     OpenBits32 missionFlagsWord_{"0x014c848c", "spec-lua-api-behaviour.md Sec15.23"};
+
+    // --- Batch 2026-10-01, spec-lua-api-behaviour.md Sec27/Sec28 - see each
+    // public accessor's own doc comment above for citation/reasoning. ---
+    CatMouseMinigame catMouseMinigame_;
+    OpenValueMap<bool> missionComplete_{"character/mission object +0x88 bit 0x4 ('is mission complete')",
+                                        "spec-lua-api-behaviour.md Sec27.2/Sec20.14"};
+    CompletionScreen completionScreen_;
+    VcustCamera vcustCamera_;
+    bool pauseMenuSeenDisplayCalScreen_ = false; // Sec27.6, CONFIRMED zero at start
+    int32_t textAdventureScreenIndex_ = -1;      // Sec27.7, CONFIRMED -1 initial
+    int32_t hordeResultsEndAction_ = 2;          // Sec27.8, CONFIRMED initial 2
+    GaragePreview garagePreview_;
+    bool coopLobbyFinished_ = false; // Sec27.10, CONFIRMED zero-filled
+    DialogForceClose dialogForceClose_;
+    Autosave autosave_;
+    PlayerSlots playerSlots_;
+    OpenValue<int32_t> coopFriendlyFireRaw_{"0x012f4500 (coop friendly-fire internal mode)",
+                                            "spec-lua-api-behaviour.md Sec27.15/Sec27.16"};
+    OpenValue<bool> steamInterfaceAvailable_{"Steam user interface pointer (0x0101c54c import) non-null",
+                                             "spec-lua-api-behaviour.md Sec27.19"};
+    std::vector<SignInRequest> signInRequests_;
+    uint64_t signInErrorDialogCount_ = 0;
+    bool coopLiveSessionActive_ = false;    // 0x014ff6c1, Sec27.23, CONFIRMED zero-filled
+    bool coopSyslinkSessionActive_ = false; // 0x014ff6c2, Sec27.24, CONFIRMED zero-filled
+    InProgressType inProgressType_;
+
+    std::unordered_map<std::string, bool> helicopterDontDeathSpiral_;
+    HelicopterFlyTo helicopterFlyTo_;
+    float hdrBloomMultiplier_ = 1.0f; // Sec28.3, CONFIRMED initial 1.0
+    GuardianAngel guardianAngel_;
+    OpenValueMap<std::string> groupNextNpcName_{"character +0x9c next name (circular list, group head stops it)",
+                                                "spec-lua-api-behaviour.md Sec28.5"};
+    OpenValueMap<std::string> groupFirstNpcName_{"group +0x40 head name", "spec-lua-api-behaviour.md Sec28.6"};
+    OpenValueMap<int32_t> humansInTriggerCount_{"trigger occupancy count (0x0075d4b0/category 47)",
+                                                "spec-lua-api-behaviour.md Sec28.7"};
+    OpenValueMap<bool> vehicleInAirByCharacter_{"character's cached active vehicle is airborne (0x00ad4040)",
+                                                "spec-lua-api-behaviour.md Sec28.8"};
+    EffectFinisher effectFinisher_;
+    bool dlc3SprintWaning_ = false; // Sec28.10, CONFIRMED zero at start
+    std::unordered_map<int64_t, int> debrisFlowRecycleCount_;
+    PlayerRig playerRig_;
+    bool cribWeaponAddEnabled_ = true; // Sec28.13/Sec28.14, CONFIRMED file value 1
+    Stronghold stronghold_;
+    ContinuousExplosion continuousExplosion_;
+    std::unordered_map<std::string, uint64_t> callbacksClearedCount_;
+    std::unordered_set<uint32_t> activeCityZoneSwapHashes_;
+    CounterOnGrabbed counterOnGrabbed_;
+    std::unordered_map<std::string, std::vector<std::string>> characterChildItems_;
+    OpenValueMap<int32_t> characterGender_{"character +0xa41 gender byte (1=female, else male)",
+                                           "spec-lua-api-behaviour.md Sec28.21/Sec28.12/Sec16.8"};
+    std::unordered_map<std::string, uint64_t> evacuateFromVehiclesCount_;
+    OpenValue<bool> cellphoneAnimSuppressed_{"0x00943a20(player) result", "spec-lua-api-behaviour.md Sec28.23"};
+    uint64_t cellphoneAnimPlayedCount_ = 0;
+    BossBattleMatt bossBattleMatt_;
 };
 
 // Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).

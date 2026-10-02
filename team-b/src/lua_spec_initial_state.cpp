@@ -39,10 +39,13 @@ void applySpecInitialState(EngineState& es) {
     //    disassembly): 0 at load, so store_vehicle_get_state returns 0.0.
     es.vehicleStoreActive().set(false);
 
-    // 4. zscene (Sec26.25, Sec14.23, Sec8.21): no start-up value is given for
-    //    the skip byte 0x0153b556, the current / pending entries, the load
-    //    state 0x0153b51c, or the cutscene.xtbl-backed table (field parse
-    //    OPEN). All stay OPEN.
+    // 4. zscene and the cutscene machine (Sec26.25, Sec14.23, Sec8.21): no
+    //    start-up value is given for the skip byte 0x0153b556, the current /
+    //    pending entries, the load state 0x0153b51c, 0x0153b541 / 0x0153b542,
+    //    the soundtrack stream globals, the cutscene state 0x0153b520 or the
+    //    cutscene manager. All stay OPEN. The scene table itself is real data
+    //    (cutscene.xtbl + <name>.cte_xtbl); lua_host_run installs it from the
+    //    archive cache (EngineState::installZsceneTable), not this function.
 
     // 5. screen fade (Sec26.24, CONFIRMED - disassembly, "Globals" table: the
     //    file-backed values the executable starts with). The init 0x0059fa30
@@ -63,13 +66,33 @@ void applySpecInitialState(EngineState& es) {
     f.holdImagesUntil.set(-1);     // 0x012e6ab8
     f.autoSaveStamp.set(-1);       // 0x012e6abc
     f.autoSaveCounter.set(0);      // 0x013effd4
-    f.useLoadImages.set(false);    // 0x0149365c
+    // 0x0149365c: 0 in the file, set to 1 unconditionally by the engine
+    // start-up 0x005d1a30 and never cleared (Sec26.24 Globals, job nnlt,
+    // CONFIRMED) - before any script, so scripts always see 1.
+    f.useLoadImages.set(true);
     f.lastBroadcastWasOut.set(false); // 0x013effc5
 
-    // 6. UI resolution (Sec26.26): the display mode 0x0132bd80 is -1 in the
-    //    file, but its writer 0x00e23000 runs from callers not dumped, so the
-    //    value scripts see is OPEN; the width/height record's writers and the
-    //    safe-frame constants are OPEN too. Nothing set.
+    // 6. UI resolution (Sec26.26, CONFIRMED - disassembly, job nnlt): the two
+    //    safe-frame constants, read as two dwords each: 0x0115ba60 =
+    //    0x3FB3333340000000 (0.075f widened to double) and 0x0116dfc0 =
+    //    0x3FED9999A0000000 (0.925f widened) - NOT the decimals 0.075 / 0.925,
+    //    which tie at dimensions = 20 (mod 40). The display mode 0x0132bd80 is
+    //    -1 in the file, but the UI subsystem init 0x00e23910 recomputes it
+    //    before any script runs, from the display resolution - a host input
+    //    (EngineState::vintUiSubsystemInit, lua_host_run --display); until then
+    //    the mode, the width/height globals and the per-thread record stay OPEN.
+    //    The safe-frame source object's +0x8 / +0xc have no specced writer.
+    es.vintSafeFrameScale1().set(EngineState::doubleFromBits(EngineState::kSafeFrameScale1Bits));
+    es.vintSafeFrameScale2().set(EngineState::doubleFromBits(EngineState::kSafeFrameScale2Bits));
+
+    // 7. Batch 2026-10-01, spec-lua-api-behaviour.md Sec27/Sec28: the only two
+    //    OpenValue slots this batch's own spec text gives a CONFIRMED file
+    //    value for (every other new OpenValue/OpenValueMap stays OPEN - see
+    //    engine_state.h's own per-field doc comments; plain, non-OpenValue
+    //    fields with a CONFIRMED initial value use a default member
+    //    initializer instead, so they need no entry here).
+    es.coopFriendlyFireRaw().set(1);       // 0x012f4500 (Sec27.15/Sec27.16)
+    es.autosave().suppressFlag.set(true);  // 0x012fcadc (Sec27.12)
 }
 
 } // namespace sr3luahost

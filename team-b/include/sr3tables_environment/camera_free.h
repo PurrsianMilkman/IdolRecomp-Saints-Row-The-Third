@@ -104,14 +104,44 @@ inline constexpr std::array<std::string_view, 61> kCameraFreeSubmodeNames = {
     "Script Fine Aim", "Script Crouch", "Script Fine Aim Crouch", "MAS Fine Aim",
 };
 
+// [FOR TEAM B 2026-10-01 CORRECTION, CONFIRMED - disassembly (0x0056B660, 0x0056DCA0,
+// 0x00DAC830): four facts about this row, all now reflected below -
+//  1. `min_elevation`/`max_elevation`/`default_elevation` are AUTHORED in degrees but the
+//     engine STORES radians (multiplied by the literal constant 0.017453 - the exact value the
+//     disassembly uses, slightly short of true pi/180 = 0.017453293; kept as the disassembly's
+//     own literal, not recomputed at higher precision, so this matches the engine bit-for-bit).
+//     ParseCameraFree now applies this conversion when storing the three fields (previously
+//     stored the raw authored degrees - a bug fixed here).
+//  2. `+0x18` (a present/absent flag for `default_elevation`) is exactly what
+//     `defaultElevation.has_value()` already reports - no separate field needed.
+//  3. `z_dist`/`y_dist` are read with the ALWAYS-WRITE accessor (0x00DACCB0), same as
+//     min_elevation etc. - NOT "write only if present" - but the two results are handed to
+//     0x0056AD50(z, y) and are NOT stored anywhere in the submode record (what 0x0056AD50 does
+//     with them is OPEN). Modelled as Always<float> (previously std::optional<float>, which
+//     wrongly implied a "write only if present" accessor) with no destination offset, since
+//     they are real data this row supplies but are not a persisted record field.
+//  4. A LATER `submode` row with the same `name` (after the engine's own `Aspect` filter, a
+//     runtime display-mode test this reader does not and cannot evaluate statically - see
+//     `aspect` below) OVERWRITES the earlier one in the engine's slot array - last one wins, no
+//     duplicate check/error. ParseCameraFree already returns every row as a plain, ordered
+//     std::vector (append only, never keyed/deduplicated by name) - a caller folding this list
+//     forward by name (last write wins) reproduces the engine's slot array exactly; this was
+//     verified to already be correct (no first-wins / error-on-duplicate bug exists here to
+//     fix). The `Aspect` filter itself (a runtime widescreen/standard flag, 0x01493661) is left
+//     to the caller, same as every other runtime-state-dependent filter in this file (e.g.
+//     Framework in effects.xtbl/vfx.xtbl) - this struct surfaces `aspect` as raw text only.
 struct CameraFreeSubmode {
     std::optional<std::string> name;    // name -> kCameraFreeSubmodeNames index (case-insensitive)
-    std::optional<std::string> aspect;  // Aspect (string, read; destination not stated by the spec)
+    std::optional<std::string> aspect;  // Aspect (string, read; the widescreen/standard runtime filter
+                                         // this reader does not evaluate - see the struct banner)
     Vec3Result lookatOffset;             // lookat_offset (vec3), combined with z_dist/y_dist at load
-    std::optional<float> zDist, yDist;   // z_dist, y_dist
-    Always<float> minElevation;          // min_elevation -> +0x10
-    Always<float> maxElevation;          // max_elevation -> +0x14
-    std::optional<float> defaultElevation; // default_elevation -> +0x1C (EXPLICITLY write-if-present)
+    Always<float> zDist, yDist;          // z_dist, y_dist - always-write reads, NOT a persisted record
+                                          // field (point 3 above)
+    Always<float> minElevation;          // min_elevation -> +0x10, RADIANS (converted from authored
+                                          // degrees x 0.017453 - point 1 above)
+    Always<float> maxElevation;          // max_elevation -> +0x14, RADIANS (same conversion)
+    std::optional<float> defaultElevation; // default_elevation -> +0x1C, RADIANS (same conversion);
+                                            // EXPLICITLY write-if-present - has_value() IS +0x18 (point 2)
     Always<float> baseFov;                // base_fov -> +0x20
     Always<float> blendTime;              // blend_time -> +0x2C
     Always<float> xShift;                 // x_shift -> +0x34

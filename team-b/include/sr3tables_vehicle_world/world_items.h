@@ -75,10 +75,27 @@ struct LevelObjectCollisionSound {
 };
 
 struct LevelObjectDeathMoney {
+    bool present = false;     // Death_Money wrapper itself present on this row
     Always<uint32_t> min;    // Death_Money/Min
     Always<uint32_t> max;    // Death_Money/Max
-    Vec3Result point;         // Death_Money's own X/Y/Z (the "Cash_Out_Point"-labelled vec3 - CONFIRMED empirically
-                              // to be Death_Money's own children, not a separate wrapper, spec 12.1/12.3)
+    // point: CORRECTED 2026-10-02 (Team A exe re-derivation, spec 12.1). The
+    // OLD text here ("CONFIRMED empirically to be Death_Money's own X/Y/Z
+    // children, not a separate wrapper") was WRONG - that empirical check
+    // only confirmed the real XML SHAPE of one sample row (which happened to
+    // carry <X>/<Y>/<Z> directly under <Death_Money>, all-zero), it did not
+    // confirm what the READER actually consumes. CONFIRMED - disassembly
+    // (FUN_008e7490's vec3-with-presence helper, read in full): the
+    // "Cash_Out_Point"-labelled vec3 is read from a `Cash_Out_Point` CHILD
+    // ELEMENT of Death_Money, not from Death_Money's own X/Y/Z fields
+    // directly. OPEN, not guessed (spec 12.1 dispatch note): whether the
+    // underlying helper falls back to Death_Money's own X/Y/Z when the named
+    // `Cash_Out_Point` child is absent is NOT determined - this reader does
+    // NOT implement a fallback (ReadVec3Child's own "absent -> present=false,
+    // zeroed" behaviour is used as-is, with no special-casing added either
+    // way), so `point.present == false` for a row whose Death_Money has no
+    // `Cash_Out_Point` child correctly represents "this reader doesn't know",
+    // not "the real value is zero".
+    Vec3Result point;
     Always<bool> justCoins;   // Death_Money/Just_Coins
 };
 

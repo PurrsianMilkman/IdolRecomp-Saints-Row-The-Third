@@ -1,0 +1,53 @@
+# next-dump list for spec-tables-audio-radio.md (re-derivation 2026-10-01/02, job 20261001T123123-team-a-ytgi)
+# one request per line; the comment names the unit and the question it settles
+# --- §1.2 Wwise string-to-id
+func 0x00F4C350
+func 0x0046FC50
+# --- §2 audio_banks (free-list capacity, +0x5B bit 6, wep_ cache capacity, +0x48 value, voice adjustment, bounded copy)
+func 0x00466ED0
+func 0x004673C0
+func 0x004641F0
+func 0x00DA7D20
+func 0x00464820
+func 0x00DA7930
+# --- §6 / §5 / §8 / §9 shared accessors (missing-child results, always vs if-present flavour)
+func 0x00DABDF0
+func 0x00DABE80
+func 0x00DABA10
+func 0x00DABA40
+func 0x0070B980
+# --- §9 foley_touch consumers
+func 0x00561BB0
+func 0x00561A70
+func 0x00561A90
+# --- §10 foley_engine (pointer-array room, name -> index resolvers, field getters)
+range 0x013BB8A0-0x013BBAA8
+func 0x005592F0
+func 0x005594E0
+func 0x005593C0
+func 0x00558FD0
+# --- §11 / §12 / §16 radio stations, playlists, radio-content table entry creation
+func 0x0055F580
+func 0x0055C9F0
+func 0x0055C950
+func 0x0055F270
+func 0x0055D7D0
+func 0x0055E000
+func 0x0083E5C0
+func 0x0083E200
+func 0x0055BF90
+func 0x0055BFA0
+# --- §14 radio_events (consumer, NULL-name hash, EventType literals)
+func 0x0055C0B0
+func 0x00D9E8B0
+ptrs 0x01119960 5
+# --- §15 commercial_events (startup initialiser, second dword, third reader)
+range 0x00FEE0F0-0x00FEE130
+xref 0x013BBB0C
+func 0x0055C070
+# --- §17 voc_sb_line_sit (+0x54 bit 15 writers, loader timing, line-situation registry, gate byte)
+func 0x00465CC0
+func 0x00469460
+func 0x0046B310
+func 0x0046B3B0
+range 0x01353760-0x01353780

@@ -843,6 +843,8 @@ add_library(sr3luahost STATIC
     src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
     src/lua_screen_fade.cpp
+    src/lua_cutscene.cpp
+    src/lua_vint_resolution.cpp
     src/lua_tutorial_names.cpp
     src/lua_bare_globals.cpp
 )
@@ -878,6 +880,29 @@ target_link_libraries(sr3luahost_refusal_stress_tests PRIVATE sr3luahost)
 target_compile_definitions(sr3luahost_refusal_stress_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
 add_test(NAME synthetic_luahost_refusal_stress_test COMMAND sr3luahost_refusal_stress_tests)
 
+# zscene lifecycle driver, cutscene machine and UI resolution state
+# (spec-lua-api-behaviour.md Sec26.25 / Sec26.26, 2026-10-01 nnlt text).
+add_executable(sr3luahost_cutscene_tests tests/synthetic_luahost_cutscene_test.cpp)
+target_link_libraries(sr3luahost_cutscene_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_cutscene_test COMMAND sr3luahost_cutscene_tests)
+
+# Batch 2026-10-01: spec-lua-api-behaviour.md Sec27 (25 UI-cluster names)
+# and Sec28 (25 gameplay-cluster names), "ranks 551-650" tranche parts D/C
+# - see src/lua_spec_confirmed_stubs.cpp and this test's own top comment.
+add_executable(sr3luahost_batch2728_tests tests/synthetic_luahost_batch2728_test.cpp)
+target_link_libraries(sr3luahost_batch2728_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_batch2728_test COMMAND sr3luahost_batch2728_tests)
+
+# The zscene / cutscene scene table (Sec26.25 item 5): cutscene.xtbl names +
+# one <name>.cte_xtbl per scene, on sr3xtbl like the other table readers.
+add_library(sr3tables_cutscene STATIC src/tables_cutscene.cpp)
+target_include_directories(sr3tables_cutscene PUBLIC include)
+target_link_libraries(sr3tables_cutscene PUBLIC sr3xtbl)
+
+add_executable(sr3tables_cutscene_tests tests/synthetic_tables_cutscene_test.cpp)
+target_link_libraries(sr3tables_cutscene_tests PRIVATE sr3tables_cutscene)
+add_test(NAME synthetic_tables_cutscene_test COMMAND sr3tables_cutscene_tests)
+
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
 # stub environment above, reporting real luaL_loadbuffer/lua_pcall
@@ -890,7 +915,7 @@ add_test(NAME synthetic_luahost_refusal_stress_test COMMAND sr3luahost_refusal_s
 # and restrict fireConfirmedHooks() to each script's own real state - see
 # tools/lua_host_run.cpp's own `statetag` namespace for the full method.
 add_executable(lua_host_run tools/lua_host_run.cpp)
-target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm)
+target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm sr3tables_cutscene)
 
 # Integration check (cloud phase 2026-09-30): lua_host_run end to end on a
 # synthetic two-archive cache written by tests/lua_host_run_fixture.cpp

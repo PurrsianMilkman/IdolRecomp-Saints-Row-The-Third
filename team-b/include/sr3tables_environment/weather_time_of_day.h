@@ -192,11 +192,29 @@ WeatherTimeOfDayCell ParseWeatherTimeOfDayCell(const Node* stageRow);
 
 struct WeatherTimeSegment {
     std::optional<std::string> name;              // Name
-    Always<uint32_t> startTimeHHMM;                 // Start_Time - RAW integer HHMM; the engine converts
-                                                     // this to a fraction-of-day float (load-time transform,
-                                                     // spec 3.1)
-    Always<uint32_t> rampOutTimeMinutes;             // Ramp_Out_Time - RAW integer minutes
-    std::vector<WeatherTimeOfDayCell> stages;       // Weather_Stages/Stage (repeated)
+    // Start_Time / Ramp_Out_Time - RAW integer HHMM / minutes; the engine converts this to a
+    // fraction-of-day float (load-time transform, spec 3.1 - NOT applied here, matching this
+    // file's "RAW value, conversion documented not performed" convention). [FOR TEAM B
+    // 2026-10-01 CORRECTION, CONFIRMED - disassembly: both fields are read with 0x00DABC70,
+    // the SIGNED always-write accessor (not 0x00DABE80/unsigned) - so Always<int32_t>, not
+    // Always<uint32_t>, is the correct type (a leading '-' in the text is a real negative
+    // value, not 0). The load-time fraction-of-day conversion additionally keeps a Start_Time
+    // of exactly 2400 as 1.0 (only values STRICTLY ABOVE 1.0 are wrapped by -1.0) and divides
+    // with a truncating signed t/100 - neither is modelled here since this struct does not
+    // compute the fraction at all (see above), only the accessor signedness is actionable at
+    // this struct's level.]
+    Always<int32_t> startTimeHHMM;
+    Always<int32_t> rampOutTimeMinutes;
+    // Weather_Stages/Stage (repeated). NOTE: this is the raw per-row Stage list in document
+    // order, keyed by each cell's own stageName - NOT the engine's full one-cell-per-weather-
+    // stage runtime array (spec 3.1: capacity = weather.xtbl capacity (0x0140E314) x 0xE48
+    // bytes, allocated once, cells never named by a Stage row stay zeroed). That whole-array
+    // allocation/zero-fill/name-to-slot-index resolution is a load-time/runtime-memory concern,
+    // not a readable XML element, and is deliberately not simulated here (same "derived value,
+    // not modelled" rule as tables.h's banner) - CORRECTED 2026-10-01: the cell-array size
+    // itself was clarified to be sized by weather CAPACITY, not by this segment's own Stage
+    // row count, which does not change what this struct can or should hold.
+    std::vector<WeatherTimeOfDayCell> stages;
 };
 
 WeatherTimeSegment ParseWeatherTimeSegment(const Node* row);

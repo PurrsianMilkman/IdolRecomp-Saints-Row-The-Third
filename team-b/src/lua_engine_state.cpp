@@ -160,62 +160,8 @@ std::string EngineState::zsceneTableKey(const std::string& name) {
     return lowercased(name);
 }
 
-void EngineState::zscenePrep(const std::string& name) {
-    const std::string key = zsceneTableKey(name);
-    // Gate 0x007232e0 (Sec26.25 step 1): refuses for a missing entry, a
-    // kind other than 1, or the skip_all_cutscenes byte. The lookup comes
-    // first (0x00721be0 in the wrapper), so a missing name never reads the
-    // byte; "missing" and "kind != 1" both return here.
-    if (!zsceneLoadable_.get(key)) return;
-    if (zsceneSkipAllCutscenes_.get()) return;
-    const std::string current = zsceneCurrent_.get();
-    if (current == key) return; // already current: returns 1, no change
-    // Teardown 0x00721c20(a = 1, b = 0, c = 0) of the current scene (step 2).
-    // Everything it branches on is read before anything is written.
-    bool tearDownWrites = false;
-    if (!current.empty()) {                                 // no current scene: nothing
-        if (!zsceneTeardownCutsceneGuard_.get()) {          // cutscene guard: nothing
-            // Handle not live (class 1): acts only when c != 0; prep passes 0.
-            tearDownWrites = !zsceneCurrentHandleNotLive_.get();
-        }
-    }
-    // 0x0101b530: a stub that does nothing.
-    if (tearDownWrites) {
-        // Handle live: release the secondary handle, the lightset and the
-        // selected handle (no resources here), 0x007317a0(1) since a != 0,
-        // 0x0153b541 := 0, 0x0153b542 := b (0), state := 0. The current
-        // pointer is left as it was.
-        zsceneStateCode_.set(0);
-    }
-    zscenePending_.set(key);
-    // 0x0153b568/0x0153b56c := the zero constants 0x01180120/0x01180124
-    // (read only by the promotion, which this host does not run).
-}
-
-bool EngineState::zsceneIsLoaded(bool hasName, const std::string& name) {
-    // Sec14.23 corrected truth table (CONFIRMED - disassembly).
-    if (hasName) {
-        const std::string key = zsceneTableKey(name);
-        if (!zsceneLoadable_.get(key)) return true; // fast path 0x00723d20 false: nothing to load
-        if (zsceneSkipAllCutscenes_.get()) return true;
-        if (zsceneCurrent_.get() != key) {
-            // Not the current scene: the engine answers false. If it is the
-            // pending one, that answer lasts until the cutscene machine
-            // promotes it (0x00720410 via 0x007258a0, OPEN), which this host
-            // does not run - refused rather than an endless false.
-            if (zscenePending_.known() && zscenePending_.get() == key) {
-                ++zscenePendingPromotionRefusals_;
-                throw OpenStateError("zscene pending -> current promotion of '" + key +
-                                         "' (0x00720410, caller 0x007258a0 OPEN)",
-                                     "spec-lua-api-behaviour.md Sec26.25");
-            }
-            return false;
-        }
-        return zsceneStateCode_.get() == 2;
-    }
-    if (zsceneSkipAllCutscenes_.get()) return true;
-    return zsceneStateCode_.get() == 2;
-}
+// zscenePrep / zsceneIsLoaded and the per-frame zscene / cutscene driver
+// live in src/lua_cutscene.cpp (Sec26.25, 2026-10-01 nnlt text).
 
 bool EngineState::vintIsStdRes() const {
     // 0x00e1a150 (Sec26.26, CONFIRMED): first / second in double precision.
@@ -257,8 +203,25 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     value("zscene", zsceneCurrent_);
     value("zscene", zscenePending_);
     value("zscene", zsceneStateCode_);
-    value("zscene", zsceneTeardownCutsceneGuard_);
-    value("zscene", zsceneCurrentHandleNotLive_);
+    value("zscene", zsceneAutoSelectNearest_);
+    value("zscene", zsceneRequeueOnReset_);
+    map("zscene", zsceneHandleClass_);
+    value("zscene", zsceneSoundtrackActive_);
+    value("zscene", zsceneSoundtrackStartMs_);
+    value("zscene", zsceneSoundtrackEnded_);
+    value("zscene", zsceneNearestWorldObjectScene_);
+    out.push_back({"zscene", "scene table 0x0153b294 (cutscene.xtbl names + <name>.cte_xtbl fields)",
+                   "spec-lua-api-behaviour.md Sec26.25", "table", zsceneTableInstalled_, zsceneTable_.size()});
+    value("cutscene", cutsceneManager_.present);
+    value("cutscene", cutsceneManager_.sceneKey);
+    value("cutscene", cutsceneManager_.field8);
+    value("cutscene", cutsceneManager_.chainTarget);
+    value("cutscene", cutscenePreloadMounted_);
+    value("cutscene", cutsceneChainTarget_);
+    value("cutscene", cutscenePlayerChecksPass_);
+    value("cutscene", cutsceneLoadStamp_);
+    value("cutscene", cutscenePlayingByte_);
+    value("cutscene", cutsceneInProgressByte_);
     value("fade", screenFade_.state);
     value("fade", screenFade_.target);
     value("fade", screenFade_.flag);
@@ -276,6 +239,9 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     value("vint", vintRecordFirst_);
     value("vint", vintRecordSecond_);
     value("vint", vintDisplayMode_);
+    value("vint", vintGlobalWidth_);
+    value("vint", vintGlobalHeight_);
+    value("vint", vintLayoutIndex_);
     value("vint", vintSafeFrameA_);
     value("vint", vintSafeFrameB_);
     value("vint", vintSafeFrameScale1_);
@@ -287,6 +253,63 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     for (uint32_t m = missionFlagsWord_.knownMask(); m != 0; m &= m - 1) ++knownBits;
     out.push_back({"other", missionFlagsWord_.global(), missionFlagsWord_.spec(), "bit word",
                    missionFlagsWord_.knownMask() == 0xFFFFFFFFu, knownBits});
+
+    // --- Batch 2026-10-01, spec-lua-api-behaviour.md Sec27/Sec28 ---
+    value("batch2728", catMouseMinigame_.present);
+    value("batch2728", catMouseMinigame_.fieldIc1IsOne);
+    map("batch2728", missionComplete_);
+    value("batch2728", completionScreen_.present);
+    value("batch2728", completionScreen_.flagClusterSet);
+    value("batch2728", completionScreen_.derefByteAtLeastOne);
+    value("batch2728", completionScreen_.everyPlayerAtThreshold1);
+    value("batch2728", completionScreen_.recordEnabled);
+    value("batch2728", vcustCamera_.targetPresent);
+    value("batch2728", vcustCamera_.targetValid);
+    value("batch2728", vcustCamera_.targetAlive);
+    map("batch2728", garagePreview_.vehicleTypeAtIndex);
+    value("batch2728", garagePreview_.previewCache);
+    map("batch2728", dialogForceClose_.slotMatchesId);
+    map("batch2728", dialogForceClose_.timerArmedNotExpired);
+    map("batch2728", dialogForceClose_.alreadyClosing);
+    map("batch2728", dialogForceClose_.hasResultCallback);
+    map("batch2728", dialogForceClose_.callbackNameBlank);
+    map("batch2728", dialogForceClose_.fullyRemoved);
+    value("batch2728", autosave_.suppressFlag);
+    value("batch2728", autosave_.secondFlagSet);
+    value("batch2728", autosave_.missionActive);
+    value("batch2728", autosave_.thirdGateBlocks);
+    value("batch2728", autosave_.fourthFlagNonzero);
+    value("batch2728", playerSlots_.count);
+    map("batch2728", playerSlots_.sendInviteOk);
+    map("batch2728", playerSlots_.canSendInvite);
+    map("batch2728", playerSlots_.joinFriendInProgressOk);
+    value("batch2728", coopFriendlyFireRaw_);
+    value("batch2728", steamInterfaceAvailable_);
+    value("batch2728", inProgressType_.activeMissionPresent);
+    value("batch2728", inProgressType_.activeMissionType);
+    value("batch2728", inProgressType_.activityPresent);
+    value("batch2728", inProgressType_.activityType);
+    map("batch2728", helicopterFlyTo_.qualifies);
+    map("batch2728", helicopterFlyTo_.applyGate);
+    value("batch2728", guardianAngel_.modeIsThree);
+    value("batch2728", guardianAngel_.objectPresent);
+    map("batch2728", groupNextNpcName_);
+    map("batch2728", groupFirstNpcName_);
+    map("batch2728", humansInTriggerCount_);
+    map("batch2728", vehicleInAirByCharacter_);
+    value("batch2728", effectFinisher_.gamepadMode);
+    map("batch2728", effectFinisher_.effectIndexValid);
+    value("batch2728", effectFinisher_.successReturn);
+    value("batch2728", playerRig_.localPlayer1Gender);
+    value("batch2728", playerRig_.coopPlayerPresent);
+    value("batch2728", playerRig_.coopPlayerGender);
+    map("batch2728", stronghold_.stillLocked);
+    map("batch2728", continuousExplosion_.definitionResolves);
+    value("batch2728", continuousExplosion_.active);
+    map("batch2728", characterGender_);
+    value("batch2728", cellphoneAnimSuppressed_);
+    value("batch2728", bossBattleMatt_.cheatSlot);
+    value("batch2728", bossBattleMatt_.retryCounter);
     return out;
 }
 

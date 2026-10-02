@@ -139,6 +139,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -149,6 +150,7 @@
 #include "sr3lua/parser.h"
 #include "sr3luahost/host.h"
 #include "sr3luahost/hook_registry.h"
+#include "sr3tables_cutscene/scene_table.h"
 #include "vpp/container.h"
 
 namespace fs = std::filesystem;
@@ -184,6 +186,102 @@ bool endsWithLuaExt(const std::string& lowerName) {
     static const std::string ext = ".lua";
     if (lowerName.size() < ext.size()) return false;
     return lowerName.compare(lowerName.size() - ext.size(), ext.size(), ext) == 0;
+}
+
+// --- The zscene / cutscene scene table (spec-lua-api-behaviour.md Sec26.25
+// item 5, CONFIRMED; job nnlt) ------------------------------------------------
+// 0x0073bfb0's "main" call: names from cutscene.xtbl (inside
+// cutscene_tables.vpp), then one <name>.cte_xtbl per name. Where the files
+// come from: the engine finds an entry by "a linear, case-insensitive,
+// name-string search across every mounted container's directory"
+// (spec-vpp-container.md Sec2). CHOSEN: this host searches the one container
+// cutscene.xtbl is in, cutscene_tables.vpp_pc at the cache root (which
+// containers the engine has mounted at that moment is not specced; every
+// shipped .cte_xtbl is in that container). Patch containers: which exist and
+// when they are parsed is OPEN, so only the "main" call runs. No container ->
+// nothing installed, the table stays OPEN.
+// Returns the summary for verdict_summary.txt's zscene_table= line.
+std::string installSceneTableFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    fs::path archivePath;
+    for (auto& ent : fs::directory_iterator(cacheDir)) {
+        if (ent.is_regular_file() && toLower(ent.path().filename().string()) == "cutscene_tables.vpp_pc") {
+            archivePath = ent.path();
+            break;
+        }
+    }
+    if (archivePath.empty()) return "not installed (no cutscene_tables.vpp_pc in the cache; the table stays OPEN)";
+    std::vector<uint8_t> bytes;
+    try {
+        bytes = readFile(archivePath);
+        vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+        // Entry bytes by case-insensitive name (raw or zlib).
+        auto entryBytes = [&c](const std::string& wanted, std::string* foundName) -> std::optional<std::string> {
+            const std::string w = toLower(wanted);
+            const auto& entries = c.entries();
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (toLower(entries[i].name) != w) continue;
+                if (foundName) *foundName = entries[i].name;
+                if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                    vpp::ByteView raw = c.rawEntryBytes(i);
+                    return std::string(reinterpret_cast<const char*>(raw.data()), raw.size());
+                }
+                vpp::DecompressResult r = c.decompressEntry(i);
+                if (r.status != vpp::DecodeStatus::Ok) return std::nullopt;
+                return std::string(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+            }
+            return std::nullopt;
+        };
+        std::optional<std::string> names = entryBytes("cutscene.xtbl", nullptr);
+        if (!names) return "not installed (cutscene.xtbl not readable in " + archivePath.filename().string() + ")";
+        sr3tables_cutscene::SceneTable table = sr3tables_cutscene::BuildMainSceneTable(
+            *names, [&entryBytes](const std::string& fileName) -> std::optional<sr3tables_cutscene::OpenedFile> {
+                sr3tables_cutscene::OpenedFile f;
+                std::optional<std::string> b = entryBytes(fileName, &f.fileName);
+                if (!b) return std::nullopt;
+                f.bytes = std::move(*b);
+                return f;
+            });
+        std::vector<sr3luahost::EngineState::ZsceneTableRow> rows;
+        size_t kind0 = 0, kind1 = 0, kind2 = 0, kindOpen = 0, lightsetUnterminated = 0, soundtrackSplitOpen = 0;
+        for (const auto& e : table.entries) {
+            sr3luahost::EngineState::ZsceneTableRow row;
+            row.name = e.name;
+            row.crc = e.crc;
+            row.kind = e.fields.kind;
+            if (e.fields.resources) {
+                std::vector<std::string> res;
+                for (const auto& r : *e.fields.resources) {
+                    res.push_back(r.source == sr3tables_cutscene::SceneResource::Source::AngelFixedNames
+                                      ? std::string("(IsAngel: three fixed names, OPEN)")
+                                      : (r.textPresent ? r.text : std::string("(Variant absent, OPEN)")));
+                }
+                row.resources = std::move(res);
+            }
+            rows.push_back(std::move(row));
+            if (!e.fields.kind) ++kindOpen;
+            else if (*e.fields.kind == 0) ++kind0;
+            else if (*e.fields.kind == 1) ++kind1;
+            else ++kind2;
+            if (e.fields.lightsetUnterminated) ++lightsetUnterminated;
+            if (e.fields.soundtrackSplitOpen) ++soundtrackSplitOpen;
+        }
+        const size_t installed = rows.size();
+        es.installZsceneTable(std::move(rows));
+        return "installed source=" + archivePath.filename().string() +
+               " cutscene_elements=" + std::to_string(table.names.cutsceneElements) +
+               " names_accepted=" + std::to_string(table.names.accepted.size()) +
+               " names_skipped=" + std::to_string(table.names.skipped.size()) +
+               " names_case_ambiguous=" + std::to_string(table.names.caseAmbiguous.size()) +
+               " capacity=" + std::to_string(table.capacity) + " entries=" + std::to_string(installed) +
+               " missing_scene_files=" + std::to_string(table.missingSceneFiles.size()) +
+               " unparseable_scene_files=" + std::to_string(table.unparseableSceneFiles.size()) +
+               " kind0_designer=" + std::to_string(kind0) + " kind1_zscene=" + std::to_string(kind1) +
+               " kind2_story=" + std::to_string(kind2) + " kind_open=" + std::to_string(kindOpen) +
+               " lightset_unterminated=" + std::to_string(lightsetUnterminated) +
+               " soundtrack_split_open=" + std::to_string(soundtrackSplitOpen);
+    } catch (const std::exception& ex) {
+        return std::string("not installed (") + ex.what() + ")";
+    }
 }
 
 struct ScriptInstance {
@@ -777,7 +875,13 @@ int main(int argc, char** argv) {
                      "      from a ring filled once by a deterministic host generator (default seed 1) instead of\n"
                      "      the CONFIRMED file-image ring, where every draw returns lo until a fill (the engine\n"
                      "      generator and fill are OPEN, spec-lua-api-behaviour.md Sec26.27). Values are not the\n"
-                     "      game's. Recorded as host_rng_option= in verdict_summary.txt.\n";
+                     "      game's. Recorded as host_rng_option= in verdict_summary.txt.\n"
+                     "  --display=WxH | --display=none  the display resolution handed to the UI subsystem init\n"
+                     "      0x00e23910 at front-end bring-up (spec-lua-api-behaviour.md Sec26.26): the width/height\n"
+                     "      globals and the per-thread record vint_is_std_res reads, the display mode and the layout\n"
+                     "      index. A HOST INPUT, not an engine value: default 1280x720 (CHOSEN, the spec's first\n"
+                     "      worked example); none = the init does not run and those values stay OPEN. Recorded as\n"
+                     "      display_option= in verdict_summary.txt.\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
@@ -785,6 +889,9 @@ int main(int argc, char** argv) {
     bool preloadStatesSpec164 = true; // Sec16.1/Sec16.4, CONFIRMED and cleared 2026-10-01
     bool hostRng = false;      // --host-rng: only when explicitly given
     uint64_t hostRngSeed = 1;
+    // --display (Sec26.26): CHOSEN default 1280x720, a host input (see usage).
+    bool displayInit = true;
+    int32_t displayWidth = 1280, displayHeight = 720;
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
@@ -799,6 +906,23 @@ int main(int argc, char** argv) {
             }
             hostRng = true;
             hostRngSeed = std::stoull(v);
+        } else if (arg == "--display=none") {
+            displayInit = false;
+        } else if (arg.rfind("--display=", 0) == 0) {
+            const std::string v = arg.substr(10);
+            const size_t x = v.find('x');
+            const std::string ws = x == std::string::npos ? std::string() : v.substr(0, x);
+            const std::string hs = x == std::string::npos ? std::string() : v.substr(x + 1);
+            auto digits = [](const std::string& s) {
+                return !s.empty() && s.size() <= 6 && s.find_first_not_of("0123456789") == std::string::npos;
+            };
+            if (!digits(ws) || !digits(hs) || std::stoi(ws) == 0 || std::stoi(hs) == 0) {
+                std::cerr << "bad --display value (want WxH, e.g. 1920x1080, or none): " << v << "\n";
+                return 1;
+            }
+            displayInit = true;
+            displayWidth = std::stoi(ws);
+            displayHeight = std::stoi(hs);
         } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "unknown option: " << arg << "\n";
             return 1;
@@ -824,6 +948,25 @@ int main(int argc, char** argv) {
     Host host(allNames);
     // --host-rng (HYPOTHESIS / host substitute, opt-in): before any script draws.
     if (hostRng) host.useHostRng(hostRngSeed);
+    // Front-end bring-up, before any script (Sec26.24/Sec26.26: the UI
+    // subsystem init 0x008489e0 -> 0x00e23910 runs before the screen_fade
+    // init and before UI scripts): the display resolution (host input).
+    std::string displayOption;
+    if (displayInit) {
+        host.engineState().vintUiSubsystemInit(displayWidth, displayHeight);
+        displayOption = std::to_string(displayWidth) + "x" + std::to_string(displayHeight) +
+                        " (UI subsystem init 0x00e23910 run with this host display - CHOSEN default 1280x720 unless "
+                        "--display=WxH; a host input, not an engine value; display_mode=" +
+                        (host.engineState().vintDisplayMode().known()
+                             ? std::to_string(host.engineState().vintDisplayMode().get())
+                             : std::string("OPEN")) +
+                        ")";
+    } else {
+        displayOption = "none (--display=none: UI subsystem init not run, the width/height record stays OPEN)";
+    }
+    // The scene table (Sec26.25 item 5): real data from the cache.
+    const std::string sceneTableSummary = installSceneTableFromCache(cacheDir, host.engineState());
+    std::cout << "display_option=" << displayOption << "\nzscene_table=" << sceneTableSummary << "\n";
     std::cout << "Host built: gameplay state has " << host.gameplayStubCount()
               << " stubs, UI state has " << host.uiStubCount() << " stubs ("
               << (host.gameplayStubCount() + host.uiStubCount()) << " total, matching the "
@@ -1552,6 +1695,8 @@ int main(int argc, char** argv) {
     line("\n=== POPULATION SUMMARY (lua_host_run) ===");
     line("archives_scanned=" + std::to_string(archives.size()));
     line("open_state_slots_with_values_at_start=" + openStateSummary);
+    line("display_option=" + displayOption);
+    line("zscene_table=" + sceneTableSummary);
     line("total_bytes_read=" + std::to_string(grandBytes));
     line("total_directory_entries=" + std::to_string(st.stats.entries));
     line("real_lua_scripts_found(name ends '.lua')=" + std::to_string(st.found.size()));
@@ -1955,6 +2100,10 @@ int main(int argc, char** argv) {
             bool stopped = false;
             for (int tick = 1; tick <= kMissionTickBudget; ++tick) {
                 host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
+                // The cutscene machine and the zscene lifecycle (Sec26.25 Host
+                // summary: promotion then completion, every frame), on the same
+                // host clock; after the fade frame (CHOSEN order).
+                host.engineState().cutsceneHostFrame();
                 auto tickHooks = host.fireConfirmedHooks(host.gameplayState(), hooks, script.entryName);
                 TickSig sig;
                 bool newWatchdogThisTick = false;
@@ -2088,8 +2237,14 @@ int main(int argc, char** argv) {
     mline("total_ticks_survived_across_all_missions=" + std::to_string(ticksSum));
     mline("total_stub_calls_this_step_contributed(ALL-INCLUSIVE minus pre-step-1 snapshot, real HitLog delta)=" +
           std::to_string(missionIncrementalTotal));
-    mline("zscene_is_loaded_pending_promotion_refusals(whole run, Sec26.25: promotion 0x00720410 OPEN)=" +
-          std::to_string(host.engineState().zscenePendingPromotionRefusals()));
+    {
+        // Sec26.25: the per-frame cutscene machine + zscene promotion/completion.
+        // Also appended to verdict_summary.txt.
+        const std::string csLine = "cutscene_frame=" + host.engineState().cutsceneFrameSummary();
+        mline(csLine);
+        std::ofstream summaryAppend(outDir / "verdict_summary.txt", std::ios::app);
+        summaryAppend << csLine << "\n";
+    }
     {
         // Screen fade (Sec26.24): which path completed each transition. real =
         // the UI script called Screen_fade_transition_complete; fallback_* =

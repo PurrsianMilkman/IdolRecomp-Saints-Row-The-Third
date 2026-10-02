@@ -376,6 +376,128 @@ int main(int argc, char** argv) {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Correction diagnostics (dispatch 2026-10-02: spec-tables-vehicle-world.md's
+    // hold was lifted after Team A's exe re-derivation; two corrections land in
+    // THIS reader, spec 5.1/7 and 12.1 - see the field comments in tables.h /
+    // world_items.h for the full citations). These are DESCRIPTIVE MEASUREMENTS
+    // against real shipped data, not pass/fail gates - an honest "0 affected" is
+    // a fine outcome for either, so neither is wired into `g_fail`.
+    // -----------------------------------------------------------------------
+    std::printf("=== Correction diagnostics ===\n");
+    std::printf("--- spec 5.1/7 (CORRECTED): Front_Rim/Rear_Rim/Front_Spinner/Rear_Spinner are Component-record\n");
+    std::printf("    pointers (matched against externalized_vehicle_components.xtbl's Component/Name), NOT a Slot\n");
+    std::printf("    reference (the earlier OPEN desk-review question) ---\n");
+    {
+        std::vector<Found> compMatches = findMatches("externalized_vehicle_components.xtbl");
+        std::set<std::string> slotNames, componentNames;
+        long long slotsSeen = 0, componentsSeen = 0, componentsWithName = 0;
+        for (const Found& f : compMatches) {
+            if (f.item->status != 0) continue;
+            try {
+                keepAlive.push_back(sr3xtbl::ParseDocument(f.item->data.data(), f.item->data.size()));
+                const sr3xtbl::Document& doc = keepAlive.back();
+                for (const sr3tables_vehicle_world::ExternalizedComponentSlot& slot :
+                     sr3tables_vehicle_world::ParseExternalizedVehicleComponentsTable(doc)) {
+                    ++slotsSeen;
+                    if (slot.name) slotNames.insert(lower(*slot.name));
+                    componentsSeen += static_cast<long long>(slot.componentCount);
+                    componentsWithName += static_cast<long long>(slot.componentNames.size());
+                    for (const std::string& cn : slot.componentNames) componentNames.insert(lower(cn));
+                }
+            } catch (const sr3xtbl::FormatError& e) {
+                std::printf("  PARSE FAILED %s: %s\n", f.item->name.c_str(), e.what());
+            }
+        }
+        std::printf(
+            "  externalized_vehicle_components.xtbl: %lld Slot row(s) (%zu distinct Slot Name(s)), %lld Component\n",
+            slotsSeen, slotNames.size(), componentsSeen);
+        std::printf("    child(ren) (%lld carry a Name child -> %zu distinct Component Name(s))\n", componentsWithName,
+                    componentNames.size());
+
+        std::vector<Found> wheelMatches = findMatches("vehicle_wheel_groups.xtbl");
+        long long fieldsChecked = 0, matchedSlotName = 0, matchedComponentName = 0, matchedBoth = 0, matchedNeither = 0;
+        auto check = [&](const std::optional<std::string>& v) {
+            if (!v) return;
+            ++fieldsChecked;
+            const std::string lc = lower(*v);
+            const bool inSlot = slotNames.count(lc) != 0;
+            const bool inComp = componentNames.count(lc) != 0;
+            if (inSlot) ++matchedSlotName;
+            if (inComp) ++matchedComponentName;
+            if (inSlot && inComp) ++matchedBoth;
+            if (!inSlot && !inComp) ++matchedNeither;
+        };
+        for (const Found& f : wheelMatches) {
+            if (f.item->status != 0) continue;
+            try {
+                keepAlive.push_back(sr3xtbl::ParseDocument(f.item->data.data(), f.item->data.size()));
+                const sr3xtbl::Document& doc = keepAlive.back();
+                for (const sr3tables_vehicle_world::WheelGroup& wg : sr3tables_vehicle_world::ParseWheelGroupsTable(doc)) {
+                    for (const sr3tables_vehicle_world::WheelGroupRimElement& r : wg.rims) {
+                        check(r.frontRim);
+                        check(r.rearRim);
+                    }
+                    for (const sr3tables_vehicle_world::WheelGroupSpinnerElement& s : wg.spinners) {
+                        check(s.frontSpinner);
+                        check(s.rearSpinner);
+                    }
+                }
+            } catch (const sr3xtbl::FormatError& e) {
+                std::printf("  PARSE FAILED %s: %s\n", f.item->name.c_str(), e.what());
+            }
+        }
+        std::printf("  real Front_Rim/Rear_Rim/Front_Spinner/Rear_Spinner text values checked: %lld\n", fieldsChecked);
+        std::printf("  BEFORE (matches a real Slot Name - the now-superseded hypothesis):    %lld\n", matchedSlotName);
+        std::printf("  AFTER  (matches a real Component Name - the CORRECTED mechanism):      %lld\n", matchedComponentName);
+        std::printf("  match both name sets: %lld; match neither: %lld\n", matchedBoth, matchedNeither);
+        std::printf(
+            "  NOTE: spec 5.2's own NEEDS-DATA item (do all 51 real values exist as real Component names) is NOT\n");
+        std::printf(
+            "        cleared or claimed resolved by this count - per the task's instruction not to chase it\n");
+        std::printf("        further, this is a real-data measurement only.\n");
+    }
+
+    std::printf("--- spec 12.1 (CORRECTED): Death_Money's vec3 is read from a Cash_Out_Point CHILD element, NOT\n");
+    std::printf("    Death_Money's own X/Y/Z fields directly ---\n");
+    {
+        std::vector<Found> lvlMatches = findMatches("level_objects.xtbl");
+        long long rowsWithDeathMoney = 0, withCashOutPoint = 0, withoutCashOutPoint = 0, withoutButLegacyXYZ = 0;
+        for (const Found& f : lvlMatches) {
+            if (f.item->status != 0) continue;
+            try {
+                keepAlive.push_back(sr3xtbl::ParseDocument(f.item->data.data(), f.item->data.size()));
+                const sr3xtbl::Document& doc = keepAlive.back();
+                const Node* scope = doc.table() ? doc.table() : doc.root();
+                for (const Node* row : sr3xtbl::Children(scope, "Level_Object")) {
+                    const Node* dm = sr3xtbl::FindChild(row, "Death_Money");
+                    if (!dm) continue;
+                    ++rowsWithDeathMoney;
+                    const bool hasCashOut = sr3xtbl::FindChild(dm, "Cash_Out_Point") != nullptr;
+                    const bool hasLegacyXYZ = sr3xtbl::FindChild(dm, "X") != nullptr || sr3xtbl::FindChild(dm, "Y") != nullptr ||
+                                               sr3xtbl::FindChild(dm, "Z") != nullptr;
+                    if (hasCashOut) {
+                        ++withCashOutPoint;
+                    } else {
+                        ++withoutCashOutPoint;
+                        if (hasLegacyXYZ) ++withoutButLegacyXYZ;
+                    }
+                }
+            } catch (const sr3xtbl::FormatError& e) {
+                std::printf("  PARSE FAILED %s: %s\n", f.item->name.c_str(), e.what());
+            }
+        }
+        std::printf("  real Level_Object rows with a Death_Money block: %lld\n", rowsWithDeathMoney);
+        std::printf("  BEFORE: all %lld of those rows read a vec3 directly from Death_Money's own X/Y/Z (present\n",
+                    rowsWithDeathMoney);
+        std::printf("          whenever Death_Money itself was present, regardless of Cash_Out_Point).\n");
+        std::printf("  AFTER:  %lld have a Cash_Out_Point child (point.present == true); %lld do NOT (point.present\n",
+                    withCashOutPoint, withoutCashOutPoint);
+        std::printf("          == false - of those, %lld still carry the legacy direct X/Y/Z children, now unread\n",
+                    withoutButLegacyXYZ);
+        std::printf("          by this corrected path - same 'dead element' family as spec 12.3's Dislodged_By finding).\n");
+    }
+
     std::printf("=== G3 parser smoke check ===\n");
     std::printf("parse attempts: %lld, FormatError failures: %lld\n", parseAttempts, parseFailures);
     if (parseAttempts > 0)

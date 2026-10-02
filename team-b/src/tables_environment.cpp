@@ -21,6 +21,11 @@ std::optional<std::string> getText(const Node* node, std::string_view name = {})
     return *t;
 }
 
+// camera_free.xtbl submode degree->radian conversion (spec 12.2, FOR TEAM B 2026-10-01
+// CORRECTION): REAL - the exact literal constant the disassembly multiplies by (0x0056B660),
+// not pi/180 recomputed at higher precision, so this reproduces the engine's own rounding.
+constexpr float kSubmodeDegreesToRadians = 0.017453f;
+
 bool isWs(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 
 std::vector<std::string_view> splitWs(std::string_view s) {
@@ -979,10 +984,12 @@ WeatherTimeOfDayCell ParseWeatherTimeOfDayCell(const Node* stageRow) {
 WeatherTimeSegment ParseWeatherTimeSegment(const Node* row) {
     WeatherTimeSegment seg;
     seg.name = getText(row, "Name");
-    // [OPEN - spec-tables-environment.md 1.4 and the Start_Time row: "which accessor (signed/unsigned) reads `t`";
-    // ReadUInt32Always kept.]
-    seg.startTimeHHMM = sr3xtbl::ReadUInt32Always(row, "Start_Time");
-    seg.rampOutTimeMinutes = sr3xtbl::ReadUInt32Always(row, "Ramp_Out_Time");
+    // [FOR TEAM B 2026-10-01 CORRECTION, CONFIRMED - disassembly (0x005A89F0): both Start_Time
+    // and Ramp_Out_Time are read with 0x00DABC70, the SIGNED always-write accessor - fixed from
+    // the prior ReadUInt32Always (which read a leading '-' as 0, per the unsigned-accessor
+    // rule that does NOT apply here).]
+    seg.startTimeHHMM = sr3xtbl::ReadInt32Always(row, "Start_Time");
+    seg.rampOutTimeMinutes = sr3xtbl::ReadInt32Always(row, "Ramp_Out_Time");
     const Node* weatherStages = sr3xtbl::FindChild(row, "Weather_Stages");
     for (const Node* stage : sr3xtbl::Children(weatherStages, "Stage")) seg.stages.push_back(ParseWeatherTimeOfDayCell(stage));
     return seg;
@@ -1094,11 +1101,18 @@ std::optional<CameraFree> ParseCameraFree(const Document& doc) {
         s.name = getText(sm, "name");
         s.aspect = getText(sm, "Aspect");
         s.lookatOffset = sr3xtbl::ReadVec3Child(sm, "lookat_offset");
-        s.zDist = sr3xtbl::GetFloat(sm, "z_dist");
-        s.yDist = sr3xtbl::GetFloat(sm, "y_dist");
+        // [FOR TEAM B 2026-10-01 CORRECTION: z_dist/y_dist are always-write reads (fixed from
+        // GetFloat/"write only if present"), not a persisted record field - see camera_free.h.]
+        s.zDist = sr3xtbl::ReadFloatAlways(sm, "z_dist");
+        s.yDist = sr3xtbl::ReadFloatAlways(sm, "y_dist");
+        // [FOR TEAM B 2026-10-01 CORRECTION: authored degrees -> stored radians (fixed from
+        // storing the raw authored degrees) - see camera_free.h's struct banner.]
         s.minElevation = sr3xtbl::ReadFloatAlways(sm, "min_elevation");
+        s.minElevation.value *= kSubmodeDegreesToRadians;
         s.maxElevation = sr3xtbl::ReadFloatAlways(sm, "max_elevation");
+        s.maxElevation.value *= kSubmodeDegreesToRadians;
         s.defaultElevation = sr3xtbl::GetFloat(sm, "default_elevation");
+        if (s.defaultElevation) *s.defaultElevation *= kSubmodeDegreesToRadians;
         s.baseFov = sr3xtbl::ReadFloatAlways(sm, "base_fov");
         s.blendTime = sr3xtbl::ReadFloatAlways(sm, "blend_time");
         s.xShift = sr3xtbl::ReadFloatAlways(sm, "x_shift");

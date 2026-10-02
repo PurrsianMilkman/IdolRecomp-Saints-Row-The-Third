@@ -3,7 +3,8 @@
 //
 //   lua_host_run_fixture <out_dir>
 //
-// Two uncompressed containers laid out per spec-vpp-container.md Sec1-2 (the
+// Three uncompressed containers (misc, dlc1 and - 2026-10-01 - a small
+// cutscene_tables for the zscene scene table) laid out per spec-vpp-container.md Sec1-2 (the
 // same layout tests/synthetic_archive_test.cpp builds, raw entries only). The
 // Lua sources are written for this test; nothing here comes from game files.
 // The mission stems (dlc1_mm_04/05/06) are names from this project's own
@@ -90,9 +91,31 @@ int main(int argc, char** argv) {
          "function helper_wait_scene(n)\n  while not zscene_is_loaded(n) do thread_yield() end\nend\n"},
         {"system_lib.lua", "-- synthetic preload\n"},
     };
+    // The zscene scene table (spec-lua-api-behaviour.md Sec26.25 item 5):
+    // cutscene.xtbl gives the names ("main": names starting with "dlc" are
+    // skipped), one <name>.cte_xtbl per name gives the fields; a name with no
+    // scene file has no entry. Written for this test, shaped like the shipped
+    // files (<root><Table><Cutscene>...).
+    const std::vector<Entry> cutsceneTables = {
+        {"cutscene.xtbl",
+         "<root>\n<Table>\n"
+         "<Cutscene><Name>Scene_A</Name></Cutscene>\n"
+         "<Cutscene><Name>story_b</Name></Cutscene>\n"
+         "<Cutscene><Name>dlc_skipped</Name></Cutscene>\n"
+         "<Cutscene><Name>no_file_c</Name></Cutscene>\n"
+         "</Table>\n</root>\n"},
+        {"scene_a.cte_xtbl",
+         "<root><Table><Cutscene><CutsceneType>Zscene</CutsceneType>"
+         "<Soundtrack>CINEMATIC : FIXTURE_01</Soundtrack></Cutscene></Table></root>\n"},
+        {"story_b.cte_xtbl",
+         "<root><Table><Cutscene><CutsceneType>Story</CutsceneType><Characters><Character>"
+         "<Name>X</Name><Mesh>npc_fixture</Mesh></Character></Characters></Cutscene></Table></root>\n"},
+        {"dlc_skipped.cte_xtbl", "<root><Table><Cutscene><CutsceneType>Zscene</CutsceneType></Cutscene></Table></root>\n"},
+    };
     const std::vector<Entry> dlc1 = {
-        // Blocks on OPEN engine state: whether 'scene_a' is a kind-1 entry of
-        // the cutscene.xtbl scene table (Sec14.23/Sec26.25: field parse OPEN).
+        // 'scene_a' is a kind-1 entry of the fixture's scene table, so the
+        // next read is the skip_all_cutscenes byte 0x0153b556, which no spec
+        // gives a start-up value: blocks on that OPEN state (Sec14.23/Sec26.25).
         {"dlc1_mm_06.lua", "function dlc1_mm_06_start(cp, restart)\n  helper_wait_scene('scene_a')\nend\n"},
         // CONFIRMED stubs only: _start succeeds. fade_out(0) starts a fade-out
         // (Sec26.24); no UI script defines screen_fade_do here, so the host's
@@ -104,7 +127,8 @@ int main(int argc, char** argv) {
         // Not loadable: both real Lua and sr3lua must reject it.
         {"broken_syntax.lua", "function broken(\n"},
     };
-    if (!save(dir + "/misc.vpp_pc", buildContainer(misc)) || !save(dir + "/dlc1.vpp_pc", buildContainer(dlc1))) {
+    if (!save(dir + "/misc.vpp_pc", buildContainer(misc)) || !save(dir + "/dlc1.vpp_pc", buildContainer(dlc1)) ||
+        !save(dir + "/cutscene_tables.vpp_pc", buildContainer(cutsceneTables))) {
         std::cerr << "lua_host_run_fixture: cannot write into " << dir << "\n";
         return 1;
     }

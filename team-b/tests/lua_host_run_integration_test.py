@@ -63,8 +63,13 @@ def main(argv):
         m5, m6, m4 = missions.get("dlc1_mm_05", {}), missions.get("dlc1_mm_06", {}), missions.get("dlc1_mm_04", {})
         check(m5.get("start_call_ok") == "1", "dlc1_mm_05 _start succeeds")
         check(m6.get("start_call_ok") == "0", "dlc1_mm_06 _start refused")
-        check("0x00723d20" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
-              f"dlc1_mm_06 stops on the OPEN zscene table entry: {m6.get('start_call_error')}")
+        # 2026-10-01 (Sec26.25 scene table): 'scene_a' is a kind-1 entry of the
+        # fixture's cutscene_tables.vpp_pc, so the table is no longer the
+        # blocker; the next read, the skip_all_cutscenes byte, has no specced
+        # start-up value.
+        check("0x0153b556" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
+              f"dlc1_mm_06 stops on the OPEN skip_all_cutscenes byte: {m6.get('start_call_error')}")
+        check("0x00723d20" not in m6.get("start_call_error", ""), "the scene table entry is no longer OPEN")
         check(m4.get("start_call_ok") == "0", "dlc1_mm_04 _start fails")
         check("attempt to index local 't'" in m4.get("start_call_error", ""),
               f"dlc1_mm_04 reports the Lua error: {m4.get('start_call_error')}")
@@ -79,18 +84,36 @@ def main(argv):
         check(len(scripts) == 6, f"6 scripts listed, got {len(scripts)}")
 
         summary = read_kv(os.path.join(out1, "verdict_summary.txt"))
-        check(summary.get("archives_scanned") == "2", f"archives_scanned={summary.get('archives_scanned')}")
+        check(summary.get("archives_scanned") == "3", f"archives_scanned={summary.get('archives_scanned')}")
+        # Sec26.25 item 5: the fixture's scene table - 4 names, "dlc_skipped"
+        # skipped by the main filter, "no_file_c" has no scene file.
+        zt = summary.get("zscene_table", "")
+        for part in ("installed source=cutscene_tables.vpp_pc", "names_accepted=3", "names_skipped=1", "capacity=15",
+                     "entries=2", "missing_scene_files=1", "kind1_zscene=1", "kind2_story=1", "kind_open=0"):
+            check(part in zt, f"zscene_table has {part}: {zt}")
+        # Sec26.26: the UI subsystem init ran with the CHOSEN default display.
+        check(summary.get("display_option", "").startswith("1280x720 ") and "display_mode=-1" in summary.get("display_option", ""),
+              f"display_option={summary.get('display_option')}")
+        # Sec26.25: the cutscene frame ran once per mission tick and stops on
+        # the cutscene state, which has no specced start-up value.
+        cf = summary.get("cutscene_frame", "")
+        check(cf.startswith("frames:") and "last_blocker=[0x0153b520" in cf, f"cutscene_frame={cf}")
+        m = re.match(r"^frames:(\d+) blocked_on_open:(\d+) ", cf)
+        check(m is not None and m.group(1) == m.group(2) and int(m.group(1)) > 0, f"every cutscene frame blocked: {cf}")
         check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
         check(summary.get("real_luaL_loadbuffer_ok", "").startswith("5/6"), "5/6 scripts load")
         check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "6/6", "sr3lua agrees on 6/6")
         # Batch 2026-10-01: the CONFIRMED start-up values (no co-op session,
         # tutorial states after the fill, store flag 0, the fade globals'
-        # file values) fill 15 of the 40 slots; zscene and vint stay OPEN.
-        check(summary.get("open_state_slots_with_values_at_start", "").startswith("15/40 "),
-              f"slots with a value at start: {summary.get('open_state_slots_with_values_at_start')}")
+        # file values) fill 15 of the first 40 slots; the nnlt batch adds the
+        # safe-frame constants, the display init's 6 vint values and the scene
+        # table. The summary line must agree with the TSV.
         slots = read_tsv(os.path.join(out1, "verdict_open_state.tsv"))
+        known_rows = sum(1 for r in slots if r["known"] == "1" or r["known_keys"] != "0")
+        check(summary.get("open_state_slots_with_values_at_start", "").startswith(f"{known_rows}/{len(slots)} "),
+              f"slots with a value at start: {summary.get('open_state_slots_with_values_at_start')}")
         areas = {r["area"] for r in slots}
-        check({"co-op", "tutorial", "vehicle-store", "zscene", "fade", "vint"} <= areas,
+        check({"co-op", "tutorial", "vehicle-store", "zscene", "cutscene", "fade", "vint"} <= areas,
               f"open-state areas: {sorted(areas)}")
         check(any("0x00723d20" in r["global"] for r in slots), "zscene table entry listed")
 
@@ -104,8 +127,19 @@ def main(argv):
         check(slot("0x022cdf08").get("known") == "1", "vehicle-store flag known (0)")
         check(slot("0x012e6aa4").get("known") == "1", "fade state known (2)")
         check(slot("mode stack").get("known") == "0", "mode-stack top OPEN")
-        check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots if r["area"] in ("zscene", "vint")),
-              "zscene and vint slots OPEN at start")
+        # zscene / cutscene: only the scene table (2 entries) has a value; vint:
+        # everything but the safe-frame source object's +0x8 / +0xc.
+        check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots
+                  if r["area"] in ("zscene", "cutscene") and r["kind"] != "table"),
+              "zscene and cutscene slots OPEN at start")
+        # "scene table" alone is ambiguous: it's also a substring of the per-entry
+        # "zscene table entry with kind 1 (...)" slot. 0x0153b294 is the table-level
+        # slot's own unique address (src/lua_engine_state.cpp).
+        check(slot("0x0153b294").get("known") == "1" and slot("0x0153b294").get("known_keys") == "2", "scene table installed")
+        check(slot("0x00e236f0)+4").get("known") == "1" and slot("0x0132bd80").get("known") == "1", "UI init ran")
+        check(slot("0x0115ba60").get("known") == "1" and slot("0x0116dfc0").get("known") == "1", "safe-frame constants")
+        check(slot("+0x8 ((context").get("known") == "0" and slot("+0xc ((context").get("known") == "0",
+              "safe-frame source object OPEN")
         # Fade completion paths (Sec26.24): dlc1_mm_05's fade_out(0) has no
         # screen_fade_do to run, so the labelled host fallback completes it.
         check(summary.get("fade_completion_path") == "real:0 fallback_undefined:1 fallback_no_callback:0",
@@ -163,6 +197,21 @@ def main(argv):
         badseed = subprocess.run([host, cache, reglist, os.path.join(tmp, "run6"), "--host-rng=abc"],
                                  capture_output=True, text=True)
         check(badseed.returncode != 0, "bad --host-rng seed rejected")
+
+        # --display (Sec26.26 host input): none keeps the record OPEN; a bad value is rejected.
+        out7 = os.path.join(tmp, "run7")
+        run_host(host, reglist, cache, out7, "--display=none")
+        check(read_kv(os.path.join(out7, "verdict_summary.txt")).get("display_option", "").startswith("none "),
+              "display_option none")
+        slots7 = {r["global"]: r for r in read_tsv(os.path.join(out7, "verdict_open_state.tsv"))}
+        check(all(r["known"] == "0" for g, r in slots7.items() if "0x00e236f0" in g), "record OPEN with --display=none")
+        out8 = os.path.join(tmp, "run8")
+        run_host(host, reglist, cache, out8, "--display=1024x768")
+        check(read_kv(os.path.join(out8, "verdict_summary.txt")).get("display_option", "").startswith("1024x768 "),
+              "display_option 1024x768")
+        baddisp = subprocess.run([host, cache, reglist, os.path.join(tmp, "run9"), "--display=12x"],
+                                 capture_output=True, text=True)
+        check(baddisp.returncode != 0, "bad --display rejected")
 
     print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))
     return 1 if failures else 0

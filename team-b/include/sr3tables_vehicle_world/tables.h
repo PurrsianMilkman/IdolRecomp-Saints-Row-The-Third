@@ -342,8 +342,23 @@ struct WheelGroupRimElement {
     // array-of-structs for convenience; the SoA-vs-AoS distinction is a
     // runtime storage detail, not an XML shape difference.
     std::optional<std::string> displayName;  // Display_Name (localized handle)
-    std::optional<std::string> frontRim;      // Front_Rim -> externalized_vehicle_components.xtbl (FUN_00A96040)
-    std::optional<std::string> rearRim;       // Rear_Rim -> same resolver
+    // Front_Rim/Rear_Rim: CORRECTED 2026-10-02 (Team A exe re-derivation,
+    // spec 5.1/7 - the OPEN "Slot Name vs Component Name" question the desk
+    // review raised is now settled). CONFIRMED - disassembly (FUN_00a973e0/
+    // FUN_00A96040, read in full): these resolve to a `Component`-record
+    // POINTER, not a `Slot` reference - a parallel u32[] of pointers is
+    // resolved from each field's own text via a `Component` +0x00 NAME-HASH
+    // lookup (ExternalizedComponentSlot::componentNames is the match target
+    // now, NOT ExternalizedComponentSlot::name/the Slot's own Name). Kept as
+    // RAW TEXT here per this file's own cross-table-reference convention (no
+    // pre-resolved pointer is modelled - resolving is a load-time, cross-
+    // table join this per-row reader does not perform). STILL NEEDS-DATA,
+    // not cleared, not chased further here (spec 5.2): whether all 51 real
+    // Front_Rim/Rear_Rim values actually exist as real Component names - see
+    // the validator's "Component-pointer resolution" diagnostic for a real-
+    // data measurement (descriptive only, does not clear this item).
+    std::optional<std::string> frontRim;
+    std::optional<std::string> rearRim;  // Rear_Rim - same resolver/correction as frontRim above
 };
 
 struct WheelGroupSpinnerElement {
@@ -353,8 +368,12 @@ struct WheelGroupSpinnerElement {
     // "both spinner fields default to 0 if Front_Spinner is absent" (spec
     // 5.1) - modelled as: frontSpinner absent -> rearSpinner not read at all
     // (matches "read only if Front_Spinner was present").
-    std::optional<std::string> frontSpinner;  // Front_Spinner -> externalized_vehicle_components.xtbl
-    std::optional<std::string> rearSpinner;   // Rear_Spinner -> same resolver; only read if Front_Spinner present
+    // Front_Spinner/Rear_Spinner: same CORRECTED Component-pointer mechanism
+    // as Front_Rim/Rear_Rim above (spec 5.1/7, FUN_00a973e0/FUN_00A96040) -
+    // RAW TEXT kept, same reasoning. 0 real S_Element rows exist in base data
+    // (spec 5.2), so this path is currently untestable against real data.
+    std::optional<std::string> frontSpinner;
+    std::optional<std::string> rearSpinner;   // Rear_Spinner - same resolver; only read if Front_Spinner present
 };
 
 struct WheelGroup {
@@ -426,17 +445,34 @@ VehicleAnimModifiers ParseVehicleAnimModifiers(const Document& doc);
 //    component catalogue (spec-tables-vehicle-world.md 7)
 // ===========================================================================
 struct ExternalizedComponentSlot {
-    std::optional<std::string> name;         // Name (hashed; matched by FUN_00A96040, cross-referenced by
-                                              // vehicle_wheel_groups.xtbl's Front_Rim/Rear_Rim/etc. - spec 5, 7)
+    // Name: the Slot's OWN Name (hashed; matched by FUN_00A96040 when SOME
+    // OTHER table resolves a Slot by name - e.g. vehicle_cust_interface.xtbl's
+    // slots/slots/name, spec 8.2). CORRECTED 2026-10-02 (Team A exe re-
+    // derivation): this is NOT what vehicle_wheel_groups.xtbl's Front_Rim/
+    // Rear_Rim/Front_Spinner/Rear_Spinner match against - an earlier guess in
+    // this file said so (spec 5's OPEN "Slot vs Component" question), but
+    // that is now settled as `Component` (see componentNames below), not
+    // `Slot`.
+    std::optional<std::string> name;
     std::optional<std::string> cameraInfo;    // Camera_Info (hashed); absent -> a shared runtime "no override"
                                               // global (DAT_029C9964) - a runtime default, not modelled here
-    // Components/Component (+0x0C/+0x10): only the COUNT is modelled. Byte
-    // layout still genuinely unfound (only one non-data-driven flag byte,
-    // spec 7.1/23 item 4) - but 4 real field NAMES (Name/DisplayName/Price/
-    // Buyable) are now confirmed present in real data (spec 23 item 4,
-    // 2026-09-28); this reader still correctly doesn't model per-field data
-    // without a real byte offset, per this project's own standing rule.
+    // Components/Component (+0x0C/+0x10): only the COUNT and each Component's
+    // own Name text are modelled. Byte layout still genuinely unfound (only
+    // one non-data-driven flag byte, spec 7.1/23 item 4) - but 4 real field
+    // NAMES (Name/DisplayName/Price/Buyable) are confirmed present in real
+    // data (spec 23 item 4, 2026-09-28); DisplayName/Price/Buyable still
+    // correctly aren't modelled without a real byte offset, per this
+    // project's own standing rule. `Name` is the one exception: it is now
+    // the CONFIRMED match target of vehicle_wheel_groups.xtbl's Front_Rim/
+    // Rear_Rim/Front_Spinner/Rear_Spinner (spec 5.1/7, CORRECTED 2026-10-02,
+    // FUN_00a973e0/FUN_00A96040 - a `Component` +0x00 NAME-HASH lookup), so
+    // reading its raw XML text (not a byte offset - this is an XML-level
+    // read, no runtime layout needed) is in scope to let a caller/validator
+    // actually check the corrected mechanism against real data. Kept as raw
+    // text per this file's cross-table-reference convention; order matches
+    // document order, not a claimed array layout.
     size_t componentCount = 0;
+    std::vector<std::string> componentNames;  // Components/Component/Name (raw text; see above)
 };
 
 ExternalizedComponentSlot ParseExternalizedComponentSlot(const Node* row);

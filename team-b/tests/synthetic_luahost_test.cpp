@@ -911,9 +911,12 @@ int main() {
         }
 
         // 15. Completion_is_client (Sec10.2) and game_get_is_host (Sec8.27):
-        // no session (CONFIRMED start-up) -> both false; with a session the
-        // host pair +0x5c == +0x58 decides (OPEN until set), and they are
-        // exact opposites.
+        // no session (CONFIRMED start-up, and CONFIRMED - not merely
+        // default - for single player as of job "fvzk" 2026-10-01: the
+        // session installer is proven statically unreachable there) -> both
+        // false; the "with a session" branch below stays a real test of the
+        // function's own logic (host pair +0x5c == +0x58, OPEN until set)
+        // even though it no longer models anything single player can reach.
         {
             auto ok = [&](const char* chunk) {
                 auto r = host.runChunk(ui, chunk, "host.lua");
@@ -1177,28 +1180,38 @@ int main() {
             es.zsceneSkipAllCutscenes().set(false);
             check("zscene_prep('scene_b')", "zp3.lua");               // already current: no change
             CHECK(!es.zscenePending().known() && es.zsceneStateCode().get() == 2);
-            // Teardown of the current scene reads the cutscene guard, then the
-            // handle class; refused with nothing written.
-            refuses("zscene_prep('scene_c')", "cutscene guard");
+            // Teardown of the current scene reads the cutscene guard (cutscene
+            // state 0x0153b520 in 7..13 with a manager whose +8 == 1), then
+            // the handle class; refused with nothing written.
+            refuses("zscene_prep('scene_c')", "0x0153b520");
             CHECK(!es.zscenePending().known());
-            es.zsceneTeardownCutsceneGuard().set(true);              // under a cutscene: no teardown
+            es.cutsceneState().set(8);
+            es.cutsceneManager().present.set(true);
+            es.cutsceneManager().field8.set(1);                       // under a cutscene: no teardown
             check("zscene_prep('SCENE_C')", "zp4.lua");
             CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 2);
             es.zscenePending().forget();
-            es.zsceneTeardownCutsceneGuard().set(false);
+            es.cutsceneState().set(0);                                // guard off
             refuses("zscene_prep('scene_c')", "handle class");
             CHECK(!es.zscenePending().known());
-            es.zsceneCurrentHandleNotLive().set(true);               // not live, c == 0: nothing
+            es.zsceneHandleClass().set("scene_b", 1);                 // not live, c == 0: nothing
             check("zscene_prep('scene_c')", "zp5.lua");
             CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 2);
-            es.zsceneCurrentHandleNotLive().set(false);              // live: state := 0
+            es.zsceneHandleClass().set("scene_b", 3);                 // live: state := 0
             check("zscene_prep('scene_c')", "zp6.lua");
             CHECK(es.zscenePending().get() == "scene_c" && es.zsceneStateCode().get() == 0);
             CHECK(es.zsceneCurrent().get() == "scene_b");            // current left as it was
-            // The pending entry is not loaded until promoted; promotion is OPEN.
-            CHECK(es.zscenePendingPromotionRefusals() == 0);
-            refuses("zscene_is_loaded('scene_c')", "promotion");
-            CHECK(es.zscenePendingPromotionRefusals() == 1);
+            CHECK(!es.zsceneHandleClass().known("scene_b"));          // released handle's class: OPEN
+            CHECK(es.zsceneAutoSelectNearest().get() == false && es.zsceneRequeueOnReset().get() == false);
+            // The pending entry: false until the per-frame driver promotes it;
+            // refused only while that driver is stopped on an OPEN read.
+            check("assert(zscene_is_loaded('scene_c') == false)", "zs8b.lua");
+            es.cutsceneState().forget();
+            es.cutsceneHostFrame();                                   // stops on 0x0153b520
+            CHECK(es.zscenePendingBlockedRefusals() == 0);
+            refuses("zscene_is_loaded('scene_c')", "0x0153b520");
+            CHECK(es.zscenePendingBlockedRefusals() == 1);
+            es.cutsceneState().set(0);
             check("assert(zscene_is_loaded('scene_b') == false)", "zs9.lua"); // current, state 0
             check("assert(zscene_is_loaded() == false)", "zs10.lua");
             // No current scene: prep tears nothing down.
@@ -1688,14 +1701,21 @@ int main() {
         refuses("vint_get_safe_frame()", "+0x8");
         es.vintSafeFrameA().set(1280);
         es.vintSafeFrameB().set(720);
-        refuses("vint_get_safe_frame()", "0x0115ba60");
+        // The constants are CONFIRMED (job nnlt) and set at start; Sec26.26's
+        // worked value for 1280 x 720. Fuller coverage:
+        // tests/synthetic_luahost_cutscene_test.cpp.
+        run("local a, b, c, d = vint_get_safe_frame()\n"
+            "assert(a == 96 and b == 54 and c == 1184 and d == 666)\n"
+            "assert(select('#', vint_get_safe_frame()) == 4)");
         es.vintSafeFrameScale1().set(0.0625);
         es.vintSafeFrameScale2().set(0.9375);
         run("local a, b, c, d = vint_get_safe_frame()\n"
-            "assert(a == 80 and b == 45 and c == 1200 and d == 675)\n"
-            "assert(select('#', vint_get_safe_frame()) == 4)");
-        es.vintSafeFrameScale2().set(1.0 / 3.0);              // 426.67: rounding mode OPEN
-        refuses("vint_get_safe_frame()", "rounding");
+            "assert(a == 80 and b == 45 and c == 1200 and d == 675)");
+        es.vintSafeFrameScale2().set(1.0 / 3.0);              // 426.67 / 240: round to nearest
+        run("local a, b, c, d = vint_get_safe_frame()\nassert(c == 427 and d == 240)");
+        es.vintSafeFrameScale1().set(0.5);
+        es.vintSafeFrameA().set(3);                            // 1.5: an exact tie, mode not stated
+        refuses("vint_get_safe_frame()", "tie");
     }
 
     // --- Hook evidence labels (spec-lua-bindings.md §4 desk review,
@@ -1730,18 +1750,24 @@ int main() {
         sr3luahost::EngineState es;
         sr3luahost::applySpecInitialState(es);
         const auto inv = es.openSlotInventory();
-        CHECK(inv.size() == 40);
         std::unordered_map<std::string, int> perArea, knownPerArea;
         for (const auto& r : inv) {
             ++perArea[r.area];
             if (r.known || r.knownKeys > 0) ++knownPerArea[r.area];
             CHECK(!r.global.empty() && r.spec.rfind("spec-", 0) == 0);
         }
+        // 59 = the 40 of the first batch + 6 zscene (Sec26.25 lifecycle
+        // driver and scene table, nnlt) + 10 cutscene machine + 3 vint (width,
+        // height, layout index). The Sec27/Sec28 batch's own area is counted
+        // separately so the two batches' checks stay independent.
+        CHECK(inv.size() == 59u + static_cast<size_t>(perArea["batch2728"]));
         CHECK(perArea["co-op"] == 6 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
-        CHECK(perArea["zscene"] == 7 && perArea["fade"] == 14 && perArea["vint"] == 7 && perArea["other"] == 4);
+        CHECK(perArea["zscene"] == 13 && perArea["cutscene"] == 10 && perArea["fade"] == 14 &&
+              perArea["vint"] == 10 && perArea["other"] == 4);
         CHECK(knownPerArea["co-op"] == 1 && knownPerArea["tutorial"] == 1 && knownPerArea["vehicle-store"] == 1);
-        CHECK(knownPerArea["zscene"] == 0 && knownPerArea["fade"] == 12 && knownPerArea["vint"] == 0 &&
-              knownPerArea["other"] == 0);
+        // vint: the two safe-frame constants (CONFIRMED, nnlt) are set at start.
+        CHECK(knownPerArea["zscene"] == 0 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
+              knownPerArea["vint"] == 2 && knownPerArea["other"] == 0);
         for (const auto& r : inv) {
             if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
             if (r.global.find("0x0151d600") != std::string::npos) CHECK(r.knownKeys == 210);
@@ -1759,12 +1785,15 @@ int main() {
         CHECK(f.state.get() == 2 && f.target.get() == 2 && f.flag.get() == 0 && !f.documentLoaded.get());
         CHECK(f.logoAt.get() == -1 && f.holdLogoUntil.get() == -1 && f.imagesAt.get() == -1 &&
               f.holdImagesUntil.get() == -1 && f.autoSaveStamp.get() == -1);
-        CHECK(f.autoSaveCounter.get() == 0 && !f.useLoadImages.get() && !f.lastBroadcastWasOut.get());
+        // 0x0149365c: set to 1 by the start-up 0x005d1a30 (Sec26.24, nnlt).
+        CHECK(f.autoSaveCounter.get() == 0 && f.useLoadImages.get() && !f.lastBroadcastWasOut.get());
         CHECK(f.inFlight == nullptr && f.deferred == nullptr);
         for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
             CHECK(es.tutorialState().get(EngineState::tutorialStateKey(i)) == (i <= 188 ? 0 : 1));
         CHECK(!es.zsceneSkipAllCutscenes().known() && !es.zsceneStateCode().known() && !es.zsceneCurrent().known());
-        CHECK(!es.vintDisplayMode().known());
+        CHECK(!es.vintDisplayMode().known() && !es.vintRecordFirst().known());
+        CHECK(es.vintSafeFrameScale1().get() == static_cast<double>(0.075f) &&
+              es.vintSafeFrameScale2().get() == static_cast<double>(0.925f));
         // The inventory follows writes: a value, a per-name key, and bits.
         es.zsceneStateCode().set(2);
         es.zsceneLoadable().set("scene_a", true);

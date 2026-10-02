@@ -408,9 +408,10 @@ void testVfx() {
         <Start_time>1.0</Start_time>
       </Effect>
       <Effect><Name>vfx_minimal</Name><Streaming_Category>Cutscene</Streaming_Category></Effect>
+      <Effect><Name>vfx_lod_empty</Name><LOD/></Effect>
     </Table></root>)");
     std::vector<VfxEffect> rows = ParseVfxTable(d);
-    CHECK(rows.size() == 2);
+    CHECK(rows.size() == 3);
     const VfxEffect& v0 = rows[0];
     CHECK(v0.name.has_value() && *v0.name == "vfx_car_explosion");
     CHECK(v0.vfxFilename.has_value() && *v0.vfxFilename == "vfx_car_explosion.effectx");
@@ -433,9 +434,21 @@ void testVfx() {
     CHECK(!v1.radiusExpands.has_value() && v1.RadiusExpandsOrDefault() == true);
     CHECK(!v1.blockerPresent && v1.BlockerOpacityOrDefault() == -1.0f);
     CHECK(!v1.lodPresent);
-    CHECK(v1.LodSpawningDistanceOrDefault() == 1.0e8f);
-    CHECK(v1.LodFadingStartOrDefault() == 1.0e10f && v1.LodFadingEndOrDefault() == 1.0e10f);
+    // FOR TEAM B 2026-10-01 CORRECTION: `LOD` itself is WHOLLY ABSENT here (no <LOD> element at
+    // all) - the 1.0e8/1.0e10 defaults do NOT apply in this case (fixed from the prior,
+    // unconditional *OrDefault() behaviour); the fields stay 0, matching the zero-filled record
+    // the disassembly shows.
+    CHECK(v1.LodSpawningDistanceOrDefault() == 0.0f);
+    CHECK(v1.LodFadingStartOrDefault() == 0.0f && v1.LodFadingEndOrDefault() == 0.0f);
     CHECK(!v1.startTime.has_value() && v1.StartTimeOrDefault() == 0.0f);
+
+    // `<LOD/>` PRESENT but empty (no Spawning/Distance/Update sub-blocks): THIS is the case the
+    // 1.0e8/1.0e10 defaults are actually documented for (spec 10.2) - still correct post-fix.
+    const VfxEffect& v2 = rows[2];
+    CHECK(v2.lodPresent);
+    CHECK(!v2.lodSpawningDistance.has_value() && v2.LodSpawningDistanceOrDefault() == 1.0e8f);
+    CHECK(!v2.lodDistanceFadingStart.has_value() && v2.LodFadingStartOrDefault() == 1.0e10f);
+    CHECK(!v2.lodDistanceFadingEnd.has_value() && v2.LodFadingEndOrDefault() == 1.0e10f);
 }
 
 // ===========================================================================
@@ -639,11 +652,17 @@ void testWeatherTimeOfDay() {
           </Stage>
         </Weather_Stages>
       </Weather_Time_Segment>
+      <Weather_Time_Segment><Name>Negative</Name><Start_Time>-100</Start_Time><Ramp_Out_Time>-5</Ramp_Out_Time></Weather_Time_Segment>
     </Table></root>)");
     std::vector<WeatherTimeSegment> segs = ParseWeatherTimeOfDayTable(d);
-    CHECK(segs.size() == 1);
-    CHECK(segs[0].startTimeHHMM.value == 600u);
+    CHECK(segs.size() == 2);
+    CHECK(segs[0].startTimeHHMM.value == 600);
     CHECK(segs[0].stages.size() == 1);
+    // FOR TEAM B 2026-10-01 CORRECTION: Start_Time/Ramp_Out_Time use the SIGNED always-write
+    // accessor (0x00DABC70), not the unsigned one - a leading '-' is a real negative value, not
+    // 0 (the unsigned-accessor rule does not apply to this field).
+    CHECK(segs[1].startTimeHHMM.present && segs[1].startTimeHHMM.value == -100);
+    CHECK(segs[1].rampOutTimeMinutes.present && segs[1].rampOutTimeMinutes.value == -5);
     const WeatherTimeOfDayCell& c = segs[0].stages[0];
     CHECK(c.stageName.has_value() && *c.stageName == "Clear Skies");
     // PRESENCE-BIT semantics (spec 3.2/3.3): element found == present.
@@ -679,8 +698,15 @@ void testCameraFree() {
         <interior_v_dampening_mouse>0.6</interior_v_dampening_mouse>
       </panning_group>
       <miscellany_group><pitch_reset_time>0.5</pitch_reset_time></miscellany_group>
-      <submodes><submode><name>fine aim</name><min_elevation>-80</min_elevation><max_elevation>80</max_elevation>
-        <base_fov>40</base_fov><lookat_offset><X>0</X><Y>1</Y><Z>0</Z></lookat_offset></submode></submodes>
+      <submodes>
+        <submode><name>fine aim</name><min_elevation>-80</min_elevation><max_elevation>80</max_elevation>
+          <default_elevation>10</default_elevation><z_dist>5</z_dist><y_dist>-2</y_dist>
+          <base_fov>40</base_fov><lookat_offset><X>0</X><Y>1</Y><Z>0</Z></lookat_offset></submode>
+        <submode><name>fine aim</name><min_elevation>-90</min_elevation><max_elevation>90</max_elevation>
+          <base_fov>45</base_fov></submode>
+        <submode><name>zoom</name><min_elevation>0</min_elevation><max_elevation>0</max_elevation>
+          <base_fov>50</base_fov></submode>
+      </submodes>
       <vehicle_fallbacks><vehicle_fallback><name>nitrous</name><distance>10</distance><rampin>1</rampin><duration>2</duration><return>3</return></vehicle_fallback></vehicle_fallbacks>
       <Vehicle_Aims><Vehicle_Aim><name>tank</name><Min_Pitch>-10</Min_Pitch><Max_pitch>10</Max_pitch>
         <flags><Flag>NoZoom</Flag><Flag>Locked</Flag></flags></Vehicle_Aim></Vehicle_Aims>
@@ -692,9 +718,26 @@ void testCameraFree() {
     CHECK(cf->panning.tankGenkiDampeningMouse.horiz.value == 0.7f);
     CHECK(cf->panning.interiorVDampeningMouse.value == 0.6f);
     CHECK(cf->miscellany.pitchResetTime.value == 0.5f);
-    CHECK(cf->submodes.size() == 1 && cf->submodes[0].name.has_value() && *cf->submodes[0].name == "fine aim");
-    CHECK(cf->submodes[0].minElevation.value == -80.0f);
+    // FOR TEAM B 2026-10-01 CORRECTION: min_elevation/max_elevation/default_elevation are
+    // authored in degrees but stored in radians (x 0.017453, the exact disassembly literal).
+    CHECK(cf->submodes.size() == 3 && cf->submodes[0].name.has_value() && *cf->submodes[0].name == "fine aim");
+    CHECK(near(cf->submodes[0].minElevation.value, -80.0f * 0.017453f, 1e-6f));
+    CHECK(near(cf->submodes[0].maxElevation.value, 80.0f * 0.017453f, 1e-6f));
+    CHECK(cf->submodes[0].defaultElevation.has_value() &&
+          near(*cf->submodes[0].defaultElevation, 10.0f * 0.017453f, 1e-6f));  // "+0x18" == has_value()
     CHECK(cf->submodes[0].lookatOffset.complete() && cf->submodes[0].lookatOffset.value().y == 1.0f);
+    // z_dist/y_dist: always-write reads (hazard-free here since both are present), NOT a
+    // persisted record field - kept only because they are real data this row supplies.
+    CHECK(cf->submodes[0].zDist.present && cf->submodes[0].zDist.value == 5.0f);
+    CHECK(cf->submodes[0].yDist.present && cf->submodes[0].yDist.value == -2.0f);
+    // Absent default_elevation elsewhere -> not present (the "+0x18 clear" case).
+    CHECK(!cf->submodes[1].defaultElevation.has_value());
+    // Two rows name "fine aim" (after the engine's own runtime Aspect filter, not evaluated
+    // here): this reader keeps BOTH, in document order, in a plain vector - a caller folding
+    // forward by name (last write wins) reproduces the engine's "later duplicate overwrites the
+    // earlier" slot-array rule exactly; no first-wins / duplicate-error bug exists to fix here.
+    CHECK(cf->submodes[1].name.has_value() && *cf->submodes[1].name == "fine aim");
+    CHECK(near(cf->submodes[1].minElevation.value, -90.0f * 0.017453f, 1e-6f));
     CHECK(cf->vehicleFallbacks.size() == 1 && cf->vehicleFallbacks[0].returnValue.value == 3);
     // FLAG-LIST table (spec 12.2: "flags/Flag ... name->bit map NOT decoded"):
     // raw flag text captured verbatim, no bit meaning assigned.

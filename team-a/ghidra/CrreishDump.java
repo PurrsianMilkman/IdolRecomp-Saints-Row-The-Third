@@ -239,9 +239,15 @@ public class CrreishDump extends GhidraScript {
     private Function functionFor(Address a) throws Exception {
         Function f = getFunctionAt(a);
         if (f == null) f = getFunctionContaining(a);
-        if (f == null && listing.getInstructionAt(a) != null) {
-            // not a defined function in the project: create it in this read-only session only
-            f = createFunction(a, null);
+        if (f == null) {
+            if (listing.getInstructionAt(a) == null) {
+                // undefined code: disassemble it in this read-only session only (not saved), same as 'range' mode
+                disassemble(a);
+            }
+            if (listing.getInstructionAt(a) != null) {
+                // not a defined function in the project: create it in this read-only session only
+                f = createFunction(a, null);
+            }
         }
         return f;
     }

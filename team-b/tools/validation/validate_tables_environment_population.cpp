@@ -185,10 +185,13 @@ const std::vector<TableSpec>& tableSpecs() {
             "Sun_Settings", "Moon", "Wind_Settings", "Cloud_Settings", "Temp_Settings", "Ambient_Wave_Settings",
             "Audio", "Next_Stage_List"}),
          {}, {}},
+        // FOR TEAM B 2026-10-01 CORRECTION: both fields use the SIGNED always-write accessor
+        // 0x00DABC70 (fixed from `unsignedField=true`, which would have wrongly flagged a real
+        // leading '-' as a mismatch; it is not one - see G6 below for the dedicated census).
         {"weather_time_of_day.xtbl", "Weather_Time_Segment", false, "",
          V({"Name", "Start_Time", "Ramp_Out_Time", "Weather_Stages"}),
          {},
-         {{"", "Start_Time", true}, {"", "Ramp_Out_Time", true}}},
+         {{"", "Start_Time", false}, {"", "Ramp_Out_Time", false}}},
         {"wind.xtbl", "Wind_Stage", false, "", V({"Name", "Display_Name", "Stage_Settings", "Wind_Settings", "Next_Stage_List"}), {}, {}},
         {"rain.xtbl", "Level", false, "Parameters",
          V({"Density", "View_Radius", "Speed", "Opacity", "Length_Near", "Length_Far", "Width_Near", "Width_Far",
@@ -375,6 +378,97 @@ std::vector<const Node*> rowsOf(const sr3xtbl::Document& doc, const TableSpec& s
     return sr3xtbl::Children(doc.table(), spec.rowElement);
 }
 
+// ---------------------------------------------------------------------------
+// G6: dedicated real-data census for each of the 5 "FOR TEAM B (2026-10-01,
+// CORRECTION)" spec tags this harness's own reader fixes were made against.
+// Every count here is genuine over the real archives passed on argv; "0" is
+// reported as-is (the task this harness exists for explicitly allows it).
+// ---------------------------------------------------------------------------
+
+// Correction 1 (spec 1.4: float sign is handled by the grammar, not the
+// accessor - every float field is signed). Recursively counts every element
+// anywhere under `n` whose OWN text starts with '-', across every table this
+// harness touches - a generic "how much real leading-minus text exists in
+// this table group" census, independent of the typed reader. Reported
+// per-element-name so the already-tracked unsigned-INTEGER fields (Density,
+// On_Time/Off_Time/Variation, Audio_Occlusion, _Entry_ID, Info_Slot_Index,
+// Life_Time/Fade_Time - each already censused by G4 above with its own
+// correct, still-unsigned semantics) can be told apart from everything else
+// (predominantly float fields, now CONFIRMED signed end-to-end by this fix).
+void censusLeadingMinusLeaves(const Node* n, long long& total, std::map<std::string, long long>& byName) {
+    if (!n) return;
+    if (n->hasText()) {
+        const std::string& t = *n->text();
+        if (!t.empty() && t[0] == '-') {
+            ++total;
+            ++byName[lower(n->name())];
+        }
+    }
+    for (const Node* c : n->children()) censusLeadingMinusLeaves(c, total, byName);
+}
+
+// Correction 2 (spec 3.1: Start_Time = 2400 -> exactly 1.0, kept, not
+// wrapped). Counts exact-text "2400" occurrences (the one value the wrap-
+// boundary correction actually distinguishes from the old behaviour) plus any
+// real leading '-' (now a real negative value per the signed-accessor fix,
+// where before it silently read as 0).
+struct StartTimeCensus {
+    long long occurrences = 0;
+    long long exactly2400 = 0;
+    long long leadingMinus = 0;
+};
+StartTimeCensus censusStartTime(const std::vector<const Node*>& rows, const std::string& fieldName) {
+    StartTimeCensus r;
+    for (const Node* row : rows) {
+        const std::string* t = sr3xtbl::ChildText(row, fieldName);
+        if (!t || t->empty()) continue;
+        ++r.occurrences;
+        if (*t == "2400") ++r.exactly2400;
+        if ((*t)[0] == '-') ++r.leadingMinus;
+    }
+    return r;
+}
+
+// Correction 3 (spec 9.2: the Street Lights/Searchlights default (on, off)
+// pair is data, not a build constant). Counts real rows naming either of the
+// two indices that - per the spec's own real-data citation (17.1) - never
+// have a row in the base game, so they run on that data-sourced default for
+// the whole game. Independently re-verified here against the full real
+// archive list (not just the base game's own tables).
+long long censusNamedRows(const std::vector<const Node*>& rows, std::string_view name) {
+    long long n = 0;
+    for (const Node* row : rows) {
+        const std::string* t = sr3xtbl::ChildText(row, "Name");
+        if (t && sr3xtbl::NameEquals(*t, name)) ++n;
+    }
+    return n;
+}
+
+// Correction 5 (spec 12.2: a later duplicate submode name overwrites the
+// earlier one - last wins). Tallies real submodes/submode row names (case-
+// insensitively) across every real camera_free.xtbl copy found, so the real
+// duplicate count this correction actually matters for is visible.
+struct SubmodeNameCensus {
+    long long totalRows = 0;
+    long long duplicateRows = 0;  // rows whose name was already seen at least once before them
+    std::map<std::string, long long> countByName;  // lower-cased name -> occurrences
+};
+SubmodeNameCensus censusSubmodeNames(const std::vector<const Node*>& cameraRows) {
+    SubmodeNameCensus r;
+    for (const Node* camera : cameraRows) {
+        const Node* submodes = sr3xtbl::FindChild(camera, "submodes");
+        for (const Node* sm : sr3xtbl::Children(submodes, "submode")) {
+            const std::string* t = sr3xtbl::ChildText(sm, "name");
+            if (!t) continue;
+            ++r.totalRows;
+            const std::string key = lower(*t);
+            if (r.countByName.count(key) && r.countByName[key] > 0) ++r.duplicateRows;
+            ++r.countByName[key];
+        }
+    }
+    return r;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -406,6 +500,10 @@ int main(int argc, char** argv) {
     std::vector<sr3xtbl::Document> keepAlive;  // Node* point into these; keep them alive for the whole run
 
     long long parseFailures = 0, parseAttempts = 0;
+
+    // G6 correction 1 aggregate (filled per-table below, reported at the end).
+    long long leadingMinusTotal = 0;
+    std::map<std::string, long long> leadingMinusByName;
 
     for (const TableSpec& spec : tableSpecs()) {
         std::printf("--- %s ---\n", spec.canonicalFile.c_str());
@@ -444,6 +542,20 @@ int main(int argc, char** argv) {
             std::vector<const Node*> rows = rowsOf(doc, spec);
             rowsPerFile += static_cast<long long>(rows.size());
             allRows.insert(allRows.end(), rows.begin(), rows.end());
+
+            // G6 correction 5, PER ARCHIVE COPY (not combined - see why below): only one
+            // archive's copy of camera_free.xtbl is ever actually loaded in a real run, so the
+            // engine's "later duplicate overwrites the earlier" rule only ever applies WITHIN a
+            // single copy. Combining multiple copies (as the aggregate census further below
+            // does, for a different, honest purpose) would conflate a real intra-file duplicate
+            // with "the same submode name also appears in a DIFFERENT archive's copy", which is
+            // not the same phenomenon the correction describes.
+            if (spec.canonicalFile == "camera_free.xtbl") {
+                SubmodeNameCensus sc = censusSubmodeNames(rows);
+                std::printf("  G6 correction 5 (FOR TEAM B 2026-10-01), this copy only (%s): %lld submode "
+                            "rows, %lld a repeat of a name already seen earlier IN THIS SAME FILE\n",
+                            f.item->archiveChain.c_str(), sc.totalRows, sc.duplicateRows);
+            }
         }
         std::printf("  rows parsed (all found copies combined): %lld\n", rowsPerFile);
         if (spec.canonicalFile == "effects.xtbl") effectsRowsForControl = allRows;
@@ -487,7 +599,63 @@ int main(int argc, char** argv) {
             for (auto& s : is.dotExamples) std::printf("      dot example: %s\n", s.c_str());
             for (auto& s : is.minusExamples) std::printf("      leading-minus example: %s\n", s.c_str());
         }
+
+        // G6 correction 1 (float sign): fold this table's rows into the global census.
+        for (const Node* row : allRows) censusLeadingMinusLeaves(row, leadingMinusTotal, leadingMinusByName);
+
+        // G6 correction 2 (weather_time_of_day Start_Time / Ramp_Out_Time wrap boundary + sign).
+        if (spec.canonicalFile == "weather_time_of_day.xtbl") {
+            StartTimeCensus st = censusStartTime(allRows, "Start_Time");
+            StartTimeCensus ro = censusStartTime(allRows, "Ramp_Out_Time");
+            std::printf("  G6 correction 2 (Start_Time wrap boundary + sign, FOR TEAM B 2026-10-01): "
+                        "%lld Start_Time occurrences, %lld exactly \"2400\" (the corrected wrap boundary - "
+                        "kept as 1.0, not wrapped to 0), %lld with a leading '-' (now a real negative "
+                        "value per the signed-accessor fix); Ramp_Out_Time: %lld occurrences, %lld "
+                        "with a leading '-'\n",
+                        st.occurrences, st.exactly2400, st.leadingMinus, ro.occurrences, ro.leadingMinus);
+        }
+
+        // G6 correction 3 (time_of_day_objects default pair is data, not a build constant):
+        // real count of rows naming the two indices that never have one in the base game.
+        if (spec.canonicalFile == "time_of_day_objects.xtbl") {
+            const long long streetLights = censusNamedRows(allRows, "Street Lights");
+            const long long searchlights = censusNamedRows(allRows, "Searchlights");
+            std::printf("  G6 correction 3 (default (on,off) pair is TOD-definition DATA, FOR TEAM B "
+                        "2026-10-01): real rows named \"Street Lights\": %lld, \"Searchlights\": %lld "
+                        "(0 of either -> both records run on the data-sourced default for the whole "
+                        "archive set given; this reader does not model that default - see tables.h)\n",
+                        streetLights, searchlights);
+        }
+
+        // G6 correction 4 (vfx LOD-absent fields stay 0, not 1.0e8/1.0e10): the LOD-absent count
+        // is already in cs.presentCount above; restated here for direct visibility.
+        if (spec.canonicalFile == "vfx.xtbl") {
+            const long long lodPresent = cs.presentCount.count("lod") ? cs.presentCount["lod"] : 0;
+            std::printf("  G6 correction 4 (LOD-absent fields stay 0, FOR TEAM B 2026-10-01): "
+                        "%lld / %lld real vfx rows have NO <LOD> element at all (these now get 0, "
+                        "not the 1.0e8/1.0e10 defaults, from LodSpawningDistanceOrDefault() etc.)\n",
+                        cs.rows - lodPresent, cs.rows);
+        }
+
+        // G6 correction 5, COMBINED across every copy found (NOT the real in-file duplicate
+        // figure - see the per-copy numbers printed above, inside the parse loop, for that;
+        // this combined figure additionally folds in "same name also appears in a DIFFERENT
+        // archive's copy", a different, cross-copy phenomenon, kept here only to show the raw
+        // combined vector this reader actually returns when several copies are all passed in).
+        if (spec.canonicalFile == "camera_free.xtbl") {
+            SubmodeNameCensus sc = censusSubmodeNames(allRows);
+            std::printf("  G6 correction 5 COMBINED across all copies (informational only - see the "
+                        "per-copy counts above for the real same-file duplicate figure): %lld submode "
+                        "rows total, %lld a repeat of a name already seen earlier in this combined list\n",
+                        sc.totalRows, sc.duplicateRows);
+            for (auto& kv : sc.countByName)
+                if (kv.second > 1) std::printf("      combined duplicate name: %-28s x%lld\n", kv.first.c_str(), kv.second);
+        }
     }
+
+    std::printf("=== G6 correction 1 (float sign, FOR TEAM B 2026-10-01): aggregate real-data census ===\n");
+    std::printf("total leaf elements with a leading '-' across every table scanned above: %lld\n", leadingMinusTotal);
+    for (auto& kv : leadingMinusByName) std::printf("    %-40s x%lld\n", kv.first.c_str(), kv.second);
 
     std::printf("=== G2 CONTROL: vfx.xtbl's schema applied to effects.xtbl rows ===\n");
     {

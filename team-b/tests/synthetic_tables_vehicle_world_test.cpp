@@ -287,7 +287,7 @@ void testExternalizedComponentSlot() {
         <Name>front_bumper</Name>
         <Camera_Info>front_bumper_cam</Camera_Info>
         <Components>
-          <Component><SomeUnmappedField>x</SomeUnmappedField></Component>
+          <Component><Name>rim_chrome_5spoke</Name><SomeUnmappedField>x</SomeUnmappedField></Component>
           <Component></Component>
         </Components>
       </Slot>
@@ -297,7 +297,13 @@ void testExternalizedComponentSlot() {
     CHECK(rows.size() == 2);
     CHECK(rows[0].name == "front_bumper" && rows[0].cameraInfo == "front_bumper_cam");
     CHECK(rows[0].componentCount == 2);
+    // Component/Name (spec 5.1/7 CORRECTED 2026-10-02): the match target for
+    // vehicle_wheel_groups.xtbl's Front_Rim/Rear_Rim/etc. is the Component's
+    // OWN Name, not the enclosing Slot's Name - a Component with no <Name>
+    // child contributes nothing to componentNames (not an empty string).
+    CHECK(rows[0].componentNames.size() == 1 && rows[0].componentNames[0] == "rim_chrome_5spoke");
     CHECK(rows[1].name == "rear_bumper" && !rows[1].cameraInfo.has_value() && rows[1].componentCount == 0);
+    CHECK(rows[1].componentNames.empty());
 }
 
 // ===========================================================================
@@ -487,7 +493,7 @@ void testLevelObject() {
         </Anchored>
         <Emitting_Sound>snd_dumpster_hum</Emitting_Sound>
         <Collision_Sound><VehicleIVS>0.5</VehicleIVS><FoleyCollision>foley_metal</FoleyCollision></Collision_Sound>
-        <Death_Money><Min>1</Min><Max>10</Max><X>0.1</X><Y>0.2</Y><Z>0.3</Z><Just_Coins>true</Just_Coins></Death_Money>
+        <Death_Money><Min>1</Min><Max>10</Max><Cash_Out_Point><X>0.1</X><Y>0.2</Y><Z>0.3</Z></Cash_Out_Point><Just_Coins>true</Just_Coins></Death_Money>
         <center_of_mass><com_offset><X>0</X><Y>0</Y><Z>0.5</Z></com_offset></center_of_mass>
         <Movable_By_Humans>true</Movable_By_Humans>
         <Vehicle_Obstacle>unanchored</Vehicle_Obstacle>
@@ -496,9 +502,13 @@ void testLevelObject() {
           <Flag>fire_hydrant</Flag>
         </Flags>
       </Level_Object>
+      <Level_Object>
+        <Name>no_cash_out_point</Name>
+        <Death_Money><Min>0</Min><Max>0</Max><X>0.0</X><Y>0.0</Y><Z>0.0</Z><Just_Coins>False</Just_Coins></Death_Money>
+      </Level_Object>
     </Table></root>)");
     std::vector<LevelObject> rows = ParseLevelObjectsTable(d);
-    CHECK(rows.size() == 1);
+    CHECK(rows.size() == 2);
     const LevelObject& o = rows[0];
     CHECK(o.name == "dumpster_01");
     CHECK(o.hitpoints.present && o.hitpoints.value == 50u);
@@ -513,8 +523,13 @@ void testLevelObject() {
     CHECK(o.anchored.dislodgeOnDeath == true);
     CHECK(o.collisionSound.vehicleIVS.has_value() && *o.collisionSound.vehicleIVS == 0.5f);
     CHECK(o.collisionSound.foleyCollision == "foley_metal");
-    // Death_Money's own X/Y/Z (spec 12.1/12.3 confirmed correction: NOT a separate wrapper).
+    // Death_Money/Cash_Out_Point CHILD vec3 (spec 12.1 CORRECTED 2026-10-02 -
+    // Team A exe re-derivation; NOT Death_Money's own X/Y/Z directly, the
+    // earlier "confirmed empirically" claim here was wrong - see
+    // world_items.h's LevelObjectDeathMoney::point comment).
+    CHECK(o.deathMoney.present);
     CHECK(o.deathMoney.min.value == 1u && o.deathMoney.max.value == 10u);
+    CHECK(o.deathMoney.point.present);
     CHECK(near(o.deathMoney.point.value().x, 0.1f, 1e-5f) && near(o.deathMoney.point.value().z, 0.3f, 1e-5f));
     CHECK(o.deathMoney.justCoins.value == true);
     CHECK(near(o.comOffset.value().z, 0.5f, 1e-5f));
@@ -522,6 +537,17 @@ void testLevelObject() {
     CHECK(o.vehicleObstacle == "unanchored");
     CHECK(o.receivesBulletImpulse && o.fireHydrant);
     CHECK(!o.disappearOnDeath && !o.breakableGlass);  // 27-literal vocabulary: not mentioned -> false
+
+    // BOUNDARY (spec 12.1 CORRECTED 2026-10-02): a Death_Money block with
+    // direct X/Y/Z siblings and NO Cash_Out_Point child must read point as
+    // ABSENT (present=false), not fall back to those sibling X/Y/Z - whether
+    // the real engine helper falls back is itself OPEN/undetermined, and
+    // this reader deliberately does not guess a fallback either way (see
+    // world_items.h's LevelObjectDeathMoney::point comment).
+    const LevelObject& o2 = rows[1];
+    CHECK(o2.name == "no_cash_out_point");
+    CHECK(o2.deathMoney.present);
+    CHECK(!o2.deathMoney.point.present);
 }
 
 // ===========================================================================
