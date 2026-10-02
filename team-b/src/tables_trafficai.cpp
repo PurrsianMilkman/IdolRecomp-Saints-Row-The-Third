@@ -391,7 +391,11 @@ AiBehavior ParseAiBehavior(const Node* row) {
     b.investigate.present = investigate != nullptr;
     b.investigate.seenInLast = ReadFloatAlways(investigate, "seen_in_last");
 
-    b.goalsCanProcessEarly = ReadBoolAlways(row, "goals_can_process_early");
+    // spec-tables-traffic-ai.md s10 (CORRECTED 2026-10-02): goals_can_process_early
+    // is read as a child of Goals, not as a row-level child - the same `goals`
+    // handle used for Survive/Suppress/.../Investigate above is still the parent
+    // when this element is looked up.
+    b.goalsCanProcessEarly = ReadBoolAlways(goals, "goals_can_process_early");
     return b;
 }
 AiBehaviorTable ParseAiBehaviorTable(const Document& doc) {
@@ -467,6 +471,13 @@ AiPersonalitiesTable ParseAiPersonalitiesTable(const Document& doc) {
 GenericCharacterRow ParseGenericCharacterRow(const Node* row) {
     GenericCharacterRow r;
     r.name = getText(row, "Name");
+    // spec-tables-traffic-ai.md s12 (RESOLVED 2026-10-02): the 21 slot names are now
+    // known in slot order (read directly from 0x01308CD0); the match is CASE-
+    // INSENSITIVE (CRC-32 lower-cases every byte, spec 1.4), so EnumIndex (also
+    // case-insensitive) faithfully reproduces the real CRC-compare outcome.
+    const Node* nameChild = FindChild(row, "Name");
+    r.index = EnumIndex(nameChild, enums::kGenericCharacterSlotNames.data(),
+                         enums::kGenericCharacterSlotNames.size());
     r.spawnName = getText(row, "Spawn_Name");
     return r;
 }
@@ -948,28 +959,32 @@ std::optional<EscortConstants> ParseEscortConstants(const Document& doc) {
 
     const Node* vehicles = FindChild(penalties, "Vehicles");
     c.vehicles.present = vehicles != nullptr;
-    // spec-tables-traffic-ai.md s19: "Vehicle_Damage_Penalty_MS 0x014BB25C 4000 (u32)" under the section's
-    // [CONFIRMED - disassembly, read in full] marker (the other leaves' reader types are OPEN there, so they stay float).
+    // spec-tables-traffic-ai.md s19 (RESOLVED 2026-10-02, re-derived from 0x0067F1D0
+    // read in full): the reader type follows the field name exactly - every leaf
+    // whose name ends `_MS` is read by the unsigned-32-bit always-write reader
+    // (0x00DABDF0), every other leaf by the float always-write reader (0x00DACCB0).
+    // Previously only Vehicle_Damage_Penalty_MS was known to be u32; the other six
+    // `_MS` leaves below were wrongly read as float before this fix.
     c.vehicles.vehicleDamagePenaltyMs = ReadUInt32Always(vehicles, "Vehicle_Damage_Penalty_MS");
     c.vehicles.vehicleDamageThreshold = ReadFloatAlways(vehicles, "Vehicle_Damage_Threshold");
-    c.vehicles.vehicleDamageCooldownMs = ReadFloatAlways(vehicles, "Vehicle_Damage_Cooldown_MS");
+    c.vehicles.vehicleDamageCooldownMs = ReadUInt32Always(vehicles, "Vehicle_Damage_Cooldown_MS");
 
     const Node* humans = FindChild(penalties, "Humans");
     c.humans.present = humans != nullptr;
-    c.humans.humanDamagePenaltyMs = ReadFloatAlways(humans, "Human_Damage_Penalty_MS");
+    c.humans.humanDamagePenaltyMs = ReadUInt32Always(humans, "Human_Damage_Penalty_MS");
     c.humans.humanDamageThreshold = ReadFloatAlways(humans, "Human_Damage_Threshold");
 
     const Node* movers = FindChild(penalties, "Movers");
     c.movers.present = movers != nullptr;
-    c.movers.moverDamagePenaltyMs = ReadFloatAlways(movers, "Mover_Damage_Penalty_MS");
+    c.movers.moverDamagePenaltyMs = ReadUInt32Always(movers, "Mover_Damage_Penalty_MS");
     c.movers.moverMassThresholdKg = ReadFloatAlways(movers, "Mover_Mass_Threshold_KG");
-    c.movers.moverDamageCooldownMs = ReadFloatAlways(movers, "Mover_Damage_Cooldown_MS");
+    c.movers.moverDamageCooldownMs = ReadUInt32Always(movers, "Mover_Damage_Cooldown_MS");
 
     const Node* world = FindChild(penalties, "World");
     c.world.present = world != nullptr;
-    c.world.worldDamagePenaltyMs = ReadFloatAlways(world, "World_Damage_Penalty_MS");
+    c.world.worldDamagePenaltyMs = ReadUInt32Always(world, "World_Damage_Penalty_MS");
     c.world.worldDamageThresholdHp = ReadFloatAlways(world, "World_Damage_Threshold_HP");
-    c.world.worldDamageCooldownMs = ReadFloatAlways(world, "World_Damage_Cooldown_MS");
+    c.world.worldDamageCooldownMs = ReadUInt32Always(world, "World_Damage_Cooldown_MS");
 
     return c;
 }

@@ -96,8 +96,30 @@
 //    whole loaded group table, out of scope for a single-row parse (7.9
 //    item 5 also flags the lookup's own -1/unchecked-index behaviour OPEN).
 //  * Entry +0x628..+0x72B: the vehicle-camera parameter region (three
-//    camera-angle sets, follow/lookat values, Camera_Follow_Aggression...) -
-//    "partially decoded, not tabulated" (7.3, 7.9 item 2). Not implemented.
+//    camera-angle sets, Camera_Follow_Aggression...). A 2026-10-02 spec
+//    update (spec-vehicle-data.md 7.3's own field table, sourced from and
+//    partly spot-checked against spec-tables-ui-controls.md 8.1 "Family A")
+//    now gives CONFIRMED shapes for the three 32-byte angle sets and
+//    Camera_Follow_Aggression/Position_Based/Sphere_Based - implemented, but
+//    NOT inside VehicleEntry/ParseVehicleEntry. Per 8.1's own text, this
+//    region is filled by a SEPARATE load pass over vehicle_cameras.xtbl
+//    (vehicle mode) / vehicle_group_cameras.xtbl (group mode), whose own
+//    <Vehicle>/<Vehicle_Group> rows are resolved by NAME against the
+//    already-populated vehicle-info table (0x00ACB000/0x00ACE2D0 resolve
+//    Name via 0x00AC27A0 to a row index, then call the shared
+//    0x00ACA960/0x00AC5CF0 helpers) - it is NOT read from the SAME
+//    <name>_veh.xtbl/vehicle_groups.xtbl row ParseVehicleEntry(row)
+//    receives (that row has no Lookat_Offset/Camera_Follow_Aggression
+//    children at all - this was verified directly against the spec text,
+//    not assumed). See VehicleCameraRow/ParseVehicleCameraRow below (after
+//    ParseVehicleEntry) for the new, correctly-scoped reader and its own
+//    file-level comment for the full discovery note. Still genuinely OPEN
+//    even there: four further sub-readers run after the three angle sets
+//    with no element names tabulated at all (0x00AC6020, 0x00AC6210,
+//    0x00AC6120, 0x00AC9910), and the +0x870 bit 0x40000000 mode-selector /
+//    group-row-inheritance mechanics (needs a cross-file join, out of scope
+//    for a single-row parser - same footing as the +0x480 group-row-pointer
+//    item above).
 //  * Vtol's +0x410 eight-dword Camera_Overrides block - untabulated (7.5,
 //    7.9 item 2). Not implemented.
 //  * Watercraft's un-tabulated offsets (+0x30..+0x54, +0x6C..+0x80) - the
@@ -220,7 +242,16 @@ inline constexpr uint32_t kRadioTuner = 1u << 26;                        // Radi
 inline constexpr uint32_t k2dLodFade = 1u << 27;                         // "2D_Lod_Fade" (note the exact reader spelling - see the "8 dead tags" note below)
 inline constexpr uint32_t kUseStunts = 1u << 28;                         // Use_Stunts
 inline constexpr uint32_t kUseableByAiLife = 1u << 29;                   // Useable_by_AI_LIFE
-// bits 30/31: no element - never set here
+// bit 30 (0x40000000): spec-tables-ui-controls.md 8.1 now documents this as
+// the Camera_Follow_Aggression Position_Based/Sphere_Based mode selector,
+// inherited from the group row when neither block is present - but its
+// SOURCE element lives in vehicle_cameras.xtbl/vehicle_group_cameras.xtbl
+// (see VehicleCameraRow below), a file this struct's ComputeFlags0/row never
+// sees, so it is still never set here; no longer "no element at all", just
+// not this reader's row to read it from.
+// bit 31 (0x80000000): same file-provenance note - set when
+// Camera_Follow_Aggression/Sphere_Based/Min_Angle is present (8.1); not set
+// here for the same reason as bit 30.
 }  // namespace flags0
 
 namespace flags1 {  // entry +0x874
@@ -518,8 +549,12 @@ struct VehicleEntry {
     Always<float> centerOfMassZOffset;    // Center_Of_Mass_Z_Offset, +0x620
     Always<float> cameraProximityLockY;    // Camera_Proximity_Lock_Y, +0x624
 
-    // Entry +0x628..+0x72B (vehicle-camera parameters): OPEN, not modeled -
-    // see the DELIBERATELY OPEN list above.
+    // Entry +0x628..+0x72B (vehicle-camera parameters): NOT a field of this
+    // struct - the region is populated from a SEPARATE xtbl file
+    // (vehicle_cameras.xtbl / vehicle_group_cameras.xtbl), not from the same
+    // row ParseVehicleEntry(row) parses everything else from. See
+    // VehicleCameraRow/ParseVehicleCameraRow below and the DELIBERATELY OPEN
+    // list above for the full explanation and what remains genuinely OPEN.
 
     // --- Rotation/friction (spec 7.3 +0x72C..+0x774) ---
     Always<float> staticLoadFriction;         // Static_Load_Friction, +0x72C
@@ -641,5 +676,173 @@ std::vector<VehicleEntry> ParseAllVehicles(const Document& doc);
 // see the SCOPE banner above for what this reader does and does not
 // reproduce about that mode).
 std::vector<VehicleEntry> ParseAllVehicleGroups(const Document& doc);
+
+// ---------------------------------------------------------------------------
+// Vehicle camera parameters: `vehicle_cameras.xtbl` / `vehicle_group_cameras.
+// xtbl` (spec-vehicle-data.md 7.3's `+0x628`-`+0x72B` field table, added
+// 2026-10-02, itself sourced from and partly spot-checked against
+// spec-tables-ui-controls.md section 8.1 "Family A").
+//
+// DISCOVERY (found while implementing this, not anticipated going in):
+// despite describing bytes `+0x628..+0x72B` of the SAME 0xB80-byte
+// vehicle-info-table entry VehicleEntry/ParseVehicleEntry already covers
+// most of, this region is NOT populated from the `<name>_veh.xtbl`/
+// `vehicle_groups.xtbl` `<Vehicle>`/`<Vehicle_Group>` row ParseVehicleEntry
+// receives. Per spec-tables-ui-controls.md 8.1 directly: it is filled by a
+// SEPARATE load pass over `vehicle_cameras.xtbl` (vehicle mode) /
+// `vehicle_group_cameras.xtbl` (group mode). Those files' OWN `<Vehicle>`/
+// `<Vehicle_Group>` rows are resolved by NAME against the already-populated
+// vehicle-info table (`0x00ACB000`/`0x00ACE2D0` resolve `Name` via
+// `0x00AC27A0` to a 16-bit row index, `0xFFFF` = unknown -> row skipped,
+// then call the shared `0x00ACA960`/`0x00AC5CF0` helpers to write into that
+// row). A `<name>_veh.xtbl` `<Vehicle>` element has no `Lookat_Offset`/
+// `Camera_Follow_Aggression` children at all - reading for them on the SAME
+// row ParseVehicleEntry already has would silently read "absent" for every
+// vehicle, which is not a faithful reimplementation. Consequently these
+// types/this reader are kept SEPARATE from VehicleEntry/ParseVehicleEntry,
+// mirroring the real engine's own two-pass load; VehicleEntry itself gains
+// NO new field for this region (same footing as entry +0x480's group-row
+// POINTER and Weapon_Link: a full merge needs the caller to join two loaded
+// documents by Name, out of scope for a single-row parser).
+//
+// Only the `+0x628..+0x72B` fields this task's spec update confirms are
+// modeled below. Also written by this same file per spec-tables-ui-
+// controls.md 8.1, but OUTSIDE this task's `+0x628..+0x72B` scope and so
+// NOT modeled here: `+0x624`'s `Camera_Proximity_Lock_Y` override,
+// `+0xAF0`/`+0xAF4`'s `Camera_Roll`, `+0x860`/`+0x864`/`+0x868`'s FOV/follow
+// fields, and `skip_camera_transition`/`use_alt_freckle_cam`.
+
+// One `0x00AC5CF0`-shaped 32-byte camera-angle set: Primary at destination
+// entry `+0x628` (selector 0), Secondary `+0x648` (selector 1, +0x20), RC
+// `+0x668` (selector 2, +0x40). The set's final 4 bytes ("+0x1C" within the
+// set) are spec-documented as "copied only" with no named XML element read
+// into them by `0x00AC5CF0` - nothing is modeled for that sub-field (same
+// convention as every other element-less field this reader leaves out).
+struct CameraAngleSet {
+    Vec3Result lookatOffset;          // Lookat_Offset, set+0x00 (3xf32)
+    Always<float> followDistance;      // Follow_Distance, set+0x0C
+    Always<float> followHeight;         // Follow_Height, set+0x10
+    Always<float> minPitchRadians;       // Min_Pitch, set+0x14, (r) when present
+    Always<float> maxPitchRadians;        // Max_Pitch, set+0x18, (r) when present
+};
+
+// `Camera_Follow_Aggression > Position_Based` (spec-tables-ui-controls.md
+// 8.1, +0x6EC/+0x6FC/+0x6F0/+0x6F4/+0x70C/+0x710). Mutually exclusive with
+// Sphere_Based below - `Position_Based` wins when both exist (spec text).
+// Swing_Rate_Fwd/Rev and From_Sticky_Fwd/Rev are documented as going through
+// a further DETERMINISTIC (not RNG - 8.1 text corrects an earlier RNG
+// reading) `1 - exp(K / value)` transform downstream of this reader, where K
+// is a double constant the spec itself has not yet read
+// (`0x01184050`, NEEDS-EXE) - that transform is NOT applied here (this
+// reader's house convention: do not reproduce a transform this reader could
+// not even complete correctly, same footing as the Helicopter rotor-ring
+// derivation being left to vehicle_type.h's "not reproduced" note). The raw
+// authored XML values are kept as read.
+struct PositionBasedAggression {
+    Always<float> swingRateFwd;           // Swing_Rate_Fwd, +0x6EC
+    Always<float> swingRateRev;            // Swing_Rate_Rev, +0x6FC
+    Always<float> headingRetentionNormal;   // Heading_Retention_Normal, +0x6F0; documented default 1.0, NOT auto-applied (matches Player_Damage_Multiplier precedent)
+    Always<float> headingRetentionTurning;   // Heading_Retention_Turning, +0x6F4; documented default 1.0, NOT auto-applied
+    Always<float> fromStickyFwd;              // From_Sticky_Fwd, +0x70C
+    Always<float> fromStickyRev;               // From_Sticky_Rev, +0x710
+};
+
+// `Camera_Follow_Aggression > Sphere_Based` (+0x700/+0x704/+0x708).
+struct SphereBasedAggression {
+    Always<float> slerpValue;              // Slerp_Value, +0x700
+    Always<float> fromStickySlerpValue;     // From_Sticky_Slerp_Value, +0x704; documented default = Slerp_Value, NOT computed here (matches AI_Wheel_Friction precedent)
+    Always<float> minAngleRadians;           // Min_Angle, +0x708, (r) when present; presence also sets destination-entry +0x870 bit 0x80000000 in the real engine - NOT applied here (this reader has no +0x870 flag word of its own; see flags0's bit-31 comment in this header)
+};
+
+// `Camera_Follow_Aggression` (+0x6EC..+0x710): a child element of a
+// vehicle_cameras.xtbl/vehicle_group_cameras.xtbl row (NOT of the
+// `<name>_veh.xtbl` row - see the SCOPE note above). `present` tracks
+// whether the wrapper itself exists (same convention as AirControlBlock /
+// MotorcycleVariant::Wheelie's own `present` flag, vehicle_type.h). Both
+// Position_Based and Sphere_Based are read unconditionally when the wrapper
+// is present (each sub-block's own fields already read as absent/default
+// when ITS OWN wrapper is additionally missing) - which one the real engine
+// prefers when both are supplied is documented ("Position_Based wins") but
+// not resolved here, left to the caller, matching this reader's precedent
+// of keeping mutually-exclusive raw inputs rather than resolving them (same
+// footing as ExhaustTypes' keyed list).
+//
+// NOT modeled here: the destination `+0x870` bit `0x40000000` mode selector
+// and its group-row inheritance path (needs the whole loaded group table
+// PLUS this camera file, doubly out of scope for a single-row parser - same
+// footing as the +0x480 group-row-pointer precedent), and the four still-
+// untabulated sub-readers that run after the three angle sets
+// (`0x00AC6020`, `0x00AC6210`, `0x00AC6120`, `0x00AC9910`).
+struct CameraFollowAggression {
+    bool present = false;
+    PositionBasedAggression positionBased;    // Position_Based
+    SphereBasedAggression sphereBased;         // Sphere_Based
+};
+
+// One `vehicle_cameras.xtbl` `<Vehicle>` row (vehicle mode) or
+// `vehicle_group_cameras.xtbl` `<Vehicle_Group>` row (group mode) - the SAME
+// shape serves both, mirroring VehicleEntry/ParseVehicleEntry's own
+// "same reader, two root element kinds" precedent (spec 7.2). `name` is kept
+// as raw text, NOT resolved to the vehicle-info-table row index the real
+// `0x00AC27A0` lookup would compute (same footing as VehicleEntry::group -
+// resolving it needs the whole loaded vehicle-info table, out of scope for
+// a single-row parser). `primary`/`secondary`/`rc` are read from XML wrapper
+// elements named `Primary_Camera_Angle`/`Secondary_Camera_Angle`/
+// `RC_Camera_Angle` per spec-tables-ui-controls.md 8.1's own field table.
+// CONFIRMED against real data (clean-room legitimate - real game data, not
+// TEAM A\tools or disassembly): `misc_tables.vpp_pc`'s own
+// `vehicle_cameras.xtbl` carries BOTH real `<Vehicle>` rows using exactly
+// this nesting (`Primary_Camera_Angle`/`Secondary_Camera_Angle`/
+// `RC_Camera_Angle` > `Lookat_Offset`/`Follow_Distance`/`Follow_Height`,
+// `Camera_Follow_Aggression` > `Position_Based`/`Sphere_Based` with every
+// field name used below appearing verbatim) AND the file's own embedded
+// `<TableDescription>` schema block (every real `.xtbl` carries one, an
+// authoring-tool field catalog, not disassembly) naming every field here
+// identically, resolving 8.1's own "NEEDS-DATA: element-vs-attribute check
+// in the real file" note. That same schema block also names the four
+// sub-readers 8.1 could not identify from disassembly alone, most likely:
+// `Fine_Aim_Camera_Angle` (same Lookat_Offset shape as the three angle sets,
+// seen between Secondary_Camera_Angle and Camera_Follow_Aggression in real
+// rows), `Camera_Swings` (`Powerslide`/`Nitrous`/`Burnout`, each an
+// offset-vec3/slerp/Duration/Roll/flags record), `Camera_Sticky`
+// (`Default_Time`/`Stopped_Time`/`Speed_Threshhold`), and
+// `Helicopter_Specific`. This is a real, useful finding (reported, not
+// guessed) but NOT implemented: the schema block gives element names and
+// authoring-tool defaults only, never the runtime byte offsets spec-
+// vehicle-data.md 7.3/spec-tables-ui-controls.md 8.1 still mark NEEDS-EXE
+// for `0x00AC6020`/`0x00AC6210`/`0x00AC6120`/`0x00AC9910` - implementing a
+// destination offset from this alone would be inventing an engine value,
+// against this project's hard rule. Left genuinely OPEN, as instructed.
+//
+// Also surfaced by this same real-data check, worth flagging rather than
+// silently resolving: the real file's own schema states
+// `Heading_Retention_Normal`/`Heading_Retention_Turning`'s authoring-tool
+// `<Default>` as `0.0`, not the `1.0` spec-tables-ui-controls.md 8.1's prose
+// states - these may be two different concepts (an XML-authoring-tool
+// fallback vs. the compiled reader's own absent-value default) rather than
+// a real contradiction, and this reader does not auto-apply either number
+// for these two fields regardless (see PositionBasedAggression above), so
+// no code depends on which is right - flagged here for the spec's own
+// maintainers to reconcile, not resolved by guessing.
+struct VehicleCameraRow {
+    std::optional<std::string> name;          // Name (join key - see the note above)
+    CameraAngleSet primary;                    // Primary_Camera_Angle, selector 0, destination +0x628
+    CameraAngleSet secondary;                   // Secondary_Camera_Angle, selector 1, destination +0x648
+    CameraAngleSet rc;                           // RC_Camera_Angle, selector 2, destination +0x668
+    CameraFollowAggression cameraFollowAggression;  // Camera_Follow_Aggression, destination +0x6EC..+0x710
+};
+
+// Parses one `<Vehicle>` (vehicle_cameras.xtbl) or `<Vehicle_Group>`
+// (vehicle_group_cameras.xtbl) row into a VehicleCameraRow. `row` must be
+// that element (case-insensitive), directly under `<root><Table>`.
+VehicleCameraRow ParseVehicleCameraRow(const Node* row);
+
+// Convenience: parses every `<Vehicle>` row of a whole vehicle_cameras.xtbl
+// document, in file order.
+std::vector<VehicleCameraRow> ParseAllVehicleCameraRows(const Document& doc);
+
+// Convenience: parses every `<Vehicle_Group>` row of a whole
+// vehicle_group_cameras.xtbl document, in file order.
+std::vector<VehicleCameraRow> ParseAllVehicleGroupCameraRows(const Document& doc);
 
 }  // namespace sr3vehicleinfo

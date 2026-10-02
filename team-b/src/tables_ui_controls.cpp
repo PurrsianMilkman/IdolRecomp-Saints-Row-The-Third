@@ -105,7 +105,10 @@ ControlSchemeAxis ParseControlSchemeAxis(const Node* row) {
     a.axis = LookupNamedValue(FindChild(row, "Axis"), kStickAxisTable);
     a.inverted = ReadBoolAlways(row, "Inverted");
     a.alternateAxis = LookupNamedValue(FindChild(row, "Alternate_Axis"), kStickAxisTable);
-    a.alternateInverted = ReadBoolAlways(row, "Alternate_Inverted");
+    // CORRECTED 2026-10-01 (spec 3.2): the real loader reads "Inverted" a
+    // SECOND time here, not "Alternate_Inverted" - the file's own
+    // Alternate_Inverted values are dead data the loader never looks up.
+    a.alternateInverted = ReadBoolAlways(row, "Inverted");
     return a;
 }
 
@@ -237,12 +240,12 @@ QteSequence ParseQteSequence(const Node* row) {
     s.viewRemotely = ReadBoolAlways(row, "View_Remotely");
     s.playerWeapon = getText(row, "Player_Weapon");
     const Node* succesState = FindChild(row, "Succes_State");  // sic: one 's' - see 7.1
-    // [OPEN - spec-tables-ui-controls.md 7.1 (+ 7.2 note): "`FUN_0095DA50` is a name->`u16`
-    // index resolver into `anim_synced.xtbl` by CRC ..., so `Synced_Animation` text here is a
-    // name, not a number; ... to be settled against the executable" - Review status 7.2:
-    // "NEEDS-EXE: `Synced_Animation` resolver conflict". Kept as the numeric read; a name is
-    // NOT resolved here and the reading is not CONFIRMED either way.]
-    s.successAnimation = GetUInt16(succesState, "Synced_Animation");
+    // CORRECTED 2026-10-01 (7.1/7.2): 0x0095DA50 is a hash-indexed name->u16
+    // resolver (a DIFFERENT table from Looping_State's own Synced_Animation,
+    // which goes through 0x004BF810) - so this element is a NAME, not a raw
+    // number. Was previously read with GetUInt16 (a real bug); now raw text,
+    // matching every other un-modelled resolver field in this struct.
+    s.successAnimation = getText(succesState, "Synced_Animation");
     s.successPlayerIsAttacker = ReadBoolAlways(succesState, "Player_Is_Attacker");
     const Node* animatedNpcs = FindChild(row, "Animated_NPCs");
     for (const Node* npc : Children(animatedNpcs, "Animated_NPC"))
@@ -287,16 +290,14 @@ VehicleCameraFields ParseVehicleCameraFields(const Node* row) {
     f.cameraRollTypeText = getText(cameraRoll, "Roll_Type");
     f.cameraRollIntensityMultiplier = GetFloat(cameraRoll, "Intensity_Multiplier");
 
-    // [OPEN - spec-tables-ui-controls.md 8.1: "whether `skip_camera_transition`/
-    // `use_alt_freckle_cam` are row attributes or child elements is not checked against the
-    // real file; ... to be settled against the executable" - Review status 8.1: NEEDS-EXE.
-    // Attribute reading kept, not CONFIRMED.]
-    // Row ATTRIBUTES, not child elements (8.1). Node::attribute() matches the
-    // attribute NAME case-insensitively; the spec does not state the VALUE
-    // comparison's case-sensitivity, so this reader compares case-insensitively
-    // too (NameEquals), the same policy as every other text-literal match here.
-    if (const std::string* skip = row->attribute("skip_camera_transition")) f.skipCameraTransition = NameEquals(*skip, "yes");
-    if (const std::string* alt = row->attribute("use_alt_freckle_cam")) f.useAltFreckleCam = NameEquals(*alt, "yes");
+    // CORRECTED 2026-10-01 (8.1): these are CHILD ELEMENTS, not row
+    // attributes - the former "attribute vs child element" OPEN question is
+    // now settled (getter 0x00DABA40 reads child elements everywhere else in
+    // this group). The spec does not state the VALUE comparison's
+    // case-sensitivity, so this reader compares case-insensitively (NameEquals),
+    // the same policy as every other text-literal match here.
+    if (auto skip = getText(row, "skip_camera_transition")) f.skipCameraTransition = NameEquals(*skip, "yes");
+    if (auto alt = getText(row, "use_alt_freckle_cam")) f.useAltFreckleCam = NameEquals(*alt, "yes");
 
     f.cameraFovScale = GetFloat(row, "camera_fov_scale");
     f.maxFov = ReadFloatAlways(row, "Max_FOV");
@@ -378,8 +379,10 @@ HudQteInterface ParseHudQteInterface(const Node* row) {
     HudQteInterface h;
     h.name = getText(row, "Name");
     h.buttonType = EnumIndex(FindChild(row, "Button_Type"), kQteButtonTypeNames.data(), kQteButtonTypeNames.size());
-    h.buttonAnimationType =
-        EnumIndex(FindChild(row, "Button_Animation_Type"), kButtonAnimationTypeNames.data(), kButtonAnimationTypeNames.size());
+    // CORRECTED 2026-10-01 (9.2): raw text, not EnumIndex - see tables.h's
+    // HudQteInterface::buttonAnimationType comment (real table has 9 slots,
+    // only 3 names known; closing it would mis-map unknown-but-real values).
+    h.buttonAnimationType = getText(row, "Button_Animation_Type");
     h.buttonAction = getText(row, "Button_Action");
     h.axisAction = getText(row, "Axis_Action");
     h.axisDirPos = ReadBoolAlways(row, "Axis_Dir_Pos");
@@ -412,18 +415,23 @@ UiPart ParseUiPart(const Node* row) {
     p.name = getText(row, "Name");
     const Node* slotList = FindChild(row, "SlotList");
     for (const Node* s : Children(slotList, "SlotOffset")) p.slots.push_back(ParseUiSlotOffset(s));
-    p.xOffset = ReadFloatAlways(row, "XOffset");
-    p.yOffset = ReadFloatAlways(row, "YOffset");
-    p.scale = ReadFloatAlways(row, "Scale");
-    p.alpha = ReadFloatAlways(row, "Alpha");
+    // CORRECTED 2026-10-01 (10): i32/f32, if-present (was ReadFloatAlways for
+    // all four - both the type and the always/if-present reader were wrong
+    // for XOffset/YOffset; only the always/if-present part was wrong for
+    // Scale/Alpha).
+    p.xOffset = GetInt32(row, "XOffset");
+    p.yOffset = GetInt32(row, "YOffset");
+    p.scale = GetFloat(row, "Scale");
+    p.alpha = GetFloat(row, "Alpha");
     return p;
 }
 
 UiClusterOffset ParseUiClusterOffset(const Node* row) {
     UiClusterOffset c;
     c.resolutionRatio = getText(row, "ResolutionRatio");
-    c.xOffset = ReadFloatAlways(row, "XOffset");
-    c.yOffset = ReadFloatAlways(row, "YOffset");
+    // CORRECTED 2026-10-01 (10): i32, if-present (was ReadFloatAlways).
+    c.xOffset = GetInt32(row, "XOffset");
+    c.yOffset = GetInt32(row, "YOffset");
     return c;
 }
 
@@ -474,11 +482,23 @@ ControlSchemeTextEntry ParseControlSchemeTextEntry(const Node* row) {
     return e;
 }
 
+// Platform filter + infinite-loop-hazard note: see tables.h's
+// ControlSchemeText/ControlSchemeTextEntry struct banner (spec 11) for the
+// full citation and precedent discussion. Short version: only a Control
+// whose Platform text is exactly "360" or "All" (case-sensitive) is kept;
+// FindChild()/Children() are both null-safe, so a Controls-less row yields
+// an empty vector here rather than reproducing the real loader's re-entry
+// hazard.
 ControlSchemeText ParseControlSchemeText(const Node* row) {
     ControlSchemeText t;
     t.name = getText(row, "Name");
     const Node* controls = FindChild(row, "Controls");
-    for (const Node* c : Children(controls, "Control")) t.controls.push_back(ParseControlSchemeTextEntry(c));
+    for (const Node* c : Children(controls, "Control")) {
+        const std::optional<std::string> platform = getText(c, "Platform");
+        const bool platformKept = platform.has_value() && (*platform == "360" || *platform == "All");
+        if (!platformKept) continue;
+        t.controls.push_back(ParseControlSchemeTextEntry(c));
+    }
     return t;
 }
 
@@ -500,8 +520,11 @@ VoiceControlEntry ParseVoiceControlEntry(const Node* row) {
     e.maxDelayRaw = ReadInt32Always(row, "Max_delay");
     e.playPercent = ReadInt32Always(row, "Play_percent");
     e.priority = GetInt32(row, "Priority");
-    e.externalSource = GetUInt32(row, "External_source");
-    e.playEvent = GetUInt32(row, "Play_event");
+    // External_source/Play_event: "always" reader (CORRECTED 2026-10-01,
+    // was GetUInt32/if-present) - see tables.h's VoiceControlEntry fields
+    // for the full citation.
+    e.externalSource = ReadUInt32Always(row, "External_source");
+    e.playEvent = ReadUInt32Always(row, "Play_event");
     return e;
 }
 

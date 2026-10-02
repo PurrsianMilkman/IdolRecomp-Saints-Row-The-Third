@@ -660,6 +660,7 @@ void analyzeGenericCharacters(const std::vector<FoundItem>& items) {
     long long rows = 0;
     PresenceMap pm;
     UnrecognisedScan u;
+    EnumMismatchScan nameEnum;
     const std::vector<std::string> known = {"Name", "Spawn_Name"};
     for (const Document& d : docs) {
         for (const Node* row = sr3xtbl::FindChild(d.table(), "Generics_Table"); row;
@@ -668,12 +669,16 @@ void analyzeGenericCharacters(const std::vector<FoundItem>& items) {
             GenericCharacterRow r = ParseGenericCharacterRow(row);
             tally(pm, "Name", r.name.has_value());
             tally(pm, "Spawn_Name", r.spawnName.has_value());
+            // spec §12 (RESOLVED 2026-10-02): 21 slot names now known in order,
+            // matched CASE-INSENSITIVELY (unlike generic_vehicles) - see ParseGenericCharacterRow.
+            scanEnum(nameEnum, r.name, r.index);
             scanUnrecognised(u, row, known);
         }
     }
     std::printf("    Generics_Table rows: %lld\n", rows);
     printPresence(pm);
     printUnrecognised(u);
+    printEnum("Name (case-insensitive vs kGenericCharacterSlotNames)", nameEnum);
     g_runs.push_back(
         {"generic_characters.xtbl", rows, [](const Document& d) { return d.table(); }, "Generics_Table"});
 }

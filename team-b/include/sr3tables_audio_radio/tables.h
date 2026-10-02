@@ -73,16 +73,20 @@
 //     sr3tables_environment made for map_districts.xtbl's textLocationY).
 //   * Purely derived/computed, non-XML values are not modelled as fields:
 //     a row's resolved Wwise/AK hash id, a cross-table pointer resolved at
-//     load time, radio_activities.xtbl's final chance-fraction (its own
-//     denominator global is itself OPEN - unresolved, spec 13), radio_events
-//     .xtbl's +0x2C slot index (resolver untraced, spec 14), radio_stations
-//     .xtbl station 0's hard-coded "My Radio 85.5"/"Mix Tape" (not read from
-//     any row at all - spec 11.1). Where the spec gives an exact, CONFIRMED
-//     formula for a load-time transform of a field this reader DOES capture
-//     (e.g. mph->m/s x0.44704, a squared distance, med_health's percent-to-
-//     fraction scale, the "Veh_"+Name switch-name construction, the
-//     "<Soundbank>.lm_pc" filename construction), a small helper method
-//     applies exactly that spec-stated formula - never a guessed one.
+//     load time, radio_events.xtbl's +0x2C slot index (2026-10-01, CONFIRMED
+//     - disassembly: an index into the shared stride-20 radio-content table
+//     at 0x013BBC18, resolved by FUN_0055E470's linear scan - still not
+//     modelled here, it is cross-table/derived, not XML-sourced, spec 14),
+//     radio_stations.xtbl station 0's hard-coded "My Radio 85.5"/"Mix Tape"
+//     (not read from any row at all - spec 11.1). Where the spec gives an
+//     exact, CONFIRMED formula for a load-time transform of a field this
+//     reader DOES capture (e.g. mph->m/s x0.44704, a squared distance,
+//     med_health's percent-to-fraction scale, radio_activities.xtbl's own
+//     Percentage/100 fraction (spec 13, denominator global DAT_012A2DD8
+//     CONFIRMED 2026-10-01 as the constant double 100.0), the "Veh_"+Name
+//     switch-name construction, the "<Soundbank>.lm_pc" filename
+//     construction), a small helper method applies exactly that spec-stated
+//     formula - never a guessed one.
 //   * No table in this group has NO loader (spec 1.1: all 16 filenames have
 //     exactly one code cross-reference and were fully traced) - unlike
 //     sr3tables_environment's materials.xtbl, nothing is skipped here for
@@ -200,8 +204,11 @@ struct AudioBank {
     uint32_t RamSizePcOrDefault() const { return ramSizePc.value_or(0u); }
 
     std::optional<std::string> voice;  // voice - case-INSENSITIVE compare against "True" (the ONE boolean-like
-                                        // check in this loader that is case-insensitive, spec 2.3); a transient
-                                        // local only, not stored in the record, but real present XML data.
+                                        // check in this loader that is case-insensitive, spec 2.3) -> record
+                                        // `+0x5B` bit 4 (`0x10`) (2026-10-01, disassembly - CORRECTED: NOT a
+                                        // transient local as previously thought; the flag is also passed to the
+                                        // allocator, which then runs an untraced helper (0x00464820) on the
+                                        // record before hashing its name).
     bool VoiceOrDefault() const { return voice.has_value() && sr3xtbl::NameEquals(*voice, "True"); }
 
     // spec 2.3/11.2/17: the combined "boot-load" flag (+0x54 bit 0x8000) other tables in this group (notably
@@ -209,6 +216,11 @@ struct AudioBank {
     // audio_banks.xtbl, false for a dlcN_audio_banks.xtbl load) since a single row's own data cannot tell which
     // file it came from and load_at_boot is only ever consulted for base-game rows (spec 2.3).
     bool IsBootLoad(bool isBaseGameFile) const { return IsInit() || (isBaseGameFile && LoadAtBootOrDefault()); }
+
+    // record `+0x5A` (byte) = the DLC index the row's own FILE was loaded from (0 for plain audio_banks.xtbl, N
+    // for dlcN_audio_banks.xtbl) - 2026-10-01, disassembly. Like `isBaseGameFile` above, this is a caller-known
+    // fact about WHICH FILE was opened, not a per-row XML element; not modelled as a struct field here for the
+    // same reason `isBaseGameFile` is a parameter rather than a field, not because it is uncertain (spec 2.3).
 };
 AudioBank ParseAudioBank(const Node* row);
 // Row `<NewEntity>` directly under `<Table>` (spec 2.1). DLC-aware: `dlc%d_audio_banks.xtbl` for dlc_index>0,
@@ -226,28 +238,33 @@ std::vector<AudioBank> ParseAudioBanksTable(const Document& doc);
 // optional<T>, including the PlayTimers/OnFootSettings/DrivingSettings/Wind groups the spec's own prose calls
 // "if present" while citing the ALWAYS-write accessor addresses.
 struct AudioConstants {
-    // PlayTimers (12 f32 - spec-tables-audio-radio.md §3: count corrected from 11 to 12 by desk review
-    // 2026-09-30, the 12 listed names; review status DESK-PASS, text fixes applied)
-    Always<float> playTimerBrassCollision;
-    Always<float> playTimerGlassShatter;
-    Always<float> playTimerBulletImpactHuman;
-    Always<float> playTimerBulletImpactWall;
-    Always<float> playTimerObjectDebris;
-    Always<float> playTimerVehicleImpactCollision;
-    Always<float> playTimerVehicleImpactDistance;  // RAW; engine squares it in place after load (distance^2,
-                                                    // presumably compared against a squared position-delta to
-                                                    // avoid a sqrt, spec 3)
-    float PlayTimerVehicleImpactDistanceSquared() const {
+    // PlayTimers (12 u32, NOT f32 - spec-tables-audio-radio.md §3: count corrected from 11 to 12 by desk review
+    // 2026-09-30, the 12 listed names; type corrected 2026-10-01, disassembly - CORRECTED: every one is read by
+    // the shared "always" u32 reader FUN_00DABDF0 into consecutive dword globals 0x013BB440-0x013BB46C, i.e.
+    // these are INTEGERS, not floats - a reimplementation that stores them as floats (or squares the two
+    // distances below in float) diverges from the engine's integer values, Team B relevance per the 2026-10-01
+    // re-derivation).
+    Always<uint32_t> playTimerBrassCollision;
+    Always<uint32_t> playTimerGlassShatter;
+    Always<uint32_t> playTimerBulletImpactHuman;
+    Always<uint32_t> playTimerBulletImpactWall;
+    Always<uint32_t> playTimerObjectDebris;
+    Always<uint32_t> playTimerVehicleImpactCollision;
+    Always<uint32_t> playTimerVehicleImpactDistance;  // RAW; engine squares it in place after load BY AN INTEGER
+                                                       // MULTIPLY (distance^2 as an integer, wraps modulo 2^32 -
+                                                       // presumably compared against a squared position-delta to
+                                                       // avoid a sqrt, spec 3, corrected 2026-10-01)
+    uint32_t PlayTimerVehicleImpactDistanceSquared() const {
         return playTimerVehicleImpactDistance.value * playTimerVehicleImpactDistance.value;
     }
-    Always<float> playTimerVehicleScrapeCollision;
-    Always<float> playTimerVehicleScrapeDistance;  // RAW; squared likewise
-    float PlayTimerVehicleScrapeDistanceSquared() const {
+    Always<uint32_t> playTimerVehicleScrapeCollision;
+    Always<uint32_t> playTimerVehicleScrapeDistance;  // RAW; squared likewise, by an integer multiply
+    uint32_t PlayTimerVehicleScrapeDistanceSquared() const {
         return playTimerVehicleScrapeDistance.value * playTimerVehicleScrapeDistance.value;
     }
-    Always<float> playTimerRagdollBoneImpactCollision;
-    Always<float> playTimerSmallDeformation;
-    Always<float> playTimerLargeDeformation;
+    Always<uint32_t> playTimerRagdollBoneImpactCollision;
+    Always<uint32_t> playTimerSmallDeformation;
+    Always<uint32_t> playTimerLargeDeformation;
 
     Always<float> onFootFootstepRange;  // OnFootSettings/FootstepRange - RAW; squared in place
     float OnFootFootstepRangeSquared() const { return onFootFootstepRange.value * onFootFootstepRange.value; }
@@ -279,22 +296,37 @@ std::optional<AudioConstants> ParseAudioConstants(const Document& doc);
 // 4. audio_settings.xtbl - global Wwise-adjacent tuning (spec 4)
 // ===========================================================================
 struct AudioSettings {
+    // Whether the `<general_settings>` child itself exists at all (spec 4, 2026-10-01, disassembly). This GATES
+    // the 343.5 Speed_of_sound default below: `FUN_00467F40` only primes that default when `general_settings`
+    // is present, immediately before reading `Speed_of_sound`; if `general_settings` is absent entirely, nothing
+    // primes the global and it stays at the engine's zero-filled `.data` value (0.0) - CORRECTED 2026-10-01, this
+    // reader previously applied the 343.5 default unconditionally.
+    bool generalSettingsPresent = false;
+
     std::optional<float> speedOfSound;  // general_settings/Speed_of_sound (if-present); the real shipped row
-                                         // GENUINELY omits this element (spec 4.1) - default-primed 343.5 m/s
-    float SpeedOfSoundOrDefault() const { return speedOfSound.value_or(343.5f); }
+                                         // GENUINELY omits this element but DOES carry `general_settings` itself
+                                         // (spec 4.1), so the coded default of 343.5 m/s applies on retail data.
+    float SpeedOfSoundOrDefault() const { return speedOfSound.value_or(generalSettingsPresent ? 343.5f : 0.0f); }
 
-    std::optional<float> healthAdjustRate;  // general_settings/Health_adjust_rate (if-present); UNLIKE every other
-                                             // "if present" field in this group, the spec found NO documented
-                                             // default-priming instruction for this one (spec 4) - an absent
-                                             // element keeps whatever the .data section already holds. Deliberately
-                                             // NO OrDefault() helper here: this project does not invent a default
-                                             // the spec itself could not find. (The file's own embedded
-                                             // TableDescription authoring-tool metadata separately documents 0.75
-                                             // for this field - irrelevant to the runtime default, spec 4.1, not
-                                             // modelled - attributes are never visited by row readers, xtbl.h 1.)
+    std::optional<float> healthAdjustRate;  // general_settings/Health_adjust_rate (if-present). UNLIKE every other
+                                             // "if present" field in this group, no code primes a default for this
+                                             // one - but 2026-10-01, disassembly CONFIRMED the fallback anyway:
+                                             // `0x0317297C` sits in the zero-filled `.data` block with no writer
+                                             // other than this very reader, so an absent element leaves it at
+                                             // 0.0 - no longer OPEN, a real confirmed fact, not an invented
+                                             // default. (The file's own embedded TableDescription authoring-tool
+                                             // metadata separately documents 0.75 for this field - irrelevant to
+                                             // the runtime default, spec 4.1, not modelled - attributes are never
+                                             // visited by row readers, xtbl.h 1.)
+    float HealthAdjustRateOrDefault() const { return healthAdjustRate.value_or(0.0f); }
 
-    std::optional<float> dopplerMultiplier;  // Doppler_settings/Doppler_multiplier (if-present); default-primed 11.0
-    float DopplerMultiplierOrDefault() const { return dopplerMultiplier.value_or(11.0f); }
+    std::optional<float> dopplerMultiplier;  // Doppler_settings/Doppler_multiplier (if-present); default-primed
+                                              // UNCONDITIONALLY by `FUN_00467F40` before the `Doppler_settings`
+                                              // lookup (regardless of whether `general_settings` exists) -> the
+                                              // float at `0x01118D20` = **10.0** (2026-10-01, disassembly -
+                                              // CORRECTED from 11.0; the shipped row supplies an explicit 11.0,
+                                              // so retail data never actually falls back to this default, §4.1).
+    float DopplerMultiplierOrDefault() const { return dopplerMultiplier.value_or(10.0f); }
 };
 // nullopt if the gating <global_settings> element itself is absent (spec 4: "only if a <global_settings> child
 // exists at all"). Path assumed general_settings/Doppler_settings nested INSIDE global_settings, matching this
@@ -310,16 +342,19 @@ struct AudioLineTag {
                                        // array itself (spec 5); kept here only because it is real, present XML
                                        // data - the same call sr3tables_environment's map_districts.xtbl
                                        // textLocationY precedent made for a field the engine reads but discards.
-    std::optional<uint32_t> wwiseId;  // wwise_id (u32, if-present). Only the FIRST 119 rows (index 0..118) of the
-                                       // real file ever reach the runtime array DAT_01504484 (a 120-slot allocation
-                                       // with an off-by-one-short break condition, spec 5) - a table-level loader
-                                       // cap, NOT enforced by ParseAudioLineTagsTable() below (see the file banner);
-                                       // the real shipped file has 4,626 rows against this 119 cap, a CONFIRMED
+    Always<uint32_t> wwiseId;  // wwise_id (u32, **"always"**, FUN_00DABDF0 - written straight into the slot;
+                                       // 2026-10-01, disassembly - CORRECTED from "if-present": an absent element
+                                       // still consumes a slot, with whatever the "always" reader leaves for a
+                                       // missing child, see xtbl.h's Always<T> convention). Only the FIRST 119 rows
+                                       // (index 0..118) of the real file ever reach the runtime array
+                                       // DAT_01504484 (a 120-slot allocation, count tested AFTER the store and
+                                       // breaking once it reaches 119, spec 5) - a table-level loader cap, NOT
+                                       // enforced by ParseAudioLineTagsTable() below (see the file banner); the
+                                       // real shipped file has 4,626 rows against this 119 cap, a CONFIRMED
                                        // 4,507/4,626 (97%) unreachable-row mismatch (spec 5.1) reproduced by
-                                       // tools/validation/validate_tables_audio_radio_population.cpp.
-                                       // LABEL: spec-tables-audio-radio.md §5, [OPEN - desk review 2026-09-30]:
-                                       // the 119-cap break condition (119 vs 120 stored) is not settled; no
-                                       // behaviour here depends on it.
+                                       // tools/validation/validate_tables_audio_radio_population.cpp. 2026-10-01:
+                                       // the cross-reference listing for the array and its count shows NO
+                                       // consumer outside this loader - no other function reads them by name.
 };
 AudioLineTag ParseAudioLineTag(const Node* row);
 // Row `<Audio_line>` directly under `<Table>` (CONFIRMED not nested, spec 5).
@@ -336,10 +371,11 @@ std::vector<AudioLineTag> ParseAudioLineTagsTable(const Document& doc);
 // exact-case (case-SENSITIVE) substring search, since the spec explicitly calls it "a plain substring search"
 // with no case-folding mentioned (unlike the element-NAME lookups the shared family documents as
 // case-insensitive) - a JUDGMENT CALL, flagged honestly.
-// LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: whether FUN_00EA48B0 matches
-// case-sensitively (and whether it searches the full Name or the 0x20-byte truncated copy) is NOT established -
-// its body was never decompiled. The CONFIRMED label covers FUN_00709F40's body only. Case-sensitive matching
-// is OUR ASSUMPTION; no behaviour change.
+// LABEL: spec-tables-audio-radio.md §6 [CONFIRMED - disassembly, 2026-10-01, re-derived (job
+// 20261001T123123-team-a-ytgi), was OPEN before this pass]: FUN_00EA48B0 is the C runtime's `strstr`, byte-exact
+// and CASE-SENSITIVE, and it is given the row's FULL `Name` text - NOT the 0x20-byte-bounded copy stored in the
+// persisted record. This reader therefore keeps a separate, untruncated copy of `Name` (`fullName` below) for
+// the three Derive*FromName() methods to search, distinct from `name` (the bounded record copy) - see `fullName`.
 inline constexpr std::array<std::string_view, 8> kAudioPersonaDemographicSuffixes = {
     "_WM", "_WF", "_BM", "_BF", "_HM", "_HF", "_AM", "_AF",
 };
@@ -348,15 +384,30 @@ inline constexpr std::array<std::string_view, 3> kAudioPersonaAgeTokens = {
     "Young", "Middle", "Elderly",
 };
 struct AudioPersona {
-    std::optional<std::string> name;  // Name (bounded char[0x20] copy) -> record +0x00-0x1F
-    std::optional<uint32_t> wwiseId;  // wwise_id (u32, if-present) -> +0x20. The real loader DEDUPLICATES by
-                                       // wwise_id (a persona whose id already exists in the table is skipped, spec
-                                       // 6) - NOT enforced by ParseAudioPersonasTable() below (see the file
-                                       // banner); use the validation harness to check for real duplicates.
+    std::optional<std::string> name;  // Name (bounded char[0x20] copy) -> record +0x00-0x1F. This is the
+                                       // PERSISTED record copy (used for e.g. by-name lookup, spec 7's
+                                       // FUN_00709EB0) - the demographic derivation below does NOT search this
+                                       // truncated copy, see `fullName`.
+    std::optional<std::string> fullName;  // Name, UNTRUNCATED (spec 6, CONFIRMED 2026-10-01, disassembly): the
+                                           // three Derive*FromName() methods search this raw text, not the
+                                           // 0x20-byte bounded copy above - a Name longer than 31 bytes whose
+                                           // demographic suffix falls beyond that bound would be missed if the
+                                           // bounded copy were searched instead. Real base-game names are short
+                                           // enough that this has no observed effect on retail data (§6.1), but is
+                                           // a real, disassembly-confirmed distinction.
+    Always<uint32_t> wwiseId;  // wwise_id (u32, **"always"**, FUN_00DABDF0; 2026-10-01, disassembly - CORRECTED
+                                       // from "if-present") -> +0x20. The real loader DEDUPLICATES by wwise_id (a
+                                       // persona whose id already exists in the table is skipped, linear scan on
+                                       // +0x20, spec 6) - NOT enforced by ParseAudioPersonasTable() below (see the
+                                       // file banner); use the validation harness to check for real duplicates.
+                                       // OPEN (2026-10-01): what the "always" reader leaves for a missing
+                                       // wwise_id (callee 0x00DABDF0 not dumped) - if 0, all such rows after the
+                                       // first would collapse onto one record under the real loader's dedup rule.
     // record +0x24 (default 0xFF) is NOT read from any XML element by THIS table's own loader - it is exactly
     // the byte persona_radio_prefs.xtbl later patches (see PersonaRadioPref below, spec 7). +0x26 (default
-    // 0xFFFF) and +0x2C (default 0) are OPEN (spec 6/20 item 7) and are pure record defaults, not derived from
-    // any XML element at all - not modelled.
+    // 0xFFFF) is OPEN (spec 6/20 item 7), a pure record default, not derived from any XML element at all - not
+    // modelled. +0x2C is a u16, zeroed by the fill helper (not read from any element either; width CONFIRMED
+    // 2026-10-01, disassembly) - also not modelled, same reason.
 
     // 1=male, 2=female, 0=no match / Name has no underscore at all (spec 6)
     int DeriveGenderFromName() const;
@@ -366,27 +417,47 @@ struct AudioPersona {
     int DeriveAgeFromName() const;
 };
 AudioPersona ParseAudioPersona(const Node* row);
-// Row `<Audio_Persona>` directly under `<Table>`; DLC-aware (dlc%d_audio_personas.xtbl or plain, spec 6). The
-// real loader caps the table at 300 entries (bound-checked directly) - NOT enforced here.
+// Row `<Audio_Persona>` directly under `<Table>`; DLC-aware - a SIGN test on the index argument (non-negative
+// selects dlc%d_audio_personas.xtbl, negative the plain file; 2026-10-01, disassembly - CORRECTED from "> 0",
+// unlike audio_banks.xtbl's own DLC selection), a caller-known fact about which file was opened, not modelled as
+// a per-row field, same reasoning as AudioBank's `+0x5A` note above. The real fill helper (FUN_00709F40) returns
+// NULL once the running count reaches the 300-entry cap, but the LOADER IGNORES that and keeps walking every
+// remaining row without filling further records (2026-10-01, disassembly - CORRECTED: previously described as
+// the loader itself failing/returning null at the cap) - NOT enforced here either way, since no cap is applied
+// by ParseAudioPersonasTable() below (see the file banner).
 std::vector<AudioPersona> ParseAudioPersonasTable(const Document& doc);
 
 // ===========================================================================
 // 7. persona_radio_prefs.xtbl - patches audio_personas.xtbl's unused +0x24 (spec 7)
 // ===========================================================================
 struct PersonaRadioPref {
-    std::optional<std::string> name;  // Name -> resolved (FUN_00709EB0, not independently decompiled) to an
-                                       // EXISTING audio_personas.xtbl record by name lookup (spec 7)
-    std::optional<std::string> radioStation;  // Radio_Station -> a station index via FUN_0055DD50 (not
-                                               // independently decompiled). The exact matching rule against
-                                               // radio_stations.xtbl is OPEN (spec 7/20 item 5) - the real data
-                                               // shows a strong structural correspondence to radio_stations.xtbl's
-                                               // own Genre VALUES (a stem match, e.g. "KRHYME" <->
-                                               // "RADIO_STATION_GENRE_KRHYME"), not to any Name field (stations
-                                               // have none, spec 11.2) - HIGH CONFIDENCE, not CONFIRMED, and NOT
-                                               // implemented here as a resolver (the normalisation rule itself was
-                                               // never decompiled - this project will not guess it). Written into
-                                               // the resolved persona record's own +0x24 (default 0xFF = "no
-                                               // station preference").
+    std::optional<std::string> name;  // Name -> resolved to an EXISTING audio_personas.xtbl record via
+                                       // FUN_00709EB0, CONFIRMED - disassembly 2026-10-01: a case-insensitive
+                                       // `_stricmp` linear scan over the table §6 built; a Name matching no
+                                       // persona skips the row entirely (spec 7).
+    std::optional<std::string> radioStation;  // Radio_Station -> a station index via FUN_0055DD50, CONFIRMED -
+                                               // disassembly 2026-10-01 (was OPEN before this pass): the text is
+                                               // Wwise/AK-hashed (FUN_00462960) and compared against each
+                                               // station's own `+0x140` id (itself the Wwise/AK hash of that
+                                               // station's `wwise_id` element, §11.2) in index order starting at
+                                               // the hard-coded station 0 (whose `+0x140` is always 0, §11.3) -
+                                               // the earlier "stem match against Genre" reading was coincidental,
+                                               // not the real mechanism. The stored byte is (matched index) + 1 -
+                                               // 1 would mean station 0 (the mix tape), 2 means the first
+                                               // `radio_stations.xtbl` `<Info>` row, etc. - or 0xFF when nothing
+                                               // matches OR the input hash is 0 (empty/unset text); since the
+                                               // input hash is checked non-zero before comparing, station 0's
+                                               // always-0 `+0x140` can never itself be matched in practice. NOT
+                                               // implemented here as an actual resolver: the match is by the
+                                               // Wwise/AK hash, a third-party algorithm this project does not
+                                               // reproduce (see the file banner) - raw text is kept on both sides
+                                               // (this field and RadioStationInfo::wwiseId below) instead; §7.1
+                                               // confirms every one of the 9 distinct real Radio_Station values is
+                                               // literally equal (as TEXT) to a real station's wwise_id text, a
+                                               // 100%-empirical stand-in for the hash match on retail data, but
+                                               // not the same operation and not assumed to hold for modded data.
+                                               // Written into the resolved persona record's own +0x24 (default
+                                               // 0xFF = "no station preference").
 };
 PersonaRadioPref ParsePersonaRadioPref(const Node* row);
 // Row `<Audio_Persona>` directly under `<Table>` - the SAME row-element name as audio_personas.xtbl's own table
@@ -407,7 +478,8 @@ struct FoleyCollision {
     Always<float> maximumSpeedRaw;  // MaximumSpeed - RAW mph; same conversion
     float MinimumSpeedMps() const { return minimumSpeedRaw.value * 0.44704f; }
     float MaximumSpeedMps() const { return maximumSpeedRaw.value * 0.44704f; }
-    std::optional<uint32_t> frequency;       // Frequency (u32, if-present) -> +0x0C
+    Always<uint32_t> frequency;       // Frequency (u32, **"always"**, FUN_00DABDF0, written unconditionally;
+                                       // 2026-10-01, disassembly - CORRECTED from "if-present") -> +0x0C
     std::optional<std::string> wwiseSwitch;  // Wwise_switch -> +0x10 id, Wwise/AK-hashed (third-party, not
                                               // reproduced); raw text kept
 };
@@ -423,14 +495,16 @@ struct FoleyTouch {
                                        // CRC-32 SIBLING ENTRY POINT `FUN_00D9E7E0` - the ONE table in this whole
                                        // group whose row-name key is CASE-SENSITIVE (NOT lower-cased), unlike every
                                        // other engine-CRC-32 Name hash in this group (spec 1.3 item 2 / 9).
-    // LABEL: spec-tables-audio-radio.md §9 / §1.3 item 2, [OPEN - desk review 2026-09-30]: the seed passed to
-    // FUN_00D9E7E0 at the foley_touch call site (FUN_00561AB0), and whether a final XOR applies, are not stated
-    // (the spec gives seed 0 for another table's call site only). Seed 0 here is OUR ASSUMPTION (the helper's
-    // default); no behaviour change.
+    // LABEL: spec-tables-audio-radio.md §9 / §1.3 item 2 [CONFIRMED - disassembly, 2026-10-01, re-derived (job
+    // 20261001T123123-team-a-ytgi), was OPEN before this pass]: at the foley_touch call site (0x00561B23-
+    // 0x00561B31) the seed IS 0 and the maximum byte count is 0xFFFFFFFF (no length limit), no final XOR -
+    // exactly what this reader already assumed; no behaviour change, the earlier "OUR ASSUMPTION" caveat no
+    // longer applies.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHashCaseSensitive(*name) : 0; }
 
     // TouchFoleySet - only the FIRST such child is read (same caveat as foley_collision.xtbl, spec 9).
-    std::optional<uint32_t> frequency;       // Frequency (u32, if-present) -> +0x04
+    Always<uint32_t> frequency;       // Frequency (u32, **"always"**, FUN_00DABDF0, written unconditionally into
+                                       // +0x04; 2026-10-01, disassembly - CORRECTED from "if-present") -> +0x04
     std::optional<std::string> wwiseSwitch;  // Wwise_switch -> +0x08 id, Wwise/AK-hashed (third-party, not
                                               // reproduced); raw text kept
 };
@@ -492,6 +566,12 @@ struct RadioStationInfo {
     // Station_flags/Flag children, matched case-insensitively against exactly 4 literals (an if/else chain, NOT
     // an exhaustive-enum check - any other Flag text is silently ignored, spec 11.2); these 4 bits are wholly
     // DETERMINED by this element on each load (the destination bits are cleared first), not accumulated.
+    // NOTE (spec 11.1, CONFIRMED - disassembly, 2026-10-01): `+0x689` bit 5 has a DIFFERENT meaning on the
+    // hard-coded station 0 (not represented by this struct at all, see RadioSettings::stations below) - there it
+    // means "mix-tape list non-empty", set/cleared dynamically by 0x0055E380, NOT by any `<Info>` row's
+    // `Station_flags`. The meaning below (bit 5 set together with bit 6 by `Selectable`) applies ONLY to the
+    // stations 1..N this struct actually models; the real enumerator (FUN_0055DDC0) that lists selectable
+    // stations tests bit 6, not bit 5, for exactly this reason.
     bool selectable = false;      // "Selectable" -> +0x689 bits 5&6 together (0x60)
     bool policeStation = false;   // "Police_Station" -> +0x68A bit 1 (0x02)
     bool fbiStation = false;      // "FBI_Station" -> +0x68A bit 2 (0x04)
@@ -513,11 +593,15 @@ struct RadioSettings {
                                                     // independently decompiled) -> global DAT_013BBAB0, default 1
     int32_t SimultaneousNpcRadiosOrDefault() const { return simultaneousNpcRadios.value_or(1); }
 
-    // Radio_Station_List/Info - these are stations 1..N. Station 0 ("My Radio 85.5" / "Mix Tape") is entirely
-    // HARD-CODED IN THE ENGINE, not read from any row at all (spec 11.1) - it is deliberately NOT represented
-    // here since it has no source XML element whatsoever. The real allocated station-array capacity is
-    // stations.size() + 1 (the "+1" reserves station index 0, spec 11.1) - not itself a field, easily recovered
-    // by the caller as stations.size() + 1.
+    // Radio_Station_List/Info - these are stations 1..N. Station 0 is entirely HARD-CODED IN THE ENGINE, not
+    // read from any row at all (spec 11.1) - it is deliberately NOT represented here since it has no source XML
+    // element whatsoever, regardless of the detail below. (2026-10-01, disassembly - CORRECTED: station 0
+    // actually carries TWO different hard-coded name fields, not one - `+0x40` = "My Radio 85.5" (loader
+    // hard-init) and `+0x00` = "Mix Tape" (written later, only when global byte 0x013C60E4 is set and `+0x00` is
+    // still empty, by 0x0055DB40); only bit 3 of `+0x689` is set by the loader itself, not bit 5 as earlier
+    // believed - bit 5 is set/cleared dynamically by the mix-tape list setter 0x0055E380, see RadioStationInfo's
+    // own bit-5 note above.) The real allocated station-array capacity is stations.size() + 1 (the "+1" reserves
+    // station index 0, spec 11.1) - not itself a field, easily recovered by the caller as stations.size() + 1.
     std::vector<RadioStationInfo> stations;
 };
 // nullopt if the single settings row (`<NewEntity>` directly under `<Table>` - the file's ONE settings block,
@@ -528,13 +612,15 @@ std::optional<RadioSettings> ParseRadioSettings(const Document& doc);
 // 12. playlist_artist_track.xtbl - the track/artist catalog (spec 12)
 // ===========================================================================
 struct PlaylistTrack {
-    std::optional<uint32_t> wwiseId;  // WWise_ID (u32, if-present; note the spec's own exact capitalisation) ->
+    Always<uint32_t> wwiseId;  // WWise_ID (u32, **"always"**, FUN_00DABDF0; note the spec's own exact
+                                       // capitalisation; 2026-10-01, disassembly - CORRECTED from "if-present") ->
                                        // +0x00. CONFIRMED (spec 12.2, full chain traced): this is the JOIN KEY a
                                        // separate runtime function uses to resolve a played song (via the
-                                       // stride-20 song table spec-save-format.md names at 0x013BBC18, itself not
-                                       // mapped by this spec - OPEN, spec 20 item 3) back to display text. The
-                                       // real shipped file has zero duplicate WWise_ID values (spec 12.3), though
-                                       // the loader itself does not enforce uniqueness.
+                                       // stride-20 radio-content table at 0x013BBC18 - now substantially mapped,
+                                       // §20 item 3 - the same table commercials.xtbl/radio_events.xtbl share,
+                                       // see Commercial below) back to display text. The real shipped file has
+                                       // zero duplicate WWise_ID values (spec 12.3), though the loader itself
+                                       // does not enforce uniqueness.
     std::optional<std::string> artistName;  // Artist_Name -> +0x04 (interned/localised string handle, FUN_00DB12C0)
     std::optional<std::string> trackName;   // Track_Name -> +0x08 (same helper)
 };
@@ -542,28 +628,59 @@ PlaylistTrack ParsePlaylistTrack(const Node* row);
 // Row `<Track_Listing>/<Tracks>/<Track>` (three levels of nesting, spec 12); the real loader reads at most 145
 // (0x91) rows, silently dropping any beyond that bound - NOT enforced here (the real shipped file has 138 rows,
 // under the cap, spec 12.3).
+//
+// STATION NUMBERING (spec 12.2, CONFIRMED - disassembly, 2026-10-01): every per-station accessor in this group
+// uses 1-BASED station numbers (station 0 = the hard-coded Mix Tape, radio_stations.xtbl's `<Info>` rows are
+// stations 1..N, spec 11.1). The real per-station playlist-slot bound check (`FUN_0055DFB0`) is `slot <=
+// +0x5A4`, INCLUSIVE - an off-by-one that admits one slot past the real list, a confirmed real-ENGINE quirk, not
+// a reader defect. Neither this table's reader nor radio_stations.xtbl's (RadioStationInfo/RadioSettings above)
+// performs any station-indexed lookup or bound check at all - this is purely a schema-level XML reader, so
+// nothing here currently depends on or needs to reproduce the inclusive-bound quirk; noted for any FUTURE
+// consumer (e.g. a save-format or runtime playlist-queue module) that models per-station slot access.
 std::vector<PlaylistTrack> ParsePlaylistArtistTrackTable(const Document& doc);
 
 // ===========================================================================
 // 13. radio_activities.xtbl - an 8-slot, unchecked-bound chance table (spec 13)
 // ===========================================================================
 struct RadioActivity {
-    std::optional<uint32_t> level;  // Level (u32, if-present) - the slot index; real base-game values are 1..8
-                                     // (one-indexed, NOT 0-based, spec 13.1)
-    std::optional<uint32_t> percentageRaw;  // Percentage (u32, if-present). The real engine reinterprets this as
+    Always<uint32_t> level;  // Level (u32, **"always"**, FUN_00DABDF0; 2026-10-01, disassembly - CORRECTED from
+                              // "if-present"); real base-game values are 1..8 (one-indexed, NOT 0-based, spec
+                              // 13.1). CORRECTED 2026-10-01 - DESPITE THE NAME, `Level` IS NOT USED AS THE SLOT
+                              // INDEX by the real engine: `FUN_0060E790` fills slots strictly in ROW ORDER (the
+                              // slot pointer simply advances by 8 bytes per row, with no bound check of its own);
+                              // `Level` is stored into the record but this job's traced code never reads it back
+                              // as an index. Team B relevance (spec 13): "place rows by order, not by `Level`" -
+                              // matches this reader's own row-order `std::vector` (see
+                              // ParseRadioActivitiesTable below). Also note: only the eight `Percentage` floats
+                              // are pre-zeroed by the loader before the walk - the `Level` dwords are NOT
+                              // pre-written (spec 13); an absent `Level`'s "always"-reader 0-stand-in should not
+                              // be read as reflecting that real pre-zeroing.
+    Always<uint32_t> percentageRaw;  // Percentage (u32, **"always"**, FUN_00DABDF0; 2026-10-01, disassembly -
+                                             // CORRECTED from "if-present"). The real engine reinterprets this as
                                              // SIGNED and, if negative, adds 2^32 back (spec 13) - i.e. it
                                              // corrects the raw bit pattern back to its UNSIGNED reading; this is
                                              // functionally exactly the helper below (the add-back-2^32 branch is
                                              // dead in practice on retail data - all 8 real values are
                                              // non-negative, spec 13.1 - but real, disassembly-confirmed code).
-    float PercentageAsUnsignedFloat() const { return static_cast<float>(percentageRaw.value_or(0)); }
-    // A further division by a per-load denominator global (DAT_012A2DD8, reads 0 in the static image - its real
-    // value is primed by code not traced this pass) is OPEN (spec 13/20 item 7) and NOT computed here.
+    float PercentageAsUnsignedFloat() const { return static_cast<float>(percentageRaw.value); }
+    // The per-load denominator global DAT_012A2DD8 is CONFIRMED (2026-10-01, disassembly, was OPEN before this
+    // pass) as the constant double **100.0** (`.rdata`, 279 read-only uses across 195 functions, no writer - the
+    // earlier "reads as 0" finding was just the zero LOW DWORD of the 100.0 double literal, not an unprimed
+    // global). The real computation divides in DOUBLE precision and narrows the quotient to `f32` for storage -
+    // percent -> fraction (spec 13's own "Team B relevance" line: "a reimplementation must store `Percentage /
+    // 100` (fraction), not the raw value"). Spec 13.1's raw values 1,2,3,5,10,15,20,25 must become
+    // 0.01,0.02,0.03,0.05,0.10,0.15,0.20,0.25 (summing to 0.81, per the spec's own note) through this accessor.
+    float PercentageFraction() const {
+        return static_cast<float>(static_cast<double>(percentageRaw.value) / 100.0);
+    }
 };
 RadioActivity ParseRadioActivity(const Node* row);
-// Row `<RadioActivities>/<ChancesToPlay>/<ChanceToPlay>`. Exactly 8 module-level slots are pre-zeroed and the
-// row-walking loop has NO BOUND CHECK of its own (spec 13) - a 9th row would silently overrun a fixed 8-slot
-// region in the real engine; NOT enforced/truncated here (the real shipped file has exactly 8 rows, spec 13.1).
+// Row `<RadioActivities>/<ChancesToPlay>/<ChanceToPlay>`. The row-walking loop has NO BOUND CHECK of its own
+// (spec 13) - a 9th row would silently overrun a fixed 8-slot region in the real engine; NOT enforced/truncated
+// here (the real shipped file has exactly 8 rows, spec 13.1). Rows fill slots in ROW ORDER, not by `Level` (see
+// RadioActivity::level above) - this function's own `std::vector` already preserves document row order and
+// never uses `.level` as an index anywhere in this codebase, so it already matches the real engine's slot
+// assignment with no further change needed.
 std::vector<RadioActivity> ParseRadioActivitiesTable(const Document& doc);
 
 // ===========================================================================
@@ -575,11 +692,17 @@ inline constexpr std::array<std::string_view, 5> kRadioEventTypeNames = {
     "Commercial", "News", "Police", "FBI", "Police and FBI",
 };
 struct RadioEvent {
-    std::optional<std::string> name;  // Name (REQUIRED - the real loader skips the rest of THIS row silently via
-                                       // a 0-length hash if absent, not traced further, spec 14) -> +0x08 engine
-                                       // CRC-32, LOWER-CASED
-    // LABEL: spec-tables-audio-radio.md §14, [OPEN - desk review 2026-09-30]: the CRC-32 seed passed for Name is
-    // not stated. Seed 0 is OUR ASSUMPTION (the helper's default); no behaviour change.
+    std::optional<std::string> name;  // Name -> +0x08 engine CRC-32, LOWER-CASED. CORRECTED 2026-10-01,
+                                       // disassembly (was previously described as "REQUIRED - skips the rest of
+                                       // the row if absent"): an absent Name skips NOTHING - the NULL pointer is
+                                       // simply handed to the hash function (-> 0, §1.2) and every OTHER field of
+                                       // the row is still read and written normally. This reader's own behaviour
+                                       // already matched the corrected finding (ParseRadioEvent below never
+                                       // conditions any other field on Name's presence) - only this comment was
+                                       // stale.
+    // LABEL: spec-tables-audio-radio.md §14 [CONFIRMED - disassembly, 2026-10-01, re-derived (job
+    // 20261001T123123-team-a-ytgi), was OPEN before this pass]: "Name is hashed with seed 0 and no length limit"
+    // - exactly what this reader already assumed; no behaviour change.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHash(*name) : 0; }
 
     std::optional<std::string> eventType;  // EventType (direct child) -> +0x0C enum index via
@@ -596,10 +719,13 @@ struct RadioEvent {
     std::optional<int32_t> maxTimesPlayed;  // MaxTimesPlayed (s32, if-present, truncated to a byte, default 1) -> +0x2F
     int32_t MaxTimesPlayedOrDefault() const { return maxTimesPlayed.value_or(1); }
 
-    // NOTE (spec 14, OPEN): a further u16 slot index derived from Name (Wwise/AK-hashed, then resolved via
-    // FUN_0055E470, the same "hash -> small index" resolver commercials.xtbl uses - spec 16) is written to
-    // +0x2C; its exact consuming structure was not traced, and the Wwise/AK hash step is third-party (not
-    // reproduced) - not modelled here.
+    // NOTE (spec 14, 2026-10-01, disassembly - CONFIRMED, was OPEN before this pass): a further u16 slot index
+    // derived from Name (Wwise/AK-hashed, then resolved via FUN_0055E470, the same "hash -> small index"
+    // resolver commercials.xtbl uses - spec 16) is written to +0x2C. The consuming structure IS now identified:
+    // it is the index of the matching entry (by Wwise id) in the SHARED stride-20 radio-content table at
+    // 0x013BBC18 (count: s16 at 0x013C045C) - the same table §12's playlist slots and §16's Commercial records
+    // live in - or 0xFFFF when none matches. Still not modelled here: it is a derived cross-table value, not
+    // read from any XML element, and the Wwise/AK hash step itself remains third-party (not reproduced).
     // NOTE (spec 14): the RUNTIME record this row feeds has 16 of its own 52 bytes written by this reader (spec
     // 14, corrected by desk review 2026-09-30 from ~17); the remaining 36 bytes (was ~35) are genuine uninitialised heap memory in the real engine (the allocator's memset
     // only clears a count-scaled PREFIX of the whole buffer, not each record). This is a fact about the runtime
@@ -619,15 +745,23 @@ struct CommercialEvent {
     std::optional<std::string> name;  // Name -> engine CRC-32 (FUN_00D9E740), LOWER-CASED; stored into slot
                                        // DAT_013BBB08[EventValue]'s first dword - ONLY if EventValue < 30 (spec
                                        // 15) - that gate is NOT enforced here, see EventValue below.
-    // LABEL: spec-tables-audio-radio.md §15, [OPEN - desk review 2026-09-30]: the CRC-32 seed is not stated.
-    // Seed 0 is OUR ASSUMPTION (the helper's default); no behaviour change.
+    // LABEL: spec-tables-audio-radio.md §15 [CONFIRMED - disassembly, 2026-10-01, re-derived (job
+    // 20261001T123123-team-a-ytgi), was OPEN before this pass]: "CRC seed 0" for Name - exactly what this reader
+    // already assumed; no behaviour change.
     uint32_t NameHash() const { return name ? sr3xtbl::NameHash(*name) : 0; }
 
     Always<int32_t> eventValue;  // EventValue (s32, the shared "always" reader FUN_00DABC70) - the slot index.
-                                  // Values >= 30 (0x1E) are silently DROPPED by the real loader (NOT clamped,
-                                  // spec 15); the real base-game file's 15 values are all < 30 with no duplicates
-                                  // (spec 15.1) - a clean, independently-reproduced cross-check against
-                                  // spec-save-format.md's own "new game has flags 1, 2, 6, 27 set" claim.
+                                  // The real loader's bound check is an UNSIGNED "above 29" test (2026-10-01,
+                                  // disassembly - narrowed from "values >= 30 are dropped"): values >= 30 (0x1E)
+                                  // AND every NEGATIVE value are both silently DROPPED (not clamped, nothing can
+                                  // index before the array, spec 15); the real base-game file's 15 values are all
+                                  // < 30 and non-negative with no duplicates (spec 15.1) - a clean,
+                                  // independently-reproduced cross-check against spec-save-format.md's own "new
+                                  // game has flags 1, 2, 6, 27 set" claim. NOT enforced by ParseCommercialEventsTable()
+                                  // below, same structural judgment call as every other table-level loader guard
+                                  // in this group (see the file banner) - ResolveCommercialEventValue() below
+                                  // already only matches rows with both Name and a present eventValue, so it is
+                                  // unaffected either way.
 };
 CommercialEvent ParseCommercialEvent(const Node* row);
 // Row `<Event>` (spec 15/16 both explicitly state their own row element name without the "directly under Table"
@@ -636,13 +770,22 @@ CommercialEvent ParseCommercialEvent(const Node* row);
 std::vector<CommercialEvent> ParseCommercialEventsTable(const Document& doc);
 
 // ===========================================================================
-// 16. commercials.xtbl - resolves against commercial_events.xtbl (spec 16)
+// 16. commercials.xtbl - patches an entry of the SHARED stride-20 radio-content table (spec 16), and separately
+// resolves EnableEvent/DisableEvent against commercial_events.xtbl (a genuinely different relationship, unchanged)
 // ===========================================================================
 struct Commercial {
-    std::optional<std::string> name;  // Name - identifies a PRE-EXISTING commercial record via the Wwise/AK hash
-                                       // (third-party, not reproduced); this loader only PATCHES an
-                                       // already-registered record, it does not build one from this element
-                                       // (spec 16) - raw text kept for identification.
+    std::optional<std::string> name;  // Name - identifies a PRE-EXISTING entry of the SHARED stride-20
+                                       // radio-content table at 0x013BBC18 (count: s16 at 0x013C045C) via the
+                                       // Wwise/AK hash (third-party, not reproduced) through FUN_0055E470 (hash ->
+                                       // index, a linear scan of the table's own +0x00) and FUN_0055DF80 (index
+                                       // -> entry). CORRECTED 2026-10-01, disassembly: this is the SAME table
+                                       // §12's playlist slots (PlaylistTrack::wwiseId above) and §14's
+                                       // RadioEvent::+0x2C index reference - NOT a separate, dedicated
+                                       // "commercial record" registry as this comment previously described. This
+                                       // loader only PATCHES a matching entry (`+0x04` Length, `+0x11`/`+0x12`
+                                       // enable/disable event slots, `+0x13` enabled flag - all below); a Name
+                                       // whose hash matches no entry is silently DROPPED - this loader never
+                                       // creates an entry, raw text kept here for identification only.
 
     std::optional<std::string> initialState;  // InitialState - case-INSENSITIVE _stricmp against exactly
                                                 // "Disabled" (spec 16)
@@ -679,15 +822,30 @@ int32_t ResolveCommercialEventValue(const std::string& eventName, const std::vec
 // 17. voc_sb_line_sit.xtbl - resolves spec-audio-format.md's `.lm_pc`/`DMLV` open item (spec 17)
 // ===========================================================================
 struct VocSbLineSit {
-    std::optional<uint32_t> personaId;           // Persona_id (u32, if-present)
+    Always<uint32_t> personaId;           // Persona_id (u32, **"always"**, FUN_00DABDF0 - read into a stack slot
+                                                  // this loader never reuses; 2026-10-01, disassembly - CORRECTED
+                                                  // from "if-present")
     std::optional<std::string> soundbank;        // Soundbank (bounded char[0x41] copy) - resolved against
                                                   // audio_banks.xtbl's own Name (spec 17); a clean, exhaustive
                                                   // 100% match in the real data (all 265 values found, spec 17.1)
-    std::optional<uint32_t> numLineSituations;   // Num_line_situations (u32, if-present)
+    Always<uint32_t> numLineSituations;   // Num_line_situations (u32, **"always"**; 2026-10-01, disassembly -
+                                                  // CORRECTED from "if-present")
 
     // spec 17: this entry is only further consulted (its Num_line_situations accumulated, and a
     // "<Soundbank>.lm_pc" file queued for open) when the MATCHING audio_banks.xtbl record is boot-loaded (its
-    // own +0x54 bit 0x8000 - see AudioBank::IsBootLoad() above) - a cross-table runtime gate, NOT enforced here.
+    // own +0x54 bit 0x8000 - see AudioBank::IsBootLoad() above) - a cross-table runtime gate, NOT enforced here
+    // (this reader performs no file I/O at all - pure XML schema parsing).
+    //
+    // DO NOT ASSUME THIS GATE OPENS A `.lm_pc` FILE AT TABLE-LOAD TIME (spec 17's own "Team B relevance" line).
+    // EMPIRICALLY CONFIRMED 2026-10-01: on the ONE confirmed `+0x54` bit-15 writer found so far (audio_banks.xtbl's
+    // own loader, which sets it only for base-game rows that are `Init` or `load_at_boot = True`, §2.3), **0 of
+    // the 265 real `Soundbank` values ever pass this gate** - every one of them is `load_at_boot = False`,
+    // `voice = True`, `streaming = True` in the real `audio_banks.xtbl` (§17.1). So `IsBootLoad()` evaluates
+    // false for every real voice bank, and `ExpectedLmPcFilename()`'s result should NOT be treated as something
+    // that actually gets opened on retail data through this path. Whether bit 15 is EVER set by some OTHER,
+    // not-yet-found writer (candidates 0x00465CC0 / 0x004673C0) stays genuinely OPEN (spec 17/§20 item 9) - this
+    // reader does not and should not guess an answer either way.
+    //
     // The filename CONSTRUCTION itself is a simple, confirmed string build (Soundbank + ".lm_" + "pc"), captured
     // exactly by the helper below - this is the disassembly-confirmed mechanism that substantially advances
     // spec-audio-format.md's own open `.lm_pc`/`DMLV` question (spec 17/18.1), though that file's own interior

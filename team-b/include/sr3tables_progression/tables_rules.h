@@ -120,9 +120,9 @@ struct GcHelicopter { GcHelicopterDraft draft; };                               
 struct GcMoneyStorageElement { Always<int32_t> numberOfCribs; Always<int32_t> maxStash; };  // index n
 struct GcCribs { std::vector<GcMoneyStorageElement> moneyStorage; };                        // <Cribs>
 struct GcCombatAiGun { Always<uint32_t> repositionMin, repositionMax, cantFireRepositionMin, cantFireRepositionMax; };
-// [OPEN - spec-tables-progression.md 10.2/14.9: parent of <Pepperspray> (sibling of <Gun> vs child of <Gun>);
-// the reader below looks for it under <Combat_AI> directly. NEEDS-EXE.]
-// spec: the loader reads the element named Spray_Min TWICE (a Spray_Max element is never read).
+// spec-tables-progression.md 10.2, CORRECTED 2026-10-01 (disassembly, job 20261001T123123-team-a-ytgi):
+// <Pepperspray> is a child of <Gun> (not a sibling of it under <Combat_AI>) - the reader looks for it
+// under the <Gun> node. spec: the loader reads the element named Spray_Min TWICE (a Spray_Max element is never read).
 struct GcCombatAiPepperspray { Always<uint32_t> sprayMin; };
 struct GcCombatAiGunfireEvade { Always<float> cowerFleeChance; Always<int32_t> cowerFleeMaxRank; };
 struct GcCombatAiBust { Always<float> bustHpPcnt; };
@@ -217,7 +217,9 @@ extern const char* const kGameplayNagNames[20];
 constexpr size_t kGameplayNagCount = 20;
 
 // spec 10.3 <Nag_Data> of gameplay_nags.xtbl. Both times are the raw XML
-// seconds value; the engine stores round(value*1000) ms (spec: not applied here).
+// seconds value; the engine stores trunc(value*1000) ms, a double product truncated toward zero
+// (CORRECTED 2026-10-01, disassembly, job 20261001T123123-team-a-ytgi: truncation, not rounding -
+// spec: not applied here).
 struct GameplayNagEntry {
     int nagIndex = -1;              // -1 if <Name> matched none of kGameplayNagNames
     Always<float> incrementSeconds; // <Increment>, raw seconds
@@ -276,9 +278,9 @@ std::vector<MissionHelpText> ParseMissionHelpTable(const Document& doc);
 // - spec-tables-progression.md S10.6
 // ===========================================================================
 
-// spec 10.6 <Group> under a Category's <Groups> ("only when the matched
-// group's kind byte is 7" - a runtime cross-reference this reader cannot
-// resolve; the conditional fields below are simply if-present).
+// spec 10.6 <Group> under a Category's <Groups> ("only when the matched spawn group's `Team` index byte
+// (+0x08 of the group record) is 7 - HIGH CONFIDENCE `Civilian`" per the 2026-10-01 wording correction -
+// a runtime cross-reference this reader cannot resolve; the conditional fields below are simply if-present).
 struct SpawnCategoryGroup {
     std::optional<std::string> name;               // CRC-32; matched against spawn_info_groups' hash
     std::optional<float> dayChance, nightChance;
@@ -307,11 +309,13 @@ struct SpawnCategory {
 SpawnCategory ParseSpawnCategory(const Node* row);
 std::vector<SpawnCategory> ParseSpawnInfoCategoriesTable(const Document& doc);
 
-// [OPEN - spec-tables-progression.md 10.6: the six-name Spline_Type list "label downgraded 2026-09-30 from
-// CONFIRMED to OPEN"; real data uses "All Roads" / "Surface Roads" in 58 of 61 rows (Team B measured
-// 58/61; spec 14.12: 56 + 2). The value is kept as raw text; no name list is enforced.]
+// spec-tables-progression.md 10.6, RESOLVED 2026-10-01 (disassembly, job 20261001T123123-team-a-ytgi):
+// the six-name Spline_Type compare table (0x01312708) is CONFIRMED complete - "All Roads"/"Surface Roads"
+// (58 of 61 real rows, spec 14.12: 56 + 2) match none of the six and resolve to -1 at the real loader.
+// The value is still kept here as raw text (this reader does not replicate the engine's -1 fallback
+// resolution, same convention as every other raw-text cross-reference field in this file).
 // spec 10.6 <Group> (spawn_info_groups.xtbl). `splineType` raw text: one of
-// "Highway Only"|"Boat"|"Offroad"|"Indoor"|"Baggage"|"Taxi" (-1 if none).
+// "Highway Only"|"Boat"|"Offroad"|"Indoor"|"Baggage"|"Taxi" (-1 if none, including "All Roads"/"Surface Roads").
 struct SpawnGroupVehicle { std::optional<std::string> name, variant; }; // FUN_00ACB350(node, "Name", "Variant")
 
 struct SpawnGroup {
@@ -398,11 +402,30 @@ NpcGroup ParseNpcGroup(const Node* row);
 std::vector<NpcGroup> ParseRankReactionsTable(const Document& doc);
 
 // ===========================================================================
-// default_global.xtbl - spec-tables-progression.md S10.9
+// default_global.xtbl - spec-tables-progression.md S10.9 + spec-tables-environment.md S15.5
 //
 // Opened WITHOUT the usual <Table> wrapper (spec: "the document root is
 // used directly"); ParseDefaultGlobal therefore takes the root, not a
 // <Table> row.
+//
+// TWO loader functions over (believed to be) the SAME file:
+//  - S10.9's own FUN_00BB70B0 reads skyboxMeshFilename/cloudMeshFilename/
+//    orbitalMapNames (CONFIRMED - disassembly; this part of the file name
+//    itself, 0x0118CF40, is also CONFIRMED to have exactly one user).
+//  - spec-tables-environment.md S15.5's 0x00BB6400 reads five more
+//    top-level elements, three children of cloud_mesh_filename, and a
+//    tod_segments/segment list - a DIFFERENT function from FUN_00BB70B0,
+//    found and fully tabulated (element set, types, defaults, destinations)
+//    only after S10.9 was written. S15.5 CONFIRMS (disassembly) every
+//    element it reads, but is explicit that WHICH FILE 0x00BB6400 opens is
+//    only HIGH CONFIDENCE, not proven: its caller 0x00B9D3F0 was never
+//    dumped, so the filename literal it passes is unseen - the only
+//    evidence it is this same default_global.xtbl is that the element set
+//    it reads matches this file's real content exactly. The fields below
+//    from S15.5 are therefore added to this SAME struct/parsed from this
+//    SAME Document on that HIGH CONFIDENCE (not proven) basis - if a future
+//    pass dumps 0x00B9D3F0 and finds a different file, these fields belong
+//    on a separate struct instead.
 // ===========================================================================
 
 struct DefaultGlobal {
@@ -411,6 +434,36 @@ struct DefaultGlobal {
     std::string skyboxMeshFilename = "rfg_skybox"; // <skybox_mesh_filename>, if-present else this default
     std::string cloudMeshFilename = "skybox_clouds"; // <cloud_mesh_filename>, if-present else this default
     std::vector<std::string> orbitalMapNames; // <orbitals><orbital><map_name>, kept only if non-empty, at most 15
+
+    // --- spec-tables-environment.md S15.5 (0x00BB6400 - see the HIGH CONFIDENCE same-file note above) ---
+    // Bool reader 0x00DC51B0: "yes"/"true"/"1", case-insensitive; anything else (including an absent
+    // node) reads as the field's own default below - a THIRD bool-literal set in this table group,
+    // distinct from sr3xtbl::ParseBool ("true"/"yes") and TextEqualsTrue ("true" only).
+    bool horizonMountainEnabled = true;  // <horizon_mountain_enabled>
+    bool fogCameraFollow = false;        // <fog_camera_follow>
+    int32_t dayBegin = 600;              // <day_begin>, int reader 0x00DC5270
+    int32_t dayEnd = 1800;               // <day_end>, int reader 0x00DC5270
+    // Children of the SAME <cloud_mesh_filename> node resolved above for cloudMeshFilename - S15.5 is
+    // explicit these are NOT independent top-level elements.
+    std::string cloudMeshHorizonMat = "Cloud_base_material";      // cloud_mesh_filename/cloud_mesh_horizon_mat
+    std::string cloudMeshOverheadMat = "Cloud_overhead_material"; // cloud_mesh_filename/cloud_mesh_overhead_mat
+    std::string cloudMeshSkylineMat = "m_sky_matte_01";           // cloud_mesh_filename/cloud_mesh_skyline_mat
+    // <tod_segments><segment>...</segment>...</tod_segments>: S15.5 confirms one dword is appended per
+    // <segment> child (via 0x00DC5240(node, 0)) while count+1 <= a runtime capacity, excess dropped - the
+    // same "capacity caps, excess dropped" shape as orbitalMapNames above. UNLIKE orbitalMapNames, though,
+    // S15.5 gives only the capacity's memory ADDRESS (0x02915300), never its numeric value, so there is no
+    // real number here to apply. Rather than invent one, this reader does NOT cap the list - same documented
+    // scope choice as tables_core.h's ParseUnlockablesTable, which likewise skips a real, spec-known
+    // (384-record) loader capacity and returns every row present: every <segment> child present here is
+    // kept. S15.5 also does not spell out what the appended dword IS beyond "a dword" per child; modelled
+    // here as each <segment> child's own text parsed as int32 (GetInt32 with no child name - this
+    // codebase's existing "no name -> the node's own text" shape, ChildText/xtbl.h), the most direct
+    // reading of "per child, a reader applied to (node, 0)" - NOT a literal spec quote. Empirically
+    // checked (real data, not disassembly) against the one real default_global.xtbl found across the
+    // 38-archive validator run: exactly 4 <segment> children, each a bare integer text node with no
+    // children of its own ("500", "930", "1430", "2100") - consistent with this interpretation and far
+    // under any plausible small capacity, so the missing cap number did not affect that one real sample.
+    std::vector<int32_t> todSegments;
 };
 
 // Parses a default_global.xtbl document's root element directly (spec 10.9: opened with the "plain open" helper).
@@ -437,7 +490,8 @@ std::vector<TweakTableEntry> ParseTweakTable(const Document& doc);
 struct SprintEntry {
     std::optional<std::string> name;   // <Name>; the boot path matches case-SENSITIVELY against "Single Player"
     Always<int32_t> useTime, rechargeTime, delayTime;
-    Always<float> pantPercentage;      // <PantPercentage>; engine: threshold_ms = round(RechargeTime * PantPercentage)
+    Always<float> pantPercentage;      // <PantPercentage>; engine: threshold_ms = trunc(RechargeTime * PantPercentage)
+                                        // (CORRECTED 2026-10-01, disassembly: double product, truncated toward zero, not rounded)
     Always<float> jumpPenalty, startPenalty;
 };
 

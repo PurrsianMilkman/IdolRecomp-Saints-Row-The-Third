@@ -71,11 +71,6 @@
 //
 // WHAT IS DELIBERATELY LEFT OUT (spec explicitly marks it OPEN/UNKNOWN, so this
 // header does not guess it):
-//   * generic_characters.xtbl's 21 compiled-in slot NAMES: spec §1.5/§12 gives only
-//     the first and last ("Young Male ... Camera Man"), not the list. Only the
-//     vehicle file's 20 names are given in full (§12), so only that name table is
-//     compiled in here (kGenericVehicleSlotNames); GenericCharacterRow::name stays
-//     raw text with no enum resolution.
 //   * life files (§21): Skeleton_Set and Group have no identifying leaf element in
 //     the spec's element tree ("the meaning of Skeleton_Set names were not traced
 //     [OPEN]") - LifeSkeletonSet/LifeGroup carry no name field.
@@ -144,9 +139,8 @@ struct Rgb {
 
 // ---------------------------------------------------------------------------
 // §1.5 Fixed enum tables compiled into the exe (game data, quoted verbatim from
-// spec-tables-traffic-ai.md 1.5; listed because rows in this group refer to them
-// by name). Only the lists the spec gives IN FULL are here - see the header
-// banner for the one that is not (generic_characters' 21 slot names).
+// spec-tables-traffic-ai.md 1.5/§12; listed because rows in this group refer to
+// them by name).
 // ---------------------------------------------------------------------------
 namespace enums {
 
@@ -195,6 +189,21 @@ inline constexpr std::array<std::string_view, 20> kGenericVehicleSlotNames = {
     "Swat APC Police", "Swat APC Ultor", "Armored Truck", "News Van", "Taxi",
     "Ambulance", "Garbage Truck", "Delivery Gyro", "Delivery Freckled Bitches",
     "Delivery Lik A Chick", "Pimp", "Ship It", "Firetruck", "Hazmat", "Gang Wagon",
+};
+
+// 21 entries, in slot order (spec §12; RESOLVED 2026-10-02 from a direct read of
+// the 0x01308CD0 pointer table - previously only the first/last names were known,
+// "Young Male ... Camera Man"). Used by generic_characters.Name, matched
+// CASE-INSENSITIVELY: the real engine compares CRC-32 hashes (seed 0, each byte
+// lower-cased first, spec 1.4), which sr3xtbl::EnumIndex's own case-insensitive
+// compare faithfully reproduces (unlike the vehicle file above); see
+// ParseGenericCharacterRow.
+inline constexpr std::array<std::string_view, 21> kGenericCharacterSlotNames = {
+    "Young Male", "Young Female", "Old Male", "Old Female", "Business Male",
+    "Business Female", "Poor Male", "Poor Female", "Rich Male", "Rich Female",
+    "Police Officer", "Police Swat", "Commando", "National Guard Soldier",
+    "Stag Soldier", "Ultor Goon", "Ultor Masako", "Ronin Female Biker",
+    "Ronin Male Biker", "Placeholder Saint", "Camera Man",
 };
 
 // 5 entries (spec 1.5, §5). Used by roadblock_layouts.Object/Child.Type.
@@ -416,8 +425,12 @@ AiGoalsTable ParseAiGoalsTable(const Document& doc);
 // Human_Description -> repeated human_elm, Riotshield_Only, Actions -> repeated
 // ability_elm, Options, Goals -> {Survive, Suppress, Cover, Taking_damage, Group,
 // Advance, Avoid_brute, Kill_near_player, Retreat, Kill_Enemy, Reload, Flush_Out,
-// Acquire_Target, Investigate}, goals_can_process_early. Loader 0x004F2B50 (whole
+// Acquire_Target, Investigate, goals_can_process_early}. Loader 0x004F2B50 (whole
 // loader read; record-base arithmetic cross-checked against the assembly).
+// CORRECTED 2026-10-02 (re-derived from 0x004F2B50): goals_can_process_early is
+// read as a child of Goals, not as a row-level child of Behavior as this project
+// previously modelled it - the same node handle held across the whole
+// Survive..Investigate run is still the parent when this element is looked up.
 struct AiHumanDescEntry { // human_elm
     EnumText weaponClass; // Weapon_Class: vs the 23 names (kWeaponClassNames); index -1 if absent/unmatched
     Text team;            // Team: -> team registry (external, unresolved); engine default id 9 ("none") if absent
@@ -473,7 +486,7 @@ struct AiBehavior {
     AiBehaviorSeenInLast flushOut;      // Goals/Flush_Out/seen_in_last
     AiBehaviorSeenInLast acquireTarget; // Goals/Acquire_Target/seen_in_last
     AiBehaviorSeenInLast investigate;   // Goals/Investigate/seen_in_last
-    Always<bool> goalsCanProcessEarly;  // goals_can_process_early
+    Always<bool> goalsCanProcessEarly;  // Goals/goals_can_process_early (CORRECTED 2026-10-02: child of Goals, not row-level - spec s10)
 };
 struct AiBehaviorTable {
     std::vector<AiBehavior> rows;
@@ -530,7 +543,15 @@ AiPersonalitiesTable ParseAiPersonalitiesTable(const Document& doc);
 // Variant_Name. Loaders 0x009189A0 (characters, via helper 0x009188C0) and
 // 0x009186E0 (vehicles). Both read in full.
 struct GenericCharacterRow {
-    Text name;      // Name: -> CRC vs 21 compiled-in slot names (list incomplete in the spec; see header banner)
+    // Name is matched CASE-INSENSITIVELY against kGenericCharacterSlotNames (§12;
+    // the real compare is CRC-32, which lower-cases every byte, spec 1.4) - `index`
+    // mirrors GenericVehicleRow's but via sr3xtbl::EnumIndex (case-insensitive);
+    // see ParseGenericCharacterRow. RESOLVED 2026-10-02: previously the spec gave
+    // only the first/last of the 21 names, so this field stayed raw text with no
+    // enum resolution (see the removed header-banner note); the full ordered list
+    // is now known.
+    Text name;      // Name: -> CRC vs the 21 compiled-in slot names
+    int index = -1; // case-insensitive match index into kGenericCharacterSlotNames, or -1
     Text spawnName; // Spawn_Name: -> character-definition registry (external, unresolved here)
 };
 struct GenericCharactersTable {
@@ -895,28 +916,34 @@ struct EscortRage {
     Always<float> rageIncreaseRate;     // image default 1.0
     Always<float> rageDecreaseRate;     // image default 1.0
 };
+// RESOLVED 2026-10-02 (re-derived from 0x0067F1D0, read in full): the reader type
+// follows the field name exactly - every leaf whose name ends `_MS` is read by the
+// unsigned-32-bit always-write reader (0x00DABDF0, u32); every other leaf is read by
+// the float always-write reader (0x00DACCB0). Previously only
+// Vehicle_Damage_Penalty_MS was confirmed u32 and the rest defaulted to float
+// (OPEN); all seven `_MS` leaves below are u32.
 struct EscortVehiclesPenalty {
     bool present = false;
-    Always<uint32_t> vehicleDamagePenaltyMs;  // u32 (spec-tables-traffic-ai.md s19: "Vehicle_Damage_Penalty_MS 0x014BB25C 4000 (u32)", CONFIRMED - disassembly); image default 4000
+    Always<uint32_t> vehicleDamagePenaltyMs;  // u32; image default 4000
     Always<float> vehicleDamageThreshold;  // image default 50.0
-    Always<float> vehicleDamageCooldownMs; // image default 250
+    Always<uint32_t> vehicleDamageCooldownMs; // u32; image default 250
 };
 struct EscortHumansPenalty {
     bool present = false;
-    Always<float> humanDamagePenaltyMs; // image default 2000
+    Always<uint32_t> humanDamagePenaltyMs; // u32; image default 2000
     Always<float> humanDamageThreshold; // image default 10.0
 };
 struct EscortMoversPenalty {
     bool present = false;
-    Always<float> moverDamagePenaltyMs;  // image default 500
+    Always<uint32_t> moverDamagePenaltyMs;  // u32; image default 500
     Always<float> moverMassThresholdKg;  // image default 75.0
-    Always<float> moverDamageCooldownMs; // image default 250
+    Always<uint32_t> moverDamageCooldownMs; // u32; image default 250
 };
 struct EscortWorldPenalty {
     bool present = false;
-    Always<float> worldDamagePenaltyMs;   // image default 500
+    Always<uint32_t> worldDamagePenaltyMs;   // u32; image default 500
     Always<float> worldDamageThresholdHp; // image default 15.0
-    Always<float> worldDamageCooldownMs;  // image default 250
+    Always<uint32_t> worldDamageCooldownMs;  // u32; image default 250
 };
 struct EscortConstants {
     EscortRage rage;

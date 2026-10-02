@@ -425,7 +425,13 @@ int main(int argc, char** argv) {
             for (auto& p : presets)
                 if (p.name) presetNames.insert(*p.name);
             long long posUnmatched = 0, posPcUnmatched = 0, posTotal = 0, posPcTotal = 0;
-            long long buttonTypeUnmatched = 0, buttonAnimUnmatched = 0;
+            // Button_Animation_Type (CORRECTED 2026-10-01, spec 9.2): raw text now,
+            // not a closed EnumIndex - the real table has 9 slots, only 3 names
+            // known (kButtonAnimationTypeNames). Report distinct values and how
+            // many fall outside that known-3 set (informational, NOT a gate - an
+            // unknown-but-real 4th-9th name would be expected, not a bug).
+            long long buttonTypeUnmatched = 0, buttonAnimOutsideKnown3 = 0, buttonAnimPresent = 0;
+            std::set<std::string> buttonAnimValues;
             for (auto& h : ifaces) {
                 if (h.position) {
                     ++posTotal;
@@ -436,14 +442,23 @@ int main(int argc, char** argv) {
                     if (!presetNames.count(*h.positionPC)) ++posPcUnmatched;
                 }
                 if (h.buttonType < 0) ++buttonTypeUnmatched;
-                if (h.buttonAnimationType < 0) ++buttonAnimUnmatched;
+                if (h.buttonAnimationType) {
+                    ++buttonAnimPresent;
+                    buttonAnimValues.insert(*h.buttonAnimationType);
+                    bool known3 = *h.buttonAnimationType == "Mash Standard" || *h.buttonAnimationType == "Mash Fast" ||
+                                  *h.buttonAnimationType == "Alternate Triggers";
+                    if (!known3) ++buttonAnimOutsideKnown3;
+                }
             }
             GATE(posUnmatched == 0, "every Position value resolves to a real preset name (spec 9.2, 16): %lld / %lld unmatched", posUnmatched,
                  posTotal);
             GATE(posPcUnmatched == 0, "every Position_PC value resolves to a real preset name (spec 9.2, 16): %lld / %lld unmatched", posPcUnmatched,
                  posPcTotal);
-            std::printf("  Button_Type unmatched (outside the 9-entry table): %lld / %zu; Button_Animation_Type unmatched: %lld / %zu\n",
-                        buttonTypeUnmatched, ifaces.size(), buttonAnimUnmatched, ifaces.size());
+            std::printf("  Button_Type unmatched (outside the 9-entry table): %lld / %zu; Button_Animation_Type: %lld/%zu present, "
+                        "%zu distinct value(s) (",
+                        buttonTypeUnmatched, ifaces.size(), buttonAnimPresent, ifaces.size(), buttonAnimValues.size());
+            for (auto& v : buttonAnimValues) std::printf("%s ", v.c_str());
+            std::printf("), %lld outside the known-3 names\n", buttonAnimOutsideKnown3);
         } else {
             std::printf("  hud_qte_interface.xtbl NOT FOUND in the given archives.\n");
         }
@@ -458,21 +473,41 @@ int main(int argc, char** argv) {
     if (const Item* it = find1("vehicle_cameras.xtbl")) {
         Document doc = ParseDocument(it->data.data(), it->data.size());
         auto rows = ParseVehicleCamerasTable(doc);
-        long long posBased = 0, sphereBased = 0, neither = 0;
+        long long posBased = 0, sphereBased = 0, neither = 0, skipTrans = 0, altFreckle = 0;
         for (auto& r : rows) {
             if (r.camera.positionBasedPresent) ++posBased;
             else if (r.camera.sphereBasedPresent) ++sphereBased;
             else ++neither;
+            if (r.camera.skipCameraTransition) ++skipTrans;
+            if (r.camera.useAltFreckleCam) ++altFreckle;
         }
         std::printf("  vehicle_cameras.xtbl: %zu <Vehicle> rows (Position_Based: %lld, Sphere_Based: %lld, neither: %lld)\n", rows.size(),
                     posBased, sphereBased, neither);
+        // CORRECTED 2026-10-01 (8.1): skip_camera_transition/use_alt_freckle_cam
+        // are child elements, not row attributes (real fix, see tables.h). Row
+        // attributes essentially never occur in this project's real XML (see
+        // sr3xtbl.h's own node-model note: only one real attribute use exists
+        // project-wide, unrelated to this table), so BEFORE this fix these two
+        // fields were silently always false on every real row; this count is
+        // the direct measure of what the fix recovers.
+        std::printf("  vehicle_cameras.xtbl: skip_camera_transition=true: %lld / %zu, use_alt_freckle_cam=true: %lld / %zu "
+                    "(CORRECTED 2026-10-01 attribute->element fix - was always 0/%zu before)\n",
+                    skipTrans, rows.size(), altFreckle, rows.size(), rows.size());
     } else {
         std::printf("  vehicle_cameras.xtbl NOT FOUND in the given archives.\n");
     }
     if (const Item* it = find1("vehicle_group_cameras.xtbl")) {
         Document doc = ParseDocument(it->data.data(), it->data.size());
         auto rows = ParseVehicleGroupCamerasTable(doc);
+        long long skipTrans = 0, altFreckle = 0;
+        for (auto& r : rows) {
+            if (r.camera.skipCameraTransition) ++skipTrans;
+            if (r.camera.useAltFreckleCam) ++altFreckle;
+        }
         std::printf("  vehicle_group_cameras.xtbl: %zu <Vehicle_Group> rows\n", rows.size());
+        std::printf("  vehicle_group_cameras.xtbl: skip_camera_transition=true: %lld / %zu, use_alt_freckle_cam=true: %lld / %zu "
+                    "(CORRECTED 2026-10-01 attribute->element fix - was always 0/%zu before)\n",
+                    skipTrans, rows.size(), altFreckle, rows.size(), rows.size());
     } else {
         std::printf("  vehicle_group_cameras.xtbl NOT FOUND in the given archives.\n");
     }
@@ -530,6 +565,24 @@ int main(int argc, char** argv) {
     std::printf("\n=== control_scheme_text.xtbl (spec 11 - no exact count stated by the spec) ===\n");
     if (const Item* it = find1("control_scheme_text.xtbl")) {
         Document doc = ParseDocument(it->data.data(), it->data.size());
+
+        // RAW pre-filter count: walk <ControlScheme>/<Controls>/<Control>
+        // directly off the node tree (NOT through the typed reader, which
+        // now applies the Platform filter - spec 11, CORRECTED 2026-10-01)
+        // to measure what that filter actually drops in real data: "only
+        // Controls whose Platform text is exactly 360 or All ... are kept;
+        // every other value (e.g. PS3) is dropped at load."
+        long long rawControls = 0;
+        std::map<std::string, long long> rawPlatformCounts;
+        for (const Node* scheme : Children(doc.table(), "ControlScheme")) {
+            const Node* controls = FindChild(scheme, "Controls");
+            for (const Node* c : Children(controls, "Control")) {
+                ++rawControls;
+                const std::string* p = ChildText(c, "Platform");
+                ++rawPlatformCounts[p ? *p : std::string("(absent)")];
+            }
+        }
+
         auto schemes = ParseControlSchemeTextTable(doc);
         long long entries = 0;
         std::set<std::string> platforms;
@@ -538,10 +591,16 @@ int main(int argc, char** argv) {
             for (auto& c : s.controls)
                 if (c.platform) platforms.insert(*c.platform);
         }
-        std::printf("  %zu <ControlScheme> rows, %lld total Control entries, distinct Platform values: %zu (", schemes.size(), entries,
-                    platforms.size());
+        std::printf("  %zu <ControlScheme> rows, %lld total Control entries (POST Platform filter), distinct Platform values kept: %zu (",
+                    schemes.size(), entries, platforms.size());
         for (auto& p : platforms) std::printf("%s ", p.c_str());
         std::printf(")\n");
+        std::printf("  RAW (pre-filter): %lld <Control> rows total, by Platform value: ", rawControls);
+        for (auto& kv : rawPlatformCounts) std::printf("%s=%lld ", kv.first.c_str(), kv.second);
+        std::printf("\n");
+        GATE(entries <= rawControls, "Platform filter never increases the Control count (%lld kept of %lld raw)", entries, rawControls);
+        std::printf("  Platform filter: dropped %lld of %lld raw Control rows, kept %lld (360/All only)\n", rawControls - entries,
+                     rawControls, entries);
     } else {
         std::printf("  NOT FOUND in the given archives.\n");
     }

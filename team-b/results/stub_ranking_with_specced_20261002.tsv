@@ -1,0 +1,70 @@
+name	call_count_all_inclusive	call_count_before_missions(top_level+hooks)	incremental_from_missions	last_argc	last_arg_types	static_total_call_sites	static_distinct_scripts	gameplay_call_count	ui_call_count	specced
+vint_object_find	24733	24698	35	1	string	0	0	0	24733	y
+vint_set_property	14500	14475	25	3	number,string,boolean	0	0	0	14500	n(generic-stub)
+audio_object_post_event	1847	1847	0	5	string,nil,nil,nil,boolean	427	47	0	1847	n(generic-stub)
+vint_get_property	1692	1692	0	2	number,string	0	0	0	1692	n(generic-stub)
+vint_get_time_index	1206	1201	5	1	nil	0	0	0	1206	n(generic-stub)
+thread_yield	1141	1102	39	0		0	0	39	1102	y
+store_vehicle_get_state	1128	1128	0	0		3	1	0	1128	y
+vint_dataresponder_finished	1102	1102	0	1	string	0	0	0	1102	n(generic-stub)
+vint_internal_dataresponder_request	1102	1102	0	3	string,string,number	0	0	0	1102	n(generic-stub)
+Completion_is_client	836	836	0	0		3	3	0	836	y
+vint_is_std_res	738	738	0	0		0	0	0	738	y
+OPEN_STATE:safe-frame source +0x8 ((context +0x674)+0x14)	736	736	0	0		0	0	0	736	specced-OPEN
+vint_get_safe_frame	736	736	0	0		0	0	0	736	y
+vint_dataitem_get	711	711	0	1	nil	0	0	0	711	n(generic-stub)
+vint_object_first_child	708	703	5	1	number	0	0	0	708	n(generic-stub)
+vint_object_clone	509	509	0	1	number	0	0	0	509	n(generic-stub)
+game_peg_load_with_cb	496	496	0	3	string,number,string	62	38	0	496	y
+game_UI_audio_play	303	303	0	1	string	616	158	0	303	y
+pause_map_stag_current_district_control	303	303	0	0		1	1	0	303	n(generic-stub)
+thread_check_done	244	48	196	1	number	0	0	244	0	y
+tutorial_advance	170	72	98	0		0	0	170	0	y
+rand_int	146	48	98	2	number,number	0	0	122	24	y
+OPEN_STATE:named-object resolution['Killbane']	140	42	98	5	string,number,number,number,number	0	0	140	0	specced-OPEN
+minimap_icon_add_do	140	42	98	5	string,string,string,number,number	3	1	140	0	y
+object_indicator_add_do	140	42	98	5	string,number,number,number,number	3	1	140	0	y
+OPEN_STATE:character ignore-AI flag (+0x2bc)	122	24	98	2	string,boolean	0	0	122	0	specced-OPEN
+OPEN_STATE:character max hit points (+0x1cac)	122	24	98	1	string	0	0	122	0	specced-OPEN
+ai_clear_scripted_action	122	24	98	1	string	34	13	122	0	y
+get_max_hit_points	122	24	98	1	string	43	18	122	0	y
+on_qte_animation_trigger	122	24	98	1	string	14	4	122	0	y
+set_ignore_ai_flag	122	24	98	2	string,boolean	238	30	122	0	y
+coop_is_active	52	1	51	0		505	45	52	0	y
+fade_out	38	0	38	1	number	94	53	38	0	y
+fade_is_fully_faded_out	37	0	37	0		1	1	37	0	y
+player_controls_disable	37	0	37	1	string	35	9	37	0	n(generic-stub)
+debug_print	20	20	0	2	string,string	0	0	0	20	y
+game_audio_get_audio_id	6	6	0	1	string	37	11	0	6	y
+rand_float	6	6	0	2	number,number	0	0	0	6	y
+OPEN_STATE:Wwise id for 'SYS_HUD_CNTDWN_POS' (0x00462960)	5	5	0	1	string	0	0	0	5	specced-OPEN
+game_get_key_name_for_action	5	5	0	1	string	72	16	0	5	y
+traffic_disable_lanes	5	0	5	2	string,boolean	23	10	5	0	n(generic-stub)
+OPEN_STATE:key binding for action 'CBA_SWC_FIRE_GUIDED' (0x005be440 CBA/CAA lookup)	3	3	0	1	string	0	0	0	3	specced-OPEN
+city_zone_swap	3	0	3	1	string	104	22	3	0	n(generic-stub)
+fade_in	3	0	3	1	number	58	27	3	0	y
+party_dismiss_all	3	0	3	0		17	17	3	0	n(generic-stub)
+set_mission_author	3	0	3	1	string	67	67	3	0	y
+OPEN_STATE:key binding for action 'CBA_VDC_CRUISE_CONTROL_B' (0x005be440 CBA/CAA lookup)	2	2	0	1	string	0	0	0	2	specced-OPEN
+fade_is_fully_faded_in	2	0	2	0		1	1	2	0	y
+game_get_key_name	2	2	0	1	number	442	76	0	2	y
+mip_streaming_pause	2	0	2	2	boolean,string	2	1	2	0	n(generic-stub)
+object_spawn_pause	2	0	2	2	boolean,string	2	1	2	0	n(generic-stub)
+OPEN_STATE:0x012f44fc (co-op join type)	1	1	0	0		0	0	0	1	specced-OPEN
+OPEN_STATE:Wwise id for 'SYS_HUD_CONF_SERIOUS' (0x00462960)	1	1	0	1	string	0	0	0	1	specced-OPEN
+character_ragdoll_set_last_resort_position	1	0	1	1	string	37	13	1	0	n(generic-stub)
+crib_weapon_add_disable	1	0	1	0		3	3	1	0	y
+customization_create_character	1	0	1	0		1	1	1	0	n(generic-stub)
+customization_creation_is_open	1	0	1	0		1	1	1	0	n(generic-stub)
+customization_outfit_wear	1	0	1	1	string	16	8	1	0	n(generic-stub)
+customization_screen_is_ready	1	0	1	0		1	1	1	0	n(generic-stub)
+game_get_coop_join_type	1	1	0	0		2	2	0	1	y
+mesh_mover_hide	1	0	1	1	string	52	22	1	0	n(generic-stub)
+mesh_mover_show	1	0	1	1	string	37	15	1	0	n(generic-stub)
+mission_autosave	1	0	1	0		12	12	1	0	n(generic-stub)
+mission_end_silently	1	0	1	0		10	10	1	0	y
+mission_set_next_mission	1	0	1	1	string	4	4	1	0	n(generic-stub)
+player_parachute_has_backpack	1	0	1	1	string	2	1	1	0	n(generic-stub)
+sidewalk_disable_nodes	1	0	1	2	string,boolean	11	5	1	0	n(generic-stub)
+zscene_prep	1	0	1	1	string	44	27	1	0	y
+zscene_prep:OPEN_STATE	1	0	1	1	string	0	0	1	0	specced-OPEN

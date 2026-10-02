@@ -384,7 +384,7 @@ object's exact class/subsystem identity.]** **[Resolved by §3: `0x005e4dd0` is 
 ### 1.12 `object_is_in_trigger` (`0x00a57720`) — 86 calls / 19 scripts
 
 **Arguments:** 2 mandatory strings, both read unconditionally: arg 1 an object name, arg 2 a
-trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]** **[Narrowed 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.7's re-derivation): the containment test `0x0093bfc0` takes its object in ECX and exactly one 4-byte stack argument (it pops 4 bytes on return), and branches on that object's `+0x8c` shape code — 0, 1 or 2 select one of three geometric tests (`0x00dbdc90` / `0x00dbe2a0` / `0x00dbe050`) built from the object's own `+0x40` position and its `+0x58`/`+0x5c`/`+0x60`/`+0x90`/`+0x94` extents; any other code returns false. CONFIRMED — disassembly for `0x0093bfc0`. So the ECX object is the trigger volume and the stack argument is the point tested (§28.7 calls it with receiver = the trigger and argument = a candidate's `+0x40` position). It follows that arg 1 (resolved through `0x005e4e30`) is the trigger and arg 2 (the `0x00a455a0` position) is the object: the desk review's reading. HIGH CONFIDENCE — `0x00a57720` itself is not in these dumps, so the register load at its call site is not read; box/sphere/cylinder names for the three shapes are HYPOTHESIS.]**
+trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]** **[Narrowed 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.7's re-derivation): the containment test `0x0093bfc0` takes its object in ECX and exactly one 4-byte stack argument (it pops 4 bytes on return), and branches on that object's `+0x8c` shape code — 0, 1 or 2 select one of three geometric tests (`0x00dbdc90` / `0x00dbe2a0` / `0x00dbe050`) built from the object's own `+0x40` position and its `+0x58`/`+0x5c`/`+0x60`/`+0x90`/`+0x94` extents; any other code returns false. CONFIRMED — disassembly for `0x0093bfc0`. So the ECX object is the trigger volume and the stack argument is the point tested (§28.7 calls it with receiver = the trigger and argument = a candidate's `+0x40` position). It follows that arg 1 (resolved through `0x005e4e30`) is the trigger and arg 2 (the `0x00a455a0` position) is the object: the desk review's reading. ~~HIGH CONFIDENCE — `0x00a57720` itself is not in these dumps, so the register load at its call site is not read~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00a57720` is now dumped, and its call site matches this reading exactly. ECX is loaded with the handle `0x005e4e30` resolves for arg 1 — `0x005e4e30` is itself called with hidden `this` = the shared singleton `0x02442750` (the same singleton §22.23 cites for a sibling resolver) and explicit argument = the arg-1 string — immediately before `CALL 0x0093bfc0`; the pushed stack argument is the address of the 12-byte position record `0x00a455a0` fills from arg 2. This is exactly the trigger-receiver/point-argument shape `0x0093bfc0`'s own body requires. CONFIRMED — disassembly: arg 1 = trigger (via `0x005e4e30`), arg 2 = object/position (via `0x00a455a0`).]** box/sphere/cylinder names for the three shapes are still HYPOTHESIS.]**
 
 **Return:** 1 Lua value (boolean-shaped) — a real `0x00dfe590` push followed by a literal
 `return 1;`.
@@ -405,11 +405,13 @@ state (read-only query). **[CONFIRMED — disassembly for the full gating logic 
 OPEN — the exact contents of the two records `0x00a455a0` produces~~, and why the containment test
 `0x0093bfc0` is passed only the first record with no other argument visible in the decompilation
 (a hidden calling-convention argument, e.g. the resolved object handle carried in a register, is
-the likely explanation but was not independently confirmed)~~.]** **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: the hidden argument is confirmed on the callee side — `0x0093bfc0` reads its trigger object from ECX and pops one stack argument, the point; see the Arguments note above. CONFIRMED — disassembly for `0x0093bfc0`; the call site in `0x00a57720` is HIGH CONFIDENCE until that entry is dumped.]**
+the likely explanation but was not independently confirmed)~~.]** **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: the hidden argument is confirmed on the callee side — `0x0093bfc0` reads its trigger object from ECX and pops one stack argument, the point; see the Arguments note above. CONFIRMED — disassembly for `0x0093bfc0`; ~~the call site in `0x00a57720` is HIGH CONFIDENCE until that entry is dumped~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00a57720` is now dumped and its call site is read directly (see the Arguments note above) — CONFIRMED.]**]**
 
 **Review status (2026-09-30): NEEDS-EXE: argument roles probably swapped (arg 1 trigger, arg 2 object); record OPEN partly closed (text fixes applied) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
 
-**Review status (2026-10-01):** callee side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`, via §28.7): `0x0093bfc0` is a trigger-object method (ECX) with one stack argument, the point — CONFIRMED; arg 1 = trigger / arg 2 = object is HIGH CONFIDENCE. Still NEEDS-EXE for the entry `0x00a57720` itself; NOT yet cleared for implementation.
+**Review status (2026-10-01):** callee side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`, via §28.7): `0x0093bfc0` is a trigger-object method (ECX) with one stack argument, the point — CONFIRMED; arg 1 = trigger / arg 2 = object is HIGH CONFIDENCE. ~~Still NEEDS-EXE for the entry `0x00a57720` itself; NOT yet cleared for implementation.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x00a57720` dumped directly: its call site loads ECX from the `0x005e4e30`-resolved arg-1 handle and pushes the `0x00a455a0`-derived position from arg 2 as the point, exactly as predicted — arg 1 = trigger, arg 2 = object is now CONFIRMED, not just HIGH CONFIDENCE. Remaining OPEN items (the 36-byte record's field layout; the box/sphere/cylinder shape-code names) are unrelated to the argument-order question and stay open.
 
 ### 1.13 Cross-function observations
 
@@ -758,14 +760,14 @@ pattern as §2.1/§2.8).
 
 **Return:** 1 Lua value (a genuine boolean, not a number) — `lua_pushboolean` then `return 1;`.
 
-**Body:** reads one global byte flag (`0x0141250d`) directly and pushes it as a boolean. No other
+**Body:** ~~reads one global byte flag (`0x0141250d`) directly~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: calls the one-instruction getter `0x005bc5d0` (see below), which in turn reads the global byte flag `0x0141250d`.]** and pushes it as a boolean. No other
 engine state is read or written.
 
 **Side effects / subsystem:** none — a pure read of a single global input-mode flag: whether the
 currently active input device is a gamepad (as opposed to keyboard/mouse). Subsystem: input. The
 flag's own writer was not located within this task's scope — ~~the only reference this pass found to
 `0x0141250d` anywhere in the binary is this function's own read~~; **[OPEN — writer not located; does
-not affect the confirmed read-only contract of this function itself.]** **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.9): `0x005bc5d0` is a one-instruction getter that loads the byte `0x0141250d` and returns it, and it has many callers (30 call sites listed before the dump's cap; §28.9's `effect_play_finisher` uses it to pick the gamepad or PC icon effect). The byte lives in zero-filled `.data` (initial value 0), and the global's cross-reference listing shows exactly one direct use, the read inside `0x005bc5d0` — no direct writer in defined code, so the writer stays OPEN (it may write through a pointer or from undefined code). CONFIRMED — disassembly. That single direct use also means this function's "reads the byte directly" is most likely a call to `0x005bc5d0` that the earlier pass read through; HYPOTHESIS — `0x00842270` is not in these dumps. The read-only contract is unchanged either way.]**
+not affect the confirmed read-only contract of this function itself.]** **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.9): `0x005bc5d0` is a one-instruction getter that loads the byte `0x0141250d` and returns it, and it has many callers (30 call sites listed before the dump's cap; §28.9's `effect_play_finisher` uses it to pick the gamepad or PC icon effect). The byte lives in zero-filled `.data` (initial value 0), and the global's cross-reference listing shows exactly one direct use, the read inside `0x005bc5d0` — no direct writer in defined code, so the writer stays OPEN (it may write through a pointer or from undefined code). CONFIRMED — disassembly. That single direct use also means this function's "reads the byte directly" is most likely a call to `0x005bc5d0` that the earlier pass read through; ~~HYPOTHESIS — `0x00842270` is not in these dumps.~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00842270` is now dumped — its body is `lua_gettop` (unused) then a direct, unconditional `CALL 0x005bc5d0`, then `lua_pushboolean` of the result. CONFIRMED — disassembly.]** The read-only contract is unchanged either way.]**
 
 **Dual registration (task brief's own flagged item):** this exact function pointer, `0x00842270`, is
 registered under the identical name in **both** Lua-state registrars — the 1,014-entry gameplay table
@@ -779,7 +781,9 @@ disassembly, both raw array walks read directly for both names.]**
 
 **Review status (2026-09-30): DESK-PASS — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
 
-**Review status (2026-10-01):** flag side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): getter `0x005bc5d0`, zero initial value and no direct writer of `0x0141250d` — CONFIRMED; whether `0x00842270` reads the byte directly or through `0x005bc5d0` is HYPOTHESIS (entry not dumped). Behaviour contract unchanged; still NOT cleared for implementation until the entry is dumped.
+**Review status (2026-10-01):** flag side re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): getter `0x005bc5d0`, zero initial value and no direct writer of `0x0141250d` — CONFIRMED; ~~whether `0x00842270` reads the byte directly or through `0x005bc5d0` is HYPOTHESIS (entry not dumped). Behaviour contract unchanged; still NOT cleared for implementation until the entry is dumped.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x00842270` dumped directly: it calls `0x005bc5d0` (not an inlined read) — CONFIRMED. A fresh, independently-run xref of `0x0141250d` (cap `xrefs:200`, wider than the earlier pass) still shows exactly one reference anywhere in the binary, the read inside `0x005bc5d0` itself — the no-direct-writer finding is reconfirmed, not just repeated. No OPEN part remains in this unit.
 
 ### 2.7 `game_peg_unload` (`0x00845650`) — 122 calls / 41 scripts
 
@@ -793,7 +797,10 @@ function silently does nothing.
 that hashes the filename (via `0x00dab330`, with a fixed constant `9000` — ~~read as a resource-type
 tag~~ **[Correction: the bucket count — `0x00dab330`'s second parameter is `bucket_count`, the hash returning `hash % bucket_count` (§5.3; `spec-texture-format.md` §8.2)]**) and looks the hash up in a slot table (`0x006cf2d0`) **[OPEN — desk review 2026-09-30: `0x006cf2d0` and `0x00845080` (below) sit among `.text` functions, so each is probably the routine that operates on a table rather than the table itself (the `WALLS.md` function-as-data pattern; §8.24 places the per-binding request table at `0x02319570`); to be settled against the executable.]** to fetch a loaded-PEG pointer from a fixed
 array (`0x029e1930`). If found, its load-state (via a small state-classifying helper, `0x00dafb60`,
-returning one of 6 possible states from 3 tested flag bits) is checked; only for the two states this
+returning one of 6 possible states from ~~3~~ **[corrected, job `20261001T172007-team-a-buqd`, full
+disassembly: 6]** tested flag bits (a null handle reads state 1; otherwise one bit selects state 5,
+a pair of bits selects between 2 and 4, and the remaining two bits each select one more state, with
+state 1 also reachable as the fallback) is checked; only for the two states this
 classifier maps to a "fully loaded" reading is anything done: a reference-count-aware teardown routine
 (`0x00dafad0` — checks the calling thread, decrements a refcount, and once it reaches zero clears
 flags and releases the underlying GPU/texture resource, gated on its own flag bits) followed by a
@@ -886,28 +893,30 @@ small numeric conversation id, read via `lua_tonumber` and truncated to a single
 **Return:** none (`return 0;`).
 
 **Body:** the byte-sized id, plus a fixed literal mode value `3`, is passed to a helper (`0x006df210`)
-that first attempts to queue an internal UI-command-queue message **[OPEN — desk review 2026-09-30: by analogy with §8.13's host-gated opcode-`0x53` record (§2.9), the opcode-`0x51` path is most likely a network record behind a host gate rather than a UI-queue message, and §27.4 finds by raw disassembly that `0x008788e0` takes a hidden `this`, which conflicts with the direct call with the id described below; to be settled against the executable.]** (opcode `0x51`, matching the same
+~~that first attempts to queue an internal UI-command-queue message **[OPEN — desk review 2026-09-30: by analogy with §8.13's host-gated opcode-`0x53` record (§2.9), the opcode-`0x51` path is most likely a network record behind a host gate rather than a UI-queue message, and §27.4 finds by raw disassembly that `0x008788e0` takes a hidden `this`, which conflicts with the direct call with the id described below; to be settled against the executable.]** (opcode `0x51`, matching the same
 numeric-opcode command-queue mechanism `fade_out`'s bit-`0x2` path uses, §2.9) carrying the id and mode
 byte, gated on the queue currently being in a specific pending-write state and on the mode byte's own
-bit `0x2` being set (which it always is here, being the literal `3`). Independently of whether that
+bit `0x2` being set (which it always is here, being the literal `3`).~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: the desk review's analogy was right, and there is no "pending-write state." `0x006df210` is a near-exact sibling of §8.2's `audio_conversation_end` helper (`0x006df370`, the same mode-`3` shape) and §8.5's `0x006dee40`: it reads the host-check singleton `0x0087ba20`/`0x024d8534` and only opens the record when the singleton is non-null AND its own `+0x5c`/`+0x58` fields are equal — this machine is the host, the same predicate §8.2/§8.27/§8.28 already establish — AND the mode byte's bit `0x2` is set (always true here, the literal `3`). When taken, it opens an opcode-`0x51` record (`0x0086f5f0`) and writes a hard-coded literal subtype-tag byte `3` (not a forwarded copy of the caller's mode-byte value, though the two happen to match numerically for this call site) followed by the id byte (`0x00881040` for each, each itself gated on the record having write space), then commits via `0x0086f1b0`/`0x0086eb20` — the exact same open/write/commit shape, and the same host gate, §8.2 uses for its own subtype tag `4`. CONFIRMED — disassembly.]** Independently of whether that
 queue path was taken, it also looks up whatever conversation object is currently considered "current"
 (`0x006de8a0`); if one exists, marks a byte flag on it and, if a second byte flag on it is already
 set, calls an interrupt/stop pair (`0x0070ba80`/`0x0046a3f0`) — read as stopping/replacing whatever
 conversation is already active before the new one starts. The same mode byte's bit `0x2` additionally
 triggers one more direct call (`0x008788e0`) ~~with the conversation id~~, as an apparent fallback/parallel
-dispatch alongside the command-queue path. **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.4): `0x008788e0` reads its object from ECX from its first use and pops exactly one 4-byte stack argument, so every call to it — including this one, which its reference list places at `0x006df33a` inside the helper `0x006df210` — carries a hidden `this`. Its body: when the object's `+4` record is enabled and the byte argument is not `0x81`, it stores that byte in the record, sends a type-4 message carrying it (`0x008779b0`, then `0x00877860`), and logs "Changed your state to %u." through the no-op stub `0x00754410`; §27.4 passes the state 1 ("done viewing"). CONFIRMED — disassembly for the signature and body. A plain call "with the conversation id" cannot run this body as written; what object is in ECX at `0x006df33a`, and which byte is pushed there, are OPEN until `0x006df210` is dumped.]**
+dispatch alongside the command-queue path. **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.4): `0x008788e0` reads its object from ECX from its first use and pops exactly one 4-byte stack argument, so every call to it — including this one, which its reference list places at `0x006df33a` inside the helper `0x006df210` — carries a hidden `this`. Its body: when the object's `+4` record is enabled and the byte argument is not `0x81`, it stores that byte in the record, sends a type-4 message carrying it (`0x008779b0`, then `0x00877860`), and logs "Changed your state to %u." through the no-op stub `0x00754410`; §27.4 passes the state 1 ("done viewing"). CONFIRMED — disassembly for the signature and body. ~~A plain call "with the conversation id" cannot run this body as written; what object is in ECX at `0x006df33a`, and which byte is pushed there, are OPEN until `0x006df210` is dumped.~~ **[Resolved 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x006df210` is now dumped. Immediately before `CALL 0x008788e0` at `0x006df33a`, ECX is loaded from the global `0x014e9ad0` (a cached pointer written and read by several sibling functions in this same `0x006deXXX`/`0x006dfXXX` conversation cluster; its own object-kind identity was not independently confirmed here) — a slot distinct from the per-kind "current conversation" table `0x006de8a0` consults earlier in this same function for the interrupt/stop pair above. The stack argument pushed is this function's own first argument, i.e. literally the conversation id `audio_conversation_play` was given — so the struck phrase above was right about the argument VALUE; it was only incomplete about the hidden-`this` mechanism, now supplied by `0x014e9ad0`. This call's own gate is independent of the host-gated record above: it fires whenever `0x006de8a0`'s lookup resolves AND mode bit `0x2` is set, with no host check at all. CONFIRMED — disassembly for the call site; OPEN — `0x014e9ad0`'s own object-kind identity.]**]**
 
-**Side effects / subsystem:** queues (and/or directly dispatches, depending on internal queue state) a
+**Side effects / subsystem:** ~~queues (and/or directly dispatches, depending on internal queue state) a
 request to start the given scripted conversation by numeric id, interrupting whatever conversation is
-already active if one is found. Subsystem: UI/HUD command queue plus the dialogue/conversation
+already active if one is found.~~ **[Corrected 2026-10-01, job `20261001T170909-team-a-nbjm`: host-gated, queues an opcode-`0x51` "start conversation" record (subtype tag `3`) carrying the id; independently, if the per-kind "current conversation" lookup (`0x006de8a0`) resolves, marks it and interrupts/stops whatever conversation was already active; independently again, if mode bit `0x2` is set (always true here), dispatches directly to `0x008788e0` with the id against whatever object the global `0x014e9ad0` caches. These three actions have three independent gates (host status; the per-kind lookup resolving; the mode bit), not one shared condition.]** Subsystem: UI/HUD command queue plus the dialogue/conversation
 subsystem already documented from the data-file side in `spec-conversation-format.md`. **[CONFIRMED —
-disassembly for the full argument reading and dual queue/direct dispatch structure; OPEN for the exact
+disassembly for the full argument reading and dual queue/direct dispatch structure; ~~OPEN for the exact
 distinct roles of the command-queue path versus the direct `0x008788e0` fallback call, both of which
-appear to fire under the same condition in this build.]**
+appear to fire under the same condition in this build.~~ **[Resolved 2026-10-01, job `20261001T170909-team-a-nbjm`: the two paths are independently gated, not co-conditional — see above. CONFIRMED — disassembly.]**]**
 
 **Review status (2026-09-30): NEEDS-EXE: opcode-`0x51` path and the `0x008788e0` call shape (§27.4 hidden `this`) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
 
-**Review status (2026-10-01):** `0x008788e0` re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): thiscall with one byte argument at every site, body as annotated above — CONFIRMED. Still NEEDS-EXE: the receiver and argument at `0x006df33a` (inside `0x006df210`) and the opcode-`0x51` path. NOT yet cleared for implementation.
+**Review status (2026-10-01):** `0x008788e0` re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): thiscall with one byte argument at every site, body as annotated above — CONFIRMED. ~~Still NEEDS-EXE: the receiver and argument at `0x006df33a` (inside `0x006df210`) and the opcode-`0x51` path. NOT yet cleared for implementation.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x006df210` dumped directly: the opcode-`0x51` path is host-gated (not a "pending-write state"), CONFIRMED; the receiver at `0x006df33a` is the global `0x014e9ad0` and the argument is the id, CONFIRMED; the two dispatch paths are independently gated. No OPEN part remains in this unit except `0x014e9ad0`'s own object-kind identity.
 
 ### 2.11 Cross-function observations
 
@@ -6240,11 +6249,13 @@ in this front matter instead, a real structural inconsistency against the other 
 
 **Return:** none (`return 0;`).
 
-**Body:** unconditionally calls a zero-argument helper `0x0101b4f0` (not decompiled), then writes the boolean into a single global, `0x014a0f89`. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.21/§27.22): `0x0101b4f0` is a two-instruction `return 1` stub, like every member of the `0x0101b4a0`–`0x0101bac0` range; the call is inert and the only effect is the global write. CONFIRMED — disassembly for the stub. Caveat: the stub's reference list in job `…-jxxz` is complete (16 call sites, below the dump's cap) and contains no site inside `0x00a42c60`, so the helper address cited here could not be cross-checked; OPEN until `0x00a42c60` is dumped. If the entry in fact calls a different helper, that helper's effect is unknown.]**
+**Body:** ~~unconditionally calls a zero-argument helper `0x0101b4f0` (not decompiled), then writes the boolean into a single global, `0x014a0f89`~~ **[Corrected 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00a42c60` itself reads arg 1 as a boolean (the shared `lua_gettop`-then-`lua_toboolean` pair, `0x00dfde50`+`0x00dfe1e0`) and passes it, unconditionally, to a setter wrapper, `0x005ee900(bool)` — not to `0x0101b4f0` directly. `0x005ee900`'s own two-instruction-plus-write body is exactly what this entry previously attributed to `0x00a42c60` itself: it calls the inert stub `0x0101b4f0`, then writes the boolean into the global `0x014a0f89`. The net behaviour is unchanged; only the call depth was wrong. CONFIRMED — disassembly for both `0x00a42c60` and `0x005ee900`.]** **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.21/§27.22): `0x0101b4f0` is a two-instruction `return 1` stub, like every member of the `0x0101b4a0`–`0x0101bac0` range; the call is inert and the only effect is the global write. CONFIRMED — disassembly for the stub. ~~Caveat: the stub's reference list in job `…-jxxz` is complete (16 call sites, below the dump's cap) and contains no site inside `0x00a42c60`, so the helper address cited here could not be cross-checked; OPEN until `0x00a42c60` is dumped. If the entry in fact calls a different helper, that helper's effect is unknown.~~ **[Resolved above, job `20261001T170909-team-a-nbjm`: the direct caller of `0x0101b4f0` in this chain is `0x005ee900`, which is indeed among the stub's 16 listed call sites — it had simply not yet been linked back to `0x00a42c60` until this entry itself was dumped. A fresh xref of `0x0101b4f0` this pass reconfirms the same 16 call sites. CONFIRMED.]**]**
 
-**Side effects/subsystem:** a pure global on/off switch (same simplicity class as `action_nodes_enable`/`set_ped_density`), disabling the "crib" (safehouse customization) UI. **[CONFIRMED — disassembly, full body read; ~~OPEN — `0x0101b4f0`'s own role.~~ `0x0101b4f0` is an inert `return 1` stub (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly); OPEN — the call-site cross-check noted above.]**
+**Side effects/subsystem:** a pure global on/off switch (same simplicity class as `action_nodes_enable`/`set_ped_density`), disabling the "crib" (safehouse customization) UI. **[CONFIRMED — disassembly, full body read; ~~OPEN — `0x0101b4f0`'s own role.~~ `0x0101b4f0` is an inert `return 1` stub (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly); ~~OPEN — the call-site cross-check noted above.~~ CONFIRMED — the call chain is `0x00a42c60` → `0x005ee900` → [`0x0101b4f0` stub + the `0x014a0f89` write] (2026-10-01, job `20261001T170909-team-a-nbjm`).]**
 
-**Review status (2026-10-01):** helper re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): `0x0101b4f0` is a `return 1` stub — CONFIRMED; the entry `0x00a42c60` was not dumped and the stub's reference list does not show a call from it, so NEEDS-EXE for the entry; NOT yet cleared for implementation.
+**Review status (2026-10-01):** helper re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): `0x0101b4f0` is a `return 1` stub — CONFIRMED; ~~the entry `0x00a42c60` was not dumped and the stub's reference list does not show a call from it, so NEEDS-EXE for the entry; NOT yet cleared for implementation.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x00a42c60` dumped directly: it calls `0x005ee900`, not `0x0101b4f0`, as the Body correction above details; `0x005ee900` is the one that calls the stub and writes the global. CONFIRMED. No OPEN part remains in this unit.
 
 ### 13.25 `character_ragdoll_set_last_valid_position` (`0x00a45f50`)
 
@@ -8963,11 +8974,13 @@ Second part of the fresh four-part "ranks 351-450" tranche's own gameplay side (
 
 **Return:** none.
 
-**Body:** unconditionally calls 0x005eae60, which calls an ~~un-decompiled~~ zero-argument helper, 0x0101b570, then clears a global, 0x012ec964, to 0. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: 0x0101b570 is a two-instruction `return 1` stub (one of its listed call sites is inside 0x005eae60); the call is inert, so the only effect is the clear of 0x012ec964. CONFIRMED — disassembly.]**
+**Body:** unconditionally calls 0x005eae60, which calls an ~~un-decompiled~~ zero-argument helper, 0x0101b570, then clears a global, 0x012ec964, to 0. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: 0x0101b570 is a two-instruction `return 1` stub (one of its listed call sites is inside 0x005eae60); the call is inert, so the only effect is the clear of 0x012ec964. CONFIRMED — disassembly.]** **[2026-10-01, job `20261001T170909-team-a-nbjm`: both `0x00a42b30` and `0x005eae60` are now dumped directly and match this description exactly — `0x00a42b30` reads `lua_gettop` (unused) then unconditionally calls `0x005eae60`, whose own body is exactly the stub call plus the clear of `0x012ec964`. CONFIRMED — disassembly for both entries.]**
 
 **Side effects/subsystem:** unconditionally stops/clears the continuous-explosion system's state, regardless of any argument. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly — genuinely zero-argument-sensitive.]** **[Reconciled with §28.16, 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: there is a single global continuous explosion, not one per instance. Its start (0x005eb6c0, §28.16) acts only while the byte 0x012ec964 is 0 and then sets it to 1, so a second start while one runs is ignored; this stop clears the same byte, which re-enables the next start. CONFIRMED — disassembly for the start side as read in §28.16. The stop does not reset the definition row (0x012ec8f0) or the position (0x012ec950); the start overwrites them.]**
 
-**Review status (2026-10-01):** helper and shared state re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): 0x0101b570 is an inert stub; 0x012ec964 is the one global running flag shared with §28.16 — CONFIRMED. The entry 0x00a42b30 and 0x005eae60 were not re-dumped (0x005eae60 is attested only as a caller of the stub); NOT yet cleared for implementation.
+**Review status (2026-10-01):** helper and shared state re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): 0x0101b570 is an inert stub; 0x012ec964 is the one global running flag shared with §28.16 — CONFIRMED. ~~The entry 0x00a42b30 and 0x005eae60 were not re-dumped (0x005eae60 is attested only as a caller of the stub); NOT yet cleared for implementation.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** both `0x00a42b30` and `0x005eae60` dumped directly; body matches exactly as described. CONFIRMED. No OPEN part remains in this unit.
 
 ### 22.25 `check_animation_state` (0x00a433e0)
 
@@ -9160,9 +9173,11 @@ After the tracker-transition step, the new category is stored into 0x01300d90 an
 
 **A minor finding worth citing precisely:** ~~the decompiled pseudocode labels the query call as a thunk sharing the same displayed name as a separate already-catalogued accessor, but the actual instruction at this call site is `CALL 0x0086fde0` — the REAL target address, not the thunk's own displayed entry point at 0x008703c0. (Per this project's own standing caution about not citing a setter/thunk's own address as if it were the real target — the same principle, here applied to a thunk rather than a setter.)~~ **[Corrected 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§27.18/§27.19/§27.26): the direction was backwards. The call operand 0x0086fde0 is a one-instruction jump stub (a single `JMP 0x008703c0`), and 0x008703c0 is the function that runs; the decompiler's thunk label named it correctly. 0x008703c0 fetches the Steam user interface through the import at 0x0101c54c, returns false when it is null, otherwise calls the interface's second virtual method (vtable `+4`, the logged-on query) and returns true only when that reports true. Its siblings 0x0086fdd0 and 0x0086fdf0 are likewise jump stubs (to 0x008703b0 and 0x00db60a0). Cite the jump target, not the stub. CONFIRMED — disassembly.]**
 
-**Body:** trivial passthrough of ~~0x0086fde0()'s~~ the boolean result of 0x008703c0 (reached through the jump stub 0x0086fde0) via `lua_pushboolean`. **[CONFIRMED — disassembly.]** **Side effects/subsystem:** none (pure query) — platform online-service connectivity check~~.~~: on PC, "a Steam user interface exists and reports logged on" (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly for 0x008703c0).
+**Body:** trivial passthrough of ~~0x0086fde0()'s~~ the boolean result of 0x008703c0 (reached through the jump stub 0x0086fde0) via `lua_pushboolean`. **[CONFIRMED — disassembly.]** **Side effects/subsystem:** none (pure query) — platform online-service connectivity check~~.~~: on PC, "a Steam user interface exists and reports logged on" (2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`; CONFIRMED — disassembly for 0x008703c0). **[2026-10-01, job `20261001T170909-team-a-nbjm`: `0x008428e0` dumped directly — body is `lua_gettop` (unused), `CALL 0x0086fde0` (the jump stub to `0x008703c0`), then `lua_pushboolean`/`return 1`. Matches this description exactly. CONFIRMED — disassembly for the entry itself.]**
 
-**Review status (2026-10-01):** callee re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): jump-stub direction corrected; 0x008703c0's body — CONFIRMED. The entry 0x008428e0 was not re-dumped (its call site is not among the 30 references the stub's capped listing shows); NOT yet cleared for implementation.
+**Review status (2026-10-01):** callee re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): jump-stub direction corrected; 0x008703c0's body — CONFIRMED. ~~The entry 0x008428e0 was not re-dumped (its call site is not among the 30 references the stub's capped listing shows); NOT yet cleared for implementation.~~
+
+**Review status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x008428e0` dumped directly; body matches exactly as described. CONFIRMED. No OPEN part remains in this unit.
 
 ### 23.14 `game_interface_effect_end` (0x00841ef0) — same registrar
 
@@ -10235,6 +10250,20 @@ clock stamps. Each frame, in this order:
   queued at 0x012f4a94; per-mode enter/leave/may-leave callbacks in the 9-dword records at
   0x01503bc0; a mode already on the stack is not pushed twice; a pop waits while the top mode's
   may-leave predicate is false). OPEN: which mode is 4 (no dump names the modes).
+
+  **0x00706a40, the per-mode registrar, CONFIRMED — disassembly, full body, job
+  `20261001T172007-team-a-buqd`.** Bounds-checked to `< 0xb` (11 slots, matching the array above), it
+  writes one 9-dword (0x24-byte) record per mode index: the first four qwords copied verbatim from
+  the caller's second argument (the enter/leave/may-leave callbacks the mode-stack line above already
+  names, plus one more field), a dword at `+0x20` also copied from the caller and then overwritten in
+  its low byte by the caller's own third (byte) argument, and a `+0x21` byte forced to 1 ("this slot
+  is registered"). This confirms the record layout already inferred above, but not which of its ten
+  call sites (0x005d3ac0, 0x00707840, 0x00bdc120, 0x007041b0, 0x007a8530, 0x007ad410, 0x007af0f0,
+  0x007b06f0, 0x007e1d10, 0x0088cf70 — one per mode, for up to eleven slots) is mode 4 or mode 5: the
+  job did not include `xref 0x00706a40` or any of these ten callers' own bodies, so the index each one
+  passes is still unread. OPEN (narrowed): which mode is 4, and whether mode 5 — the loading-screen
+  candidate at 0x007a82c0 above — is registered by 0x007a8530 (the one call site in the same small
+  address neighbourhood as 0x007a82c0, HYPOTHESIS, not confirmed).
 - Loading logo: if 0x012e6aac is set and reached and the cutscene state 0x0153b520 is not 10..13:
   reset 0x012e6aac, 0x012e6ab0 := now + 1000 ms, 0x012e6ab4 := now + 6000 ms when 0x0149365c is
   set, 0x012e6ab8 := -1; unless one of the ids 0x35/0x36/0x37 is active in the set at 0x012fced8
@@ -10314,9 +10343,14 @@ from the interpretation of job `20261001T114101-team-a-mnao`; the struck items w
 - ~~`func 0x005d14b0 0x007a82c0 0x005d2400 0x005d1a30 0x0059faf0 0x0059fb20 0x00706be0` (callers
   of the per-frame routine and init; the load-images byte; the auto-save counter; the mode stack).~~
 - ~~Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`.~~
-- `func 0x0059fa10` (the "fade settled" predicate used by the cutscene machine and 0x007a82c0). **[queued in `team-a/ghidra/jobs/nnlt-followup.json`]**
-- `func 0x00706a40`; `xref 0x00706a40` (mode registrations, to name mode 4); `func 0x005d7d10 0x007068d0`.
-  **[`func 0x00706a40` queued in `team-a/ghidra/jobs/nnlt-followup.json`; `xref 0x00706a40` and `func 0x005d7d10 0x007068d0` not yet queued]**
+- ~~`func 0x0059fa10` (the "fade settled" predicate used by the cutscene machine and 0x007a82c0).~~
+  **[run in job `20261001T172007-team-a-buqd`: resolved, see "What completes a fade" above — body is
+  `return (state == 3)`, the same test `sfx_faded_out`/`fade_is_fully_faded_out` already wrap.]**
+- ~~`func 0x00706a40`~~ **[run in job `20261001T172007-team-a-buqd`: full body read, see the mode-gate
+  paragraph above; mode 4/5 still unnamed]**; `xref 0x00706a40` (mode registrations, to name mode 4);
+  `func 0x005d7d10 0x007068d0`.
+  **[`func 0x00706a40` queued and run (`team-a/ghidra/jobs/nnlt-followup.json` → job
+  `20261001T172007-team-a-buqd`); `xref 0x00706a40` and `func 0x005d7d10 0x007068d0` still not yet queued]**
 - Audio-id posts (HYPOTHESIS check): `func 0x0045d990 0x0045ea70`. **[not yet queued]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
@@ -10333,7 +10367,7 @@ HIGH CONFIDENCE — the document-id/handle labels of 0x012e6aa0/0x013effc0, the 
 0x53, the script calling the completion native; HYPOTHESIS — audio-id posts, the auto-save
 counter's meaning; OPEN — mode 4 of the mode stack, the callers of the per-frame routine.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — globals and
 initial values, state encoding, both request helpers, both broadcast helpers, the four UI natives
 including `Screen_fade_transition_complete`, the completion body, the per-frame routine and its two
@@ -10342,7 +10376,20 @@ mode-stack mechanics, the engine-side fade requesters; HIGH CONFIDENCE — the d
 labels of 0x012e6aa0/0x013effc0, the co-op purpose of 0x53, the script calling the completion
 native, 0x0149365c as a shipping-mode byte; HYPOTHESIS — audio-id posts, the auto-save counter's
 meaning, 0x007a82c0 as the loading-screen callback; OPEN — which mode is 4, the body of
-0x0059fa10.**
+0x0059fa10.**~~
+
+**Review status (2026-10-02): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`, `20261001T172007-team-a-buqd`):
+CONFIRMED parts — globals and initial values, state encoding, both request helpers, both broadcast
+helpers, the four UI natives including `Screen_fade_transition_complete`, the completion body, the
+per-frame routine and its two callers, init/shutdown and the init's place in start-up, the fixed
+value of 0x0149365c, the mode-stack mechanics, the engine-side fade requesters, the body of the
+"fade settled" predicate 0x0059fa10 (`state == 3`, the same test `fade_is_fully_faded_out` wraps),
+the full per-mode registration record written by 0x00706a40; HIGH CONFIDENCE — the document-id/handle
+labels of 0x012e6aa0/0x013effc0, the co-op purpose of 0x53, the script calling the completion
+native, 0x0149365c as a shipping-mode byte, 0x007a82c0 as the loading-screen callback; OPEN
+(narrowed) — which mode is 4, and whether mode 5 is 0x007a8530's own registration slot: `xref
+0x00706a40` and its ten callers' own bodies were not part of this job.**
 
 ### 26.25 zscene lifecycle (exe-derived 2026-10-01)
 
@@ -10358,7 +10405,7 @@ Wrapper detail lives in §8.21 and §14.23.
 | 0x0153b294 / 0x0153b29c | ~~scene table base / count; entries 0xf8 bytes~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x007231e0, 0x00723d60, 0x00723e40 |
 | 0x0153b294 / 0x0153b29c / 0x0153b298 | ~~scene table base / count / capacity (≤ 200); entries 0xf8 bytes, parsed from cutscene.xtbl~~ **[superseded, job `20261001T122853-team-a-nnlt`: next row; cutscene.xtbl gives only the names]** | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
 | 0x0153b294 / 0x0153b29c / 0x0153b298 | scene table base / count / capacity; entries 0xf8 bytes; capacity = number of accepted "main" names in cutscene.xtbl + 12, capped at 200 (the spare slots take the per-container patch tables) | 0x00723d60 (allocate), 0x00723e40 (append), 0x007231e0 (destroy) |
-| 0x0153b530 | current scene entry | cleared by 0x00720320 and one path of 0x00721c20; set by 0x00720410 (from the pending slot), 0x00722f10, 0x007231e0, 0x00728440 |
+| 0x0153b530 | current scene entry; a 4-byte entry pointer into the scene table, or null. **Initial value RESOLVED 2026-10-02 (local investigation, `review/exe-notes-2026-10-01/interp_0153b530_initial_value.md`, Team B mission-blocker `mm_p_01`): the field lives in zero-fill `.data` with no static initializer — same mechanism already established for `0x0153b556` below. An exhaustive whole-binary write census (reference-manager and raw byte scan, not just xrefs) finds exactly 6 writes anywhere in the binary, all 6 inside the functions already listed in this row's own "set/cleared by" column — no 7th writer, no module-init site, no by-name/cvar registration. Before any of those 6 functions has ever run, the global is exactly the static image's zero: a null pointer, i.e. "no current scene entry," at game start and at any point before the first prep/promotion/load-complete/teardown call. CONFIRMED.** | cleared by 0x00720320 and one path of 0x00721c20; set by 0x00720410 (from the pending slot), 0x00722f10, 0x007231e0, 0x00728440 |
 | 0x0153b538 | pending (requested) entry | set by prep's gate 0x007232e0; cleared by 0x00720410; 0x00720320 copies the current entry into it |
 | 0x0153b51c | load state: 0 idle, 1 loading, 2 loaded | := 0 by 0x00720320 and 0x00721c20; := 1 by 0x00720410; := 2 by 0x007285c0; also written by 0x00722f10, 0x007231e0 |
 | 0x0153b556 | ~~byte; when set, prep refuses and `zscene_is_loaded` reports true (HYPOTHESIS: a bypass toggle)~~ **[superseded, job `20261001T114101-team-a-mnao`: next row]** | 0x0072df50; its address is handed out by 0x0072d330 |
@@ -10374,7 +10421,7 @@ Wrapper detail lives in §8.21 and §14.23.
 | 0x0153b525 / 0x0153b526 | bytes rewritten every frame by 0x007258a0: "a cutscene is playing" (state 10..13) and "a cutscene is in progress" (state ≥ 2 with a manager); getters 0x00720780 / 0x00720790 **[added, job `20261001T122853-team-a-nnlt`]** | 0x007258a0 |
 | 0x0153b543 | byte: the preload packfiles are mounted (set in cutscene state 4, cleared at 0x10/0x11) **[added, job `20261001T122853-team-a-nnlt`]** | 0x007258a0, 0x0072d660 |
 | 0x0153b52c | the next cutscene to chain into (copied from the manager at state 13; consumed at state 15) **[added, job `20261001T122853-team-a-nnlt`]** | 0x0072d660, 0x00729150 (cleared) |
-| 0x0153ba00 / 0x0153ba01 / 0x0153ba02 | parser option bytes: no female variant (+0x10 := +0xc); female variant only (+0xc := +0x10); treat "Zscene" scenes as story cutscenes (kind 2). All zero; no writer dumped **[added, job `20261001T122853-team-a-nnlt`]** | — |
+| 0x0153ba00 / 0x0153ba01 / 0x0153ba02 | parser option bytes: no female variant (+0x10 := +0xc); female variant only (+0xc := +0x10); treat "Zscene" scenes as story cutscenes (kind 2). All zero; ~~no writer dumped~~ **[confirmed, job `20261001T172007-team-a-buqd`: a wider 200-site xref scan per byte found only 2, 4 and 3 total cross-references respectively (well under the cap, so each list is complete, not truncated), every one a READ inside the parser region (0x0073bfb0/0x0073ada0); no WRITE exists anywhere in the binary for any of the three — CONFIRMED dead/always-zero, not merely "not yet found"]** **[added, job `20261001T122853-team-a-nnlt`]** | — |
 
 ~~State code: 2 = loaded is **CONFIRMED** (the value tested). 1 = loading and 0 = idle are **HIGH
 CONFIDENCE**: they are read from which routines write each value, but the bodies of 0x00720410 and
@@ -10413,15 +10460,28 @@ disassembly.**
   over the load).~~ **[added, job `20261001T114101-team-a-mnao`]** **[Superseded, job `20261001T122853-team-a-nnlt`: next bullet.]**
 - `+0xf0` / `+0xf4`: the two halves of the scene file's `Soundtrack` text, split at the first
   `:` (one character is dropped on each side of the colon, i.e. the form `left : right`), each
-  passed through 0x00462960 (HIGH CONFIDENCE: name → audio id). Both 0 when absent. +0xf4 is the
+  passed through 0x00462960 (~~HIGH CONFIDENCE~~ **[CONFIRMED, re-decompiled directly by job
+  `20261001T172007-team-a-buqd`: the name → the "none"/empty-string guard → `AK::SoundEngine::GetIDFromString`
+  chain, the same one independently documented at §2.2/§2.4/§2.5]**: name → audio id). Both 0 when absent. +0xf4 is the
   stream started at promotion (the soundtrack); +0xf0 is not read by anything dumped.
 - `+0x18` / `+0x1c`: the two per-object parameters copied in at promotion. **[added, job `20261001T114101-team-a-mnao`]**
 - `+0x20` / `+0x24` / `+0x28`: array pointer, capacity and count of the resources of a story
   cutscene's `Characters`/`Character` (its `Mesh` and `Killbane` names, or the three fixed names
   when `IsAngel` is set) and `Vehicles`/`Vehicle` (the `Variant` id); the cutscene loader starts
   all of them (0x00722f10). Empty for a zscene. **[added, job `20261001T122853-team-a-nnlt`]**
-- Fields not listed here are written by the entry constructor 0x007233c0 or at run time
-  (**OPEN**). **[added, job `20261001T122853-team-a-nnlt`]**
+- ~~Fields not listed here are written by the entry constructor 0x007233c0 or at run time
+  (**OPEN**).~~ **[added, job `20261001T122853-team-a-nnlt`; constructor body read, job
+  `20261001T172007-team-a-buqd`:]** The entry constructor 0x007233c0 (passed as a per-slot
+  constructor callback to the table allocator 0x00723d60 — confirmed by its own DATA-only
+  cross-reference there, not a direct call site; **CONFIRMED — disassembly, full body**)
+  default-initializes exactly two things on every raw slot, before any name is known: it points
+  `+0x20`/`+0x24`/`+0x28` (the Characters/Vehicles array above) at an inline, 32-entry buffer
+  immediately following the header (`+0x2c`), with capacity 32 and count 0 — so that array is never
+  heap-allocated — and it writes `+0x4` from a shared global default (0x029c9964, read in roughly 790
+  places across some 248 otherwise-unrelated constructors elsewhere in the binary, so this value is a
+  generic default, not anything cutscene-specific), which the appender 0x00723e40 then overwrites
+  with the real per-name CRC once the name is known. Fields not listed above are therefore still
+  written only at run time (**OPEN**: which routine writes each one).
 
 **Lifecycle** (CONFIRMED — disassembly unless marked):
 1. `zscene_prep(name)` runs the gate 0x007232e0, which returns 0 in three cases: byte 0x0153b556 is
@@ -10454,14 +10514,44 @@ disassembly.**
    cutscene machine's load step; OPEN: its body and callers).~~ **[Superseded, job `20261001T122853-team-a-nnlt`:]**
    Its only caller is **0x007258a0** (**CONFIRMED — disassembly**): the cutscene machine's second
    per-frame step, called from the same two drivers as 0x0072d660 (0x00702a50 … 0x00703121 and
-   0x00bdbc54 … 0x00bdc0ef, HIGH CONFIDENCE once per frame, after 0x0072d660). In cutscene states 0
+   0x00bdbc54 … 0x00bdc0ef, HIGH CONFIDENCE once per frame, after 0x0072d660). **[job
+   `20261001T172007-team-a-buqd`, full bodies of both call sites' own functions:** the first driver's
+   own function (0x00702a50-0x00702f8a; its call to 0x0072d660 sits at 0x00702a7c, near the top) reads,
+   once fully disassembled, as a large, debug-flag-gated (0x00707490) sequence of what looks like
+   one-shot subsystem bring-up/reset calls — audio, FX, UI-panel and HUD resets, two explicit 1-second
+   blocking waits (0x00dad740 with argument `1000000`, called twice) — not a lightweight per-frame
+   body; whether it truly runs every single frame or only at specific transitions depends on its own
+   caller, 0x00703c00 (not part of this job), so "once per frame" above stays HIGH CONFIDENCE for the
+   call chain down to 0x0072d660 but is a fresh HYPOTHESIS, not yet CONFIRMED, that 0x00702a50 itself
+   is better read as a cutscene-start/scene-transition routine than a steady-state tick. The second
+   driver's tail, independently function-boundaried by this job as 0x00bdbf30-0x00bdc118 (containing
+   the cited 0x00bdc0ef call site), turns out to be the per-frame "debug bink" movie load/play state
+   machine over a 4-value state byte at 0x02989874 (0 idle; 1 tears a finished bink down; 2 starts
+   one — through 0x00a73e40's "ingame bink lock"/"ingame bink split lock" pair, falling back to
+   0x00a73eb0's own locking path, then opens the stream via 0x00bdc890/0x00bddbd0; 3 is a teardown
+   re-entry) and, on every call regardless of that state, ends by testing 0x00720640 and — when
+   true — calling 0x007258a0 (confirming the "after 0x0072d660" ordering already stated above), then
+   three more pump calls (0x00bdd520, 0x00861850, 0x00daf9a0 with arguments `1, 0`) not decompiled
+   this pass (the job's own `maxfuncs:10` cap on this target was reached). OPEN: 0x00703c00's own body
+   (does 0x00702a50 really run every frame, or only at cutscene start); the three un-decompiled tail
+   calls in the second driver.]** In cutscene states 0
    and 2 it calls the reset-check 0x00720320 and, when that returns true, promotes. 0x00720320 returns
    true when there is no current entry (it then sets 0x0153b541 := 1), when the current entry's
    selected handle has class 1 (it then resets state := 0, current := 0, re-queues the entry when
    0x0153b542 is set), or when the handle is live and 0x0153b541 is set. So a bare Lua `zscene_prep`
    (cutscene state 0) **is promoted by the engine on the next frame** — CONFIRMED when no scene was
    current before, HIGH CONFIDENCE otherwise (it depends on the released handle classifying as class
-   1; OPEN: 0x00dafad0's effect on the flag word).
+   1; ~~OPEN: 0x00dafad0's effect on the flag word).~~ **[Resolved, job `20261001T172007-team-a-buqd`,
+   full body: 0x00dafad0 only touches the flag word once its own internal refcount (read/written on
+   the handle through 0x00db19d0/0x00db1990) reaches zero: it then clears two bits (one of them the
+   same bit 0x00db1fa0 sets) when the higher of the two was set, unlinks the handle from one tracking
+   list (0x00daf270, only when a third bit was set) and always re-links it onto a second list while
+   setting a fourth bit (0x00daf010) — i.e. it moves the handle from an "active" list to a "pending"
+   list rather than freeing anything itself; the actual deallocation is not in this function. Whenever
+   the refcount was positive before the call (whether or not it reached zero), it also calls
+   0x00daefe0, which looks up a second, linked handle and — when one is present — recursively tears
+   it down through this SAME routine: a cascade release for a paired resource. OPEN (narrower): which
+   list is "pending" and who drains it; the paired-handle relationship 0x00daefe0 follows.]**
    The load completes in 0x007285c0 (**CONFIRMED — disassembly**), called only by the cutscene
    state machine 0x0072d660 (per frame, in two of its state cases): when the state is 1 it
    classifies the current entry's selected handle (0x00dafb60); class 3 (resident) together with a
@@ -10500,7 +10590,15 @@ disassembly.**
    skipped when the shipping-mode byte 0x0149365c is set — always, in the retail executable.
    0x007231e0 is the table's destructor, called from 0x00707170 (not dumped).
 6. **[added, job `20261001T122853-team-a-nnlt`]** The cutscene machine proper. **CONFIRMED — disassembly** for the state table of 0x0072d660
-   (jump table at 0x0072defc, 20 entries; the last four read by elimination, HIGH CONFIDENCE) and
+   (jump table at 0x0072defc, ~~20 entries; the last four read by elimination, HIGH CONFIDENCE~~
+   **[confirmed directly, job `20261001T172007-team-a-buqd`: all 20 raw pointers read with a `ptrs`
+   dump (no decompile needed) — the "last four" targets (for states 0x10-0x13) are 0x0072dbb9,
+   0x0072dc40, 0x0072dd44 and 0x0072de4f, which independently line up with the state-advance writes
+   (to 0x11, 0x12, 0x13 and 0 respectively) the companion 200-site xref of 0x0153b520 finds inside
+   each of those four address ranges — so the states this project previously named "by elimination"
+   are now directly CONFIRMED from the table itself, not inferred. The same dump also shows indices 5
+   and 15 sharing one target, 0x0072def5 — the shared do-nothing tail — consistent with both states
+   being driven only by 0x007258a0, as the narrative below already has it]**) and
    the five cases of 0x007258a0: 0 idle; 1 → 3 ("CS_STATE_FADING_OUT"); 2 waits for the zscene to
    load, then 0x00725df0 continues; 3 → 4 once the player-side checks pass; 4: 0x007258a0 mounts
    `preload_items.vpp` / `preload_effects.vpp` and sets 0x0153b543, then 0x0072d660 → 5; 5:
@@ -10535,13 +10633,14 @@ from the interpretation of job `20261001T114101-team-a-mnao`; the struck items w
 - ~~`xref 0x0153b534 0x0153b541 0x01180120`.~~
 - ~~`func 0x007258a0 0x0073bfb0 0x00707170`; `xref 0x007258a0`; the 20 jump-table dwords at
   0x0072defc (raw data read).~~ **[run in job `20261001T122853-team-a-nnlt` except `func 0x00707170`, restated below; list replaced from that job's interpretation]**
-- `ptrs count:20 0x0072defc`; `func 0x00702a50 0x00bdbf30 0x007233c0 0x00dafad0 0x00dafb60
-  0x00462960 0x007315a0`; `xref 0x0153ba00 0x0153ba01 0x0153ba02`; `xref xrefs:200 0x0153b520`;
-  `func 0x0072c790 0x0072bff0 0x0072c260 0x0072c980 0x0072d030 0x00729150 0x00720040 0x00722e00`;
-  `func 0x00707170`.
-  **[queued in `team-a/ghidra/jobs/nnlt-followup.json`: the `ptrs` read, `func 0x00702a50 0x00bdbf30 0x007233c0 0x00dafad0
-  0x00dafb60 0x00462960`, both `xref` items. Not yet queued: `func 0x007315a0`, the eight cutscene
-  helper bodies, `func 0x00707170`.]**
+- ~~`ptrs count:20 0x0072defc`; `func 0x00702a50 0x00bdbf30 0x007233c0 0x00dafad0 0x00dafb60
+  0x00462960`; `xref 0x0153ba00 0x0153ba01 0x0153ba02`; `xref xrefs:200 0x0153b520`.~~ **[run in job
+  `20261001T172007-team-a-buqd`: all resolved — see the jump-table note in item 6, the entry
+  constructor note above, the 0x00dafad0/0x00dafb60 notes above, the Wwise-resolver upgrade above, and
+  the parser-option-bytes row above.]**
+  `func 0x007315a0`; `func 0x0072c790 0x0072bff0 0x0072c260 0x0072c980 0x0072d030 0x00729150
+  0x00720040 0x00722e00`; `func 0x00707170`.
+  **[still not yet queued: `func 0x007315a0`, the eight cutscene helper bodies, `func 0x00707170`.]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
 CONFIRMED parts — prep gate, stub, teardown, pending slot, entry offsets, `zscene_is_loaded` truth
@@ -10557,7 +10656,7 @@ classes, the cutscene machine as the per-frame driver; HYPOTHESIS — gender var
 guard, the transition stream's nature, 0x0153b534's nature; OPEN — the promoter's caller
 0x007258a0, the xtbl field parse.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — prep gate, stub,
 teardown, pending slot, entry offsets, `zscene_is_loaded` truth table, all three state codes,
 promotion and completion bodies, the promoter 0x007258a0 and its rule, the `skip_all_cutscenes`
@@ -10568,7 +10667,29 @@ classes, the female variant (+0x10, `+0xa41`), +0xf4 as the soundtrack, the requ
 +0xc/+0x10, states 0x10..0x13 by elimination, promotion of a Lua-only prep after a previous scene;
 HYPOTHESIS — cutscene guard, 0x0153b534's nature, the marker routine, the parser option bytes'
 purpose; OPEN — the entry constructor and unlisted fields, the loading/playback helper bodies, the
-released handle's class.**
+released handle's class.**~~
+
+**Review status (2026-10-02): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`, `20261001T172007-team-a-buqd`):
+CONFIRMED parts — prep gate, stub, teardown, pending slot, entry offsets, `zscene_is_loaded` truth
+table, all three state codes, promotion and completion bodies, the promoter 0x007258a0 and its
+rule, the `skip_all_cutscenes` byte, the table's allocation/append/destroy, the two-file parse
+(`cutscene.xtbl` names, `<name>.cte_xtbl` fields), the `CutsceneType` → kind mapping, the cutscene
+state table for all 20 states 0..0x13 (the last four now read directly from the jump table, not by
+elimination), the entry constructor's own two initialisations (+0x4 default, the inline
+Characters/Vehicles buffer), the handle classifier 0x00dafb60's full 6-state test, the teardown
+0x00dafad0's effect on the flag word (clears on refcount-zero, re-links onto a second list, cascades
+into a linked companion handle), the Wwise name-resolver re-confirmed, the parser option bytes
+confirmed permanently zero/dead (wider xref, all reads, no writer); HIGH CONFIDENCE — the labels of
+0x0153b541/0x0153b542, the resident/failed handle classes, the female variant (+0x10, `+0xa41`),
++0xf4 as the soundtrack, the request-group label of +0xc/+0x10, promotion of a Lua-only prep after a
+previous scene, the identity of the cutscene machine's two per-frame drivers (0x00702a50 and the
+"debug bink" state machine tailing at 0x00bdbf30); HYPOTHESIS — cutscene guard, 0x0153b534's nature,
+the marker routine, the parser option bytes' original intended purpose, 0x00702a50 as a
+scene-transition routine rather than a steady-state per-frame tick; OPEN — remaining unlisted entry
+fields, the still-undumped loading/playback helper bodies (0x0072c790/0x0072bff0/0x0072c260/
+0x0072c980/0x0072d030/0x00729150/0x00720040/0x00722e00/0x007315a0/0x00707170), the released handle's
+class, 0x00703c00's own body, the three un-decompiled tail calls inside the bink state machine.**
 
 ### 26.26 UI resolution queries `vint_is_std_res` / `vint_get_safe_frame` (exe-derived 2026-10-01)
 
@@ -10601,8 +10722,16 @@ ignored). Return: 1 boolean. **CONFIRMED — disassembly.**
   dwords, copies of the global **width 0x02a5a180 and height 0x02a5a184** (**CONFIRMED —
   disassembly**). Writers: the UI subsystem init 0x00e23910 (called by 0x008489e0 during front-end
   bring-up; it takes the pair from its second argument and copies it into the calling thread's
-  record with 0x00e237f0) and 0x00e23a20(width, height) (caller 0x005df6e0, not dumped;
-  HYPOTHESIS: the display-mode/resize handler), which does nothing when the pair is unchanged and
+  record with 0x00e237f0) and 0x00e23a20(width, height) (caller 0x005df6e0, ~~not dumped;
+  HYPOTHESIS: the display-mode/resize handler~~ **[CONFIRMED, job `20261001T172007-team-a-buqd`, full
+  body: 0x005df6e0(deviceOrWindow, mode) returns false immediately when `mode == -1`; otherwise it
+  calls a device interface method pair (through the same per-thread device-context pointer as
+  0x00e236f0's record, at `+0xac` then `+0xb8` — a mode-set/reset pair), on success toggles the
+  window's style bits (`GetWindowLongW`/`SetWindowLongW`), repositions it with `AdjustWindowRect`/
+  `SetWindowPos` centred on the primary display (`GetSystemMetrics(SM_CXSCREEN/SM_CYSCREEN)`) or
+  maximized full-screen, shows/hides it (`ShowWindow`), writes the new width/height aspect ratio to a
+  global, and only then calls 0x00e23a20 with the resolved width and height — so it genuinely is the
+  OS-level display-mode/window-resize handler the mode reader depends on]**), which does nothing when the pair is unchanged and
   otherwise stores both globals and the record copy. Both then recompute the mode through
   0x00e23000 and the C-side standard-resolution test 0x00e2ad30 (the same rule as this function:
   width / height < 1.5 or mode 2), whose result becomes the layout index 0x0132c0ac (1 = standard,
@@ -10661,8 +10790,10 @@ job `20261001T122853-team-a-nnlt`; the struck items were run in that job]**
 - ~~`func 0x00e23a20 0x00e23910 0x00e230a0 0x00e23770 0x00e237b0 0x00e237c0 0x00e237f0` (who writes
   the width/height record and sets the mode).~~
 - ~~A raw 8-byte read of 0x0115ba60 and 0x0116dfc0 (the `xref` mode prints only the first dword).~~
-- `func 0x005df6e0` (what triggers 0x00e23a20); `func 0x00e230a0 0x00e2a980` (the mode reader and
-  the layout-count writer). **[`func 0x005df6e0` queued in `team-a/ghidra/jobs/nnlt-followup.json`; `func 0x00e230a0 0x00e2a980`
+- ~~`func 0x005df6e0` (what triggers 0x00e23a20)~~ **[run in job `20261001T172007-team-a-buqd`:
+  resolved — see the writers note above; it is the window resize/display-mode-change handler]**;
+  `func 0x00e230a0 0x00e2a980` (the mode reader and
+  the layout-count writer). **[`func 0x00e230a0 0x00e2a980` still
   not yet queued]**
 
 ~~**Review status (2026-10-01): re-derived from the executable (job `20261001T020200-team-a-nzxf`):
@@ -10677,14 +10808,25 @@ the `vint_get_safe_frame` data path; HIGH CONFIDENCE — width/height reading, o
 four double thresholds; HYPOTHESIS — multi-monitor meaning of the mode, safe-frame edge meaning;
 OPEN — the record's writers, the two scale constants.**~~
 
-**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+~~**Review status (2026-10-01): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
 `20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`): CONFIRMED parts — both
 argument/return shapes, the `vint_is_std_res` decision rule, the mode ladder of 0x00e23000 and its
 two callers, the per-thread record of 0x00e236f0 and its writers, the global width/height, the
 change-time Lua calls, the `vint_get_safe_frame` data path and both constants; HIGH CONFIDENCE —
 width/height reading, output order, the four double thresholds, the safe-frame edge reading, the
 layout index 0x0132c0ac; HYPOTHESIS — multi-monitor meaning of the mode, 0x005df6e0 as the resize
-handler; OPEN — what triggers a resolution change.**
+handler; OPEN — what triggers a resolution change.**~~
+
+**Review status (2026-10-02): re-derived from the executable (jobs `20261001T020200-team-a-nzxf`,
+`20261001T114101-team-a-mnao`, `20261001T122853-team-a-nnlt`, `20261001T172007-team-a-buqd`):
+CONFIRMED parts — both argument/return shapes, the `vint_is_std_res` decision rule, the mode ladder
+of 0x00e23000 and its two callers, the per-thread record of 0x00e236f0 and its writers, the global
+width/height, the change-time Lua calls, the `vint_get_safe_frame` data path and both constants,
+0x005df6e0 as the window resize/display-mode-change handler and what it does before calling
+0x00e23a20 (device mode-set, window style/position, then the width/height push); HIGH CONFIDENCE —
+width/height reading, output order, the four double thresholds, the safe-frame edge reading, the
+layout index 0x0132c0ac; HYPOTHESIS — multi-monitor meaning of the mode; OPEN — what calls
+0x005df6e0 itself, i.e. what ultimately triggers a resolution change (not part of this job).**
 
 ### 26.27 Bare globals registered by 0x00e0f900 (exe-derived 2026-10-01)
 
@@ -10952,8 +11094,59 @@ dumped).
      found by the `+0x08` key with the record, then release.
   7. Release (0x00e0c650, not dumped) receives the address of the record pointer and reports not alive;
      that it nulls the caller's pointer is **HIGH CONFIDENCE**.
-- The runner's other callers are 0x00e0cd00, 0x00e0cf50 and 0x006280d0. Which of them is the per-frame
-  scheduler, and so **how often a yielded thread is resumed, is OPEN** (HYPOTHESIS: once per frame).
+- The runner's other callers are 0x00e0cd00, 0x00e0cf50 and 0x006280d0. ~~Which of them is the per-frame
+  scheduler, and so **how often a yielded thread is resumed, is OPEN** (HYPOTHESIS: once per frame).~~
+  **[RESOLVED 2026-10-02, local investigation (Team B mission-blocker: 39 of 49 real missions never
+  resume their script thread after a bare `thread_yield()` inside a `fade_out_block`/`fade_in_block`
+  poll — full trace in `review/exe-notes-2026-10-01/interp_thread_resume_schedule.md`): `0x00e0cf50`
+  IS the per-frame scheduler, but it does not run on the render-frame cadence this entry's own
+  HYPOTHESIS guessed. Its full body (CONFIRMED — disassembly) walks the live-thread array in index
+  order, re-reading the live count every step (so a mid-walk release, which swap-compacts the freed
+  slot, correctly re-examines the same index rather than skipping the record just moved into it);
+  for every record it visits it unconditionally clears that record's own `+0x18` bit 0 — the runner's
+  own re-entrancy flag, which the runner itself sets on every resume and never clears again, so
+  `0x00e0cf50` is the ONLY code anywhere that makes an already-resumed record resumable a second
+  time — and then, unless the record's `+0x08` owning Lua state is one of up to 4 keys an "I drive my
+  own threads" subsystem has opted out via a small refcounted exempt list (`0x00e0d710`/`0x00e0d6e0`/
+  `0x00e0d5c0`; CONFIRMED empty at start-up, CONFIRMED the only 4 adders are all in the interface/UI
+  module `0x00707xxx`, CONFIRMED nothing ever adds the gameplay state), calls the runner on it.
+  `0x00e0cf50` itself has exactly two callers, exhaustively (raw whole-binary scan, not just
+  cross-references): the steady-state `case 6` of an infinite loop inside `0x00702070` — a dedicated
+  background OS thread, spawned once at start-up from the main loop, whose own loop body is throttled
+  to a *minimum* 30 ms per iteration with no fixed maximum (so roughly, but not exactly, 33 Hz —
+  CONFIRMED the throttle, HIGH CONFIDENCE the exact spawn instruction, which was not individually
+  inspected) — and `0x00e0dfc0`, which is NOT a per-frame driver but an on-demand "flush every
+  script thread before I tear down" utility with exactly 5 callers (cutscene start/stop, the
+  installer, a debug-movie driver, one not investigated). **So: an ordinary mission/gameplay script
+  thread — which is never in the exempt list — is resumed once per iteration of this separate ~33 Hz
+  background pump, NOT once per rendered frame and NOT by any per-subsystem holder call.** This is
+  architecturally distinct from, and runs independently of, the per-rendered-frame `0x005d14b0` path
+  this document's request-11 finding above already covers (confirmed, concretely, for the fade
+  routine `0x0059fe70`, which drives its own held thread directly via two calls to `0x00e0cd00` every
+  rendered frame — a real instance of the parallel mechanism, for UI-exempted threads only). A bare
+  `thread_yield()` inside a non-exempt (i.e. ordinary mission) thread therefore waits for "the next
+  tick of the engine's independent ~33 Hz script-thread pump," which only coincides with a rendered
+  frame by chance of timing, never by design. `thread_new`'s allocator (`0x00e0ca80`→`0x00e0c720`)
+  appends a new record directly into the exact same contiguous, 256-capacity array `0x00e0cf50`
+  walks and bumps the shared live count in the same step — there is no separate pending/promotion
+  list and no delay, so a freshly created thread is visible to the scheduler's very next pass; removal
+  is swap-compaction (`0x00e0c650`: the freed slot is overwritten by the current last live record,
+  the vacated last slot is zeroed, the count decremented), run by the runner itself whenever a resume
+  finishes, errors, or finds the kill bit set, or in bulk (`0x00e0cdb0`) when an entire Lua state is
+  torn down. There is no per-pass resume budget of any kind: every live, non-exempt record is offered
+  a resume on every single call to `0x00e0cf50` — the only real limiter on total resume throughput is
+  the 30 ms-minimum cadence of its own enclosing loop, not a count cap. **Fix for a host: run an
+  independent loop, decoupled from rendering, on a cadence of roughly 30 ms or less (calling it every
+  rendered frame instead is a safe superset and cannot under-resume), that walks every live thread
+  record and resumes each one whose owning state has not separately opted itself out — a host that
+  only ever resumes script threads from inside its per-rendered-frame update reproduces exactly the
+  reported symptom, because no ordinary mission thread is ever exempt, and nothing else ever clears
+  the re-entrancy flag a directly-driven thread also depends on.** CONFIRMED throughout except the
+  single HIGH-CONFIDENCE item noted (the literal spawn instruction for `0x00702070`); a short residual
+  OPEN list (whether `0x00702a50`/`0x00703c00` is itself steady-state — a pre-existing, narrower OPEN
+  item in the cutscene passage above, unaffected by this answer; the exact value the 4 UI callers pass
+  into the exempt list, HIGH CONFIDENCE not literally read) is recorded in the interp note, not
+  repeated here.]**
   **[2026-10-01, local job (Team B request 11, "do mission hooks run inside a script-thread record"):**
   0x00e0cd00 is a thin guard — resume via the runner only if the record pointer is non-null and its
   "do not run" bit is clear — called from dozens of distinct sites across the UI, cutscene and other
@@ -12214,7 +12407,40 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 
 **Review status (2026-10-01):** re-derived from the executable (jobs 20261001T021703-team-a-pwgq / 20261001T021707-team-a-jxxz): CORRECTED as above (items 2, 7, 8, 10, 13; items 1, 3 and 6 confirmed as written) — cleared for implementation.
 
-## Changelog
+## 29. Named-object registration — the write side of the `0x02442750` resolver family (2026-10-02)
+
+The dozen-plus by-name resolvers already catalogued throughout this document (§1.1/§1.12 and the many further sightings tallied at §25.29/§28 — `0x005982e0`, `0x005e4dd0`, `0x005e4e30`, `0x005eab60`, `0x005f4c30`, `0x00734e90`, `0x00739690`, `0x004584e0`, `0x00a3de90`, `0x0071f0d0` and others) are all thin, kind-filtering wrappers over **one shared find routine, `0x004588f0`, on an embedded name-map sub-object at `0x02444db0`** (the singleton `0x02442750` plus `0x2660`) — a case-insensitive, multiply-by-33 bucket hash (`0x00dab330`, the same hash the texture registry uses, `spec-texture-format.md` §8.2) over `_stricmp` chain nodes, each storing the object pointer and the name inline. This section documents the **write side** — how a name gets into that map in the first place — investigated 2026-10-02 against the real executable (local Ghidra project, read-only; full trace in `review/exe-notes-2026-10-01/interp_named_object_resolution.md`, not committed to this spec). **CONFIRMED — disassembly, unless marked otherwise.**
+
+### 29.1 The generic 40-byte record / property-tail construction interface
+
+Every object the registry creates — named or not — is built from one shared in-memory shape: a fixed 40-byte record (`+0x00/+0x04` object handle, `+0x08/+0x0c` owner handle, `+0x10` a 32-bit class-name hash mixed by the engine's integer mixer `0x00dab2b0` into one of 510 buckets and looked up in the registry's own class-name table, `+0x14` a property count, `+0x18` tail length, `+0x1c` a pointer to a variable **property tail**) plus that tail: a sequence of `{u16 kind, u16 size, u32 id}` headers followed by each property's data, grown by `0x00456660` ("add-property") and read back by id/descriptor. The registry's base-vtable slot 11 (`0x00456d80`, or a derived-class override) is the single per-object "initialise from your record" step: if the record names an owner it attaches to it; then, **if the record carries a name and no other live object is already using it, it calls `0x00457650(obj, name)` — the set-object-name method** — before calling the object's own class-specific property reader. `0x00457650` requires the name be 1-32 characters, finds-or-inserts it into the `0x02444db0` map (capped at `0x21` bytes per node), and stores the map node's own copy of the name back into the object's `+0x18` field — which is why no resolver needs a second lookup once an object is found. **This is the only path by which a name reaches the map** (raw call-site census of `0x00457650`/`0x00458850`: no undisassembled caller, no Lua-bound function calls either directly).
+
+### 29.2 Four producers feed the same interface — it is generic, not any one data format's private mechanism
+
+Raw call-site census of the generic create-from-record method, `0x00456e30` (`this` = record; resolves the class, constructs, inserts into the handle table, then calls slot 11 above) finds **173 call sites across roughly 130 functions** — the gameplay, AI/world and vehicle modules, and the Lua binding module. Four distinct producers build 40-byte records and feed them to this one interface:
+
+1. **Zone object placement.** The zone-load module (`0x00863e90`, one step of the ten-step zone-parse chain `0x00865f90` already placed in `spec-zone-data-format.md` §9.5) reads the top-level `{tag, length}` record whose id is the dword at `0x013026d0` — **`0x2234`**, described in the executable's own data section as `"Game objects, as placed in the WE"` — and batch-loads every placed object's 40-byte record from it (`0x00457c60`/`0x00457a50`) through the exact interface above.
+2. **A vehicle definition's embedded "cover nodes" batch** uses the same `FBOW`/version-5 batch layout and the same loader.
+3. **In-memory records built by engine code**, fed to `0x00456e30` directly — the bulk of the 173 call sites, including spawners, path/navpoint builders, and group objects.
+4. **In-memory records built from a serialised stream** by a dedicated deserialiser, `0x00a36a80` — it reads a kind code and a NUL-terminated name taken in place from the stream buffer, then dispatches through a 6-entry jump table to one of five record builders (an "interior" object, a "script mover", and others). This path *replays* a name that already existed on the writing side; it does not originate one. Its property vocabulary (`script_interior_peer`, `script_mover_peer`, …) suggests co-op replication as the transport — **HYPOTHESIS**, the writer side was not traced.
+
+Whether a given producer's record ends up named is simply whether that record carries a `ctg_object_name` property (zone/vehicle stream path) or had the in-memory set-name method called on it (`0x004563f0`, see §29.3) before being handed to `0x00456e30`.
+
+### 29.3 The authored-name property, and the global name map's size
+
+**`ctg_object_name` is the property that carries an object's authored name.** `0x004563f0(record, name)` — the in-memory set-name method — appends a property keyed by the descriptor at `0x01352568` (string `ctg_object_name`), copies the name string into the tail, and stores that data pointer into the record's `+0x1c` field — the exact field slot 11 reads to call `0x00457650`. On the zone/vehicle stream side, the same field is populated from the on-stream record head's `+0x18` "name offset" into the tail, which (HIGH CONFIDENCE, not independently confirmed — no class-specific property reader was dumped this pass) is read as the same `ctg_object_name` property.
+
+**The name map is a single global table, 2,999 slots, enabled once at game start — not per-zone, not per-kind.** The registry's base-vtable slot 2 (`0x00457370`, `init`) is called exactly once, at start-up (`0x008536b0` ← `0x0091f4f0` ← `0x005d25f0`), with a class count of 62 and a **name-map capacity of `0xBB7` = 2999**, which is what fills the map's live count/bucket-count fields and is why every resolver first checks that count before searching. A name registered by any of the four §29.2 producers is therefore resolvable by every per-kind resolver in this document, with no per-producer distinction visible at lookup time.
+
+**For Team B:** the name map itself — the hash, the chain-node layout, the 2,999-slot capacity, the single global instance, and the fact that every resolver in this document is a thin kind-filter over it — is fully specified above and can be implemented directly; nothing about it depends on data this project cannot open.
+
+### 29.4 Where a mission script's fixed name (e.g. `'Killbane'`) actually comes from — and where the trail stops
+
+No Lua-bound function can choose a name for an object it creates: Lua-reachable creation is either unnamed (`spawn_wieldable_prop`, `character_add_prop`, `human_skydive_create_npc_backpack`) or engine-named with a generated, uniquified suffix (`commando_spawn` → `<def-name>_NNN`). Engine code separately registers a handful of literal names (`"homies"`, `"shopkeepers"`, `"-- Cutscene Script Group --"`) and the special-cased `"#PLAYER1#"`/`"#PLAYER2#"` pair — none of which is a mission-specific character name.
+
+**A mission character addressed by a fixed authored name is therefore a placed object whose zone record carries that name as its `ctg_object_name` property (§29.1-§29.3) — i.e. producer (1) of §29.2.** That record lives inside the `.czn_pc` object-placement interior (the `0x2234` top-level record), which **stays PARKED pending the project owner's own direct word** (standing instruction, unrelated to this write-up). **This is where the trail stops: no `.czn_pc` bytes were opened or requested to produce this section** — everything above was established purely from the registry/record code's own call graph and literal data, not from reading any real zone file. A reader that wants to resolve a mission name such as `'Killbane'` would need to parse the `0x2234` record's per-object heads and their `ctg_object_name` property — which requires that parked interior to be opened first.
+
+
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 49 cross-references (e.g. §1.9→§1.7 in the §1 resolver lists, §33→§7.33, §14.3–11.5→§14.3–§14.5, §16.8→§16.11, §8.31/§16.30 in §22.3, placeholder "item N"/"D.N" refs in §11/§20, §23.7→§23.1); marked 47 stale OPEN/"unidentified"/"not traced" items resolved in place with pointers (extractor pair §4.1, `0x006434a0` §9.21/§14.6, `0x00a017c0` §15.10, 0x00e0xxxx family §26.23, `0x00d9e8b0` CRC-32, §2.9/§6.1/§12.20/§15.27/§16.7/§18.9 and others); annotated 127 stale or contradicted statements (spurious "new/first/not previously catalogued" claims for opcodes, bits, resolvers, primitives and hook bases; opcode-list errors such as `door_lock` in `0x43` and `inv_weapon_add_temporary` in `0x46`; commit-sibling inversion in §15.29; `"null"`→empty string at `0x0129a0e3`; `0x00d9e140`/`0x00d9e8b0` role misdescriptions; count slips) using strike-through plus pointer; reworded 13 clean-room problems (one `thunk_` Ghidra label, code-shaped expressions, a decompiler signature with an auto-type, inline raw x86 instructions); added 13 review markers for items needing a binary re-read (rounding semantics of `0x00ea2596` flagged OPEN in §4.1 with 3 pointers, the `0x00a525a0` address conflict at §20.14/§27.2, the `0x00a7a830` bit conflict at §3.7/§20.1/§21.30, setter-address-as-global OPEN notes at §18.2/§18.15), plus an in-spec §5.2 bullet for the §4.7/§4.8 header-address correction and one reworded draft self-correction in §20.29.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).
@@ -12236,3 +12462,8 @@ Otherwise, resolves via 0x00734e90 (§22.4, re-confirmed here as a method on sin
 - 2026-10-01 (local, re-derivation for Team B request 11, "do mission hooks run inside a script-thread record"): the thread-table section — exhaustive check of every writer of the current-thread stack's depth field (`0x02a44d10`) and record array (`0x02a44d14`) finds exactly two: the runner `0x00e0cba0` (push on resume, pop on return) and a one-time module-init function (`0x00e0d0b0`, called once from `0x005d2400`, only zeroes the depth) — so no code anywhere manually constructs a "root" record; every current record got there by being resumed through the runner. Characterized two of the runner's three other callers: `0x00e0cd00` (a thin null/flag guard called from dozens of distinct per-subsystem holder sites, none individually traced) and `0x006280d0` (a 12-way requirement/condition-kind dispatcher, one case of which resumes a script thread — a concrete non-Lua caller going through the same push/pop path). Gives Team B an architectural answer and fix even without naming every individual caller: a script-thread record is current for the full duration of any holder's resume call, and nothing reaches Lua from mission/trigger code except through that path, so a host must route every mission-hook invocation through an equivalent push/resume/pop rather than a bare `lua_call`. Old text struck or annotated in place.
 - 2026-10-01 (local, re-derivation for a new Team B mission blocker, "`0x0153b556`/`skip_all_cutscenes` initial value/writer/condition" on mission mm_p_01): the §26.25 writers table — the byte is zero-fill `.data` with no static initializer and exactly one direct code-writer anywhere (`0x0072df50`'s opcode-0 case, unconditionally clears to 0 once a named-scene argument resolves); the registration call `0x0086d770("skip_all_cutscenes", &0x0153b556, 1, isHost, 0)` does not write a default (its 3rd argument is a byte-count, not a value) and its host-branch copy-in never fires because no second registration of the same name exists. CONFIRMED — disassembly: false at load, stays false through every single-player/mission-script-reachable path; only a by-name console/config/command-line mechanism (not mission/Lua code) can ever set it true.
 - 2026-10-01 (local, folding in bridge job `20261001T165637-team-a-tabs`'s §27/§28 residual-OPEN-item interpretation, 16 questions/42 sub-items across all 55 of the job's dumped addresses): closed §27.11's two Steam-invite query entries (`0x0088e690`/`0x0088dfd0`/`0x0088e040`, friends-list record shape, 15-second throttle table, join-request semantics); closed §28.15/§28.23's six stronghold-unlock helper identities (tutorial arming 7–10, homie-table phone-contact unlock, trigger/door-callback toggling settling §1.1's hidden-argument question as the trigger handle, player `+0x209c` corrected from "garage-vehicle-list pointer" to "current crib," save-row writer, owned-object-notice broadcast) and §28.24/§28.25's `0x0084a910`/`0x0084a940` zone-swap activate/deactivate pair (collateral confirmation for §1.9); closed §28.23's `0x00943a20` combat-ready/weapon-raised predicate and `0x004b1b90`'s animation-controller-state-restart mechanics; closed §28.1/§28.2's `0x00a79470` getter (not a separate "AI record" — plain `vehicle+0x100`, correcting the bit-offset citations elsewhere to vehicle-relative `+0x102`) and the `0x0062a190`/`0x00a280c0`/`0x004dcf00` vehicle-name-resolver chain (cached-id-pair-first, name-fallback-second, case-insensitive). 5 corrections to prior-session claims (Q1.2, Q6, Q3.1, Q3.2's stride, Q9) applied in place. Old text struck or annotated in place.
+- 2026-10-01 (cloud, executable re-derivation from job `20261001T170909-team-a-nbjm`, "residual entries from the §27/§28 knock-on corrections"): dumped the six entries/helpers the pwgq/jxxz knock-on pass (changelog two entries above) could not reach because the entries themselves were still undumped, closing out §1.12, §2.6, §2.10, §13.24, §22.24 and §23.13 (the "and others" in this job's own title resolve to §22.24's `continuous_explosion_stop` and §23.13's `game_is_connected_to_service`, both identified by matching the dumped addresses against this document's own existing text rather than the job's four named sections). §1.12 — `0x00a57720`'s own call site confirms arg 1 = trigger (via `0x005e4e30`, hidden `this` = singleton `0x02442750`) and arg 2 = object/position (via `0x00a455a0`), matching the trigger-receiver/point shape `0x0093bfc0` requires; HIGH CONFIDENCE raised to CONFIRMED. §2.6 — `0x00842270` calls `0x005bc5d0` directly (not an inlined read); a wider xref of `0x0141250d` (cap 200) still shows only the one reference, inside the getter. §2.10 — the helper `0x006df210`: the opcode-`0x51` path is host-gated (singleton `0x0087ba20`/`0x024d8534`, `+0x5c`==`+0x58`), the same shape §8.2/§8.5 already use, not a "queue pending-write state"; its record payload is a hard-coded subtype-tag byte `3` then the id; the direct `0x008788e0` dispatch's hidden `this` is the global `0x014e9ad0` (object-kind identity still OPEN) and its argument is genuinely the conversation id; the two dispatch paths are independently gated, not co-conditional. §13.24 — `0x00a42c60` calls a setter wrapper, `0x005ee900(bool)`, not `0x0101b4f0` directly; `0x005ee900` is the one that calls the inert stub and writes `0x014a0f89` (net behaviour unchanged, call depth corrected); a fresh xref of `0x0101b4f0` reconfirms the same 16 call sites, now linked back to this entry via `0x005ee900`. §22.24 — `0x00a42b30` and `0x005eae60` both dumped directly and match the existing description exactly. §23.13 — `0x008428e0` dumped directly and matches the existing description exactly (jump stub to `0x008703c0`). Nothing in this job's output contradicted the pwgq/jxxz knock-on corrections; it only removed the "entry itself not dumped" caveat each of the six carried. Old text struck or annotated in place.
+- 2026-10-02 (local, new §29, investigation for Team B's "named-object resolution" mission blocker, `'Killbane'` in `dlc1_mm_06` — write-up of the generic, non-parked findings only, from `review/exe-notes-2026-10-01/interp_named_object_resolution.md`): added §29.1-§29.4, documenting the write side of the §1.1/§25.29/§28 by-name resolver family's shared singleton `0x02442750` — the generic 40-byte record/property-tail construction interface and its single per-object naming path (`0x00456d80` slot 11 → `0x00457650` → the `0x02444db0` name map); its four producers (zone object placement's `0x2234` record, a vehicle definition's embedded cover-node batch, 173 in-memory call sites via `0x00456e30`, and a stream deserialiser `0x00a36a80`, HYPOTHESIS co-op replication); the `ctg_object_name` property as the authored-name carrier (`0x004563f0`); and the single global, 2,999-slot name map enabled once at start-up (`0x00457370`, called once from `0x005d2400`'s chain). §29.4 states plainly, per the standing `.czn_pc` boundary, that a mission character's own fixed name (e.g. `'Killbane'`) is that `ctg_object_name` property on its placed-object record inside the parked `.czn_pc` `0x2234` interior — OPEN, pending the project owner's own direct word; no `.czn_pc` bytes were opened or requested for this section.
+- 2026-10-02 (cloud, executable re-derivation from job `20261001T172007-team-a-buqd`, follow-up `team-a/ghidra/jobs/nnlt-followup.json`, "full cutscene state jump table, cutscene load/play helpers, mode 4/5 identity, UI resize caller"): §2.7 — corrected the handle classifier `0x00dafb60`'s own bit count (6 states from 6 tested flag bits, not 3). §26.24 — the mode-gate's registrar `0x00706a40` fully decompiled (one 9-dword record per mode index, bounds `< 0xb`); mode 4/5 identity stays OPEN (`xref 0x00706a40` and its ten callers were not part of this job); the "fade settled" predicate `0x0059fa10` resolved (`state == 3`, the same test `fade_is_fully_faded_out` wraps). §26.25 — the jump table at `0x0072defc` read directly (all 20 raw pointers, a `ptrs` dump), independently confirming the previously-by-elimination states 0x10-0x13 and the shared states-5/15 tail target; the cutscene machine's two per-frame drivers' own bodies read (`0x00702a50`, a large debug-gated one-shot-looking subsystem bring-up that also calls `0x0072d660`, HYPOTHESIS re-reads as a scene-transition routine rather than a steady tick; the tail of the second driver, independently boundaried here as `0x00bdbf30`, is the "debug bink" movie load/play state machine, which ends every call by pumping `0x007258a0`); the entry constructor `0x007233c0` fully read (inline 32-slot Characters/Vehicles buffer, a generic `+0x4` default later overwritten by the real name CRC); the teardown `0x00dafad0`'s effect on the flag word resolved (moves the handle onto a second list on refcount-zero rather than freeing it, and cascades into a linked companion handle via `0x00daefe0`); the parser option bytes `0x0153ba00`/`0x0153ba01`/`0x0153ba02` confirmed permanently dead (wider 200-site xref, all reads, no writer anywhere); the Wwise resolver `0x00462960` re-confirmed. §26.26 — `0x005df6e0` confirmed as the window resize/display-mode-change handler that calls `0x00e23a20` (device mode-set, window style/position, then the width/height push); what calls `0x005df6e0` itself stays OPEN. Review statuses added to §26.24/§26.25/§26.26. Old text struck or annotated in place.
+- 2026-10-02 (local, resolving the thread-table section's long-standing "which caller is the per-frame scheduler" OPEN item, for a new Team B mission blocker — 39 of 49 real missions never resumed their script thread after `thread_yield()` inside a `fade_out_block`/`fade_in_block` poll — full trace in `review/exe-notes-2026-10-01/interp_thread_resume_schedule.md`): identified `0x00e0cf50` as the one steady-state scheduler — it walks the entire live-thread array every call, clears each visited record's own re-entrancy flag (the only code anywhere that does), and resumes every record whose owning Lua state isn't in a small UI-only exempt list; it is driven by a dedicated ~33 Hz (30 ms minimum, no max) background OS thread (`0x00702070`), not the render-frame loop — so an ordinary mission thread's `thread_yield()` resumes on that independent pump, never on a rendered frame. Confirmed `thread_new`/`thread_kill`/removal all operate on that same single array with no separate pending list and no per-pass resume budget. Gives a concrete host fix: run an independent ≤30 ms loop that resumes every non-exempt live thread record. Old text struck in place, nothing deleted.
+- 2026-10-02 (local, resolving mission `mm_p_01`'s `zscene_prep` blocker — `0x0153b530`'s value before any writer has ever run, `review/exe-notes-2026-10-01/interp_0153b530_initial_value.md`): confirmed the global is zero-fill `.data` with no static initializer (same mechanism as `0x0153b556`) and that an exhaustive write census finds no writer beyond the 6 functions this section's own table already names — so it is null ("no current scene") at game start by construction. Added in place to the §26.25 globals table.

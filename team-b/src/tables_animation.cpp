@@ -18,6 +18,27 @@ std::optional<std::string> getText(const Node* node, std::string_view name = {})
     return *t;
 }
 
+// anim_synced.xtbl's Flags/Flag compare (Sec11.2, RE-DERIVED 2026-10-02,
+// CONFIRMED - disassembly) is case-SENSITIVE ("an inlined string compare, no
+// _stricmp") - the one exception in this whole group; sr3xtbl::FlagMask is
+// always case-insensitive (see xtbl.h), so it cannot be reused for this one
+// table. Same semantics as FlagMask otherwise: first match wins, a Flag
+// matching no name or with no text contributes nothing.
+uint32_t caseSensitiveFlagMask(const Node* flagsNode, const std::string_view* names, size_t count) {
+    uint32_t mask = 0;
+    for (const Node* f : sr3xtbl::Children(flagsNode, "Flag")) {
+        const std::string* t = f->text();
+        if (!t) continue;
+        for (size_t i = 0; i < count; ++i) {
+            if (*t == names[i]) {
+                mask |= (1u << i);
+                break;
+            }
+        }
+    }
+    return mask;
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -71,7 +92,10 @@ AnimFile ParseAnimFile(const Node* row) {
     AnimFile f;
     const Node* animation = sr3xtbl::FindChild(row, "Animation");
     f.filename = getText(animation, "Filename");
-    f.preload = sr3xtbl::ReadBoolAlways(animation, "Preload");
+    // Sec3.2, RE-DERIVED 2026-10-01: Preload is read by a different function
+    // (0x008C7F80) than this row's own primary reader, "as a bool defaulting
+    // to false" - sr3xtbl::GetBool (if-present), not ReadBoolAlways.
+    f.preload = sr3xtbl::GetBool(animation, "Preload");
 
     const Node* triggers = sr3xtbl::FindChild(row, "Triggers");
     for (const Node* t : sr3xtbl::Children(triggers, "Trigger")) {
@@ -172,19 +196,44 @@ namespace {
 
 AnimBlendTreeControlPoint parseAnimBlendTreeControlPoint(const Node* row) {
     AnimBlendTreeControlPoint c;
-    c.range = sr3xtbl::GetFloat(row, "Range");
-    c.value = sr3xtbl::GetFloat(row, "Value");
+    // Sec7.2, RE-DERIVED 2026-10-02: "always" reader (was "if present").
+    c.range = sr3xtbl::ReadFloatAlways(row, "Range");
+    c.value = sr3xtbl::ReadFloatAlways(row, "Value");
     return c;
 }
 
 AnimBlendTreeState parseAnimBlendTreeState(const Node* row) {
     AnimBlendTreeState s;
     s.animationFilename = getText(sr3xtbl::FindChild(row, "Animation"), "Filename");
-    s.blendTime = sr3xtbl::GetFloat(row, "Blend_time");
+    // Sec7.2, RE-DERIVED 2026-10-02: "always" reader (was "if present").
+    s.blendTime = sr3xtbl::ReadFloatAlways(row, "Blend_time");
     const Node* controlPoints = sr3xtbl::FindChild(row, "Control_points");
     for (const Node* cp : sr3xtbl::Children(controlPoints, "Control_point"))
         s.controlPoints.push_back(parseAnimBlendTreeControlPoint(cp));
     return s;
+}
+
+// Sec7.2 Action stride (0x44), RE-DERIVED 2026-10-02 - see AnimBlendTreeAction's
+// own comment in tables.h for the full field list and the infinite-loop WARNING.
+AnimBlendTreeAction parseAnimBlendTreeAction(const Node* row) {
+    AnimBlendTreeAction a;
+    a.animationFilename = getText(sr3xtbl::FindChild(row, "Animation"), "Filename");
+    a.controlType = getText(row, "Control_type");
+    a.startRangeMin = sr3xtbl::ReadFloatAlways(row, "Start_range_min");
+    a.startRangeMax = sr3xtbl::ReadFloatAlways(row, "Start_range_max");
+    a.endRangeMin = sr3xtbl::ReadFloatAlways(row, "End_range_min");
+    a.endRangeMax = sr3xtbl::ReadFloatAlways(row, "End_range_max");
+    a.timeVariance = sr3xtbl::ReadFloatAlways(row, "Time_variance");
+    a.capRampMin = sr3xtbl::GetFloat(row, "Cap_ramp_min");
+    a.capRampMax = sr3xtbl::GetFloat(row, "Cap_ramp_max");
+    a.alwaysCap = sr3xtbl::ReadBoolAlways(row, "Always_cap");
+    a.endStatePercent = sr3xtbl::GetFloat(row, "End_state_percent");
+    a.startStatePercentMin = sr3xtbl::GetFloat(row, "Start_state_percent_min");
+    a.startStatePercentMax = sr3xtbl::GetFloat(row, "Start_state_percent_max");
+    a.cancelRangeMin = sr3xtbl::GetFloat(row, "Cancel_range_min");
+    a.cancelRangeMax = sr3xtbl::GetFloat(row, "Cancel_range_max");
+    a.speedThrottling = sr3xtbl::ReadBoolAlways(row, "Speed_throttling");
+    return a;
 }
 
 }  // namespace
@@ -192,11 +241,16 @@ AnimBlendTreeState parseAnimBlendTreeState(const Node* row) {
 AnimBlendTree ParseAnimBlendTree(const Node* row) {
     AnimBlendTree b;
     b.name = getText(row, "Name");
-    b.controlInputLow = sr3xtbl::GetFloat(row, "Control_input_low");
-    b.controlInputHigh = sr3xtbl::GetFloat(row, "Control_input_high");
-    b.rampSpeed = sr3xtbl::GetFloat(row, "Ramp_speed");
+    // Sec7.2, RE-DERIVED 2026-10-02: all three "always" readers (were "if present").
+    b.controlInputLow = sr3xtbl::ReadFloatAlways(row, "Control_input_low");
+    b.controlInputHigh = sr3xtbl::ReadFloatAlways(row, "Control_input_high");
+    b.rampSpeed = sr3xtbl::ReadFloatAlways(row, "Ramp_speed");
     const Node* states = sr3xtbl::FindChild(row, "States");
     for (const Node* s : sr3xtbl::Children(states, "State")) b.states.push_back(parseAnimBlendTreeState(s));
+    // Actions is ROW-level (sibling of States), NOT nested inside State - see
+    // AnimBlendTreeAction's comment in tables.h for the evidence.
+    const Node* actions = sr3xtbl::FindChild(row, "Actions");
+    for (const Node* a : sr3xtbl::Children(actions, "Action")) b.actions.push_back(parseAnimBlendTreeAction(a));
     return b;
 }
 
@@ -271,6 +325,7 @@ std::vector<AnimFlinch> ParseAnimFlinchesTable(const Document& doc) {
 // ===========================================================================
 AnimSyncedMove ParseAnimSyncedMove(const Node* row) {
     AnimSyncedMove m;
+    m.name = getText(row, "Name");
     m.attackerAnim = getText(sr3xtbl::FindChild(row, "AttackerAnim"), "Filename");
     m.victimAnim = getText(sr3xtbl::FindChild(row, "VictimAnim"), "Filename");
     const Node* victimOffsets = sr3xtbl::FindChild(row, "VictimOffsets");
@@ -279,7 +334,9 @@ AnimSyncedMove ParseAnimSyncedMove(const Node* row) {
     m.zOffset = sr3xtbl::ReadFloatAlways(victimOffsets, "ZOffset");
     m.heading = sr3xtbl::ReadFloatAlways(victimOffsets, "heading");
     const Node* flags = sr3xtbl::FindChild(row, "Flags");
-    m.flags = sr3xtbl::FlagMask(flags, kAnimSyncedFlagNames.data(), kAnimSyncedFlagNames.size());
+    // Sec11.2, RE-DERIVED 2026-10-02: case-SENSITIVE compare (CORRECTED from
+    // this file's former case-insensitive sr3xtbl::FlagMask usage).
+    m.flags = caseSensitiveFlagMask(flags, kAnimSyncedFlagNames.data(), kAnimSyncedFlagNames.size());
     return m;
 }
 

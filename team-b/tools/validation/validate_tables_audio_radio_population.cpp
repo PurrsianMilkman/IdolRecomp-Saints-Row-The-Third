@@ -322,7 +322,8 @@ int main(int argc, char** argv) {
                     any = true;
                     // spec-tables-audio-radio.md §3: PlayTimers has 12 values (count corrected from 11 by desk review
                     // 2026-09-30); real-data leaf presence was counted only for these two (spec §3 validation note).
-                    std::printf("  PlayTimers.BrassCollision=%g VehicleImpactDistance=%g LargeDeformation=%g (spec 3: 200 / 12 / 1000)\n",
+                    // spec 3, CORRECTED 2026-10-01: PlayTimers are u32, not f32 - %u, not %g.
+                    std::printf("  PlayTimers.BrassCollision=%u VehicleImpactDistance=%u LargeDeformation=%u (spec 3: 200 / 12 / 1000)\n",
                                 ac->playTimerBrassCollision.value, ac->playTimerVehicleImpactDistance.value, ac->playTimerLargeDeformation.value);
                     GATE(ac->playTimerBrassCollision.present && ac->playTimerLargeDeformation.present,
                          "AudioConstants sub-blocks present and readable");
@@ -404,8 +405,8 @@ int main(int argc, char** argv) {
                 ++ageMatch;
                 ++ageCounts[std::string(tar::kAudioPersonaAgeTokens[static_cast<size_t>(age - 1)])];
             }
-            if (p.wwiseId) {
-                if (!seenWwiseIds.insert(*p.wwiseId).second) ++duplicateWwiseIds;
+            if (p.wwiseId.present) {
+                if (!seenWwiseIds.insert(p.wwiseId.value).second) ++duplicateWwiseIds;
             }
         }
         // LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: case sensitivity of the
@@ -436,7 +437,7 @@ int main(int argc, char** argv) {
     if (!foleyCollisions.empty()) {
         long long full = 0;
         for (const tar::FoleyCollision& f : foleyCollisions)
-            if (f.name && f.frequency && f.wwiseSwitch && f.minimumSpeedRaw.present && f.maximumSpeedRaw.present) ++full;
+            if (f.name && f.frequency.present && f.wwiseSwitch && f.minimumSpeedRaw.present && f.maximumSpeedRaw.present) ++full;
         std::printf("  %zu rows, all-fields-present: %lld (spec 8: 55/55)\n", foleyCollisions.size(), full);
         GATE(full == static_cast<long long>(foleyCollisions.size()), "every row has every field present (spec 8: 55/55 100%% coverage)");
     }
@@ -446,7 +447,7 @@ int main(int argc, char** argv) {
     if (!foleyTouches.empty()) {
         long long full = 0;
         for (const tar::FoleyTouch& f : foleyTouches)
-            if (f.name && f.frequency && f.wwiseSwitch) ++full;
+            if (f.name && f.frequency.present && f.wwiseSwitch) ++full;
         std::printf("  %zu rows, all-fields-present: %lld (spec 9: 8/8)\n", foleyTouches.size(), full);
         GATE(full == static_cast<long long>(foleyTouches.size()), "every row has every field present (spec 9: 8/8)");
     }
@@ -511,9 +512,9 @@ int main(int argc, char** argv) {
         std::set<uint32_t> seen;
         long long duplicates = 0, haveId = 0;
         for (const tar::PlaylistTrack& t : tracks) {
-            if (t.wwiseId) {
+            if (t.wwiseId.present) {
                 ++haveId;
-                if (!seen.insert(*t.wwiseId).second) ++duplicates;
+                if (!seen.insert(t.wwiseId.value).second) ++duplicates;
             }
         }
         std::printf("  %zu rows, WWise_ID present: %lld, duplicate WWise_ID values: %lld (spec 12.3: 138 rows, 0 duplicates)\n",
@@ -527,12 +528,42 @@ int main(int argc, char** argv) {
     if (!activities.empty()) {
         std::vector<uint32_t> levels;
         for (const tar::RadioActivity& a : activities)
-            if (a.level) levels.push_back(*a.level);
+            if (a.level.present) levels.push_back(a.level.value);
         std::sort(levels.begin(), levels.end());
         std::string levelsStr;
         for (uint32_t lv : levels) levelsStr += std::to_string(lv) + " ";
         std::printf("  %zu rows; Level values: %s(spec 13.1: exactly 8 rows, Levels 1..8)\n", activities.size(), levelsStr.c_str());
         GATE(activities.size() == 8, "REPRODUCES spec 13.1: exactly 8 rows against the loader's unchecked 8-slot bound: %zu", activities.size());
+
+        // spec 13, CORRECTED 2026-10-01: the denominator global DAT_012A2DD8 is now CONFIRMED as the constant
+        // 100.0 (was OPEN) - a reimplementation must store Percentage/100 (a fraction), placed by ROW ORDER, not
+        // by Level. Reproduce spec 13.1's own raw values (1,2,3,5,10,15,20,25) -> fractions (0.01..0.25, sum
+        // 0.81) against the REAL shipped row order.
+        std::string rawStr, fracStr;
+        double fracSum = 0.0;
+        for (const tar::RadioActivity& a : activities) {
+            rawStr += std::to_string(a.percentageRaw.value) + " ";
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.4f ", static_cast<double>(a.PercentageFraction()));
+            fracStr += buf;
+            fracSum += static_cast<double>(a.PercentageFraction());
+        }
+        std::printf("  Percentage raw (row order): %s(spec 13.1: 1 2 3 5 10 15 20 25)\n", rawStr.c_str());
+        std::printf("  Percentage fraction (row order, via PercentageFraction()): %s(spec 13's own note: sums to 0.81)\n", fracStr.c_str());
+        std::printf("  Percentage fraction sum: %.6f (spec 13's own note: 0.81)\n", fracSum);
+        if (activities.size() == 8) {
+            static const uint32_t kExpectedRaw[8] = {1, 2, 3, 5, 10, 15, 20, 25};
+            static const double kExpectedFraction[8] = {0.01, 0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25};
+            bool rawMatches = true, fractionMatches = true;
+            for (int i = 0; i < 8; ++i) {
+                if (activities[static_cast<size_t>(i)].percentageRaw.value != kExpectedRaw[i]) rawMatches = false;
+                const double diff = static_cast<double>(activities[static_cast<size_t>(i)].PercentageFraction()) - kExpectedFraction[i];
+                if (diff > 1e-4 || diff < -1e-4) fractionMatches = false;
+            }
+            GATE(rawMatches, "REPRODUCES spec 13.1's own raw values 1,2,3,5,10,15,20,25 in row order exactly");
+            GATE(fractionMatches, "PercentageFraction() turns spec 13.1's raw values into 0.01..0.25 exactly (percent -> fraction, denominator 100.0)");
+        }
+        GATE(fracSum > 0.80999 && fracSum < 0.81001, "REPRODUCES spec 13's own note: the 8 real fractions sum to 0.81");
     }
 
     // ===== 14. radio_events.xtbl =====
@@ -602,7 +633,7 @@ int main(int argc, char** argv) {
         long long full = 0, distinctSoundbanks = 0, matches = 0;
         std::set<std::string> seenSoundbanks;
         for (const tar::VocSbLineSit& e : vocEntries) {
-            if (e.personaId && e.soundbank && e.numLineSituations) ++full;
+            if (e.personaId.present && e.soundbank && e.numLineSituations.present) ++full;
             if (e.soundbank) {
                 if (seenSoundbanks.insert(*e.soundbank).second) {
                     ++distinctSoundbanks;

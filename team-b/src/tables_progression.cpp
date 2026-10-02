@@ -38,11 +38,23 @@ std::optional<std::string> OptText(const Node* n, std::string_view name) {
     return *t;
 }
 
-// spec 6.1: Check_Detection's ONLY accepted spelling is the literal "true"
-// (unlike sr3xtbl::ParseBool, "yes" does NOT count here).
+// spec 6.1 (notoriety.xtbl Check_Detection) and spec 2.2/1.3 (stats.xtbl Allow_Update_By_Server,
+// CORRECTED 2026-10-01): both fields' ONLY accepted spelling is the literal "true" (case-insensitive) -
+// unlike sr3xtbl::ParseBool, "yes" does NOT count for either. Neither uses the generic four-literal
+// ("true"/"yes"/"false"/"no") bool reader the rest of this table group's bool fields use.
 bool TextEqualsTrue(const Node* n, std::string_view name) {
     const std::string* t = ChildText(n, name);
     return t != nullptr && NameEquals(*t, "true");
+}
+
+// spec-tables-environment.md S15.5 (default_global.xtbl, 0x00BB6400's bool reader 0x00DC51B0):
+// "yes"/"true"/"1", case-insensitive; returns nullopt (caller applies ITS OWN default) only when
+// the node/text is absent - a third bool-literal set in this table group, distinct from both
+// sr3xtbl::ParseBool ("true"/"yes") and TextEqualsTrue ("true" only) above.
+std::optional<bool> OptYesTrueOneBool(const Node* n, std::string_view name) {
+    const std::string* t = ChildText(n, name);
+    if (!t) return std::nullopt;
+    return NameEquals(*t, "true") || NameEquals(*t, "yes") || NameEquals(*t, "1");
 }
 
 // spec 4.4: the 61 <Type> child names, in the tested order (position ==
@@ -95,7 +107,9 @@ Stat ParseStat(const Node* row) {
             s.valueKind = StatValueKind::None;
         }
     }
-    s.allowUpdateByServer = ReadBoolAlways(row, "Allow_Update_By_Server");
+    // spec 2.2/1.3, CORRECTED 2026-10-01: compared to the single literal "true" (case-insensitive),
+    // NOT the generic four-literal bool reader - "yes" does not count (same mechanism as Check_Detection).
+    s.allowUpdateByServer = TextEqualsTrue(row, "Allow_Update_By_Server");
     s.livePropertyId = GetInt32(row, "LivePropertyID");
     s.liveLeaderboardId = GetInt32(row, "LiveLeaderboardID");
     return s;
@@ -940,24 +954,25 @@ std::optional<GameplayConstants> ParseGameplayConstants(const Document& doc) {
         }
     }
     if (const Node* n = FindChild(gc, "Combat_AI")) {
+        // spec-tables-progression.md 10.2, CORRECTED 2026-10-01 (disassembly of 0x005F5390, job
+        // 20261001T123123-team-a-ytgi): `Pepperspray`, `PepperSprayMinUsageDelay`, `StunGunMinUsageDelay`
+        // and the three `Back_Away_*` leaves are all children of `Gun`, not siblings of it under
+        // `Combat_AI` - "FOR TEAM B: ... are read from the Gun element; Gunfire_Evade and Bust from
+        // Combat_AI". Previously coded (wrongly) as direct children of Combat_AI; fixed in place.
         if (const Node* g = FindChild(n, "Gun")) {
             c.combatAi.gun.repositionMin = ReadUInt32Always(g, "Reposition_Min");
             c.combatAi.gun.repositionMax = ReadUInt32Always(g, "Reposition_Max");
             c.combatAi.gun.cantFireRepositionMin = ReadUInt32Always(g, "Cant_Fire_Reposition_Min");
             c.combatAi.gun.cantFireRepositionMax = ReadUInt32Always(g, "Cant_Fire_Reposition_Max");
+            if (const Node* p = FindChild(g, "Pepperspray")) {
+                c.combatAi.pepperspray.sprayMin = ReadUInt32Always(p, "Spray_Min");
+            }
+            c.combatAi.pepperSprayMinUsageDelay = ReadUInt32Always(g, "PepperSprayMinUsageDelay");
+            c.combatAi.stunGunMinUsageDelay = ReadUInt32Always(g, "StunGunMinUsageDelay");
+            c.combatAi.backAwayMinDist = ReadFloatAlways(g, "Back_Away_Min_Dist");
+            c.combatAi.backAwayMaxDist = ReadFloatAlways(g, "Back_Away_Max_Dist");
+            c.combatAi.backAwayAbsMinDist = ReadFloatAlways(g, "Back_Away_Abs_Min_Dist");
         }
-        // [OPEN - spec-tables-progression.md 10.2 (`Combat_AI` row): "parent of `Pepperspray` - this row
-        // lists it beside `Gun` (a child of `Combat_AI`), 14.9 writes `Combat_AI` -> `Gun` ->
-        // `Pepperspray` (a child of `Gun`); ... to be settled against the executable"; Review
-        // status 10.2: NEEDS-EXE. Coded as a sibling of Gun (the 10.2 table reading); not CONFIRMED.]
-        if (const Node* p = FindChild(n, "Pepperspray")) {
-            c.combatAi.pepperspray.sprayMin = ReadUInt32Always(p, "Spray_Min");
-        }
-        c.combatAi.pepperSprayMinUsageDelay = ReadUInt32Always(n, "PepperSprayMinUsageDelay");
-        c.combatAi.stunGunMinUsageDelay = ReadUInt32Always(n, "StunGunMinUsageDelay");
-        c.combatAi.backAwayMinDist = ReadFloatAlways(n, "Back_Away_Min_Dist");
-        c.combatAi.backAwayMaxDist = ReadFloatAlways(n, "Back_Away_Max_Dist");
-        c.combatAi.backAwayAbsMinDist = ReadFloatAlways(n, "Back_Away_Abs_Min_Dist");
         if (const Node* ge = FindChild(n, "Gunfire_Evade")) {
             c.combatAi.gunfireEvade.cowerFleeChance = ReadFloatAlways(ge, "Cower_Flee_Chance");
             c.combatAi.gunfireEvade.cowerFleeMaxRank = ReadInt32Always(ge, "Cower_Flee_Max_Rank");
@@ -1212,8 +1227,9 @@ SpawnGroup ParseSpawnGroup(const Node* row) {
         g.hasDesignatedDriver = HasFlag(gf, "has_designated_driver");
     }
     g.team = OptText(row, "Team");
-    // [OPEN - spec-tables-progression.md 10.6: Spline_Type name list incomplete (58/61 real rows use
-    // "All Roads"/"Surface Roads"); raw text kept, no enum resolution.]
+    // spec-tables-progression.md 10.6, RESOLVED 2026-10-01: the six-name Spline_Type list is CONFIRMED
+    // complete; "All Roads"/"Surface Roads" (58/61 real rows) match none of the six and resolve to -1 at
+    // the real loader. Kept here as raw text; no enum resolution applied (see header comment).
     g.splineType = OptText(row, "Spline_Type");
     if (const Node* chars = FindChild(row, "Characters")) {
         for (const Node* ch = FindChild(chars, "Character"); ch; ch = NextSibling(chars, ch, "Character"))
@@ -1360,12 +1376,14 @@ std::vector<NpcGroup> ParseRankReactionsTable(const Document& doc) {
 }
 
 // ===========================================================================
-// default_global.xtbl - spec-tables-progression.md S10.9
+// default_global.xtbl - spec-tables-progression.md S10.9 + spec-tables-environment.md S15.5
+// (see the header's banner comment for the two-loader-functions, HIGH-CONFIDENCE-same-file nuance)
 // ===========================================================================
 
 DefaultGlobal ParseDefaultGlobal(const Document& doc) {
     DefaultGlobal g;
     const Node* root = doc.root();
+    // --- S10.9 (FUN_00BB70B0) ---
     if (const std::string* t = ChildText(root, "skybox_mesh_filename")) g.skyboxMeshFilename = *t;
     if (const std::string* t = ChildText(root, "cloud_mesh_filename")) g.cloudMeshFilename = *t;
     if (const Node* orbitals = FindChild(root, "orbitals")) {
@@ -1377,6 +1395,27 @@ DefaultGlobal ParseDefaultGlobal(const Document& doc) {
                     ++kept;
                 }
             }
+        }
+    }
+
+    // --- spec-tables-environment.md S15.5 (0x00BB6400) ---
+    if (auto v = OptYesTrueOneBool(root, "horizon_mountain_enabled")) g.horizonMountainEnabled = *v;
+    if (auto v = OptYesTrueOneBool(root, "fog_camera_follow")) g.fogCameraFollow = *v;
+    if (auto v = GetInt32(root, "day_begin")) g.dayBegin = *v;
+    if (auto v = GetInt32(root, "day_end")) g.dayEnd = *v;
+    // cloud_mesh_horizon_mat/overhead_mat/skyline_mat are children of the SAME cloud_mesh_filename
+    // node resolved above for cloudMeshFilename (S15.5), not independent top-level elements.
+    if (const Node* cmf = FindChild(root, "cloud_mesh_filename")) {
+        if (const std::string* t = ChildText(cmf, "cloud_mesh_horizon_mat")) g.cloudMeshHorizonMat = *t;
+        if (const std::string* t = ChildText(cmf, "cloud_mesh_overhead_mat")) g.cloudMeshOverheadMat = *t;
+        if (const std::string* t = ChildText(cmf, "cloud_mesh_skyline_mat")) g.cloudMeshSkylineMat = *t;
+    }
+    // tod_segments/segment: no real numeric capacity is stated anywhere in either spec (S15.5 gives
+    // only the capacity's memory address, 0x02915300) - see the header comment - so every <segment>
+    // child present is kept, uncapped.
+    if (const Node* segs = FindChild(root, "tod_segments")) {
+        for (const Node* s = FindChild(segs, "segment"); s; s = NextSibling(segs, s, "segment")) {
+            if (auto v = GetInt32(s)) g.todSegments.push_back(*v);
         }
     }
     return g;

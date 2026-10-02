@@ -225,6 +225,11 @@ void testControlScheme() {
         "<Axis>RIGHT_STICK_AXIS_X</Axis>"
         "<Inverted>True</Inverted>"
         "<Alternate_Axis>LEFT_STICK_AXIS_Y</Alternate_Axis>"
+        // Alternate_Inverted is real authored data but CORRECTED 2026-10-01
+        // (3.2) to be dead - the loader never looks it up. Deliberately set
+        // to the OPPOSITE of <Inverted> here so the test would fail loudly
+        // if this reader ever started reading it instead of re-reading
+        // <Inverted>.
         "<Alternate_Inverted>False</Alternate_Inverted>"
         "</Axis>"
         "</Axes>"
@@ -255,7 +260,11 @@ void testControlScheme() {
     CHECK(a.axis == 0);            // RIGHT_STICK_AXIS_X (the row's OWN <Axis> child, same name as the row itself)
     CHECK(a.inverted.present && a.inverted.value == true);
     CHECK(a.alternateAxis == 3);   // LEFT_STICK_AXIS_Y
-    CHECK(a.alternateInverted.present && a.alternateInverted.value == false);
+    // CORRECTED 2026-10-01 (3.2): the loader re-reads <Inverted>, not
+    // <Alternate_Inverted> - so this equals a.inverted (true), NOT the
+    // <Alternate_Inverted>False</Alternate_Inverted> text actually authored
+    // above, proving that element is genuinely dead data for this reader too.
+    CHECK(a.alternateInverted.present && a.alternateInverted.value == true);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +305,10 @@ void testQteSequenceAndNode() {
         "<Disable_Player>True</Disable_Player>"
         "<View_Remotely>False</View_Remotely>"
         "<Player_Weapon>rifle_std</Player_Weapon>"
-        "<Succes_State><Synced_Animation>7</Synced_Animation><Player_Is_Attacker>True</Player_Is_Attacker></Succes_State>"
+        // CORRECTED 2026-10-01 (7.1/7.2): Synced_Animation here is a NAME
+        // resolved via a hash-indexed table (0x0095DA50), not a literal
+        // number like the old test data implied - use a real-shaped name.
+        "<Succes_State><Synced_Animation>anim_sync_success</Synced_Animation><Player_Is_Attacker>True</Player_Is_Attacker></Succes_State>"
         "<Animated_NPCs>"
         "<Animated_NPC><NPC_Name>Bodyguard1</NPC_Name></Animated_NPC>"
         "<Animated_NPC><NPC_Name>Bodyguard2</NPC_Name></Animated_NPC>"
@@ -350,7 +362,7 @@ void testQteSequenceAndNode() {
     CHECK(s.disablePlayer.present && s.disablePlayer.value == true);
     CHECK(s.viewRemotely.present && s.viewRemotely.value == false);
     CHECK(s.playerWeapon.has_value() && *s.playerWeapon == "rifle_std");
-    CHECK(s.successAnimation.has_value() && *s.successAnimation == 7);
+    CHECK(s.successAnimation.has_value() && *s.successAnimation == "anim_sync_success");
     CHECK(s.successPlayerIsAttacker.present && s.successPlayerIsAttacker.value == true);
     CHECK(s.animatedNpcNames.size() == 2);
     CHECK(s.animatedNpcNames[0] == "Bodyguard1" && s.animatedNpcNames[1] == "Bodyguard2");
@@ -470,10 +482,13 @@ void testVehicleCameraFields() {
     // Defaults applied when absent (spec-stated concrete defaults, 8.1).
     CHECK(near(f1.PositionHeadingRetentionNormalOrDefault(), 0.9f, 1e-3f));
 
-    // Sphere_Based variant + Camera_Roll + row ATTRIBUTES.
+    // Sphere_Based variant + Camera_Roll + CHILD ELEMENTS (CORRECTED
+    // 2026-10-01, 8.1 - were previously modelled, and tested here, as row
+    // attributes; see tables.h's VehicleCameraFields banner).
     const char* xml2 =
-        "<root><Table><Vehicle_Group skip_camera_transition=\"yes\" use_alt_freckle_cam=\"yes\">"
+        "<root><Table><Vehicle_Group>"
         "<Name>Compacts</Name>"
+        "<skip_camera_transition>yes</skip_camera_transition><use_alt_freckle_cam>yes</use_alt_freckle_cam>"
         "<Sphere_Based><Slerp_Value>0.6</Slerp_Value><From_Sticky_Slerp_Value>0.5</From_Sticky_Slerp_Value><Min_Angle>15</Min_Angle></Sphere_Based>"
         "<Camera_Roll><Roll_Type>custom_roll</Roll_Type><Intensity_Multiplier>2.0</Intensity_Multiplier></Camera_Roll>"
         "</Vehicle_Group></Table></root>";
@@ -501,7 +516,7 @@ void testVehicleCameraFields() {
     CHECK(rows3.size() == 1);
     CHECK(rows3[0].camera.cameraRollTypeText.has_value() && *rows3[0].camera.cameraRollTypeText == "none");
     CHECK(rows3[0].camera.CameraRollTypeIsCustom() == false);
-    CHECK(rows3[0].camera.skipCameraTransition == false);  // attribute absent entirely
+    CHECK(rows3[0].camera.skipCameraTransition == false);  // element absent entirely
 }
 
 // ---------------------------------------------------------------------------
@@ -571,7 +586,9 @@ void testHudQte() {
     const HudQteInterface& h = ifaces[0];
     CHECK(h.name.has_value() && *h.name == "Rapid X");
     CHECK(h.buttonType == 1);              // X, index 1 in kQteButtonTypeNames
-    CHECK(h.buttonAnimationType == 1);     // Mash Fast, index 1
+    // CORRECTED 2026-10-01 (9.2): raw text, not an EnumIndex - the real
+    // table has 9 slots, only 3 names known (see tables.h's comment).
+    CHECK(h.buttonAnimationType.has_value() && *h.buttonAnimationType == "Mash Fast");
     CHECK(h.buttonAction.has_value() && *h.buttonAction == "CBA_OFC_ATTACK_PRIMARY");
     CHECK(h.axisAction.has_value() && *h.axisAction == "CAA_AXIS_UNBOUND");  // kept raw, unresolved
     CHECK(h.axisDirPos.present && h.axisDirPos.value == true);
@@ -621,13 +638,16 @@ void testUserInterface() {
     CHECK(near(cl.yPosition.value, 20.0f, 1e-6f));
     CHECK(cl.offsets.size() == 1);
     CHECK(cl.offsets[0].resolutionRatio.has_value() && *cl.offsets[0].resolutionRatio == "16:9");
-    CHECK(near(cl.offsets[0].xOffset.value, 1.0f, 1e-6f));
-    CHECK(near(cl.offsets[0].yOffset.value, 2.0f, 1e-6f));
+    // CORRECTED 2026-10-01 (10): ClusterOffset/Part XOffset/YOffset are i32,
+    // if-present (were previously modelled as float/always, before Open
+    // Item 6 was closed).
+    CHECK(cl.offsets[0].xOffset.has_value() && *cl.offsets[0].xOffset == 1);
+    CHECK(cl.offsets[0].yOffset.has_value() && *cl.offsets[0].yOffset == 2);
     CHECK(cl.bitmapParts.size() == 1);
     const UiPart& part = cl.bitmapParts[0];
     CHECK(part.name.has_value() && *part.name == "Health_Bar");
-    CHECK(near(part.xOffset.value, 5.0f, 1e-6f));
-    CHECK(near(part.scale.value, 1.1f, 1e-6f));
+    CHECK(part.xOffset.has_value() && *part.xOffset == 5);
+    CHECK(part.scale.has_value() && near(*part.scale, 1.1f, 1e-6f));
     CHECK(part.slots.size() == 1);
     CHECK(near(part.slots[0].xOffset.value, 3.0f, 1e-6f));
     CHECK(near(part.slots[0].alpha.value, 0.9f, 1e-6f));
@@ -636,18 +656,43 @@ void testUserInterface() {
     Document noActive = P("<root><Table><UserInterface><Name>PC_old - not used</Name></UserInterface></Table></root>");
     auto rows2 = ParseUserInterfaceTable(noActive);
     CHECK(FindActiveUserInterfaceRow(rows2) == nullptr);
+
+    // CONTROL: absent Part/ClusterOffset XOffset/YOffset must come back
+    // !has_value() (if-present, CORRECTED 2026-10-01, 10) - not a silent 0.
+    const char* xmlAbsent =
+        "<root><Table><UserInterface><Name>XBox2</Name>"
+        "<UIClusters><Cluster><ClusterName>HUD_Main</ClusterName>"
+        "<ClusterOffsetList><ClusterOffset><ResolutionRatio>16:9</ResolutionRatio></ClusterOffset></ClusterOffsetList>"
+        "<BitmapSlots><Part><Name>Health_Bar</Name></Part></BitmapSlots>"
+        "</Cluster></UIClusters>"
+        "</UserInterface></Table></root>";
+    Document docAbsent = P(xmlAbsent);
+    auto rowsAbsent = ParseUserInterfaceTable(docAbsent);
+    const UserInterfaceRow* activeAbsent = FindActiveUserInterfaceRow(rowsAbsent);
+    CHECK(activeAbsent != nullptr);
+    CHECK(!activeAbsent->clusters[0].offsets[0].xOffset.has_value());
+    CHECK(!activeAbsent->clusters[0].offsets[0].yOffset.has_value());
+    CHECK(!activeAbsent->clusters[0].bitmapParts[0].xOffset.has_value());
+    CHECK(!activeAbsent->clusters[0].bitmapParts[0].scale.has_value());
 }
 
 // ---------------------------------------------------------------------------
 // 11. control_scheme_text.xtbl
 // ---------------------------------------------------------------------------
 void testControlSchemeText() {
+    // Platform filter (spec 11, CORRECTED 2026-10-01): only a <Control> whose
+    // <Platform> text is exactly "360" or "All" (case-sensitive) survives
+    // into the loaded structure; PS3 and an absent Platform are both dropped
+    // at parse time. Real-shaped case: one 360, one PS3 (dropped), one All,
+    // one with no <Platform> element at all (dropped).
     const char* xml =
         "<root><Table><ControlScheme>"
         "<Name>Scheme A - On Foot</Name>"
         "<Controls>"
         "<Control><Control1>R1</Control1><LocDesc>CONTROL_DESC_GRENADE</LocDesc><Platform>360</Platform></Control>"
         "<Control><Control1>L2</Control1><LocDesc>CONTROL_DESC_PRIM_ATTACK</LocDesc><Platform>PS3</Platform></Control>"
+        "<Control><Control1>X</Control1><LocDesc>CONTROL_DESC_JUMP</LocDesc><Platform>All</Platform></Control>"
+        "<Control><Control1>Y</Control1><LocDesc>CONTROL_DESC_SPRINT</LocDesc></Control>"
         "</Controls>"
         "</ControlScheme></Table></root>";
     Document doc = P(xml);
@@ -655,11 +700,32 @@ void testControlSchemeText() {
     auto schemes = ParseControlSchemeTextTable(doc);
     CHECK(schemes.size() == 1);
     CHECK(schemes[0].name.has_value() && *schemes[0].name == "Scheme A - On Foot");
-    CHECK(schemes[0].controls.size() == 2);
+    CHECK(schemes[0].controls.size() == 2);  // PS3 row and no-Platform row both dropped
     CHECK(schemes[0].controls[0].control1.has_value() && *schemes[0].controls[0].control1 == "R1");
     CHECK(schemes[0].controls[0].locDesc.has_value() && *schemes[0].controls[0].locDesc == "CONTROL_DESC_GRENADE");
     CHECK(schemes[0].controls[0].platform.has_value() && *schemes[0].controls[0].platform == "360");
-    CHECK(schemes[0].controls[1].platform.has_value() && *schemes[0].controls[1].platform == "PS3");
+    CHECK(schemes[0].controls[1].control1.has_value() && *schemes[0].controls[1].control1 == "X");
+    CHECK(schemes[0].controls[1].platform.has_value() && *schemes[0].controls[1].platform == "All");
+
+    // CONTROL: a scheme whose every Control is a non-360/All platform must
+    // yield an empty controls vector (filter applies, no silent fallback).
+    Document allDropped = P(
+        "<root><Table><ControlScheme><Name>Scheme A - On Foot</Name>"
+        "<Controls><Control><Control1>Z</Control1><Platform>PS3</Platform></Control></Controls>"
+        "</ControlScheme></Table></root>");
+    auto schemesAllDropped = ParseControlSchemeTextTable(allDropped);
+    CHECK(schemesAllDropped.size() == 1);
+    CHECK(schemesAllDropped[0].controls.empty());
+
+    // CONTROL: the real engine's documented infinite loop ("a matched
+    // ControlScheme without a Controls child makes the loader re-enter the
+    // same row forever", spec 11) must NOT reproduce here - this reader is a
+    // tree-walking parser, not the original's index-based loop (tables.h's
+    // struct banner). A Controls-less row must just finish with an empty list.
+    Document noControls = P("<root><Table><ControlScheme><Name>Scheme A - On Foot</Name></ControlScheme></Table></root>");
+    auto schemesNoControls = ParseControlSchemeTextTable(noControls);
+    CHECK(schemesNoControls.size() == 1);
+    CHECK(schemesNoControls[0].controls.empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -685,6 +751,23 @@ void testVoiceControlBitfields() {
     CHECK(!e.priority.has_value());
     CHECK(e.PriorityOrDefault() == 10);    // spec-stated default (12)
     CHECK(e.PriorityField() == 10);
+    // External_source/Play_event (CORRECTED 2026-10-01): "always" reader, not
+    // if-present - this row has neither element, so both come back !present
+    // with the Always<T> hazard value 0 (NOT a real engine default).
+    CHECK(!e.externalSource.present);
+    CHECK(!e.playEvent.present);
+
+    // External_source/Play_event present: the "always" reader (0x00DABDF0)
+    // actually reads them when the row has them (real-shaped case).
+    const char* xmlExtSrc =
+        "<root><Table>"
+        "<Entry><Voiceline_id>55</Voiceline_id><External_source>777</External_source><Play_event>888</Play_event></Entry>"
+        "</Table></root>";
+    Document docExtSrc = P(xmlExtSrc);
+    auto entriesExtSrc = ParseVoiceControlTable(docExtSrc);
+    CHECK(entriesExtSrc.size() == 1);
+    CHECK(entriesExtSrc[0].externalSource.present && entriesExtSrc[0].externalSource.value == 777);
+    CHECK(entriesExtSrc[0].playEvent.present && entriesExtSrc[0].playEvent.value == 888);
 
     // Tier boundaries (26/51/76) and an out-of-range Priority clamp.
     const char* xml2 =

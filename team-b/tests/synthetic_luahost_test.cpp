@@ -1119,8 +1119,9 @@ int main() {
         }
 
         // 23. zscene_is_loaded (Sec14.23 corrected, Sec26.25) and zscene_prep
-        // (Sec8.21, Sec26.25). Nothing zscene-related has a specced start-up
-        // value, so every first read is OPEN.
+        // (Sec8.21, Sec26.25). Only the skip byte 0x0153b556 has a specced
+        // start-up value (false, Sec26.25 Globals, 2026-10-01); every other
+        // zscene first read is OPEN.
         {
             auto check = [&](const char* chunk, const char* tag) {
                 auto r = host.runChunk(gp, chunk, tag);
@@ -1138,7 +1139,8 @@ int main() {
                 auto r = host.runChunk(ui, "assert(zscene_is_loaded == nil and zscene_prep == nil)", "zs0b.lua");
                 CHECK(r.loadOk && r.pcallOk);
             }
-            refuses("zscene_is_loaded()", "0x0153b556");          // no name: skip byte first
+            CHECK(es.zsceneSkipAllCutscenes().known() && es.zsceneSkipAllCutscenes().get() == false);
+            refuses("zscene_is_loaded()", "0x0153b51c");          // no name: skip byte (false), then the load state
             refuses("zscene_is_loaded('Scene_A')", "0x00723d20"); // name: table / kind first
             refuses("zscene_is_loaded('Scene_A')", "scene_a");    // keyed lower-case
             CHECK(host.hitLog().hits().count("zscene_is_loaded:OPEN_STATE") == 1);
@@ -1146,9 +1148,9 @@ int main() {
             es.zsceneLoadable().set("scene_a", false);
             check("assert(zscene_is_loaded('SCENE_A') == true)", "zs1.lua");
             check("assert(select('#', zscene_is_loaded('scene_a')) == 1)", "zs1b.lua");
-            // A kind-1 entry: skip byte next.
+            // A kind-1 entry: skip byte next (false at start), then the current entry.
             es.zsceneLoadable().set("scene_b", true);
-            refuses("zscene_is_loaded('scene_b')", "0x0153b556");
+            refuses("zscene_is_loaded('scene_b')", "0x0153b530");
             es.zsceneSkipAllCutscenes().set(true);
             check("assert(zscene_is_loaded('scene_b') == true)", "zs2.lua");
             check("assert(zscene_is_loaded() == true)", "zs3.lua");
@@ -1766,8 +1768,12 @@ int main() {
               perArea["vint"] == 10 && perArea["other"] == 4);
         CHECK(knownPerArea["co-op"] == 1 && knownPerArea["tutorial"] == 1 && knownPerArea["vehicle-store"] == 1);
         // vint: the two safe-frame constants (CONFIRMED, nnlt) are set at start.
-        CHECK(knownPerArea["zscene"] == 0 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
-              knownPerArea["vint"] == 2 && knownPerArea["other"] == 0);
+        // zscene: only the skip byte 0x0153b556 (false, Sec26.25 Globals, 2026-10-01).
+        // other: objectResolves_ now carries 5 known entries (Sec29's closed
+        // literal set - "homies"/"shopkeepers"/"-- Cutscene Script Group --"/
+        // "#PLAYER1#"/"#PLAYER2#"), so its one inventory record counts as known.
+        CHECK(knownPerArea["zscene"] == 1 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
+              knownPerArea["vint"] == 2 && knownPerArea["other"] == 1);
         for (const auto& r : inv) {
             if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
             if (r.global.find("0x0151d600") != std::string::npos) CHECK(r.knownKeys == 210);
@@ -1790,7 +1796,8 @@ int main() {
         CHECK(f.inFlight == nullptr && f.deferred == nullptr);
         for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
             CHECK(es.tutorialState().get(EngineState::tutorialStateKey(i)) == (i <= 188 ? 0 : 1));
-        CHECK(!es.zsceneSkipAllCutscenes().known() && !es.zsceneStateCode().known() && !es.zsceneCurrent().known());
+        CHECK(es.zsceneSkipAllCutscenes().known() && es.zsceneSkipAllCutscenes().get() == false);
+        CHECK(!es.zsceneStateCode().known() && !es.zsceneCurrent().known() && !es.zscenePending().known());
         CHECK(!es.vintDisplayMode().known() && !es.vintRecordFirst().known());
         CHECK(es.vintSafeFrameScale1().get() == static_cast<double>(0.075f) &&
               es.vintSafeFrameScale2().get() == static_cast<double>(0.925f));
@@ -1820,6 +1827,38 @@ int main() {
         CHECK(h.engineState().coopSession().present.get() == false);
         CHECK(!h.engineState().screenFade().documentLoaded.get());
         CHECK(h.engineState().screenFadeUiState() == nullptr);
+    }
+
+    // --- Named-object resolution's closed literal set (Sec29, 2026-10-02):
+    // applySpecInitialState() pre-populates exactly the 5 names Sec29.4
+    // confirms engine code registers unconditionally - everything else,
+    // including a mission character's own fixed name, must stay OPEN. This
+    // is a regression guard against ever accidentally widening the set.
+    {
+        sr3luahost::EngineState es;
+        sr3luahost::applySpecInitialState(es);
+        auto& resolves = es.objectResolves();
+        for (const std::string& name :
+             {"homies", "shopkeepers", "-- Cutscene Script Group --", "#PLAYER1#", "#PLAYER2#"}) {
+            CHECK(resolves.known(name));
+            CHECK(resolves.get(name) == true);
+        }
+        CHECK(resolves.knownCount() == 5);
+        // An arbitrary name NOT in the closed set - including the actual
+        // mission-blocker name - stays OPEN: producer (3) (173 in-memory
+        // call sites, never individually traced) could register essentially
+        // any name, so this project does not know and must not guess.
+        for (const std::string& name : {"Killbane", "homie", "Homies", "#PLAYER3#", "some_other_npc"}) {
+            CHECK(!resolves.known(name));
+            bool threw = false;
+            try {
+                (void)resolves.get(name);
+            } catch (const sr3luahost::OpenStateError& e) {
+                threw = true;
+                CHECK(std::string(e.what()).find("named-object resolution['" + name + "']") != std::string::npos);
+            }
+            CHECK(threw);
+        }
     }
 
     if (g_failures == 0) {

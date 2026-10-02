@@ -305,9 +305,12 @@ int main(int argc, char** argv) {
         std::vector<sr3tables_progression::Stat> parsed;
         for (auto r : rows) parsed.push_back(sr3tables_progression::ParseStat(r));
         std::printf("  rows: %zu\n", rows.size());
-        long long allowPresent = 0;
-        for (auto& s : parsed) allowPresent += s.allowUpdateByServer.present;
-        reportAlways("Allow_Update_By_Server", allowPresent, static_cast<long long>(parsed.size()));
+        // spec 2.2/1.3, CORRECTED 2026-10-01: Allow_Update_By_Server is a dedicated single-literal "true"
+        // compare (like notoriety.xtbl's Check_Detection), not the generic always-bool reader - plain bool,
+        // no "present" concept, so reported as a true/total count rather than via reportAlways().
+        long long allowTrue = 0;
+        for (auto& s : parsed) allowTrue += s.allowUpdateByServer;
+        std::printf("    Allow_Update_By_Server true: %lld / %zu\n", allowTrue, parsed.size());
         long long liveProp = 0, liveLb = 0;
         for (auto& s : parsed) { liveProp += s.livePropertyId.has_value(); liveLb += s.liveLeaderboardId.has_value(); }
         std::printf("    if-present LivePropertyID supplied: %lld / %zu; LiveLeaderboardID supplied: %lld / %zu\n",
@@ -741,6 +744,38 @@ int main(int argc, char** argv) {
         sr3tables_progression::DefaultGlobal g = sr3tables_progression::ParseDefaultGlobal(doc);
         std::printf("  skyboxMeshFilename=\"%s\" cloudMeshFilename=\"%s\" orbitals=%zu (spec: at most 15)\n",
                     g.skyboxMeshFilename.c_str(), g.cloudMeshFilename.c_str(), g.orbitalMapNames.size());
+        // spec-tables-environment.md S15.5 fields (0x00BB6400, HIGH CONFIDENCE same file - see the header's
+        // banner comment on sr3tables_progression::DefaultGlobal).
+        std::printf("  horizonMountainEnabled=%s (element %s) fogCameraFollow=%s (element %s) dayBegin=%d dayEnd=%d\n",
+                    g.horizonMountainEnabled ? "true" : "false",
+                    FindChild(doc.root(), "horizon_mountain_enabled") ? "present" : "absent",
+                    g.fogCameraFollow ? "true" : "false",
+                    FindChild(doc.root(), "fog_camera_follow") ? "present" : "absent",
+                    g.dayBegin, g.dayEnd);
+        std::printf("  cloudMeshHorizonMat=\"%s\" cloudMeshOverheadMat=\"%s\" cloudMeshSkylineMat=\"%s\"\n",
+                    g.cloudMeshHorizonMat.c_str(), g.cloudMeshOverheadMat.c_str(), g.cloudMeshSkylineMat.c_str());
+        std::printf("  todSegments: %zu (no real numeric capacity is stated in either spec - uncapped here)\n",
+                    g.todSegments.size());
+        if (!g.todSegments.empty()) {
+            std::printf("    values:");
+            for (size_t i = 0; i < g.todSegments.size() && i < 20; ++i) std::printf(" %d", g.todSegments[i]);
+            if (g.todSegments.size() > 20) std::printf(" ...");
+            std::printf("\n");
+        }
+        // Raw diagnostic (NOT the typed reader): dump each real <segment> child's own shape exactly as
+        // parsed from the document - name/text/child-count - to check this reader's "segment's own text,
+        // as int32" assumption (S15.5 only says "a dword" via 0x00DC5240(node, 0), not what it holds)
+        // against the real file, independent of ParseDefaultGlobal's own interpretation above.
+        if (const Node* segs = FindChild(doc.root(), "tod_segments")) {
+            std::printf("  raw tod_segments/segment diagnostic:\n");
+            int i = 0;
+            for (const Node* s = FindChild(segs, "segment"); s; s = sr3xtbl::NextSibling(segs, s, "segment"), ++i) {
+                const std::string* t = ChildText(s, "");
+                std::printf("    [%d] ownText=%s%s%s childCount=%zu\n", i,
+                            t ? "\"" : "", t ? t->c_str() : "(none)", t ? "\"" : "", s->children().size());
+                if (i >= 24) { std::printf("    ... (truncated)\n"); break; }
+            }
+        }
     } else {
         std::printf("default_global.xtbl: NOT FOUND in the given archives - no population data.\n");
     }

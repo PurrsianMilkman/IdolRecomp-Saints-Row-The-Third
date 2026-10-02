@@ -39,13 +39,24 @@ void applySpecInitialState(EngineState& es) {
     //    disassembly): 0 at load, so store_vehicle_get_state returns 0.0.
     es.vehicleStoreActive().set(false);
 
-    // 4. zscene and the cutscene machine (Sec26.25, Sec14.23, Sec8.21): no
-    //    start-up value is given for the skip byte 0x0153b556, the current /
-    //    pending entries, the load state 0x0153b51c, 0x0153b541 / 0x0153b542,
-    //    the soundtrack stream globals, the cutscene state 0x0153b520 or the
-    //    cutscene manager. All stay OPEN. The scene table itself is real data
-    //    (cutscene.xtbl + <name>.cte_xtbl); lua_host_run installs it from the
-    //    archive cache (EngineState::installZsceneTable), not this function.
+    // 4. zscene and the cutscene machine (Sec26.25, Sec14.23, Sec8.21).
+    //    The skip_all_cutscenes byte 0x0153b556 is false at load (Sec26.25
+    //    Globals table, 2026-10-01 re-derivation, CONFIRMED - disassembly):
+    //    it is zero-fill .data with no static initializer; its one direct
+    //    code-write (0x0072e04d in 0x0072df50's opcode-0 case) only clears it;
+    //    the registration 0x0086d770("skip_all_cutscenes", &0x0153b556, 1,
+    //    isHost, 0) writes no default (1 is the size in bytes) and its host
+    //    copy-in never fires (no second registration of the name). Only the
+    //    by-name console/config/command-line path can set it, which no
+    //    mission or Lua code reaches.
+    es.zsceneSkipAllCutscenes().set(false);
+    //    Everything else here still has no specced start-up value and stays
+    //    OPEN: the current / pending entries, the load state 0x0153b51c,
+    //    0x0153b541 / 0x0153b542, the soundtrack stream globals, the cutscene
+    //    state 0x0153b520 and the cutscene manager. The scene table itself is
+    //    real data (cutscene.xtbl + <name>.cte_xtbl); lua_host_run installs it
+    //    from the archive cache (EngineState::installZsceneTable), not this
+    //    function.
 
     // 5. screen fade (Sec26.24, CONFIRMED - disassembly, "Globals" table: the
     //    file-backed values the executable starts with). The init 0x0059fa30
@@ -93,6 +104,27 @@ void applySpecInitialState(EngineState& es) {
     //    initializer instead, so they need no entry here).
     es.coopFriendlyFireRaw().set(1);       // 0x012f4500 (Sec27.15/Sec27.16)
     es.autosave().suppressFlag.set(true);  // 0x012fcadc (Sec27.12)
+
+    // 8. named-object resolution (Sec29, 2026-10-02, CONFIRMED - disassembly,
+    //    write side of the shared 0x02442750 by-name resolver family). No
+    //    Lua-bound function can ever choose a name for an object it creates
+    //    (Sec29.4); engine code separately registers a small CLOSED set of
+    //    literal names into the shared 2,999-slot name map regardless of any
+    //    zone/data file: "homies", "shopkeepers", "-- Cutscene Script Group
+    //    --", and the special-cased "#PLAYER1#"/"#PLAYER2#" pair. These five
+    //    are the full extent of what Sec29 confirms unconditionally - every
+    //    other name (including a mission character's own fixed name, e.g.
+    //    'Killbane') traces back to the still-parked .czn_pc zone-placement
+    //    interior (Sec29.2 producer 1) or to 173 in-memory call sites never
+    //    individually traced (producer 3, could register essentially any
+    //    name) - so it correctly stays OPEN; do not widen this set without
+    //    new CONFIRMED spec text (see objectResolves()'s own doc comment,
+    //    engine_state.h).
+    es.objectResolves().set("homies", true);
+    es.objectResolves().set("shopkeepers", true);
+    es.objectResolves().set("-- Cutscene Script Group --", true);
+    es.objectResolves().set("#PLAYER1#", true);
+    es.objectResolves().set("#PLAYER2#", true);
 }
 
 } // namespace sr3luahost

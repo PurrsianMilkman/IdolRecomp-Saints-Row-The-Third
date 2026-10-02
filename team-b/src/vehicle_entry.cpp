@@ -862,4 +862,76 @@ std::vector<VehicleEntry> ParseAllVehicleGroups(const Document& doc) {
     return out;
 }
 
+// ===========================================================================
+// Vehicle camera parameters: vehicle_cameras.xtbl / vehicle_group_cameras.
+// xtbl (spec-vehicle-data.md 7.3's +0x628-+0x72B field table, added
+// 2026-10-02; spec-tables-ui-controls.md 8.1 "Family A"). See
+// vehicle_entry.h's own comment above VehicleCameraRow for why this is a
+// SEPARATE reader from ParseVehicleEntry rather than new fields on
+// VehicleEntry.
+// ===========================================================================
+namespace {
+
+// One 32-byte angle set (spec-tables-ui-controls.md 8.1: Lookat_Offset
+// set+0x00, Follow_Distance set+0x0C, Follow_Height set+0x10, Min_Pitch
+// set+0x14 (deg->rad when present), Max_Pitch set+0x18 (deg->rad when
+// present); set+0x1C is "copied only", no element - not modeled).
+CameraAngleSet ParseCameraAngleSet(const Node* wrap) {
+    CameraAngleSet r;
+    r.lookatOffset = ReadVec3Child(wrap, "Lookat_Offset");
+    r.followDistance = ReadFloatAlways(wrap, "Follow_Distance");
+    r.followHeight = ReadFloatAlways(wrap, "Follow_Height");
+    r.minPitchRadians = ReadDegAsRadAlways(wrap, "Min_Pitch");
+    r.maxPitchRadians = ReadDegAsRadAlways(wrap, "Max_Pitch");
+    return r;
+}
+
+CameraFollowAggression ParseCameraFollowAggression(const Node* row) {
+    CameraFollowAggression r;
+    const Node* n = FindChild(row, "Camera_Follow_Aggression");
+    r.present = (n != nullptr);
+
+    const Node* pb = FindChild(n, "Position_Based");
+    r.positionBased.swingRateFwd = ReadFloatAlways(pb, "Swing_Rate_Fwd");
+    r.positionBased.swingRateRev = ReadFloatAlways(pb, "Swing_Rate_Rev");
+    r.positionBased.headingRetentionNormal = ReadFloatAlways(pb, "Heading_Retention_Normal");
+    r.positionBased.headingRetentionTurning = ReadFloatAlways(pb, "Heading_Retention_Turning");
+    r.positionBased.fromStickyFwd = ReadFloatAlways(pb, "From_Sticky_Fwd");
+    r.positionBased.fromStickyRev = ReadFloatAlways(pb, "From_Sticky_Rev");
+
+    const Node* sb = FindChild(n, "Sphere_Based");
+    r.sphereBased.slerpValue = ReadFloatAlways(sb, "Slerp_Value");
+    r.sphereBased.fromStickySlerpValue = ReadFloatAlways(sb, "From_Sticky_Slerp_Value");
+    r.sphereBased.minAngleRadians = ReadDegAsRadAlways(sb, "Min_Angle");
+    return r;
+}
+
+}  // namespace
+
+VehicleCameraRow ParseVehicleCameraRow(const Node* row) {
+    VehicleCameraRow r;
+    r.name = OptText(row, "Name");
+    r.primary = ParseCameraAngleSet(FindChild(row, "Primary_Camera_Angle"));
+    r.secondary = ParseCameraAngleSet(FindChild(row, "Secondary_Camera_Angle"));
+    r.rc = ParseCameraAngleSet(FindChild(row, "RC_Camera_Angle"));
+    r.cameraFollowAggression = ParseCameraFollowAggression(row);
+    return r;
+}
+
+std::vector<VehicleCameraRow> ParseAllVehicleCameraRows(const Document& doc) {
+    std::vector<VehicleCameraRow> out;
+    const Node* table = doc.table();
+    for (const Node* row = FindChild(table, "Vehicle"); row; row = NextSibling(table, row, "Vehicle"))
+        out.push_back(ParseVehicleCameraRow(row));
+    return out;
+}
+
+std::vector<VehicleCameraRow> ParseAllVehicleGroupCameraRows(const Document& doc) {
+    std::vector<VehicleCameraRow> out;
+    const Node* table = doc.table();
+    for (const Node* row = FindChild(table, "Vehicle_Group"); row; row = NextSibling(table, row, "Vehicle_Group"))
+        out.push_back(ParseVehicleCameraRow(row));
+    return out;
+}
+
 }  // namespace sr3vehicleinfo

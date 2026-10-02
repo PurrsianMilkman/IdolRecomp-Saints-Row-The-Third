@@ -11,8 +11,11 @@
 // false, and, where the spec calls one out, a boundary/quirk value
 // (anim_triggers.xtbl's 31-char bound, anim_flinches.xtbl's non-sequential
 // Hit_Location value table and its documented "Male" dead-flag finding,
-// anim_synced.xtbl's YOffset-differs-from-its-siblings presence behaviour,
-// anim_transitions.xtbl's base-game-empty-<Table> quirk).
+// anim_synced.xtbl's YOffset-differs-from-its-siblings presence behaviour
+// and (2026-10-02 RE-DERIVATION) its case-SENSITIVE Flags compare,
+// anim_transitions.xtbl's base-game-empty-<Table> quirk,
+// anim_blend_trees.xtbl's (2026-10-02 RE-DERIVATION) row-level Actions/
+// Action container with its full field set).
 
 #include <iostream>
 #include <string>
@@ -85,7 +88,7 @@ void testAnimFile() {
     CHECK(rows.size() == 2);
     const AnimFile& f0 = rows[0];
     CHECK(f0.filename.has_value() && *f0.filename == "plyr_idle.animx");
-    CHECK(f0.preload.present && f0.preload.value == true);
+    CHECK(f0.preload.has_value() && *f0.preload == true && f0.PreloadOrDefault() == true);
     CHECK(f0.triggerNames.size() == 2 && f0.triggerNames[0] == "footstep_l" && f0.triggerNames[1] == "footstep_r");
     CHECK(f0.iks.size() == 1);
     CHECK(f0.iks[0].enable.value == true);
@@ -113,7 +116,7 @@ void testAnimFile() {
 
     const AnimFile& f1 = rows[1];
     CHECK(f1.filename.has_value() && *f1.filename == "minimal.animx");
-    CHECK(!f1.preload.present);
+    CHECK(!f1.preload.has_value() && f1.PreloadOrDefault() == false);
     CHECK(f1.triggerNames.empty() && f1.iks.empty() && f1.sounds.empty());
     CHECK(!f1.voiceLinesPresent && !f1.miscPresent);
     CHECK(f1.flags == 0);
@@ -202,6 +205,17 @@ void testAnimBlendTree() {
           <Control_points><Control_point><Range>0</Range><Value>0</Value></Control_point>
             <Control_point><Range>5</Range><Value>1</Value></Control_point></Control_points></State>
         </States>
+        <Actions>
+          <Action><Animation><Filename>walk_to_run.animx</Filename></Animation><Control_type>Ramped input</Control_type>
+            <Start_range_min>0</Start_range_min><Start_range_max>1</Start_range_max>
+            <End_range_min>2</End_range_min><End_range_max>3</End_range_max><Time_variance>0.1</Time_variance>
+            <Cap_ramp_min>0.5</Cap_ramp_min><Cap_ramp_max>0.9</Cap_ramp_max>
+            <Always_cap>True</Always_cap><End_state_percent>0.75</End_state_percent>
+            <Start_state_percent_min>0.1</Start_state_percent_min><Start_state_percent_max>0.2</Start_state_percent_max>
+            <Cancel_range_min>-100</Cancel_range_min><Cancel_range_max>100</Cancel_range_max>
+            <Speed_throttling>False</Speed_throttling></Action>
+          <Action><Animation><Filename>minimal_action.animx</Filename></Animation></Action>
+        </Actions>
       </Blend_trees>
       <Blend_trees><Name>minimal</Name></Blend_trees>
     </Table></root>)");
@@ -209,19 +223,55 @@ void testAnimBlendTree() {
     CHECK(rows.size() == 2);
     const AnimBlendTree& b0 = rows[0];
     CHECK(b0.name.has_value() && *b0.name == "locomotion");
-    CHECK(b0.controlInputLow.has_value() && *b0.controlInputLow == 0.0f);
-    CHECK(b0.controlInputHigh.has_value() && *b0.controlInputHigh == 10.0f);
-    CHECK(b0.rampSpeed.has_value() && near(*b0.rampSpeed, 2.5f, 1e-6f));
+    // Sec7.2 RE-DERIVED 2026-10-02: Control_input_low/high, Ramp_speed are
+    // "always" readers now (were "if present") - Always<T>, not optional<T>.
+    CHECK(b0.controlInputLow.present && b0.controlInputLow.value == 0.0f);
+    CHECK(b0.controlInputHigh.present && b0.controlInputHigh.value == 10.0f);
+    CHECK(b0.rampSpeed.present && near(b0.rampSpeed.value, 2.5f, 1e-6f));
     CHECK(b0.states.size() == 1);
     CHECK(b0.states[0].animationFilename.has_value() && *b0.states[0].animationFilename == "walk.animx");
-    CHECK(b0.states[0].blendTime.has_value() && near(*b0.states[0].blendTime, 0.25f, 1e-6f));
+    // Blend_time: also RE-DERIVED to "always" (was "if present").
+    CHECK(b0.states[0].blendTime.present && near(b0.states[0].blendTime.value, 0.25f, 1e-6f));
     CHECK(b0.states[0].controlPoints.size() == 2);
-    CHECK(b0.states[0].controlPoints[1].range.has_value() && *b0.states[0].controlPoints[1].range == 5.0f);
-    CHECK(b0.states[0].controlPoints[1].value.has_value() && *b0.states[0].controlPoints[1].value == 1.0f);
+    // Control_point Range/Value: RE-DERIVED to "always" (was "if present").
+    CHECK(b0.states[0].controlPoints[1].range.present && b0.states[0].controlPoints[1].range.value == 5.0f);
+    CHECK(b0.states[0].controlPoints[1].value.present && b0.states[0].controlPoints[1].value.value == 1.0f);
+
+    // Actions/Action (spec 7.2, NEW 2026-10-02 - previously entirely unimplemented).
+    // Row-level (sibling of States/State), stride 0x44, full field set.
+    CHECK(b0.actions.size() == 2);
+    const AnimBlendTreeAction& a0 = b0.actions[0];
+    CHECK(a0.animationFilename.has_value() && *a0.animationFilename == "walk_to_run.animx");
+    CHECK(a0.controlType.has_value() && *a0.controlType == "Ramped input");
+    CHECK(a0.startRangeMin.present && a0.startRangeMin.value == 0.0f);
+    CHECK(a0.startRangeMax.present && a0.startRangeMax.value == 1.0f);
+    CHECK(a0.endRangeMin.present && a0.endRangeMin.value == 2.0f);
+    CHECK(a0.endRangeMax.present && a0.endRangeMax.value == 3.0f);
+    CHECK(a0.timeVariance.present && near(a0.timeVariance.value, 0.1f, 1e-6f));
+    CHECK(a0.capRampMin.has_value() && near(*a0.capRampMin, 0.5f, 1e-6f));
+    CHECK(a0.capRampMax.has_value() && near(*a0.capRampMax, 0.9f, 1e-6f));
+    CHECK(a0.alwaysCap.present && a0.alwaysCap.value == true);
+    CHECK(a0.endStatePercent.has_value() && near(*a0.endStatePercent, 0.75f, 1e-6f));
+    CHECK(a0.startStatePercentMin.has_value() && near(*a0.startStatePercentMin, 0.1f, 1e-6f));
+    CHECK(a0.startStatePercentMax.has_value() && near(*a0.startStatePercentMax, 0.2f, 1e-6f));
+    CHECK(a0.cancelRangeMin.has_value() && *a0.cancelRangeMin == -100.0f);
+    CHECK(a0.cancelRangeMax.has_value() && *a0.cancelRangeMax == 100.0f);
+    CHECK(a0.speedThrottling.present && a0.speedThrottling.value == false);
+
+    // Second Action: only Animation given - every "if present"/judgement-call
+    // field absent, every "always" field present with its 0 stand-in (NOT
+    // engine behaviour, per the Always<T> hazard - see xtbl.h).
+    const AnimBlendTreeAction& a1 = b0.actions[1];
+    CHECK(a1.animationFilename.has_value() && *a1.animationFilename == "minimal_action.animx");
+    CHECK(!a1.controlType.has_value());
+    CHECK(!a1.alwaysCap.present && a1.alwaysCap.value == false);
+    CHECK(!a1.capRampMin.has_value() && !a1.endStatePercent.has_value());
+    CHECK(!a1.cancelRangeMin.has_value() && !a1.cancelRangeMax.has_value());
 
     const AnimBlendTree& b1 = rows[1];
-    CHECK(!b1.controlInputLow.has_value() && !b1.rampSpeed.has_value());
+    CHECK(!b1.controlInputLow.present && !b1.rampSpeed.present);
     CHECK(b1.states.empty());
+    CHECK(b1.actions.empty());  // no <Actions> container at all -> empty, not a parse error
 }
 
 // ===========================================================================
@@ -309,10 +359,10 @@ void testAnimFlinch() {
 // ===========================================================================
 void testAnimSyncedMove() {
     Document d = P(R"(<root><Table>
-      <SyncedMove><AttackerAnim><Filename>atk.animx</Filename></AttackerAnim>
+      <SyncedMove><Name>takedown_01</Name><AttackerAnim><Filename>atk.animx</Filename></AttackerAnim>
         <VictimAnim><Filename>vic.animx</Filename></VictimAnim>
         <VictimOffsets><XOffset>1.0</XOffset><YOffset>2.0</YOffset><ZOffset>3.0</ZOffset><heading>90.0</heading></VictimOffsets>
-        <Flags><Flag>attacker is brute</Flag><Flag>hold last frame</Flag></Flags></SyncedMove>
+        <Flags><Flag>attacker is brute</Flag><Flag>hold last frame</Flag><Flag>Attacker Is Brute</Flag></Flags></SyncedMove>
       <SyncedMove><AttackerAnim><Filename>atk2.animx</Filename></AttackerAnim>
         <VictimAnim><Filename>vic2.animx</Filename></VictimAnim>
         <VictimOffsets><XOffset>0</XOffset><ZOffset>0</ZOffset><heading>0</heading></VictimOffsets></SyncedMove>
@@ -320,18 +370,27 @@ void testAnimSyncedMove() {
     std::vector<AnimSyncedMove> rows = ParseAnimSyncedTable(d);
     CHECK(rows.size() == 2);
     const AnimSyncedMove& m0 = rows[0];
+    CHECK(m0.name.has_value() && *m0.name == "takedown_01");
     CHECK(m0.attackerAnim.has_value() && *m0.attackerAnim == "atk.animx");
     CHECK(m0.victimAnim.has_value() && *m0.victimAnim == "vic.animx");
     CHECK(m0.xOffset.value == 1.0f && m0.zOffset.value == 3.0f && m0.heading.value == 90.0f);
     CHECK(m0.yOffset.has_value() && *m0.yOffset == 2.0f);
-    CHECK((m0.flags & (1u << 5)) != 0);  // "attacker is brute"
+    CHECK((m0.flags & (1u << 5)) != 0);  // "attacker is brute" (exact case)
     CHECK((m0.flags & (1u << 9)) != 0);  // "hold last frame"
     CHECK((m0.flags & (1u << 0)) == 0);
+    // BOUNDARY (spec 11.2, RE-DERIVED 2026-10-02): the compare is
+    // case-SENSITIVE (CORRECTED from this file's former case-insensitive
+    // FlagMask usage) - "Attacker Is Brute" (wrong case) must NOT also set
+    // bit 5 a second time / contribute anything, proving the fix actually
+    // rejects a near-miss rather than accidentally matching via FlagMask's
+    // case-insensitive compare.
+    CHECK(m0.flags == ((1u << 5) | (1u << 9)));
 
     // YOffset is the one field in this row that differs from its siblings
     // (spec 11.2): "if present", not "always" - absent here, so nullopt,
     // while X/Z/heading (Always-hazard) fall back to their 0 stand-in.
     const AnimSyncedMove& m1 = rows[1];
+    CHECK(!m1.name.has_value());
     CHECK(!m1.yOffset.has_value());
     CHECK(m1.flags == 0);
 }

@@ -36,6 +36,16 @@
 //   G7  vehicles.xtbl: row census only (different schema - Name/Framework/
 //       Info_Slot_Index - not a stats row, so not run through
 //       ParseVehicleEntry; see spec 7.1).
+//   G8  vehicle_cameras.xtbl / vehicle_group_cameras.xtbl (spec 7.3's
+//       +0x628-+0x72B field table, added 2026-10-02; spec-tables-ui-
+//       controls.md 8.1): a SEPARATE schema/file from *_veh.xtbl - see
+//       VehicleCameraRow's own header comment - so this is a SEPARATE census
+//       via ParseVehicleCameraRow, not folded into G2-G5. Reports real counts
+//       for the newly-tabulated fields: Camera_Follow_Aggression presence,
+//       Position_Based vs Sphere_Based usage, and the three angle sets'
+//       Lookat_Offset presence. INFORMATIONAL if the files are not present
+//       in the given archive list (not yet confirmed to ship in this
+//       project's 38-archive baseline set) rather than a hard gate failure.
 
 #include <algorithm>
 #include <cctype>
@@ -106,6 +116,8 @@ struct Item {
     bool isVehXtbl = false;
     bool isGroups = false;
     bool isVehiclesList = false;
+    bool isVehCameras = false;
+    bool isGroupCameras = false;
     Bytes data;
     bool ok = false;
 };
@@ -122,7 +134,9 @@ void walk(vpp::ByteView bytes, const std::string& path) {
         const bool isVeh = endsWithCi(e.name, "_veh.xtbl");
         const bool isGroups = equalsCi(e.name, "vehicle_groups.xtbl");
         const bool isVehiclesList = equalsCi(e.name, "vehicles.xtbl");
-        if (isVeh || isGroups || isVehiclesList) {
+        const bool isVehCameras = equalsCi(e.name, "vehicle_cameras.xtbl");
+        const bool isGroupCameras = equalsCi(e.name, "vehicle_group_cameras.xtbl");
+        if (isVeh || isGroups || isVehiclesList || isVehCameras || isGroupCameras) {
             Item it;
             it.archive = path;
             it.name = e.name;
@@ -130,6 +144,8 @@ void walk(vpp::ByteView bytes, const std::string& path) {
             it.isVehXtbl = isVeh;
             it.isGroups = isGroups;
             it.isVehiclesList = isVehiclesList;
+            it.isVehCameras = isVehCameras;
+            it.isGroupCameras = isGroupCameras;
             if (it.compressed) {
                 vpp::DecompressResult r = c.decompressEntry(i);
                 if (r.status == vpp::DecodeStatus::Ok) {
@@ -723,6 +739,88 @@ int main(int argc, char** argv) {
     std::printf("vehicles.xtbl <Vehicle> name-list rows: %lld (Framework present %lld, Info_Slot_Index present %lld)\n", listRows, haveFramework,
                 haveSlotIndex);
     GATE(vehiclesListFiles == 0 || listRows > 0, "vehicles.xtbl found and its rows parsed: %lld rows in %lld file(s)", listRows, vehiclesListFiles);
+
+    // ------------------------------------------------------------------ G8: vehicle_cameras.xtbl / vehicle_group_cameras.xtbl
+    // spec 7.3's +0x628-+0x72B field table (added 2026-10-02): a SEPARATE
+    // file/schema from *_veh.xtbl (see VehicleCameraRow's own header
+    // comment) - censused here via ParseVehicleCameraRow, not ProcessRow.
+    std::printf("\n=== G8 vehicle_cameras.xtbl / vehicle_group_cameras.xtbl (spec 7.3 +0x628-+0x72B, added 2026-10-02) ===\n");
+    long long camFiles = 0, groupCamFiles = 0;
+    for (const Item& it : g_items) {
+        if (it.isVehCameras) ++camFiles;
+        if (it.isGroupCameras) ++groupCamFiles;
+    }
+    std::printf("vehicle_cameras.xtbl found: %lld; vehicle_group_cameras.xtbl found: %lld\n", camFiles, groupCamFiles);
+
+    struct CamStats {
+        long long rows = 0;
+        long long havePrimaryLookat = 0, haveSecondaryLookat = 0, haveRcLookat = 0;
+        long long haveCameraFollowAggression = 0, havePositionBasedWrapper = 0, haveSphereBasedWrapper = 0,
+                   haveBothWrappers = 0;
+    };
+    CamStats cam, grpCam;
+    auto censusCameraRow = [](const Node* row, CamStats& s) {
+        ++s.rows;
+        VehicleCameraRow r = ParseVehicleCameraRow(row);
+        if (r.primary.lookatOffset.present) ++s.havePrimaryLookat;
+        if (r.secondary.lookatOffset.present) ++s.haveSecondaryLookat;
+        if (r.rc.lookatOffset.present) ++s.haveRcLookat;
+        const Node* cfa = FindChild(row, "Camera_Follow_Aggression");
+        if (cfa) {
+            ++s.haveCameraFollowAggression;
+            const bool pb = FindChild(cfa, "Position_Based") != nullptr;
+            const bool sb = FindChild(cfa, "Sphere_Based") != nullptr;
+            if (pb) ++s.havePositionBasedWrapper;
+            if (sb) ++s.haveSphereBasedWrapper;
+            if (pb && sb) ++s.haveBothWrappers;
+        }
+    };
+    for (const Item& it : g_items) {
+        if (!it.isVehCameras || !it.ok) continue;
+        Document doc;
+        try {
+            doc = ParseDocument(it.data.data(), it.data.size());
+        } catch (const sr3xtbl::FormatError&) {
+            continue;
+        }
+        const Node* table = doc.table();
+        for (const Node* row = FindChild(table, "Vehicle"); row; row = NextSibling(table, row, "Vehicle")) censusCameraRow(row, cam);
+    }
+    for (const Item& it : g_items) {
+        if (!it.isGroupCameras || !it.ok) continue;
+        Document doc;
+        try {
+            doc = ParseDocument(it.data.data(), it.data.size());
+        } catch (const sr3xtbl::FormatError&) {
+            continue;
+        }
+        const Node* table = doc.table();
+        for (const Node* row = FindChild(table, "Vehicle_Group"); row; row = NextSibling(table, row, "Vehicle_Group")) censusCameraRow(row, grpCam);
+    }
+
+    if (camFiles == 0 && groupCamFiles == 0) {
+        std::printf("  (neither file is present in this archive list - INFORMATIONAL only, not a gate failure: this project's 38-archive\n");
+        std::printf("   10a baseline set was not previously known to carry these files; spec-tables-ui-controls.md 8.1 places their only\n");
+        std::printf("   base-game xref inside the same loader chain as vehicle_groups.xtbl, so they are expected somewhere in the full game data)\n");
+    } else {
+        std::printf("vehicle_cameras.xtbl <Vehicle> rows: %lld\n", cam.rows);
+        std::printf("  Primary/Secondary/RC Lookat_Offset present: %lld / %lld / %lld\n", cam.havePrimaryLookat, cam.haveSecondaryLookat,
+                    cam.haveRcLookat);
+        std::printf("  HEADLINE: Camera_Follow_Aggression present: %lld / %lld\n", cam.haveCameraFollowAggression, cam.rows);
+        std::printf("  HEADLINE: of those, Position_Based: %lld, Sphere_Based: %lld, both (Position_Based wins per spec): %lld\n",
+                    cam.havePositionBasedWrapper, cam.haveSphereBasedWrapper, cam.haveBothWrappers);
+        GATE(camFiles == 0 || cam.rows > 0, "CONTROL: vehicle_cameras.xtbl found but at least one <Vehicle> row parsed (not vacuous): %lld",
+             cam.rows);
+
+        std::printf("vehicle_group_cameras.xtbl <Vehicle_Group> rows: %lld\n", grpCam.rows);
+        std::printf("  Primary/Secondary/RC Lookat_Offset present: %lld / %lld / %lld\n", grpCam.havePrimaryLookat, grpCam.haveSecondaryLookat,
+                    grpCam.haveRcLookat);
+        std::printf("  Camera_Follow_Aggression present: %lld / %lld (Position_Based %lld, Sphere_Based %lld, both %lld)\n",
+                    grpCam.haveCameraFollowAggression, grpCam.rows, grpCam.havePositionBasedWrapper, grpCam.haveSphereBasedWrapper,
+                    grpCam.haveBothWrappers);
+        GATE(groupCamFiles == 0 || grpCam.rows > 0,
+             "CONTROL: vehicle_group_cameras.xtbl found but at least one <Vehicle_Group> row parsed (not vacuous): %lld", grpCam.rows);
+    }
 
     std::printf("\n%s (%d gate failure%s)\n", g_fail ? "FAILED" : "ALL GATES PASSED", g_fail, g_fail == 1 ? "" : "s");
     return g_fail ? 1 : 0;

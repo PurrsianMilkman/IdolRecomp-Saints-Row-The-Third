@@ -54,15 +54,19 @@ void testStats() {
         "<LivePropertyID>7</LivePropertyID><LiveLeaderboardID>9</LiveLeaderboardID></Stat>"
         "<Stat><Name>time played</Name><Value_Type><time/></Value_Type>"
         "<Allow_Update_By_Server>false</Allow_Update_By_Server></Stat>"
+        "<Stat><Name>yes variant</Name><Allow_Update_By_Server>yes</Allow_Update_By_Server></Stat>"
         "</Table></root>";
     Document d = P(xml);
     std::vector<Stat> rows = ParseStatsTable(d);
-    CHECK(rows.size() == 2);
+    CHECK(rows.size() == 3);
     CHECK(rows[0].name == "pistol hit pct");
     CHECK(rows[0].displayName.has_value() && *rows[0].displayName == "KEY_PISTOL_HIT");
     CHECK(rows[0].valueKind == StatValueKind::Percent);
     CHECK(rows[0].percentageOfStat.has_value() && *rows[0].percentageOfStat == "pistol shots fired");
-    CHECK(rows[0].allowUpdateByServer.present && rows[0].allowUpdateByServer.value == true);
+    CHECK(rows[0].allowUpdateByServer == true);
+    // spec 2.2/1.3, CORRECTED 2026-10-01: Allow_Update_By_Server's ONLY accepted spelling is the
+    // literal "true" - unlike the generic bool reader, "yes" must NOT set it.
+    CHECK(rows[2].allowUpdateByServer == false);
     // "write-only-if-present" (spec 2.2 rows 7-8): both present here.
     CHECK(rows[0].livePropertyId.has_value() && *rows[0].livePropertyId == 7);
     CHECK(rows[0].liveLeaderboardId.has_value() && *rows[0].liveLeaderboardId == 9);
@@ -77,8 +81,8 @@ void testStats() {
     Document d2 = P("<root><Table><Stat><Name>x</Name></Stat></Table></root>");
     Stat s2 = ParseStat(sr3xtbl::FindChild(d2.table(), "Stat"));
     CHECK(s2.valueKind == StatValueKind::None);
-    // Allow_Update_By_Server absent: bool-always is deterministic false (xtbl.h: "always (false if absent)").
-    CHECK(!s2.allowUpdateByServer.present && s2.allowUpdateByServer.value == false);
+    // Allow_Update_By_Server absent: the single-literal reader is deterministic false when absent.
+    CHECK(s2.allowUpdateByServer == false);
 
     // integer/float/distance/money/boolean/complex all select via first-present-child order.
     Document d3 = P(
@@ -487,7 +491,15 @@ void testGameplayConstants() {
         "<panic_fall_velocity>15.0</panic_fall_velocity><FriendlyFirePercentage>50</FriendlyFirePercentage>"
         "<Fat_bones><Fat_Bones_Arm>2</Fat_Bones_Arm><Fat_Bones_Leg>3</Fat_Bones_Leg></Fat_bones>"
         "<Object_Glow_Colors><Weapons><X>1</X><Y>0</Y><Z>0</Z></Weapons></Object_Glow_Colors>"
-        "<Combat_AI><Pepperspray><Spray_Min>5</Spray_Min></Pepperspray></Combat_AI>"
+        // spec 10.2, CORRECTED 2026-10-01 (job ytgi): Pepperspray, PepperSprayMinUsageDelay,
+        // StunGunMinUsageDelay and the three Back_Away_* leaves are children of <Gun>, not siblings
+        // of it directly under <Combat_AI>; Gunfire_Evade/Bust stay direct children of Combat_AI.
+        "<Combat_AI><Gun><Reposition_Min>20</Reposition_Min>"
+        "<Pepperspray><Spray_Min>5</Spray_Min></Pepperspray>"
+        "<PepperSprayMinUsageDelay>9</PepperSprayMinUsageDelay><StunGunMinUsageDelay>11</StunGunMinUsageDelay>"
+        "<Back_Away_Min_Dist>1</Back_Away_Min_Dist><Back_Away_Max_Dist>2</Back_Away_Max_Dist>"
+        "<Back_Away_Abs_Min_Dist>3</Back_Away_Abs_Min_Dist></Gun>"
+        "<Gunfire_Evade><Cower_Flee_Chance>0.5</Cower_Flee_Chance></Gunfire_Evade></Combat_AI>"
         "<Coop_Meta_Game><Reward_Cash>100</Reward_Cash><_Gang_Vehicle>3</_Gang_Vehicle><_Headshot>7</_Headshot></Coop_Meta_Game>"
         "</Gameplay_Constants></Table></root>";
     Document d = P(xml);
@@ -497,13 +509,33 @@ void testGameplayConstants() {
     CHECK(gc->friendlyFirePercentage.value == 50.0f); // raw; /100 NOT applied here
     CHECK(gc->fatBones.arm.value == 2.0f && gc->fatBones.leg.value == 3.0f); // raw; x0.1 NOT applied here
     CHECK(gc->objectGlowColors.weapons.x.value == 1.0f && gc->objectGlowColors.weapons.y.value == 0.0f);
+    CHECK(gc->combatAi.gun.repositionMin.value == 20u);
     // spec: the loader reads the SAME element (Spray_Min) for both dwords - a Spray_Max
     // element is never consulted; this reader models a single sprayMin field.
     CHECK(gc->combatAi.pepperspray.sprayMin.value == 5u);
+    // CORRECTED 2026-10-01: these are read from <Gun>, not from <Combat_AI> directly.
+    CHECK(gc->combatAi.pepperSprayMinUsageDelay.value == 9u);
+    CHECK(gc->combatAi.stunGunMinUsageDelay.value == 11u);
+    CHECK(gc->combatAi.backAwayMinDist.value == 1.0f);
+    CHECK(gc->combatAi.backAwayMaxDist.value == 2.0f);
+    CHECK(gc->combatAi.backAwayAbsMinDist.value == 3.0f);
+    CHECK(gc->combatAi.gunfireEvade.cowerFleeChance.value == 0.5f); // Gunfire_Evade stays under Combat_AI
     // Underscore-prefixed element names (spec's literal spelling: _Gang_Vehicle, _Headshot, ...).
     CHECK(gc->coopMetaGame.pointsPerGangVehicle.value == 3);
     CHECK(gc->coopMetaGame.pointsPerHeadshot.value == 7);
     CHECK(!gc->coopMetaGame.pointsPerNutshot.present);
+
+    // Regression guard for the pre-fix bug: Pepperspray etc. placed directly under Combat_AI (NOT
+    // inside Gun, the old wrong tree) must NOT populate these fields.
+    Document wrongTree = P(
+        "<root><Table><Gameplay_Constants><Combat_AI>"
+        "<Pepperspray><Spray_Min>99</Spray_Min></Pepperspray>"
+        "<PepperSprayMinUsageDelay>99</PepperSprayMinUsageDelay>"
+        "</Combat_AI></Gameplay_Constants></Table></root>");
+    std::optional<GameplayConstants> gcWrong = ParseGameplayConstants(wrongTree);
+    CHECK(gcWrong.has_value());
+    CHECK(!gcWrong->combatAi.pepperspray.sprayMin.present);
+    CHECK(!gcWrong->combatAi.pepperSprayMinUsageDelay.present);
 
     // Gameplay_Constants element entirely absent -> nullopt (no leaves written, spec S10.2).
     Document empty = P("<root><Table></Table></root>");
@@ -764,6 +796,90 @@ void testDefaultGlobal() {
     CHECK(g2.skyboxMeshFilename == "rfg_skybox");
     CHECK(g2.cloudMeshFilename == "skybox_clouds");
     CHECK(g2.orbitalMapNames.empty());
+    // spec-tables-environment.md S15.5 defaults, all absent.
+    CHECK(g2.horizonMountainEnabled == true);
+    CHECK(g2.fogCameraFollow == false);
+    CHECK(g2.dayBegin == 600);
+    CHECK(g2.dayEnd == 1800);
+    CHECK(g2.cloudMeshHorizonMat == "Cloud_base_material");
+    CHECK(g2.cloudMeshOverheadMat == "Cloud_overhead_material");
+    CHECK(g2.cloudMeshSkylineMat == "m_sky_matte_01");
+    CHECK(g2.todSegments.empty());
+}
+
+// spec-tables-environment.md S15.5's bool reader: "yes"/"true"/"1", case-insensitive; everything
+// else (including absence) is the field's own default.
+void testDefaultGlobalBoolReader() {
+    Document yes = P("<root><horizon_mountain_enabled>No</horizon_mountain_enabled>"
+                      "<fog_camera_follow>YES</fog_camera_follow></root>");
+    DefaultGlobal g = ParseDefaultGlobal(yes);
+    CHECK(g.horizonMountainEnabled == false); // present, "No" -> not one of yes/true/1 -> false
+    CHECK(g.fogCameraFollow == true);         // present, "YES" case-insensitive -> true
+
+    Document one = P("<root><horizon_mountain_enabled>0</horizon_mountain_enabled>"
+                      "<fog_camera_follow>1</fog_camera_follow></root>");
+    DefaultGlobal g2 = ParseDefaultGlobal(one);
+    CHECK(g2.horizonMountainEnabled == false); // "0" is not "1"/"yes"/"true"
+    CHECK(g2.fogCameraFollow == true);         // literal "1" accepted (distinct from sr3xtbl::ParseBool)
+
+    Document trueMixedCase = P("<root><horizon_mountain_enabled>TrUe</horizon_mountain_enabled></root>");
+    DefaultGlobal g3 = ParseDefaultGlobal(trueMixedCase);
+    CHECK(g3.horizonMountainEnabled == true);
+}
+
+// spec-tables-environment.md S15.5: day_begin/day_end are a plain int reader with real literal defaults.
+void testDefaultGlobalDayBeginEnd() {
+    Document d = P("<root><day_begin>530</day_begin><day_end>2130</day_end></root>");
+    DefaultGlobal g = ParseDefaultGlobal(d);
+    CHECK(g.dayBegin == 530);
+    CHECK(g.dayEnd == 2130);
+}
+
+// spec-tables-environment.md S15.5: the three cloud_mesh_*_mat children resolve under the SAME
+// <cloud_mesh_filename> node as cloudMeshFilename's own text, not as independent top-level elements.
+void testDefaultGlobalCloudMeshChildren() {
+    Document d = P(
+        "<root><cloud_mesh_filename>my_clouds"
+        "<cloud_mesh_horizon_mat>horizon_mat</cloud_mesh_horizon_mat>"
+        "<cloud_mesh_overhead_mat>overhead_mat</cloud_mesh_overhead_mat>"
+        "<cloud_mesh_skyline_mat>skyline_mat</cloud_mesh_skyline_mat>"
+        "</cloud_mesh_filename></root>");
+    DefaultGlobal g = ParseDefaultGlobal(d);
+    CHECK(g.cloudMeshFilename == "my_clouds"); // the node's own text, S10.9's existing field
+    CHECK(g.cloudMeshHorizonMat == "horizon_mat");
+    CHECK(g.cloudMeshOverheadMat == "overhead_mat");
+    CHECK(g.cloudMeshSkylineMat == "skyline_mat");
+
+    // A top-level element of the same name is NOT the cloud_mesh_filename child - spec is explicit
+    // these resolve under cloud_mesh_filename only.
+    Document wrongPlace = P("<root><cloud_mesh_filename>my_clouds</cloud_mesh_filename>"
+                             "<cloud_mesh_horizon_mat>should_not_apply</cloud_mesh_horizon_mat></root>");
+    DefaultGlobal g2 = ParseDefaultGlobal(wrongPlace);
+    CHECK(g2.cloudMeshHorizonMat == "Cloud_base_material"); // default, not "should_not_apply"
+}
+
+// spec-tables-environment.md S15.5: tod_segments/segment, one int32 per child, in file order. No real
+// numeric capacity is given anywhere in either spec (only the capacity's memory address) - this reader
+// does not invent one, so an arbitrarily long list (well past any plausible small cap like 15) is kept
+// in full, same documented scope choice as tables_core.h's ParseUnlockablesTable.
+void testDefaultGlobalTodSegments() {
+    Document d = P("<root><tod_segments>"
+                    "<segment>100</segment><segment>200</segment><segment>300</segment>"
+                    "</tod_segments></root>");
+    DefaultGlobal g = ParseDefaultGlobal(d);
+    CHECK(g.todSegments.size() == 3);
+    CHECK(g.todSegments[0] == 100 && g.todSegments[1] == 200 && g.todSegments[2] == 300);
+
+    std::string big = "<root><tod_segments>";
+    for (int i = 0; i < 20; ++i) big += "<segment>" + std::to_string(i) + "</segment>";
+    big += "</tod_segments></root>";
+    Document dBig = P(big);
+    DefaultGlobal gBig = ParseDefaultGlobal(dBig);
+    CHECK(gBig.todSegments.size() == 20); // not capped at 15 (that cap is orbitalMapNames', a different field)
+
+    Document noSegs = P("<root><tod_segments></tod_segments></root>");
+    DefaultGlobal g2 = ParseDefaultGlobal(noSegs);
+    CHECK(g2.todSegments.empty());
 }
 
 // ===========================================================================
@@ -854,6 +970,10 @@ int main() {
     run("drunk_levels", testDrunkLevels);
     run("rank_reactions", testRankReactions);
     run("default_global", testDefaultGlobal);
+    run("default_global_bool_reader", testDefaultGlobalBoolReader);
+    run("default_global_day_begin_end", testDefaultGlobalDayBeginEnd);
+    run("default_global_cloud_mesh_children", testDefaultGlobalCloudMeshChildren);
+    run("default_global_tod_segments", testDefaultGlobalTodSegments);
     run("tweak_table", testTweakTable);
     run("metered_sprint", testMeteredSprint);
     run("activity_types", testActivityTypes);

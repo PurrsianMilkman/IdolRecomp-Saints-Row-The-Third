@@ -32,19 +32,24 @@
 // constant this group uses (seconds->ms, percent->fraction, mph->(m/s)^2,
 // degrees->radians, the 180-degree/90-degree clamp-and-supplement idioms,
 // the various floor/reset-pair validation idioms) is spec 1.4/2.1: role
-// CONFIRMED by usage pattern, but EVERY constant's exact numeric value reads
-// as zero in the static image (filled at start-up, not traced - spec 1.4's
-// closing paragraph) and is explicitly marked OPEN. Since "only CONFIRMED
-// facts should drive parsing" and a derived/computed value (this project's
-// standing "what is deliberately left out" rule, see
-// sr3tables_environment/tables.h) is not modelled, every struct below holds
-// the RAW as-authored XML value (seconds, percent, mph, degrees, ...) with a
-// comment citing the spec's stated transform; validation/reset/clamp logic
-// that only makes sense after two fields are compared together (Min/Max
-// reset pairs, acceptance predicates on grid rows, capacity caps) is
-// likewise a load-time step, not modelled - each is called out in a comment
-// at the field/table it applies to and is left to the validation harness to
-// report against real data.
+// CONFIRMED by usage pattern. UPDATED 2026-10-02 (spec 1.4, re-derived from
+// the executable): the ORIGINAL premise here - that every constant's exact
+// value reads as zero in the static image, filled only at start-up - was
+// itself wrong and has been corrected in the spec; nearly every constant's
+// exact value (1000.0 / -1000.0 / 100.0 / 0.44704 / ~0.017453 / 180.0 / 90.0
+// / 1.0, per role, genuinely a mix of f64 and f32 widths by role not a
+// uniform width) is now directly readable and spec-CONFIRMED. That does NOT
+// change the modelling choice below, though: this project's standing "only
+// CONFIRMED facts should drive parsing, derived/computed values are not
+// modelled" rule (see sr3tables_environment/tables.h) still applies - the
+// struct fields hold the RAW as-authored XML value (seconds, percent, mph,
+// degrees, ...) regardless of whether the conversion constant is known,
+// with a comment citing the spec's stated transform; validation/reset/clamp
+// logic that only makes sense after two fields are compared together
+// (Min/Max reset pairs, acceptance predicates on grid rows, capacity caps)
+// is likewise a load-time step, not modelled - each is called out in a
+// comment at the field/table it applies to and is left to the validation
+// harness to report against real data.
 //
 // Row-level parsers are named ParseXxx(const sr3xtbl::Node* row) -> Xxx.
 // Whole-table convenience parsers are ParseXxxTable(const sr3xtbl::Document&)
@@ -135,11 +140,19 @@ std::optional<StuntDrifting> ParseStuntDriftingTable(const Document& doc);
 // The ONLY member of the family with no Record_* triad (spec 2.3).
 struct StuntHijacking {
     Always<float> hudTimeSeconds;       // Hud_Time (seconds; ->ms at load, floor 0)
-    Always<float> cooldownTimeSeconds;  // Cooldown_Time - RAW seconds as authored; the engine
-                                         // stores it combined as Hud_Time_ms - round(Cooldown_Time_s
-                                         // * k) using a DISTINCT constant (DAT_01115368, not the
-                                         // general DAT_012a2d90) - the combined derived value is not
-                                         // computed here (spec 2.3)
+    Always<float> cooldownTimeSeconds;  // Cooldown_Time - RAW seconds as authored. CORRECTED
+                                         // 2026-10-02 (spec 2.3, re-derived from the executable):
+                                         // the engine stores it combined as Hud_Time_ms +
+                                         // Cooldown_Time_ms (ADDITION, a "cooldown ends at"
+                                         // timestamp) - NOT subtraction as earlier text here said.
+                                         // The distinct constant DAT_01115368 (used instead of the
+                                         // general DAT_012a2d90) is itself -1000.0, i.e.
+                                         // round(Cooldown_Time_s * -1000.0) = -Cooldown_Time_ms, and
+                                         // Hud_Time_ms - (-Cooldown_Time_ms) = Hud_Time_ms +
+                                         // Cooldown_Time_ms. No clamp exists or is needed (both
+                                         // operands are floor-clamped >=0, so the sum can never go
+                                         // negative). The combined derived value is not computed
+                                         // here regardless (spec 2.3).
     Always<bool> onlyRewardHijacks;      // Only_Reward_Hijacks (schema-documented default True;
                                          // still read by the always accessor, so absence is the
                                          // general Always-hazard, not this schema default - spec 2.3)
@@ -158,10 +171,17 @@ struct StuntNearMiss {
     Always<float> relativeSpeedMph;             // Relative_Speed (mph; ->(m/s)^2)
     Always<float> vehicleDistance;               // Vehicle_Distance - ONE XML element; the engine
                                                  // broadcasts it into 4 separate destination globals
-                                                 // (HIGH CONFIDENCE per-side/quadrant hit-test radii,
-                                                 // exact meaning of the 4 slots OPEN, spec 2.4) - that
-                                                 // fan-out is a runtime-layout detail, not modelled;
-                                                 // this is the single XML value as read
+                                                 // (a contiguous 16-byte array of four f32s, written
+                                                 // via one broadcast MOVAPS - CONFIRMED 2026-10-02,
+                                                 // spec 2.4, re-derived from the executable). CORRECTED
+                                                 // 2026-10-02: the stored value is PLAIN, not squared -
+                                                 // floored to >=0.0 then copied unmodified into all 4
+                                                 // slots (unlike Min_Speed/Relative_Speed in this same
+                                                 // function, which genuinely are squared). HIGH
+                                                 // CONFIDENCE per-side/quadrant hit-test radii; exact
+                                                 // meaning of the 4 slots OPEN. The fan-out itself is a
+                                                 // runtime-layout detail, not modelled; this is the
+                                                 // single XML value as read
     Always<float> maxTimeBetweenMissesSeconds, minTimeBetweenMissesSeconds;  // seconds; ->ms
     Always<float> delayAfterCrashSeconds;         // Delay_After_Crash (seconds; ->ms)
     Always<float> delayAfterCompletionSeconds;    // Delay_After_Completion (seconds; ->ms)
@@ -229,7 +249,12 @@ struct StuntPeelOut {
     // representation is identical in shape to RecordNotificationTriad's, but
     // it is intentionally NOT that shared type, to keep this quirk visible
     // at the type level for anyone building a byte-faithful engine
-    // reimplementation on top of this reader.
+    // reimplementation on top of this reader. PARTIALLY CONFIRMED 2026-10-02
+    // (spec 1.5, re-derived from the executable): the destination is now
+    // settled as a plain 4-byte dword (not a float, not 8 bytes), floored to
+    // >=0.0 before the multiply so no sign clamp is needed; the field's
+    // downstream consumer (percent vs. ms) remains OPEN. Neither changes
+    // this reader's raw-value modelling.
     Always<float> recordThresholdRaw;
     RewardTriad reward;
 };
@@ -248,20 +273,19 @@ struct StuntWheelsSubStunt {
     Always<float> endTimeSeconds;             // End_Time (seconds; ->ms)
     RewardTriad reward;
 };
-// NOTE on the spec's own field count (report this as a spec-internal
-// inconsistency, per the task instructions): spec 2.8 states "7/7
-// top-level + 3x7/7 nested = 28/28 real-row fields accounted for", but its
-// prose only NAMES 3 top-level fields for this table (the record triad, "at
-// fixed offsets +0x68/+0x6C/+0x70"). The other 4 fields implied by "7/7
-// top-level" are not identified anywhere in section 2.8's text (unlike
-// stunt_jumping_diversion, spec 2.9, which explicitly lists all 7 of ITS
-// top-level fields: End_Time + record triad + reward triad). Rather than
-// guess what the missing 4 are (a top-level reward triad would be the
-// obvious guess by analogy with stunt_jumping_diversion, but spec 2.8
-// explicitly frames the reward triad as appearing ONLY nested "three times",
-// which reads as contrasting with - not adding to - a top-level occurrence),
-// only the 3 CONFIRMED top-level fields (the record triad) are modelled
-// here, per this project's "only CONFIRMED facts drive parsing" rule.
+// NOTE on the spec's own field count: spec 2.8's original text stated "7/7
+// top-level + 3x7/7 nested = 28/28 real-row fields accounted for" while only
+// NAMING 3 top-level fields (the record triad, at fixed offsets
+// +0x68/+0x6C/+0x70) - a self-reported spec-internal inconsistency this
+// reader deliberately did not try to resolve by guessing. **CORRECTED
+// 2026-10-02** (spec 2.8, re-derived from the executable, FUN_006C16A0):
+// this is now settled, not just sidestepped - no instruction in the loader
+// touches any offset below +0x14 (where the sub-stunt loop begins), so there
+// is no disassembly support for "~4 more top-level fields" at all. The
+// "7/7 top-level" framing does not hold; only the 3 named fields (the record
+// triad) are actually read from XML by this function. The modelling below
+// (3 top-level fields) was already correct by construction - this note is
+// updated so it no longer describes an open question.
 struct StuntWheels {
     RecordNotificationTriad record;  // +0x68/+0x6C/+0x70 (see the NOTE above re: "7/7 top-level")
     StuntWheelsSubStunt twoWheels;   // Two_Wheels
@@ -311,13 +335,31 @@ struct StuntJumpingVehicleType {
     StuntJumpingAxis spinRotation;    // Spin_Rotation (index 5, degrees->radians at load)
 };
 struct StuntJumpingDiversion {
-    Always<float> endTimeSeconds;  // End_Time (+0x14; seconds; ->ms at load)
-    RecordNotificationTriad record;  // +0x18/+0x1C/+0x20ish (spec 2.9)
-    RewardTriad reward;
+    Always<float> endTimeSeconds;  // End_Time - NOT part of the record (CORRECTED 2026-10-02,
+                                    // spec 2.9): it is a separate flat global (DAT_014c74c0),
+                                    // same as the reward triad below; only kept here as a
+                                    // struct field for convenience, grouped with its sibling
+                                    // table fields the way every other table in this reader is.
+    RecordNotificationTriad record;  // +0x14/+0x18/+0x1C exactly (CORRECTED 2026-10-02, spec
+                                      // 2.9, re-derived from the executable - was "+0x18/+0x1C/
+                                      // +0x20ish"; this is the ONLY part of the schema actually
+                                      // carried through the record pointer)
+    RewardTriad reward;  // Also NOT part of the record - 3 more separate flat globals
+                          // (DAT_014c74c4/_c8/_cc), same correction as End_Time above
     // Vehicle_Types - capped at EXACTLY 3 (matches TableDescription's
     // Max_Children=3, Min_Children=3; real base row has all 3: Car,
     // Motorcycle, Boat, each with all 6 sub-blocks present, spec 2.9/14).
-    // The cap is not enforced by this struct - see the file banner.
+    // CORRECTED 2026-10-02 (spec 2.9): the grid itself is ALSO not part of
+    // the record - it is a separate flat-global array, each matched vehicle
+    // type written at base+matched_index*0x48 (slot = literal-table match
+    // index: Car=0/Motorcycle=1/Boat=2, NOT XML encounter order). An
+    // unmatched Vehicle_Name is silently skipped (no write, no error); a
+    // repeated name silently overwrites that same index's slot again (no
+    // duplicate guard). This vector preserves XML encounter order rather
+    // than index-assignment order/overwrite semantics - a runtime-layout
+    // detail not modelled here (file banner); for the real base row (one
+    // each of Car/Motorcycle/Boat) the two orderings coincide. The cap is
+    // not enforced by this struct either - see the file banner.
     std::vector<StuntJumpingVehicleType> vehicleTypes;
 };
 StuntJumpingDiversion ParseStuntJumpingDiversion(const Node* row);
@@ -618,25 +660,36 @@ inline constexpr std::array<std::string_view, 8> kShopTypeNames = {
 struct ShopName {
     std::optional<std::string> name;            // Name (+0x00) - the row key, hashed with the
                                                  // shared CRC-32 name-hash, seed 0
-    // A second Name-derived value at +0x30 via an unidentified transform
-    // FUN_00821EE0 (spec 12/15 item 4: OPEN, not confirmed to be a second
-    // hash or an id derivation) - a purely derived/computed value, not a
-    // distinct XML element, so it is NOT modelled here.
+    // A second Name-derived value at +0x30 via FUN_00821EE0. CORRECTED
+    // 2026-10-02 (spec 12, re-derived from the executable): this is now
+    // fully traced and is NOT a hash of any kind and NOT an id derivation -
+    // it is a case-insensitive linear name search (stricmp) into an
+    // unrelated external array (base DAT_022db998), returning a pointer into
+    // that array on a match or null otherwise. What that array is and what
+    // consumes the +0x30 pointer both remain OPEN (spec 12/15 item 4). Still
+    // a purely derived/computed value, not a distinct XML element, so it is
+    // NOT modelled here.
     std::optional<std::string> localizedName;   // Localized_Name (+0x04, heap-duplicated string);
                                                  // spec-stated concrete default "{localize}franchise"
     std::string LocalizedNameOrDefault() const { return localizedName.value_or("{localize}franchise"); }
-    std::optional<int32_t> cost;                 // Ownership.Cost (+0x10); spec-stated default 10000
-    int32_t CostOrDefault() const { return cost.value_or(10000); }
-    std::optional<int32_t> income;               // Ownership.Income (+0x14); spec-stated default 500
-    int32_t IncomeOrDefault() const { return income.value_or(500); }
-    std::optional<float> discount;               // Ownership.Discount (+0x18) - RAW percent as
-                                                 // authored; spec-stated default 15 (percent);
-                                                 // ->fraction at load via the shared percent
-                                                 // constant, not applied here
-    float DiscountOrDefault() const { return discount.value_or(15.0f); }
-    std::optional<float> totalOwnerDiscount;     // Ownership.Total_Owner_Discount (+0x1C) - RAW
-                                                 // percent; spec-stated default 20
-    float TotalOwnerDiscountOrDefault() const { return totalOwnerDiscount.value_or(20.0f); }
+    // Cost/Income/Discount/Total_Owner_Discount: CORRECTED 2026-10-02 (spec
+    // 12, re-derived from the executable, FUN_00A00B90). The TableDescription
+    // documents defaults of 10000/500/15/20 for these four, but - UNLIKE
+    // Localized_Name's default above, which IS loader-enforced (passed as an
+    // explicit fallback argument to its own text-getter accessor) - the
+    // "always" accessors used for these four have NO visible default-fallback
+    // branch in the loader. Those four numbers are schema-only documentation,
+    // not runtime behaviour: on the absent path the real engine leaves
+    // whatever was already at the destination (the general Always-hazard),
+    // not a concrete 10000/500/15/20. Modelled as Always<T>, matching this
+    // project's own stated convention (file banner) that optional+OrDefault
+    // is reserved for a spec-CONFIRMED loader-enforced default only.
+    Always<int32_t> cost;                 // Ownership.Cost (+0x10)
+    Always<int32_t> income;               // Ownership.Income (+0x14)
+    Always<float> discount;               // Ownership.Discount (+0x18) - RAW percent as authored;
+                                           // ->fraction at load via the shared percent constant, not
+                                           // applied here
+    Always<float> totalOwnerDiscount;     // Ownership.Total_Owner_Discount (+0x1C) - RAW percent
     std::optional<std::string> reward;           // Ownership.Reward (+0x20, optional Reference into
                                                  // unlockables.xtbl, resolved via FUN_0071CC90)
     std::optional<std::string> useMessage;       // Use_Message (+0x28, optional, heap-duplicated

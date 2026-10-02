@@ -4,7 +4,7 @@
     lua_host_run_integration_test.py <fixture_exe> <lua_host_run_exe> <registered_tagged.txt> <bridge_diff.py>
 
 The fixture (tests/lua_host_run_fixture.cpp) writes two containers holding
-game_lib.lua, system_lib.lua, three mission scripts and one file with a syntax
+game_lib.lua, system_lib.lua, five mission scripts and one file with a syntax
 error. lua_host_run is run on that cache twice. The test checks the first run's
 per-mission rows, per-script rows, summaries and stub hits, then diffs the two
 runs with tools/bridge_diff.py: apart from timing, the output must not change.
@@ -56,20 +56,34 @@ def main(argv):
         run_host(host, reglist, cache, out1)
         run_host(host, reglist, cache, out2)
 
-        # Missions: one _start succeeds, one stops on OPEN engine state, one on a Lua error.
+        # Missions: one _start succeeds, one stops on OPEN engine state, one on a
+        # Lua error, one yields after starting a child thread, one runs away.
         missions = {r["stem"]: r for r in read_tsv(os.path.join(out1, "verdict_mission_drive.tsv"))}
         found = sorted(s for s, r in missions.items() if r["script_found"] == "1")
-        check(found == ["dlc1_mm_04", "dlc1_mm_05", "dlc1_mm_06"], f"missions found: {found}")
+        check(found == ["dlc1_mm_02", "dlc1_mm_03", "dlc1_mm_04", "dlc1_mm_05", "dlc1_mm_06"], f"missions found: {found}")
         m5, m6, m4 = missions.get("dlc1_mm_05", {}), missions.get("dlc1_mm_06", {}), missions.get("dlc1_mm_04", {})
-        check(m5.get("start_call_ok") == "1", "dlc1_mm_05 _start succeeds")
+        m3, m2 = missions.get("dlc1_mm_03", {}), missions.get("dlc1_mm_02", {})
+        check(m5.get("start_call_ok") == "1" and m5.get("start_suspended") == "0", "dlc1_mm_05 _start runs to its end")
+        # Request 11 (Sec26.27): _start is a script-thread record - thread_new
+        # inside it finds a parent, and thread_yield suspends it (no error).
+        check(m3.get("start_call_ok") == "1" and m3.get("start_suspended") == "1",
+              f"dlc1_mm_03 _start yields after thread_new: {m3.get('start_call_error')}")
+        # The watchdog sits on the _start coroutine.
+        check(m2.get("start_call_ok") == "0" and "watchdog" in m2.get("start_call_error", ""),
+              f"dlc1_mm_02 runaway _start stopped by the watchdog: {m2.get('start_call_error')}")
         check(m6.get("start_call_ok") == "0", "dlc1_mm_06 _start refused")
         # 2026-10-01 (Sec26.25 scene table): 'scene_a' is a kind-1 entry of the
         # fixture's cutscene_tables.vpp_pc, so the table is no longer the
-        # blocker; the next read, the skip_all_cutscenes byte, has no specced
-        # start-up value.
-        check("0x0153b556" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
-              f"dlc1_mm_06 stops on the OPEN skip_all_cutscenes byte: {m6.get('start_call_error')}")
+        # blocker; the skip_all_cutscenes byte is false at start (Sec26.25
+        # Globals, 2026-10-01, CONFIRMED), so the next read, the current scene
+        # entry, has no specced start-up value.
+        check("0x0153b530" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
+              f"dlc1_mm_06 stops on the OPEN current scene entry: {m6.get('start_call_error')}")
+        check("0x0153b556" not in m6.get("start_call_error", ""), "the skip byte is no longer OPEN")
         check("0x00723d20" not in m6.get("start_call_error", ""), "the scene table entry is no longer OPEN")
+        # Request 11 (Sec26.27): _start runs as a script-thread record, so the
+        # runner's "<name>: " prefix is not part of the reported error.
+        check(not m6.get("start_call_error", "").startswith("dlc1_mm_06_start:"), "bare _start error message")
         check(m4.get("start_call_ok") == "0", "dlc1_mm_04 _start fails")
         check("attempt to index local 't'" in m4.get("start_call_error", ""),
               f"dlc1_mm_04 reports the Lua error: {m4.get('start_call_error')}")
@@ -81,7 +95,7 @@ def main(argv):
         broken = scripts.get("broken_syntax.lua", {})
         check(broken.get("gameplay_load_ok") == "0", "broken_syntax.lua fails real Lua load")
         check(broken.get("sr3lua_parse_ok") == "0", "broken_syntax.lua fails sr3lua parse")
-        check(len(scripts) == 6, f"6 scripts listed, got {len(scripts)}")
+        check(len(scripts) == 8, f"8 scripts listed, got {len(scripts)}")
 
         summary = read_kv(os.path.join(out1, "verdict_summary.txt"))
         check(summary.get("archives_scanned") == "3", f"archives_scanned={summary.get('archives_scanned')}")
@@ -101,8 +115,8 @@ def main(argv):
         m = re.match(r"^frames:(\d+) blocked_on_open:(\d+) ", cf)
         check(m is not None and m.group(1) == m.group(2) and int(m.group(1)) > 0, f"every cutscene frame blocked: {cf}")
         check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
-        check(summary.get("real_luaL_loadbuffer_ok", "").startswith("5/6"), "5/6 scripts load")
-        check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "6/6", "sr3lua agrees on 6/6")
+        check(summary.get("real_luaL_loadbuffer_ok", "").startswith("7/8"), "7/8 scripts load")
+        check(summary.get("sr3lua_parser_agrees_with_real_lua_load_result") == "8/8", "sr3lua agrees on 8/8")
         # Batch 2026-10-01: the CONFIRMED start-up values (no co-op session,
         # tutorial states after the fill, store flag 0, the fade globals'
         # file values) fill 15 of the first 40 slots; the nnlt batch adds the
@@ -127,11 +141,13 @@ def main(argv):
         check(slot("0x022cdf08").get("known") == "1", "vehicle-store flag known (0)")
         check(slot("0x012e6aa4").get("known") == "1", "fade state known (2)")
         check(slot("mode stack").get("known") == "0", "mode-stack top OPEN")
-        # zscene / cutscene: only the scene table (2 entries) has a value; vint:
-        # everything but the safe-frame source object's +0x8 / +0xc.
+        # zscene / cutscene: only the scene table (2 entries) and the skip byte
+        # (false, Sec26.25 Globals 2026-10-01) have a value; vint: everything
+        # but the safe-frame source object's +0x8 / +0xc.
+        check(slot("0x0153b556").get("known") == "1", "skip_all_cutscenes byte known (false)")
         check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots
-                  if r["area"] in ("zscene", "cutscene") and r["kind"] != "table"),
-              "zscene and cutscene slots OPEN at start")
+                  if r["area"] in ("zscene", "cutscene") and r["kind"] != "table" and "0x0153b556" not in r["global"]),
+              "other zscene and cutscene slots OPEN at start")
         # "scene table" alone is ambiguous: it's also a substring of the per-entry
         # "zscene table entry with kind 1 (...)" slot. 0x0153b294 is the table-level
         # slot's own unique address (src/lua_engine_state.cpp).
@@ -147,8 +163,12 @@ def main(argv):
         check(summary.get("fade_detail", "").startswith("screen_fade_do_calls:0 screen_fade_do_errors:0 "),
               f"fade_detail={summary.get('fade_detail')}")
         drive = read_kv(os.path.join(out1, "verdict_mission_drive_summary.txt"))
-        check(re.match(r"^3/\d+$", drive.get("missions_with_script_found", "")) is not None, "3 missions found")
-        check(re.match(r"^1/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "1 _start ok")
+        check(re.match(r"^5/\d+$", drive.get("missions_with_script_found", "")) is not None, "5 missions found")
+        check(re.match(r"^2/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "2 _start ok")
+        check(re.match(r"^1/\d+ ", drive.get("missions_with_start_suspended", "")) is not None, "1 _start suspended")
+        # dlc1_mm_03_start and its child both stay suspended (nothing resumes them).
+        check(drive.get("live_script_threads_after_missions", "").startswith("2 "),
+              f"live threads after missions: {drive.get('live_script_threads_after_missions')}")
 
         hits = {r["name"]: r for r in read_tsv(os.path.join(out1, "verdict_stub_hits_with_missions.tsv"))}
         check(hits.get("set_mission_author", {}).get("call_count_all_inclusive") == "1", "set_mission_author hit once")

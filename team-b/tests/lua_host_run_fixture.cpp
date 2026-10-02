@@ -7,7 +7,7 @@
 // cutscene_tables for the zscene scene table) laid out per spec-vpp-container.md Sec1-2 (the
 // same layout tests/synthetic_archive_test.cpp builds, raw entries only). The
 // Lua sources are written for this test; nothing here comes from game files.
-// The mission stems (dlc1_mm_04/05/06) are names from this project's own
+// The mission stems (dlc1_mm_02..06) are names from this project's own
 // mission list (tools/, the one lua_host_run reads), so the mission-driving
 // pass picks them up.
 #include <algorithm>
@@ -89,7 +89,9 @@ int main(int argc, char** argv) {
     const std::vector<Entry> misc = {
         {"game_lib.lua",
          "function helper_wait_scene(n)\n  while not zscene_is_loaded(n) do thread_yield() end\nend\n"},
-        {"system_lib.lua", "-- synthetic preload\n"},
+        // thread_new looks its target up through _GetAnyGlobalSilent (real
+        // scripts get it from system_lib.lua); a minimal one for this test.
+        {"system_lib.lua", "-- synthetic preload\nfunction _GetAnyGlobalSilent(n) return rawget(_G, n) end\n"},
     };
     // The zscene scene table (spec-lua-api-behaviour.md Sec26.25 item 5):
     // cutscene.xtbl gives the names ("main": names starting with "dlc" are
@@ -114,8 +116,10 @@ int main(int argc, char** argv) {
     };
     const std::vector<Entry> dlc1 = {
         // 'scene_a' is a kind-1 entry of the fixture's scene table, so the
-        // next read is the skip_all_cutscenes byte 0x0153b556, which no spec
-        // gives a start-up value: blocks on that OPEN state (Sec14.23/Sec26.25).
+        // next read is the skip_all_cutscenes byte 0x0153b556 (false at start,
+        // Sec26.25 Globals 2026-10-01), then the current scene entry 0x0153b530,
+        // which no spec gives a start-up value: blocks on that OPEN state
+        // (Sec14.23/Sec26.25).
         {"dlc1_mm_06.lua", "function dlc1_mm_06_start(cp, restart)\n  helper_wait_scene('scene_a')\nend\n"},
         // CONFIRMED stubs only: _start succeeds. fade_out(0) starts a fade-out
         // (Sec26.24); no UI script defines screen_fade_do here, so the host's
@@ -124,6 +128,20 @@ int main(int argc, char** argv) {
          "function dlc1_mm_05_start(cp, restart)\n  set_mission_author()\n  fade_out(0)\nend\n"},
         // A plain Lua runtime error inside _start.
         {"dlc1_mm_04.lua", "function dlc1_mm_04_start(cp, restart)\n  local t = nil\n  return t.field\nend\n"},
+        // Request 11 (Sec26.27): _start runs as a script-thread record, so
+        // thread_new inside it has a parent and the child runs at once; the
+        // child yields (alive), then _start itself yields: suspended, no
+        // error. A bare lua_pcall raised "no script thread is current" here.
+        {"dlc1_mm_03.lua",
+         "function dlc1_mm_03_child(tag)\n  dlc1_mm_03_child_ran = tag\n  thread_yield()\nend\n"
+         "function dlc1_mm_03_start(cp, restart)\n"
+         "  local id = thread_new('dlc1_mm_03_child', 'ran')\n"
+         "  if id == 65535 or dlc1_mm_03_child_ran ~= 'ran' then error('child thread did not start') end\n"
+         "  thread_yield()\n"
+         "end\n"},
+        // A runaway _start: the watchdog must still stop it now that it runs
+        // on its own coroutine.
+        {"dlc1_mm_02.lua", "function dlc1_mm_02_start(cp, restart)\n  while true do end\nend\n"},
         // Not loadable: both real Lua and sr3lua must reject it.
         {"broken_syntax.lua", "function broken(\n"},
     };

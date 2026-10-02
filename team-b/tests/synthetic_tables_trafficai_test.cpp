@@ -255,6 +255,7 @@ void testAiBehavior() {
         "<Cover><take_cover_when><Flag>aimed at</Flag><Flag>damaged</Flag></take_cover_when>"
         "<abandon_cover_time>4.0</abandon_cover_time></Cover>"
         "<Kill_Enemy><seen_in_last>2.5</seen_in_last></Kill_Enemy>"
+        "<goals_can_process_early>true</goals_can_process_early>"
         "</Goals>"
         "<Actions><ability_elm><Action>reload</Action><Repeat_min>0.5</Repeat_min><Repeat_max>1.0</Repeat_max></ability_elm></Actions>"
         "</Behavior>"
@@ -272,6 +273,40 @@ void testAiBehavior() {
     CHECK(!b.flushOut.present && !b.flushOut.seenInLast.present);
     CHECK(!b.group.present); // Goals/Group absent
     CHECK(b.actions.size() == 1 && b.actions[0].action.index == 44); // "reload" (kCombatActionNames[44])
+    // spec §10 (CORRECTED 2026-10-02): goals_can_process_early is a child of Goals.
+    CHECK(b.goalsCanProcessEarly.present && b.goalsCanProcessEarly.value == true);
+}
+
+// ---------------------------------------------------------------------------
+// §10 ai_behavior.xtbl - goals_can_process_early's parent (regression for the
+// CORRECTED 2026-10-02 fix: it is a child of Goals, NOT a row-level child of
+// Behavior as this project previously, incorrectly, read it).
+// ---------------------------------------------------------------------------
+void testAiBehaviorGoalsCanProcessEarlyParent() {
+    // Placed correctly, under Goals: must be read.
+    sr3xtbl::Document underGoals = P(
+        "<root><Table>"
+        "<Behavior><Name>UnderGoals</Name>"
+        "<Goals><goals_can_process_early>true</goals_can_process_early></Goals>"
+        "</Behavior>"
+        "</Table></root>");
+    AiBehaviorTable tg = ParseAiBehaviorTable(underGoals);
+    CHECK(tg.rows.size() == 1);
+    CHECK(tg.rows[0].goalsCanProcessEarly.present && tg.rows[0].goalsCanProcessEarly.value == true);
+
+    // Placed at row level (a sibling of Goals, not inside it): must NOT be read -
+    // this is the old (wrong) reading this project previously used; it must now
+    // report absent, not true, proving the reader no longer falls back to row-level.
+    sr3xtbl::Document rowLevel = P(
+        "<root><Table>"
+        "<Behavior><Name>RowLevelOnly</Name>"
+        "<Goals><Survive><low_health_pct>0.3</low_health_pct></Survive></Goals>"
+        "<goals_can_process_early>true</goals_can_process_early>"
+        "</Behavior>"
+        "</Table></root>");
+    AiBehaviorTable tr = ParseAiBehaviorTable(rowLevel);
+    CHECK(tr.rows.size() == 1);
+    CHECK(!tr.rows[0].goalsCanProcessEarly.present); // row-level placement is invisible to the fixed reader
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +344,26 @@ void testGenericVehicles() {
     CHECK(t.rows.size() == 2);
     CHECK(t.rows[0].index == 1); // "Police Car" is kGenericVehicleSlotNames[1]
     CHECK(t.rows[1].index == -1); // exact-case mismatch -> no match (spec §12: case-SENSITIVE)
+}
+
+// ---------------------------------------------------------------------------
+// §12 generic_characters.xtbl - CASE-INSENSITIVE Name match (unlike the vehicle
+// file above). Regression for the 2026-10-02 RESOLVED fix: the 21 slot names are
+// now known in slot order and resolved to an index, like the vehicle file already
+// was.
+// ---------------------------------------------------------------------------
+void testGenericCharacters() {
+    sr3xtbl::Document d = P(
+        "<root><Table>"
+        "<Generics_Table><Name>Old Female</Name><Spawn_Name>npc_old_female</Spawn_Name></Generics_Table>"
+        "<Generics_Table><Name>old female</Name><Spawn_Name>x</Spawn_Name></Generics_Table>" // different case
+        "<Generics_Table><Name>Not A Slot</Name><Spawn_Name>y</Spawn_Name></Generics_Table>"
+        "</Table></root>");
+    GenericCharactersTable t = ParseGenericCharactersTable(d);
+    CHECK(t.rows.size() == 3);
+    CHECK(t.rows[0].index == 3); // "Old Female" is kGenericCharacterSlotNames[3]
+    CHECK(t.rows[1].index == 3); // case-insensitive match (spec §12: CRC lower-cases every byte)
+    CHECK(t.rows[2].index == -1); // not one of the 21 slot names
 }
 
 // ---------------------------------------------------------------------------
@@ -541,6 +596,27 @@ void testEscortConstants() {
     CHECK(cu.has_value() && cu->vehicles.vehicleDamagePenaltyMs.present);
     CHECK(cu->vehicles.vehicleDamagePenaltyMs.value == 4500u);
 
+    // spec s19 (RESOLVED 2026-10-02): ALL seven `_MS`-suffixed leaves are u32, not
+    // just Vehicle_Damage_Penalty_MS - regression for the fix (previously these six
+    // were wrongly read as float). Fraction text truncates the same way.
+    sr3xtbl::Document ms = P(
+        "<root><Table><Escort_Constants><Tiger_Constants><Penalties>"
+        "<Vehicles><Vehicle_Damage_Cooldown_MS>250.9</Vehicle_Damage_Cooldown_MS></Vehicles>"
+        "<Humans><Human_Damage_Penalty_MS>2000.9</Human_Damage_Penalty_MS></Humans>"
+        "<Movers><Mover_Damage_Penalty_MS>500.9</Mover_Damage_Penalty_MS>"
+        "<Mover_Damage_Cooldown_MS>250.9</Mover_Damage_Cooldown_MS></Movers>"
+        "<World><World_Damage_Penalty_MS>500.9</World_Damage_Penalty_MS>"
+        "<World_Damage_Cooldown_MS>250.9</World_Damage_Cooldown_MS></World>"
+        "</Penalties></Tiger_Constants></Escort_Constants></Table></root>");
+    auto cms = ParseEscortConstants(ms);
+    CHECK(cms.has_value());
+    CHECK(cms->vehicles.vehicleDamageCooldownMs.present && cms->vehicles.vehicleDamageCooldownMs.value == 250u);
+    CHECK(cms->humans.humanDamagePenaltyMs.present && cms->humans.humanDamagePenaltyMs.value == 2000u);
+    CHECK(cms->movers.moverDamagePenaltyMs.present && cms->movers.moverDamagePenaltyMs.value == 500u);
+    CHECK(cms->movers.moverDamageCooldownMs.present && cms->movers.moverDamageCooldownMs.value == 250u);
+    CHECK(cms->world.worldDamagePenaltyMs.present && cms->world.worldDamagePenaltyMs.value == 500u);
+    CHECK(cms->world.worldDamageCooldownMs.present && cms->world.worldDamageCooldownMs.value == 250u);
+
     sr3xtbl::Document absent = P("<root><Table></Table></root>");
     CHECK(!ParseEscortConstants(absent).has_value());
 }
@@ -679,8 +755,10 @@ int main() {
     testPanicReactions();
     testAiGoals();
     testAiBehavior();
+    testAiBehaviorGoalsCanProcessEarlyParent();
     testAiPersonalities();
     testGenericVehicles();
+    testGenericCharacters();
     testActionNodeGroups();
     testActionNodeNpcs();
     testActionNodes();

@@ -155,6 +155,7 @@
 
 namespace fs = std::filesystem;
 using sr3luahost::bareGlobalRoster;
+using sr3luahost::BareThreadTable;
 using sr3luahost::confirmedHooks;
 using sr3luahost::HookGroup;
 using sr3luahost::hookGroupLabel;
@@ -815,8 +816,16 @@ Host::RunResult runChunkWithWatchdog(Host& host, lua_State* L, const std::string
 struct MissionStartResult {
     bool existedAsFunction = false;
     bool attemptedCall = false;
-    bool callOk = false;
+    bool callOk = false;    // no error: the record finished, or yielded and is still alive
+    bool suspended = false; // callOk and the record yielded (runner step 6: "alive"); nothing resumes it
     std::string callError;
+    // When suspended: the Lua source location that actually called thread_yield
+    // (coroutine stack level 1 - level 0 is bareGuard's own C frame, where the
+    // real lua_yield() call lives, src/lua_bare_globals.cpp; level 1 is the
+    // mission script's own call site). Real, measured via lua_getstack/
+    // lua_getinfo on the still-suspended coroutine, not inferred. Empty if not
+    // suspended, or if neither stack level could be read.
+    std::string suspendedAt;
 };
 
 // checkpoint/isRestart are CHOSEN literal values (0 / false), per this
@@ -825,8 +834,22 @@ struct MissionStartResult {
 // (`m01_start(m01_checkpoint, is_restart)` calls `m01_run(...)`
 // internally) never pinned down a real, confirmed checkpoint VALUE to
 // use - this is a documented engineering choice, not recovered data.
-MissionStartResult callMissionStart(lua_State* L, const std::string& funcName, double checkpoint,
-                                     bool isRestart) {
+//
+// The call goes through the script-thread runner, not a bare lua_pcall
+// (spec-lua-api-behaviour.md Sec26.27 thread table, 2026-10-01 answer to
+// Team B request 11, CONFIRMED: the only writers of the current-thread
+// stack 0x02a44d10/0x02a44d14 are the runner 0x00e0cba0's push/pop and a
+// start-up zero-out, so every Lua code the engine reaches from mission or
+// trigger code runs inside a pushed record; "route every such invocation
+// through a resume-shaped call (push a record, call, pop)"). So `_start`
+// runs in its own coroutine (a yield inside it is legal) and is the
+// current record for the call (thread_new inside it finds a parent).
+// BareThreadTable::allocate()/run() is the host's model of that runner;
+// `threads` must be the table registered into L (Host::bareGlobals()).
+// Which of the runner's callers SR3 uses for mission hooks is OPEN and is
+// not modelled; only the mechanism is.
+MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, const std::string& funcName,
+                                     double checkpoint, bool isRestart) {
     MissionStartResult r;
     lua_getglobal(L, funcName.c_str());
     r.existedAsFunction = (lua_type(L, -1) == LUA_TFUNCTION);
@@ -835,22 +858,83 @@ MissionStartResult callMissionStart(lua_State* L, const std::string& funcName, d
         return r;
     }
     lua_pop(L, 1);
-    lua_getglobal(L, funcName.c_str()); // fresh reference, same convention as fireConfirmedHooks
+    r.attemptedCall = true;
+    // The runner's step 4 fetches the global by name below the arguments, so
+    // only the two arguments go on L's stack (allocate() moves them).
     lua_pushnumber(L, checkpoint);
     lua_pushboolean(L, isRestart ? 1 : 0);
-    r.attemptedCall = true;
-    lua_sethook(L, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
-    int callStatus = lua_pcall(L, 2, LUA_MULTRET, 0);
-    lua_sethook(L, nullptr, 0, 0);
-    if (callStatus != 0) {
-        const char* msg = lua_tostring(L, -1);
+    // hasParent=false: nothing is current before a mission's `_start` runs
+    // (the drive loop calls it from the host, not from inside a record), the
+    // same root-level situation BareThreadTable::startThread() models. The
+    // spec gives no record a mission `_start` would be nested in.
+    BareThreadTable::Record* rec = threads.allocate(L, funcName, /*nargs=*/2, /*hasParent=*/false);
+    if (!rec) {
+        lua_pop(L, 2); // allocate() leaves the arguments when the table is full
         r.callOk = false;
-        r.callError = msg ? msg : "(no error message)";
-        lua_pop(L, 1);
-    } else {
-        r.callOk = true;
+        r.callError = "lua_host_run: script-thread table full (" + std::to_string(BareThreadTable::kCapacity) +
+                      " records, HIGH CONFIDENCE capacity) - " + funcName + " not started";
+        lua_settop(L, 0);
+        return r;
     }
-    lua_settop(L, 0); // clear any return values, same convention as runChunk()/fireConfirmedHooks
+    // Keep the coroutine reachable across run(): when the record finishes or
+    // fails, run() releases it (the Record is freed and its registry ref
+    // dropped), and its own status / error message is read from it below.
+    lua_State* co = rec->co;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, rec->ref);
+    const int coRef = luaL_ref(L, LUA_REGISTRYINDEX);
+    // The watchdog goes on the coroutine: a count hook is per lua_State, and
+    // the mission code now runs on `co`, not on L. Threads that thread_new
+    // creates inside it inherit it (Lua 5.1 lua_newthread copies the hook).
+    lua_sethook(co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+    std::string fetchError;
+    const bool alive = threads.run(L, rec, fetchError); // rec is dangling once this returns false
+    lua_sethook(co, nullptr, 0, 0);
+    if (!fetchError.empty()) {
+        r.callOk = false;
+        r.callError = "lua_host_run: runner could not fetch " + funcName + ": " + fetchError;
+    } else if (alive) {
+        // Runner step 6: yielded without error -> alive. Not an error; the
+        // record stays in the table (the scheduler cadence is OPEN and this
+        // tool resumes nothing).
+        r.callOk = true;
+        r.suspended = true;
+        // Capture where it's actually waiting: level 1 is the mission script's
+        // own frame that called thread_yield (level 0 is bareGuard's C frame -
+        // see this function's own doc comment above). Falls back to level 0 if
+        // level 1 isn't available (a yield from somewhere other than the
+        // bareGuard<thread_yield> path, if one is ever added).
+        lua_Debug ar;
+        if (lua_getstack(co, 1, &ar) && lua_getinfo(co, "Sln", &ar)) {
+            r.suspendedAt = (ar.short_src[0] ? ar.short_src : "?") + std::string(":") +
+                             std::to_string(ar.currentline) +
+                             (ar.name ? (std::string(" (in ") + ar.name + ")") : "");
+        } else if (lua_getstack(co, 0, &ar) && lua_getinfo(co, "Sln", &ar)) {
+            r.suspendedAt = (ar.short_src[0] ? ar.short_src : "?") + std::string(":") +
+                             std::to_string(ar.currentline) + " (C frame, no Lua caller level)";
+        }
+    } else {
+        // Finished or failed. The error is read from the coroutine itself
+        // (lua_resume marks a failed coroutine dead with the message on its
+        // stack), not from threads.errors(): that vector is shared with any
+        // thread_new child that failed during the call, so "it grew" would
+        // misattribute a child's error to `_start`. This gives the bare
+        // message, as the old lua_tostring(L, -1) did, without the runner's
+        // "<name>: " prefix - the per-mission error columns and bridge_diff
+        // comparisons keep their meaning across runs.
+        const int st = lua_status(co);
+        if (st != 0 && st != LUA_YIELD) {
+            const char* msg = lua_tostring(co, -1);
+            r.callOk = false;
+            r.callError = msg ? msg : "(no error message)";
+        } else {
+            r.callOk = true;
+        }
+    }
+    luaL_unref(L, LUA_REGISTRYINDEX, coRef);
+    // Same end state as the old bare-pcall version: L's stack empty. Measured
+    // (2026-10-02, fixture and real cache): L is already at 0 here - the
+    // call's results stay on `co` - so this only guards the contract.
+    lua_settop(L, 0);
     return r;
 }
 
@@ -1951,7 +2035,10 @@ int main(int argc, char** argv) {
     // watchdog-protected before - see runChunkWithWatchdog() above's own
     // doc comment for why that's safe here). Then call
     // `<stem>_start(0, false)` (CHOSEN, documented args - see
-    // callMissionStart()'s own doc comment), watchdog-wrapped. Then tick
+    // callMissionStart()'s own doc comment), watchdog-wrapped, as a
+    // script-thread record through the runner (request 11, Sec26.27: the
+    // record is current for the call and the call may yield; a yielded
+    // record stays suspended, since nothing here resumes threads). Then tick
     // the confirmed-hook-firing pass (the real, already-built mechanism
     // that exercises sr3luahost::ThreadScheduler - thread_new/thread_yield
     // etc. are registered into both states and reachable from any hook
@@ -2032,6 +2119,8 @@ int main(int argc, char** argv) {
         bool loadOk = false, pcallOk = false;
         std::string loadError, pcallError;
         bool startExisted = false, startAttempted = false, startCallOk = false;
+        bool startSuspended = false; // _start's record yielded (no error) and is still alive
+        std::string startSuspendedAt; // see MissionStartResult::suspendedAt
         std::string startCallError;
         int ticksSurvived = 0;
         std::string stopReason;
@@ -2078,11 +2167,13 @@ int main(int argc, char** argv) {
         else if (loadResult.ranPcall && !loadResult.pcallOk) errorsInOrder.push_back(loadResult.pcallError);
 
         std::string funcName = row.missionLuaStem + "_start";
-        MissionStartResult startResult = callMissionStart(host.gameplayState(), funcName, kMissionStartCheckpoint,
-                                                            kMissionStartIsRestart);
+        MissionStartResult startResult = callMissionStart(host.gameplayState(), host.bareGlobals().threads(), funcName,
+                                                            kMissionStartCheckpoint, kMissionStartIsRestart);
         mr.startExisted = startResult.existedAsFunction;
         mr.startAttempted = startResult.attemptedCall;
         mr.startCallOk = startResult.callOk;
+        mr.startSuspended = startResult.suspended;
+        mr.startSuspendedAt = startResult.suspendedAt;
         mr.startCallError = startResult.callError;
         if (startResult.attemptedCall && !startResult.callOk) errorsInOrder.push_back(startResult.callError);
 
@@ -2128,7 +2219,23 @@ int main(int argc, char** argv) {
                     stopped = true;
                     break;
                 }
-                if (havePrevSig && sig.existed == prevSig.existed && sig.ok == prevSig.ok && sig.err == prevSig.err) {
+                // A fade transition still in flight (state != target) is real,
+                // silent progress the hook-firing signature above can't see -
+                // screenFadeHostFrame() keeps advancing toward its CONFIRMED
+                // (Sec26.24) host-side timeout completion every tick, but
+                // nothing about that shows up in sig.{existed,ok,err} while the
+                // suspended mission thread that's waiting on it isn't resumed.
+                // Without this check the loop declared "completion" after 2
+                // ticks (666ms) even when the fade's own request duration was
+                // longer, so the host-side substitute never got the chance to
+                // fire (found 2026-10-02, purrsian-d3's own next-blocker
+                // follow-up). Only suppresses the early-stop; never extends the
+                // loop past kMissionTickBudget.
+                const auto& fade = host.engineState().screenFade();
+                const bool fadePending = fade.state.known() && fade.target.known() &&
+                                          fade.state.get() != fade.target.get();
+                if (havePrevSig && sig.existed == prevSig.existed && sig.ok == prevSig.ok && sig.err == prevSig.err &&
+                    !fadePending) {
                     mr.stopReason = "completion (2 consecutive identical tick signatures - real, measured "
                                      "idempotence, CHOSEN stopping convention, see this block's own top comment)";
                     stopped = true;
@@ -2157,14 +2264,17 @@ int main(int argc, char** argv) {
     std::ofstream missionOut(outDir / "verdict_mission_drive.tsv");
     missionOut << "stem\tentry_name\tcontainer_name\tscript_found\tload_ok\tload_error\tpcall_ok\tpcall_error\t"
                   "start_func_name\tstart_existed\tstart_attempted\tstart_call_ok\tstart_call_error\t"
-                  "ticks_survived\tstop_reason\tfirst_error_message\tfirst_unimplemented_stub\n";
+                  "ticks_survived\tstop_reason\tfirst_error_message\tfirst_unimplemented_stub\tstart_suspended\t"
+                  "start_suspended_at\n";
     uint64_t missionsFoundCount = 0, missionsStartExistedCount = 0, missionsStartOkCount = 0;
+    uint64_t missionsStartSuspendedCount = 0;
     uint64_t stopBudget = 0, stopError = 0, stopCompletion = 0;
     uint64_t ticksSum = 0;
     for (auto& mr : missionResults) {
         if (mr.scriptFound) missionsFoundCount++;
         if (mr.startExisted) missionsStartExistedCount++;
         if (mr.startCallOk) missionsStartOkCount++;
+        if (mr.startSuspended) missionsStartSuspendedCount++;
         ticksSum += (uint64_t)mr.ticksSurvived;
         if (mr.stopReason.rfind("budget exhaustion", 0) == 0) stopBudget++;
         else if (mr.stopReason.rfind("error", 0) == 0) stopError++;
@@ -2176,7 +2286,8 @@ int main(int argc, char** argv) {
                    << (mr.startExisted ? 1 : 0) << "\t" << (mr.startAttempted ? 1 : 0) << "\t"
                    << (mr.startCallOk ? 1 : 0) << "\t" << sanitizeTsv(mr.startCallError) << "\t"
                    << mr.ticksSurvived << "\t" << sanitizeTsv(mr.stopReason) << "\t"
-                   << sanitizeTsv(mr.firstErrorMessage) << "\t" << sanitizeTsv(mr.firstUnimplementedStub) << "\n";
+                   << sanitizeTsv(mr.firstErrorMessage) << "\t" << sanitizeTsv(mr.firstUnimplementedStub) << "\t"
+                   << (mr.startSuspended ? 1 : 0) << "\t" << sanitizeTsv(mr.startSuspendedAt) << "\n";
     }
     missionOut.close();
 
@@ -2230,6 +2341,14 @@ int main(int argc, char** argv) {
     mline("missions_with_script_found=" + std::to_string(missionsFoundCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_existed=" + std::to_string(missionsStartExistedCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_call_ok=" + std::to_string(missionsStartOkCount) + "/" + std::to_string(missions.size()));
+    // _start runs as a script-thread record (Sec26.27 runner, request 11): a
+    // call that yielded without error counts as ok above and is listed here;
+    // its record stays suspended (nothing in this tool resumes threads - the
+    // scheduler cadence is OPEN), so it never ran to its end.
+    mline("missions_with_start_suspended=" + std::to_string(missionsStartSuspendedCount) + "/" +
+          std::to_string(missions.size()) + " (subset of start_call_ok: yielded, record still alive, not resumed)");
+    mline("live_script_threads_after_missions=" + std::to_string(host.bareGlobals().threads().liveCount()) +
+          " (capacity " + std::to_string(BareThreadTable::kCapacity) + ")");
     mline("stop_reason_histogram: budget_exhaustion=" + std::to_string(stopBudget) + " error=" +
           std::to_string(stopError) + " completion=" + std::to_string(stopCompletion) + " (sum should equal "
           "missions_with_script_found, since a not-found script gets its own separate \"script not found\" "
@@ -2269,7 +2388,7 @@ int main(int argc, char** argv) {
         if (mr.scriptFound) {
             row << " load_ok=" << (mr.loadOk ? 1 : 0) << " pcall_ok=" << (mr.pcallOk ? 1 : 0)
                 << " start_existed=" << (mr.startExisted ? 1 : 0) << " start_call_ok=" << (mr.startCallOk ? 1 : 0)
-                << " ticks_survived=" << mr.ticksSurvived << " stop_reason=[" << mr.stopReason << "]";
+                << (mr.startSuspended ? " start_suspended=1" : "") << " ticks_survived=" << mr.ticksSurvived << " stop_reason=[" << mr.stopReason << "]";
             if (!mr.firstErrorMessage.empty()) row << " first_error=[" << mr.firstErrorMessage << "]";
             if (!mr.firstUnimplementedStub.empty()) row << " first_unimplemented_stub=" << mr.firstUnimplementedStub;
         }

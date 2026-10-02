@@ -220,7 +220,10 @@ int32_t LookupNamedValue(const Node* node, const NamedValue (&table)[N]) {
 
 // Index-of-match tables (index == stored value; via sr3xtbl::EnumIndex, the
 // generic reader FUN_00DAC830 - spec 1.3/9.2).
-// Button_Animation_Type - 3-entry table at 0x012FFF1C (9.2).
+// Button_Animation_Type - the engine's real table at 0x012FFF1C has 9 slots
+// (CORRECTED 2026-10-01, 9.2); only these 3 names are known, so this is NOT
+// used as a closed EnumIndex lookup (see HudQteInterface::buttonAnimationType,
+// kept as raw text instead) - documentation of the known subset only.
 inline constexpr std::array<std::string_view, 3> kButtonAnimationTypeNames = {
     "Mash Standard", "Mash Fast", "Alternate Triggers",
 };
@@ -295,7 +298,12 @@ struct ControlSchemeControl {
     int32_t button = -1;                        // Button -> kGamepadButtonTable (4.6)
     int32_t alternateButton = -1;                 // Alternate_Button -> same
     int32_t stickDirection = -1;                   // Stick_Direction -> kStickDirectionTable (4.7)
-    std::optional<std::string> actionName;          // Action_Name - free-text display label, NOT looked up
+    // Action_Name - free-text display label, NOT looked up. CORRECTED
+    // 2026-10-01 (3.1): the real loader bounds-copies it to 23 characters and
+    // interns it via 0x00DB12C0 - a load-time TRANSFORM (truncation), not an
+    // XML-shape fact, so per this file's own banner policy it is NOT
+    // modelled here; the full, untruncated authored text is kept.
+    std::optional<std::string> actionName;
     // X360 gates storage; spec-STATED concrete default true when absent (3.1)
     // - modelled as optional + OrDefault, per the project's convention for a
     // stated default distinct from the general Always-hazard.
@@ -314,7 +322,14 @@ struct ControlSchemeAxis {
     int32_t axis = -1;                     // Axis -> kStickAxisTable (4.8)
     Always<bool> inverted;                   // Inverted
     int32_t alternateAxis = -1;               // Alternate_Axis -> same table
-    Always<bool> alternateInverted;             // Alternate_Inverted
+    // alternateInverted (CORRECTED 2026-10-01): the real loader does NOT read
+    // the XML element <Alternate_Inverted> - it reads <Inverted> a SECOND
+    // time into this slot, so this field always equals `inverted` and the
+    // file's actual <Alternate_Inverted> values are dead data, never
+    // consulted (3.2). ParseControlSchemeAxis() reads the "Inverted" element
+    // name here, matching the real loader, not the XML tag name that would
+    // naively be expected.
+    Always<bool> alternateInverted;
 };
 
 struct ControlScheme {
@@ -339,14 +354,21 @@ std::vector<ControlScheme> ParseControlSchemesTable(const Document& doc);
 // ===========================================================================
 // Trivial single-row table: <root><Table><QTE><Name>QTE</Name>...
 struct QteGlobalParams {
-    Always<float> hudTime;      // Hud_Time - RAW seconds; the engine multiplies
-                                 // by a global scale constant (DAT_012A2D90,
-                                 // not identified - spec Open Item 8) and
-                                 // rounds - a load-time transform, not applied here
-    Always<float> cooldownTime; // Cooldown_Time - RAW seconds as authored; the
-                                 // engine stores an offset relative to the
-                                 // converted Hud_Time, not this value directly
-                                 // (load-time transform, not applied here)
+    // Hud_Time - RAW seconds as authored. CORRECTED 2026-10-01 (6): the
+    // engine clamps >= 0.0, multiplies by the now-identified scale constant
+    // 0x012A2D90 (= 1000.0, seconds->milliseconds) and truncates toward zero
+    // (not "rounds") - a load-time transform, still not applied here per
+    // this file's banner policy (raw authored value kept).
+    Always<float> hudTime;
+    // Cooldown_Time - RAW seconds as authored. CORRECTED 2026-10-01 (6): the
+    // engine does NOT store an offset relative to Hud_Time's converted
+    // value - it clamps >= 0.0, multiplies by -1000.0, truncates, and
+    // subtracts that (negative) result from Hud_Time's stored milliseconds,
+    // i.e. the real stored quantity is Hud_Time_ms + Cooldown_Time_ms (a
+    // positive sum; real data 4s + 6s -> 10000). Still a load-time
+    // transform, not applied here - this field stays the raw authored
+    // seconds value.
+    Always<float> cooldownTime;
     Always<int32_t> respect;              // Respect (engine clamps >= 0)
     Always<int32_t> maxLifetimeRespect;   // Max_Lifetime_Respect (engine clamps >= 0)
     Always<float> cash;                    // Cash (engine clamps >= 0.0)
@@ -382,7 +404,9 @@ struct QteNodeNpcAnimation {
 // sequences: 160 (0xA0); per-sequence capacity 24 (7.1) - neither cap is
 // enforced by this reader (raw parse convention; see 7.3's retraction).
 struct QteNode {
-    std::optional<std::string> nodeName;     // Node_Name (row key; CRC-32 seed 0xFFFFFFFF, 1.4/7.2)
+    std::optional<std::string> nodeName;     // Node_Name (row key; CRC-32 0x00D9E8B0, initial value 0, no length
+                                              // limit - CORRECTED 2026-10-01, 1.4/7.2; 0xFFFFFFFF was the max-length
+                                              // call argument, not a seed)
     std::optional<std::string> hudInterface; // HUD_Interface (join key into hud_qte_interface.xtbl's Name, same seed, 7.2/9.2)
     std::optional<int32_t> failTime;         // Fail_Time (if-present)
 
@@ -429,7 +453,8 @@ struct QteNode {
     Always<bool> onSuccessKeepHud;      // On_Success/Keep_HUD
     Always<bool> onSuccessKillPartner;  // On_Success/Kill_Partner
     Always<int32_t> onSuccessRepeat;      // On_Success/Repeat
-    std::optional<std::string> onSuccessGoToNode;  // On_Success/Go_To_Node (hashed node-name reference, seed 0xFFFFFFFF; raw text)
+    std::optional<std::string> onSuccessGoToNode;  // On_Success/Go_To_Node (hashed node-name reference, CRC-32
+                                                    // 0x00D9E8B0 seed 0, CORRECTED 2026-10-01, 1.4; raw text)
     std::optional<std::string> onFailGoToNode;      // On_Fail/Go_To_Node (same)
     std::optional<bool> onFailForceSuccess;           // On_Fail/Force_Success (if-present)
     Always<bool> onFailKeepHud;                         // On_Fail/Keep_HUD
@@ -438,13 +463,21 @@ struct QteNode {
 };
 
 struct QteSequence {  // <QTE> row, 128 (0x80) bytes
-    std::optional<std::string> name;  // Name (row key; CRC-32 seed 0xFFFFFFFF)
+    std::optional<std::string> name;  // Name (row key; CRC-32 0x00D9E8B0, seed 0, CORRECTED 2026-10-01, 1.4)
     Always<bool> disablePlayer;         // Disable_Player
     Always<bool> viewRemotely;            // View_Remotely
     std::optional<std::string> playerWeapon;  // Player_Weapon -> FUN_00B81220 weapons-array resolver (raw text)
-    // [OPEN: numeric u16 vs name - spec-tables-ui-controls.md 7.1/7.2, NEEDS-EXE; see the .cpp]
-    std::optional<uint16_t> successAnimation;  // Succes_State/Synced_Animation (NOTE: "Succes" - one 's' - is the
-                                                // actual, confirmed-real XML tag; not a transcription error, 7.1)
+    // CORRECTED 2026-10-01 (7.1/7.2): the former "numeric u16 vs name" OPEN
+    // question is now settled - 0x0095DA50 is a hash-indexed NAME->u16
+    // resolver into the 0x30-stride table at 0x02624B50 (0xFFFF when
+    // unmatched), a DIFFERENT table from Looping_State's own
+    // Synced_Animation resolver (0x004BF810, name+hash into a 16-byte-stride
+    // table at 0x03171C10) - "two tables, both attributions right" (7.2).
+    // So this element is a NAME (like every other resolver field in this
+    // struct), not a literal u16; retyped from std::optional<uint16_t> to
+    // match (was previously read as a raw number, a real bug this corrects).
+    std::optional<std::string> successAnimation;  // Succes_State/Synced_Animation (NOTE: "Succes" - one 's' - is the
+                                                   // actual, confirmed-real XML tag; not a transcription error, 7.1)
     Always<bool> successPlayerIsAttacker;        // Succes_State/Player_Is_Attacker
     std::vector<std::string> animatedNpcNames;     // Animated_NPCs/Animated_NPC/NPC_Name (capacity 4; extras kept here regardless)
     std::vector<QteNode> nodes;                      // QTE_Nodes/QTE_Node (per-sequence capacity 24; extras kept here regardless)
@@ -477,11 +510,17 @@ struct VehicleCameraFields {
     // block is present here - a cross-row behaviour this struct cannot
     // resolve alone, so it is not modelled as a derived bool).
     bool positionBasedPresent = false;
-    std::optional<float> positionSwingRateFwd;  // Position_Based/Swing_Rate_Fwd (+0x6EC, if-present; absent -> engine
-                                                 // RNG-draws clamped [0,1), NOT a fixed default - not modelled)
+    // CORRECTED 2026-10-01 (8.1): the former "RNG default" reading of
+    // 0x00EA4ACC was wrong - that address is the CRT `exp` intrinsic, used
+    // in a DETERMINISTIC transform applied to whatever value is present
+    // (0 -> 1.0; otherwise 1 - exp(K / value), clamped to [0, 1]) - not a
+    // fixed default and not a random draw. Still a load-time transform, so
+    // still not applied here; the raw authored value is kept either way.
+    std::optional<float> positionSwingRateFwd;  // Position_Based/Swing_Rate_Fwd (+0x6EC, if-present)
     std::optional<float> positionSwingRateRev;  // Position_Based/Swing_Rate_Rev (+0x6FC)
-    std::optional<float> positionFromStickyFwd; // Position_Based/From_Sticky_Fwd (+0x70C; defaults to Swing_Rate_Fwd
-                                                 // if absent, else independently RNG-drawn - neither applied here)
+    std::optional<float> positionFromStickyFwd; // Position_Based/From_Sticky_Fwd (+0x70C; same deterministic
+                                                 // transform when present, without the zero test; copies the
+                                                 // already-transformed Swing_Rate_Fwd when absent - not applied here)
     std::optional<float> positionFromStickyRev; // Position_Based/From_Sticky_Rev (+0x710)
     std::optional<float> positionHeadingRetentionNormal;   // Position_Based/Heading_Retention_Normal (+0x6F0, default 1.0)
     std::optional<float> positionHeadingRetentionTurning;  // Position_Based/Heading_Retention_Turning (+0x6F4, default 1.0)
@@ -501,14 +540,18 @@ struct VehicleCameraFields {
     bool CameraRollTypeIsCustom() const { return cameraRollTypeText.has_value() && !sr3xtbl::NameEquals(*cameraRollTypeText, "none"); }
     std::optional<float> cameraRollIntensityMultiplier;  // Camera_Roll/Intensity_Multiplier (+0xAF4, if-present)
 
-    // Row ATTRIBUTES (not child elements) - "yes" (case-insensitive; the
-    // spec's own exact-casing is not stated - see the .cpp).
-    // [OPEN: attribute vs child element - spec-tables-ui-controls.md 8.1, NEEDS-EXE; see the .cpp]
+    // CORRECTED 2026-10-01 (8.1): these are CHILD ELEMENTS, not row
+    // attributes (the former "attribute vs child element" OPEN question is
+    // now settled - getter 0x00DABA40 reads child elements everywhere else
+    // in this group) - "yes", case-insensitive comparison.
     bool skipCameraTransition = false;  // skip_camera_transition == "yes" (+0x870 bit 0x8000)
     bool useAltFreckleCam = false;      // use_alt_freckle_cam == "yes" (+0x870 bit 0x2000000; inherited from the
                                         // group row when absent, vehicle mode - not modelled, cross-row)
 
-    std::optional<float> cameraFovScale;  // camera_fov_scale (+0x860, if-present, default 1.0, engine clamps >= 0)
+    // camera_fov_scale (+0x860, if-present, default 1.0). CORRECTED
+    // 2026-10-01 (8.1): engine clamp is [0, 1], not ">= 0" - a load-time
+    // transform, not applied here.
+    std::optional<float> cameraFovScale;
     float CameraFovScaleOrDefault() const { return cameraFovScale.value_or(1.0f); }
     Always<float> maxFov;  // Max_FOV (+0x864, f32, always - vehicle-mode only; group-fill mode leaves it untouched)
     std::optional<float> minFollowDistMultiplier;  // Min_Follow_Dist_Multiplier (+0x868, if-present, default 1.0)
@@ -577,9 +620,22 @@ std::vector<HudQtePreset> ParseHudQteInterfacePresetsTable(const Document& doc);
 // 9.2 Hud_qte record, 56 (0xE-dword) bytes. Row tag per the file banner's
 // JUDGEMENT CALLS note.
 struct HudQteInterface {
-    std::optional<std::string> name;  // Name (row key; CRC-32 seed 0xFFFFFFFF - joins qte_sequences.xtbl's HUD_Interface, 7.2/9.2)
-    int32_t buttonType = -1;            // Button_Type -> kQteButtonTypeNames (9-entry, EnumIndex)
-    int32_t buttonAnimationType = -1;     // Button_Animation_Type -> kButtonAnimationTypeNames (3-entry, EnumIndex)
+    std::optional<std::string> name;  // Name (row key; CRC-32 0x00D9E8B0, seed 0, CORRECTED 2026-10-01, 1.4 - joins
+                                       // qte_sequences.xtbl's HUD_Interface, 7.2/9.2)
+    int32_t buttonType = -1;            // Button_Type -> kQteButtonTypeNames (9-entry, fully enumerated, EnumIndex)
+    // Button_Animation_Type: CORRECTED 2026-10-01 (9.2) - the real scan
+    // covers 9 slots at 0x012FFF1C, not 3; only 3 of the 9 names are known
+    // (kButtonAnimationTypeNames - "Mash Standard"/"Mash Fast"/"Alternate
+    // Triggers"), the other 6 are unread (NEEDS-EXE: ptrs 0x012FFF1C 9). This
+    // now matches the banner's "confirmed table, not fully enumerated" case
+    // (same category as CBA/CAA/the key-name table, 4) rather than the
+    // "fully enumerated small table" case it was wrongly modelled as before
+    // - closing the 3-entry EnumIndex would silently map any of the 6
+    // unknown-but-real values to "no match" (-1). Kept as RAW TEXT instead,
+    // per this project's "do not fabricate placeholder names" rule; real
+    // shipped data only uses "Mash Fast"/"Mash Standard" (9.2), so this is a
+    // soundness fix with no effect on the current real-archive population.
+    std::optional<std::string> buttonAnimationType;
     std::optional<std::string> buttonAction;  // Button_Action -> CBA table (raw text; second copy of the same 4.1 table)
     // Axis_Action -> CAA table (raw text; second copy of 4.2). NOTE: real
     // data's placeholder text "CAA_AXIS_UNBOUND" is NOT a real table entry -
@@ -596,14 +652,23 @@ std::vector<HudQteInterface> ParseHudQteInterfaceTable(const Document& doc);
 
 // ===========================================================================
 // 10. user_interface.xtbl - UI cluster/resolution layout
-// (spec-tables-ui-controls.md 10). Schema CONFIRMED - empirical; byte-offset
-// layout OPEN (the four downstream fill functions were not decompiled -
-// spec Open Item 6). This models the element-TREE SHAPE only, reconstructed
-// from the spec's own tag-chain prose (see the file banner's JUDGEMENT
-// CALLS). Numeric field WIDTH (int vs float) is not stated by the spec for
-// this table at all; float is used throughout as the generic default.
+// (spec-tables-ui-controls.md 10). Schema CONFIRMED - empirical. Open Item 6
+// (the four downstream fill functions) is now CLOSED (2026-10-01): the spec
+// now states numeric field WIDTH/presence for the two sub-structs the real
+// loader actually reads from (UiClusterOffset, UiPart) - i32, if-present for
+// XOffset/YOffset, f32 if-present for Scale/Alpha (CORRECTED below; was
+// previously "float throughout, always", a JUDGEMENT CALL made before this
+// was known). UiSlotOffset (SlotList/SlotOffset) and UiCluster's own
+// XPosition/YPosition remain UNCONFIRMED - the spec explicitly states the
+// loader and these fills never read either ("Part > Name, the SlotList >
+// SlotOffset sub-tree, ResolutionList/Resolution and XPosition/YPosition are
+// never read"), so no type/presence fact exists to cite for them; left as
+// float/always (the original generic-default judgement call) rather than
+// guessed at.
 // ===========================================================================
-struct UiSlotOffset {  // BitmapSlots/Part/SlotList/SlotOffset
+struct UiSlotOffset {  // BitmapSlots/Part/SlotList/SlotOffset - NEVER READ by
+                        // the real loader (10); type/presence unconfirmed,
+                        // kept as the original generic-default judgement call.
     std::optional<std::string> resolutionRatio;  // ResolutionRatio
     Always<float> xOffset, yOffset;
     Always<float> scale;
@@ -612,13 +677,18 @@ struct UiSlotOffset {  // BitmapSlots/Part/SlotList/SlotOffset
 struct UiPart {  // UIClusters/Cluster/BitmapSlots/Part
     std::optional<std::string> name;    // Name
     std::vector<UiSlotOffset> slots;      // SlotList/SlotOffset
-    Always<float> xOffset, yOffset;         // Part's own direct XOffset/YOffset (distinct from per-slot values)
-    Always<float> scale;
-    Always<float> alpha;
+    // Part's own direct XOffset/YOffset (distinct from per-slot values).
+    // CORRECTED 2026-10-01 (10): i32, if-present (was float/always).
+    std::optional<int32_t> xOffset, yOffset;
+    // CORRECTED 2026-10-01 (10): f32, if-present (was f32/always - type was
+    // already right, presence was not).
+    std::optional<float> scale;
+    std::optional<float> alpha;
 };
 struct UiClusterOffset {  // UIClusters/Cluster/ClusterOffsetList/ClusterOffset
     std::optional<std::string> resolutionRatio;  // ResolutionRatio
-    Always<float> xOffset, yOffset;
+    // CORRECTED 2026-10-01 (10): i32, if-present (was float/always).
+    std::optional<int32_t> xOffset, yOffset;
 };
 struct UiCluster {  // UIClusters/Cluster
     std::optional<std::string> clusterName;  // ClusterName
@@ -643,15 +713,51 @@ const UserInterfaceRow* FindActiveUserInterfaceRow(const std::vector<UserInterfa
 
 // ===========================================================================
 // 11. control_scheme_text.xtbl - on-screen control-legend text
-// (spec-tables-ui-controls.md 11). Deeper field-offset mapping past row
-// selection was not pursued by the spec (Open Item 7) - schema is fully
-// confirmed from real data regardless.
+// (spec-tables-ui-controls.md 11). Record pool/stride/field-offset layout
+// (one shared pool, stride 0x88, running count, per-scheme circular list,
+// re-derived 2026-10-01 - Open Item 7, closed) describes internal RUNTIME
+// storage, not additional XML shape, so it changes nothing below; this
+// struct still only models the XML element tree.
+//
+// Platform filter (CORRECTED 2026-10-01, was previously undocumented/
+// unmodelled): the real loader keeps a <Control> row ONLY when its
+// <Platform> text is EXACTLY "360" or "All" (case-sensitive); every other
+// value (e.g. "PS3"), and an absent Platform, is dropped before it ever
+// reaches the loaded structure - "only Controls whose Platform text is
+// exactly 360 or All ... are kept; every other value ... is dropped at
+// load" (11). ParseControlSchemeText() applies this filter at parse time
+// (continue, never pushed), matching this project's established
+// drop-at-parse convention for an explicit, fully-settled disqualifying
+// field value - see tables_customization_items.cpp's Wear_Option
+// Disabled=yes and Customization_Item "not ready" flag, both dropped via
+// `continue` before push_back - rather than this SAME spec file's own
+// control_binding_sets.xtbl Debug_Only/Non_Release_Final precedent (2.2),
+// which deliberately keeps every row raw because that gate's absence
+// behaviour was spec-unstated and tangled with an unresolved
+// save-table-builder NEEDS-EXE item; neither complication applies to
+// Platform, so the filter is applied here. The `platform` field below is
+// kept (unlike Wear_Option's dropped `Disabled`) because, unlike a boolean
+// gate that becomes a constant after filtering, Platform still carries
+// live information post-filter (which of "360"/"All" matched) - every
+// ControlSchemeTextEntry this reader produces has platform == "360" or
+// "All" by construction.
+//
+// Real-engine infinite-loop hazard (11), documented but NOT reproduced
+// here: "A matched ControlScheme without a Controls child makes the
+// loader re-enter the same row forever" describes the ORIGINAL index-based
+// C++ loader. This reader is a tree-walking parser, not a re-implementation
+// of that index-walking loop: ParseControlSchemeText() calls FindChild(row,
+// "Controls") once and iterates its children via Children(); both are
+// null-safe (verified against sr3xtbl.h's implementation, not assumed), so
+// a Controls-less row simply yields an empty `controls` vector - there is
+// no loop construct here that could re-enter.
 // ===========================================================================
 struct ControlSchemeTextEntry {  // <ControlScheme>/Controls/Control
     std::optional<std::string> control1;  // Control1 (a display token, e.g. "R1", "L2")
     std::optional<std::string> locDesc;     // LocDesc (a localization string KEY, e.g. CONTROL_DESC_GRENADE -
                                              // the resolving system is not identified by the spec; raw key kept)
-    std::optional<std::string> platform;      // Platform ("360"/"PS3"/presumably others)
+    std::optional<std::string> platform;      // Platform - "360"/"All" only (PS3/etc. dropped at parse time by
+                                               // ParseControlSchemeText's Platform filter; see struct banner above)
 };
 struct ControlSchemeText {  // <ControlScheme> row (note: NO underscore - distinct from
                              // control_schemes.xtbl's <Control_Scheme>, spec 11 vs 3)
@@ -660,7 +766,7 @@ struct ControlSchemeText {  // <ControlScheme> row (note: NO underscore - distin
     // list is NOT enumerated by the spec beyond one example, so (like the
     // CBA/CAA/key-name tables) it is kept as raw text, not a lookup table.
     std::optional<std::string> name;
-    std::vector<ControlSchemeTextEntry> controls;  // Controls/Control
+    std::vector<ControlSchemeTextEntry> controls;  // Controls/Control, Platform-filtered (see banner above)
 };
 ControlSchemeTextEntry ParseControlSchemeTextEntry(const Node* row);
 ControlSchemeText ParseControlSchemeText(const Node* row);
@@ -682,9 +788,24 @@ struct VoiceControlEntry {  // <Entry> row
     Always<int32_t> playPercent;                // Play_percent - RAW value (bits 21-22; engine buckets into 4 tiers at 26/51/76)
     std::optional<int32_t> priority;              // Priority (if-present, spec-stated default 10; bits 23-27, 5-bit field)
     int32_t PriorityOrDefault() const { return priority.value_or(10); }
-    std::optional<uint32_t> externalSource;  // External_source (if-present; registered with the audio subsystem only
-                                              // when a debug/registration flag is set - not modelled, engine-side condition)
-    std::optional<uint32_t> playEvent;         // Play_event (if-present; same registration condition)
+    // External_source/Play_event (CORRECTED 2026-10-01, was previously
+    // modelled as "if-present"): both use the same "always" reader
+    // (0x00DABDF0) as every other u32 field in this struct, e.g.
+    // voicelineId/localCooldownMs above - NOT an if-present read. Stored by
+    // the real loader in a 12-byte record {External_source +0x00,
+    // Play_event +0x04, packed word +0x08} (12).
+    Always<uint32_t> externalSource;  // External_source - see registration note below
+    // Registration gate (CORRECTED 2026-10-01): the row's only sink is
+    // 0x00467950(Voiceline_id, &record), made only when byte 0x0135375E is
+    // set. That byte is NOT a standing "debug/registration flag" - it is
+    // ARMED BY THE LOADER ITSELF, via 0x0046B190, when loading the
+    // base-game file (not a DLC variant) with the loader's own second
+    // argument true (12). This reader does not model the store
+    // (0x00467950) or the arming call (0x0046B190) - that is runtime
+    // registration/sink behaviour, out of scope for a schema reader (same
+    // standing rule as every other un-simulated subsystem in this file);
+    // only the XML shape (External_source, Play_event) is read.
+    Always<uint32_t> playEvent;  // Play_event - same registration note as externalSource above
 
     // Load-time-computed bitfield helpers reproducing the spec's own fully
     // CONFIRMED (disassembly of every shift/mask/clamp constant, 12) packing

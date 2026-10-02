@@ -577,6 +577,152 @@ void testAutomobileFlagsBitmask() {
     CHECK(e.vehicleType.automobile.automobileFlags == (0x01u | 0x08u));
 }
 
+// ---------------------------------------------------------------------------
+// Vehicle camera parameters (spec-vehicle-data.md 7.3's +0x628-+0x72B field
+// table, added 2026-10-02; spec-tables-ui-controls.md 8.1 "Family A").
+// IMPORTANT: this region is NOT read from a <name>_veh.xtbl <Vehicle> row at
+// all (see VehicleCameraRow's own header comment for the full discovery) -
+// it comes from a SEPARATE vehicle_cameras.xtbl/vehicle_group_cameras.xtbl
+// file, so these fixtures build THAT row shape (Primary_Camera_Angle etc.
+// wrapper elements), not a _veh.xtbl one, and go through
+// ParseVehicleCameraRow, not ParseVehicleEntry.
+// ---------------------------------------------------------------------------
+void testVehicleCameraRowNormal() {
+    const char* xml =
+        "<root><Table><Vehicle>"
+        "<Name>sp_test01_car</Name>"
+        "<Primary_Camera_Angle>"
+        "<Lookat_Offset><X>1</X><Y>2</Y><Z>3</Z></Lookat_Offset>"
+        "<Follow_Distance>5</Follow_Distance>"
+        "<Follow_Height>1.5</Follow_Height>"
+        "<Min_Pitch>-10</Min_Pitch>"
+        "<Max_Pitch>45</Max_Pitch>"
+        "</Primary_Camera_Angle>"
+        "<Secondary_Camera_Angle><Follow_Distance>8</Follow_Distance></Secondary_Camera_Angle>"
+        "<RC_Camera_Angle><Follow_Height>2.2</Follow_Height></RC_Camera_Angle>"
+        "<Camera_Follow_Aggression>"
+        "<Position_Based>"
+        "<Swing_Rate_Fwd>0.3</Swing_Rate_Fwd>"
+        "<Swing_Rate_Rev>0.4</Swing_Rate_Rev>"
+        "<Heading_Retention_Normal>0.9</Heading_Retention_Normal>"
+        "<From_Sticky_Fwd>0.1</From_Sticky_Fwd>"
+        "</Position_Based>"
+        "</Camera_Follow_Aggression>"
+        "</Vehicle></Table></root>";
+    Document doc = P(xml);
+    CHECK(doc.warnings().empty());
+    const Node* row = FirstVehicle(doc);
+    CHECK(row != nullptr);
+    VehicleCameraRow r = ParseVehicleCameraRow(row);
+
+    CHECK(r.name.has_value() && *r.name == "sp_test01_car");
+
+    // Primary angle set: vec3 Lookat_Offset + the four scalar siblings,
+    // Min_Pitch/Max_Pitch deg->rad.
+    CHECK(r.primary.lookatOffset.complete());
+    CHECK(r.primary.lookatOffset.value().x == 1.0f && r.primary.lookatOffset.value().y == 2.0f && r.primary.lookatOffset.value().z == 3.0f);
+    CHECK(r.primary.followDistance.present && r.primary.followDistance.value == 5.0f);
+    CHECK(r.primary.followHeight.present && near(r.primary.followHeight.value, 1.5f, 1e-6f));
+    CHECK(near(r.primary.minPitchRadians.value, -10.0f * kDegToRad, 1e-5f));
+    CHECK(near(r.primary.maxPitchRadians.value, 45.0f * kDegToRad, 1e-5f));
+
+    // Secondary/RC are independent sets (own wrapper element, +0x20/+0x40) -
+    // each reads only what its own wrapper authored.
+    CHECK(r.secondary.followDistance.present && r.secondary.followDistance.value == 8.0f);
+    CHECK(!r.secondary.followHeight.present);
+    CHECK(r.primary.followHeight.present);  // sanity: primary's own followHeight stays present (not clobbered by Secondary/RC parsing)
+    CHECK(r.rc.followHeight.present && near(r.rc.followHeight.value, 2.2f, 1e-5f));
+    CHECK(!r.rc.followDistance.present);
+
+    // Camera_Follow_Aggression > Position_Based: fields present stay exact
+    // (near(), not ==, matches this test file's own convention - the
+    // engine's own float grammar, src/xtbl.cpp's ParseFloat, accumulates
+    // fractional digits via successive single-precision x0.1f multiplies,
+    // which is not always bit-identical to a C++ decimal float literal, see
+    // this file's `near` helper). Heading_Retention_Turning's documented 1.0
+    // default is NOT auto-applied (matches this reader's
+    // Player_Damage_Multiplier precedent).
+    CHECK(r.cameraFollowAggression.present);
+    CHECK(r.cameraFollowAggression.positionBased.swingRateFwd.present && near(r.cameraFollowAggression.positionBased.swingRateFwd.value, 0.3f, 1e-6f));
+    CHECK(near(r.cameraFollowAggression.positionBased.swingRateRev.value, 0.4f, 1e-6f));
+    CHECK(near(r.cameraFollowAggression.positionBased.headingRetentionNormal.value, 0.9f, 1e-6f));
+    CHECK(!r.cameraFollowAggression.positionBased.headingRetentionTurning.present);
+    CHECK(near(r.cameraFollowAggression.positionBased.fromStickyFwd.value, 0.1f, 1e-6f));
+    CHECK(!r.cameraFollowAggression.positionBased.fromStickyRev.present);
+    // Sphere_Based absent under this Camera_Follow_Aggression: stays unset.
+    CHECK(!r.cameraFollowAggression.sphereBased.slerpValue.present);
+}
+
+// Sphere_Based side: Min_Angle deg->rad + its documented default-copy note
+// (From_Sticky_Slerp_Value "defaults to Slerp_Value", NOT computed here).
+void testVehicleCameraRowSphereBased() {
+    const char* xml =
+        "<root><Table><Vehicle><Name>sphere_test</Name>"
+        "<Camera_Follow_Aggression>"
+        "<Sphere_Based>"
+        "<Slerp_Value>0.5</Slerp_Value>"
+        "<Min_Angle>30</Min_Angle>"
+        "</Sphere_Based>"
+        "</Camera_Follow_Aggression>"
+        "</Vehicle></Table></root>";
+    Document doc = P(xml);
+    VehicleCameraRow r = ParseVehicleCameraRow(FirstVehicle(doc));
+    CHECK(r.cameraFollowAggression.present);
+    CHECK(r.cameraFollowAggression.sphereBased.slerpValue.present && near(r.cameraFollowAggression.sphereBased.slerpValue.value, 0.5f, 1e-6f));
+    CHECK(!r.cameraFollowAggression.sphereBased.fromStickySlerpValue.present);  // "defaults to Slerp_Value" - not auto-applied here
+    CHECK(r.cameraFollowAggression.sphereBased.minAngleRadians.present);
+    CHECK(near(r.cameraFollowAggression.sphereBased.minAngleRadians.value, 30.0f * kDegToRad, 1e-5f));
+    // Position_Based absent under this Camera_Follow_Aggression: stays unset.
+    CHECK(!r.cameraFollowAggression.positionBased.swingRateFwd.present);
+}
+
+// A row with none of the camera elements: absence must stay observable
+// (present=false throughout), matching testVehicleMissingOptional's rule
+// for VehicleEntry.
+void testVehicleCameraRowMissing() {
+    const char* xml = "<root><Table><Vehicle><Name>bare_cam</Name></Vehicle></Table></root>";
+    Document doc = P(xml);
+    VehicleCameraRow r = ParseVehicleCameraRow(FirstVehicle(doc));
+    CHECK(r.name.has_value() && *r.name == "bare_cam");
+    CHECK(!r.primary.lookatOffset.present);
+    CHECK(!r.primary.followDistance.present);
+    CHECK(!r.secondary.followDistance.present);
+    CHECK(!r.rc.followDistance.present);
+    CHECK(!r.cameraFollowAggression.present);
+    CHECK(!r.cameraFollowAggression.positionBased.swingRateFwd.present);
+    CHECK(!r.cameraFollowAggression.sphereBased.slerpValue.present);
+}
+
+// ParseAllVehicleCameraRows (vehicle_cameras.xtbl's <Vehicle> rows) and
+// ParseAllVehicleGroupCameraRows (vehicle_group_cameras.xtbl's
+// <Vehicle_Group> rows) - the same whole-document convenience pattern as
+// ParseAllVehicles/ParseAllVehicleGroups (spec 7.2's "same reader, two root
+// element kinds" precedent).
+void testParseAllVehicleCameraRowsAndGroups() {
+    const char* xml =
+        "<root><Table>"
+        "<Vehicle><Name>cam_a</Name><Primary_Camera_Angle><Follow_Distance>4</Follow_Distance></Primary_Camera_Angle></Vehicle>"
+        "<Vehicle><Name>cam_b</Name></Vehicle>"
+        "</Table></root>";
+    Document doc = P(xml);
+    std::vector<VehicleCameraRow> rows = ParseAllVehicleCameraRows(doc);
+    CHECK(rows.size() == 2);
+    CHECK(rows[0].name.has_value() && *rows[0].name == "cam_a");
+    CHECK(rows[0].primary.followDistance.present && rows[0].primary.followDistance.value == 4.0f);
+    CHECK(rows[1].name.has_value() && *rows[1].name == "cam_b");
+    CHECK(!rows[1].primary.followDistance.present);
+
+    const char* xmlGroup =
+        "<root><Table>"
+        "<Vehicle_Group><Name>grp_cam_a</Name><RC_Camera_Angle><Follow_Height>9</Follow_Height></RC_Camera_Angle></Vehicle_Group>"
+        "</Table></root>";
+    Document docGroup = P(xmlGroup);
+    std::vector<VehicleCameraRow> groupRows = ParseAllVehicleGroupCameraRows(docGroup);
+    CHECK(groupRows.size() == 1);
+    CHECK(groupRows[0].name.has_value() && *groupRows[0].name == "grp_cam_a");
+    CHECK(groupRows[0].rc.followHeight.present && groupRows[0].rc.followHeight.value == 9.0f);
+}
+
 }  // namespace
 
 int main() {
@@ -592,6 +738,10 @@ int main() {
     testFlagWordsWord0();
     testFlagWordsWord1();
     testAutomobileFlagsBitmask();
+    testVehicleCameraRowNormal();
+    testVehicleCameraRowSphereBased();
+    testVehicleCameraRowMissing();
+    testParseAllVehicleCameraRowsAndGroups();
 
     if (g_failed) {
         std::cerr << g_failed << " check(s) FAILED (" << g_passed << " passed).\n";

@@ -561,20 +561,23 @@ void testShopNames() {
     std::vector<ShopName> rows = ParseShopNamesTable(d);
     CHECK(rows.size() == 2);
     CHECK(rows[0].name == "Rim Jobs");
-    CHECK(rows[0].cost.has_value() && *rows[0].cost == 15000);
-    CHECK(rows[0].discount.has_value() && *rows[0].discount == 10.0f);
+    CHECK(rows[0].cost.present && rows[0].cost.value == 15000);
+    CHECK(rows[0].discount.present && rows[0].discount.value == 10.0f);
     CHECK(rows[0].reward == "unlockable_rim_jobs");
     CHECK(rows[0].shopType == "vehicle dealer");
 
-    // Row 2: every optional/default field absent -> nullopt, OrDefault()
-    // helpers give the spec-stated concrete defaults (spec 12).
+    // Row 2: Localized_Name is the ONE field among these five whose default
+    // is loader-enforced (spec 12 CORRECTED) - absent -> nullopt,
+    // OrDefault() gives the spec-stated concrete default. Cost/Income/
+    // Discount/Total_Owner_Discount are NOT loader-enforced (schema-only
+    // documentation) - absent -> Always<T>.present == false, matching the
+    // general Always-hazard every other Always<T> field in this group uses.
     CHECK(!rows[1].localizedName.has_value());
     CHECK(rows[1].LocalizedNameOrDefault() == "{localize}franchise");
-    CHECK(!rows[1].cost.has_value());
-    CHECK(rows[1].CostOrDefault() == 10000);
-    CHECK(rows[1].IncomeOrDefault() == 500);
-    CHECK(rows[1].DiscountOrDefault() == 15.0f);
-    CHECK(rows[1].TotalOwnerDiscountOrDefault() == 20.0f);
+    CHECK(!rows[1].cost.present);
+    CHECK(!rows[1].income.present);
+    CHECK(!rows[1].discount.present);
+    CHECK(!rows[1].totalOwnerDiscount.present);
 
     // kShopTypeNames covers the 8 schema choices exactly (spec 12).
     CHECK(kShopTypeNames.size() == 8);

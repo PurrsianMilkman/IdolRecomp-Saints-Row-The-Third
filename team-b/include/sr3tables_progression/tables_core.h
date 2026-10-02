@@ -84,9 +84,13 @@ struct Stat {
     // Required when valueKind == Percent (spec: "a missing element dereferences NULL" - HIGH CONFIDENCE, not
     // exercised); case-SENSITIVE cross-reference to an earlier-loaded Stat.Name (spec 2.2, 11 "cross-table" row).
     std::optional<std::string> percentageOfStat;
-    // "text compared to true (case-insensitive)"; spec's own bool-always semantics (false if absent) - this is
-    // the DETERMINISTIC bool-always reader (xtbl.h S3: "always (false if absent)"), not the int/float caveat.
-    Always<bool> allowUpdateByServer;
+    // spec 2.2/1.3, CORRECTED 2026-10-01 (disassembly, jobs ytgi/qohu): Allow_Update_By_Server does NOT use
+    // the generic four-literal ("true"/"yes"/"false"/"no") bool reader that most bool fields in this group
+    // use - it is a dedicated case-insensitive compare against the single literal "true" (same mechanism as
+    // notoriety.xtbl's Check_Detection, S6.1); "yes" must NOT set this, unlike sr3xtbl::ParseBool/GetBool.
+    // Modelled as a plain bool (not Always<bool>): the real reader's missing-element path is a NULL-handler
+    // edge case never exercised by real data (217/217 real rows supply the element) - absent reads as false.
+    bool allowUpdateByServer = false;
     std::optional<int32_t> livePropertyId;    // "signed int, write-only-if-present", default 0 (spec 2.2 row 7)
     std::optional<int32_t> liveLeaderboardId; // same, spec 2.2 row 8
 };

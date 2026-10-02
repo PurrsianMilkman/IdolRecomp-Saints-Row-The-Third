@@ -67,18 +67,18 @@ std::optional<AudioConstants> ParseAudioConstants(const Document& doc) {
     AudioConstants c;
 
     const Node* playTimers = sr3xtbl::FindChild(ac, "PlayTimers");
-    c.playTimerBrassCollision = sr3xtbl::ReadFloatAlways(playTimers, "BrassCollision");
-    c.playTimerGlassShatter = sr3xtbl::ReadFloatAlways(playTimers, "GlassShatter");
-    c.playTimerBulletImpactHuman = sr3xtbl::ReadFloatAlways(playTimers, "BulletImpactHuman");
-    c.playTimerBulletImpactWall = sr3xtbl::ReadFloatAlways(playTimers, "BulletImpactWall");
-    c.playTimerObjectDebris = sr3xtbl::ReadFloatAlways(playTimers, "ObjectDebris");
-    c.playTimerVehicleImpactCollision = sr3xtbl::ReadFloatAlways(playTimers, "VehicleImpactCollision");
-    c.playTimerVehicleImpactDistance = sr3xtbl::ReadFloatAlways(playTimers, "VehicleImpactDistance");
-    c.playTimerVehicleScrapeCollision = sr3xtbl::ReadFloatAlways(playTimers, "VehicleScrapeCollision");
-    c.playTimerVehicleScrapeDistance = sr3xtbl::ReadFloatAlways(playTimers, "VehicleScrapeDistance");
-    c.playTimerRagdollBoneImpactCollision = sr3xtbl::ReadFloatAlways(playTimers, "RagdollBoneImpactCollision");
-    c.playTimerSmallDeformation = sr3xtbl::ReadFloatAlways(playTimers, "SmallDeformation");
-    c.playTimerLargeDeformation = sr3xtbl::ReadFloatAlways(playTimers, "LargeDeformation");
+    c.playTimerBrassCollision = sr3xtbl::ReadUInt32Always(playTimers, "BrassCollision");
+    c.playTimerGlassShatter = sr3xtbl::ReadUInt32Always(playTimers, "GlassShatter");
+    c.playTimerBulletImpactHuman = sr3xtbl::ReadUInt32Always(playTimers, "BulletImpactHuman");
+    c.playTimerBulletImpactWall = sr3xtbl::ReadUInt32Always(playTimers, "BulletImpactWall");
+    c.playTimerObjectDebris = sr3xtbl::ReadUInt32Always(playTimers, "ObjectDebris");
+    c.playTimerVehicleImpactCollision = sr3xtbl::ReadUInt32Always(playTimers, "VehicleImpactCollision");
+    c.playTimerVehicleImpactDistance = sr3xtbl::ReadUInt32Always(playTimers, "VehicleImpactDistance");
+    c.playTimerVehicleScrapeCollision = sr3xtbl::ReadUInt32Always(playTimers, "VehicleScrapeCollision");
+    c.playTimerVehicleScrapeDistance = sr3xtbl::ReadUInt32Always(playTimers, "VehicleScrapeDistance");
+    c.playTimerRagdollBoneImpactCollision = sr3xtbl::ReadUInt32Always(playTimers, "RagdollBoneImpactCollision");
+    c.playTimerSmallDeformation = sr3xtbl::ReadUInt32Always(playTimers, "SmallDeformation");
+    c.playTimerLargeDeformation = sr3xtbl::ReadUInt32Always(playTimers, "LargeDeformation");
 
     const Node* onFoot = sr3xtbl::FindChild(ac, "OnFootSettings");
     c.onFootFootstepRange = sr3xtbl::ReadFloatAlways(onFoot, "FootstepRange");
@@ -120,6 +120,7 @@ std::optional<AudioSettings> ParseAudioSettings(const Document& doc) {
     if (!globalSettings) return std::nullopt;
     AudioSettings s;
     const Node* general = sr3xtbl::FindChild(globalSettings, "general_settings");
+    s.generalSettingsPresent = (general != nullptr);
     s.speedOfSound = sr3xtbl::GetFloat(general, "Speed_of_sound");
     s.healthAdjustRate = sr3xtbl::GetFloat(general, "Health_adjust_rate");
     const Node* doppler = sr3xtbl::FindChild(globalSettings, "Doppler_settings");
@@ -133,7 +134,7 @@ std::optional<AudioSettings> ParseAudioSettings(const Document& doc) {
 AudioLineTag ParseAudioLineTag(const Node* row) {
     AudioLineTag t;
     t.name = getText(row, "Name");
-    t.wwiseId = sr3xtbl::GetUInt32(row, "wwise_id");
+    t.wwiseId = sr3xtbl::ReadUInt32Always(row, "wwise_id");
     return t;
 }
 
@@ -147,9 +148,10 @@ std::vector<AudioLineTag> ParseAudioLineTagsTable(const Document& doc) {
 // 6. audio_personas.xtbl
 // ===========================================================================
 namespace {
-// spec 6: fixed priority order, first substring match wins; case-SENSITIVE (see tables.h's judgment-call note).
-// LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: case sensitivity of the helper
-// FUN_00EA48B0 is OPEN (never decompiled); case-sensitive is our assumption, no behaviour change.
+// spec 6: fixed priority order, first substring match wins; case-SENSITIVE and over the FULL (untruncated) Name
+// text, not the 0x20-byte bounded record copy - CONFIRMED - disassembly, 2026-10-01 (job
+// 20261001T123123-team-a-ytgi): FUN_00EA48B0 is the C runtime's `strstr`, byte-exact, given the full Name text.
+// Callers below pass `fullName`, not `name` (see tables.h's AudioPersona struct for why both fields exist).
 int findSuffixIndex(const std::string& name) {
     if (name.find('_') == std::string::npos) return -1;  // "searched only after first confirming an underscore"
     for (size_t i = 0; i < kAudioPersonaDemographicSuffixes.size(); ++i) {
@@ -160,23 +162,23 @@ int findSuffixIndex(const std::string& name) {
 }  // namespace
 
 int AudioPersona::DeriveGenderFromName() const {
-    if (!name) return 0;
-    const int idx = findSuffixIndex(*name);
+    if (!fullName) return 0;
+    const int idx = findSuffixIndex(*fullName);
     if (idx < 0) return 0;
     return (idx % 2 == 0) ? 1 : 2;  // even index = male (_WM/_BM/_HM/_AM), odd = female
 }
 
 int AudioPersona::DeriveEthnicityFromName() const {
-    if (!name) return 0;
-    const int idx = findSuffixIndex(*name);
+    if (!fullName) return 0;
+    const int idx = findSuffixIndex(*fullName);
     if (idx < 0) return 0;
     return (idx / 2) + 1;  // 0,1->White(1) 2,3->Black(2) 4,5->Hispanic(3) 6,7->Asian(4)
 }
 
 int AudioPersona::DeriveAgeFromName() const {
-    if (!name) return 0;
+    if (!fullName) return 0;
     for (size_t i = 0; i < kAudioPersonaAgeTokens.size(); ++i) {
-        if (name->find(kAudioPersonaAgeTokens[i]) != std::string::npos) return static_cast<int>(i) + 1;
+        if (fullName->find(kAudioPersonaAgeTokens[i]) != std::string::npos) return static_cast<int>(i) + 1;
     }
     return 0;
 }
@@ -184,7 +186,8 @@ int AudioPersona::DeriveAgeFromName() const {
 AudioPersona ParseAudioPersona(const Node* row) {
     AudioPersona p;
     p.name = sr3xtbl::CopyText(row, "Name", 0x20);
-    p.wwiseId = sr3xtbl::GetUInt32(row, "wwise_id");
+    p.fullName = getText(row, "Name");
+    p.wwiseId = sr3xtbl::ReadUInt32Always(row, "wwise_id");
     return p;
 }
 
@@ -219,7 +222,7 @@ FoleyCollision ParseFoleyCollision(const Node* row) {
     const Node* set = sr3xtbl::FindChild(row, "CollisionFoleySet");
     f.minimumSpeedRaw = sr3xtbl::ReadFloatAlways(set, "MinimumSpeed");
     f.maximumSpeedRaw = sr3xtbl::ReadFloatAlways(set, "MaximumSpeed");
-    f.frequency = sr3xtbl::GetUInt32(set, "Frequency");
+    f.frequency = sr3xtbl::ReadUInt32Always(set, "Frequency");
     f.wwiseSwitch = getText(set, "Wwise_switch");
     return f;
 }
@@ -237,7 +240,7 @@ FoleyTouch ParseFoleyTouch(const Node* row) {
     FoleyTouch f;
     f.name = getText(row, "Name");
     const Node* set = sr3xtbl::FindChild(row, "TouchFoleySet");
-    f.frequency = sr3xtbl::GetUInt32(set, "Frequency");
+    f.frequency = sr3xtbl::ReadUInt32Always(set, "Frequency");
     f.wwiseSwitch = getText(set, "Wwise_switch");
     return f;
 }
@@ -297,7 +300,7 @@ std::optional<RadioSettings> ParseRadioSettings(const Document& doc) {
 // ===========================================================================
 PlaylistTrack ParsePlaylistTrack(const Node* row) {
     PlaylistTrack t;
-    t.wwiseId = sr3xtbl::GetUInt32(row, "WWise_ID");
+    t.wwiseId = sr3xtbl::ReadUInt32Always(row, "WWise_ID");
     t.artistName = getText(row, "Artist_Name");
     t.trackName = getText(row, "Track_Name");
     return t;
@@ -316,8 +319,8 @@ std::vector<PlaylistTrack> ParsePlaylistArtistTrackTable(const Document& doc) {
 // ===========================================================================
 RadioActivity ParseRadioActivity(const Node* row) {
     RadioActivity a;
-    a.level = sr3xtbl::GetUInt32(row, "Level");
-    a.percentageRaw = sr3xtbl::GetUInt32(row, "Percentage");
+    a.level = sr3xtbl::ReadUInt32Always(row, "Level");
+    a.percentageRaw = sr3xtbl::ReadUInt32Always(row, "Percentage");
     return a;
 }
 
@@ -398,9 +401,9 @@ int32_t ResolveCommercialEventValue(const std::string& eventName, const std::vec
 // ===========================================================================
 VocSbLineSit ParseVocSbLineSit(const Node* row) {
     VocSbLineSit e;
-    e.personaId = sr3xtbl::GetUInt32(row, "Persona_id");
+    e.personaId = sr3xtbl::ReadUInt32Always(row, "Persona_id");
     e.soundbank = sr3xtbl::CopyText(row, "Soundbank", 0x41);
-    e.numLineSituations = sr3xtbl::GetUInt32(row, "Num_line_situations");
+    e.numLineSituations = sr3xtbl::ReadUInt32Always(row, "Num_line_situations");
     return e;
 }
 

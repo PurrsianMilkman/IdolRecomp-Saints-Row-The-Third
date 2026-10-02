@@ -555,6 +555,48 @@ public:
     // the calling function uses (ai_add_enemy_target Sec3.9: "on successful
     // resolution of both names"; object_indicator_add_do Sec10.6). One map
     // for all resolvers - a stated simplification; OPEN until set.
+    //
+    // Sec29 (2026-10-02) documents the real write side this stands in for:
+    // every per-kind resolver this document catalogues (Sec1.1/Sec25.29/
+    // Sec28 and others) is a thin kind-filter over ONE shared global name
+    // map (singleton 0x02442750's embedded sub-object at 0x02444db0), a
+    // case-insensitive multiply-by-33 (0x00dab330) bucket hash, CONFIRMED
+    // as a single instance of 2,999 slots (0xBB7) enabled exactly once at
+    // start-up (Sec29.3) - not per-zone, not per-kind, so a name registered
+    // by any producer below is resolvable by every resolver here, with no
+    // per-producer distinction visible at lookup time. This map is keyed by
+    // exact std::string equality (unlike the real _stricmp/hash chain) -
+    // a simplification, not yet modelled as case-insensitive (Sec29.3).
+    //
+    // Sec29.2: FOUR producers feed names into that one map: (1) zone object
+    // placement's 0x2234 "Game objects, as placed in the WE" record -
+    // PARKED, lives inside the held .czn_pc object-placement interior, not
+    // lifted, not read here; (2) a vehicle definition's embedded cover-node
+    // batch (same loader); (3) "the bulk of the 173 call sites" - in-memory
+    // records built directly by engine code (spawners, path/navpoint
+    // builders, group objects), fed to 0x00456e30 - NOT individually traced
+    // (Sec29.2's own words), so it could register essentially any name a
+    // resolver might query; (4) a stream deserialiser (0x00a36a80),
+    // HYPOTHESIS co-op replication, not Lua-reachable, replays a name that
+    // already existed rather than originating one.
+    //
+    // Sec29.4: no Lua-bound function can ever CHOOSE a name for an object
+    // it creates (unnamed, or engine-named with a generated/uniquified
+    // suffix). Engine code separately registers a small CLOSED set of
+    // literal names regardless of any zone/data file - "homies",
+    // "shopkeepers", "-- Cutscene Script Group --", and the special-cased
+    // "#PLAYER1#"/"#PLAYER2#" pair - applySpecInitialState() pre-populates
+    // exactly these five as known-true, the full extent of what Sec29
+    // confirms unconditionally. Everything else a mission script names by
+    // a fixed authored name (e.g. 'Killbane') traces back to producer (1)
+    // above - the parked .czn_pc interior - so it correctly, honestly
+    // stays OPEN: since producer (3) was never individually traced and
+    // backs resolvers for groups/triggers/vehicles/NPCs too, not just
+    // mission characters, defaulting any OTHER unknown name to false here
+    // would be inventing an answer this project does not have, not
+    // reporting a confirmed one (the OpenValue/OpenStateError discipline
+    // this whole map exists to honour) - do not widen this pre-population
+    // beyond the five literals without new CONFIRMED spec text.
     OpenValueMap<bool>& objectResolves() { return objectResolves_; }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
@@ -1242,7 +1284,7 @@ private:
     std::string qteAnimationTriggerCallback_;                  // Sec10.7
     OpenValue<int> coopJoinType_{"0x012f44fc (co-op join type)", "spec-lua-api-behaviour.md Sec10.9"};
     OpenValueMap<int> tutorialState_{"tutorial entry state (0x0151d600[i] +0x0c)", "spec-lua-api-behaviour.md Sec6.19/Sec10.4/Sec26.28"};
-    OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6"};
+    OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6/Sec29"};
 
     // --- zscene (Sec26.25/Sec14.23/Sec8.21), see the accessor doc comment above ---
     OpenValueMap<bool> zsceneLoadable_{"zscene table entry with kind 1 (0x00721be0 lookup, 0x00723d20 test)",

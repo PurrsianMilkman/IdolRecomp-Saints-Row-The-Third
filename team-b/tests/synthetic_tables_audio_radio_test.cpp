@@ -156,8 +156,9 @@ void testAudioConstants() {
     </AudioConstants></Table></root>)");
     std::optional<AudioConstants> ac = ParseAudioConstants(d);
     CHECK(ac.has_value());
-    CHECK(ac->playTimerBrassCollision.present && ac->playTimerBrassCollision.value == 200.0f);
-    CHECK(ac->playTimerLargeDeformation.value == 1000.0f);
+    // spec 3, CORRECTED 2026-10-01: PlayTimers are u32 (NOT f32) - exact integer equality, no "near" needed.
+    CHECK(ac->playTimerBrassCollision.present && ac->playTimerBrassCollision.value == 200u);
+    CHECK(ac->playTimerLargeDeformation.value == 1000u);
     // spec 3 (count corrected 11 -> 12 by desk review 2026-09-30): ALL 12 PlayTimers values are read, each
     // distinguishable. Distinct values 101..112 in spec order prove no slot is dropped or shifted.
     {
@@ -170,7 +171,7 @@ void testAudioConstants() {
         </PlayTimers></AudioConstants></Table></root>)");
         std::optional<AudioConstants> p = ParseAudioConstants(pt);
         CHECK(p.has_value());
-        const Always<float>* slots[12] = {
+        const Always<uint32_t>* slots[12] = {
             &p->playTimerBrassCollision,           &p->playTimerGlassShatter,
             &p->playTimerBulletImpactHuman,        &p->playTimerBulletImpactWall,
             &p->playTimerObjectDebris,             &p->playTimerVehicleImpactCollision,
@@ -181,13 +182,14 @@ void testAudioConstants() {
         int presentCount = 0;
         for (int i = 0; i < 12; ++i) {
             if (slots[i]->present) ++presentCount;
-            CHECK(slots[i]->value == static_cast<float>(101 + i));
+            CHECK(slots[i]->value == static_cast<uint32_t>(101 + i));
         }
         CHECK(presentCount == 12);
     }
-    CHECK(ac->playTimerVehicleImpactDistance.value == 12.0f);
-    CHECK(near(ac->PlayTimerVehicleImpactDistanceSquared(), 144.0f, 1e-3f));  // spec 3: squared in place
-    CHECK(near(ac->PlayTimerVehicleScrapeDistanceSquared(), 16.0f, 1e-3f));
+    CHECK(ac->playTimerVehicleImpactDistance.value == 12u);
+    // spec 3, CORRECTED 2026-10-01: squared BY AN INTEGER MULTIPLY, not float - exact equality.
+    CHECK(ac->PlayTimerVehicleImpactDistanceSquared() == 144u);
+    CHECK(ac->PlayTimerVehicleScrapeDistanceSquared() == 16u);
     CHECK(ac->onFootFootstepRange.value == 3.0f);
     CHECK(near(ac->OnFootFootstepRangeSquared(), 9.0f, 1e-3f));
     CHECK(ac->drivingAlarmTimeMin.present && ac->drivingAlarmTimeMin.value == 10);
@@ -204,7 +206,7 @@ void testAudioConstants() {
     std::optional<AudioConstants> ac2 = ParseAudioConstants(sparse);
     CHECK(ac2.has_value());
     CHECK(ac2->playTimerBrassCollision.present);
-    CHECK(!ac2->playTimerLargeDeformation.present && ac2->playTimerLargeDeformation.value == 0.0f);
+    CHECK(!ac2->playTimerLargeDeformation.present && ac2->playTimerLargeDeformation.value == 0u);
     CHECK(!ac2->medHealth.present && ac2->medHealth.value == 0);
 }
 
@@ -222,18 +224,40 @@ void testAudioSettings() {
     </global_settings></Table></root>)");
     std::optional<AudioSettings> s = ParseAudioSettings(d);
     CHECK(s.has_value());
+    CHECK(s->generalSettingsPresent);  // <general_settings> IS present in this fixture
     CHECK(!s->speedOfSound.has_value());
-    CHECK(s->SpeedOfSoundOrDefault() == 343.5f);  // coded default applies
+    CHECK(s->SpeedOfSoundOrDefault() == 343.5f);  // coded default applies (general_settings present, spec 4)
     CHECK(s->healthAdjustRate.has_value() && near(*s->healthAdjustRate, 0.5f, 1e-6f));
     CHECK(s->dopplerMultiplier.has_value() && near(*s->dopplerMultiplier, 11.0f, 1e-5f));
     CHECK(s->DopplerMultiplierOrDefault() == *s->dopplerMultiplier);
 
-    // Doppler_multiplier absent -> its OrDefault applies.
+    // Doppler_multiplier absent -> its OrDefault applies. spec 4, CORRECTED 2026-10-01: the coded default is
+    // 10.0, not 11.0 (the shipped row happens to supply an explicit 11.0 above, so retail data never exercises
+    // this default).
     Document d2 = P(R"(<root><Table><global_settings><general_settings/></global_settings></Table></root>)");
     std::optional<AudioSettings> s2 = ParseAudioSettings(d2);
     CHECK(s2.has_value());
+    CHECK(s2->generalSettingsPresent);  // <general_settings/> IS present, just empty
     CHECK(!s2->dopplerMultiplier.has_value());
-    CHECK(s2->DopplerMultiplierOrDefault() == 11.0f);
+    CHECK(s2->DopplerMultiplierOrDefault() == 10.0f);
+    CHECK(!s2->healthAdjustRate.has_value());
+    CHECK(s2->HealthAdjustRateOrDefault() == 0.0f);  // CONFIRMED 2026-10-01: zero-filled .data, no other writer
+    CHECK(s2->SpeedOfSoundOrDefault() == 343.5f);  // general_settings present -> 343.5 default still applies
+
+    // spec 4, CORRECTED 2026-10-01: <general_settings> ABSENT ENTIRELY (unlike d2's empty-but-present case)
+    // means the 343.5 Speed_of_sound default is never primed at all - it stays at the engine's zero-filled 0.0,
+    // not 343.5. <global_settings> itself is still present, so ParseAudioSettings still returns a value.
+    Document d3 = P(R"(<root><Table><global_settings>
+      <Doppler_settings><Doppler_multiplier>12.0</Doppler_multiplier></Doppler_settings>
+    </global_settings></Table></root>)");
+    std::optional<AudioSettings> s3 = ParseAudioSettings(d3);
+    CHECK(s3.has_value());
+    CHECK(!s3->generalSettingsPresent);
+    CHECK(!s3->speedOfSound.has_value());
+    CHECK(s3->SpeedOfSoundOrDefault() == 0.0f);  // NOT 343.5 - general_settings was never present to prime it
+    CHECK(!s3->healthAdjustRate.has_value());
+    CHECK(s3->HealthAdjustRateOrDefault() == 0.0f);
+    CHECK(s3->dopplerMultiplier.has_value() && near(*s3->dopplerMultiplier, 12.0f, 1e-5f));
 }
 
 // ===========================================================================
@@ -247,9 +271,10 @@ void testAudioLineTag() {
     std::vector<AudioLineTag> rows = ParseAudioLineTagsTable(d);
     CHECK(rows.size() == 2);
     CHECK(rows[0].name.has_value() && *rows[0].name == "line_01");
-    CHECK(rows[0].wwiseId.has_value() && *rows[0].wwiseId == 42u);
+    // spec 5, CORRECTED 2026-10-01: wwise_id is the "always" reader, not "if-present".
+    CHECK(rows[0].wwiseId.present && rows[0].wwiseId.value == 42u);
     CHECK(rows[1].name.has_value() && *rows[1].name == "line_02");
-    CHECK(!rows[1].wwiseId.has_value());
+    CHECK(!rows[1].wwiseId.present);
 }
 
 // ===========================================================================
@@ -259,6 +284,10 @@ void testAudioPersona() {
     auto persona = [](std::string_view name) {
         AudioPersona p;
         p.name = std::string(name);
+        // spec 6, CORRECTED 2026-10-01: the demographic derivation searches `fullName` (the untruncated Name),
+        // not `name` (the 0x20-byte bounded record copy) - set both here so this synthetic helper still exercises
+        // the Derive*FromName() methods correctly.
+        p.fullName = std::string(name);
         return p;
     };
     // spec 6: fixed suffix list, gender 1=male/2=female, ethnicity 1=White/2=Black/3=Hispanic/4=Asian.
@@ -291,8 +320,27 @@ void testAudioPersona() {
     std::vector<AudioPersona> rows = ParseAudioPersonasTable(d);
     CHECK(rows.size() == 1);
     CHECK(rows[0].name.has_value() && *rows[0].name == "Ped_Young_WM_01");
-    CHECK(rows[0].wwiseId.has_value() && *rows[0].wwiseId == 777u);
+    CHECK(rows[0].fullName.has_value() && *rows[0].fullName == "Ped_Young_WM_01");
+    // spec 6, CORRECTED 2026-10-01: wwise_id is the "always" reader, not "if-present".
+    CHECK(rows[0].wwiseId.present && rows[0].wwiseId.value == 777u);
     CHECK(rows[0].DeriveGenderFromName() == 1 && rows[0].DeriveEthnicityFromName() == 1 && rows[0].DeriveAgeFromName() == 1);
+
+    // Regression test for the §6 2026-10-01 correction: the demographic suffix search must use the FULL Name
+    // text (FUN_00EA48B0 given the full Name, CONFIRMED - disassembly), not the 0x20-byte-bounded record copy -
+    // a Name longer than 31 bytes whose suffix falls beyond that bound must still resolve correctly.
+    {
+        const std::string longName = std::string(35, 'x') + "_WM";  // 38 chars; "_WM" starts at index 35, past
+                                                                     // the 0x1F-byte truncation boundary of `name`
+        const std::string xml =
+            "<root><Table><Audio_Persona><Name>" + longName + "</Name></Audio_Persona></Table></root>";
+        Document dl = P(xml);
+        std::vector<AudioPersona> lrows = ParseAudioPersonasTable(dl);
+        CHECK(lrows.size() == 1);
+        CHECK(lrows[0].name.has_value() && lrows[0].name->size() == 0x1F);     // bounded record copy, truncated
+        CHECK(lrows[0].fullName.has_value() && *lrows[0].fullName == longName);  // untruncated, used for derivation
+        CHECK(lrows[0].DeriveGenderFromName() == 1);     // male (_WM) - only findable via the FULL name
+        CHECK(lrows[0].DeriveEthnicityFromName() == 1);  // White
+    }
 }
 
 // ===========================================================================
@@ -324,7 +372,8 @@ void testFoleyCollision() {
     CHECK(rows[0].minimumSpeedRaw.present && rows[0].minimumSpeedRaw.value == 10.0f);
     CHECK(near(rows[0].MinimumSpeedMps(), 4.4704f, 1e-3f));   // 10 mph * 0.44704
     CHECK(near(rows[0].MaximumSpeedMps(), 22.352f, 1e-3f));   // 50 mph * 0.44704
-    CHECK(rows[0].frequency.has_value() && *rows[0].frequency == 3u);
+    // spec 8, CORRECTED 2026-10-01: Frequency is the "always" reader, not "if-present".
+    CHECK(rows[0].frequency.present && rows[0].frequency.value == 3u);
     CHECK(rows[0].wwiseSwitch.has_value() && *rows[0].wwiseSwitch == "metal_switch");
     // spec 8: only the FIRST CollisionFoleySet is ever read - the second (MinimumSpeed=999) must be ignored.
     CHECK(rows[0].minimumSpeedRaw.value != 999.0f);
@@ -342,7 +391,8 @@ void testFoleyTouch() {
     std::vector<FoleyTouch> rows = ParseFoleyTouchTable(d);
     CHECK(rows.size() == 1);
     CHECK(rows[0].name.has_value() && *rows[0].name == "Door");
-    CHECK(rows[0].frequency.has_value() && *rows[0].frequency == 7u);
+    // spec 9, CORRECTED 2026-10-01: Frequency is the "always" reader, not "if-present".
+    CHECK(rows[0].frequency.present && rows[0].frequency.value == 7u);
     CHECK(rows[0].wwiseSwitch.has_value() && *rows[0].wwiseSwitch == "door_switch");
     // spec 1.3 item 2 / 9: the ONE table whose Name hash is CASE-SENSITIVE (FUN_00D9E7E0), unlike every sibling.
     CHECK(rows[0].NameHash() == sr3xtbl::NameHashCaseSensitive("Door"));
@@ -430,10 +480,11 @@ void testPlaylistTrack() {
     </Tracks></Track_Listing></Table></root>)");
     std::vector<PlaylistTrack> rows = ParsePlaylistArtistTrackTable(d);
     CHECK(rows.size() == 2);
-    CHECK(rows[0].wwiseId.has_value() && *rows[0].wwiseId == 500u);
+    // spec 12, CORRECTED 2026-10-01: WWise_ID is the "always" reader, not "if-present".
+    CHECK(rows[0].wwiseId.present && rows[0].wwiseId.value == 500u);
     CHECK(rows[0].artistName.has_value() && *rows[0].artistName == "DJ Test");
     CHECK(rows[0].trackName.has_value() && *rows[0].trackName == "Song A");
-    CHECK(!rows[1].wwiseId.has_value());
+    CHECK(!rows[1].wwiseId.present);
     CHECK(rows[1].artistName.has_value() && *rows[1].artistName == "Unknown Artist");
 }
 
@@ -447,12 +498,41 @@ void testRadioActivity() {
     </ChancesToPlay></RadioActivities></Table></root>)");
     std::vector<RadioActivity> rows = ParseRadioActivitiesTable(d);
     CHECK(rows.size() == 2);
-    CHECK(rows[0].level.has_value() && *rows[0].level == 1u);
-    CHECK(rows[0].percentageRaw.has_value() && *rows[0].percentageRaw == 25u);
+    // spec 13, CORRECTED 2026-10-01: Level and Percentage are both the "always" reader, not "if-present".
+    CHECK(rows[0].level.present && rows[0].level.value == 1u);
+    CHECK(rows[0].percentageRaw.present && rows[0].percentageRaw.value == 25u);
     CHECK(near(rows[0].PercentageAsUnsignedFloat(), 25.0f, 1e-6f));
-    CHECK(rows[1].level.has_value() && *rows[1].level == 8u);
-    CHECK(!rows[1].percentageRaw.has_value());
-    CHECK(rows[1].PercentageAsUnsignedFloat() == 0.0f);  // value_or(0)
+    // spec 13, CORRECTED 2026-10-01: the denominator global is CONFIRMED as the constant 100.0 (was OPEN) - a
+    // reimplementation must store the FRACTION, not the raw value.
+    CHECK(near(rows[0].PercentageFraction(), 0.25f, 1e-6f));
+    CHECK(rows[1].level.present && rows[1].level.value == 8u);
+    CHECK(!rows[1].percentageRaw.present);
+    CHECK(rows[1].PercentageAsUnsignedFloat() == 0.0f);  // value when !present
+    CHECK(rows[1].PercentageFraction() == 0.0f);
+
+    // spec 13.1's own validation example: real base-game raw values 1,2,3,5,10,15,20,25 must become fractions
+    // 0.01..0.25 (summing to 0.81, per the spec's own note), placed by ROW ORDER (not by Level).
+    {
+        Document d2 = P(R"(<root><Table><RadioActivities><ChancesToPlay>
+          <ChanceToPlay><Level>1</Level><Percentage>1</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>2</Level><Percentage>2</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>3</Level><Percentage>3</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>4</Level><Percentage>5</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>5</Level><Percentage>10</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>6</Level><Percentage>15</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>7</Level><Percentage>20</Percentage></ChanceToPlay>
+          <ChanceToPlay><Level>8</Level><Percentage>25</Percentage></ChanceToPlay>
+        </ChancesToPlay></RadioActivities></Table></root>)");
+        std::vector<RadioActivity> rows2 = ParseRadioActivitiesTable(d2);
+        CHECK(rows2.size() == 8);
+        const float expected[8] = {0.01f, 0.02f, 0.03f, 0.05f, 0.10f, 0.15f, 0.20f, 0.25f};
+        float sum = 0.0f;
+        for (int i = 0; i < 8; ++i) {
+            CHECK(near(rows2[i].PercentageFraction(), expected[i], 1e-5f));
+            sum += rows2[i].PercentageFraction();
+        }
+        CHECK(near(sum, 0.81f, 1e-4f));
+    }
 }
 
 // ===========================================================================
@@ -549,11 +629,15 @@ void testVocSbLineSit() {
     </Entries></Table></root>)");
     std::vector<VocSbLineSit> rows = ParseVocSbLineSitTable(d);
     CHECK(rows.size() == 2);
-    CHECK(rows[0].personaId.has_value() && *rows[0].personaId == 5u);
+    // spec 17, CORRECTED 2026-10-01: Persona_id and Num_line_situations are both the "always" reader, not
+    // "if-present".
+    CHECK(rows[0].personaId.present && rows[0].personaId.value == 5u);
     CHECK(rows[0].soundbank.has_value() && *rows[0].soundbank == "veh_generic");
-    CHECK(rows[0].numLineSituations.has_value() && *rows[0].numLineSituations == 12u);
+    CHECK(rows[0].numLineSituations.present && rows[0].numLineSituations.value == 12u);
     CHECK(rows[0].ExpectedLmPcFilename() == "veh_generic.lm_pc");
+    CHECK(rows[1].personaId.present && rows[1].personaId.value == 6u);
     CHECK(!rows[1].soundbank.has_value());
+    CHECK(!rows[1].numLineSituations.present);
     CHECK(rows[1].ExpectedLmPcFilename().empty());
 }
 

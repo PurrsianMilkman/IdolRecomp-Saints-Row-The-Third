@@ -183,9 +183,11 @@ StuntWheelsSubStunt ParseStuntWheelsSubStunt(const Node* block) {
 }
 StuntWheels ParseStuntWheels(const Node* row) {
     StuntWheels w;
-    // See tables.h's NOTE on StuntWheels for the spec's own "7/7 top-level"
-    // count that this reader could not fully account for; only the record
-    // triad (CONFIRMED top-level) is modelled here.
+    // See tables.h's NOTE on StuntWheels: spec 2.8 CORRECTED 2026-10-02 -
+    // +0x00-0x13 is never touched by FUN_006C16A0, so only the record triad
+    // is a real top-level field; the old "7/7 top-level" framing does not
+    // hold. The record triad (the only real top-level field) is modelled
+    // here.
     w.record = ParseRecordTriad(row);
     w.twoWheels = ParseStuntWheelsSubStunt(sr3xtbl::FindChild(row, "Two_Wheels"));
     w.wheelie = ParseStuntWheelsSubStunt(sr3xtbl::FindChild(row, "Wheelie"));
@@ -540,10 +542,13 @@ ShopName ParseShopName(const Node* row) {
     s.name = getText(row, "Name");
     s.localizedName = getText(row, "Localized_Name");
     const Node* ownership = sr3xtbl::FindChild(row, "Ownership");
-    s.cost = sr3xtbl::GetInt32(ownership, "Cost");
-    s.income = sr3xtbl::GetInt32(ownership, "Income");
-    s.discount = sr3xtbl::GetFloat(ownership, "Discount");
-    s.totalOwnerDiscount = sr3xtbl::GetFloat(ownership, "Total_Owner_Discount");
+    // Cost/Income/Discount/Total_Owner_Discount: "always" reads, not
+    // "if present" - spec 12 CORRECTED (see tables.h): none of their
+    // schema-stated defaults are loader-enforced, unlike Localized_Name's.
+    s.cost = sr3xtbl::ReadInt32Always(ownership, "Cost");
+    s.income = sr3xtbl::ReadInt32Always(ownership, "Income");
+    s.discount = sr3xtbl::ReadFloatAlways(ownership, "Discount");
+    s.totalOwnerDiscount = sr3xtbl::ReadFloatAlways(ownership, "Total_Owner_Discount");
     s.reward = getText(ownership, "Reward");
     s.useMessage = getText(row, "Use_Message");
     s.minimapIcon = getText(row, "Minimap_Icon");

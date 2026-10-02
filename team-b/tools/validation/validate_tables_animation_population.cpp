@@ -369,11 +369,11 @@ int main(int argc, char** argv) {
         {"anim_actions.xtbl", {}, "Action", {"Name", "_Editor"}},
         {"anim_transitions.xtbl", {}, "Anim_Transition", {"From_State", "To_State", "Action"}},
         {"anim_blend_trees.xtbl", {}, "Blend_trees",
-         {"Name", "Control_input_low", "Control_input_high", "Ramp_speed", "States"}},
+         {"Name", "Control_input_low", "Control_input_high", "Ramp_speed", "States", "Actions"}},
         {"anim_ik_situation.xtbl", {}, "IK_Situation", {"Name", "Prop_Name", "Morphed_Surface_Max_Adjustment", "Flags"}},
         {"anim_triggers.xtbl", {}, "Trigger", {"Name"}},
         {"anim_flinches.xtbl", {}, "Flinch", {"Name", "Hit_Location", "Hit_Direction", "Type", "Flags"}},
-        {"anim_synced.xtbl", {}, "SyncedMove", {"AttackerAnim", "VictimAnim", "VictimOffsets", "Flags"}},
+        {"anim_synced.xtbl", {}, "SyncedMove", {"Name", "AttackerAnim", "VictimAnim", "VictimOffsets", "Flags"}},
         {"anim_correction_offsets.xtbl", {}, "Correction_Offset", {"Name", "Offset", "_Editor", "File"}},
         {"creation_lipsync_animations.xtbl", {}, "Entry", {"Name", "Chances"}},
         {"character_visemes.xtbl", {}, "Viseme", {"Name", "Targets"}},
@@ -479,7 +479,36 @@ int main(int argc, char** argv) {
     }
     if (located.count("anim_synced.xtbl")) {
         scanFlags(located.at("anim_synced.xtbl").rows, "Flags", {kAnimSyncedFlagNames.begin(), kAnimSyncedFlagNames.end()},
-                  "anim_synced.xtbl 10-phrase table");
+                  "anim_synced.xtbl 10-phrase table, CASE-INSENSITIVE reference count");
+        // NEW 2026-10-02: spec 11.2 RE-DERIVED the real engine's compare to be
+        // CASE-SENSITIVE for this one table (CORRECTED from this project's
+        // former case-insensitive assumption, fixed in ParseAnimSyncedMove).
+        // Measure the delta directly: any real Flag text that matches a
+        // phrase case-insensitively but NOT case-sensitively would have
+        // silently been counted before this fix and is silently dropped
+        // (matches nothing) by the real engine and by this reader now.
+        {
+            long long caseSensitiveOccurrences = 0;
+            std::map<std::string, long long> caseOnlyMismatch;
+            for (const Node* row : located.at("anim_synced.xtbl").rows) {
+                const Node* flags = sr3xtbl::FindChild(row, "Flags");
+                for (const Node* flag : sr3xtbl::Children(flags, "Flag")) {
+                    if (!flag->text()) continue;
+                    bool exact = false, ciOnly = false;
+                    for (auto v : kAnimSyncedFlagNames) {
+                        if (*flag->text() == v) { exact = true; break; }
+                        if (sr3xtbl::NameEquals(*flag->text(), v)) ciOnly = true;
+                    }
+                    if (exact) ++caseSensitiveOccurrences;
+                    else if (ciOnly) ++caseOnlyMismatch[*flag->text()];
+                }
+            }
+            std::printf("  G3 flag field 'Flags/Flag' (anim_synced.xtbl 10-phrase table, CASE-SENSITIVE - "
+                        "matches the real engine, spec 11.2 RE-DERIVED 2026-10-02): %lld exact occurrences, "
+                        "%zu case-only-mismatch value(s) (would match case-insensitively but NOT in the real "
+                        "engine or this reader)\n", caseSensitiveOccurrences, caseOnlyMismatch.size());
+            for (auto& kv : caseOnlyMismatch) std::printf("      case-only mismatch %-32s x%lld\n", kv.first.c_str(), kv.second);
+        }
     }
 
     // ---- G4 capacity / integer-looking-like-float sanity -------------------
@@ -554,6 +583,46 @@ int main(int argc, char** argv) {
         }
         std::printf("  anim_ik_situation.xtbl rows authored with 'Hard Coded' set: %lld (spec 8.2: these are "
                     "discarded at load - written then immediately overwritten)\n", hardCoded);
+    }
+    if (located.count("anim_blend_trees.xtbl")) {
+        // NEW 2026-10-02: spec 7.4 itself flags that the original pass's census
+        // did NOT count Actions/Action under Blend_trees nor the max
+        // Control_point count per State - "both are needed" (a non-resolving
+        // Action/Animation would hang the ORIGINAL loader, spec 7's WARNING;
+        // more than 5 Control_points per State overflows the real 0x3C-byte
+        // State record, spec 7.2/7.3). This is that first real-data
+        // measurement (the "Team B census" the spec itself asks for).
+        long long rowsWithActions = 0, totalActions = 0, actionsWithAnimation = 0;
+        long long totalStates = 0, maxControlPointsPerState = 0;
+        std::map<long long, long long> controlPointCountHistogram;
+        for (const Node* row : located.at("anim_blend_trees.xtbl").rows) {
+            const Node* actionsNode = sr3xtbl::FindChild(row, "Actions");
+            std::vector<const Node*> actionRows = sr3xtbl::Children(actionsNode, "Action");
+            if (!actionRows.empty()) ++rowsWithActions;
+            totalActions += static_cast<long long>(actionRows.size());
+            for (const Node* a : actionRows) {
+                const std::string* fn = sr3xtbl::ChildText(sr3xtbl::FindChild(a, "Animation"), "Filename");
+                if (fn && !fn->empty()) ++actionsWithAnimation;
+            }
+            const Node* statesNode = sr3xtbl::FindChild(row, "States");
+            for (const Node* s : sr3xtbl::Children(statesNode, "State")) {
+                ++totalStates;
+                const Node* cps = sr3xtbl::FindChild(s, "Control_points");
+                long long n = static_cast<long long>(sr3xtbl::Children(cps, "Control_point").size());
+                ++controlPointCountHistogram[n];
+                if (n > maxControlPointsPerState) maxControlPointsPerState = n;
+            }
+        }
+        std::printf("  anim_blend_trees.xtbl Actions/Action census (spec 7.4, previously uncounted): "
+                    "%lld / %zu rows carry at least one Action; %lld Action elements total, %lld of those "
+                    "have a non-empty Animation/Filename\n", rowsWithActions,
+                    located.at("anim_blend_trees.xtbl").rows.size(), totalActions, actionsWithAnimation);
+        std::printf("  anim_blend_trees.xtbl Control_point-per-State census (spec 7.4, previously uncounted): "
+                    "%lld States total, max %lld Control_points in a single State (real cap is 5, spec 7.2 "
+                    "RE-DERIVED 2026-10-02)%s\n", totalStates, maxControlPointsPerState,
+                    maxControlPointsPerState > 5 ? "  <-- OVER THE RE-DERIVED 5-PER-STATE CAP" : "");
+        for (auto& kv : controlPointCountHistogram)
+            std::printf("      %lld Control_point(s): %lld State(s)\n", kv.first, kv.second);
     }
     {
         long long floatLookingInts = 0;
