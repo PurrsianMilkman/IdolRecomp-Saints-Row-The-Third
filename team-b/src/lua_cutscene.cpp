@@ -1,5 +1,6 @@
 // zscene lifecycle and the cutscene machine (spec-lua-api-behaviour.md
-// Sec26.25, with Sec14.23 / Sec8.21; 2026-10-01 text through job nnlt).
+// Sec26.25, with Sec14.23 / Sec8.21; 2026-10-01 text through job nnlt, plus
+// the 2026-10-02 `mm_p_01` zscene-promotion-driver correction below).
 // Declarations: engine_state.h ("zscene" and "cutscene machine" blocks).
 //
 // Labels: REAL = stated by Sec26.25 and CONFIRMED by its review status;
@@ -19,11 +20,41 @@
 //    fade frame (CHOSEN order; the engine's drivers 0x00702a50 / 0x00bdbc54
 //    are not ordered against the fade routine in the spec), on the host clock
 //    screenFadeClockMs();
-//  - running 0x007285c0 every frame after the promotion: the Host summary's
-//    instruction ("A host runs, every frame: promotion ..., then
-//    completion"); the engine calls it from two unnamed cases of 0x0072d660;
 //  - streaming, audio and world objects: the handle class, the soundtrack's
 //    end and the nearest world object are OPEN values a test sets.
+//
+// 2026-10-02 correction (the `mm_p_01` zscene-promotion-driver investigation,
+// Sec26.25's corrected Host summary): completion and promotion are REAL,
+// unconditional-every-frame steps, each independent of the other and of the
+// rest of the 20-state cutscene machine - "a host runs, every gameplay frame
+// and regardless of the cutscene machine, but only in cutscene states 0 and
+// 2: FIRST completion ..., THEN promotion ...". This host previously read the
+// cutscene state (0x0153b520) once, up front, in a single try block shared by
+// all three steps (the 20-state machine, the 5-case second step holding
+// promotion, and completion last) - an OPEN read there (cutscene state has no
+// specced start-up value here, Sec26.25 Globals, and nothing in gameplay ever
+// sets it for a mission that never starts a real cutscene) aborted the whole
+// frame, silently skipping completion and promotion too, even though neither
+// of those actually needs that global (0x007285c0 switches on the ZSCENE load
+// state 0x0153b51c; 0x00720320/0x00720410 switch on the pending/current slots
+// - cutscene state only decides *whether* 0x007258a0 is the one driving them
+// this frame, same as the old code's own case 0/2 routing already had it).
+// That is exactly the "drives these two steps only while a cutscene is
+// already active" hazard the corrected Host summary names, in this host's
+// own shape, and it is why a bare `zscene_prep` (no cutscene ever started,
+// so cutscene state stays permanently OPEN here) could never be promoted.
+// Fixed below: completion and promotion each get their own try/catch (one
+// step's OPEN block no longer blocks the other), completion runs first, and
+// promotion's "am I in cutscene state 0 or 2" gate treats an OPEN cutscene
+// state as "proceed" rather than "refuse" - there is no writer anywhere in
+// this host that could have moved it away from the engine's own idle default
+// without the gate itself already knowing it (cutsceneSetState's only
+// callers are this file's own state-machine transitions below, none reachable
+// without already knowing the state), so an OPEN read here is not missing
+// evidence of an active story cutscene, it is the absence of one. The 20-state
+// machine and the second step's other 3 cases (4, 5, 15) still require the
+// cutscene state to actually be known - they cannot do anything with it
+// otherwise, and nothing above depends on them running.
 #include "sr3luahost/engine_state.h"
 
 namespace sr3luahost {
@@ -172,10 +203,74 @@ void EngineState::zsceneGateApply(const GatePlan& plan) {
     // +0x18/+0x1c at promotion and read by nothing in the spec: not modelled.
     zsceneTeardownApply(plan.teardown, 1, 0);
     zscenePending_.set(plan.key);
+    // 2026-10-02 correction: stamp when THIS name became pending, so
+    // zsceneIsLoaded's refusal below only ever fires on a frame that has
+    // actually run for it (see zscenePendingSetAtFrame_'s own comment).
+    if (!plan.key.empty()) zscenePendingSetAtFrame_ = cutsceneCounters_.framesRun;
 }
 
 void EngineState::zscenePrep(const std::string& name) {
     zsceneGateApply(zsceneGatePlan(name));
+}
+
+// ---------------------------------------------------------------------------
+// cutscene_play_do / cutscene_play_check_done (spec-lua-api-behaviour.md
+// Sec57.2, "ranking tranche 23"; real-hit batch 2026-10-03 - these two are
+// 2 of the 8 real-hit names found across the 10 orchestrator-directed
+// sections Sec50-Sec59, by far the highest-volume pair: 31 + 12121 calls in
+// a fresh mission drive, with `cutscene_play_check_done` the single highest
+// hit count of the whole batch, and the real Lua stack evidence
+// ("waiting_at=...cutscene_play") shows this pair is where almost every
+// mission in this project's own mission-drive baseline parks.
+//
+// CONFIRMED body, per Sec26.25 item 6/Host summary (written before
+// Sec57.2's own Lua name was known, under the label "0x00725df0,
+// 'cutscene_play'"): "use the same prep gate [0x007232e0, i.e. the SAME
+// mechanism zscene_prep already runs] with the zero constants and then
+// request a 500 ms fade-out." Sec57.2 itself adds the fuller native's own
+// argument shape and three logic defects on top of that body:
+//  - a 2nd (optional table-or-boolean) argument is "read and discarded" -
+//    modeled by simply never reading it for any decision (functionally
+//    identical to reading-then-ignoring it; real call-site evidence from
+//    this project's own mission drive passes `nil` here);
+//  - a destination table (3rd argument) needs EXACTLY two entries or
+//    "both end-of-cutscene teleports are silently dropped";
+//  - "the destinations are written even when the cutscene start itself
+//    was refused" (another cutscene already running) - modeled by writing
+//    them unconditionally, BEFORE the refusal check below.
+// NOT modeled (Sec57.2 itself marks both HYPOTHESIS/not given beyond the
+// crash shape, and nothing in this project's own in-scope natives can ever
+// observe either): the uninitialized 8-entry "script-group handles" array
+// copied into the manager, and the failed-scene-manager-allocation
+// null-write path. Fabricating either would be inventing an engine value
+// this task's own standing rule refuses to do.
+void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::string> destinations) {
+    // CONFIRMED (Sec57.2): written unconditionally, before anything below
+    // decides whether the start itself succeeds or is refused.
+    if (destinations.size() == 2) {
+        cutscenePlayDestination1_ = destinations[0];
+        cutscenePlayDestination2_ = destinations[1];
+    } else {
+        cutscenePlayDestination1_.clear();
+        cutscenePlayDestination2_.clear();
+    }
+    // "the cutscene start itself was refused (e.g. another cutscene is
+    // already running)" - this host has no native in its real-hit scope
+    // that ever ends a cutscene, so cutscenePlayInProgress_ is a one-way
+    // latch here (CHOSEN, not a spec fact beyond the refusal condition
+    // itself): once a start has succeeded, a further call is refused,
+    // same as the real engine's own "already running" gate.
+    if (cutscenePlayInProgress_) return;
+    // Same prep gate zscene_prep already runs, with the zero constants
+    // (CONFIRMED, Sec26.25 - this call IS that same mechanism, not a
+    // reimplementation of it).
+    zsceneGateApply(zsceneGatePlan(name));
+    // "request a 500 ms fade-out" (CONFIRMED) - the SAME screenFadeRequest()
+    // mechanism fade_out's own stub uses, with no callback and no special
+    // flag (flag 0, the established convention for a plain request - see
+    // stub_fade_out/stub_fade_in in lua_spec_confirmed_stubs.cpp).
+    screenFadeRequest(true, 500, nullptr, 0);
+    cutscenePlayInProgress_ = true;
 }
 
 bool EngineState::zsceneIsLoaded(bool hasName, const std::string& name) {
@@ -186,12 +281,22 @@ bool EngineState::zsceneIsLoaded(bool hasName, const std::string& name) {
         if (zsceneSkipAllCutscenes_.get()) return true;
         if (zsceneCurrent_.get() != r.key) {
             // The engine answers false; for the pending entry that lasts until
-            // 0x007258a0 promotes it. If the host's last cutscene frame stopped
-            // on an OPEN read, that promotion cannot run here: refuse naming it.
-            if (cutsceneCounters_.lastFrameBlocked && zscenePending_.known() && zscenePending_.get() == r.key) {
+            // 0x007258a0 promotes it. If the entry is still pending after a
+            // cutscene frame that ran *for this pending entry* (framesRun has
+            // advanced since it was set - 2026-10-02 correction: EngineState
+            // is shared across a whole mission-drive run, so a stale blocked
+            // flag from an earlier, unrelated mission's own frames must not
+            // count here) hit an OPEN read somewhere in that frame's own
+            // completion/promotion/machine steps (cutsceneHostFrame), the
+            // promotion that would have cleared the pending slot cannot be
+            // assumed to have run: refuse naming it. Queried synchronously,
+            // before any frame of its own has run yet, it is simply "not
+            // promoted yet" - the same false the engine itself would answer.
+            if (cutsceneCounters_.lastFrameBlocked && cutsceneCounters_.framesRun > zscenePendingSetAtFrame_ &&
+                zscenePending_.known() && zscenePending_.get() == r.key) {
                 ++zscenePendingBlockedRefusals_;
                 throw OpenStateError("promotion of pending zscene '" + r.key +
-                                         "' (the per-frame driver 0x007258a0 last stopped on OPEN " +
+                                         "' (the per-frame zscene driver last stopped on OPEN " +
                                          cutsceneCounters_.lastFrameBlocker + ")",
                                      kSpec);
             }
@@ -235,7 +340,19 @@ void EngineState::zsceneResetApply(const ResetPlan& p) {
     } else if (p.write == ResetPlan::Write::ResetNotLive) {
         zsceneStateCode_.set(0);
         zsceneCurrent_.set("");
-        if (p.requeue) zscenePending_.set(p.current);
+        // CORRECTED 2026-10-02 (Sec26.25 Globals table, the `mm_p_01`
+        // zscene-promotion investigation): 0x00720320 sets 0x0153b541 to 1
+        // unconditionally on this class-1 reset path - the earlier reading
+        // (jobs mnao/nnlt) misread this as copying 0x0153b542's value, which
+        // this project had therefore left unwritten here (0x0153b542's own
+        // separate requeue-into-pending effect, below, is unaffected).
+        zsceneAutoSelectNearest_.set(true);
+        if (p.requeue) {
+            zscenePending_.set(p.current);
+            // Same 2026-10-02 correction as zsceneGateApply: this is a fresh
+            // entry into the pending slot too.
+            if (!p.current.empty()) zscenePendingSetAtFrame_ = cutsceneCounters_.framesRun;
+        }
     }
 }
 
@@ -243,7 +360,13 @@ bool EngineState::zsceneSoundtrackFinished() const {
     // 0x007316a0: the stream has ended (status 0x66) or 5 s have passed since
     // promotion started it (REAL). No stream: nothing to wait for. Exactly
     // 5 s: "pass" does not say which side of the comparison - OPEN.
-    if (!zsceneSoundtrackActive_.get()) return true;
+    // A stream that was never started (0x0153b71c/0x0153b720/0x0153b724 only
+    // come into existence at a promotion, Sec26.25 Globals) is "nothing to
+    // wait for" by construction of this host's own run, not an engine fact
+    // it is missing - the very first promotion attempt (2026-10-02, `mm_p_01`
+    // investigation) must not refuse here just because nothing has recorded
+    // whether a stream is active yet. The slot itself stays OPEN either way.
+    if (!zsceneSoundtrackActive_.known() || !zsceneSoundtrackActive_.get()) return true;
     const int64_t elapsed = screenFadeClockMs_ - zsceneSoundtrackStartMs_.get();
     if (elapsed == kSoundtrackTimeoutMs) refuse("soundtrack timer 0x0153b724 compared with 5 s at exact equality");
     if (elapsed > kSoundtrackTimeoutMs) return true;
@@ -416,14 +539,15 @@ void EngineState::cutsceneSecondStep() {
 
     switch (cs) {
     case 0:
-        zscenePromotionStep();
+        // Promotion itself now runs unconditionally from cutsceneHostFrame,
+        // before this function is even reached (2026-10-02 correction, file
+        // header above) - nothing left to do for this case specifically.
         return;
     case 2:
-        // "2 waits for the zscene to load, then 0x00725df0 continues": the
-        // promotion runs here too; loaded = load state 0x0153b51c == 2 (the
-        // value 0x0072d660 tests). What 0x00725df0 does next is not in the
-        // spec beyond the prep gate and the fade-out request: OPEN.
-        zscenePromotionStep();
+        // Promotion already ran (same reasoning). "2 waits for the zscene to
+        // load, then 0x00725df0 continues": loaded = load state 0x0153b51c
+        // == 2 (the value 0x0072d660 tests). What 0x00725df0 does next is not
+        // in the spec beyond the prep gate and the fade-out request: OPEN.
         if (zsceneStateCode_.get() == 2) {
             refuse("cutscene state 2: what 0x00725df0 (cutscene_play) does after the zscene has loaded");
         }
@@ -499,16 +623,69 @@ void EngineState::cutsceneSecondStep() {
 }
 
 void EngineState::cutsceneHostFrame() {
+    // 2026-10-02 correction (file header above, Sec26.25's corrected Host
+    // summary): completion and promotion are each unconditional, independent
+    // per-frame steps - neither one's own OPEN block may stop the other from
+    // being attempted, and completion runs first. Only the rest of the
+    // cutscene machine (the full 20-state jump table, and the second step's
+    // other 3 cases) still needs the cutscene state to actually be known.
     ++cutsceneCounters_.framesRun;
+    bool blocked = false;
+    std::string blocker;
+
+    // 1. Completion (0x007285c0): never depends on the cutscene state.
     try {
-        cutsceneMachineStep();
-        cutsceneSecondStep();
         zsceneCompletionStep();
-        cutsceneCounters_.lastFrameBlocked = false;
     } catch (const OpenStateError& e) {
+        blocked = true;
+        blocker = e.global();
+    }
+
+    // 2. Promotion (0x007258a0/0x00720320/0x00720410): acts only in cutscene
+    // states 0 and 2 (REAL). An OPEN cutscene state is "proceed", not
+    // "refuse" (file header above) - nothing in this host could have moved
+    // it away from the engine's idle default without this gate already
+    // knowing about it.
+    const bool csKnown = screenFade_.cutsceneState.known();
+    bool runPromotion = true;
+    int32_t cs = 0;
+    if (csKnown) {
+        cs = screenFade_.cutsceneState.get();
+        runPromotion = (cs == 0 || cs == 2);
+    }
+    if (runPromotion) {
+        try {
+            zscenePromotionStep();
+        } catch (const OpenStateError& e) {
+            blocked = true;
+            blocker = e.global();
+        }
+    }
+
+    // 3. The rest of the cutscene machine needs the real cutscene-state
+    // value to do anything at all; skip entirely while it is OPEN, same as
+    // before this correction - nothing above depends on it running. These
+    // two keep their original, single try/catch (not split like steps 1/2
+    // above): cutsceneSecondStep unconditionally reads the cutscene manager
+    // for any cs >= 2 (its in-progress status byte), so if cutsceneMachineStep
+    // already refused on that same cutscene state, cutsceneSecondStep's own
+    // read would just as reliably refuse too, on a different, less specific
+    // global - the original "stop at the first refusal" chaining between
+    // these two is unrelated to this correction and is preserved here.
+    if (csKnown) {
+        try {
+            cutsceneMachineStep();
+            cutsceneSecondStep();
+        } catch (const OpenStateError& e) {
+            blocked = true;
+            blocker = e.global();
+        }
+    }
+
+    cutsceneCounters_.lastFrameBlocked = blocked;
+    if (blocked) {
         ++cutsceneCounters_.framesBlockedOnOpen;
-        cutsceneCounters_.lastFrameBlocked = true;
-        cutsceneCounters_.lastFrameBlocker = e.global();
+        cutsceneCounters_.lastFrameBlocker = blocker;
     }
 }
 

@@ -17,6 +17,9 @@
 // spec Sec2) are explicitly left open by this pass, not solved.
 #pragma once
 
+#include <cstdint>
+#include <functional>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -150,10 +153,16 @@ public:
     size_t bareGlobalCount() const { return bareGlobalCount_; }
 
     // One pass of the script-thread scheduler 0x00e0cf50 over both states
-    // (spec-lua-api-behaviour.md Sec26.27, RESOLVED 2026-10-02, CONFIRMED
-    // mechanism - BareThreadTable::schedulerPass). WHEN to call it is the
-    // caller's choice: the engine runs it from its own ~33 Hz background pump
-    // (30 ms minimum per iteration), not from any frame the host models.
+    // (spec-lua-api-behaviour.md thread-table section, MAJOR CORRECTION
+    // 2026-10-02, CONFIRMED mechanism - BareThreadTable::schedulerPass).
+    // WHEN to call it is still the caller's choice, but the engine's own
+    // cadence is no longer a background pump: it runs once per rendered/game
+    // frame, on the main thread, from each active game state's own per-frame
+    // update (0x00e0dfc0, called from e.g. 0x007b05f0) - see bare_globals.h's
+    // own class-top comment for the corrected mechanism. A caller that calls
+    // this once per its own rendered/game frame reproduces the real engine
+    // exactly; tools/lua_host_run.cpp's mission loop does this (CHOSEN
+    // tick-equals-frame mapping, kSchedulerPassesPerTick == 1).
     BareThreadTable::PassResult runScriptThreadSchedulerPass(const BareThreadTable::BeforeRun& before = {},
                                                              const BareThreadTable::AfterRun& after = {}) {
         return bareGlobals_.threads().schedulerPass({gameplay_, ui_}, before, after);
@@ -175,6 +184,36 @@ public:
     // The buffer loader's behaviour on a failed load (Sec16.4): drop the queue.
     void discardIncludeQueue() { bareGlobals_.includeQueue().discard(); }
 
+    // --- Per-call "current document" context (2026-10-03) ----------------
+    //
+    // spec-lua-bindings.md Sec15/Sec18.2/Sec19.1: vint_object_find's,
+    // vint_object_clone's and vint_get_time_index's "current document" is
+    // the +0x14 field of the calling script's context (0x00e0ceb0;
+    // spec-lua-api-behaviour.md Sec26.27 reads the same field as "the calling
+    // script's own context"). EngineState models it as
+    // currentDefaultDocHandle(), OPEN by default. A UI document names its own
+    // script in its `lua_script_file` metadata (spec-vint-doc-format.md
+    // Sec3.2), so this project CHOOSES (labelled, not a spec fact): code
+    // runs in the context of the document whose lua_script_file is the chunk
+    // that DEFINED it. With a resolver set:
+    //  * runChunk() resolves `chunkName` before the pcall;
+    //  * fireConfirmedHooks() resolves the hook function's own defining
+    //    chunk (lua_getinfo's `source` - runChunk passes the script's entry
+    //    name as the chunk name, so this is that script's name), so a hook
+    //    defined by script A but fired during script B's pass (the
+    //    persistent-state artifact tools/lua_host_run.cpp's top comment
+    //    describes) still runs in A's document, not B's.
+    // The resolver returns the document handle, or nullopt for "this chunk
+    // has no known document" (the current document is then OPEN for the
+    // call, as before). The previous value is restored after every call.
+    // Without a resolver (the default, and every existing test) nothing
+    // changes. NOT covered: script-thread resumption by the scheduler
+    // (thread bodies resume with whatever context the caller left, OPEN
+    // under lua_host_run) - Sec26.27's "inherited by child threads" is not
+    // modelled.
+    using DocumentContextResolver = std::function<std::optional<uint32_t>(const std::string& chunkName)>;
+    void setDocumentContextResolver(DocumentContextResolver r) { docContextResolver_ = std::move(r); }
+
 private:
     lua_State* gameplay_ = nullptr;
     lua_State* ui_ = nullptr;
@@ -185,6 +224,24 @@ private:
     EngineState engineState_;
     BareGlobalsState bareGlobals_;
     size_t bareGlobalCount_ = 0;
+    DocumentContextResolver docContextResolver_;
+
+    // Sets currentDefaultDocHandle() for one call from the resolver (see
+    // setDocumentContextResolver) and restores the previous value when it
+    // goes out of scope. A no-op without a resolver.
+    class DocumentContextScope {
+    public:
+        DocumentContextScope(Host& h, const std::string& chunkName);
+        ~DocumentContextScope();
+        DocumentContextScope(const DocumentContextScope&) = delete;
+        DocumentContextScope& operator=(const DocumentContextScope&) = delete;
+
+    private:
+        Host& host_;
+        bool active_ = false;
+        bool hadValue_ = false;
+        uint32_t previous_ = 0;
+    };
 };
 
 } // namespace sr3luahost

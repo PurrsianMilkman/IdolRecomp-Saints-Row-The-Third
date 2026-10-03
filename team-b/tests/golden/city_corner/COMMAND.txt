@@ -1,0 +1,78 @@
+Golden scene: city_corner, real multi-tile `city` streaming command, 4-cell real tile-boundary corner
+========================================================================================================
+
+FROZEN 2026-10-03, orchestrator request (after the streaming city viewer merged to main, 281136c) - a
+fixed regression scene for `sr3_viewer city`, the multi-tile streaming viewer (see tools/sr3_viewer.cpp's
+own runCity() top comment for the full real-command/why writeup already covering the lattice formula,
+the level-4 box reconciliation rule, and the honest within-cell fake-grid limitation). This golden exists
+to catch a regression in BOTH halves of that command at once: which real cells stream in/out (the tile
+lattice + box rule) AND how their real textures resolve (the cross-archive texture fallback this merge
+added, since the city is split across sr3_city_0/sr3_city_1).
+
+Real command (run with cwd = tests/golden/, same convention every other baseline in this directory tree
+uses):
+
+    <sr3_viewer.exe> city \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        --eye -960 250 -700 --yaw 0 --pitch -75 --no-input \
+        --frames 1 --capture _work/city_corner.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by tests/golden/build.bat straight from
+tools/sr3_viewer.cpp - unchanged build mechanism from every other baseline in this directory (no
+build.bat change was needed: `city` uses only readers that script already compiles for the `zone`/
+`clmesh` commands - vpp::Container, sr3clmesh::LevelMesh, sr3zone::ZoneHeader, sr3render::MeshRenderer/
+TextureSearchCache).
+
+Why this camera position (a real, measured corner, not an arbitrary point): `city --list` was run first
+to read each cell's own real centre (not assumed), then the 4 cells that share one real box-overlap
+corner were picked directly from those real centres:
+    1016h0  centre (-880, -770)  box [-960,-800] x [-840,-700]   (tile 1016, col 10 row 16)
+    0916h1  centre (-1040,-770)  box [-1120,-960] x [-840,-700]  (tile 0916, col  9 row 16)
+    1015h2  centre (-1040,-630)  box [-1120,-960] x [-700,-560]  (tile 1015, col 10 row 15)
+    1015h3  centre (-880,-630)   box [-960,-800] x [-700,-560]   (tile 1015, col 10 row 15)
+All 4 boxes meet exactly at (x=-960, z=-700) - the focus point used here - so the real level-4 window
+(159.5 x 139.5 m, half-extents 79.75/69.75) centred there overlaps all 4 simultaneously, the real
+Sec10.4-documented maximum (never more than 4). This is a genuine 3-tile-corner case (0916/1016/1015),
+not a single-tile view, and it exercises Sec10.4's own capacity-4 bound directly rather than by
+assertion only. --pitch -75 (DEGREES - the command's own --pitch argument is interpreted in degrees, not
+radians, confirmed directly: an initial attempt at --pitch -1.3 intending radians produced a near-empty
+frame, since -1.3 degrees is nearly level) gives a near-top-down view at --eye height 250 that keeps all
+4 cells' real props and boundary outlines in frame.
+
+Why textures ARE on (the command's own default - no --tint, no --no-textures): the orchestrator's own
+stated reason for this golden is to catch a regression in texturing (the cross-archive fallback this
+merge added) as well as streaming, so a --tint flat-colour capture would miss exactly the thing this
+golden is for. Real texture-hit counts for the loaded cells (from this baseline's own stdout): 1016h0
+125/136, 0916h1 122/128, 1015h2 318/327, 1015h3 146/146 - all 4 resolved entirely within sr3_city_0.vpp_pc
+itself (0 from another archive), since this golden only passes one archive on the command line.
+
+Within-cell prop placement is the SAME CHOSEN fake local grid every other clmesh/city scene in this
+directory already uses - NOT real per-instance placement (unresolved, see runCity()'s own top comment) -
+labelled as such in the command's own stdout banner on every run. A future resolution of real within-cell
+placement will legitimately change this baseline's pixels; that is an intended re-freeze, not a
+regression.
+
+Determinism: confirmed directly this session by running this exact command twice in a row into two
+different --capture paths and MD5-comparing the resulting PNGs - byte-identical both times (MD5
+6aba93ef58eb420e0fae863d3be361c4). The two stdout captures were NOT byte-identical, though - this is the
+first golden command whose own stdout embeds a real measured wall-clock duration per line (the per-cell
+"NNN ms" load time, the one-time TextureSearchCache "indexed in N.N s" build time), which varies by a few
+hundred ms run to run on real disk I/O even though the rendered frame itself does not. Per golden_scene_
+check.cpp's own stated comparison policy ("a fallback is added only if one [concrete non-determinism] is
+found"), this is a real, now-found case: checkCityCornerScene() compares this baseline's stdout with
+compareTextMaskingTiming() instead of compareTextExact() (see that function's own doc comment) - every
+numeric run immediately followed by " ms" or " s" is masked to the literal "<T>" before the line-by-line
+compare, so a timing jitter of a few hundred ms is not flagged, while every other field on the same line
+(prop counts, texture counts, cell names, centres, resident sets) still has to match byte-for-byte.
+
+Frozen here:
+  baseline_capture.png - the real captured frame: all 4 real cells at their real Sec10.6(g) lattice
+                         positions, real per-material textures, real cell-boundary outlines, the fake
+                         within-cell prop grid (see above).
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact invocation (per-archive census,
+                         per-cell LOAD lines with real prop/texture counts, the focus/wanted-set line,
+                         the final frame/load/evict summary). Re-run and check with
+                         compareTextMaskingTiming(), not a raw diff (see above - timing text will differ
+                         run to run by design).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkCityCornerScene().

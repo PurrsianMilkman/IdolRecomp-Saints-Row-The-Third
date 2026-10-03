@@ -82,6 +82,7 @@
 #include "sr3texture/texture_pair.h"
 #include "sr3vehicle/vehicle.h"
 #include "sr3zone/zone_geometry.h"
+#include "sr3zone/zone_header.h"
 #include "vpp/container.h"
 
 #pragma comment(lib, "d3dcompiler.lib")
@@ -6847,6 +6848,943 @@ int runClmeshBatch(int argc, char** argv) {
     return 0;
 }
 
+// ===========================================================================
+// `city` command (2026-10-03): the first multi-cell STREAMING viewer - loads
+// and draws the real hN ("Zone (High LOD)", engine level 4) fine-cell
+// containers around a moving fly camera, acquiring and releasing them by the
+// engine's own level-4 box rule. The step from "one hN cell on its own"
+// (`clmesh-tile`) to "the city".
+//
+// WHAT IS SOLID GROUND HERE (and where each number comes from):
+//
+//   * Cell naming: `CCRRhN` = fine cell N of tile (col CC, row RR),
+//     spec-world-streaming.md Sec10.1/Sec10.3/Sec10.6(e). The CC=col /
+//     RR=row reading is NOT taken on trust: `--lattice-check` re-measures it
+//     against this archive's own `.czh_pc` FAST headers (header origin +
+//     SR3Z record position words, the exact Sec10.6(g) method - header data
+//     only, nothing from `.czn_pc`) and prints the residuals for BOTH the
+//     CC=col and the swapped CC=row parse.
+//   * Tile-to-tile world position: Sec10.6(g), VALIDATED-BY-DATA -
+//       centre_x = 320*col - 4000 - 160*(row mod 2)
+//       centre_z = 3640 - 280*row
+//     and the fine cell centre = tile centre + (-80,+70) / (+80,+70) /
+//     (-80,-70) / (+80,-70) for N = 0/1/2/3. Fine cell = 160 x 140 m
+//     (Sec10.3 level-4 row).
+//   * Which cells are wanted: Sec10.4 steps 1-3 / Sec11.1 - an axis-aligned
+//     box centred on the focus, half-extent = level-4 window / 2 =
+//     (79.75, 69.75) m; every cell whose box overlaps it (touching does not
+//     count - Sec10.4 says the engine shrinks the box by "a small epsilon"
+//     whose value is not given; strict inequality is used here, which is
+//     immaterial at this scale since the window is 0.5 m smaller than a cell
+//     in each axis); only cells with a real registered container are kept
+//     (here: a real `CCRRhN.str2_pc` entry in the archive). Level 4 never
+//     overlaps more than 4 cells, so its capacity-4 sort/truncate never
+//     fires (Sec10.4) - asserted at run time, not assumed.
+//   * Reconciliation: the SAME box drives acquire and release - no keep
+//     margin / hysteresis (Sec11.2 confirmed negative); release of a dropped
+//     cell is immediate (Sec11.4: refcount-to-zero frees in the same call);
+//     there is no per-tick acquire budget (Sec11.4) - every newly-wanted cell
+//     is loaded in the same pass it becomes wanted. Release is done before
+//     acquire, the order Sec10.4 describes the reconciliation in.
+//   * Focus point: this viewer's own fly-camera eye (x, z). This is a
+//     standalone offline viewer, so the engine's own OPEN "what feeds/calls
+//     the reconciliation every frame" question (Sec10.4/Sec11.3/Sec11.5) is
+//     not ours to answer: this render loop IS the per-frame driver, by
+//     construction.
+//
+// CHOSEN ENGINEERING DECISIONS (not spec facts):
+//
+//   * Cadence: the wanted set is recomputed EVERY rendered frame (a few
+//     hundred box tests - negligible), and loading/evicting happens only on
+//     the delta, exactly the diff the engine's reconciliation does. No
+//     throttle is needed because an unchanged wanted set already costs
+//     nothing; loads are synchronous in the frame that needs them (a visible
+//     hitch on crossing a boundary - async loading is deferred, see below).
+//   * Only the DEFAULT variant `CCRRhN` of each cell is loaded. The engine
+//     acquires a cell record's SELECTED variant (Sec10.3); which `CCRR^name`
+//     variant is selected at run time is game-state, not modelled here.
+//     Variant counts are reported by `--list`.
+//   * Textures: TextureSearchCache, one per archive, built once on first use
+//     and kept for the whole run (shared by every cell, never released on
+//     cell eviction) - the same reuse runClmeshTile() does across props.
+//     A material's texture is looked up in the cell's own archive first,
+//     then in every other archive given (the city is split across
+//     sr3_city_0/1; a cell's textures need not sit in its own file).
+//     In the real engine textures belong to the tile bundle (level 3, Low
+//     Mips, Sec10.6(a)), a level this viewer does not stream.
+//   * `--window-scale S` (default 1 = the engine's rule) is a DEBUG-ONLY
+//     override that widens the window for an overview capture of several
+//     tiles at once; any run using it prints a WARNING that its wanted set
+//     is not the engine's level-4 rule.
+//
+// WHAT IS NOT SOLID GROUND, AND STAYS EXACTLY AS HONEST AS `clmesh-tile`:
+// WHERE EACH PROP SITS INSIDE ITS CELL. Real per-instance placement of
+// `.clmesh_pc` objects was investigated and did NOT resolve (see
+// runClmeshTile()'s own top comment and tools/tile1018_placement_probe.cpp).
+// So inside each cell the props are laid out on the same kind of FAKE
+// fixed local grid `clmesh-tile` uses - each prop's own bounding-box centre
+// moved to an arbitrary grid slot - with ONE change: the grid is fitted to
+// the cell's own real 160 x 140 m footprint (cols = ceil(sqrt(n*160/140)))
+// and translated to the cell's REAL world centre, instead of
+// `clmesh-tile`'s footprint-sized slots at a shared local origin (which
+// would make adjacent cells' grids overlap by hundreds of metres and hide
+// the lattice). A prop larger than its slot spills into its neighbours
+// (counted in the log). Props keep their real local Y. Nothing here claims
+// real within-cell placement; the stdout banner says so on every run.
+//
+// DELIBERATELY DEFERRED (with reason):
+//   * real within-cell placement - unresolved, see above (not this pass's to
+//     solve; it needs the cross-manifest name-index investigation);
+//   * levels 0 / 3 (`awld_compact` ~L2, tile bundle ~L1) - only level 4 is
+//     streamed, so at distance there is no LOD backdrop;
+//   * `^name` variant selection, see above;
+//   * asynchronous loading (a worker-thread parse + upload) - loads are
+//     synchronous; the per-cell load time is logged so the hitch is visible;
+//   * terrain / ground height - props keep their local Y, the outlines sit
+//     at y = 0;
+//   * lighting / material consistency across cells - same plain
+//     diffuse-textured fallback shader `clmesh`/`clmesh-tile` use;
+//   * a memory budget (Sec9.6 high-LOD allocator budgets) - up to 4 resident
+//     cells is small enough that no budget is enforced;
+//   * a mesh duplicated into several cells (Sec10.5/Sec10.6(c): a mesh
+//     spanning several sub-boxes is registered in each) is drawn once per
+//     resident cell - de-duplication needs real placement first.
+//
+// STRICTLY ADDITIVE: every type/function below is new and only reached from
+// the new `city` branch in main(). The per-prop load below MIRRORS
+// runClmeshTile()'s per-prop block step by step (same parse, same
+// render-group-0 g-cursor chaining, same per-channel masked upload, same
+// texture lookup) rather than refactoring that function's body.
+// ===========================================================================
+namespace {
+
+// 64-bit-safe whole-file read: readFile() above uses ftell()'s 32-bit
+// `long`, which cannot size `sr3_city_1.vpp_pc` (2,611,376,351 bytes).
+std::vector<uint8_t> readFileLargeC(const std::string& path) {
+    std::vector<uint8_t> buf;
+    FILE* f = nullptr;
+    if (fopen_s(&f, path.c_str(), "rb") != 0 || f == nullptr) return buf;
+    _fseeki64(f, 0, SEEK_END);
+    const long long size = _ftelli64(f);
+    _fseeki64(f, 0, SEEK_SET);
+    if (size > 0) {
+        buf.resize(static_cast<size_t>(size));
+        size_t done = 0;
+        while (done < buf.size()) {
+            const size_t want = (std::min)(buf.size() - done, static_cast<size_t>(256u) << 20);
+            const size_t got = fread(buf.data() + done, 1, want, f);
+            if (got == 0) break;
+            done += got;
+        }
+        if (done != buf.size()) buf.clear();
+    }
+    fclose(f);
+    return buf;
+}
+
+// spec-world-streaming.md Sec10.6(g) (VALIDATED-BY-DATA) and Sec10.3 level 4.
+constexpr float kCityTilePitchX = 320.0f;
+constexpr float kCityTilePitchZ = 280.0f;
+constexpr float kCityOriginX = -4000.0f;
+constexpr float kCityOriginZ = 3640.0f;
+constexpr float kCityRowStagger = 160.0f;
+constexpr float kFineCellHalfX = 80.0f;   // 160 x 140 m fine cell
+constexpr float kFineCellHalfZ = 70.0f;
+constexpr float kLevel4WindowX = 159.5f;  // Sec10.3 / Sec11.1
+constexpr float kLevel4WindowZ = 139.5f;
+constexpr size_t kLevel4Capacity = 4;     // Sec10.3 desired-list capacity
+
+void cityTileCentre(int col, int row, float& x, float& z) {
+    x = kCityTilePitchX * static_cast<float>(col) + kCityOriginX - kCityRowStagger * static_cast<float>(row % 2);
+    z = kCityOriginZ - kCityTilePitchZ * static_cast<float>(row);
+}
+
+// N -> (column offset N & 1, row offset N >> 1), row 0 = higher z (Sec10.1,
+// Sec10.6(f)/(g)).
+void cityFineCellCentre(int col, int row, int n, float& x, float& z) {
+    cityTileCentre(col, row, x, z);
+    x += (n & 1) ? kFineCellHalfX : -kFineCellHalfX;
+    z += (n >> 1) ? -kFineCellHalfZ : kFineCellHalfZ;
+}
+
+// Parses EXACTLY "<4 digits>h<digit>.str2_pc" (case-insensitive 'h' and
+// extension) - the default variant of a fine cell. `^name` variants and
+// anything else return false.
+bool parseDefaultHnEntryName(const std::string& entryName, int& col, int& row, int& n) {
+    if (!endsWithNoCase(entryName, ".str2_pc")) return false;
+    const std::string stem = entryName.substr(0, entryName.size() - 8);
+    if (stem.size() != 6) return false;
+    for (int i = 0; i < 4; ++i)
+        if (stem[static_cast<size_t>(i)] < '0' || stem[static_cast<size_t>(i)] > '9') return false;
+    if (stem[4] != 'h' && stem[4] != 'H') return false;
+    if (stem[5] < '0' || stem[5] > '3') return false;
+    col = (stem[0] - '0') * 10 + (stem[1] - '0');
+    row = (stem[2] - '0') * 10 + (stem[3] - '0');
+    n = stem[5] - '0';
+    return true;
+}
+
+// "CCRR^<name>h<N>.str2_pc" - a sub-area/state variant of a fine cell
+// (Sec10.3). Only counted, never loaded (see the top comment).
+bool looksLikeHnVariantEntryName(const std::string& entryName) {
+    if (!endsWithNoCase(entryName, ".str2_pc")) return false;
+    const std::string stem = entryName.substr(0, entryName.size() - 8);
+    if (stem.size() < 7 || stem.find('^') == std::string::npos) return false;
+    const char h = stem[stem.size() - 2];
+    const char d = stem[stem.size() - 1];
+    return (h == 'h' || h == 'H') && d >= '0' && d <= '3';
+}
+
+struct CityArchive {
+    std::string path;
+    std::string label;
+    std::vector<uint8_t> bytes;
+    std::unique_ptr<vpp::Container> top;
+    TextureSearchCache texCache;
+    double texCacheBuildMs = -1.0;
+};
+
+struct CityCell {
+    std::string name;      // e.g. "1018h1"
+    std::string entryName; // the real archive entry name
+    size_t archiveIndex = 0;
+    size_t entryIndex = 0;
+    int col = 0, row = 0, n = 0;
+    float centreX = 0.0f, centreZ = 0.0f;
+};
+
+struct CityProp {
+    std::string name;
+    std::vector<std::unique_ptr<sr3render::MeshRenderer>> renderers;
+    std::vector<ID3D11ShaderResourceView*> perMaterialSrv;
+    float localMin[3] = {1e30f, 1e30f, 1e30f};
+    float localMax[3] = {-1e30f, -1e30f, -1e30f};
+    float world[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    size_t texturesWanted = 0, texturesFound = 0, texturesFoundElsewhere = 0;
+};
+
+struct CityLoadedCell {
+    size_t cellIndex = 0;
+    std::vector<CityProp> props; // only successfully uploaded props
+    size_t propEntries = 0, propsFailed = 0, propsOverflowSlot = 0;
+    size_t texturesWanted = 0, texturesFound = 0, texturesFoundElsewhere = 0;
+    std::unique_ptr<sr3render::MeshRenderer> outline;
+    float tint[4] = {1, 1, 1, 1};
+    double loadMs = 0.0;
+};
+
+double cityNowMs() {
+    LARGE_INTEGER f{}, t{};
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&t);
+    return static_cast<double>(t.QuadPart) * 1000.0 / static_cast<double>(f.QuadPart);
+}
+
+// Loads ONE real `.clmesh_pc`/`.glmesh_pc` pair - mirrors runClmeshTile()'s
+// per-prop block step by step (see the top comment). Returns false with
+// `why` set on any failure; never fabricates a stand-in.
+bool loadCityProp(const vpp::Container& str2, const std::string& clName,
+                  std::vector<std::unique_ptr<CityArchive>>& archives, size_t ownArchive, ID3D11Device* device,
+                  bool textures, CityProp& prop, std::string& why) {
+    prop.name = clName;
+    std::string glName = clName;
+    {
+        const size_t dot = glName.find_last_of('.');
+        if (dot != std::string::npos) glName[dot + 1] = 'g';
+    }
+    std::vector<uint8_t> clBytes, glBytes;
+    if (!findEntry(str2, clName, clBytes, glBytes, glName) || clBytes.empty() || glBytes.empty()) {
+        why = "could not find paired .clmesh_pc/.glmesh_pc bytes";
+        return false;
+    }
+    vpp::ByteView clView(clBytes.data(), clBytes.size());
+    vpp::ByteView glView(glBytes.data(), glBytes.size());
+    sr3clmesh::LevelMesh lm;
+    try {
+        lm = sr3clmesh::LevelMesh::parse(clView);
+    } catch (const std::exception& ex) {
+        why = std::string("LevelMesh parse failed: ") + ex.what();
+        return false;
+    }
+    if (!lm.walkComplete() || lm.middle().renderGroupCount == 0) {
+        why = "walk incomplete or no render groups";
+        return false;
+    }
+    const auto& mid = lm.middle();
+
+    std::vector<sr3clmesh::MaterialRecord> matRecs = lm.materialRecords(clView);
+    prop.perMaterialSrv.assign(matRecs.size(), nullptr);
+    if (textures) {
+        // Search the cell's OWN archive first, then (on a miss) every other
+        // archive given on the command line, in order - each through its own
+        // lazily-built TextureSearchCache.
+        std::vector<size_t> order{ownArchive};
+        for (size_t ai = 0; ai < archives.size(); ++ai)
+            if (ai != ownArchive) order.push_back(ai);
+        for (size_t mi = 0; mi < matRecs.size(); ++mi) {
+            sr3geometry::MaterialBinding mb = lm.materialTextureBinding(mi, clView);
+            const std::string* diffuse = mb.diffuse();
+            if (diffuse == nullptr && !mb.textures.empty()) diffuse = &mb.textures.front().name;
+            if (diffuse == nullptr) continue;
+            ++prop.texturesWanted;
+            for (size_t ai : order) {
+                CityArchive& archive = *archives[ai];
+                sr3render::UploadedTexture ut;
+                std::string foundIn;
+                if (!archive.texCache.built) {
+                    std::printf("[tex] building TextureSearchCache for %s (one-time, shared by every cell)...\n",
+                                archive.label.c_str());
+                    std::fflush(stdout);
+                }
+                const bool wasBuilt = archive.texCache.built;
+                const double t0 = cityNowMs();
+                const bool found =
+                    findAndUploadTexture(*archive.top, *diffuse, device, ut, foundIn, &archive.texCache);
+                if (!wasBuilt && archive.texCache.built) {
+                    archive.texCacheBuildMs = cityNowMs() - t0;
+                    std::printf("[tex] TextureSearchCache for %s built: %zu texture records indexed in %.1f s\n",
+                                archive.label.c_str(), archive.texCache.all.size(),
+                                archive.texCacheBuildMs / 1000.0);
+                }
+                if (found) {
+                    prop.perMaterialSrv[mi] = ut.srv;
+                    ++prop.texturesFound;
+                    if (ai != ownArchive) ++prop.texturesFoundElsewhere;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::vector<sr3mesh::MeshBlock> headBlocks = lm.resolveReferencedMeshes(clView, glView);
+    size_t gCursor = 0;
+    for (auto& hb : headBlocks)
+        if (hb.bulkInGFile()) gCursor += hb.gLength();
+    const auto& rg = mid.renderGroups[0];
+    const size_t headerDisplacement = ((rg.mesh.offset + 16 + 7) / 8 * 8) - rg.mesh.offset;
+    sr3mesh::MeshBlock chosenMesh;
+    try {
+        chosenMesh = sr3mesh::MeshBlock::parse(clView, rg.mesh.offset, glView, gCursor, headerDisplacement);
+    } catch (const std::exception& ex) {
+        why = std::string("renderGroup[0] Mesh sub-block parse failed: ") + ex.what();
+        return false;
+    }
+    if (!chosenMesh.drawGroupsLocated() || chosenMesh.drawGroups().empty()) {
+        why = "renderGroup[0] has no located draw groups";
+        return false;
+    }
+    const auto& drawGroup0 = chosenMesh.drawGroups()[0];
+    std::map<size_t, std::vector<bool>> masksByChannel;
+    for (size_t r = 0; r < drawGroup0.size(); ++r) {
+        const size_t ch = drawGroup0[r].submeshIndex;
+        auto it = masksByChannel.find(ch);
+        if (it == masksByChannel.end()) it = masksByChannel.emplace(ch, std::vector<bool>(drawGroup0.size(), false)).first;
+        it->second[r] = true;
+    }
+    std::string error;
+    for (const auto& kv : masksByChannel) {
+        if (kv.first >= chosenMesh.channels().size()) continue;
+        auto r = std::make_unique<sr3render::MeshRenderer>();
+        if (!r->initialise(device, error)) continue;
+        if (!r->upload(device, chosenMesh, kv.first, 0, error, 0, nullptr, nullptr, &kv.second)) continue;
+        const float* rmn = r->boundsMin();
+        const float* rmx = r->boundsMax();
+        for (int c = 0; c < 3; ++c) {
+            if (rmn[c] < prop.localMin[c]) prop.localMin[c] = rmn[c];
+            if (rmx[c] > prop.localMax[c]) prop.localMax[c] = rmx[c];
+        }
+        prop.renderers.push_back(std::move(r));
+    }
+    if (prop.renderers.empty()) {
+        why = "no channel target could be uploaded" + (error.empty() ? std::string() : (": " + error));
+        return false;
+    }
+    return true;
+}
+
+// A closed rectangle (plus two orientation ticks from its centre: a long one
+// toward +x, a short one toward +z) as a MeshRenderer line list via
+// uploadSkeleton() - parent chain p0 <- p1 <- ... so each consecutive pair
+// becomes one segment. White lines (drawSkeleton()'s own fixed colour).
+bool uploadCityOutline(sr3render::MeshRenderer& r, ID3D11Device* device, float cx, float cz, float halfX,
+                       float halfZ, bool ticks, std::string& error) {
+    std::vector<std::array<float, 3>> pos;
+    std::vector<uint32_t> parents;
+    const float y = 0.0f;
+    const std::array<float, 3> corners[5] = {{cx - halfX, y, cz - halfZ},
+                                             {cx + halfX, y, cz - halfZ},
+                                             {cx + halfX, y, cz + halfZ},
+                                             {cx - halfX, y, cz + halfZ},
+                                             {cx - halfX, y, cz - halfZ}};
+    for (int i = 0; i < 5; ++i) {
+        pos.push_back(corners[i]);
+        parents.push_back(i == 0 ? 0xFFFFFFFFu : static_cast<uint32_t>(pos.size() - 2));
+    }
+    if (ticks) {
+        const uint32_t centre = static_cast<uint32_t>(pos.size());
+        pos.push_back({cx, y, cz});
+        parents.push_back(0xFFFFFFFFu);
+        pos.push_back({cx + halfX * 0.6f, y, cz}); // long tick: +x
+        parents.push_back(centre);
+        pos.push_back({cx, y, cz + halfZ * 0.3f}); // short tick: +z
+        parents.push_back(centre);
+    }
+    if (!r.initialise(device, error)) return false;
+    return r.uploadSkeleton(device, pos, parents, error);
+}
+
+// Sec10.4 steps 1-3 for level 4: every registered cell whose 160 x 140 m box
+// overlaps the focus box (focus +- window/2). Strict inequality: touching
+// does not count.
+// `windowScale` != 1 is the `--window-scale` DEBUG override (NOT the
+// engine's rule) used only for wide overview captures.
+std::vector<size_t> cityWantedCells(const std::vector<CityCell>& cells, float fx, float fz, float windowScale) {
+    const float hx = kLevel4WindowX * 0.5f * windowScale;
+    const float hz = kLevel4WindowZ * 0.5f * windowScale;
+    std::vector<size_t> out;
+    for (size_t i = 0; i < cells.size(); ++i) {
+        const CityCell& c = cells[i];
+        const bool ox = (fx - hx) < (c.centreX + kFineCellHalfX) && (fx + hx) > (c.centreX - kFineCellHalfX);
+        const bool oz = (fz - hz) < (c.centreZ + kFineCellHalfZ) && (fz + hz) > (c.centreZ - kFineCellHalfZ);
+        if (ox && oz) out.push_back(i);
+    }
+    return out;
+}
+
+} // namespace
+
+int runCity(int argc, char** argv) {
+    if (argc < 3) {
+        std::fprintf(stderr,
+                     "usage: sr3_viewer city <sr3_city_0.vpp_pc> [<sr3_city_1.vpp_pc> ...]\n"
+                     "                        [--list] [--lattice-check]\n"
+                     "                        [--eye X Y Z] [--yaw D] [--pitch D] [--speed U]\n"
+                     "                        [--fly-to X Z] [--no-input] [--frames N]\n"
+                     "                        [--capture <out.png>] [--capture-frame N]\n"
+                     "                        [--capture-at N <out.png>]... [--size W H]\n"
+                     "                        [--tint] [--no-textures] [--no-outlines] [--far F]\n"
+                     "                        [--window-scale S]\n"
+                     "       Multi-cell STREAMING viewer for the real hN fine cells (engine\n"
+                     "       level 4, 'Zone (High LOD)'): every frame the wanted set is the\n"
+                     "       cells whose 160x140 m box overlaps a 159.5x139.5 m window around\n"
+                     "       the fly camera's (x,z) (spec-world-streaming.md Sec10.4/Sec11);\n"
+                     "       newly-wanted cells are loaded, dropped cells evicted immediately,\n"
+                     "       each logged to stdout as [stream] LOAD/EVICT with the frame number.\n"
+                     "       Cells sit at their REAL world position (Sec10.6(g) lattice); the\n"
+                     "       props INSIDE a cell are on a FAKE local grid (real within-cell\n"
+                     "       placement is unresolved - see runCity()'s top comment).\n"
+                     "       --list         print every hN container (parsed col/row/N, centre)\n"
+                     "                      per archive and exit.\n"
+                     "       --lattice-check  re-measure the CC=col/RR=row parse against each\n"
+                     "                      tile's own .czh_pc fast-header extents and exit.\n"
+                     "       --fly-to X Z   scripted flight: eye moves linearly from --eye to\n"
+                     "                      (X, eyeY, Z) over --frames frames.\n"
+                     "       --no-input     ignore the keyboard (deterministic scripted runs).\n"
+                     "       --tint         flat colour per cell instead of textures.\n"
+                     "       --window-scale S  DEBUG override: scale the level-4 window by S for a\n"
+                     "                      wide overview capture (NOT the engine's rule; flagged).\n"
+                     "       Fly controls (GetAsyncKeyState, same as `scene`): W/A/S/D move,\n"
+                     "       Q/E down/up, arrows look, Shift = faster, Escape closes.\n");
+        return 1;
+    }
+
+    std::vector<std::string> archivePaths;
+    int argi = 2;
+    while (argi < argc && std::strncmp(argv[argi], "--", 2) != 0) archivePaths.push_back(argv[argi++]);
+    bool listOnly = false, latticeCheck = false, noInput = false, tintMode = false, textures = true,
+         outlines = true;
+    uint32_t winWidth = 1400, winHeight = 900;
+    int maxFrames = -1;
+    int captureFrame = 0;
+    std::string capturePath;
+    std::vector<std::pair<int, std::string>> captureAt;
+    float eye[3] = {0.0f, 60.0f, 0.0f};
+    bool eyeGiven = false;
+    float yaw = 0.0f, pitch = -0.35f;
+    float moveSpeed = 60.0f; // m/s, CHOSEN for city scale
+    bool flyTo = false;
+    float flyTarget[2] = {0.0f, 0.0f};
+    float farZ = 3000.0f;
+    float windowScale = 1.0f; // 1 = the engine's level-4 window (Sec10.3); anything else is a labelled DEBUG override
+    for (; argi < argc; ++argi) {
+        const std::string arg = argv[argi];
+        if (arg == "--list") listOnly = true;
+        else if (arg == "--lattice-check") latticeCheck = true;
+        else if (arg == "--no-input") noInput = true;
+        else if (arg == "--tint") tintMode = true;
+        else if (arg == "--no-textures") textures = false;
+        else if (arg == "--no-outlines") outlines = false;
+        else if (arg == "--size" && argi + 2 < argc) {
+            winWidth = static_cast<uint32_t>(std::atoi(argv[++argi]));
+            winHeight = static_cast<uint32_t>(std::atoi(argv[++argi]));
+        } else if (arg == "--frames" && argi + 1 < argc) {
+            maxFrames = std::atoi(argv[++argi]);
+        } else if (arg == "--capture" && argi + 1 < argc) {
+            capturePath = argv[++argi];
+        } else if (arg == "--capture-frame" && argi + 1 < argc) {
+            captureFrame = std::atoi(argv[++argi]);
+        } else if (arg == "--capture-at" && argi + 2 < argc) {
+            const int f = std::atoi(argv[++argi]);
+            captureAt.emplace_back(f, argv[++argi]);
+        } else if (arg == "--eye" && argi + 3 < argc) {
+            eye[0] = static_cast<float>(std::atof(argv[++argi]));
+            eye[1] = static_cast<float>(std::atof(argv[++argi]));
+            eye[2] = static_cast<float>(std::atof(argv[++argi]));
+            eyeGiven = true;
+        } else if (arg == "--yaw" && argi + 1 < argc) {
+            yaw = static_cast<float>(std::atof(argv[++argi])) * 3.14159265f / 180.0f;
+        } else if (arg == "--pitch" && argi + 1 < argc) {
+            pitch = static_cast<float>(std::atof(argv[++argi])) * 3.14159265f / 180.0f;
+        } else if (arg == "--speed" && argi + 1 < argc) {
+            moveSpeed = static_cast<float>(std::atof(argv[++argi]));
+        } else if (arg == "--fly-to" && argi + 2 < argc) {
+            flyTo = true;
+            flyTarget[0] = static_cast<float>(std::atof(argv[++argi]));
+            flyTarget[1] = static_cast<float>(std::atof(argv[++argi]));
+        } else if (arg == "--far" && argi + 1 < argc) {
+            farZ = static_cast<float>(std::atof(argv[++argi]));
+        } else if (arg == "--window-scale" && argi + 1 < argc) {
+            windowScale = static_cast<float>(std::atof(argv[++argi]));
+            if (windowScale <= 0.0f) windowScale = 1.0f;
+        } else {
+            std::fprintf(stderr, "unrecognised argument '%s'\n", arg.c_str());
+            return 2;
+        }
+    }
+    if (!capturePath.empty()) captureAt.emplace_back(captureFrame, capturePath);
+    if (archivePaths.empty()) {
+        std::fprintf(stderr, "no archive given\n");
+        return 2;
+    }
+    if (flyTo && maxFrames <= 0) {
+        std::fprintf(stderr, "--fly-to needs --frames N (the flight is spread over N frames)\n");
+        return 2;
+    }
+
+    // ---- Open every archive and enumerate its real hN containers from the
+    // archive's own directory (top-level entries). ---------------------------
+    std::vector<std::unique_ptr<CityArchive>> archives;
+    std::vector<CityCell> cells;
+    std::map<std::string, size_t> cellByName;
+    for (const auto& path : archivePaths) {
+        auto a = std::make_unique<CityArchive>();
+        a->path = path;
+        {
+            const size_t slash = path.find_last_of("/\\");
+            a->label = slash == std::string::npos ? path : path.substr(slash + 1);
+        }
+        const double t0 = cityNowMs();
+        a->bytes = readFileLargeC(path);
+        if (a->bytes.empty()) {
+            std::fprintf(stderr, "could not read %s\n", path.c_str());
+            return 1;
+        }
+        a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
+        size_t defaults = 0, variants = 0, dupes = 0;
+        const size_t archiveIndex = archives.size();
+        for (size_t i = 0; i < a->top->entries().size(); ++i) {
+            const std::string& en = a->top->entries()[i].name;
+            int col = 0, row = 0, n = 0;
+            if (parseDefaultHnEntryName(en, col, row, n)) {
+                CityCell c;
+                c.name = en.substr(0, en.size() - 8);
+                c.entryName = en;
+                c.archiveIndex = archiveIndex;
+                c.entryIndex = i;
+                c.col = col;
+                c.row = row;
+                c.n = n;
+                cityFineCellCentre(col, row, n, c.centreX, c.centreZ);
+                const std::string key = toLowerLocal(c.name);
+                if (cellByName.count(key)) {
+                    ++dupes; // first archive on the command line wins
+                    std::printf("[city] %s: duplicate %s (already from %s) - ignored\n", a->label.c_str(),
+                                en.c_str(), archives[cells[cellByName[key]].archiveIndex]->label.c_str());
+                    continue;
+                }
+                cellByName[key] = cells.size();
+                cells.push_back(c);
+                ++defaults;
+            } else if (looksLikeHnVariantEntryName(en)) {
+                ++variants;
+            }
+        }
+        std::printf("[city] %s: %zu top-level entries, %zu default CCRRhN cells, %zu CCRR^name hN variants "
+                    "(not loaded), %zu duplicates; read in %.1f s\n",
+                    a->label.c_str(), a->top->entries().size(), defaults, variants, dupes,
+                    (cityNowMs() - t0) / 1000.0);
+        archives.push_back(std::move(a));
+    }
+    if (cells.empty()) {
+        std::fprintf(stderr, "no CCRRhN.str2_pc containers found in the given archive(s)\n");
+        return 1;
+    }
+
+    if (listOnly) {
+        std::printf("[list] name      archive              col row N  fineCol fineRow  centre_x  centre_z\n");
+        for (const auto& c : cells) {
+            std::printf("[list] %-9s %-20s %3d %3d %d  %7d %7d  %8.1f  %8.1f\n", c.name.c_str(),
+                        archives[c.archiveIndex]->label.c_str(), c.col, c.row, c.n, 2 * c.col + (c.n & 1),
+                        2 * c.row + (c.n >> 1), static_cast<double>(c.centreX), static_cast<double>(c.centreZ));
+        }
+        return 0;
+    }
+
+    if (latticeCheck) {
+        // Sec10.6(g)'s own method, re-run on THIS archive's tiles: midpoint of
+        // each tile's placed-object extents (fast `.czh_pc` header origin +
+        // SR3Z record position words - header only, never `.czn_pc`) against
+        // the formula, under both the CC=col/RR=row parse and the swapped one.
+        std::set<std::pair<int, int>> tiles;
+        std::map<std::pair<int, int>, size_t> tileArchive;
+        for (const auto& c : cells) {
+            tiles.insert({c.col, c.row});
+            tileArchive[{c.col, c.row}] = c.archiveIndex;
+        }
+        std::printf("[lattice] tile  records  measured_mid_x  measured_mid_z | CC=col: dx dz | swapped: dx dz\n");
+        std::vector<double> adx, adz, sdx, sdz;
+        for (const auto& t : tiles) {
+            char nm[64];
+            std::snprintf(nm, sizeof(nm), "sr3_city~f%02d%02d.czh_pc", t.first, t.second);
+            std::vector<uint8_t> czh, unused;
+            const CityArchive& a = *archives[tileArchive[t]];
+            if (!findEntry(*a.top, nm, czh, unused, "") || czh.empty()) {
+                std::printf("[lattice] %02d%02d  (no %s in %s)\n", t.first, t.second, nm, a.label.c_str());
+                continue;
+            }
+            sr3zone::ZoneHeader zh;
+            try {
+                zh = sr3zone::ZoneHeader::parse(vpp::ByteView(czh.data(), czh.size()));
+            } catch (const std::exception& ex) {
+                std::printf("[lattice] %02d%02d  %s parse failed: %s\n", t.first, t.second, nm, ex.what());
+                continue;
+            }
+            if (zh.records().empty()) {
+                std::printf("[lattice] %02d%02d  0 records - no extents to measure\n", t.first, t.second);
+                continue;
+            }
+            float mnx = 1e30f, mxx = -1e30f, mnz = 1e30f, mxz = -1e30f;
+            for (const auto& r : zh.records()) {
+                const auto p = sr3zone::RecordPosition(r);
+                const float x = p[0] + zh.headerOrigin()[0];
+                const float z = p[2] + zh.headerOrigin()[2];
+                mnx = (std::min)(mnx, x);
+                mxx = (std::max)(mxx, x);
+                mnz = (std::min)(mnz, z);
+                mxz = (std::max)(mxz, z);
+            }
+            const float midX = (mnx + mxx) * 0.5f, midZ = (mnz + mxz) * 0.5f;
+            float px, pz, sx, sz;
+            cityTileCentre(t.first, t.second, px, pz);
+            cityTileCentre(t.second, t.first, sx, sz);
+            adx.push_back(std::fabs(midX - px));
+            adz.push_back(std::fabs(midZ - pz));
+            sdx.push_back(std::fabs(midX - sx));
+            sdz.push_back(std::fabs(midZ - sz));
+            std::printf("[lattice] %02d%02d  %7zu  %14.1f  %14.1f | %7.1f %7.1f | %8.1f %8.1f\n", t.first, t.second,
+                        zh.records().size(), static_cast<double>(midX), static_cast<double>(midZ),
+                        static_cast<double>(midX - px), static_cast<double>(midZ - pz),
+                        static_cast<double>(midX - sx), static_cast<double>(midZ - sz));
+        }
+        auto median = [](std::vector<double> v) {
+            if (v.empty()) return 0.0;
+            std::sort(v.begin(), v.end());
+            return v[v.size() / 2];
+        };
+        std::printf("[lattice] %zu tiles measured. median |residual|: CC=col parse dx=%.2f dz=%.2f m;  "
+                    "swapped parse dx=%.2f dz=%.2f m\n",
+                    adx.size(), median(adx), median(adz), median(sdx), median(sdz));
+        return 0;
+    }
+
+    if (!eyeGiven) {
+        // Default start: above the first enumerated cell (CHOSEN, not data).
+        eye[0] = cells.front().centreX;
+        eye[2] = cells.front().centreZ;
+    }
+    const float flyStart[2] = {eye[0], eye[2]};
+
+    std::printf(
+        "=====================================================================\n"
+        "CELL POSITIONS ARE REAL, PROP POSITIONS INSIDE A CELL ARE NOT.\n"
+        "Each hN fine cell is drawn at its real world centre from the\n"
+        "spec-world-streaming.md Sec10.6(g) lattice (validated to ~2 m MAD).\n"
+        "The props INSIDE each cell are on an ARBITRARY local grid fitted to\n"
+        "the cell's 160x140 m footprint - real per-instance placement of\n"
+        ".clmesh_pc objects was investigated and did NOT resolve (see\n"
+        "runClmeshTile()'s top comment / tools/tile1018_placement_probe.cpp).\n"
+        "=====================================================================\n");
+    if (windowScale != 1.0f)
+        std::printf("WARNING  : --window-scale %.2f is a DEBUG OVERRIDE for overview captures - the wanted\n"
+                    "           set is NOT the engine's level-4 rule (window 159.5 x 139.5 m) in this run.\n",
+                    static_cast<double>(windowScale));
+
+    std::string error;
+    sr3render::Window window;
+    if (!window.create("SR3 Viewer - city (hN streaming)", winWidth, winHeight, error)) {
+        std::fprintf(stderr, "window creation failed: %s\n", error.c_str());
+        return 1;
+    }
+    sr3render::RenderDevice device;
+    if (!device.initialise(16, 16, error)) {
+        std::fprintf(stderr, "device init failed: %s\n", error.c_str());
+        return 1;
+    }
+    std::printf("device   : %s (%s)\n",
+                device.kind() == sr3render::DeviceKind::Hardware ? "HARDWARE" : "WARP (software)",
+                device.adapterName().c_str());
+    sr3render::SwapChain swapChain;
+    if (!swapChain.create(device.device(), window.nativeHandle(), winWidth, winHeight, error)) {
+        std::fprintf(stderr, "swap chain creation failed: %s\n", error.c_str());
+        return 1;
+    }
+    // A persistent renderer that owns the shared depth buffer (cell renderers
+    // come and go with streaming) and draws the focus-window outline.
+    sr3render::MeshRenderer focusBox;
+    if (!uploadCityOutline(focusBox, device.device(), 0.0f, 0.0f, kLevel4WindowX * 0.5f, kLevel4WindowZ * 0.5f,
+                           false, error) ||
+        !focusBox.createDepth(device.device(), winWidth, winHeight, error)) {
+        std::fprintf(stderr, "focus/depth renderer failed: %s\n", error.c_str());
+        return 1;
+    }
+    uint32_t depthWidth = winWidth, depthHeight = winHeight;
+
+    std::map<size_t, std::unique_ptr<CityLoadedCell>> loaded;
+    size_t totalLoads = 0, totalEvicts = 0;
+
+    auto loadCell = [&](size_t cellIndex, int frame) {
+        const CityCell& c = cells[cellIndex];
+        CityArchive& a = *archives[c.archiveIndex];
+        auto lc = std::make_unique<CityLoadedCell>();
+        lc->cellIndex = cellIndex;
+        const double t0 = cityNowMs();
+        try {
+            vpp::Container str2 = a.top->openNested(c.entryIndex);
+            std::vector<std::string> clNames;
+            for (const auto& e : str2.entries())
+                if (endsWithNoCase(e.name, ".clmesh_pc")) clNames.push_back(e.name);
+            lc->propEntries = clNames.size();
+            for (const auto& nm : clNames) {
+                CityProp p;
+                std::string why;
+                if (loadCityProp(str2, nm, archives, c.archiveIndex, device.device(), textures && !tintMode, p,
+                                 why)) {
+                    lc->texturesWanted += p.texturesWanted;
+                    lc->texturesFound += p.texturesFound;
+                    lc->texturesFoundElsewhere += p.texturesFoundElsewhere;
+                    lc->props.push_back(std::move(p));
+                } else {
+                    ++lc->propsFailed;
+                    std::printf("[stream]   %s: prop %s SKIPPED: %s\n", c.name.c_str(), nm.c_str(), why.c_str());
+                }
+            }
+        } catch (const std::exception& ex) {
+            std::printf("[stream]   %s: container open failed: %s\n", c.name.c_str(), ex.what());
+        }
+        // FAKE local grid fitted to the cell's real footprint (see the top
+        // comment) - slot order = the container's own entry order.
+        const size_t m = lc->props.size();
+        if (m > 0) {
+            const int cols = (std::max)(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(m) *
+                                                                                 kFineCellHalfX / kFineCellHalfZ))));
+            const int rows = static_cast<int>((m + static_cast<size_t>(cols) - 1) / static_cast<size_t>(cols));
+            const float slotX = 2.0f * kFineCellHalfX / static_cast<float>(cols);
+            const float slotZ = 2.0f * kFineCellHalfZ / static_cast<float>(rows);
+            for (size_t i = 0; i < m; ++i) {
+                CityProp& p = lc->props[i];
+                const int ci = static_cast<int>(i % static_cast<size_t>(cols));
+                const int ri = static_cast<int>(i / static_cast<size_t>(cols));
+                const float sx = c.centreX - kFineCellHalfX + (static_cast<float>(ci) + 0.5f) * slotX;
+                const float sz = c.centreZ + kFineCellHalfZ - (static_cast<float>(ri) + 0.5f) * slotZ;
+                const float lcx = (p.localMin[0] + p.localMax[0]) * 0.5f;
+                const float lcz = (p.localMin[2] + p.localMax[2]) * 0.5f;
+                if (p.localMax[0] - p.localMin[0] > slotX || p.localMax[2] - p.localMin[2] > slotZ)
+                    ++lc->propsOverflowSlot;
+                sr3render::buildWorldMatrix(sx - lcx, 0.0f, sz - lcz, 0.0f, 1.0f, p.world);
+            }
+        }
+        // Flat colour for --tint (CHOSEN palette), keyed by TILE so a tile's
+        // four fine cells share one colour and the half-tile row stagger
+        // shows up as a brick pattern: same-row neighbours differ in col%3,
+        // neighbours in the rows above/below differ in row parity.
+        static const float kPalette[6][3] = {{0.90f, 0.35f, 0.30f}, {0.30f, 0.75f, 0.35f}, {0.30f, 0.50f, 0.95f},
+                                             {0.95f, 0.80f, 0.25f}, {0.80f, 0.40f, 0.85f}, {0.25f, 0.85f, 0.85f}};
+        const int pi = (c.col % 3) + 3 * (c.row % 2);
+        for (int k = 0; k < 3; ++k) lc->tint[k] = kPalette[pi][k];
+        if (outlines) {
+            lc->outline = std::make_unique<sr3render::MeshRenderer>();
+            std::string oerr;
+            if (!uploadCityOutline(*lc->outline, device.device(), c.centreX, c.centreZ, kFineCellHalfX,
+                                   kFineCellHalfZ, true, oerr))
+                lc->outline.reset();
+        }
+        lc->loadMs = cityNowMs() - t0;
+        ++totalLoads;
+        std::printf("[stream] frame %d LOAD  %-8s (%s, col %d row %d N %d) centre (%.1f, %.1f): %zu/%zu props "
+                    "uploaded, %zu failed, %zu larger than their fake-grid slot, textures %zu/%zu (%zu of them "
+                    "from another archive), %.0f ms\n",
+                    frame, c.name.c_str(), a.label.c_str(), c.col, c.row, c.n, static_cast<double>(c.centreX),
+                    static_cast<double>(c.centreZ), lc->props.size(), lc->propEntries, lc->propsFailed,
+                    lc->propsOverflowSlot, lc->texturesFound, lc->texturesWanted, lc->texturesFoundElsewhere,
+                    lc->loadMs);
+        loaded[cellIndex] = std::move(lc);
+    };
+
+    // The reconciliation (Sec10.4/Sec11.2/Sec11.4): one box for both
+    // directions, release dropped cells immediately, then acquire every new
+    // cell in the same pass (no budget).
+    std::vector<size_t> lastWanted;
+    bool firstReconcile = true;
+    auto reconcile = [&](int frame) {
+        std::vector<size_t> wanted = cityWantedCells(cells, eye[0], eye[2], windowScale);
+        if (windowScale == 1.0f && wanted.size() > kLevel4Capacity) {
+            std::printf("[stream] frame %d WARNING: %zu cells overlap the level-4 window - Sec10.4 says this "
+                        "cannot exceed %zu; lattice/window constants are wrong somewhere\n",
+                        frame, wanted.size(), kLevel4Capacity);
+        }
+        if (!firstReconcile && wanted == lastWanted) return;
+        firstReconcile = false;
+        lastWanted = wanted;
+        std::string names;
+        for (size_t idx : wanted) names += (names.empty() ? "" : ",") + cells[idx].name;
+        std::printf("[stream] frame %d focus (%.1f, %.1f): wanted = {%s}\n", frame, static_cast<double>(eye[0]),
+                    static_cast<double>(eye[2]), names.c_str());
+        const std::set<size_t> wantedSet(wanted.begin(), wanted.end());
+        for (auto it = loaded.begin(); it != loaded.end();) {
+            if (wantedSet.count(it->first) == 0) {
+                const CityCell& c = cells[it->first];
+                std::printf("[stream] frame %d EVICT %-8s (col %d row %d N %d) - %zu props released\n", frame,
+                            c.name.c_str(), c.col, c.row, c.n, it->second->props.size());
+                it = loaded.erase(it); // MeshRenderer destructors release the GPU buffers here, immediately
+                ++totalEvicts;
+            } else {
+                ++it;
+            }
+        }
+        for (size_t idx : wanted)
+            if (loaded.count(idx) == 0) loadCell(idx, frame);
+        std::fflush(stdout);
+    };
+
+    std::printf("camera   : free-fly, start eye (%.1f %.1f %.1f) yaw %.1f pitch %.1f%s "
+                "(W/A/S/D move, Q/E down/up, arrows look, Shift=fast, Esc=quit)\n",
+                static_cast<double>(eye[0]), static_cast<double>(eye[1]), static_cast<double>(eye[2]),
+                static_cast<double>(yaw * 180.0f / 3.14159265f), static_cast<double>(pitch * 180.0f / 3.14159265f),
+                noInput ? " [--no-input: keyboard ignored]" : "");
+    if (flyTo)
+        std::printf("camera   : scripted flight (%.1f, %.1f) -> (%.1f, %.1f) over %d frames\n",
+                    static_cast<double>(flyStart[0]), static_cast<double>(flyStart[1]),
+                    static_cast<double>(flyTarget[0]), static_cast<double>(flyTarget[1]), maxFrames);
+
+    LARGE_INTEGER freq{}, prevTime{};
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&prevTime);
+    int frames = 0;
+    while (window.pumpMessages()) {
+        if (!swapChain.resize(window.width(), window.height(), error)) {
+            std::fprintf(stderr, "swap chain resize failed: %s\n", error.c_str());
+            break;
+        }
+        if (swapChain.width() != depthWidth || swapChain.height() != depthHeight) {
+            if (focusBox.createDepth(device.device(), swapChain.width(), swapChain.height(), error)) {
+                depthWidth = swapChain.width();
+                depthHeight = swapChain.height();
+            }
+        }
+        LARGE_INTEGER now{};
+        QueryPerformanceCounter(&now);
+        float dt = static_cast<float>(static_cast<double>(now.QuadPart - prevTime.QuadPart) /
+                                      static_cast<double>(freq.QuadPart));
+        prevTime = now;
+        if (dt > 0.25f || dt < 0.0f) dt = 0.0f;
+
+        if (flyTo) {
+            const float t = maxFrames > 1 ? static_cast<float>(frames) / static_cast<float>(maxFrames - 1) : 1.0f;
+            eye[0] = flyStart[0] + (flyTarget[0] - flyStart[0]) * t;
+            eye[2] = flyStart[1] + (flyTarget[1] - flyStart[1]) * t;
+        }
+        if (!noInput) {
+            // Same polled-input fly camera as runScene().
+            const bool fast = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            const float speed = moveSpeed * (fast ? 3.0f : 1.0f) * dt;
+            const float lookSpeed = 1.6f * dt;
+            if (GetAsyncKeyState(VK_LEFT) & 0x8000) yaw -= lookSpeed;
+            if (GetAsyncKeyState(VK_RIGHT) & 0x8000) yaw += lookSpeed;
+            if (GetAsyncKeyState(VK_UP) & 0x8000) pitch += lookSpeed;
+            if (GetAsyncKeyState(VK_DOWN) & 0x8000) pitch -= lookSpeed;
+            float forward[3] = {std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+            float right[3] = {-forward[2], 0.0f, forward[0]};
+            const float rightLen = std::sqrt(right[0] * right[0] + right[2] * right[2]);
+            if (rightLen > 0.0f) { right[0] /= rightLen; right[2] /= rightLen; }
+            if (GetAsyncKeyState('W') & 0x8000) for (int c = 0; c < 3; ++c) eye[c] += forward[c] * speed;
+            if (GetAsyncKeyState('S') & 0x8000) for (int c = 0; c < 3; ++c) eye[c] -= forward[c] * speed;
+            if (GetAsyncKeyState('D') & 0x8000) for (int c = 0; c < 3; ++c) eye[c] += right[c] * speed;
+            if (GetAsyncKeyState('A') & 0x8000) for (int c = 0; c < 3; ++c) eye[c] -= right[c] * speed;
+            if (GetAsyncKeyState('E') & 0x8000) eye[1] += speed;
+            if (GetAsyncKeyState('Q') & 0x8000) eye[1] -= speed;
+        }
+        // CHOSEN limit just short of straight down (+-89.4 deg) so a top-down
+        // overview works; buildFreeViewProjection degenerates at exactly 90.
+        const float pitchLimit = 1.56f;
+        if (pitch > pitchLimit) pitch = pitchLimit;
+        if (pitch < -pitchLimit) pitch = -pitchLimit;
+
+        reconcile(frames);
+
+        float viewProjection[16];
+        sr3render::buildFreeViewProjection(eye, yaw, pitch,
+                                           static_cast<float>(swapChain.width()) /
+                                               static_cast<float>(swapChain.height()),
+                                           0.5f, farZ, viewProjection);
+        swapChain.bind(device.context());
+        ID3D11RenderTargetView* rtv = swapChain.renderTargetView();
+        device.context()->OMSetRenderTargets(1, &rtv, focusBox.depthView());
+        swapChain.clear(device.context(), 0.05f, 0.05f, 0.08f, 1.0f);
+        focusBox.clearDepth(device.context());
+
+        for (auto& kv : loaded) {
+            CityLoadedCell& lc = *kv.second;
+            for (auto& p : lc.props) {
+                for (auto& r : p.renderers) {
+                    if (tintMode)
+                        r->draw(device.context(), viewProjection, sr3render::MeshDrawMode::FlatTint, nullptr,
+                                p.world, lc.tint);
+                    else
+                        r->drawTextured(device.context(), viewProjection, p.perMaterialSrv, p.world);
+                }
+            }
+            if (lc.outline) lc.outline->drawSkeleton(device.context(), viewProjection);
+        }
+        if (outlines) {
+            float fw[16];
+            sr3render::buildWorldMatrix(eye[0], 0.0f, eye[2], 0.0f, 1.0f, fw);
+            focusBox.drawSkeleton(device.context(), viewProjection, fw);
+        }
+
+        for (const auto& ca : captureAt) {
+            if (ca.first != frames) continue;
+            std::vector<uint8_t> pixels;
+            if (swapChain.capture(device.context(), pixels, error) &&
+                sr3render::writePng(ca.second, swapChain.width(), swapChain.height(), pixels, error)) {
+                std::string names;
+                for (const auto& kv : loaded) names += (names.empty() ? "" : ",") + cells[kv.first].name;
+                std::printf("captured : %s (frame %d, eye (%.1f %.1f %.1f), resident {%s})\n", ca.second.c_str(),
+                            frames, static_cast<double>(eye[0]), static_cast<double>(eye[1]),
+                            static_cast<double>(eye[2]), names.c_str());
+            } else {
+                std::fprintf(stderr, "capture failed (%s): %s\n", ca.second.c_str(), error.c_str());
+            }
+        }
+
+        swapChain.present(true);
+        ++frames;
+        if (maxFrames >= 0 && frames >= maxFrames) break;
+    }
+    std::printf("frames   : %d presented; %zu cell loads, %zu cell evictions, %zu resident at exit\n", frames,
+                totalLoads, totalEvicts, loaded.size());
+    return 0;
+}
+
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::fprintf(stderr, "usage: sr3_viewer <command> [args]\n");
@@ -6940,6 +7878,15 @@ int main(int argc, char** argv) {
                      "        clmesh-tile's single shared-scale grid, a small prop and a large\n"
                      "        building both render clearly - see runClmeshBatch()'s own doc comment\n"
                      "        for the full reasoning)\n");
+        std::fprintf(stderr,
+                     "  city <sr3_city_0.vpp_pc> [<sr3_city_1.vpp_pc> ...] [--list] [--lattice-check]\n"
+                     "        [--eye X Y Z] [--yaw D] [--pitch D] [--speed U] [--fly-to X Z] [--no-input]\n"
+                     "        [--frames N] [--capture <out.png>] [--capture-frame N]\n"
+                     "        [--capture-at N <out.png>]... [--tint] [--no-textures] [--no-outlines]\n"
+                     "       (multi-cell STREAMING viewer: loads/evicts the real hN fine cells around\n"
+                     "        the fly camera by the level-4 box rule, spec-world-streaming.md\n"
+                     "        Sec10.4/Sec11; cells at their REAL Sec10.6(g) lattice positions, props\n"
+                     "        inside a cell on a FAKE local grid - see runCity()'s own doc comment)\n");
         return 1;
     }
     const std::string command = argv[1];
@@ -6958,6 +7905,7 @@ int main(int argc, char** argv) {
         if (command == "clmesh") return runClmesh(argc, argv);
         if (command == "clmesh-tile") return runClmeshTile(argc, argv);
         if (command == "clmesh-batch") return runClmeshBatch(argc, argv);
+        if (command == "city") return runCity(argc, argv);
     } catch (const std::exception& ex) {
         std::fprintf(stderr, "error: %s\n", ex.what());
         return 1;

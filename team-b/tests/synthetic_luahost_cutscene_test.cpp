@@ -1,7 +1,8 @@
 // Synthetic tests for the zscene lifecycle driver, the cutscene machine and
 // the UI resolution state (src/lua_cutscene.cpp, src/lua_vint_resolution.cpp),
 // built from spec-lua-api-behaviour.md Sec26.25 / Sec26.26 (2026-10-01 text
-// through job nnlt). Expected values are the spec's statements and worked
+// through job nnlt, plus the 2026-10-02 `mm_p_01` zscene-promotion-driver
+// correction). Expected values are the spec's statements and worked
 // examples; the engine-state values a test sets are the OPEN inputs the host
 // has no source for (handle classes, the soundtrack's end, the cutscene state).
 //
@@ -19,6 +20,13 @@
 //   M10 0x10..0x13 implemented instead of refused          (testMachineStates)
 //   M11 reset-check skipped when nothing is pending        (testResetCheckWithNothingPending,
 //       testIdleDriver) - the host's behaviour before the 2026-10-01 continuation
+//   M12 promotion refuses (instead of proceeding) when the cutscene state is
+//       OPEN, or completion's own OPEN block also stops promotion from being
+//       attempted in the same frame (the single shared try/catch cutsceneHostFrame
+//       had before the 2026-10-02 correction) (testBarePrepPromotedWithCutsceneStateOpen)
+//   M13 promotion refuses (instead of proceeding) when a previous soundtrack
+//       stream's active flag was never recorded, instead of treating "never
+//       started" as "nothing to wait for" (testPromotionWaitsForPreviousStream)
 
 #include <cmath>
 #include <iostream>
@@ -171,14 +179,54 @@ void testBarePrepPromotesNextFrame() {
     CHECK(!g.blocked() && g.es.zsceneStateCode().get() == 1);
 }
 
+void testBarePrepPromotedWithCutsceneStateOpen() {
+    // 2026-10-02 correction (Sec26.25's corrected Host summary, the `mm_p_01`
+    // zscene-promotion-driver investigation): a bare zscene_prep made with no
+    // cutscene machine ever engaged - cutscene state 0x0153b520 has no
+    // specced start-up value and nothing in this host ever writes it, so it
+    // is genuinely OPEN for the whole test, exactly as it is for mm_p_01's
+    // own real-archive run - must still be promoted the next frame, not
+    // refused. M12 (added with this test): re-gate promotion on cutscene
+    // state *known* and in {0,2} (i.e. refuse instead of proceed when OPEN)
+    // and this test's CHECKs below fail.
+    Fixture f;
+    f.installTable();
+    CHECK(!f.es.cutsceneState().known());
+    f.ok(f.gp, "zscene_prep('Z_A')");
+    CHECK(f.es.zscenePending().get() == "z_a" && f.es.zsceneCurrent().get().empty());
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+    // Next frame: completion runs first (and is itself correctly blocked -
+    // the zscene load state 0x0153b51c is still OPEN too, nothing to
+    // complete yet) but that must not stop promotion, which does not need
+    // the cutscene state to be known at all.
+    f.tick(100);
+    CHECK(f.es.zsceneCurrent().get() == "z_a" && f.es.zscenePending().get().empty() && f.es.zsceneStateCode().get() == 1);
+    CHECK(f.es.cutsceneCounters().zscenePromotions == 1);
+    CHECK(!f.es.cutsceneState().known()); // still never claimed to be anything
+    // zscene_is_loaded must answer false (not throw: Sec14.23), now that the
+    // entry is no longer pending.
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+    // Another frame: this host was never given a handle class for 'z_a' (no
+    // streaming model), so completion can never see it as resident - the
+    // scene stays at load state 1 forever, which is the documented engine
+    // property (Sec26.25 Host summary, "No timeout"), not a host error.
+    f.tick(100);
+    CHECK(f.es.zsceneStateCode().get() == 1);
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+}
+
 void testFiveSeconds() {
     Fixture f;
     f.installTable();
     f.idleZscene();
     f.es.zsceneHandleClass().set("z_a", 3);
     f.ok(f.gp, "zscene_prep('z_a')");
-    f.tick(100); // promoted at t = 100; the completion refuses on the status
-    CHECK(f.es.zsceneStateCode().get() == 1 && f.blocked());
+    // 2026-10-02 correction: completion runs before promotion now, so this
+    // frame's completion still sees load state 0 (nothing to classify yet) -
+    // promotion itself is unblocked; the classify-at-state-1 refusal below
+    // starts from the *next* tick instead of this same one.
+    f.tick(100); // promoted at t = 100
+    CHECK(f.es.zsceneStateCode().get() == 1 && !f.blocked());
     f.tick(4999); // t = 5099: 4999 ms elapsed, status still needed
     CHECK(f.blocked() && f.es.zsceneStateCode().get() == 1);
     f.tick(1); // exactly 5 s: "or 5 s pass" does not fix the equality case
@@ -194,15 +242,26 @@ void testFailedLoad() {
     f.idleZscene();
     f.es.zsceneHandleClass().set("z_a", 5);
     f.ok(f.gp, "zscene_prep('z_a')");
-    f.tick(10); // promoted; then class 5 -> teardown 0x00721c20(1, 0, 0), live path
-    CHECK(!f.blocked());
+    // 2026-10-02 correction: completion runs before promotion, so this
+    // frame's completion still sees load state 0 (nothing to classify) while
+    // promotion does the actual promoting - the class-5 classification moves
+    // to the next tick.
+    f.tick(10); // promoted
+    CHECK(!f.blocked() && f.es.zsceneStateCode().get() == 1 && f.es.cutsceneCounters().zsceneFailedLoads == 0);
+    // Completion classifies class 5 -> teardown 0x00721c20(1, 0, 0), live
+    // path, in the same frame; promotion's own reset-check then re-reads the
+    // same entry's now-just-released handle class (current is left as it
+    // was by the teardown): OPEN.
+    f.tick(10);
+    CHECK(f.blocked() && f.blocker().find("handle class") != std::string::npos);
     CHECK(f.es.cutsceneCounters().zsceneFailedLoads == 1);
     CHECK(f.es.zsceneStateCode().get() == 0 && f.es.zsceneCurrent().get() == "z_a"); // current left as it was
     CHECK(f.es.zsceneAutoSelectNearest().get() == false && f.es.zsceneRequeueOnReset().get() == false);
     CHECK(!f.es.zsceneHandleClass().known("z_a"));   // released handle: class OPEN
     CHECK(!f.es.zsceneSoundtrackActive().known());   // 0x007317a0(1): stream state OPEN
     // Next frame: load state 0, 0x0153b541 clear -> the reset 0x00720320 reads
-    // the released handle's class: OPEN (the spec's own open item).
+    // the released handle's class: OPEN (the spec's own open item) - same
+    // blocker, one tick further on.
     f.tick(10);
     CHECK(f.blocked() && f.blocker().find("handle class") != std::string::npos);
 }
@@ -227,7 +286,12 @@ void testPromotionWaitsForPreviousStream() {
     f.tick(10);
     CHECK(f.es.zsceneCurrent().get() == "z_a" && f.es.zsceneStateCode().get() == 1);
     CHECK(f.es.cutsceneCounters().zscenePromotions == 1);
-    // OPEN previous stream (no specced start-up value): refused, nothing written.
+    // 2026-10-02 correction (the `mm_p_01` zscene-promotion-driver
+    // investigation): a previous stream that was never recorded (no specced
+    // start-up value for 0x0153b71c) is no longer refused here - "nothing to
+    // wait for" is true by construction when nothing has ever started a
+    // stream in this host's own run, not an engine fact it is missing.
+    // Before this correction: refused, nothing written (M13, below).
     Fixture g;
     g.installTable();
     g.idleZscene();
@@ -235,8 +299,8 @@ void testPromotionWaitsForPreviousStream() {
     g.es.zsceneHandleClass().set("z_a", 0);
     g.ok(g.gp, "zscene_prep('z_a')");
     g.tick(10);
-    CHECK(g.blocked() && g.blocker().find("0x0153b71c") != std::string::npos);
-    CHECK(g.es.zscenePending().get() == "z_a" && g.es.zsceneAutoSelectNearest().get() == false);
+    CHECK(!g.blocked() && g.es.zsceneCurrent().get() == "z_a" && g.es.zsceneStateCode().get() == 1);
+    CHECK(g.es.zscenePending().get().empty() && g.es.cutsceneCounters().zscenePromotions == 1);
 }
 
 void testRequeue() {
@@ -290,10 +354,16 @@ void testIdleDriver() {
     f.es.zsceneNearestWorldObjectScene().set("");
     f.tick(10);
     CHECK(!f.blocked() && f.es.zscenePending().get().empty());
-    // An object whose scene is z_a: prepped through the gate.
+    // An object whose scene is z_a: prepped through the idle driver and
+    // (2026-10-02 correction: completion runs before promotion, same frame)
+    // immediately promoted too, before this tick even ends - exactly the
+    // "idle auto-select races a script's own prep" hazard the corrected
+    // Host summary describes, just with nothing else contending for it here.
     f.es.zsceneNearestWorldObjectScene().set("z_a");
     f.tick(10);
-    CHECK(!f.blocked() && f.es.zscenePending().get() == "z_a" && f.es.cutsceneCounters().zsceneIdleAutoPreps == 1);
+    CHECK(!f.blocked() && f.es.zscenePending().get().empty() && f.es.cutsceneCounters().zsceneIdleAutoPreps == 1);
+    CHECK(f.es.zsceneCurrent().get() == "z_a" && f.es.zsceneStateCode().get() == 1 &&
+          f.es.cutsceneCounters().zscenePromotions == 1);
     // 0x0153b541 clear: the idle driver's own reset 0x00720320 runs (no
     // current -> 541 := 1). Cutscene state 3 (checks failing) so that
     // 0x007258a0's reset-check (states 0 and 2 only) does not set it first.
@@ -305,12 +375,18 @@ void testIdleDriver() {
     g.es.cutsceneManager().present.set(false); // 0x007258a0's in-progress byte reads it in state >= 2
     g.tick(10);
     CHECK(!g.blocked() && g.es.zsceneAutoSelectNearest().get() == true && g.es.cutsceneState().get() == 3);
-    // Cutscene state 0, nothing pending: 0x007258a0's reset-check still runs
-    // (no current -> 541 := 1), so the idle driver of the same frame already
-    // takes the nearest-world-object branch - OPEN in this host.
+    // Cutscene state 0, nothing pending: the reset-check (now run by
+    // completion itself, 2026-10-02 correction) sets 0x0153b541 := 1 this
+    // frame without yet reading it - completion's own idle branch only
+    // checks 0x0153b541 at the *start* of this same step, before its own
+    // reset-check's write lands. Not until the *next* frame, with 0x0153b541
+    // already set, does the idle driver take the nearest-world-object
+    // branch - OPEN in this host.
     Fixture h;
     h.installTable();
     h.idleZscene();
+    h.tick(10);
+    CHECK(!h.blocked() && h.es.zsceneAutoSelectNearest().get() == true && h.es.cutsceneCounters().zscenePromotions == 0);
     h.tick(10);
     CHECK(h.blocked() && h.blocker().find("0x03171a64") != std::string::npos);
     CHECK(h.es.zsceneAutoSelectNearest().get() == true && h.es.cutsceneCounters().zscenePromotions == 0);
@@ -335,9 +411,14 @@ void testResetCheckWithNothingPending() {
     CHECK(f.es.zsceneCurrent().get() == "z_a" && f.es.zscenePending().get().empty() && f.es.zsceneStateCode().get() == 1);
     CHECK(f.es.cutsceneCounters().zscenePromotions == 1);
     CHECK(f.es.zsceneSoundtrackActive().get() && f.es.zsceneSoundtrackStartMs().get() == 10);
-    // Without 0x0153b542: reset, nothing re-queued, nothing promoted; the
-    // idle driver of the same frame (load state 0, 0x0153b541 clear) runs
-    // its own reset: no current -> 541 := 1.
+    // Without 0x0153b542: reset, nothing re-queued, nothing promoted. 2026-10-02
+    // correction: completion runs before promotion now, so this frame's
+    // completion still sees load state 1 (the "other classes wait" path,
+    // untouched) while promotion alone does the reset-check - which, per the
+    // Sec26.25 Globals table's own 2026-10-02 correction, now unconditionally
+    // sets 0x0153b541 on this class-1 path (not only when there is no current
+    // entry), so the idle driver already has its turn primed for the very
+    // next frame.
     Fixture g;
     g.installTable();
     g.idleZscene();
@@ -348,6 +429,10 @@ void testResetCheckWithNothingPending() {
     CHECK(!g.blocked());
     CHECK(g.es.zsceneCurrent().get().empty() && g.es.zscenePending().get().empty() && g.es.zsceneStateCode().get() == 0);
     CHECK(g.es.cutsceneCounters().zscenePromotions == 0 && g.es.zsceneAutoSelectNearest().get() == true);
+    // Next frame: the idle driver (0x0153b541 now set) takes the
+    // nearest-world-object branch - OPEN in this host, same as testIdleDriver.
+    g.tick(10);
+    CHECK(g.blocked() && g.blocker().find("0x03171a64") != std::string::npos);
     // Outside states 0 / 2 the reset-check is not run by 0x007258a0: the
     // loading entry with a not-live handle just waits in 0x007285c0.
     Fixture h;
@@ -393,13 +478,21 @@ void testCutsceneStateTwo() {
     f.es.zsceneHandleClass().set("z_a", 3);
     f.ok(f.gp, "zscene_prep('z_a')");
     f.es.zsceneSoundtrackEnded().set(true); // forgotten again by the promotion
+    // 2026-10-02 correction: completion runs before promotion, so this
+    // frame's completion still sees load state 0 (nothing to classify yet);
+    // promotion alone promotes, unblocked.
     f.tick(10);
-    CHECK(f.es.zsceneStateCode().get() == 1 && f.blocked()); // promoted; status of the new stream OPEN
+    CHECK(f.es.zsceneStateCode().get() == 1 && !f.blocked());
     CHECK(f.es.cutscenePlayingByte().get() == false && f.es.cutsceneInProgressByte().get() == true);
     f.es.zsceneSoundtrackEnded().set(true);
+    // Completion now classifies the resident handle and reaches load state
+    // 2 in this same frame; the second step's own state-2 post-check, which
+    // runs after completion now, sees that updated state immediately
+    // (2026-10-02 correction) instead of waiting for a later frame.
     f.tick(10);
-    CHECK(!f.blocked() && f.es.zsceneStateCode().get() == 2 && f.es.cutsceneState().get() == 2);
-    f.tick(10);
+    CHECK(f.blocked() && f.blocker().find("0x00725df0") != std::string::npos);
+    CHECK(f.es.zsceneStateCode().get() == 2 && f.es.cutsceneState().get() == 2);
+    f.tick(10); // stays blocked on the same still-OPEN continuation every frame after
     CHECK(f.blocked() && f.blocker().find("0x00725df0") != std::string::npos);
     CHECK(f.es.cutsceneState().get() == 2);
     // The scene itself is loaded (current, state 2), whatever the machine does next.
@@ -444,11 +537,17 @@ void testMachineStates() {
           (std::vector<std::string>{"npc_basehead", "cutscene manager handle", "npc_b", "veh_variant_b", "+0xf4 soundtrack"}));
     CHECK(f.es.cutsceneLoadStamp().get() == before + 10 + 120000);
     // 0x00722f10 writes 0x0153b530 / 0x0153b51c / 0x0153b541 / 0x0153b542
-    // with values the spec does not give: OPEN, and the completion step of
-    // the same frame stops on the load state.
+    // with values the spec does not give: OPEN. 2026-10-02 correction:
+    // completion now runs *before* this same step forgets the load state, so
+    // it still saw the old (known) value this frame and does not stop on it
+    // here - the load state's own OPEN read moves to the next frame instead
+    // (below), where cutsceneMachineStep's own refusal for state 6 arrives
+    // first anyway.
     CHECK(!f.es.zsceneCurrent().known() && !f.es.zsceneStateCode().known());
-    CHECK(f.blocked() && f.blocker().find("0x0153b51c") != std::string::npos);
-    // 6: the loading helper's body is OPEN.
+    CHECK(!f.blocked());
+    // 6: the loading helper's body is OPEN (cutsceneMachineStep's own
+    // refusal arrives before completion would otherwise stop on the now-OPEN
+    // load state forgotten above).
     f.tick(10);
     CHECK(f.blocked() && f.blocker().find("0x0072c790") != std::string::npos && f.es.cutsceneState().get() == 6);
 
@@ -506,10 +605,18 @@ void testMachineStates() {
         k.tick(10);
         CHECK(k.es.cutsceneState().get() == 5 && !k.es.cutsceneManager().sceneKey.known());
     }
-    // The cutscene state itself has no specced start-up value.
+    // The cutscene state itself has no specced start-up value. Before the
+    // 2026-10-02 correction this aborted the whole frame on that one read
+    // (blocker 0x0153b520); now promotion proceeds anyway (nothing was ever
+    // prepped, so it refuses on the still-OPEN pending slot instead) and
+    // completion separately refuses on the still-OPEN zscene load state -
+    // still exactly one blocked frame, for a different, more specific
+    // reason. See testBarePrepPromotedWithCutsceneStateOpen for the case
+    // this host actually needs to handle (a real prep pending).
     Fixture z;
     z.tick(10);
-    CHECK(z.blocked() && z.blocker().find("0x0153b520") != std::string::npos);
+    CHECK(z.blocked() && z.blocker().find("0x0153b538") != std::string::npos);
+    CHECK(!z.es.cutsceneState().known());
     CHECK(z.es.cutsceneCounters().framesRun == 1 && z.es.cutsceneCounters().framesBlockedOnOpen == 1);
 }
 
@@ -657,6 +764,7 @@ void testSafeFrame() {
 int main() {
     testTableResolution();
     testBarePrepPromotesNextFrame();
+    testBarePrepPromotedWithCutsceneStateOpen();
     testFiveSeconds();
     testFailedLoad();
     testPromotionWaitsForPreviousStream();

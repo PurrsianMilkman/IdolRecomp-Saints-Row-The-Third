@@ -108,6 +108,109 @@
 // vehicleExitGroupNullThisGuardCount()/registerTeamIdForTesting()/
 // resolveTeamId()/setTeamRelationIfInBounds()/teamRelationForTesting()/
 // teamRelationOobGuardCount()).
+// Batch 2026-10-02 (second, same day): +30 from spec-lua-api-behaviour.md
+// Sec31 (`pause_map_stag_current_district_control` and its 4 fully-
+// confirmed pause-map siblings - `pause_map_is_stag_mode`,
+// `pause_map_is_tutorial_mode`, `pause_map_set_gps`,
+// `pause_map_stag_takeover_do_reward` - all 5 members of the SAME 9-entry
+// UI pause-map registrar, FUN_007dfae0, Sec31.1's own table; the other 4
+// table entries - get_world_income_dollars, pause_map_add_bookmark,
+// pause_map_drag_map, pause_map_zoom - have no CONFIRMED body anywhere in
+// Sec31 and are NOT implemented, still ordinary generic stubs) and Sec32
+// ("ranking tranche 04", 25 previously-unspecced gameplay-registrar
+// names: store_interface_is_active, spawn_region_max_spawn_dist(_reset),
+// set_ped_override_density, pause_map_tutorial_mode, set_time_of_day,
+// satellite_weapon_mode_exit (Sec32.1); set_seatbelt_flag,
+// set_trailing_aim_flag, set_never_turn_on_player (Sec32.2);
+// player_revive, player_warp_to_shore_disable,
+// skydive_setup_tank_bailout, qte_human_is_used (Sec32.3); party_add_do,
+// npc_is_in_party, npc_go_idle (Sec32.4); object_destroy,
+// object_indicator_remove_do, minimap_icon_remove_do,
+// shop_enable_nearest (Sec32.5); item_show, item_anim_play (Sec32.6);
+// radio_set_station, helicopter_shoot_vehicle (Sec32.7)). Real call-count
+// evidence (results/stub_ranking_with_specced_20261002.tsv, the most
+// recent mission-drive verdict TSV as of this batch): the Sec31 target
+// itself is real and significant (303 real calls, all pre-mission UI
+// bring-up, matching Sec31's own "called 303 times" claim exactly); NONE
+// of Sec32's 25 tranche-04 names appear in that same real mission-drive
+// trace at all (0 real calls measured) - an honest, measured finding, not
+// an assumption, so no further internal-depth prioritization was applied
+// within the tranche (breadth across all 25, each at the depth its own
+// CONFIRMED text supports, rather than concentrating depth on an
+// arbitrary subset real evidence doesn't actually favor).
+//
+// The 0x009df3d0 correction (Sec14.31/Sec32.8, folded in as part of this
+// same batch): this document's own §8.17/§14.31 previously read 0x009df3d0
+// as a "matching" lookup for the local player's own roster entry; ranking
+// tranche 04 (§32.1-A.7) corrects this to "the first live-roster entry
+// that is NOT the local player" (the remote co-op player), returning null
+// only when every roster entry equals the local player - NOT a fallback
+// that could wrongly resolve to the local player itself with no co-op
+// session. A direct grep of this project's own source for "0x009df3d0"
+// before this batch found exactly one prior consumer,
+// `customization_restore_player_rig` (Sec28.12,
+// EngineState::PlayerRig::coopPlayerPresent) - already modeled as a plain
+// presence boolean, never as a name-matching lookup, so it needed NO
+// change. The only NEW consumer this batch adds,
+// `satellite_weapon_mode_exit`, applies the corrected reading directly:
+// its bit-0x2 selector only acts on a player when
+// playerRig().coopPlayerPresent is true. See
+// lua_spec_confirmed_stubs.cpp's own batch header comment (above the 30
+// functions) and engine_state.h's own per-field/per-method doc comments
+// for the full per-function reasoning.
+//
+// Batch 2026-10-02 (spec-lua-api-behaviour.md Sec35, the `teleport_coop`
+// investigation): +4 - teleport_check_done (Sec15.17), turn_to_check_done,
+// move_to_check_done (Sec22.15), vehicle_pathfind_check_done (Sec9.10). All
+// 4 were plain generic logging stubs (returning nil) before this batch -
+// the real, measured reason 3 missions (dlc2_m01, m13, m19) sat suspended
+// forever inside `teleport_coop` (a game_lib.lua script helper, not a
+// native): a `repeat thread_yield() until teleport_check_done(...)` idiom
+// can never be satisfied by nil. All 4 share one engine module, the
+// 200-slot scripted-request completion pool (Sec35.2); see
+// engine_state.h's own "teleport_check_done/..." section for the shared
+// mechanism and lua_spec_confirmed_stubs.cpp for each wrapper's own
+// citation/scope note (move_to_check_done and vehicle_pathfind_check_done
+// each implement only part of their real, fuller body - see their own doc
+// comments for exactly what is NOT modeled and why).
+//
+// Batch 2026-10-02 (resumed session): +28. First, the long-standing Sec3.7/
+// Sec20.1 vehicle-invulnerability bit conflict - settled by ranking tranche
+// 14 (Sec46.1: bit 0x01 of vehicle +0x1d7a; Sec3.7 was right, Sec20.1's own
+// "bit 0x8" was the error) - is now actually IMPLEMENTED (previously only
+// corrected in the spec text): turn_invulnerable (Sec3.7), turn_vulnerable
+// (Sec3.8), vehicle_set_vulnerable (Sec20.1), vehicle_is_invulnerable
+// (Sec46.5). Second, a curated subset of ranking tranches 12-14 (Sec44/
+// Sec45/Sec46, 75 previously-unspecced names total): character_fake_
+// revival_start/_end, character_take_human_shield_check_done, vehicle_
+// turret_base_to_do, vehicle_lights_on, vehicle_tire_indicators_alive
+// (Sec45.1/Sec46.4/Sec46.5 - each supporting this same bit-conflict
+// correction or its own already-scaffolded engine-state); game_is_pc_dx11/
+// game_get_ps3_button_swap/game_record_mode_is_supported/game_record_
+// mode_is_active/game_show_party_ui/game_show_community_sessions_ui
+// (Sec44.1, 6 trivial constant-false/no-op names sharing 2 already-known
+// native handlers); flee_to_navpoint (Sec44.5/Sec44.6); character_hidden,
+// ambient_gang_spawn_enable, cellphone_animate_stop_do, cell_camera_enable/
+// cell_camera_is_enabled (Sec45.1/Sec45.4/Sec45.6); ambient_cop_spawn_
+// enable, action_nodes_shouldnt_flee, action_nodes_restrict_spawning,
+// whored_countdown_finished, vehicle_set_tire_durability, vehicle_set_
+// tire_damage_multiplier (Sec46.3/Sec46.5/Sec46.6). Selected (same
+// reasoning Sec30/Sec33 above already precedent) because a real call-count
+// check (results/stub_ranking_with_specced_20261002.tsv) finds ZERO of
+// these 3 tranches' 75 names with any measured real call at all - no
+// signal to prioritize BY, so breadth was applied instead, bounded to
+// names implementable without inventing a new subsystem (no networking,
+// Steam, path/node graph, cellphone activity-record machine, or key-
+// binding table - see lua_spec_confirmed_stubs.cpp's own batch header
+// comment, right before stub_turn_invulnerable, for exactly which tranche-
+// 12/13/14 names were deliberately left as ordinary generic stubs this
+// pass, and why). See engine_state.h for the new state (CharacterState::
+// hiddenFlag/fleeToNavpointRequestCount, VehicleState::tireDurability/
+// tireDamageMultiplier, plus the already-scaffolded forceFlags1c98/
+// forceFlags1d7a/flagsE4/humanShieldHostageName/lightsForceFlags/
+// tireIndicatorObjectDisabled/seat0Occupied; EngineState::
+// ambientGangSpawnEnabled()/cellCameraEnabled()/ambientCopSpawnEnabled()/
+// actionNodesShouldntFlee()/actionNodesRestrictSpawning()).
 //
 // IMPLEMENTED PRE-REVIEW, PENDING EXE RE-CLEARANCE (2026-09-30): the desk
 // review now marks spec-lua-api-behaviour.md §1-§5 "NOT yet cleared for

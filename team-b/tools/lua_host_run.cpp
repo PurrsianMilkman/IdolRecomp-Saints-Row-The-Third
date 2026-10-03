@@ -151,9 +151,11 @@
 #include "sr3luahost/host.h"
 #include "sr3luahost/hook_registry.h"
 #include "sr3tables_cutscene/scene_table.h"
+#include "sr3vintdoc/vint_doc.h"
 #include "vpp/container.h"
 
 namespace fs = std::filesystem;
+using sr3luahost::LoadedVintDocument;
 using sr3luahost::bareGlobalRoster;
 using sr3luahost::BareThreadTable;
 using sr3luahost::confirmedHooks;
@@ -298,15 +300,30 @@ struct WalkStats {
     uint64_t decompressFailed = 0;
 };
 
+// A real .vint_doc leaf found by the same walk (2026-10-03): loaded into the
+// UI engine state's Vint element tree on demand (see the document-context
+// resolver in main()).
+struct DocInstance {
+    std::string archive;
+    std::string pathChain;
+    std::string entryName;
+    std::vector<uint8_t> bytes;
+};
+
 struct WalkState {
     std::deque<std::vector<uint8_t>> bufferPool;
     std::vector<ScriptInstance> found;
+    std::vector<DocInstance> docs;
     WalkStats stats;
 };
 
 void inspectLeaf(WalkState& st, const std::string& archive, const std::string& chain, const std::string& name,
                   const uint8_t* data, size_t len) {
     std::string lower = toLower(name);
+    if (lower.size() > 9 && lower.compare(lower.size() - 9, 9, ".vint_doc") == 0) {
+        st.docs.push_back({archive, chain, name, std::vector<uint8_t>(data, data + len)});
+        return;
+    }
     if (endsWithLuaExt(lower)) {
         ScriptInstance si;
         si.archive = archive;
@@ -831,12 +848,33 @@ struct MissionStartResult {
     std::string suspendedAt;
 };
 
-// checkpoint/isRestart are CHOSEN literal values (0 / false), per this
-// task's own instruction - spec-lua-bindings.md Sec14.10/HANDOFF.md
-// Sec9.123's own real, confirmed evidence for the call shape
-// (`m01_start(m01_checkpoint, is_restart)` calls `m01_run(...)`
-// internally) never pinned down a real, confirmed checkpoint VALUE to
-// use - this is a documented engineering choice, not recovered data.
+// checkpoint/isRestart's call-shape values are now CONFIRMED, not chosen
+// (spec-lua-api-behaviour.md Sec36.4, spec-lua-bindings.md Sec14.11, synced
+// 2026-10-02): the engine's own two native call sites for a mission's
+// `<stem>_start` push exactly two Lua values onto the freshly created
+// coroutine - a checkpoint STRING (the literal `"mission start"` on a
+// genuine fresh start; the mission's own last-reported checkpoint name,
+// e.g. `mission_checkpoints.xtbl`'s `CheckpointName` column, on a resume) -
+// and a boolean `is_restart` (`false` on a fresh start, `true` on a
+// resume/retry). **Never the number 0** - Sec36.4 is explicit that nothing
+// in this mechanism ever produces anything but that string and that
+// boolean on a fresh start, and no `mission_checkpoints.xtbl` row is ever
+// named `"mission start"` or indexed `0`. This project's host previously
+// passed the CHOSEN literal number `0.0` here, which is exactly the real
+// `dlc2_m02` "attempt to index local 'cp_data' (a nil value)" bug shape:
+// a mission script that only ever keys its checkpoint table by name
+// strings (e.g. `checkpoints["mission start"]`/`checkpoints["1"]`) gets
+// nil back when indexed by the number `0`.
+//
+// This harness only ever drives a FRESH start (one `callMissionStart` call
+// per mission, below) - there is no resume/retry call site here yet, so
+// Sec36.4's second half (`start_fn(<checkpoint_name_string>, true)`,
+// reading the current-checkpoint-name global `0x014c8354`) is honestly
+// NOT implemented: there is nothing in this harness that would ever call
+// it with `isRestart=true`, so modelling that global here would be dead
+// code, not a real fix. If a resume/retry drive path is added later, it
+// must read the checkpoint-name string from that global (CONFIRMED;
+// Sec36.3) rather than inventing one.
 //
 // The call goes through the script-thread runner, not a bare lua_pcall
 // (spec-lua-api-behaviour.md Sec26.27 thread table, 2026-10-01 answer to
@@ -849,10 +887,13 @@ struct MissionStartResult {
 // current record for the call (thread_new inside it finds a parent).
 // BareThreadTable::allocate()/run() is the host's model of that runner;
 // `threads` must be the table registered into L (Host::bareGlobals()).
-// Which of the runner's callers SR3 uses for mission hooks is OPEN and is
-// not modelled; only the mechanism is.
+// This already matches Sec36.2/Sec36.4's "as a new coroutine through the
+// thread runner, never a plain direct call" requirement - it was the
+// checkpoint ARGUMENT that was wrong, not this call mechanism. Which of
+// the runner's callers SR3 uses for mission hooks is OPEN and is not
+// modelled; only the mechanism is.
 MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, const std::string& funcName,
-                                     double checkpoint, bool isRestart) {
+                                     const std::string& checkpoint, bool isRestart) {
     MissionStartResult r;
     lua_getglobal(L, funcName.c_str());
     r.existedAsFunction = (lua_type(L, -1) == LUA_TFUNCTION);
@@ -864,7 +905,7 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
     r.attemptedCall = true;
     // The runner's step 4 fetches the global by name below the arguments, so
     // only the two arguments go on L's stack (allocate() moves them).
-    lua_pushnumber(L, checkpoint);
+    lua_pushstring(L, checkpoint.c_str());
     lua_pushboolean(L, isRestart ? 1 : 0);
     // hasParent=false: nothing is current before a mission's `_start` runs
     // (the drive loop calls it from the host, not from inside a record), the
@@ -970,7 +1011,27 @@ int main(int argc, char** argv) {
                      "      globals and the per-thread record vint_is_std_res reads, the display mode and the layout\n"
                      "      index. A HOST INPUT, not an engine value: default 1280x720 (CHOSEN, the spec's first\n"
                      "      worked example); none = the init does not run and those values stay OPEN. Recorded as\n"
-                     "      display_option= in verdict_summary.txt.\n";
+                     "      display_option= in verdict_summary.txt.\n"
+                     "  --tick-budget=N  CHOSEN override of the mission-drive loop's per-mission tick budget\n"
+                     "      (default 20). One tick models kFadeHostMsPerTick (333 ms, CHOSEN) of this host's own\n"
+                     "      simulated time (see that constant's own doc comment for the full cadence reasoning).\n"
+                     "      Raise this to distinguish a 'still suspended' mission that is a real blocker from one\n"
+                     "      that is just mid-way through a long, legitimate wait; mission_simulated_seconds_budget=\n"
+                     "      in verdict_summary.txt reports what this host modelled, and start_still_suspended_at=\n"
+                     "      (per-mission output / TSV) reports where it ended up parked.\n"
+                     "  --probe-unresolved-names  DIAGNOSTIC ONLY, off by default, NEVER a real measurement: a\n"
+                     "      named-object resolution miss (the OPEN gate behind most 'Killbane'-style blockers)\n"
+                     "      returns a synthetic \"resolves\" placeholder instead of refusing, so a mission can\n"
+                     "      keep running past it to show what blocks it NEXT. Every probed (synthetic) name is\n"
+                     "      listed in verdict_summary.txt as probed_unresolved_names=; every other OPEN item a\n"
+                     "      mission still hits past that point (another named-object check, a per-character/\n"
+                     "      per-vehicle field, an unimplemented stub) is still genuinely OPEN and reported as\n"
+                     "      such - this flag widens exactly one gate, nothing else.\n"
+                     "  --no-vint-docs  turn OFF real .vint_doc loading (on by default since 2026-10-03): every\n"
+                     "      .vint_doc found is parsed (layout CONFIRMED, spec-vint-doc-format.md) and, the first\n"
+                     "      time a chunk named by a document's lua_script_file runs (or a hook it defined fires),\n"
+                     "      loaded into the Vint object registry, with that document as the call's current\n"
+                     "      document (CHOSEN association). Recorded as vint_docs= in verdict_summary.txt.\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
@@ -981,11 +1042,40 @@ int main(int argc, char** argv) {
     // --display (Sec26.26): CHOSEN default 1280x720, a host input (see usage).
     bool displayInit = true;
     int32_t displayWidth = 1280, displayHeight = 720;
+    // --tick-budget (CHOSEN override, not a spec fact): how many mission-drive
+    // ticks to run per mission before "budget exhaustion" - see
+    // kMissionTickBudget's own doc comment below for what one tick models.
+    // Default unchanged (20); a caller investigating whether a "still
+    // suspended" mission is a real blocker or just a long, legitimate wait
+    // (e.g. a scripted delay/fade) should pass a much larger value and read
+    // start_still_suspended_at in the per-mission output / TSV to see where
+    // it parked.
+    int missionTickBudget = 20;
+    // --probe-unresolved-names: DIAGNOSTIC ONLY, off by default (see
+    // OpenValueMap::enableProbeFallback's own doc comment, open_state.h).
+    // Never feeds a real baseline measurement - every number it influences
+    // is a synthetic stand-in for the real, still-genuinely-OPEN named-
+    // object resolution map, used only to see what blocks a mission NEXT
+    // once that one gate stops refusing.
+    bool probeUnresolvedNames = false;
+    // --no-vint-docs: turn off real .vint_doc loading + the per-chunk
+    // document context (2026-10-03, see the block after the archive walk).
+    bool vintDocs = true;
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
         if (arg == "--preload-states=spec16.4" || arg == "--preload-states=spec16.4-highconf") preloadStatesSpec164 = true;
         else if (arg == "--preload-states=tag") preloadStatesSpec164 = false;
+        else if (arg.rfind("--tick-budget=", 0) == 0) {
+            std::string v = arg.substr(14);
+            if (v.empty() || v.find_first_not_of("0123456789") != std::string::npos || std::stol(v) <= 0) {
+                std::cerr << "bad --tick-budget value (want a positive integer): " << v << "\n";
+                return 1;
+            }
+            missionTickBudget = std::stoi(v);
+        }
+        else if (arg == "--probe-unresolved-names") probeUnresolvedNames = true;
+        else if (arg == "--no-vint-docs") vintDocs = false;
         else if (arg == "--host-rng") hostRng = true;
         else if (arg.rfind("--host-rng=", 0) == 0) {
             std::string v = arg.substr(11);
@@ -1037,6 +1127,13 @@ int main(int argc, char** argv) {
     Host host(allNames);
     // --host-rng (HYPOTHESIS / host substitute, opt-in): before any script draws.
     if (hostRng) host.useHostRng(hostRngSeed);
+    // --probe-unresolved-names (DIAGNOSTIC ONLY, opt-in, see usage text above
+    // and EngineState::enableUnresolvedNameProbe()/probedFieldOr()'s own doc
+    // comments): widens the named-object resolution gate, and lets specific
+    // per-character/per-vehicle OPEN fields (those routed through
+    // probedFieldOr(), e.g. max hit points/ignore-AI) also fall back to a
+    // labelled placeholder for a name this same run already probed.
+    if (probeUnresolvedNames) host.engineState().enableUnresolvedNameProbe();
     // Front-end bring-up, before any script (Sec26.24/Sec26.26: the UI
     // subsystem init 0x008489e0 -> 0x00e23910 runs before the screen_fade
     // init and before UI scripts): the display resolution (host input).
@@ -1176,6 +1273,69 @@ int main(int argc, char** argv) {
     std::cout << "Archive walk complete: " << archives.size() << " archives, " << grandBytes
               << " bytes, " << st.stats.entries << " directory entries, " << st.found.size()
               << " real .lua entries found (population denominator for everything below).\n";
+
+    // --- Real .vint_doc documents -> the UI state's Vint element tree
+    // (2026-10-03). Every .vint_doc leaf the walk found is parsed
+    // (sr3vintdoc::parseDocument, layout CONFIRMED in spec-vint-doc-format.md
+    // at main 67455c3) and indexed by its `lua_script_file` metadata (the
+    // value is stored with or without ".lua" in real files; compared
+    // case-insensitively without it). Host's document-context resolver then
+    // runs each chunk - and each hook function, by the chunk that defined
+    // it - in the context of the document naming that chunk as its script,
+    // loading the document into EngineState the first time it is needed
+    // (CHOSEN association, see Host::setDocumentContextResolver). A chunk no
+    // document names keeps the OPEN current document, as before.
+    // --no-vint-docs disables all of this (the pre-2026-10-03 behaviour) for
+    // A/B measurement.
+    auto scriptKey = [](std::string s) {
+        s = toLower(s);
+        size_t slash = s.find_last_of("/\\");
+        if (slash != std::string::npos) s = s.substr(slash + 1);
+        if (s.size() > 4 && s.compare(s.size() - 4, 4, ".lua") == 0) s.resize(s.size() - 4);
+        return s;
+    };
+    std::vector<sr3vintdoc::Document> parsedDocs;
+    std::vector<size_t> parsedDocSource; // index into st.docs
+    std::unordered_map<std::string, size_t> docByScript; // scriptKey -> index into parsedDocs (first in walk order)
+    std::vector<uint32_t> docHandleByParsed;
+    uint64_t docsParseFailed = 0, docsWithoutScript = 0, docScriptDuplicates = 0, docsLoaded = 0;
+    uint64_t docObjectsLoaded = 0, docPropertiesLoaded = 0, docContextHits = 0, docContextMisses = 0;
+    if (vintDocs) {
+        for (size_t i = 0; i < st.docs.size(); ++i) {
+            const auto& d = st.docs[i];
+            try {
+                parsedDocs.push_back(sr3vintdoc::parseDocument(vpp::ByteView(d.bytes.data(), d.bytes.size())));
+                parsedDocSource.push_back(i);
+            } catch (const std::exception&) {
+                ++docsParseFailed;
+                continue;
+            }
+            const std::string* script = parsedDocs.back().metadataValue("lua_script_file");
+            if (!script || script->empty()) { ++docsWithoutScript; continue; }
+            if (!docByScript.emplace(scriptKey(*script), parsedDocs.size() - 1).second) ++docScriptDuplicates;
+        }
+        docHandleByParsed.assign(parsedDocs.size(), 0);
+        host.setDocumentContextResolver([&](const std::string& chunkName) -> std::optional<uint32_t> {
+            auto it = docByScript.find(scriptKey(chunkName));
+            if (it == docByScript.end()) { ++docContextMisses; return std::nullopt; }
+            ++docContextHits;
+            uint32_t& h = docHandleByParsed[it->second];
+            if (h == 0) {
+                const auto& src = st.docs[parsedDocSource[it->second]];
+                h = host.engineState().loadVintDocument(src.entryName, parsedDocs[it->second]);
+                const LoadedVintDocument* ld = host.engineState().loadedVintDocument(h);
+                ++docsLoaded;
+                docObjectsLoaded += ld ? ld->objectCount : 0;
+                docPropertiesLoaded += ld ? ld->propertyCount : 0;
+            }
+            return h;
+        });
+    }
+    std::cout << "vint_docs: " << st.docs.size() << " .vint_doc entries found, " << parsedDocs.size() << " parsed, "
+              << docsParseFailed << " failed to parse, " << docByScript.size() << " distinct lua_script_file names ("
+              << docsWithoutScript << " documents name no script, " << docScriptDuplicates
+              << " later documents repeat an already-indexed script and are not used)"
+              << (vintDocs ? "" : " - DISABLED by --no-vint-docs") << "\n";
 
     // --- Real per-script state-tag resolution (this task, spec-lua-
     // bindings.md Sec14.5 - see the `statetag` namespace above for the
@@ -1786,6 +1946,14 @@ int main(int argc, char** argv) {
     line("open_state_slots_with_values_at_start=" + openStateSummary);
     line("display_option=" + displayOption);
     line("zscene_table=" + sceneTableSummary);
+    line("vint_docs=" + std::string(vintDocs ? "on" : "off (--no-vint-docs)") + " found=" +
+         std::to_string(st.docs.size()) + " parsed=" + std::to_string(parsedDocs.size()) +
+         " parse_failed=" + std::to_string(docsParseFailed) + " scripts_indexed=" + std::to_string(docByScript.size()) +
+         " loaded_so_far=" + std::to_string(docsLoaded) + " objects=" + std::to_string(docObjectsLoaded) +
+         " properties=" + std::to_string(docPropertiesLoaded) + " context_hits=" + std::to_string(docContextHits) +
+         " context_misses=" + std::to_string(docContextMisses) +
+         " (real .vint_doc element trees in the Vint object registry; per-call current document = the "
+         "document naming the defining chunk as lua_script_file - CHOSEN; see --no-vint-docs)");
     line("total_bytes_read=" + std::to_string(grandBytes));
     line("total_directory_entries=" + std::to_string(st.stats.entries));
     line("real_lua_scripts_found(name ends '.lua')=" + std::to_string(st.found.size()));
@@ -1866,6 +2034,17 @@ int main(int argc, char** argv) {
                   : std::string("off (default: CONFIRMED file-image ring - every rand_int/rand_float draw returns lo; "
                                 "whether the engine fills the ring before scripts draw is OPEN)")) +
          " draws=" + std::to_string(host.bareGlobals().random().draws()));
+    // probe_unresolved_names_option (DIAGNOSTIC ONLY, see usage text above
+    // and OpenValueMap::enableProbeFallback's own doc comment, open_state.h):
+    // reported here so any run's own verdict_summary.txt makes plain whether
+    // its numbers used the real named-object resolution gate or the
+    // synthetic probe stand-in - never ambiguous after the fact.
+    line(std::string("probe_unresolved_names_option=") +
+         (probeUnresolvedNames
+              ? "on (DIAGNOSTIC: every miss on the named-object resolution map returns a synthetic "
+                "\"resolves\" placeholder instead of refusing - every number below past such a miss is "
+                "a synthetic stand-in, not a real measurement)"
+              : "off (default: the real, genuinely-OPEN named-object resolution map refuses as normal)"));
     {
         size_t resolved = 0, ran = 0;
         for (const auto& il : host.bareGlobals().includeQueue().log()) {
@@ -2039,8 +2218,11 @@ int main(int argc, char** argv) {
     // elsewhere, watchdog-wrapped (this task's own NEW call site, never
     // watchdog-protected before - see runChunkWithWatchdog() above's own
     // doc comment for why that's safe here). Then call
-    // `<stem>_start(0, false)` (CHOSEN, documented args - see
-    // callMissionStart()'s own doc comment), watchdog-wrapped, as a
+    // `<stem>_start("mission start", false)` (CONFIRMED call shape as of
+    // 2026-10-02 - spec-lua-api-behaviour.md Sec36.4, spec-lua-bindings.md
+    // Sec14.11; see callMissionStart()'s own doc comment for the full
+    // citation and for why this harness's remaining tick budget/watchdog
+    // numbers below stay CHOSEN), watchdog-wrapped, as a
     // script-thread record through the runner (request 11, Sec26.27: the
     // record is current for the call and the call may yield; a yielded
     // record stays in the thread table and every tick's scheduler passes -
@@ -2111,43 +2293,73 @@ int main(int argc, char** argv) {
               << "this run's own actual, independently-derived count, reported as-is whether or not it "
               << "matches).\n";
 
-    constexpr int kMissionTickBudget = 20; // CHOSEN - see this block's own top comment for the reasoning
-    constexpr double kMissionStartCheckpoint = 0.0; // CHOSEN literal, not recovered
-    constexpr bool kMissionStartIsRestart = false;  // CHOSEN literal, not recovered
+    const int kMissionTickBudget = missionTickBudget; // CHOSEN (default 20, --tick-budget= override) - see this block's own top comment for the reasoning
+    // CONFIRMED, not chosen (spec-lua-api-behaviour.md Sec36.4, spec-lua-bindings.md
+    // Sec14.11, synced 2026-10-02): a genuine fresh start's two native call sites
+    // always push the literal string "mission start" and the boolean false - see
+    // callMissionStart()'s own doc comment for the full citation and for why this
+    // harness (fresh-start-only, no resume/retry call site) never needs any other
+    // checkpoint-name value. Previously this harness passed the CHOSEN number 0.0
+    // here, which reproduced the real dlc2_m02 "attempt to index local 'cp_data'
+    // (a nil value)" bug: `checkpoints[0]` is nil when a mission only ever keys
+    // its checkpoint table by name strings.
+    const std::string kMissionStartCheckpoint = "mission start";
+    constexpr bool kMissionStartIsRestart = false;  // CONFIRMED false on a fresh start (Sec36.3)
     // Screen fade host clock (batch 2026-10-01, spec-lua-api-behaviour.md
     // Sec26.24): each mission tick is one host frame of this many ms
     // (EngineState::screenFadeHostFrame). CHOSEN: about a third of a second,
     // and not a divisor of the engine's 1000/1500/3000/6000 ms stamp offsets,
     // so a stamp never lands exactly on a frame (that comparison is OPEN).
     constexpr int64_t kFadeHostMsPerTick = 333;
-    // Script-thread scheduler cadence (spec-lua-api-behaviour.md Sec26.27,
-    // "[RESOLVED 2026-10-02 ...]" block, CONFIRMED - disassembly): the
-    // scheduler 0x00e0cf50 runs on a dedicated background thread whose loop
-    // is throttled to a MINIMUM of 30 ms per iteration, no fixed maximum
-    // (~33 Hz), independent of rendering; each call offers every live,
-    // non-exempt record a resume (no budget). That 30 ms is the engine's.
-    constexpr int64_t kScriptPumpMinPeriodMs = 30; // CONFIRMED (0x00702070's throttle)
-    // CHOSEN (engineering decision, not spec fact): this host is tick-driven,
-    // not wall-clock-driven, so how many scheduler passes one mission tick
-    // gets is ours to choose. One tick is kFadeHostMsPerTick (333 ms, itself
-    // CHOSEN above) of host time; we run floor(333 / 30) = 11 passes per tick,
-    // i.e. as many as the engine's pump could fit into the same span at its
-    // fastest allowed rate (the 30 ms minimum, an unloaded loop). Why the
-    // fastest rate rather than one pass per tick: the spec's own host fix
-    // says to run the pump "on a cadence of roughly 30 ms or less" and that a
-    // faster cadence "is a safe superset and cannot under-resume"; one pass
-    // per 333 ms tick would be ~10x slower than any real engine cadence, so
-    // any script that measures time by counting its own yields (e.g. adding
-    // get_frame_time(), the file image's 1/30 s, per yield) would fall ~10x
-    // behind the tick clock the fade machine runs on. All 11 passes
-    // run back to back after the tick's fade and cutscene frames and before
-    // the hook-firing pass (order also CHOSEN: the engine's pump runs on its
-    // own thread, so its phase against the frame is chance, never designed);
-    // the fade clock is NOT subdivided - the passes of one tick all see that
-    // tick's fade/cutscene state, a known simplification. The real engine's
-    // pass count per 333 ms is somewhere between 0 and 11 depending on load.
-    constexpr int kSchedulerPassesPerTick = static_cast<int>(kFadeHostMsPerTick / kScriptPumpMinPeriodMs);
-    static_assert(kSchedulerPassesPerTick == 11, "CHOSEN mapping: floor(333 / 30) passes per tick");
+    // Script-thread scheduler cadence (spec-lua-api-behaviour.md thread-table
+    // section, "MAJOR CORRECTION (2026-10-02, stuck-delay-mission
+    // investigation)", CONFIRMED - disassembly, re-derived a second time -
+    // supersedes the "[RESOLVED 2026-10-02 ...]" pass immediately before it,
+    // which this one corrects rather than contradicts): 0x00702070 is NOT a
+    // steady background pump - it's the boot-only "Boot_render" loading-
+    // screen thread, which terminates before the first gameplay frame and
+    // never runs again. The real steady-state driver is 0x00e0dfc0, on the
+    // MAIN thread, called once per rendered/game frame from each active game
+    // state's own per-frame update (0x007b05f0 for the in-game state, the
+    // front-end state, and the cutscene driver 0x00702a50), which itself
+    // unconditionally calls the scheduler 0x00e0cf50 once per frame (no
+    // budget - every live, non-exempt record is offered a resume on that one
+    // call) - except while 0x00dafa90 reports a blocking stream load in
+    // progress (not modelled here; this host never simulates a blocking
+    // load). There never was an independent ~30 ms pump to approximate
+    // outside the boot screen; the spec states plainly that a host which
+    // "resumes 0x00e0cf50 once per rendered frame ... reproduces the real
+    // engine exactly."
+    //
+    // CHOSEN (engineering decision, not spec fact - supersedes the old
+    // floor(333 ms / 30 ms) = 11-passes-per-tick mapping this comment
+    // previously derived from the now-corrected "independent ~30 ms pump"
+    // reading): this host already treats one mission tick as one host frame
+    // (kFadeHostMsPerTick above - "each mission tick is one host frame of
+    // this many ms"), and the real mechanism is now confirmed to run exactly
+    // once per rendered/game frame, so the faithful mapping is 1:1 - one
+    // scheduler pass per tick. The old 11x figure was sized to approximate a
+    // ~30 ms cadence that the corrected spec text confirms never existed
+    // outside the boot screen; running it that many times no longer has any
+    // engine cadence behind it, so it is simplified away rather than kept as
+    // a "safe superset" (nothing here is being approximated anymore - this
+    // IS the mechanism, 1 pass per frame, not a bound on it).
+    constexpr int kSchedulerPassesPerTick = 1; // CHOSEN: 1 host tick == 1 rendered/game frame == 1 scheduler pass
+    // get_frame_time (spec-lua-api-behaviour.md Sec37.2/Sec37.5, CONFIRMED
+    // writer: a raw, unscaled, uncapped, unpaused measured wall-clock delta,
+    // refreshed every main-loop frame): since this host now resumes each
+    // thread's single scheduler pass exactly once per tick (above), a call
+    // to get_frame_time() during that resume must report that same tick's
+    // own modelled elapsed time to keep the script's own wall-clock reading
+    // in step with the host's other per-tick clocks (the fade/cutscene host
+    // frame above already use kFadeHostMsPerTick). CHOSEN: reuse that same
+    // constant here rather than leave get_frame_time() at the file image's
+    // unrelated 1/30 s startup default, which has no relation to this host's
+    // own tick length and was the root cause of a stuck-delay mission (e.g.
+    // m02) never accumulating enough modelled time to finish - Sec37.5's own
+    // "For a host" paragraph names exactly this mismatch shape. Set once,
+    // before the mission loop: the value never varies tick-to-tick here.
+    host.bareGlobals().setFrameTime(static_cast<float>(kFadeHostMsPerTick) / 1000.0f);
 
     struct MissionResult {
         std::string stem, entryName, containerName;
@@ -2213,6 +2425,18 @@ int main(int argc, char** argv) {
         if (!loadResult.loadOk) errorsInOrder.push_back(loadResult.loadError);
         else if (loadResult.ranPcall && !loadResult.pcallOk) errorsInOrder.push_back(loadResult.pcallError);
 
+        // DOCUMENTED ENGINEERING CHOICE, not a confirmed spec mechanism: the real
+        // bound function name is a data-borne string property
+        // (`script_mission_start`) read off the mission's own `scripted_mission_start`
+        // placement/definition record (spec-lua-api-behaviour.md Sec36.1,
+        // spec-lua-bindings.md Sec14.11) - this project does not have that record's
+        // data (it lives in the still-parked `.czn_pc` interior, or another unread
+        // carrier) to look up the true name. Deriving it as `<stem>_start` from this
+        // row's own `mission_lua_stem` column is HYPOTHESIS per Sec36.4/Sec14.11 (a
+        // partner team's own census found shipped missions follow this pattern, but
+        // the object data itself was never read to confirm it) - kept here as a
+        // reasonable stand-in, per Sec36.4's own framing, but never presented as
+        // itself a confirmed spec fact.
         std::string funcName = row.missionLuaStem + "_start";
         // Records still live from earlier missions (the gameplay state is
         // shared across the walk - see this block's top caveat). The
@@ -2252,6 +2476,13 @@ int main(int argc, char** argv) {
                 // summary: promotion then completion, every frame), on the same
                 // host clock; after the fade frame (CHOSEN order).
                 host.engineState().cutsceneHostFrame();
+                // The game clock (Sec48.3, CONFIRMED mechanism): advances by
+                // this same tick's own modelled frame time, matching
+                // get_frame_time's own per-resume value (kFadeHostMsPerTick/
+                // 1000 - see that constant's and setFrameTime()'s own doc
+                // comments above). CHOSEN call order: alongside the other
+                // per-tick host clocks.
+                host.engineState().gameClockAdvanceFrame(static_cast<double>(kFadeHostMsPerTick) / 1000.0);
                 // The script-thread scheduler 0x00e0cf50, kSchedulerPassesPerTick
                 // times (CHOSEN mapping, see that constant). The watchdog is
                 // re-armed on each coroutine right before its resume
@@ -2463,14 +2694,36 @@ int main(int argc, char** argv) {
     mline("real_rows_loaded_from_mission_package_per_container_tsv=" + std::to_string(missionRows.size()));
     mline("distinct_stems_after_dedup_and_stem_covers_a_start_script_filter=" + std::to_string(missions.size()) +
           " (HANDOFF.md's own citation: \"49/54\" - reported here as this run's own actual count, not assumed)");
+    // start_checkpoint_arg/start_is_restart_arg are CONFIRMED call-shape values
+    // (spec-lua-api-behaviour.md Sec36.4, spec-lua-bindings.md Sec14.11, synced
+    // 2026-10-02) - no longer CHOSEN, so reported on their own line, separate
+    // from the genuinely CHOSEN values below (not recovered data).
+    mline("CONFIRMED_values(spec-lua-api-behaviour.md Sec36.4/spec-lua-bindings.md Sec14.11 call shape, "
+          "fresh start only - this harness has no resume/retry call site): start_checkpoint_arg=\"" +
+          kMissionStartCheckpoint + "\", start_is_restart_arg=" +
+          std::string(kMissionStartIsRestart ? "true" : "false"));
+    // mission_simulated_seconds_budget: the tick budget re-expressed in this
+    // host's own simulated time, so a caller doesn't have to multiply ticks
+    // by fade_host_ms_per_tick by hand to judge whether "still suspended"
+    // missions had enough modelled time to finish a long but legitimate wait
+    // (e.g. a scripted delay/fade) before assuming they're stuck on a real
+    // blocker - see --tick-budget='s own usage text.
+    mline("mission_simulated_seconds_budget=" +
+          std::to_string(static_cast<double>(kMissionTickBudget) * kFadeHostMsPerTick / 1000.0) +
+          " (CHOSEN: mission_tick_budget * fade_host_ms_per_tick / 1000 - this host's own per-tick frame "
+          "time, not a real-engine frame rate; raise via --tick-budget= to tell a long legitimate wait "
+          "apart from a missing value, then read start_still_suspended_at per mission below)");
     mline("CHOSEN_values(not recovered data, stated per this project's own discipline): mission_tick_budget=" +
-          std::to_string(kMissionTickBudget) + ", start_checkpoint_arg=" + std::to_string(kMissionStartCheckpoint) +
-          ", start_is_restart_arg=" + std::string(kMissionStartIsRestart ? "true" : "false") +
+          std::to_string(kMissionTickBudget) +
           ", watchdog_instruction_budget=" + std::to_string(kMissionWatchdogInstructionBudget) +
           ", fade_host_ms_per_tick=" + std::to_string(kFadeHostMsPerTick) +
-          ", scheduler_passes_per_tick=" + std::to_string(kSchedulerPassesPerTick) + " (floor(" +
-          std::to_string(kFadeHostMsPerTick) + "/" + std::to_string(kScriptPumpMinPeriodMs) +
-          "), the CONFIRMED 30 ms pump minimum mapped onto the CHOSEN tick)" +
+          ", scheduler_passes_per_tick=" + std::to_string(kSchedulerPassesPerTick) +
+          " (CHOSEN: 1 tick == 1 rendered/game frame == 1 scheduler pass, matching the corrected spec's "
+          "once-per-frame driver 0x00e0dfc0 - the old 11x figure approximated a ~30 ms independent pump "
+          "the spec now confirms was boot-only, see this block's own top comment)" +
+          ", get_frame_time_per_resume_s=" + std::to_string(static_cast<float>(kFadeHostMsPerTick) / 1000.0f) +
+          " (CHOSEN: tied to fade_host_ms_per_tick so one resume's wall-clock delta matches one tick, see "
+          "setFrameTime() call above)" +
           " (watchdog: same constant as host.h's own kHookWatchdogInstructionBudget, not independently chosen)");
     mline("missions_with_script_found=" + std::to_string(missionsFoundCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_existed=" + std::to_string(missionsStartExistedCount) + "/" + std::to_string(missions.size()));
@@ -2487,6 +2740,26 @@ int main(int argc, char** argv) {
           " errored:" + std::to_string(missionsStartErroredAfterResume) +
           " killed:" + std::to_string(missionsStartKilledAfterResume) +
           " (of the missions_with_start_suspended records, after the tick loop's scheduler passes)");
+    // probed_unresolved_names (DIAGNOSTIC ONLY, see --probe-unresolved-names'
+    // own usage text above): every distinct name the named-object resolution
+    // gate synthetically resolved during this run, so the probe's own effect
+    // on the numbers above is never silently invisible. Empty/omitted when
+    // the flag is off - this line only appears to avoid implying a probe
+    // happened when it didn't.
+    if (probeUnresolvedNames) {
+        const auto& probed = host.engineState().probedNames();
+        std::string namesJoined;
+        for (const auto& n : probed) {
+            if (!namesJoined.empty()) namesJoined += ", ";
+            namesJoined += n;
+        }
+        mline("probed_unresolved_names=" + std::to_string(probed.size()) +
+              " distinct name(s) synthetically resolved (DIAGNOSTIC, not real data): [" + namesJoined + "]");
+        mline("probed_field_reads=" + std::to_string(host.engineState().probedFieldReadCount()) +
+              " (DIAGNOSTIC: per-character/per-vehicle OPEN field reads that fell back to a labelled "
+              "placeholder because their owner was itself a probed name - see probedFieldOr()'s own doc "
+              "comment, engine_state.h)");
+    }
     mline("scheduler_passes=own_resumes:" + std::to_string(schedulerResumesTotal) +
           " own_thread_errors:" + std::to_string(schedulerOwnErrorsTotal) +
           " leftover_resumes:" + std::to_string(schedulerForeignResumesTotal) +
@@ -2534,6 +2807,9 @@ int main(int argc, char** argv) {
             row << " load_ok=" << (mr.loadOk ? 1 : 0) << " pcall_ok=" << (mr.pcallOk ? 1 : 0)
                 << " start_existed=" << (mr.startExisted ? 1 : 0) << " start_call_ok=" << (mr.startCallOk ? 1 : 0)
                 << (mr.startSuspended ? " start_suspended=1" : "") << " ticks_survived=" << mr.ticksSurvived << " stop_reason=[" << mr.stopReason << "]";
+            if (mr.startAfterTicks == "still_suspended")
+                row << " start_after_ticks=still_suspended waiting_at=["
+                    << (mr.startStillSuspendedAt.empty() ? "?" : mr.startStillSuspendedAt) << "]";
             if (!mr.firstErrorMessage.empty()) row << " first_error=[" << mr.firstErrorMessage << "]";
             if (!mr.firstUnimplementedStub.empty()) row << " first_unimplemented_stub=" << mr.firstUnimplementedStub;
         }

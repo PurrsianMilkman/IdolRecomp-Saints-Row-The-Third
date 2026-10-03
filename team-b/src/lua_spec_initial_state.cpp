@@ -135,6 +135,61 @@ void applySpecInitialState(EngineState& es) {
     es.objectResolves().set("-- Cutscene Script Group --", true);
     es.objectResolves().set("#PLAYER1#", true);
     es.objectResolves().set("#PLAYER2#", true);
+
+    // 9. player gender initial state (spec-lua-api-behaviour.md Sec16.8/
+    //    Sec16.8a, spec-save-format.md Sec10.4, spec-tables-customization.md
+    //    Sec16.2, 2026-10-02, CONFIRMED - disassembly + empirical). A freshly
+    //    constructed character object (0x00954340) holds the engine's own
+    //    "unspecified" sentinel pair, +0xa41 (gender) := 3, +0xa40 (race) :=
+    //    5 - but Sec16.8's own producer census shows no script ever observes
+    //    that raw pair in practice: by the time any Lua code can query the
+    //    player, game-start step 0x00708330 has already applied exactly one
+    //    of (a) a loaded save's own character-record bytes
+    //    (+0x203c/+0x203d, spec-save-format.md Sec10.4), (b) the
+    //    player_presets.xtbl row marked Default, or (c) a co-op guest
+    //    record. This host (tools/lua_host_run.cpp) never loads a real
+    //    .sr3save/.sr3s_pc/.sr3d_pc file anywhere in the mission drive -
+    //    checked directly, no reference to any save path in that file - so
+    //    path (a) never applies here, and path (c) needs a co-op session
+    //    which item 1 above confirms is absent at start; the applicable path
+    //    is always (b), the fresh-game default-preset step (0x008373d0).
+    //    The shipped data's one Default-marked player_presets.xtbl row is
+    //    "male_white": Gender=0 (male), Race=3 (white) - the record's own
+    //    +0x5d/+0x5c bytes (spec-tables-customization.md Sec16.2), using the
+    //    vocabulary 0=male/1=female/3=unspecified-sentinel for Gender
+    //    (0x00831fc0) and 0 asian/1 black/2 hispanic/3 white/
+    //    5=unspecified-sentinel for Race (0x00832000), both confirmed against
+    //    the shared string tables 0x01160028/0x01160030
+    //    (spec-lua-api-behaviour.md Sec16.8).
+    //    Only the gender byte has a modelled consumer in this host
+    //    (characterGender(), feeding character_get_gender/Sec28.21/the
+    //    player-rig accessor family of Sec28.12) - there is no
+    //    race/ethnicity-reading stub in this codebase to extend, so only
+    //    Gender is set here; Race stays unmodelled (not OPEN-by-omission,
+    //    just genuinely unused by any stub yet).
+    //    "#PLAYER1#" only: a second player's gender depends on the co-op
+    //    guest-record path (c), which stays OPEN - no "#PLAYER2#" character
+    //    object is even constructed while co-op is absent, so nothing here
+    //    would resolve it, and inventing a value for it would be exactly the
+    //    kind of guess this project's OpenValue discipline exists to refuse.
+    es.characterGender().set("#PLAYER1#", 0); // male - the shipped Default preset row
+
+    // 10. game clock initial state (spec-lua-api-behaviour.md Sec48.2,
+    //     2026-10-03, CONFIRMED - disassembly + the orchestrator's own
+    //     reconciliation of the single-player/host-session question).
+    //     Engine boot sets 13 May 2004 10:17:33; the new-game routine
+    //     (reached before any mission script runs) then rewrites ONLY the
+    //     time to 10:00:00, keeping the date. The one other initial-state
+    //     source, a world-start random-key snap, CONFIRMED never fires
+    //     without a co-op session object - this host never models one
+    //     (item 1 above) - and this host never loads a save (checked
+    //     directly, no save path referenced anywhere in tools/
+    //     lua_host_run.cpp), so the applicable path is always 10:00:00.
+    //     This closes the dlc3_m01/m19/etc. blocker: set_time_of_day's own
+    //     forward-delta arithmetic reads the CURRENT hour/minute first,
+    //     which previously had no initial value to read.
+    es.gameClock().hour.set(10);
+    es.gameClock().minute.set(0);
 }
 
 } // namespace sr3luahost

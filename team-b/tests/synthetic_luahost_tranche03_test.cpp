@@ -170,15 +170,18 @@ int main() {
     CHECK(es.vehicles().at("veh04").forceFlags.get(VehicleState::kRadioControlsLockedBit) ==
           VehicleState::kRadioControlsLockedBit); // gate false: replicate-only, NOT cleared
 
-    // Sec30.5 vehicle_is_vtol: unresolved -> false; resolved -> true only
-    // when vehicleClass == 4.
+    // Sec30.5/Sec33.1 vehicle_is_vtol: unresolved -> false; resolved -> true
+    // only when flyingType == 4 (the (+0xbf4)+0x2c field, unified under this
+    // name with Sec33's vehicle_is_helicopter/vtol_hover/vtol_jet during the
+    // merge of the two batches - was named vehicleClass in this batch's own
+    // original pass).
     es.objectResolves().set("veh05", false);
     ok(host, gp, "assert(vehicle_is_vtol('veh05') == false)");
     es.objectResolves().set("veh06", true);
     fails(host, gp, "vehicle_is_vtol('veh06')", "0xbf4");
-    es.getOrCreateVehicle("veh06").vehicleClass.set(2);
+    es.getOrCreateVehicle("veh06").flyingType.set(2);
     ok(host, gp, "assert(vehicle_is_vtol('veh06') == false)");
-    es.vehicles().at("veh06").vehicleClass.set(4);
+    es.vehicles().at("veh06").flyingType.set(4);
     ok(host, gp, "assert(vehicle_is_vtol('veh06') == true)");
 
     // ------------------------------------------------------------------

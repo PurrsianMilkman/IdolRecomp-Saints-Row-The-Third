@@ -65,6 +65,7 @@
 // type 0 on every scanline; NOT a general PNG reader) so the failure report
 // names actual differing pixels and a bounding box, not just "differs".
 
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -337,6 +338,86 @@ bool compareTextExact(const std::string& baselinePath, const std::string& freshP
         std::ostringstream head;
         head << diffCount << " line(s) differ (baseline " << la.size() << " lines, fresh " << lb.size()
              << " lines):\n"
+             << out.str();
+        report = head.str();
+    }
+    return pass;
+}
+
+// Masks wall-clock timing text before a byte-for-byte compare. `city` (9th
+// golden scene) is the first command whose own stdout embeds a real
+// measured duration on otherwise-deterministic lines (per-cell "NNN ms"
+// load times, "indexed in N.N s" texture-cache-build time) - real disk/CPU
+// jitter of a few hundred ms between two runs of the identical command,
+// confirmed directly (two runs of the exact same city_corner command
+// produced a byte-identical PNG - MD5 6aba93ef58eb420e0fae863d3be361c4 both
+// times - but differing ONLY in these timing numbers; every other field on
+// the same line, incl. prop/texture counts, stayed identical). Per this
+// file's own stated COMPARISON POLICY ("a fallback is added only if one
+// [concrete non-determinism] is [found]"), this masks ONLY a numeric run
+// immediately followed by " ms" or " s" (replaced with the literal "<T>"),
+// leaving every other character - including every count, name and
+// coordinate on the same line - byte-exact.
+std::string maskTimingText(const std::string& line) {
+    std::string out;
+    out.reserve(line.size());
+    size_t i = 0;
+    while (i < line.size()) {
+        if (std::isdigit(static_cast<unsigned char>(line[i]))) {
+            size_t j = i;
+            while (j < line.size() && (std::isdigit(static_cast<unsigned char>(line[j])) || line[j] == '.')) ++j;
+            size_t k = j;
+            if (k < line.size() && line[k] == ' ') ++k;
+            const bool isMs = line.compare(k, 2, "ms") == 0;
+            const bool isS = line.compare(k, 1, "s") == 0 &&
+                             !(k + 1 < line.size() && std::isalpha(static_cast<unsigned char>(line[k + 1])));
+            if (isMs || isS) {
+                out += "<T>";
+                i = j;
+                continue;
+            }
+        }
+        out += line[i++];
+    }
+    return out;
+}
+
+bool compareTextMaskingTiming(const std::string& baselinePath, const std::string& freshPath, std::string& report) {
+    std::ifstream fa(baselinePath), fb(freshPath);
+    if (!fa) {
+        report = "could not read baseline '" + baselinePath + "'";
+        return false;
+    }
+    if (!fb) {
+        report = "could not read fresh capture '" + freshPath + "'";
+        return false;
+    }
+    std::vector<std::string> la, lb;
+    std::string line;
+    while (std::getline(fa, line)) la.push_back(maskTimingText(line));
+    while (std::getline(fb, line)) lb.push_back(maskTimingText(line));
+
+    std::ostringstream out;
+    bool pass = true;
+    size_t n = la.size() > lb.size() ? la.size() : lb.size();
+    size_t diffCount = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const std::string a = i < la.size() ? la[i] : "<no line>";
+        const std::string b = i < lb.size() ? lb[i] : "<no line>";
+        if (a != b) {
+            pass = false;
+            ++diffCount;
+            if (diffCount <= 8) {
+                out << "  line " << (i + 1) << ":\n    baseline: " << a << "\n    fresh   : " << b << "\n";
+            }
+        }
+    }
+    if (pass) {
+        report = "identical after masking timing text (" + std::to_string(la.size()) + " lines)";
+    } else {
+        std::ostringstream head;
+        head << diffCount << " line(s) differ after masking timing text (baseline " << la.size() << " lines, fresh "
+             << lb.size() << " lines):\n"
              << out.str();
         report = head.str();
     }
@@ -818,6 +899,88 @@ SceneResult checkClmeshAirportControlTowerScene(const std::string& root, const s
     return r;
 }
 
+// The 9th golden scene (2026-10-03, orchestrator request): the new `city`
+// command (tools/sr3_viewer.cpp's multi-tile streaming viewer, see
+// runCity()'s own top comment) at a fixed camera position over the real
+// corner where 4 real hN cells from 3 different tiles (0916, 1016, 1015)
+// meet - the box-overlap corner at focus (-960, -700), where cell 1016h0's
+// box [-960,-800]x[-840,-700], 0916h1's [-1120,-960]x[-840,-700], 1015h2's
+// [-1120,-960]x[-700,-560] and 1015h3's [-960,-800]x[-700,-560] all touch,
+// confirmed directly from `city --list`'s own real centres before freezing
+// (not assumed). A single still frame, not a scripted flight: this is a
+// STATIC regression scene like every other golden here, not a re-run of the
+// implementing agent's own flight-log evidence. Same shape as
+// checkZoneTileScene()/checkClmeshLiteFixhScene() above (one real `city`
+// subcommand, one --capture PNG, one stdout capture, through the SAME fresh
+// tests/golden/_bin/sr3_viewer.exe build.bat already produces - no build.bat
+// change needed, `city` uses only readers that script already compiles for
+// `zone`/`clmesh`) - EXCEPT the stdout comparison uses
+// compareTextMaskingTiming() instead of compareTextExact(): `city` is the
+// first golden command whose own stdout embeds a real measured wall-clock
+// duration per line (the per-cell "NNN ms" load time, the one-time texture-
+// cache "indexed in N.N s" build time), a genuine, directly-confirmed source
+// of run-to-run non-determinism in TEXT even though the rendered PNG itself
+// is still byte-identical (see maskTimingText()'s own doc comment for the
+// confirmation). Within-cell prop placement is still the CHOSEN fake local
+// grid every other clmesh/city scene already uses (NOT real - see
+// runCity()'s own top comment) - this golden catches a regression in BOTH
+// which real cells stream in/out (tile lattice, box rule) AND how their real
+// textures resolve (the cross-archive texture-fallback this merge added),
+// the orchestrator's own stated reason for freezing this scene.
+SceneResult checkCityCornerScene(const std::string& root, const std::string& dataRoot) {
+    SceneResult r;
+    r.name = "city_corner (sr3_viewer city, 4-cell real tile-boundary corner, real textures)";
+
+    const std::string goldenDir = root + "\\tests\\golden\\city_corner";
+    const std::string workDir = root + "\\tests\\golden";
+    const std::string viewerExe = root + "\\tests\\golden\\_bin\\sr3_viewer.exe";
+    const std::string archive = dataRoot + "\\sr3_city_0.vpp_pc";
+    const std::string workStem = "city_corner";
+
+    if (!fileExists(goldenDir + "\\baseline_capture.png") || !fileExists(goldenDir + "\\baseline_stdout.txt")) {
+        r.status = "SKIP";
+        r.details.push_back("no frozen baseline under " + goldenDir);
+        return r;
+    }
+    if (!fileExists(viewerExe)) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe not found at " + viewerExe + " - run tests/golden/build.bat");
+        return r;
+    }
+
+    _mkdir((workDir + "\\_work").c_str());
+    // Same out path (forward slash, "_work/city_corner.png") and the same
+    // --eye/--yaw/--pitch the baseline was frozen with (tests/golden/
+    // city_corner/COMMAND.txt records the exact command) - sr3_viewer echoes
+    // the --capture argument back verbatim in its own "captured:" line, same
+    // caller-chosen-path convention every other scene here documents.
+    // --no-input makes the run deterministic (ignores the live keyboard);
+    // --frames 1 --capture-frame 0 captures the first (only) frame.
+    std::string cmd = "\"" + viewerExe + "\" city \"" + archive +
+                      "\" --eye -960 250 -700 --yaw 0 --pitch -75 --no-input --frames 1 --capture _work/" +
+                      workStem + ".png --capture-frame 0 > _work\\" + workStem + "_check_stdout.txt 2>&1";
+    int rc = runIn(workDir, cmd);
+    if (rc != 0) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe returned exit code " + std::to_string(rc));
+        return r;
+    }
+
+    bool allPass = true;
+    std::string report;
+    bool p1 = comparePngExact(goldenDir + "\\baseline_capture.png", workDir + "\\_work\\" + workStem + ".png", report);
+    r.details.push_back(std::string("capture.png : ") + (p1 ? "PASS - " : "FAIL - ") + report);
+    allPass = allPass && p1;
+
+    bool p2 = compareTextMaskingTiming(goldenDir + "\\baseline_stdout.txt",
+                                       workDir + "\\_work\\" + workStem + "_check_stdout.txt", report);
+    r.details.push_back(std::string("stdout      : ") + (p2 ? "PASS - " : "FAIL -\n" + report));
+    allPass = allPass && p2;
+
+    r.status = allPass ? "PASS" : "FAIL";
+    return r;
+}
+
 // The 8th golden scene, RE-FROZEN (orchestrator task, 2026-09-30, verifying
 // two leads against real bytes): a real 3-pass deferred-LIT `.clmesh_pc`
 // BUILDING render (G-buffer prepass -> real directional light -> real
@@ -1023,6 +1186,7 @@ int main(int argc, char** argv) {
     results.push_back(checkClmeshLiteFixhScene(root, dataRoot));
     results.push_back(checkClmeshAirportControlTowerScene(root, dataRoot));
     results.push_back(checkClmeshAirportControlTowerLitScene(root, dataRoot));
+    results.push_back(checkCityCornerScene(root, dataRoot));
 
     int failures = 0;
     std::printf("\n=== golden-scene regression check ===\n");

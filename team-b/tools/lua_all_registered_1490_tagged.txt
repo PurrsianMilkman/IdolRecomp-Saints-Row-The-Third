@@ -606,6 +606,7 @@ on_hud_screen_exit	gameplay
 on_human_killed	gameplay
 on_incapacitated	gameplay
 on_m21_player_choice	gameplay
+on_mission_item_drop	gameplay
 on_mission_item_pickup	gameplay
 on_mount	gameplay
 on_mover_destroyed	gameplay

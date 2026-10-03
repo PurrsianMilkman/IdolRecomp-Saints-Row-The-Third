@@ -347,7 +347,9 @@ bool BareThreadTable::resume(lua_State* L, uint16_t id, std::string& fetchError)
 
 BareThreadTable::PassResult BareThreadTable::schedulerPass(const std::vector<lua_State*>& states,
                                                             const BeforeRun& before, const AfterRun& after) {
-    // 0x00e0cf50 (Sec26.27, RESOLVED 2026-10-02, CONFIRMED - disassembly).
+    // 0x00e0cf50 (thread-table section, CONFIRMED - disassembly; see
+    // bare_globals.h's own class-top comment for the 2026-10-02 MAJOR
+    // CORRECTION to who calls it and when).
     PassResult result;
     size_t i = 0;
     while (i < records_.size()) { // the live count, re-read every step
@@ -613,8 +615,11 @@ int bare_assert_msg(lua_State* L) {
     return 0;
 }
 
-// get_frame_time (0x00e0f400), CONFIRMED: the float at 0x0132a0b0, widened;
-// 1/30 in the file image. Writer OPEN, so the value never changes here.
+// get_frame_time (0x00e0f400), CONFIRMED: the float at 0x0132a0b0, widened.
+// Writer now CONFIRMED (spec-lua-api-behaviour.md Sec37.2/Sec37.5): a raw,
+// unscaled, uncapped, unpaused measured wall-clock delta, refreshed every
+// main-loop frame. See BareGlobalsState::frameTime()/setFrameTime()'s own
+// comment for how this host models that value without a real wall clock.
 int bare_get_frame_time(lua_State* L) {
     logCall(L, "get_frame_time");
     pushFloat(L, upState(L)->frameTime());

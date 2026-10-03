@@ -41,10 +41,12 @@
 
 #include <array>
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 // sr3save::nameHash(): the engine's general lower-cased, seed-0, no-final-
@@ -60,6 +62,10 @@
 #include "sr3luahost/lua_c_api.h"
 #include "sr3luahost/open_state.h"
 #include "sr3save/save_crc.h"
+
+namespace sr3vintdoc {
+struct Document; // include/sr3vintdoc/vint_doc.h - EngineState::loadVintDocument
+}
 
 namespace sr3luahost {
 
@@ -354,28 +360,173 @@ struct CharacterState {
     // call site this predicate is never confirmed to share. OPEN until
     // set.
     OpenValue<bool> isAlive{"character alive/not-gone predicate (0x0096f4f0)", "spec-lua-api-behaviour.md Sec30.5"};
+
+    // --- Ranking tranche 05 (spec-lua-api-behaviour.md Sec33), batch 2026-10-02 ---
+
+    // ai_clear_priority_target (Sec33.2): the character's AI forced-target
+    // handle (human_ai_data/forced_target_handle), cleared to the null id
+    // pair by that call. No Lua-visible query of this field exists among
+    // this project's in-scope names; "" is this project's own chosen
+    // "null id pair" stand-in (same convention as onTakeDamageCallback's
+    // own empty-string default above).
+    std::string forcedTargetHandle;
+
+    // ai_set_in_scripted_cover (Sec33.2): AI force-flag byte +0x2bc bit
+    // 0x1 - the SAME physical byte ignoreAI above models bit 0x2 of
+    // (Sec33.2's own cross-reference). This minimal registry keeps the two
+    // bits as independent fields (stated simplification, not a shared bit
+    // word - same convention this header already uses throughout, see
+    // this struct's own top note) rather than retrofitting ignoreAI into a
+    // bit word.
+    OpenValue<bool> inScriptedCover{"AI force-flag byte +0x2bc bit 0x1 (in_scripted_cover)",
+                                    "spec-lua-api-behaviour.md Sec33.2"};
+
+    // ai_set_in_scripted_cover (false path) / ai_do_scripted_rush (Sec33.2/
+    // Sec33.3): the character's current "scripted action" id - CONFIRMED
+    // mechanism (a single id field this document's own scripted-action
+    // family writes, e.g. action 8 "take cover" elsewhere, 13 here, 22 for
+    // rush); the real-world meaning of each id beyond ones already named
+    // elsewhere is OPEN/HYPOTHESIS per entry, not claimed here.
+    OpenValue<int32_t> scriptedAction{"character scripted-action id", "spec-lua-api-behaviour.md Sec33.2/Sec33.3"};
+
+    // ai_do_scripted_rush (Sec33.3), "with a target" path: the rush
+    // target's own name - this project has no position data to copy the
+    // real target position into (stated simplification, same "record the
+    // raw request, not real physics" convention as MinimapIconRecord/
+    // ObjectIndicatorRecord above).
+    std::string scriptedRushTargetName;
+
+    // ai_pay_attention_to_position (Sec33.2): this project has no real
+    // position/coordinate data for any named object anywhere (stated,
+    // project-wide simplification) - records only the resolved source-
+    // object's own name and the derived attention mode (7 = true/"attend",
+    // 3 = false, CONFIRMED mapping; bit 0x4 of the real mode IS the Lua
+    // boolean, per spec).
+    std::string attentionSourceObjectName;
+    int32_t attentionMode = 0; // 0 = never called; else 7 or 3 (CONFIRMED values)
+
+    // boss_battle_matt_begin (Sec33.5): dword +0xec bit 0x4000 on the
+    // character literally named "Matt" - a new, generic per-character bit
+    // this header has not previously modeled (real-world meaning OPEN per
+    // spec). OpenBits32 since only this one bit is ever confirmed.
+    OpenBits32 flagsEc{"character dword +0xec", "spec-lua-api-behaviour.md Sec33.5"};
+
+    // player_revive (Sec32.3): object +0xcc8, 6 = "downed" (the same test
+    // Sec7.13 `human_is_downed` uses, cross-referenced there - that function
+    // itself is out of this batch's scope). Default 0 ("not downed") - this
+    // project's own chosen "alive, ordinary" default.
+    OpenValue<int32_t> lifeState{"character life-state field (+0xcc8)", "spec-lua-api-behaviour.md Sec7.13/Sec32.3"};
+    // Test-observable count of successful player_revive calls (downed ->
+    // processed). The real post-revive life-state value is not stated by
+    // Sec32.3 (HIGH CONFIDENCE only that the character is no longer downed
+    // afterward) - not modeled here, to avoid guessing a numeric value the
+    // spec itself doesn't give.
+    uint64_t reviveCount = 0;
+
+    // npc_go_idle (Sec32.4): count of AI-orders-sub-object resets (+0x510:
+    // clears several handles, zeroes several fields, resets 22 fixed-size
+    // slots - not individually modeled, only that a reset occurred is
+    // counted).
+    uint64_t aiOrdersResetCount = 0;
+
+    // --- turn_invulnerable (spec-lua-api-behaviour.md Sec3.7, re-touched by
+    // ranking tranche 14's own Sec46.1 bit-conflict resolution), batch
+    // 2026-10-02 -------------------------------------------------------
+
+    // Sec3.7: object +0x1c98 bit 0x20 ("invulnerable", 0x00946190) and bit
+    // 0x200 ("always apply player damage", 0x00946300). CONFIRMED (Sec3.7's
+    // own text): "Both setters are the SAME record-and-replicate idiom
+    // ...not a dead branch" - the double-gate (0x008ae480/0x008837a0) is
+    // modeled explicitly here, mirroring VehicleState::forceFlagGatePasses
+    // below (Sec30.5's identical shape for the vehicle side of this same
+    // function) - a deliberate choice NOT to simplify to "always write
+    // directly" the way ai_set_in_scripted_cover's own stated simplification
+    // does (Sec33.2), because Sec3.7's text is unusually explicit that this
+    // particular gate is real and tested, not a dead/unreachable branch.
+    OpenValue<bool> forceFlagGatePasses{"character force-flag double-gate (0x008ae480/0x008837a0)",
+                                        "spec-lua-api-behaviour.md Sec3.7"};
+    OpenBits32 forceFlags1c98{"character force-flag byte +0x1c98 (invulnerable 0x20 / always-apply-player-damage 0x200)",
+                              "spec-lua-api-behaviour.md Sec3.7"};
+    static constexpr uint32_t kInvulnerableBit1c98 = 0x20u;
+    static constexpr uint32_t kAlwaysApplyPlayerDamageBit1c98 = 0x200u;
+
+    // --- character_fake_revival_start/_end (Sec45.1, "ranking tranche 13"),
+    // batch 2026-10-02 --------------------------------------------------
+
+    // Dword +0xe4 bit 0x10000 ("fake revival in progress", HIGH CONFIDENCE -
+    // established together by both functions' own shared no-null-check
+    // shape, Sec45.1). A new per-character bit on a new dword, same
+    // "generic per-character bit this header has not previously modeled"
+    // convention as flagsEc above (Sec33.5).
+    OpenBits32 flagsE4{"character dword +0xe4", "spec-lua-api-behaviour.md Sec45.1"};
+    static constexpr uint32_t kFakeRevivalInProgressBit = 0x10000u;
+
+    // --- character_take_human_shield_check_done (Sec45.1), batch
+    // 2026-10-02 ---------------------------------------------------------
+
+    // The taker's own held-hostage name. Sec45.1's own text: "A character
+    // carries two separate hostage-handle fields, one for network-owned
+    // characters and one for locally-owned ones" - this project has no real
+    // networking layer (stated, project-wide simplification), so only the
+    // single, locally-owned field is modeled; CHOSEN, write-only in scope
+    // (no in-scope setter populates it - a test sets it directly, same
+    // "test sets it directly" convention as CharacterState::currentVehicleName
+    // above). Empty = "holds nothing".
+    std::string humanShieldHostageName;
+
+    // --- character_hidden (Sec45.1), batch 2026-10-02 (resumed session) ---
+
+    // Bit 0 of +0x3b. CONFIRMED (Sec45.1): "the same bit is the 'skip hidden
+    // object' test debris_flow_set_inactive's worker uses" - supports
+    // "object is hidden" as the real meaning. NOTE the inverted-from-usual
+    // unresolved behaviour lives in the STUB (lua_spec_confirmed_stubs.cpp),
+    // not here: "an unresolved name reads as hidden (true), not an error" -
+    // this field only ever holds the RESOLVED-case value.
+    OpenValue<bool> hiddenFlag{"character hidden flag (+0x3b bit 0)", "spec-lua-api-behaviour.md Sec45.1"};
+
+    // --- flee_to_navpoint (Sec44.5/Sec44.6), batch 2026-10-02 (resumed
+    // session) -----------------------------------------------------------
+
+    // CONFIRMED (Sec44.5): queues a per-character AI event (type 0x30) with
+    // the navpoint position and a threat handle, "silently dropped if the
+    // event pool is empty, the character is dead, or it is a player-class
+    // object." This project has no real AI-event free-list/pool to exhaust
+    // (same "no generic entity shape invented" boundary this header's own
+    // top note states) - the dead/player-class gates ARE modeled (the stub
+    // checks them before incrementing), but "pool empty" is not reachable
+    // here, so this counter undercounts only in that one, documented way.
+    // Plain counter, not OpenValue, matching aiOrdersResetCount's own
+    // precedent just above for "a reset/request occurred N times," not a
+    // specific record's own content.
+    uint64_t fleeToNavpointRequestCount = 0;
 };
 
 // vehicle_set_invulnerable_to_player_explosives / vehicle_disable_explosion_
 // and_damage_vfx / vehicle_set_special_override_never_ghost /
 // vehicle_clear_all_radio_locks / vehicle_is_vtol (spec-lua-api-behaviour.md
-// Sec30.5, "ranking tranche 03", 2026-10-02): one tracked vehicle-shaped
-// object. Same "keyed by the plain name string it was given" simplification
-// CharacterState's own top note already establishes for characters - the
-// real resolution chain Sec30.5's shared preamble describes (character-
-// redirect-when-driving, THEN the per-kind vehicle resolver, liveness, a
-// +0x68 gate, virtual slot +0x70) is NOT reproduced; every vehicle function
-// in this project's scope instead gates on the SAME shared objectResolves()
-// map every other object kind already uses (Sec29's own "one shared global
-// name map" finding - a vehicle name is just another name in that one map,
-// not a distinctly-resolved kind).
+// Sec30.5, "ranking tranche 03") and the vehicle cluster of ranking tranche
+// 05 (Sec33.1, batch 2026-10-02 - the first batch to need vehicle-shaped
+// state; merged into this one struct rather than two). Same "keyed by the
+// plain name string it was given" simplification CharacterState's own top
+// note already establishes for characters - the real resolution chain
+// Sec30.5's shared preamble describes (character-redirect-when-driving,
+// THEN the per-kind vehicle resolver, liveness, a +0x68 gate, virtual slot
+// +0x70) is NOT reproduced; every vehicle function in this project's scope
+// instead gates on the SAME shared objectResolves() map every other object
+// kind already uses (Sec29's own "one shared global name map" finding - a
+// vehicle name is just another name in that one map, not a distinctly-
+// resolved kind).
 struct VehicleState {
     // +0x1d7c/+0x1d7d force-flag bytes (Sec30.5, CONFIRMED structure, 4
     // bits total). Packed here as ONE 16-bit value inside one OpenBits32 -
     // this project's OWN choice, not a real combined engine field: the low
     // byte holds +0x1d7c's own bits 0x2/0x4 verbatim; the high byte holds
     // +0x1d7d's own bits 0x20/0x40 shifted left 8, so both real bytes fit
-    // one word without colliding.
+    // one word without colliding. NOTE: Sec33.1 separately tracks two MORE
+    // bits of this SAME +0x1d7c byte (0x8/0x10, see forceFlags1d7c below) -
+    // this project keeps them as independent fields rather than unifying
+    // into one bit-accurate byte model, since no in-scope function ever
+    // reads the byte back as a whole.
     OpenBits32 forceFlags{"vehicle force-flag bytes (+0x1d7c/+0x1d7d)", "spec-lua-api-behaviour.md Sec30.5"};
     static constexpr uint32_t kInvulnerableToPlayerExplosivesBit = 0x0002u; // +0x1d7c bit 0x2
     static constexpr uint32_t kRadioControlsLockedBit = 0x0004u;           // +0x1d7c bit 0x4
@@ -393,10 +544,165 @@ struct VehicleState {
     OpenValue<bool> forceFlagGatePasses{"vehicle force-flag double-gate (0x008ae480/0x008837a0)",
                                         "spec-lua-api-behaviour.md Sec30.5"};
 
-    // Shared vehicle fact (Sec30.5): "(+0xbf4)+0x2c equals 4 = VTOL".
-    // Read by vehicle_is_vtol; no in-scope setter writes it (a test sets
-    // it directly, same convention as CharacterState::stateEnum above).
-    OpenValue<int32_t> vehicleClass{"vehicle class ((+0xbf4)+0x2c)", "spec-lua-api-behaviour.md Sec30.5"};
+    // Shared vehicle fact, read by BOTH batches: vehicle_is_vtol (Sec30.5:
+    // "(+0xbf4)+0x2c equals 4 = VTOL") and vehicle_is_helicopter/
+    // vehicle_is_vtol_hover/vehicle_is_vtol_jet (Sec33.1: CONFIRMED values 3
+    // = helicopter, 4 = VTOL, tested by name) - ONE real field at the SAME
+    // offset, unified here under Sec33.1's name since more consumers use
+    // it; the field's own real identity ("class/definition record" +
+    // "flying-type enum") is HYPOTHESIS per Sec33.1's own text. No in-scope
+    // setter writes it (a test sets it directly, same convention as
+    // CharacterState::stateEnum above).
+    OpenValue<int32_t> flyingType{"vehicle flying-type enum ((+0xbf4)+0x2c)", "spec-lua-api-behaviour.md Sec30.5/Sec33.1"};
+
+    // vehicle_is_vtol_hover / vehicle_is_vtol_jet (Sec33.1): vehicle +0x5e8.
+    // CONFIRMED the two functions test disjoint {0,3}/{1,2} subsets; the
+    // real-world "hover vs jet" meaning of each value is HYPOTHESIS.
+    OpenValue<int32_t> vtolState{"vehicle VTOL hover/jet state (+0x5e8)", "spec-lua-api-behaviour.md Sec33.1"};
+
+    // vehicle_is_ready (Sec33.1): three independently-gated bits. Real-
+    // world meaning of the two "not ready" bits is OPEN per spec; the
+    // "fully set up" bit cross-links to vehicle_set_kneecappers's own
+    // deferred-write gate below (HIGH CONFIDENCE, same spec paragraph).
+    OpenValue<bool> notReadyBit3b{"vehicle not-ready flag (+0x3b bit 0)", "spec-lua-api-behaviour.md Sec33.1"};
+    OpenValue<bool> notReadyBit3a{"vehicle not-ready flag (+0x3a bit 0)", "spec-lua-api-behaviour.md Sec33.1"};
+    OpenValue<bool> fullySetUp{"vehicle fully-set-up flag (+0x33 bit 0x8)", "spec-lua-api-behaviour.md Sec33.1"};
+
+    // vehicle_never_flatten_tires (Sec33.1): double-gate setter, local bit
+    // +0x1d7b bit 0x1 (this project always applies the local write - see
+    // EngineState::replicateStateChange's own doc comment for why). Reader
+    // not traced per spec (OPEN) - no Lua-visible query of this bit is in
+    // scope, so that gap has no further effect here.
+    OpenBits32 forceFlags1d7b{"vehicle force-flags byte +0x1d7b", "spec-lua-api-behaviour.md Sec33.1"};
+    // vehicle_set_weapons_disarmed (Sec33.1): +0x1d7e bit 0x4.
+    OpenBits32 forceFlags1d7e{"vehicle force-flags byte +0x1d7e", "spec-lua-api-behaviour.md Sec33.1"};
+    // vehicle_set_sirenlights (Sec33.1): +0x1d7c bit 0x10 (flashing
+    // headlights) / bit 0x8 (siren lights) - a DIFFERENT byte from the two
+    // above (CONFIRMED distinct offsets).
+    OpenBits32 forceFlags1d7c{"vehicle force-flags byte +0x1d7c (headlight 0x10 / siren 0x8)",
+                              "spec-lua-api-behaviour.md Sec33.1"};
+    // vehicle_set_no_chase (Sec33.1): vehicle-AI sub-record (+0xc68) own
+    // sub-byte +5 bit 0x1 - CONFIRMED the SAME setter this document's
+    // existing vehicle_disable_chase entry reaches (out of this batch's
+    // own scope to implement), through an extra wrapper this project does
+    // not model (same "always apply the write directly" convention as
+    // every other double-gate setter in this header).
+    OpenBits32 vehicleAiForceFlags{"vehicle-AI force-flags byte (+0xc68)+5", "spec-lua-api-behaviour.md Sec33.1"};
+
+    // vehicle_set_kneecappers (Sec33.1): this project has no per-wheel
+    // physics/collision pool to simulate (48-vehicle fixed pool, CONFIRMED
+    // structure, stated simplification same as several `*_add_do` records
+    // elsewhere in this header) - only the two CONFIRMED gate outcomes are
+    // tracked: whether kneecappers are currently requested enabled, and
+    // whether that request is still deferred (requested before the
+    // vehicle was "fully set up", fullySetUp above).
+    bool kneecappersEnabled = false;
+    bool kneecappersDeferred = false;
+
+    // vehicle_set_sirenlights (Sec33.1): the vehicle-class enum
+    // ((+0xbf4)+0x4c4, a DIFFERENT field from flyingType above despite the
+    // shared +0xbf4 base - CONFIRMED distinct offsets) and the body-active
+    // gate (+0xbd0). The actual Wwise siren SOUND side effect is NOT
+    // modeled anywhere here (no Wwise event table in this project - same
+    // gap as game_audio_get_audio_id's own Wwise-hash resolver elsewhere).
+    OpenValue<int32_t> vehicleClass{"vehicle class enum ((+0xbf4)+0x4c4)", "spec-lua-api-behaviour.md Sec33.1"};
+    OpenValue<bool> bodyActive{"vehicle body-active flag (+0xbd0)", "spec-lua-api-behaviour.md Sec33.1"};
+
+    // vehicle_set_ambient (Sec33.1): +0x16c0 bit 0x1 marker, the vehicle-AI
+    // sub-record's mode/sub-mode (CONFIRMED values 6/0x11, HYPOTHESIS real-
+    // world meaning), and the speed-cap target this document's existing
+    // vehicle_speed_override entry's own setter receives (out of this
+    // batch's scope to implement its own Lua entry point) - stored
+    // UNCONVERTED per Sec33.1's own explicit "passes the number
+    // unconverted" finding, clamped to at most 1000.0.
+    OpenBits32 ambientFlags{"vehicle ambient marker byte +0x16c0", "spec-lua-api-behaviour.md Sec33.1"};
+    int32_t aiMode = 0;    // 0 = never set; CONFIRMED value when set: 6
+    int32_t aiSubMode = 0; // 0 = never set; CONFIRMED value when set: 0x11
+    bool hasSpeedCap = false;
+    double speedCapRaw = 0.0; // unconverted Lua number, clamped to <= 1000.0
+
+    // vehicle_spotlight_is_target_spotted (Sec33.1): the side effect this
+    // project CAN model (re-aiming the spotlight at the resolved target,
+    // every call) is tracked; the actual range/angle/raycast boolean test
+    // needs real position/geometry data this project has nowhere in its
+    // state (no coordinate system at all, stated project-wide
+    // simplification) - NOT modeled, refused as OPEN by the stub rather
+    // than fabricated (same convention as game_audio_get_audio_id's
+    // Wwise-hash gap).
+    std::string spotlightTargetName; // last re-aimed target name, "" = none
+
+    // vehicle_engine_check_running (Sec38.1, "ranking tranche 06"): "On
+    // failure (unresolved, or a specific object flag clear) pushes false
+    // and returns 1 value; on success it calls the engine-running-bit
+    // getter, discards the result, and returns 0 values" - so "success"
+    // here means resolved AND this gate passes, NOT "the engine is
+    // actually running" (that bit is read and thrown away either way,
+    // CONFIRMED - the mandated "structurally can never answer true"
+    // quirk). The exact real bit this "specific object flag" tests is not
+    // named by address in scope - this project's own minimal stand-in,
+    // scoped only to this one query. OPEN until set.
+    OpenValue<bool> engineCheckGatePasses{"vehicle_engine_check_running success gate (a specific object flag)",
+                                          "spec-lua-api-behaviour.md Sec38.1"};
+
+    // --- vehicle_set_vulnerable (Sec20.1) / turn_invulnerable (Sec3.7) /
+    // vehicle_is_invulnerable (Sec46.5) - ranking tranche 14's own Sec46.1
+    // bit-conflict resolution, batch 2026-10-02 -------------------------
+
+    // Vehicle +0x1d7a, bit 0x01 ("invulnerable") / bit 0x02 ("always apply
+    // player damage"). RESOLVED 2026-10-02 (ranking tranche 14, Sec46.1):
+    // bit 0x01 is CONFIRMED correct by direct disassembly of the merge
+    // idiom (Sec3.7 was right all along); Sec20.1's own prior "bit 0x8"
+    // reading was the error, now corrected in the spec text itself. A
+    // DIFFERENT byte from forceFlags/forceFlags1d7b/forceFlags1d7c/
+    // forceFlags1d7e above (all CONFIRMED distinct offsets, Sec30.5/Sec33.1).
+    OpenBits32 forceFlags1d7a{"vehicle force-flags byte +0x1d7a (invulnerable 0x01 / always-apply-player-damage 0x02)",
+                              "spec-lua-api-behaviour.md Sec3.7/Sec20.1/Sec46.1"};
+    static constexpr uint32_t kInvulnerableBit1d7a = 0x01u;
+    static constexpr uint32_t kAlwaysApplyPlayerDamageBit1d7a = 0x02u;
+
+    // --- vehicle_lights_on (Sec46.5, "ranking tranche 14") - a faithful
+    // naming trap, NOT "fixed": vehicle_lights_on(v, false) does NOT turn
+    // the lights off - it clears BOTH the force-on and force-off flags,
+    // returning the lights to automatic control (CONFIRMED). The true-path's
+    // own exact flag combination beyond "force on" is not separately given
+    // by this tranche's text - this project's own minimal, stated choice:
+    // true sets force-on and clears force-off (the natural complement of
+    // the CONFIRMED false-path's "clear both").
+    OpenBits32 lightsForceFlags{"vehicle headlight force-on/force-off flags (naming trap: false = automatic, not off)",
+                                "spec-lua-api-behaviour.md Sec46.5"};
+    static constexpr uint32_t kLightsForceOnBit = 0x1u;
+    static constexpr uint32_t kLightsForceOffBit = 0x2u;
+
+    // --- vehicle_tire_indicators_alive (Sec46.5) - a faithful naming trap:
+    // reports 8 ("all alive") whenever the vehicle's tire-indicator object
+    // is simply DISABLED, not actually alive (CONFIRMED). This project has
+    // no real per-tire alive/damage simulation (same gap as
+    // kneecappersEnabled's own "no per-wheel physics pool" precedent,
+    // Sec33.1) - only the disabled-object short-circuit is modeled; test-
+    // settable, OPEN until set.
+    OpenValue<bool> tireIndicatorObjectDisabled{"vehicle tire-indicator object disabled flag",
+                                                "spec-lua-api-behaviour.md Sec46.5"};
+
+    // --- vehicle_turret_base_to_do (Sec46.4) - batch 2026-10-02 ---------
+
+    // Whether the vehicle's seat 0 is occupied - gates the CONFIRMED null-
+    // read crash (Sec46.4's own text: "a resolvable vehicle that has a
+    // seat-0 occupant"). This project has no real seat/occupant array (same
+    // gap as kneecappersEnabled's own "no per-wheel physics pool" precedent)
+    // - test-settable only, OPEN until set.
+    OpenValue<bool> seat0Occupied{"vehicle seat-0 occupant present", "spec-lua-api-behaviour.md Sec46.4"};
+
+    // --- vehicle_set_tire_durability / vehicle_set_tire_damage_multiplier
+    // (Sec46.5), batch 2026-10-02 (resumed session) ----------------------
+
+    // CONFIRMED (Sec46.5): both setters "silently ignore any value <= 0
+    // (the field can never be reset to 0 from Lua this way)" - the stub
+    // enforces that gate before calling set(), so these are only ever
+    // known holding a value > 0. The real numeric unit/range is OPEN (not
+    // stated beyond "a value"); no in-scope Lua getter reads either field
+    // back, so nothing downstream depends on a specific default.
+    OpenValue<double> tireDurability{"vehicle tire durability", "spec-lua-api-behaviour.md Sec46.5"};
+    OpenValue<double> tireDamageMultiplier{"vehicle tire damage multiplier", "spec-lua-api-behaviour.md Sec46.5"};
 };
 
 // vint_object_find (spec-lua-bindings.md Sec15, folded in mid-task per the
@@ -413,6 +719,13 @@ struct VehicleState {
 // the real, CONFIRMED "not found" path (returns 0.0), which is itself
 // correct, real behavior for a never-populated object space, not a
 // simplification of the return contract itself.
+//
+// UPDATE 2026-10-03: no longer test-only. EngineState::loadVintDocument()
+// is a real loading path - a parsed `.vint_doc` (sr3vintdoc::parseDocument,
+// layout CONFIRMED in spec-vint-doc-format.md at main 67455c3) becomes one
+// VdoObject per element/animation record, with real names, parents, first
+// children and file-applied properties. Hosts that never load a document
+// (every existing test) see exactly the old behaviour.
 struct VdoObject {
     std::string name;
     // Real, CONFIRMED-mechanism hash of `name` (FUN_00D9E740, lower-cased,
@@ -439,6 +752,29 @@ struct VdoObject {
     // honestly takes the real, CONFIRMED "no children" path unless a test set
     // one up directly.
     uint32_t firstChildHandle = 0;
+
+    // --- Set only by EngineState::loadVintDocument (2026-10-03), the real
+    // loading path; left empty/0 by registerVdoObjectForTesting(). ---
+    // The record's registered type name (`bitmap`, `group`, `tween`, ...),
+    // resolved through the document's string table (spec-vint-doc-format.md
+    // Sec4).
+    std::string typeName;
+    // The next record under the same parent in file order (0 = last). Not
+    // read by any Lua-visible function yet (vint_object_next_sibling is not
+    // implemented); kept so the tree's sibling order is not lost.
+    uint32_t nextSiblingHandle = 0;
+    bool fromDocument = false;
+};
+
+// One document loaded by EngineState::loadVintDocument (2026-10-03).
+struct LoadedVintDocument {
+    std::string name;          // the caller's document name, e.g. "cmp_mission.vint_doc"
+    uint32_t handle = 0;       // this project's own document handle (see loadVintDocument)
+    std::string luaScriptFile; // metadata "lua_script_file", "" if absent
+    std::vector<uint32_t> elementHandles;   // top-level elements (header +0x1A), file order
+    std::vector<uint32_t> animationHandles; // top-level animations (header +0x1C), file order
+    size_t objectCount = 0;    // every record, recursively
+    size_t propertyCount = 0;  // every applied property, over all records
 };
 
 // vint_dataitem_get (spec-lua-bindings.md Sec19.2): one generic captured Lua
@@ -488,6 +824,35 @@ struct VintDataResponderRecord {
     // dispatch, FUN_00e1e660, was not independently decompiled this pass and
     // is not modeled - see EngineState::dataResponderRequest's own doc comment).
     int dispatchAttempts = 0;
+};
+
+// pause_map_stag_current_district_control / pause_map_stag_takeover_do_reward
+// (spec-lua-api-behaviour.md Sec31.2/Sec31.4/Sec31.6): one zone-membership
+// record from the world singleton's own typed sub-list (0x03171a64, count
+// +0x198, u16 indices +0x190, object pointers +0x58 - a different sub-list
+// from this document's OTHER uses of the same global, e.g. the zscene
+// "nearest world object" note above or Sec30.3's ambient-emitter list - this
+// project has no real world-object-manager loader at all (same "no world
+// objects in this host" precedent already established for
+// zsceneNearestWorldObjectScene_ below) - populated ONLY via
+// EngineState::registerZoneMemberForTesting().
+struct ZoneMember {
+    float weight = 0.0f; // +0x3c, CONFIRMED (Sec31.2) - the member's weighted contribution to the zone total
+    bool owned = false;  // +0x3a bit 0x02, CONFIRMED (Sec31.4) - "owned by the player" (claimed via pause_map_stag_takeover_do_reward)
+};
+
+// pause_map_set_gps's own stag-mode branch (Sec31.3): the hovered-zone
+// global 0x0229a2e4, written by the pause map's per-update refresher from
+// the real cursor position (0x0084ba60, a zone-containment lookup this
+// project does not run). This project has no cursor/pointer-input system -
+// a test sets this fixture directly, standing in for "the player is
+// currently hovering this zone on the pause map." zoneHandle 0 = "nothing
+// hovered" (this project's own chosen sentinel, matching the selected-zone
+// global's own "0 = none selected" reading, Sec31.2).
+struct PauseMapHoveredZone {
+    uint32_t zoneHandle = 0;
+    bool hasParentDistrict = false; // the hovered zone's own +0x44 non-null (CONFIRMED gate, Sec31.3)
+    int32_t fieldPlus0x54 = 0;      // the hovered zone's own +0x54 (CONFIRMED gate: must be > 0, Sec31.3)
 };
 
 // The shared, cross-script, whole-run engine-state instance - one per
@@ -555,11 +920,12 @@ public:
     size_t characterCount() const { return characters_.size(); }
 
     // Same convention as getOrCreateCharacter/hasCharacter/characterCount
-    // above, for VehicleState (spec-lua-api-behaviour.md Sec30.5). Exposed
-    // by mutable reference so vehicle_clear_all_radio_locks can walk every
-    // vehicle this host currently knows about (this project's own stand-in
-    // for "every vehicle in the world object manager" - see VehicleState's
-    // own doc comment) and so tests can read/write state directly.
+    // above, for VehicleState (spec-lua-api-behaviour.md Sec30.5/Sec33.1).
+    // Exposed by mutable reference so vehicle_clear_all_radio_locks can walk
+    // every vehicle this host currently knows about (this project's own
+    // stand-in for "every vehicle in the world object manager" - see
+    // VehicleState's own doc comment) and so tests can read/write state
+    // directly.
     VehicleState& getOrCreateVehicle(const std::string& name);
     bool hasVehicle(const std::string& name) const;
     size_t vehicleCount() const { return vehicles_.size(); }
@@ -629,6 +995,23 @@ public:
     // trace/log later.
     static void replicateStateChange(const std::string& fieldTag, const std::string& objectName);
 
+    // --- 0x0095da50 (Sec14.1 CORRECTED + Sec33.3 action_play_synced_do) ---
+    //
+    // 0x0095da50 is a plain name -> synced-action-definition index lookup
+    // (hash the name, scan a global table, sentinel kSyncedActionNotFound
+    // for "not found") - NOT a hidden-argument identity match against an
+    // actor, as this document's own Sec14.1 entry (action_play_synced_state,
+    // out of this batch's scope to implement) previously read it before the
+    // 2026-10-02 correction this same investigation applied in place there.
+    // This project has no real table of synced-action definitions loaded
+    // anywhere (no in-scope function populates one), so every name honestly
+    // takes the real, CONFIRMED "not found" path unless a test registers
+    // one directly - same "never-populated object space" precedent as
+    // VdoObject/vint_object_find above.
+    static constexpr int32_t kSyncedActionNotFound = 0xffff;
+    void registerSyncedActionForTesting(const std::string& name, int32_t index);
+    int32_t lookupSyncedActionIndex(const std::string& name) const;
+
     // FUN_00DAB330 (spec-texture-format.md Sec8.2's "multiply-33/XOR"
     // hash: fold each character to lowercase, `hash = (hash*0x21) XOR c`,
     // then `hash % bucketCount`) - CONFIRMED, empirically vector-validated
@@ -693,6 +1076,15 @@ public:
     // Returns 0 (the real, CONFIRMED 0.0-on-failure return value, per
     // Sec15's own explicit "do not change it to -1" instruction) if
     // nothing matches either way.
+    // 2026-10-03, with real documents loadable: (a) the OPEN current
+    // document is read only when the answer depends on it - if no
+    // registered object anywhere carries `name`'s hash, "not found" holds
+    // in every document and 0 is returned without reading it (the same
+    // reasoning as the old "registry empty" shortcut, generalised); (b) on
+    // several matches the lowest handle wins, i.e. the first in file
+    // pre-order for a loaded document - CHOSEN, the real search order is
+    // not specified (Sec15 says only "looked up among that parent's children,
+    // or document-wide").
     uint32_t findVdoObject(const std::string& name, bool hasParent, uint32_t parentHandle,
                            bool hasDoc, uint32_t docHandle) const;
 
@@ -741,6 +1133,59 @@ public:
     // succeeds.
     uint32_t cloneVdoObject(uint32_t origHandle, bool hasParentArg, uint32_t parentHandleArg);
 
+    // --- Real document loading (2026-10-03) --------------------------------
+    //
+    // Builds the live element tree of one parsed document
+    // (sr3vintdoc::parseDocument) into this registry, the way the real
+    // binary loader (spec-vint-doc-format.md Sec4/Sec5 at 67455c3:
+    // 0x00e2a280 creates each element and attaches it to its parent, then
+    // 0x00e29860 applies its properties through the type's descriptor
+    // setters) does:
+    //  * a fresh document handle (this project's own counter, starting at 1
+    //    and separate from object handles - the real engine resolves
+    //    documents through a different resolver, FUN_00e1f330, Sec18.2/
+    //    Sec19.1; its numbering is not specified, same "plain incrementing
+    //    counter" convention as registerVdoObjectForTesting);
+    //  * one VdoObject per element AND per animation record (Sec4: the same
+    //    record shape, both lists under the same document), handles issued in
+    //    file pre-order, name hashed with sr3save::nameHash (Sec15), parent =
+    //    the enclosing record (0 for a top-level record - this project's
+    //    existing "document root" sentinel; whether the real engine puts a
+    //    root object above them is not specified), firstChildHandle = the
+    //    first child record (Sec18.1's +0x1c), nextSiblingHandle = the next
+    //    record under the same parent;
+    //  * every applied property stored into the SAME per-(object, name-hash)
+    //    bag vint_set_property writes and vint_get_property reads, as the
+    //    loader's setter call would leave it (CONFIRMED that the loader
+    //    applies file values through the descriptor's +0x08 setter, Sec5 /
+    //    spec-lua-bindings.md Sec9.3). Value mapping (CHOSEN, one Lua value per
+    //    stored component, matching Sec20.2's "N values per the type" rule):
+    //    tag 1 -> one number from a SIGNED 32-bit integer, tag 2 -> one
+    //    number from an UNSIGNED 32-bit integer (both CONFIRMED widths,
+    //    67455c3), tag 3 -> one number (float), tag 4 -> one string (the
+    //    document's string at that index), tag 5 -> one boolean, tag 6 ->
+    //    three numbers, tag 7 -> two numbers.
+    // Which list is applied: the effective properties for `activeResolution`
+    // (Sec5's override-then-baseline rule, ElementNode::effectiveProperties).
+    // The real active resolution comes from a resolution table this project
+    // does not model; the default "" (no override matches - what every
+    // resolution other than the only shipped override, "640x480", gives) is
+    // CHOSEN.
+    // NOT modelled, deliberately: per-type descriptor tables (a stored
+    // property whose hash the real type does not register would be consumed
+    // and skipped by the real loader; this project stores every property,
+    // since every shipped hash belongs to a name the shipped scripts use),
+    // property defaults for names the file does not store (only scale/anchor
+    // have a spec'd default, Sec7, and its seeding scope is OPEN), and the
+    // instancing of a `document`-typed record's referenced widget document
+    // (its `document_name` property names another .vint_doc - the runtime
+    // instancing is not specified anywhere).
+    uint32_t loadVintDocument(const std::string& docName, const sr3vintdoc::Document& doc,
+                              const std::string& activeResolution = std::string());
+    // nullptr for a handle loadVintDocument never issued.
+    const LoadedVintDocument* loadedVintDocument(uint32_t docHandle) const;
+    size_t loadedVintDocumentCount() const { return loadedVintDocuments_.size(); }
+
     // --- vint_get_time_index (Sec19.1) --------------------------------------
 
     // FUN_00e0ceb0's own stand-in reused a third time (Sec19.1's own text:
@@ -784,19 +1229,20 @@ public:
     // vint_get_property. Property names are hashed the real way (CONFIRMED,
     // Sec9.2/Sec20.1: the engine's own lower-cased string hash,
     // sr3save::nameHash here, same citation as VdoObject::nameHash above).
-    // Deliberately NOT modeled, all per this task's own established "deep
-    // multi-step dispatch chain this project has no real data table for"
-    // convention (see the Sec27/Sec28 batch's own file-header note): the
-    // real per-type property-descriptor table (Sec9.2's own FUN_00e290c0
-    // registration mechanism is not implemented anywhere in this project -
-    // no real catalog of property names/type-size codes exists to resolve a
-    // name against a concrete VDO subclass), the tween start_value/end_value
-    // redirect (Sec20.1's own "confirmed, concrete real-game quirk" -
-    // requires knowing a property's real type/size code from that same
-    // missing table), and the callback-claim mechanism (Sec20.1's own
-    // vint_callback_lua pool interaction, case 8 - same reason). Each would
-    // require guessing which properties are of which type, which no spec-
-    // *.md file or real game data this project parses provides.
+    // Tweens (CORRECTED 2026-10-03, spec-lua-bindings.md Sec20.1 as revised
+    // by Team A's U1 pass): setting start_value/end_value on a tween writes
+    // the TWEEN's own property - there is no write-through to the target
+    // object. Only the target property's type code is borrowed to PARSE the
+    // value. This bag already stores the value on the handle it was given,
+    // so the write behaviour matches; the type-code borrowing is part of the
+    // descriptor-driven parsing below, which is not implemented.
+    // Not implemented yet: the real per-type property-descriptor tables
+    // (Sec9.1/Sec9.2/Sec9.2a, now specified for all 13 element types by U1;
+    // using them is a separate follow-up task) - so no value is parsed or
+    // converted by its type/size code, values are stored exactly as the
+    // Lua caller passed them - and the callback-claim mechanism (Sec20.1's
+    // vint_callback_lua pool interaction, case 8), which needs those same
+    // type codes.
     //
     // `setVintProperty` silently does nothing if `handle` does not resolve
     // to a registered VdoObject (CONFIRMED, Sec20.1: "an unresolvable handle
@@ -835,6 +1281,77 @@ public:
     // pass either, per Sec21.2's own explicit "not traced" note).
     void dataResponderRequest(const std::string& name, bool validCallback, bool validMax);
     int dataResponderDispatchAttempts(const std::string& name) const;
+
+    // --- teleport_check_done / turn_to_check_done / move_to_check_done /
+    // vehicle_pathfind_check_done (spec-lua-api-behaviour.md Sec35, Sec15.17,
+    // Sec22.15, Sec9.10; batch 2026-10-02, the `teleport_coop` investigation -
+    // Sec35's own "why" note: this is the real blocker for 3 missions,
+    // dlc2_m01/m13/m19, parked forever inside `teleport_coop`, a game_lib.lua
+    // script helper, NOT a native). ---------------------------------------
+    //
+    // The real engine's own shared "scripted request" completion pool
+    // (Sec35.2): 200 records, each keyed by (object handle, kind) - kind 0 =
+    // turn-to, kind 2 = move-to/pathfind (shared by BOTH move_to_check_done
+    // AND vehicle_pathfind_check_done - Sec35.2/Sec22.15's own text), kind 4 =
+    // teleport. Status query CONFIRMED (Sec35.2, re-derived from the raw
+    // instruction stream, correcting an earlier inverted decompile-based
+    // reading): 0 = a request exists and is still pending; 1 = a request
+    // exists and is done (released back to the free list as a side effect of
+    // THIS very read, matching the real engine's own release-on-read
+    // behavior); 2 = no matching request at all (never issued, already
+    // consumed, superseded, or an unresolved name). This project has no real
+    // handle-resolution mechanism (this header's own top note) and models no
+    // request-ALLOCATING native in scope - `teleport`, `turn_to`, `move_to`,
+    // and `vehicle_pathfind_navmesh_do` all remain generic logging stubs, out
+    // of this task's own scope - so the pool is keyed by the plain Lua name
+    // string directly (same convention as CharacterState) and is populated
+    // ONLY via registerScriptedRequestForTesting(), never by any in-scope Lua
+    // call. This is not a guess: per Sec35.6's own explicitly-endorsed
+    // "Minimum correct model," a host that models no asynchronous request at
+    // all correctly answers "done" (status 2, no request) for every real
+    // call - the honest, CONFIRMED answer for an unmodeled allocator, not a
+    // simplification of the query's own CONFIRMED mechanism/polarity.
+    static constexpr int kScriptedRequestKindTurnTo = 0;          // Sec35.2
+    static constexpr int kScriptedRequestKindMoveOrPathfind = 2;  // Sec35.2
+    static constexpr int kScriptedRequestKindTeleport = 4;        // Sec35.2
+
+    // Test/setup-only entry point (see this section's own doc comment above
+    // on why no in-scope Lua call ever populates this pool).
+    void registerScriptedRequestForTesting(const std::string& name, int kind, bool done);
+
+    // The shared status query itself (Sec35.2's own 3-code result, CONFIRMED,
+    // corrected polarity), consuming (erasing) the record on a genuine "done"
+    // read, exactly like the real engine's `0x006f6380`/`0x006f6040` pair.
+    int scriptedRequestStatusCode(const std::string& name, int kind);
+
+    // teleport_check_done (Sec15.17) / turn_to_check_done / move_to_check_done
+    // (Sec22.15 - see that stub's own doc comment in
+    // lua_spec_confirmed_stubs.cpp for what of its fuller 8-argument body is
+    // deliberately NOT modeled): the shared boolean convention all three
+    // push, CONFIRMED (Sec35.2): `status != 0` - true for "done" or "no
+    // request," false only while genuinely pending.
+    bool scriptedRequestCheckDone(const std::string& name, int kind) {
+        return scriptedRequestStatusCode(name, kind) != 0;
+    }
+
+    // vehicle_pathfind_check_done (Sec9.10, the REFERENCE reading Sec35.2's
+    // own cross-check cites as "already correct"): the real wrapper resolves
+    // the vehicle AND checks for an occupant/part in slot 0 (most plausibly a
+    // driver check, Sec9.10's own text) BEFORE ever consulting the shared
+    // pool; failing either converges on the SAME literal fallback constant
+    // the pool's own "no request" code already uses, 2.0 (Sec9.10: "the SAME
+    // numeric code the success path itself uses... both routes converge on
+    // one consistent answer"). This project has no vehicle-resolution/
+    // occupant registry (same "no invented entity system" boundary as
+    // CharacterState's own top note) - every name defaults UNRESOLVABLE,
+    // which is itself the real, CONFIRMED fallback path for an unmodeled
+    // vehicle, not a guess. setVehiclePathfindResolvableForTesting() is the
+    // only way to open the gate, so a test can still exercise the shared
+    // pool's own 0/1/2 polarity through this wrapper.
+    void setVehiclePathfindResolvableForTesting(const std::string& vehicleName, bool resolvable);
+    // Pushed AS A NUMBER by the real native (CONFIRMED, Sec9.10 - NOT a
+    // boolean, unlike the three siblings above): the raw 0/1/2 status code.
+    double vehiclePathfindCheckDoneCode(const std::string& vehicleName);
 
     // --- store_vehicle_get_state (Sec10.1) ----------------------------------
 
@@ -976,6 +1493,38 @@ public:
     // this whole map exists to honour) - do not widen this pre-population
     // beyond the five literals without new CONFIRMED spec text.
     OpenValueMap<bool>& objectResolves() { return objectResolves_; }
+
+    // DIAGNOSTIC ONLY (tools/lua_host_run.cpp's --probe-unresolved-names
+    // flag, off by default, never enabled by any normal code path or test):
+    // widens objectResolves() to synthetically resolve any miss, and
+    // remembers which names were synthesized so probedFieldOr() below can
+    // extend the same diagnostic stance to a per-character/per-vehicle OPEN
+    // field whose real value this project could never compute for a
+    // SYNTHETIC name anyway (e.g. max hit points depends on the character's
+    // own preset, Sec34.2 - a probe object has no preset, only a fabricated
+    // "resolves" placeholder, so refusing to also fabricate ITS value would
+    // just move the same "is this a real name" question one field deeper
+    // without answering anything new). Real, legitimately-resolved names
+    // are never affected by either mechanism.
+    void enableUnresolvedNameProbe() { objectResolves_.enableProbeFallback(true, &probedNames_); }
+    bool isProbedName(const std::string& name) const { return probedNames_.count(name) != 0; }
+    const std::unordered_set<std::string>& probedNames() const { return probedNames_; }
+    uint64_t probedFieldReadCount() const { return probedFieldReadCount_; }
+
+    // DIAGNOSTIC ONLY (see enableUnresolvedNameProbe() above): `v` as normal
+    // if known; if OPEN and `ownerName` is itself a probed (synthetic) name,
+    // returns `fallback` instead of throwing (test-observably counted, never
+    // silent); otherwise throws exactly as `v.get()` would (a real name's
+    // own real OPEN gap is never widened by this).
+    template <typename T>
+    T probedFieldOr(const OpenValue<T>& v, const std::string& ownerName, const T& fallback) {
+        if (v.known()) return v.get();
+        if (isProbedName(ownerName)) {
+            ++probedFieldReadCount_;
+            return fallback;
+        }
+        return v.get(); // throws OpenStateError: a real name's real OPEN gap
+    }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
     // batch 2026-10-01, lifecycle driver + scene table 2026-10-01 nnlt text;
@@ -1715,6 +2264,906 @@ public:
     }
     int teamRelationOobGuardCount() const { return teamRelationOobGuardCount_; }
     void recordTeamRelationOobGuard() { ++teamRelationOobGuardCount_; }
+    // --- Ranking tranche 05 (Sec33), batch 2026-10-02: non-vehicle, non-
+    // character state. See each function's own trampoline doc comment
+    // (lua_spec_confirmed_stubs.cpp) for the full citation. -------------
+
+    // action_sequence_end (Sec33.3): this project has no real "scripted
+    // cutscene sequence" object, "tracked handle," or per-player scripted-
+    // camera/target field elsewhere - a self-contained, test-observable
+    // stand-in: a shared "sequence active" flag and per-player scripted-
+    // camera/target names, cleared by this call; a combined tracked-handle
+    // release count (the real body releases up to 2 distinct handles;
+    // nothing else in scope distinguishes them); a host-only broadcast
+    // count (opcode 0x49, byte value 2, CONFIRMED gated on coopLocalIsHost()).
+    struct ActionSequence {
+        bool active = false;
+        std::string localScriptedCameraTarget;
+        std::string remoteScriptedCameraTarget;
+        int trackedHandleReleaseCount = 0;
+        int hostBroadcastCount = 0;
+    };
+    ActionSequence& actionSequence() { return actionSequence_; }
+    void actionSequenceEnd();
+
+    // audio_set_listener_override / audio_clear_listener_override
+    // (Sec33.4): CONFIRMED - both always store an id (clear stores the
+    // null id) and always send a record, no authority gate - this
+    // project's own no-op replicateStateChange stand-in models the
+    // "always sends" record. The per-frame position/orientation snapshot
+    // and listener substitution are NOT modeled (no position/camera data
+    // anywhere in this project, stated project-wide simplification).
+    std::string& audioListenerOverrideTarget() { return audioListenerOverrideTarget_; }
+
+    // audio_any_conversation_playing (Sec33.4): CONFIRMED mechanism - loops
+    // every session member's own slot on a named per-session channel
+    // ("mission_conv" here; the spec's own text notes this is "a generic,
+    // reusable mechanism ... one such channel among possibly several").
+    // This project tracks no per-member array anywhere (CoopSession above
+    // is a handful of summary predicates, not a member list) - collapsed
+    // to one "is anyone active on this channel" flag per channel name, a
+    // stated simplification; OPEN until a test sets it.
+    OpenValueMap<bool>& conversationChannelActive() { return conversationChannelActive_; }
+
+    // waiting_for_player_dialog (Sec33.5): CONFIRMED reference-counted
+    // show/hide, including the real, confirmed hazard this project
+    // reproduces deliberately: neither this function's own show nor hide
+    // path ever clears "currently shown" (only an untraced third writer,
+    // out of scope, does) - so once a real display happens, currentlyShown
+    // stays true for the rest of the run, same as the real engine. The
+    // "suppressing game-state check" gating whether a show actually
+    // displays is NOT modeled (this project has no such check anywhere) -
+    // every show that isn't already "shown" is treated as actually
+    // displaying, a stated simplification.
+    struct WaitingForPlayerDialog {
+        int refCount = 0;
+        bool pending = false;
+        bool currentlyShown = false;
+        int showBroadcastCount = 0;
+        int hideBroadcastCount = 0;
+    };
+    WaitingForPlayerDialog& waitingForPlayerDialog() { return waitingForPlayerDialog_; }
+
+    // auto_pickup_disable (Sec33.5): CONFIRMED - writes a named, session-
+    // synchronized variable "allow_weapon_auto_pickup" off; no in-scope
+    // function reads it back, and the spec text gives no confirmed initial
+    // value, so this project's own chosen default (true, "enabled") only
+    // matters for a test that checks it before any call - same "write-
+    // only in scope, plain chosen default" convention as cribWeaponAddEnabled_.
+    bool& allowWeaponAutoPickup() { return allowWeaponAutoPickup_; }
+    // =====================================================================
+    // pause-map stag mode / district control (spec-lua-api-behaviour.md
+    // Sec31) + pause_map_tutorial_mode (Sec32.1) - batch 2026-10-02.
+    // =====================================================================
+
+    // 0x0229a317 - the SAME global Sec27.12's `game_autosave` already reads
+    // (autosave().fourthFlagNonzero: "0x0229a317 nonzero" blocks autosave -
+    // Sec31.5's own cross-reference: "the autosave gate... autosave is
+    // suppressed while stag mode is on"). Reused directly rather than
+    // duplicated, so a stag-mode write from the pause-map functions below is
+    // honestly visible to the autosave gate too, and vice versa.
+    OpenValue<bool>& pauseMapStagMode() { return autosave_.fourthFlagNonzero; }
+
+    // 0x0229a318 - the pause-map tutorial-mode flag `pause_map_is_tutorial_mode`
+    // (Sec31.1 table item 5) reads and `pause_map_tutorial_mode` (Sec32.1)
+    // writes. A SEPARATE global from the stag-mode flag above (Sec31.5's own
+    // text: the pause-map close handler "clears the tutorial-mode flag
+    // 0x0229a318... alongside the stag-mode flag" - two distinct bytes
+    // cleared together by one handler, not one byte read two ways).
+    OpenValue<bool>& pauseMapTutorialMode() { return pauseMapTutorialMode_; }
+
+    // 0x0229a2ac - the pause-map's own "currently selected zone" global
+    // (Sec31.2/Sec31.3). Default 0 ("no zone selected") - not independently
+    // confirmed via an explicit static-initializer/exhaustive-write-census
+    // check this pass (unlike 0x0153b530/0x0153b556's own dedicated such
+    // checks elsewhere in this file), but HIGH CONFIDENCE: Sec31.2's own
+    // CONFIRMED function body treats a 0 read as the normal, meaningful
+    // "nothing selected" case, not as missing information, and Sec31.3's own
+    // exhaustive 7-use census finds only two writers - pause_map_set_gps
+    // (sets a real zone) and a teardown helper (explicitly resets to 0) - so
+    // 0 is a real, reachable, well-understood state of this global, not a
+    // guess at unknown content.
+    uint32_t pauseMapSelectedZone() const { return pauseMapSelectedZone_; }
+    void setPauseMapSelectedZoneForTesting(uint32_t zoneHandle) { pauseMapSelectedZone_ = zoneHandle; }
+
+    // Test-only direct fixture for the hovered-zone global's own confirmed
+    // gate fields (see PauseMapHoveredZone's own doc comment for why this is
+    // test-only - no cursor/pointer-input system exists in this host).
+    void setPauseMapHoveredZoneForTesting(uint32_t zoneHandle, bool hasParentDistrict, int32_t fieldPlus0x54) {
+        pauseMapHoveredZone_ = PauseMapHoveredZone{zoneHandle, hasParentDistrict, fieldPlus0x54};
+    }
+
+    // Test-only zone-membership fixture (see ZoneMember's own doc comment
+    // above for why this registry is test-only).
+    void registerZoneMemberForTesting(uint32_t zoneHandle, float weight, bool owned) {
+        zoneMembersByZone_[zoneHandle].push_back(ZoneMember{weight, owned});
+    }
+    // Test-only direct read, so a test can verify pause_map_stag_takeover_do_reward's
+    // own claiming effect (ZoneMember::owned flipping true). Returns nullptr
+    // for a zone with no registered members (including zone handle 0).
+    const std::vector<ZoneMember>* zoneMembersForTesting(uint32_t zoneHandle) const {
+        auto it = zoneMembersByZone_.find(zoneHandle);
+        return it == zoneMembersByZone_.end() ? nullptr : &it->second;
+    }
+
+    // pause_map_stag_current_district_control's own CONFIRMED computation
+    // (Sec31.2): owned-weight / total-weight for the given zone, or 1.0 when
+    // total <= 0 (including NaN) - CONFIRMED, including the "a zone with no
+    // registered members" case (an unregistered zoneHandle, e.g. 0 on the
+    // no-selection path, naturally has total==0 here, matching Sec31.2's own
+    // "in practice over members with no zone, giving 1.0" reading exactly -
+    // no special-casing of zone 0 is needed, the general formula already
+    // produces it).
+    double pauseMapZoneControlFraction(uint32_t zoneHandle) const;
+
+    // pause_map_set_gps's own CONFIRMED stag-mode branch (Sec31.3) - see this
+    // method's own .cpp doc comment for the full gate. The real non-stag
+    // GPS-route behavior is not traced by this section and is not modeled
+    // (this project's own stated simplification - see the .cpp doc comment).
+    void pauseMapSetGpsStagBranch();
+
+    // pause_map_stag_takeover_do_reward's own CONFIRMED claim/clear-stag-
+    // mode/request-autosave mechanism (Sec31.6) - see this method's own .cpp
+    // doc comment for the full reasoning, including why this host refuses
+    // the real engine's own unchecked null-dereference safely instead of
+    // reproducing it (same §32.8 "flag, don't reproduce" precedent as the
+    // three crash paths below).
+    void pauseMapStagTakeover();
+
+    uint64_t pauseMapStagCompletionHookFiredCount() const { return pauseMapStagCompletionHookFiredCount_; }
+    uint64_t pauseMapTakeoverClaimedCount() const { return pauseMapTakeoverClaimedCount_; }
+    uint64_t pauseMapTakeoverAutosaveRequestCount() const { return pauseMapTakeoverAutosaveRequestCount_; }
+
+    // =====================================================================
+    // Ranking tranche 04 (spec-lua-api-behaviour.md Sec32), 25 names - batch
+    // 2026-10-02. Every name below resolves through this project's existing
+    // objectResolves() shared-resolver simplification (same "one-map-for-
+    // all-resolvers" convention the Sec27/Sec28 batch already established) -
+    // no new resolver concept is introduced.
+    // =====================================================================
+
+    // Sec32.1 `store_interface_is_active`: 0x022cce86 bit 0x1. OPEN writer
+    // (7 direct references, all reads, per spec - not traced).
+    OpenValue<bool>& storeInterfaceActive() { return storeInterfaceActive_; }
+
+    // Sec32.1 `spawn_region_max_spawn_dist`/`spawn_region_max_spawn_dist_reset`:
+    // 0x013092f0, a squared max-spawn-distance cap. CONFIRMED file-backed
+    // default FLT_MAX ("no limit"). No range check on the setter (CONFIRMED:
+    // negative squares positive, 0 makes the cap 0) - the stub applies that
+    // arithmetic directly (lua_spec_confirmed_stubs.cpp), this is a plain
+    // read/write pair.
+    float spawnRegionMaxSpawnDistSquared() const { return spawnRegionMaxSpawnDistSquared_; }
+    void setSpawnRegionMaxSpawnDistSquared(float v) { spawnRegionMaxSpawnDistSquared_ = v; }
+    void resetSpawnRegionMaxSpawnDist(); // .cpp: FLT_MAX, CONFIRMED "reset" value
+
+    // Sec32.1 `set_ped_override_density`: 0x01308af0. CONFIRMED file-backed
+    // default -1.0 ("no override").
+    float pedOverrideDensity() const { return pedOverrideDensity_; }
+    void setPedOverrideDensity(float v) { pedOverrideDensity_ = v; } // caller (the stub) applies the CONFIRMED >0/<=1.0/NaN branch logic before calling this
+
+    // The game clock (0x014ff338), Sec48 - corrects Sec32.1. hour/minute
+    // (0x014ff33c/0x014ff33d) are now CONFIRMED known from construction, not
+    // OPEN: Sec48.2's own resolved correction establishes that a fresh
+    // single-player game (no save loaded, no co-op session - this host
+    // never models either) always starts at 10:00:00 via the new-game
+    // routine, since the world-start random-key snap (the only other
+    // source) is CONFIRMED to never fire without a session object. This is
+    // what actually closed the dlc3_m01/m19/etc. blocker: those missions
+    // call set_time_of_day, whose own forward-delta arithmetic (below) reads
+    // the CURRENT hour/minute first - previously OPEN (no initial value),
+    // now a real read.
+    //
+    // set_time_of_day's real effect (Sec48.4, corrects Sec32.1's own "the
+    // clock now reads the requested time" assumption): the engine
+    // unconditionally snaps the clock to the NEAREST time-of-day KEY of the
+    // active definition after the forward jump - usually NOT leaving
+    // hour/minute equal to what was requested. The key list is loaded data
+    // this project does not have (OPEN, Sec48.5's own "Residual OPEN
+    // items"), so the real post-snap value cannot be computed, only that it
+    // changed. Modeled honestly: setTimeOfDay() computes and records the
+    // CONFIRMED forward delta (lastAdvanceSeconds, test-observable), then
+    // forgets hour/minute rather than fabricating the snapped result - a
+    // second set_time_of_day call (or a read inside this project's own
+    // per-frame advance below) correctly sees OPEN again past that point,
+    // the honest consequence of genuinely not knowing where the snap landed.
+    //
+    // Per-frame advance (Sec48.3, CONFIRMED mechanism): advanceFrame()
+    // advances by realSeconds * kTimeScale game-seconds, CHOSEN to be called
+    // once per this host's own modelled tick (tools/lua_host_run.cpp passes
+    // its own per-tick frame-time constant, matching get_frame_time's own
+    // per-resume value - see that call site's own doc comment). A no-op
+    // while hour/minute are unknown (advancing an unknown base is still
+    // unknown, not a value to fabricate). STATED SIMPLIFICATION: wraps
+    // within one 86400-second day (hour/minute/second only) and does not
+    // advance date/weekday/moon-day - nothing in scope reads those fields
+    // (grepped directly: only hour/minute are ever read via Lua), and no
+    // budget used by this project crosses a full in-game day (40x scale
+    // needs ~36 real minutes per in-game day; the longest run so far is a
+    // few real seconds). Revisit if a future budget or spec need ever
+    // requires the date fields.
+    struct GameClock {
+        OpenValue<int32_t> hour{"game clock hour byte (0x014ff33c)", "spec-lua-api-behaviour.md Sec32.1/Sec48.2/Sec48.4"};
+        OpenValue<int32_t> minute{"game clock minute byte (0x014ff33d)", "spec-lua-api-behaviour.md Sec32.1/Sec48.2/Sec48.4"};
+        int32_t second = 0; // CONFIRMED 0 at new-game (Sec48.2); not independently exposed to Lua in scope
+        static constexpr double kTimeScale = 40.0; // CONFIRMED (Sec48.1/Sec48.3), game-seconds per real second
+        int64_t lastAdvanceSeconds = 0;  // CONFIRMED computed total delta (forced non-negative via the hour-wrap rule), seconds
+        uint64_t advanceRequestCount = 0;
+        double frameAdvanceSecondsAccumulated = 0.0; // test-observable: total real seconds fed to advanceFrame()
+    };
+    GameClock& gameClock() { return gameClock_; }
+    void setTimeOfDay(int64_t newHour, int64_t newMinute); // .cpp
+    void gameClockAdvanceFrame(double realSeconds); // .cpp - Sec48.3
+
+    // Sec32.1 `satellite_weapon_mode_exit`: the satellite-weapon-controller
+    // singleton 0x0130eee8's own "active" gate, plus this project's own
+    // per-selector exit counters. **The 0x009df3d0 (remote co-op player)
+    // correction (Sec14.31/Sec32.8) is applied at this function's own call
+    // site** (lua_spec_confirmed_stubs.cpp): bit 0x2 only ever selects a
+    // player when playerRig().coopPlayerPresent is true (the CONFIRMED "no
+    // co-op session -> no remote entry" reading, not a "matching" lookup
+    // that might wrongly fall back to the local player).
+    struct SatelliteWeaponController {
+        OpenValue<bool> active{"satellite-weapon-controller active (0x0130eee8)", "spec-lua-api-behaviour.md Sec32.1"};
+        uint64_t localExitCount = 0;
+        uint64_t remoteExitCount = 0;
+    };
+    SatelliteWeaponController& satelliteWeapon() { return satelliteWeapon_; }
+    void satelliteWeaponExit(bool remote); // .cpp
+
+    // Sec32.2 character force-flag setters (write-only in scope, no Lua
+    // getter among these three names) - CHOSEN per-name maps, same
+    // "write-only, CHOSEN" convention as helicopterDontDeathSpiral above.
+    std::unordered_map<std::string, bool>& seatbeltForceFlag() { return seatbeltForceFlag_; }         // +0x1c9c bit 0x40
+    std::unordered_map<std::string, bool>& trailingAimForceFlag() { return trailingAimForceFlag_; }   // +0x1c9c bit 0x1
+    std::unordered_map<std::string, bool>& neverTurnOnPlayerFlag() { return neverTurnOnPlayerFlag_; } // +0x2b9 bit 0x40 (AI sub-object)
+
+    // Sec32.3 `player_warp_to_shore_disable`: +0x28ad bit 0x2, write-only in
+    // scope (CHOSEN per-name map; always true per Sec32.3's own hardcoded
+    // setter argument).
+    std::unordered_map<std::string, bool>& warpToShoreDisabled() { return warpToShoreDisabled_; }
+
+    // Sec32.3 `skydive_setup_tank_bailout`: the mission-18 cargo-plane/tank
+    // set piece. No real name resolve at all (both vehicles are hardcoded
+    // literals, never argument-driven) - a plain counter trio, CONFIRMED
+    // per-stage branch structure; the named-vehicle-animation dispatch
+    // internals are not modeled.
+    struct SkydiveTankBailout {
+        uint64_t broadcastCount = 0;   // CONFIRMED: always sent, every stage, regardless of vehicle existence
+        uint64_t armedCount = 0;       // stage 1
+        uint64_t animStartedCount = 0; // stage 2
+    };
+    SkydiveTankBailout& skydiveTankBailout() { return skydiveTankBailout_; }
+
+    // Sec32.3 `qte_human_is_used`: two fixed QTE slot records. This
+    // project's own name-keyed simplification of "the slot's owning player
+    // is the local or remote co-op player depending on a session-indexed
+    // byte" (that real local/remote selection mechanism is itself
+    // HYPOTHESIS/OPEN per spec) - a test sets whichever name currently owns
+    // a slot directly (by whatever sentinel it chooses, e.g. "#PLAYER1#"),
+    // rather than this project re-deriving local-vs-remote identity from
+    // playerRig() here.
+    struct QteSlot {
+        bool active = false;
+        std::string owningPlayerName;
+        std::vector<std::string> participantNames; // the slot's up to five id-pair-identified participants, modeled by name
+    };
+    void setQteSlotForTesting(int index, bool active, std::string owningPlayerName, std::vector<std::string> participants);
+    bool qteHumanIsUsed(const std::string& name) const; // .cpp
+
+    // Sec32.4 `party_add_do`/`npc_is_in_party`: this project's own name-keyed
+    // stand-in for the real party-record lookup (0x005088c0, OPEN per spec).
+    // `membersByLeader` is bounded to 5 real adds per call, matching the
+    // real function's own fixed 5-slot local array (Sec32.4's own CONFIRMED
+    // structural bound) - NOT the full capacity/force-override/network-
+    // ownership-handoff/leader-kind-bit AI setup mechanism, which has no
+    // real data this project can reproduce.
+    struct PartyState {
+        std::unordered_map<std::string, std::vector<std::string>> membersByLeader;
+        // CONFIRMED real stack-overrun hazard (Sec32.4/Sec32.8: a 6th-or-
+        // later follower overwrites the saved return address and beyond) -
+        // NOT reproduced as an actual memory-unsafe crash; only flagged and
+        // counted (same "flag, don't reproduce" precedent as the other two
+        // crash paths this tranche finds, Sec32.8).
+        uint64_t overflowDetectedCount = 0;
+    };
+    PartyState& party() { return party_; }
+
+    // Sec32.5 `object_destroy`: this project's own minimal "was a destroy
+    // processed against a resolved object" record - the liveness check,
+    // capability-predicate gate and per-kind destroy virtual are OPEN/not
+    // modeled.
+    std::unordered_set<std::string>& destroyedObjects() { return destroyedObjects_; }
+
+    // Sec32.5 `object_indicator_remove_do`: counts the opcode 0x40 sub-tag 4
+    // record (bit 0x2 of the arg-2 bitmask) - this project builds no
+    // networking layer (see replicateStateChange's own doc comment above).
+    // Bit 0x1's own "clear every indicator" effect reuses
+    // CharacterState::objectIndicators directly (the stub clears that
+    // vector) rather than a separate field here.
+    uint64_t& indicatorRemoveRecordCount() { return indicatorRemoveRecordCount_; }
+
+    // Sec32.5 `shop_enable_nearest`: a test-only shop fixture (this project
+    // has no spatial/world-position system - the real "first within 15
+    // units, else closest within 75" distance search, and arg 1's own role
+    // in seeding the search origin, are not modeled; tests configure each
+    // candidate shop's own distance-tier flags directly). Iteration order =
+    // registration order, standing in for "the world object manager's shop
+    // sub-list" scan order.
+    struct Shop {
+        bool withinFifteen = false;
+        bool withinSeventyFive = false;
+        bool disabled = true; // this project's own "closed by default" choice - no CONFIRMED initial state given
+    };
+    std::vector<Shop>& shops() { return shops_; }
+    uint64_t& shopEnableRecordCount() { return shopEnableRecordCount_; } // the host-replicated opcode 0x45 sub-tag 7 record; no host/authority layer modeled, counted unconditionally
+
+    // Sec32.6 `item_show`: +0x3b bit 0x1 ("hidden"), write-only in scope
+    // (CHOSEN per-name map; item_show always clears it - "shows" - per
+    // Sec32.6's own text; the HYPOTHESIS sibling `item_hide` is out of this
+    // batch's scope and not implemented).
+    std::unordered_map<std::string, bool>& itemHidden() { return itemHidden_; }
+
+    // Sec32.6 `item_anim_play`: last-requested animation per item, split by
+    // the CONFIRMED branch (blend-transition vs single-state-start); the
+    // layer-slot internals and the exact flag-value meanings are OPEN/
+    // HYPOTHESIS per spec and are not modeled further than the branch
+    // itself.
+    struct ItemAnimState {
+        std::string lastBlendTransitionAnim;
+        std::string lastSingleStateAnim;
+        int lastFlag = 0; // CONFIRMED branch values 0x40/0x10; HYPOTHESIS real-world meaning
+        uint64_t blendTransitionCount = 0;
+        uint64_t singleStateStartCount = 0;
+    };
+    std::unordered_map<std::string, ItemAnimState>& itemAnimState() { return itemAnimState_; }
+
+    // Sec32.7 `radio_set_station`: per-vehicle(-or-character) radio state.
+    // `hasRadio`/`stationCount`/`stationRefused` are all OPEN (no real per-
+    // vehicle radio-table data this project parses); `currentStation` is
+    // this project's own plain tracked field (0 = "no station tuned").
+    struct VehicleRadio {
+        OpenValue<bool> hasRadio{"vehicle has a radio", "spec-lua-api-behaviour.md Sec32.7"};
+        OpenValue<int32_t> stationCount{"vehicle radio station count", "spec-lua-api-behaviour.md Sec32.7"};
+        OpenValueMap<bool> stationRefused{"vehicle radio station refused, by station number",
+                                          "spec-lua-api-behaviour.md Sec32.7"};
+        int32_t currentStation = 0; // 0 = "no station tuned" (this project's own choice; stations are CONFIRMED 1-based)
+        uint64_t recordSentCount = 0;
+    };
+    VehicleRadio& vehicleRadio(const std::string& name) { return vehicleRadios_[name]; }
+
+    // Sec32.7 `helicopter_shoot_vehicle`: the AI-drive-state gate per
+    // helicopter name, plus the shared fire dispatcher's own OPEN return
+    // value (Sec32.7: "its own return value is invisible in the decompiled
+    // view" - a SINGLE shared OpenValue, not per-call/per-name data, since
+    // this is a structural "we don't know this dispatcher's return contract
+    // on success" marker, not state belonging to any one helicopter).
+    struct Helicopter {
+        OpenValue<bool> aiDriveStateOk{"helicopter AI-drive-state gate", "spec-lua-api-behaviour.md Sec32.7"};
+    };
+    Helicopter& helicopter(const std::string& name) { return helicopters_[name]; }
+    OpenValue<bool>& helicopterFireDispatcherResult() { return helicopterFireDispatcherResult_; }
+
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec38/Sec39/Sec40
+    // ("ranking tranches 06/07/08") - see each field's own doc comment for
+    // citation/reasoning, and lua_spec_confirmed_stubs.cpp's own per-batch
+    // header comments for which of each tranche's 25 names this pass
+    // implements and why the rest stay generic stubs. -------------------
+
+    // vcust_preview_wheel_sizing (Sec38.5): the mandated crash guard. All 4
+    // vcust_preview_*/vcust_purchase_wheels entries share "no live
+    // customization target -> the vehicle pointer is zero, dereferenced
+    // unconditionally" (CONFIRMED, Sec38.5's own intro paragraph); this
+    // pass implements only vcust_preview_wheel_sizing (the one explicitly
+    // mandated), so this field is scoped to it alone - no real garage/
+    // customization-UI state exists elsewhere in this project to unify it
+    // with. See `targetLive`'s own doc comment just below for why this is
+    // a CHOSEN plain default rather than OPEN.
+    struct VcustPreview {
+        // CHOSEN default false, not OPEN: this project has no garage/
+        // customization-UI subsystem anywhere in scope, so no code path
+        // here ever establishes a live target - "false" is the honest
+        // depiction of THIS host's own behavior (never live), not a
+        // guess about the real engine's own variable at-rest state
+        // (same "never-populated registry is the honest default"
+        // precedent as EngineState::resolveTeamId()'s sentinel-9 default).
+        // A test may still set this true to exercise the non-guarded path.
+        bool targetLive = false;
+        uint64_t wheelSizingNullTargetGuardCount = 0; // HOST-SAFETY, test-observable only - not a real engine field
+    };
+    VcustPreview& vcustPreview() { return vcustPreview_; }
+    void recordVcustPreviewWheelSizingNullTargetGuard() { ++vcustPreview_.wheelSizingNullTargetGuardCount; }
+
+    // store_weapon_purchase_ammo (Sec38.3) / shared by any future
+    // *_purchase_*-style entry: this project's own minimal "player purse"
+    // stand-in - no real currency/economy system anywhere in this project.
+    // CONFIRMED: no affordability check in store_weapon_purchase_ammo at
+    // all; it charges the price and records the purchase even when the
+    // item lookup FAILS (a confirmed real quirk, not a bug to guard
+    // against). `tag` matches the real notification mechanism's own
+    // literal string (Sec38.3: `"weapon-ammo"`); `itemResolved` is always
+    // false from this host (no real store-list table in scope - the
+    // honest default for a never-populated registry, same precedent as
+    // EngineState::resolveTeamId()/findVdoObject()).
+    struct PurchaseRecord {
+        std::string tag;
+        double amountCharged = 0.0;
+        bool itemResolved = false;
+    };
+    double& playerCash() { return playerCash_; }
+    std::vector<PurchaseRecord>& purchaseLedger() { return purchaseLedger_; }
+
+    // skydive_move_to_do (Sec39.1): "the target resolves through the
+    // generic third-tier resolver with NO guard on failure: an absent/
+    // unresolved name leaves the target pointer at literal zero, and the
+    // function then unconditionally copies 12 bytes from address 0x40 into
+    // the character - a genuine access violation" (CONFIRMED real defect,
+    // new this tranche). HOST-SAFETY DEVIATION (not a spec fact): this
+    // host skips the equivalent copy on an explicitly-known-unresolved
+    // non-path target instead of performing it, counting the averted path
+    // here - "this project does not simulate crashes" (cf. group_get_
+    // next_npc, Sec28.5, the established precedent for this exact idiom).
+    int skydiveMoveToNullTargetGuardCount() const { return skydiveMoveToNullTargetGuardCount_; }
+    void recordSkydiveMoveToNullTargetGuard() { ++skydiveMoveToNullTargetGuardCount_; }
+
+    // Sec39.4 save-system UI cluster (save_system_save_game/_load_game/
+    // _cancel_coop_load): one shared singleton; slot records are a fixed
+    // table whose count is read from one field (OPEN - the real at-rest
+    // value/writer isn't given in scope). CONFIRMED real defect (HIGH
+    // CONFIDENCE per spec, sibling-confirmed): both the save-confirm
+    // callback and the load path bound the slot with `slot <= count`,
+    // accepting `slot == count` - one past the end of the table. The
+    // mandated faithful quirk: this host allows that exact off-by-one
+    // (not "correctly" rejecting it) and logs when it fires, rather than
+    // tightening the bound to `<`.
+    struct SaveSystemUi {
+        OpenValue<uint32_t> slotCount{"save-system UI slot-record count", "spec-lua-api-behaviour.md Sec39.4"};
+        uint64_t saveCallCount = 0;
+        uint64_t loadCallCount = 0;
+        uint64_t saveOffByOneCount = 0; // CONFIRMED-adjacent real defect: slot==count accepted (<=, not <)
+        uint64_t loadOffByOneCount = 0;
+        // save_system_cancel_coop_load's own state field (Sec39.4: "sets
+        // the save-system's own state field to 5 unless already there").
+        // CHOSEN write-only default - the real at-rest value is OPEN/not
+        // given in scope, same "CHOSEN write-only in scope" convention as
+        // CatMouseMinigame::selection above.
+        int32_t coopLoadState = 0;
+    };
+    SaveSystemUi& saveSystemUi() { return saveSystemUi_; }
+
+    // store_gang_show_question_marks / store_gallery_download_hide_list
+    // (Sec39.5): two further CONFIRMED-new null-dereference defects,
+    // guarded/logged rather than reproduced as crashes (this task's own
+    // explicit instruction - these are NOT the mandated faithful-quirk
+    // kind, they are plain original-game bugs this host must not
+    // simulate). store_gallery_download_hide_list's local-player half
+    // reuses the existing hasLocalPlayer() accessor above (the SAME
+    // "player 1 exists" concept cellphone_animate_start_do already reuses
+    // it for, Sec28.23) rather than inventing a second, separate local-
+    // player flag.
+    struct StorePreviewGuards {
+        // CHOSEN default false, not OPEN, same reasoning as VcustPreview::
+        // targetLive above: this project has no gang-customization-preview
+        // or gallery-list subsystem anywhere in scope, so neither asset
+        // ever resolves from this host's own default state. A test may
+        // set either true to exercise the non-guarded path.
+        bool gangPreviewAssetOrFallbackResolved = false;
+        bool gangPreviewShowingQuestionMarks = false; // CHOSEN write-only toggle, this project's own stand-in
+        uint64_t gangQuestionMarksNullGuardCount = 0;
+        bool galleryListObjectResolved = false;
+        uint64_t galleryHideListNullGuardCount = 0;
+    };
+    StorePreviewGuards& storePreviewGuards() { return storePreviewGuards_; }
+
+    // store_common_rotate_mouse_drag (Sec39.5): "reads mouse-delta values
+    // from three fixed stack slots, but only copies the real values in
+    // when a specific input-mode bit is set ... when clear, the stack
+    // slots are never initialized at all ... rotate[s] ... by a garbage
+    // angle derived from that uninitialized stack memory. A faithful
+    // reimplementation must treat 'mouse delta unavailable' as zero, not
+    // skip the rotation or read whatever happens to be on the stack."
+    // CHOSEN (host-safety stand-in for undefined behaviour, not a spec
+    // fact, per this task's own explicit instruction): this host has no
+    // real mouse-delta-capture layer at all (not modeled anywhere else in
+    // this codebase either), so BOTH the "bit clear" case (real
+    // uninitialized memory) and the "bit set" case (a real value this
+    // host has no source for) land on the same explicit, defined 0 -
+    // never raw/undefined C++ memory, never an invented nonzero value.
+    struct StoreCommonRotateMouseDrag {
+        double lastDeltaX = 0.0, lastDeltaY = 0.0, lastDeltaZ = 0.0;
+        uint64_t callCount = 0;
+    };
+    StoreCommonRotateMouseDrag& storeCommonRotateMouseDrag() { return storeCommonRotateMouseDrag_; }
+
+    // pcu_is_bra_category / pcu_is_underwear_category (Sec40.5): "dereference
+    // a null category record when the index is out of range" (CONFIRMED
+    // real defect). This project's own minimal stand-in for the real
+    // category table: a test populates each known index's own "kind" tag
+    // directly (no real category table in scope) - an index a test never
+    // populated takes the same "out of range" guarded path a real
+    // out-of-bounds index would.
+    struct PcuCategoryTable {
+        static constexpr int32_t kOther = 0, kBra = 1, kUnderwear = 2; // CHOSEN tags, this project's own enum
+        OpenValueMap<int32_t> kindByIndex{"PCU category record kind, by index", "spec-lua-api-behaviour.md Sec40.5"};
+        uint64_t categoryIndexOobGuardCount = 0;
+    };
+    PcuCategoryTable& pcuCategoryTable() { return pcuCategoryTable_; }
+
+    // pcu_wear_store_outfit / pcu_purchase_outfit (Sec40.5/Sec40.6): one
+    // shared catalog-outfit list, this project's own minimal stand-in (a
+    // test populates each list position's own raw flag word directly - no
+    // real catalog table in scope). CONFIRMED real indexing inconsistency:
+    // pcu_wear_store_outfit numbers qualifying nodes by testing "any flag
+    // bit, excluding one specific bit" while pcu_purchase_outfit (and,
+    // out of this pass's own implemented scope, pcu_get_num_items_owned)
+    // number the SAME list by testing "bit 0 only" - two INDEPENDENT
+    // filters over one shared list, each with its own 0-based "Nth
+    // qualifying node" numbering; this header deliberately does NOT unify
+    // them into one shared counting helper (this task's own explicit
+    // instruction). WHICH single bit the text's own "excluding one
+    // specific bit" names is not given by address - read here as bit 0
+    // (0x1), the SAME bit pcu_purchase_outfit/pcu_get_num_items_owned
+    // test exclusively: a stated, reasoned interpretation of the text's
+    // own direct juxtaposition, NOT an independently confirmed address-
+    // level fact.
+    struct PcuCatalogOutfits {
+        OpenValueMap<uint32_t> flagsByIndex{"PCU catalog-outfit node raw flag word, by list position",
+                                            "spec-lua-api-behaviour.md Sec40.5/Sec40.6"};
+    };
+    PcuCatalogOutfits& pcuCatalogOutfits() { return pcuCatalogOutfits_; }
+
+    // pcu_purchase_slot / pcu_purchase_outfit (Sec40.5): "both IGNORE the
+    // inventory-append function's 'full' return value - a player who is
+    // already at capacity (2048 items or 128 outfits) is charged the full
+    // price and receives nothing silently" (CONFIRMED real logic defect,
+    // the mandated faithful quirk). This project's own minimal stand-in:
+    // only COUNTS are tracked (no individual item/outfit identity - no
+    // real item/outfit catalog in scope beyond PcuCatalogOutfits above).
+    // Reuses its own `cashBalance` rather than playerCash() above - PCU is
+    // explicitly "local-player-only" (Sec40.5) and this project does not
+    // claim the two purchase systems (weapon-store cash vs. PCU cash)
+    // share one real wallet anywhere in scope.
+    struct PcuInventory {
+        static constexpr int kOwnedItemCapacity = 2048;   // CONFIRMED
+        static constexpr int kSavedOutfitCapacity = 128;  // CONFIRMED
+        int ownedItemCount = 0;
+        int savedOutfitCount = 0;
+        double cashBalance = 0.0; // CHOSEN starting balance - no real initial value given anywhere in scope
+        uint64_t purchaseSlotChargedWhileFullCount = 0;
+        uint64_t purchaseOutfitChargedWhileFullCount = 0;
+        int lastWornCatalogPosition = -1; // -1 = none worn yet; pcu_wear_store_outfit's own test-observable result
+        // pcu_purchase_outfit's own test-observable resolution via its OWN
+        // "bit 0 only" rule - kept as a SEPARATE field from
+        // lastWornCatalogPosition above (not unified) specifically so a
+        // test can directly compare the SAME raw Lua index resolving to
+        // TWO DIFFERENT catalog-list positions across the two functions,
+        // proving the mandated divergence rather than merely asserting it.
+        int lastPurchasedOutfitCatalogPosition = -1;
+    };
+    PcuInventory& pcuInventory() { return pcuInventory_; }
+
+    // --- Sec44/Sec45/Sec46 tranche follow-up (ranking tranches 12-14),
+    // batch 2026-10-02 (resumed session) -----------------------------------
+
+    // ambient_gang_spawn_enable (Sec45.6): CONFIRMED "a single boolean fans
+    // out to all four ambient-gang-enable bytes at once - no per-gang Lua
+    // control exists at this entry point." Since nothing in this project's
+    // scope can ever observe the 4 bytes independently (no per-gang getter,
+    // and the only writer sets them in lockstep), they are modeled as ONE
+    // global value rather than 4 redundant copies - a stated simplification,
+    // not a claim the real engine stores only one byte.
+    OpenValue<bool>& ambientGangSpawnEnabled() { return ambientGangSpawnEnabled_; }
+
+    // cell_camera_enable / cell_camera_is_enabled (Sec45.4): CONFIRMED "a
+    // global that has exactly one other reference anywhere in the binary -
+    // its own getter ... confirmed Lua-side-only state with no engine
+    // consumer." A single bare global, not per-name.
+    OpenValue<bool>& cellCameraEnabled() { return cellCameraEnabled_; }
+
+    // ambient_cop_spawn_enable / action_nodes_shouldnt_flee /
+    // action_nodes_restrict_spawning (Sec46.3): CONFIRMED "simple global-
+    // byte toggles gating AI spawn/flee behavior, none replicated." Three
+    // genuinely distinct bytes (unlike the ambient-gang case above, nothing
+    // in Sec46.3's text says these three share storage) - each write-only
+    // in this project's scope (no in-scope Lua getter reads any of them
+    // back; a test can).
+    OpenValue<bool>& ambientCopSpawnEnabled() { return ambientCopSpawnEnabled_; }
+    OpenValue<bool>& actionNodesShouldntFlee() { return actionNodesShouldntFlee_; }
+    OpenValue<bool>& actionNodesRestrictSpawning() { return actionNodesRestrictSpawning_; }
+
+    // --- Batch 2026-10-03, spec-lua-api-behaviour.md Sec49 ("ranking
+    // tranche 16") - see each accessor's own doc comment below, and
+    // lua_spec_confirmed_stubs.cpp's own Sec49 batch header comment, for
+    // which of its 25 names this pass implements: the 8 explicitly
+    // mandated crash guards/faithful quirks, PLUS `spawning_boats` (the
+    // one name this batch's own fresh mission-drive run found a REAL
+    // measured hit for - every other name was zero real hits, the same
+    // outcome Sec38/Sec39/Sec40's own batch already found for their
+    // combined 75 names). ------------------------------------------------
+
+    // shop_purchase_purchase_shop (Sec49.1, one-name registrar
+    // `0x00a03600`, `ui`). No Lua arguments - the real function resolves
+    // "the" shop via an AMBIENT trigger-handle lookup (CONFIRMED: "a
+    // trigger-handle lookup that returns null when the trigger is stale
+    // or absent"), not a Lua-visible name/handle argument. This project
+    // has no spatial/trigger-overlap system (same boundary as
+    // shop_enable_nearest's own test-only Shop fixture above) -
+    // `triggerResolves` is this project's own CHOSEN plain stand-in for
+    // "the ambient lookup currently resolves to a shop," default false
+    // (the honest "nothing wired up" answer, same precedent as
+    // VcustPreview::targetLive above). CONFIRMED real defect pair
+    // (Sec49.1): a null shop pointer is dereferenced unconditionally on
+    // the very next read (guarded here, HOST-SAFETY, via
+    // nullShopGuardCount); separately, once a shop DOES resolve, every
+    // side effect except the one-time ownership bit (`owned`) - the
+    // payment, the trigger-disable, the owned-object broadcast, and the
+    // property fly-by - repeats on EVERY subsequent call with no "already
+    // purchased" guard. Implemented faithfully (NOT "fixed" into a
+    // once-only purchase) via the four *RepeatCount fields below, which
+    // increment on every resolved call regardless of `owned`.
+    struct ShopPurchase {
+        bool triggerResolves = false;    // CHOSEN default false, see comment above
+        bool owned = false;              // CONFIRMED: the ONE guarded bit
+        double price = 0.0;              // CHOSEN, test-settable - no real price table in scope
+        uint64_t nullShopGuardCount = 0; // HOST-SAFETY - test-observable only, not a real engine field
+        uint64_t paymentRepeatCount = 0;        // CONFIRMED defect: repeats every resolved call
+        uint64_t triggerDisableRepeatCount = 0; // CONFIRMED defect: repeats every resolved call
+        uint64_t ownedBroadcastRepeatCount = 0; // CONFIRMED defect: repeats every resolved call
+        uint64_t flyByRepeatCount = 0;          // CONFIRMED defect: repeats every resolved call
+    };
+    ShopPurchase& shopPurchase() { return shopPurchase_; }
+
+    // spawn_override_set_override_category_for_hood (Sec49.2,
+    // `0x00a20840` gameplay registrar, `gameplay`). 2 strings
+    // (neighbourhood, category name). CONFIRMED real defect: the
+    // category-name lookup result is never checked before being stored
+    // and dispatched; on a host with a session, the dispatch inside THIS
+    // call immediately dereferences the null category; everywhere else
+    // the null is merely stored (dereferenced later by the per-hood
+    // reader or the co-op join-snapshot serializer, both out of this
+    // batch's own scope - not modeled here, since nothing in THIS
+    // function crashes on that path). Direct contrast (Sec49.2): the
+    // sibling global setter `spawn_global_override_set_category` DOES
+    // check its own lookup - that sibling is NOT "fixed" onto this one;
+    // `categoryNameResolves` is guard-checked here ONLY for the
+    // immediate-dispatch host branch, faithfully leaving the per-hood
+    // setter as the one missing its sibling's guard.
+    struct SpawnOverride {
+        OpenValueMap<bool> categoryNameResolves{"spawn-override category-name lookup resolves",
+                                                 "spec-lua-api-behaviour.md Sec49.2"};
+        std::unordered_map<std::string, std::string> perHoodCategory; // CHOSEN: last successfully-resolved category, by hood
+        std::unordered_set<std::string> perHoodCategoryNullStored;    // CHOSEN: hoods currently holding the real defect's unchecked null (deferred read, not modeled further)
+        uint64_t hoodCategoryImmediateNullDerefGuardCount = 0; // HOST-SAFETY - test-observable only, not a real engine field
+    };
+    SpawnOverride& spawnOverride() { return spawnOverride_; }
+
+    // spawning_boats (Sec49.2, `0x00a20840` gameplay registrar,
+    // `gameplay`) - added to this batch after its own fresh mission-drive
+    // pass found a REAL measured hit (1 incremental call from a real
+    // mission script, not just a static call-site count - see this
+    // header's own top-of-batch comment and lua_spec_confirmed_stubs.cpp's
+    // own Sec49 batch header comment). 1 mandatory boolean. CONFIRMED:
+    // writes a host-authoritative, session-replicated byte (registered
+    // name `"os_boat"`) with NO host gate on the write itself - unlike
+    // tranche 13's sibling `audio_suppress_ambient_player_lines` (Sec45,
+    // itself unimplemented anywhere in this project), which DOES gate.
+    struct SpawningBoats {
+        bool value = false; // CHOSEN initial value - the "os_boat" replicated byte itself
+        uint64_t writeCount = 0;
+    };
+    SpawningBoats& spawningBoats() { return spawningBoats_; }
+
+    // skydive_move_to_check_done (Sec49.3, `0x00a20840` gameplay
+    // registrar, `gameplay`). Argument shape NOT independently re-derived
+    // this pass (same "HIGH CONFIDENCE, not CONFIRMED" caveat
+    // turn_to_check_done's own doc comment already carries for an
+    // analogous gap) - CHOSEN, labelled: 1 string (the target name) + 1
+    // boolean ("list mode" selector; true = the sibling branch the spec
+    // calls already-correct, false = the single-object-target-mode branch
+    // the crash shape belongs to). CONFIRMED (Sec49.3): in single-object
+    // mode, when the target doesn't resolve, the real code computes
+    // `null_pointer+0x40` and tests THAT SUM (which survives the null
+    // check) rather than the pointer itself - a one-off miss; the
+    // list-mode branch handles the identical failure correctly and
+    // returns "done". HOST-SAFETY DEVIATION (not a spec fact): rather than
+    // reproducing the crash, this host gives the SAME answer the
+    // already-correct sibling branch gives for the identical failure
+    // ("done", pushed true) - counted via nullTargetGuardCount. A
+    // resolved target's own done/pending determination (in EITHER mode)
+    // is OPEN - Sec49.3 gives no further detail beyond the crash shape
+    // itself, so the stub refuses that case via OpenStateError rather
+    // than inventing one.
+    struct SkydiveMoveToCheckDone {
+        uint64_t nullTargetGuardCount = 0; // HOST-SAFETY - test-observable only, not a real engine field
+    };
+    SkydiveMoveToCheckDone& skydiveMoveToCheckDone() { return skydiveMoveToCheckDone_; }
+
+    // set_char_in_string (Sec49.4, `ui`). 1 string + 1 0-based index
+    // (unlike Lua's usual 1-based convention, CONFIRMED) + 1 single-
+    // character string. CONFIRMED real crash shapes: (1) "builds its
+    // result in a stack buffer sized by the index with no cap - a large
+    // or NaN-derived index can overrun the stack guard outright, reachable
+    // from script data alone"; (2) "either string argument being non-a-
+    // string reads through null" - already avoided by construction here
+    // via this file's own established NULL-safe argString() wrapper (same
+    // precedent noted for team_make_hostile's identical-shaped defect,
+    // Sec38.2), nothing further to guard for (2). This project has no
+    // literal stack guard to overrun (standing project note), so (1) is
+    // modeled as a MANDATED bounds check: a CHOSEN cap, `kMaxIndex`, below
+    // the real buffer's own unconfirmed size - chosen as 1024, the SAME
+    // magnitude independently confirmed elsewhere in this binary for a
+    // fixed stack string buffer (spec-lua-api-behaviour.md Sec44's
+    // `game_coop_kick_player`/`0x00db0510` finding: "always tells the CRT
+    // its buffer holds 1024 wide characters") - NOT claimed to be the SAME
+    // buffer, only a reasoned size-class stand-in, clearly not a spec
+    // fact. An index outside [0, kMaxIndex] is guarded and logged rather
+    // than built. The in-bounds result-construction itself (pad with a
+    // CHOSEN space fill to reach the index, then write the given
+    // character there) is this project's own CHOSEN, labelled minimal
+    // reading of "set a char in a string" - Sec49.4 gives no further
+    // detail on the real padding/construction algorithm beyond the crash
+    // shape, so nothing here claims to be the real byte-for-byte result.
+    struct SetCharInString {
+        static constexpr int64_t kMaxIndex = 1024; // CHOSEN cap, see comment above
+        uint64_t indexOutOfBoundsGuardCount = 0;   // HOST-SAFETY - test-observable only, not a real engine field
+    };
+    SetCharInString& setCharInString() { return setCharInString_; }
+
+    // store_stronghold_game_purchase_upgrade (Sec49.1, `ui`). No Lua
+    // arguments - same ambient-context situation as shop_purchase_
+    // purchase_shop above (`strongholdResolves`, CHOSEN default false).
+    // CONFIRMED (Sec49.1, reconciled 2026-10-03 against Sec8.27/Sec26.28):
+    // charges the stronghold's price UNCONDITIONALLY once a stronghold
+    // resolves (no affordability check - same shape as store_weapon_
+    // purchase_ammo's own unconditional charge, Sec38.3), then attempts a
+    // level-up whose own gate - a session exists AND this machine is host
+    // - is CONFIRMED false in single player (EngineState::coopLocalIsHost(),
+    // Sec8.27/Sec26.28's exhaustive negative check) - so the level-up
+    // silently no-ops, every time, in this host as in real single-player
+    // play: cash is always deducted, the stronghold level never changes.
+    // Separately CONFIRMED: "No local-player null check either" - a
+    // second, independent crash shape, guarded here (HOST-SAFETY) via
+    // hasLocalPlayer() (reused - the SAME "player 1 exists" concept
+    // store_gallery_download_hide_list's own guard already reuses,
+    // Sec39.5/Sec28.23).
+    struct StrongholdPurchaseUpgrade {
+        bool strongholdResolves = false; // CHOSEN default false, see comment above
+        double price = 0.0;              // CHOSEN, test-settable - no real price table in scope
+        uint64_t chargeCount = 0;                // CONFIRMED: charged unconditionally once resolved
+        uint64_t levelUpGateFailedNoopCount = 0; // CONFIRMED: session-exists-and-host gate false in single player
+        uint64_t localPlayerNullGuardCount = 0;  // HOST-SAFETY - test-observable only, not a real engine field
+    };
+    StrongholdPurchaseUpgrade& strongholdPurchaseUpgrade() { return strongholdPurchaseUpgrade_; }
+
+    // squad_enable (Sec49.3, `gameplay`). 1 character name + 1 boolean
+    // (CONFIRMED default false). CONFIRMED real asymmetric-effect defect:
+    // `squad_enable(name, false)` actually dismisses the character from
+    // the player's crew (restores stats, removes it from the roster,
+    // releases resources - this project's own minimal stand-in only models
+    // the roster-membership bit, `inRoster`; the stat-restore/resource-
+    // release internals are OPEN, not given beyond the fact they happen);
+    // `squad_enable(name, true)` only flips two unrelated flag bits
+    // (`flagBitA`/`flagBitB` - CHOSEN names, real meanings OPEN) and does
+    // NOT re-add the character to the crew - `inRoster` is deliberately
+    // left untouched on the true path, faithfully reproducing the defect
+    // rather than "fixing" the two calls into real inverses.
+    struct SquadMember {
+        bool inRoster = false;
+        bool flagBitA = false;
+        bool flagBitB = false;
+        uint64_t dismissCount = 0;
+        uint64_t enableTrueCount = 0;
+    };
+    SquadMember& squadMember(const std::string& name) { return squadMembers_[name]; }
+
+    // screen_capture_preview_should_upload (Sec49.4, `ui`). 1 boolean, 0
+    // Lua return values either way (CONFIRMED). CONFIRMED: an explicit
+    // `false` argument takes a "cancel" path; a denied platform privilege
+    // silently takes the SAME cancel path (so the calling script cannot
+    // tell the two apart from the return value alone - there is none).
+    // This project has no real platform-privilege layer anywhere in scope
+    // to query (CHOSEN, explicitly labelled, NOT a confirmed value): the
+    // "platform denied" fork is modeled as ALWAYS "not denied" here, so
+    // only the explicit-false path is ever actually reachable from this
+    // host - `explicitFalseCancelCount` is the one CONFIRMED path;
+    // `uploadProceedCount` is this host's own stand-in answer for every
+    // `true` call (never "denied").
+    struct ScreenCapturePreview {
+        uint64_t explicitFalseCancelCount = 0; // CONFIRMED: explicit false -> the cancel path
+        uint64_t uploadProceedCount = 0;       // CHOSEN "always not denied" stand-in for a true call, see comment above
+    };
+    ScreenCapturePreview& screenCapturePreview() { return screenCapturePreview_; }
+
+    // sfx_use_load_images (Sec49.4, `ui`) needs no state - CONFIRMED
+    // hardcoded true (0x0149365c set unconditionally at start-up,
+    // independently re-confirmed this tranche; already in Sec26.24's own
+    // screen-fade table) - the stub pushes a literal true directly, no
+    // accessor needed here.
+
+    // --- Ranking tranches 15/17/20/22/23 (spec-lua-api-behaviour.md
+    // Sec52/Sec51/Sec53/Sec55/Sec57), real-hit names only (2026-10-03,
+    // orchestrator-directed pass over the whole Sec50-Sec59 backlog: only
+    // names with a real, measured non-zero mission-drive call count get a
+    // real implementation; every other name in that backlog stays a
+    // generic logging stub - see the implementing commit's own message for
+    // the per-section tally). -----------------------------------------------
+
+    // tutorial_lock (Sec52.3, tranche 15). CONFIRMED: "it only accepts
+    // tutorial indices up to 188... the 21 entries from 189-209 can never
+    // be locked through this native at all." The resulting lock
+    // state/mechanism itself is not given beyond that bound (OPEN) - this
+    // project counts a "would lock" hit per in-range index rather than
+    // fabricate a state code into tutorialState()'s own stride-9 enum
+    // (whose "locked" value is nowhere confirmed in this spec). Reuses
+    // EngineState::tutorialLookup() (Sec10.4, above) for name resolution -
+    // the SAME 210-entry table every sibling in this family shares.
+    // Test-observable only.
+    int tutorialLockCount(int index) const;
+    void recordTutorialLock(int index);
+
+    // radio_newsbreak_clear (Sec51.3, tranche 17). CONFIRMED only as "a
+    // straightforward local-only state change[...], no further crash
+    // shapes" - no further detail given, so this is modeled the same
+    // minimal way as the Sec46.3 write-only flags above: one boolean,
+    // write-only in this project's scope (no in-scope Lua getter reads it
+    // back; a test can).
+    OpenValue<bool>& radioNewsbreakActive() { return radioNewsbreakActive_; }
+
+    // group_create_do / group_create_hidden_do (Sec53.3, tranche 20).
+    // CONFIRMED: "the same underlying creation routine differing only in
+    // one passed literal, and creation happens exactly once - calling
+    // group_create_hidden_do on a group group_create_do already created
+    // does nothing at all." One shared "has this name already been
+    // created" set - which literal (visible/hidden) was used first is
+    // never read back by anything in this project's scope, so it is not
+    // separately tracked (would be fabricated detail).
+    bool groupAlreadyCreated(const std::string& name) const { return groupsCreated_.count(name) != 0; }
+    void markGroupCreated(const std::string& name) { groupsCreated_.insert(name); }
+
+    // dlc2_m02_clapboards_set/_get/_reset (Sec55.5, tranche 22). CONFIRMED:
+    // a 10-byte flag array plus a count, file-default count -1 ("so every
+    // index fails the upper bound too" before the first _reset call). Only
+    // _get and _reset show a real mission-drive hit this pass; _set does
+    // not and stays a generic stub per this pass's own scope rule, so
+    // _set's own separate out-of-bounds WRITE shape is deliberately not
+    // reproduced or guarded here. _get's CONFIRMED upper-bound check (out
+    // of range -> "no value at all", not nil/false pushed, not even a
+    // boolean) is modeled directly; _get's own missing LOWER bound (any
+    // argument <= 0 is the real arbitrary-read defect) is a HOST-SAFETY
+    // DEVIATION refused here instead of reproduced - this project does not
+    // simulate crashes/arbitrary reads (the established group_get_next_npc
+    // / Sec28.5 precedent this task's own instructions name directly) -
+    // counted separately from the ordinary upper-bound "out of range" case.
+    int dlc2ClapboardCount() const { return dlc2ClapboardCount_; }
+    void dlc2ClapboardsReset(int32_t rawCount);
+    // Returns -1 for "no value" (the real native's own CONFIRMED out-of-
+    // range answer - nil, not false - and the HOST-SAFETY-refused case
+    // below); otherwise 0 or 1, the flag byte at the resolved index.
+    int dlc2ClapboardsGet(int32_t clapboardNumber);
+    int dlc2ClapboardsGetNegativeIndexGuardCount() const { return dlc2ClapboardsGetNegativeIndexGuardCount_; }
+
+    // cutscene_play_do / cutscene_play_check_done (Sec57.2, tranche 23) -
+    // see src/lua_cutscene.cpp's own doc comment above cutscenePlayDo() for
+    // the full design (reuses the EXISTING zscene prep gate and screen-
+    // fade-request mechanism, both already Sec26.25-confirmed; the
+    // destination-table and "written even when refused" quirks are modeled
+    // directly). NOT modeled (unobservable through any in-scope native, so
+    // nothing to fabricate): the uninitialized script-group-handle copy
+    // and the failed-scene-manager-allocation null-write path (reachability
+    // HYPOTHESIS per Sec57.2 itself).
+    void cutscenePlayDo(const std::string& name, std::vector<std::string> destinations);
+    const std::string& cutscenePlayDestination1() const { return cutscenePlayDestination1_; }
+    const std::string& cutscenePlayDestination2() const { return cutscenePlayDestination2_; }
+    bool cutscenePlayInProgress() const { return cutscenePlayInProgress_; }
+    // CONFIRMED (Sec57.2): "treats 'no manager' as equivalent to
+    // 'finished'" - this host never allocates cutsceneManager_.present
+    // (the allocation path itself is OPEN/HYPOTHESIS, not modeled, see
+    // above), so this honestly and permanently reproduces the documented
+    // "reports done prematurely" bug rather than a simplification of it
+    // (same "minimum correct model" precedent as Sec35.6's scripted-
+    // request pool).
+    bool cutscenePlayCheckDone() const {
+        return !(cutsceneManager_.present.known() && cutsceneManager_.present.get());
+    }
 
     // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
 
@@ -1742,8 +3191,13 @@ private:
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
 
-    std::unordered_map<uint32_t, VdoObject> vdoObjects_;
+    // std::map (not unordered): findVdoObject's searches walk handles in
+    // ascending order, which for a loaded document is the file's pre-order
+    // (loadVintDocument issues handles in that order) - see findVdoObject.
+    std::map<uint32_t, VdoObject> vdoObjects_;
     uint32_t nextVdoObjectHandle_ = 1;
+    std::map<uint32_t, LoadedVintDocument> loadedVintDocuments_;
+    uint32_t nextVintDocumentHandle_ = 1;
     OpenValue<uint32_t> currentDefaultDocHandle_{"current default vint document (0x00e0ceb0)", "spec-lua-bindings.md Sec15"};
 
     // --- Vint UI API, Sec18-Sec21 batch (2026-10-02) - see each public
@@ -1759,6 +3213,14 @@ private:
     // "hash the name with the engine's standard string-hash" text).
     std::unordered_map<uint32_t, VintDataResponderRecord> vintDataResponders_;
 
+    // --- teleport_check_done/turn_to_check_done/move_to_check_done/
+    // vehicle_pathfind_check_done (Sec35.2), see each public accessor's own
+    // doc comment above for citation/reasoning. Keyed by (name, kind) - see
+    // kScriptedRequestKind* above for the 3 real kind values. `bool` = done
+    // (true) vs. pending (false); absent = "no matching request" (status 2).
+    std::map<std::pair<std::string, int>, bool> scriptedRequestDone_;
+    std::unordered_set<std::string> vehiclePathfindResolvable_; // Sec9.10, test-only gate
+
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
     // above for citation/reasoning. ---
@@ -1770,6 +3232,11 @@ private:
     OpenValue<int> coopJoinType_{"0x012f44fc (co-op join type)", "spec-lua-api-behaviour.md Sec10.9"};
     OpenValueMap<int> tutorialState_{"tutorial entry state (0x0151d600[i] +0x0c)", "spec-lua-api-behaviour.md Sec6.19/Sec10.4/Sec26.28"};
     OpenValueMap<bool> objectResolves_{"named-object resolution", "spec-lua-api-behaviour.md Sec3.9/Sec10.6/Sec29"};
+    // DIAGNOSTIC ONLY state (see enableUnresolvedNameProbe()/probedFieldOr()
+    // above) - empty, and probedFieldReadCount_ zero, unless a caller
+    // explicitly opts in; never populated by any normal code path or test.
+    std::unordered_set<std::string> probedNames_;
+    uint64_t probedFieldReadCount_ = 0;
 
     // --- zscene (Sec26.25/Sec14.23/Sec8.21), see the accessor doc comment above ---
     OpenValueMap<bool> zsceneLoadable_{"zscene table entry with kind 1 (0x00721be0 lookup, 0x00723d20 test)",
@@ -1792,6 +3259,16 @@ private:
     OpenValue<std::string> zsceneNearestWorldObjectScene_{"nearest scene-bearing world object (list 0x03171a64; no world objects in this host)",
                                                           "spec-lua-api-behaviour.md Sec26.25"};
     int zscenePendingBlockedRefusals_ = 0;
+    // The cutsceneCounters_.framesRun value as of the most recent time a NEW
+    // (non-empty) key was written into zscenePending_ - 2026-10-02 correction
+    // (the `mm_p_01` zscene-promotion-driver investigation): EngineState is
+    // shared across an entire mission-drive run, so cutsceneCounters_.
+    // lastFrameBlocked can be true only because of some earlier, unrelated
+    // mission's own frames (nothing pending there either), long before this
+    // name was ever prepped. zsceneIsLoaded's pending-blocked refusal (below)
+    // must not fire on that stale signal; it needs at least one frame to have
+    // actually run for THIS pending entry first.
+    uint64_t zscenePendingSetAtFrame_ = 0;
 
     // --- cutscene machine (Sec26.25 item 6) ---
     CutsceneManager cutsceneManager_;
@@ -1942,6 +3419,101 @@ private:
         return m;
     }();
     int teamRelationOobGuardCount_ = 0; // Sec30.6/Sec30.7 - test-observable only, not a real engine field
+
+    // --- Ranking tranche 05 (Sec33), batch 2026-10-02 - see each public
+    // accessor's own doc comment above for citation/reasoning. vehicles_
+    // itself is declared once already above (shared with Sec30.5's own
+    // vehicle cluster, same VehicleState struct). ---
+    std::unordered_map<std::string, int32_t> syncedActionIndexByName_;
+    ActionSequence actionSequence_;
+    std::string audioListenerOverrideTarget_;
+    OpenValueMap<bool> conversationChannelActive_{"per-session conversation channel active slot",
+                                                   "spec-lua-api-behaviour.md Sec33.4"};
+    WaitingForPlayerDialog waitingForPlayerDialog_;
+    bool allowWeaponAutoPickup_ = true; // Sec33.5, CHOSEN default (no confirmed file value in scope)
+    // --- pause-map / Sec31, Sec32.1 pause_map_tutorial_mode - batch
+    // 2026-10-02 - see each public accessor's own doc comment above for
+    // citation/reasoning. ---
+    OpenValue<bool> pauseMapTutorialMode_{"0x0229a318 (pause-map tutorial-mode flag)",
+                                          "spec-lua-api-behaviour.md Sec31.5/Sec32.1"};
+    uint32_t pauseMapSelectedZone_ = 0; // 0x0229a2ac, see pauseMapSelectedZone()'s own doc comment
+    PauseMapHoveredZone pauseMapHoveredZone_;
+    std::unordered_map<uint32_t, std::vector<ZoneMember>> zoneMembersByZone_;
+    uint64_t pauseMapStagCompletionHookFiredCount_ = 0;
+    uint64_t pauseMapTakeoverClaimedCount_ = 0;
+    uint64_t pauseMapTakeoverAutosaveRequestCount_ = 0;
+
+    // --- ranking tranche 04, Sec32 - batch 2026-10-02 - see each public
+    // accessor's own doc comment above for citation/reasoning. ---
+    OpenValue<bool> storeInterfaceActive_{"store-interface active (0x022cce86 bit 0x1)", "spec-lua-api-behaviour.md Sec32.1"};
+    float spawnRegionMaxSpawnDistSquared_ = 3.402823466e+38f; // FLT_MAX, CONFIRMED file-backed default
+    float pedOverrideDensity_ = -1.0f;                        // CONFIRMED file-backed default ("no override")
+    GameClock gameClock_;
+    SatelliteWeaponController satelliteWeapon_;
+    std::unordered_map<std::string, bool> seatbeltForceFlag_;
+    std::unordered_map<std::string, bool> trailingAimForceFlag_;
+    std::unordered_map<std::string, bool> neverTurnOnPlayerFlag_;
+    std::unordered_map<std::string, bool> warpToShoreDisabled_;
+    SkydiveTankBailout skydiveTankBailout_;
+    QteSlot qteSlots_[2];
+    PartyState party_;
+    std::unordered_set<std::string> destroyedObjects_;
+    uint64_t indicatorRemoveRecordCount_ = 0;
+    std::vector<Shop> shops_;
+    uint64_t shopEnableRecordCount_ = 0;
+    std::unordered_map<std::string, bool> itemHidden_;
+    std::unordered_map<std::string, ItemAnimState> itemAnimState_;
+    std::unordered_map<std::string, VehicleRadio> vehicleRadios_;
+    std::unordered_map<std::string, Helicopter> helicopters_;
+    OpenValue<bool> helicopterFireDispatcherResult_{
+        "shared helicopter-fire dispatcher's own return value (invisible in the decompiled view)",
+        "spec-lua-api-behaviour.md Sec32.7"};
+
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec38/Sec39/Sec40
+    // ("ranking tranches 06/07/08") - see each public accessor's own doc
+    // comment above. ---
+    VcustPreview vcustPreview_;
+    double playerCash_ = 0.0; // CHOSEN starting balance - no real initial value given anywhere in scope
+    std::vector<PurchaseRecord> purchaseLedger_;
+    int skydiveMoveToNullTargetGuardCount_ = 0; // Sec39.1 - test-observable only, not a real engine field
+    SaveSystemUi saveSystemUi_;
+    StorePreviewGuards storePreviewGuards_;
+    StoreCommonRotateMouseDrag storeCommonRotateMouseDrag_;
+    PcuCategoryTable pcuCategoryTable_;
+    PcuCatalogOutfits pcuCatalogOutfits_;
+    PcuInventory pcuInventory_;
+
+    // Sec44/Sec45/Sec46 tranche follow-up (batch 2026-10-02, resumed session) - see the public accessors above.
+    OpenValue<bool> ambientGangSpawnEnabled_{"ambient-gang spawn-enable bytes (all 4, fanned out together)",
+                                             "spec-lua-api-behaviour.md Sec45.6"};
+    OpenValue<bool> cellCameraEnabled_{"cell_camera_enable global", "spec-lua-api-behaviour.md Sec45.4"};
+    OpenValue<bool> ambientCopSpawnEnabled_{"ambient_cop_spawn_enable global byte", "spec-lua-api-behaviour.md Sec46.3"};
+    OpenValue<bool> actionNodesShouldntFlee_{"action_nodes_shouldnt_flee global byte", "spec-lua-api-behaviour.md Sec46.3"};
+    OpenValue<bool> actionNodesRestrictSpawning_{"action_nodes_restrict_spawning global byte",
+                                                 "spec-lua-api-behaviour.md Sec46.3"};
+
+    // --- Batch 2026-10-03, spec-lua-api-behaviour.md Sec49 ("ranking
+    // tranche 16") - see each public accessor's own doc comment above. ---
+    ShopPurchase shopPurchase_;
+    SpawnOverride spawnOverride_;
+    SpawningBoats spawningBoats_;
+    SkydiveMoveToCheckDone skydiveMoveToCheckDone_;
+    SetCharInString setCharInString_;
+    StrongholdPurchaseUpgrade strongholdPurchaseUpgrade_;
+    std::unordered_map<std::string, SquadMember> squadMembers_;
+    ScreenCapturePreview screenCapturePreview_;
+
+    // Ranking tranches 15/17/20/22/23 real-hit batch (2026-10-03) - see the
+    // public accessors above for each field's own citation.
+    std::unordered_map<int, int> tutorialLockCounts_;  // Sec52.3, by table index
+    OpenValue<bool> radioNewsbreakActive_{"radio_newsbreak_clear global byte", "spec-lua-api-behaviour.md Sec51.3"};
+    std::unordered_set<std::string> groupsCreated_;    // Sec53.3
+    std::array<bool, 10> dlc2ClapboardFlags_{};        // Sec55.5, zero-fill (file-default)
+    int32_t dlc2ClapboardCount_ = -1;                  // Sec55.5, CONFIRMED file-default -1
+    int dlc2ClapboardsGetNegativeIndexGuardCount_ = 0; // HOST-SAFETY, test-observable only
+    std::string cutscenePlayDestination1_;             // Sec57.2, "" = none/dropped
+    std::string cutscenePlayDestination2_;
+    bool cutscenePlayInProgress_ = false;              // host bookkeeping stand-in, not a direct spec field
 };
 
 // Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).

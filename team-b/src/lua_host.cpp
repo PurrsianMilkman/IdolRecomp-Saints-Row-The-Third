@@ -196,6 +196,7 @@ Host::RunResult Host::runChunk(lua_State* L, const std::string& source, const st
     }
     r.loadOk = true;
     r.ranPcall = true;
+    DocumentContextScope docScope(*this, chunkName); // no-op without a resolver
     int callStatus = lua_pcall(L, 0, LUA_MULTRET, 0);
     if (callStatus != 0) {
         const char* msg = lua_tostring(L, -1);
@@ -217,6 +218,24 @@ Host::RunResult Host::runChunk(lua_State* L, const std::string& source, const st
     // previous script defined.
     lua_settop(L, 0);
     return r;
+}
+
+Host::DocumentContextScope::DocumentContextScope(Host& h, const std::string& chunkName) : host_(h) {
+    if (!host_.docContextResolver_) return;
+    active_ = true;
+    auto& cur = host_.engineState_.currentDefaultDocHandle();
+    hadValue_ = cur.known();
+    if (hadValue_) previous_ = cur.get();
+    std::optional<uint32_t> doc = host_.docContextResolver_(chunkName);
+    if (doc) cur.set(*doc);
+    else cur.forget(); // no known document for this chunk: OPEN, exactly as without a resolver
+}
+
+Host::DocumentContextScope::~DocumentContextScope() {
+    if (!active_) return;
+    auto& cur = host_.engineState_.currentDefaultDocHandle();
+    if (hadValue_) cur.set(previous_);
+    else cur.forget();
 }
 
 namespace {
@@ -281,6 +300,17 @@ std::vector<Host::HookFireResult> Host::fireConfirmedHooks(lua_State* L, const s
         // placeholder.
         lua_getglobal(L, spec.name.c_str());
         r.attemptedCall = true;
+
+        // The hook function's own defining chunk, for the per-call document
+        // context (setDocumentContextResolver). Only looked up with a
+        // resolver set; ">S" pops the copy pushed for it.
+        std::string definingChunk;
+        if (docContextResolver_ && lua_type(L, -1) == LUA_TFUNCTION) {
+            lua_Debug ar;
+            lua_pushvalue(L, -1);
+            if (lua_getinfo(L, ">S", &ar) && ar.source) definingChunk = ar.source;
+        }
+        DocumentContextScope docScope(*this, definingChunk);
 
         for (const auto& arg : spec.args) {
             switch (arg.kind) {

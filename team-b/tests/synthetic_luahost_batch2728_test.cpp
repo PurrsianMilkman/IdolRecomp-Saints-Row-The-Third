@@ -525,6 +525,31 @@ int main() {
     es.characterGender().set("char05", 1);
     ok(host, gp, "assert(character_get_gender('char05') == 1)");
 
+    // Player gender initial state (2026-10-02, spec-lua-api-behaviour.md
+    // Sec16.8/Sec16.8a, spec-save-format.md Sec10.4, spec-tables-
+    // customization.md Sec16.2): applySpecInitialState() (run automatically
+    // by Host's constructor, src/lua_host.cpp) pre-populates "#PLAYER1#"'s
+    // gender via the fresh-game default-preset path (this host never loads
+    // a real save file), matching the shipped player_presets.xtbl Default
+    // row ("male_white", Gender=0). This is the exact mechanism that used to
+    // leave mission m21 blocked on "character +0xa41 gender byte (1=female,
+    // else male)['#PLAYER1#'] is OPEN" when the mission queried its own
+    // resolved player object - no manual es.characterGender().set() call
+    // here, unlike the char05 case above, because the whole point is that
+    // it is already known from host construction.
+    CHECK(es.objectResolves().known("#PLAYER1#") && es.objectResolves().get("#PLAYER1#"));
+    CHECK(es.characterGender().known("#PLAYER1#"));
+    CHECK(es.characterGender().get("#PLAYER1#") == 0);
+    ok(host, gp, "assert(character_get_gender('#PLAYER1#') == 0)"); // male, Default preset row
+    // "#PLAYER2#" resolves (Sec29.4's unconditional name registration) but a
+    // co-op session is absent at start (item 1 of applySpecInitialState), so
+    // no second player character object exists to even hold a sentinel pair
+    // - its gender correctly stays OPEN, not guessed.
+    CHECK(es.objectResolves().get("#PLAYER2#") == true);
+    CHECK(!es.characterGender().known("#PLAYER2#"));
+    fails(host, gp, "character_get_gender('#PLAYER2#')",
+          "character +0xa41 gender byte (1=female, else male)['#PLAYER2#']");
+
     // Sec28.22 character_evacuate_from_all_vehicles.
     es.objectResolves().set("char06", true);
     ok(host, gp, "character_evacuate_from_all_vehicles('char06')");

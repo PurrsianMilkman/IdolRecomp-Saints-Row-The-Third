@@ -849,7 +849,9 @@ add_library(sr3luahost STATIC
     src/lua_bare_globals.cpp
 )
 target_include_directories(sr3luahost PUBLIC include)
-target_link_libraries(sr3luahost PUBLIC lua51)
+# sr3vintdoc (2026-10-03): EngineState::loadVintDocument builds the live
+# Vint element tree from a parsed .vint_doc (sr3vintdoc::parseDocument).
+target_link_libraries(sr3luahost PUBLIC lua51 sr3vintdoc)
 if(WIN32)
     target_link_libraries(sr3luahost PUBLIC user32)
 endif()
@@ -899,6 +901,50 @@ add_test(NAME synthetic_luahost_batch2728_test COMMAND sr3luahost_batch2728_test
 add_executable(sr3luahost_tranche03_tests tests/synthetic_luahost_tranche03_test.cpp)
 target_link_libraries(sr3luahost_tranche03_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_tranche03_test COMMAND sr3luahost_tranche03_tests)
+
+# Batch 2026-10-02: spec-lua-api-behaviour.md Sec31 (pause_map_stag_current_
+# district_control + 4 confirmed pause-map siblings, 5 `ui` names) and Sec32
+# (ranking tranche 04, 25 `gameplay` names), plus the 0x009df3d0 remote-co-op-
+# player correction (Sec14.31/Sec32.8) - see src/lua_spec_confirmed_stubs.cpp
+# and this test's own top comment.
+add_executable(sr3luahost_batch31_32_tests tests/synthetic_luahost_batch31_32_test.cpp)
+target_link_libraries(sr3luahost_batch31_32_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_batch31_32_test COMMAND sr3luahost_batch31_32_tests)
+
+# Batch 2026-10-02: spec-lua-api-behaviour.md Sec38/Sec39/Sec40 ("ranking
+# tranches 06/07/08"), 16 of their combined 75 CONFIRMED names - see
+# src/lua_spec_confirmed_stubs.cpp's own Sec38/Sec39/Sec40 batch header
+# comments and this test's own top comment.
+add_executable(sr3luahost_tranche060708_tests tests/synthetic_luahost_tranche060708_test.cpp)
+target_link_libraries(sr3luahost_tranche060708_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_tranche060708_test COMMAND sr3luahost_tranche060708_tests)
+
+# Batch 2026-10-02 (resumed session): the Sec3.7/Sec20.1 vehicle-
+# invulnerability bit-conflict resolution (Sec46.1) plus a curated subset of
+# ranking tranches 12-14 (Sec44/Sec45/Sec46) - see src/lua_spec_confirmed_
+# stubs.cpp's own batch header comment (right before stub_turn_invulnerable)
+# for the full selection reasoning.
+add_executable(sr3luahost_sec44_46_tests tests/synthetic_luahost_sec44_46_test.cpp)
+target_link_libraries(sr3luahost_sec44_46_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_sec44_46_test COMMAND sr3luahost_sec44_46_tests)
+
+# Batch 2026-10-03: spec-lua-api-behaviour.md Sec49 ("ranking tranche 16"),
+# 9 of its 25 CONFIRMED names (8 explicitly mandated regardless of call
+# count, plus spawning_boats which this batch's own fresh mission-drive
+# run found a real measured hit for) - see src/lua_spec_confirmed_stubs.cpp's
+# own Sec49 batch header comment and this test's own top comment.
+add_executable(sr3luahost_tranche16_tests tests/synthetic_luahost_tranche16_test.cpp)
+target_link_libraries(sr3luahost_tranche16_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_tranche16_test COMMAND sr3luahost_tranche16_tests)
+
+# Ranking tranches 15/17/20/22/23 (Sec52/Sec51/Sec53/Sec55/Sec57), the 8
+# real-hit names found across the whole Sec50-Sec59 backlog (2026-10-03,
+# orchestrator-directed pass) - see src/lua_spec_confirmed_stubs.cpp's own
+# batch header comment (right before stub_tutorial_lock) for the full
+# citation.
+add_executable(sr3luahost_tranche_realhits_tests tests/synthetic_luahost_tranche_realhits_test.cpp)
+target_link_libraries(sr3luahost_tranche_realhits_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_tranche_realhits_test COMMAND sr3luahost_tranche_realhits_tests)
 
 # The zscene / cutscene scene table (Sec26.25 item 5): cutscene.xtbl names +
 # one <name>.cte_xtbl per scene, on sr3xtbl like the other table readers.
@@ -988,6 +1034,21 @@ target_link_libraries(sr3vintdoc PUBLIC vpp_container)
 add_executable(sr3vintdoc_tests tests/synthetic_vintdoc_test.cpp)
 target_link_libraries(sr3vintdoc_tests PRIVATE sr3vintdoc)
 add_test(NAME synthetic_vintdoc_test COMMAND sr3vintdoc_tests)
+
+# Full-document walk + its Lua-host wiring (2026-10-03): synthetic (no game
+# data) and real-data (interface_startup.vpp_pc from CRREISH_GAME_CACHE_DIR;
+# exit 77 = SKIPPED when the archive is absent, e.g. CI).
+add_executable(sr3vintdoc_document_tests tests/synthetic_vintdoc_document_test.cpp)
+target_link_libraries(sr3vintdoc_document_tests PRIVATE sr3vintdoc sr3luahost)
+add_test(NAME synthetic_vintdoc_document_test COMMAND sr3vintdoc_document_tests)
+
+set(CRREISH_GAME_CACHE_DIR "D:/Project Crreish/Saints Row 3 CRREISH/packfiles/pc/cache" CACHE PATH
+    "Directory holding the shipped .vpp_pc archives, for real-data tests (skipped when absent)")
+add_executable(real_vintdoc_document_tests tests/real_vintdoc_document_test.cpp)
+target_link_libraries(real_vintdoc_document_tests PRIVATE sr3vintdoc sr3luahost vpp_container)
+target_compile_definitions(real_vintdoc_document_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_vintdoc_document_test COMMAND real_vintdoc_document_tests)
+set_tests_properties(real_vintdoc_document_test PROPERTIES SKIP_RETURN_CODE 77)
 
 add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
 target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)

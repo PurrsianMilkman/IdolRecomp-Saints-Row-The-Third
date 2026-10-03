@@ -19,6 +19,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace sr3luahost {
 
@@ -94,8 +95,15 @@ public:
     bool known(const std::string& key) const { return values_.count(key) != 0; }
     const T& get(const std::string& key) const {
         auto it = values_.find(key);
-        if (it == values_.end()) throw OpenStateError(std::string(what_) + "['" + key + "']", spec_);
-        return it->second;
+        if (it != values_.end()) return it->second;
+        // DIAGNOSTIC, not behaviour (see enableProbeFallback's own doc
+        // comment): off by default - every real baseline measurement runs
+        // with this unset, so a miss still throws exactly as before.
+        if (probeFallback_) {
+            if (probedKeys_) probedKeys_->insert(key);
+            return *probeFallback_;
+        }
+        throw OpenStateError(std::string(what_) + "['" + key + "']", spec_);
     }
     void set(const std::string& key, const T& v) { values_[key] = v; }
     void forget(const std::string& key) { values_.erase(key); }
@@ -103,10 +111,27 @@ public:
     const char* what() const { return what_; }
     const char* spec() const { return spec_; }
 
+    // DIAGNOSTIC ONLY (lua_host_run's own --probe-unresolved-names flag,
+    // off by default, never set by any normal code path or test): once
+    // enabled, a miss on get() no longer throws - it records the key into
+    // `probedKeys` (if given) and returns `fallback` instead, so a caller
+    // chasing "what's the NEXT blocker past this OPEN gate" can keep a
+    // mission running rather than stopping here. This never changes the
+    // DEFAULT behaviour (disabled unless a caller explicitly opts in) and
+    // must never be enabled while producing a real baseline measurement -
+    // every number it would influence is a synthetic stand-in, not
+    // recovered data.
+    void enableProbeFallback(const T& fallback, std::unordered_set<std::string>* probedKeys) {
+        probeFallback_ = fallback;
+        probedKeys_ = probedKeys;
+    }
+
 private:
     const char* what_;
     const char* spec_;
     std::unordered_map<std::string, T> values_;
+    std::optional<T> probeFallback_;
+    std::unordered_set<std::string>* probedKeys_ = nullptr;
 };
 
 } // namespace sr3luahost

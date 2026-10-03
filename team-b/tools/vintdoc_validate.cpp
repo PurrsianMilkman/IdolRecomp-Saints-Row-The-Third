@@ -2,6 +2,7 @@
 // owner's PC through the bridge (team-b/bridge-jobs/03_vintdoc_validate.json).
 //
 // usage: vintdoc_validate <out_dir> <archive.vpp_pc> [more archives...] [--dump <name-substring>]
+//        [--tree <name-substring>]   (Part 3: writes the first matching document's parsed tree)
 //
 // Part 1 - CONFIRMED checks. Every .vint_doc / .vint_xdoc entry in each
 // archive (nested .str2_pc containers included, every archive reported on
@@ -49,6 +50,7 @@
 #include <string>
 #include <vector>
 
+#include "sr3save/save_crc.h" // header-only nameHash (the engine's lower-cased CRC-32)
 #include "sr3vintdoc/vint_doc.h"
 #include "vpp/container.h"
 
@@ -268,6 +270,139 @@ std::string rangeMedian(std::vector<T> v) {
     return o.str();
 }
 
+// ---- Part 3: the real full-document walk (sr3vintdoc::parseDocument) -----
+//
+// Added 2026-10-03. Part 2's grid could never land (every combo reads the
+// string table at 0x1E); parseDocument() implements the layout confirmed
+// by Team A's disassembly (spec-vint-doc-format.md at main 67455c3) and
+// independently derived from these same files. This part is the Team B
+// cross-check Sec8 item 12 asks for: landing on header +0x16 and on EOF,
+// the tag histogram, the override layout, plus independent corroborators
+// (type names, property-name hashes against known names).
+struct Part3 {
+    long attempted = 0, parsedOk = 0, treeAt16 = 0, poolAtEof = 0, landed = 0, inlineInOrder = 0;
+    long records = 0, typeRegistered = 0, blocksWithOverrides = 0, emptyStringTables = 0;
+    std::map<std::string, long> failures; // message -> count
+    std::map<int, long> tagHist, rawByteHist, overrideCountHist, critSelectorHist;
+    std::map<std::string, long> overrideResolutions, typeHist;
+    std::map<uint32_t, long> hashHist;
+    std::map<std::string, std::string> distinct; // content digest key -> first entry chain
+    std::string treeDump;
+
+    static std::string key(const std::vector<uint8_t>& b) {
+        // A cheap content key (size + FNV-1a) - only used to count distinct documents.
+        uint64_t h = 1469598103934665603ull;
+        for (uint8_t x : b) { h ^= x; h *= 1099511628211ull; }
+        return std::to_string(b.size()) + ":" + std::to_string(h);
+    }
+
+    void walkNode(const ElementNode& n, int depth, bool dump) {
+        ++records;
+        typeRegistered += isRegisteredElementType(n.type);
+        ++typeHist[n.type];
+        ++rawByteHist[n.rawByte];
+        ++overrideCountHist[static_cast<int>(n.overrides.size())];
+        if (!n.overrides.empty()) ++blocksWithOverrides;
+        inlineInOrder += n.listsInlineInOrder;
+        for (const auto& o : n.overrides) {
+            ++overrideResolutions[o.resolutionName];
+            for (const auto& p : o.list.properties) { ++tagHist[p.tag]; ++hashHist[p.nameHash]; }
+        }
+        for (const auto& p : n.baseline.properties) { ++tagHist[p.tag]; ++hashHist[p.nameHash]; }
+        if (dump) {
+            treeDump += std::string(static_cast<size_t>(depth) * 2, ' ') + n.name + " : " + n.type + "  children=" +
+                        std::to_string(n.children.size()) + " baseline_props=" +
+                        std::to_string(n.baseline.properties.size()) + " overrides=" +
+                        std::to_string(n.overrides.size()) + "\n";
+        }
+        for (const auto& c : n.children) walkNode(c, depth + 1, dump);
+    }
+
+    void score(const Doc& d, vpp::ByteView v, const std::string& treeName) {
+        ++attempted;
+        distinct.emplace(key(d.bytes), d.chain);
+        try {
+            Document doc = parseDocument(v);
+            ++parsedOk;
+            treeAt16 += doc.treeEndsAtStringTable();
+            poolAtEof += doc.strings.endsAtEof;
+            landed += doc.landsExactly();
+            for (const auto& c : doc.criticalResources) ++critSelectorHist[c.selectorRaw];
+            bool dump = !treeName.empty() && d.chain.find(treeName) != std::string::npos && treeDump.empty();
+            if (dump) {
+                treeDump = "document " + d.chain + " (" + std::to_string(d.bytes.size()) + " bytes): header elements=" +
+                           std::to_string(doc.header.elementCount) + " animations=" +
+                           std::to_string(doc.header.animationCount) + " metadata=" +
+                           std::to_string(doc.header.metadataCount) + " critical=" +
+                           std::to_string(doc.header.criticalResourceCount) + " strings=" +
+                           std::to_string(doc.strings.strings.size()) + " records=" +
+                           std::to_string(doc.totalRecordCount()) + " lands=" +
+                           (doc.landsExactly() ? "yes" : "no") + "\n";
+                for (const auto& m : doc.metadataStrings) treeDump += "  metadata " + m.name + " = " + m.value + "\n";
+            }
+            if (dump) treeDump += "-- elements\n";
+            for (const auto& e : doc.elements) walkNode(e, 1, dump);
+            if (dump) treeDump += "-- animations\n";
+            for (const auto& e : doc.animations) walkNode(e, 1, dump);
+        } catch (const std::exception& ex) {
+            ++failures[ex.what()];
+        }
+    }
+
+    template <typename Line>
+    void report(Line& line, const fs::path& outDir) const {
+        auto frac = [](long a, long b) { return std::to_string(a) + "/" + std::to_string(b); };
+        line("\n--- Part 3: full-document walk, sr3vintdoc::parseDocument (layout CONFIRMED, spec 67455c3) ---");
+        line("entries attempted: " + std::to_string(attempted) + "   distinct contents: " + std::to_string(distinct.size()));
+        line("parsed without FormatError: " + frac(parsedOk, attempted));
+        for (const auto& [msg, n] : failures) line("  failure x" + std::to_string(n) + ": " + msg);
+        line("tree ends exactly at header +0x16: " + frac(treeAt16, parsedOk));
+        line("string pool ends exactly at EOF: " + frac(poolAtEof, parsedOk));
+        line("both (lands exactly): " + frac(landed, parsedOk));
+        line("element/animation records: " + std::to_string(records) + "   type resolves to a registered name: " +
+             frac(typeRegistered, records));
+        line("property lists stored inline, overrides then baseline, contiguous: " + frac(inlineInOrder, records));
+        std::string s;
+        for (const auto& [k, n] : overrideCountHist) s += " " + std::to_string(k) + ":" + std::to_string(n);
+        line("override pairs per block (count:records):" + s);
+        s.clear();
+        for (const auto& [k, n] : overrideResolutions) s += " " + k + " x" + std::to_string(n);
+        line("override resolution names:" + s);
+        s.clear();
+        for (const auto& [k, n] : tagHist) s += " " + std::to_string(k) + ":" + std::to_string(n);
+        line("property tag histogram (tag:records):" + s);
+        s.clear();
+        for (const auto& [k, n] : rawByteHist) s += " " + std::to_string(k) + ":" + std::to_string(n);
+        line("record raw byte after child count (value:records):" + s);
+        s.clear();
+        for (const auto& [k, n] : critSelectorHist) s += " " + std::to_string(k) + ":" + std::to_string(n);
+        line("critical-resource selector byte (value:entries):" + s);
+        s.clear();
+        for (const auto& [k, n] : typeHist) s += " " + k + ":" + std::to_string(n);
+        line("record types:" + s);
+        // spec-lua-bindings.md Sec9.2's 17 `element` property names, hashed the
+        // engine's way (lower-cased seed-0 CRC-32, sr3save::nameHash).
+        static const char* const kElementProps[17] = {
+            "render_mode", "visible", "mask", "offset", "anchor", "tint", "alpha", "depth", "mouse_depth",
+            "screen_size", "screen_nw", "screen_se", "rotation", "scale", "auto_offset", "unscaled_size", "background"};
+        long seen = 0;
+        s.clear();
+        for (const char* nm : kElementProps) {
+            auto it = hashHist.find(sr3save::nameHash(nm));
+            long n = it == hashHist.end() ? 0 : it->second;
+            seen += n > 0;
+            s += " " + std::string(nm) + ":" + std::to_string(n);
+        }
+        line("distinct property-name hashes: " + std::to_string(hashHist.size()) +
+             "   Sec9.2 element names present on disk: " + std::to_string(seen) + "/17 ->" + s);
+        if (!treeDump.empty()) {
+            std::ofstream t(outDir / "vintdoc_tree_dump.txt");
+            t << treeDump; // element/document names are game data - private bus / local only, never committed
+            line("tree dump written: vintdoc_tree_dump.txt");
+        }
+    }
+};
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -278,10 +413,11 @@ int main(int argc, char** argv) {
     fs::path outDir = argv[1];
     fs::create_directories(outDir);
     std::vector<std::string> archives;
-    std::string dumpName;
+    std::string dumpName, treeName;
     for (int i = 2; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--dump" && i + 1 < argc) dumpName = argv[++i];
+        else if (a == "--tree" && i + 1 < argc) treeName = argv[++i];
         else archives.push_back(a);
     }
 
@@ -341,6 +477,7 @@ int main(int argc, char** argv) {
         std::vector<uint16_t> elems, anims;
         std::map<std::string, long> comboWalked, comboLanded, comboType, comboElems, comboMetaIn, comboMeta;
         std::map<int, long> landedHistogram;
+        Part3 part3;
 
         for (const Doc& d : docs) {
             vpp::ByteView v(d.bytes.data(), d.bytes.size());
@@ -359,6 +496,7 @@ int main(int argc, char** argv) {
                 continue;
             }
             ++magicOk;
+            part3.score(d, v, treeName);
             reservedZero += h.reserved04 == 0;
             if (h.version == 1) ++v1; else if (h.version == 2) ++v2; else ++vOther;
             if (h.field0ARaw == 0) ++f0aZero; else ++f0aValues[h.field0ARaw];
@@ -496,6 +634,7 @@ int main(int argc, char** argv) {
         std::string hist;
         for (auto& kv : landedHistogram) hist += " " + std::to_string(kv.first) + ":" + std::to_string(kv.second);
         line("ambiguity - number of combos landing per file (combos:files):" + hist);
+        part3.report(line, outDir);
     }
     return exitCode;
 }

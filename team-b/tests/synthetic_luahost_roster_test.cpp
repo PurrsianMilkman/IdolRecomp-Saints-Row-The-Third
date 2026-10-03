@@ -42,7 +42,12 @@ std::string typeOf(lua_State* L, const std::string& name) {
 
 int main() {
     auto names = loadTaggedRegistrationList(CRREISH_TOOLS_DIR "/lua_all_registered_1490_tagged.txt");
-    CHECK(names.size() == 1490);
+    // 1491 (2026-10-02, Sec47): the gameplay registrar's own row count
+    // discrepancy resolved - on_mission_item_drop is registered twice under
+    // an identical name/handler, so it was simply missing from this file
+    // until now. Filename kept as-is (historical, not re-derived from the
+    // current count).
+    CHECK(names.size() == 1491);
     Host host(names);
     lua_State* gp = host.gameplayState();
     lua_State* ui = host.uiState();

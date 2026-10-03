@@ -145,6 +145,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 #elif CRREISH_FUZZ_TARGET_asm
     guarded([&] { (void)sr3asm::AsmManifest::parse(v); });
 #elif CRREISH_FUZZ_TARGET_vintdoc
+    // The full-document walk (2026-10-03), on its own so a failure in the
+    // older positioned-decoder probe below cannot hide it.
+    guarded([&] {
+        if (!sr3vintdoc::looksLikeVintDoc(v)) return;
+        auto d = sr3vintdoc::parseDocument(v);
+        for (const auto& e : d.elements) (void)e.effectiveProperties("640x480");
+    });
     guarded([&] {
         if (!sr3vintdoc::looksLikeVintDoc(v)) return;
         auto h = sr3vintdoc::parseHeader(v);

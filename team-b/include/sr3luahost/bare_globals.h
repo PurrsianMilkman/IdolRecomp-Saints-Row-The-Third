@@ -153,9 +153,11 @@ private:
 // +0x08 key is not modelled - the error is recorded in errors() and the
 // HitLog instead. The parent's +0x08/+0x14 values are never read by the host.
 //
-// The scheduler 0x00e0cf50 (spec-lua-api-behaviour.md Sec26.27 thread table,
-// "[RESOLVED 2026-10-02 ...]" block under "The runner's other callers",
-// CONFIRMED - disassembly), implemented as schedulerPass():
+// The scheduler 0x00e0cf50 (spec-lua-api-behaviour.md thread-table section,
+// "MAJOR CORRECTION (2026-10-02, stuck-delay-mission investigation)" block,
+// CONFIRMED - disassembly, re-derived a second time - supersedes an earlier
+// "[RESOLVED 2026-10-02 ...]" pass's own wrong reading of the cadence, see
+// below), implemented as schedulerPass():
 //  - one 256-capacity array, walked in index order, the live count re-read
 //    every step;
 //  - every visited record's +0x18 bit 0 (the runner's re-entrancy flag, set
@@ -163,21 +165,49 @@ private:
 //    unconditionally;
 //  - then the runner is called on it unless its owning Lua state (+0x08) is
 //    in the small refcounted exempt list (0x00e0d710/0x00e0d6e0/0x00e0d5c0:
-//    up to 4 keys, empty at start-up, only the interface/UI module adds, the
-//    gameplay state never);
+//    up to 4 keys, empty at start-up). CORRECTED: the only code anywhere
+//    that adds to this list is the game-PAUSE push/pop quartet
+//    (0x007074a0/0x00708a80 push, 0x00707540/0x00708330 pop, keyed on the
+//    shared pause depth 0x01503eb0) - every one of them passes the GAMEPLAY
+//    Lua state itself (0x026e7e6c), never the UI module (the "only the
+//    interface/UI module adds" reading above this correction was wrong on
+//    the key). So the gameplay state is exempted for exactly as long as any
+//    game-pause level is held, never otherwise. No Lua-registered function
+//    can ever push or pop a pause (Sec37.3), and this host never simulates
+//    an engine-side pause flow (e.g. a cutscene pause-menu), so
+//    exemptState()/unexemptState() correctly stay uncalled by any real host
+//    code path today - exercised only by tests;
 //  - no per-pass resume budget; thread_new appends straight into the same
 //    array (no pending list); removal is swap-compaction (0x00e0c650), run by
 //    the runner itself.
-// The engine calls it from a dedicated background thread throttled to a 30 ms
-// minimum per iteration (~33 Hz, no fixed maximum). How a tick-driven host
-// maps its ticks onto that cadence is the host's own choice (lua_host_run's
-// mission loop documents its CHOSEN mapping); nothing here runs on a clock.
+// CORRECTED (the engine-calls-it-from-a-background-thread reading above this
+// note's own earlier revision was wrong): 0x00702070 is NOT a steady-state
+// pump - it is the boot-only "Boot_render" loading-screen thread, which
+// terminates before the first gameplay frame and never runs again. The real
+// steady-state driver is 0x00e0dfc0, on the MAIN thread, called once per
+// rendered/game frame from each active game state's own per-frame update
+// (0x007b05f0 for the in-game state, the front-end state, and the cutscene
+// driver 0x00702a50), which itself unconditionally calls this scheduler once
+// - except while 0x00dafa90 reports a blocking stream load in progress (not
+// modelled here; this host never simulates a blocking load). There is no
+// independent ~30 ms cadence to approximate: a host that calls
+// schedulerPass() once per its own rendered/game "frame" reproduces the real
+// engine exactly (lua_host_run's mission loop documents its CHOSEN
+// tick-equals-frame mapping, kSchedulerPassesPerTick == 1).
 // OPEN, not implemented: the engine hooks at 0x02a44d60/0x02a44d64; the
 // "do not run" bit 4 (never set in the dumps); the top-level entry that
 // pushes the first record (startThread() is the host's explicit entry for
-// tools and tests); WHEN the UI module adds its state to the exempt list
-// and the exact key it passes (HIGH CONFIDENCE only), so no host code adds
-// to it on its own - exemptState() is there for a caller that models it.
+// tools and tests).
+//
+// Resume-veto hooks (spec-lua-api-behaviour.md Sec37.4, CONFIRMED): the
+// runner 0x00e0cba0 also consults two optional callbacks (installed once by
+// 0x00a1ff70) before every resume - a "should this thread be killed" hook and
+// a "skip this resume" hook - but BOTH act only on records whose own +0x18
+// has bit 0x08 set; for any other record (every plain mission/gameplay
+// thread this table drives) both unconditionally return false. Not
+// implemented here (the object-bound thread category that sets bit 0x08,
+// and its own setter, are OPEN) - correctly a no-op for everything this host
+// runs, since nothing here ever sets that bit.
 // ---------------------------------------------------------------------
 class BareThreadTable {
 public:
@@ -314,10 +344,31 @@ private:
 // Everything the 24 bodies keep between calls, one per Host.
 class BareGlobalsState {
 public:
-    // get_frame_time (Sec26.27): the single-precision engine global
-    // 0x0132a0b0, 1/30 in the file image (CONFIRMED). Its writer is OPEN, so
-    // nothing in the host changes it.
+    // get_frame_time: the single-precision engine global 0x0132a0b0.
+    // CONFIRMED (spec-lua-api-behaviour.md Sec37.2/Sec37.5, stuck-delay-
+    // mission investigation 2026-10-02 - supersedes the earlier "writer is
+    // OPEN" reading): the writer (0x00db9970, one-time startup default 1/30
+    // from 0x00db97e0) stores the RAW measured wall-clock delta since the
+    // previous call, refreshed every main-loop frame - never scaled by game
+    // speed, never capped, never gated by game pause (those apply only to a
+    // separate pair of millisecond accumulators, Sec37.2) - so in the
+    // shipped engine the clock itself can never stall, only the thread
+    // reading it can.
+    //
+    // This host has no real wall clock to measure against, so this member
+    // models "the elapsed time the call that just resumed this thread
+    // should see" as a value a caller sets explicitly via setFrameTime();
+    // it starts at the file image's own CONFIRMED 1/30 default until a
+    // caller chooses otherwise. Sec37.5 states plainly that a stuck-delay
+    // defect is most likely "refreshed on a cadence that does not match the
+    // thread-resume cadence" - so a caller that resumes schedulerPass() N
+    // times per its own tick must set this to (that tick's own modelled
+    // elapsed time) / N, not leave it at a value with no relation to its own
+    // resume cadence (tools/lua_host_run.cpp's mission loop does this: one
+    // schedulerPass() per tick, so one call's worth of elapsed time is the
+    // whole tick's own kFadeHostMsPerTick, CHOSEN).
     float frameTime() const { return frameTime_; }
+    void setFrameTime(float seconds) { frameTime_ = seconds; }
 
     BareRandomSource& random() { return random_; }
     IncludeQueue& includeQueue() { return includeQueue_; }
@@ -326,7 +377,7 @@ public:
     void setHitLog(HitLog* log) { log_ = log; }
 
 private:
-    float frameTime_ = 1.0f / 30.0f;
+    float frameTime_ = 1.0f / 30.0f; // CONFIRMED file-image startup default; see setFrameTime() above.
     BareRandomSource random_;
     IncludeQueue includeQueue_;
     BareThreadTable threads_;

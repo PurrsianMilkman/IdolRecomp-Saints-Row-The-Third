@@ -10,6 +10,14 @@
 // The mission stems (dlc1_mm_02..06) are names from this project's own
 // mission list (tools/, the one lua_host_run reads), so the mission-driving
 // pass picks them up.
+//
+// 2026-10-02: dlc1_mm_05_start now also regression-tests the real dlc2_m02
+// "attempt to index local 'cp_data' (a nil value)" bug
+// (spec-lua-api-behaviour.md Sec36.4, spec-lua-bindings.md Sec14.11) - a
+// fresh start's checkpoint argument must be the STRING "mission start",
+// never the number 0 this harness used to pass (tools/lua_host_run.cpp's
+// callMissionStart()). A checkpoint table keyed only by name strings comes
+// back nil when indexed by the number 0, same shape as the real bug.
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
@@ -123,9 +131,22 @@ int main(int argc, char** argv) {
         {"dlc1_mm_06.lua", "function dlc1_mm_06_start(cp, restart)\n  helper_wait_scene('scene_a')\nend\n"},
         // CONFIRMED stubs only: _start succeeds. fade_out(0) starts a fade-out
         // (Sec26.24); no UI script defines screen_fade_do here, so the host's
-        // labelled fallback completes it on the first mission tick.
+        // labelled fallback completes it on the first mission tick. Also
+        // regression-tests the checkpoint-argument call shape (see this file's
+        // own top comment, 2026-10-02): a checkpoint table keyed only by name
+        // strings, indexed by `cp` - if `cp` were ever the number 0 again (the
+        // old bug) instead of the string "mission start", `cp_data` would come
+        // back nil and indexing it would raise "attempt to index local
+        // 'cp_data' (a nil value)", the exact real dlc2_m02 error shape.
         {"dlc1_mm_05.lua",
-         "function dlc1_mm_05_start(cp, restart)\n  set_mission_author()\n  fade_out(0)\nend\n"},
+         "function dlc1_mm_05_start(cp, restart)\n"
+         "  local checkpoints = {[\"mission start\"] = {done = true}}\n"
+         "  local cp_data = checkpoints[cp]\n"
+         "  if not cp_data.done then error('unreachable: cp_data.done not set') end\n"
+         "  if restart then error('is_restart should be false on a fresh start') end\n"
+         "  set_mission_author()\n"
+         "  fade_out(0)\n"
+         "end\n"},
         // A plain Lua runtime error inside _start.
         {"dlc1_mm_04.lua", "function dlc1_mm_04_start(cp, restart)\n  local t = nil\n  return t.field\nend\n"},
         // Request 11 (Sec26.27): _start runs as a script-thread record, so

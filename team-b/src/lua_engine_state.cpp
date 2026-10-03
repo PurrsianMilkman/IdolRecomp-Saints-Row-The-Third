@@ -4,7 +4,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <functional>
 #include <limits>
+
+#include "sr3vintdoc/vint_doc.h"
 
 namespace sr3luahost {
 
@@ -69,6 +72,27 @@ void EngineState::markScriptNpcBoundForTesting(const std::string& name) {
     c.currentHitPoints.forget();
 }
 
+void EngineState::registerSyncedActionForTesting(const std::string& name, int32_t index) {
+    syncedActionIndexByName_[name] = index;
+}
+
+int32_t EngineState::lookupSyncedActionIndex(const std::string& name) const {
+    auto it = syncedActionIndexByName_.find(name);
+    return it != syncedActionIndexByName_.end() ? it->second : kSyncedActionNotFound;
+}
+
+void EngineState::actionSequenceEnd() {
+    // action_sequence_end (Sec33.3): clears the shared sequence object and
+    // per-player scripted-camera/target fields; releases two tracked
+    // handles (this project's own combined counter, see ActionSequence's
+    // own doc comment); host-only broadcasts an opcode-0x49 record.
+    actionSequence_.active = false;
+    actionSequence_.localScriptedCameraTarget.clear();
+    actionSequence_.remoteScriptedCameraTarget.clear();
+    actionSequence_.trackedHandleReleaseCount += 2;
+    if (coopLocalIsHost()) ++actionSequence_.hostBroadcastCount;
+}
+
 void EngineState::replicateStateChange(const std::string& fieldTag, const std::string& objectName) {
     // Stated, explicit no-op (see engine_state.h's own doc comment on this
     // function): a real coop/network-sync commit would happen here on the
@@ -116,9 +140,13 @@ uint32_t EngineState::findVdoObject(const std::string& name, bool hasParent, uin
         return 0; // resolved parent, no matching child - real "not found" path
     }
     // The current default document is OPEN state; read it only when the
-    // answer depends on it. With no objects registered at all, "not found"
-    // holds for every document, so it is not read.
-    if (vdoObjects_.empty()) return 0;
+    // answer depends on it. With no object registered under this name at
+    // all, "not found" holds for every document, so it is not read.
+    bool anyWithName = false;
+    for (const auto& [h, obj] : vdoObjects_) {
+        if (obj.nameHash == targetHash) { anyWithName = true; break; }
+    }
+    if (!anyWithName) return 0;
     uint32_t targetDoc = hasDoc ? docHandle : currentDefaultDocHandle_.get();
     for (const auto& [h, obj] : vdoObjects_) {
         if (obj.docHandle == targetDoc && obj.nameHash == targetHash) return h;
@@ -164,6 +192,109 @@ uint32_t EngineState::cloneVdoObject(uint32_t origHandle, bool hasParentArg, uin
     clone.docHandle = doc;
     vdoObjects_[handle] = clone;
     return handle;
+}
+
+namespace {
+
+// One stored file property as the Lua values vint_get_property pushes (see
+// EngineState::loadVintDocument's doc comment for the CHOSEN mapping).
+std::vector<VintTaggedValue> fileValueToTagged(const sr3vintdoc::Property& p, const sr3vintdoc::Document& doc) {
+    auto number = [](double d) {
+        VintTaggedValue v;
+        v.kind = VintTaggedValue::Kind::Number;
+        v.number = d;
+        return v;
+    };
+    std::vector<VintTaggedValue> out;
+    switch (p.tag) {
+        case 1: out.push_back(number(static_cast<double>(static_cast<int32_t>(p.rawU32())))); break; // signed (67455c3)
+        case 2: out.push_back(number(static_cast<double>(p.rawU32()))); break;                       // unsigned (67455c3)
+        case 3: out.push_back(number(p.f32(0))); break;
+        case 4: {
+            uint32_t idx = p.rawU32();
+            if (idx < doc.strings.strings.size()) {
+                VintTaggedValue v;
+                v.kind = VintTaggedValue::Kind::String;
+                v.text = doc.strings.strings[idx];
+                out.push_back(v);
+            }
+            // An out-of-range index would resolve to null in the loader
+            // (0x00e1ed90); no shipped file has one - nothing is stored.
+            break;
+        }
+        case 5: {
+            VintTaggedValue v;
+            v.kind = VintTaggedValue::Kind::Boolean;
+            v.boolean = p.boolean();
+            out.push_back(v);
+            break;
+        }
+        case 6: for (size_t i = 0; i < 3; ++i) out.push_back(number(p.f32(i))); break;
+        case 7: for (size_t i = 0; i < 2; ++i) out.push_back(number(p.f32(i))); break;
+        default: break; // parseDocument never yields another tag
+    }
+    return out;
+}
+
+} // namespace
+
+uint32_t EngineState::loadVintDocument(const std::string& docName, const sr3vintdoc::Document& doc,
+                                       const std::string& activeResolution) {
+    LoadedVintDocument ld;
+    ld.name = docName;
+    ld.handle = nextVintDocumentHandle_++;
+    if (const std::string* s = doc.metadataValue("lua_script_file")) ld.luaScriptFile = *s;
+
+    // Pre-order, handle issued before the children are visited, so handles
+    // ascend in file order (findVdoObject's tie-break relies on it).
+    std::function<uint32_t(const sr3vintdoc::ElementNode&, uint32_t)> add =
+        [&](const sr3vintdoc::ElementNode& n, uint32_t parent) -> uint32_t {
+        uint32_t h = nextVdoObjectHandle_++;
+        {
+            VdoObject obj;
+            obj.name = n.name;
+            obj.nameHash = sr3save::nameHash(n.name);
+            obj.parentHandle = parent;
+            obj.docHandle = ld.handle;
+            obj.typeName = n.type;
+            obj.fromDocument = true;
+            vdoObjects_[h] = obj;
+        }
+        ++ld.objectCount;
+        for (const auto& p : n.effectiveProperties(activeResolution)) {
+            std::vector<VintTaggedValue> values = fileValueToTagged(p, doc);
+            if (values.empty()) continue;
+            vintProperties_[h][p.nameHash] = std::move(values);
+            ++ld.propertyCount;
+        }
+        uint32_t prev = 0;
+        for (const auto& c : n.children) {
+            uint32_t ch = add(c, h);
+            if (prev == 0) vdoObjects_[h].firstChildHandle = ch;
+            else vdoObjects_[prev].nextSiblingHandle = ch;
+            prev = ch;
+        }
+        return h;
+    };
+    auto addList = [&](const std::vector<sr3vintdoc::ElementNode>& list, std::vector<uint32_t>& handles) {
+        uint32_t prev = 0;
+        for (const auto& n : list) {
+            uint32_t h = add(n, 0);
+            if (prev != 0) vdoObjects_[prev].nextSiblingHandle = h;
+            prev = h;
+            handles.push_back(h);
+        }
+    };
+    addList(doc.elements, ld.elementHandles);
+    addList(doc.animations, ld.animationHandles);
+    uint32_t handle = ld.handle;
+    loadedVintDocuments_[handle] = std::move(ld);
+    return handle;
+}
+
+const LoadedVintDocument* EngineState::loadedVintDocument(uint32_t docHandle) const {
+    auto it = loadedVintDocuments_.find(docHandle);
+    return it == loadedVintDocuments_.end() ? nullptr : &it->second;
 }
 
 double EngineState::vintGetTimeIndex(bool hasExplicitNonZeroDoc, uint32_t explicitDoc) const {
@@ -219,6 +350,28 @@ int EngineState::dataResponderDispatchAttempts(const std::string& name) const {
     return it == vintDataResponders_.end() ? 0 : it->second.dispatchAttempts;
 }
 
+void EngineState::registerScriptedRequestForTesting(const std::string& name, int kind, bool done) {
+    scriptedRequestDone_[{name, kind}] = done;
+}
+
+int EngineState::scriptedRequestStatusCode(const std::string& name, int kind) {
+    auto it = scriptedRequestDone_.find({name, kind});
+    if (it == scriptedRequestDone_.end()) return 2; // Sec35.2: no matching request
+    if (!it->second) return 0;                      // Sec35.2: request exists, still pending
+    scriptedRequestDone_.erase(it);                  // Sec35.2: a "done" read releases the record
+    return 1;
+}
+
+void EngineState::setVehiclePathfindResolvableForTesting(const std::string& vehicleName, bool resolvable) {
+    if (resolvable) vehiclePathfindResolvable_.insert(vehicleName);
+    else vehiclePathfindResolvable_.erase(vehicleName);
+}
+
+double EngineState::vehiclePathfindCheckDoneCode(const std::string& vehicleName) {
+    if (!vehiclePathfindResolvable_.count(vehicleName)) return 2.0; // Sec9.10: unresolved vehicle/no slot-0 occupant fallback
+    return static_cast<double>(scriptedRequestStatusCode(vehicleName, kScriptedRequestKindMoveOrPathfind));
+}
+
 int EngineState::tutorialAdvanceCount(int index) const {
     auto it = tutorialAdvanceCounts_.find(index);
     return it == tutorialAdvanceCounts_.end() ? 0 : it->second;
@@ -226,6 +379,50 @@ int EngineState::tutorialAdvanceCount(int index) const {
 
 void EngineState::recordTutorialAdvance(int index) {
     ++tutorialAdvanceCounts_[index];
+}
+
+// tutorial_lock (Sec52.3, tranche 15, real-hit batch 2026-10-03) - see
+// engine_state.h's own doc comment on tutorialLockCount()/
+// recordTutorialLock() for the full citation.
+int EngineState::tutorialLockCount(int index) const {
+    auto it = tutorialLockCounts_.find(index);
+    return it == tutorialLockCounts_.end() ? 0 : it->second;
+}
+
+void EngineState::recordTutorialLock(int index) {
+    ++tutorialLockCounts_[index];
+}
+
+// dlc2_m02_clapboards_get/_reset (Sec55.5, tranche 22, real-hit batch
+// 2026-10-03) - see engine_state.h's own doc comment for the full citation
+// (CONFIRMED shape, HOST-SAFETY lower-bound deviation).
+void EngineState::dlc2ClapboardsReset(int32_t rawCount) {
+    // CONFIRMED: "clamped to at most 10, no lower clamp" - a negative
+    // rawCount is stored as-is (matching the real native exactly; it is
+    // harmless here because the zero-fill loop below only runs for a
+    // strictly positive count).
+    dlc2ClapboardCount_ = rawCount > 10 ? 10 : rawCount;
+    for (int32_t i = 0; i < dlc2ClapboardCount_ && i < static_cast<int32_t>(dlc2ClapboardFlags_.size()); ++i) {
+        dlc2ClapboardFlags_[static_cast<size_t>(i)] = false;
+    }
+}
+
+int EngineState::dlc2ClapboardsGet(int32_t clapboardNumber) {
+    // CONFIRMED (1-based -> 0-based): index = clapboardNumber - 1, compared
+    // against dlc2ClapboardCount_ as a signed value with only the upper
+    // bound checked by the real native. HOST-SAFETY DEVIATION (not a spec
+    // fact): clapboardNumber <= 0 (the real arbitrary-read trigger) is
+    // refused here instead of reproduced - this project does not simulate
+    // crashes/arbitrary reads (group_get_next_npc / Sec28.5 precedent).
+    if (clapboardNumber <= 0) {
+        ++dlc2ClapboardsGetNegativeIndexGuardCount_; // HOST-SAFETY, see doc comment above
+        return -1;
+    }
+    const int32_t index = clapboardNumber - 1;
+    // CONFIRMED: out of the upper bound -> "no value at all" (-1 sentinel
+    // here, pushed as nil by the stub, not false).
+    if (index >= dlc2ClapboardCount_ || index >= static_cast<int32_t>(dlc2ClapboardFlags_.size())) return -1;
+    return dlc2ClapboardFlags_[static_cast<size_t>(index)] ? 1 : 0;
 }
 
 EngineState::TutorialLookup EngineState::tutorialLookup(const std::string& name) {
@@ -333,6 +530,171 @@ bool EngineState::vintIsStdRes() const {
     }
     if (q < 1.5) return true; // the double at 0x012a2d30; false for NaN
     return vintDisplayMode_.get() == 2;
+}
+
+// =========================================================================
+// pause-map stag mode / district control (spec-lua-api-behaviour.md Sec31)
+// - batch 2026-10-02.
+// =========================================================================
+
+double EngineState::pauseMapZoneControlFraction(uint32_t zoneHandle) const {
+    double total = 0.0;
+    double owned = 0.0;
+    auto it = zoneMembersByZone_.find(zoneHandle);
+    if (it != zoneMembersByZone_.end()) {
+        for (const auto& m : it->second) {
+            total += static_cast<double>(m.weight);
+            if (m.owned) owned += static_cast<double>(m.weight);
+        }
+    }
+    // CONFIRMED (Sec31.2): total <= 0 (including a NaN total, which fails
+    // every ordered comparison) pushes the constant 1.0 instead of dividing.
+    if (!(total > 0.0)) return 1.0;
+    return owned / total;
+}
+
+// pause_map_set_gps (Sec31.3). CONFIRMED: while stag mode (0x0229a317, the
+// SAME global game_autosave's own gate reads - Sec27.12/Sec31.5) is on, a
+// valid hovered zone (non-null, +0x44 non-null, +0x54 > 0) is copied into
+// the selected-zone global and the Lua hook `pause_map_stag_completion`
+// fires through the established hook dispatch trio (0x00e0cef0/0x00e0ca80/
+// 0x00e0cd00). That real per-call dispatch already has its own general,
+// existence-gated per-script firing pass elsewhere in this project
+// (hook_registry.cpp's `pause_map_stag_completion` entry, Group 1) - rather
+// than invoking the Lua callback a SECOND time through a separate path
+// here, this method counts that the real gate fired
+// (pauseMapStagCompletionHookFiredCount_), which is itself the real,
+// CONFIRMED condition under which the engine's own dispatch would run.
+// Outside stag mode, or with no valid hovered zone: CONFIRMED "it does
+// nothing" to 0x0229a2ac - the real non-stag GPS-route behavior is not
+// traced by this section and is not modeled (this project's own stated
+// simplification, not a claim the real function does nothing at all).
+void EngineState::pauseMapSetGpsStagBranch() {
+    if (!autosave_.fourthFlagNonzero.get()) return; // OPEN until set; not in stag mode -> real GPS-route behavior, not modeled here
+    const PauseMapHoveredZone& h = pauseMapHoveredZone_;
+    if (h.zoneHandle != 0 && h.hasParentDistrict && h.fieldPlus0x54 > 0) {
+        pauseMapSelectedZone_ = h.zoneHandle;
+        ++pauseMapStagCompletionHookFiredCount_;
+    }
+}
+
+// pause_map_stag_takeover_do_reward (Sec31.6). CONFIRMED: claims every
+// member of the selected zone not yet owned (sets bit 0x02 of +0x3a - and,
+// per Sec31.4, bit 0x01 too, though nothing in this batch's own scope reads
+// that second bit, so only the Lua-visible "owned" bit is modeled); clears
+// stag mode; requests an autosave (no longer suppressed, since clearing
+// stag mode lifts game_autosave's own 0x0229a317 gate). The real reward-
+// summary display (0x007ef9a0, HYPOTHESIS) and its own feeder reads (local
+// player cash/respect, the parent district's control fraction via
+// 0x0084ce80) have no further Lua-visible consequence among this batch's
+// own in-scope names and are not modeled.
+//
+// Sec31.6's own text: "this function dereferences the selected zone's own
+// +0x44 without a null check - it must only be called after a valid
+// selection has been made." With no zone selected (pauseMapSelectedZone_ ==
+// 0), the real engine's behavior is undefined (a null-pointer dereference);
+// this host safely refuses instead of reproducing that crash, matching the
+// project's own "flag a real hazard, don't reproduce it" precedent for the
+// three crash-shaped paths ranking tranche 04 itself flags (Sec32.8).
+void EngineState::pauseMapStagTakeover() {
+    if (pauseMapSelectedZone_ == 0) return; // real engine: undefined-behavior null-deref on +0x44; this host refuses safely instead
+    auto it = zoneMembersByZone_.find(pauseMapSelectedZone_);
+    if (it != zoneMembersByZone_.end()) {
+        for (auto& m : it->second) {
+            if (!m.owned) {
+                m.owned = true;
+                ++pauseMapTakeoverClaimedCount_;
+            }
+        }
+    }
+    autosave_.fourthFlagNonzero.set(false); // CONFIRMED: clears stag mode
+    ++pauseMapTakeoverAutosaveRequestCount_; // CONFIRMED: requests an autosave; the real save itself (0x00b94ff0) is OPEN per spec, same precedent as game_autosave's own triggeredCount
+}
+
+// =========================================================================
+// Ranking tranche 04 (spec-lua-api-behaviour.md Sec32) - batch 2026-10-02.
+// =========================================================================
+
+void EngineState::resetSpawnRegionMaxSpawnDist() {
+    spawnRegionMaxSpawnDistSquared_ = std::numeric_limits<float>::max(); // CONFIRMED "reset" value, FLT_MAX
+}
+
+// set_time_of_day (Sec32.1 forward-jump arithmetic, corrected by Sec48.4's
+// own real post-condition - see GameClock's own header doc comment).
+// CONFIRMED: computes an hour delta forced non-negative (adds 24 if it
+// would go negative - "the clock only ever advances"), combines it with
+// the raw minute delta into a total seconds figure - kept as
+// lastAdvanceSeconds, test-observable. The real engine then snaps the
+// clock to the nearest time-of-day key (Sec48.4), which this project
+// cannot compute (the key list is OPEN loaded data) - so hour/minute are
+// forgotten rather than set to newHour/newMinute, honestly reflecting that
+// the real post-call value is unknown, not fabricated as "whatever was
+// requested."
+void EngineState::setTimeOfDay(int64_t newHour, int64_t newMinute) {
+    int64_t curHour = gameClock_.hour.get();     // OPEN until set (Sec48.2: known from construction in single player)
+    int64_t curMinute = gameClock_.minute.get(); // OPEN until set
+    int64_t hourDelta = newHour - curHour;
+    if (hourDelta < 0) hourDelta += 24; // CONFIRMED: forced forward
+    int64_t totalMinutes = hourDelta * 60 + (newMinute - curMinute);
+    gameClock_.lastAdvanceSeconds = totalMinutes * 60;
+    ++gameClock_.advanceRequestCount;
+    gameClock_.second = 0; // CONFIRMED: the post-jump key-snap zeroes the seconds (Sec48.4)
+    gameClock_.hour.forget();   // Sec48.4: the real post-snap value is OPEN, not newHour
+    gameClock_.minute.forget(); // Sec48.4: the real post-snap value is OPEN, not newMinute
+}
+
+// Per-frame clock advance (Sec48.3, CONFIRMED mechanism - see GameClock's
+// own header doc comment for the CHOSEN call cadence and the stated
+// day-rollover simplification). A no-op while hour/minute are unknown
+// (e.g. after setTimeOfDay forgot them above) - there is no known base to
+// add a delta to.
+void EngineState::gameClockAdvanceFrame(double realSeconds) {
+    gameClock_.frameAdvanceSecondsAccumulated += realSeconds;
+    if (!gameClock_.hour.known() || !gameClock_.minute.known()) return;
+    int64_t secondsOfDay = gameClock_.hour.get() * 3600 + gameClock_.minute.get() * 60 + gameClock_.second;
+    double gameSeconds = realSeconds * GameClock::kTimeScale;
+    secondsOfDay = (secondsOfDay + static_cast<int64_t>(gameSeconds)) % 86400;
+    if (secondsOfDay < 0) secondsOfDay += 86400; // defensive: realSeconds is never negative in scope
+    gameClock_.hour.set(static_cast<int32_t>(secondsOfDay / 3600));
+    gameClock_.minute.set(static_cast<int32_t>((secondsOfDay % 3600) / 60));
+    gameClock_.second = static_cast<int32_t>(secondsOfDay % 60);
+}
+
+// satellite_weapon_mode_exit (Sec32.1). CONFIRMED: "with authority and the
+// controller active, tears down camera/HUD/audio state locally"; without
+// authority, forwards a request instead (this project's own no-networking-
+// layer convention treats every call as locally authoritative, same as
+// set_ignore_ai_flag/set_current_hit_points above - only the
+// controller-active gate is modeled). The caller (lua_spec_confirmed_
+// stubs.cpp's own stub_satellite_weapon_mode_exit) is where the 0x009df3d0
+// correction is actually applied: `remote` is only ever passed true when
+// playerRig().coopPlayerPresent is true.
+void EngineState::satelliteWeaponExit(bool remote) {
+    if (!satelliteWeapon_.active.get()) return; // OPEN until set
+    if (remote) ++satelliteWeapon_.remoteExitCount;
+    else ++satelliteWeapon_.localExitCount;
+}
+
+void EngineState::setQteSlotForTesting(int index, bool active, std::string owningPlayerName,
+                                        std::vector<std::string> participants) {
+    if (index < 0 || index > 1) return; // test/setup-only - the real record array is exactly 2 slots (Sec32.3)
+    qteSlots_[index] = QteSlot{active, std::move(owningPlayerName), std::move(participants)};
+}
+
+// qte_human_is_used (Sec32.3). CONFIRMED: true if the queried character
+// either IS the active slot's own owning player, or matches any of its
+// participant id-pair fields; false otherwise (including no active slot at
+// all). See QteSlot's own doc comment for this project's name-keyed
+// simplification of the real local/remote selection mechanism.
+bool EngineState::qteHumanIsUsed(const std::string& name) const {
+    for (const auto& slot : qteSlots_) {
+        if (!slot.active) continue;
+        if (slot.owningPlayerName == name) return true;
+        for (const auto& p : slot.participantNames) {
+            if (p == name) return true;
+        }
+    }
+    return false;
 }
 
 std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const {
@@ -464,6 +826,50 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     value("batch2728", cellphoneAnimSuppressed_);
     value("batch2728", bossBattleMatt_.cheatSlot);
     value("batch2728", bossBattleMatt_.retryCounter);
+
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec31/Sec32 ---
+    // (CharacterState's own per-character OpenValue fields - lifeState here,
+    // like stateEnum/attackerThreatRef/maxHitPoints/currentHitPoints above -
+    // are not centrally inventoried, matching this function's own existing
+    // precedent of only listing EngineState-level slots.)
+    value("batch3132", pauseMapTutorialMode_);
+    value("batch3132", storeInterfaceActive_);
+    value("batch3132", gameClock_.hour);
+    value("batch3132", gameClock_.minute);
+    value("batch3132", satelliteWeapon_.active);
+    value("batch3132", helicopterFireDispatcherResult_);
+
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec38/Sec39/Sec40
+    // ("ranking tranches 06/07/08") --- vcustPreview_.targetLive and
+    // storePreviewGuards_.{gangPreviewAssetOrFallbackResolved,
+    // galleryListObjectResolved} are CHOSEN plain bools (not OpenValue -
+    // see their own doc comments), so they are not listed here, same
+    // convention as every other CHOSEN plain-default field in this file
+    // (e.g. pauseMenuSeenDisplayCalScreen_ above).
+    value("ranking0608", saveSystemUi_.slotCount);
+    map("ranking0608", pcuCategoryTable_.kindByIndex);
+    map("ranking0608", pcuCatalogOutfits_.flagsByIndex);
+
+    // --- Batch 2026-10-02 (resumed session), spec-lua-api-behaviour.md
+    // Sec44/Sec45/Sec46 (ranking tranches 12-14). Per-character/per-vehicle
+    // OpenValue fields (CharacterState::hiddenFlag, VehicleState::
+    // tireDurability/tireDamageMultiplier/forceFlags1d7a/lightsForceFlags/
+    // tireIndicatorObjectDisabled/seat0Occupied, CharacterState::
+    // forceFlags1c98/flagsE4, etc.) are NOT centrally inventoried here,
+    // matching this function's own existing precedent (see the
+    // "batch3132" comment above) of only listing EngineState-level slots.
+    value("batch444546", ambientGangSpawnEnabled_);
+    value("batch444546", cellCameraEnabled_);
+    value("batch444546", ambientCopSpawnEnabled_);
+    value("batch444546", actionNodesShouldntFlee_);
+    value("batch444546", actionNodesRestrictSpawning_);
+
+    // --- Batch 2026-10-03, spec-lua-api-behaviour.md Sec49 ("ranking
+    // tranche 16") --- shopPurchase_.triggerResolves and
+    // strongholdPurchaseUpgrade_.strongholdResolves are CHOSEN plain bools
+    // (not OpenValue - see their own doc comments), so they are not listed
+    // here, same convention as vcustPreview_.targetLive above.
+    map("ranking16", spawnOverride_.categoryNameResolves);
     return out;
 }
 

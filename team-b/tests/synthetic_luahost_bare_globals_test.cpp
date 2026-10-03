@@ -216,6 +216,23 @@ int main() {
     // get_frame_time: the file-image 1/30 as a float.
     CHECK(evalNumber(host, gp, "get_frame_time()") == 0.03333333507180214);
     CHECK(evalNumber(host, ui, "get_frame_time()") == static_cast<double>(1.0f / 30.0f));
+    // setFrameTime (spec-lua-api-behaviour.md Sec37.2/Sec37.5, CONFIRMED the
+    // writer is a raw, unscaled, uncapped, unpaused measured delta, not the
+    // fixed 1/30 the host otherwise starts at): a caller-set value is
+    // reflected verbatim, with no scaling/capping/pausing applied by this
+    // host, and - matching the real engine's single shared global - is the
+    // SAME value read from both Lua states, since BareGlobalsState is one
+    // instance per Host.
+    host.bareGlobals().setFrameTime(1.0f / 3.0f);
+    CHECK(evalNumber(host, gp, "get_frame_time()") == static_cast<double>(1.0f / 3.0f));
+    CHECK(evalNumber(host, ui, "get_frame_time()") == static_cast<double>(1.0f / 3.0f));
+    host.bareGlobals().setFrameTime(0.0f);
+    CHECK(evalNumber(host, gp, "get_frame_time()") == 0.0);
+    // Restore the file-image default so later checks in this file (if any
+    // come to depend on it) see the same starting value this block itself
+    // relied on above.
+    host.bareGlobals().setFrameTime(1.0f / 30.0f);
+    CHECK(evalNumber(host, gp, "get_frame_time()") == 0.03333333507180214);
 
     // ------------------------------------------------------------------
     // debug_print / assert_msg: accept anything, return nothing.

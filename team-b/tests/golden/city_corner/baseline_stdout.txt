@@ -1,0 +1,28 @@
+[city] sr3_city_0.vpp_pc: 1033 top-level entries, 91 default CCRRhN cells, 46 CCRR^name hN variants (not loaded), 0 duplicates; read in 0.4 s
+=====================================================================
+CELL POSITIONS ARE REAL, PROP POSITIONS INSIDE A CELL ARE NOT.
+Each hN fine cell is drawn at its real world centre from the
+spec-world-streaming.md Sec10.6(g) lattice (validated to ~2 m MAD).
+The props INSIDE each cell are on an ARBITRARY local grid fitted to
+the cell's 160x140 m footprint - real per-instance placement of
+.clmesh_pc objects was investigated and did NOT resolve (see
+runClmeshTile()'s top comment / tools/tile1018_placement_probe.cpp).
+=====================================================================
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+camera   : free-fly, start eye (-960.0 250.0 -700.0) yaw 0.0 pitch -75.0 [--no-input: keyboard ignored] (W/A/S/D move, Q/E down/up, arrows look, Shift=fast, Esc=quit)
+[stream] frame 0 focus (-960.0, -700.0): wanted = {1016h0,0916h1,1015h2,1015h3}
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 16.2 s
+[stream]   1016h0: prop hwy_yellow_st_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x50d21c90
+[stream] frame 0 LOAD  1016h0   (sr3_city_0.vpp_pc, col 10 row 16 N 0) centre (-880.0, -770.0): 52/53 props uploaded, 1 failed, 2 larger than their fake-grid slot, textures 125/136 (0 of them from another archive), 16587 ms
+[stream]   0916h1: prop terminal_sign_a.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0xf857cee4
+[stream]   0916h1: prop terminal_sign_c.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1a34fc47
+[stream] frame 0 LOAD  0916h1   (sr3_city_0.vpp_pc, col 9 row 16 N 1) centre (-1040.0, -770.0): 46/48 props uploaded, 2 failed, 1 larger than their fake-grid slot, textures 122/128 (0 of them from another archive), 398 ms
+[stream] frame 0 LOAD  1015h2   (sr3_city_0.vpp_pc, col 10 row 15 N 2) centre (-1040.0, -630.0): 114/114 props uploaded, 0 failed, 10 larger than their fake-grid slot, textures 318/327 (0 of them from another archive), 932 ms
+[stream]   1015h3: prop hwy_sw_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_sw_l.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_sw.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_yellow_ap_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x7b9df258
+[stream] frame 0 LOAD  1015h3   (sr3_city_0.vpp_pc, col 10 row 15 N 3) centre (-880.0, -630.0): 42/46 props uploaded, 4 failed, 5 larger than their fake-grid slot, textures 146/146 (0 of them from another archive), 429 ms
+captured : _work/city_corner.png (frame 0, eye (-960.0 250.0 -700.0), resident {1016h0,0916h1,1015h2,1015h3})
+frames   : 1 presented; 4 cell loads, 0 cell evictions, 4 resident at exit

@@ -36,7 +36,49 @@
 // A-*, i.e. +0x16 absolute, are the spec's current reading) until the
 // population sweep (bridge job 03) or the executable settles 2 and 3.
 //
-// NOT implemented - a full-document walk. Three facts it needs are OPEN or
+// UPDATE 2026-10-03 - FULL-DOCUMENT WALK NOW IMPLEMENTED (parseDocument(),
+// bottom of this header). The layout is CONFIRMED by Team A's disassembly
+// of the binary loader (spec-vint-doc-format.md as synced at main commit
+// 67455c3: dispatch 0x00e212a0, reader 0x00e20500, string table
+// 0x00e1fbe0, element reader 0x00e2a280, property block 0x00e29860), and
+// INDEPENDENTLY reproduced from real data by this project before that sync
+// arrived - the Team B cross-check spec Sec8 item 12 asks for. How the
+// data side went (kept because it is the independent half): tools/vintdoc_validate.cpp's
+// original 12-combo grid was finally run (results/baseline_2026-10-01.md
+// already held its output): 0/146 landings for every combo, because every
+// combo assumed the string table sits at 0x1E. Reading real bytes directly
+// (interface_startup.vpp_pc's smallest files first) gave a different,
+// simpler layout that lands EXACTLY on end-of-file for 159/159 distinct
+// documents (777/777 entries across interface_startup.vpp_pc and
+// interface.vpp_pc - interface.vpp_pc's 618 copies are byte-identical to
+// the 159), with every one of the 5,326 distinct element records' type
+// reference resolving to one of the 13 registered type names. The answers to the
+// three items below (data-derived first, then matched point for point by
+// 67455c3's CONFIRMED text; see parseDocument's own comment for the full
+// evidence list):
+//  1. header +0x16 is the ABSOLUTE offset of the STRING TABLE, which is
+//     the LAST section of the file (u32 count, u32 pool byte size, count x
+//     u32 pool offsets, then the pool; ends exactly at EOF 159/159). The
+//     critical-resource entries start at 0x1E, then metadata, then the
+//     element tree, which ends exactly at header +0x16 (159/159).
+//  2. baseline/override offsets are file-absolute; every list of a block
+//     is stored inline, back to back, starting right after the override
+//     table (overrides first, the baseline last, 504/504 distinct override
+//     blocks). CONFIRMED semantics (67455c3): the loader reads the matching
+//     override list (if any), then ALWAYS jumps to the baseline and reads
+//     it (records already applied by the override are skipped), and leaves
+//     the cursor just past the BASELINE list - which, the baseline being
+//     stored last, is also the end of the block's stored lists.
+//  3. readPropertyList()'s tag/hash/value order is right (it is the only
+//     order under which the walk lands; tag-first; CONFIRMED 67455c3). Tag 1
+//     is a signed and tag 2 an unsigned 32-bit integer, applied through the
+//     ordinary descriptor setter (CONFIRMED 67455c3, closing Sec8 item 10).
+// One correction to Sec4 found on the way (also CONFIRMED by 67455c3): the element record's FIRST u32
+// is the instance NAME and the SECOND is the TYPE (readElementRecordHead();
+// readElementHead() below keeps its original Sec4 field naming unchanged
+// for compatibility - see its own note).
+//
+// (Original note, kept for history.) NOT implemented - a full-document walk. Three facts it needs are OPEN or
 // ambiguous in the spec, so no parseDocument() exists yet:
 //  1. where the critical-resource section starts. Sec3.2 says "after the
 //     string-offset array", but Sec3.1 puts the string character data at
@@ -161,6 +203,15 @@ MetadataEntry readMetadataEntry(Cursor& c);
 // Sec4: the fixed part of an element record, before its property block.
 // The type name is resolved through the string pool (never a numeric type
 // id); it should be one of kRegisteredElementTypes.
+//
+// 2026-10-03, REAL DATA DISAGREES WITH THE FIELD ORDER: across the 5,326
+// element records of the 159 distinct real documents the FIRST u32
+// resolves to the instance name and the SECOND to one of the 13 registered
+// type names (5,326/5,326; the first u32 resolves to a registered type
+// name on only 12/5,326 - instance names that happen to equal a type name).
+// This decoder and its field names are left exactly as Sec4 states them so
+// existing callers/tests keep their meaning; parseDocument() uses
+// readElementRecordHead() below, which names the fields by the real order.
 struct ElementHead {
     uint32_t typeIndex = 0;
     uint32_t nameIndex = 0;
@@ -235,5 +286,132 @@ struct PropertyList {
 // zero tag (cursor left just past it) or at an unknown tag (cursor left on
 // that tag byte). Throws FormatError on running off the end of the file.
 PropertyList readPropertyList(Cursor& c);
+
+// =========================================================================
+// Full-document walk (2026-10-03). The layout is CONFIRMED by disassembly
+// (spec-vint-doc-format.md Sec2-Sec5 as synced at main 67455c3 - this
+// worktree's own copy of that file predates the sync), and independently
+// reproduced from real data by this project (the Team B cross-check of
+// Sec8 item 12). Team B's own figures, measured with this parser and the
+// throwaway probes that preceded it, on interface_startup.vpp_pc (159
+// distinct documents) and interface.vpp_pc (618 .vint_doc entries, every
+// one byte-identical to one of the 159, so 777/777 for every line):
+//  * string table at absolute header +0x16 (u32 count N, u32 pool size L,
+//    N x u32 offsets, pool): ends EXACTLY at EOF 159/159; the offsets tile
+//    the pool exactly (offset[0] == 0, each next == previous + strlen + 1)
+//    159/159; 8,893/8,893 strings NUL-terminated inside the pool;
+//  * critical resources (Sec3.2) from 0x1E, then metadata (Sec3.2), then
+//    elements + animations (Sec4), and the tree ends EXACTLY at header
+//    +0x16: 159/159;
+//  * element record: u32 name index, u32 type index, u16 child count, u8
+//    raw byte (0 on 5,281, 1 on 45 of 5,326 records), then the Sec5
+//    property block inline; type resolves to a registered name 5,326/5,326;
+//  * property block: baseline offset == position right after the 5-byte
+//    table on 4,822/4,822 blocks without overrides; all 504 blocks with
+//    overrides have exactly one ("640x480"), its list right after the
+//    13-byte table and the baseline list right after the override list;
+//  * property record = tag u8, name hash u32, value (tags 1-7 only); every
+//    name hash is the engine's lower-cased seed-0 CRC-32 (sr3save::nameHash)
+//    of a real name: 49 of the 55 distinct hashes match a string literal
+//    in the shipped Lua scripts, including 13 of spec-lua-bindings.md
+//    Sec9.2's 17 `element` names - the other 4 are exactly Sec9.2's
+//    read-only ones (screen_size/screen_nw/screen_se/unscaled_size), never
+//    stored on disk.
+// =========================================================================
+
+// The string table as it is really stored (Sec3.1, CONFIRMED 67455c3).
+struct DocumentStringTable {
+    size_t start = 0;        // absolute file offset (header +0x16)
+    uint32_t poolSize = 0;   // L, the second u32 of the table
+    std::vector<uint32_t> offsets;
+    std::vector<std::string> strings; // offsets resolved, NUL-terminated inside the pool
+    bool endsAtEof = false;  // pool ends exactly at end of file (159/159 real documents)
+};
+
+// Throws FormatError when N == 0 (the loader fails the whole document),
+// when L + 4N exceeds the bytes remaining (the loader's own check), or when
+// an offset lies outside the pool or has no NUL before the pool's end (the
+// loader does no such check; this parser refuses rather than read garbage).
+DocumentStringTable parseTrailingStringTable(vpp::ByteView bytes, const Header& h);
+
+// The element record head in its real on-disk order (Sec4, CONFIRMED
+// 67455c3; see ElementHead's note): name first, then type.
+struct ElementRecordHead {
+    uint32_t nameIndex = 0;
+    uint32_t typeIndex = 0;
+    uint16_t childCount = 0;
+    uint8_t rawByte = 0; // never read by the loader (67455c3); role OPEN (Sec8.4)
+};
+ElementRecordHead readElementRecordHead(Cursor& c);
+
+struct ElementNode {
+    uint32_t nameIndex = 0;
+    uint32_t typeIndex = 0;
+    std::string name;
+    std::string type; // one of kRegisteredElementTypes on all real data
+    uint8_t rawByte = 0;
+    size_t fileOffset = 0; // where the record starts (diagnostics)
+
+    struct ResolutionOverride {
+        uint32_t resolutionNameIndex = 0;
+        std::string resolutionName; // "640x480" on every real override
+        PropertyList list;
+    };
+    PropertyList baseline;
+    std::vector<ResolutionOverride> overrides; // every stored override list, in table order
+    // Diagnostic only, never required: the override lists and then the
+    // baseline list are stored back to back right after the override table
+    // (true on 5,326/5,326 real records).
+    bool listsInlineInOrder = true;
+    std::vector<ElementNode> children;
+
+    // The properties the loader applies (Sec5, CONFIRMED 67455c3): the first
+    // override whose resolution name equals `activeResolution` (none when it
+    // is empty) is applied in full, then the baseline, minus every baseline
+    // record whose name hash that override already applied.
+    std::vector<Property> effectiveProperties(const std::string& activeResolution) const;
+};
+
+struct ResolvedMetadata {
+    std::string name;
+    std::string value;
+};
+
+struct Document {
+    Header header;
+    DocumentStringTable strings;
+    // Sec3.2: selector/value raw. 67455c3: the loader registers an entry
+    // only when the selector is 0; in version 2 the trailing byte is the
+    // autoload flag; what selector 1 means is OPEN. Not used by anything
+    // in this project yet.
+    std::vector<CriticalResource> criticalResources;
+    std::vector<MetadataEntry> metadata;
+    std::vector<ResolvedMetadata> metadataStrings; // same order as `metadata`
+    std::vector<ElementNode> elements;   // header +0x1A records
+    std::vector<ElementNode> animations; // header +0x1C records (Sec4: the same record shape)
+    size_t treeEnd = 0; // main-cursor position after the last top-level record
+
+    // The value of the first metadata entry named `name` (e.g.
+    // "lua_script_file", "document_depth"), or nullptr.
+    const std::string* metadataValue(const std::string& name) const;
+    // Every element and animation record, recursively.
+    size_t totalRecordCount() const;
+    // The structural landing checks the validator scores (true on 159/159
+    // real documents): the tree ends exactly at header +0x16 and the string
+    // pool ends exactly at end of file. The loader itself checks neither.
+    bool treeEndsAtStringTable() const { return treeEnd == strings.start; }
+    bool landsExactly() const { return treeEndsAtStringTable() && strings.endsAtEof; }
+};
+
+// The full walk, following the loader's own read order (0x00e20500 ->
+// 0x00e2a280 -> 0x00e29860). Every override list is read and kept; the
+// main cursor continues after each block's BASELINE list. Throws
+// FormatError on: bad magic or short header; a string-table failure (see
+// parseTrailingStringTable); a string index outside the table (the
+// loader's accessor would return null); a property-list offset outside the
+// file; a tag outside 1-7 (the loader would desynchronise); running off the
+// tree region [0, header +0x16) on the main cursor; or a hostile depth or
+// record count.
+Document parseDocument(vpp::ByteView bytes);
 
 } // namespace sr3vintdoc

@@ -63,7 +63,14 @@ def main(argv):
         check(found == ["dlc1_mm_02", "dlc1_mm_03", "dlc1_mm_04", "dlc1_mm_05", "dlc1_mm_06"], f"missions found: {found}")
         m5, m6, m4 = missions.get("dlc1_mm_05", {}), missions.get("dlc1_mm_06", {}), missions.get("dlc1_mm_04", {})
         m3, m2 = missions.get("dlc1_mm_03", {}), missions.get("dlc1_mm_02", {})
+        # Also a regression test for the real dlc2_m02 bug (spec-lua-api-behaviour.md
+        # Sec36.4/spec-lua-bindings.md Sec14.11, fixed 2026-10-02): dlc1_mm_05_start
+        # indexes a checkpoint table by `cp` the same way dlc2_m02.lua does; if `cp`
+        # ever regressed back to the old CHOSEN number 0 instead of the CONFIRMED
+        # string "mission start", this would fail with the real "attempt to index
+        # local 'cp_data' (a nil value)" error instead of running to its end.
         check(m5.get("start_call_ok") == "1" and m5.get("start_suspended") == "0", "dlc1_mm_05 _start runs to its end")
+        check(m5.get("start_call_error", "") == "", f"dlc1_mm_05 no checkpoint-argument error: {m5.get('start_call_error')}")
         # Request 11 (Sec26.27): _start is a script-thread record - thread_new
         # inside it finds a parent, and thread_yield suspends it (no error).
         check(m3.get("start_call_ok") == "1" and m3.get("start_suspended") == "1",
@@ -82,14 +89,17 @@ def main(argv):
         check(m6.get("start_call_error", "") == "", f"dlc1_mm_06 no error: {m6.get('start_call_error')}")
         check("game_lib.lua\"]:2 (in helper_wait_scene)" in m6.get("start_suspended_at", ""),
               f"dlc1_mm_06 parks in helper_wait_scene: {m6.get('start_suspended_at')}")
-        # The scheduler 0x00e0cf50 (Sec26.27, RESOLVED 2026-10-02) resumes it
+        # The scheduler 0x00e0cf50 (thread-table section, MAJOR CORRECTION
+        # 2026-10-02: the real driver runs once per rendered/game frame, not
+        # from an independent ~30 ms pump - lua_host_run now maps 1 tick to 1
+        # frame to 1 scheduler pass, kSchedulerPassesPerTick == 1) resumes it
         # every pass; nothing ever loads the scene, so it is still waiting, in
         # the same place, after the whole tick budget.
         check(m6.get("start_after_ticks") == "still_suspended", f"dlc1_mm_06 after ticks: {m6.get('start_after_ticks')}")
         check("game_lib.lua\"]:2 (in helper_wait_scene)" in m6.get("start_still_suspended_at", ""),
               f"dlc1_mm_06 still in helper_wait_scene: {m6.get('start_still_suspended_at')}")
-        check(m6.get("ticks_survived") == "20" and int(m6.get("scheduler_resumes", "0")) == 20 * 11,
-              f"dlc1_mm_06 resumed 11 passes x 20 ticks: {m6.get('ticks_survived')} {m6.get('scheduler_resumes')}")
+        check(m6.get("ticks_survived") == "20" and int(m6.get("scheduler_resumes", "0")) == 20 * 1,
+              f"dlc1_mm_06 resumed 1 pass x 20 ticks: {m6.get('ticks_survived')} {m6.get('scheduler_resumes')}")
         # dlc1_mm_03: _start and its child are both resumed by the first pass
         # and run to their ends.
         check(m3.get("start_after_ticks") == "finished", f"dlc1_mm_03 after ticks: {m3.get('start_after_ticks')}")
@@ -120,10 +130,21 @@ def main(argv):
         # Sec26.26: the UI subsystem init ran with the CHOSEN default display.
         check(summary.get("display_option", "").startswith("1280x720 ") and "display_mode=-1" in summary.get("display_option", ""),
               f"display_option={summary.get('display_option')}")
-        # Sec26.25: the cutscene frame ran once per mission tick and stops on
-        # the cutscene state, which has no specced start-up value.
+        # Sec26.25: the cutscene frame ran once per mission tick. 2026-10-02
+        # correction (the `mm_p_01` zscene-promotion-driver investigation):
+        # completion and promotion each run unconditionally and independently
+        # now (cutsceneHostFrame no longer stops the whole frame on the
+        # cutscene state alone) - none of this fixture's missions ever call
+        # zscene_prep, so the pending slot 0x0153b538 stays OPEN the whole
+        # run and is what the *last* blocked frame now reports (completion's
+        # own OPEN zscene load state 0x0153b51c blocks first every frame, but
+        # promotion's attempt - now unconditional - is the one still pending
+        # when the run ends, so it is the one whose OPEN read is recorded
+        # last). The cutscene state 0x0153b520 itself is never even read here
+        # (no cutscene_play call either), so it stays OPEN but is no longer
+        # what the per-frame driver reports stopping on.
         cf = summary.get("cutscene_frame", "")
-        check(cf.startswith("frames:") and "last_blocker=[0x0153b520" in cf, f"cutscene_frame={cf}")
+        check(cf.startswith("frames:") and "last_blocker=[0x0153b538" in cf, f"cutscene_frame={cf}")
         m = re.match(r"^frames:(\d+) blocked_on_open:(\d+) ", cf)
         check(m is not None and m.group(1) == m.group(2) and int(m.group(1)) > 0, f"every cutscene frame blocked: {cf}")
         check(summary.get("game_lib_lua_first_instance_pcall_ok") == "true", "game_lib.lua runs")
