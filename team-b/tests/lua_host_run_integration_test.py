@@ -71,19 +71,31 @@ def main(argv):
         # The watchdog sits on the _start coroutine.
         check(m2.get("start_call_ok") == "0" and "watchdog" in m2.get("start_call_error", ""),
               f"dlc1_mm_02 runaway _start stopped by the watchdog: {m2.get('start_call_error')}")
-        check(m6.get("start_call_ok") == "0", "dlc1_mm_06 _start refused")
-        # 2026-10-01 (Sec26.25 scene table): 'scene_a' is a kind-1 entry of the
-        # fixture's cutscene_tables.vpp_pc, so the table is no longer the
-        # blocker; the skip_all_cutscenes byte is false at start (Sec26.25
-        # Globals, 2026-10-01, CONFIRMED), so the next read, the current scene
-        # entry, has no specced start-up value.
-        check("0x0153b530" in m6.get("start_call_error", "") and "is OPEN" in m6.get("start_call_error", ""),
-              f"dlc1_mm_06 stops on the OPEN current scene entry: {m6.get('start_call_error')}")
-        check("0x0153b556" not in m6.get("start_call_error", ""), "the skip byte is no longer OPEN")
-        check("0x00723d20" not in m6.get("start_call_error", ""), "the scene table entry is no longer OPEN")
-        # Request 11 (Sec26.27): _start runs as a script-thread record, so the
-        # runner's "<name>: " prefix is not part of the reported error.
-        check(not m6.get("start_call_error", "").startswith("dlc1_mm_06_start:"), "bare _start error message")
+        # 'scene_a' is a kind-1 entry of the fixture's cutscene_tables.vpp_pc;
+        # the skip_all_cutscenes byte is false at start (Sec26.25 Globals,
+        # 2026-10-01) and the current scene entry 0x0153b530 is null at start
+        # (Sec26.25 Globals, RESOLVED 2026-10-02, CONFIRMED), so
+        # zscene_is_loaded answers false and helper_wait_scene yields - no
+        # OPEN refusal any more.
+        check(m6.get("start_call_ok") == "1" and m6.get("start_suspended") == "1",
+              f"dlc1_mm_06 _start waits on the scene: {m6.get('start_call_error')}")
+        check(m6.get("start_call_error", "") == "", f"dlc1_mm_06 no error: {m6.get('start_call_error')}")
+        check("game_lib.lua\"]:2 (in helper_wait_scene)" in m6.get("start_suspended_at", ""),
+              f"dlc1_mm_06 parks in helper_wait_scene: {m6.get('start_suspended_at')}")
+        # The scheduler 0x00e0cf50 (Sec26.27, RESOLVED 2026-10-02) resumes it
+        # every pass; nothing ever loads the scene, so it is still waiting, in
+        # the same place, after the whole tick budget.
+        check(m6.get("start_after_ticks") == "still_suspended", f"dlc1_mm_06 after ticks: {m6.get('start_after_ticks')}")
+        check("game_lib.lua\"]:2 (in helper_wait_scene)" in m6.get("start_still_suspended_at", ""),
+              f"dlc1_mm_06 still in helper_wait_scene: {m6.get('start_still_suspended_at')}")
+        check(m6.get("ticks_survived") == "20" and int(m6.get("scheduler_resumes", "0")) == 20 * 11,
+              f"dlc1_mm_06 resumed 11 passes x 20 ticks: {m6.get('ticks_survived')} {m6.get('scheduler_resumes')}")
+        # dlc1_mm_03: _start and its child are both resumed by the first pass
+        # and run to their ends.
+        check(m3.get("start_after_ticks") == "finished", f"dlc1_mm_03 after ticks: {m3.get('start_after_ticks')}")
+        check(m3.get("scheduler_resumes") == "2" and m3.get("scheduler_thread_errors") == "0",
+              f"dlc1_mm_03 resumes: {m3.get('scheduler_resumes')} errors: {m3.get('scheduler_thread_errors')}")
+        check(m5.get("start_after_ticks") == "", "dlc1_mm_05 never suspended")
         check(m4.get("start_call_ok") == "0", "dlc1_mm_04 _start fails")
         check("attempt to index local 't'" in m4.get("start_call_error", ""),
               f"dlc1_mm_04 reports the Lua error: {m4.get('start_call_error')}")
@@ -145,8 +157,10 @@ def main(argv):
         # (false, Sec26.25 Globals 2026-10-01) have a value; vint: everything
         # but the safe-frame source object's +0x8 / +0xc.
         check(slot("0x0153b556").get("known") == "1", "skip_all_cutscenes byte known (false)")
+        check(slot("0x0153b530").get("known") == "1", "current scene entry known (null, 2026-10-02)")
         check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots
-                  if r["area"] in ("zscene", "cutscene") and r["kind"] != "table" and "0x0153b556" not in r["global"]),
+                  if r["area"] in ("zscene", "cutscene") and r["kind"] != "table" and "0x0153b556" not in r["global"]
+                  and "0x0153b530" not in r["global"]),
               "other zscene and cutscene slots OPEN at start")
         # "scene table" alone is ambiguous: it's also a substring of the per-entry
         # "zscene table entry with kind 1 (...)" slot. 0x0153b294 is the table-level
@@ -164,16 +178,29 @@ def main(argv):
               f"fade_detail={summary.get('fade_detail')}")
         drive = read_kv(os.path.join(out1, "verdict_mission_drive_summary.txt"))
         check(re.match(r"^5/\d+$", drive.get("missions_with_script_found", "")) is not None, "5 missions found")
-        check(re.match(r"^2/\d+$", drive.get("missions_with_start_call_ok", "")) is not None, "2 _start ok")
-        check(re.match(r"^1/\d+ ", drive.get("missions_with_start_suspended", "")) is not None, "1 _start suspended")
-        # dlc1_mm_03_start and its child both stay suspended (nothing resumes them).
-        check(drive.get("live_script_threads_after_missions", "").startswith("2 "),
+        check(re.match(r"^3/\d+$", drive.get("missions_with_start_call_ok", "")) is not None,
+              f"3 _start ok: {drive.get('missions_with_start_call_ok')}")
+        check(re.match(r"^2/\d+ ", drive.get("missions_with_start_suspended", "")) is not None,
+              f"2 _start suspended: {drive.get('missions_with_start_suspended')}")
+        check(drive.get("missions_start_after_ticks", "").startswith("still_suspended:1 finished:1 errored:0 killed:0 "),
+              f"after ticks: {drive.get('missions_start_after_ticks')}")
+        # Only dlc1_mm_06_start is left: dlc1_mm_03's records were resumed to their ends.
+        check(drive.get("live_script_threads_after_missions", "").startswith("1 "),
               f"live threads after missions: {drive.get('live_script_threads_after_missions')}")
 
         hits = {r["name"]: r for r in read_tsv(os.path.join(out1, "verdict_stub_hits_with_missions.tsv"))}
         check(hits.get("set_mission_author", {}).get("call_count_all_inclusive") == "1", "set_mission_author hit once")
-        check(hits.get("zscene_is_loaded:OPEN_STATE", {}).get("call_count_all_inclusive") == "1",
-              "zscene_is_loaded OPEN refusal logged once")
+        check("zscene_is_loaded:OPEN_STATE" not in hits, "no zscene_is_loaded OPEN refusal (0x0153b530 known)")
+        # Polled once on the first run, then once per resume of dlc1_mm_06_start:
+        # its own mission's passes, plus the passes of the missions driven after
+        # it, where it is a leftover record (the only one: dlc1_mm_03's finish).
+        sp = re.search(r"leftover_resumes:(\d+) ", drive.get("scheduler_passes", ""))
+        check(sp is not None, f"scheduler_passes line: {drive.get('scheduler_passes')}")
+        leftover = int(sp.group(1)) if sp else -1
+        check(int(hits.get("zscene_is_loaded", {}).get("call_count_all_inclusive", "0")) ==
+              1 + int(m6.get("scheduler_resumes", "0")) + leftover,
+              f"zscene_is_loaded polled per resume: {hits.get('zscene_is_loaded', {}).get('call_count_all_inclusive')} "
+              f"own {m6.get('scheduler_resumes')} leftover {leftover}")
 
         # Determinism: a second run on the same cache diffs clean.
         r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True, encoding="utf-8")

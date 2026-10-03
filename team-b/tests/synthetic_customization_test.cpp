@@ -100,8 +100,7 @@ void testCustomizationItemNormalRow() {
         "<Price>500</Price>"
         "<Respect_Bonus>0</Respect_Bonus>"
         "<Mesh_Variant_Info><Variant_Name>panda_default</Variant_Name><VariantID>1</VariantID></Mesh_Variant_Info>"
-        "<Material_List><Material_Element><Material>mtl_panda_fur</Material></Material_Element></Material_List>"
-        "<Shader_Type>ir_sr3pccloth</Shader_Type>"
+        "<Material_List><Material_Element><Material>mtl_panda_fur</Material><Shader_Type>ir_sr3pccloth</Shader_Type></Material_Element></Material_List>"
         "<Default_Colors_Grid><Default_Color><Clothing_Color>white</Clothing_Color></Default_Color></Default_Colors_Grid>"
         "</Variant></Variants>"
         "<Multi_Slot><First_Slot>headwear</First_Slot><Last_Slot>eyewear</Last_Slot></Multi_Slot>"
@@ -153,8 +152,11 @@ void testCustomizationItemNormalRow() {
     CHECK(v.respectBonus.present && v.respectBonus.value == 0);
     CHECK(v.meshVariantName.has_value() && *v.meshVariantName == "panda_default");
     CHECK(v.variantId.present && v.variantId.value == 1);  // Mesh_Variant_Info > VariantID (spec 2.1/5.1)
-    CHECK(v.materials.size() == 1 && v.materials[0] == "mtl_panda_fur");
-    CHECK(v.shaderType.has_value() && *v.shaderType == "ir_sr3pccloth");
+    // CORRECTED 2026-10-02 (spec-tables-customization.md §4.3): Shader_Type is a Material_Element child, not a
+    // Variant child - each Material_Element now carries its own Material + Shader_Type pair.
+    CHECK(v.materials.size() == 1);
+    CHECK(v.materials[0].material.has_value() && *v.materials[0].material == "mtl_panda_fur");
+    CHECK(v.materials[0].shaderType.has_value() && *v.materials[0].shaderType == "ir_sr3pccloth");
     CHECK(v.defaultColorsGrid.clothingColors.size() == 1 && v.defaultColorsGrid.clothingColors[0] == "white");
 
     CHECK(it.multiSlot.present);

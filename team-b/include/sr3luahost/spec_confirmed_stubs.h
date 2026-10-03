@@ -57,6 +57,58 @@
 // Screen_fade_transition_complete in a state also makes that state the
 // screen_fade UI state and runs the fade init there (see the .cpp).
 //
+// Batch 2026-10-02: +8 from spec-lua-bindings.md Sec18-Sec21 ("Vint UI
+// API") - vint_object_first_child/vint_object_clone (Sec18),
+// vint_get_time_index/vint_dataitem_get (Sec19), vint_set_property/
+// vint_get_property (Sec20), vint_dataresponder_finished/
+// vint_internal_dataresponder_request (Sec21). Unlike the historical
+// 2026-09-30 pause described below (which was specifically about
+// spec-lua-api-behaviour.md §1-§5), Sec18-Sec21 were committed as part of
+// the SAME sync (`0f33ef7`) the orchestrator's own commit message marks
+// "final, byte-identical to Team A" - the per-section "DESK-PASS ... NOT
+// yet cleared for implementation" review-status line each of Sec18-Sec21
+// (and in fact nearly every section of this spec file, including Sec15's
+// own vint_object_find above) carries is this document's own standing
+// internal-QA tracking convention (whether a SECOND independent reviewer
+// re-derived a section from the executable), not a per-feature
+// implementation gate - verified directly before acting by checking that
+// vint_object_find (Sec13.7/Sec15), the very first function this file ever
+// implemented, carries the identical boilerplate. See
+// lua_spec_confirmed_stubs.cpp's own file-header comment above functions
+// 23+ onward for each of the 8 names' full citation/reasoning, and
+// engine_state.h for the new state (VdoObject::firstChildHandle,
+// VintTaggedValue/VintDataItem/VintDataResponderRecord,
+// EngineState::vdoObjectFirstChild/cloneVdoObject/vintGetTimeIndex/
+// registerVintDataItemForTesting/setVintProperty/findVintProperty/
+// registerDataResponderForTesting/dataResponderFinished/
+// dataResponderRequest).
+//
+// Batch 2026-10-02: +9 from spec-lua-api-behaviour.md Sec30 ("ranking
+// tranche 03", 25 previously-unspecced names, final/committed) - vehicle_
+// set_invulnerable_to_player_explosives, vehicle_disable_explosion_and_
+// damage_vfx, vehicle_set_special_override_never_ghost, vehicle_clear_all_
+// radio_locks, vehicle_is_vtol (Sec30.5, one shared VehicleState/force-flag
+// infrastructure), auto_pickup_enable (Sec30.3), vehicle_exit_group_do /
+// vehicle_exit_group_check_done (Sec30.5, including an explicit, labelled
+// HOST-SAFETY guard on a CONFIRMED null-`this` crash-shaped edge), and
+// team_make_unfriendly (Sec30.6, including an explicit, labelled HOST-
+// SAFETY guard on a CONFIRMED out-of-bounds relation-matrix crash-shaped
+// edge). Selected as the intersection of (a) real non-zero measured call
+// counts in this session's own latest trace (results/verify_sched_check/
+// verdict_stub_hits_with_missions.tsv: vehicle_disable_explosion_and_
+// damage_vfx 28 calls, auto_pickup_enable 1 call) and (b) the task's own
+// explicit, mandatory crash-guard requirement for the other two; the
+// remaining 16 of this tranche's 25 names had zero measured real hits AND
+// would each need substantial further new engine-state modeling, so they
+// stay ordinary generic logging stubs this pass (see lua_spec_confirmed_
+// stubs.cpp's own Sec30 batch header comment for the full list and
+// reasoning). See engine_state.h for the new state (CharacterState::
+// currentVehicleName/isAlive; VehicleState and EngineState::vehicles()/
+// getOrCreateVehicle(); EngineState::autoPickupEnabled()/
+// vehicleExitGroupNullThisGuardCount()/registerTeamIdForTesting()/
+// resolveTeamId()/setTeamRelationIfInBounds()/teamRelationForTesting()/
+// teamRelationOobGuardCount()).
+//
 // IMPLEMENTED PRE-REVIEW, PENDING EXE RE-CLEARANCE (2026-09-30): the desk
 // review now marks spec-lua-api-behaviour.md §1-§5 "NOT yet cleared for
 // implementation". Six functions here come from those sections and were
@@ -72,12 +124,19 @@
 //
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
-// The 8 vint_object_* lifecycle siblings Sec15 flags as "likely equally
-// high-impact if also missing" (create/destroy/first_child/next_sibling/
-// parent/set_parent/add_child/get_name_from_handle) are NOT specially
-// implemented this pass (not individually behavior-traced beyond the
-// shared handle resolver, per Sec15's own text) - they, and the other 46
-// names in the same 55-name registrar, are registered as ordinary generic
+// The 8 vint_object_* lifecycle siblings Sec15 originally flagged as
+// "likely equally high-impact if also missing" (create/destroy/
+// first_child/next_sibling/parent/set_parent/add_child/
+// get_name_from_handle) are, as of the 2026-10-02 Sec18-Sec21 batch above,
+// down to 6 still NOT implemented (create/destroy/next_sibling/parent/
+// set_parent/get_name_from_handle - first_child is now
+// vint_object_first_child, Sec18.1; vint_object_clone, Sec18.2, was also
+// traced this same pass though Sec15 did not originally name it a
+// sibling) - still not individually behavior-traced beyond the shared
+// handle resolver. The remaining 6, and the other 38 names in the same
+// 55-name registrar not covered by Sec18-Sec21 either (vint_object_clone_rename,
+// vint_set_property_typed among them - Sec18's own front matter scopes
+// this pass to exactly 8 names), are registered as ordinary generic
 // logging stubs by simply being present in the current tagged registration
 // list (tools/lua_all_registered_1490_tagged.txt) and NOT in this file's
 // specConfirmedStubNames() - see host.h/lua_host.cpp's own filtering.

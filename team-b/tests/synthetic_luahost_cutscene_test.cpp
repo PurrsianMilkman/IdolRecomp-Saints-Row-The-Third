@@ -112,9 +112,11 @@ void testTableResolution() {
     f.ok(f.gp, "assert(zscene_is_loaded('not_in_table') == true)");
     f.ok(f.gp, "assert(zscene_is_loaded('STORY_B') == true)"); // kind 2: not loadable
     // kind 1: the skip byte next - false at start (Sec26.25 Globals,
-    // 2026-10-01, CONFIRMED) - then the OPEN current entry.
+    // 2026-10-01, CONFIRMED) - then the current entry, null at start
+    // (Sec26.25 Globals, RESOLVED 2026-10-02, CONFIRMED): not current -> false.
     CHECK(f.es.zsceneSkipAllCutscenes().known() && !f.es.zsceneSkipAllCutscenes().get());
-    f.refuses(f.gp, "zscene_is_loaded('z_a')", "0x0153b530");
+    CHECK(f.es.zsceneCurrent().known() && f.es.zsceneCurrent().get().empty());
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
     f.refuses(f.gp, "zscene_is_loaded('open_c')", "kind (+0x8)");
     // zscene_prep on a missing or kind-2 name: the gate returns, nothing read.
     f.ok(f.gp, "zscene_prep('story_b'); zscene_prep('nope')");

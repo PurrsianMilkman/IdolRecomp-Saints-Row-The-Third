@@ -152,10 +152,32 @@ private:
 // thread_yield returns is OPEN); the error callback selected by the parent's
 // +0x08 key is not modelled - the error is recorded in errors() and the
 // HitLog instead. The parent's +0x08/+0x14 values are never read by the host.
-// OPEN, not implemented: the per-frame scheduler cadence (nothing resumes a
-// yielded thread except an explicit resume() call); the engine hooks at
-// 0x02a44d60/0x02a44d64; the top-level entry that pushes the first record
-// (startThread() is the host's explicit entry for tools and tests).
+//
+// The scheduler 0x00e0cf50 (spec-lua-api-behaviour.md Sec26.27 thread table,
+// "[RESOLVED 2026-10-02 ...]" block under "The runner's other callers",
+// CONFIRMED - disassembly), implemented as schedulerPass():
+//  - one 256-capacity array, walked in index order, the live count re-read
+//    every step;
+//  - every visited record's +0x18 bit 0 (the runner's re-entrancy flag, set
+//    by the runner on every resume and cleared by nothing else) is cleared
+//    unconditionally;
+//  - then the runner is called on it unless its owning Lua state (+0x08) is
+//    in the small refcounted exempt list (0x00e0d710/0x00e0d6e0/0x00e0d5c0:
+//    up to 4 keys, empty at start-up, only the interface/UI module adds, the
+//    gameplay state never);
+//  - no per-pass resume budget; thread_new appends straight into the same
+//    array (no pending list); removal is swap-compaction (0x00e0c650), run by
+//    the runner itself.
+// The engine calls it from a dedicated background thread throttled to a 30 ms
+// minimum per iteration (~33 Hz, no fixed maximum). How a tick-driven host
+// maps its ticks onto that cadence is the host's own choice (lua_host_run's
+// mission loop documents its CHOSEN mapping); nothing here runs on a clock.
+// OPEN, not implemented: the engine hooks at 0x02a44d60/0x02a44d64; the
+// "do not run" bit 4 (never set in the dumps); the top-level entry that
+// pushes the first record (startThread() is the host's explicit entry for
+// tools and tests); WHEN the UI module adds its state to the exempt list
+// and the exact key it passes (HIGH CONFIDENCE only), so no host code adds
+// to it on its own - exemptState() is there for a caller that models it.
 // ---------------------------------------------------------------------
 class BareThreadTable {
 public:
@@ -169,7 +191,10 @@ public:
         int ref = LUA_NOREF;       // anchors `co` in its state's registry
         bool notStarted = true;    // +0x0c
         std::string name;          // +0x10
-        bool started = false;      // +0x18 bit 0
+        // +0x18 bit 0: set by the runner on every resume (step 5), checked by
+        // its re-entry guard (step 3), cleared only by the scheduler
+        // 0x00e0cf50 (schedulerPass) - CONFIRMED, Sec26.27 2026-10-02.
+        bool started = false;
         bool killed = false;       // +0x18 bit 2
         int argCount = 0;          // +0x1c
         bool hasParent = false;    // false for a startThread() root (its context is OPEN)
@@ -207,9 +232,60 @@ public:
     // (no arguments) and run it at once. Returns its id while it is suspended,
     // else kNoThread. The engine's own top-level entry is OPEN.
     uint16_t startThread(lua_State* L, const std::string& name, std::string& fetchError);
-    // Runner on the live record `id` (scheduling cadence OPEN: only explicit
-    // calls resume). Returns true when it is still alive afterwards.
+    // The runner on the live record `id` alone - the shape of a direct driver
+    // such as 0x00e0cd00. Like the engine's, it resumes a record only after a
+    // schedulerPass() has cleared its bit 0 since the last resume; otherwise
+    // the runner's re-entry guard reports it alive without resuming it.
+    // Returns true when it is still alive afterwards.
     bool resume(lua_State* L, uint16_t id, std::string& fetchError);
+
+    // One record the scheduler visited (for tools: the host's watchdog and
+    // per-record error attribution). `resumed` is false for an exempt record
+    // or one whose owning state was not handed to schedulerPass().
+    struct PassEvent {
+        uint16_t id = 0;
+        std::string name;
+        bool exempt = false;
+        bool resumed = false;      // the runner was called on it
+        bool killedBefore = false; // its kill bit was set when the runner was called
+        bool bodyRan = false;      // the runner actually resumed the coroutine (lua_resume)
+        bool aliveAfter = true;
+        std::string error;        // the thread's own error ("<name>: <message>"), if it raised
+        std::string fetchError;   // the runner could not fetch the global by name
+    };
+    struct PassResult {
+        size_t visited = 0;
+        size_t resumed = 0;
+        size_t exemptSkipped = 0;
+        size_t released = 0;     // records that left the table during the pass
+    };
+    // Called right before the runner resumes a record (tools arm their
+    // watchdog on rec.co here), and right after with what happened.
+    using BeforeRun = std::function<void(const Record&)>;
+    using AfterRun = std::function<void(const PassEvent&)>;
+
+    // One call of the scheduler 0x00e0cf50 (CONFIRMED mechanism, see this
+    // class's top comment). `states` are the main Lua states whose records
+    // may be resumed (Host passes both); a record's owning state is found by
+    // its registry. Records allocated during the pass sit past the walk
+    // position and are visited in the same pass (the live count is re-read
+    // every step).
+    PassResult schedulerPass(const std::vector<lua_State*>& states, const BeforeRun& before = {},
+                             const AfterRun& after = {});
+
+    // The refcounted exempt list (0x00e0d710/0x00e0d6e0/0x00e0d5c0), keyed by
+    // owning Lua state, up to kExemptCapacity distinct keys, empty at start-up
+    // (CONFIRMED). exemptState() adds a reference (false, nothing added, when
+    // a 5th distinct key would be needed - that case is OPEN);
+    // unexemptState() drops one and removes the key at zero.
+    static constexpr size_t kExemptCapacity = 4;
+    bool exemptState(lua_State* L);
+    void unexemptState(lua_State* L);
+    bool isExempt(lua_State* L) const;
+    size_t exemptKeyCount() const { return exempt_.size(); }
+
+    // Ids of the live records, in array order.
+    std::vector<uint16_t> liveIds() const;
 
     // Errors raised inside threads ("<name>: <message>"), in order.
     const std::vector<std::string>& errors() const { return errors_; }
@@ -219,10 +295,20 @@ private:
     Record* findById(uint16_t id);
     uint16_t nextId();
 
+    struct ExemptKey {
+        const void* registry = nullptr;
+        int refs = 0;
+    };
+
     std::vector<std::unique_ptr<Record>> records_;
     std::vector<Record*> current_;
     std::vector<std::string> errors_;
+    std::vector<ExemptKey> exempt_;
     uint16_t lastId_ = 0;
+    // lua_resume status of the record the most recent run() call was made on,
+    // or kNoResume when that call did not resume it (schedulerPass reads it).
+    static constexpr int kNoResume = -1;
+    int lastResumeStatus_ = kNoResume;
 };
 
 // Everything the 24 bodies keep between calls, one per Host.

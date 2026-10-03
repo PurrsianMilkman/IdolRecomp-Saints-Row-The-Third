@@ -241,16 +241,50 @@ int stub_game_audio_get_audio_id(lua_State* L) {
 // ---------------------------------------------------------------------
 // 5. game_get_key_name_for_action (Sec8.23)
 // Arguments: 1 mandatory string (action name), read unconditionally.
-// CONFIRMED literal: the axis name "CAA_CAMERA_ROTATE" (index 0 of the
-// CAA table, spec-tables-ui-controls.md Sec4.2) resolves to
-// "STR_THE_MOUSE". CONFIRMED default: any other/no match yields an
-// empty string. Explicit gap: the primary CBA (button-bound-key) branch
-// and the CAA_WALK_FORWARD_BACKWARD/CAA_WALK_TURN_LEFT_RIGHT two-key
-// formatted branch both need the real PER-ACTION CURRENTLY-BOUND-KEY
-// data, which lives in a separate real xtbl file
-// (control_binding_sets.xtbl) this task's minimal state-layer scope does
-// not load - not fabricated, left as the spec's own confirmed empty-
-// string default.
+//
+// Re-checked 2026-10-02 against spec-tables-ui-controls.md Sec4.1/Sec4.2
+// (cross-cited by Sec8.23 itself), independently confirmed CONFIRMED and
+// not held (that document's own 2026-10-01 review status; nothing in
+// Sec4.1/Sec4.2 is HYPOTHESIS or NEEDS-DATA/NEEDS-EXE). That table's own
+// CBA/CAA *row dumps* are still "Team A working dump, not in this
+// repository - only the entries quoted [t]here are published" though, so
+// only the literal names actually quoted in spec text (not the full
+// 166/34-row vocabulary) can be classified here without guessing.
+//
+// CONFIRMED literals now recognised, case-insensitively:
+// - "CAA_CAMERA_ROTATE" (CAA axis index 0) -> "STR_THE_MOUSE".
+// - The CBA sentinel "BUTTON_UNBOUND" (spec-tables-ui-controls.md Sec4.1:
+//   the CBA table's own index-0 name, value -1) does NOT satisfy Sec8.23's
+//   "CBA entry with a bound (non -1) value" condition, so it falls through
+//   to the CAA check (no match there either) -> the CONFIRMED "no match at
+//   all" default, "".
+// - 6 further CAA representative entries spec-tables-ui-controls.md Sec4.2
+//   names outright, none at axis index 0/2/3: CAA_CAMERA_ELEVATE(1),
+//   CAA_DRIVE_STEER(9), CAA_TANK_DRIVE_FORWARD_BACKWARD(16),
+//   CAA_VPC_TURRET_RIGHT(29), CAA_TURRET_CAMERA_ELEVATE(31),
+//   CAA_PLANE_ROLL_LEFT_RIGHT(33) -> each hits Sec8.23's "any other axis
+//   index" branch -> "".
+//
+// Still OPEN, unchanged by this re-check:
+// - CAA_WALK_FORWARD_BACKWARD/CAA_WALK_TURN_LEFT_RIGHT (axis 2/3): the
+//   two-key sub-action resolvers 0x005be2c0/0x005be340 that format their
+//   result are themselves still OPEN per Sec8.23's own closing sentence
+//   ("OPEN - ... 0x005be2c0/0x005be340's own bodies") - not resolved by
+//   the ui-controls table sync, which only covers the CBA/CAA NAME tables,
+//   not these two callees.
+// - The primary CBA (button-bound-key) branch, and any action name not
+//   individually quoted above: Sec8.23's own CONFIRMED text routes a CBA
+//   match through the REAL PER-ACTION CURRENTLY-BOUND-KEY data (from
+//   control_binding_sets.xtbl's live binding-set state), which this
+//   project's minimal state layer does not load (no active binding set,
+//   no runtime per-action key array) - this is genuinely unmodeled engine
+//   state, not merely an unconfirmed spec text, so it stays OPEN. Since
+//   the full 166-row CBA table (and the remaining 28 CAA rows) are not in
+//   this repository either, an arbitrary unrecognised name cannot be
+//   safely classified as "definitely not CBA" - returning "" for it would
+//   risk inventing a "no binding" answer for what is very likely a real,
+//   currently-bound action name. Refusing (OPEN) stays the correct,
+//   conservative default for anything not explicitly named above.
 // ---------------------------------------------------------------------
 int stub_game_get_key_name_for_action(lua_State* L) {
     logCall(L, upLog(L), "game_get_key_name_for_action", upStateTag(L));
@@ -259,11 +293,28 @@ int stub_game_get_key_name_for_action(lua_State* L) {
         lua_pushstring(L, "STR_THE_MOUSE");
         return 1;
     }
-    // Every other name goes through the CBA/CAA tables and the live key
-    // bindings (Sec8.23); neither is modelled here, so the result is OPEN
-    // rather than an invented "".
+    static const char* kKnownEmptyResultNames[] = {
+        "BUTTON_UNBOUND",                    // CBA sentinel, value -1 (spec-tables-ui-controls.md Sec4.1)
+        "CAA_CAMERA_ELEVATE",                // CAA axis 1
+        "CAA_DRIVE_STEER",                   // CAA axis 9
+        "CAA_TANK_DRIVE_FORWARD_BACKWARD",   // CAA axis 16
+        "CAA_VPC_TURRET_RIGHT",              // CAA axis 29
+        "CAA_TURRET_CAMERA_ELEVATE",         // CAA axis 31
+        "CAA_PLANE_ROLL_LEFT_RIGHT",         // CAA axis 33
+    };
+    for (const char* known : kKnownEmptyResultNames) {
+        if (caseInsensitiveEquals(name, known)) {
+            lua_pushstring(L, "");
+            return 1;
+        }
+    }
+    // Every other name either needs the live per-action key-binding data
+    // (CBA branch) or the still-OPEN two-key sub-action resolvers (CAA
+    // axis 2/3), or cannot be safely classified from the entries this
+    // repository actually has - the result is OPEN rather than an
+    // invented "".
     throw OpenStateError("key binding for action '" + name + "' (0x005be440 CBA/CAA lookup)",
-                         "spec-lua-api-behaviour.md Sec8.23");
+                         "spec-lua-api-behaviour.md Sec8.23 / spec-tables-ui-controls.md Sec4.1-4.2");
 }
 
 // ---------------------------------------------------------------------
@@ -371,6 +422,14 @@ int stub_on_take_damage(lua_State* L) {
 // why) and calls the no-op replication stand-in. CONFIRMED structure,
 // HIGH-CONFIDENCE-tagged sub-detail: when newly enabling (false->true),
 // conditionally sets/clears CharacterState::actionOverrideId.
+//
+// Character spawn state (Sec34.1/Sec34.3, 2026-10-02): a freshly touched
+// name's ignoreAI is no longer OPEN by default - EngineState::
+// getOrCreateCharacter() applies the now-CONFIRMED engine default (off) at
+// construction, so `wasIgnoring` below reads real state immediately
+// instead of refusing, UNLESS the character was marked
+// markScriptNpcBoundForTesting() (the zone-held script-NPC override
+// question, Sec34.4), which forgets it back to OPEN.
 // ---------------------------------------------------------------------
 int stub_set_ignore_ai_flag(lua_State* L) {
     logCall(L, upLog(L), "set_ignore_ai_flag", upStateTag(L));
@@ -403,6 +462,16 @@ int stub_set_ignore_ai_flag(lua_State* L) {
 // Arguments: 1 mandatory string. Return: 1 number (the CONFIRMED,
 // cross-checked-against-set_current_hit_points +0x1cac integer field,
 // "stored as a plain integer, converted to float on read"). Pure query.
+//
+// Character spawn state (Sec34.2, 2026-10-02): the CONFIRMED default-path
+// formula (round(M * Hit_Points), M=1.0 for ordinary classes) is
+// implemented as EngineState::applyCharacterSpawnDefaults() - see
+// CharacterState::maxHitPoints's own doc comment for why nothing in this
+// host calls it automatically for a bare name (preset/level resolution is
+// this project's own unmodeled gap). This field therefore still stays
+// OPEN here until that's called (by a test, or a future real spawn
+// integration) - unchanged refusal behavior for a name with no Hit_Points
+// supplied, not a regression.
 // ---------------------------------------------------------------------
 int stub_get_max_hit_points(lua_State* L) {
     logCall(L, upLog(L), "get_max_hit_points", upStateTag(L));
@@ -2084,6 +2153,610 @@ int stub_boss_battle_matt_cheats_start(lua_State* L) {
     return 0;
 }
 
+// =======================================================================
+// Batch 2026-10-02: spec-lua-bindings.md Sec18-Sec21 ("Vint UI API"), the
+// 8 names a partner team's own real-mission-drive trace flagged as the
+// single biggest unspecced area by runtime call volume (Sec18's own front
+// matter: vint_set_property 14,500 calls, vint_get_property 1,692,
+// vint_get_time_index 1,206, vint_dataresponder_finished/
+// vint_internal_dataresponder_request 1,102 each, vint_dataitem_get 711,
+// vint_object_first_child 708, vint_object_clone 509). All eight are
+// members of the same 55-name registrar (FUN_00e1dfb0) vint_object_find
+// (Sec13.7/Sec15, function 13 above) already belongs to - genuinely
+// native for all eight (Sec18's own grep check against the six real
+// preload files), never a missing Lua-library load. Each function below
+// implements ONLY its own (sub)section's CONFIRMED argument-reading and
+// return-arity contract; a deep multi-step dispatch chain this project has
+// no real data table for (the Sec9.2 per-type property-descriptor table,
+// the tween redirect, the callback-claim mechanism, the data-responder's
+// own final dispatch FUN_00e1e660) is NOT separately simulated - same
+// "record the real, checkable gate/branch, not the full engine" convention
+// the Sec27/Sec28 batch above already established. See engine_state.h's
+// own per-field/per-method doc comments for exactly which real
+// global/mechanism each one stands for.
+// =======================================================================
+
+// A generic captured Lua scalar (VintTaggedValue, engine_state.h) read from
+// one Lua stack slot - number/boolean/string, or None for anything else
+// (nil, table, function, ...) rather than guessing a type. Shared by
+// vint_dataitem_get's own field storage and vint_set_property/
+// vint_get_property's own property-value bag (both cite the same real
+// 24-byte tagged-value record shape, Sec19.2/Sec20).
+VintTaggedValue readVintTaggedValue(lua_State* L, int idx) {
+    VintTaggedValue v;
+    switch (lua_type(L, idx)) {
+        case LUA_TNUMBER:
+            v.kind = VintTaggedValue::Kind::Number;
+            v.number = lua_tonumber(L, idx);
+            break;
+        case LUA_TBOOLEAN:
+            v.kind = VintTaggedValue::Kind::Boolean;
+            v.boolean = lua_toboolean(L, idx) != 0;
+            break;
+        case LUA_TSTRING:
+            v.kind = VintTaggedValue::Kind::String;
+            v.text = argString(L, idx);
+            break;
+        default:
+            v.kind = VintTaggedValue::Kind::None;
+            break;
+    }
+    return v;
+}
+
+// The matching push side - the generic "push one typed variant" helper
+// Sec19.2/Sec20.2 both cite (FUN_00e1a420). Returns how many Lua values it
+// pushed (0 for a None slot - defensive; a populated field/property this
+// project itself stored is never None, since readVintTaggedValue only
+// produces one from a real Lua value already on the stack at write time).
+int pushVintTaggedValue(lua_State* L, const VintTaggedValue& v) {
+    switch (v.kind) {
+        case VintTaggedValue::Kind::Number:
+            lua_pushnumber(L, v.number);
+            return 1;
+        case VintTaggedValue::Kind::Boolean:
+            lua_pushboolean(L, v.boolean ? 1 : 0);
+            return 1;
+        case VintTaggedValue::Kind::String:
+            lua_pushstring(L, v.text.c_str());
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+// ---------------------------------------------------------------------
+// vint_object_first_child (Sec18.1). Arguments: 1, mandatory, unconditional
+// lua_tonumber+truncate (no type gate - CONFIRMED). Return: CONFIRMED, a
+// genuine difference from vint_object_find's own "always one value"
+// convention - zero Lua values (not even 0.0) on EITHER a bad handle or a
+// resolved object with no first child; exactly one number (the child's
+// handle) when a real first child exists.
+// ---------------------------------------------------------------------
+int stub_vint_object_first_child(lua_State* L) {
+    logCall(L, upLog(L), "vint_object_first_child", upStateTag(L));
+    uint32_t handle = static_cast<uint32_t>(lua_tonumber(L, 1));
+    uint32_t child = upState(L)->vdoObjectFirstChild(handle);
+    if (child == 0) return 0; // CONFIRMED: bad handle, or no first child -> zero Lua values
+    lua_pushnumber(L, static_cast<lua_Number>(child));
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_object_clone (Sec18.2). Arguments: variable arity 1-2 - orig_handle
+// (number, mandatory, unconditional lua_tonumber+truncate); parent_handle
+// (number, optional - absent/nil falls back to the original's own parent,
+// CONFIRMED). The type gate on arg 2 (absent-or-wrong-type -> fallback)
+// mirrors vint_object_find's own sibling argument in the SAME registrar
+// (Sec15) - HIGH CONFIDENCE by that analogy, not independently re-confirmed
+// for this exact call site (Sec18.2's own text only states the absent/nil
+// case explicitly). Return: CONFIRMED, matches vint_object_find's own
+// "always exactly one number" convention exactly - 0.0 on every failure
+// path (no current document - an OPEN read, see EngineState::cloneVdoObject
+// - or an unresolvable orig_handle), the new clone's real handle on success.
+// ---------------------------------------------------------------------
+int stub_vint_object_clone(lua_State* L) {
+    logCall(L, upLog(L), "vint_object_clone", upStateTag(L));
+    uint32_t orig = static_cast<uint32_t>(lua_tonumber(L, 1));
+    bool hasParent = lua_gettop(L) >= 2 && lua_type(L, 2) == LUA_TNUMBER;
+    uint32_t parentArg = hasParent ? static_cast<uint32_t>(lua_tonumber(L, 2)) : 0;
+    uint32_t handle = upState(L)->cloneVdoObject(orig, hasParent, parentArg); // OPEN (current document) propagates
+    lua_pushnumber(L, static_cast<lua_Number>(handle));
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_get_time_index (Sec19.1). Arguments: variable arity 0-1 -
+// doc_handle (number, optional; CONFIRMED a genuine difference from every
+// other optional numeric-handle argument in this document: absent, nil, OR
+// the literal number 0 all take the SAME current-document fallback path).
+// Return: CONFIRMED - zero Lua values on failure, exactly one number (the
+// time-index float) on success; this minimal host cannot separately
+// reach the real failure path (see EngineState::vintGetTimeIndex's own doc
+// comment), so every call either returns a real, test-set value or refuses
+// as OPEN.
+// ---------------------------------------------------------------------
+int stub_vint_get_time_index(lua_State* L) {
+    logCall(L, upLog(L), "vint_get_time_index", upStateTag(L));
+    bool isNumberArg = lua_gettop(L) >= 1 && lua_type(L, 1) == LUA_TNUMBER;
+    double rawArg = isNumberArg ? lua_tonumber(L, 1) : 0.0;
+    bool explicitNonZero = isNumberArg && rawArg != 0.0; // CONFIRMED: an explicit 0 is NOT "explicit" here
+    uint32_t explicitDoc = explicitNonZero ? static_cast<uint32_t>(rawArg) : 0;
+    double t = upState(L)->vintGetTimeIndex(explicitNonZero, explicitDoc); // OPEN propagates
+    lua_pushnumber(L, t);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_dataitem_get (Sec19.2). Arguments: 1, mandatory, unconditional
+// lua_tonumber+truncate. Return: CONFIRMED - zero Lua values on a bad
+// handle; otherwise every populated field of the resolved data item, in
+// order (bounded at 32, real shipped script only ever reads the first 24).
+// A separate handle space from the VDO-object handles above (CONFIRMED,
+// Sec19.2 - a distinct resolver).
+// ---------------------------------------------------------------------
+int stub_vint_dataitem_get(lua_State* L) {
+    logCall(L, upLog(L), "vint_dataitem_get", upStateTag(L));
+    uint32_t handle = static_cast<uint32_t>(lua_tonumber(L, 1));
+    const std::vector<VintTaggedValue>* fields = upState(L)->findVintDataItemFields(handle);
+    if (!fields) return 0; // CONFIRMED: bad handle -> zero Lua values
+    int pushed = 0;
+    for (const auto& f : *fields) pushed += pushVintTaggedValue(L, f);
+    return pushed;
+}
+
+// ---------------------------------------------------------------------
+// vint_set_property (Sec20.1). Arguments: variable arity 2+ - handle
+// (number, type-gated via lua_type == LUA_TNUMBER; an absent/non-numeric
+// handle leaves it the literal 0 rather than aborting, CONFIRMED - a
+// genuine difference from vint_get_property's own unconditional handle
+// read below); property_name (string, mandatory - a missing or non-string
+// value makes the WHOLE call a silent no-op, CONFIRMED); value... (1-3
+// trailing values, whose real required type/count depends on the named
+// property's own type/size code - NOT modeled, see
+// EngineState::setVintProperty's own doc comment). Return: CONFIRMED -
+// always zero Lua values, every path.
+// ---------------------------------------------------------------------
+int stub_vint_set_property(lua_State* L) {
+    logCall(L, upLog(L), "vint_set_property", upStateTag(L));
+    uint32_t handle = 0;
+    if (lua_gettop(L) >= 1 && lua_type(L, 1) == LUA_TNUMBER) handle = static_cast<uint32_t>(lua_tonumber(L, 1));
+    if (lua_gettop(L) < 2 || lua_type(L, 2) != LUA_TSTRING) return 0; // CONFIRMED: missing/non-string property_name -> silent no-op
+    std::string propertyName = argString(L, 2);
+    std::vector<VintTaggedValue> values;
+    for (int i = 3, top = lua_gettop(L); i <= top; ++i) values.push_back(readVintTaggedValue(L, i));
+    upState(L)->setVintProperty(handle, propertyName, std::move(values)); // silently no-ops on an unresolved handle
+    return 0; // CONFIRMED: always zero Lua values, every path
+}
+
+// ---------------------------------------------------------------------
+// vint_get_property (Sec20.2). Arguments: 2, fixed - handle (number,
+// mandatory, unconditional lua_tonumber+truncate - no type gate, unlike
+// vint_set_property's own handle read above); property_name (string,
+// mandatory). Return: CONFIRMED, variable arity driven by the named
+// property's own type (NOT modeled - see
+// EngineState::findVintProperty's own doc comment; this minimal stand-in
+// echoes back exactly whatever vint_set_property last stored) - zero Lua
+// values (not even nil) on a bad handle or a property-name miss.
+// ---------------------------------------------------------------------
+int stub_vint_get_property(lua_State* L) {
+    logCall(L, upLog(L), "vint_get_property", upStateTag(L));
+    uint32_t handle = static_cast<uint32_t>(lua_tonumber(L, 1));
+    std::string propertyName = argString(L, 2);
+    const std::vector<VintTaggedValue>* values = upState(L)->findVintProperty(handle, propertyName);
+    if (!values) return 0; // CONFIRMED: not found / bad handle -> zero Lua values
+    int pushed = 0;
+    for (const auto& v : *values) pushed += pushVintTaggedValue(L, v);
+    return pushed;
+}
+
+// ---------------------------------------------------------------------
+// vint_dataresponder_finished (Sec21.1). Arguments: 1, mandatory string.
+// Return: CONFIRMED, always exactly 1 boolean - true if no record exists
+// for `name` at all (the real, honestly-flagged quirk) or the found
+// record's own completion flag is set; false only when a record exists
+// and that flag is clear.
+// ---------------------------------------------------------------------
+int stub_vint_dataresponder_finished(lua_State* L) {
+    logCall(L, upLog(L), "vint_dataresponder_finished", upStateTag(L));
+    std::string name = argString(L, 1);
+    lua_pushboolean(L, upState(L)->dataResponderFinished(name) ? 1 : 0);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vint_internal_dataresponder_request (Sec21.2). Arguments: variable arity
+// 3+ - data_responder_name (string, mandatory); callback_function_name
+// (string, conditionally required - absent/non-string makes the whole
+// call a silent no-op); max_records_to_return (number, conditionally
+// required the same way); up to 16 further trailing arguments (NOT
+// modeled - see EngineState::dataResponderRequest's own doc comment, they
+// have no Lua-visible consequence among this pass's two in-scope
+// functions). Return: CONFIRMED, always zero Lua values, every path
+// including the no-op path. CONFIRMED, a genuinely surprising negative:
+// this native never creates the named record - a name with no existing
+// record is itself a complete, silent no-op.
+// ---------------------------------------------------------------------
+int stub_vint_internal_dataresponder_request(lua_State* L) {
+    logCall(L, upLog(L), "vint_internal_dataresponder_request", upStateTag(L));
+    std::string name = argString(L, 1);
+    bool validCallback = lua_gettop(L) >= 2 && lua_type(L, 2) == LUA_TSTRING;
+    bool validMax = lua_gettop(L) >= 3 && lua_type(L, 3) == LUA_TNUMBER;
+    upState(L)->dataResponderRequest(name, validCallback, validMax);
+    return 0; // CONFIRMED: always zero Lua values, every path including the no-op path
+}
+
+// =======================================================================
+// Batch 2026-10-02: spec-lua-api-behaviour.md Sec30 ("ranking tranche 03"),
+// 9 of its 25 CONFIRMED names. All 25 were investigated and written up by
+// Team A (Sec30.1-Sec30.7); per the orchestrator's own explicit scope
+// instruction for this pass ("implement the CONFIRMED entries that the
+// runtime ranking or mission drive actually hit; others can wait"), this
+// batch covers:
+//   - The 2 names with a real, non-zero measured call count in this
+//     session's own latest trace (results/verify_sched_check/verdict_stub_
+//     hits_with_missions.tsv, the scheduler-verification run against the
+//     full 1490-tagged registry): vehicle_disable_explosion_and_damage_vfx
+//     (28 calls, 3 static call sites across 2 distinct scripts) and
+//     auto_pickup_enable (1 call, 4 static call sites across 2 scripts).
+//   - vehicle_exit_group_do and team_make_unfriendly, the two functions
+//     this tranche's own cross-function note (Sec30.7) flags as reaching a
+//     CONFIRMED crash-shaped edge in the real engine (a NULL-`this` call,
+//     an out-of-bounds relation-matrix index) - implemented with an
+//     explicit, labelled HOST-SAFETY guard per this task's own instruction
+//     (see each function's own doc comment below for the exact reasoning;
+//     this is a deliberate, stated deviation from faithful reproduction,
+//     never presented as a spec fact).
+//   - vehicle_exit_group_check_done, vehicle_exit_group_do's own "polling
+//     partner" (Sec30.5) - implemented alongside it since it shares the
+//     same table-reading helper and CharacterState fields, at negligible
+//     marginal cost over implementing vehicle_exit_group_do alone.
+//   - vehicle_set_invulnerable_to_player_explosives and vehicle_set_
+//     special_override_never_ghost, the 2 further single-vehicle setters
+//     Sec30.5 describes as sharing the IDENTICAL "variant-1 double-gate"
+//     shape as vehicle_disable_explosion_and_damage_vfx, and vehicle_
+//     clear_all_radio_locks, the bulk-clear sibling of the same force-flag
+//     word - all 4 bundled together once the shared VehicleState/
+//     force-flag infrastructure exists for the first one, at negligible
+//     marginal cost.
+//   - vehicle_is_vtol, a simple shared-fact query (Sec30.5: "true only
+//     when class 4") reusing the same VehicleState/objectResolves()
+//     infrastructure the other vehicle functions above already need.
+//
+// Deliberately NOT implemented this pass (zero measured real hits in the
+// trace above, AND each would need its own substantial new, untested
+// engine-state modeling - e.g. the 70-entry CAE combat-action table
+// (Sec30.4) and its per-character staged/committed action record for
+// ai_suggest_action/ai_do_scripted_advance; a customization/rig-swap
+// sequencing model for boss_battle_matt_set_player_as_avatar; a world-
+// object-manager-based ambient-emitter search for audio_ambient_emitter_
+// pause/resume; seat/occupant arrays, screen-distortion effects, path-
+// point arrays and recursive component detachment for vehicle_stop_do/
+// vehicle_pathfind_to_do/vehicle_set_malfunctioning/vehicle_component_
+// detach/vehicle_set_2d_tank_controls/vehicle_rc_get_signal_strength;
+// turn_to_do/teleport_vehicle_to_object's own deep pose/orientation
+// helpers; character_dont_regenerate/character_clear_combat_move's own
+// force-flag/combat-move-slot machinery): character_dont_regenerate,
+// character_clear_combat_move, boss_battle_matt_set_player_as_avatar,
+// boss_battle_matt_hide_wings, audio_ambient_emitter_pause, audio_ambient_
+// emitter_resume, ai_suggest_action, ai_do_scripted_advance, vehicle_set_
+// 2d_tank_controls, vehicle_rc_get_signal_strength, vehicle_stop_do,
+// vehicle_pathfind_to_do, vehicle_set_malfunctioning, vehicle_component_
+// detach, turn_to_do, teleport_vehicle_to_object. These remain ordinary
+// generic logging stubs (ARE in tools/lua_all_registered_1490_tagged.txt,
+// NOT in specConfirmedStubNames()) - left for a future pass if real call
+// evidence or further scoping time justifies the deeper modeling each one
+// needs. All 25 names are tagged `gameplay` in tools/lua_all_registered_
+// 1490_tagged.txt (grepped directly, not assumed).
+// =======================================================================
+
+// 0x0083dff0 (Sec30.5, shared by vehicle_exit_group_do/_check_done): "t.n
+// if numeric, else counts via lua_next; -1 for missing/nil [table]." This
+// project reads the actual names from a table shaped as the spec's own "a
+// Lua table of character names" text describes: a plain Lua array, `t.n`
+// (if a number) giving the element count or, absent that, elements read in
+// order 1..N until the first nil - the SAME standard contiguous-array idiom
+// this file already uses elsewhere for a table argument (fadeOutReadColour
+// above, Sec2.9). The exact per-index enumeration algorithm behind "else
+// counts via lua_next" is not independently given beyond the count-
+// determination method itself, so this project's own standard idiom stands
+// in for it (a stated choice, not a guessed engine mechanism). A missing or
+// non-table argument returns empty (the "-1" case - no names to process).
+std::vector<std::string> readCharacterNameArray(lua_State* L, int idx) {
+    std::vector<std::string> out;
+    if (idx > lua_gettop(L) || lua_type(L, idx) != LUA_TTABLE) return out;
+    lua_pushstring(L, "n");
+    lua_gettable(L, idx);
+    bool hasN = lua_type(L, -1) == LUA_TNUMBER;
+    double n = hasN ? lua_tonumber(L, -1) : 0.0;
+    lua_pop(L, 1);
+    int count = (hasN && n >= 0.0 && n < 1000000.0) ? static_cast<int>(n) : -1;
+    for (int i = 1; count < 0 || i <= count; ++i) {
+        lua_pushnumber(L, i);
+        lua_gettable(L, idx);
+        if (lua_type(L, -1) == LUA_TNIL) { lua_pop(L, 1); break; }
+        out.push_back(argString(L, -1));
+        lua_pop(L, 1);
+        if (i > 100000) break; // a safety bound, not a spec fact - avoids an unbounded loop on a hostile table
+    }
+    return out;
+}
+
+// Shared body for the 3 single-vehicle force-flag setters below (Sec30.5):
+// resolve (reuses objectResolves(), Sec29's "one shared global name map" -
+// see VehicleState's own doc comment, engine_state.h), then apply the
+// double-gate: gate passes -> set the bit directly; gate fails -> replicate
+// only (the no-op stand-in for the real opcode-0x46 record), no local bit
+// write - CONFIRMED either/or shape (Sec30.5: "either true -> write the bit
+// directly; both false -> open ... instead").
+void applyVehicleForceFlagSetter(lua_State* L, const char* name, const std::string& vehicleName, bool flag,
+                                  uint32_t bitMask) {
+    EngineState* st = upState(L);
+    if (!st->objectResolves().get(vehicleName)) return; // OPEN until set
+    VehicleState& vehicle = st->getOrCreateVehicle(vehicleName);
+    if (vehicle.forceFlagGatePasses.get()) { // OPEN until set
+        vehicle.forceFlags.setBits(bitMask, flag ? bitMask : 0u);
+    } else {
+        EngineState::replicateStateChange(name, vehicleName);
+    }
+}
+
+// ---------------------------------------------------------------------
+// vehicle_set_invulnerable_to_player_explosives (Sec30.5, 0x00a66270). 1
+// mandatory vehicle name + 1 boolean (lua_toboolean, no nil-gate, absent ->
+// false - CONFIRMED). No return. Sets/clears VehicleState::forceFlags bit
+// kInvulnerableToPlayerExplosivesBit (+0x1d7c bit 0x2) via the shared
+// double-gate helper above.
+// ---------------------------------------------------------------------
+int stub_vehicle_set_invulnerable_to_player_explosives(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_set_invulnerable_to_player_explosives", upStateTag(L));
+    std::string vehicleName = argString(L, 1);
+    bool flag = lua_toboolean(L, 2) != 0;
+    applyVehicleForceFlagSetter(L, "vehicle_set_invulnerable_to_player_explosives", vehicleName, flag,
+                                VehicleState::kInvulnerableToPlayerExplosivesBit);
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_disable_explosion_and_damage_vfx (Sec30.5, 0x00a621f0). 1
+// mandatory vehicle name + 1 boolean (no nil-gate, absent -> false -
+// CONFIRMED). No return. Sets/clears VehicleState::forceFlags bit
+// kDisableExpAndDamageVfxBit (+0x1d7d bit 0x20). Measured 28 real calls, 3
+// static call sites across 2 distinct real scripts (results/verify_sched_
+// check/verdict_stub_hits_with_missions.tsv) - the highest real call count
+// of any of this tranche's 25 names, so this is this batch's top priority.
+// ---------------------------------------------------------------------
+int stub_vehicle_disable_explosion_and_damage_vfx(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_disable_explosion_and_damage_vfx", upStateTag(L));
+    std::string vehicleName = argString(L, 1);
+    bool flag = lua_toboolean(L, 2) != 0;
+    applyVehicleForceFlagSetter(L, "vehicle_disable_explosion_and_damage_vfx", vehicleName, flag,
+                                VehicleState::kDisableExpAndDamageVfxBit);
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_set_special_override_never_ghost (Sec30.5, 0x00a63300). 1
+// mandatory vehicle name + 1 boolean (no nil-gate, absent -> false -
+// CONFIRMED). No return. Sets/clears VehicleState::forceFlags bit
+// kSpecialOverrideNeverGhostBit (+0x1d7d bit 0x40). CONFIRMED: this
+// setter has two further engine callers beyond this Lua entry point - not
+// modeled (out of this project's own Lua-visible scope).
+// ---------------------------------------------------------------------
+int stub_vehicle_set_special_override_never_ghost(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_set_special_override_never_ghost", upStateTag(L));
+    std::string vehicleName = argString(L, 1);
+    bool flag = lua_toboolean(L, 2) != 0;
+    applyVehicleForceFlagSetter(L, "vehicle_set_special_override_never_ghost", vehicleName, flag,
+                                VehicleState::kSpecialOverrideNeverGhostBit);
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_clear_all_radio_locks (Sec30.5, 0x00a647e0). No arguments. No
+// return. CONFIRMED: walks every vehicle in the world object manager and
+// clears the radio_controls_locked bit (+0x1d7c bit 0x4) on each (literal
+// false, hardcoded) - a per-vehicle authority miss emits one opcode-0x46
+// record per such vehicle rather than skipping it. This project has no
+// real world object manager / spawned-vehicle enumeration (stated
+// simplification, VehicleState's own doc comment) - "every vehicle in the
+// world object manager" stands in here for "every vehicle this host
+// currently knows about" (EngineState::vehicles(), populated only by the
+// single-vehicle setters above or a test), the same minimal-registry
+// convention this project already applies elsewhere (e.g. the Sec29 named-
+// object map).
+// ---------------------------------------------------------------------
+int stub_vehicle_clear_all_radio_locks(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_clear_all_radio_locks", upStateTag(L));
+    EngineState* st = upState(L);
+    for (auto& entry : st->vehicles()) {
+        VehicleState& vehicle = entry.second;
+        if (vehicle.forceFlagGatePasses.get()) { // OPEN until set, per vehicle
+            vehicle.forceFlags.setBits(VehicleState::kRadioControlsLockedBit, 0u); // hardcoded false
+        } else {
+            EngineState::replicateStateChange("vehicle_clear_all_radio_locks", entry.first);
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_is_vtol (Sec30.5, 0x00a66170). 1 mandatory vehicle name. Return:
+// exactly 1 boolean, CONFIRMED. Inline resolution (no character redirect -
+// this project does not model the redirect distinction either way, see
+// VehicleState's own doc comment); true only when VehicleState::
+// vehicleClass reads 4. An unresolved name pushes false (CONFIRMED: the
+// real inline chain's own liveness/+0x70 failure path yields false here,
+// same "unresolved -> false" shape as every boolean-returning query
+// elsewhere in this file).
+// ---------------------------------------------------------------------
+int stub_vehicle_is_vtol(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_is_vtol", upStateTag(L));
+    std::string vehicleName = argString(L, 1);
+    bool isVtol = false;
+    EngineState* st = upState(L);
+    if (st->objectResolves().get(vehicleName)) { // OPEN until set
+        isVtol = st->getOrCreateVehicle(vehicleName).vehicleClass.get() == 4; // OPEN until set
+    }
+    lua_pushboolean(L, isVtol ? 1 : 0);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// auto_pickup_enable (Sec30.3, 0x00a3c880). No arguments. No return.
+// CONFIRMED: writes the hardcoded byte 1 to global 0x01308698
+// (EngineState::autoPickupEnabled(), file-backed default "enabled" per
+// spec's own text - already true by construction). "This entry can only
+// enable" (CONFIRMED) - there is no in-scope disable counterpart (the
+// adjacent registrar slot's own disable sibling is HYPOTHESIS, not dumped,
+// not one of this tranche's 25 confirmed names, so not implemented here).
+// Measured: 1 real call, 4 static call sites across 2 distinct scripts
+// (results/verify_sched_check/verdict_stub_hits_with_missions.tsv).
+// ---------------------------------------------------------------------
+int stub_auto_pickup_enable(lua_State* L) {
+    logCall(L, upLog(L), "auto_pickup_enable", upStateTag(L));
+    upState(L)->autoPickupEnabled() = true;
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_exit_group_do (Sec30.5, 0x00a67a00). Arguments: arg 1 boolean (no
+// nil-gate, CONFIRMED - no further Lua-visible effect modeled, its real
+// role inside the OPEN exit-request builder 0x00af3cd0 is not given) + arg
+// 2/3 optional booleans (nil-gated, default false - arg 3 is forwarded to
+// 0x00a7bdc0, see below; arg 2's own role is likewise inside the OPEN
+// 0x00af3cd0) + arg 4 the table of character names (CONFIRMED: must be the
+// 4th argument - fewer args sees no table and does nothing, same as an
+// empty/missing table). Return: exactly 1 boolean, true iff >=1 named
+// character resolves (objectResolves(), reused per Sec29) and is in
+// vehicle-state 3 ("seated", HYPOTHESIS - CharacterState::stateEnum,
+// already-established +0x16d4 field, Sec3.4/Sec3.10/Sec30.5). Per the
+// spec's own exact wording, Sec30.5 does NOT additionally gate this
+// function's own state-3 test on the "is dead/gone" predicate the way
+// vehicle_exit_group_check_done's own paragraph explicitly does below - a
+// stated, preserved asymmetry (copying the spec's own quirks, not
+// "cleaning them up", per Sec30.7's own instruction elsewhere in this
+// document) - so CharacterState::isAlive is intentionally NOT read here.
+//
+// For each such character, the real engine "builds an exit request and
+// hands it to 0x00af3cd0" (OPEN, not dumped - no further effect modeled)
+// and remembers the FIRST vehicle found via the character's own vehicle
+// link (CharacterState::currentVehicleName, a new field scoped only to
+// this function - see its own doc comment, engine_state.h).
+//
+// CONFIRMED crash-shaped edge, explicitly flagged by Sec30.7: the real
+// engine then calls 0x00a7bdc0(arg3) on whatever vehicle was found - or,
+// when none was found across the whole table, with a NULL `this`
+// ("confirmed from the listing, XOR ECX,ECX"); Sec30.7 leaves OPEN
+// "whether 0x00a7bdc0 tolerates that". 0x00a7bdc0's own body was never
+// independently dumped, so this host has no further real effect to apply
+// on the found-vehicle path either way. HOST-SAFETY DEVIATION (not a spec
+// fact, per this task's own explicit instruction): the real engine reaches
+// that unconfirmed-safety null-`this` call on the no-vehicle-found path;
+// this host guards explicitly instead of performing the equivalent call on
+// an unresolved target, and counts the averted path via
+// EngineState::recordVehicleExitGroupNullThisGuard() (test-observable
+// only, not a real engine field) - "this project does not simulate
+// crashes" (cf. group_get_next_npc above, Sec28.5, item 57, the
+// established precedent for this exact idiom).
+// ---------------------------------------------------------------------
+int stub_vehicle_exit_group_do(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_exit_group_do", upStateTag(L));
+    (void)lua_toboolean(L, 1); // arg 1: no nil-gate, CONFIRMED; no further effect modeled (see comment above)
+    bool arg3 = (lua_gettop(L) >= 3 && lua_type(L, 3) != LUA_TNIL) ? (lua_toboolean(L, 3) != 0) : false;
+    (void)arg3; // forwarded to 0x00a7bdc0 per spec; not modeled further (callee OPEN, not dumped)
+    std::vector<std::string> names = readCharacterNameArray(L, 4); // arg 4 must be 4th, CONFIRMED
+    EngineState* st = upState(L);
+    bool any = false;
+    std::string foundVehicle; // empty = "no vehicle found" (the null-`this` case)
+    for (const auto& name : names) {
+        if (!st->objectResolves().get(name)) continue; // OPEN until set
+        CharacterState& c = st->getOrCreateCharacter(name);
+        if (c.stateEnum.get() != 3) continue; // OPEN until set
+        any = true; // this character got an exit request (0x00af3cd0, OPEN - no further effect modeled)
+        if (foundVehicle.empty()) {
+            foundVehicle = c.currentVehicleName.get(); // OPEN until set
+        }
+    }
+    if (foundVehicle.empty()) {
+        st->recordVehicleExitGroupNullThisGuard(); // HOST-SAFETY: null-`this` guard, see comment above
+    }
+    lua_pushboolean(L, any ? 1 : 0);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// vehicle_exit_group_check_done (Sec30.5, 0x00a66b00). 1 table argument
+// (same shape/reader as vehicle_exit_group_do above). Return: exactly 1
+// boolean - CONFIRMED false if ANY listed character resolves
+// (objectResolves()), is alive (CharacterState::isAlive, the shared "is
+// dead/gone" predicate 0x0096f4f0 Sec30.5's own preamble names), and is in
+// vehicle-state 2 or 3 (CharacterState::stateEnum); true otherwise,
+// INCLUDING an empty or missing table (CONFIRMED) - "the polling partner"
+// of vehicle_exit_group_do above.
+// ---------------------------------------------------------------------
+int stub_vehicle_exit_group_check_done(lua_State* L) {
+    logCall(L, upLog(L), "vehicle_exit_group_check_done", upStateTag(L));
+    std::vector<std::string> names = readCharacterNameArray(L, 1);
+    EngineState* st = upState(L);
+    for (const auto& name : names) {
+        if (!st->objectResolves().get(name)) continue; // OPEN until set
+        CharacterState& c = st->getOrCreateCharacter(name);
+        if (!c.isAlive.get()) continue; // OPEN until set
+        int32_t state = c.stateEnum.get(); // OPEN until set
+        if (state == 2 || state == 3) {
+            lua_pushboolean(L, 0);
+            return 1;
+        }
+    }
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
+// ---------------------------------------------------------------------
+// team_make_unfriendly (Sec30.6, 0x00a60940). 2 mandatory strings (team
+// names). No return. CONFIRMED: both names resolve via the established
+// team-name-to-id helper 0x0094cc60 (EngineState::resolveTeamId() - see
+// its own doc comment, engine_state.h, for why an unregistered name
+// honestly takes the real CONFIRMED sentinel-9 "unknown name" path rather
+// than refusing). 0x009b7130(id1, id2, 1, true) writes relation value 1
+// symmetrically (EngineState::setTeamRelationIfInBounds(), including
+// Sec30.6's own "team 5 mirrors team 6" refinement of Sec20.6).
+//
+// CONFIRMED crash-shaped edge, explicitly flagged by Sec30.7 (also
+// Sec30.6's own text): an unrecognized name's sentinel id 9 indexes PAST
+// the CONFIRMED 8x8 relation-matrix block - "a crash-shaped edge... OPEN,
+// not confirmed" whether it truly faults. HOST-SAFETY DEVIATION (not a
+// spec fact, per this task's own explicit instruction): either way, this
+// host bounds-checks both ids first (setTeamRelationIfInBounds returns
+// false on an out-of-range id) and skips the write entirely rather than
+// performing the equivalent out-of-bounds C++ array write, logging the
+// averted path via the same logCall/HitLog mechanism every stub already
+// uses - "this project does not simulate crashes" (cf. group_get_next_npc
+// above, Sec28.5, item 57, the established precedent for this exact
+// idiom). Since this project has no real team-name registry (no spec
+// gives the actual in-game team name strings/ids), every call this host
+// sees in practice takes this guarded path unless a test explicitly
+// registers both names' ids first - itself the honest behavior of a
+// never-populated registry, not a simplification of the return contract
+// (there is none; return is always none).
+// ---------------------------------------------------------------------
+int stub_team_make_unfriendly(lua_State* L) {
+    logCall(L, upLog(L), "team_make_unfriendly", upStateTag(L));
+    std::string team1 = argString(L, 1);
+    std::string team2 = argString(L, 2);
+    EngineState* st = upState(L);
+    int id1 = st->resolveTeamId(team1);
+    int id2 = st->resolveTeamId(team2);
+    if (!st->setTeamRelationIfInBounds(id1, id2, 1)) {
+        st->recordTeamRelationOobGuard(); // HOST-SAFETY: out-of-bounds team index guard, see comment above
+        logCall(L, upLog(L), "team_make_unfriendly:OOB_TEAM_INDEX_GUARD", upStateTag(L));
+        return 0;
+    }
+    EngineState::replicateStateChange("team_make_unfriendly", team1 + "/" + team2);
+    return 0;
+}
+
 // Every spec stub is registered through this trampoline. A stub reading
 // OPEN engine state (open_state.h) throws OpenStateError; the trampoline
 // catches it, logs "OPEN_STATE:<global>" in the HitLog, pushes the message
@@ -2257,6 +2930,31 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "cellphone_animate_start_do",
         "boss_battle_matt_get_cheat",
         "boss_battle_matt_cheats_start",
+        // Batch 2026-10-02: spec-lua-bindings.md Sec18-Sec21 ("Vint UI
+        // API"), all 8 `ui` in tools/lua_all_registered_1490_tagged.txt
+        // (grepped directly, lines 1443/1446/1455/1458/1462/1464/1469/1475).
+        "vint_object_first_child",
+        "vint_object_clone",
+        "vint_get_time_index",
+        "vint_dataitem_get",
+        "vint_set_property",
+        "vint_get_property",
+        "vint_dataresponder_finished",
+        "vint_internal_dataresponder_request",
+        // Batch 2026-10-02: spec-lua-api-behaviour.md Sec30 ("ranking
+        // tranche 03"), 9 of its 25 names - all `gameplay` in
+        // tools/lua_all_registered_1490_tagged.txt (grepped directly). See
+        // this file's own Sec30 batch header comment above for which of
+        // the 25 these are and why.
+        "vehicle_set_invulnerable_to_player_explosives",
+        "vehicle_disable_explosion_and_damage_vfx",
+        "vehicle_set_special_override_never_ghost",
+        "vehicle_clear_all_radio_locks",
+        "vehicle_is_vtol",
+        "auto_pickup_enable",
+        "vehicle_exit_group_do",
+        "vehicle_exit_group_check_done",
+        "team_make_unfriendly",
     };
     // The 24 bare globals (specBareGlobals(), lua_bare_globals.cpp) are spec
     // functions too, so tools and tests that walk this list (the refusal
@@ -2386,6 +3084,25 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("cellphone_animate_start_do")) registerOne(L, state, log, stateTag, "cellphone_animate_start_do", openGuard<stub_cellphone_animate_start_do>);
     if (wants("boss_battle_matt_get_cheat")) registerOne(L, state, log, stateTag, "boss_battle_matt_get_cheat", openGuard<stub_boss_battle_matt_get_cheat>);
     if (wants("boss_battle_matt_cheats_start")) registerOne(L, state, log, stateTag, "boss_battle_matt_cheats_start", openGuard<stub_boss_battle_matt_cheats_start>);
+    if (wants("vint_object_first_child")) registerOne(L, state, log, stateTag, "vint_object_first_child", openGuard<stub_vint_object_first_child>);
+    if (wants("vint_object_clone")) registerOne(L, state, log, stateTag, "vint_object_clone", openGuard<stub_vint_object_clone>);
+    if (wants("vint_get_time_index")) registerOne(L, state, log, stateTag, "vint_get_time_index", openGuard<stub_vint_get_time_index>);
+    if (wants("vint_dataitem_get")) registerOne(L, state, log, stateTag, "vint_dataitem_get", openGuard<stub_vint_dataitem_get>);
+    if (wants("vint_set_property")) registerOne(L, state, log, stateTag, "vint_set_property", openGuard<stub_vint_set_property>);
+    if (wants("vint_get_property")) registerOne(L, state, log, stateTag, "vint_get_property", openGuard<stub_vint_get_property>);
+    if (wants("vint_dataresponder_finished")) registerOne(L, state, log, stateTag, "vint_dataresponder_finished", openGuard<stub_vint_dataresponder_finished>);
+    if (wants("vint_internal_dataresponder_request")) registerOne(L, state, log, stateTag, "vint_internal_dataresponder_request", openGuard<stub_vint_internal_dataresponder_request>);
+
+    // Batch 2026-10-02: spec-lua-api-behaviour.md Sec30 ("ranking tranche 03"), 9 names.
+    if (wants("vehicle_set_invulnerable_to_player_explosives")) registerOne(L, state, log, stateTag, "vehicle_set_invulnerable_to_player_explosives", openGuard<stub_vehicle_set_invulnerable_to_player_explosives>);
+    if (wants("vehicle_disable_explosion_and_damage_vfx")) registerOne(L, state, log, stateTag, "vehicle_disable_explosion_and_damage_vfx", openGuard<stub_vehicle_disable_explosion_and_damage_vfx>);
+    if (wants("vehicle_set_special_override_never_ghost")) registerOne(L, state, log, stateTag, "vehicle_set_special_override_never_ghost", openGuard<stub_vehicle_set_special_override_never_ghost>);
+    if (wants("vehicle_clear_all_radio_locks")) registerOne(L, state, log, stateTag, "vehicle_clear_all_radio_locks", openGuard<stub_vehicle_clear_all_radio_locks>);
+    if (wants("vehicle_is_vtol")) registerOne(L, state, log, stateTag, "vehicle_is_vtol", openGuard<stub_vehicle_is_vtol>);
+    if (wants("auto_pickup_enable")) registerOne(L, state, log, stateTag, "auto_pickup_enable", openGuard<stub_auto_pickup_enable>);
+    if (wants("vehicle_exit_group_do")) registerOne(L, state, log, stateTag, "vehicle_exit_group_do", openGuard<stub_vehicle_exit_group_do>);
+    if (wants("vehicle_exit_group_check_done")) registerOne(L, state, log, stateTag, "vehicle_exit_group_check_done", openGuard<stub_vehicle_exit_group_check_done>);
+    if (wants("team_make_unfriendly")) registerOne(L, state, log, stateTag, "team_make_unfriendly", openGuard<stub_team_make_unfriendly>);
 }
 
 } // namespace sr3luahost

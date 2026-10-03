@@ -94,6 +94,21 @@
 //    so what actually SETS/CHECKS them at runtime is unconfirmed - this
 //    reader stores the lists verbatim (see convention 3) but computes nothing
 //    from them.
+//  * The composer's own custmesh_<N>/custmesh_<N>f record-TABLE capacity
+//    (spec section 5.1, re-derived from the executable 2026-10-02): this
+//    reader only parses xtbl rows (Customization_Item/Wear_Option/Variant)
+//    and never builds or caps the composer's (wear option, variant) output
+//    records, so no capacity is enforced here, nor should one be invented -
+//    documented for whoever implements that composer layer later. The
+//    composer's record tables are sized 1,000 entries for the `main`
+//    framework and 56 entries for any DLC framework, BUT the usable
+//    capacity is one less than each table size in both cases: a slot is
+//    handed out only while `(current_count + 1) < table_size`, i.e. at most
+//    999 `main` records and 55 DLC records, not 1,000/56. The three shipped
+//    DLC tables hold 13 + 26 + 17 = 56 raw item rows (13 + 26 + 8 = 47
+//    distinct, per spec section 6) - either count sits comfortably under
+//    the real 55-slot usable cap, so this was never a reachable edge case
+//    on real data and no gating is implemented for it.
 //
 // See vehicle_customization.h for the DIFFERENT `<vehicle_name>.xtbl` (no
 // `_veh` suffix) vehicle-customization variant file (spec section 3).
@@ -198,6 +213,16 @@ struct DefaultColorsGrid {
     std::vector<std::string> clothingColors;  // Default_Color > Clothing_Color, in document order
 };
 
+// `Material_List > Material_Element` (spec 2.1, nested under a Variant).
+// CONFIRMED 2026-10-02 (spec-tables-customization.md §4.3, re-derived from
+// the executable): Shader_Type is read per-Material_Element, not once per
+// Variant - see CustomizationVariant::materials' own banner below for the
+// full correction history.
+struct MaterialElement {
+    std::optional<std::string> material;    // Material_Element > Material
+    std::optional<std::string> shaderType;   // Material_Element > Shader_Type, e.g. "ir_sr3pccloth"
+};
+
 // `Variants > Variant` (spec 2.1 "Variants (color/material options within
 // one item)").
 struct CustomizationVariant {
@@ -220,15 +245,25 @@ struct CustomizationVariant {
     // ("ordinary 32-bit add, wraps").
     Always<int32_t> variantId;  // Mesh_Variant_Info > VariantID
 
-    // Material_List > Material_Element > Material: INTERPRETATION of the
-    // inner wrapper/item names, which the spec gives only as
-    // "Material_List > Material_Element > Material" (this IS the literal
-    // 3-level path the spec states, so no judgement call is needed here
-    // beyond the usual "each Material_Element node's own Material child
-    // holds the text").
-    std::vector<std::string> materials;
-
-    std::optional<std::string> shaderType;  // Shader_Type, e.g. "ir_sr3pccloth". LABEL: parent [OPEN] per spec-customization-data.md §2.1 / spec-tables-customization.md §4.3; read as a Variant child here (the tables reader uses Material_Element)
+    // Material_List > Material_Element[]: INTERPRETATION of the inner
+    // wrapper/item names, which the spec gives only as "Material_List >
+    // Material_Element > Material" (this IS the literal 3-level path the
+    // spec states, so no judgement call is needed here beyond the usual
+    // "each Material_Element node's own Material child holds the text").
+    //
+    // CORRECTED 2026-10-02 (spec-tables-customization.md §4.3, re-derived
+    // from the executable, `FUN_00829650` read in full): Shader_Type's
+    // parent is CONFIRMED to be Material_Element, NOT Variant - "the
+    // FUN_00daba40(elementHandle, "Shader_Type") call sits inside the
+    // per-Material_Element loop, using that loop's own element handle".
+    // This settles the previously-OPEN parent ambiguity (this struct used
+    // to carry a Variant-level `shaderType` field, inconsistent with
+    // sr3tables_customization's own reading, tables_customization_items.cpp
+    // ParseMaterialElement) IN FAVOUR of the per-Material_Element reading -
+    // the flat `std::vector<std::string> materials` was replaced with
+    // `std::vector<MaterialElement> materials` below and the old Variant-
+    // level `shaderType` field was removed.
+    std::vector<MaterialElement> materials;
 
     DefaultColorsGrid defaultColorsGrid;  // Default_Colors_Grid (this Variant's own)
 };

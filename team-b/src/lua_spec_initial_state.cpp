@@ -50,8 +50,18 @@ void applySpecInitialState(EngineState& es) {
     //    by-name console/config/command-line path can set it, which no
     //    mission or Lua code reaches.
     es.zsceneSkipAllCutscenes().set(false);
+    //    The current scene entry 0x0153b530 is null ("no current scene
+    //    entry") at load (Sec26.25 Globals table, "Initial value RESOLVED
+    //    2026-10-02", CONFIRMED - disassembly): zero-fill .data with no static
+    //    initializer, the same mechanism as 0x0153b556 above; an exhaustive
+    //    whole-binary write census finds exactly 6 writes, all inside the
+    //    functions that row's own "set/cleared by" column names (0x00720320,
+    //    0x00721c20, 0x00720410, 0x00722f10, 0x007231e0, 0x00728440) - no
+    //    module-init site, no by-name/cvar registration. "" is this slot's
+    //    null (engine_state.h).
+    es.zsceneCurrent().set("");
     //    Everything else here still has no specced start-up value and stays
-    //    OPEN: the current / pending entries, the load state 0x0153b51c,
+    //    OPEN: the pending entry, the load state 0x0153b51c,
     //    0x0153b541 / 0x0153b542, the soundtrack stream globals, the cutscene
     //    state 0x0153b520 and the cutscene manager. The scene table itself is
     //    real data (cutscene.xtbl + <name>.cte_xtbl); lua_host_run installs it

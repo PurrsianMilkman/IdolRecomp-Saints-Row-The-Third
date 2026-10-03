@@ -34,10 +34,15 @@
 //     MEANING/consumer is HYPOTHESIS or OPEN, is still surfaced as a raw
 //     value (with a comment citing the spec's own open-item number) - never
 //     given an interpreted meaning the spec itself didn't commit to. Where
-//     NOTHING about a row's fields is confirmed at all (character_
-//     customization_categories.xtbl §13.1, character.xtbl §13.3), this
-//     library surfaces only a row LOCATOR (raw `const Node*`), not a guessed
-//     struct - see characters.h.
+//     NOTHING about a row's fields is confirmed at all, this library
+//     surfaces only a row LOCATOR (raw `const Node*`), not a guessed struct
+//     - see characters.h. As of the 2026-10-02 executable re-derivation this
+//     applies ONLY to character.xtbl (§13.3, still genuinely OPEN);
+//     character_customization_categories.xtbl (§13.1) gained a full
+//     CONFIRMED schema that pass (Name/Display_name/Is_DLC/locked, a 20-row
+//     cap, and a duplicate-Name whole-table-truncation hazard) and is now a
+//     typed reader like every other table here - its old row-locator-only
+//     function is kept only for backward compatibility, see characters.h.
 //
 // ---------------------------------------------------------------------------
 // SCOPE DECISIONS (see the per-file banners for detail; summarised here)
@@ -52,8 +57,13 @@
 //    "npc only" Slot fallback, the 858-row hard cap and the Comparison
 //    sub-flag on each Wear_Option flag reference are all real, disassembly-
 //    confirmed fields the older reader has no equivalent for. See items.h's
-//    banner for the specific points where this header's reading of §4
-//    differs from the older reader's own schema (DISCREPANCIES 1-3).
+//    banner for the specific points where this header's reading of §4 used
+//    to differ from the older reader's own schema (DISCREPANCIES 1-3) - as
+//    of the 2026-10-02 executable re-derivation, 1 (Female_Mesh_Filename)
+//    and 2 (Shader_Type's parent) are both RESOLVED (both readers now agree,
+//    and the older reader's Shader_Type-at-Variant-level bug was fixed in
+//    include/sr3customization/customization.h); only 3 (Default_Colors_Grid
+//    item-vs-variant modelling) remains a genuine, documented difference.
 //  * §5.1 customization_outfits.xtbl is DELIBERATELY NOT reimplemented -
 //    materially the same schema as sr3customization::Outfit; see
 //    include/sr3customization/customization.h for that type and items.h's

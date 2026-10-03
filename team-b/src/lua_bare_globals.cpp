@@ -253,11 +253,16 @@ BareThreadTable::Record* BareThreadTable::allocate(lua_State* L, const std::stri
 }
 
 void BareThreadTable::release(lua_State* L, Record* rec) {
-    // 0x00e0c650 (not dumped): the record is freed and reported not alive.
+    // 0x00e0c650: the record is freed and reported not alive. Swap-compaction
+    // (Sec26.27, RESOLVED 2026-10-02, CONFIRMED): the freed slot is
+    // overwritten by the current last live record, the vacated last slot is
+    // cleared and the count decremented - so array order is not creation order
+    // once anything has been released.
     luaL_unref(L, LUA_REGISTRYINDEX, rec->ref);
     for (size_t i = 0; i < records_.size(); ++i) {
         if (records_[i].get() == rec) {
-            records_.erase(records_.begin() + static_cast<std::ptrdiff_t>(i));
+            if (i + 1 != records_.size()) records_[i] = std::move(records_.back());
+            records_.pop_back();
             break;
         }
     }
@@ -267,16 +272,25 @@ bool BareThreadTable::run(lua_State* L, Record* rec, std::string& fetchError) {
     fetchError.clear();
     if (rec->registry != registryOf(L)) {
         fetchError = "thread record belongs to another Lua state";
+        lastResumeStatus_ = kNoResume;
         return true; // left untouched
     }
     // Step 2: killed -> release.
     if (rec->killed) {
+        lastResumeStatus_ = kNoResume;
         release(L, rec);
         return false;
     }
-    // Step 3: re-entry guard - a record already being resumed is alive, not resumed.
-    for (const Record* c : current_)
-        if (c == rec) return true;
+    // Step 3: re-entry guard - a record already resumed is alive, not
+    // resumed. The guard is +0x18 bit 0, which step 5 sets on every resume and
+    // only the scheduler 0x00e0cf50 clears (Sec26.27, RESOLVED 2026-10-02,
+    // CONFIRMED): a record is resumable again only after a schedulerPass().
+    // A record on the current-thread stack always has the bit set, so this
+    // also covers true re-entry.
+    if (rec->started) {
+        lastResumeStatus_ = kNoResume;
+        return true;
+    }
     int nargs = 0;
     if (rec->notStarted) {
         // Step 4: the global named at +0x10 placed below the arguments.
@@ -286,6 +300,7 @@ bool BareThreadTable::run(lua_State* L, Record* rec, std::string& fetchError) {
             const char* m = lua_tostring(L, -1);
             fetchError = m ? m : "(no error message)";
             lua_pop(L, 1);
+            lastResumeStatus_ = kNoResume;
             release(L, rec);
             return false;
         }
@@ -301,6 +316,9 @@ bool BareThreadTable::run(lua_State* L, Record* rec, std::string& fetchError) {
     current_.push_back(rec);
     int status = lua_resume(rec->co, nargs);
     current_.pop_back();
+    // Set after lua_resume returns, so any nested run (a thread_new inside the
+    // body) has already written its own value: this is the outer record's.
+    lastResumeStatus_ = status;
     if (status == LUA_YIELD) return true; // Step 6: yielded -> alive
     if (status != 0) {
         // Step 6: error -> the error callback keyed by the parent's +0x08 (not
@@ -325,6 +343,96 @@ bool BareThreadTable::resume(lua_State* L, uint16_t id, std::string& fetchError)
     Record* rec = findById(id);
     if (!rec) return false;
     return run(L, rec, fetchError);
+}
+
+BareThreadTable::PassResult BareThreadTable::schedulerPass(const std::vector<lua_State*>& states,
+                                                            const BeforeRun& before, const AfterRun& after) {
+    // 0x00e0cf50 (Sec26.27, RESOLVED 2026-10-02, CONFIRMED - disassembly).
+    PassResult result;
+    size_t i = 0;
+    while (i < records_.size()) { // the live count, re-read every step
+        Record* rec = records_[i].get();
+        ++result.visited;
+        // Unconditional: the re-entrancy flag of every visited record,
+        // exempt or not - the only code that clears it.
+        rec->started = false;
+        lua_State* owner = nullptr;
+        for (lua_State* s : states)
+            if (s && registryOf(s) == rec->registry) owner = s;
+        PassEvent ev;
+        ev.id = rec->id;
+        ev.name = rec->name;
+        bool exempt = false;
+        for (const ExemptKey& k : exempt_)
+            if (k.registry == rec->registry) exempt = true;
+        if (exempt) {
+            ev.exempt = true;
+            ++result.exemptSkipped;
+        } else if (owner) {
+            // No budget: every live, non-exempt record is offered a resume.
+            if (before) before(*rec);
+            ev.killedBefore = rec->killed;
+            ev.resumed = true;
+            ++result.resumed;
+            ev.aliveAfter = run(owner, rec, ev.fetchError); // rec may be freed here
+            ev.bodyRan = lastResumeStatus_ != kNoResume;
+            // The record's own error is the last one pushed (nested threads'
+            // errors, if any, were pushed before it).
+            if (ev.bodyRan && lastResumeStatus_ != 0 && lastResumeStatus_ != LUA_YIELD && !errors_.empty())
+                ev.error = errors_.back();
+        }
+        // Swap-compaction: if the visited record left the table, its slot now
+        // holds the record that was last, so the same index is examined again
+        // (re-reading the slot rather than trusting the runner's return value,
+        // which is also "not alive" for a record it leaves alone).
+        // (Live ids are unique, so the id identifies the slot's occupant
+        // without touching a possibly freed pointer.)
+        const bool stillHere = i < records_.size() && records_[i]->id == ev.id;
+        if (!stillHere) {
+            ++result.released;
+            ev.aliveAfter = false;
+        } else {
+            ++i;
+        }
+        if (after) after(ev);
+    }
+    return result;
+}
+
+bool BareThreadTable::exemptState(lua_State* L) {
+    const void* key = registryOf(L);
+    for (ExemptKey& k : exempt_) {
+        if (k.registry == key) {
+            ++k.refs;
+            return true;
+        }
+    }
+    if (exempt_.size() >= kExemptCapacity) return false; // OPEN: what a 5th distinct key does
+    exempt_.push_back({key, 1});
+    return true;
+}
+
+void BareThreadTable::unexemptState(lua_State* L) {
+    const void* key = registryOf(L);
+    for (size_t i = 0; i < exempt_.size(); ++i) {
+        if (exempt_[i].registry != key) continue;
+        if (--exempt_[i].refs <= 0) exempt_.erase(exempt_.begin() + static_cast<std::ptrdiff_t>(i));
+        return;
+    }
+}
+
+bool BareThreadTable::isExempt(lua_State* L) const {
+    const void* key = registryOf(L);
+    for (const ExemptKey& k : exempt_)
+        if (k.registry == key) return true;
+    return false;
+}
+
+std::vector<uint16_t> BareThreadTable::liveIds() const {
+    std::vector<uint16_t> ids;
+    ids.reserve(records_.size());
+    for (const auto& r : records_) ids.push_back(r->id);
+    return ids;
 }
 
 // ---------------------------------------------------------------------

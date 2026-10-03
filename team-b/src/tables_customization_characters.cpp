@@ -49,9 +49,54 @@ std::vector<HeightClass> ParseCharacterHeightTable(const Document& doc) {
 }
 
 // ===========================================================================
-// 13.1 character_customization_categories.xtbl - row locator only (no field
-// schema recovered, see characters.h banner).
+// 13.1 character_customization_categories.xtbl
 // ===========================================================================
+CharacterCustomizationCategory ParseCharacterCustomizationCategory(const Node* row) {
+    CharacterCustomizationCategory c;
+    c.name = OptText(row, "Name");
+    c.displayName = OptText(row, "Display_name");
+    c.isDlc = ReadBoolAlways(row, "Is_DLC");
+    c.locked = HasFlag(FindChild(row, "Flags"), "locked");
+    return c;
+}
+
+std::vector<CharacterCustomizationCategory> ParseCharacterCustomizationCategoriesTable(const Document& doc) {
+    std::vector<CharacterCustomizationCategory> out;
+    const Node* wrap = doc.table();
+    for (const Node* row = FindChild(wrap, "category"); row; row = NextSibling(wrap, row, "category")) {
+        // Hard cap 20 rows (0x14, §13.1), checked pre-increment against the
+        // not-yet-stored count - keeps a maximum of exactly 20.
+        if (out.size() >= 20) break;
+        CharacterCustomizationCategory c = ParseCharacterCustomizationCategory(row);
+        // Duplicate-Name truncation hazard (§13.1, "FOR TEAM B - real
+        // hazard, not just documentation"): the real loader registers each
+        // row into a dedup hash table by Name as it reads it; a Name that
+        // collides with one already registered makes the loader `return`
+        // immediately, abandoning EVERY remaining row in the file (not just
+        // the duplicate). Reproduced by stopping the whole parse - this row
+        // is not pushed either, matching the real loader never finishing
+        // this row's own registration before bailing.
+        // JUDGEMENT CALL: the dedup hash's own case-sensitivity was not
+        // independently confirmed for this table; NameEquals (this
+        // project's general case-insensitive text-match convention, used
+        // for every other Name-based lookup in this library) is reused here.
+        bool duplicate = false;
+        if (c.name) {
+            for (const CharacterCustomizationCategory& existing : out) {
+                if (existing.name && NameEquals(*existing.name, *c.name)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+        }
+        if (duplicate) break;
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+
+// Superseded by ParseCharacterCustomizationCategoriesTable above - kept as a
+// thinner, schema-free row locator (see characters.h banner).
 std::vector<const Node*> FindCharacterCustomizationCategoryRows(const Document& doc) {
     return Children(doc.table(), "category");
 }
@@ -69,9 +114,10 @@ std::vector<CharacterType> ParseCharacterTypesTable(const Document& doc) {
     std::vector<CharacterType> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Type"); row; row = NextSibling(wrap, row, "Type")) {
-        // LABEL: spec-tables-customization.md §13.2, [OPEN - desk review 2026-09-30]: the compare operator is
-        // not given (119 vs 120 rows kept); `>= 120` is our assumption. Real data has 96 rows, so it cannot
-        // change a result on real data.
+        // CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_00be1d80` read in full): a do/while that
+        // stores a row, increments the row index, THEN tests `(short)index < 0x78` to continue - a post-
+        // increment strict `<` that keeps a true maximum of exactly 120 (not 119), matching the `>= 120`
+        // already coded here. Real data has 96 rows, so it cannot change a result on real data.
         if (out.size() >= 120) break;  // hard cap 0x78 (§13.2)
         out.push_back(ParseCharacterType(row));
     }

@@ -149,6 +149,16 @@ public:
     // Registrations made by registerBareGlobals() over both states (24 + 24).
     size_t bareGlobalCount() const { return bareGlobalCount_; }
 
+    // One pass of the script-thread scheduler 0x00e0cf50 over both states
+    // (spec-lua-api-behaviour.md Sec26.27, RESOLVED 2026-10-02, CONFIRMED
+    // mechanism - BareThreadTable::schedulerPass). WHEN to call it is the
+    // caller's choice: the engine runs it from its own ~33 Hz background pump
+    // (30 ms minimum per iteration), not from any frame the host models.
+    BareThreadTable::PassResult runScriptThreadSchedulerPass(const BareThreadTable::BeforeRun& before = {},
+                                                             const BareThreadTable::AfterRun& after = {}) {
+        return bareGlobals_.threads().schedulerPass({gameplay_, ui_}, before, after);
+    }
+
     // HYPOTHESIS / HOST SUBSTITUTE, opt-in only: rand_int/rand_float draw
     // from a ring filled once by a deterministic host generator seeded with
     // `seed`, instead of the CONFIRMED file-image ring (every draw = lo until

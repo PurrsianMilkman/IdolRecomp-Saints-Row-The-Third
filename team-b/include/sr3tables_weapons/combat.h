@@ -34,7 +34,23 @@ using sr3xtbl::Node;
 // ===========================================================================
 
 // Table at spec section 4.2, `0x011888BC`: absent/unmatched `<name>_OM` => Replace.
+// This 4-value encoding (which `_OM` text maps to which mode) is unaffected
+// by the 2026-10-02 correction below - only the APPLY/dispatch side changed.
 enum class OperationMode : int32_t { Replace = -1, Additive = 0, Multiplicative = 1, Removal = 2 };
+
+// [CONFIRMED/CORRECTED - disassembly, 2026-10-02 (spec section 4.2): the
+// patch-application dispatcher (`FUN_00B76B20`, not modelled in this reader -
+// see weapons.h's "Record-management concerns... out of scope" note, same
+// bucket as the rest of section 4's runtime patch-apply machinery) only
+// distinguishes Additive (0) and Multiplicative (1); EVERY other stored mode
+// value - which includes both Replace (-1) and Removal (2) - falls through
+// to the same generic byte-copy path. So Replace and Removal are NOT
+// distinguished by the engine's dispatcher, contrary to what their separate
+// enum names might suggest; whatever behavioural difference exists between
+// "replace" and "remove" is decided earlier, by what bytes the (un-read,
+// 22 KB) row reader `FUN_00B76BC0` captures as the patch payload, not by
+// this dispatch. Flagged here for any future consumer of `OperationMode`,
+// since this reader itself only exposes the parsed mode and does not apply it.]
 
 // One override element: its parsed value (read with the exact same readers
 // weapons.xtbl §2 uses, so units/enums/sub-blocks match 1:1) plus its
@@ -268,17 +284,25 @@ std::vector<MeleeTransitionState> ParseAllMeleeTransitionStates(const Document& 
 // Firing, Explosive_Miss) are not null-checked by the real reader either, so
 // a well-formed profile carries all four (spec section 8) - not enforced here.
 //
-// [OPEN / NEEDS-EXE - spec-tables-weapons-combat.md section 8, "Review status
-// (2026-09-30): NEEDS-EXE: `Recovery` in 0/20 real rows (section 18.6) and five
-// undocumented elements in 20/20 (Team B 9.83)"]. The `Bullet_miss -> Recovery`
-// path below is the spec's reading, but real data carries no `Recovery` element
-// in any of 20 rows while `Penalties`, `Bonuses`, `lag_amount`, `lag_time`,
-// `vertical_offset` occur in 20/20; the spec says the path may have been
-// mis-associated. The reader keeps the spec path (no change to the values) but
-// REPORTS the condition in `diagnostics` instead of silently returning empty
-// recovery fields.
+// [CONFIRMED - disassembly, 2026-10-02 (spec-tables-weapons-combat.md section
+// 8): `FUN_00B6C370`'s entire body was read; its complete literal vocabulary
+// is exactly the elements this struct models, and `Penalties`, `Bonuses`,
+// `lag_amount`, `lag_time`, `vertical_offset` (the five elements Team B found
+// in 20/20 real rows) appear nowhere in it, under any parent - this is now
+// settled as authored data this reader's vocabulary genuinely does not cover,
+// NOT a missed/mis-associated parent. The `Bullet_miss -> Recovery` path below
+// is confirmed correct (previously only the spec's desk-reviewed reading,
+// flagged suspect because 0/20 real rows carry a `Recovery` wrapper); the
+// three recovery* defaults (1.0 / 500.0 / -1.0) are pre-set UNCONDITIONALLY
+// before the presence check - same pattern confirmed for Charge_Release_Info,
+// section 2.3 - so a row with no `Recovery` wrapper simply gets those three
+// defaults verbatim, which is expected/normal, not a sign of a bug. The
+// `diagnostics` mechanism below is kept (still factually useful: it reports
+// exactly which rows relied on those defaults) but the message no longer
+// claims this is an open question.
 inline constexpr const char* kAimDriftRecoveryEmptyDiagnostic =
-    "aim_drift Recovery empty - spec path suspect (NEEDS-EXE)";
+    "aim_drift Recovery absent - recover_penalty/recover_time/bullets_to_unsteady "
+    "default to 1.0/500.0/-1.0 (CONFIRMED path, spec-tables-weapons-combat.md section 8)";
 
 struct AimDriftProfile {
     // Holds kAimDriftRecoveryEmptyDiagnostic when `Bullet_miss` has no `Recovery`
@@ -345,7 +369,18 @@ struct StickySmallEffect {  // Sticky_Fire/Small_Sticky_Effects/Effect, capacity
 
 struct ExplosionRecord {
     std::string name;                              // bounded copy, 0x20 bytes
-    std::optional<std::string> panicReaction;         // Panic_Reaction (id lookup table not decoded here; stored as text)
+    // Panic_Reaction: id lookup table not decoded here (stored as text; see
+    // weapons.h convention 2 - cross-table resolution is out of scope).
+    // [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `FUN_004EEE40`
+    // computes a CRC(name) but then never reads that result (dead code on
+    // that computation) - it actually resolves by a linear scan comparing
+    // each of 6 table entries' first dword against the raw NAME-TEXT POINTER
+    // ITSELF (pointer identity, not a string/hash compare). A future
+    // resolver for this field could NOT reproduce the real match by hashing
+    // the stored text (unlike Groundfire below, which genuinely does hash) -
+    // it would need the same interned-pointer pool the engine uses. Not
+    // attempted here; flagged for whoever eventually tackles this resolver.]
+    std::optional<std::string> panicReaction;
     Always<float> radius;                                // Radius (a)
     std::optional<float> decalRadiusOverride;              // Decal_Radius_Override (i); default Radius
     std::optional<float> coneAngleRadians;                   // Cone_Angle (i), degrees -> radians; default -1.0 (no cone)
@@ -364,7 +399,11 @@ struct ExplosionRecord {
     std::optional<std::string> stickyFireLargeStickyEffect;                             // Sticky_Fire/Large_Sticky_Effect
     std::vector<StickySmallEffect> stickyFireSmallEffects;                                // Sticky_Fire/Small_Sticky_Effects/Effect, capacity 4
     bool stickyFireAlwaysProduce = false;                                                    // Sticky_Fire/Always_Produce: text == "yes" case-insensitively ONLY (NOT "true")
-    std::optional<std::string> groundfire;                                                    // Groundfire (id lookup table not decoded here; stored as text); 0 if absent
+    // Groundfire: id lookup table not decoded here (stored as text). Unlike
+    // Panic_Reaction above, `FUN_005FD830` genuinely DOES use the CRC(name)
+    // it computes - a real hash-table lookup, CONFIRMED 2026-10-02 (spec
+    // 10.1) - the table's own string contents just were not dumped this pass.
+    std::optional<std::string> groundfire;                                                    // Groundfire; 0 if absent
     bool screenEffectsPresent = false;                                                           // whether <Screen_Effects> existed
     Always<float> screenEffectsDelayTime;                                                          // Screen_Effects/Delay_Time (a); only if Screen_Effects present
     Always<float> screenEffectsRampUpTime;                                                           // .../Ramp_Up_Time (a)
@@ -372,7 +411,19 @@ struct ExplosionRecord {
     Always<float> screenEffectsDecayTime;                                                                // .../Decay_Time (a)
     Always<float> screenEffectsAttenStart;                                                                  // .../Atten_Start (a)
     Always<float> screenEffectsAttenEnd;                                                                       // .../Atten_End (a)
-    std::optional<int32_t> screenEffectsTintR, screenEffectsTintG, screenEffectsTintB;                            // Tone/Tint (component semantics of FUN_00DAD160 OPEN; raw R/G/B ints 0-255 as shipped)
+    // Tone/Tint. [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `FUN_00DAD160`
+    // delegates to `FUN_00DAD0A0`, the actual component reader - it reads the
+    // three children (name literals starting `R`/`G`/`B`, in that order) with
+    // the "always" f32 reader, DIVIDES EACH BY 255.0, and stores the result as
+    // three consecutive normalised [0.0, 1.0] floats (a 12-byte vec3) - NOT
+    // the raw 0-255 integers the XML carries. Previously modelled here as raw
+    // `int32_t` (matching the shipped XML text, not the stored schema); fixed
+    // to apply the documented transform, per this file's convention 3 ("this
+    // reader applies that single documented transform... because that
+    // transform IS the schema"). `Always<float>`: "always" reader, so
+    // present=false means Tint (or Tone/Screen_Effects) itself was absent,
+    // not that R/G/B were individually missing within a present Tint.]
+    Always<float> screenEffectsTintR, screenEffectsTintG, screenEffectsTintB;
     std::optional<float> screenEffectsTintScale;                                                                    // Tone/Tint_scale (i)
     std::optional<float> screenEffectsSaturation;                                                                     // Tone/Saturation (i)
     bool screenEffectsLockedAttenuation = false;                                                                        // Screen_Effects/Locked_Attenuation (bool)

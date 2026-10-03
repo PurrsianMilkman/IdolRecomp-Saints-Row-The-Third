@@ -39,6 +39,7 @@
 // reading as settled.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -182,11 +183,27 @@ struct ObjectIndicatorRecord {
 // describe the pre-conversion stand-ins and are kept for history; the
 // stand-in values themselves are gone.
 struct CharacterState {
-    // set_ignore_ai_flag (Sec3.4): the character's "ignore AI" flag.
-    // Real read location per spec: bit 1 of the byte at object +0x2bc.
-    // Default false ("not ignoring AI") - this project's own chosen
-    // default for "alive, ordinary, not yet specially flagged."
-    OpenValue<bool> ignoreAI{"character ignore-AI flag (+0x2bc)", "spec-lua-api-behaviour.md Sec3.4"};
+    // set_ignore_ai_flag (Sec3.4) / character spawn state (Sec34.1/Sec34.3).
+    // Real location: bit mask 0x02 of the byte at object +0x2bc - CONFIRMED
+    // (2026-10-02, character spawn-state investigation) to be the exact
+    // same byte Sec3.4's own setter `0x004e2050` writes: that helper runs
+    // with `this` = character `+0x2b0` (the per-character AI-data
+    // sub-object constructed in place by `0x004e46c0`) and writes its own
+    // `+0xc`, i.e. `0x2b0+0xc` = `0x2bc` - so this project's existing
+    // "+0x2bc" modeling was already the right byte; Sec3.4's former OPEN
+    // note (same `this`? which bit?) is resolved in place, nothing to
+    // correct here. Default false ("not ignoring AI") is now a CONFIRMED
+    // engine default, not just this project's own choice: cleared by the
+    // sub-object constructor `0x004dde30` and re-cleared by
+    // `0x004e5a50(character, 1)` inside the no-bound-script-NPC default
+    // path (Sec34.1 step 3) - applied at construction by
+    // EngineState::getOrCreateCharacter() below. The ONLY way this starts
+    // true is a bound script NPC whose own placement-record
+    // `script_npc_flags` carries `"ignore_ai"` (Sec34.3) - that override
+    // data lives in the still-held `.czn_pc` zone-placement interior, so a
+    // character explicitly marked via markScriptNpcBoundForTesting() stays
+    // (or reverts to) OPEN instead of getting the default.
+    OpenValue<bool> ignoreAI{"character ignore-AI flag (+0x2bc)", "spec-lua-api-behaviour.md Sec3.4/Sec34.3"};
 
     // set_ignore_ai_flag's own conditional side effect (Sec3.4): "forces
     // the character's action/animation-override state to a fixed id
@@ -216,21 +233,43 @@ struct CharacterState {
     // reference") - same "no Lua setter in scope" note as stateEnum above.
     OpenValue<int32_t> attackerThreatRef{"character attacker/threat reference", "spec-lua-api-behaviour.md Sec3.4"};
 
-    // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31):
-    // CONFIRMED, cross-checked to be the SAME integer field at object
-    // +0x1cac ("stored as a plain integer, converted to float on read" -
-    // Sec7.12's own text). Default 100 - this project's OWN chosen
-    // "sensible full-health" default (the spec states the field's real
-    // SHAPE, never a real default value for an unspawned character), kept
-    // as a plain int32 to honor the confirmed "stored as a plain integer"
-    // detail precisely, converted to a double only at Lua-push time.
-    OpenValue<int32_t> maxHitPoints{"character max hit points (+0x1cac)", "spec-lua-api-behaviour.md Sec7.12/Sec7.31"};
+    // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31) /
+    // character spawn state (Sec34.1/Sec34.2): CONFIRMED, cross-checked to
+    // be the SAME integer field at object +0x1cac ("stored as a plain
+    // integer, converted to float on read" - Sec7.12's own text), kept as a
+    // plain int32 to honor that detail precisely, converted to a double
+    // only at Lua-push time. NOTE: object +0x1cb0 is a SEPARATE field, the
+    // max-HP BONUS (`"max_hit_point_bonus"`, own setter `0x0094d380`,
+    // Sec13.20/Sec34.2 correction) - zero on every spawn path, never a base
+    // and never read/written anywhere in this project; nothing here treats
+    // it as +0x1cac's value.
+    //
+    // CONFIRMED spawn default (Sec34.2): round(M * Hit_Points), where
+    // Hit_Points is the selected spawn_info_ranks.xtbl <Rank> record's
+    // Hit_Points field (sr3tables_progression::SpawnRank::hitPoints) and M
+    // is 1.0 for ordinary classes (the one documented exception - a
+    // per-class multiplier gated on class test 0x00853b30(character, 0x22)
+    // - has a HYPOTHESIS-only, never-opened source, so it is NOT
+    // implemented; out of scope callers stay on M=1.0, a known residual
+    // gap, not invented). Resolving WHICH rank record applies to a given
+    // bare Lua name (character_definitions.xtbl preset + the OPEN
+    // 0x0096e830 level-index choice) is this project's own unmodeled gap -
+    // no Lua-visible spawn function in scope performs that resolution - so
+    // this field stays OPEN for a name with no Hit_Points supplied, same as
+    // before; EngineState::applyCharacterSpawnDefaults() applies the
+    // formula once a caller (a future real spawn integration, or a test)
+    // supplies a resolved Hit_Points value. A script-NPC-bound character's
+    // own `script_npc_hp` override (also zone-held, Sec34.2/Sec34.4) is the
+    // same unavailable-data situation markScriptNpcBoundForTesting()
+    // represents for ignoreAI above.
+    OpenValue<int32_t> maxHitPoints{"character max hit points (+0x1cac)", "spec-lua-api-behaviour.md Sec7.12/Sec7.31/Sec34.2"};
 
     // set_current_hit_points (Sec7.31): object +0x1cb8, clamped into
-    // [0, maxHitPoints] on write (CONFIRMED). Default equals maxHitPoints
-    // ("alive, full health" - this project's own chosen default, per this
-    // task's own suggested convention).
-    OpenValue<int32_t> currentHitPoints{"character current hit points (+0x1cb8)", "spec-lua-api-behaviour.md Sec7.31"};
+    // [0, maxHitPoints] on write (CONFIRMED). CONFIRMED spawn default
+    // (Sec34.1 step 2): starts equal to the newly-computed max ("a
+    // character spawns at full health") - applied together with
+    // maxHitPoints by EngineState::applyCharacterSpawnDefaults().
+    OpenValue<int32_t> currentHitPoints{"character current hit points (+0x1cb8)", "spec-lua-api-behaviour.md Sec7.31/Sec34.1"};
 
     // set_current_hit_points' own HIGH-CONFIDENCE-tier consequence (Sec7.31:
     // "if the new value is <= 0 and two further predicates ... are both
@@ -286,6 +325,78 @@ struct CharacterState {
     // ObjectIndicatorRecord's own doc comment above for what is/isn't
     // modeled.
     std::vector<ObjectIndicatorRecord> objectIndicators;
+
+    // --- vehicle_exit_group_do / vehicle_exit_group_check_done
+    // (spec-lua-api-behaviour.md Sec30.5, "ranking tranche 03",
+    // 2026-10-02) ---------------------------------------------------
+
+    // Sec30.5's shared preamble: "+0x16c0/+0x16c4 non-zero" means this
+    // character is currently in a vehicle. This project has no real
+    // character<->vehicle linkage (CharacterState::stateEnum already
+    // models THAT a character is seated/entering/exiting via the real
+    // +0x16d4 state enum, but not WHICH vehicle) - this is this project's
+    // own minimal, explicitly-scoped stand-in for the link, used ONLY by
+    // vehicle_exit_group_do's own "remembers the first vehicle found"
+    // step. No Lua-visible function in this task's scope ever writes this
+    // field; a test sets it directly. OPEN until set - same "never invent
+    // a fresh object's values" discipline as every other CharacterState
+    // field.
+    OpenValue<std::string> currentVehicleName{"character's current vehicle (+0x16c0/+0x16c4 link)",
+                                               "spec-lua-api-behaviour.md Sec30.5"};
+
+    // Sec30.5's shared preamble: "0x0096f4f0 is an 'is dead/gone'
+    // predicate" - read by vehicle_exit_group_check_done's own CONFIRMED
+    // "resolves, is alive, and is in state 2 or 3" gate. Scoped only to
+    // that one function (no other in-scope name reads this) - a
+    // DIFFERENT field from isDeadHighConfidence above, which is this
+    // project's own HIGH-CONFIDENCE stand-in tied specifically to
+    // set_current_hit_points' own internal logic (Sec7.31), a separate
+    // call site this predicate is never confirmed to share. OPEN until
+    // set.
+    OpenValue<bool> isAlive{"character alive/not-gone predicate (0x0096f4f0)", "spec-lua-api-behaviour.md Sec30.5"};
+};
+
+// vehicle_set_invulnerable_to_player_explosives / vehicle_disable_explosion_
+// and_damage_vfx / vehicle_set_special_override_never_ghost /
+// vehicle_clear_all_radio_locks / vehicle_is_vtol (spec-lua-api-behaviour.md
+// Sec30.5, "ranking tranche 03", 2026-10-02): one tracked vehicle-shaped
+// object. Same "keyed by the plain name string it was given" simplification
+// CharacterState's own top note already establishes for characters - the
+// real resolution chain Sec30.5's shared preamble describes (character-
+// redirect-when-driving, THEN the per-kind vehicle resolver, liveness, a
+// +0x68 gate, virtual slot +0x70) is NOT reproduced; every vehicle function
+// in this project's scope instead gates on the SAME shared objectResolves()
+// map every other object kind already uses (Sec29's own "one shared global
+// name map" finding - a vehicle name is just another name in that one map,
+// not a distinctly-resolved kind).
+struct VehicleState {
+    // +0x1d7c/+0x1d7d force-flag bytes (Sec30.5, CONFIRMED structure, 4
+    // bits total). Packed here as ONE 16-bit value inside one OpenBits32 -
+    // this project's OWN choice, not a real combined engine field: the low
+    // byte holds +0x1d7c's own bits 0x2/0x4 verbatim; the high byte holds
+    // +0x1d7d's own bits 0x20/0x40 shifted left 8, so both real bytes fit
+    // one word without colliding.
+    OpenBits32 forceFlags{"vehicle force-flag bytes (+0x1d7c/+0x1d7d)", "spec-lua-api-behaviour.md Sec30.5"};
+    static constexpr uint32_t kInvulnerableToPlayerExplosivesBit = 0x0002u; // +0x1d7c bit 0x2
+    static constexpr uint32_t kRadioControlsLockedBit = 0x0004u;           // +0x1d7c bit 0x4
+    static constexpr uint32_t kDisableExpAndDamageVfxBit = 0x2000u;        // +0x1d7d bit 0x20, shifted <<8
+    static constexpr uint32_t kSpecialOverrideNeverGhostBit = 0x4000u;     // +0x1d7d bit 0x40, shifted <<8
+
+    // The shared "variant-1 double-gate" abstraction (Sec30.5: "either
+    // true -> write the bit directly; both false -> open an opcode-0x46
+    // record with hashed tags instead") - same abstracted-to-one-flag
+    // convention CharacterState::CounterOnGrabbed::gatePasses already
+    // establishes (Sec28.19) for an analogous real double-gate shape.
+    // CONFIRMED that all 4 force-flag setters (plus
+    // vehicle_clear_all_radio_locks's own per-vehicle authority check)
+    // share this identical shape; OPEN until a test sets it, per vehicle.
+    OpenValue<bool> forceFlagGatePasses{"vehicle force-flag double-gate (0x008ae480/0x008837a0)",
+                                        "spec-lua-api-behaviour.md Sec30.5"};
+
+    // Shared vehicle fact (Sec30.5): "(+0xbf4)+0x2c equals 4 = VTOL".
+    // Read by vehicle_is_vtol; no in-scope setter writes it (a test sets
+    // it directly, same convention as CharacterState::stateEnum above).
+    OpenValue<int32_t> vehicleClass{"vehicle class ((+0xbf4)+0x2c)", "spec-lua-api-behaviour.md Sec30.5"};
 };
 
 // vint_object_find (spec-lua-bindings.md Sec15, folded in mid-task per the
@@ -316,6 +427,67 @@ struct VdoObject {
     // chosen sentinel for "the current default document" (real
     // FUN_00e0ceb0's own stand-in, EngineState::currentDefaultDocHandle()).
     uint32_t docHandle = 0;
+    // vint_object_first_child (spec-lua-bindings.md Sec18.1): the real
+    // record's own offset +0x1c, "the record's first-child pointer." 0 = "no
+    // children" - this project's own chosen sentinel, same reasoning as
+    // parentHandle above (handle 0 is never issued by nextVdoObjectHandle()).
+    // Only ever set by EngineState::setVdoObjectFirstChildForTesting() - no
+    // Lua-visible function in this pass's scope (vint_object_create remains a
+    // generic stub, same as parentHandle/docHandle's own established
+    // precedent) populates a real parent/child tree, so a real script's
+    // vint_object_first_child call on any object this host can resolve
+    // honestly takes the real, CONFIRMED "no children" path unless a test set
+    // one up directly.
+    uint32_t firstChildHandle = 0;
+};
+
+// vint_dataitem_get (spec-lua-bindings.md Sec19.2): one generic captured Lua
+// scalar - this project's own minimal stand-in for the real 24-byte tagged-
+// value record this pass's spec text finds reused across several of these
+// natives' own argument/field marshaling (Sec19.2's data-item fields,
+// Sec21.2's data-responder trailing args). `None` covers a slot this project
+// has no typed value for (a nil, or - per Sec21.2's own text - "any other
+// type gets an untyped/default slot") rather than guessing a type.
+struct VintTaggedValue {
+    enum class Kind { Number, Boolean, String, None };
+    Kind kind = Kind::None;
+    double number = 0.0;
+    bool boolean = false;
+    std::string text;
+};
+
+// vint_dataitem_get (Sec19.2): one "data item" record - a second, SEPARATE
+// handle space from the VDO-object handles above (Sec19.2's own text: "a
+// different resolver... data items are therefore a genuinely separate
+// handle/record space"). This project has no real data-item loader (the
+// resolved record's real own fields come from UI runtime memory this host
+// does not model) - populated ONLY via
+// EngineState::registerVintDataItemForTesting(). Bounded at 32 fields
+// (CONFIRMED, the real record's own fixed local array size); real shipped
+// source only ever reads the first 24 (`vint_lib.lua:393`).
+struct VintDataItem {
+    std::vector<VintTaggedValue> fields;
+};
+
+// vint_dataresponder_finished / vint_internal_dataresponder_request
+// (spec-lua-bindings.md Sec21): one named-record registry entry - CONFIRMED a
+// genuinely different shape from every numeric-handle resolver elsewhere in
+// this document (Sec21's own text: "a name-keyed record registry"). CONFIRMED
+// (Sec21.2): no Lua-visible function in this pass's 2-name scope ever
+// CREATES one of these records (`vint_internal_dataresponder_request`'s own
+// text: "this native never creates the named record") - so, same convention
+// as VdoObject/VintDataItem above, this registry is populated ONLY via
+// EngineState::registerDataResponderForTesting().
+struct VintDataResponderRecord {
+    // +0x258, CONFIRMED: the completion flag vint_dataresponder_finished reads.
+    bool finished = false;
+    // Not a real engine field: this project's own count of how many times
+    // vint_internal_dataresponder_request reached its own real "type-validated,
+    // record exists" gate (Sec21.2) for this name - test-observable proof the
+    // gate logic runs, without claiming any further engine effect (the actual
+    // dispatch, FUN_00e1e660, was not independently decompiled this pass and
+    // is not modeled - see EngineState::dataResponderRequest's own doc comment).
+    int dispatchAttempts = 0;
 };
 
 // The shared, cross-script, whole-run engine-state instance - one per
@@ -331,9 +503,67 @@ public:
     // visible "does this character exist" query among this task's 12
     // in-scope names, so a dedicated const-only accessor would serve no
     // real caller.
+    // Applies the CONFIRMED spawn-time defaults (character spawn state,
+    // Sec34.1/Sec34.2/Sec34.3): ignoreAI = false, so a fresh name created
+    // by getOrCreateCharacter() below already carries this (see its own
+    // comment) - this call exists so a caller that already knows the
+    // name's resolved Hit_Points can ALSO apply the max-HP default path:
+    // maxHitPoints = round(multiplier * hitPoints) (M defaults to 1.0,
+    // CONFIRMED for ordinary classes - see CharacterState::maxHitPoints's
+    // own doc comment for the special-class M gap this does not cover),
+    // currentHitPoints set equal (a character spawns at full health).
+    // Resolving a bare Lua name to a real Hit_Points value is this
+    // project's own unmodeled gap (no in-scope spawn function performs
+    // character_definitions.xtbl preset / level-index resolution), so
+    // nothing in this host calls this automatically today - exposed for a
+    // future real spawn-call integration and for tests, same
+    // "mechanism confirmed, no in-scope producer wires it up" convention
+    // as registerVdoObjectForTesting() and its siblings.
+    void applyCharacterSpawnDefaults(const std::string& name, uint32_t hitPoints, double multiplier = 1.0);
+
+    // Test-only (Sec34.4): marks `name` as bound to a script NPC whose own
+    // placement-record overrides (`script_npc_hp` / `script_npc_flags`
+    // containing `"ignore_ai"`) are zone data - the still-held `.czn_pc`
+    // interior. This project cannot know whether such a record carries
+    // either override (that IS the parked question), so this represents
+    // ONLY "the override question is live for this character" by
+    // forgetting the CONFIRMED defaults back to OPEN; it never fabricates
+    // what an override would actually contain. No Lua-visible function in
+    // this host's scope ever establishes this binding for a real name
+    // (Sec34.4's own census: commando_spawn's builder `0x00a33b80` and the
+    // script-NPC spawn routine `0x00a34f00` never set either property) -
+    // populated only via this entry point, for a test demonstrating the
+    // refusal.
+    void markScriptNpcBoundForTesting(const std::string& name);
+
+    // Looks up `name` (the plain Lua name string, see this header's own
+    // top note on why no further resolution happens), creating a
+    // fresh, all-defaults entry on first reference. Returned by mutable
+    // reference so both the 12 trampolines AND this project's own tests
+    // can read/write real state directly - there is no separate Lua-
+    // visible "does this character exist" query among this task's 12
+    // in-scope names, so a dedicated const-only accessor would serve no
+    // real caller. CONFIRMED (Sec34.1/Sec34.3): a FRESH entry's ignoreAI
+    // is set to false here, not left OPEN - the engine default is a real,
+    // disassembly-confirmed constant (see CharacterState::ignoreAI's own
+    // doc comment), not an invented stand-in. maxHitPoints/currentHitPoints
+    // stay OPEN (see their own doc comments: the real default needs a
+    // resolved Hit_Points value this project has no way to attach to a
+    // bare name).
     CharacterState& getOrCreateCharacter(const std::string& name);
     bool hasCharacter(const std::string& name) const;
     size_t characterCount() const { return characters_.size(); }
+
+    // Same convention as getOrCreateCharacter/hasCharacter/characterCount
+    // above, for VehicleState (spec-lua-api-behaviour.md Sec30.5). Exposed
+    // by mutable reference so vehicle_clear_all_radio_locks can walk every
+    // vehicle this host currently knows about (this project's own stand-in
+    // for "every vehicle in the world object manager" - see VehicleState's
+    // own doc comment) and so tests can read/write state directly.
+    VehicleState& getOrCreateVehicle(const std::string& name);
+    bool hasVehicle(const std::string& name) const;
+    size_t vehicleCount() const { return vehicles_.size(); }
+    std::unordered_map<std::string, VehicleState>& vehicles() { return vehicles_; }
 
     // --- co-op session (spec-lua-api-behaviour.md Sec26.28, Sec3.1, Sec8.27,
     // Sec10.2; batch 2026-10-01) -------------------------------------------
@@ -435,6 +665,14 @@ public:
     // project has no real record to read).
     uint32_t registerVdoObjectForTesting(const std::string& name, uint32_t parentHandle, uint32_t docHandle);
 
+    // Test-only direct read of a registered VDO object's own fields - no
+    // Lua-visible getter exists for parentHandle/docHandle among this
+    // document's 8-name Sec18-Sec21 scope (vint_object_parent/
+    // vint_object_get_doc are both out of scope), so cloneVdoObject's own
+    // parent/document assignment (Sec18.2) can only be checked this way.
+    // Returns nullptr for an unregistered handle.
+    const VdoObject* vdoObjectForTesting(uint32_t handle) const;
+
     // FUN_00e0ceb0's own stand-in ("a 'current default document' global
     // lookup") - default 0 (this project's own "no default document yet"
     // sentinel, VdoObject's own doc comment). Test-only setter; no Lua
@@ -457,6 +695,146 @@ public:
     // nothing matches either way.
     uint32_t findVdoObject(const std::string& name, bool hasParent, uint32_t parentHandle,
                            bool hasDoc, uint32_t docHandle) const;
+
+    // --- vint_object_first_child / vint_object_clone (spec-lua-bindings.md
+    // Sec18) ------------------------------------------------------------
+
+    // Test/setup-only entry point (see VdoObject::firstChildHandle's own doc
+    // comment). No-op if `parentHandle` is not a registered object.
+    void setVdoObjectFirstChildForTesting(uint32_t parentHandle, uint32_t childHandle);
+
+    // vint_object_first_child's own CONFIRMED mechanism (Sec18.1): resolve
+    // `handle` (the shared resolver, same as findVdoObject), read its
+    // firstChildHandle. Returns 0 for EITHER a bad handle OR a resolved
+    // object with no first child - both real, CONFIRMED paths that push zero
+    // Lua values (never 0.0), which the caller (the Lua stub) implements by
+    // simply not pushing anything when this returns 0 (handle 0 is never a
+    // real child handle - same sentinel reasoning as VdoObject::parentHandle).
+    uint32_t vdoObjectFirstChild(uint32_t handle) const;
+
+    // vint_object_clone's own CONFIRMED mechanism (Sec18.2): resolves "the
+    // current document" first (currentDefaultDocHandle() - literally the
+    // SAME OPEN value as findVdoObject's own doc_handle fallback, per
+    // Sec18.2's own explicit cross-reference to Sec15 - so an OPEN read here
+    // refuses exactly like it already does there, rather than being
+    // special-cased to the real "document resolution failed -> 0.0" path;
+    // consistent with this project's own established precedent of never
+    // silently converting "this host doesn't know" into a fabricated
+    // definite answer). Then resolves `origHandle` via the shared resolver;
+    // not found -> returns 0 (CONFIRMED 0.0-on-failure, the real engine also
+    // logs a debug string here, not Lua-visible, not reproduced). Then
+    // resolves the requested parent (`hasParentArg`/`parentHandleArg`) via
+    // the same shared resolver, falling back to the ORIGINAL object's own
+    // parentHandle if absent/wrong-type/unresolvable (CONFIRMED, Sec18.2's
+    // own "falls back to the original's own +0x24 parent field" text).
+    // Creates a new VdoObject scoped to the resolved parent and the resolved
+    // current document and returns its fresh handle. The real virtual clone
+    // call's own deep-copy of the source object's content (name, type,
+    // properties) was NOT independently decompiled this pass (Sec18.2's text
+    // only confirms the receiver/parent/flag call arguments, not what the
+    // callee internally copies) - NOT modeled: the new object's own name/hash
+    // stay empty/0 rather than guessed, so it is never itself findable by
+    // name via vint_object_find/vint_object_first_child afterward. This
+    // minimal stand-in has no further failure condition to model honestly
+    // (same precedent already established for object_indicator_add_do
+    // above), so every call that gets past the OPEN/not-found checks
+    // succeeds.
+    uint32_t cloneVdoObject(uint32_t origHandle, bool hasParentArg, uint32_t parentHandleArg);
+
+    // --- vint_get_time_index (Sec19.1) --------------------------------------
+
+    // FUN_00e0ceb0's own stand-in reused a third time (Sec19.1's own text:
+    // "the third sighting in this document of the identical +0x14-field read
+    // feeding a 'current document' resolution") - this project's host has no
+    // document registry distinct from the resolved handle number itself, so
+    // a genuine "FUN_00e1f330 failed to resolve" cannot be told apart from
+    // "no test has supplied a time index for this handle yet"; both become
+    // an OpenStateError refusal (never a fabricated number). The real
+    // "zero Lua values pushed" failure path is therefore not separately
+    // reachable in this minimal host - same "no failure condition to model
+    // honestly" precedent as cloneVdoObject above.
+    OpenValueMap<double>& vintTimeIndexByDoc() { return vintTimeIndexByDoc_; }
+    // `hasExplicitNonZeroDoc`/`explicitDoc`: CONFIRMED (Sec19.1) that absent,
+    // nil, OR the literal number 0 all take the SAME fallback
+    // (currentDefaultDocHandle()) path - a genuine difference from every
+    // other optional numeric-handle argument elsewhere in this document,
+    // which only fall back on absence/nil, not on an explicit 0.
+    double vintGetTimeIndex(bool hasExplicitNonZeroDoc, uint32_t explicitDoc) const;
+
+    // --- vint_dataitem_get (Sec19.2) ----------------------------------------
+
+    // Test/setup-only entry point (see VintDataItem's own doc comment).
+    // Truncates `fields` to the real 32-slot cap (CONFIRMED) rather than
+    // guessing what a longer list would mean. Returns the fresh handle
+    // (starts at 1, incrementing - same unconfirmed-numeric-scheme stand-in
+    // convention as registerVdoObjectForTesting, a SEPARATE counter since
+    // Sec19.2 confirms this is a separate handle space).
+    uint32_t registerVintDataItemForTesting(std::vector<VintTaggedValue> fields);
+    // Returns nullptr for a bad handle (CONFIRMED: "bad handle -> zero Lua
+    // values pushed" - never populated by any Lua-visible call in this
+    // pass's scope, so this is itself the real, honest default), else every
+    // populated field in order.
+    const std::vector<VintTaggedValue>* findVintDataItemFields(uint32_t handle) const;
+
+    // --- vint_set_property / vint_get_property (Sec20) ----------------------
+    //
+    // This project's own minimal stand-in: a plain per-(resolved VDO object,
+    // property-name-hash) bag of whatever raw trailing Lua values a
+    // vint_set_property call was given, echoed back verbatim by
+    // vint_get_property. Property names are hashed the real way (CONFIRMED,
+    // Sec9.2/Sec20.1: the engine's own lower-cased string hash,
+    // sr3save::nameHash here, same citation as VdoObject::nameHash above).
+    // Deliberately NOT modeled, all per this task's own established "deep
+    // multi-step dispatch chain this project has no real data table for"
+    // convention (see the Sec27/Sec28 batch's own file-header note): the
+    // real per-type property-descriptor table (Sec9.2's own FUN_00e290c0
+    // registration mechanism is not implemented anywhere in this project -
+    // no real catalog of property names/type-size codes exists to resolve a
+    // name against a concrete VDO subclass), the tween start_value/end_value
+    // redirect (Sec20.1's own "confirmed, concrete real-game quirk" -
+    // requires knowing a property's real type/size code from that same
+    // missing table), and the callback-claim mechanism (Sec20.1's own
+    // vint_callback_lua pool interaction, case 8 - same reason). Each would
+    // require guessing which properties are of which type, which no spec-
+    // *.md file or real game data this project parses provides.
+    //
+    // `setVintProperty` silently does nothing if `handle` does not resolve
+    // to a registered VdoObject (CONFIRMED, Sec20.1: "an unresolvable handle
+    // simply fails to resolve later" - matching vint_set_property's own
+    // always-zero-Lua-values return, there is no path where this needs to
+    // be visible to a caller).
+    void setVintProperty(uint32_t handle, const std::string& propertyName, std::vector<VintTaggedValue> values);
+    // Returns nullptr for a bad handle or a property-name miss (CONFIRMED,
+    // Sec20.2: "Property not found, or bad handle -> zero Lua values pushed
+    // (not even nil)"), else the exact values last set.
+    const std::vector<VintTaggedValue>* findVintProperty(uint32_t handle, const std::string& propertyName) const;
+
+    // --- vint_dataresponder_finished / vint_internal_dataresponder_request
+    // (Sec21) -----------------------------------------------------------
+
+    // Test/setup-only entry point (see VintDataResponderRecord's own doc
+    // comment on why no Lua-visible function in this pass's 2-name scope
+    // populates this registry).
+    void registerDataResponderForTesting(const std::string& name, bool finished);
+    // CONFIRMED (Sec21.1), including the real, honestly-flagged quirk: no
+    // record for `name` at all -> true ("finished"), not false and not a
+    // refusal - this project's never-populated-by-default registry already
+    // IS that real "no record" state, so this is itself the real, honest
+    // default, same "never-populated object space" precedent as VdoObject.
+    bool dataResponderFinished(const std::string& name) const;
+    // CONFIRMED (Sec21.2): a complete, silent no-op when no record exists
+    // for `name`, or when `validCallback`/`validMax` (the caller's own
+    // lua_type checks on args 2/3) are false - never creates the record
+    // itself (Sec21.2's own text: "this native never creates the named
+    // record"). When a record exists and both types validate, increments
+    // this project's own dispatchAttempts counter (test-observable proof the
+    // gate runs) - the real further dispatch (FUN_00e1e660, the trailing-
+    // argument array, and the +0x25c context stamp) has no Lua-visible
+    // consequence among this pass's two in-scope functions and is not
+    // modeled (FUN_00e1e660's own body was not independently decompiled this
+    // pass either, per Sec21.2's own explicit "not traced" note).
+    void dataResponderRequest(const std::string& name, bool validCallback, bool validMax);
+    int dataResponderDispatchAttempts(const std::string& name) const;
 
     // --- store_vehicle_get_state (Sec10.1) ----------------------------------
 
@@ -616,9 +994,11 @@ public:
     // from an installed table is "missing" (REAL). Without an installed table
     // the per-name map zsceneLoadable[key] is used, OPEN until a test sets it.
     //
+    // Start-up values: 0x0153b556 the skip_all_cutscenes byte (false) and
+    // 0x0153b530 the current entry ("" = null, Sec26.25 Globals, RESOLVED
+    // 2026-10-02) are set by applySpecInitialState (lua_spec_initial_state.cpp).
     // CONFIRMED globals with no specced start-up value - all OPEN at start:
-    //  - 0x0153b556 the skip_all_cutscenes byte.
-    //  - 0x0153b530 current entry ("" = null), 0x0153b538 pending entry.
+    //  - 0x0153b538 pending entry.
     //  - 0x0153b51c load state: 0 idle, 1 loading, 2 loaded (all CONFIRMED).
     //  - 0x0153b541 / 0x0153b542 (labels HIGH CONFIDENCE).
     //  - the soundtrack stream 0x0153b71c, its status and its timer 0x0153b724.
@@ -1245,6 +1625,97 @@ public:
     };
     BossBattleMatt& bossBattleMatt() { return bossBattleMatt_; }
 
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec30 ("ranking
+    // tranche 03") - see lua_spec_confirmed_stubs.cpp's own file-header
+    // note above these functions for the full per-function citation. ---
+
+    // Sec30.3 `auto_pickup_enable` (0x00a3c880): no arguments; writes the
+    // hardcoded byte 1 to global 0x01308698. CONFIRMED: "file-backed
+    // default: enabled" - so this project's own default is true (the
+    // spec's own stated starting value, not a guess), matching the
+    // existing cribWeaponAddEnabled_ precedent (Sec28.13/Sec28.14, "CONFIRMED
+    // file value 1"). The call always re-sets it true (this entry "can
+    // only enable" per spec); there is no in-scope disable counterpart
+    // (the adjacent registrar slot's own disable sibling is HYPOTHESIS,
+    // not dumped, and not one of this tranche's 25 confirmed names).
+    bool& autoPickupEnabled() { return autoPickupEnabled_; }
+
+    // Sec30.5 `vehicle_exit_group_do`'s own CONFIRMED crash-shaped edge
+    // (Sec30.7): the real engine calls 0x00a7bdc0(arg3) on the first
+    // vehicle found among the resolved, state-3 characters in its table
+    // argument - or, when none was found across the whole table, with a
+    // NULL `this` ("confirmed from the listing, XOR ECX,ECX"; Sec30.7:
+    // "OPEN whether 0x00a7bdc0 tolerates that"). HOST-SAFETY DEVIATION
+    // (not a spec fact, per this task's own explicit instruction): the
+    // real engine reaches that unconfirmed-safety null-`this` call here;
+    // this host guards the found-vehicle name explicitly and never
+    // attempts the equivalent call on an unresolved target, matching the
+    // established "this project does not simulate crashes" precedent
+    // (cf. group_get_next_npc, Sec28.5, item 57 in lua_spec_confirmed_
+    // stubs.cpp). This counter is this project's OWN test-observable
+    // proof the guard fired - NOT a real engine field - same convention
+    // as VintDataResponderRecord::dispatchAttempts.
+    int vehicleExitGroupNullThisGuardCount() const { return vehicleExitGroupNullThisGuardCount_; }
+    void recordVehicleExitGroupNullThisGuard() { ++vehicleExitGroupNullThisGuardCount_; }
+
+    // Sec30.6 `team_make_unfriendly` / Sec20.6 `team_make_allies` (the
+    // latter out of this tranche's own scope, not Lua-registered by this
+    // project): both resolve a team name via the established helper
+    // 0x0094cc60 (hash 0x00dab330 + lookup 0x005961a0, default sentinel 9
+    // for an unrecognized name - CONFIRMED mechanism, both Sec20.6 and
+    // Sec30.6). This project has no real team-name registry (no spec
+    // gives the actual in-game team name strings or their real ids) -
+    // resolveTeamId() is this project's own minimal stand-in: a name a
+    // test has not registered takes the real, CONFIRMED "unknown name"
+    // path (sentinel id 9) - the SAME "never-populated real registry,
+    // so the honest default IS the real behavior" precedent as
+    // EngineState::findVdoObject's own doc comment.
+    void registerTeamIdForTesting(const std::string& name, int id) { teamIdByName_[name] = id; }
+    int resolveTeamId(const std::string& name) const {
+        auto it = teamIdByName_.find(name);
+        return it != teamIdByName_.end() ? it->second : 9; // CONFIRMED sentinel, 0x0094cc60
+    }
+
+    // 0x009b7130(id1, id2, value, true) writes `value` symmetrically into
+    // an 8x8 (CONFIRMED, Sec20.6) relation-matrix byte block (base
+    // 0x0262d940, stride 8) - valid indices 0..7. Sentinel id 9 (or any id
+    // outside 0..7, such as a resolver bug this project cannot rule out)
+    // indexes PAST that block - Sec30.7's own cross-function note flags
+    // this as "a crash-shaped edge... OPEN, not confirmed" (whether it
+    // truly faults or just corrupts adjacent memory is not independently
+    // settled). HOST-SAFETY DEVIATION (not a spec fact, per this task's
+    // own explicit instruction): either way, this host must not perform
+    // the equivalent out-of-bounds write into its own 8x8 array - both
+    // ids are bounds-checked first; an out-of-range id makes this return
+    // false and skip the write entirely (the caller logs the averted path
+    // - see stub_team_make_unfriendly), matching the same "this project
+    // does not simulate crashes" precedent used throughout this file.
+    // Also applies Sec30.6's own refinement of Sec20.6: "whenever team 5
+    // is one side, team 6 gets the identical relation" (the SAME base
+    // matrix at rows/columns 6, not a separate auxiliary array -
+    // CONFIRMED, address arithmetic) - done here so both team_make_allies
+    // (out of scope) and team_make_unfriendly share one correct
+    // implementation if team_make_allies is ever added.
+    static constexpr int kTeamRelationMatrixDim = 8; // CONFIRMED 8x8 block, Sec20.6/Sec30.6
+    bool setTeamRelationIfInBounds(int id1, int id2, int value) {
+        if (id1 < 0 || id1 >= kTeamRelationMatrixDim || id2 < 0 || id2 >= kTeamRelationMatrixDim) return false;
+        teamRelation_[static_cast<size_t>(id1)][static_cast<size_t>(id2)] = value;
+        teamRelation_[static_cast<size_t>(id2)][static_cast<size_t>(id1)] = value;
+        if (id1 == 5) { teamRelation_[6][static_cast<size_t>(id2)] = value; teamRelation_[static_cast<size_t>(id2)][6] = value; }
+        if (id2 == 5) { teamRelation_[6][static_cast<size_t>(id1)] = value; teamRelation_[static_cast<size_t>(id1)][6] = value; }
+        return true;
+    }
+    // Test-only direct read; -2 (never a real relation value this project
+    // writes) for an out-of-bounds pair, else whatever was last set (-1 =
+    // "never written" default, this project's own sentinel, not a spec fact -
+    // the real matrix's own true at-rest contents are OPEN).
+    int teamRelationForTesting(int id1, int id2) const {
+        if (id1 < 0 || id1 >= kTeamRelationMatrixDim || id2 < 0 || id2 >= kTeamRelationMatrixDim) return -2;
+        return teamRelation_[static_cast<size_t>(id1)][static_cast<size_t>(id2)];
+    }
+    int teamRelationOobGuardCount() const { return teamRelationOobGuardCount_; }
+    void recordTeamRelationOobGuard() { ++teamRelationOobGuardCount_; }
+
     // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
 
     // One row per engine-state slot the stubs read, grouped by area (co-op,
@@ -1266,6 +1737,7 @@ public:
 
 private:
     std::unordered_map<std::string, CharacterState> characters_;
+    std::unordered_map<std::string, VehicleState> vehicles_;
     CoopSession coopSession_;
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
@@ -1273,6 +1745,19 @@ private:
     std::unordered_map<uint32_t, VdoObject> vdoObjects_;
     uint32_t nextVdoObjectHandle_ = 1;
     OpenValue<uint32_t> currentDefaultDocHandle_{"current default vint document (0x00e0ceb0)", "spec-lua-bindings.md Sec15"};
+
+    // --- Vint UI API, Sec18-Sec21 batch (2026-10-02) - see each public
+    // accessor's own doc comment above for citation/reasoning. ---
+    OpenValueMap<double> vintTimeIndexByDoc_{"vint document time index (+0x574), by resolved document handle",
+                                              "spec-lua-bindings.md Sec19.1"};
+    std::unordered_map<uint32_t, VintDataItem> vintDataItems_;
+    uint32_t nextVintDataItemHandle_ = 1;
+    // Outer key: resolved VDO object handle; inner key: sr3save::nameHash of
+    // the (case-folded-by-that-hash) property name (Sec20.1/Sec9.2).
+    std::unordered_map<uint32_t, std::unordered_map<uint32_t, std::vector<VintTaggedValue>>> vintProperties_;
+    // Keyed by sr3save::nameHash of the data-responder name (Sec21's own
+    // "hash the name with the engine's standard string-hash" text).
+    std::unordered_map<uint32_t, VintDataResponderRecord> vintDataResponders_;
 
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
     // Sec10.1-Sec10.9, see each field's own public-accessor doc comment
@@ -1444,6 +1929,19 @@ private:
     OpenValue<bool> cellphoneAnimSuppressed_{"0x00943a20(player) result", "spec-lua-api-behaviour.md Sec28.23"};
     uint64_t cellphoneAnimPlayedCount_ = 0;
     BossBattleMatt bossBattleMatt_;
+
+    // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec30 ("ranking
+    // tranche 03") - see each public accessor's own doc comment above. ---
+    bool autoPickupEnabled_ = true; // Sec30.3, CONFIRMED file-backed default "enabled"
+    int vehicleExitGroupNullThisGuardCount_ = 0; // Sec30.5/Sec30.7 - test-observable only, not a real engine field
+    std::unordered_map<std::string, int> teamIdByName_; // Sec30.6/Sec20.6, test-only; unregistered -> sentinel 9
+    // CONFIRMED 8x8 (Sec20.6); -1 = "never written" (this project's own sentinel, not a spec fact).
+    std::array<std::array<int, kTeamRelationMatrixDim>, kTeamRelationMatrixDim> teamRelation_ = [] {
+        std::array<std::array<int, kTeamRelationMatrixDim>, kTeamRelationMatrixDim> m{};
+        for (auto& row : m) row.fill(-1);
+        return m;
+    }();
+    int teamRelationOobGuardCount_ = 0; // Sec30.6/Sec30.7 - test-observable only, not a real engine field
 };
 
 // Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).

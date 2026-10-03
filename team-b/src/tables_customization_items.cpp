@@ -40,11 +40,10 @@ std::vector<WearOptionFlagRef> ReadFlagRefList(const Node* wrap, std::string_vie
 MaterialElementEntry ParseMaterialElement(const Node* row) {
     MaterialElementEntry m;
     m.material = OptText(row, "Material");
-    // LABEL: spec-tables-customization.md §4.3, [OPEN - desk review 2026-09-30]: whether Shader_Type is a
-    // child of Material_Element or of Variant is unsettled (spec-customization-data.md §2.1 lists it at
-    // variant level; conflict, see its §2.1 Variants row "[OPEN - desk review 2026-09-30: the parent of
-    // `Shader_Type` is ambiguous ...]"). Read under Material_Element here as our assumption; the other site is
-    // src/customization.cpp ParseVariant (reads it as a Variant child). No behaviour change.
+    // CONFIRMED 2026-10-02 (spec-tables-customization.md §4.3, re-derived from the executable, `FUN_00829650`
+    // read in full): Shader_Type IS a Material_Element child, not a Variant child - this reading was correct.
+    // src/customization.cpp's ParseVariant used to read it at the Variant level instead (the actual bug); it
+    // has been corrected to match this function (see include/sr3customization/customization.h's MaterialElement).
     m.shaderType = OptText(row, "Shader_Type");
     return m;
 }
@@ -67,15 +66,14 @@ WearOptionEntry ParseWearOptionAccepted(const Node* row) {
     WearOptionEntry w;
     w.name = OptText(row, "Name");
     const Node* meshInformation = FindChild(row, "Mesh_Information");
-    // LABEL: spec-tables-customization.md §4.2, [OPEN - desk review 2026-09-30]: that section names only
-    // Male_Mesh_Filename, while spec-customization-data.md §2.1/§5.2 also documents Female_Mesh_Filename >
-    // Filename (it drives the custmesh_<N>f bundle). Only the male name is read here pending the executable
-    // check; no behaviour change. Also: spec-tables-customization.md §4.2 review status "NEEDS-EXE: ...
-    // `Female_Mesh_Filename` handling". spec-customization-data.md §2.1 lists the element under a
-    // "[CONFIRMED - empirical]" scope that is narrowed to "the elements exist with the names shown" (one
-    // sample row) and §5.2 says the composer registers custmesh_<N>f "only if the wear option has a
-    // <Female_Mesh_Filename>"; neither says the 0x28 wear-option record loader (FUN_00829650) reads it, so it
-    // is NOT added to this typed reader (sr3customization::MeshInformation, a different layer, does read it).
+    // RESOLVED 2026-10-02 (spec-tables-customization.md §4.2, re-derived from the executable,
+    // `func_0x00829650.txt`/`func_0x009fd8c0.txt` read in full): Female_Mesh_Filename is CONFIRMED absent from
+    // FUN_00829650's own decompile (the function WearOptionEntry models) - not a decompile gap, a genuine
+    // absence from THIS function. It IS read, but by a separate composer (`FUN_009FD8C0`, called once per item
+    // right after the Wear_Option loop, building the custmesh_<N>/custmesh_<N>f bundle names) - both specs were
+    // right about different functions, no real conflict. Only the male name belongs in this typed reader;
+    // sr3customization::MeshInformation (a different layer, built from spec-customization-data.md) already
+    // models Female_Mesh_Filename correctly for that composer-level concept.
     w.maleMeshFilename = OptText(FindChild(meshInformation, "Male_Mesh_Filename"), "Filename");
     w.activeFlags = ReadFlagRefList(FindChild(row, "Active_Flags"), "Active_Flag");
     w.requiredFlags = ReadFlagRefList(FindChild(row, "Required_Flags"), "Required_Flag");
@@ -157,11 +155,10 @@ std::vector<CustomizationItemEntry> ParseCustomizationItemsTable(const Document&
         // "not ready (bit 0 - row is entirely skipped ... without allocating
         // a slot)" (§4.1).
         if (HasFlag(FindChild(row, "Flags"), "not ready")) continue;
-        // Hard cap 858 rows (0x35a, §4.1).
-        // LABEL: spec-tables-customization.md §4.1, [OPEN - desk review 2026-09-30]: whether the engine's
-        // counter test runs before or after a row is stored (858 vs 859 kept) is not settled; the `>=`
-        // here is our assumption, not a spec fact. Real data has 574 rows (§21), so this operator cannot
-        // change a result on real data.
+        // Hard cap 858 rows (0x35a, §4.1). CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_00829650`
+        // read in full): the compare runs at the TOP of the loop against the not-yet-incremented count, keeping
+        // a maximum of exactly 858 (indices 0-857) - matching the `>=` coding already used here. Real data has
+        // 574 rows (§21), so this operator cannot change a result on real data either way.
         if (out.size() >= 858) break;
         out.push_back(ParseCustomizationItem(row));
     }
@@ -190,16 +187,18 @@ Store ParseStore(const Node* row) {
     s.name = OptText(row, "Name");
     s.allowWardrobe = HasFlag(FindChild(row, "Flags"), "allow_wardrobe");
     for (const Node* e = FindChild(row, "Store_Item"); e; e = NextSibling(row, e, "Store_Item")) {
-        // LABEL: spec-tables-customization.md §5.2, [OPEN - desk review 2026-09-30]: decimal 255 and hex 0xfe
-        // (= 254) disagree and no compare operator is given, so 254 vs 255 is unsettled; `>= 255` is our
-        // assumption. Real stores are never near the cap (§5.2 validation), so it cannot change a real result.
+        // CONFIRMED 2026-10-02 (re-derived from the executable): the loop checks `0xfe(254) < current_count`
+        // before storing, using the not-yet-incremented count - true cap is 255 items, matching the `>= 255`
+        // already coded here (0xfe only names the compare threshold, not the cap itself). Real stores are never
+        // near the cap (§5.2 validation).
         if (s.storeItems.size() >= 255) break;  // cap 0xfe (§5.2)
         s.storeItems.push_back(ParseStoreItem(e));
     }
     const Node* outfitsWrap = FindChild(row, "Outfits");
     for (const Node* e = FindChild(outfitsWrap, "Outfit_Element"); e; e = NextSibling(outfitsWrap, e, "Outfit_Element")) {
-        // LABEL: spec-tables-customization.md §5.2, [OPEN - desk review 2026-09-30]: no compare operator is
-        // given for the 73 cap; `>= 73` is our assumption. Not near the cap in real data (§5.2 validation).
+        // CONFIRMED 2026-10-02 (re-derived from the executable): identical pattern to the Store_Item cap above
+        // (`0x48(72) < current_count` checked pre-store) - true cap is 73, matching the `>= 73` already coded
+        // here. Not near the cap in real data (§5.2 validation).
         if (s.outfitElements.size() >= 73) break;  // cap 0x48+1 (§5.2)
         if (e->text()) s.outfitElements.push_back(*e->text());
     }

@@ -239,7 +239,19 @@ void testWeaponNormalRow() {
     CHECK(w.watersprayInfo.pressureIncreaseRate.has_value() && *w.watersprayInfo.pressureIncreaseRate == 2.0f);
     CHECK(w.watersprayInfo.pressureDecreaseRate.has_value() && *w.watersprayInfo.pressureDecreaseRate == 3.0f);
 
-    CHECK(w.chargeReleaseInfo.chargeTimeReciprocal.has_value() && near(*w.chargeReleaseInfo.chargeTimeReciprocal, 0.5f, 1e-6f));
+    // Charge_Release_Info reader flavours (spec section 2.3, CORRECTED
+    // 2026-10-02): Charge_Time_sec is "always" (Always<float>, not
+    // optional<float>); the row here authors only Charge_Time_sec and
+    // Charge_Flags, so the four "if present" scalars (Min_Charge_Percent,
+    // Charge_Base, Min_Range, Pre_Charge_Delay) must read back absent, not a
+    // fabricated default, and Auto_Release ("always" bool, also unauthored
+    // here) must read back present=false.
+    CHECK(w.chargeReleaseInfo.chargeTimeReciprocal.present && near(w.chargeReleaseInfo.chargeTimeReciprocal.value, 0.5f, 1e-6f));
+    CHECK(!w.chargeReleaseInfo.minChargePercent.has_value());
+    CHECK(!w.chargeReleaseInfo.chargeBase.has_value());
+    CHECK(!w.chargeReleaseInfo.minRange.has_value());
+    CHECK(!w.chargeReleaseInfo.preChargeDelay.has_value());
+    CHECK(!w.chargeReleaseInfo.autoRelease.present);
     CHECK(w.chargeReleaseInfo.showHudOnCharge);
 
     CHECK(w.cameraInfo.primaryFire.shakeName.has_value() && *w.cameraInfo.primaryFire.shakeName == "shake_a");
@@ -336,6 +348,50 @@ void testWeaponFlagsAndSpecialCases() {
         Document c = P("<root><Table><Weapon><Name>c3</Name><Category>NoSuchCategory</Category></Weapon></Table></root>");
         Weapon wc = ParseWeapon(FindChild(c.table(), "Weapon"));
         CHECK(wc.category.has_value() && *wc.category == -1);  // present but unmatched: element WAS present, index is -1
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Charge_Release_Info reader flavours (spec section 2.3, CORRECTED 2026-10-02):
+// Charge_Time_sec/Auto_Release are "always"; Min_Charge_Percent/Charge_Base/
+// Min_Range/Pre_Charge_Delay are "if present" (this reader previously had all
+// five non-bool scalars on the Always<T> family - this test pins the fix).
+// ---------------------------------------------------------------------------
+void testChargeReleaseInfoReaderFlavours() {
+    // All five scalars authored: the "if present" fields must take the
+    // authored value (not some fabricated/default value).
+    {
+        const char* xml =
+            "<root><Table><Weapon><Name>w1</Name><Charge_Release_Info>"
+            "<Charge_Time_sec>4.0</Charge_Time_sec><Min_Charge_Percent>0.25</Min_Charge_Percent>"
+            "<Charge_Base>1.5</Charge_Base><Auto_Release>true</Auto_Release>"
+            "<Min_Range>2.0</Min_Range><Pre_Charge_Delay>0.5</Pre_Charge_Delay>"
+            "</Charge_Release_Info></Weapon></Table></root>";
+        Document doc = P(xml);
+        Weapon w = ParseWeapon(FindChild(doc.table(), "Weapon"));
+        CHECK(w.chargeReleaseInfo.chargeTimeReciprocal.present && near(w.chargeReleaseInfo.chargeTimeReciprocal.value, 0.25f, 1e-6f));
+        CHECK(w.chargeReleaseInfo.minChargePercent.has_value() && *w.chargeReleaseInfo.minChargePercent == 0.25f);
+        CHECK(w.chargeReleaseInfo.chargeBase.has_value() && *w.chargeReleaseInfo.chargeBase == 1.5f);
+        CHECK(w.chargeReleaseInfo.autoRelease.present && w.chargeReleaseInfo.autoRelease.value == true);
+        CHECK(w.chargeReleaseInfo.minRange.has_value() && *w.chargeReleaseInfo.minRange == 2.0f);
+        CHECK(w.chargeReleaseInfo.preChargeDelay.has_value() && *w.chargeReleaseInfo.preChargeDelay == 0.5f);
+    }
+    // Wrapper entirely absent: chargeTimeReciprocal ("always") must read back
+    // present=true/value=0 (the real engine's unconditional +0x460=0 preset -
+    // NOT the same as "untouched"); the four "if present" scalars and
+    // Auto_Release must read back absent, not a fabricated default - this
+    // reader does not attempt to model the documented 1.0/-1.0 defaults when
+    // the whole wrapper (as opposed to just one field inside it) is missing,
+    // per the caveat in weapons.h's ChargeReleaseInfo comment.
+    {
+        Document doc = P("<root><Table><Weapon><Name>w2</Name></Weapon></Table></root>");
+        Weapon w = ParseWeapon(FindChild(doc.table(), "Weapon"));
+        CHECK(!w.chargeReleaseInfo.chargeTimeReciprocal.present);  // Charge_Time_sec child itself absent -> this reader's Always<T> convention: present=false
+        CHECK(!w.chargeReleaseInfo.minChargePercent.has_value());
+        CHECK(!w.chargeReleaseInfo.chargeBase.has_value());
+        CHECK(!w.chargeReleaseInfo.autoRelease.present);
+        CHECK(!w.chargeReleaseInfo.minRange.has_value());
+        CHECK(!w.chargeReleaseInfo.preChargeDelay.has_value());
     }
 }
 
@@ -448,6 +504,35 @@ void testExplosionsBoundary() {
 }
 
 // ---------------------------------------------------------------------------
+// explosions.xtbl Tone/Tint (spec section 10.1, CORRECTED 2026-10-02): the
+// engine stores R/G/B normalised to [0.0, 1.0] (divided by 255.0), NOT the
+// raw 0-255 integers the XML authors - this reader previously stored the raw
+// ints. Also pins Panic_Reaction/Groundfire as unmodified raw text (their
+// resolver mechanisms differ per the correction, but neither changes what
+// this reader stores).
+// ---------------------------------------------------------------------------
+void testExplosionTintNormalisation() {
+    const char* xml =
+        "<root><Table>"
+        "<Explosion><Name>expl_tint</Name><Radius>1</Radius><Panic_Reaction>flee</Panic_Reaction>"
+        "<Groundfire>burning_ground</Groundfire>"
+        "<Screen_Effects><Tone><Tint><R>255</R><G>128</G><B>0</B></Tint></Tone></Screen_Effects>"
+        "</Explosion>"
+        "<Explosion><Name>expl_no_tint</Name><Radius>1</Radius>"
+        "<Screen_Effects><Tone><Tint_scale>1</Tint_scale></Tone></Screen_Effects></Explosion>"
+        "</Table></root>";
+    Document doc = P(xml);
+    auto rows = ParseAllExplosions(doc);
+    CHECK(rows.size() == 2);
+    CHECK(rows[0].panicReaction.has_value() && *rows[0].panicReaction == "flee");   // raw text, unresolved (resolver out of scope)
+    CHECK(rows[0].groundfire.has_value() && *rows[0].groundfire == "burning_ground");  // raw text, unresolved (resolver out of scope)
+    CHECK(rows[0].screenEffectsTintR.present && near(rows[0].screenEffectsTintR.value, 1.0f, 1e-6f));     // 255/255.0
+    CHECK(rows[0].screenEffectsTintG.present && near(rows[0].screenEffectsTintG.value, 128.0f / 255.0f, 1e-6f));
+    CHECK(rows[0].screenEffectsTintB.present && near(rows[0].screenEffectsTintB.value, 0.0f, 1e-6f));     // 0/255.0 == 0, but present must still be true
+    CHECK(!rows[1].screenEffectsTintR.present);  // no <Tint> at all under this row's Tone - "always" reader: present=false, not a fabricated 0
+}
+
+// ---------------------------------------------------------------------------
 // continuous_explosions.xtbl (spec section 10.2): Target_Info's positional
 // 4-tuples, matched by content rather than by any fixed tag name.
 // ---------------------------------------------------------------------------
@@ -489,6 +574,38 @@ void testCombatTricksIndexedArray() {
 }
 
 // ---------------------------------------------------------------------------
+// combat_tricks.xtbl static-table row count and the `Beat_Down_Kill` question
+// (spec section 11.2, CONFIRMED/CORRECTED 2026-10-02: the static table is
+// exactly 18 rows; its 10th entry is `Brute_Beat_Kill`, and there is no
+// `..._BEAT_DOWN_KILL` key anywhere in it - a real row's `Beat_Down_Kill`
+// child is simply never looked up by this loader, distinct from and
+// additional to whatever `Brute_Beat_Kill` itself contains). This reader was
+// already correct on this point before the spec sync (kCombatTrickNames has
+// always had exactly 18 entries with `Brute_Beat_Kill` at index 9, never
+// `Beat_Down_Kill`); this test pins that down as a named regression so a
+// future edit cannot silently reintroduce Team B's old "Beat_Down_Kill"
+// shape or drop a row.
+// ---------------------------------------------------------------------------
+void testCombatTricksBeatDownKillIsUnread() {
+    const char* xml =
+        "<root><Table><Combat_Tricks>"
+        "<Beat_Down_Kill><Max_Respect>99</Max_Respect></Beat_Down_Kill>"
+        "<Brute_Beat_Kill><Max_Respect>42</Max_Respect></Brute_Beat_Kill>"
+        "</Combat_Tricks></Table></root>";
+    Document doc = P(xml);
+    CombatTricksRow r = ParseCombatTricks(doc);
+    CHECK(r.tricks[9].present && r.tricks[9].maxRespect.value == 42);  // Brute_Beat_Kill == index 9, the real 18-row table's 10th entry
+    // No slot anywhere in the fixed 18 should have picked up the
+    // Beat_Down_Kill child's value (99) - confirming it is genuinely unread,
+    // not aliased onto some other trick by a name-matching accident.
+    bool any99 = false;
+    for (const auto& d : r.tricks) {
+        if (d.present && d.maxRespect.present && d.maxRespect.value == 99) any99 = true;
+    }
+    CHECK(!any99);
+}
+
+// ---------------------------------------------------------------------------
 // weapon_upgrades.xtbl (spec section 4): the operation-mode enum and the
 // "text after the last ':' of _Editor/Category" weapon-name extraction.
 // ---------------------------------------------------------------------------
@@ -499,6 +616,7 @@ void testWeaponUpgradeOmAndEditorCategory() {
         "<Range_Max>600</Range_Max><Range_Max_OM>OM_ADDITIVE</Range_Max_OM>"
         "<Ragdoll_Force_Shoot>2</Ragdoll_Force_Shoot><Ragdoll_Force_Shoot_OM>OM_MULTIPLICATIVE</Ragdoll_Force_Shoot_OM>"
         "<Magazine_Size>40</Magazine_Size>"  // no _OM sibling -> Replace (spec section 4.2 default)
+        "<Damage_Max_Dist>80</Damage_Max_Dist><Damage_Max_Dist_OM>OM_REMOVAL</Damage_Max_Dist_OM>"
         "</Weapon_Upgrade></Table></root>";
     Document doc = P(xml);
     WeaponUpgrade u = ParseWeaponUpgrade(FindChild(doc.table(), "Weapon_Upgrade"));
@@ -506,6 +624,13 @@ void testWeaponUpgradeOmAndEditorCategory() {
     CHECK(u.rangeMax.has_value() && u.rangeMax->value == 600.0f && u.rangeMax->mode == OperationMode::Additive);
     CHECK(u.ragdollForceShoot.has_value() && u.ragdollForceShoot->mode == OperationMode::Multiplicative);
     CHECK(u.magazineSize.has_value() && u.magazineSize->value == 40 && u.magazineSize->mode == OperationMode::Replace);
+    // OM_REMOVAL (spec section 4.2, CONFIRMED/CORRECTED 2026-10-02): this
+    // reader only parses/exposes the mode value - it does not apply patches
+    // (that dispatch is out of scope here, see combat.h's OperationMode
+    // comment) - so the only thing to pin down at this layer is that the
+    // encoding still round-trips Removal distinctly from Replace, even
+    // though the real dispatcher treats both the same way downstream.
+    CHECK(u.damageMaxDist.has_value() && u.damageMaxDist->value == 80.0f && u.damageMaxDist->mode == OperationMode::Removal);
     CHECK(!u.fireConeLength.has_value());  // not authored at all
 }
 
@@ -531,8 +656,11 @@ void testHostageNestedEnumAndLevels() {
     CHECK(r.vehicleClasses[0].difficultyLevels[1].respect.value() == 30);
 }
 
-// spec section 8 [OPEN / NEEDS-EXE]: a profile with no Bullet_miss/Recovery child
-// must be REPORTED (diagnostics), and one with the child must not be.
+// spec section 8 (CONFIRMED 2026-10-02 - previously OPEN/NEEDS-EXE): a profile
+// with no Bullet_miss/Recovery child must be REPORTED (diagnostics), and one
+// with the child must not be. The `Bullet_miss -> Recovery` path and the
+// "defaults preset unconditionally before the presence check" behaviour are
+// both now confirmed correct, not a mis-association - see combat.h.
 void testAimDriftRecoveryReport() {
     const char* withoutRecovery =
         "<root><Table><Profile><Name>Default</Name><turn_speed>1</turn_speed>"
@@ -542,7 +670,7 @@ void testAimDriftRecoveryReport() {
     auto v1 = ParseAllAimDriftProfiles(d1);
     CHECK(v1.size() == 1);
     CHECK(v1[0].diagnostics.size() == 1);
-    CHECK(!v1[0].diagnostics.empty() && v1[0].diagnostics[0] == "aim_drift Recovery empty - spec path suspect (NEEDS-EXE)");
+    CHECK(!v1[0].diagnostics.empty() && v1[0].diagnostics[0] == kAimDriftRecoveryEmptyDiagnostic);
     CHECK(!v1[0].recoveryTime.present);
 
     const char* withRecovery =
@@ -563,12 +691,15 @@ int main() {
     testWeaponNormalRow();
     testWeaponMissingOptional();
     testWeaponFlagsAndSpecialCases();
+    testChargeReleaseInfoReaderFlavours();
     testWeaponCategoriesEnum();
     testAmmoFlagsAndBoundaries();
     testMeleeAttackLimbBoundary();
     testExplosionsBoundary();
+    testExplosionTintNormalisation();
     testContinuousExplosionsPositionalGrouping();
     testCombatTricksIndexedArray();
+    testCombatTricksBeatDownKillIsUnread();
     testWeaponUpgradeOmAndEditorCategory();
     testHostageNestedEnumAndLevels();
 

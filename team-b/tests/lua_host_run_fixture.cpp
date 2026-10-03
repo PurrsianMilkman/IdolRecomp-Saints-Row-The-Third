@@ -117,9 +117,9 @@ int main(int argc, char** argv) {
     const std::vector<Entry> dlc1 = {
         // 'scene_a' is a kind-1 entry of the fixture's scene table, so the
         // next read is the skip_all_cutscenes byte 0x0153b556 (false at start,
-        // Sec26.25 Globals 2026-10-01), then the current scene entry 0x0153b530,
-        // which no spec gives a start-up value: blocks on that OPEN state
-        // (Sec14.23/Sec26.25).
+        // Sec26.25 Globals 2026-10-01), then the current scene entry 0x0153b530
+        // (null at start, Sec26.25 Globals 2026-10-02): not current -> false,
+        // so _start yields and the scheduler passes keep re-polling it.
         {"dlc1_mm_06.lua", "function dlc1_mm_06_start(cp, restart)\n  helper_wait_scene('scene_a')\nend\n"},
         // CONFIRMED stubs only: _start succeeds. fade_out(0) starts a fade-out
         // (Sec26.24); no UI script defines screen_fade_do here, so the host's

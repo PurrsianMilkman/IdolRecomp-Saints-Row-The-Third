@@ -893,6 +893,13 @@ add_executable(sr3luahost_batch2728_tests tests/synthetic_luahost_batch2728_test
 target_link_libraries(sr3luahost_batch2728_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_batch2728_test COMMAND sr3luahost_batch2728_tests)
 
+# Batch 2026-10-02: spec-lua-api-behaviour.md Sec30 ("ranking tranche 03"),
+# 9 of its 25 CONFIRMED names - see src/lua_spec_confirmed_stubs.cpp's own
+# Sec30 batch header comment and this test's own top comment.
+add_executable(sr3luahost_tranche03_tests tests/synthetic_luahost_tranche03_test.cpp)
+target_link_libraries(sr3luahost_tranche03_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_tranche03_test COMMAND sr3luahost_tranche03_tests)
+
 # The zscene / cutscene scene table (Sec26.25 item 5): cutscene.xtbl names +
 # one <name>.cte_xtbl per scene, on sr3xtbl like the other table readers.
 add_library(sr3tables_cutscene STATIC src/tables_cutscene.cpp)

@@ -215,8 +215,9 @@ const std::vector<TableCheck>& tableChecks() {
         // --- §12/§13 ---
         {"character_definitions.xtbl", {}, "Character", 282, "spec 12.1 (#73)", true, Counter(ParseCharacterDefinitionsTable)},
         {"character_height.xtbl", {}, "Height_Class", 3, "spec 12.2 (#74)", true, Counter(ParseCharacterHeightTable)},
-        {"character_customization_categories.xtbl", {}, "category", 16, "spec 13.1 (#72) - row locator only, no field schema", true,
-         [](const Document& d) { return FindCharacterCustomizationCategoryRows(d).size(); }},
+        {"character_customization_categories.xtbl", {}, "category", 16,
+         "spec 13.1 (#72) - full 0xc record + 20-row cap + duplicate-Name truncation hazard, all CONFIRMED 2026-10-02", true,
+         Counter(ParseCharacterCustomizationCategoriesTable)},
         {"character_types.xtbl", {}, "Type", 96, "spec 13.2 (#75, 120-row cap [compare operator OPEN, spec 13.2])", true, Counter(ParseCharacterTypesTable)},
         {"character.xtbl", {}, "Character", 382, "spec 13.3 (#70) - row locator only, no field schema; SAME tag as character_definitions.xtbl but a separate file", true,
          [](const Document& d) { return FindCharacterRows(d).size(); }},

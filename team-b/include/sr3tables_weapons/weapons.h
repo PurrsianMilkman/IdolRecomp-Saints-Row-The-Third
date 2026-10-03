@@ -280,6 +280,15 @@ struct FlatSpreadMetrics {
 // `Fire_Cone_Metrics` (+0x1AC..+0x1BC + 6 ring points, spec section 2.3).
 // Only the two authored forms are kept; the derived ring geometry
 // (Near/Far -> six 60-degree points) is NOT reproduced here (convention 3).
+// [CORRECTED - disassembly, 2026-10-02: the Min_Max-form record also carries
+// a plain literal `7` at +0x208, written unconditionally right before the
+// six-point ring loop. This was previously suspected to be a ring-point
+// count; it is now confirmed NOT that (the loop's bound of 6 is a separate
+// hardcoded constant, and no consumer of +0x208 was found). This reader has
+// never stored +0x208 at all (it was already out of scope under the same
+// convention-3 "derived ring geometry" umbrella as the ring points
+// themselves), so this note is documentation only - no field was added or
+// changed.]
 struct FireConeMetrics {
     bool present = false;        // whether <Fire_Cone_Metrics> existed at all
     bool isMinMaxForm = false;   // Metric_Type/Min_Max present (else the Angle form, if present)
@@ -345,15 +354,39 @@ struct WaterSprayInfo {
     std::optional<float> pressureRestoreTime;         // Pressure_Restore_Time (only read if Pressure_Increase_Rate present)
 };
 
-// `Charge_Release_Info` (+0x460..+0x484). Zero if absent.
+// `Charge_Release_Info` (+0x460..+0x484).
+//
+// [CONFIRMED/CORRECTED - disassembly, 2026-10-02 (spec section 2.3): the
+// block is NOT uniformly "zero if absent" - `FUN_00B80D40` presets +0x460,
+// +0x478, +0x464(=1.0, not 0), +0x468, +0x46C, +0x47C, +0x480, +0x484 to
+// their listed values UNCONDITIONALLY, before it even checks whether
+// `Charge_Release_Info` exists; +0x470 (Min_Range) and +0x474
+// (Pre_Charge_Delay) are set to their documented defaults only AFTER that
+// presence check, so when the wrapper is wholly absent those two fields are
+// never touched at all (left at whatever the record held before - 0 from
+// the record-wide zero-fill on first load, not the documented -1.0/0). This
+// reader's established convention (see the file-level CONVENTIONS comment,
+// point 1) collapses "wrapper absent" and "field absent inside a present
+// wrapper" into the same present=false/nullopt result for every sub-block in
+// this file, which is still correct for every field below EXCEPT this
+// wrapper-absent-vs-field-missing distinction for minRange/preChargeDelay -
+// that distinction is a refresh/runtime-array-lifecycle nuance (same
+// category as the "loaded bit" / Base_Version post-pass concerns this file
+// already puts out of scope), not modelled here; the comments below flag it
+// per-field instead of changing the general convention.
+//
+// Reader flavours, now spec-confirmed per field (previously unmarked, so
+// this reader had defaulted every unmarked scalar to the Always<T> family
+// per convention 1 - that default was right for autoRelease but wrong for
+// four fields, fixed here):
 struct ChargeReleaseInfo {
-    std::optional<float> chargeTimeReciprocal;    // Charge_Time_sec -> stored as 1/seconds
-    Always<float> minChargePercent;                // Min_Charge_Percent; documented default 1.0
-    Always<float> chargeBase;                       // Charge_Base
-    Always<bool> autoRelease;                        // Auto_Release
-    Always<float> minRange;                           // Min_Range; documented default -1.0
-    Always<float> preChargeDelay;                      // Pre_Charge_Delay
-    std::optional<float> chargeCooldownReciprocal;      // Charge_Cooldown_Time -> 1/seconds; presence sets flag word bit 1
+    Always<float> chargeTimeReciprocal;            // Charge_Time_sec -> 1/seconds; "always" f32 reader (confirmed) - 0 whether the wrapper is absent or Charge_Time_sec itself is missing (both collapse to the same real engine value here)
+    std::optional<float> minChargePercent;         // Min_Charge_Percent; "if present" f32 reader (CORRECTED from Always<T>); documented default 1.0 - applies even when the whole wrapper is absent (see block comment)
+    std::optional<float> chargeBase;                // Charge_Base; "if present" f32 reader (CORRECTED from Always<T>); documented default 0, applies in every absence case
+    Always<bool> autoRelease;                        // Auto_Release; "always" bool reader (confirmed correct as-is)
+    std::optional<float> minRange;                     // Min_Range; "if present" f32 reader (CORRECTED from Always<T>); documented default -1.0 applies ONLY when the wrapper is present but this field is missing - see block comment for the wrapper-absent case
+    std::optional<float> preChargeDelay;                // Pre_Charge_Delay; "if present" f32 reader (CORRECTED from Always<T>); documented default 0 applies ONLY when the wrapper is present but this field is missing - see block comment for the wrapper-absent case
+    std::optional<float> chargeCooldownReciprocal;      // Charge_Cooldown_Time -> 1/seconds; "if present" f32 reader (confirmed correct as-is); presence sets flag word bit 1
     std::optional<std::string> chargingCameraShake;      // Charging_Camera_Shake (name text)
     std::optional<std::string> chargedCameraShake;        // Charged_Camera_Shake (name text)
     bool showHudOnCharge = false;                           // Charge_Flags/Flag "Show HUD on charge", bit 0
@@ -529,8 +562,11 @@ struct Weapon {
 
     FlatSpreadMetrics flatSpreadMetrics;      // Flat_Spread_Metrics (+0x190..+0x1A0)
 
-    // [HIGH CONFIDENCE (cosine) / OPEN (reader flavour, write order vs Fire_Cone_Metrics) -
-    // spec-tables-weapons-combat.md 2.2 `+0x1A4`; see tables_weapons.cpp]
+    // [CONFIRMED (reader flavour = if-present, write order vs Fire_Cone_Metrics) /
+    // HIGH CONFIDENCE (cosine) - disassembly, 2026-10-02, spec-tables-weapons-combat.md
+    // 2.2 `+0x1A4`; see tables_weapons.cpp. NOTE: when Fire_Cone_Metrics (+0x1AC..) is
+    // ALSO present, its own `+0x1A4` write runs after this one and wins in the real
+    // engine record - this field alone is not the final stored value in that case.]
     Always<float> fireConeAngleCos;   // Fire_Cone_Angle (+0x1A4): stored value is cos(half the authored degrees); documented default 1.0
     std::optional<float> fireConeLength;  // Fire_Cone_Length (+0x1A8, i); default 0
     FireConeMetrics fireConeMetrics;        // Fire_Cone_Metrics (+0x1AC..)

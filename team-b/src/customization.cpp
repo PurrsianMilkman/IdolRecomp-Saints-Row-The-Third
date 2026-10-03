@@ -120,13 +120,20 @@ CustomizationVariant ParseVariant(const Node* n) {
     const Node* mvi = FindChild(n, "Mesh_Variant_Info");
     r.meshVariantName = OptText(mvi, "Variant_Name");
     r.variantId = ReadInt32Always(mvi, "VariantID");
-    r.materials = ReadNestedTextList(FindChild(n, "Material_List"), "Material_Element", "Material");
-    // LABEL: spec-customization-data.md §2.1 (Variants row) "[OPEN - desk review 2026-09-30: the parent of
-    // `Shader_Type` is ambiguous in this cell (a `Variant` child, or a `Material_Element` sibling of ...)]";
-    // spec-tables-customization.md §4.3 marks the same parent [OPEN]. This reader takes it as a Variant child;
-    // sr3tables_customization (tables_customization_items.cpp ParseMaterialElement) reads it under
-    // Material_Element. The two sites are inconsistent by design until the parent is settled; no behaviour change.
-    r.shaderType = OptText(n, "Shader_Type");
+    // CORRECTED 2026-10-02 (spec-tables-customization.md §4.3, re-derived from the executable): Shader_Type's
+    // parent is CONFIRMED Material_Element, not Variant - matches sr3tables_customization's own reading
+    // (tables_customization_items.cpp ParseMaterialElement). Previously this read `materials` as a flat
+    // vector<string> (Material only) plus a separate Variant-level `shaderType`; now each Material_Element's
+    // own Shader_Type is read alongside its Material, and the Variant-level field is gone.
+    {
+        const Node* matList = FindChild(n, "Material_List");
+        for (const Node* e = FindChild(matList, "Material_Element"); e; e = NextSibling(matList, e, "Material_Element")) {
+            MaterialElement m;
+            m.material = OptText(e, "Material");
+            m.shaderType = OptText(e, "Shader_Type");
+            r.materials.push_back(m);
+        }
+    }
     r.defaultColorsGrid = ParseDefaultColorsGrid(n);
     return r;
 }

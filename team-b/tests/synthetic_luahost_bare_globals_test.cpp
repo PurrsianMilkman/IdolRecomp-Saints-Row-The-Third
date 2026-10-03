@@ -459,20 +459,30 @@ int main() {
               threads.errors()[0].find("boom in thread") != std::string::npos);
         CHECK(h.hitLog().hits().count("thread_new:THREAD_ERROR(error callback OPEN)") == 1);
         CHECK(threads.liveCount() == 2); // main + child
-        // Resume the child: the cadence is OPEN, so only explicit resumes run it.
         lua_getglobal(L, "R_H");
         uint16_t childId = static_cast<uint16_t>(lua_tonumber(L, -1));
         lua_pop(L, 1);
-        CHECK(!threads.resume(L, childId, err)); // finishes
+        CHECK(threads.liveIds() == (std::vector<uint16_t>{mainId, childId}));
+        // Re-entrancy flag (+0x18 bit 0, Sec26.27 RESOLVED 2026-10-02,
+        // CONFIRMED): the runner set it on each record's run and only the
+        // scheduler 0x00e0cf50 clears it, so a direct resume before any pass is
+        // refused - reported alive, not resumed.
+        CHECK(threads.resume(L, childId, err));
+        CHECK(threads.resume(L, mainId, err));
+        ok(h, L, "assert(LOG[3] == nil)");
+        // One scheduler pass, index order [main, child]: main runs to its end
+        // and is released by swap-compaction, which moves child into slot 0;
+        // the pass re-examines slot 0 and resumes child in the same pass.
+        BareThreadTable::PassResult pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.visited == 2 && pass.resumed == 2 && pass.released == 2 && pass.exemptSkipped == 0);
         ok(h, L,
-           "assert(LOG[3] == 'child resumed')\n"
+           "assert(LOG[3] == 'main resumed', LOG[3])\n"
+           "assert(LOG[4] == 'child resumed', LOG[4])\n"
            "assert(CHILD_YIELD_VALUES == 0)\n"   // resumed with no values (host substitute)
            "assert(thread_check_done(R_H) == true)\n");
-        CHECK(!threads.resume(L, mainId, err));
-        ok(h, L, "assert(LOG[4] == 'main resumed')");
         CHECK(threads.liveCount() == 0);
 
-        // thread_kill: bit only; released at the next resume; self-kill runs on
+        // thread_kill: bit only; released at the next run; self-kill runs on
         // to its next yield.
         ok(h, L,
            "function looper() while true do LOOPS = (LOOPS or 0) + 1; thread_yield() end end\n"
@@ -492,13 +502,22 @@ int main() {
         lua_getglobal(L, "SELF_ID");
         uint16_t selfId = static_cast<uint16_t>(lua_tonumber(L, -1));
         lua_pop(L, 2);
-        CHECK(!threads.resume(L, k1, err));  // killed -> released, not resumed
+        // Step 2 (killed -> release) precedes the step-3 bit-0 guard, so even a
+        // direct run releases a killed record at once. Swap-compaction moves
+        // the last record (selfkiller) into the freed slot.
+        CHECK(!threads.resume(L, k1, err));
         ok(h, L, "assert(LOOPS == 1)");
-        CHECK(threads.resume(L, selfId, err));  // kills itself, runs to its next yield
+        CHECK(threads.liveIds() == (std::vector<uint16_t>{m2, selfId}));
+        // Pass 1: main2 finishes (released, selfkiller swapped into slot 0 and
+        // re-examined); selfkiller kills itself and runs to its next yield.
+        pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.visited == 2 && pass.resumed == 2 && pass.released == 1);
         ok(h, L, "assert(AFTER_KILL == true and thread_check_done(SELF_ID) == true)");
-        CHECK(!threads.resume(L, selfId, err));
+        CHECK(threads.liveCount() == 1);
+        // Pass 2: the killed record is released without being resumed.
+        pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.visited == 1 && pass.released == 1);
         ok(h, L, "assert(NEVER == nil)");
-        CHECK(!threads.resume(L, m2, err));
         CHECK(threads.liveCount() == 0);
 
         // Current-thread stack: 0x00e0ceb0 is null above depth 16, so the 17th
@@ -533,6 +552,138 @@ int main() {
         lua_State* other = h.uiState();
         CHECK(threads.resume(other, fillerId, err)); // left untouched
         CHECK(err.find("another Lua state") != std::string::npos);
+    }
+
+    // ------------------------------------------------------------------
+    // The scheduler 0x00e0cf50 (spec-lua-api-behaviour.md Sec26.27 thread
+    // table, "[RESOLVED 2026-10-02 ...]", CONFIRMED): every live, non-exempt
+    // record resumed each pass, no budget, new records visible in the same
+    // walk, the exempt list keyed by owning state.
+    {
+        Host h({});
+        lua_State* sgp = h.gameplayState();
+        lua_State* sui = h.uiState();
+        BareThreadTable& threads = h.bareGlobals().threads();
+        std::string err;
+        ok(h, sgp, kHelper);
+
+        // A suspended thread actually resumes on the next pass: the
+        // fade_out_block shape (poll, thread_yield, poll again).
+        ok(h, sgp,
+           "FADE_DONE = false; POLLS = 0\n"
+           "function waiter() while not FADE_DONE do POLLS = POLLS + 1; thread_yield() end; WAITER_DONE = true end\n");
+        uint16_t w = threads.startThread(sgp, "waiter", err);
+        CHECK(w != BareThreadTable::kNoThread);
+        ok(h, sgp, "assert(POLLS == 1 and WAITER_DONE == nil)");
+        BareThreadTable::PassResult p = h.runScriptThreadSchedulerPass();
+        CHECK(p.visited == 1 && p.resumed == 1 && p.released == 0);
+        ok(h, sgp, "assert(POLLS == 2 and WAITER_DONE == nil)");
+        ok(h, sgp, "FADE_DONE = true");
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.resumed == 1 && p.released == 1);
+        ok(h, sgp, "assert(WAITER_DONE == true and POLLS == 2)");
+        CHECK(threads.liveCount() == 0);
+
+        // No per-pass budget: 200 suspended records plus their parent, all
+        // resumed in one pass.
+        ok(h, sgp,
+           "TICKS = 0\n"
+           "function ticker() while true do TICKS = TICKS + 1; thread_yield() end end\n"
+           "function many() for i = 1, 200 do thread_new('ticker') end; thread_yield() end\n");
+        CHECK(threads.startThread(sgp, "many", err) != BareThreadTable::kNoThread);
+        ok(h, sgp, "assert(TICKS == 200)");
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.visited == 201 && p.resumed == 201 && p.released == 1);
+        ok(h, sgp, "assert(TICKS == 400)");
+        for (uint16_t id : threads.liveIds()) threads.kill(id);
+        p = h.runScriptThreadSchedulerPass(); // killed records leave on their next run
+        CHECK(p.released == 200 && threads.liveCount() == 0);
+
+        // No pending list: a record thread_new appends mid-walk sits past the
+        // walk position and is visited (bit 0 cleared, resumed) in the same pass.
+        ok(h, sgp,
+           "COUNT = 0\n"
+           "function counter() while true do COUNT = COUNT + 1; thread_yield() end end\n"
+           "function spawner() thread_yield(); SPAWNED = thread_new('counter'); thread_yield() end\n");
+        uint16_t sp = threads.startThread(sgp, "spawner", err);
+        CHECK(sp != BareThreadTable::kNoThread);
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.visited == 2 && p.resumed == 2);
+        ok(h, sgp, "assert(COUNT == 2, COUNT)"); // once inside thread_new, once by the same pass
+
+        // Pass events: a record's own error is attributed to it; a nested
+        // child's error is not.
+        threads.kill(sp);
+        for (uint16_t id : threads.liveIds()) threads.kill(id);
+        h.runScriptThreadSchedulerPass();
+        CHECK(threads.liveCount() == 0);
+        ok(h, sgp,
+           "function late_raiser() thread_yield(); error('late boom') end\n"
+           "function child_raiser() error('child boom') end\n"
+           "function parent_spawns() thread_yield(); thread_new('child_raiser'); thread_yield() end\n");
+        uint16_t lr = threads.startThread(sgp, "late_raiser", err);
+        uint16_t ps = threads.startThread(sgp, "parent_spawns", err);
+        std::vector<BareThreadTable::PassEvent> events;
+        int beforeCalls = 0;
+        const size_t errorsBefore = threads.errors().size();
+        h.runScriptThreadSchedulerPass([&](const BareThreadTable::Record&) { ++beforeCalls; },
+                                       [&](const BareThreadTable::PassEvent& ev) { events.push_back(ev); });
+        CHECK(beforeCalls == 2 && events.size() == 2);
+        CHECK(threads.errors().size() == errorsBefore + 2);
+        for (const auto& ev : events) {
+            if (ev.id == lr) {
+                CHECK(ev.resumed && ev.bodyRan && !ev.aliveAfter);
+                CHECK(ev.error.find("late_raiser: ") == 0 && ev.error.find("late boom") != std::string::npos);
+            } else {
+                CHECK(ev.id == ps && ev.resumed && ev.bodyRan && ev.aliveAfter && ev.error.empty());
+            }
+        }
+        threads.kill(ps);
+        h.runScriptThreadSchedulerPass();
+        CHECK(threads.liveCount() == 0);
+
+        // The exempt list: empty at start-up (CONFIRMED), so a UI-state thread
+        // is resumed like any other until something exempts its state (the
+        // host never does so on its own - when the UI module does is OPEN).
+        CHECK(threads.exemptKeyCount() == 0 && !threads.isExempt(sui) && !threads.isExempt(sgp));
+        ok(h, sui, "UI_POLLS = 0; function ui_loop() while true do UI_POLLS = UI_POLLS + 1; thread_yield() end end");
+        ok(h, sgp, "GP_POLLS = 0; function gp_loop() while true do GP_POLLS = GP_POLLS + 1; thread_yield() end end");
+        uint16_t uiId = threads.startThread(sui, "ui_loop", err);
+        uint16_t gpId = threads.startThread(sgp, "gp_loop", err);
+        CHECK(uiId != BareThreadTable::kNoThread && gpId != BareThreadTable::kNoThread);
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.resumed == 2 && p.exemptSkipped == 0);
+        ok(h, sui, "assert(UI_POLLS == 2)");
+        ok(h, sgp, "assert(GP_POLLS == 2)");
+        // Exempted (refcounted: two adds): the UI thread is not resumed.
+        CHECK(threads.exemptState(sui) && threads.exemptState(sui));
+        CHECK(threads.isExempt(sui) && !threads.isExempt(sgp) && threads.exemptKeyCount() == 1);
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.visited == 2 && p.resumed == 1 && p.exemptSkipped == 1);
+        ok(h, sui, "assert(UI_POLLS == 2)");
+        ok(h, sgp, "assert(GP_POLLS == 3)");
+        // The pass still cleared the exempt record's bit 0: its own direct
+        // driver (the 0x00e0cd00 shape) can resume it - once per pass.
+        CHECK(threads.resume(sui, uiId, err));
+        ok(h, sui, "assert(UI_POLLS == 3)");
+        CHECK(threads.resume(sui, uiId, err));
+        ok(h, sui, "assert(UI_POLLS == 3)");
+        // One release leaves one reference: still exempt.
+        threads.unexemptState(sui);
+        CHECK(threads.isExempt(sui));
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.exemptSkipped == 1);
+        ok(h, sui, "assert(UI_POLLS == 3)");
+        threads.unexemptState(sui);
+        CHECK(!threads.isExempt(sui) && threads.exemptKeyCount() == 0);
+        p = h.runScriptThreadSchedulerPass();
+        CHECK(p.resumed == 2 && p.exemptSkipped == 0);
+        ok(h, sui, "assert(UI_POLLS == 4)");
+        // Up to 4 distinct keys; a 5th is refused (its behaviour is OPEN).
+        Host h2({}), h3({});
+        CHECK(threads.exemptState(sgp) && threads.exemptState(sui) && threads.exemptState(h2.gameplayState()) &&
+              threads.exemptState(h2.uiState()));
+        CHECK(!threads.exemptState(h3.gameplayState()) && threads.exemptKeyCount() == 4);
     }
 
     // ------------------------------------------------------------------

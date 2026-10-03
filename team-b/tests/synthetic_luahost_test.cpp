@@ -50,6 +50,7 @@ using sr3luahost::Host;
 using sr3luahost::RegisteredName;
 using sr3luahost::loadTaggedRegistrationList;
 using sr3luahost::registerStubs;
+using sr3luahost::VintTaggedValue;
 
 // A string global's value ("" when absent or not a string) - used where a test
 // would otherwise need the `string` library, which host states do not have.
@@ -117,6 +118,17 @@ std::vector<RegisteredName> specConfirmedFixtureNames() {
         {"game_get_is_host", "ui"},
         {"vint_get_safe_frame", "ui"},
         {"vint_is_std_res", "ui"},
+        // Batch 2026-10-02 (spec-lua-bindings.md Sec18-Sec21, "Vint UI
+        // API"), all `ui` in tools/lua_all_registered_1490_tagged.txt
+        // (grepped directly, lines 1443/1446/1455/1458/1462/1464/1469/1475).
+        {"vint_object_first_child", "ui"},
+        {"vint_object_clone", "ui"},
+        {"vint_get_time_index", "ui"},
+        {"vint_dataitem_get", "ui"},
+        {"vint_set_property", "ui"},
+        {"vint_get_property", "ui"},
+        {"vint_dataresponder_finished", "ui"},
+        {"vint_internal_dataresponder_request", "ui"},
     };
 }
 
@@ -662,14 +674,31 @@ int main() {
         // 5. game_get_key_name_for_action (Sec8.23): CONFIRMED literal
         // CAA_CAMERA_ROTATE -> STR_THE_MOUSE (case-insensitive match, real
         // __stricmp-equivalent contract); CONFIRMED "no match" -> "".
+        // Re-checked 2026-10-02 against spec-tables-ui-controls.md Sec4.1/
+        // Sec4.2 (CONFIRMED, not held): the CBA sentinel BUTTON_UNBOUND
+        // (value -1, so it never satisfies the CBA "bound" branch) and 6
+        // CAA representative entries at axis indices other than 0/2/3 are
+        // now individually named in spec text and resolve to "" too.
         {
             auto r = host.runChunk(ui,
                 "assert(game_get_key_name_for_action('CAA_CAMERA_ROTATE') == 'STR_THE_MOUSE')\n"
-                "assert(game_get_key_name_for_action('caa_camera_rotate') == 'STR_THE_MOUSE')",
+                "assert(game_get_key_name_for_action('caa_camera_rotate') == 'STR_THE_MOUSE')\n"
+                "assert(game_get_key_name_for_action('BUTTON_UNBOUND') == '')\n"
+                "assert(game_get_key_name_for_action('button_unbound') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_CAMERA_ELEVATE') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_DRIVE_STEER') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_TANK_DRIVE_FORWARD_BACKWARD') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_VPC_TURRET_RIGHT') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_TURRET_CAMERA_ELEVATE') == '')\n"
+                "assert(game_get_key_name_for_action('CAA_PLANE_ROLL_LEFT_RIGHT') == '')",
                 "actionname1.lua");
             CHECK(r.loadOk && r.pcallOk);
             // Everything else goes through the CBA/CAA tables + live bindings: OPEN.
             refusesOpen(ui, "game_get_key_name_for_action('CBA_SOME_UNKNOWN_ACTION')", "key binding");
+            // The two-key movement axes (CAA axis 2/3) stay OPEN too - their
+            // own sub-action resolvers are still unread (Sec8.23's own
+            // closing OPEN item), unaffected by the ui-controls table sync.
+            refusesOpen(ui, "game_get_key_name_for_action('CAA_WALK_FORWARD_BACKWARD')", "key binding");
         }
 
         // 6. game_peg_load_with_cb (Sec8.24): CONFIRMED arg-reading
@@ -744,14 +773,27 @@ int main() {
         // omitted/nil (the one function in this batch defaulting a
         // nil-gated bool to true); explicit false; and the HIGH-
         // CONFIDENCE-tagged conditional action-override side effect when
-        // newly enabling while stateEnum==3 ("in a vehicle").
+        // newly enabling while stateEnum==3 ("in a vehicle"). Character
+        // spawn state (Sec34.1/Sec34.3, 2026-10-02): a freshly touched
+        // name's ignore-AI is now a CONFIRMED default (off), applied by
+        // EngineState::getOrCreateCharacter() itself - not OPEN - except
+        // for the one path (a bound script NPC, Sec34.4) that correctly
+        // stays OPEN.
         {
-            // The prior flag (and, when newly enabling, the state enum /
-            // threat reference) are OPEN until set; nothing is written on refusal.
-            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "ignore-AI flag");
-            CHECK(!es.getOrCreateCharacter("npc_a").ignoreAI.known());
-            es.getOrCreateCharacter("npc_a").ignoreAI.set(true);
-            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch
+            // CONFIRMED default (Sec34.1/Sec34.3): known immediately, off,
+            // no .set() needed first.
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.known());
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
+            // Default arg2 (true) against the off default is "newly
+            // enabling", which reads stateEnum next - still OPEN until test
+            // setup, so THAT's what refuses now: the ignore-AI default-path
+            // fix moved this call's blocker forward by one field, it didn't
+            // remove the need for state-enum test setup on the enabling path.
+            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "state enum");
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false); // unchanged: refused before any write
+
+            es.getOrCreateCharacter("npc_a").ignoreAI.set(true); // test setup: simulate already-on
+            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch, stateEnum never read
             CHECK(r.loadOk && r.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
 
@@ -763,20 +805,27 @@ int main() {
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
 
             auto& npcB = es.getOrCreateCharacter("npc_b");
-            npcB.ignoreAI.set(false);
-            npcB.stateEnum.set(3); // test setup - "in a vehicle" (Sec3.4/Sec3.10)
+            npcB.stateEnum.set(3); // test setup - "in a vehicle" (Sec3.4/Sec3.10); ignoreAI already off via the CONFIRMED default
             CHECK(!npcB.actionOverrideId.known());
             auto r3 = host.runChunk(gp, "set_ignore_ai_flag('npc_b', true)", "ignoreai3.lua"); // false->true: "newly enabling"
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_b").actionOverrideId.get() == 0x19); // HIGH CONFIDENCE meaning, CONFIRMED structure
             // Not in a vehicle, nonzero threat -> override cleared to 0.
             auto& npcC = es.getOrCreateCharacter("npc_c");
-            npcC.ignoreAI.set(false);
             npcC.stateEnum.set(0);
             npcC.attackerThreatRef.set(7);
             auto r4 = host.runChunk(gp, "set_ignore_ai_flag('npc_c', true)", "ignoreai4.lua");
             CHECK(r4.loadOk && r4.pcallOk);
             CHECK(npcC.actionOverrideId.get() == 0);
+
+            // Sec34.4: a character explicitly bound to a script NPC - the
+            // override question (script_npc_flags containing "ignore_ai")
+            // is zone data this project does not have (the .czn_pc hold),
+            // so it correctly stays OPEN even though an ordinary fresh name
+            // would not be.
+            es.markScriptNpcBoundForTesting("npc_scriptnpc");
+            CHECK(!es.getOrCreateCharacter("npc_scriptnpc").ignoreAI.known());
+            refusesOpen(gp, "set_ignore_ai_flag('npc_scriptnpc', false)", "ignore-AI flag");
         }
 
         // 10./11. get_max_hit_points (Sec7.12) / set_current_hit_points
@@ -818,6 +867,39 @@ int main() {
             auto r6 = host.runChunk(gp, "set_current_hit_points('freshvictim')", "hp6.lua"); // omitted arg2 -> 0 (CONFIRMED nil-handling)
             CHECK(r6.loadOk && r6.pcallOk);
             CHECK(es.getOrCreateCharacter("freshvictim").currentHitPoints.get() == 0);
+
+            // Character spawn state (Sec34.1/Sec34.2, 2026-10-02): the
+            // CONFIRMED default-path formula, round(M * Hit_Points) with M
+            // defaulting to 1.0 for ordinary classes - applied via
+            // EngineState::applyCharacterSpawnDefaults() once a caller
+            // supplies a resolved Hit_Points value (this project has no way
+            // to attach one to a bare name on its own - see
+            // CharacterState::maxHitPoints's own doc comment - so a fresh
+            // name with no such call still stays OPEN, same as 'hero' above;
+            // not a regression).
+            refusesOpen(gp, "get_max_hit_points('grunt')", "max hit points");
+            es.applyCharacterSpawnDefaults("grunt", 150); // M=1.0: round(1.0*150) = 150
+            CHECK(es.getOrCreateCharacter("grunt").maxHitPoints.get() == 150);
+            CHECK(es.getOrCreateCharacter("grunt").currentHitPoints.get() == 150); // Sec34.1 step 2: spawns at full health
+            CHECK(es.getOrCreateCharacter("grunt").ignoreAI.get() == false);
+            auto rg = host.runChunk(gp, "assert(get_max_hit_points('grunt') == 150.0)", "hp_spawn1.lua");
+            CHECK(rg.loadOk && rg.pcallOk);
+            // Explicit multiplier, half-away-from-zero rounding (this
+            // project's one CONFIRMED round() convention, Sec26.27, reused
+            // here per Sec34.2's own "round(...)" text - see
+            // RoundHalfAwayFromZero's own doc comment, lua_engine_state.cpp).
+            es.applyCharacterSpawnDefaults("elite", 75, 1.5); // round(1.5*75) = round(112.5) = 113
+            CHECK(es.getOrCreateCharacter("elite").maxHitPoints.get() == 113);
+
+            // Sec34.4: a character explicitly bound to a script NPC - the
+            // override question (script_npc_hp) is zone data this project
+            // does not have, so even after the spawn-default formula ran,
+            // marking it bound forgets the result back to OPEN rather than
+            // guess whether an override would have applied instead.
+            es.applyCharacterSpawnDefaults("maybe_scripted", 200);
+            CHECK(es.getOrCreateCharacter("maybe_scripted").maxHitPoints.known());
+            es.markScriptNpcBoundForTesting("maybe_scripted");
+            refusesOpen(gp, "get_max_hit_points('maybe_scripted')", "max hit points");
         }
 
         // 12. ai_clear_scripted_action (Sec7.24): the confirmed resolve
@@ -1148,14 +1230,20 @@ int main() {
             es.zsceneLoadable().set("scene_a", false);
             check("assert(zscene_is_loaded('SCENE_A') == true)", "zs1.lua");
             check("assert(select('#', zscene_is_loaded('scene_a')) == 1)", "zs1b.lua");
-            // A kind-1 entry: skip byte next (false at start), then the current entry.
+            // A kind-1 entry: skip byte next (false at start), then the current
+            // entry - null at start (Sec26.25 Globals, RESOLVED 2026-10-02,
+            // CONFIRMED), so not current -> false.
             es.zsceneLoadable().set("scene_b", true);
-            refuses("zscene_is_loaded('scene_b')", "0x0153b530");
+            CHECK(es.zsceneCurrent().known() && es.zsceneCurrent().get().empty());
+            check("assert(zscene_is_loaded('scene_b') == false)", "zs1c.lua");
             es.zsceneSkipAllCutscenes().set(true);
             check("assert(zscene_is_loaded('scene_b') == true)", "zs2.lua");
             check("assert(zscene_is_loaded() == true)", "zs3.lua");
             es.zsceneSkipAllCutscenes().set(false);
-            refuses("zscene_is_loaded('scene_b')", "0x0153b530"); // then the current entry
+            // An unknown current entry (as after 0x00722f10, whose value is
+            // not specced) is refused, naming it.
+            es.zsceneCurrent().forget();
+            refuses("zscene_is_loaded('scene_b')", "0x0153b530");
             es.zsceneCurrent().set("");                             // no current scene
             check("assert(zscene_is_loaded('scene_b') == false)", "zs4.lua"); // not current -> false
             es.zsceneCurrent().set("scene_b");
@@ -1758,21 +1846,25 @@ int main() {
             if (r.known || r.knownKeys > 0) ++knownPerArea[r.area];
             CHECK(!r.global.empty() && r.spec.rfind("spec-", 0) == 0);
         }
-        // 59 = the 40 of the first batch + 6 zscene (Sec26.25 lifecycle
+        // 60 = the 40 of the first batch + 6 zscene (Sec26.25 lifecycle
         // driver and scene table, nnlt) + 10 cutscene machine + 3 vint (width,
-        // height, layout index). The Sec27/Sec28 batch's own area is counted
+        // height, layout index) + 1 vint (vintTimeIndexByDoc_, Sec19.1 batch
+        // 2026-10-02). The Sec27/Sec28 batch's own area is counted
         // separately so the two batches' checks stay independent.
-        CHECK(inv.size() == 59u + static_cast<size_t>(perArea["batch2728"]));
+        CHECK(inv.size() == 60u + static_cast<size_t>(perArea["batch2728"]));
         CHECK(perArea["co-op"] == 6 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
         CHECK(perArea["zscene"] == 13 && perArea["cutscene"] == 10 && perArea["fade"] == 14 &&
-              perArea["vint"] == 10 && perArea["other"] == 4);
+              perArea["vint"] == 11 && perArea["other"] == 4);
         CHECK(knownPerArea["co-op"] == 1 && knownPerArea["tutorial"] == 1 && knownPerArea["vehicle-store"] == 1);
-        // vint: the two safe-frame constants (CONFIRMED, nnlt) are set at start.
-        // zscene: only the skip byte 0x0153b556 (false, Sec26.25 Globals, 2026-10-01).
+        // vint: the two safe-frame constants (CONFIRMED, nnlt) are set at start;
+        // vintTimeIndexByDoc_ (a per-name map) starts empty (OPEN, Sec19.1), so
+        // it doesn't add to the known count.
+        // zscene: the skip byte 0x0153b556 (false, Sec26.25 Globals, 2026-10-01)
+        // and the current entry 0x0153b530 (null, Sec26.25 Globals, 2026-10-02).
         // other: objectResolves_ now carries 5 known entries (Sec29's closed
         // literal set - "homies"/"shopkeepers"/"-- Cutscene Script Group --"/
         // "#PLAYER1#"/"#PLAYER2#"), so its one inventory record counts as known.
-        CHECK(knownPerArea["zscene"] == 1 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
+        CHECK(knownPerArea["zscene"] == 2 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
               knownPerArea["vint"] == 2 && knownPerArea["other"] == 1);
         for (const auto& r : inv) {
             if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
@@ -1797,7 +1889,8 @@ int main() {
         for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
             CHECK(es.tutorialState().get(EngineState::tutorialStateKey(i)) == (i <= 188 ? 0 : 1));
         CHECK(es.zsceneSkipAllCutscenes().known() && es.zsceneSkipAllCutscenes().get() == false);
-        CHECK(!es.zsceneStateCode().known() && !es.zsceneCurrent().known() && !es.zscenePending().known());
+        CHECK(es.zsceneCurrent().known() && es.zsceneCurrent().get().empty()); // 0x0153b530 null at start
+        CHECK(!es.zsceneStateCode().known() && !es.zscenePending().known());
         CHECK(!es.vintDisplayMode().known() && !es.vintRecordFirst().known());
         CHECK(es.vintSafeFrameScale1().get() == static_cast<double>(0.075f) &&
               es.vintSafeFrameScale2().get() == static_cast<double>(0.925f));
@@ -1858,6 +1951,232 @@ int main() {
                 CHECK(std::string(e.what()).find("named-object resolution['" + name + "']") != std::string::npos);
             }
             CHECK(threw);
+        }
+    }
+
+    // --- Batch 2026-10-02: spec-lua-bindings.md Sec18-Sec21 ("Vint UI
+    // API"), 8 names - vint_object_first_child/vint_object_clone (Sec18),
+    // vint_get_time_index/vint_dataitem_get (Sec19), vint_set_property/
+    // vint_get_property (Sec20), vint_dataresponder_finished/
+    // vint_internal_dataresponder_request (Sec21). Same "exercised through
+    // the real Lua-visible global, a genuine round-trip through the real
+    // Lua 5.1 C API" convention as every other spec-confirmed test above.
+    {
+        Host host(specConfirmedFixtureNames());
+        lua_State* ui = host.uiState();
+        lua_State* gp = host.gameplayState();
+        sr3luahost::EngineState& es = host.engineState();
+        auto refusesOpen = [&](lua_State* st, const std::string& chunk, const char* needle) {
+            auto r = host.runChunk(st, chunk, "vint1821_open.lua");
+            CHECK(r.loadOk && !r.pcallOk);
+            CHECK(r.pcallError.find("is OPEN") != std::string::npos);
+            CHECK(r.pcallError.find(needle) != std::string::npos);
+        };
+        auto ok = [&](lua_State* st, const std::string& chunk) {
+            auto r = host.runChunk(st, chunk, "vint1821.lua");
+            CHECK(r.loadOk && r.pcallOk);
+            if (!r.pcallOk) std::cerr << chunk << ": " << r.pcallError << "\n";
+        };
+        auto globalNumber = [&](lua_State* st, const char* name) -> double {
+            lua_getglobal(st, name);
+            double v = lua_tonumber(st, -1);
+            lua_pop(st, 1);
+            return v;
+        };
+
+        // All 8 are `ui`-tagged (CONFIRMED, tools/lua_all_registered_1490_
+        // tagged.txt) - nil in gameplay.
+        ok(gp,
+           "assert(vint_object_first_child == nil and vint_object_clone == nil and "
+           "vint_get_time_index == nil and vint_dataitem_get == nil and "
+           "vint_set_property == nil and vint_get_property == nil and "
+           "vint_dataresponder_finished == nil and vint_internal_dataresponder_request == nil)");
+
+        // 1. vint_object_first_child (Sec18.1): CONFIRMED - zero Lua values
+        // (not even 0.0) on either a bad handle or a resolved object with
+        // no first child; exactly one number (the child's handle) when a
+        // real first child exists.
+        {
+            ok(ui, "assert(select('#', vint_object_first_child(999999)) == 0)"); // bad handle
+            uint32_t root = es.registerVdoObjectForTesting("root", 0, 0);
+            ok(ui, "assert(select('#', vint_object_first_child(" + std::to_string(root) + ")) == 0)"); // no child yet
+            uint32_t child = es.registerVdoObjectForTesting("child", root, 0);
+            es.setVdoObjectFirstChildForTesting(root, child);
+            ok(ui, "assert(vint_object_first_child(" + std::to_string(root) + ") == " + std::to_string(child) + ")");
+        }
+
+        // 2. vint_object_clone (Sec18.2): CONFIRMED - always exactly 1
+        // number, 0.0 on every failure path (no current document - OPEN;
+        // an unresolvable orig_handle); the new clone's real handle on
+        // success, scoped to the resolved parent (explicit arg, or the
+        // original's own parent as fallback - including a given-but-
+        // unresolvable parent handle) and the resolved CURRENT document
+        // (not the original's own document).
+        {
+            refusesOpen(ui, "vint_object_clone(1)", "current default vint document"); // OPEN: no current document yet
+            es.currentDefaultDocHandle().set(42);
+            ok(ui, "assert(vint_object_clone(999999) == 0.0)"); // bad orig_handle -> 0.0, logged (not Lua-visible), not 0 Lua values
+
+            uint32_t parentA = es.registerVdoObjectForTesting("parentA", 0, 7);
+            uint32_t origWithParent = es.registerVdoObjectForTesting("orig_with_parent", parentA, 7);
+
+            // No parent arg -> falls back to the ORIGINAL's own parent
+            // (parentA); the clone is scoped to the CURRENT document (42),
+            // not the original's own document (7).
+            ok(ui, "CLONE1 = vint_object_clone(" + std::to_string(origWithParent) + ")");
+            uint32_t clone1 = static_cast<uint32_t>(globalNumber(ui, "CLONE1"));
+            CHECK(clone1 != 0 && clone1 != origWithParent);
+            const auto* c1obj = es.vdoObjectForTesting(clone1);
+            CHECK(c1obj != nullptr);
+            if (c1obj) CHECK(c1obj->parentHandle == parentA && c1obj->docHandle == 42);
+
+            // An explicit, resolvable parent arg overrides the fallback.
+            uint32_t parentB = es.registerVdoObjectForTesting("parentB", 0, 7);
+            ok(ui, "CLONE2 = vint_object_clone(" + std::to_string(origWithParent) + ", " + std::to_string(parentB) + ")");
+            uint32_t clone2 = static_cast<uint32_t>(globalNumber(ui, "CLONE2"));
+            CHECK(clone2 != 0 && clone2 != clone1);
+            const auto* c2obj = es.vdoObjectForTesting(clone2);
+            CHECK(c2obj != nullptr);
+            if (c2obj) CHECK(c2obj->parentHandle == parentB && c2obj->docHandle == 42);
+
+            // A given-but-unresolvable parent handle ALSO falls back to the
+            // original's own parent (CONFIRMED: "falls back ... if that
+            // resolution yields nothing").
+            ok(ui, "CLONE3 = vint_object_clone(" + std::to_string(origWithParent) + ", 888888)");
+            uint32_t clone3 = static_cast<uint32_t>(globalNumber(ui, "CLONE3"));
+            const auto* c3obj = es.vdoObjectForTesting(clone3);
+            CHECK(c3obj != nullptr);
+            if (c3obj) CHECK(c3obj->parentHandle == parentA);
+        }
+
+        // 3. vint_get_time_index (Sec19.1): CONFIRMED - absent, nil, OR the
+        // literal number 0 all take the SAME current-document fallback
+        // path (a genuine difference from every other optional numeric-
+        // handle argument elsewhere in this document). This host cannot
+        // separately reach the real "resolution failed" zero-push path
+        // (see EngineState::vintGetTimeIndex's own doc comment), so every
+        // call either returns a real, test-set value or refuses as OPEN.
+        {
+            refusesOpen(ui, "vint_get_time_index(5)", "vint document time index"); // explicit nonzero doc, never set
+            es.vintTimeIndexByDoc().set("5", 12.5);
+            ok(ui, "assert(vint_get_time_index(5) == 12.5)");
+
+            // currentDefaultDocHandle_ is 42 (set above, in test 2) - the
+            // fallback path, not yet set in vintTimeIndexByDoc_.
+            refusesOpen(ui, "vint_get_time_index()", "vint document time index");
+            refusesOpen(ui, "vint_get_time_index(0)", "vint document time index"); // explicit 0 -> SAME fallback, not "explicit"
+            es.vintTimeIndexByDoc().set("42", 99.0);
+            ok(ui, "assert(vint_get_time_index() == 99.0)");
+            ok(ui, "assert(vint_get_time_index(0) == 99.0)");
+            ok(ui, "assert(vint_get_time_index(5) == 12.5)"); // explicit nonzero stays independent of the fallback
+        }
+
+        // 4. vint_dataitem_get (Sec19.2): CONFIRMED - zero Lua values on a
+        // bad handle; every populated field of the resolved data item, in
+        // order, otherwise; bounded at the real 32-slot cap.
+        {
+            ok(ui, "assert(select('#', vint_dataitem_get(999999)) == 0)"); // bad handle
+
+            VintTaggedValue n1;
+            n1.kind = VintTaggedValue::Kind::Number;
+            n1.number = 3.5;
+            VintTaggedValue b1;
+            b1.kind = VintTaggedValue::Kind::Boolean;
+            b1.boolean = true;
+            VintTaggedValue s1;
+            s1.kind = VintTaggedValue::Kind::String;
+            s1.text = "hello";
+            uint32_t di = es.registerVintDataItemForTesting({n1, b1, s1});
+            ok(ui,
+               "local a, b, c = vint_dataitem_get(" + std::to_string(di) + ")\n"
+               "assert(a == 3.5 and b == true and c == 'hello')");
+
+            std::vector<VintTaggedValue> many;
+            for (int i = 0; i < 40; ++i) {
+                VintTaggedValue v;
+                v.kind = VintTaggedValue::Kind::Number;
+                v.number = i;
+                many.push_back(v);
+            }
+            uint32_t di2 = es.registerVintDataItemForTesting(many); // CONFIRMED cap: truncated to 32
+            ok(ui, "assert(select('#', vint_dataitem_get(" + std::to_string(di2) + ")) == 32)");
+        }
+
+        // 5./6. vint_set_property / vint_get_property (Sec20): CONFIRMED -
+        // vint_set_property always returns zero Lua values, every path
+        // (including a missing/non-string property_name, and an
+        // unresolvable handle - both silent no-ops); vint_get_property
+        // returns zero Lua values (not even nil) on a bad handle or a
+        // property-name miss, else echoes back exactly what was last set
+        // (the real per-type dispatch/tween-redirect/callback-claim
+        // mechanisms are NOT modeled - see EngineState::setVintProperty's
+        // own doc comment).
+        {
+            uint32_t obj = es.registerVdoObjectForTesting("widget", 0, 0);
+            ok(ui, "assert(select('#', vint_get_property(999999, 'scale')) == 0)"); // bad handle
+            ok(ui, "assert(select('#', vint_get_property(" + std::to_string(obj) + ", 'scale')) == 0)"); // never set
+
+            ok(ui, "assert(select('#', vint_set_property(" + std::to_string(obj) + ", 'is_paused', false)) == 0)");
+            ok(ui, "local a = vint_get_property(" + std::to_string(obj) + ", 'is_paused'); assert(a == false)");
+
+            // Multi-value (vec2-shaped) round-trip.
+            ok(ui, "vint_set_property(" + std::to_string(obj) + ", 'scale', 1.5, 2.5)");
+            ok(ui, "local x, y = vint_get_property(" + std::to_string(obj) + ", 'scale'); assert(x == 1.5 and y == 2.5)");
+
+            // CONFIRMED: missing/non-string property_name -> silent no-op.
+            ok(ui, "assert(select('#', vint_set_property(" + std::to_string(obj) + ")) == 0)"); // no property_name at all
+            ok(ui, "vint_set_property(" + std::to_string(obj) + ", 123, 'x')"); // non-string name -> no-op
+            ok(ui, "assert(select('#', vint_get_property(" + std::to_string(obj) + ", 123)) == 0)"); // confirms nothing stored
+
+            // An unresolvable handle silently no-ops (CONFIRMED: "an
+            // unresolvable handle simply fails to resolve later").
+            ok(ui, "assert(select('#', vint_set_property(999999, 'scale', 1, 2)) == 0)");
+            ok(ui, "assert(select('#', vint_get_property(999999, 'scale')) == 0)");
+
+            // Case-insensitive property-name hash match (CONFIRMED, Sec9.2:
+            // the engine's own lower-cased string hash).
+            ok(ui, "vint_set_property(" + std::to_string(obj) + ", 'Visible', true)");
+            ok(ui, "assert(vint_get_property(" + std::to_string(obj) + ", 'VISIBLE') == true)");
+        }
+
+        // 7./8. vint_dataresponder_finished / vint_internal_dataresponder_
+        // request (Sec21): CONFIRMED - no record at all -> "finished"
+        // (true), the real, honestly-flagged quirk; the request native
+        // never creates a record and always returns zero Lua values, even
+        // for a name with no record (a complete, silent no-op) or wrong
+        // argument types.
+        {
+            ok(ui, "assert(vint_dataresponder_finished('never_registered') == true)");
+            es.registerDataResponderForTesting("my_responder", false);
+            ok(ui, "assert(vint_dataresponder_finished('my_responder') == false)");
+
+            ok(ui, "assert(select('#', vint_internal_dataresponder_request('never_registered', 'cb', 10)) == 0)");
+            ok(ui, "assert(vint_dataresponder_finished('never_registered') == true)"); // still no record - unaffected
+            CHECK(es.dataResponderDispatchAttempts("never_registered") == 0);
+
+            ok(ui, "vint_internal_dataresponder_request('my_responder', 'cb', 10)");
+            CHECK(es.dataResponderDispatchAttempts("my_responder") == 1);
+            ok(ui, "assert(vint_dataresponder_finished('my_responder') == false)"); // this native never flips it (CONFIRMED)
+
+            // CONFIRMED: wrong/missing arg type -> silent no-op, no dispatch attempt.
+            ok(ui, "vint_internal_dataresponder_request('my_responder', 123, 10)");    // callback_name not a string
+            CHECK(es.dataResponderDispatchAttempts("my_responder") == 1);
+            ok(ui, "vint_internal_dataresponder_request('my_responder', 'cb', 'ten')"); // max_records not a number
+            CHECK(es.dataResponderDispatchAttempts("my_responder") == 1);
+            ok(ui, "vint_internal_dataresponder_request('my_responder')");              // missing both
+            CHECK(es.dataResponderDispatchAttempts("my_responder") == 1);
+
+            es.registerDataResponderForTesting("my_responder", true);
+            ok(ui, "assert(vint_dataresponder_finished('my_responder') == true)");
+        }
+
+        // Every one of the 8 calls above must fold into the SAME HitLog
+        // ranking every other stub/hook in this project uses.
+        for (const char* name : {"vint_object_first_child", "vint_object_clone", "vint_get_time_index",
+                                  "vint_dataitem_get", "vint_set_property", "vint_get_property",
+                                  "vint_dataresponder_finished", "vint_internal_dataresponder_request"}) {
+            CHECK(host.hitLog().hits().count(name) == 1);
+            CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }
     }
 

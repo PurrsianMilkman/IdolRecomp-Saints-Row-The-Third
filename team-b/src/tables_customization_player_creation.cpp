@@ -105,15 +105,17 @@ NormalMapSettings ParseNormalMapSettings(const Node* row) {
     n.bodyTypeIndex = MatchName(n.name, kBodyTypeNames.data(), kBodyTypeNames.size());
     const Node* slidersWrap = FindChild(row, "Morph_Sliders");
     for (const Node* s = FindChild(slidersWrap, "Morph_Slider"); s; s = NextSibling(slidersWrap, s, "Morph_Slider")) {
-        // LABEL: spec-tables-customization.md §15.1, [OPEN - desk review 2026-09-30]: no compare operator is
-        // given for either cap below (4 sliders/type, 8 keys/slider); both `>=` are our assumption. The
-        // reviewer's finding is that only the normals cap (materials.cpp, §9.2) can change a real result.
+        // CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_009fbf10` read in full): both caps are
+        // pre-checked while-loop conditions (tested BEFORE processing each entry) - the slider loop runs
+        // `while (nextElement != 0 && count < 4)`, keeping a true maximum of exactly 4, matching the `>= 4`
+        // already coded here. Only the normals cap (materials.cpp, §9.2) can change a real result.
         if (n.morphSliders.size() >= 4) break;  // cap 4 sliders/type (§15.1)
         MorphSlider slider;
         slider.sliderName = OptText(s, "Slider_Name");
         const Node* keysWrap = FindChild(s, "Slider_Keys");
         for (const Node* k = FindChild(keysWrap, "Slider_Key"); k; k = NextSibling(keysWrap, k, "Slider_Key")) {
-            // LABEL: spec-tables-customization.md §15.1, [OPEN - desk review 2026-09-30]: see the note above.
+            // CONFIRMED 2026-10-02 (same dump as above): the key loop runs `while (nextElement != 0 && count < 8)`,
+            // keeping a true maximum of exactly 8, matching the `>= 8` already coded here.
             if (slider.sliderKeys.size() >= 8) break;  // cap 8 keys/slider (§15.1)
             SliderKey key;
             key.sliderPosition = ReadFloatAlways(k, "Slider_Position");
@@ -237,8 +239,15 @@ Preset ParsePreset(const Node* row) {
     p.skinColor = OptText(row, "Skin_Color");
 
     const Node* compositesWrap = FindChild(row, "Composites");
-    for (const Node* c = FindChild(compositesWrap, "Composite"); c; c = NextSibling(compositesWrap, c, "Composite"))
+    for (const Node* c = FindChild(compositesWrap, "Composite"); c; c = NextSibling(compositesWrap, c, "Composite")) {
+        // Hard cap: 5 inline Composite entries per preset - previously undocumented, CONFIRMED 2026-10-02 from
+        // the executable (the fixed 100-byte Preset record has room for no more: up to 5 inline Layer pointers
+        // at +0x34-+0x47 plus 5 inline {R,G,B,0xff} colour cells at +0x48-+0x5B). Real data never approaches
+        // this (§16.2 validation: 8 rows total), so this cannot change a real result, but it is now a CONFIRMED
+        // fact, not an OPEN compare-operator guess like this file's other caps.
+        if (p.composites.size() >= 5) break;
         p.composites.push_back(ParsePresetComposite(c));
+    }
 
     const Node* presetGridWrap = FindChild(row, "Preset_Grid");
     for (const Node* e = FindChild(presetGridWrap, "Preset_Element"); e; e = NextSibling(presetGridWrap, e, "Preset_Element")) {

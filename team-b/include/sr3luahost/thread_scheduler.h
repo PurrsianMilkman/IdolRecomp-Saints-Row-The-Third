@@ -2,6 +2,13 @@
 // registration of thread_new/thread_yield/thread_kill/thread_check_done/
 // thread_close.
 //
+// 2026-10-02: superseded for everything but thread_close (see
+// registerThreadClose below). The engine's real script-thread table, its
+// runner and its scheduler 0x00e0cf50 (which DOES resume yielded threads -
+// spec-lua-api-behaviour.md Sec26.27, RESOLVED 2026-10-02) are modelled by
+// BareThreadTable (bare_globals.h; Host::runScriptThreadSchedulerPass). The
+// "nothing resumes" notes below describe only this scaffold's own handles.
+//
 // Why this exists (confirmed directly, not guessed, per HANDOFF.md's own
 // write-up for this task): these 5 names are called extensively by real
 // shipped scripts (thread_yield alone: 1,474 call sites / 94 scripts,

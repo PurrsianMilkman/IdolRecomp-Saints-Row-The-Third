@@ -505,13 +505,55 @@ void testCharacterHeight() {
 }
 
 // ===========================================================================
-// 13.1 character_customization_categories.xtbl / 13.3 character.xtbl - row
-// locators only (no field schema recovered, §13.1/§13.3).
+// 13.1 character_customization_categories.xtbl - full schema (CONFIRMED
+// 2026-10-02: Name/Display_name/Is_DLC/locked, 20-row cap, duplicate-Name
+// truncation hazard). 13.3 character.xtbl stays a row locator only (schema
+// still OPEN, §13.3).
 // ===========================================================================
 void testCharacterCustomizationCategoryRows() {
     Document d = P(R"(<root><Table><category><anything>x</anything></category><category/></Table></root>)");
     std::vector<const Node*> rows = FindCharacterCustomizationCategoryRows(d);
     CHECK(rows.size() == 2);
+}
+
+void testCharacterCustomizationCategories() {
+    // Basic field read: Name, Display_name, Is_DLC, Flags>locked (§13.1).
+    Document d = P(R"(<root><Table>
+      <category><Name>Headwear</Name><Display_name>CAT_HEADWEAR</Display_name><Is_DLC>no</Is_DLC>
+        <Flags><Flag>locked</Flag></Flags></category>
+      <category><Name>Eyewear</Name></category>
+    </Table></root>)");
+    std::vector<CharacterCustomizationCategory> rows = ParseCharacterCustomizationCategoriesTable(d);
+    CHECK(rows.size() == 2);
+    CHECK(rows[0].name == "Headwear" && rows[0].displayName == "CAT_HEADWEAR");
+    CHECK(rows[0].isDlc.present && rows[0].isDlc.value == false);
+    CHECK(rows[0].locked);
+    CHECK(rows[1].name == "Eyewear" && !rows[1].locked);
+
+    // Hard cap: 20 rows (0x14, §13.1) - a 21st distinctly-named row must not appear.
+    {
+        std::string xml = "<root><Table>";
+        for (int i = 0; i < 25; ++i) xml += "<category><Name>Cat" + std::to_string(i) + "</Name></category>";
+        xml += "</Table></root>";
+        Document dc = P(xml);
+        std::vector<CharacterCustomizationCategory> capped = ParseCharacterCustomizationCategoriesTable(dc);
+        CHECK(capped.size() == 20);
+        CHECK(capped[19].name == "Cat19");
+    }
+
+    // Duplicate-Name truncation hazard ("FOR TEAM B" - §13.1): a repeated
+    // Name abandons every remaining row, not just the duplicate.
+    {
+        Document dd = P(R"(<root><Table>
+          <category><Name>Alpha</Name></category>
+          <category><Name>Beta</Name></category>
+          <category><Name>Alpha</Name></category>
+          <category><Name>Gamma</Name></category>
+        </Table></root>)");
+        std::vector<CharacterCustomizationCategory> truncated = ParseCharacterCustomizationCategoriesTable(dd);
+        CHECK(truncated.size() == 2);  // Alpha, Beta only - the second Alpha stops the parse, Gamma never read
+        CHECK(truncated[0].name == "Alpha" && truncated[1].name == "Beta");
+    }
 }
 
 void testCharacterRows() {
@@ -688,6 +730,19 @@ void testPlayerPresets() {
     CHECK(rows[0].regionalPresets.size() == 1 && rows[0].regionalPresets[0].category == "Face");
 }
 
+// Hard cap: 5 inline Composite entries per preset (previously undocumented,
+// CONFIRMED 2026-10-02 - the fixed 100-byte record has room for no more).
+void testPlayerPresetsCompositeCap() {
+    std::string xml = "<root><Table><Preset><Name>Capped</Name><Composites>";
+    for (int i = 0; i < 8; ++i) xml += "<Composite><Layer>layer" + std::to_string(i) + "</Layer></Composite>";
+    xml += "</Composites></Preset></Table></root>";
+    Document d = P(xml);
+    std::vector<Preset> rows = ParsePlayerPresetsTable(d);
+    CHECK(rows.size() == 1);
+    CHECK(rows[0].composites.size() == 5);
+    CHECK(rows[0].composites[4].layer == "layer4");
+}
+
 // ===========================================================================
 // 16.3 player_regional_presets.xtbl
 // ===========================================================================
@@ -744,6 +799,7 @@ int main() {
         testCharacterDefinitions();
         testCharacterHeight();
         testCharacterCustomizationCategoryRows();
+        testCharacterCustomizationCategories();
         testCharacterRows();
         testCharacterTypes();
         testPlayerCreation();
@@ -753,6 +809,7 @@ int main() {
         testPlayerCreationSkinColors();
         testPlayerMasterSliders();
         testPlayerPresets();
+        testPlayerPresetsCompositeCap();
         testPlayerRegionalPresets();
         testPlayerCustShotMap();
     } catch (const std::exception& e) {

@@ -56,6 +56,23 @@ std::optional<float> ReadSecAsMsIfPresent(const Node* node, std::string_view nam
     if (v) return *v * 1000.0f;
     return std::nullopt;
 }
+// Charge_Time_sec -> stored as 1/seconds, read with the "always" f32 reader
+// (spec-tables-weapons-combat.md 2.3, CONFIRMED 2026-10-02). Division-by-zero
+// guard matches the documented transform (reciprocal of 0 is defined as 0).
+Always<float> ReadReciprocalAlways(const Node* node, std::string_view name) {
+    Always<float> a = ReadFloatAlways(node, name);
+    if (a.present) a.value = (a.value != 0.0f) ? (1.0f / a.value) : 0.0f;
+    return a;
+}
+// Tone/Tint R/G/B component -> normalised [0.0, 1.0] float, read with the
+// "always" f32 reader (spec-tables-weapons-combat.md 10.1, CONFIRMED/
+// CORRECTED 2026-10-02: the engine divides the authored 0-255 integer by
+// 255.0 and stores a vec3 of floats, not the raw integers).
+Always<float> ReadTintComponentAlways(const Node* node, std::string_view name) {
+    Always<float> a = ReadFloatAlways(node, name);
+    if (a.present) a.value /= 255.0f;
+    return a;
+}
 
 // Constant_Effect/Condition (spec section 2.2): a 3-way match with default 0
 // (NOT sr3xtbl::EnumIndex, which would give -1 for "no match").
@@ -335,12 +352,19 @@ WaterSprayInfo ParseWaterSprayInfo(const Node* row) {
 ChargeReleaseInfo ParseChargeReleaseInfo(const Node* row) {
     ChargeReleaseInfo r;
     const Node* n = FindChild(row, "Charge_Release_Info");
-    if (auto sec = GetFloat(n, "Charge_Time_sec")) r.chargeTimeReciprocal = (*sec != 0.0f) ? (1.0f / *sec) : 0.0f;
-    r.minChargePercent = ReadFloatAlways(n, "Min_Charge_Percent");
-    r.chargeBase = ReadFloatAlways(n, "Charge_Base");
+    // Reader flavours below are spec-confirmed 2026-10-02 (section 2.3): only
+    // Charge_Time_sec and Auto_Release use the "always" reader; the other four
+    // scalars use the "if present" reader (this reader previously had all five
+    // non-bool scalars on Always<T>, which was this file's documented default
+    // for an unmarked cell - now corrected per field; see the struct comment
+    // in weapons.h for the wrapper-absent-vs-field-missing nuance on
+    // minRange/preChargeDelay that this reader does not attempt to model).
+    r.chargeTimeReciprocal = ReadReciprocalAlways(n, "Charge_Time_sec");
+    r.minChargePercent = GetFloat(n, "Min_Charge_Percent");
+    r.chargeBase = GetFloat(n, "Charge_Base");
     r.autoRelease = ReadBoolAlways(n, "Auto_Release");
-    r.minRange = ReadFloatAlways(n, "Min_Range");
-    r.preChargeDelay = ReadFloatAlways(n, "Pre_Charge_Delay");
+    r.minRange = GetFloat(n, "Min_Range");
+    r.preChargeDelay = GetFloat(n, "Pre_Charge_Delay");
     if (auto sec = GetFloat(n, "Charge_Cooldown_Time")) r.chargeCooldownReciprocal = (*sec != 0.0f) ? (1.0f / *sec) : 0.0f;
     r.chargingCameraShake = OptText(n, "Charging_Camera_Shake");
     r.chargedCameraShake = OptText(n, "Charged_Camera_Shake");
@@ -564,11 +588,18 @@ Weapon ParseWeapon(const Node* row) {
     w.flatSpreadMetrics = ParseFlatSpreadMetrics(row);
 
     {
-        // [HIGH CONFIDENCE - spec-tables-weapons-combat.md 2.2 (`+0x1A4` Fire_Cone_Angle): "the stored
-        // value is cos(1/2 x angle) (HIGH CONFIDENCE that the transcendental is cosine)"; also
-        // 2.3 Fire_Cone_Metrics `Angle` form. Same row: [OPEN] the reader flavour (always / if
-        // present) and which of the two `+0x1A4` writes wins are not stated. Conversion kept
-        // as-is; not CONFIRMED.]
+        // [CONFIRMED - disassembly, 2026-10-02 (spec-tables-weapons-combat.md 2.2, `+0x1A4`
+        // Fire_Cone_Angle): reader flavour settled as "if present" (FUN_00DACD40, default
+        // 1.0 pre-set then overwritten only if found) - functionally equivalent to the
+        // ReadFloatAlways-then-guard-on-present pattern kept here (both only commit a value
+        // when the element is found). Write order vs Fire_Cone_Metrics (section 2.3) is also
+        // now settled: Fire_Cone_Metrics's reader always runs AFTER Fire_Cone_Angle's in the
+        // real loader, so when BOTH are present, Fire_Cone_Metrics's own `+0x1A4` write (not
+        // modelled as a value here - see FireConeMetrics/convention 3) is the one that
+        // actually stands in the engine record; `w.fireConeAngleCos` below reflects only
+        // Fire_Cone_Angle's own write and is NOT the final engine value in that case. The
+        // cosine transcendental itself stays HIGH CONFIDENCE (not independently confirmed
+        // this pass).]
         Always<float> angle = ReadFloatAlways(row, "Fire_Cone_Angle");
         if (angle.present) {
             w.fireConeAngleCos.value = std::cos(angle.value * 0.5f * kDegToRad);
@@ -1011,9 +1042,15 @@ AimDriftProfile ParseAimDriftProfile(const Node* row) {
     r.bulletMissAimingFarAccuracy = ReadFloatAlways(aiming, "Far_accuracy");
     r.bulletMissAimingBouncesPerSec = ReadFloatAlways(aiming, "Bounces_per_sec");
     r.bulletMissAimingSpeedMultipler = ReadFloatAlways(aiming, "Speed_multipler");
-    // [OPEN / NEEDS-EXE - spec-tables-weapons-combat.md section 8: "Recovery in
-    // 0/20 real rows (section 18.6) and five undocumented elements in 20/20"].
-    // Spec path kept unchanged; the empty case is reported, not hidden.
+    // [CONFIRMED - disassembly, 2026-10-02, spec-tables-weapons-combat.md
+    // section 8: `FUN_00B6C370`'s full body was read - the `Bullet_miss ->
+    // Recovery` path is exactly where the real reader looks (not a
+    // mis-association), and the three recovery* defaults are pre-set
+    // unconditionally before the presence check (same pattern as
+    // Charge_Release_Info, section 2.3), so a row without a `Recovery`
+    // wrapper getting all three defaults is expected/normal, not suspect.
+    // The empty case is still reported in `diagnostics` (factually useful),
+    // just no longer phrased as an open question - see combat.h.
     const Node* recovery = FindChild(bm, "Recovery");
     if (!recovery) r.diagnostics.push_back(kAimDriftRecoveryEmptyDiagnostic);
     r.recoveryPenalty = ReadFloatAlways(recovery, "recover_penalty");
@@ -1128,9 +1165,9 @@ ExplosionRecord ParseExplosion(const Node* row) {
     r.screenEffectsAttenEnd = ReadFloatAlways(se, "Atten_End");
     const Node* tone = FindChild(se, "Tone");
     const Node* tint = FindChild(tone, "Tint");
-    r.screenEffectsTintR = GetInt32(tint, "R");
-    r.screenEffectsTintG = GetInt32(tint, "G");
-    r.screenEffectsTintB = GetInt32(tint, "B");
+    r.screenEffectsTintR = ReadTintComponentAlways(tint, "R");
+    r.screenEffectsTintG = ReadTintComponentAlways(tint, "G");
+    r.screenEffectsTintB = ReadTintComponentAlways(tint, "B");
     r.screenEffectsTintScale = GetFloat(tone, "Tint_scale");
     r.screenEffectsSaturation = GetFloat(tone, "Saturation");
     r.screenEffectsLockedAttenuation = GetBool(se, "Locked_Attenuation").value_or(false);

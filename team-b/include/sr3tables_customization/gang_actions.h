@@ -35,7 +35,18 @@ struct GangVehicleGroup {
                                           // cross-referenced only per this spec's own text, not resolved here)
 };
 struct GangSignPose {
-    std::optional<std::string> displayName;  // display_name (localized)
+    std::optional<std::string> displayName;  // display_name. CORRECTED 2026-10-02 (§10, re-derived from the
+                                               // executable, `func_0x00839290.txt` read in full): this is a RAW
+                                               // TEXT HASH (via FUN_00daba10 then FUN_00db12c0 - the same
+                                               // raw-hash helper customization_materials.xtbl's Name and
+                                               // customization_compositing.xtbl's Name/diffuse/normal go
+                                               // through, §9.1/§9.3), NOT one of the FUN_0084xxxx-family
+                                               // localization-id resolvers every other "DisplayName"-style field
+                                               // in this document uses - previously documented as "(localized)"
+                                               // here, which was wrong. No behaviour change: this reader only
+                                               // ever captured the raw element text either way (no hash is
+                                               // computed in this project's readers), so the correction is
+                                               // comment-only.
     StateAnimation animation;                  // animation (State/Animation pair via FUN_004bf810)
 };
 struct GangCustomization {

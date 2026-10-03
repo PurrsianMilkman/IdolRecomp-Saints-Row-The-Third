@@ -146,7 +146,12 @@ struct FlagEntry {
                                         // instead of a generic array slot - BLING_COLLIDER_ACTIVE, "HAT
                                         // ACTIVE", "PIMP COAT", "flasher coat" (§7.2) - that fast-path
                                         // caching is derived/runtime, not modelled; the row's Name is kept
-                                        // uniformly regardless of which path it takes.
+                                        // uniformly regardless of which path it takes. CONFIRMED 2026-10-02
+                                        // (re-derived from the executable): the exact name->global mapping is
+                                        // now known (HAT ACTIVE/PIMP COAT/flasher coat -> 3 dedicated index
+                                        // caches; BLING_COLLIDER_ACTIVE belongs to a wholly separate 4-entry
+                                        // checklist, 2 of 4 names still unknown) - still not modelled, no
+                                        // behaviour change, this is purely a derived/runtime mechanism.
 };
 FlagEntry ParseFlagEntry(const Node* row);
 std::vector<FlagEntry> ParseCustomizationFlagsTable(const Document& doc);

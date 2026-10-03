@@ -250,7 +250,10 @@ struct Preset {
     std::optional<std::string> hairColorPrimary;    // Hair_Color_Primary -> §15.2's loaded Hair_Color array (by name)
     std::optional<std::string> hairColorSecondary;   // Hair_Color_Secondary
     std::optional<std::string> skinColor;              // Skin_Color -> §15.3's loaded Entry array (by name)
-    std::vector<PresetComposite> composites;             // Composites > Composite[]
+    std::vector<PresetComposite> composites;             // Composites > Composite[] - hard cap 5 entries per
+                                                           // preset (previously undocumented, CONFIRMED
+                                                           // 2026-10-02: the fixed 100-byte record has room for
+                                                           // no more), enforced by ParsePreset
     std::vector<PresetElement> presetGrid;                // Preset_Grid > Preset_Element[]
     std::vector<PresetRegionalPresetRef> regionalPresets;  // RegionalPresets > RegionalPreset[]
 };
@@ -290,11 +293,20 @@ std::vector<RegionalPresetsGroup> ParsePlayerRegionalPresetsTable(const Document
 struct NewEntity {
     std::optional<std::string> name;     // Name (hashed)
     std::optional<std::string> animPos;   // Anim_Pos (hashed) - together, matched as a pair against a small
-                                            // fixed ~12-slot lookup array of known entity/anim-position
-                                            // combinations (§17). The resolved slot id, the entity's local
-                                            // position, and the destination output array (whose own consumer was
-                                            // not traced, open item §22.7) are all derived/runtime, not XML
-                                            // fields - not modelled.
+                                            // fixed lookup array of known entity/anim-position combinations
+                                            // (§17). CORRECTED 2026-10-02 (re-derived from the executable,
+                                            // `func_0x0080c330.txt` read in full): the array is CONFIRMED
+                                            // exactly 6 slots (not "~12" as previously estimated). The resolved
+                                            // slot id and a second output dword are pushed into a bounded
+                                            // output array (capacity/count/array-pointer identity also fully
+                                            // resolved this pass: DAT_022cbf4c=capacity 46, DAT_022cbf50=count,
+                                            // DAT_022cbf48=array base). The spec's earlier claim that the
+                                            // second dword is "a copy of the entity's own local position (a
+                                            // float triple)" is NOT supported by the full decompile - no
+                                            // vector/position assembly appears anywhere in this function; that
+                                            // second dword's true source is still OPEN (confirmed to be exactly
+                                            // one dword, not a float triple). None of this is modelled here
+                                            // either way - all of it is derived/runtime, not an XML field.
 };
 NewEntity ParseNewEntity(const Node* row);
 std::vector<NewEntity> ParsePlayerCustShotMapTable(const Document& doc);

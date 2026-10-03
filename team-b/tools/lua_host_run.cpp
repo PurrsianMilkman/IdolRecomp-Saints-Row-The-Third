@@ -817,7 +817,10 @@ struct MissionStartResult {
     bool existedAsFunction = false;
     bool attemptedCall = false;
     bool callOk = false;    // no error: the record finished, or yielded and is still alive
-    bool suspended = false; // callOk and the record yielded (runner step 6: "alive"); nothing resumes it
+    bool suspended = false; // callOk and the record yielded (runner step 6: "alive")
+    // When suspended: the record's id, so the mission loop can follow it
+    // through the scheduler passes (BareThreadTable::schedulerPass).
+    uint16_t recordId = BareThreadTable::kNoThread;
     std::string callError;
     // When suspended: the Lua source location that actually called thread_yield
     // (coroutine stack level 1 - level 0 is bareGuard's own C frame, where the
@@ -887,6 +890,7 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
     // creates inside it inherit it (Lua 5.1 lua_newthread copies the hook).
     lua_sethook(co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
     std::string fetchError;
+    const uint16_t recordId = rec->id;
     const bool alive = threads.run(L, rec, fetchError); // rec is dangling once this returns false
     lua_sethook(co, nullptr, 0, 0);
     if (!fetchError.empty()) {
@@ -894,10 +898,11 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
         r.callError = "lua_host_run: runner could not fetch " + funcName + ": " + fetchError;
     } else if (alive) {
         // Runner step 6: yielded without error -> alive. Not an error; the
-        // record stays in the table (the scheduler cadence is OPEN and this
-        // tool resumes nothing).
+        // record stays in the table, and the mission loop's scheduler passes
+        // (0x00e0cf50, Sec26.27 RESOLVED 2026-10-02) resume it from then on.
         r.callOk = true;
         r.suspended = true;
+        r.recordId = recordId;
         // Capture where it's actually waiting: level 1 is the mission script's
         // own frame that called thread_yield (level 0 is bareGuard's C frame -
         // see this function's own doc comment above). Falls back to level 0 if
@@ -2038,7 +2043,8 @@ int main(int argc, char** argv) {
     // callMissionStart()'s own doc comment), watchdog-wrapped, as a
     // script-thread record through the runner (request 11, Sec26.27: the
     // record is current for the call and the call may yield; a yielded
-    // record stays suspended, since nothing here resumes threads). Then tick
+    // record stays in the thread table and every tick's scheduler passes -
+    // 0x00e0cf50, see kSchedulerPassesPerTick below - resume it). Then tick
     // the confirmed-hook-firing pass (the real, already-built mechanism
     // that exercises sr3luahost::ThreadScheduler - thread_new/thread_yield
     // etc. are registered into both states and reachable from any hook
@@ -2066,8 +2072,10 @@ int main(int argc, char** argv) {
     // budget on a call already known to be hitting the same infinite
     // loop); (b) "completion" - 2 consecutive ticks produce an IDENTICAL
     // (existed/ok/err) signature across the whole hook set, a real,
-    // measured (not assumed) idempotence signal consistent with this
-    // pass's own no-coroutine-resume ThreadScheduler model. Otherwise:
+    // measured (not assumed) idempotence signal - suppressed while a fade is
+    // in flight or while the tick's scheduler passes resumed any of this
+    // mission's own script threads (both are progress the signature can't
+    // see). Otherwise:
     // "budget exhaustion" (all 20 ticks ran).
     //
     // A real, stated caveat, same shape as this file's own top-comment
@@ -2112,6 +2120,34 @@ int main(int argc, char** argv) {
     // and not a divisor of the engine's 1000/1500/3000/6000 ms stamp offsets,
     // so a stamp never lands exactly on a frame (that comparison is OPEN).
     constexpr int64_t kFadeHostMsPerTick = 333;
+    // Script-thread scheduler cadence (spec-lua-api-behaviour.md Sec26.27,
+    // "[RESOLVED 2026-10-02 ...]" block, CONFIRMED - disassembly): the
+    // scheduler 0x00e0cf50 runs on a dedicated background thread whose loop
+    // is throttled to a MINIMUM of 30 ms per iteration, no fixed maximum
+    // (~33 Hz), independent of rendering; each call offers every live,
+    // non-exempt record a resume (no budget). That 30 ms is the engine's.
+    constexpr int64_t kScriptPumpMinPeriodMs = 30; // CONFIRMED (0x00702070's throttle)
+    // CHOSEN (engineering decision, not spec fact): this host is tick-driven,
+    // not wall-clock-driven, so how many scheduler passes one mission tick
+    // gets is ours to choose. One tick is kFadeHostMsPerTick (333 ms, itself
+    // CHOSEN above) of host time; we run floor(333 / 30) = 11 passes per tick,
+    // i.e. as many as the engine's pump could fit into the same span at its
+    // fastest allowed rate (the 30 ms minimum, an unloaded loop). Why the
+    // fastest rate rather than one pass per tick: the spec's own host fix
+    // says to run the pump "on a cadence of roughly 30 ms or less" and that a
+    // faster cadence "is a safe superset and cannot under-resume"; one pass
+    // per 333 ms tick would be ~10x slower than any real engine cadence, so
+    // any script that measures time by counting its own yields (e.g. adding
+    // get_frame_time(), the file image's 1/30 s, per yield) would fall ~10x
+    // behind the tick clock the fade machine runs on. All 11 passes
+    // run back to back after the tick's fade and cutscene frames and before
+    // the hook-firing pass (order also CHOSEN: the engine's pump runs on its
+    // own thread, so its phase against the frame is chance, never designed);
+    // the fade clock is NOT subdivided - the passes of one tick all see that
+    // tick's fade/cutscene state, a known simplification. The real engine's
+    // pass count per 333 ms is somewhere between 0 and 11 depending on load.
+    constexpr int kSchedulerPassesPerTick = static_cast<int>(kFadeHostMsPerTick / kScriptPumpMinPeriodMs);
+    static_assert(kSchedulerPassesPerTick == 11, "CHOSEN mapping: floor(333 / 30) passes per tick");
 
     struct MissionResult {
         std::string stem, entryName, containerName;
@@ -2122,6 +2158,16 @@ int main(int argc, char** argv) {
         bool startSuspended = false; // _start's record yielded (no error) and is still alive
         std::string startSuspendedAt; // see MissionStartResult::suspendedAt
         std::string startCallError;
+        // What became of a suspended _start record over the tick loop's
+        // scheduler passes: "" (not suspended), still_suspended, finished
+        // (resumed and ran to its end), killed (released by the runner's step
+        // 2), errored (its own Lua error, in startAfterResumeError).
+        std::string startAfterTicks;
+        std::string startAfterResumeError;
+        std::string startStillSuspendedAt; // still_suspended: where it is now waiting
+        uint64_t schedulerResumes = 0;      // records this mission's passes resumed
+        uint64_t schedulerThreadErrors = 0; // this mission's records that raised on a resume
+        uint64_t schedulerForeignResumes = 0; // resumes of records left over from earlier missions
         int ticksSurvived = 0;
         std::string stopReason;
         std::string firstErrorMessage;
@@ -2129,6 +2175,7 @@ int main(int argc, char** argv) {
     };
     std::vector<MissionResult> missionResults;
     missionResults.reserve(missions.size());
+    uint64_t schedulerForeignErrorsTotal = 0; // leftover records' own errors on a resume (not in any mission's row)
 
     // Snapshot host.hitLog() right before step 1 begins - the "before"
     // half of the NEW stub-hit-with-missions ranking's own incremental
@@ -2167,6 +2214,15 @@ int main(int argc, char** argv) {
         else if (loadResult.ranPcall && !loadResult.pcallOk) errorsInOrder.push_back(loadResult.pcallError);
 
         std::string funcName = row.missionLuaStem + "_start";
+        // Records still live from earlier missions (the gameplay state is
+        // shared across the walk - see this block's top caveat). The
+        // scheduler resumes them too, as the engine's would; their resumes
+        // and errors are counted apart from this mission's own. Measurement
+        // only: nothing about the passes depends on this set. A record a
+        // leftover thread creates during this mission counts as this
+        // mission's (not distinguishable here).
+        std::set<uint16_t> foreignIds;
+        for (uint16_t id : host.bareGlobals().threads().liveIds()) foreignIds.insert(id);
         MissionStartResult startResult = callMissionStart(host.gameplayState(), host.bareGlobals().threads(), funcName,
                                                             kMissionStartCheckpoint, kMissionStartIsRestart);
         mr.startExisted = startResult.existedAsFunction;
@@ -2189,12 +2245,55 @@ int main(int argc, char** argv) {
             TickSig prevSig;
             bool havePrevSig = false;
             bool stopped = false;
+            bool startTracked = startResult.suspended;
             for (int tick = 1; tick <= kMissionTickBudget; ++tick) {
                 host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
                 // The cutscene machine and the zscene lifecycle (Sec26.25 Host
                 // summary: promotion then completion, every frame), on the same
                 // host clock; after the fade frame (CHOSEN order).
                 host.engineState().cutsceneHostFrame();
+                // The script-thread scheduler 0x00e0cf50, kSchedulerPassesPerTick
+                // times (CHOSEN mapping, see that constant). The watchdog is
+                // re-armed on each coroutine right before its resume
+                // (lua_sethook resets the instruction count), so it bounds one
+                // resume, not a thread's whole life.
+                bool ownResumeThisTick = false;
+                for (int pass = 0; pass < kSchedulerPassesPerTick; ++pass) {
+                    host.runScriptThreadSchedulerPass(
+                        [&](const BareThreadTable::Record& rec) {
+                            lua_sethook(rec.co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+                        },
+                        [&](const BareThreadTable::PassEvent& ev) {
+                            if (foreignIds.count(ev.id)) {
+                                if (ev.resumed) mr.schedulerForeignResumes++;
+                                if (!ev.error.empty()) schedulerForeignErrorsTotal++;
+                                if (!ev.aliveAfter) foreignIds.erase(ev.id); // its id may be reused later
+                                return;
+                            }
+                            if (ev.resumed) {
+                                mr.schedulerResumes++;
+                                ownResumeThisTick = true;
+                            }
+                            if (!ev.error.empty()) {
+                                mr.schedulerThreadErrors++;
+                                errorsInOrder.push_back(ev.error); // the runner's "<name>: <message>"
+                            }
+                            if (!ev.fetchError.empty())
+                                errorsInOrder.push_back("lua_host_run: runner could not fetch " + ev.name + ": " +
+                                                        ev.fetchError);
+                            if (startTracked && ev.id == startResult.recordId && !ev.aliveAfter) {
+                                startTracked = false;
+                                if (!ev.error.empty()) {
+                                    mr.startAfterTicks = "errored";
+                                    mr.startAfterResumeError = ev.error;
+                                } else if (ev.killedBefore) {
+                                    mr.startAfterTicks = "killed";
+                                } else {
+                                    mr.startAfterTicks = "finished";
+                                }
+                            }
+                        });
+                }
                 auto tickHooks = host.fireConfirmedHooks(host.gameplayState(), hooks, script.entryName);
                 TickSig sig;
                 bool newWatchdogThisTick = false;
@@ -2234,8 +2333,12 @@ int main(int argc, char** argv) {
                 const auto& fade = host.engineState().screenFade();
                 const bool fadePending = fade.state.known() && fade.target.known() &&
                                           fade.state.get() != fade.target.get();
+                // Same reasoning for this mission's own script threads: a
+                // resumed thread may be making progress the hook signature
+                // can't see (a poll loop, a countdown), so a tick that resumed
+                // any of them never counts toward "completion".
                 if (havePrevSig && sig.existed == prevSig.existed && sig.ok == prevSig.ok && sig.err == prevSig.err &&
-                    !fadePending) {
+                    !fadePending && !ownResumeThisTick) {
                     mr.stopReason = "completion (2 consecutive identical tick signatures - real, measured "
                                      "idempotence, CHOSEN stopping convention, see this block's own top comment)";
                     stopped = true;
@@ -2246,6 +2349,20 @@ int main(int argc, char** argv) {
             }
             if (!stopped) {
                 mr.stopReason = "budget exhaustion (" + std::to_string(kMissionTickBudget) + " ticks)";
+            }
+            if (startTracked) {
+                const BareThreadTable::Record* rec = host.bareGlobals().threads().findAlive(startResult.recordId);
+                if (rec && rec->name == funcName) {
+                    mr.startAfterTicks = "still_suspended";
+                    lua_Debug ar;
+                    if (lua_getstack(rec->co, 1, &ar) && lua_getinfo(rec->co, "Sln", &ar)) {
+                        mr.startStillSuspendedAt = (ar.short_src[0] ? ar.short_src : "?") + std::string(":") +
+                                                   std::to_string(ar.currentline) +
+                                                   (ar.name ? (std::string(" (in ") + ar.name + ")") : "");
+                    }
+                } else {
+                    mr.startAfterTicks = "released_unobserved"; // left the table outside a scheduler pass
+                }
             }
         }
 
@@ -2265,9 +2382,13 @@ int main(int argc, char** argv) {
     missionOut << "stem\tentry_name\tcontainer_name\tscript_found\tload_ok\tload_error\tpcall_ok\tpcall_error\t"
                   "start_func_name\tstart_existed\tstart_attempted\tstart_call_ok\tstart_call_error\t"
                   "ticks_survived\tstop_reason\tfirst_error_message\tfirst_unimplemented_stub\tstart_suspended\t"
-                  "start_suspended_at\n";
+                  "start_suspended_at\tstart_after_ticks\tstart_after_resume_error\tstart_still_suspended_at\t"
+                  "scheduler_resumes\tscheduler_thread_errors\tscheduler_foreign_resumes\n";
     uint64_t missionsFoundCount = 0, missionsStartExistedCount = 0, missionsStartOkCount = 0;
     uint64_t missionsStartSuspendedCount = 0;
+    uint64_t missionsStartStillSuspended = 0, missionsStartFinishedAfterResume = 0;
+    uint64_t missionsStartErroredAfterResume = 0, missionsStartKilledAfterResume = 0;
+    uint64_t schedulerResumesTotal = 0, schedulerOwnErrorsTotal = 0, schedulerForeignResumesTotal = 0;
     uint64_t stopBudget = 0, stopError = 0, stopCompletion = 0;
     uint64_t ticksSum = 0;
     for (auto& mr : missionResults) {
@@ -2287,7 +2408,17 @@ int main(int argc, char** argv) {
                    << (mr.startCallOk ? 1 : 0) << "\t" << sanitizeTsv(mr.startCallError) << "\t"
                    << mr.ticksSurvived << "\t" << sanitizeTsv(mr.stopReason) << "\t"
                    << sanitizeTsv(mr.firstErrorMessage) << "\t" << sanitizeTsv(mr.firstUnimplementedStub) << "\t"
-                   << (mr.startSuspended ? 1 : 0) << "\t" << sanitizeTsv(mr.startSuspendedAt) << "\n";
+                   << (mr.startSuspended ? 1 : 0) << "\t" << sanitizeTsv(mr.startSuspendedAt) << "\t"
+                   << sanitizeTsv(mr.startAfterTicks) << "\t" << sanitizeTsv(mr.startAfterResumeError) << "\t"
+                   << sanitizeTsv(mr.startStillSuspendedAt) << "\t" << mr.schedulerResumes << "\t"
+                   << mr.schedulerThreadErrors << "\t" << mr.schedulerForeignResumes << "\n";
+        if (mr.startAfterTicks == "still_suspended") missionsStartStillSuspended++;
+        else if (mr.startAfterTicks == "finished") missionsStartFinishedAfterResume++;
+        else if (mr.startAfterTicks == "errored") missionsStartErroredAfterResume++;
+        else if (mr.startAfterTicks == "killed") missionsStartKilledAfterResume++;
+        schedulerResumesTotal += mr.schedulerResumes;
+        schedulerOwnErrorsTotal += mr.schedulerThreadErrors;
+        schedulerForeignResumesTotal += mr.schedulerForeignResumes;
     }
     missionOut.close();
 
@@ -2337,16 +2468,30 @@ int main(int argc, char** argv) {
           ", start_is_restart_arg=" + std::string(kMissionStartIsRestart ? "true" : "false") +
           ", watchdog_instruction_budget=" + std::to_string(kMissionWatchdogInstructionBudget) +
           ", fade_host_ms_per_tick=" + std::to_string(kFadeHostMsPerTick) +
-          " (same constant as host.h's own kHookWatchdogInstructionBudget, not independently chosen)");
+          ", scheduler_passes_per_tick=" + std::to_string(kSchedulerPassesPerTick) + " (floor(" +
+          std::to_string(kFadeHostMsPerTick) + "/" + std::to_string(kScriptPumpMinPeriodMs) +
+          "), the CONFIRMED 30 ms pump minimum mapped onto the CHOSEN tick)" +
+          " (watchdog: same constant as host.h's own kHookWatchdogInstructionBudget, not independently chosen)");
     mline("missions_with_script_found=" + std::to_string(missionsFoundCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_existed=" + std::to_string(missionsStartExistedCount) + "/" + std::to_string(missions.size()));
     mline("missions_with_start_call_ok=" + std::to_string(missionsStartOkCount) + "/" + std::to_string(missions.size()));
     // _start runs as a script-thread record (Sec26.27 runner, request 11): a
-    // call that yielded without error counts as ok above and is listed here;
-    // its record stays suspended (nothing in this tool resumes threads - the
-    // scheduler cadence is OPEN), so it never ran to its end.
+    // call that yielded without error counts as ok above and is listed here
+    // (measured right after the call, before any tick). The tick loop's
+    // scheduler passes (0x00e0cf50) then resume it; what became of it is the
+    // missions_start_after_ticks line.
     mline("missions_with_start_suspended=" + std::to_string(missionsStartSuspendedCount) + "/" +
-          std::to_string(missions.size()) + " (subset of start_call_ok: yielded, record still alive, not resumed)");
+          std::to_string(missions.size()) + " (subset of start_call_ok: yielded on the first run, before any tick)");
+    mline("missions_start_after_ticks=still_suspended:" + std::to_string(missionsStartStillSuspended) +
+          " finished:" + std::to_string(missionsStartFinishedAfterResume) +
+          " errored:" + std::to_string(missionsStartErroredAfterResume) +
+          " killed:" + std::to_string(missionsStartKilledAfterResume) +
+          " (of the missions_with_start_suspended records, after the tick loop's scheduler passes)");
+    mline("scheduler_passes=own_resumes:" + std::to_string(schedulerResumesTotal) +
+          " own_thread_errors:" + std::to_string(schedulerOwnErrorsTotal) +
+          " leftover_resumes:" + std::to_string(schedulerForeignResumesTotal) +
+          " leftover_thread_errors:" + std::to_string(schedulerForeignErrorsTotal) +
+          " (leftover = records still live from an earlier mission in the shared gameplay state)");
     mline("live_script_threads_after_missions=" + std::to_string(host.bareGlobals().threads().liveCount()) +
           " (capacity " + std::to_string(BareThreadTable::kCapacity) + ")");
     mline("stop_reason_histogram: budget_exhaustion=" + std::to_string(stopBudget) + " error=" +

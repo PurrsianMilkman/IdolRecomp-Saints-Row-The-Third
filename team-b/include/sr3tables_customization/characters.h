@@ -58,20 +58,52 @@ HeightClass ParseHeightClass(const Node* row);
 std::vector<HeightClass> ParseCharacterHeightTable(const Document& doc);
 
 // ===========================================================================
-// 13.1 character_customization_categories.xtbl. [CONFIRMED real, single-
-// literal, consumed twice; per-row SCHEMA is OPEN - both callers route
-// through a shared, undecompiled stash function, §13.1, open item §22.1]
+// 13.1 character_customization_categories.xtbl. [CONFIRMED - disassembly +
+// empirical, re-derived 2026-10-02: `FUN_00be4120` read in full and
+// confirmed to be this table's OWN dedicated reader (it hardcodes the
+// child-element name "category"), not a generic shared stash function as
+// the 2026-09-30 text assumed - see spec-tables-customization.md §13.1's
+// 2026-10-02 review status.]
 // ===========================================================================
 // Element tag is lowercase "category" (confirmed against real data,
 // distinct casing from customization_categories.xtbl's "Category", §7.1 -
 // the accessor grammar is case-insensitive so this has no functional
-// effect, noted only to avoid confusing the two tables). Nothing about this
-// row's OWN fields (not even whether it has a Name) is confirmed by the
-// spec text - per this project's confidence discipline, this reader does
-// NOT invent a field list for it. It only LOCATES the rows (a real,
-// confirmed-to-exist element with a confirmed tag) and hands back the raw
-// Node for a caller to inspect further themselves - a deliberately thinner
-// contract than every other table in this file.
+// effect, noted only to avoid confusing the two tables).
+//
+// Full `0xc`-byte (12-byte) record CONFIRMED 2026-10-02: `+0x00` Name hash,
+// `+0x04` Display_name localized id, `+0x08` the Is_DLC sentinel byte
+// (`0xff` base / `0` DLC - the same convention as every other table in this
+// document), `+0x09` a Flags>flag membership byte that sets bits 0x1+0x2
+// together ("| 3") when a flag's own text equals "locked" (the same two-
+// bits-at-once idiom gang_customization.xtbl's `locked` flag uses, §10 -
+// modelled as one boolean here, same storage-duplication treatment as
+// GangVehicleGroup::locked above).
+struct CharacterCustomizationCategory {
+    std::optional<std::string> name;         // Name (hashed)
+    std::optional<std::string> displayName;   // Display_name (localized id)
+    Always<bool> isDlc;                        // Is_DLC sentinel byte
+    bool locked = false;                        // Flags > flag == "locked"
+};
+CharacterCustomizationCategory ParseCharacterCustomizationCategory(const Node* row);
+
+// Applies BOTH real-loader behaviours CONFIRMED 2026-10-02 (spec-tables-
+// customization.md §13.1):
+//  1. Hard cap 20 rows (0x14), checked pre-increment against the
+//     not-yet-stored count ("if (0x13 < count) return") - keeps a maximum
+//     of 20 (16 real rows ship, well under it).
+//  2. A genuine hazard the spec flags explicitly "FOR TEAM B": rows are
+//     registered into a dedup hash table by Name as they're read; if a
+//     row's Name collides with one already registered, the REAL loader
+//     `return`s immediately, abandoning every remaining row in the file -
+//     not just skipping the duplicate. Reproduced here by stopping the
+//     whole parse (not pushing the colliding row, and not reading any row
+//     after it) the first time a Name repeats.
+std::vector<CharacterCustomizationCategory> ParseCharacterCustomizationCategoriesTable(const Document& doc);
+
+// Superseded by ParseCharacterCustomizationCategoriesTable above (which now
+// has a CONFIRMED full schema, the 20-row cap and the duplicate-Name
+// truncation hazard) - kept only as a thinner, schema-free row locator for
+// any existing caller that just wants the raw <category> Nodes.
 std::vector<const Node*> FindCharacterCustomizationCategoryRows(const Document& doc);
 
 // ===========================================================================
