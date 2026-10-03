@@ -1,5 +1,11 @@
 # Teams and sessions (cloud phase, from 2026-09-30)
 
+> **Local phase (from 2026-10-01): the cloud phase below is historical.** The project is worked on locally
+> on the owner's PC again. Team A runs Ghidra directly and Team B builds and runs against the game files directly, so
+> the PC bridge (`bridge/`, the private bus repository) is **no longer used**: no jobs are submitted and the PC agent is
+> not running. `bridge/` is kept for reference only.
+
+
 The project is **un-paused** as of 2026-09-30: the owner asked for work to continue on Anthropic's servers,
 with two separate teams and one session managing both. The pause banners at the top of
 `team-a/HANDOFF.md` and `team-b/HANDOFF.md` are historical from this date on.
