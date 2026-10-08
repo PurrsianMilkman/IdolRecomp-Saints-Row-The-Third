@@ -3,6 +3,11 @@
 // confirmed Region-1 formula this implements, and why it replaces this
 // reader's own first-draft heuristic (same day, superseded before this
 // reader was ever relied on for a real finding).
+//
+// CORRECTED 2026-10-03: the header is 48 bytes, not 16 - see cvtf.h's top
+// comment for the real-byte check (against car_4dr_standard03.cvtf_pc)
+// that confirmed spec-geometry-format.md §5.1's HIGH CONFIDENCE finding
+// and settled the Region-2 "40 vs 45" composition question (45).
 
 #include "sr3vehicle/cvtf.h"
 
@@ -54,7 +59,7 @@ size_t resolveFixup(uint32_t v) { return static_cast<size_t>(v) + kCvtfFixupBase
 } // namespace
 
 bool CvtfCatalog::tryParse(vpp::ByteView bytes, CvtfCatalog& out, std::string& whyNot) {
-    if (bytes.size() < kCvtfHeaderSize) { whyNot = "smaller than the 16-byte header"; return false; }
+    if (bytes.size() < kCvtfHeaderSize) { whyNot = "smaller than the 48-byte header"; return false; }
     CvtfCatalog c;
     c.magic_ = bytes.readU32LE(0x00);
     if (c.magic_ != kCvtfMagic) { whyNot = "magic mismatch (not 'ftvc')"; return false; }
@@ -64,19 +69,35 @@ bool CvtfCatalog::tryParse(vpp::ByteView bytes, CvtfCatalog& out, std::string& w
                  "ID 8 'Character cvtf' is a structurally different format per spec §5.2 and is out of scope here)";
         return false;
     }
-    c.entryCount1_ = bytes.readU32LE(0x08);
-    c.entryCount2_ = bytes.readU32LE(0x0C);
+    c.region1Count_ = bytes.readU32LE(0x08);
+    c.region1OffsetRaw_ = bytes.readU32LE(0x0C);
+    const uint32_t table2OffsetRaw = bytes.readU32LE(0x10);
+    c.table2Count_ = bytes.readU32LE(0x14);
+    const uint32_t table3OffsetRaw = bytes.readU32LE(0x18);
+    c.table3Count_ = bytes.readU32LE(0x1C);
+    const uint32_t array1OffsetRaw = bytes.readU32LE(0x20);
+    const uint32_t array1Count = bytes.readU32LE(0x24);
+    const uint32_t array2OffsetRaw = bytes.readU32LE(0x28);
+    const uint32_t array2Count = bytes.readU32LE(0x2C);
 
-    const uint64_t quadCount = static_cast<uint64_t>(c.entryCount1_) + kCvtfRegion1LeadingQuads;
-    const uint64_t region1End = kCvtfHeaderSize + quadCount * kCvtfRegion1QuadSize;
+    if (table2OffsetRaw != kCvtfSentinel) c.table2Offset_ = resolveFixup(table2OffsetRaw);
+    if (table3OffsetRaw != kCvtfSentinel) c.table3Offset_ = resolveFixup(table3OffsetRaw);
+
+    if (c.region1OffsetRaw_ == kCvtfSentinel) {
+        whyNot = "Region 1's own offset field (+0x0C) is the sentinel - no component table in this file";
+        return false;
+    }
+    const size_t region1Start = resolveFixup(c.region1OffsetRaw_);
+    if (region1Start > bytes.size()) { whyNot = "Region 1's quad table starts past the end of the file"; return false; }
+    const uint64_t region1End = static_cast<uint64_t>(region1Start) +
+                                 static_cast<uint64_t>(c.region1Count_) * kCvtfRegion1QuadSize;
     if (region1End > bytes.size()) { whyNot = "Region 1's quad table extends past the end of the file"; return false; }
     const size_t stringRegionStart = static_cast<size_t>(region1End);
 
     // ---- Region 1: raw quads, resolved via the real a+8/b+8/c+8 formula ----
-    size_t maxEntryEnd = stringRegionStart; // running max of every entry's own real end offset - Region 2 lower bound
-    c.region1_.resize(static_cast<size_t>(quadCount));
+    c.region1_.resize(static_cast<size_t>(c.region1Count_));
     for (size_t i = 0; i < c.region1_.size(); ++i) {
-        const size_t o = kCvtfHeaderSize + i * kCvtfRegion1QuadSize;
+        const size_t o = region1Start + i * kCvtfRegion1QuadSize;
         CvtfRegion1Entry& e = c.region1_[i];
         e.a = bytes.readU32LE(o + 0x00);
         e.b = bytes.readU32LE(o + 0x04);
@@ -90,18 +111,12 @@ bool CvtfCatalog::tryParse(vpp::ByteView bytes, CvtfCatalog& out, std::string& w
         if (!e.aIsSentinel) {
             size_t nameOff = resolveFixup(e.a);
             e.name = readCStringSafe(bytes, nameOff);
-            size_t nameLen = 0;
-            try { nameLen = bytes.cStringLength(nameOff); } catch (const std::out_of_range&) {}
-            if (nameOff + nameLen + 1 > maxEntryEnd) maxEntryEnd = nameOff + nameLen + 1;
         }
 
         e.bIsSentinel = (e.b == kCvtfSentinel);
         if (!e.bIsSentinel) {
             size_t variantOff = resolveFixup(e.b);
             e.variant = readCStringSafe(bytes, variantOff);
-            size_t variantLen = 0;
-            try { variantLen = bytes.cStringLength(variantOff); } catch (const std::out_of_range&) {}
-            if (variantOff + variantLen + 1 > maxEntryEnd) maxEntryEnd = variantOff + variantLen + 1;
         }
 
         e.cIsSentinel = (e.c == kCvtfSentinel);
@@ -118,50 +133,34 @@ bool CvtfCatalog::tryParse(vpp::ByteView bytes, CvtfCatalog& out, std::string& w
                 }
                 e.options.push_back(std::move(el));
             }
-            size_t arrEnd = arrBase + static_cast<size_t>(e.optionCount) * kCvtfOptionElementSize;
-            if (arrEnd > maxEntryEnd) maxEntryEnd = arrEnd;
         }
     }
 
-    // ---- Region 2: best-effort. Lower bound = maxEntryEnd (the highest
-    //      real end-offset among every Region-1 entry's own name/variant/
-    //      option-array span); then scan forward for the first string
-    //      shaped like spec §5.1's own documented Region-2 wheel-name
-    //      vocabulary as a confirming anchor (Region 1/2's own boundary is
-    //      NOT given by any confirmed formula - see this header's own top
-    //      comment). If no such anchor is found within a generous window,
-    //      falls back to reading entryCount2() strings starting right at
-    //      the lower bound. ----
-    {
-        size_t searchPos = maxEntryEnd;
-        size_t region2Start = maxEntryEnd;
-        bool foundAnchor = false;
-        size_t stringsScanned = 0;
-        constexpr size_t kAnchorScanCap = 200; // generous; see header comment
-        while (searchPos < bytes.size() && stringsScanned < kAnchorScanCap) {
-            size_t len = 0;
-            try {
-                len = bytes.cStringLength(searchPos);
-            } catch (const std::out_of_range&) {
-                break;
-            }
-            std::string s = readCStringSafe(bytes, searchPos);
-            bool looksLikeRegion2 =
-                (s.find("_Profile") != std::string::npos) ||
-                (s.rfind("W_", 0) == 0 && (s.find("_F") != std::string::npos || s.find("_R") != std::string::npos));
-            if (looksLikeRegion2) { region2Start = searchPos; foundAnchor = true; break; }
-            searchPos += len + 1;
-            ++stringsScanned;
+    // ---- Region 2 (wheel names) + the "Family00N" array: both are real
+    //      dword-offset arrays (header fields +0x20/+0x24 and +0x28/+0x2C),
+    //      NOT a content-shape scan - CORRECTED 2026-10-03. Each array is a
+    //      flat run of `count` raw u32 offsets starting at the array's own
+    //      resolved offset; each element is ITSELF resolved via the same
+    //      sentinel/+8 idiom to a plain string. This reader's own real-byte
+    //      check (this header's own top comment) found 45/45 and 7/7
+    //      elements resolving cleanly in the one real sample tested - no
+    //      scanning forward from Region 1's own end offset to guess where
+    //      Region 2 starts is needed any more; the array's own offset
+    //      field gives an exact location, independent of Region 1
+    //      entirely. ----
+    auto readDwordOffsetArray = [&](uint32_t offsetRaw, uint32_t count, std::vector<std::string>& outNames) {
+        if (offsetRaw == kCvtfSentinel) return; // absent - leave outNames empty
+        const size_t arrBase = resolveFixup(offsetRaw);
+        for (uint32_t i = 0; i < count; ++i) {
+            const size_t elemOff = arrBase + static_cast<size_t>(i) * 4;
+            if (elemOff + 4 > bytes.size()) break; // truncated - report what fit, don't throw
+            const uint32_t raw = bytes.readU32LE(elemOff);
+            if (raw == kCvtfSentinel) { outNames.emplace_back(); continue; }
+            outNames.push_back(readCStringSafe(bytes, resolveFixup(raw)));
         }
-        (void)foundAnchor; // informational only - region2Start already defaults sensibly either way
-        size_t pos = region2Start;
-        for (uint32_t i = 0; i < c.entryCount2_ && pos < bytes.size(); ++i) {
-            size_t len = 0;
-            try { len = bytes.cStringLength(pos); } catch (const std::out_of_range&) { break; }
-            c.region2Names_.push_back(readCStringSafe(bytes, pos));
-            pos += len + 1;
-        }
-    }
+    };
+    readDwordOffsetArray(array1OffsetRaw, array1Count, c.region2Names_);
+    readDwordOffsetArray(array2OffsetRaw, array2Count, c.familyNames_);
 
     // ---- allStrings(): the reliable, boundary-agnostic fallback — every
     //      NUL-terminated string from stringRegionStart to EOF, in order.

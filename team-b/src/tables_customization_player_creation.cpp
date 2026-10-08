@@ -149,8 +149,25 @@ HairColor ParseHairColor(const Node* row) {
     h.specularAlpha = ReadFloatAlways(row, "Specular_alpha");
     h.brightness = ReadFloatAlways(row, "Brightness");
     h.brightnessBias = ReadFloatAlways(row, "Brightness_bias");
-    h.specularBrightRaw = OptText(row, "Specular_bright");
-    h.specularDarkRaw = OptText(row, "Specular_dark");
+    // Specular_bright/Specular_dark: CONFIRMED vec3 (R/G/B child elements),
+    // not a single text blob (CORRECTED 2026-10-03, see player_creation.h's
+    // SpecularColorRGB banner for the full citation) - OptText(row, name)
+    // on the parent element itself would always read empty for this shape,
+    // since the real value lives on R/G/B grandchildren.
+    if (const Node* sb = FindChild(row, "Specular_bright")) {
+        SpecularColorRGB c;
+        c.r = ReadFloatAlways(sb, "R");
+        c.g = ReadFloatAlways(sb, "G");
+        c.b = ReadFloatAlways(sb, "B");
+        h.specularBright = c;
+    }
+    if (const Node* sd = FindChild(row, "Specular_dark")) {
+        SpecularColorRGB c;
+        c.r = ReadFloatAlways(sd, "R");
+        c.g = ReadFloatAlways(sd, "G");
+        c.b = ReadFloatAlways(sd, "B");
+        h.specularDark = c;
+    }
     return h;
 }
 

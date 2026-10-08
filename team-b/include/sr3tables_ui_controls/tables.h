@@ -783,8 +783,17 @@ struct VoiceControlEntry {  // <Entry> row
     Always<int32_t> localCooldownMs;    // Local_cooldown - RAW milliseconds as authored (bits 0-5 of the packed
                                          // word; engine: ms/1000, clamped to 63 - see LocalCooldownField())
     Always<int32_t> globalCooldownMs;     // Global_cooldown - RAW ms (bits 6-9; engine: ms/1000, clamped to 15)
-    Always<int32_t> minDelayRaw;            // Min_delay - RAW value (bits 10-14; engine: raw/70, clamped to 31)
-    Always<int32_t> maxDelayRaw;              // Max_delay - RAW value (bits 15-20; engine: (Max_delay-Min_delay)/80, clamped to 63)
+    Always<int32_t> minDelayRaw;            // Min_delay - RAW value in MILLISECONDS (bits 10-14; engine: ms/70,
+                                             // clamped to 31). Unit CONFIRMED 2026-10-03 (spec 12): the play
+                                             // routine (0x00469a80 -> 0x00469a30) divides a value drawn from
+                                             // [Min_delay, Max_delay] by 1000 and adds it to the already-
+                                             // seconds-scaled cooldowns, which only dimensions correctly if
+                                             // Min_delay/Max_delay share the cooldowns' own authored unit
+                                             // (milliseconds) - previously left unit-unstated here since the
+                                             // spec itself said the unit "is not derivable from the code".
+    Always<int32_t> maxDelayRaw;              // Max_delay - RAW value in MILLISECONDS (bits 15-20; engine:
+                                               // (Max_delay-Min_delay)/80, clamped to 63). Same 2026-10-03 unit
+                                               // confirmation as minDelayRaw above.
     Always<int32_t> playPercent;                // Play_percent - RAW value (bits 21-22; engine buckets into 4 tiers at 26/51/76)
     std::optional<int32_t> priority;              // Priority (if-present, spec-stated default 10; bits 23-27, 5-bit field)
     int32_t PriorityOrDefault() const { return priority.value_or(10); }
@@ -813,9 +822,10 @@ struct VoiceControlEntry {  // <Entry> row
     // - these are pure functions of the raw fields above.
     uint32_t LocalCooldownField() const;   // clamp(localCooldownMs/1000, 0, 63)
     uint32_t GlobalCooldownField() const;  // clamp(globalCooldownMs/1000, 0, 15)
-    uint32_t MinDelayField() const;        // clamp(minDelayRaw/70, 0, 31)
+    uint32_t MinDelayField() const;        // clamp(minDelayRaw/70, 0, 31) - minDelayRaw in milliseconds (above)
     uint32_t MaxDelayField() const;        // clamp((maxDelayRaw - minDelayRaw)/80, 0, 63) - uses the RAW Min_delay,
-                                            // NOT MinDelayField()'s already-packed value (12's own formula)
+                                            // NOT MinDelayField()'s already-packed value (12's own formula);
+                                            // both raw fields are in milliseconds (above)
     uint32_t PlayPercentTier() const;      // 0..3, bucketed at thresholds 26/51/76 (edge inclusivity at the exact
                                             // threshold values is not specified by the spec; this uses "< threshold")
     uint32_t PriorityField() const;        // PriorityOrDefault() clamped/masked to 5 bits (0-31)

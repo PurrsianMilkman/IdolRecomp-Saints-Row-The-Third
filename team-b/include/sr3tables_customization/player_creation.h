@@ -132,6 +132,21 @@ struct NormalMapSettings {
 NormalMapSettings ParseNormalMapSettings(const Node* row);
 std::vector<NormalMapSettings> ParsePlayerCreationNormalMapsTable(const Document& doc);
 
+// A raw R/G/B colour element read from child elements literally named `R`,
+// `G`, `B` (§15.2, 2026-10-03 correction: CONFIRMED - disassembly,
+// FUN_00dad130 -> FUN_00dad0a0 - vec3, NOT the previously-unresolved
+// vec2-or-vec3 "multi-component parser"). Kept as the RAW authored value
+// here, matching this project's established convention for this exact
+// accessor family (sr3tables_environment::ColorRGBAlways,
+// sr3tables_customization::TertiaryColor/SecondaryColor/PrimaryColor,
+// color_pools.h): the engine additionally divides each component by 255.0
+// at load time (same "RGB / 255" convention spec-tables-environment.md
+// §3.3 already names at this same FUN_00dad0a0), but that bake is a
+// load-time transform over the raw authored value and is NOT applied here.
+struct SpecularColorRGB {
+    Always<float> r, g, b;  // R, G, B child elements
+};
+
 // ===========================================================================
 // 15.2 player_creation_hair_color.xtbl. [CONFIRMED - disassembly +
 // empirical] Each Hair_Color is a 72-byte (0x48) record.
@@ -154,11 +169,18 @@ struct HairColor {
     Always<float> saturationLight, saturationDark;   // Saturation_light, Saturation_dark
     Always<float> specularAlpha;                       // Specular_alpha
     Always<float> brightness, brightnessBias;           // Brightness, Brightness_bias
-    std::optional<std::string> specularBrightRaw;         // Specular_bright - "parsed by a multi-component helper
-                                                           // (FUN_00dad130) whose exact output arity (vec2 vs vec3)
-                                                           // was not narrowed" (§15.2, open item §22.9) - raw text,
-                                                           // not decomposed into components
-    std::optional<std::string> specularDarkRaw;            // Specular_dark - same treatment
+    // Specular_bright/Specular_dark: CORRECTED 2026-10-03 (spec §15.2,
+    // disassembly re-derivation, review/exe-notes-2026-10-01/
+    // interp_needs_data_triage_20261003.md §2.1): CONFIRMED vec3 (R/G/B
+    // child elements), stored at record +0x30/+0x3C - closes the previously
+    // OPEN vec2-vs-vec3 arity question (§22 item 9). This reader used to
+    // keep each as a single raw-text blob (ChildText of the whole element,
+    // which is actually ALWAYS EMPTY for this shape - a genuine mismatch,
+    // not just an uncertain-arity placeholder, since the real value lives
+    // in R/G/B grandchildren, not the element's own text) - replaced with
+    // the real per-component read below.
+    std::optional<SpecularColorRGB> specularBright;  // Specular_bright
+    std::optional<SpecularColorRGB> specularDark;     // Specular_dark - same shape
 };
 HairColor ParseHairColor(const Node* row);
 std::vector<HairColor> ParsePlayerCreationHairColorTable(const Document& doc);

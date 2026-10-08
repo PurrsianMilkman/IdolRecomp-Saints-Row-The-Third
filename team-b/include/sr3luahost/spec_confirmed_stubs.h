@@ -225,6 +225,40 @@
 // behaviour change) and nothing new is implemented from §1-§5 until Team A's
 // executable re-derivation clears it.
 //
+// Batch 2026-10-03 (real-hit probe-mode batch, post-realhits): +2 -
+// action_play_do (spec-lua-api-behaviour.md Sec22.29) and
+// action_play_is_finished (Sec7.21). Investigation trigger: results/
+// probe_blockers_ranked_20261003_post_realhits.md's #1 shared blocker -
+// action_play_do had 49,655 real calls (the single highest in a fresh
+// mission-drive run), was NOT in this list, and 7 missions (dlc3_m03/m06/
+// m10/m11/m13/m14/m15) all parked at the identical game_lib.lua:563 (in
+// action_play_non_blocking), no first_error - the same architectural
+// shape cutscene_play_do/cutscene_play_check_done had before Sec57.2
+// closed it. Real measured evidence (not the a-priori guess that a
+// separate "_check_done"-style native was being polled) found
+// action_play_is_finished has ZERO real calls across the same 49
+// missions, and that action_play_do's OWN generic-stub nil return is
+// what a Lua truthiness-driven retry/poll idiom can never satisfy -
+// Sec22.29 itself describes no completion-signaling mechanism to invent
+// (no request-id pool, no thread handle, no flag), only a one-shot
+// dispatcher contract ("always exactly 1 number"); implementing that
+// contract faithfully is the fix. See lua_spec_confirmed_stubs.cpp's own
+// doc comment above stub_action_play_do for the full reasoning and
+// engine_state.h for the new state (CharacterState::
+// notDeadForActionPlay; EngineState::kActionPlaySentinelResolveFail/
+// kActionPlaySentinelDeadNotForced/kActionPlaySentinelLookupMiss/
+// actionPlayDeadGuardCount()/actionPlayLookupMissCount()/
+// actionPlayIsFinished()).
+//
+// Batch 2026-10-03 (--trace-host-calls-before-error's first real use): +2 -
+// get_dist (Sec4.2) and player_names_get_all (Sec51.4). Both were generic
+// stubs feeding nil directly into a script-level error (m08.lua:910's
+// nil-compare; game_lib.lua:1488's player_list nil-index, sh03/dlc3_m02).
+// See lua_spec_confirmed_stubs.cpp's own doc comments above stub_get_dist/
+// stub_player_names_get_all, and engine_state.h for the new
+// CharacterState::worldPosition/VehicleState::worldPosition fields (OPEN
+// by default - no spec gives a CONFIRMED spawn position for any object).
+//
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
 // The 8 vint_object_* lifecycle siblings Sec15 originally flagged as

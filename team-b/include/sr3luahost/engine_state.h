@@ -41,6 +41,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -61,6 +62,8 @@
 // own established convention, every library already does this).
 #include "sr3luahost/lua_c_api.h"
 #include "sr3luahost/open_state.h"
+#include "sr3player/control_state.h"
+#include "sr3player/input.h"
 #include "sr3save/save_crc.h"
 
 namespace sr3vintdoc {
@@ -188,6 +191,12 @@ struct ObjectIndicatorRecord {
 // object's values. The per-field notes below that mention a "default"
 // describe the pre-conversion stand-ins and are kept for history; the
 // stand-in values themselves are gone.
+
+// A world position (get_dist, Sec4.2; shared by several other natives, see
+// CharacterState::worldPosition's own doc comment). Plain xyz, no rotation -
+// nothing in scope needs orientation here.
+struct WorldPosition { double x = 0, y = 0, z = 0; };
+
 struct CharacterState {
     // set_ignore_ai_flag (Sec3.4) / character spawn state (Sec34.1/Sec34.3).
     // Real location: bit mask 0x02 of the byte at object +0x2bc - CONFIRMED
@@ -413,9 +422,21 @@ struct CharacterState {
 
     // player_revive (Sec32.3): object +0xcc8, 6 = "downed" (the same test
     // Sec7.13 `human_is_downed` uses, cross-referenced there - that function
-    // itself is out of this batch's scope). Default 0 ("not downed") - this
-    // project's own chosen "alive, ordinary" default.
-    OpenValue<int32_t> lifeState{"character life-state field (+0xcc8)", "spec-lua-api-behaviour.md Sec7.13/Sec32.3"};
+    // itself is out of this batch's scope); 5 = dead/kill-finalized (Sec34.5,
+    // written by the kill finalizer). CONFIRMED (Sec34.5, 2026-10-03): the
+    // constructor zeroes this field, so a freshly-spawned character starts
+    // at 0 ("alive, ordinary," neither downed nor dead) - seeded at
+    // construction (EngineState::getOrCreateCharacter), not left OPEN.
+    OpenValue<int32_t> lifeState{"character life-state field (+0xcc8)", "spec-lua-api-behaviour.md Sec7.13/Sec32.3/Sec34.5"};
+    // Sec34.5: byte +0xe3 bit 0x01, the second of the two real conditions
+    // the 0x0096f4f0 alive/not-gone predicate tests (alongside lifeState ==
+    // 5 above) - see CharacterState::notDeadForActionPlay()'s own doc
+    // comment for how the two combine. HIGH CONFIDENCE (Sec34.5): clear at
+    // construction, inferred from a zero-filled allocation rather than an
+    // observed constructor write - seeded at construction all the same
+    // (EngineState::getOrCreateCharacter).
+    OpenValue<bool> killFinalizedFlagE3{"character dead/kill-finalized flag (+0xe3 bit 0x01)",
+                                        "spec-lua-api-behaviour.md Sec34.5"};
     // Test-observable count of successful player_revive calls (downed ->
     // processed). The real post-revive life-state value is not stated by
     // Sec32.3 (HIGH CONFIDENCE only that the character is no longer downed
@@ -443,6 +464,19 @@ struct CharacterState {
     // directly" the way ai_set_in_scripted_cover's own stated simplification
     // does (Sec33.2), because Sec3.7's text is unusually explicit that this
     // particular gate is real and tested, not a dead/unreachable branch.
+    // UPDATE 2026-10-03 (Sec3.7's own single-player resolution, cross-ref
+    // Sec6.22): with no co-op session installed, gate 1 (0x008ae480)
+    // resolves true on every reachable branch (traced through its own
+    // connection-state guard and sentinel fallthrough) and gate 2's
+    // (0x008837a0) backing global stays at its zero-fill default, since its
+    // one writer anywhere in the binary only ever runs while actively
+    // applying an already-received network record - unreachable with no
+    // session. So the whole idiom family takes the direct-local-apply
+    // branch UNCONDITIONALLY in single player; the network-record fallback
+    // is dead code there, not merely rare. CONFIRMED, not CHOSEN: seeded
+    // true at construction (EngineState::getOrCreateCharacter), not a
+    // default awaiting a test - a test can still .set(false) to exercise
+    // the (now known-dead) replicate-only branch for structural coverage.
     OpenValue<bool> forceFlagGatePasses{"character force-flag double-gate (0x008ae480/0x008837a0)",
                                         "spec-lua-api-behaviour.md Sec3.7"};
     OpenBits32 forceFlags1c98{"character force-flag byte +0x1c98 (invulnerable 0x20 / always-apply-player-damage 0x200)",
@@ -499,6 +533,93 @@ struct CharacterState {
     // precedent just above for "a reset/request occurred N times," not a
     // specific record's own content.
     uint64_t fleeToNavpointRequestCount = 0;
+
+    // --- action_play_do (spec-lua-api-behaviour.md Sec22.29), real-hit
+    // probe-mode batch (2026-10-03) ---------------------------------------
+
+    // Sec22.29's own text: "if the character resolves but is either forced
+    // (arg 4) or currently NOT dead/flagged (the already-established
+    // predicate 0x0096f4f0, item 22.3/Sec18.14)". This is the SAME real
+    // predicate CharacterState::isAlive above already cites (Sec30.5) -
+    // kept as a SEPARATELY SCOPED predicate rather than reused, matching
+    // isAlive's own doc comment's explicit reasoning ("a DIFFERENT field
+    // from isDeadHighConfidence... a separate call site this predicate is
+    // never confirmed to share"): Sec22.29 never confirms this call site
+    // shares timing/scope with vehicle_exit_group_check_done's own, so
+    // widening isAlive to cover both would be assuming a fact neither
+    // section states.
+    //
+    // UPDATE 2026-10-03 (Sec34.5, closing the 7-mission notDeadForActionPlay
+    // blocker Sec22.29's own batch found): the real 0x0096f4f0 body for
+    // THIS call site is CONFIRMED - dead if the resolved pointer is null
+    // (handled upstream by this project's own objectResolves() resolve
+    // step, before this predicate is ever reached), OR lifeState == 5
+    // ("kill-finalized," above), OR killFinalizedFlagE3 is set (above).
+    // Computed live from those two real fields rather than stored as its
+    // own independently-settable flag, so a later write to either (e.g. a
+    // future kill-finalizer implementation setting lifeState to 5) is
+    // reflected here automatically instead of silently going stale.
+    // Throws OpenStateError if either underlying field is itself OPEN
+    // (e.g. a test .forget()s one to explore that case) - same discipline
+    // as every other computed predicate in this file.
+    bool notDeadForActionPlay() const { return lifeState.get() != 5 && !killFinalizedFlagE3.get(); }
+
+    // get_dist's own shared position-lookup function (0x00a455a0, Sec4.2),
+    // reused by several other natives (object_is_in_trigger's arg-2 parser
+    // Sec1.12, the vehicle-seated-character redirect Sec20.24). OPEN by
+    // default: no spec gives a CONFIRMED spawn position for any object (the
+    // save format doesn't carry one either - spec-save-format.md Sec6.6,
+    // confirmed 2026-10-03), so this starts unset for every character and
+    // stays that way until something writes it (a future teleport/spawn
+    // implementation). A read while unset throws OpenStateError, which is
+    // the correct, honest outcome for "resolved object, unknown position" -
+    // NOT the same case as "name failed to resolve at all", which get_dist
+    // handles separately via objectResolves() and its own CONFIRMED
+    // FLT_MAX sentinel (Sec4.2), never this field.
+    OpenValue<WorldPosition> worldPosition{"character world position (get_dist's own 0x00a455a0 lookup)",
+                                            "spec-lua-api-behaviour.md Sec4.2"};
+
+    // --- player_controls_disable / player_controls_enable /
+    // player_movement_disable (spec-lua-api-behaviour.md Sec7.22/Sec7.7/
+    // Sec7.25), wired to the player control-state stack
+    // (spec-player-runtime.md Sec2), batch 2026-10-03 -------------------
+
+    // The byte at object +0x1d99: bit 0x08 "controls disabled" (setters
+    // 0x009e2dd0 / 0x009e4940) and bit 0x10 "movement disabled" (0x009e2fa0 /
+    // 0x009e4a60). Two further bits of the same byte are documented
+    // elsewhere (0x20, Sec27.x; 0x80, Sec31.x) and not modelled here. Kept as
+    // two independent OpenValue<bool> fields rather than one bit word - the
+    // same per-bit simplification ignoreAI/inScriptedCover already use for
+    // the shared byte +0x2bc - so a probe-mode read can go through
+    // EngineState::probedFieldOr(). CONFIRMED/HIGH spawn default (spec-
+    // player-runtime.md Sec2.10, synced 2026-10-03, after an earlier pass
+    // found no spec gave this byte's construction value at all): HIGH
+    // CONFIDENCE all-clear (both bits 0) at spawn - no constructor touches
+    // +0x1d99 and no initialiser exists, so it rests on the pool allocation
+    // being zero-filled, the same caveat already established for
+    // lifeState/killFinalizedFlagE3 (Sec34.5). Seeded false at construction
+    // (EngineState::getOrCreateCharacter) - a test can still .set()/.forget()
+    // to exercise the disabled/OPEN cases directly.
+    OpenValue<bool> controlsDisabled{"character byte +0x1d99 bit 0x08 (controls disabled)",
+                                     "spec-lua-api-behaviour.md Sec7.7/Sec7.22"};
+    OpenValue<bool> movementDisabled{"character byte +0x1d99 bit 0x10 (movement disabled)",
+                                     "spec-lua-api-behaviour.md Sec7.8/Sec7.25"};
+    static constexpr uint32_t kControlsDisabledBit1d99 = 0x08u;
+    static constexpr uint32_t kMovementDisabledBit1d99 = 0x10u;
+
+    // The single gate 0x008addb0 (variant 2) all three setters test: true =
+    // apply directly; false = the co-op-session-gated network record
+    // (opcode 0x32). CHOSEN (not CONFIRMED - Sec7.7's own text says "which
+    // branch dominates in single-player is not established here"): seeded
+    // TRUE at construction (EngineState::getOrCreateCharacter), this
+    // project's standing "single player only, the co-op path is never
+    // taken" simplification for co-op-gated branches, and the only reading
+    // under which these setters do anything at all in single player - with
+    // no session installed (Sec26.28, coopSession().present == false), the
+    // gate-false branch's own session check fails and the call would be a
+    // silent no-op. A test can .set(false) to exercise that branch.
+    OpenValue<bool> controlLockGatePasses{"character single gate 0x008addb0 (variant 2)",
+                                          "spec-lua-api-behaviour.md Sec7.7/Sec7.22/Sec7.25"};
 };
 
 // vehicle_set_invulnerable_to_player_explosives / vehicle_disable_explosion_
@@ -540,7 +661,13 @@ struct VehicleState {
     // establishes (Sec28.19) for an analogous real double-gate shape.
     // CONFIRMED that all 4 force-flag setters (plus
     // vehicle_clear_all_radio_locks's own per-vehicle authority check)
-    // share this identical shape; OPEN until a test sets it, per vehicle.
+    // share this identical shape. UPDATE 2026-10-03: Sec3.7's own
+    // single-player resolution (cross-ref Sec6.22) settles this gate for
+    // the vehicle side too - see CharacterState::forceFlagGatePasses's own
+    // doc comment above for the full trace. Seeded true at construction
+    // (EngineState::getOrCreateVehicle), CONFIRMED not CHOSEN; a test can
+    // still .set(false) per vehicle to exercise the now known-dead
+    // replicate-only branch for structural coverage.
     OpenValue<bool> forceFlagGatePasses{"vehicle force-flag double-gate (0x008ae480/0x008837a0)",
                                         "spec-lua-api-behaviour.md Sec30.5"};
 
@@ -703,6 +830,17 @@ struct VehicleState {
     // back, so nothing downstream depends on a specific default.
     OpenValue<double> tireDurability{"vehicle tire durability", "spec-lua-api-behaviour.md Sec46.5"};
     OpenValue<double> tireDamageMultiplier{"vehicle tire damage multiplier", "spec-lua-api-behaviour.md Sec46.5"};
+
+    // get_dist's own shared position-lookup (Sec4.2) - see
+    // CharacterState::worldPosition's own doc comment for the full
+    // reasoning (same field, same OPEN-by-default rationale, same
+    // FLT_MAX-vs-OpenStateError distinction). Not yet read by get_dist's
+    // own stub (which uses the CharacterState-shaped simplification already
+    // established for other dual-typed resolvers, e.g. on_take_damage) -
+    // added here so a future vehicle-specific position need doesn't have to
+    // re-derive this same reasoning.
+    OpenValue<WorldPosition> worldPosition{"vehicle world position (get_dist's own 0x00a455a0 lookup)",
+                                            "spec-lua-api-behaviour.md Sec4.2"};
 };
 
 // vint_object_find (spec-lua-bindings.md Sec15, folded in mid-task per the
@@ -790,6 +928,61 @@ struct VintTaggedValue {
     double number = 0.0;
     bool boolean = false;
     std::string text;
+};
+
+// One stored Vint property value (vint_set_property / the document loader /
+// the element defaults). `typedAs` is the type/size code
+// (include/sr3luahost/vint_property_types.h) the values were parsed or
+// decoded as - their shape then matches that code exactly (vec2 = 2
+// numbers, ...). 0 = stored raw, as the caller gave it (an untyped test
+// object, a row whose code is OPEN in clean spec text, or a value this host
+// cannot convert faithfully - see EngineState::setVintProperty).
+struct VintStoredProperty {
+    std::vector<VintTaggedValue> values;
+    uint8_t typedAs = 0;
+};
+
+// Counters for the typed property path (2026-10-03), so a real run can show
+// how much of the traffic went through a confirmed type versus a CHOSEN
+// pass-through or an OPEN refusal. Reported by lua_host_run as
+// vint_properties= in verdict_summary.txt.
+struct VintPropertyStats {
+    // vint_set_property
+    uint64_t setBadHandle = 0;           // handle resolves to no object -> silent no-op (CONFIRMED)
+    uint64_t setTyped = 0;             // parsed through the row's (or a borrowed) code
+    uint64_t setRawOpenCode = 0;         // row found, code OPEN in clean text -> stored raw (CHOSEN)
+    uint64_t setRawUntypedObject = 0;    // object has no registered type (test-registered / clone) -> legacy raw
+    uint64_t setRawUnknownType = 0;      // object's type name is none of the 13 -> legacy raw
+    uint64_t setRawEnumUnresolved = 0;   // 0xd string not resolvable from the clean tables -> stored raw
+    uint64_t setRawTweenBorrowUnresolved = 0; // tween start/end_value whose target code is unknown -> stored raw
+    uint64_t setTweenBorrowTyped = 0;    // subset of setTyped: parsed with the target property's code
+    uint64_t setNameMiss = 0;            // no descriptor on the type chain -> no write (CONFIRMED)
+    uint64_t setReadOnlyNoop = 0;        // fail-stub setter (screen_nw/se, unscaled_size; group/point screen_size)
+    uint64_t setShapeRefusals = 0;       // OpenStateError: Lua values do not fit the code
+    uint64_t setCallbackNamesStored = 0; // code 8 names stored (pool claim not modelled)
+    uint64_t screenSizeSets = 0;         // screen_size setter wrote scale
+    uint64_t screenSizeDivZeroGuards = 0; // HOST-SAFETY: zero current size, no write
+    // vint_get_property
+    uint64_t getBadHandle = 0;           // zero Lua values (CONFIRMED)
+    uint64_t getTyped = 0;
+    uint64_t getRawEcho = 0;             // raw stored value echoed (CHOSEN)
+    uint64_t getComputed = 0;            // screen_nw/se/size, mouse_depth-follows-depth
+    uint64_t getNameMiss = 0;            // zero Lua values (CONFIRMED)
+    uint64_t getOpenRefusals = 0;        // OpenStateError
+    // EngineState::loadVintDocument
+    uint64_t docRecordsTyped = 0;
+    uint64_t docRecordsRaw = 0;
+    uint64_t docRecordsSkippedNoDescriptor = 0; // CONFIRMED loader skip (vint-doc Sec5)
+    uint64_t docRecordsSkippedReadOnly = 0;     // fail-stub setters
+    uint64_t docObjectsSeeded = 0;              // element defaults (spec-vint-render.md Sec8)
+    // spec-vint-render.md Sec12.1 image-setter side effects, applied at load
+    // time only when the caller passes an image-size resolver (2026-10-03,
+    // UI draw unit U3 - see loadVintDocument's doc comment).
+    uint64_t docImageSizesApplied = 0;          // `image` record resolved -> unscaled_size re-seeded
+    uint64_t docImageSourceCoordsReset = 0;     // ... and source_nw/source_se reset (custom_source_coords clear)
+    uint64_t docImageUnresolved = 0;            // resolver returned nothing -> no side effect (pool lookup failed)
+    uint64_t docAutoOffsetApplied = 0;          // Sec5.4 applier wrote `offset` (auto_offset 1..9)
+    uint64_t docAutoOffsetNotApplied = 0;       // Sec5.4 applier: auto_offset none/out of range/not a typed value
 };
 
 // vint_dataitem_get (Sec19.2): one "data item" record - a second, SEPARATE
@@ -995,6 +1188,37 @@ public:
     // trace/log later.
     static void replicateStateChange(const std::string& fieldTag, const std::string& objectName);
 
+    // --- Player runtime U0/U1 (spec-player-runtime.md Sec1/Sec2), batch
+    // 2026-10-03 ----------------------------------------------------------
+    //
+    // The input query contract (control context 0x01411b18, binding
+    // tables, every query) and the control-state machine (state table
+    // 0x012e6bb8, request stack 0x012e6c58). Both are pure machinery in
+    // sr3player (include/sr3player/*.h). The input system runs on the
+    // headless NullDeviceSource: this host has no window, so per
+    // spec-player-runtime.md Sec1.1 the context freezes in its cleared state
+    // and every query reads "nothing" - the spec's own rule for an inactive
+    // window, not a stand-in. Nothing in this host runs the per-frame latch
+    // or the dispatcher yet (their callers are the world update, Sec1.1/
+    // Sec2.3, not built here); the Lua natives below push/pop the real stack
+    // and call the real "clear latched".
+    sr3player::InputSystem& inputSystem() { return inputSystem_; }
+    sr3player::ControlStateMachine& controlStateMachine() { return controlStateMachine_; }
+    // player_controls_disable's lock handle, the global 0x0263ae3c
+    // (Sec7.22/Sec7.7; spec-player-runtime.md Sec2.6 push site 0x009e2ef2).
+    // OPEN: no spec gives its static value. (Every keeper tests its handle
+    // for 0 and zeroes it after popping, Sec2.6, which suggests a zero
+    // static - an inference, not a stated value, so not applied.)
+    OpenValue<uint32_t>& playerControlsLockHandle() { return playerControlsLockHandle_; }
+
+    EngineState();
+    // The input system and the control-state machine are wired to each
+    // other through callbacks that capture `this` (rows 0/1 enter -> clear
+    // latched; the latch's step-5 state getter), so an EngineState is not
+    // copyable or movable.
+    EngineState(const EngineState&) = delete;
+    EngineState& operator=(const EngineState&) = delete;
+
     // --- 0x0095da50 (Sec14.1 CORRECTED + Sec33.3 action_play_synced_do) ---
     //
     // 0x0095da50 is a plain name -> synced-action-definition index lookup
@@ -1055,6 +1279,10 @@ public:
     // parent/document assignment (Sec18.2) can only be checked this way.
     // Returns nullptr for an unregistered handle.
     const VdoObject* vdoObjectForTesting(uint32_t handle) const;
+    // The same lookup for a non-test reader of the live tree (2026-10-03:
+    // the UI draw path, sr3_viewer vint-doc, walks parent/first-child/
+    // next-sibling links and reads type names). nullptr = no such handle.
+    const VdoObject* vdoObject(uint32_t handle) const { return vdoObjectForTesting(handle); }
 
     // FUN_00e0ceb0's own stand-in ("a 'current default document' global
     // lookup") - default 0 (this project's own "no default document yet"
@@ -1171,17 +1399,62 @@ public:
     // does not model; the default "" (no override matches - what every
     // resolution other than the only shipped override, "640x480", gives) is
     // CHOSEN.
-    // NOT modelled, deliberately: per-type descriptor tables (a stored
-    // property whose hash the real type does not register would be consumed
-    // and skipped by the real loader; this project stores every property,
-    // since every shipped hash belongs to a name the shipped scripts use),
-    // property defaults for names the file does not store (only scale/anchor
-    // have a spec'd default, Sec7, and its seeding scope is OPEN), and the
-    // instancing of a `document`-typed record's referenced widget document
-    // (its `document_name` property names another .vint_doc - the runtime
-    // instancing is not specified anywhere).
+    // UPDATED 2026-10-03 (property descriptors + spec-vint-render.md):
+    //  * every element-family object (VdoObject::typeName is-an-element) is
+    //    first seeded with the element initializer's defaults
+    //    (spec-vint-render.md Sec8, "a host should seed every element with
+    //    these before applying the loaded document's own property records") -
+    //    except unscaled_size for bitmap/gradient/text/bitmap_circle, which
+    //    their own size paths set (OPEN here, Sec5.4);
+    //  * each file record is then matched against the object's type's
+    //    descriptor chain: no row -> consumed and skipped (CONFIRMED,
+    //    spec-vint-doc-format.md Sec5); a fail-stub row (screen_nw/se,
+    //    unscaled_size, spec-vint-render.md Sec7.3) -> skipped too (the
+    //    loader writes through the same setter); otherwise stored typed when
+    //    the file tag's shape is the row's code (tag n for code n, a tag-4
+    //    string for codes 9/0xa/0xb, a tag-1/2 integer or a resolvable tag-4
+    //    enumerator name for 0xd - the latter the loader's own 0x00e307c0
+    //    conversion, vint-doc Sec5 HIGH CONFIDENCE / spec-lua-bindings.md
+    //    Sec9.2a), raw otherwise. An object of a type name none of the 13
+    //    keeps every record raw (the pre-descriptor behaviour).
+    // Still NOT modelled: the auto_offset applier (spec-vint-render.md
+    // Sec5.4 - when it fires after a load is not specified), the instancing
+    // of a `document`-typed record's referenced widget document (its
+    // `document_name` names another .vint_doc - not specified anywhere).
+    // LoadedVintDocument::propertyCount counts applied FILE records only
+    // (not seeded defaults, not skipped records).
+    //
+    // UPDATED 2026-10-03 (UI draw unit U3, spec-vint-render.md Sec12.1):
+    // `imageSize`, when given, is consulted for every `image` record (tag-4
+    // string) of a `bitmap`-family object (bitmap and gradient - gradient's
+    // parent type is bitmap, spec-lua-bindings.md Sec9.1) AT THAT RECORD'S
+    // POSITION in the applied order, i.e. exactly where the real loader runs
+    // the image setter. It returns the image's own size (w, h) - the
+    // bitmap-resource pool lookup itself (sheet sub-image vs standalone
+    // image, Sec12.1) is the caller's, since this host has no resource pool.
+    // On a hit the CONFIRMED Sec12.1 side effects run, in this order:
+    //  1. if custom_source_coords is clear, source_nw := (0,0) and
+    //     source_se := (w,h). CHOSEN: an object with no stored
+    //     custom_source_coords counts as clear (bitmap's constructor default
+    //     for it is not given in clean text; no shipped HUD document stores
+    //     it - 17 of 1,820 shipped bitmap records do, all `true`);
+    //  2. unscaled_size := (w,h) (re-seeded from the image's own size);
+    //  3. the auto_offset applier (Sec5.4, vtable +0xc4 - "re-fetched on
+    //     every size-changing path of bitmap") with the auto_offset value
+    //     stored at that moment.
+    // Later records of the same block then overwrite whatever they name,
+    // exactly as the real setters would. On a miss nothing happens (the
+    // real pool lookup returned null - no size change) and unscaled_size
+    // stays OPEN for vintQueryBox, as before. NOT modelled: image_crc
+    // records (resolving a CRC to an image needs the pool's CRC index) and
+    // whether auto_offset's OWN setter re-runs the applier (not given in
+    // clean text - a document storing auto_offset after image with no later
+    // `offset` record keeps the offset it had). Without `imageSize` the
+    // loader behaves exactly as before (every existing caller).
+    using VintImageSizeResolver = std::function<std::optional<std::pair<double, double>>(const std::string& imageName)>;
     uint32_t loadVintDocument(const std::string& docName, const sr3vintdoc::Document& doc,
-                              const std::string& activeResolution = std::string());
+                              const std::string& activeResolution = std::string(),
+                              const VintImageSizeResolver& imageSize = VintImageSizeResolver());
     // nullptr for a handle loadVintDocument never issued.
     const LoadedVintDocument* loadedVintDocument(uint32_t docHandle) const;
     size_t loadedVintDocumentCount() const { return loadedVintDocuments_.size(); }
@@ -1223,37 +1496,142 @@ public:
 
     // --- vint_set_property / vint_get_property (Sec20) ----------------------
     //
-    // This project's own minimal stand-in: a plain per-(resolved VDO object,
-    // property-name-hash) bag of whatever raw trailing Lua values a
-    // vint_set_property call was given, echoed back verbatim by
-    // vint_get_property. Property names are hashed the real way (CONFIRMED,
-    // Sec9.2/Sec20.1: the engine's own lower-cased string hash,
-    // sr3save::nameHash here, same citation as VdoObject::nameHash above).
-    // Tweens (CORRECTED 2026-10-03, spec-lua-bindings.md Sec20.1 as revised
-    // by Team A's U1 pass): setting start_value/end_value on a tween writes
-    // the TWEEN's own property - there is no write-through to the target
-    // object. Only the target property's type code is borrowed to PARSE the
-    // value. This bag already stores the value on the handle it was given,
-    // so the write behaviour matches; the type-code borrowing is part of the
-    // descriptor-driven parsing below, which is not implemented.
-    // Not implemented yet: the real per-type property-descriptor tables
-    // (Sec9.1/Sec9.2/Sec9.2a, now specified for all 13 element types by U1;
-    // using them is a separate follow-up task) - so no value is parsed or
-    // converted by its type/size code, values are stored exactly as the
-    // Lua caller passed them - and the callback-claim mechanism (Sec20.1's
-    // vint_callback_lua pool interaction, case 8), which needs those same
-    // type codes.
+    // One per-(resolved VDO object, property-name-hash) store
+    // (VintStoredProperty), written by vint_set_property, the document
+    // loader and the element defaults, read by vint_get_property. Names are
+    // hashed the real way (CONFIRMED, Sec9.2/Sec20.1: the engine's own
+    // lower-cased string hash, sr3save::nameHash).
+    //
+    // TYPED objects (2026-10-03: VdoObject::typeName is one of the 13
+    // registered types - every document-loaded object, and
+    // registerTypedVdoObjectForTesting) go through the real per-type
+    // property-descriptor tables (spec-lua-bindings.md Sec9.1/Sec9.2/Sec9.2a,
+    // include/sr3luahost/vint_property_types.h - read that header for which
+    // rows have a code in clean text and which are OPEN):
+    //  * the name is looked up in the object's own type's table, then up the
+    //    parent chain (CONFIRMED Sec9.1); no row anywhere -> set writes
+    //    nothing, get pushes zero Lua values (CONFIRMED Sec20.1/Sec20.2);
+    //  * a row with a known code: set parses the trailing Lua values by that
+    //    code - exactly vintCodeArity(code) of them are consumed (extra
+    //    trailing values are ignored: the switch builds ONE value record of
+    //    the code's shape, Sec20.1), numbers for 1/2/3/6/7 (floats rounded to
+    //    32-bit, the field width spec-vint-render.md Sec1 gives; 1/2 must be
+    //    whole numbers, 2 non-negative), a string for 4/8/9/0xa/0xb, a
+    //    boolean for 5; 0xd takes a whole number or an enumerator name
+    //    resolved through Sec9.2a's tables. Lua values that do not fit the
+    //    code (wrong count, wrong Lua type, a fractional integer) are an
+    //    OpenStateError - the real switch's behaviour on such input is not
+    //    specified, so this host refuses rather than coerce;
+    //  * a row whose code is OPEN in clean text: CHOSEN pass-through - the
+    //    Lua values are stored and echoed exactly as given (the
+    //    pre-descriptor behaviour), never converted by a guessed type;
+    //  * a 0xd name that the clean tables cannot resolve (an unknown name, or
+    //    any name tween.algorithm lists only as "8 families x {in, out,
+    //    in-out}"): stored raw (CHOSEN - mirrors the document loader's own
+    //    string fallback on a lookup miss, vint-doc Sec5, HIGH CONFIDENCE);
+    //  * TWEEN start_value/end_value (CONFIRMED Sec20.1, as CORRECTED
+    //    2026-10-03): the gate is exact - object type tween, row code 0xe,
+    //    name start_value/end_value case-insensitively. The values are then
+    //    parsed with the code of the property the tween drives (the tween's
+    //    own stored target_handle -> object, target_property -> that object's
+    //    descriptor) and the write lands on the TWEEN's own property, never
+    //    on the target. When this host cannot determine that code (no
+    //    target_handle/target_property stored, target not a typed object, the
+    //    target row's own code OPEN) the values are stored raw (CHOSEN);
+    //  * code 8 (callback name): the name is stored; the vint_callback_lua
+    //    pool claim/refcount Sec20.1 describes is NOT modelled (this host has
+    //    no callback pool) - deferred;
+    //  * spec-vint-render.md Sec7.3 setters: screen_nw, screen_se and
+    //    unscaled_size are the universal fail-stub (no write); screen_size is
+    //    a real setter (see setVintScreenSize below); group/point screen_size
+    //    fail; text's own screen_size setter is OPEN (layout-ready bit).
+    // get, for a typed object: screen_nw/screen_se/screen_size are computed
+    // on every call (spec-vint-render.md Sec7, vintQueryBox below);
+    // mouse_depth reads back depth while it holds the 0x7fffffff sentinel
+    // (Sec1); codes 8 and 0xd refuse (OpenStateError: what FUN_00e1a420
+    // pushes for a callback slot or an enum is not specified, and no shipped
+    // script reads one - measured); a row with no stored value refuses
+    // (OpenStateError: no spec'd default - element-family objects are seeded
+    // with spec-vint-render.md Sec8's defaults, so this is only subtype rows
+    // and tween/animation); otherwise the stored values are pushed.
+    //
+    // UNTYPED objects (registerVdoObjectForTesting, cloneVdoObject - no type
+    // name) and objects whose type name is none of the 13 keep the exact
+    // pre-descriptor behaviour: any name is stored raw and echoed back,
+    // never-set -> zero values (CHOSEN, the test-only path keeps working).
     //
     // `setVintProperty` silently does nothing if `handle` does not resolve
-    // to a registered VdoObject (CONFIRMED, Sec20.1: "an unresolvable handle
-    // simply fails to resolve later" - matching vint_set_property's own
-    // always-zero-Lua-values return, there is no path where this needs to
-    // be visible to a caller).
+    // to a registered VdoObject (CONFIRMED, Sec20.1).
     void setVintProperty(uint32_t handle, const std::string& propertyName, std::vector<VintTaggedValue> values);
-    // Returns nullptr for a bad handle or a property-name miss (CONFIRMED,
-    // Sec20.2: "Property not found, or bad handle -> zero Lua values pushed
-    // (not even nil)"), else the exact values last set.
+    // vint_get_property's value list: nullopt = zero Lua values (bad handle,
+    // name miss - CONFIRMED Sec20.2); throws OpenStateError as described
+    // above.
+    std::optional<std::vector<VintTaggedValue>> getVintProperty(uint32_t handle, const std::string& propertyName) const;
+    // Raw store access (tests, diagnostics): nullptr when nothing is stored
+    // under that name; the stored values exactly, with no type dispatch.
     const std::vector<VintTaggedValue>* findVintProperty(uint32_t handle, const std::string& propertyName) const;
+    const VintStoredProperty* findVintStoredProperty(uint32_t handle, const std::string& propertyName) const;
+    const VintPropertyStats& vintPropertyStats() const { return vintPropertyStats_; }
+
+    // Test/setup-only: a VdoObject of a registered type, attached as the last
+    // child of `parentHandle` (0 = none) and seeded with the element
+    // defaults when it is element-family - the same shape loadVintDocument
+    // builds, without a file.
+    uint32_t registerTypedVdoObjectForTesting(const std::string& name, const std::string& typeName,
+                                              uint32_t parentHandle, uint32_t docHandle);
+    // Test/setup-only stand-in for a type-specific size path this host does
+    // not model (bitmap/gradient/bitmap_circle size from their image, text
+    // layout - spec-vint-render.md Sec5.4/Sec11 item 6): stores
+    // unscaled_size directly (Lua cannot - its setter is the fail-stub).
+    void setVintUnscaledSizeForTesting(uint32_t handle, double w, double h);
+
+    // --- Query-time geometry (spec-vint-render.md Sec7, 2026-10-03) ----------
+    //
+    // The axis-aligned box behind screen_nw/screen_se/screen_size, in the
+    // document's own authored coordinates (Sec7.2: the query chain starts
+    // from identity and zero, NOT the screen fit), recomputed on every call
+    // (Sec7.1 - nothing cached, culling plays no part):
+    //  * pos/M (0x00e272c0): recurse to the parent while it is element-family,
+    //    else start from pos 0, M = identity; then pos = P.pos + P.M*anchor,
+    //    M = P.M * R(rotation) * S(scale) (Sec5.2's compose, op-for-op; the
+    //    matrix products are computed in double and rounded to float, Sec5.2);
+    //  * the four corners pos + M*(offset + q), q over the unscaled_size box
+    //    (0x00e280d0), their axis-aligned box, unioned with every
+    //    element-family child's own box, recursively (0x00e28540) - children
+    //    in tree order via firstChildHandle/nextSiblingHandle; tween/animation
+    //    children are skipped (not element-family);
+    //  * group: the union of its element children's boxes only; a childless
+    //    group "collapses to a single point" whose position Sec7.1 does not
+    //    give -> nullopt here (its screen_size is then (0,0); screen_nw/se and
+    //    any parent union that includes it refuse, OPEN);
+    //  * text: OPEN (layout re-run, Sec7.1/Sec11 item 6) -> OpenStateError;
+    //  * unscaled_size of bitmap/gradient/text/bitmap_circle (sized by their
+    //    own paths, Sec5.4) is OPEN unless a test set it.
+    // auto_offset's applier (Sec5.4, vtable +0xc4) is NOT run here: the spec
+    // names when it fires only for the size-changing paths of bitmap/text/
+    // bitmap_circle, which this host does not model, so `offset` is whatever
+    // was stored. Throws OpenStateError for anything above that is OPEN.
+    struct VintBox { double minX = 0, minY = 0, maxX = 0, maxY = 0; };
+    std::optional<VintBox> vintQueryBox(uint32_t handle) const;
+    // The query-time pos/M chain itself (0x00e272c0, Sec7.1) for one
+    // element, in document coordinates: `px,py` = the pivot position, `m` =
+    // the 2x2 matrix row-major {m00, m01, m10, m11} (x' = m00*x + m01*y).
+    // Sec7.1: an operation-for-operation re-implementation of the render-time
+    // compose step (Sec5.2), differing only in its starting frame (identity/
+    // zero instead of the screen fit, Sec7.2) - so a renderer gets the
+    // render-time state as fitOffset + fitScale*(px,py) and fitScale*m
+    // (the fit scale is uniform, Sec5.1). Exposed 2026-10-03 for the UI draw
+    // path (sr3_viewer vint-doc). Throws OpenStateError as vintQueryBox does
+    // for an unknown/untyped ancestor.
+    struct VintQueryTransform { double px = 0, py = 0; double m[4] = {1, 0, 0, 1}; };
+    VintQueryTransform vintQueryTransform(uint32_t handle) const;
+    // The screen_size setter (Sec7.3, shared body 0x00e27c70): clamps the
+    // request to >= 1e-4 per axis, then scale := scale * requested /
+    // current screen_size. HOST-SAFETY (coordinator-mandated, not engine
+    // behaviour): the real body divides by a zero current size unguarded
+    // (float division - a non-finite scale); this host writes nothing in
+    // that case and counts it (VintPropertyStats::screenSizeDivZeroGuards).
+    void setVintScreenSize(uint32_t handle, double requestedW, double requestedH);
 
     // --- vint_dataresponder_finished / vint_internal_dataresponder_request
     // (Sec21) -----------------------------------------------------------
@@ -1524,6 +1902,30 @@ public:
             return fallback;
         }
         return v.get(); // throws OpenStateError: a real name's real OPEN gap
+    }
+
+    // DIAGNOSTIC ONLY, a second --probe-unresolved-names extension
+    // (2026-10-03, peer follow-up once get_dist's own worldPosition OPEN
+    // gap became the shared next blocker for 5 missions): UNLIKE
+    // probedFieldOr() above, this is not gated on the owning name itself
+    // having been a probed (synthetic) name - a legitimately-resolved name
+    // (one of the 5 CONFIRMED literals, e.g. "#PLAYER1#") can reach
+    // get_dist just as easily as a synthetic one, and its position is
+    // EQUALLY unknown either way (no spec gives a real spawn position for
+    // ANY object, confirmed name or not - see WorldPosition's own doc
+    // comment). So this probes on "is an OPEN position itself" directly,
+    // once explicitly enabled, rather than requiring a probed owner name -
+    // a deliberately different, slightly broader gate than
+    // probedFieldOr()'s, same off-by-default/diagnostic-only discipline.
+    void enableWorldPositionProbe() { worldPositionProbeEnabled_ = true; }
+    uint64_t worldPositionProbeReadCount() const { return worldPositionProbeReadCount_; }
+    WorldPosition worldPositionOr(const OpenValue<WorldPosition>& v, const WorldPosition& fallback) {
+        if (v.known()) return v.get();
+        if (worldPositionProbeEnabled_) {
+            ++worldPositionProbeReadCount_;
+            return fallback;
+        }
+        return v.get(); // throws OpenStateError: real OPEN gap, diagnostic not enabled
     }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
@@ -2131,6 +2533,13 @@ public:
 
     // Sec28.19 `character_set_counter_on_grabbed`.
     struct CounterOnGrabbed {
+        // UPDATE 2026-10-03 (Sec3.7's own single-player resolution, cross-
+        // ref Sec6.22): this is the SAME 0x008ae480/0x008837a0 gate pair
+        // Sec3.7 settles, so it is CONFIRMED true in single player too -
+        // seeded true on first touch in stub_character_set_counter_on_
+        // grabbed (lua_spec_confirmed_stubs.cpp), not left OPEN awaiting a
+        // test. A test can still .set(name, false) to exercise the now
+        // known-dead replicate-only branch for structural coverage.
         OpenValueMap<bool> gatePasses{
             "double-gate (0x008ae480/0x008837a0 direct OR 0x008ae3a0 replicate) passes, abstracted to one flag",
             "spec-lua-api-behaviour.md Sec28.19"};
@@ -3165,6 +3574,85 @@ public:
         return !(cutsceneManager_.present.known() && cutsceneManager_.present.get());
     }
 
+    // --- action_play_do / action_play_is_finished (spec-lua-api-behaviour.md
+    // Sec22.29/Sec7.21), real-hit probe-mode batch (2026-10-03): see
+    // lua_spec_confirmed_stubs.cpp's own doc comment above stub_action_play_do
+    // for the full design and what this closes/leaves OPEN. ---------------
+
+    // Sec22.29: "returns the FIXED sentinel -1.0 ... the SAME 0x012a3038
+    // constant effect_play/effect_play_on_script_object (Sec9.1/Sec12.10)
+    // already establish for their own failure case." Neither effect_play
+    // nor effect_play_on_script_object is implemented anywhere in this
+    // codebase yet (grepped directly - no stub_effect_play/
+    // stub_effect_play_on_script_object exist), so this constant has no
+    // prior shared home to reuse; defined here, named for a future
+    // effect_play pass to reuse instead of re-deriving.
+    static constexpr double kActionPlaySentinelResolveFail = -1.0;
+    // Sec22.29: "a bare -1 ... a genuinely distinct sentinel from the
+    // resolve-failure case above (a plain literal -1 here vs. the named
+    // 0x012a3038 constant there - both textually '-1' but sourced from
+    // different code paths)." Textually identical to -1.0 as a Lua number;
+    // kept as its own named constant (not reused) to mirror that spec
+    // distinction and so a test can tell which branch actually ran via the
+    // counters below, not just the pushed value.
+    static constexpr double kActionPlaySentinelDeadNotForced = -1.0;
+
+    // Sec22.29's action-id lookup (0x004bf810, the animation-name->id
+    // table) has ZERO confirmed entries anywhere in this project's spec -
+    // the same boundary Sec29's named-object map documents for Killbane
+    // ("producer (3)'s 173 call sites were never individually traced,
+    // could register essentially any name"), here for animation names
+    // instead of object names. This project therefore has no real table
+    // data to look an action name up against, so every lookup takes the
+    // "not found" path - the SAME "honest behavior of a never-populated
+    // registry, not a simplification of the return contract" this project
+    // already established for team_make_unfriendly's team-name registry
+    // (Sec30.6, lua_spec_confirmed_stubs.cpp). Per Sec22.29's own AND
+    // logic ("the final return code is 1 only if BOTH the action-lookup
+    // succeeded earlier AND this dispatch itself succeeded"), a failed
+    // lookup alone already forces a non-1 return regardless of what the
+    // still-OPEN dispatch (0x00a275e0) would have done - so this project
+    // never needs to know 0x00a275e0's own internal result to answer this
+    // honestly. The EXACT non-1 numeric encoding is not itself given by
+    // Sec22.29 (only the two CONFIRMED sentinels above are spelled out) -
+    // CHOSEN here as 0, this document's own common boolean-as-number
+    // "false" idiom used throughout (e.g. mode arguments elsewhere in
+    // spec-lua-api-behaviour.md), NOT a claimed real value.
+    static constexpr double kActionPlaySentinelLookupMiss = 0.0;
+
+    int actionPlayDeadGuardCount() const { return actionPlayDeadGuardCount_; }
+    void recordActionPlayDeadGuard() { ++actionPlayDeadGuardCount_; }
+    int actionPlayLookupMissCount() const { return actionPlayLookupMissCount_; }
+    void recordActionPlayLookupMiss() { ++actionPlayLookupMissCount_; }
+
+    // action_play_is_finished (Sec7.21): CONFIRMED structure - "if resolved
+    // AND a zero-argument context check (0x00487e80) succeeds (result !=
+    // -1) AND the object's action-slot value ... is still below the
+    // threshold argument, returns false. Otherwise returns true[, +
+    // conditional notify]." The "context check" queries whether the
+    // character's animation controller currently has an active sub-state -
+    // something only action_play_do's own OPEN internal dispatch
+    // (0x00a275e0, Sec22.29) could ever establish, and this project does
+    // not model those internals (see stub_action_play_do's own doc comment
+    // and the lookup-miss reasoning just above). Nothing in this project's
+    // scope can therefore ever make the context check report anything
+    // other than "no active state" - the SAME "this host never allocates
+    // X, so it honestly and permanently reproduces the 'reports done
+    // prematurely' [structural branch]" reasoning cutscenePlayCheckDone()
+    // above already documents, here applied to a different CONFIRMED
+    // branch of a different function. Both the "character resolves" and
+    // "character doesn't resolve" paths converge on this SAME "otherwise:
+    // true" branch in this project's scope (Sec22.29's own text: "if
+    // resolved AND ... Otherwise returns true" - not-resolved is one of
+    // the ways the AND is false), so resolving the character is not
+    // needed to answer honestly here. The conditional notify
+    // (0x009e3200(0,0)) has no Lua-visible effect anywhere in this
+    // project's scope (an internal engine call, not a further native) and
+    // so is not separately modeled, same as the unobservable internals
+    // this file already declines to fabricate elsewhere (e.g.
+    // cutscenePlayDo's own uninitialized script-group-handle array).
+    bool actionPlayIsFinished() const { return true; }
+
     // --- OPEN-slot inventory (manager prep 2026-10-01) -----------------------
 
     // One row per engine-state slot the stubs read, grouped by area (co-op,
@@ -3188,6 +3676,10 @@ private:
     std::unordered_map<std::string, CharacterState> characters_;
     std::unordered_map<std::string, VehicleState> vehicles_;
     CoopSession coopSession_;
+    sr3player::InputSystem inputSystem_;
+    sr3player::ControlStateMachine controlStateMachine_;
+    OpenValue<uint32_t> playerControlsLockHandle_{"player_controls_disable lock handle global 0x0263ae3c",
+                                                  "spec-lua-api-behaviour.md Sec7.7/Sec7.22"};
     int64_t nextAudioVoiceHandle_ = 1;
     std::vector<PegLoadRequest> pegLoadRequests_;
 
@@ -3208,7 +3700,21 @@ private:
     uint32_t nextVintDataItemHandle_ = 1;
     // Outer key: resolved VDO object handle; inner key: sr3save::nameHash of
     // the (case-folded-by-that-hash) property name (Sec20.1/Sec9.2).
-    std::unordered_map<uint32_t, std::unordered_map<uint32_t, std::vector<VintTaggedValue>>> vintProperties_;
+    std::unordered_map<uint32_t, std::unordered_map<uint32_t, VintStoredProperty>> vintProperties_;
+    // Counted from const getters too (vint_get_property), hence mutable.
+    mutable VintPropertyStats vintPropertyStats_;
+    // Typed-path helpers (src/lua_engine_state.cpp).
+    void seedVintElementDefaults(uint32_t handle, const std::string& typeName);
+    // Numeric components of a stored typed value, or OpenStateError naming
+    // what is missing.
+    std::vector<double> vintNumbers(uint32_t handle, const char* propertyName, size_t count) const;
+    std::vector<double> vintUnscaledSize(uint32_t handle) const;
+    struct VintPosM { double px = 0, py = 0; double m[4] = {1, 0, 0, 1}; };
+    VintPosM vintQueryPosM(uint32_t handle) const;
+    // Sec5.4 auto_offset applier (vtable +0xc4, 0x00e27530) on the stored
+    // auto_offset/unscaled_size - used by loadVintDocument's image path.
+    void vintApplyAutoOffset(uint32_t handle);
+    std::optional<uint8_t> vintTweenBorrowedCode(uint32_t tweenHandle) const;
     // Keyed by sr3save::nameHash of the data-responder name (Sec21's own
     // "hash the name with the engine's standard string-hash" text).
     std::unordered_map<uint32_t, VintDataResponderRecord> vintDataResponders_;
@@ -3237,6 +3743,17 @@ private:
     // explicitly opts in; never populated by any normal code path or test.
     std::unordered_set<std::string> probedNames_;
     uint64_t probedFieldReadCount_ = 0;
+    // DIAGNOSTIC ONLY (see enableWorldPositionProbe()/worldPositionOr()
+    // above) - off unless a caller explicitly opts in; never enabled by any
+    // normal code path or test.
+    bool worldPositionProbeEnabled_ = false;
+    uint64_t worldPositionProbeReadCount_ = 0;
+
+    // --- action_play_do (Sec22.29), see the public accessor doc comments
+    // above for citation/reasoning. Test-observable only, not real engine
+    // fields - same convention as vehicleExitGroupNullThisGuardCount_.
+    int actionPlayDeadGuardCount_ = 0;
+    int actionPlayLookupMissCount_ = 0;
 
     // --- zscene (Sec26.25/Sec14.23/Sec8.21), see the accessor doc comment above ---
     OpenValueMap<bool> zsceneLoadable_{"zscene table entry with kind 1 (0x00721be0 lookup, 0x00723d20 test)",

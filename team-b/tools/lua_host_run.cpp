@@ -804,12 +804,80 @@ std::string extractNilGlobalName(const std::string& msg) {
 // kHookWatchdogInstructionBudget (5,000,000) for consistency - not an
 // independently-chosen new number.
 constexpr int kMissionWatchdogInstructionBudget = 5'000'000;
-void missionWatchdogHook(lua_State* L, lua_Debug*) {
+
+// --trace-host-calls-before-error=N (DIAGNOSTIC ONLY, CHOSEN tooling, off
+// by default, N=0): when N > 0, every single resume this tool makes (the
+// mission's own initial _start call AND every later scheduler-pass resume
+// - both re-arm this SAME hook fresh per resume, see runChunkWithWatchdog/
+// callMissionStart/the schedulerPass `before` callback below) keeps a ring
+// of the last N global-call names (C stub or Lua, via LUA_HOOKCALL) made
+// during THAT ONE resume. Reset at the start of each resume and, if that
+// resume's own call ends in a Lua error, printed right there before being
+// discarded - so it always reflects "what led to this specific error,"
+// never a stale trace from an unrelated resume. Not a spec fact, not a
+// behavior change - purely an investigation aid for "what host call fed a
+// script-level nil/error," the same spirit as --probe-unresolved-names.
+// Real engine behavior is never altered by this flag; only stderr output
+// changes.
+//
+// UPDATED 2026-10-03 (peer follow-up, per-coroutine keying): the first
+// version used a single global ring, which is wrong for any question that
+// isn't "what led to THIS error" - this mission-drive loop advances the
+// WHOLE scheduler every tick (host.runScriptThreadSchedulerPass resumes
+// every live thread, not just one mission's own), so by the time a mission
+// is classified still_suspended at budget exhaustion, a single global ring
+// holds whatever OTHER thread's resume happened to run last that tick, not
+// necessarily this mission's own (results/trace_host_calls_20261003.md's
+// own "NOT answered" section has the full original finding). Keying by the
+// resuming lua_State* (lua_sethook is itself already per-thread in Lua
+// 5.1, so the L the hook fires with IS the specific coroutine) fixes this:
+// each coroutine gets its own ring, so reading back by its own co is
+// always that thread's own last resume, regardless of what else resumed
+// around it. Stale entries for a finished/released thread are simply left
+// in the map (bounded by the mission count this tool ever touches in one
+// run - never reused across tool invocations, so no real leak concern for
+// a short-lived diagnostic).
+size_t g_traceRingSize = 0;
+std::unordered_map<lua_State*, std::vector<std::string>> g_traceRings;
+void resetTraceRing(lua_State* co) { g_traceRings[co].clear(); }
+void printTraceRingIfAny(lua_State* co, const std::string& label, const std::string& errorMessage) {
+    if (g_traceRingSize == 0) return;
+    const auto& ring = g_traceRings[co];
+    std::cerr << "[trace-host-calls] " << label << " error: " << errorMessage << "\n[trace-host-calls] last "
+              << ring.size() << " global calls before it:";
+    for (const auto& n : ring) std::cerr << " " << n;
+    std::cerr << "\n";
+}
+// Prints a coroutine's own ring with no error - the still_suspended case
+// (2026-10-03): a mission that never errors (a thread_yield poll loop) has
+// nothing for printTraceRingIfAny's own error-gated print to fire on, so
+// "what does this mission's own wait poll" needed this separate entry
+// point, reading the SAME per-coroutine ring at budget-exhaustion time
+// instead of at an error.
+void printTraceRingStillSuspended(lua_State* co, const std::string& label) {
+    if (g_traceRingSize == 0) return;
+    const auto& ring = g_traceRings[co];
+    std::cerr << "[trace-host-calls] " << label << " still suspended (no error) - last " << ring.size()
+              << " global calls of its own last resume:";
+    for (const auto& n : ring) std::cerr << " " << n;
+    std::cerr << "\n";
+}
+void missionWatchdogHook(lua_State* L, lua_Debug* ar) {
+    if (ar->event == LUA_HOOKCALL) {
+        lua_Debug info{};
+        if (lua_getstack(L, 0, &info) && lua_getinfo(L, "n", &info)) {
+            auto& ring = g_traceRings[L];
+            ring.push_back(info.name ? info.name : "?");
+            if (ring.size() > g_traceRingSize) ring.erase(ring.begin());
+        }
+        return;
+    }
     luaL_error(L, "lua_host_run mission-drive watchdog: call exceeded the %d-instruction budget "
                   "(likely an infinite loop in never-before-executed mission code) - aborted by "
                   "this tool's own safety hook, not hung",
                kMissionWatchdogInstructionBudget);
 }
+int missionWatchdogHookMask() { return LUA_MASKCOUNT | (g_traceRingSize > 0 ? LUA_MASKCALL : 0); }
 
 // Watchdog-wrapped host.runChunk() - same instruction-budget convention as
 // missionWatchdogHook above, applied around the ONE real Lua API call
@@ -929,7 +997,8 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
     // The watchdog goes on the coroutine: a count hook is per lua_State, and
     // the mission code now runs on `co`, not on L. Threads that thread_new
     // creates inside it inherit it (Lua 5.1 lua_newthread copies the hook).
-    lua_sethook(co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+    resetTraceRing(co); // see g_traceRings' own doc comment above - fresh per resume, keyed by this coroutine
+    lua_sethook(co, missionWatchdogHook, missionWatchdogHookMask(), kMissionWatchdogInstructionBudget);
     std::string fetchError;
     const uint16_t recordId = rec->id;
     const bool alive = threads.run(L, rec, fetchError); // rec is dangling once this returns false
@@ -972,6 +1041,7 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
             const char* msg = lua_tostring(co, -1);
             r.callOk = false;
             r.callError = msg ? msg : "(no error message)";
+            printTraceRingIfAny(co, funcName, r.callError);
         } else {
             r.callOk = true;
         }
@@ -1031,7 +1101,14 @@ int main(int argc, char** argv) {
                      "      .vint_doc found is parsed (layout CONFIRMED, spec-vint-doc-format.md) and, the first\n"
                      "      time a chunk named by a document's lua_script_file runs (or a hook it defined fires),\n"
                      "      loaded into the Vint object registry, with that document as the call's current\n"
-                     "      document (CHOSEN association). Recorded as vint_docs= in verdict_summary.txt.\n";
+                     "      document (CHOSEN association). Recorded as vint_docs= in verdict_summary.txt.\n"
+                     "  --trace-host-calls-before-error=N  DIAGNOSTIC ONLY, off by default (N=0): on any\n"
+                     "      mission-thread Lua error (the initial _start call or a later scheduler-pass resume),\n"
+                     "      print to stderr, prefixed [trace-host-calls], the last N global calls (name only,\n"
+                     "      via LUA_HOOKCALL) made during that specific resume before it errored. The ring resets\n"
+                     "      fresh before every individual resume and is discarded unless that resume's own call\n"
+                     "      ends in a Lua error, so it always reflects what led to one specific error, never a\n"
+                     "      stale trace from an unrelated resume. Never alters real engine behavior.\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
@@ -1076,6 +1153,14 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--probe-unresolved-names") probeUnresolvedNames = true;
         else if (arg == "--no-vint-docs") vintDocs = false;
+        else if (arg.rfind("--trace-host-calls-before-error=", 0) == 0) {
+            std::string v = arg.substr(32);
+            if (v.empty() || v.find_first_not_of("0123456789") != std::string::npos) {
+                std::cerr << "bad --trace-host-calls-before-error value (want a non-negative integer): " << v << "\n";
+                return 1;
+            }
+            g_traceRingSize = std::stoul(v);
+        }
         else if (arg == "--host-rng") hostRng = true;
         else if (arg.rfind("--host-rng=", 0) == 0) {
             std::string v = arg.substr(11);
@@ -1133,7 +1218,15 @@ int main(int argc, char** argv) {
     // per-character/per-vehicle OPEN fields (those routed through
     // probedFieldOr(), e.g. max hit points/ignore-AI) also fall back to a
     // labelled placeholder for a name this same run already probed.
-    if (probeUnresolvedNames) host.engineState().enableUnresolvedNameProbe();
+    if (probeUnresolvedNames) {
+        host.engineState().enableUnresolvedNameProbe();
+        // Same single switch also widens get_dist's own worldPosition gate
+        // (EngineState::worldPositionOr(), 2026-10-03 peer follow-up) - a
+        // second, deliberately separate DIAGNOSTIC ONLY extension, not
+        // gated on probedFieldOr()'s "owner name was itself probed" rule
+        // (see that method's own doc comment for why).
+        host.engineState().enableWorldPositionProbe();
+    }
     // Front-end bring-up, before any script (Sec26.24/Sec26.26: the UI
     // subsystem init 0x008489e0 -> 0x00e23910 runs before the screen_fade
     // init and before UI scripts): the display resolution (host input).
@@ -1954,6 +2047,35 @@ int main(int argc, char** argv) {
          " context_misses=" + std::to_string(docContextMisses) +
          " (real .vint_doc element trees in the Vint object registry; per-call current document = the "
          "document naming the defining chunk as lua_script_file - CHOSEN; see --no-vint-docs)");
+    {
+        // Typed property path counters (EngineState::setVintProperty/
+        // getVintProperty doc comments), cumulative at this point of the run.
+        const auto& vp = host.engineState().vintPropertyStats();
+        line("vint_properties=set_bad_handle:" + std::to_string(vp.setBadHandle) +
+             " set_typed:" + std::to_string(vp.setTyped) +
+             " set_tween_borrow_typed:" + std::to_string(vp.setTweenBorrowTyped) +
+             " set_raw_open_code:" + std::to_string(vp.setRawOpenCode) +
+             " set_raw_untyped_object:" + std::to_string(vp.setRawUntypedObject) +
+             " set_raw_unknown_type:" + std::to_string(vp.setRawUnknownType) +
+             " set_raw_enum_unresolved:" + std::to_string(vp.setRawEnumUnresolved) +
+             " set_raw_tween_borrow_unresolved:" + std::to_string(vp.setRawTweenBorrowUnresolved) +
+             " set_name_miss:" + std::to_string(vp.setNameMiss) +
+             " set_read_only_noop:" + std::to_string(vp.setReadOnlyNoop) +
+             " set_shape_refusals:" + std::to_string(vp.setShapeRefusals) +
+             " set_callback_names_stored:" + std::to_string(vp.setCallbackNamesStored) +
+             " screen_size_sets:" + std::to_string(vp.screenSizeSets) +
+             " screen_size_div_zero_guards:" + std::to_string(vp.screenSizeDivZeroGuards) +
+             " get_bad_handle:" + std::to_string(vp.getBadHandle) + " get_typed:" + std::to_string(vp.getTyped) + " get_raw_echo:" + std::to_string(vp.getRawEcho) +
+             " get_computed:" + std::to_string(vp.getComputed) + " get_name_miss:" + std::to_string(vp.getNameMiss) +
+             " get_open_refusals:" + std::to_string(vp.getOpenRefusals) +
+             " doc_records_typed:" + std::to_string(vp.docRecordsTyped) +
+             " doc_records_raw:" + std::to_string(vp.docRecordsRaw) +
+             " doc_records_skipped_no_descriptor:" + std::to_string(vp.docRecordsSkippedNoDescriptor) +
+             " doc_records_skipped_read_only:" + std::to_string(vp.docRecordsSkippedReadOnly) +
+             " doc_objects_seeded:" + std::to_string(vp.docObjectsSeeded) +
+             " (typed path = spec-lua-bindings.md Sec9/Sec20 descriptor tables + spec-vint-render.md Sec7/Sec8; "
+             "raw = CHOSEN pass-through where clean spec text gives no code)");
+    }
     line("total_bytes_read=" + std::to_string(grandBytes));
     line("total_directory_entries=" + std::to_string(st.stats.entries));
     line("real_lua_scripts_found(name ends '.lua')=" + std::to_string(st.found.size()));
@@ -2489,10 +2611,19 @@ int main(int argc, char** argv) {
                 // (lua_sethook resets the instruction count), so it bounds one
                 // resume, not a thread's whole life.
                 bool ownResumeThisTick = false;
+                // PassEvent carries no lua_State* of its own (bare_globals.h)
+                // - before/after are called in strict pairs for the same
+                // record within one schedulerPass call (src/lua_bare_
+                // globals.cpp's own single-threaded while loop, no
+                // interleaving), so this one local safely bridges the two.
+                lua_State* currentResumeCo = nullptr;
                 for (int pass = 0; pass < kSchedulerPassesPerTick; ++pass) {
                     host.runScriptThreadSchedulerPass(
                         [&](const BareThreadTable::Record& rec) {
-                            lua_sethook(rec.co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+                            currentResumeCo = rec.co;
+                            resetTraceRing(rec.co); // see g_traceRings' own doc comment above - fresh per resume
+                            lua_sethook(rec.co, missionWatchdogHook, missionWatchdogHookMask(),
+                                        kMissionWatchdogInstructionBudget);
                         },
                         [&](const BareThreadTable::PassEvent& ev) {
                             if (foreignIds.count(ev.id)) {
@@ -2508,6 +2639,7 @@ int main(int argc, char** argv) {
                             if (!ev.error.empty()) {
                                 mr.schedulerThreadErrors++;
                                 errorsInOrder.push_back(ev.error); // the runner's "<name>: <message>"
+                                printTraceRingIfAny(currentResumeCo, ev.name, ev.error);
                             }
                             if (!ev.fetchError.empty())
                                 errorsInOrder.push_back("lua_host_run: runner could not fetch " + ev.name + ": " +
@@ -2591,6 +2723,15 @@ int main(int argc, char** argv) {
                                                    std::to_string(ar.currentline) +
                                                    (ar.name ? (std::string(" (in ") + ar.name + ")") : "");
                     }
+                    // Per-coroutine ring (2026-10-03): this mission's own
+                    // thread was resumed on its own schedulerPass passes
+                    // throughout the tick loop above, each resume
+                    // overwriting g_traceRings[rec->co] fresh - so reading
+                    // it back here by this SAME co is always that thread's
+                    // own last resume, never another thread's, answering
+                    // "what does this mission's own wait poll" for the
+                    // first time (the global-ring version could not).
+                    printTraceRingStillSuspended(rec->co, funcName);
                 } else {
                     mr.startAfterTicks = "released_unobserved"; // left the table outside a scheduler pass
                 }
@@ -2759,6 +2900,14 @@ int main(int argc, char** argv) {
               " (DIAGNOSTIC: per-character/per-vehicle OPEN field reads that fell back to a labelled "
               "placeholder because their owner was itself a probed name - see probedFieldOr()'s own doc "
               "comment, engine_state.h)");
+        mline("probed_world_position_reads=" + std::to_string(host.engineState().worldPositionProbeReadCount()) +
+              " (DIAGNOSTIC: get_dist's own worldPosition OPEN gate, widened regardless of whether the "
+              "owner name was itself probed - a fixed synthetic (0,0,0) position, never real data - see "
+              "worldPositionOr()'s own doc comment, engine_state.h)");
+        const auto& csm = host.engineState().controlStateMachine();
+        mline("control_state_stack_after_missions=depth:" + std::to_string(csm.stack().size()) +
+              " handles_issued:" + std::to_string(csm.handleCounter()) +
+              " (spec-player-runtime.md Sec2.5 request stack, capacity 5; pushes are player_controls_disable's only)");
     }
     mline("scheduler_passes=own_resumes:" + std::to_string(schedulerResumesTotal) +
           " own_thread_errors:" + std::to_string(schedulerOwnErrorsTotal) +

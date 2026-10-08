@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 // Real Win32 API only (GetKeyNameTextW, WideCharToMultiByte) - a standard,
 // publicly-documented OS function, called directly, never reverse-
@@ -2098,7 +2099,15 @@ int stub_character_set_counter_on_grabbed(lua_State* L) {
     bool flag = lua_toboolean(L, 2) != 0;
     EngineState* st = upState(L);
     if (st->objectResolves().get(name)) { // OPEN until set
-        if (st->counterOnGrabbed().gatePasses.get(name)) { // OPEN until set
+        // CONFIRMED (Sec3.7's own single-player resolution, cross-ref
+        // Sec6.22, 2026-10-03): this gate shares the SAME 0x008ae480/
+        // 0x008837a0 pair Sec3.7 settles, so it is seeded true on first
+        // touch here, the same "seed on first reference, don't clobber a
+        // later explicit test override" convention
+        // EngineState::getOrCreateCharacter uses for the scalar case - an
+        // OpenValueMap has no construction hook of its own to seed through.
+        if (!st->counterOnGrabbed().gatePasses.known(name)) st->counterOnGrabbed().gatePasses.set(name, true);
+        if (st->counterOnGrabbed().gatePasses.get(name)) { // CONFIRMED true in single player, Sec3.7/Sec28.19
             st->counterOnGrabbed().value[name] = flag;
         }
     }
@@ -2408,9 +2417,11 @@ int stub_vint_dataitem_get(lua_State* L) {
 // read below); property_name (string, mandatory - a missing or non-string
 // value makes the WHOLE call a silent no-op, CONFIRMED); value... (1-3
 // trailing values, whose real required type/count depends on the named
-// property's own type/size code - NOT modeled, see
-// EngineState::setVintProperty's own doc comment). Return: CONFIRMED -
-// always zero Lua values, every path.
+// property's own type/size code - parsed by EngineState::setVintProperty
+// through the per-type descriptor tables, 2026-10-03; read its doc comment
+// for the typed/raw/refused cases - an OpenStateError there surfaces as a
+// Lua error through bareGuardCall). Return: CONFIRMED - always zero Lua
+// values, every path that returns.
 // ---------------------------------------------------------------------
 int stub_vint_set_property(lua_State* L) {
     logCall(L, upLog(L), "vint_set_property", upStateTag(L));
@@ -2429,16 +2440,17 @@ int stub_vint_set_property(lua_State* L) {
 // mandatory, unconditional lua_tonumber+truncate - no type gate, unlike
 // vint_set_property's own handle read above); property_name (string,
 // mandatory). Return: CONFIRMED, variable arity driven by the named
-// property's own type (NOT modeled - see
-// EngineState::findVintProperty's own doc comment; this minimal stand-in
-// echoes back exactly whatever vint_set_property last stored) - zero Lua
-// values (not even nil) on a bad handle or a property-name miss.
+// property's own type - EngineState::getVintProperty (2026-10-03: typed
+// through the per-type descriptor tables, computed screen_nw/se/size,
+// OpenStateError where the value or its push form is not known; untyped
+// test objects keep the old echo) - zero Lua values (not even nil) on a bad
+// handle or a property-name miss.
 // ---------------------------------------------------------------------
 int stub_vint_get_property(lua_State* L) {
     logCall(L, upLog(L), "vint_get_property", upStateTag(L));
     uint32_t handle = static_cast<uint32_t>(lua_tonumber(L, 1));
     std::string propertyName = argString(L, 2);
-    const std::vector<VintTaggedValue>* values = upState(L)->findVintProperty(handle, propertyName);
+    std::optional<std::vector<VintTaggedValue>> values = upState(L)->getVintProperty(handle, propertyName);
     if (!values) return 0; // CONFIRMED: not found / bad handle -> zero Lua values
     int pushed = 0;
     for (const auto& v : *values) pushed += pushVintTaggedValue(L, v);
@@ -2594,13 +2606,16 @@ OpenBits32& vehicleForceFlags1d7aField(VehicleState& v) { return v.forceFlags1d7
 // apply the double-gate: gate passes -> set the bit directly; gate fails ->
 // replicate only (the no-op stand-in for the real opcode-0x46 record), no
 // local bit write - CONFIRMED either/or shape (Sec30.5: "either true ->
-// write the bit directly; both false -> open ... instead").
+// write the bit directly; both false -> open ... instead"). CONFIRMED
+// (Sec3.7's own single-player resolution, 2026-10-03): the gate always
+// passes with no session installed, so every vehicle takes the direct-flip
+// branch from construction - see VehicleState::forceFlagGatePasses.
 void applyVehicleForceFlagSetter(lua_State* L, const char* name, const std::string& vehicleName, bool flag,
                                   uint32_t bitMask, OpenBits32& (*field)(VehicleState&) = vehicleForceFlags1d7c1d7d) {
     EngineState* st = upState(L);
     if (!st->objectResolves().get(vehicleName)) return; // OPEN until set
     VehicleState& vehicle = st->getOrCreateVehicle(vehicleName);
-    if (vehicle.forceFlagGatePasses.get()) { // OPEN until set
+    if (vehicle.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
         field(vehicle).setBits(bitMask, flag ? bitMask : 0u);
     } else {
         EngineState::replicateStateChange(name, vehicleName);
@@ -2677,7 +2692,7 @@ int stub_vehicle_clear_all_radio_locks(lua_State* L) {
     EngineState* st = upState(L);
     for (auto& entry : st->vehicles()) {
         VehicleState& vehicle = entry.second;
-        if (vehicle.forceFlagGatePasses.get()) { // OPEN until set, per vehicle
+        if (vehicle.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
             vehicle.forceFlags.setBits(VehicleState::kRadioControlsLockedBit, 0u); // hardcoded false
         } else {
             EngineState::replicateStateChange("vehicle_clear_all_radio_locks", entry.first);
@@ -4864,7 +4879,10 @@ int stub_vehicle_pathfind_check_done(lua_State* L) {
 // separate per-kind resolver), then write BOTH the "invulnerable" and
 // "always apply player damage" bits via the SAME double-gate idiom
 // (CharacterState::forceFlagGatePasses / VehicleState::forceFlagGatePasses),
-// on whichever kind the name resolves to. CONFIRMED (Sec3.7): the real
+// on whichever kind the name resolves to. CONFIRMED (Sec3.7's own
+// single-player resolution, 2026-10-03): the gate always passes with no
+// session installed, so every character/vehicle takes the direct-flip
+// branch from construction. CONFIRMED (Sec3.7): the real
 // function's own resolution chain tries several DIFFERENT mechanisms in
 // sequence (the generic/"#PLAYER#"/"#FOLLOWER#" chain, then a plain
 // character resolver, then a vehicle resolver) that this project's single
@@ -4881,7 +4899,7 @@ void applyInvulnerabilityFlags(lua_State* L, const char* name, const std::string
     bool treatAsVehicle = st->hasVehicle(targetName) && !st->hasCharacter(targetName);
     if (treatAsVehicle) {
         VehicleState& vehicle = st->getOrCreateVehicle(targetName);
-        if (vehicle.forceFlagGatePasses.get()) { // OPEN until set
+        if (vehicle.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
             vehicle.forceFlags1d7a.setBits(VehicleState::kInvulnerableBit1d7a,
                                            invulnerable ? VehicleState::kInvulnerableBit1d7a : 0u);
             vehicle.forceFlags1d7a.setBits(VehicleState::kAlwaysApplyPlayerDamageBit1d7a,
@@ -4891,7 +4909,7 @@ void applyInvulnerabilityFlags(lua_State* L, const char* name, const std::string
         }
     } else {
         CharacterState& character = st->getOrCreateCharacter(targetName);
-        if (character.forceFlagGatePasses.get()) { // OPEN until set
+        if (character.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
             character.forceFlags1c98.setBits(CharacterState::kInvulnerableBit1c98,
                                              invulnerable ? CharacterState::kInvulnerableBit1c98 : 0u);
             character.forceFlags1c98.setBits(CharacterState::kAlwaysApplyPlayerDamageBit1c98,
@@ -5769,6 +5787,405 @@ int stub_cutscene_play_check_done(lua_State* L) {
     return 1;
 }
 
+// action_play_do (Sec22.29, 0x00a3fae0) / action_play_is_finished (Sec7.21,
+// 0x00a3dcc0) - real-hit probe-mode batch (2026-10-03). Investigation
+// trigger: results/probe_blockers_ranked_20261003_post_realhits.md's own
+// #1 shared blocker - action_play_do has 49,655 real calls in a fresh run
+// of this project's own 49-mission drive (the single highest call count
+// of any name in the whole run), is NOT in specConfirmedStubNames(), and 7
+// missions (dlc3_m03/m06/m10/m11/m13/m14/m15) all park at the identical
+// [string "game_lib.lua"]:563 (in action_play_non_blocking), no
+// first_error, inside a thread_yield poll loop - the SAME architectural
+// shape cutscene_play_do/cutscene_play_check_done had before Sec57.2
+// closed it (src/lua_cutscene.cpp).
+//
+// UNLIKE the cutscene case, the natural same-shaped guess (a separate
+// "_check_done"-style completion-check native action_play_non_blocking
+// polls) does not hold up against this project's own real mission-drive
+// evidence: action_play_is_finished (Sec7.21, a real, registered
+// `gameplay` native - grepped directly in
+// tools/lua_all_registered_1490_tagged.txt) has ZERO measured calls in a
+// fresh run of these same 49 missions (grepped directly against
+// verdict_stub_hits_with_missions.tsv - absent from the whole file, not
+// merely zero), while thread_new/thread_check_done/thread_yield (this
+// project's own already-implemented thread-scheduler primitives,
+// thread_scheduler.cpp - deliberately NOT touched here, per
+// spec_confirmed_stubs.h's own standing "Deliberately NOT touched" note)
+// show large but structurally inconsistent call counts for this role: a
+// thread_new()-created handle is never lua_resume()'d by anything in this
+// project's scope (thread_scheduler.cpp's own stub_thread_yield doc
+// comment), so ThreadScheduler::isDone() would report "dead" on the FIRST
+// check after creation - the opposite of a multi-tick stall.
+// action_play_non_blocking is itself a plain game_lib.lua FUNCTION, not a
+// registered native (absent from tools/lua_all_registered_1490_tagged.txt,
+// grepped directly) - its traceback frame is a Lua call frame, not a C one.
+//
+// A temporary, reverted-before-commit diagnostic (dumping real argument
+// VALUES, not just types, for action_play_do specifically - never
+// committed, and never reading game_lib.lua's own source text, which
+// stays off-limits per this project's clean-room boundary) found the SAME
+// exact call repeating every tick for a stuck mission:
+// action_play_do("MS_Jimmy", "saint fan react b", "", false, true, true,
+// nil, nil). genericStubTrampoline (lua_stub_registry.cpp) always pushes
+// exactly 1 value - nil - for an unimplemented name; in Lua, nil is one of
+// only two falsy values (with false), so a wrapper of the shape `while
+// not action_play_do(...) do thread_yield() end` (or an equivalent "keep
+// retrying until this stops being nil/false" idiom - inferred from this
+// real call/return evidence, never from reading the off-limits script
+// text) can never terminate against a stub that returns nil on every
+// call, regardless of whether any SEPARATE completion-check native exists
+// at all. Sec22.29 itself describes action_play_do as a one-shot
+// dispatcher with NO completion-signaling mechanism of its own (no
+// scripted-request-id pool like Sec35.6's, no thread handle, no flag it
+// sets for a later poll to read) - its own CONFIRMED contract is simply
+// "always pushes exactly 1 number" (1 on full success; two explicitly
+// named sentinels on two named failure paths). Implementing THAT contract
+// faithfully - a real number on every path, never nil - is therefore both
+// the full extent of what Sec22.29 actually specifies and, on this
+// project's own measured evidence, the real candidate fix for the
+// observed stall: no separate completion-tracking mechanism is invented
+// here because Sec22.29 does not describe one to invent.
+//
+// Body per Sec22.29 (full citation in this file's own §22.29 reading):
+// arg 1 resolves via the generic/#PLAYER# chain (EngineState::
+// objectResolves(), the SAME shared Sec29 map the Killbane-class blocker
+// already uses) - resolve failure pushes the fixed sentinel -1.0 (the
+// SAME named constant effect_play/effect_play_on_script_object, Sec9.1/
+// Sec12.10, would use for their own failure case - NEITHER is implemented
+// anywhere in this codebase yet, so EngineState::
+// kActionPlaySentinelResolveFail is this constant's first home here, not
+// a reused one). If resolved but dead and not forced (arg 4): a bare -1 (a
+// genuinely distinct sentinel per Sec22.29's own text, tracked via its own
+// named constant/counter rather than conflated with the resolve-failure
+// path, even though both are -1 as a Lua number). The dead-check reuses
+// CharacterState::notDeadForActionPlay(), a SEPARATELY SCOPED predicate
+// from the pre-existing isAlive (Sec30.5) - see that method's own doc
+// comment (engine_state.h) for why reusing isAlive here would assume a
+// cross-call-site sharing fact neither section states. UPDATE 2026-10-03
+// (Sec34.5): this predicate's own real body is now CONFIRMED (lifeState ==
+// 5, or the +0xe3 bit 0x01 flag) and computed live from those two fields,
+// both seeded to their CONFIRMED spawn defaults at construction - no
+// longer an independently-OPEN flag a test or the probe diagnostic has to
+// set. Otherwise: the action-id
+// lookup (0x004bf810) has zero confirmed entries anywhere in this
+// project's spec (the same "never-populated registry" boundary this
+// project already established for team_make_unfriendly's team-name
+// registry, Sec30.6) - every lookup therefore honestly takes the "not
+// found" path, which alone already forces Sec22.29's own AND-gated final
+// return below 1, regardless of what the still-OPEN dispatch (0x00a275e0)
+// would otherwise have decided - so this project never needs to guess
+// 0x00a275e0's own internal result to answer honestly. The EXACT non-1
+// numeric encoding is not itself given by Sec22.29 (only the two sentinels
+// above are spelled out) - EngineState::kActionPlaySentinelLookupMiss is
+// CHOSEN as 0.0, this document's own common boolean-as-number "false"
+// idiom used throughout, NOT a claimed real value.
+int stub_action_play_do(lua_State* L) {
+    logCall(L, upLog(L), "action_play_do", upStateTag(L));
+    std::string name = argString(L, 1);
+    std::string actionName = argString(L, 2);
+    // Arg 3: standard nil-gated idiom, but CONFIRMED default = arg 2's OWN
+    // value (Sec22.29: "a genuinely distinct default shape"), not a
+    // literal constant.
+    std::string variant = optionalStringDefault(L, 3, actionName);
+    bool forced = optionalBoolDefault(L, 4, false);
+    // Args 5/6: forwarded into the still-OPEN dispatch (0x00a275e0) only;
+    // no further effect modeled anywhere in this project's scope.
+    (void)optionalBoolDefault(L, 5, false);
+    (void)optionalBoolDefault(L, 6, false);
+    // Args 7/8: two secondary named references, each resolved via the 5th
+    // per-kind resolver (liveness-gated, default 0 on failure) and
+    // forwarded into the still-OPEN dispatch - no Lua-visible effect
+    // anywhere in this project's scope, so read (matching the real call
+    // shape) and not modeled further, same as cutscene_play_do's own
+    // "read and discarded" 2nd argument above.
+    (void)optionalStringDefault(L, 7, "");
+    (void)optionalStringDefault(L, 8, "");
+
+    EngineState* st = upState(L);
+    // OPEN until set (Sec29) - throws for an unconfirmed real name (the
+    // same Killbane-class blocker every other in-scope CharacterState-
+    // based function already produces); true via --probe-unresolved-names.
+    if (!st->objectResolves().get(name)) {
+        lua_pushnumber(L, EngineState::kActionPlaySentinelResolveFail);
+        return 1;
+    }
+    CharacterState& character = st->getOrCreateCharacter(name);
+    // CONFIRMED (Sec34.5, 2026-10-03): the predicate's own two real fields
+    // (lifeState, killFinalizedFlagE3) are seeded to their CONFIRMED spawn
+    // defaults at construction (EngineState::getOrCreateCharacter) for
+    // every character - real or probed alike - so no separate probe
+    // fallback is needed here any more (see notDeadForActionPlay()'s own
+    // doc comment).
+    bool notDead = forced || character.notDeadForActionPlay();
+    if (!forced && !notDead) {
+        st->recordActionPlayDeadGuard();
+        lua_pushnumber(L, EngineState::kActionPlaySentinelDeadNotForced);
+        return 1;
+    }
+    // Action-id lookup (0x004bf810): see this function's own doc comment
+    // above - this project has zero confirmed animation-name table
+    // entries, so every lookup honestly takes the "not found" path, which
+    // alone already forces a non-1 final return per Sec22.29's own AND
+    // logic.
+    (void)variant; // consumed only by the still-OPEN sub-state blend step (0x0095be60) - no further effect modeled
+    st->recordActionPlayLookupMiss();
+    lua_pushnumber(L, EngineState::kActionPlaySentinelLookupMiss);
+    return 1;
+}
+
+// action_play_is_finished (Sec7.21, 0x00a3dcc0) - see EngineState::
+// actionPlayIsFinished()'s own doc comment (engine_state.h) for the full
+// reasoning: this project never models anything that could make its
+// CONFIRMED "has an active sub-state below threshold" branch true, so it
+// honestly always reports "finished." Zero measured real calls across
+// this project's own full 49-mission drive as of this batch (see this
+// file's own doc comment above stub_action_play_do) - implemented
+// regardless, per Sec7.21's own real, registered-native status and this
+// task's own explicit "closes part of the picture, real value regardless"
+// instruction, not because it was the actual observed blocker for the 7
+// missions named above.
+int stub_action_play_is_finished(lua_State* L) {
+    logCall(L, upLog(L), "action_play_is_finished", upStateTag(L));
+    (void)argString(L, 1); // resolved via the generic/#PLAYER# chain per Sec7.21 - consumed for real call shape only; see doc comment above for why resolution doesn't change the answer in this project's scope
+    (void)optionalNumberDefault(L, 2, 0.0); // threshold argument - consumed for shape only, same reasoning
+    lua_pushboolean(L, upState(L)->actionPlayIsFinished() ? 1 : 0);
+    return 1;
+}
+
+// get_dist (Sec4.2, 0x00a4bdb0) - 217 calls/35 scripts. Investigation
+// trigger: results/trace_host_calls_20261003.md - the new
+// --trace-host-calls-before-error diagnostic's first real use found
+// get_dist (a generic stub, always nil) feeding directly into m08.lua:910's
+// "attempt to compare nil with number". Real mission-drive call shape
+// confirmed directly (verdict_stub_hits_with_missions.tsv): argc=2,
+// types=string,string - matches Sec4.2's own 2-mandatory-string shape.
+//
+// CONFIRMED contract: 2 mandatory strings (object names) + 2 optional
+// booleans (vertical-axis handling), each individually nil-gated, default
+// false. Each name resolves through the SAME shared objectResolves() map
+// every other generic/#PLAYER# resolver in this project's scope already
+// uses (Sec29's "one shared global name map" finding - Sec4.2's own
+// 0x00a280c0 first-try resolver). If EITHER name fails to resolve, pushes
+// the CONFIRMED IEEE-754 single-precision max value as a "could not
+// compute" sentinel - Sec4.2's own text is explicit this is not an error
+// path. If both resolve, computes the Euclidean distance between their
+// world positions, with the middle (vertical) axis of the difference
+// optionally multiplied by 10.0 (arg 3) or zeroed entirely (arg 4, checked
+// after arg 3 so it wins if both are true) - "vertical" = Y, CONFIRMED
+// engine convention (spec-physics-runtime.md's own gravity constant
+// "(0, -9.8, 0), Y-up").
+//
+// Every resolved name is treated as character-shaped: the SAME
+// simplification this file already establishes for other dual/triple-typed
+// resolvers (see stub_on_take_damage's own doc comment) - this project has
+// no name-to-type registry to tell a character name from a vehicle name
+// from a bare string alone, and inventing one would be exactly the kind of
+// unconfirmed state this project's discipline refuses. worldPosition
+// itself is OPEN by default (CharacterState::worldPosition's own doc
+// comment) - no spec gives a CONFIRMED spawn position for any object, and
+// the save format doesn't carry one either (spec-save-format.md Sec6.6,
+// confirmed 2026-10-03), so a read while unset throws OpenStateError. This
+// is the correct, honest outcome for "resolved object, unknown position" -
+// a GENUINELY different case from "name failed to resolve", which never
+// reaches this far (handled above via the FLT_MAX sentinel instead). So
+// get_dist does not yet unblock m08's own forward progress (it still
+// errors - just with a clean, labelled OPEN message instead of a raw
+// nil-compare) until something writes a real position; implementing the
+// full CONFIRMED contract faithfully, rather than fabricating 0,0,0 to
+// force a number through, is what Sec4.2 actually specifies.
+int stub_get_dist(lua_State* L) {
+    logCall(L, upLog(L), "get_dist", upStateTag(L));
+    std::string a = argString(L, 1);
+    std::string b = argString(L, 2);
+    bool vertTimes10 = optionalBoolDefault(L, 3, false);
+    bool vertZero = optionalBoolDefault(L, 4, false); // checked after arg 3 - wins if both true, per Sec4.2
+    EngineState* st = upState(L);
+    if (!st->objectResolves().get(a) || !st->objectResolves().get(b)) {
+        lua_pushnumber(L, static_cast<lua_Number>((std::numeric_limits<float>::max)()));
+        return 1;
+    }
+    // DIAGNOSTIC ONLY (--probe-unresolved-names' own worldPositionOr()
+    // extension, 2026-10-03): off by default, throws exactly as .get()
+    // would until explicitly enabled; see that method's own doc comment.
+    const WorldPosition kProbeOrigin{}; // CHOSEN (0,0,0), logged as probe - never a real baseline value
+    WorldPosition pa = st->worldPositionOr(st->getOrCreateCharacter(a).worldPosition, kProbeOrigin);
+    WorldPosition pb = st->worldPositionOr(st->getOrCreateCharacter(b).worldPosition, kProbeOrigin);
+    double dx = pa.x - pb.x;
+    double dy = pa.y - pb.y; // Y = vertical (spec-physics-runtime.md: gravity (0,-9.8,0), Y-up)
+    double dz = pa.z - pb.z;
+    if (vertZero) dy = 0.0;
+    else if (vertTimes10) dy *= 10.0;
+    lua_pushnumber(L, static_cast<lua_Number>(std::sqrt(dx * dx + dy * dy + dz * dz)));
+    return 1;
+}
+
+// player_names_get_all (Sec51.4, ranking tranche 17): "resolved in full...
+// a dense 1-based name table" of local + remote co-op players. Real
+// mission-drive call shape confirmed directly
+// (verdict_stub_hits_with_missions.tsv): argc=0 - no arguments observed,
+// matching a plain "give me every player's name" query. This host models
+// single player only (no remote co-op session ever exists here), so the
+// table always holds exactly 1 entry: the local player's own name
+// sentinel, reusing the literal "#PLAYER1#" Sec29.4 already establishes as
+// a CONFIRMED pre-resolved name in this project's shared objectResolves()
+// map (CHOSEN - the tranche summary doesn't spell out the exact string
+// each table entry holds, only that it's "a dense 1-based name table", so
+// reusing this project's own already-established player-name sentinel
+// rather than inventing a different display-name format is the
+// non-fabricating reading). Fixes the sh03/dlc3_m02 player_list nil-index
+// blocker found via --trace-host-calls-before-error (results/
+// trace_host_calls_20261003.md): player_names_get_all was a generic stub,
+// always nil, feeding directly into game_lib.lua:1488's "attempt to index
+// local 'player_list' (a nil value)".
+int stub_player_names_get_all(lua_State* L) {
+    logCall(L, upLog(L), "player_names_get_all", upStateTag(L));
+    lua_newtable(L);
+    lua_pushstring(L, "#PLAYER1#");
+    lua_rawseti(L, -2, 1);
+    return 1;
+}
+
+// =======================================================================
+// Player runtime batch (2026-10-03): player_controls_disable (Sec7.22),
+// player_controls_enable (Sec7.7), player_movement_disable (Sec7.25),
+// wired to the real control-state stack and input context
+// (spec-player-runtime.md Sec2.5/Sec2.6/Sec2.9 and Sec1.11.1;
+// include/sr3player/). All three resolve through the generic/#PLAYER#
+// chain 0x00a280c0 (this project's shared objectResolves() step) and
+// share the single-gate (0x008addb0, variant 2) idiom on the byte +0x1d99:
+//   * gate TRUE -> direct apply (modelled in full below);
+//   * gate FALSE -> "checks a co-op session object (0x0087ba20) is non-null
+//     AND a session state-counter comparison" before opening an opcode-0x32
+//     record (numeric modes 0/1 disable, 2 enable, 3/4 movement-disable).
+// The gate is CharacterState::controlLockGatePasses, seeded TRUE (CHOSEN,
+// this project's single-player-only simplification; see that field's doc
+// comment). The gate-false branch is still modelled structurally: no
+// session -> silent no-op; a session present -> the state-counter
+// comparison is not modelled, so it refuses as OPEN instead of guessing.
+//
+// Real mission-drive call shape (verdict_stub_hits_with_missions.tsv,
+// results/verify_getdist_playernames_mission_drive, 721 ticks):
+// player_controls_disable 37 calls / player_controls_enable 30 calls, both
+// last_argc=1 (name only); player_movement_disable 0 calls (absent).
+// =======================================================================
+
+// Gate-false branch shared by all three (see the batch header above).
+void controlLockCoopRecord(EngineState* st, const char* tag, int mode) {
+    if (!st->coopSession().present.get()) return;  // CONFIRMED initial false (Sec26.28): no session -> no record, no write
+    throw OpenStateError(std::string("co-op session state-counter comparison before the opcode-0x32 record (") + tag +
+                             ", mode " + std::to_string(mode) + ")",
+                         "spec-lua-api-behaviour.md Sec7.7/Sec7.22/Sec7.25");
+}
+
+// 0x009e2dd0's direct-apply branch (Sec7.22), shared with player_controls_
+// enable's delegation (Sec7.7). Writes bit 0x08 of +0x1d99 to `disable`;
+// when the value changes:
+//   -> disabled, and the lock handle 0x0263ae3c was null: push state 1 on
+//      the control-state stack (0x005aa780(1), spec-player-runtime.md
+//      Sec2.5) storing the returned handle, then 0x00db8680 (not read in any
+//      spec - not modelled) and "clear latched" 0x005bbf60 (Sec1.11.1),
+//      then - if the getter 0x00941f40 succeeds - 0x009bc0d0 and 0x009c7cc0
+//      (roles OPEN in Sec7.22 - not modelled);
+//   -> enabled, and the handle was non-null: pop that exact handle
+//      (0x005aa740) and clear it.
+// The closing notify 0x0083bf20 (role OPEN) is not modelled. Every read
+// happens before any write, so a refusal would leave no half-applied state
+// if either ever read OPEN - but both are now CONFIRMED/HIGH seeded at
+// construction/session-start (spec-player-runtime.md Sec2.10,
+// CharacterState::controlsDisabled and EngineState::playerControlsLockHandle_
+// own doc comments), so a plain .get() is used directly; the earlier probe-
+// mode placeholder (EngineState::controlLockOr()) this comment used to cite
+// is gone - it existed only to widen these same two fields while they were
+// genuinely OPEN, and nothing else in this codebase ever used it.
+void applyControlsDisabledDirect(EngineState* st, CharacterState& c, bool disable) {
+    const bool wasDisabled = c.controlsDisabled.get();
+    if (wasDisabled != disable) {
+        auto& handle = st->playerControlsLockHandle();
+        const uint32_t h = handle.get();
+        if (disable && h == 0) {
+            handle.set(st->controlStateMachine().push(sr3player::kLockedStateUi));
+            st->inputSystem().clearLatched();
+        } else if (!disable && h != 0) {
+            st->controlStateMachine().pop(h);
+            handle.set(0);
+        }
+    }
+    c.controlsDisabled.set(disable);
+}
+
+// ---------------------------------------------------------------------
+// player_controls_disable (Sec7.22, 0x00a59630). 1 mandatory string; 1
+// boolean read with NO nil/absence gate (lua_toboolean: absent -> false).
+// No return. CHOSEN reading of the boolean: the spec ties it only to the
+// gate-false record's numeric mode (0 for false, 1 for true); the
+// direct-apply branch "writes the bit directly" and player_controls_enable
+// re-enters that same branch "passing false", so the delegate's own value
+// argument is the DISABLED state - read here as always true from this
+// native (a disable call that enabled controls would contradict its name).
+// What, if anything, the Lua boolean changes on the direct branch is not
+// stated by the spec and is not modelled.
+// ---------------------------------------------------------------------
+int stub_player_controls_disable(lua_State* L) {
+    logCall(L, upLog(L), "player_controls_disable", upStateTag(L));
+    std::string name = argString(L, 1);
+    const bool flag = lua_toboolean(L, 2) != 0;
+    EngineState* st = upState(L);
+    if (!st->objectResolves().get(name)) return 0;  // OPEN until set; unresolved -> no-op
+    CharacterState& c = st->getOrCreateCharacter(name);
+    if (c.controlLockGatePasses.get()) {
+        applyControlsDisabledDirect(st, c, true);
+    } else {
+        controlLockCoopRecord(st, "player_controls_disable", flag ? 1 : 0);
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// player_controls_enable (Sec7.7, 0x00a59670). 1 mandatory string, no
+// boolean at all. No return. Gate true (0x009e4940): does NOT
+// unconditionally clear the bit - only if bit 0x08 is currently set AND the
+// lock handle 0x0263ae3c is non-null does it re-enter 0x009e2dd0's direct
+// branch with false; otherwise a no-op (so an enable with the bit set but
+// no handle leaves the bit set - reproduced as specified).
+// ---------------------------------------------------------------------
+int stub_player_controls_enable(lua_State* L) {
+    logCall(L, upLog(L), "player_controls_enable", upStateTag(L));
+    std::string name = argString(L, 1);
+    EngineState* st = upState(L);
+    if (!st->objectResolves().get(name)) return 0;  // OPEN until set
+    CharacterState& c = st->getOrCreateCharacter(name);
+    if (c.controlLockGatePasses.get()) {
+        if (c.controlsDisabled.get() && st->playerControlsLockHandle().get() != 0)
+            applyControlsDisabledDirect(st, c, false);
+    } else {
+        controlLockCoopRecord(st, "player_controls_enable", 2);
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------
+// player_movement_disable (Sec7.25, 0x00a59780). 1 mandatory string; 1
+// boolean, no nil/absence gate. No return. Gate true (0x009e2fa0): writes
+// bit 0x10 of +0x1d99 directly - no control-state-stack bookkeeping. Same
+// CHOSEN reading of the boolean as player_controls_disable (record mode 3
+// for false / 4 for true on the gate-false branch only; the direct write is
+// "disabled").
+// ---------------------------------------------------------------------
+int stub_player_movement_disable(lua_State* L) {
+    logCall(L, upLog(L), "player_movement_disable", upStateTag(L));
+    std::string name = argString(L, 1);
+    const bool flag = lua_toboolean(L, 2) != 0;
+    EngineState* st = upState(L);
+    if (!st->objectResolves().get(name)) return 0;  // OPEN until set
+    CharacterState& c = st->getOrCreateCharacter(name);
+    if (c.controlLockGatePasses.get()) {
+        c.movementDisabled.set(true);
+    } else {
+        controlLockCoopRecord(st, "player_movement_disable", flag ? 4 : 3);
+    }
+    return 0;
+}
+
 // Every spec stub is registered through this trampoline. A stub reading
 // OPEN engine state (open_state.h) throws OpenStateError; the trampoline
 // catches it, logs "OPEN_STATE:<global>" in the HitLog, pushes the message
@@ -6141,6 +6558,38 @@ const std::vector<std::string>& specConfirmedStubNames() {
         "dlc2_m02_clapboards_reset",
         "cutscene_play_do",
         "cutscene_play_check_done",
+        // Real-hit probe-mode batch (2026-10-03): spec-lua-api-behaviour.md
+        // Sec22.29/Sec7.21 - see this file's own doc comment above
+        // stub_action_play_do for the full citation/reasoning. Both
+        // `gameplay` in tools/lua_all_registered_1490_tagged.txt (grepped
+        // directly).
+        "action_play_do",
+        "action_play_is_finished",
+        // --trace-host-calls-before-error's first real use (2026-10-03,
+        // results/trace_host_calls_20261003.md): both generic stubs were
+        // feeding nil directly into a script-level nil-compare/nil-index.
+        "get_dist",
+        "player_names_get_all",
+        // Player runtime batch (2026-10-03): Sec7.22/Sec7.7/Sec7.25 wired to
+        // spec-player-runtime.md's control-state stack. Registration was
+        // briefly held back pending Team A's answer on two construction-time
+        // values (character +0x1d99 byte, lock handle 0x0263ae3c) - a true
+        // default-mode drive with strict OPEN refusal on both shifted 37/49
+        // missions' own first_error_message from the Killbane-class blocker
+        // to this pair's own OPEN item, confirmed directly before holding.
+        // RESOLVED (spec-player-runtime.md Sec2.10, synced 2026-10-03):
+        // handle 0x0263ae3c is CONFIRMED null (0) at session/mission start
+        // (self-balancing - its only creator/destroyer is the disable/
+        // enable apply itself); +0x1d99 is HIGH CONFIDENCE all-clear
+        // (enabled) at spawn (no constructor touches it, rests on the pool
+        // allocation being zero-filled - the same caveat Sec34.5 already
+        // established for lifeState/killFinalizedFlagE3). Both fields now
+        // seed real CONFIRMED/HIGH defaults at construction (CharacterState,
+        // engine_state.h) instead of staying OpenValue-OPEN, so the strict
+        // refusal this comment used to warn about no longer fires.
+        "player_controls_disable",
+        "player_controls_enable",
+        "player_movement_disable",
     };
     // The 24 bare globals (specBareGlobals(), lua_bare_globals.cpp) are spec
     // functions too, so tools and tests that walk this list (the refusal
@@ -6419,6 +6868,17 @@ void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, c
     if (wants("dlc2_m02_clapboards_reset")) registerOne(L, state, log, stateTag, "dlc2_m02_clapboards_reset", openGuard<stub_dlc2_m02_clapboards_reset>);
     if (wants("cutscene_play_do")) registerOne(L, state, log, stateTag, "cutscene_play_do", openGuard<stub_cutscene_play_do>);
     if (wants("cutscene_play_check_done")) registerOne(L, state, log, stateTag, "cutscene_play_check_done", openGuard<stub_cutscene_play_check_done>);
+    // Real-hit probe-mode batch (2026-10-03): Sec22.29/Sec7.21.
+    if (wants("action_play_do")) registerOne(L, state, log, stateTag, "action_play_do", openGuard<stub_action_play_do>);
+    if (wants("action_play_is_finished")) registerOne(L, state, log, stateTag, "action_play_is_finished", openGuard<stub_action_play_is_finished>);
+    // --trace-host-calls-before-error's first real use (2026-10-03).
+    if (wants("get_dist")) registerOne(L, state, log, stateTag, "get_dist", openGuard<stub_get_dist>);
+    if (wants("player_names_get_all")) registerOne(L, state, log, stateTag, "player_names_get_all", openGuard<stub_player_names_get_all>);
+    // Player runtime batch (2026-10-03) - see specConfirmedStubNames()'s own
+    // comment above these same 3 names for the construction-default history.
+    if (wants("player_controls_disable")) registerOne(L, state, log, stateTag, "player_controls_disable", openGuard<stub_player_controls_disable>);
+    if (wants("player_controls_enable")) registerOne(L, state, log, stateTag, "player_controls_enable", openGuard<stub_player_controls_enable>);
+    if (wants("player_movement_disable")) registerOne(L, state, log, stateTag, "player_movement_disable", openGuard<stub_player_movement_disable>);
 }
 
 } // namespace sr3luahost

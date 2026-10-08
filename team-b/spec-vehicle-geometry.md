@@ -8,7 +8,7 @@
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
-**Review status summary (2026-09-30)** — adversarial desk review of 36 units (`review/adv_vehicle_geometry.md`): **14 DESK-PASS** (§2, §7.2 Q1, §7.2 Q2, §8, §9, §11.4, §11.6, §11.8, §11.9 intro, §11.9.4, §11.9.6, §11.9.7, §11.9.8, §11.10); **9 DESK-PASS, text fixes applied** (§1, §4.1, §7, §7.2 constructor paragraph, §10, §11.5, §11.9.1, §11.9.3, §11.12); **3 VALIDATED-BY-DATA** (§7.1 core association — Team B 393/393 vehicles, 17,026 materials / 36,010 entries, `team-b/HANDOFF.md` §9.69; §11.1 — Team B 393/393 vehicles, 90,290/90,290 draw ranges, §9.89; §11.2 layout — Team B 393/393 bindings §9.69 and byte-exact array B/C on `car_4dr_genki_0` §9.106); **10 NEEDS-EXE** (§3, §4, §5, §6, §7.2 Q3, §11.3, §11.7, §11.9.2, §11.9.5, §11.11). A desk pass alone does not clear a unit: it means the text is internally consistent and matches the other specs, not that it was re-derived from the executable; VALIDATED-BY-DATA units are already backed by Team B's full-population runs. Note on populations: Team B's *part-record* run is **372/372 files, 9,536 parts** (`team-b/HANDOFF.md` §9.25), not 393/9,951 — the 393/9,951 part figures in §1/§4 are this spec's own; Team B's 393/393 runs are the channel/layout decode (§9.102), the material bindings (§9.69) and the `high16 < channelCount` join (§9.89). **Awaiting the executable:** §3 (`FUN_007524f0`/`FUN_007527b0` alignment base of the blob skip; the uncharacterised header spans), §4 (`FUN_00aaad50`/`FUN_00aaaea0`: part `+0x60`..`+0x7F` vs the `+0x68` flag byte; `+0x50`/`+0x54` child array), §5 (special-case compare rules in `FUN_00ab1080`), §6 (`FUN_00ab0730` remap layout; the three bbox type masks), §7.2 Q3 (runtime writer of `Base_Paint_Color`, if any), §11.3 (`+0xA4` target), §11.7 (`FUN_00760c30` return value), §11.9.2 (device-wrapper slots), §11.9.5 (range-stride factors; `this+0xfc` array), §11.11 (steps 3–4). **Awaiting real data:** §3 `u32(ccar+0x04) mod 16` over all 393 and the `30/386`/`347` denominators; §4 parts with flag `0x200`, float-vs-byte view of part `+0x60`..`+0x7F`. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+**Review status summary (2026-09-30)** — adversarial desk review of 36 units (`review/adv_vehicle_geometry.md`): **14 DESK-PASS** (§2, §7.2 Q1, §7.2 Q2, §8, §9, §11.4, §11.6, §11.8, §11.9 intro, §11.9.4, §11.9.6, §11.9.7, §11.9.8, §11.10); **9 DESK-PASS, text fixes applied** (§1, §4.1, §7, §7.2 constructor paragraph, §10, §11.5, §11.9.1, §11.9.3, §11.12); **3 VALIDATED-BY-DATA** (§7.1 core association — Team B 393/393 vehicles, 17,026 materials / 36,010 entries, `team-b/HANDOFF.md` §9.69; §11.1 — Team B 393/393 vehicles, 90,290/90,290 draw ranges, §9.89; §11.2 layout — Team B 393/393 bindings §9.69 and byte-exact array B/C on `car_4dr_genki_0` §9.106); **10 NEEDS-EXE** (§3, §4, §5, §6, §7.2 Q3, §11.3, §11.7, §11.9.2, §11.9.5, §11.11). A desk pass alone does not clear a unit: it means the text is internally consistent and matches the other specs, not that it was re-derived from the executable; VALIDATED-BY-DATA units are already backed by Team B's full-population runs. Note on populations: Team B's *part-record* run is **372/372 files, 9,536 parts** (`team-b/HANDOFF.md` §9.25), not 393/9,951 — the 393/9,951 part figures in §1/§4 are this spec's own; Team B's 393/393 runs are the channel/layout decode (§9.102), the material bindings (§9.69) and the `high16 < channelCount` join (§9.89). **Awaiting the executable:** §3 (`FUN_007524f0`/`FUN_007527b0` alignment base of the blob skip; the uncharacterised header spans), §4 (`FUN_00aaad50`/`FUN_00aaaea0`: part `+0x60`..`+0x7F` vs the `+0x68` flag byte; `+0x50`/`+0x54` child array), §5 (special-case compare rules in `FUN_00ab1080`), §6 (`FUN_00ab0730` remap layout; the three bbox type masks), §7.2 Q3 (runtime writer of `Base_Paint_Color`, if any), §11.3 (`+0xA4` target), §11.7 (`FUN_00760c30` return value), §11.9.2 (device-wrapper slots), §11.9.5 (range-stride factors; `this+0xfc` array), §11.11 (~~steps 3–4~~ **[step 3 re-derived 2026-10-03: a Havok `hkpBoxShape` is built for the part; step 4 is narrowed but still open]**). **Awaiting real data:** §3 `u32(ccar+0x04) mod 16` over all 393 and the `30/386`/`347` denominators; §4 parts with flag `0x200`, float-vs-byte view of part `+0x60`..`+0x7F`. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
 
 ---
 
@@ -84,7 +84,7 @@ Offsets from file start. "Offset" fields are file-relative on disk and fixed up 
 | `+0x54` `+0xA0` `+0xA4` `+0xAC` `+0xB4` `+0xBC` `+0xC4` `+0xD0` | Offset fields, fixed up with `-1` = null. *(Desk review 2026-09-30: `+0x54` is the part's child array, walked recursively by the bbox accumulator `FUN_00aaad50` — §11.12; `+0xA4`'s target has its own conditional pointer at `+0x08` — §11.3.)* | **[CONFIRMED — disassembly; OPEN — targets.]** |
 | `+0x60`–`+0x7F` | *(Row added 2026-09-30 by desk review, from §11.12.)* Two bbox `vec4`s (min, max) accumulated with SSE min/max by `FUN_00aaad50` | **[CONFIRMED — disassembly, §11.12.]** **[CONFLICT — desk review 2026-09-30: the `+0x68` byte row below lies inside this range (it would be the third float of the min `vec4`); one of the two readings is wrong, or one of them belongs to the vehicle header's `+0x60` (§3) rather than the part record. To be settled against the executable (`FUN_00aaad50`/`FUN_00aaaea0`) / a float-vs-byte dump of part `+0x60`..`+0x7F`.]** |
 | `+0x68` | Byte; bit `0x80` excludes the part from bounding-box accumulation | **[CONFIRMED — disassembly.]** **[CONFLICT — desk review 2026-09-30: overlaps the `+0x60`–`+0x7F` bbox row above; see there.]** |
-| `+0x80` | *(Row added 2026-09-30 by desk review, from §11.11.)* Per-part scalar, `-1` = unresolved: remapped through the same 100-entry table as the 64-byte records' `+0x04`; if still `-1`, `FUN_00ab0a10` supplies a value (a slot handle from the 5,000-entry registration table) | **[CONFIRMED — disassembly, §11.11, `0xab0fd3`-`0xab0fe3`; OPEN — meaning.]** |
+| `+0x80` | *(Row added 2026-09-30 by desk review, from §11.11.)* Per-part scalar, `-1` = unresolved: remapped through the same 100-entry table as the 64-byte records' `+0x04`; if still `-1`, `FUN_00ab0a10` supplies a value (a slot handle from the 5,000-entry registration table) **[2026-10-03: the object `FUN_00ab0a10` registers is a freshly built Havok box collision shape (`hkpBoxShape`, RTTI-confirmed) — §11.11 step 3. What `FUN_00760c30` hands back is still the §11.7/§11.11 CONFLICT.]** | **[CONFIRMED — disassembly, §11.11, `0xab0fd3`-`0xab0fe3`; OPEN — meaning.]** |
 | `+0xC0` / `+0xC4` | Count + pointer to 64-byte records whose `+0x04` index is remapped through a 100-entry table built by a resolution call | **[CONFIRMED — disassembly; ~~HIGH CONFIDENCE — per-part sub-mesh/material references.~~]** *(Material-reference reading REFUTED: the remap resolves through a generic deferred request-registration mechanism, not a material-index lookup — §11.7, §11.5; target domain OPEN.)* |
 | `+0xCC` | `u32`, clamped to at least `4` for type `17` | **[CONFIRMED — disassembly; OPEN — meaning.]** |
 
@@ -1554,16 +1554,82 @@ Read start to end (`0xab0a10`-`0xab0d16`, matching the known 775-byte size),
    off that) -- geometry state belonging to the part, not a kind tag.
 2. Allocates a fresh 0x30-byte (48-byte) block from a per-thread pooled
    allocator (`TlsGetValue` + an indirect call through the TLS block's own
-   vtable, `0xab0b76`-`0xab0b86`) and tags its `+4` field with type `0x30`.
+   vtable, `0xab0b76`-`0xab0b86`) and tags its `+4` field with ~~type~~ `0x30`
+   **[2026-10-03: this is the block's own size, written into the referenced-object
+   size field, not a type tag -- see the note after step 4]**.
 3. Calls `FUN_00d4d7f0` (130 bytes) -- sets a vtable pointer
-   (the function pointer at `0x01243174`) on a second, stack-local object and copies/clamps
-   values into it from a global constant (at `0x0131e81c`).
+   (the function pointer at `0x01243174`) on ~~a second, stack-local object and copies/clamps
+   values into it from a global constant (at `0x0131e81c`)~~ **[corrected 2026-10-03: the
+   0x30-byte block from step 2, which is the new shape; it copies in a stack-local half-extent
+   vector and takes a radius from the global at `0x0131e81c` -- see the note after step 4]**.
 4. Calls `FUN_00c8a890` (271 bytes) and `FUN_004f00f0`/`FUN_00da4170` --
    further floating-point packing/combination steps. **What these two
    specifically compute (e.g. a basis, a support point, a normalized extent)
    was not pinned down this pass and is reported as unconfirmed rather than
    guessed.** **[OPEN -- exact geometric meaning of steps 3-4; not pursued,
    since it is orthogonal to the kind question this probe was run to answer.]**
+   **[2026-10-03: step 3 is now settled (below); step 4 is narrowed but stays OPEN.]**
+
+**[Re-derived from the executable 2026-10-03.** This checks the claim in
+`review/scoping-physics-vehicle.md` §6 that `0x01243174` is Havok's box shape. Method: a
+local Ghidra `func` dump of `FUN_00ab0a10`, `FUN_00d4d7f0` and the physics bring-up
+function, plus an RTTI read through `tools/harnesses/exe_va.py`. **Result: CONFIRMED --
+disassembly + RTTI structure decode. `FUN_00d4d7f0` is Havok's `hkpBoxShape`
+constructor, and `FUN_00ab0a10` builds a Havok box collision shape for the part.**
+
+- **The RTTI chain.** The dword just before vtable `0x01243174` points to a Complete
+  Object Locator at `0x012ba2a0`. Its type descriptor, at `0x0131e800`, names
+  `.?AVhkpBoxShape@@`. The class-hierarchy descriptor lists the bases `hkpConvexShape`,
+  `hkpSphereRepShape`, `hkpShape`, `hkReferencedObject` and `hkBaseObject`.
+  `FUN_00d4d7f0` itself sits in Havok's collision-shape code range, the scoping note's
+  range B.
+- **What the constructor does.** It is called with the object in ECX and two stack
+  arguments: a pointer to a 4-float vector and a float. It:
+  - sets the 16-bit field at `+6` to 1;
+  - writes 0 to `+8` and 4 to `+0xc` (inferred to be the shape-type field of Havok's public shape layout);
+  - stores the float at `+0x10`;
+  - copies the vector to `+0x20`..`+0x2c`;
+  - then overwrites `+0x2c` with the **smallest** of the three half-extents. This is a
+    minimum, not a clamp.
+
+  The object it builds is step 2's heap block -- `FUN_00ab0a10` passes that block in ECX
+  -- not a stack-local object. Only the half-extent vector is stack-local. Step 2's
+  `0x30` at `+4` is the block size the caller writes into the referenced-object size
+  field, which fits a 0x30-byte `hkpBoxShape`.
+- **The radius.** The float argument is read from the global `0x0131e81c`, not a
+  constant:
+  - its static value is 0.05;
+  - the game's physics bring-up `FUN_0075f370` overwrites it with 0.005 once, just before
+    it builds the Havok world (`spec-physics-format.md` §3). That is the global's only
+    write among 24 uses in 21 functions, and one of those readers is
+    `spec-physics-format.md` §4.4.6(g)'s `FUN_00d56010`;
+  - stored at the shape's `+0x10`, it lands in the convex-radius slot of Havok's public
+    convex-shape layout. **HIGH CONFIDENCE -- inferred** for that name.
+- **Step 1's arithmetic, now read in full.** The six floats are two triples: A at
+  `+0x10`..`+0x18` and B at `+0x20`..`+0x28`. The calculation runs:
+  - per axis, the code computes (A+B) − (A−B), which is 2B;
+  - it multiplies the Y component by 0.8 (the double constant at `0x01116448`);
+  - it multiplies all three by 0.5 (`0x0126d2cc`).
+
+  The box's half-extents are therefore B's X, 0.8 × B's Y and B's Z, and A cancels out.
+  This is consistent with A being a centre and B a half-extent, with the code rebuilding
+  max − min and then trimming the box height to 80%. **HIGH CONFIDENCE -- inferred** for
+  the centre/half-extent reading. Which file field feeds this object is **not traced**.
+- **Step 4, narrowed but still OPEN.** `FUN_00c8a890` (in Havok's range A) is called
+  with three arguments: the new box shape, the constant 1.0, and a zeroed stack output
+  block. `FUN_004f00f0` then repacks that output, and the result is written from `+0x84`
+  onward in the object the part's first field points to. Step 5's `FUN_00760c30` then
+  receives the box shape and that block. The call pattern fits a unit-mass
+  mass-properties computation. **HYPOTHESIS, not traced** -- it is inside Havok's own
+  code, which is out of scope.
+- **Why this matters.** This is the project's first RTTI-confirmed, load-time link from
+  Volition's own vehicle-part code to a *named* Havok shape constructor, by an ordinary
+  direct call with no wrapper layer. `spec-physics-format.md` §4.3 cross-references it.
+  It is a different data path from that section's `.clmesh_pc`-to-Havok question, so it
+  does not close that question.
+- **Not read.** The reference manager lists nine other call sites of `FUN_00d4d7f0` (not raw-scanned), and none of them was read. Among them
+  are `FUN_00ab1bb0` and `FUN_00ab8620` in this same vehicle neighbourhood, and
+  `FUN_00757100` next to the game's world wrapper.**]**
 5. Calls `FUN_00760c30` (202 bytes) -- registers the new object into a fixed
    global table capped at 5000 entries (`DAT_0163a8f0` freelist,
    `DAT_0163f710` count, parallel per-slot arrays `DAT_0163f720`-`DAT_0163f750`)
@@ -1609,7 +1675,11 @@ graph and was not searched for here. **[OPEN -- what the non-zero kind bands
 denote; CONFIRMED -- that `FUN_00ab0a10` and every function it or
 `FUN_00ab0ef0` calls are blind to that distinction.]**
 
-**Review status (2026-09-30): NEEDS-EXE: steps 3–4 of `FUN_00ab0a10` (`FUN_00d4d7f0`, `FUN_00c8a890`, `FUN_004f00f0`, `FUN_00da4170`) and the `FUN_00760c30` return-value conflict with §11.7 (text fixes applied: pointer-chain notation and auto-labels reworded; part `+0x80` added to §4) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: ~~steps 3–4 of `FUN_00ab0a10` (`FUN_00d4d7f0`, `FUN_00c8a890`, `FUN_004f00f0`, `FUN_00da4170`) and~~ the `FUN_00760c30` return-value conflict with §11.7 (text fixes applied: pointer-chain notation and auto-labels reworded; part `+0x80` added to §4) — desk review (not re-derived from the executable).** **Review status (2026-10-03, re-derived from the executable; checks `review/scoping-physics-vehicle.md` §6):**
+- **Step 3:** CONFIRMED — disassembly + RTTI structure decode. `FUN_00d4d7f0` is the `hkpBoxShape` constructor, applied to step 2's heap block, with the radius taken from the global `0x0131e81c`.
+- **Steps 1–2:** refined. The half-extents are B's X, 0.8 × B's Y and B's Z; the `+4` value `0x30` is the block size.
+- **Step 4:** narrowed but still OPEN (`FUN_00c8a890` is inside Havok; HYPOTHESIS: unit-mass mass properties).
+- **Untouched by this pass:** the `FUN_00760c30` return-value CONFLICT with §11.7.**
 
 ### 11.12 Section 11.11's named next probe executed: every real downstream consumer of `part+0xC0`/`+0xC4` traced -- clean negative, and the offset-only search this task explicitly forbade was tried anyway (on a sharper anchor) to confirm why it was forbidden
 
@@ -1751,3 +1821,10 @@ OPEN -- the non-zero kind bands' meaning.]**
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 2 cross-references (§8.4.1→`spec-vertex-format.md` §8.4.3; "line 955-956"→§11.9.2); marked stale text superseded in place (§7.1 `+0x0C` "upper bound" and `high16` "part index", §4 `+0xC0`/`+0xC4` material-reference reading downgraded per §11.7); marked 6 stale OPEN/HYPOTHESIS items resolved (§7.1 paint source, §10 items 7 and 10, §11.5 amendment row, §11.6 "enumeration" OPEN, and superseded-notes under the §11.6/§11.9.8/§11.10 headings); added pointers to `spec-vertex-format.md` §4.2's 388/388 replay at §7 and §10 item 5 (labels unchanged); reworded 3 decompiler-shaped lines (§11.7, §11.9.2, §11.11).
 - 2026-09-30 (cloud, self-containment pass): restated 1 load-bearing HANDOFF/WALLS-only fact inline (§11.6: the "zero static `CreateVertexDeclaration` calls" premise marked REFUTED per `WALLS.md`, citing `spec-render-pipeline.md` §4/§8); repointed 4 `HANDOFF.md` §27.x references to the archived headings (§7.1 §27.8 → §36 item 27.8; §11.5, §11.12 ×2 §27.4 → `WALLS.md` / §36 item 27.4); 5 left (see review).
 - 2026-09-30 (format-spec desk review, `review/adv_vehicle_geometry.md`): added review-status lines to 36 units and a summary; superseded §7.2 Q3 / §7.1 item 2 paint-source answer (`Base_Paint_Color` lives in the vehicle's own material record, array B hash / array C `Vector4` — `spec-render-pipeline.md` §20.12.6, `team-b/HANDOFF.md` §9.106); marked the stale 86/86 label (§7.1) and the §7 "Materials (original entry)" hypothesis superseded; added §4 rows `+0x50` (OPEN), `+0x60`–`+0x7F` (from §11.12) and `+0x80` (from §11.11), with a CONFLICT marker against the `+0x68` flag byte; listed the uncharacterised §3 header spans and flagged the `30/386`/`347` denominators; added the sub-header 16-alignment finding (§3, OPEN in general); flagged §11.9.5 ×4×4 = `0x10` ≠ `0x14`, the §11.9.3 8+3 = 11 vs 10-site recount, and the §11.7/§11.11 `FUN_00760c30` return-value conflict; stated Team B population scopes (parts 372/372, 9,536; 393/393 only for channel decode, bindings, `high16` join); corrected the front-matter cleanroom statement; reworded raw instruction text, pseudocode cells and `PTR_FUN_`/`_DAT_` auto-labels to prose/addresses (§11.7, §11.9.1, §11.9.2, §11.11, §11.12).
+- 2026-10-03 (local, executable re-derivation of §11.11 step 3, checking `review/scoping-physics-vehicle.md` §6; private Ghidra copy `tools\gp_havokfup`, deleted afterwards; RTTI read with `tools/harnesses/exe_va.py`):
+  - **Step 3 — CONFIRMED (disassembly + RTTI).** Vtable `0x01243174` is `.?AVhkpBoxShape@@`, so `FUN_00d4d7f0` is Havok's box-shape constructor and `FUN_00ab0a10` builds a Havok box collision shape for the part. Struck the "second, stack-local object" and "copies/clamps … from a global constant" wording: the shape is step 2's heap block, `+0x2c` takes the minimum half-extent, and the radius comes from the runtime-written global `0x0131e81c`.
+  - **Steps 1–2 refined.** Half-extents are B's X, 0.8 × B's Y and B's Z; the `+4` value `0x30` is a size, not a type.
+  - **Step 4 narrowed, still OPEN.**
+  - **Also updated:** the §11.11 review-status line, the summary's NEEDS-EXE list, and the §4 `+0x80` row (bracket added).
+  - **Cross-reference:** `spec-physics-format.md` §4.3 now points here; this is a different path from `.clmesh_pc`, so it does not close that question.
+  - **Not touched:** the `FUN_00760c30` CONFLICT.

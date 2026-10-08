@@ -1,0 +1,299 @@
+=== vint-doc: Vint UI render (spec-vint-render.md Sec12/Sec15, units U3+U6) ===
+REAL       : element tree + properties (real .vint_doc), image-setter side effects (Sec12.1),
+             sheet sub-images (Sec17.4), render walk/cull/compose/sort (Sec2-Sec6), bitmap quad
+             (Sec12.1/12.4: source_se = EXTENT; Sec15.7: half-texel UV offset + -0.5px vertex
+             shift, both real now), group = empty stub (Sec12.3), mask (Sec15.6: real stencil
+             clear/write/test, modes 0/1/2), all 5 render_mode blend codes (Sec15.4: filter/
+             additive/additive_alpha/subtractive/multiply), wrap sampler addressing (Sec15.7)
+PLACEHOLDER: `text` elements are NOT real text - a magenta 24x12 outline marks each one's composed
+             origin only (layout/glyph stream specced since - spec-vint-font-format.md - but not
+             yet wired into this renderer). Markers ON.
+CHOSEN     : doc canvas 1280.000x720.000 (--doc-size; source of document +0x5a0/+0x5a4 not specced),
+             fit to height (Sec5.1 HIGH: height), clear colour (40,40,48); `render_mode` above 5
+             falls back to filter rather than the real engine's own sticky "previous code"
+             (Sec13.5, not exercised by any real content found); scissor test not yet wired
+             (Sec15.9 item 1, separate from this pass); `background`'s own depth mode 1 not
+             yet wired (Sec15.5, separate from this pass - every draw uses depth mode 0)
+CHOSEN     : sRGB colour decode (Sec12.4 context byte +0x09) = off (default off, HIGH per Sec11 item 9);
+             sRGB texture decode (UI sampler, untraced) = off (default off)
+NOT DRAWN  : clip, bitmap_circle, gradient, document, point, sr2_map, video - counted below
+document   : hud.vint_doc (46859 bytes) - 414 records, lands exactly: yes
+sheets     : 63 bitmap_sheets.xtbl rows, 63 sheet .xtbl files found, 1148 sub-image records (0 duplicate names - first wins, 0 over the 0x680 cap)
+tables from: patch_compressed.vpp_pc=9 misc_tables.vpp_pc=55 (first archive holding a file wins - CHOSEN layering)
+device     : HARDWARE (NVIDIA GeForce RTX 3090), target 1280x720 RGBA8 offscreen
+loaded     : 414 objects, 2647 applied file records; image side effects (Sec12.1): 129 applied, 129 source-coord resets, 5 unresolved; auto_offset applier: 0 wrote offset, 129 left it
+images     : 51 distinct - 46 sheet sub-images, 0 standalone, 5 not in the pool, 0 with no texture found
+  [image] ingame_race_position_8               mode 1 ui_bms_01 page (532,867) size 44.000x39.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] map_act_kill_up                      NOT FOUND (no sheet sub-image, no <name>.tga record) -> no draw
+  [image] ui_blank                             mode 1 ui_bms_00 page (50,1006) size 16.000x16.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_dialog_shadow_side                mode 1 ui_bms_03 page (151,30) size 19.000x19.000 texture ui_bms_03.tga found 512x128 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_gradient_radial                   mode 1 ui_bms_02 page (304,263) size 103.000x103.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_act_ico_brotherhood           NOT FOUND (no sheet sub-image, no <name>.tga record) -> no draw
+  [image] ui_hud_ammo_sniper                   mode 1 ui_bms_00 page (1,971) size 8.000x34.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_collect_saints                mode 1 ui_bms_02 page (408,386) size 74.000x74.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_dd_border                     mode 1 ui_bms_00 page (514,217) size 90.000x14.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_dd_health                     mode 1 ui_bms_00 page (767,373) size 86.000x10.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_hit_major                     mode 1 ui_bms_01 page (619,592) size 55.000x23.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_hit_minor                     mode 1 ui_bms_01 page (710,108) size 35.000x15.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_icon_camera                   mode 1 ui_bms_00 page (118,881) size 78.000x58.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_icon_cheat_gimpy              mode 1 ui_bms_01 page (259,797) size 130.000x80.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_inv_fist                      mode 1 ui_bms_00 page (118,940) size 74.000x80.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_inv_grenade_grenade           mode 1 ui_bms_00 page (956,904) size 48.000x82.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_map_map_ring_full             mode 1 ui_bms_02 page (598,61) size 148.000x148.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_map_notoriety                 mode 1 ui_bms_02 page (778,63) size 107.000x107.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_map_obj_kill                  NOT FOUND (no sheet sub-image, no <name>.tga record) -> no draw
+  [image] ui_hud_map_sprint                    NOT FOUND (no sheet sub-image, no <name>.tga record) -> no draw
+  [image] ui_hud_map_sprint_bg                 NOT FOUND (no sheet sub-image, no <name>.tga record) -> no draw
+  [image] ui_hud_meter_border                  mode 1 ui_bms_01 page (1,34) size 294.000x16.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_meter_fill                    mode 1 ui_bms_01 page (311,1) size 290.000x12.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_misc_surf_arrow               mode 1 ui_bms_01 page (715,722) size 28.000x24.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_misc_surf_base                mode 1 ui_bms_01 page (260,52) size 222.000x70.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_not_police                    mode 1 ui_bms_01 page (357,878) size 52.000x58.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_not_syndicate                 mode 1 ui_bms_01 page (532,808) size 60.000x58.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_radial_circle                 mode 1 ui_bms_01 page (545,616) size 60.000x62.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_recruit_coop                  mode 1 ui_bms_01 page (710,51) size 56.000x56.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_cross_small          mode 1 ui_bms_01 page (517,596) size 16.000x19.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_dot                  mode 1 ui_bms_01 page (485,241) size 16.000x25.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_friendly             mode 1 ui_bms_01 page (620,989) size 34.000x34.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_pressure_base        mode 1 ui_bms_01 page (166,884) size 64.000x36.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_ring_large           mode 1 ui_bms_01 page (665,124) size 93.000x93.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_ring_small           mode 1 ui_bms_01 page (712,360) size 47.000x47.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_ring_split           mode 1 ui_bms_01 page (665,218) size 47.000x47.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_sniper_cross         mode 1 ui_bms_01 page (297,35) size 128.000x12.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_reticule_sniper_rim           mode 1 ui_bms_01 page (2,52) size 255.000x255.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_vignette                      mode 1 ui_bms_03 page (2,2) size 508.000x14.000 texture ui_bms_03.tga found 512x128 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_wpn_base                      mode 1 ui_bms_01 page (422,124) size 145.000x116.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_wpn_grenade_ammo              mode 1 ui_bms_01 page (423,242) size 33.000x23.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_wpn_health_bg                 mode 1 ui_bms_01 page (259,418) size 150.000x150.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_hud_wpn_sprint_bg                 mode 1 ui_bms_01 page (561,267) size 150.000x150.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_menu_tmp_arrow_e                  mode 1 ui_bms_02 page (488,402) size 22.000x30.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_menu_tmp_arrow_w                  mode 1 ui_bms_02 page (864,192) size 22.000x30.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_radio_10666_the_blood_sm          mode 1 ui_bms_02 page (601,263) size 86.000x63.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_rm_ethical_sm                     mode 1 ui_bms_02 page (777,1) size 113.000x60.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_rm_unethical_sm                   mode 1 ui_bms_02 page (598,1) size 151.000x59.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_spinner                           mode 1 ui_bms_01 page (410,527) size 74.000x88.000 texture ui_bms_01.tga found 768x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_sr3_bg_tile                       mode 1 ui_bms_02 page (2,264) size 300.000x150.000 texture ui_bms_02.tga found 896x512 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_target_icon_kill                  mode 1 ui_bms_00 page (925,57) size 42.000x42.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+screen fit : scale 1.000 offset (0.000,0.000)
+[elem] base_reticle : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   sniper : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     sniper_dir_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       sniper_dir_bmp : bitmap  CULLED (visible=false)
+[elem]     bg_sniper_w : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,204) quad (0.000,106.000) (385.000,106.000) (0.000,616.000) (385.000,616.000)  screen_nw (0.000,106.000) screen_se (385.000,616.000)
+[elem]     bg_sniper_s : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,204) quad (0.000,616.000) (1280.000,616.000) (0.000,722.000) (1280.000,722.000)  screen_nw (0.000,616.000) screen_se (1280.000,722.000)
+[elem]     hair_c_horz : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (514.000,360.000) (767.000,360.000) (514.000,362.000) (767.000,362.000)  screen_nw (514.000,360.000) screen_se (767.000,362.000)
+[elem]     rim_se : bitmap  DRAW image=ui_hud_reticule_sniper_rim nw=(0,0) se=(255,255) colour=(255,255,255,204) quad (895.000,616.000) (640.000,616.001) (894.999,361.000) (639.999,361.001)  screen_nw (639.999,361.000) screen_se (895.000,616.001)
+[elem]     rim_nw : bitmap  DRAW image=ui_hud_reticule_sniper_rim nw=(0,0) se=(255,255) colour=(255,255,255,204) quad (385.000,106.000) (640.000,106.000) (385.000,361.000) (640.000,361.000)  screen_nw (385.000,106.000) screen_se (640.000,361.000)
+[elem]     hair_horz_a1 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (642.000,378.000) (686.000,378.000) (642.000,380.000) (686.000,380.000)  screen_nw (642.000,378.000) screen_se (686.000,380.000)
+[elem]     hair_c_vert : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (640.000,107.000) (642.000,107.000) (640.000,507.000) (642.000,507.000)  screen_nw (640.000,107.000) screen_se (642.000,507.000)
+[elem]     hair_horz_b1 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (642.000,396.000) (664.000,396.000) (642.000,398.000) (664.000,398.000)  screen_nw (642.000,396.000) screen_se (664.000,398.000)
+[elem]     bg_sniper_n : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,204) quad (0.000,0.000) (1280.000,0.000) (0.000,106.000) (1280.000,106.000)  screen_nw (0.000,0.000) screen_se (1280.000,106.000)
+[elem]     hair_horz_c1 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (642.000,433.000) (653.000,433.000) (642.000,435.000) (653.000,435.000)  screen_nw (642.000,433.000) screen_se (653.000,435.000)
+[elem]     rim_sw : bitmap  DRAW image=ui_hud_reticule_sniper_rim nw=(0,0) se=(255,255) colour=(255,255,255,204) quad (385.000,616.000) (385.000,361.000) (640.000,616.000) (640.000,361.000)  screen_nw (385.000,361.000) screen_se (640.000,616.000)
+[elem]     rim_ne : bitmap  DRAW image=ui_hud_reticule_sniper_rim nw=(0,0) se=(255,255) colour=(255,255,255,204) quad (895.000,106.000) (894.999,361.000) (640.000,105.999) (639.999,360.999)  screen_nw (639.999,105.999) screen_se (895.000,361.000)
+[elem]     hair_horz_a2 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (596.000,378.000) (640.000,378.000) (596.000,380.000) (640.000,380.000)  screen_nw (596.000,378.000) screen_se (640.000,380.000)
+[elem]     bg_sniper_e : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,204) quad (895.000,106.000) (1280.000,106.000) (895.000,616.000) (1280.000,616.000)  screen_nw (895.000,106.000) screen_se (1280.000,616.000)
+[elem]     hair_horz_c2 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (629.000,433.000) (640.000,433.000) (629.000,435.000) (640.000,435.000)  screen_nw (629.000,433.000) screen_se (640.000,435.000)
+[elem]     hair_horz_b2 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (618.000,396.000) (640.000,396.000) (618.000,398.000) (640.000,398.000)  screen_nw (618.000,396.000) screen_se (640.000,398.000)
+[elem]     sniper_bullet_2 : bitmap  DRAW image=ui_hud_ammo_sniper nw=(0,0) se=(8,34) colour=(179,179,179,56) quad (1026.800,347.400) (1033.200,347.400) (1026.800,374.600) (1033.200,374.600)  screen_nw (1026.800,347.400) screen_se (1033.200,374.600)
+[elem]     sniper_bullet_3 : bitmap  DRAW image=ui_hud_ammo_sniper nw=(0,0) se=(8,34) colour=(179,179,179,38) quad (1036.000,352.500) (1040.000,352.500) (1036.000,369.500) (1040.000,369.500)  screen_nw (1036.000,352.500) screen_se (1040.000,369.500)
+[elem]     sniper_reload_text : text  CULLED (visible=false)
+[elem]     sniper_ammo_txt : text  text: PLACEHOLDER marker at origin (907.000,344.000) text_tag='999/999' (real text not drawn)
+[elem]     sniper_bullet_1 : bitmap  DRAW image=ui_hud_ammo_sniper nw=(0,0) se=(8,34) colour=(180,180,180,84) quad (1017.000,344.000) (1025.000,344.000) (1017.000,378.000) (1025.000,378.000)  screen_nw (1017.000,344.000) screen_se (1025.000,378.000)
+[elem]     cross_w : bitmap  DRAW image=ui_hud_reticule_sniper_cross nw=(0,0) se=(128,12) colour=(255,0,0,255) quad (386.000,354.500) (514.000,354.500) (386.000,366.500) (514.000,366.500)  screen_nw (386.000,354.500) screen_se (514.000,366.500)
+[elem]     cross_s : bitmap  DRAW image=ui_hud_reticule_sniper_cross nw=(0,0) se=(128,12) colour=(255,0,0,255) quad (634.500,616.000) (634.500,488.000) (646.500,616.000) (646.500,488.000)  screen_nw (634.500,488.000) screen_se (646.500,616.000)
+[elem]     cross_e : bitmap  DRAW image=ui_hud_reticule_sniper_cross nw=(0,0) se=(128,12) colour=(255,0,0,255) quad (895.000,366.500) (767.000,366.500) (895.000,354.500) (767.000,354.500)  screen_nw (767.000,354.500) screen_se (895.000,366.500)
+[elem]   health_large_grp : group  group: draws nothing (Sec12.3)  screen_nw (-347.000,286.000) screen_se (-53.000,302.000)
+[elem]     health_large_border : bitmap  DRAW image=ui_hud_meter_border nw=(0,0) se=(294,16) colour=(0,0,0,255) quad (-347.000,286.000) (-53.000,286.000) (-347.000,302.000) (-53.000,302.000)  screen_nw (-347.000,286.000) screen_se (-53.000,302.000)
+[elem]     health_large_fill : bitmap  DRAW image=ui_hud_meter_fill nw=(0,0) se=(290,12) colour=(181,0,0,255) quad (-345.000,288.000) (-55.000,288.000) (-345.000,300.000) (-55.000,300.000)  screen_nw (-345.000,288.000) screen_se (-55.000,300.000)
+[elem]   health_mini_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     health_mini_border : bitmap  DRAW image=ui_hud_dd_border nw=(0,0) se=(90,14) colour=(0,0,0,255) quad (-226.350,236.750) (-133.650,236.750) (-226.350,252.850) (-133.650,252.850)  screen_nw (-226.350,236.750) screen_se (-133.650,252.850)
+[elem]     mp_name : text  text: PLACEHOLDER marker at origin (-184.900,206.200) text_tag='\' (real text not drawn)
+[elem]     mp_arrow : bitmap  CULLED (visible=false)
+[elem]     overhead_cash : text  CULLED (visible=false)
+[elem]     health_mini_fill : bitmap  DRAW image=ui_hud_dd_health nw=(0,0) se=(86,10) colour=(255,255,255,255) quad (-223.000,239.800) (-137.000,239.800) (-223.000,249.800) (-137.000,249.800)  screen_nw (-223.000,239.800) screen_se (-137.000,249.800)
+[elem]     race_pos : bitmap  CULLED (visible=false)
+[elem]   cruise_control_grp : group  group: draws nothing (Sec12.3)  screen_nw (640.000,396.500) screen_se (641.000,397.500)
+[elem]     cruise_control_hint_bar : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (640.000,396.500) screen_se (641.000,397.500)
+[elem]   lockon : group  group: draws nothing (Sec12.3)  screen_nw (1283.000,461.500) screen_se (1423.000,601.500)
+[elem]     mask_grp : group  group: draws nothing (Sec12.3)  screen_nw (1283.000,461.500) screen_se (1423.000,601.500)
+[elem]       mask4 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1383.000,561.500) (1423.000,561.500) (1383.000,601.500) (1423.000,601.500)  screen_nw (1383.000,561.500) screen_se (1423.000,601.500)
+[elem]       mask1 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1283.000,461.500) (1323.000,461.500) (1283.000,501.500) (1323.000,501.500)  screen_nw (1283.000,461.500) screen_se (1323.000,501.500)
+[elem]       mask3 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1283.000,561.500) (1323.000,561.500) (1283.000,601.500) (1323.000,601.500)  screen_nw (1283.000,561.500) screen_se (1323.000,601.500)
+[elem]       mask2 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1383.000,461.500) (1423.000,461.500) (1383.000,501.500) (1423.000,501.500)  screen_nw (1383.000,461.500) screen_se (1423.000,501.500)
+[elem]     lockon_3 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1306.000,580.000) (1400.000,580.000) (1306.000,583.000) (1400.000,583.000)  screen_nw (1306.000,580.000) screen_se (1400.000,583.000)
+[elem]     lockon_2 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1306.000,480.000) (1400.000,480.000) (1306.000,483.000) (1400.000,483.000)  screen_nw (1306.000,480.000) screen_se (1400.000,483.000)
+[elem]     lockon_4 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1404.500,484.500) (1404.500,578.500) (1401.500,484.500) (1401.500,578.500)  screen_nw (1401.500,484.500) screen_se (1404.500,578.500)
+[elem]     lockon_1 : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(255,255,255,255) quad (1304.500,484.500) (1304.500,578.500) (1301.500,484.500) (1301.500,578.500)  screen_nw (1301.500,484.500) screen_se (1304.500,578.500)
+[elem]   reticules : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     ret_hit : group  CULLED (own alpha)
+[elem]     dot_persistant : bitmap  DRAW image=ui_hud_reticule_dot nw=(0,0) se=(16,25) colour=(255,255,255,191) quad (632.000,284.000) (648.000,284.000) (632.000,309.000) (648.000,309.000)  screen_nw (632.000,284.000) screen_se (648.000,309.000)
+[elem]     reticule_container : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       ring_split : bitmap  CULLED (visible=false)
+[elem]       pressure_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]         pressure_bg : bitmap  DRAW image=ui_hud_reticule_pressure_base nw=(0,0) se=(64,36) colour=(0,0,0,114) quad (601.600,286.000) (678.400,286.000) (601.600,329.200) (678.400,329.200)  screen_nw (601.600,286.000) screen_se (678.400,329.200)
+[elem]         pressure_fill : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]       rings : group  group: draws nothing (Sec12.3)  screen_nw (572.000,239.000) screen_se (693.000,360.000)
+[elem]         mask_se : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (645.000,297.000) (693.000,297.000) (645.000,345.000) (693.000,345.000)  screen_nw (645.000,297.000) screen_se (693.000,345.000)
+[elem]         mask_nw : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (587.000,239.000) (635.000,239.000) (587.000,287.000) (635.000,287.000)  screen_nw (587.000,239.000) screen_se (635.000,287.000)
+[elem]         mask_sw : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (572.000,312.000) (620.000,312.000) (572.000,360.000) (620.000,360.000)  screen_nw (572.000,312.000) screen_se (620.000,360.000)
+[elem]         mask_ne : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (645.000,239.000) (693.000,239.000) (645.000,287.000) (693.000,287.000)  screen_nw (645.000,239.000) screen_se (693.000,287.000)
+[elem]         ring_small : bitmap  DRAW image=ui_hud_reticule_ring_small nw=(0,0) se=(47,47) colour=(255,255,255,127) quad (616.750,268.250) (663.750,268.250) (616.750,315.250) (663.750,315.250)  screen_nw (616.750,268.250) screen_se (663.750,315.250)
+[elem]         ring_large : bitmap  DRAW image=ui_hud_reticule_ring_large nw=(0,0) se=(93,93) colour=(255,255,255,127) quad (593.750,245.250) (686.750,245.250) (593.750,338.250) (686.750,338.250)  screen_nw (593.750,245.250) screen_se (686.750,338.250)
+[elem]       friendly : bitmap  CULLED (visible=false)
+[elem]       cross : group  group: draws nothing (Sec12.3)  screen_nw (619.000,271.000) screen_se (661.000,313.000)
+[elem]         e : bitmap  DRAW image=ui_hud_reticule_cross_small nw=(0,0) se=(16,19) colour=(255,255,255,127) quad (661.000,284.000) (661.000,300.000) (642.000,284.000) (642.000,300.000)  screen_nw (642.000,284.000) screen_se (661.000,300.000)
+[elem]         n : bitmap  DRAW image=ui_hud_reticule_cross_small nw=(0,0) se=(16,19) colour=(255,255,255,127) quad (632.000,271.000) (648.000,271.000) (632.000,290.000) (648.000,290.000)  screen_nw (632.000,271.000) screen_se (648.000,290.000)
+[elem]         s : bitmap  DRAW image=ui_hud_reticule_cross_small nw=(0,0) se=(16,19) colour=(255,255,255,127) quad (648.000,313.000) (632.000,313.000) (648.000,294.000) (632.000,294.000)  screen_nw (632.000,294.000) screen_se (648.000,313.000)
+[elem]         w : bitmap  DRAW image=ui_hud_reticule_cross_small nw=(0,0) se=(16,19) colour=(255,255,255,127) quad (619.000,300.000) (619.000,284.000) (638.000,300.000) (638.000,284.000)  screen_nw (619.000,284.000) screen_se (638.000,300.000)
+[elem]       dot : bitmap  DRAW image=ui_hud_reticule_dot nw=(0,0) se=(16,25) colour=(255,255,255,191) quad (632.000,284.000) (648.000,284.000) (632.000,309.000) (648.000,309.000)  screen_nw (632.000,284.000) screen_se (648.000,309.000)
+[elem]   sniper_hint_group : group  group: draws nothing (Sec12.3)  screen_nw (640.000,650.000) screen_se (641.000,651.000)
+[elem]     sniper_btn_hints : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (640.000,650.000) screen_se (641.000,651.000)
+[elem]   mayhem_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     combo_total_item : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       combo_title_txt : text  text: PLACEHOLDER marker at origin (1357.000,372.600) text_tag='COMBO ITEM TITLE' (real text not drawn)
+[elem]       combo_value_txt : text  text: PLACEHOLDER marker at origin (1357.000,393.000) text_tag='$3,000' (real text not drawn)
+[elem]       combo_total_meter : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (1357.000,410.000) screen_se (1358.000,411.000)
+[elem]       combo_total_meter_value : text  text: PLACEHOLDER marker at origin (1316.000,390.000) text_tag='$3,000' (real text not drawn)
+[elem]     mayhem_cash_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       cash_sub_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]         multiplier_txt : text  text: PLACEHOLDER marker at origin (1384.000,340.000) text_tag='\' (real text not drawn)
+[elem]         cash_txt : text  text: PLACEHOLDER marker at origin (1298.000,332.460) text_tag='\' (real text not drawn)
+[elem]   balance_meter : group  CULLED (visible=false)
+[elem]   lockon_txt_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     lockon_txt_2 : text  text: PLACEHOLDER marker at origin (1312.000,592.000) text_tag='S.T.A.G TARGETING SYSTEM   v2.67' (real text not drawn)
+[elem]     lockon_txt : text  text: PLACEHOLDER marker at origin (1312.000,583.600) text_tag='SCANNING' (real text not drawn)
+[elem]     scan_lock : bitmap  DRAW image=ui_target_icon_kill nw=(0,0) se=(42,42) colour=(255,255,255,255) quad (1302.800,584.800) (1311.200,584.800) (1302.800,593.200) (1311.200,593.200)  screen_nw (1302.800,584.800) screen_se (1311.200,593.200)
+[elem]     scan_spinner : bitmap  DRAW image=ui_spinner nw=(0,0) se=(74,88) colour=(255,255,255,255) quad (1303.300,584.600) (1310.700,584.600) (1303.300,593.400) (1310.700,593.400)  screen_nw (1303.300,584.600) screen_se (1310.700,593.400)
+[elem] base_reticle_hits : group  group: draws nothing (Sec12.3)  screen_nw (605.500,223.000) screen_se (660.500,246.000)
+[elem]   hits : group  group: draws nothing (Sec12.3)  screen_nw (605.500,223.000) screen_se (660.500,246.000)
+[elem]     minor : bitmap  CULLED (visible=false)
+[elem]     major : bitmap  CULLED (visible=false)
+[elem] base_radio_station : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   radio_grp : group  CULLED (own alpha)
+[elem] base_vehicle_name : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   vehicle_logo_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     vehicle_logo : bitmap  CULLED (own alpha)
+[elem] base_weapon_swap_message : group  group: draws nothing (Sec12.3)  screen box: childless group (point, OPEN)
+[elem] base_mp : group  group: draws nothing (Sec12.3)  screen box: childless group (point, OPEN)
+[elem] base_gsi : group  group: draws nothing (Sec12.3)  screen_nw (96.000,54.000) screen_se (718.000,248.000)
+[elem]   gsi : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (96.000,54.000) screen_se (97.000,55.000)
+[elem]   cheats_grp : group  group: draws nothing (Sec12.3)  screen_nw (562.000,152.000) screen_se (718.000,248.000)
+[elem]     cheat_icon : bitmap  DRAW image=ui_hud_icon_cheat_gimpy nw=(0,0) se=(130,80) colour=(22,136,198,255) quad (575.000,160.000) (705.000,160.000) (575.000,240.000) (705.000,240.000)  screen_nw (575.000,160.000) screen_se (705.000,240.000)
+[elem]     cheat_icon_2 : bitmap  DRAW image=ui_hud_icon_cheat_gimpy nw=(0,0) se=(130,80) colour=(22,136,198,255) quad (562.000,152.000) (718.000,152.000) (562.000,248.000) (718.000,248.000)  screen_nw (562.000,152.000) screen_se (718.000,248.000)
+[elem] base_full_screen_effect : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   vignettes : group  group: draws nothing (Sec12.3)  screen_nw (-37.998,-59.000) screen_se (1304.001,783.522)
+[elem]     tunnel_vision : group  CULLED (own alpha)
+[elem]     vignette_health : group  CULLED (own alpha)
+[elem]   smoked_busted : group  CULLED (own alpha)
+[elem] base_cash_respect_homey : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   respect_grp : group  group: draws nothing (Sec12.3)  screen_nw (1135.000,87.000) screen_se (1136.000,88.000)
+[elem]     respect_obj : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (1135.000,87.000) screen_se (1136.000,88.000)
+[elem]   followers : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     follower_grp_1 : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       follower_frame : bitmap  DRAW image=ui_hud_radial_circle nw=(0,0) se=(60,62) colour=(0,0,0,255) quad (1029.000,55.000) (1089.000,55.000) (1029.000,117.000) (1089.000,117.000)  screen_nw (1029.000,55.000) screen_se (1089.000,117.000)
+[elem]       follower_head : bitmap  DRAW image=ui_hud_recruit_coop nw=(0,0) se=(56,56) colour=(255,255,255,255) quad (1032.000,59.000) (1088.000,59.000) (1032.000,115.000) (1088.000,115.000)  screen_nw (1032.000,59.000) screen_se (1088.000,115.000)
+[elem]       follower_count : text  text: PLACEHOLDER marker at origin (1055.353,72.480) text_tag='\' (real text not drawn)
+[elem]     follower_grp_3 : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       follower_frame : bitmap  DRAW image=ui_hud_radial_circle nw=(0,0) se=(60,62) colour=(0,0,0,255) quad (913.000,54.000) (973.000,54.000) (913.000,116.000) (973.000,116.000)  screen_nw (913.000,54.000) screen_se (973.000,116.000)
+[elem]       follower_head : bitmap  DRAW image=ui_hud_recruit_coop nw=(0,0) se=(56,56) colour=(255,255,255,255) quad (916.000,58.000) (972.000,58.000) (916.000,114.000) (972.000,114.000)  screen_nw (916.000,58.000) screen_se (972.000,114.000)
+[elem]       follower_count : text  text: PLACEHOLDER marker at origin (938.307,71.360) text_tag='\' (real text not drawn)
+[elem]     follower_grp_2 : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       follower_frame : bitmap  DRAW image=ui_hud_radial_circle nw=(0,0) se=(60,62) colour=(0,0,0,255) quad (971.000,55.000) (1031.000,55.000) (971.000,117.000) (1031.000,117.000)  screen_nw (971.000,55.000) screen_se (1031.000,117.000)
+[elem]       follower_head : bitmap  DRAW image=ui_hud_recruit_coop nw=(0,0) se=(56,56) colour=(255,255,255,255) quad (974.000,59.000) (1030.000,59.000) (974.000,115.000) (1030.000,115.000)  screen_nw (974.000,59.000) screen_se (1030.000,115.000)
+[elem]       follower_count : text  text: PLACEHOLDER marker at origin (996.400,72.600) text_tag='\' (real text not drawn)
+[elem]   cash_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     cash : text  text: PLACEHOLDER marker at origin (1018.000,117.000) text_tag='$3000,0000' (real text not drawn)
+[elem] base_genki : group  group: draws nothing (Sec12.3)  screen_nw (566.500,137.000) screen_se (717.500,197.000)
+[elem]   ethical_img : bitmap  CULLED (own alpha)
+[elem]   unethical_img : bitmap  CULLED (own alpha)
+[elem] base_mini_map : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   screenshot_camera_hint_grp : group  group: draws nothing (Sec12.3)  screen_nw (264.000,456.440) screen_se (313.920,493.560)
+[elem]     camera_hint_button : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (264.000,475.000) screen_se (264.800,475.800)
+[elem]     camera_hint_icon_bmp : bitmap  DRAW image=ui_hud_icon_camera nw=(0,0) se=(78,58) colour=(255,255,255,191) quad (264.000,456.440) (313.920,456.440) (264.000,493.560) (313.920,493.560)  screen_nw (264.000,456.440) screen_se (313.920,493.560)
+[elem]   map_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     notoriety_ring : group  group: draws nothing (Sec12.3)  screen_nw (84.000,459.000) screen_se (298.000,673.000)
+[elem]       bg_nw : bitmap  DRAW image=ui_hud_map_notoriety nw=(0,0) se=(107,107) colour=(0,0,0,51) quad (84.000,459.000) (191.000,459.000) (84.000,566.000) (191.000,566.000)  screen_nw (84.000,459.000) screen_se (191.000,566.000)
+[elem]       bg_se : bitmap  DRAW image=ui_hud_map_notoriety nw=(0,0) se=(107,107) colour=(0,0,0,51) quad (298.000,673.000) (191.000,673.000) (298.000,566.000) (191.000,566.000)  screen_nw (191.000,566.000) screen_se (298.000,673.000)
+[elem]       bg_ne : bitmap  DRAW image=ui_hud_map_notoriety nw=(0,0) se=(107,107) colour=(0,0,0,51) quad (298.000,459.000) (191.000,459.000) (298.000,566.000) (191.000,566.000)  screen_nw (191.000,459.000) screen_se (298.000,566.000)
+[elem]       bg_sw : bitmap  DRAW image=ui_hud_map_notoriety nw=(0,0) se=(107,107) colour=(0,0,0,51) quad (84.000,673.000) (191.000,673.000) (84.000,566.000) (191.000,566.000)  screen_nw (84.000,566.000) screen_se (191.000,673.000)
+[elem]     map : group  group: draws nothing (Sec12.3)  screen_nw (117.000,492.000) screen_se (265.000,640.000)
+[elem]       game_map : sr2_map  NOT DRAWN (draw unit not specced for this type)  screen_nw (117.000,492.000) screen_se (265.000,640.000)
+[elem]         map_ring_NE : bitmap  DRAW image=ui_hud_map_map_ring_full nw=(0,0) se=(148,148) colour=(0,0,0,255) quad (265.000,492.000) (265.000,640.000) (117.000,492.000) (117.000,640.000)  screen_nw (117.000,492.000) screen_se (265.000,640.000)
+[elem]     notoriety_icons : group  group: draws nothing (Sec12.3)  screen_nw (106.000,461.500) screen_se (276.000,669.500)
+[elem]       police_noto_icon_2 : bitmap  DRAW image=ui_hud_not_police nw=(0,0) se=(52,58) colour=(255,255,255,255) quad (140.000,634.500) (166.000,634.500) (140.000,663.500) (166.000,663.500)  screen_nw (140.000,634.500) screen_se (166.000,663.500)
+[elem]       gang_noto_icon_2 : bitmap  DRAW image=ui_hud_not_syndicate nw=(0,0) se=(60,58) colour=(255,255,255,255) quad (138.000,467.500) (168.000,467.500) (138.000,496.500) (168.000,496.500)  screen_nw (138.000,467.500) screen_se (168.000,496.500)
+[elem]       gang_noto_icon_3 : bitmap  DRAW image=ui_hud_not_syndicate nw=(0,0) se=(60,58) colour=(255,255,255,255) quad (176.000,461.500) (206.000,461.500) (176.000,490.500) (206.000,490.500)  screen_nw (176.000,461.500) screen_se (206.000,490.500)
+[elem]       police_noto_icon_3 : bitmap  DRAW image=ui_hud_not_police nw=(0,0) se=(52,58) colour=(255,255,255,255) quad (178.000,640.500) (204.000,640.500) (178.000,669.500) (204.000,669.500)  screen_nw (178.000,640.500) screen_se (204.000,669.500)
+[elem]       police_noto_icon_5 : bitmap  DRAW image=ui_hud_not_police nw=(0,0) se=(52,58) colour=(255,255,255,255) quad (248.000,611.500) (274.000,611.500) (248.000,640.500) (274.000,640.500)  screen_nw (248.000,611.500) screen_se (274.000,640.500)
+[elem]       police_noto_icon_1 : bitmap  DRAW image=ui_hud_not_police nw=(0,0) se=(52,58) colour=(255,255,255,255) quad (108.000,611.500) (134.000,611.500) (108.000,640.500) (134.000,640.500)  screen_nw (108.000,611.500) screen_se (134.000,640.500)
+[elem]       gang_noto_icon_1 : bitmap  DRAW image=ui_hud_not_syndicate nw=(0,0) se=(60,58) colour=(255,255,255,255) quad (106.000,490.500) (136.000,490.500) (106.000,519.500) (136.000,519.500)  screen_nw (106.000,490.500) screen_se (136.000,519.500)
+[elem]       gang_noto_icon_5 : bitmap  DRAW image=ui_hud_not_syndicate nw=(0,0) se=(60,58) colour=(255,255,255,255) quad (246.000,490.500) (276.000,490.500) (246.000,519.500) (276.000,519.500)  screen_nw (246.000,490.500) screen_se (276.000,519.500)
+[elem]       gang_noto_icon_4 : bitmap  DRAW image=ui_hud_not_syndicate nw=(0,0) se=(60,58) colour=(255,255,255,255) quad (214.000,467.500) (244.000,467.500) (214.000,496.500) (244.000,496.500)  screen_nw (214.000,467.500) screen_se (244.000,496.500)
+[elem]       police_noto_icon_4 : bitmap  DRAW image=ui_hud_not_police nw=(0,0) se=(52,58) colour=(255,255,255,255) quad (216.000,634.500) (242.000,634.500) (216.000,663.500) (242.000,663.500)  screen_nw (216.000,634.500) screen_se (242.000,663.500)
+[elem]     map_objective_icon : bitmap  CULLED (own alpha)
+[elem] base_weapons : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   weapons_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     health_sprint_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       mask_ring_2 : bitmap  DRAW image=ui_hud_wpn_health_bg nw=(0,0) se=(150,150) colour=(255,255,255,255) quad (983.250,509.250) (1140.750,509.250) (983.250,666.750) (1140.750,666.750)  screen_nw (983.250,509.250) screen_se (1140.750,666.750)
+[elem]       mask_ring_3 : bitmap  DRAW image=ui_hud_wpn_sprint_bg nw=(0,0) se=(150,150) colour=(255,255,255,255) quad (986.250,512.250) (1137.750,512.250) (986.250,663.750) (1137.750,663.750)  screen_nw (986.250,512.250) screen_se (1137.750,663.750)
+[elem]       health_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]         health_bar_bg : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]         health_bar_2 : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]         health_bar : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]         health_timer : bitmap  CULLED (own alpha)
+[elem]       sprint_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]         sprint_bar_bg : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]         sprint_bar : bitmap_circle  NOT DRAWN (draw unit not specced for this type)  screen box OPEN
+[elem]         sprint_timer : bitmap  CULLED (visible=false)
+[elem]         sprint_timer_1_1 : bitmap  CULLED (visible=false)
+[elem]         sprint_timer_1 : bitmap  CULLED (visible=false)
+[elem]     weapon_base : bitmap  DRAW image=ui_hud_wpn_base nw=(0,0) se=(145,116) colour=(0,0,0,255) quad (1004.000,532.000) (1149.000,532.000) (1004.000,648.000) (1149.000,648.000)  screen_nw (1004.000,532.000) screen_se (1149.000,648.000)
+[elem]     grenade_holster : bitmap  DRAW image=ui_hud_wpn_grenade_ammo nw=(0,0) se=(33,23) colour=(0,0,0,255) quad (1131.000,618.000) (1164.000,618.000) (1131.000,641.000) (1164.000,641.000)  screen_nw (1131.000,618.000) screen_se (1164.000,641.000)
+[elem]     grenade_holster_extra : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(0,0,0,255) quad (1164.000,619.000) (1180.000,619.000) (1164.000,640.000) (1180.000,640.000)  screen_nw (1164.000,619.000) screen_se (1180.000,640.000)
+[elem]     weapon_icons_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       grenade_icon : bitmap  DRAW image=ui_hud_inv_grenade_grenade nw=(0,0) se=(48,82) colour=(255,255,255,255) quad (1105.600,589.400) (1134.400,589.400) (1105.600,638.600) (1134.400,638.600)  screen_nw (1105.600,589.400) screen_se (1134.400,638.600)
+[elem]       dual_weapon_2 : bitmap  DRAW image=ui_hud_inv_fist nw=(0,0) se=(74,80) colour=(255,255,255,255) quad (1043.400,554.000) (1102.600,554.000) (1043.400,618.000) (1102.600,618.000)  screen_nw (1043.400,554.000) screen_se (1102.600,618.000)
+[elem]       dual_weapon_1 : bitmap  DRAW image=ui_hud_inv_fist nw=(0,0) se=(74,80) colour=(255,255,255,255) quad (1021.400,568.000) (1080.600,568.000) (1021.400,632.000) (1080.600,632.000)  screen_nw (1021.400,568.000) screen_se (1080.600,632.000)
+[elem]       grenade_ammo_txt : text  text: PLACEHOLDER marker at origin (1151.000,614.600) text_tag='88' (real text not drawn)
+[elem]       weapon_icon : bitmap  DRAW image=ui_hud_inv_fist nw=(0,0) se=(74,80) colour=(255,255,255,255) quad (1031.400,557.000) (1090.600,557.000) (1031.400,621.000) (1090.600,621.000)  screen_nw (1031.400,557.000) screen_se (1090.600,621.000)
+[elem]       weapon_ammo_txt : text  text: PLACEHOLDER marker at origin (1020.400,606.200) text_tag='888/888' (real text not drawn)
+[elem]   radial_grp : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (640.333,357.333) screen_se (641.333,358.333)
+[elem] base_collection : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   collection_base_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     collection_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]       collection_bg : group  group: draws nothing (Sec12.3)  screen_nw (-20.000,-165.960) screen_se (1571.900,492.829)
+[elem]         gradient_2_1 : bitmap  DRAW image=ui_dialog_shadow_side nw=(0,0) se=(19,19) colour=(0,0,0,255) quad (1289.999,167.000) (0.000,167.000) (1289.999,148.000) (0.000,148.000)  screen_nw (0.000,148.000) screen_se (1289.999,167.000)
+[elem]         gradient_2 : bitmap  DRAW image=ui_dialog_shadow_side nw=(0,0) se=(19,19) colour=(0,0,0,255) quad (0.000,35.000) (1289.999,35.000) (0.000,54.000) (1289.999,54.000)  screen_nw (0.000,35.000) screen_se (1289.999,54.000)
+[elem]         collection_bgxxx : group  group: draws nothing (Sec12.3)  screen_nw (-20.000,-165.960) screen_se (1571.900,492.829)
+[elem]           collection_bg_clip : clip  NOT DRAWN (draw unit not specced for this type)  screen_nw (0.000,54.000) screen_se (1.000,55.000)
+[elem]           collection_bg_tile : group  group: draws nothing (Sec12.3)  screen_nw (-20.000,-165.960) screen_se (1571.900,492.829)
+[elem]             collection_bg_tile_2 : group  group: draws nothing (Sec12.3)  screen_nw (-20.000,-165.960) screen_se (1571.900,492.829)
+[elem]               st_bg : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(35,35,35,255) quad (-20.000,49.000) (1509.524,-165.960) (42.376,492.829) (1571.900,277.869)  screen_nw (-20.000,-165.960) screen_se (1571.900,492.829)
+[elem]               bg_2_1_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (574.161,-34.504) (871.241,-76.255) (595.037,114.037) (892.117,72.285)  screen_nw (574.161,-76.255) screen_se (892.117,114.037)
+[elem]               bg_2 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (-20.000,49.000) (277.080,7.248) (0.876,197.540) (297.956,155.788)  screen_nw (-20.000,7.248) screen_se (297.956,197.540)
+[elem]               bg_2_2 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (0.876,197.540) (297.956,155.788) (21.752,346.080) (318.832,304.329)  screen_nw (0.876,155.788) screen_se (318.832,346.080)
+[elem]               bg_2_1_1_1_2 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (892.117,72.285) (1189.198,30.533) (912.993,220.825) (1210.074,179.073)  screen_nw (892.117,30.533) screen_se (1210.073,220.825)
+[elem]               bg_2_1_1_1_1_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (1189.198,30.533) (1486.278,-11.219) (1210.074,179.073) (1507.154,137.321)  screen_nw (1189.198,-11.219) screen_se (1507.154,179.073)
+[elem]               bg_2_1_1_1_2_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (912.993,220.825) (1210.074,179.073) (933.869,369.365) (1230.949,327.613)  screen_nw (912.993,179.073) screen_se (1230.949,369.365)
+[elem]               bg_2_1_1_2 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (595.037,114.037) (892.117,72.285) (615.913,262.577) (912.993,220.825)  screen_nw (595.037,72.285) screen_se (912.993,262.577)
+[elem]               bg_2_1_1_1_1_1_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (1210.074,179.073) (1507.154,137.321) (1230.950,327.613) (1528.030,285.862)  screen_nw (1210.074,137.321) screen_se (1528.030,327.613)
+[elem]               bg_2_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (277.080,7.248) (574.161,-34.504) (297.956,155.788) (595.037,114.037)  screen_nw (277.080,-34.504) screen_se (595.037,155.788)
+[elem]               bg_2_1_2 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (297.956,155.788) (595.037,114.037) (318.832,304.329) (615.913,262.577)  screen_nw (297.956,114.037) screen_se (615.913,304.329)
+[elem]               bg_2_1_1_2_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (615.913,262.577) (912.993,220.825) (636.789,411.117) (933.869,369.365)  screen_nw (615.913,220.825) screen_se (933.869,411.117)
+[elem]               bg_2_1_1_1 : bitmap  DRAW image=ui_sr3_bg_tile nw=(0,0) se=(300,150) colour=(65,65,65,255) quad (871.241,-76.255) (1168.322,-118.007) (892.117,72.285) (1189.198,30.533)  screen_nw (871.241,-118.007) screen_se (1189.198,72.285)
+[elem]           gradient_1 : bitmap  DRAW image=ui_hud_vignette nw=(0,0) se=(508,14) colour=(0,0,0,191) quad (1466.262,153.005) (1466.262,101.003) (0.000,153.000) (0.000,100.998)  screen_nw (0.000,100.998) screen_se (1466.262,153.005)
+[elem]           gradient : bitmap  DRAW image=ui_hud_vignette nw=(0,0) se=(508,14) colour=(0,0,0,127) quad (1466.262,51.005) (1466.262,80.003) (0.000,51.000) (0.000,79.997)  screen_nw (0.000,51.000) screen_se (1466.262,80.003)
+[elem]       collection_elements_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]         collect_icon_glow : bitmap  DRAW image=ui_gradient_radial nw=(0,0) se=(103,103) colour=(147,0,196,127) quad (289.500,46.500) (392.500,46.500) (289.500,149.500) (392.500,149.500)  screen_nw (289.500,46.500) screen_se (392.500,149.500)
+[elem]         collect_icon : bitmap  DRAW image=ui_hud_collect_saints nw=(0,0) se=(74,74) colour=(255,255,255,255) quad (305.000,63.000) (379.000,63.000) (305.000,137.000) (379.000,137.000)  screen_nw (305.000,63.000) screen_se (379.000,137.000)
+[elem]         collection_title_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]           collection_header_txt : text  text: PLACEHOLDER marker at origin (378.000,78.000) text_tag='GANG OPERATIONAL 10/20' (real text not drawn)
+[elem]           collection_sub_txt : text  text: PLACEHOLDER marker at origin (376.000,98.000) text_tag='GANG OPERATION' (real text not drawn)
+[elem]         collection_control_meter : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (748.000,101.000) screen_se (749.000,102.000)
+[elem]         collection_respect_meter : document  NOT DRAWN (draw unit not specced for this type)  screen_nw (830.000,101.000) screen_se (831.000,102.000)
+[elem]         collection_cash_txt : text  text: PLACEHOLDER marker at origin (862.800,81.400) text_tag='$12,000' (real text not drawn)
+summary    : 218 elements visited, 23 culled; bitmaps drawn 101, no image 0, no texture 0; groups (empty draw) 59; text PLACEHOLDER markers 18; inside mask subtrees (real stencil mask now, Sec15.6) 11
+summary    : non-filter render_mode elements (real distinct blend codes, Sec15.4) 15; background-flag elements 0; geometry OPEN 0; scratch-capacity drops 0; non-integral source coords 0
+not drawn  : bitmap_circle=6 clip=1 document=9 sr2_map=1
+wrote      : _work/hud_mask.png

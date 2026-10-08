@@ -1050,6 +1050,126 @@ SceneResult checkClmeshAirportControlTowerLitScene(const std::string& root, cons
     return r;
 }
 
+// The 10th golden scene (2026-10-03): the FIRST Vint UI render - `sr3_viewer
+// vint-doc` on the real shipped HUD document hud_running_man.vint_doc
+// (interface_startup.vpp_pc), every `bitmap` element drawn as a real textured
+// quad from real bitmap-sheet sub-images (spec-vint-render.md Sec12.1/
+// Sec12.4, sheets per spec-tables-environment.md Sec17.4), `group` drawing
+// nothing (Sec12.3), `text` only a labelled PLACEHOLDER marker - see
+// tests/golden/vint_hud_running_man/COMMAND.txt for the real command, why
+// this document, and every CHOSEN value the frame depends on, and
+// runVintDoc()'s own top comment in tools/sr3_viewer.cpp. Same shape as
+// checkClmeshAirportControlTowerScene() (one real sr3_viewer subcommand, a
+// positional out-path PNG, one stdout capture, byte-exact on both - this
+// command prints no wall-clock timing, two runs were byte-identical apart
+// from the echoed out path), through the SAME fresh tests/golden/_bin/
+// sr3_viewer.exe build.bat produces (extended with a `vint-doc` section:
+// sr3vintdoc + sr3luahost + Lua 5.1, packed into vint_luahost.lib).
+SceneResult checkVintHudRunningManScene(const std::string& root, const std::string& dataRoot) {
+    SceneResult r;
+    r.name = "vint_hud_running_man (sr3_viewer vint-doc, Vint UI render: real bitmap quads + real text, Sec12/Sec14)";
+
+    const std::string goldenDir = root + "\\tests\\golden\\vint_hud_running_man";
+    const std::string workDir = root + "\\tests\\golden";
+    const std::string viewerExe = root + "\\tests\\golden\\_bin\\sr3_viewer.exe";
+    const std::string workStem = "vint_hud_running_man";
+
+    if (!fileExists(goldenDir + "\\baseline_capture.png") || !fileExists(goldenDir + "\\baseline_stdout.txt")) {
+        r.status = "SKIP";
+        r.details.push_back("no frozen baseline under " + goldenDir);
+        return r;
+    }
+    if (!fileExists(viewerExe)) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe not found at " + viewerExe + " - run tests/golden/build.bat");
+        return r;
+    }
+
+    _mkdir((workDir + "\\_work").c_str());
+    // Same out path ("_work/vint_hud_running_man.png", echoed verbatim in the
+    // command's own "wrote" line) and the same archives/flags the baseline was
+    // frozen with (COMMAND.txt records the exact command).
+    std::string cmd = "\"" + viewerExe + "\" vint-doc \"" + dataRoot + "\\interface_startup.vpp_pc\" " +
+                      "hud_running_man.vint_doc \"" + dataRoot + "\\misc_tables.vpp_pc\" _work/" + workStem +
+                      ".png --tables \"" + dataRoot + "\\patch_compressed.vpp_pc\" --textures \"" + dataRoot +
+                      "\\misc.vpp_pc\" --textures \"" + dataRoot + "\\interface.vpp_pc\" > _work\\" + workStem +
+                      "_check_stdout.txt 2>&1";
+    int rc = runIn(workDir, cmd);
+    if (rc != 0) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe returned exit code " + std::to_string(rc));
+        return r;
+    }
+
+    bool allPass = true;
+    std::string report;
+    bool p1 = comparePngExact(goldenDir + "\\baseline_capture.png", workDir + "\\_work\\" + workStem + ".png", report);
+    r.details.push_back(std::string("capture.png : ") + (p1 ? "PASS - " : "FAIL - ") + report);
+    allPass = allPass && p1;
+
+    bool p2 = compareTextExact(goldenDir + "\\baseline_stdout.txt",
+                               workDir + "\\_work\\" + workStem + "_check_stdout.txt", report);
+    r.details.push_back(std::string("stdout      : ") + (p2 ? "PASS - " : "FAIL -\n" + report));
+    allPass = allPass && p2;
+
+    r.status = allPass ? "PASS" : "FAIL";
+    return r;
+}
+
+// hud.vint_doc: the main HUD document, covering real stencil masking (7
+// mask elements) and non-filter render_mode blend codes (15 elements) -
+// spec-vint-render.md Sec15 (UI draw unit U6). hud_running_man.vint_doc's
+// own golden exercises neither (COMMAND.txt's own "why this document"
+// note), so this is the dedicated regression coverage for both of U6's
+// biggest additions, same pattern as checkVintHudRunningManScene above.
+SceneResult checkHudMaskScene(const std::string& root, const std::string& dataRoot) {
+    SceneResult r;
+    r.name = "hud_mask (sr3_viewer vint-doc hud.vint_doc: real stencil masking + non-filter render_mode blend codes + real text, Sec15.4/15.6/Sec14)";
+
+    const std::string goldenDir = root + "\\tests\\golden\\hud_mask";
+    const std::string workDir = root + "\\tests\\golden";
+    const std::string viewerExe = root + "\\tests\\golden\\_bin\\sr3_viewer.exe";
+    const std::string workStem = "hud_mask";
+
+    if (!fileExists(goldenDir + "\\baseline_capture.png") || !fileExists(goldenDir + "\\baseline_stdout.txt")) {
+        r.status = "SKIP";
+        r.details.push_back("no frozen baseline under " + goldenDir);
+        return r;
+    }
+    if (!fileExists(viewerExe)) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe not found at " + viewerExe + " - run tests/golden/build.bat");
+        return r;
+    }
+
+    _mkdir((workDir + "\\_work").c_str());
+    std::string cmd = "\"" + viewerExe + "\" vint-doc \"" + dataRoot + "\\interface_startup.vpp_pc\" " +
+                      "hud.vint_doc \"" + dataRoot + "\\misc_tables.vpp_pc\" _work/" + workStem +
+                      ".png --tables \"" + dataRoot + "\\patch_compressed.vpp_pc\" --textures \"" + dataRoot +
+                      "\\misc.vpp_pc\" --textures \"" + dataRoot + "\\interface.vpp_pc\" > _work\\" + workStem +
+                      "_check_stdout.txt 2>&1";
+    int rc = runIn(workDir, cmd);
+    if (rc != 0) {
+        r.status = "FAIL";
+        r.details.push_back("sr3_viewer.exe returned exit code " + std::to_string(rc));
+        return r;
+    }
+
+    bool allPass = true;
+    std::string report;
+    bool p1 = comparePngExact(goldenDir + "\\baseline_capture.png", workDir + "\\_work\\" + workStem + ".png", report);
+    r.details.push_back(std::string("capture.png : ") + (p1 ? "PASS - " : "FAIL - ") + report);
+    allPass = allPass && p1;
+
+    bool p2 = compareTextExact(goldenDir + "\\baseline_stdout.txt",
+                               workDir + "\\_work\\" + workStem + "_check_stdout.txt", report);
+    r.details.push_back(std::string("stdout      : ") + (p2 ? "PASS - " : "FAIL -\n" + report));
+    allPass = allPass && p2;
+
+    r.status = allPass ? "PASS" : "FAIL";
+    return r;
+}
+
 // --selftest: proves the comparison logic itself catches a real regression.
 // Makes a byte-identical COPY of a frozen baseline PNG, flips one pixel's
 // worth of bytes in the copy (a trivial, deliberate break), confirms
@@ -1149,8 +1269,12 @@ int runSelfTest(const std::string& root) {
         root + "\\tests\\golden\\clmesh_airport_controltower_lit\\baseline_capture.png", workDir,
         "clmesh_airport_controltower_lit");
 
+    bool okVintHud = selfTestOneBaseline("vint_hud_running_man",
+                                         root + "\\tests\\golden\\vint_hud_running_man\\baseline_capture.png", workDir,
+                                         "vint_hud_running_man");
+
     bool selfTestOk = okBrad && okGenki && okStandard && okZoneTile && okTree && okClmesh && okClmeshAirport &&
-                       okClmeshAirportLit;
+                       okClmeshAirportLit && okVintHud;
     std::printf("\nSELFTEST %s\n", selfTestOk ? "OK - every scene's comparison logic correctly detects a real "
                                                  "regression and is clean against its true baseline"
                                               : "FAILED - see the per-scene SELFTEST[...] lines above");
@@ -1187,6 +1311,8 @@ int main(int argc, char** argv) {
     results.push_back(checkClmeshAirportControlTowerScene(root, dataRoot));
     results.push_back(checkClmeshAirportControlTowerLitScene(root, dataRoot));
     results.push_back(checkCityCornerScene(root, dataRoot));
+    results.push_back(checkVintHudRunningManScene(root, dataRoot));
+    results.push_back(checkHudMaskScene(root, dataRoot));
 
     int failures = 0;
     std::printf("\n=== golden-scene regression check ===\n");

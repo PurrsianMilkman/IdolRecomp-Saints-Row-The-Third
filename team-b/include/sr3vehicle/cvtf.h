@@ -71,23 +71,75 @@
 // `misc_tables.vpp_pc`, XML text, not decoded by this reader — see this
 // session's own write-up for the exact real values found this way).
 //
-// REGION 2/3 BOUNDARIES REMAIN HONESTLY OPEN, NOT RESOLVED BY THE ABOVE:
-// spec §5.1's own correction only resolved Region 1's INTERNAL structure.
-// Where Region 1's own content ends and Region 2 (the flat 40-name wheel
-// list) begins is still not given by any confirmed formula — this reader
-// uses the highest real end-offset among every Region-1 entry's own
-// name/variant/option-array span as a lower bound, then a content-shape
-// heuristic (a string matching the wheel-name vocabulary spec §5.1 itself
-// documents) to confirm the actual start, exactly the same honest,
-// non-overfit spirit as this reader's own original design. `allStrings()`
-// remains the reliable, boundary-agnostic fallback for locating anything
-// by content search regardless of which region it falls in.
+// CORRECTED 2026-10-03 (TEAM B cross-check task, reader-correctness pass
+// against spec §5.1's own 2026-10-03 HIGH CONFIDENCE header correction):
+// this reader's ENTIRE header/Region-1-boundary model below was built on
+// the ORIGINAL (now-superseded) "16-byte header, entry_count_2 is a real
+// count" reading. Spec §5.1 flagged this as HIGH CONFIDENCE, NOT YET
+// CONFIRMED, and said "a one-file hex check of +0x0C, +0x14, +0x24 and
+// +0x2C would make this CONFIRMED" — that exact check was done here,
+// directly against all 5 real byte-identical copies of
+// `car_4dr_standard03.cvtf_pc` (16,089 bytes each, extracted from
+// `vehicles.vpp_pc` via `tools/vpp_extract.cpp`), and CONFIRMS the real
+// header is 48 bytes (`0x30`), not 16:
+//   +0x00 magic 'ftvc', +0x04 section_count (==2)
+//   +0x08 region1Count  - count of Region 1's quad table (28 in this file)
+//   +0x0C region1OffsetRaw - OFFSET of Region 1's quad table (NOT a count;
+//          this project's reader used to call this "entryCount2" - real
+//          value in this file is 40 (0x28), resolving via the same +8
+//          idiom as every other field to 48 - i.e. BYTE-IDENTICAL to the
+//          old reader's hand-rolled "16-byte header + 2 leading
+//          header-like quads = 48" computation, but for the RIGHT reason;
+//          the old computation only ever worked by the exact coincidence
+//          spec §5.1 itself calls out, and silently breaks on any file
+//          where this offset isn't 40)
+//   +0x10 table2OffsetRaw, +0x14 table2Count - a second 16-byte-record
+//          table (sentinel/0 in this file - absent)
+//   +0x18 table3OffsetRaw, +0x1C table3Count - a third table, "processed
+//          last" (offset 9748 raw / 9756 resolved, count 5 in this file -
+//          this reader does NOT further decode its record shape, see
+//          Region 3 note below)
+//   +0x20 table size "array1" offset/+0x24 count - a dword-offset array,
+//          each element through the Component-name resolver `0x00a96040`
+//   +0x28 "array2" offset/+0x2C count - a second such array, resolver
+//          `0x00a960e0`
+// All verified directly against real bytes (not just the spec's own
+// citation): array1 (offset 8440 raw / 8448 resolved, count 45) resolves
+// EVERY ONE of its 45 elements (each itself a +8-fixed-up offset, same
+// idiom) to a clean, printable, null-terminated string — and they are
+// EXACTLY the Region-2 wheel-name vocabulary spec §5.1 already documents
+// by content (`W_000_F_Extra_High_Profile` ... `W_006_R_Extra_Low_Profile`,
+// 20 front + 25 rear = 45) — which also directly SETTLES spec §5.1's own
+// still-open "Region 2 40 vs 45" composition question in favour of **45**,
+// not 40 (the old reader's `entryCount2` — really the Region-1 offset
+// field, coincidentally 40 in this file — was never a real count of this
+// array at all). array2 (offset 9648 raw / 9656 resolved, count 7)
+// likewise resolves all 7 elements to `Family001`..`Family007`, exactly
+// matching spec §5.1's own HYPOTHESIS for this array's purpose. Given
+// this, Region 2 below is now read via the REAL array1 mechanism (a dword
+// array, each element independently resolved), not the old content-shape
+// scanning heuristic — see the Region 2 note below for exactly what
+// changed and what's still not modelled (the two resolver functions
+// themselves are not re-derived here, only the plain string each element
+// resolves to).
+//
+// REGION 3 / table2 / table3 REMAIN HONESTLY OPEN: this reader exposes
+// table2Offset()/table2Count()/table3Offset()/table3Count() as raw,
+// resolved-but-undecoded fields (table3's count of 5 in the worked sample
+// matches Region 3's own already-documented "5 complete style presets",
+// strongly suggesting table3 IS Region 3's real index — but this reader
+// does not attempt to decode table3's per-record layout, since spec §5.1
+// itself does not give one and inventing one here would violate this
+// project's own no-invented-fixes discipline). `allStrings()` remains the
+// reliable, boundary-agnostic fallback for locating anything by content
+// search regardless of which region it falls in.
 
 #pragma once
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -98,11 +150,19 @@ namespace sr3vehicle {
 
 constexpr uint32_t kCvtfMagic = 0x63767466u;   // 'ftvc' (extension spelled backwards), spec §5.1
 constexpr uint32_t kCvtfSectionCount = 2u;     // spec §5.1: confirmed constant in every real sample
-constexpr size_t kCvtfHeaderSize = 0x10;       // 16 bytes: magic, section_count, entry_count_1, entry_count_2
+// 48 bytes: magic, section_count, region1Count/region1OffsetRaw,
+// table2OffsetRaw/table2Count, table3OffsetRaw/table3Count,
+// array1OffsetRaw/array1Count, array2OffsetRaw/array2Count. CORRECTED
+// 2026-10-03 from this reader's own original (wrong) 16-byte assumption -
+// see this header's own top comment for the real-byte check that
+// confirmed spec §5.1's HIGH CONFIDENCE 48-byte finding.
+constexpr size_t kCvtfHeaderSize = 0x30;
 constexpr size_t kCvtfRegion1QuadSize = 0x10;  // 16 bytes: {u32 a, u32 b, u32 c, u32 tag}
-constexpr size_t kCvtfRegion1LeadingQuads = 2; // spec §5.1: "28 real entries + 2 leading header-like quads"
 constexpr uint32_t kCvtfSentinel = 0xFFFFFFFFu; // spec §5.1: raw field value meaning "absent", not resolved via +8
-constexpr size_t kCvtfFixupBase = 0x08;         // spec §5.1, FUN_00aaf9a0: every quad field resolves as v+8 (v != sentinel)
+constexpr size_t kCvtfFixupBase = 0x08;         // spec §5.1, FUN_00aaf9a0: every field (header offsets AND quad
+                                                 // fields alike - this reader's own real-byte check confirms the
+                                                 // SAME +8 idiom applies to the header's own offset fields, not
+                                                 // just Region-1's a/b/c) resolves as v+8 (v != sentinel)
 constexpr size_t kCvtfOptionElementSize = 0x3C; // 60 bytes, spec §5.1
 
 // One raw 0x3C-byte element of a Region-1 entry's option-list array (spec
@@ -153,27 +213,78 @@ struct CvtfRawString {
 class CvtfCatalog {
 public:
     // Non-throwing. Returns true and fills `out` iff the buffer is at least
-    // the 16-byte header, the magic matches, section_count == 2, and
-    // entry_count_1/entry_count_2 make Region 1's quad table fit inside the
-    // buffer. Otherwise returns false and sets `whyNot`.
+    // the 48-byte header, the magic matches, section_count == 2, the
+    // region1 offset field resolves to a non-sentinel absolute offset, and
+    // region1Count() makes Region 1's quad table fit inside the buffer.
+    // Otherwise returns false and sets `whyNot`.
     static bool tryParse(vpp::ByteView bytes, CvtfCatalog& out, std::string& whyNot);
 
     // Throwing convenience over tryParse().
     static CvtfCatalog parse(vpp::ByteView bytes);
 
     uint32_t sectionCount() const { return sectionCount_; }
-    uint32_t entryCount1() const { return entryCount1_; }
-    uint32_t entryCount2() const { return entryCount2_; }
 
-    // Region 1: entryCount1() + 2 entries, in RAW QUAD-TABLE order (index 0
-    // and 1 are the "2 leading header-like quads" spec §5.1 flags).
+    // +0x08: count of Region 1's quad table (CONFIRMED - empirical, this
+    // reader's own 2026-10-03 real-byte check; was already correct under
+    // the old 16-byte-header reading too, this field's meaning didn't
+    // change).
+    uint32_t region1Count() const { return region1Count_; }
+    // +0x0C raw value: this project's reader used to call this
+    // "entryCount2" and treat it as a count. CORRECTED 2026-10-03: it is
+    // the OFFSET of Region 1's own quad table (resolved via the shared
+    // +8 idiom, same as every other field here) - see this header's own
+    // top comment. Exposed raw mainly for diagnostics; region1() already
+    // starts at the resolved location.
+    uint32_t region1OffsetRaw() const { return region1OffsetRaw_; }
+
+    // Region 1: region1Count() entries, no more "2 leading header-like
+    // quads" (that was an artifact of the old wrong 16-byte header
+    // computation happening to land on the right byte offset by
+    // coincidence in the one sample checked at the time - CORRECTED
+    // 2026-10-03, see this header's own top comment).
     const std::vector<CvtfRegion1Entry>& region1() const { return region1_; }
 
-    // Region 2: best-effort, entryCount2() consecutive strings — see this
-    // header's own top comment for how the start is located (a structural
-    // lower bound plus a content-shape confirmation, not a confirmed
-    // formula). May be shorter than entryCount2() if EOF is hit first.
+    // +0x10/+0x14 - a second 16-byte-record table. OPEN: this reader
+    // exposes the raw/resolved offset and count but does not decode this
+    // table's record shape (spec §5.1 does not give one). nullopt when
+    // the raw offset field is the sentinel (absent - the common case;
+    // car_4dr_standard03.cvtf_pc has no table 2).
+    std::optional<size_t> table2Offset() const { return table2Offset_; }
+    uint32_t table2Count() const { return table2Count_; }
+
+    // +0x18/+0x1C - a third table, "processed last" per spec §5.1. OPEN
+    // for the same reason as table2 - NOT decoded here. In the worked
+    // sample this table's count (5) matches Region 3's own
+    // already-documented "5 complete style presets" exactly, which this
+    // reader's own comment flags as a strong but unconfirmed hint that
+    // this IS Region 3's real index table.
+    std::optional<size_t> table3Offset() const { return table3Offset_; }
+    uint32_t table3Count() const { return table3Count_; }
+
+    // +0x20/+0x24 - a dword-offset array, each element individually
+    // resolved (same sentinel/+8 idiom) to a plain string. Per spec §5.1,
+    // elements are further resolved through the Component-name resolver
+    // `0x00a96040` at runtime; this reader exposes only the resolved
+    // string, not that further resolution. THIS READER'S OWN real-byte
+    // check (2026-10-03, car_4dr_standard03.cvtf_pc, 5/5 byte-identical
+    // real copies): all 45 elements resolve to clean, printable,
+    // null-terminated strings exactly matching spec §5.1's own
+    // documented Region-2 wheel-name vocabulary (20 front + 25 rear) -
+    // this is almost certainly Region 2 itself, and directly settles
+    // spec §5.1's own open "40 vs 45" composition question in favour of
+    // 45. Region 2 below (`region2Names()`) is populated from this array.
+    const std::vector<std::string>& wheelNames() const { return region2Names_; }
+    // Back-compat alias for wheelNames() - kept because this was this
+    // reader's pre-2026-10-03 name for the same concept (then populated
+    // by a content-shape scanning heuristic instead of this real array;
+    // no other code in this project references it, grep-checked).
     const std::vector<std::string>& region2Names() const { return region2Names_; }
+
+    // +0x28/+0x2C - a second such dword-offset array, resolver
+    // `0x00a960e0` per spec. THIS READER'S OWN real-byte check: all 7
+    // elements resolve to `Family001`..`Family007`, exactly matching
+    // spec §5.1's own HYPOTHESIS for this array's purpose.
+    const std::vector<std::string>& familyNames() const { return familyNames_; }
 
     // The complete, ordered, offset-tagged string dump described in this
     // header's own top comment — the reliable fallback for locating any
@@ -188,10 +299,15 @@ public:
 private:
     uint32_t magic_ = 0;
     uint32_t sectionCount_ = 0;
-    uint32_t entryCount1_ = 0;
-    uint32_t entryCount2_ = 0;
+    uint32_t region1Count_ = 0;
+    uint32_t region1OffsetRaw_ = 0;
+    uint32_t table2Count_ = 0;
+    uint32_t table3Count_ = 0;
+    std::optional<size_t> table2Offset_;
+    std::optional<size_t> table3Offset_;
     std::vector<CvtfRegion1Entry> region1_;
-    std::vector<std::string> region2Names_;
+    std::vector<std::string> region2Names_;  // wheel names, from array1 (+0x20/+0x24)
+    std::vector<std::string> familyNames_;   // from array2 (+0x28/+0x2C)
     std::vector<CvtfRawString> allStrings_;
 };
 

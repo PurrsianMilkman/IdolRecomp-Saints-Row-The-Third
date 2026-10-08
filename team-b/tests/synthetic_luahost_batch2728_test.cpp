@@ -501,12 +501,20 @@ int main() {
     ok(host, gp, "assert(city_zone_swap_is_active('DOWNTOWN') == true)"); // nameHash lower-cases internally
     ok(host, gp, "assert(city_zone_swap_is_active('uptown') == false)");
 
-    // Sec28.19 character_set_counter_on_grabbed.
+    // Sec28.19 character_set_counter_on_grabbed. CONFIRMED (Sec3.7's own
+    // single-player resolution, 2026-10-03): the gate shares Sec3.7's SAME
+    // 0x008ae480/0x008837a0 pair and is seeded true on first touch, so the
+    // very first call already takes the direct-apply branch, not a refusal.
     es.objectResolves().set("char03", true);
-    fails(host, gp, "character_set_counter_on_grabbed('char03', true)", "0x008ae480");
-    es.counterOnGrabbed().gatePasses.set("char03", true);
     ok(host, gp, "character_set_counter_on_grabbed('char03', true)");
     CHECK(es.counterOnGrabbed().value.at("char03") == true);
+    CHECK(es.counterOnGrabbed().gatePasses.get("char03") == true);
+    // The gate-false (replicate-only) branch is CONFIRMED dead in single
+    // player but stays testable for structural coverage via an explicit
+    // override.
+    es.counterOnGrabbed().gatePasses.set("char03", false);
+    ok(host, gp, "character_set_counter_on_grabbed('char03', false)");
+    CHECK(es.counterOnGrabbed().value.at("char03") == true); // unchanged: gate false -> no write
 
     // Sec28.20 character_remove_child_item_by_name.
     es.objectResolves().set("char04", true);

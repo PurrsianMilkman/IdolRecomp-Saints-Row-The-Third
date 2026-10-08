@@ -114,15 +114,22 @@ int main() {
 
     // ------------------------------------------------------------------
     // Sec30.5 vehicle force-flag setters: unresolved vehicle -> real no-op
-    // (never even creates a VehicleState entry); resolved + gate OPEN ->
-    // refuses; gate false -> replicate-only (no local bit write); gate true
-    // -> the bit is actually written, both ways.
+    // (never even creates a VehicleState entry); gate CONFIRMED true by
+    // default (Sec3.7's own single-player resolution, 2026-10-03) -> the
+    // bit is written directly; gate false (forced via an explicit test
+    // override, CONFIRMED dead in single player) -> replicate-only, no
+    // local bit write.
     es.objectResolves().set("veh01", false);
     ok(host, gp, "vehicle_set_invulnerable_to_player_explosives('veh01', true)");
     CHECK(!es.hasVehicle("veh01"));
 
     es.objectResolves().set("veh02", true);
-    fails(host, gp, "vehicle_set_invulnerable_to_player_explosives('veh02', true)", "0x008ae480");
+    // CONFIRMED (Sec3.7, single-player resolution added 2026-10-03): the
+    // double gate always resolves true with no session installed, seeded
+    // true at construction - the gate-false (replicate-only) branch is
+    // CONFIRMED dead in single player but stays testable for structural
+    // coverage via an explicit override.
+    CHECK(es.getOrCreateVehicle("veh02").forceFlagGatePasses.get() == true);
     es.getOrCreateVehicle("veh02").forceFlagGatePasses.set(false);
     ok(host, gp, "vehicle_set_invulnerable_to_player_explosives('veh02', true)"); // gate false: replicate only
     CHECK(es.vehicles().at("veh02").forceFlags.knownMask() == 0);

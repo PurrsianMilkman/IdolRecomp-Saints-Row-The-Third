@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "sr3luahost/host.h"
+#include "sr3luahost/vint_property_types.h"
 #include "sr3save/save_crc.h"
 #include "sr3vintdoc/vint_doc.h"
 
@@ -110,6 +111,7 @@ void writeElement(Buf& w, uint32_t nameIdx, uint32_t typeIdx, uint16_t children,
 const std::vector<std::string> kStrings = {
     "synth.vint_doc", "ui_peg", "lua_script_file", "synth.lua", "root", "group", "640x480", "kid_a",
     "bitmap", "ui_blank", "kid_b", "text", "anim", "animation", "twn", "tween",
+    "right", // 16 - a text.horz_align enumerator name (spec-lua-bindings.md Sec9.2a)
 };
 
 // The fixture: 1 critical resource, 1 metadata entry, 1 element ("root",
@@ -132,8 +134,11 @@ std::vector<uint8_t> buildFixture() {
     w.u32(2); w.u32(3);
     writeElement(w, 4, 5, 2, 0, {{6, {pVec2("anchor", 5, 6)}}},
                  {pVec2("anchor", 1, 2), pInt("depth", -3), pFloat("alpha", 0.5f)});
-    writeElement(w, 7, 8, 0, 1, {}, {pStr("image", 9), pBool("visible", true)});
-    writeElement(w, 10, 11, 0, 0, {}, {pUns("leading", 0xFFFFFFF0u), pVec3("tint", 0.25f, 0.5f, 0.75f)});
+    // kid_a also carries a hash no bitmap/element row registers: the loader
+    // consumes and skips it (spec-vint-doc-format.md Sec5).
+    writeElement(w, 7, 8, 0, 1, {}, {pStr("image", 9), pBool("visible", true), pBool("no_such_row", true)});
+    writeElement(w, 10, 11, 0, 0, {},
+                 {pUns("leading", 0xFFFFFFF0u), pVec3("tint", 0.25f, 0.5f, 0.75f), pStr("horz_align", 16)});
     writeElement(w, 12, 13, 1, 0, {}, {});
     writeElement(w, 14, 15, 0, 0, {}, {pStr("target_name", 7)});
     w.patch32(0x16, static_cast<uint32_t>(w.b.size()));
@@ -145,6 +150,44 @@ std::vector<uint8_t> buildFixture() {
     w.u32(pool);
     for (uint32_t o : offs) w.u32(o);
     for (const auto& s : kStrings) { for (char c : s) w.u8(static_cast<uint8_t>(c)); w.u8(0); }
+    return w.b;
+}
+
+// Second fixture (2026-10-03, spec-vint-render.md Sec12.1): a group root
+// (anchor 100,50) with four bitmaps exercising the image setter's side
+// effects in load order - bm_plain (image, then source_se/anchor/scale),
+// bm_ao_first (auto_offset `c` BEFORE image), bm_custom
+// (custom_source_coords + source_nw before image), bm_unresolved (an image
+// the resolver does not know).
+const std::vector<std::string> kImageStrings = {
+    "img.vint_doc", "root", "group", "bm_plain", "bitmap", "ui_blank", "bm_ao_first", "c",
+    "bm_custom", "bm_unresolved", "missing_image",
+};
+std::vector<uint8_t> buildImageFixture() {
+    Buf w;
+    w.u32(0x00003027);
+    w.u32(0);
+    w.u16(2);
+    w.u32(0);
+    w.u32(0);  // metadata
+    w.u32(0);  // critical resources
+    w.u32(0);  // string table offset, patched below
+    w.u16(1);  // elements
+    w.u16(0);  // animations
+    writeElement(w, 1, 2, 4, 0, {}, {pVec2("anchor", 100, 50)});
+    writeElement(w, 3, 4, 0, 0, {},
+                 {pStr("image", 5), pVec2("source_se", 60, 62), pVec2("anchor", 10, 20), pVec2("scale", 2, 2)});
+    writeElement(w, 6, 4, 0, 0, {}, {pStr("auto_offset", 7), pStr("image", 5)});
+    writeElement(w, 8, 4, 0, 0, {}, {pBool("custom_source_coords", true), pVec2("source_nw", 3, 4), pStr("image", 5)});
+    writeElement(w, 9, 4, 0, 0, {}, {pStr("image", 10)});
+    w.patch32(0x16, static_cast<uint32_t>(w.b.size()));
+    uint32_t pool = 0;
+    std::vector<uint32_t> offs;
+    for (const auto& s : kImageStrings) { offs.push_back(pool); pool += static_cast<uint32_t>(s.size()) + 1; }
+    w.u32(static_cast<uint32_t>(kImageStrings.size()));
+    w.u32(pool);
+    for (uint32_t o : offs) w.u32(o);
+    for (const auto& s : kImageStrings) { for (char c : s) w.u8(static_cast<uint8_t>(c)); w.u8(0); }
     return w.b;
 }
 
@@ -266,7 +309,10 @@ int main() {
         const auto* ld = es.loadedVintDocument(dh);
         CHECK(ld && ld->luaScriptFile == "synth.lua" && ld->objectCount == 5);
         CHECK(ld && ld->elementHandles.size() == 1 && ld->animationHandles.size() == 1);
-        CHECK(ld && ld->propertyCount == 3 + 2 + 2 + 1);
+        // root 3, kid_a 2 (+1 skipped: no descriptor), kid_b 3, twn 1.
+        CHECK(ld && ld->propertyCount == 3 + 2 + 3 + 1);
+        CHECK(es.vintPropertyStats().docRecordsSkippedNoDescriptor == 1);
+        CHECK(es.vintPropertyStats().docObjectsSeeded == 3); // root, kid_a, kid_b - not anim/twn
         CHECK(es.loadedVintDocument(dh + 1) == nullptr);
         uint32_t root = ld->elementHandles[0];
         const auto* ro = es.vdoObjectForTesting(root);
@@ -289,6 +335,22 @@ int main() {
         CHECK(root2 != 0 && root2 != root);
         const auto* anchor2 = es.findVintProperty(root2, "anchor");
         CHECK(anchor2 && anchor2->size() == 2 && (*anchor2)[0].number == 5.0); // override applied
+
+        // Typed storage (2026-10-03): the enumerator name is converted the
+        // loader's way (0x00e307c0, Sec9.2a), the unregistered hash was
+        // skipped, the defaults were seeded under the file's records.
+        uint32_t kidB = ka->nextSiblingHandle;
+        const auto* ha = es.findVintStoredProperty(kidB, "horz_align");
+        CHECK(ha && ha->typedAs == sr3luahost::kVintCodeEnum && ha->values.size() == 1 && ha->values[0].number == 2.0);
+        CHECK(es.findVintProperty(kidA, "no_such_row") == nullptr);
+        const auto* tint = es.findVintStoredProperty(kidB, "tint");
+        CHECK(tint && tint->typedAs == sr3luahost::kVintCodeVec3);
+        const auto* leading = es.findVintStoredProperty(kidB, "leading");
+        CHECK(leading && leading->typedAs == 0); // text.leading: code OPEN in clean text -> raw
+        const auto* vis = es.findVintStoredProperty(root, "visible");
+        CHECK(vis && vis->typedAs == sr3luahost::kVintCodeBool && vis->values[0].boolean); // seeded default
+        CHECK(es.findVintProperty(kidA, "unscaled_size") == nullptr); // bitmap: its own size path (OPEN)
+        CHECK(es.findVintProperty(root, "unscaled_size") != nullptr); // group: element default (1,1)
     }
 
     // --- through Lua, with the per-chunk document context ----------------
@@ -320,6 +382,12 @@ int main() {
             "assert(r == 0.25 and g == 0.5 and bl == 0.75, 'tint')\n"
             "assert(vint_object_first_child(b) == nil, 'no children')\n"
             "assert(select('#', vint_get_property(b, 'no_such_property')) == 0, 'miss')\n"
+            "assert(select('#', vint_get_property(a, 'no_such_row')) == 0, 'skipped at load')\n"
+            "local s1, s2 = vint_get_property(root, 'scale')\n"
+            "assert(s1 == 1 and s2 == 1, 'seeded scale')\n"
+            // root (group) unions kid_a (bitmap: size from its image, OPEN)
+            // and kid_b (text: layout, OPEN) - so its bounds refuse.
+            "assert(not pcall(vint_get_property, root, 'screen_size'), 'children sizes OPEN')\n"
             "assert(vint_get_property(vint_object_find('twn'), 'target_name') == 'kid_a', 'tween')\n"
             "vint_set_property(root, 'anchor', 9, 8)\n"
             "local x2, y2 = vint_get_property(root, 'anchor')\n"
@@ -367,6 +435,72 @@ int main() {
         auto r2 = host.runChunk(host.uiState(), "assert(vint_object_find('root') ~= 0)", "synth.lua");
         CHECK(r2.loadOk && r2.pcallOk);
         CHECK(host.engineState().currentDefaultDocHandle().get() == 1); // untouched without a resolver
+    }
+
+    // --- Sec12.1 image-setter side effects at load (2026-10-03, UI unit U3) --
+    {
+        const std::vector<uint8_t> ib = buildImageFixture();
+        Document idoc = parseDocument(vpp::ByteView(ib.data(), ib.size()));
+        CHECK(idoc.landsExactly());
+        auto handleOf = [](const EngineState& es, uint32_t root, const char* name) -> uint32_t {
+            for (uint32_t c = es.vdoObject(root)->firstChildHandle; c != 0; c = es.vdoObject(c)->nextSiblingHandle)
+                if (es.vdoObject(c)->name == name) return c;
+            return 0;
+        };
+        auto nums = [](const EngineState& es, uint32_t h, const char* name) {
+            std::vector<double> out;
+            if (const auto* v = es.findVintProperty(h, name))
+                for (const auto& x : *v) out.push_back(x.number);
+            return out;
+        };
+        // Without a resolver: the pre-U3 behaviour, bitmap size stays OPEN.
+        {
+            EngineState es;
+            uint32_t dh = es.loadVintDocument("img.vint_doc", idoc);
+            uint32_t root = es.loadedVintDocument(dh)->elementHandles[0];
+            uint32_t plain = handleOf(es, root, "bm_plain");
+            CHECK(es.findVintProperty(plain, "unscaled_size") == nullptr);
+            CHECK(es.vintPropertyStats().docImageSizesApplied == 0 && es.vintPropertyStats().docImageUnresolved == 0);
+            bool open = false;
+            try { es.vintQueryBox(plain); } catch (const sr3luahost::OpenStateError&) { open = true; }
+            CHECK(open);
+        }
+        // With a resolver: ui_blank is 16x16, missing_image is not in the pool.
+        EngineState es;
+        std::vector<std::string> asked;
+        uint32_t dh = es.loadVintDocument("img.vint_doc", idoc, std::string(), [&](const std::string& n) {
+            asked.push_back(n);
+            return n == "ui_blank" ? std::optional<std::pair<double, double>>(std::make_pair(16.0, 16.0)) : std::nullopt;
+        });
+        CHECK((asked == std::vector<std::string>{"ui_blank", "ui_blank", "ui_blank", "missing_image"}));
+        uint32_t root = es.loadedVintDocument(dh)->elementHandles[0];
+        uint32_t plain = handleOf(es, root, "bm_plain"), aoFirst = handleOf(es, root, "bm_ao_first"),
+                 custom = handleOf(es, root, "bm_custom"), unres = handleOf(es, root, "bm_unresolved");
+        CHECK(plain && aoFirst && custom && unres);
+        // bm_plain: reset, then the file's later source_se wins; size re-seeded;
+        // auto_offset still none at image time -> offset untouched.
+        CHECK((nums(es, plain, "source_nw") == std::vector<double>{0, 0}));
+        CHECK((nums(es, plain, "source_se") == std::vector<double>{60, 62}));
+        CHECK((nums(es, plain, "unscaled_size") == std::vector<double>{16, 16}));
+        CHECK((nums(es, plain, "offset") == std::vector<double>{0, 0}));
+        // query-time chain: root anchor (100,50); bm anchor (10,20), scale 2.
+        auto t = es.vintQueryTransform(plain);
+        CHECK(t.px == 110 && t.py == 70 && t.m[0] == 2 && t.m[1] == 0 && t.m[2] == 0 && t.m[3] == 2);
+        auto b = es.vintQueryBox(plain);
+        CHECK(b && b->minX == 110 && b->minY == 70 && b->maxX == 142 && b->maxY == 102);
+        // bm_ao_first: auto_offset c stored BEFORE image -> the applier writes
+        // (-w/2,-h/2) from the freshly re-seeded size (Sec5.4).
+        CHECK((nums(es, aoFirst, "offset") == std::vector<double>{-8, -8}));
+        CHECK((nums(es, aoFirst, "source_se") == std::vector<double>{16, 16}));
+        // bm_custom: custom_source_coords set -> no reset; size still re-seeded.
+        CHECK((nums(es, custom, "source_nw") == std::vector<double>{3, 4}));
+        CHECK(es.findVintProperty(custom, "source_se") == nullptr);
+        CHECK((nums(es, custom, "unscaled_size") == std::vector<double>{16, 16}));
+        // bm_unresolved: the pool lookup failed -> no side effect, size OPEN.
+        CHECK(es.findVintProperty(unres, "unscaled_size") == nullptr);
+        const auto& st = es.vintPropertyStats();
+        CHECK(st.docImageSizesApplied == 3 && st.docImageSourceCoordsReset == 2 && st.docImageUnresolved == 1);
+        CHECK(st.docAutoOffsetApplied == 1 && st.docAutoOffsetNotApplied == 2);
     }
 
     if (g_failures == 0) std::cout << "ALL sr3vintdoc DOCUMENT TESTS PASSED\n";

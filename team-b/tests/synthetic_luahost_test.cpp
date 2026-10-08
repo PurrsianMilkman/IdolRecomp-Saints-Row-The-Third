@@ -1917,7 +1917,12 @@ int main() {
                              static_cast<size_t>(perArea["batch3132"]) +
                              static_cast<size_t>(perArea["ranking0608"]) +
                              static_cast<size_t>(perArea["batch444546"]) +
-                             static_cast<size_t>(perArea["ranking16"]));
+                             static_cast<size_t>(perArea["ranking16"]) +
+                             static_cast<size_t>(perArea["player"]));
+        // Player runtime batch (2026-10-03): the lock-handle global 0x0263ae3c,
+        // CONFIRMED null at session/mission start (spec-player-runtime.md
+        // Sec2.10, self-balancing - see applySpecInitialState()'s own item 11).
+        CHECK(perArea["player"] == 1 && knownPerArea["player"] == 1);
         CHECK(perArea["co-op"] == 6 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
         CHECK(perArea["zscene"] == 13 && perArea["cutscene"] == 10 && perArea["fade"] == 14 &&
               perArea["vint"] == 11 && perArea["other"] == 4);

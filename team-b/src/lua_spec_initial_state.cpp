@@ -190,6 +190,15 @@ void applySpecInitialState(EngineState& es) {
     //     which previously had no initial value to read.
     es.gameClock().hour.set(10);
     es.gameClock().minute.set(0);
+
+    // 11. player control-lock handle 0x0263ae3c (spec-player-runtime.md
+    //     Sec2.10, synced 2026-10-03, CONFIRMED): null (0) at session or
+    //     mission start - zero at image load, and a session-start reset
+    //     forces it to 0. The handle is otherwise self-balancing: its only
+    //     creator is player_controls_disable's own direct-apply push, its
+    //     only destroyer is player_controls_enable's own matching pop, so no
+    //     other code path ever needs to re-seed it mid-run.
+    es.playerControlsLockHandle().set(0);
 }
 
 } // namespace sr3luahost

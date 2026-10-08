@@ -28,7 +28,12 @@ setlocal
 call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64 >nul
 if errorlevel 1 (echo VCVARS_FAILED & exit /b 1)
 
-set PROJ=D:\Project Crreish\TEAM B
+REM GOLDEN_PROJ (optional, added 2026-10-03 for the `vint-doc` golden): build
+REM from a different source tree with the same layout - e.g. an agent's git
+REM worktree, so a not-yet-merged change can be frozen/verified against its
+REM OWN tests\golden copy without touching the main checkout's _bin\. Unset =
+REM the main checkout, exactly as before.
+if defined GOLDEN_PROJ (set "PROJ=%GOLDEN_PROJ%") else (set "PROJ=D:\Project Crreish\TEAM B")
 set OUT=%PROJ%\tests\golden\_bin
 if not exist "%OUT%" mkdir "%OUT%"
 set ZOUT=%OUT%\zlib_obj
@@ -123,6 +128,59 @@ cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%PROJ%\third_part
   "%PROJ%\src\xtbl.cpp" "%PROJ%\src\tables_environment.cpp" ^
   /Fo"%OUT%\\"
 if errorlevel 1 (echo XTBL_LIB_COMPILE_FAILED & exit /b 1)
+
+echo === extra readers for sr3_viewer's `vint-doc` command (sr3vintdoc/sr3luahost/lua51) ===
+REM sr3_viewer.cpp's `vint-doc` command (10th golden-scene target, 2026-10-03:
+REM the first Vint UI render - real `bitmap` quads from a real .vint_doc, see
+REM runVintDoc()'s own doc comment) builds the live element tree with
+REM sr3luahost::EngineState::loadVintDocument (src\lua_engine_state.cpp) over
+REM sr3vintdoc::parseDocument, and reads the bitmap-sheet tables with the
+REM xtbl.obj/tables_environment.obj already compiled above. EngineState lives
+REM in sr3luahost, which embeds the vendored Lua 5.1.5 - compiled here as C++
+REM (/TP), exactly as third_party\lua51\CMakeLists.txt builds it (LANGUAGE
+REM CXX, _CRT_SECURE_NO_WARNINGS). Same self-contained treatment as every
+REM other reader here - fresh from src\, not from build_verify\*.obj - except
+REM that these objects go into their own subdirectory and are packed into a
+REM static library (vint_luahost.lib) so the linker takes only what
+REM sr3_viewer needs from the 13 sr3luahost translation units.
+set VOUT=%OUT%\vint_obj
+if not exist "%VOUT%" mkdir "%VOUT%"
+set LUAINC=%PROJ%\third_party\lua51\src
+cl.exe /nologo /TP /EHsc /O2 /c /D_CRT_SECURE_NO_WARNINGS /I "%LUAINC%" ^
+  "%LUAINC%\lapi.c" "%LUAINC%\lcode.c" "%LUAINC%\ldebug.c" "%LUAINC%\ldo.c" "%LUAINC%\ldump.c" ^
+  "%LUAINC%\lfunc.c" "%LUAINC%\lgc.c" "%LUAINC%\llex.c" "%LUAINC%\lmem.c" "%LUAINC%\lobject.c" ^
+  "%LUAINC%\lopcodes.c" "%LUAINC%\lparser.c" "%LUAINC%\lstate.c" "%LUAINC%\lstring.c" "%LUAINC%\ltable.c" ^
+  "%LUAINC%\ltm.c" "%LUAINC%\lundump.c" "%LUAINC%\lvm.c" "%LUAINC%\lzio.c" "%LUAINC%\lauxlib.c" ^
+  "%LUAINC%\lbaselib.c" "%LUAINC%\ldblib.c" "%LUAINC%\liolib.c" "%LUAINC%\lmathlib.c" "%LUAINC%\loslib.c" ^
+  "%LUAINC%\ltablib.c" "%LUAINC%\lstrlib.c" "%LUAINC%\loadlib.c" "%LUAINC%\linit.c" ^
+  /Fo"%VOUT%\\"
+if errorlevel 1 (echo LUA51_COMPILE_FAILED & exit /b 1)
+REM src\vint_font.cpp + src\vint_text.cpp (sr3font, 2026-10-03, UI render
+REM unit U5): the .vf3_pc reader and text layout `vint-doc` now draws real
+REM text with - packed into the same vint_luahost.lib (no Lua dependency of
+REM their own, they just ride along with the other `vint-doc` objects).
+REM src\le_strings.cpp (sr3locstr, 2026-10-03 follow-up): the .le_strings
+REM localisation-key lookup `vint-doc` now tries text_tag/text_tag_crc
+REM against - same treatment, rides along with the other `vint-doc` objects.
+REM src\player_input.cpp + src\player_control_state.cpp (sr3player, player-
+REM input layer U0/U1, merged 71b7fb1): EngineState::EngineState() now
+REM unconditionally constructs an sr3player::InputSystem/ControlStateMachine
+REM regardless of whether vint-doc's own code path uses them, so this
+REM standalone link needs their symbols too - same treatment, first needed
+REM here (not touched when 71b7fb1 landed, since that merge did not itself
+REM touch tools/sr3_viewer.cpp).
+cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%LUAINC%" ^
+  "%PROJ%\src\vint_doc.cpp" "%PROJ%\src\vint_font.cpp" "%PROJ%\src\vint_text.cpp" "%PROJ%\src\le_strings.cpp" ^
+  "%PROJ%\src\player_input.cpp" "%PROJ%\src\player_control_state.cpp" ^
+  "%PROJ%\src\lua_stub_registry.cpp" "%PROJ%\src\lua_host.cpp" "%PROJ%\src\lua_hook_registry.cpp" ^
+  "%PROJ%\src\lua_thread_scheduler.cpp" "%PROJ%\src\lua_engine_state.cpp" "%PROJ%\src\vint_property_types.cpp" ^
+  "%PROJ%\src\lua_spec_initial_state.cpp" "%PROJ%\src\lua_spec_confirmed_stubs.cpp" "%PROJ%\src\lua_screen_fade.cpp" ^
+  "%PROJ%\src\lua_cutscene.cpp" "%PROJ%\src\lua_vint_resolution.cpp" "%PROJ%\src\lua_tutorial_names.cpp" ^
+  "%PROJ%\src\lua_bare_globals.cpp" ^
+  /Fo"%VOUT%\\"
+if errorlevel 1 (echo VINT_LUAHOST_COMPILE_FAILED & exit /b 1)
+lib.exe /nologo /OUT:"%OUT%\vint_luahost.lib" "%VOUT%\*.obj"
+if errorlevel 1 (echo VINT_LUAHOST_LIB_FAILED & exit /b 1)
 
 echo === tree_baseline_render.cpp ===
 cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%PROJ%\third_party\zlib" /I "%PROJ%\build\third_party\zlib" ^
@@ -220,7 +278,10 @@ REM addition and does not recognise it ("unknown command: vehicle", confirmed
 REM directly), and build_verify\ is otherwise off-limits per this task's own
 REM instructions, so this is a fresh, self-contained compile+link into
 REM tests\golden\_bin\ instead - same shape as tree_baseline_render.exe above.
+REM /I lua51\src: sr3_viewer.cpp's `vint-doc` includes sr3luahost/engine_state.h,
+REM which pulls in the Lua C API headers (2026-10-03).
 cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%PROJ%\third_party\zlib" /I "%PROJ%\build\third_party\zlib" ^
+  /I "%PROJ%\third_party\lua51\src" ^
   "%PROJ%\tools\sr3_viewer.cpp" /Fo"%OUT%\\"
 if errorlevel 1 (echo VIEWER_COMPILE_FAILED & exit /b 1)
 
@@ -239,6 +300,7 @@ link.exe /nologo /OUT:"%OUT%\sr3_viewer.exe" ^
   "%OUT%\d3d9bc_disassembler.obj" "%OUT%\d3d9bc_ctab.obj" "%OUT%\d3d9bc_hlsl_translator.obj" ^
   "%OUT%\zone_header.obj" "%OUT%\zone_geometry.obj" ^
   "%OUT%\level_mesh.obj" ^
+  "%OUT%\xtbl.obj" "%OUT%\tables_environment.obj" "%OUT%\vint_luahost.lib" ^
   "%OUT%\png_writer.obj" "%OUT%\device.obj" "%OUT%\texture_upload.obj" ^
   "%OUT%\quad_renderer.obj" "%OUT%\window.obj" "%OUT%\swap_chain.obj" "%OUT%\mesh_renderer.obj" ^
   "%ZOUT%\adler32.obj" "%ZOUT%\compress.obj" "%ZOUT%\crc32.obj" "%ZOUT%\deflate.obj" ^

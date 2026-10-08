@@ -3,267 +3,162 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## ⚡ LIVE STATE as of 2026-10-03 (4th rewrite) — read this block first, supersedes all stale framing below
+## LIVE STATE as of 2026-10-04 (11th rewrite, full) - read this first, supersedes everything before it
 
-**Git repo**: main's tip is mid-merge RIGHT NOW (see IN FLIGHT below) — last real commit before this merge
-was `51456ee`. Orchestrator is `purrsian-43`, unchanged. Full `git log --oneline -20` / `git worktree list` /
-`git status --short` directly if this note is more than a few commits stale — a huge amount landed this
-session, this note compresses heavily.
+**Git repo**: main's tip is `75fdf42` (clean except `HANDOFF.md` itself - double check `git status` before
+assuming clean, since Team A has been editing spec files directly in this shared checkout mid-session
+MULTIPLE times already, see (c)). Orchestrator is `purrsian-94`. **NO FABLE MODEL, EVER, FULL STOP** - this
+is a direct, explicit, permanent rule from the actual human user (not just project convention), relayed
+2026-10-03: *"remember. no fable until i tell you. no team should use fable."* Opus 5 is the hard ceiling of
+the escalation ladder (Sonnet -> 2 fails -> Opus -> 2 more fails -> **BLOCKED, report to the peer, do NOT
+escalate further**). This REVOKES the earlier "Opus -> Fable after 2 more fails" rung that used to exist.
+Restate this exact paragraph in every future rewrite, not just by reference - it must survive compaction
+verbatim, not as a pointer to a memory file that itself could be stale.
 
-### (a) DONE this session (commits `9712ff1`..`51456ee`, see git log for exact diffs) — do not re-derive
+ONE worktree remains, actively in flight (not yet reported back):
+`.claude/worktrees/agent-a7e5b3211a655533a` (branch `worktree-agent-a7e5b3211a655533a`) - the animation
+node-graph loader (§7) + runtime evaluator (§8), a two-phase task. See (b) for its exact scope.
 
-Merged to `main`, each independently verified (fresh build in a NEW `build_verify_X` dir, full `ctest`,
-real mission-drive): Sec35 teleport_coop fix, Sec36 mission-start-checkpoint fix (`"mission start"` string,
-not `0.0`) + resume-scheduler cadence correction (`kSchedulerPassesPerTick` 11→1, `setFrameTime()` added),
-zscene Sec26.25 per-frame-driver fix (completion-before-promotion, fixes `mm_p_01`), player-gender initial
-state (closes `m21`'s own gender-byte OPEN), Sec38/Sec39/Sec40 (16/75 ranking-tranche names, zero-call-count
-scope), Sec44/Sec45/Sec46 (28 names incl. the Sec46.1 vehicle-invulnerability bit fix — `turn_invulnerable`/
-`turn_vulnerable`/`vehicle_set_vulnerable`/`vehicle_is_invulnerable` actually implemented now), the game
-clock (Sec48: `applySpecInitialState()` now sets hour=10/minute=0 CONFIRMED single-player new-game value,
-closing the `dlc3_m01`/`m19` blocker; `set_time_of_day` now `.forget()`s hour/minute after the forward-delta
-instead of fabricating the post-snap value, since Sec48.4 says the real engine snaps to an unknown
-time-of-day key), `--tick-budget=`/`--probe-unresolved-names` diagnostic flags added to `tools/lua_host_run.cpp`
-(see LEARNED). A project-wide DOCUMENTED DECISION was added (top of `src/lua_spec_confirmed_stubs.cpp`):
-missing Lua arguments stay real-Lua-5.1 "none" semantics (nil/0/false), NOT a fabricated stale-VM-register
-value, even though the real engine's own binding layer reads raw stale stack memory for a truly-omitted
-arg — reproducing that would mean inventing unknowable state. Peer explicitly agreed with this call.
+### (a) DONE this session since the 10th rewrite - do not re-derive
 
-Spec syncs committed: Sec41-Sec47 (incl. on_mission_item_drop, roster 1490→1491, verified via
-`sr3luahost_roster_tests`), Sec48/49/50-52, **Sec53-Sec59 (the ENTIRE 554-name ranking backlog is now
-specced** — every tranche 1-25 has spec text, most not yet implemented).
+1. **Player movement (U2) + locomotion bridge (U3) merged** (`ad20a3e`, into `sr3player`): spec-player-
+   runtime.md Sec3 (closed-form move intent D=u*min(s,1)*M, sprint/walk/crouch latches+stamina coupling)
+   and Sec5 (the velocity composer's closed form, the locomotion-state update, a simple direct integrator
+   replacing real Havok internals per spec's own Sec5.11 item 5 license). New files: `include/sr3player/
+   movement.h`+`movement_tweak_table.h`, `src/player_movement.cpp`+`player_locomotion.cpp`,
+   `tests/synthetic_player_movement_test.cpp` (209 CHECK sites). **Also closed the "tweak constant" gap
+   in this same pass**: `tweak_table.xtbl` landed (`36f9fca`) while the agent was running, and it wired
+   the real `sr3tables_progression` reader in via a header-only adapter rather than leaving a second round
+   of `OpenValue` scaffolding. 70/70 ctest on a fresh build against the actual merge commit. Full detail:
+   `results/verify_player_movement_u2u3_20261003.md`.
+2. **Two follow-ups checked, reported honestly, neither needed code changes (yet)**:
+   - `vehicle_exit_do`/`vehicle_enter_check_done` (lua-api corrections, `a1f90ec`): confirmed via direct
+     grep that NEITHER native has ever been implemented in this repo - nothing to fix.
+   - Root-motion T/E split answer (`a1f90ec`: the discriminator is the animation INSTANCE's layer flag
+     `0x01` "phase-synchronised", not a controller-slot `+0x80` bit, not `Anim_Movement`) - identified a
+     real candidate hook (`sr3animruntime`'s `layerFlags`/`layerFlagsFor()` in `include/sr3animruntime/
+     controller.h`), but did NOT wire it in: `sr3player` and `sr3animruntime` are currently separate,
+     uncoupled libraries, and connecting them properly is a real cross-library integration, not a one-line
+     change. Flagged as the next follow-up rather than rushed. **This is still open - pick it up
+     deliberately, don't assume it's done because it's mentioned here.**
+3. **Animation runtime U0+U1 merged** (`5285c07`) and **localisation key lookup merged** (`4de3780`) -
+   both already fully covered in prior rewrites/their own `results/verify_*.md` docs, carried forward, not
+   re-derived here.
+4. Worktrees `agent-af86d6872446c0637` (anim-runtime) and `agent-aa3e5ac5f3a6d5dbc` (player-movement)
+   removed, branches deleted, after confirming clean.
 
-### (b) IN FLIGHT right now — READ THIS FIRST, exact next step
+### (b) IN FLIGHT right now - exact scope
 
-**Mid-merge on `main` RIGHT NOW**: merging `worktree-agent-a1914028d40e8caf0` (Sec49 "ranking tranche 16",
-9/25 names — already independently re-verified by the implementing agent itself, 55/55 ctest, real
-mission-drive confirmed `spawning_boats` is the only name with a real hit). 5 conflicts, in the SAME
-familiar files as every prior tranche merge (`CMakeLists.txt`, `include/sr3luahost/engine_state.h`,
-`src/lua_engine_state.cpp`, `src/lua_spec_confirmed_stubs.cpp`, `tests/synthetic_luahost_test.cpp`) — use
-the boundary-checking discipline in LEARNED below. **As of this note, `CMakeLists.txt`'s markers are
-located (920/929/938) but not yet resolved; the other 4 files' conflicts are not yet even opened.**
-Exact next steps: 1) resolve all 5 conflicts (expect pure concatenation except
-`synthetic_luahost_test.cpp`'s inventory-size formula, which needs a REAL merge — add a `tranche16`(or
-similar) term to the existing combined formula, same pattern as every prior batch); 2) `git add` the 5
-files + stage nothing else; 3) complete the merge commit; 4) fresh `build_verify_s49` dir, ctest, mission
-drive, write `results/mission_drive_*_post_sec49.md`, commit it; 5) `git worktree remove --force` +
-`git branch -d` for `worktree-agent-a1914028d40e8caf0`; 6) report to `purrsian-43`.
+**Animation node-graph loader (§7, U2 file format) + runtime evaluator (§8, U3 graph runtime)**,
+dispatched as a background Opus agent, worktree `.claude/worktrees/agent-a7e5b3211a655533a`, branched
+from `4de3780` (same CMakeLists.txt-conflict caveat as every other agent this session - resolve by keeping
+both blocks if it comes to a manual conflict, or trust git's auto-merge if it resolves cleanly like the
+player-movement merge just did). Explicitly framed as a TWO-PHASE task: phase 1 (the §7 loader, validated
+by actually parsing all 249 shipped graph files and reporting real pass/fail counts) must be clean before
+phase 2 (the §8 evaluator, replacing `sr3animruntime`'s current `EvaluationBoundary` stub) starts. The
+agent was explicitly told finishing phase 1 cleanly and reporting phase 2 as follow-up is a fully
+acceptable outcome if it runs low on budget - don't treat a phase-1-only report as incomplete work.
 
-**Then**: commit the 7 NOW-FINAL spec files sitting uncommitted in the working tree as one "Spec sync from
-Team A" commit — `spec-anim-format.md`, `spec-ctorless-types.md`, `spec-customization-data.md`,
-`spec-geometry-format.md`, `spec-mission-packages.md`, `spec-tables-customization.md`,
-`spec-tables-ui-controls.md`. These were HELD (do-not-commit) earlier this session; `purrsian-43` has now
-said Team A's NEEDS-DATA triage is complete and all 11 are final/clean (confirmed no conflict markers in
-any of them). Their content settles: tables-customization §15.2 (Specular_bright/dark are vec3 RGB),
-tables-ui-controls §12 (Min_delay/Max_delay in ms), customization-data §2.1/§2.2 (Shader_Type parent +
-Default_Colors_Grid level; Default_Wear_Option keyed by MALE mesh filename not Name), tables-diversions §3
-(barnstorming has 12 always-read fields not 11), vehicle-data §7.1 (listed-name-only + fallback, explains
-106 vs 104), geometry §5.1 (HIGH CONFIDENCE: `.cvtf_pc` header is 48 bytes not 16; "entry_count_2=40" is
-really the Region-1 table offset — **check this project's own `.cvtf_pc` reader against a real file**,
-queued as a LOW-PRIORITY reader-check batch, not yet done).
+**Four requirements it was given, don't let a review skip checking these**:
+1. **Guard the 32-entry output-list bound** (`0x004b0b80`'s real engine has NO bounds check there;
+   shipped data peaks at 30, in `ride_left_ready_sm`/`ride_right_ready_sm`) - this project must guard it
+   (the established host-safety-guard idiom, e.g. `EngineState::recordVehicleExitGroupNullThisGuard()`).
+2. **Keep the 4 fold-order traps** (2 transitions in `climb_fence_sm`, 2 in `jump_sm` - `((A or B) and C)`
+   under the engine's left-to-right fold, NOT what operator precedence would give) - exact worked
+   truth-table rows are in spec-anim-runtime.md §7.12/§8.10, replicate them as test fixtures.
+3. **9 `tag_name`s resolving to nothing must still load successfully** (not a parse error - data-side
+   behaviour, confirmed from both the file-format side §7.12 and the runtime side §8.6).
+4. **127 blend trees, not 128** (one file, `free_fall_bt`, has a patched duplicate in
+   `patch_compressed.vpp_pc` that's the SAME graph slot, differing only in multi-way-blend control-point
+   order - don't double-count it as a distinct 250th graph).
 
-**4 background agents dispatched this session, status as of this note** (check `ListAgents`/worktrees for
-current state — may have finished or hit a rate-limit kill since):
-1. **§17-25 runtime-hit sweep** (worktree `agent-a71ae6c9a2ebc450d`): implement ONLY names the real
-   mission drive hits across the 10 remaining unimplemented tranche sections (§50-§59, i.e. tranches
-   15/17-25), plus their direct dependencies; everything else stays a generic stub. Per `purrsian-43`'s own
-   explicit direction: do NOT implement full tranches anymore, this is the new standing policy for all
-   remaining ranking-tranche work.
-2. **Multi-tile streaming city viewer** (worktree `agent-a9f63140122bf2763`, Opus): new `sr3_viewer` command,
-   box-test streaming (spec-world-streaming.md §11) around a moving fly-camera (reuse `runScene()`'s
-   GetAsyncKeyState WASD/arrow pattern), tile-to-tile placement via the VALIDATED §10.6(g) formula
-   (`centre_x = 320*col - 4000 - 160*(row mod 2)`, `centre_z = 3640 - 280*row`, tile col/row from the
-   `CCRR` name digits, fine-cell offset ±(80,70) by N). Must NOT claim real within-tile prop placement —
-   that's a separately-investigated, confirmed-unresolved gap (`runClmeshTile()`'s own header comment has
-   the full negative result); reuse its existing fake-local-grid-per-tile approach, just correctly offset.
-3. **UI document model** (worktree `agent-a822ed5e88ccb6aff`, Opus): `include/sr3vintdoc/vint_doc.h` has
-   positioned decoders but explicitly NO `parseDocument()` (full-walk) because 3 byte-layout facts are
-   OPEN (header `+0x16`'s role, property-block offset base, property-record byte order). `tools/
-   vintdoc_validate.cpp` already exists to score layout hypotheses against real files (lands-on-EOF
-   heuristic) but nobody has RUN it yet — that's the task's first real step; if one hypothesis clearly
-   dominates, adopt it as a documented CHOSEN (not CONFIRMED) decision and build the walk on it; if
-   genuinely ambiguous, report that honestly rather than guessing. Then wire real parsed documents into
-   `engine_state.h`'s `VdoObject`/`findVdoObject`/etc. (currently 100% test-only, `registerVdoObjectForTesting()`).
-4. **Sec49** (worktree `agent-a1914028d40e8caf0`) — DONE, see top of this section, mid-merge right now.
+Also flagged, easy to get backwards: **`loop_flag`'s bit polarity is CORRECTED between §7.4 and §8.6** -
+bit 0 means LOOP (not "do not loop" as §7.4's own table first implies) - get this right from the start.
+And: **a stateful `delta multiplier` filter that is also another filter's source gets evaluated TWICE per
+frame** in the real engine (`Turn Angle Delta Multi` feeding `Turn Angle Cap`, giving 0.75 effective
+smoothing instead of the nominal 0.5) - this is a genuine engine quirk to KEEP for fidelity, not a bug to
+fix.
 
-**Priority order from `purrsian-43`, their own words**: 1) remaining runtime-hit names from §17-25 and §49
-(quick) — 2) the streaming viewer — 3) the UI doc model (document-model half only; DRAWING/rendering the
-UI waits on Team A's own separate render-path scoping, do not start that half).
+**Merge plan when it reports**: same pattern as every other agent this session.
 
-### (c) LEARNED — findings, measurements, numbers, paths, conventions (don't re-derive)
+### (c) LEARNED - findings, measurements, numbers, paths, conventions (don't re-derive)
 
-**NEW (2026-10-03): Sec60 synced, not yet implemented** — Team A's own stub hit-list. Closes 7 of the
-mission-drive's 9 OPEN_STATE items: both Wwise ids (a confirmed FNV-1 hash; strings over 128 chars abort
-on the stack cookie in the original — guard length), both default key bindings, co-op join type, the real
-`zscene_prep` blocker address. 2 more closed code-side only (zone-data residue held). 6 previously-unspecced
-names now specced, 12 earlier entries CORRECTED. Faithful (implement as bugs, don't fix): `customization_
-creation_is_open` is always true in single player (a script polling it never exits); `city_zone_swap`'s
-mission-prefix branch queues into a queue nothing reads. Guard: `customization_create_character`'s
-no-session read at session+0x60; `vint_internal_dataresponder_request`'s 16-slot trailing-arg overflow +
-unbounded callback-name copy. **Implement the runtime-hit ones, then re-run the drive** (peer's own words).
-Commit this spec (it's part of the same batch as the 7 NEEDS-DATA-triage specs, see IN FLIGHT) if not
-already committed by the time this note is read.
+**Team A edits shared spec files directly in this checkout WHILE other work is in flight - this has now
+happened at least 3 times in one session, not a one-off.** Every time, the correct response was the same:
+leave the file alone (don't `git add` it, don't let it ride into your own commit), let its own author
+commit it separately, and re-check `git status` immediately before any commit/merge step rather than
+trusting an assumption of "clean" from a few messages ago. This is now a STANDING operating assumption for
+this whole project, not an exception to note each time - expect a spec file to be dirty-and-not-yours at
+any moment, every session.
 
-**The probe-diagnostic mechanism** (`tools/lua_host_run.cpp --probe-unresolved-names`, `include/
-sr3luahost/open_state.h`'s `OpenValueMap::enableProbeFallback()`, `EngineState::enableUnresolvedNameProbe()`/
-`isProbedName()`/`probedFieldOr()`): DIAGNOSTIC ONLY, off by default, never touches a real baseline. Widens
-`objectResolves()` misses to a synthetic "resolves" placeholder, AND lets specific per-character fields
-(currently wired: `CharacterState::ignoreAI`→`false`, `::maxHitPoints`→`100`, both CHOSEN) also fall back for
-a name that was itself probed. Finding so far, at `--tick-budget=721`: 31+ missions share the exact SAME
-blocker chain at `game_lib.lua:1364` (`cutscene_play`) — first `Killbane`-style named-object-resolution OPEN,
-then (once probed through) `character max hit points (+0x1cac)` OPEN, then (once BOTH probed through) **no
-further recorded OPEN error at all** — the missions just keep yielding in `cutscene_play` with real forward
-progress (`fade_out_block`→`cutscene_play`) but no blocker to report. Conclusion documented in
-`results/mission_drive_20261003_probe_depth.md`: the probe approach has reached its practical limit for this
-call site; the remaining stall is architectural (a wait-for-condition loop, not a missing engine value) —
-further depth needs tracing `cutscene_play`'s own Lua logic, which is out of bounds (shipped script text,
-not a clean source) and out of this flag's own scope.
+**A git merge with `MERGE_HEAD` present and the index fully resolved can be concluded by ANY `git commit`
+run in that same checkout by anyone/anything.** Happened once already this session (the anim-runtime
+merge, concluded by the orchestrator's own spec-sync routine mid-merge). Lesson: after `git commit`,
+always check `git log -1 --format="%H %P" HEAD` and diff the actual resulting commit against what you
+intended, rather than trusting "my command returned success" or a description of what happened. Verify,
+then rebuild+retest against the real HEAD before reporting it as done. `git commit --amend` on an
+unpushed merge commit is safe and keeps both parents - use it to fix a misleading message.
 
-**The game clock** (Sec48, `GameClock` in `engine_state.h`, `EngineState::setTimeOfDay()`/
-`gameClockAdvanceFrame()` in `lua_engine_state.cpp`): hour/minute CONFIRMED-known from construction (10:00:00,
-single-player new-game value) via `applySpecInitialState()`. `setTimeOfDay()` computes+records the CONFIRMED
-forward delta then `.forget()`s hour/minute (the real post-snap value is unknowable, Sec48.4's time-of-day
-key list is OPEN data). `gameClockAdvanceFrame(realSeconds)` advances by `realSeconds * 40.0` game-seconds
-(CONFIRMED 40x scale), no-op while hour/minute unknown; wired into `lua_host_run.cpp`'s per-tick loop at
-`kFadeHostMsPerTick/1000` per tick. STATED SIMPLIFICATION: wraps within one 86400s day, does not advance
-date/weekday/moon-day (nothing in scope reads those fields; no budget used so far crosses a full game-day).
+**Cross-library integration gaps are real work, not a quick fix, even when both sides already exist.**
+`sr3player` and `sr3animruntime` both exist and both have a plausible-looking hook (layer flags), but
+wiring one's root-motion need to the other's per-clip data is a genuine design task (which library owns
+the dependency direction, what the shared data shape is) - don't let a plausible-sounding one-line fix
+description talk you into rushing it. Flag it honestly as its own follow-up instead (done this session for
+the root-motion E item - see (a) item 2).
 
-**Multi-tile streaming viewer groundwork** (for whoever continues/reviews that agent's work): the VALIDATED
-tile-to-world formula is spec-world-streaming.md §10.6(g): `centre_x = 320*col - 4000 - 160*(row mod 2)`,
-`centre_z = 3640 - 280*row` (tile centre, ~2m MAD over 112 real tiles), fine-cell centre = tile centre ±
-(80,70) by N (N=0 (-80,+70), N=1 (+80,+70), N=2 (-80,-70), N=3 (+80,-70)); tile name `CCRRhN`, `CC`=col,
-`RR`=row (verify digit-parsing against real archive filenames, don't trust blindly). Streaming rule is §11:
-box test around a focus point (level-4/hN window 159.5×139.5m, smaller than one 160×140m cell so never
->4 cells, no truncation needed), NO hysteresis (same box drives acquire+release, §11.2 confirmed negative),
-immediate eviction, no per-tick load budget (§11.4). **CRITICAL, already-settled negative this task must
-NOT re-litigate**: real WITHIN-tile object placement is unresolved — `tools/sr3_viewer.cpp`'s own
-`runClmeshTile()` has the full investigation+refutation in its own ~60-line header comment (the `.czh_pc`
-name-index doesn't correlate with anything this project can read); it renders props at a fake local grid,
-honestly labeled. The new viewer must keep that same honesty convention for within-tile layout while using
-the validated formula above for tile-to-tile positioning.
+**Localisation/`.le_strings` key facts**, **worktree-lock-pid check before forcing removal**,
+**"zero call volume"/"OPEN-refusing native regression" checks**, **PowerShell encoding risks**, **D3D11
+blend-factor validation**, **golden-scene `_pre_X` convention and `build.bat`'s manual-maintenance
+requirement**, **the verification build/test pattern**, **the real archive cache path** - all unchanged
+from the 10th rewrite, not repeated verbatim here for space; read that rewrite's own LEARNED section if
+this one is ever superseded without those points being carried forward again.
 
-**The `.vint_doc` document-model gap** (for whoever continues/reviews that agent's work):
-`include/sr3vintdoc/vint_doc.h` has positioned decoders (header, string table, element head, property
-list/block) but explicitly NO `parseDocument()` full-walk, because 3 byte-layout facts are OPEN: header
-`+0x16`'s role (where critical-resources start), the property-block offset base, the property-record byte
-order. `tools/vintdoc_validate.cpp` ALREADY EXISTS to score layout hypotheses against real files (lands-
-exactly-on-EOF heuristic) but as of this note nobody has run it and acted on the results — that's step 1 for
-that task. `engine_state.h`'s `VdoObject`/`findVdoObject`/`vdoObjectFirstChild`/`cloneVdoObject` are 100%
-test-only right now (`registerVdoObjectForTesting()`, no real-document path exists).
-
-**Project-wide documented decision** (top of `src/lua_spec_confirmed_stubs.cpp`, 2026-10-03): a missing Lua
-argument stays real-Lua-5.1 "none" semantics (nil/0/false via `argString`/`optionalBoolDefault`/
-`optionalNumberDefault`/`lua_gettop()`), NOT a fabricated stale-VM-register value — even though the real
-engine's own binding layer genuinely reads raw stale stack memory for a truly-omitted arg (confirmed finding,
-Sec55/interp_lgdz). Reproducing the real quirk would mean tracking unknowable prior-call VM register state;
-fabricating a plausible "stale" value would be exactly the kind of invented data this project's whole
-OpenValue discipline exists to refuse. Peer explicitly agreed with this call — don't re-litigate it.
-
-**`--tick-budget=`/`--probe-unresolved-names` flags** (`tools/lua_host_run.cpp`): `--tick-budget=N` (CHOSEN
-override, default 20) re-expresses the budget as `mission_simulated_seconds_budget=` in
-`verdict_summary.txt` and reports `waiting_at=[file:line (in func)]` per still-suspended mission (via
-`lua_getstack`/`lua_getinfo`, already-established clean mechanism). Used at 721 ticks (~240 simulated
-seconds, 36x default) to confirm "still suspended" missions are real blockers, not slow legitimate waits —
-aggregate was byte-identical at both budgets.
-
-**CRITICAL merge-conflict lesson, read before resolving ANY more conflicts in `lua_spec_confirmed_stubs.cpp`/
-`engine_state.h`**: when 2+ agent batches append functions/structs at the "same point" (both branched before
-the other's merge landed), git's conflict region often does NOT include a function's own closing `return X;
-}` — it lands OUTSIDE the markers as "shared trailing text" belonging to the OTHER side. Blindly concatenating
-both sides silently drops the closing brace of whichever function HEAD's side was still inside — compiles-
-looking but cascades into dozens of unrelated-looking errors downstream (`C2601`, `C2888`, pages of
-`undeclared identifier`). **Discipline**: before deleting any marker set, read a few lines BEFORE the first
-marker and AFTER the last. If either side doesn't end in a complete self-closed brace, find the ORIGINAL
-pre-merge version via `git show <last-good-commit>:<file> | grep -n '^int stub_whatever' -A 20` and copy its
-real closing back in. Cost one extra build-fix cycle on the Sec33 merge (caught via `ctest` reporting
-`(Not Run)`, meaning the build silently didn't reach `sr3luahost` despite exit 0 — build the specific test
-target directly to surface the real error); pre-empted on Sec31/32 by boundary-checking every marker up
-front. Also watch for two batches declaring the SAME real field under different names (Sec30's `vehicleClass`
-and Sec33's `flyingType` were the literal same `(+0xbf4)+0x2c` byte) — unify, fix every call site AND every
-test setting the old name directly.
-
-**Resume-scheduler mechanism** (merged, foundational): `0x00e0cf50` walks the live-thread array, clears bit 0
-of `+0x18` (re-entrancy flag) unconditionally, resumes every non-exempt record, no budget, swap-compaction on
-release. Real per-frame driver is `0x00e0dfc0` (once per rendered/game frame, NOT the old wrong ~33Hz-
-background-thread reading) — this host's own tick-equals-one-driver-call mapping is `kSchedulerPassesPerTick
-== 1` (already corrected and merged, don't re-derive the old 11x figure).
-
-**Remaining genuinely-unexplained mission blockers** (nobody has looked at these specifically): `m11`,
-`mm_p_07` (pre-dating the probe-diagnostic work above — may be worth a `--probe-unresolved-names` pass).
-
-**Model-tier policy, effective 2026-10-02** (from the user via the orchestrator): NO Fable, ever. Opus for
-real root-causing/hard implementation, Sonnet for well-specified implementation, Haiku for mechanical work.
-Opus is the top of the ladder — 2 Opus fails → report blocked to the orchestrator, don't escalate further.
-
-**Peer-relay verification discipline keeps paying off**: a resume-scheduler task was once correctly REFUSED
-by an agent because the worktree it branched from was stale (peer's spec sync sat uncommitted in the shared
-working tree while a new worktree branched off that same HEAD) — not a bad relay, a real race. **Before
-branching any new agent worktree, check `git status --short` on `main` for uncommitted peer spec-syncs.**
-Also: the peer (`purrsian-43`) now checks for an in-progress `main` merge before committing anything itself,
-after once briefly staging a spec file into my merge's index while I had conflicts open (self-corrected,
-unstaged, no actual damage — verified directly, matched their own account exactly).
-
-**Permission-classifier gate on spec-file commits**: my own `git commit` of a plain spec-text sync was once
-blocked by this session's own permission classifier ("Modify Shared Resources"). Session/user-level gate, not
-a project rule — don't route around it; surface it. The orchestrator has direct user authorization to commit
-spec syncs themselves and has been doing so throughout.
-
-**Verification build pattern**, exact commands, reuse verbatim:
-```
-cmake -S . -B build_verify_X -G "Visual Studio 17 2022" -A x64
-cmake --build build_verify_X --config Release   # background this, several minutes
-ctest -C Release   # from inside build_verify_X, expect 52/52 (or more; count keeps rising)
-```
-If `ctest` reports tests as `(Not Run)` rather than failing outright, the build silently didn't build that
-target — `cmake --build build_verify_X --config Release --target sr3luahost_tests` (or whichever target) to
-surface the real compiler error directly, don't trust the overall exit code alone.
-
-Real-archive validator's 38-archive list: copy verbatim from `bridge-jobs/10a_baseline_tables.json`'s own
-`args` array (root `D:/Project Crreish/Saints Row 3 CRREISH`) if needed again — not reproduced here. **The PC
-bridge is retired** — build and run against the game files directly; `bridge-jobs/` is historical only.
-
-**Build-race lesson**: NEVER `git merge` into `main` while an in-place (non-worktree) build is compiling
-`main`'s tree concurrently — silently contaminates object files (cost one false-positive segfault earlier
-this project). Worktree builds are unaffected; running an already-built `.exe` is safe to parallel with a
-merge.
-
-**Every dispatched reader-fix/implementation agent this project has used has found real bugs beyond what was
-pre-flagged** — trust the agents' own independent verification, don't skip that step.
-
-**No holds currently in effect** except whatever `git status --short` shows right now (check fresh every
-time) — the only standing, never-lifted gate is `0x2237`/`.czn_pc` object-stream interior (user-only).
+**No holds currently in effect** except whatever `git status --short` shows right now, PLUS the one
+standing never-lifted gate: `0x2237`/`.czn_pc` object-stream interior (user-only).
 
 ### (d) RULED OUT, and why
 
-- §27/§28 needs **no** code changes from the finalized spec text (exhaustively confirmed, not sampled).
-- save-format §7/§10.6 — no reader impact, checked zero references anywhere in the save reader.
-- "50 of 52" (§27/§28) was never 2 missing functions — §27.26/§28.26 are summary headers, not entries.
-- Inventing a resume-thread policy — SUPERSEDED, the policy landed as CONFIRMED spec text and is now
-  implemented (see DONE).
-- Defaulting the whole named-object resolution map to "not found" for any unset name — rejected for Killbane;
-  producer (3)'s 173 call sites were never individually traced, could register almost any name. Only the 5
-  §29.4-confirmed literals are pre-populated. Don't revisit without new CONFIRMED spec text.
-- Reproducing the 2 crash-shaped edges Sec30.7 flags (`vehicle_exit_group_do`'s null-`this`,
-  `team_make_unfriendly`'s OOB matrix index) as actual crashes — explicitly instructed to guard+log instead,
-  same pattern now established for every later crash-guard (every batch through Sec60 follows it too).
-- Implementing full ranking tranches regardless of call count — SUPERSEDED 2026-10-03: `purrsian-43`'s own
-  explicit new direction is call-count-driven-only for every remaining tranche (§15, §17-§25), freeing
-  capacity for the streaming viewer / UI doc model. Don't revert to full-tranche implementation.
-- The full taint-tracking "every later call on a probed object logged as probe" version of the probe
-  diagnostic the peer originally sketched — the minimal version (just the resolution gate +
-  `probedFieldOr()` for 2 named fields) was sufficient to answer "what's the next blocker," so the fuller
-  design was never built. Revisit only if a future diagnostic question specifically needs it.
+- Rushing the root-motion E cross-library wiring into the player-movement merge review just to close the
+  loop quickly - the right scope boundary is a deliberate follow-up, not a bolt-on during an unrelated
+  merge's review pass (see (c)).
+- Everything from the 10th rewrite's own RULED OUT section still holds (probe-mode-only regression checks
+  insufficient; `insert_values`' localisation branches not worth wiring for zero real-document payoff;
+  never fold a concurrently-dirty shared file into your own commit without checking its provenance first).
 
 ### (e) Pending on the user / still open
 
-- No direct reply is pending from the actual human user right now — current work is directed by the
-  orchestrator's relay (`purrsian-43`). Standing user-level gate, unchanged: `0x2237`/`.czn_pc` object-stream
-  interior stays held until the user releases it.
-- **Low-priority queued, not yet done**: the Sec60/NEEDS-DATA-triage reader-check batch (see IN FLIGHT) —
-  specifically check this project's own `.cvtf_pc` reader against a real file for the 48-byte-header-not-16
-  finding (spec-geometry-format.md §5.1, HIGH CONFIDENCE not confirmed).
-- **Priority 3, drawing half explicitly on hold**: once the UI document-model task lands, do NOT start
-  rendering/drawing the UI — `purrsian-43` said that waits on Team A's own separate render-path scoping.
+- No direct reply pending from the actual human user - work is directed by the orchestrator relay
+  (`purrsian-94`), itself relaying the user's own words on the NO-FABLE rule (see top of this rewrite).
+  Standing user-level gate unchanged: `0x2237`/`.czn_pc` stays held until the user releases it.
+- **Immediate**: wait for the graph-loader/evaluator agent (b) to report, then merge per that section's
+  plan (phase 1 only, or phase 1+2 - check which it reports and merge whatever it actually delivers).
+- **Peer's explicit plan, given 2026-10-04, don't re-derive**:
+  1. **Now, in parallel with the graph agent**: player U4 (spec-player-runtime.md §4, the follow camera +
+     camera mode machine) - independent of the graph work, dispatch it concurrently.
+  2. **When the graph evaluator (§8) lands**: ONE integration task, "a character walks" - wire `sr3player`
+     and `sr3animruntime` together end to end: stick -> intent -> velocity; velocity -> animation
+     parameters -> graph evaluation -> layers; T/E derived from the layer phase-sync bit (see (a) item 2 -
+     **do the root-motion E derivation AS PART OF this integration task, not as its own separate task**),
+     with speed driving playback rate (clamp [0.1, 1.5], spec-anim-runtime.md §5.4.3 step 7's stride-
+     matching rate); the follow camera (from item 1) tracking the character. **End it with a deterministic
+     demo in `sr3_viewer`**: a rigged character (`brad`) on the `city_corner` ground, driven by a scripted
+     input sequence for N frames, frozen as a NEW golden scene after a 2-run determinism check (same
+     convention as every other golden this session). This demo is explicitly the milestone the user will
+     want to see - don't let it slip into being "just another merge," give it the same visual-inspection
+     care the text-rendering goldens got.
+- Backlog, lower priority, not started, not read in detail: `spec-player-runtime.md` §6/U6.6 (vehicle exit
+  request + non-animated exit states 0x14-0x19, `d7bc7b3` - explicitly "backlog for after the walking
+  slice," vehicle units will land in a few parts); `insert_values`' localisation branches; `spec-player-
+  runtime.md` §4 (U4, follow camera); `spec-ai-runtime.md` Sec11/A3 (70 AI action routines, 3 flagged
+  hazards); `--probe-autopilot` (not started); the "architectural wait" missions sub-question (needs a
+  different trace mechanism than the current per-coroutine ring).
 <!-- CONTEXT-GUARD:RESUME-END -->
+
+
+
+
+
+
 
 
 ## 0. What this project is

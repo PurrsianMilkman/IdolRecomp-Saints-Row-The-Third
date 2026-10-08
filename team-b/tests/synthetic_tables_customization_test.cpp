@@ -640,20 +640,42 @@ void testPlayerCreationNormalMaps() {
 // 15.2 player_creation_hair_color.xtbl
 // ===========================================================================
 void testPlayerCreationHairColor() {
+    // Specular_bright/Specular_dark as real R/G/B child elements - CORRECTED
+    // 2026-10-03 (spec §15.2: CONFIRMED vec3 via FUN_00dad130->FUN_00dad0a0,
+    // the same "R/G/B children" shape as every other confirmed colour in
+    // this project, not a single text blob).
     Document d = P(R"(<root><Table>
       <Hair_Color>
         <Name>Black1</Name><Display_Name>HAIR_BLACK1</Display_Name>
         <Shaderball>hair_sb</Shaderball><swatch_image>hair_sw</swatch_image>
         <Hue>0.5</Hue><Saturation_light>0.8</Saturation_light><Saturation_dark>0.2</Saturation_dark>
         <Specular_alpha>1.0</Specular_alpha><Brightness>0.5</Brightness><Brightness_bias>0.1</Brightness_bias>
-        <Specular_bright>0.9 0.9</Specular_bright><Specular_dark>0.1 0.1</Specular_dark>
+        <Specular_bright><R>0.9</R><G>0.8</G><B>0.7</B></Specular_bright>
+        <Specular_dark><R>0.1</R><G>0.2</G><B>0.3</B></Specular_dark>
       </Hair_Color>
     </Table></root>)");
     std::vector<HairColor> rows = ParsePlayerCreationHairColorTable(d);
     CHECK(rows.size() == 1);
     CHECK(rows[0].hue.has_value() && rows[0].hue.value() == 0.5f);
-    // Specular_bright/dark kept as RAW TEXT - arity (vec2 vs vec3) not narrowed (§15.2, §22.9).
-    CHECK(rows[0].specularBrightRaw == "0.9 0.9");
+    // near(), not ==: ParseFloat's single-precision digit-by-digit
+    // accumulation (sr3xtbl.h's documented float grammar) does not always
+    // bit-match a C++ float literal for the same decimal text (e.g. 0.9f
+    // accumulated as 9*0.1f in single precision rounds to a different bit
+    // pattern than the literal 0.9f) - same convention already used
+    // elsewhere in this file (e.g. line ~418's alpha check) for exactly
+    // this reason, not a tolerance this test needs for any other cause.
+    CHECK(rows[0].specularBright.has_value());
+    if (rows[0].specularBright) {
+        CHECK(near(rows[0].specularBright->r.value, 0.9f, 1e-6f));
+        CHECK(near(rows[0].specularBright->g.value, 0.8f, 1e-6f));
+        CHECK(near(rows[0].specularBright->b.value, 0.7f, 1e-6f));
+    }
+    CHECK(rows[0].specularDark.has_value());
+    if (rows[0].specularDark) {
+        CHECK(near(rows[0].specularDark->r.value, 0.1f, 1e-6f));
+        CHECK(near(rows[0].specularDark->g.value, 0.2f, 1e-6f));
+        CHECK(near(rows[0].specularDark->b.value, 0.3f, 1e-6f));
+    }
     CHECK(!rows[0].swatchLabel.has_value());
 }
 

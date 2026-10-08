@@ -237,6 +237,23 @@ add_executable(sr3tables_ui_controls_tests tests/synthetic_tables_ui_controls_te
 target_link_libraries(sr3tables_ui_controls_tests PRIVATE sr3tables_ui_controls)
 add_test(NAME synthetic_tables_ui_controls_test COMMAND sr3tables_ui_controls_tests)
 
+# Player runtime U0 (input query contract), U1 (control-state machine), U2
+# (movement and intent) and U3 (locomotion bridge), spec-player-runtime.md
+# Sec1/Sec2/Sec3/Sec5. Pure machinery with an injectable device source;
+# depends only on the header-only sr3luahost/open_state.h (same include
+# root) for the OPEN-state discipline.
+add_library(sr3player STATIC
+    src/player_input.cpp
+    src/player_control_state.cpp
+    src/player_movement.cpp
+    src/player_locomotion.cpp
+)
+target_include_directories(sr3player PUBLIC include)
+
+add_executable(sr3player_tests tests/synthetic_player_runtime_test.cpp)
+target_link_libraries(sr3player_tests PRIVATE sr3player)
+add_test(NAME synthetic_player_runtime_test COMMAND sr3player_tests)
+
 add_library(sr3tables_vehicle_world STATIC
     src/tables_vehicle_world.cpp
 )
@@ -404,6 +421,38 @@ add_executable(sr3animpayload_tests tests/synthetic_anim_payload_test.cpp)
 target_link_libraries(sr3animpayload_tests PRIVATE sr3anim)
 add_test(NAME synthetic_anim_payload_test COMMAND sr3animpayload_tests)
 
+# Animation runtime U0 (control-parameter contract) and U1 (controller state
+# slots, play/query API, cross-fade), spec-anim-runtime.md Sec1-Sec6. A
+# stateful runtime library in the shape of sr3player: pure machinery with
+# injected data / layer (U4) / evaluator (U3) boundaries; depends on sr3xtbl
+# for control_parameters.xtbl, sr3anim for clip header timing, and the
+# header-only sr3luahost/open_state.h for the OPEN-state discipline.
+#
+# U2 (node-graph file format, Sec7: anim_node_graph.cpp) and U3 (node-graph
+# runtime, Sec8: anim_node_graph_runtime.cpp) live in the same library; U3
+# implements U1's EvaluationBoundary.
+add_library(sr3animruntime STATIC
+    src/anim_control_parameters.cpp
+    src/anim_crossfade.cpp
+    src/anim_controller.cpp
+    src/anim_node_graph.cpp
+    src/anim_node_graph_runtime.cpp
+)
+target_include_directories(sr3animruntime PUBLIC include)
+target_link_libraries(sr3animruntime PUBLIC sr3xtbl sr3anim)
+
+add_executable(sr3animruntime_tests tests/synthetic_anim_runtime_test.cpp)
+target_link_libraries(sr3animruntime_tests PRIVATE sr3animruntime)
+add_test(NAME synthetic_anim_runtime_test COMMAND sr3animruntime_tests)
+
+add_executable(sr3animruntime_node_graph_tests tests/synthetic_anim_node_graph_test.cpp)
+target_link_libraries(sr3animruntime_node_graph_tests PRIVATE sr3animruntime)
+add_test(NAME synthetic_anim_node_graph_test COMMAND sr3animruntime_node_graph_tests)
+
+add_executable(sr3animruntime_node_graph_runtime_tests tests/synthetic_anim_node_graph_runtime_test.cpp)
+target_link_libraries(sr3animruntime_node_graph_runtime_tests PRIVATE sr3animruntime)
+add_test(NAME synthetic_anim_node_graph_runtime_test COMMAND sr3animruntime_node_graph_runtime_tests)
+
 # .cmorph_pc morph-target structural reader (spec-morph-format.md) - walks
 # the full container (headers, directory, descriptors, inline bulk runs,
 # trailing sentinel) and exposes the raw 12-byte elements. The quantised
@@ -501,9 +550,18 @@ target_link_libraries(sr3mesh PUBLIC vpp_container)
 
 add_library(sr3vehicle STATIC
     src/vehicle.cpp
+    src/cvtf.cpp
 )
 target_include_directories(sr3vehicle PUBLIC include)
 target_link_libraries(sr3vehicle PUBLIC vpp_container)
+
+# .cvtf_pc compiled vehicle-customization catalogue (spec-geometry-format.md
+# §5.1) - was never wired into any CMake target before this reader-
+# correctness pass (2026-10-03, the 48-byte-header fix); added here so it
+# is actually compiled and tested going forward.
+add_executable(sr3vehicle_cvtf_tests tests/synthetic_cvtf_test.cpp)
+target_link_libraries(sr3vehicle_cvtf_tests PRIVATE sr3vehicle)
+add_test(NAME synthetic_cvtf_test COMMAND sr3vehicle_cvtf_tests)
 
 add_executable(sr3mesh_tests tests/synthetic_ccmesh_vertex_test.cpp)
 # sr3rig added test-only, HANDOFF Sec9.68: testResolveVertexSetConflictsByDuplication
@@ -777,7 +835,17 @@ if(WIN32)
     # per-material textures via the new LevelMesh::materialTextureBinding() -
     # see runClmesh()'s own doc comment in sr3_viewer.cpp) - same "keep the
     # target graph in step" lesson as every other addition noted above.
-    target_link_libraries(sr3_viewer PRIVATE sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3fxo sr3d3d9bc sr3zone sr3clmesh vpp_container d3d11 dxgi d3dcompiler user32 gdi32)
+    # sr3luahost/sr3vintdoc/sr3xtbl/sr3tables_environment added for the new
+    # `vint-doc` command (2026-10-03, UI render unit U3 - see runVintDoc()'s
+    # own doc comment): EngineState::loadVintDocument/vintQueryTransform for
+    # the live element tree, sr3xtbl + ParseBitmapSheetsTable for the
+    # bitmap-sheet tables (spec-tables-environment.md Sec11.7/Sec17.4).
+    # sr3font added for `vint-doc`'s real text drawing (2026-10-03, UI render
+    # unit U5): .vf3_pc fonts, layout and glyph geometry (defined below with
+    # its tests; CMake resolves the name at generate time). sr3locstr added
+    # for the same command's `text_tag` localisation-key lookup (2026-10-03,
+    # spec-localization-format.md).
+    target_link_libraries(sr3_viewer PRIVATE sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3fxo sr3d3d9bc sr3zone sr3clmesh sr3luahost sr3vintdoc sr3xtbl sr3tables_environment sr3font sr3locstr vpp_container d3d11 dxgi d3dcompiler user32 gdi32)
 endif()
 
 # Real Lua 5.1 lexer/parser (include/sr3lua) - built from the PUBLIC Lua 5.1
@@ -840,6 +908,7 @@ add_library(sr3luahost STATIC
     src/lua_hook_registry.cpp
     src/lua_thread_scheduler.cpp
     src/lua_engine_state.cpp
+    src/vint_property_types.cpp
     src/lua_spec_initial_state.cpp
     src/lua_spec_confirmed_stubs.cpp
     src/lua_screen_fade.cpp
@@ -851,7 +920,7 @@ add_library(sr3luahost STATIC
 target_include_directories(sr3luahost PUBLIC include)
 # sr3vintdoc (2026-10-03): EngineState::loadVintDocument builds the live
 # Vint element tree from a parsed .vint_doc (sr3vintdoc::parseDocument).
-target_link_libraries(sr3luahost PUBLIC lua51 sr3vintdoc)
+target_link_libraries(sr3luahost PUBLIC lua51 sr3vintdoc sr3player)
 if(WIN32)
     target_link_libraries(sr3luahost PUBLIC user32)
 endif()
@@ -945,6 +1014,22 @@ add_test(NAME synthetic_luahost_tranche16_test COMMAND sr3luahost_tranche16_test
 add_executable(sr3luahost_tranche_realhits_tests tests/synthetic_luahost_tranche_realhits_test.cpp)
 target_link_libraries(sr3luahost_tranche_realhits_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_tranche_realhits_test COMMAND sr3luahost_tranche_realhits_tests)
+
+# Player runtime batch (2026-10-03): player_controls_disable/_enable and
+# player_movement_disable (spec-lua-api-behaviour.md Sec7.22/Sec7.7/Sec7.25)
+# on the real control-state stack (spec-player-runtime.md Sec2).
+add_executable(sr3luahost_player_controls_tests tests/synthetic_luahost_player_controls_test.cpp)
+target_link_libraries(sr3luahost_player_controls_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_player_controls_test COMMAND sr3luahost_player_controls_tests)
+
+# Player runtime U2/U3 (spec-player-runtime.md Sec3/Sec5). Links sr3luahost
+# only for the CharacterState +0x1d99 binding check, and
+# sr3tables_progression for the header-only tweak_table.xtbl seeding
+# adapter (sr3player/movement_tweak_table.h); sr3player itself uses just the
+# header-only open_state.h.
+add_executable(sr3player_movement_tests tests/synthetic_player_movement_test.cpp)
+target_link_libraries(sr3player_movement_tests PRIVATE sr3player sr3luahost sr3tables_progression)
+add_test(NAME synthetic_player_movement_test COMMAND sr3player_movement_tests)
 
 # The zscene / cutscene scene table (Sec26.25 item 5): cutscene.xtbl names +
 # one <name>.cte_xtbl per scene, on sr3xtbl like the other table readers.
@@ -1042,6 +1127,14 @@ add_executable(sr3vintdoc_document_tests tests/synthetic_vintdoc_document_test.c
 target_link_libraries(sr3vintdoc_document_tests PRIVATE sr3vintdoc sr3luahost)
 add_test(NAME synthetic_vintdoc_document_test COMMAND sr3vintdoc_document_tests)
 
+# Typed vint_set_property/vint_get_property through the per-type property
+# descriptor tables (spec-lua-bindings.md Sec9.1/9.2/9.2a/20.1) and the
+# query-time screen_nw/screen_se/screen_size geometry + screen_size setter
+# (spec-vint-render.md Sec7/Sec8), 2026-10-03. No game data.
+add_executable(sr3luahost_vint_property_tests tests/synthetic_vint_property_test.cpp)
+target_link_libraries(sr3luahost_vint_property_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_vint_property_test COMMAND sr3luahost_vint_property_tests)
+
 set(CRREISH_GAME_CACHE_DIR "D:/Project Crreish/Saints Row 3 CRREISH/packfiles/pc/cache" CACHE PATH
     "Directory holding the shipped .vpp_pc archives, for real-data tests (skipped when absent)")
 add_executable(real_vintdoc_document_tests tests/real_vintdoc_document_test.cpp)
@@ -1052,6 +1145,68 @@ set_tests_properties(real_vintdoc_document_test PROPERTIES SKIP_RETURN_CODE 77)
 
 add_executable(vintdoc_validate tools/vintdoc_validate.cpp)
 target_link_libraries(vintdoc_validate PRIVATE sr3vintdoc vpp_container)
+
+# sr3font (2026-10-03, UI render unit U5 - text): the .vf3_pc bitmap-font
+# reader, the game's named font table (DEFAULT language arrangement only),
+# the metric callbacks, per-glyph draw geometry (spec-vint-font-format.md,
+# spec-vint-render.md Sec14.1), and Vint text string building / markup /
+# layout (spec-vint-render.md Sec14.2-Sec14.5). No D3D, no game data at
+# build time. Synthetic test: no game data. Real-data test: the six shipped
+# .vf3_pc files in misc.vpp_pc from CRREISH_GAME_CACHE_DIR, checked against
+# the spec's own emulated reference vectors (exit 77 = SKIPPED when absent).
+add_library(sr3font STATIC src/vint_font.cpp src/vint_text.cpp)
+target_include_directories(sr3font PUBLIC include)
+
+add_executable(sr3font_tests tests/synthetic_vint_font_test.cpp)
+target_link_libraries(sr3font_tests PRIVATE sr3font)
+add_test(NAME synthetic_vint_font_test COMMAND sr3font_tests)
+
+add_executable(real_vint_font_tests tests/real_vint_font_test.cpp)
+target_link_libraries(real_vint_font_tests PRIVATE sr3font vpp_container)
+target_compile_definitions(real_vint_font_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_vint_font_test COMMAND real_vint_font_tests)
+set_tests_properties(real_vint_font_test PROPERTIES SKIP_RETURN_CODE 77)
+
+# sr3locstr (2026-10-03): the `.le_strings` localisation string-table
+# reader and key-hash lookup (spec-localization-format.md). No D3D, no
+# game data at build time. Synthetic test: no game data. Real-data test:
+# the 11 US tables loaded from misc.vpp_pc/patch_compressed.vpp_pc in
+# CRREISH_GAME_CACHE_DIR, checked against the spec's own validated record
+# counts and known key->text answers (exit 77 = SKIPPED when absent).
+add_library(sr3locstr STATIC src/le_strings.cpp)
+target_include_directories(sr3locstr PUBLIC include)
+target_link_libraries(sr3locstr PUBLIC sr3save)
+
+add_executable(sr3locstr_tests tests/synthetic_le_strings_test.cpp)
+target_link_libraries(sr3locstr_tests PRIVATE sr3locstr)
+add_test(NAME synthetic_le_strings_test COMMAND sr3locstr_tests)
+
+add_executable(real_le_strings_tests tests/real_le_strings_test.cpp)
+target_link_libraries(real_le_strings_tests PRIVATE sr3locstr vpp_container)
+target_compile_definitions(real_le_strings_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_le_strings_test COMMAND real_le_strings_tests)
+set_tests_properties(real_le_strings_test PROPERTIES SKIP_RETURN_CODE 77)
+
+# Real-data test for sr3animruntime U0 (spec-anim-runtime.md Sec1.4 / Sec4):
+# loads the shipped control_parameters.xtbl (misc_tables.vpp_pc entry 946)
+# and checks the 87-row registry and all 62 compiled-in names against it.
+# Exit 77 = SKIPPED when the archive is absent.
+add_executable(real_anim_control_parameters_tests tests/real_anim_control_parameters_test.cpp)
+target_link_libraries(real_anim_control_parameters_tests PRIVATE sr3animruntime sr3tables_ui_controls vpp_container)
+target_compile_definitions(real_anim_control_parameters_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_anim_control_parameters_test COMMAND real_anim_control_parameters_tests)
+set_tests_properties(real_anim_control_parameters_test PROPERTIES SKIP_RETURN_CODE 77)
+
+# Real-data population test for sr3animruntime U2/U3 (spec-anim-runtime.md
+# Sec7.12 / Sec8.10): loads all 249 node-graph files listed by
+# node_graph_files.xtbl (misc_tables.vpp_pc) plus the patched free_fall_bt
+# (patch_compressed.vpp_pc) and checks every reference, census and replay
+# number. Exit 77 = SKIPPED when the archives are absent.
+add_executable(real_anim_node_graph_tests tests/real_anim_node_graph_test.cpp)
+target_link_libraries(real_anim_node_graph_tests PRIVATE sr3animruntime sr3tables_animation vpp_container)
+target_compile_definitions(real_anim_node_graph_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_anim_node_graph_test COMMAND real_anim_node_graph_tests)
+set_tests_properties(real_anim_node_graph_test PROPERTIES SKIP_RETURN_CODE 77)
 
 # CTAB constant census over every shipped D3D9 shader (bridge job 06):
 # per-constant name -> register set/index/count TSV.

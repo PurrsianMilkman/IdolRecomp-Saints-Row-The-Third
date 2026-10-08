@@ -328,7 +328,14 @@ struct ContentElement {
 
     // Default_Wear_Option: "references the item's
     // Wear_Option.Mesh_Information...Filename" (spec 2.2) - again plain
-    // text, not resolved here.
+    // text, not resolved here. CONFIRMED 2026-10-03 (spec 2.2, disassembly
+    // of FUN_008290c0/FUN_00828390): the match key really is that wear
+    // option's own MALE mesh filename (Mesh_Information > Male_Mesh_Filename
+    // > Filename), compared case-insensitively - NOT the wear option's
+    // `Name` (spec-tables-customization.md §5.1's own reading was wrong on
+    // this point; an unmatched value resolves to "no wear option" at
+    // runtime). This reader still stores the raw text as-is and does not
+    // attempt that resolution (same footing as ContentElement::item above).
     std::optional<std::string> defaultWearOption;
 
     // Primary_Color/Secondary_Color/Tertiary_Color: "preset color-slot

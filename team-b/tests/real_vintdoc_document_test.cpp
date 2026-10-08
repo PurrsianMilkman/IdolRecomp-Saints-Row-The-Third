@@ -265,7 +265,12 @@ int main() {
             "local video = vint_object_find('bg_video')\n"
             "assert(vint_get_property(video, 'frame_event_num') == -1, 'signed')\n"
             "assert(vint_get_property(video, 'visible') == false, 'bool')\n"
-            "assert(select('#', vint_get_property(video, 'anchor')) == 0, 'no file anchor at the baseline')\n"
+            // No file anchor at the baseline: since 2026-10-03 the element
+            // default (spec-vint-render.md Sec8, seeded before the file's
+            // records) answers, not "zero values".
+            "local vax, vay = vint_get_property(video, 'anchor')\n"
+            "assert(vax == 0 and vay == 0, 'default anchor')\n"
+            "assert(select('#', vint_get_property(video, 'no_such_property')) == 0, 'miss')\n"
             "local sx, sy = vint_get_property(video, 'scale')\n"
             "assert(sx == 1280 and sy == 720, 'baseline scale')\n"
             "assert(vint_get_property(vint_object_find('background_bmp'), 'depth') == 500, 'depth')\n"

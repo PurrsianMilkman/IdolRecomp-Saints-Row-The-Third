@@ -128,8 +128,15 @@ int main() {
     // own documented character-vs-vehicle disambiguation).
     es.objectResolves().set("veh1", true);
     (void)es.getOrCreateVehicle("veh1"); // exists as a vehicle, not a character
-    fails(host, gp, "turn_invulnerable('veh1', true)", "0x008ae480"); // gate OPEN -> refuses
-    es.getOrCreateVehicle("veh1").forceFlagGatePasses.set(false);
+    // CONFIRMED (Sec3.7, single-player resolution added 2026-10-03): the
+    // double gate always resolves true with no session installed, seeded
+    // true at construction (EngineState::getOrCreateVehicle) - the very
+    // first call already takes the direct-flip branch, not a refusal.
+    CHECK(es.vehicles().at("veh1").forceFlagGatePasses.get() == true);
+    // The gate-false (replicate-only) branch is CONFIRMED dead in single
+    // player but stays testable for structural coverage via an explicit
+    // override.
+    es.vehicles().at("veh1").forceFlagGatePasses.set(false);
     ok(host, gp, "turn_invulnerable('veh1', true)"); // gate false: replicate only
     CHECK(es.vehicles().at("veh1").forceFlags1d7a.knownMask() == 0);
     es.vehicles().at("veh1").forceFlagGatePasses.set(true);
@@ -160,7 +167,7 @@ int main() {
     // the character branch, even though turn_invulnerable's own real
     // resolution order tries character paths first.
     es.objectResolves().set("npc1", true);
-    es.getOrCreateCharacter("npc1").forceFlagGatePasses.set(true);
+    es.getOrCreateCharacter("npc1").forceFlagGatePasses.set(true); // redundant with the CONFIRMED construction default, explicit here too
     ok(host, gp, "turn_invulnerable('npc1', false)");
     CHECK(!es.hasVehicle("npc1"));
     CHECK(es.getOrCreateCharacter("npc1").forceFlags1c98.get(CharacterState::kInvulnerableBit1c98) ==
