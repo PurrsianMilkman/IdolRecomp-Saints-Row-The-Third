@@ -78,9 +78,11 @@
 #include "bink_sha256.h"
 #include "sr3binkcodec/bitstream_reader.h"
 #include "sr3binkcodec/block_dispatch.h"
+#include "sr3binkcodec/entropy_prestage_runtime.h"
 #include "sr3binkcodec/frame_decoder.h"
 #include "sr3binkcodec/planar_buffer.h"
 #include "sr3luahost/open_state.h"
+#include "sr3runtimedata/runtime_data_loader.h"
 
 #ifndef BINK_MMBG_GOLDEN_DIR
 #define BINK_MMBG_GOLDEN_DIR "tests/golden/bink_main_menu_bg"
@@ -213,6 +215,18 @@ constexpr const char* kFrame1Sha = "4135a1c881a71c71dec00c28d90df1182ba9c21a64da
 }  // namespace
 
 int main() {
+    // 2026-10-10 (runtime data loader task): load the Bink static tables
+    // from the player's own game install, independently SHA-256-verified,
+    // if they aren't already compiled in - see include/sr3runtimedata/
+    // runtime_data_loader.h. A cheap no-op in the ordinary dev build.
+    sr3runtimedata::ensureRuntimeDataLoaded();
+    if (!caseSelectorTablesAvailable()) {
+        std::cout << "real_bink_test_vector_validation_test: SKIPPED - Bink case-selector static "
+                      "tables not available (no compiled-in data, and the runtime loader found no "
+                      "verified data at the configured game install path).\n";
+        return 77;
+    }
+
     std::cout << "real_bink_test_vector_validation_test: loading real-data fixtures from '"
               << BINK_MMBG_GOLDEN_DIR << "'\n";
 

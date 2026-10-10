@@ -2265,6 +2265,73 @@ as an open-ended "didn't find it yet." Recommended to the orchestrator: treat as
 unless a live capture becomes available (an indirect/vtable call or a Havok collision-response
 callback are the only remaining possibilities, neither traceable statically).
 
+**Continued (85th rewrite):** one more routed, mission-blocking (m07) Team B question. Verbatim:
+does a freshly-spawned character ever start with a nonzero attacker/threat reference, or is 0
+confirmed default; what's the real offset; is there a confirmed nonzero writer during normal
+gameplay. Context: `spec-lua-api-behaviour.md` §3.4 mentions this only in passing inside
+`set_ignore_ai_flag`. Dispatched: Agent `a255cd919a3f1b341`. Report target:
+`scratchpad/attacker_threat_reference_2026-10-09.md`.
+
+**DONE, spliced, synced, reported.** Found a real documentation bug along the way: §3.4's "clears
+override if nonzero attacker/threat reference" was wrong — that branch actually tests AI mode/
+sub-state bytes (`+0x501`/`+0x500`), not a reference handle. Fixed in place. The real attacker/
+threat-style field is `+0x18f0`/`+0x18f4`: spawn default CONFIRMED 0 (character constructor zeroes
+it unconditionally — m07's group members always start with no reference), CONFIRMED mutually
+cleared on death, but its only confirmed consumer is `human_being_revived_by` ("reviver handle") —
+no combat/damage-side writer found, left genuinely OPEN.
+
+**Continued (86th rewrite):** one more routed, mission-blocking (m05) question — m05 now reaches
+its end-of-script stop at tick 4, then hits a new OPEN: heli AI record `+0x2c` (`spec-lua-api-
+behaviour.md` §28.2). Dispatched: Agent `a0180ded1fc783c55`. Report target:
+`scratchpad/heli_ai_record_0x2c_2026-10-09.md`.
+
+**DONE, spliced, synced, reported.** Real correction: `+0x2c` is NOT on the `vehicle+0x100` "AI
+record" §28.1 names — it's on an upstream per-vehicle-TYPE class/definition record reached via
+`vehicle+0xbf4`. CONFIRMED dword, a general vehicle-class enum (0=car, 3=heli, 4=VTOL, 2 also
+valid; 1/5/6 OPEN). No writer found anywhere — HIGH CONFIDENCE static per-type template data,
+effectively read-only to gameplay/Lua.
+
+**(j) New direction, 2026-10-10 (87th rewrite) — user decision relayed via `purrsian-4a`: the
+public repo excludes game/middleware DATA** (the Wwise codebook library, Bink static tables, Bink
+test vectors) — "as long as we can make everything work if the player has the files, then we are
+good," so the reimplementation must read that data at runtime from the player's OWN retail install.
+Task: a new file, `spec-runtime-data-sources.md`, listing exact SOURCE (file, offset/VA, length,
+layout, SHA-256) for each excluded item — locations and hashes only, never the data itself.
+
+Dispatched: Agent `a906e8d4b978ca2b2` — covers the 599-entry codebook library
+(`spec-audio-codebook-library.md`, already has full provenance, just needs re-verification + a new
+file), the 5 Bink static-table regions (`spec-bink-static-tables.md`, VA-only in `binkw32.dll`,
+needs VA→file-offset conversion), and the Bink test vectors (check whether these are even real
+runtime data Team B needs, or pure research artifacts). Also checks whether DX11 has been analyzed
+at all for these offsets. Given the task's own scope (new file, no code dependencies), this agent
+was instructed to also run its own cleanroom check and `sync_to_teamb.sh` — still verify both
+yourself on landing rather than trusting that self-report blindly.
+
+**DONE.** `spec-runtime-data-sources.md` created, independently re-verified (0 cleanroom hits,
+sync re-run myself, 66 files, exit 0), reported. Covers the 599-entry codebook library (DX9
+offset re-verified; DX11 offset newly determined this pass), the 5 Bink static-table regions
+(VA→file-offset converted against a real `binkw32.dll`, all 5 hashes re-verified), and correctly
+excludes the Bink test vectors (confirmed to be this project's own debug captures, not real retail
+data, left as research artifacts rather than forced into the framework).
+
+**Continued (88th rewrite):** queued m07 question dispatched — character byte `+0x501` (AI state
+code, `spec-lua-api-behaviour.md` §22.3, also `spec-ai-runtime.md` §2.4/§2.5): spawn default value
++ main writers/transitions. Dispatched: Agent `aa5132e4eb22a9fed`. Report target:
+`scratchpad/ai_state_byte_0x501_2026-10-09.md`.
+
+**DONE, spliced, synced, reported.** Spawn default CONFIRMED `0x00`=Idle, exactly 3 writers in the
+whole binary. Bonus: closed a second OPEN item — `vehicle_enter_check_done`'s `0x12`(18) test is
+mode `Hijack`.
+
+**Continued (89th rewrite):** one more routed, mission-blocking (m05) question — the group
+record's `+0x40` "head name" field is OPEN (`spec-lua-api-behaviour.md` §28.6). Dispatched: Agent
+`adc0801ae7452394c`. Report target: `scratchpad/group_record_0x40_head_name_2026-10-09.md`.
+
+**DONE, spliced, synced, reported.** `+0x40` is a HANDLE (member-list head), not text. Note: §28.6
+already correctly described this before this pass — couldn't find a literal OPEN tag on it in the
+current spec text, flagged to the orchestrator as possibly stale on their side. CONFIRMED no write
+site in the Lua-exposed `group_*` family regardless; not blocking for m05.
+
 **NEXT STEPS on resume:** nothing currently in flight. Wait for the orchestrator's (`purrsian-4a`,
 verify via `ListAgents` — names rotate) next instruction before starting any new work. Stay at ONE
 agent at a time per the standing lean instruction.

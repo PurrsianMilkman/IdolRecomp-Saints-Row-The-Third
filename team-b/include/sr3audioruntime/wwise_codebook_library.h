@@ -53,7 +53,13 @@ constexpr int kWwiseCodebookLibrarySize = 599;
 constexpr size_t kWwiseCodebookLibraryBlobSize = 71778;
 
 extern const WwiseCodebookLibraryEntry kWwiseCodebookLibraryIndex[kWwiseCodebookLibrarySize];
-extern const uint8_t kWwiseCodebookLibraryBlob[kWwiseCodebookLibraryBlobSize];
+
+// NOT const (unlike the index table above): when src/
+// wwise_codebook_library_data.cpp is absent (the public source export),
+// src/wwise_codebook_library_blob_stub.cpp's own copy of this storage is
+// filled in at runtime by sr3runtimedata's loader - see
+// loadWwiseCodebookLibraryBlobFromRuntimeSource() below.
+extern uint8_t kWwiseCodebookLibraryBlob[kWwiseCodebookLibraryBlobSize];
 
 // The blob's SHA-256, as stated in spec-audio-codebook-library.md's own
 // Provenance section - what verifyWwiseCodebookLibraryBlobSha256() checks
@@ -66,5 +72,32 @@ extern const char* const kWwiseCodebookLibraryBlobSha256;
 // doesn't match, STOP and report rather than proceeding on corrupted data"
 // requirement. Returns false on any mismatch.
 bool verifyWwiseCodebookLibraryBlobSha256();
+
+// True when EITHER the real, compiled-in codebook blob (src/
+// wwise_codebook_library_data.cpp - excluded from this project's public
+// source export) was linked into this binary, OR sr3runtimedata's runtime
+// loader has independently SHA-256-verified and loaded the real blob from
+// the player's own game install (src/wwise_codebook_library_blob_stub.cpp,
+// linked instead when the compiled-in file is absent). False only when
+// neither has happened yet, in which case kWwiseCodebookLibraryBlob above
+// is a zeroed placeholder and kWwiseCodebookLibraryBlobSha256 will not
+// verify against it. Callers (e.g. src/wwise_setup_rebuild.cpp) must check
+// this FIRST and report "data not loaded" rather than decoding against the
+// placeholder.
+bool isWwiseCodebookLibraryDataAvailable();
+
+// Loader-only wiring hook - called only by sr3runtimedata's runtime loader
+// (include/sr3runtimedata/runtime_data_loader.h), only after ITS OWN
+// independent SHA-256 check of a freshly-read 71778-byte blob (DX9- or
+// DX11-sourced, see spec-runtime-data-sources.md Sec1) against that blob's
+// own expected hash has already passed - never called with unverified
+// bytes. Copies `len` bytes into kWwiseCodebookLibraryBlob (a no-op unless
+// len == kWwiseCodebookLibraryBlobSize) and flips
+// isWwiseCodebookLibraryDataAvailable() to true. Defined only in src/
+// wwise_codebook_library_blob_stub.cpp (the compiled-in-data TU has nothing
+// to load - it is already true unconditionally); not a second read API,
+// every other caller still only ever reads via kWwiseCodebookLibraryBlob/
+// isWwiseCodebookLibraryDataAvailable() above.
+void loadWwiseCodebookLibraryBlobFromRuntimeSource(const uint8_t* verifiedBytes, size_t len);
 
 }  // namespace sr3audioruntime

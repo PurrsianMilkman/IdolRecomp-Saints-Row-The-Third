@@ -595,6 +595,16 @@ SetupRebuildResult rebuildVorbisSetupHeader(const uint8_t* strippedSetup, size_t
         result.diagnostic = "invalid input (null/empty stripped setup packet, or non-positive channel count)";
         return result;
     }
+    if (!isWwiseCodebookLibraryDataAvailable()) {
+        // Public build without the excluded compiled-in codebook data (see
+        // include/sr3audioruntime/wwise_codebook_library.h) - every codebook
+        // slot below would resolve against a zeroed placeholder, so report
+        // this honestly instead of decoding garbage.
+        result.diagnostic =
+            "wwise codebook library data not loaded (public build without the excluded compiled-in "
+            "codebook data - see isWwiseCodebookLibraryDataAvailable())";
+        return result;
+    }
 
     oggpack_buffer in;
     // oggpack_readinit's signature takes a non-const pointer, but it is
@@ -898,6 +908,13 @@ SetupBudgetProbeResult probeSetupPacketBitBudget(const uint8_t* strippedSetup, s
     SetupBudgetProbeResult result;
     if (strippedSetup == nullptr || strippedSetupLen == 0 || channels <= 0) {
         result.diagnostic = "invalid input (null/empty stripped setup packet, or non-positive channel count)";
+        return result;
+    }
+    if (!isWwiseCodebookLibraryDataAvailable()) {
+        // See rebuildVorbisSetupHeader()'s own identical check above.
+        result.diagnostic =
+            "wwise codebook library data not loaded (public build without the excluded compiled-in "
+            "codebook data - see isWwiseCodebookLibraryDataAvailable())";
         return result;
     }
 

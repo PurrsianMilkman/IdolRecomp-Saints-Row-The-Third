@@ -8,8 +8,17 @@
 ## re-dispatch as a RESUME agent told to inspect the existing diff first, never restart blind. Re-check
 ## `ListAgents`/git state fresh every resume, don't trust pre-restart names/IDs.
 
-**Git main tip**: re-check `git log -1 main` (was `09f3ef6` as of this rewrite - an UNBUILT/UNVERIFIED
-merge commit, see below).
+**Git main tip**: re-check `git log -1 main` (was `bc0b0a2` as of this rewrite - 2 more UNBUILT/UNVERIFIED
+merge commits just landed, see below; `09f3ef6`'s own earlier unbuilt-merge status is unchanged/separate).
+**Public-build merges landed, per the user's request via purrsian-4a**: `feature/public-build-optional-
+data`@`be602fb` merged clean (`2673cd1`, no conflicts), `feature/runtime-data-loader-sha256`@`ffce7ee`
+merged clean (`bc0b0a2`, no conflicts) - both plain `git merge` commands went through with NO denial this
+time (unlike the earlier `09f3ef6` merge, this one wasn't followed by any build attempt, so the earlier
+"build/inspect blocked post-merge" gate was never tested here). Per explicit instruction, did NOT attempt
+to build/test main afterward (both branches were already fully verified standalone in their own
+worktrees) - confirmed file presence via read-only `git ls-files` instead:
+`include/sr3binkcodec/entropy_prestage_tables.h` and `src/wwise_codebook_library_blob_stub.cpp` both
+present on main.
 **Merge-to-main, status CHANGED this tick**: at purrsian-c6's request, tried the planned merge
 (`diag/mission-blocker-recensus-current` -> main) again - **it SUCCEEDED this time, no denial** (merge
 commit `09f3ef6`, 123 files). But the REQUIRED next step, `cmake --build`/`ctest` on the merge result, is
@@ -20,13 +29,221 @@ untested** - do not assume it's safe, do not build/test it without a fresh check
 Bash permission rule for this). Reported the exact denial text to purrsian-c6, did not route around it.
 Plain `git commit` (non-merge) is still unaffected, used throughout and for this very update.
 
+### QUEUED (not dispatched, no slot free) - real data-driven vehicle-class fix, to replace the
+### m05_heli_pierce special case
+purrsian-4a correctly flagged the hardcoded seed as a per-mission special case that won't scale. Real fix
+when a slot frees: wire the already-correct, already-existing `sr3vehicleinfo` xtbl reader
+(`ParseAllVehicles` etc., `include/sr3vehicleinfo/vehicle_entry.h`) into `EngineState` so each spawned
+vehicle's `+0xbf4` class comes from its own real vehicle-type data (matching retail's type-load-time
+assignment), then drop the `m05_heli_pierce` special case entirely. Must also update the 4 existing tests
+that pin other heli-named vehicles to stay OPEN ONLY because nothing populated the field - once real data
+drives it, those should assert the real data-driven value instead, not artificially-preserved OPEN-ness.
+Sec28.6 (m05's new `group +0x40 head name` blocker) is being routed to Team A by purrsian-4a, no action
+needed from this session yet.
+
+### DONE - PART 2: runtime data loader (`feature/runtime-data-loader-sha256`@`ffce7ee`, on `be602fb` +
+### `dd8d2c8`) - fully verified, clean-room discipline upheld
+**Spec-gap handled correctly**: this worktree was branched before Team A's spec-runtime-data-sources.md
+spec-sync landed on main - rather than inspecting the exe to reconstruct the missing spec, pulled the
+EXACT committed file via `git show 586ab5e:spec-runtime-data-sources.md` (a plain read of a file Team A
+already committed, not exe inspection), committed it first (`dd8d2c8`), then worked only from that. Every
+file/offset/length/hash constant in the new loader is transcribed directly from the spec text, cited
+inline per region - never opened/hexdumped/disassembled the real exe/DLL. Built: `include/sr3runtimedata/
+runtime_data_loader.h`+`src/runtime_data_loader.cpp` (reads DX9 exe codebook blob, falls back to DX11 if
+missing, binkw32.dll for all 5 Bink table regions), new `CRREISH_GAME_INSTALL_DIR` CMake var following the
+project's existing `CRREISH_GAME_CACHE_DIR` convention. Wwise's 599-row index table moved to an
+always-compiled file (it's derived analysis metadata per spec framing, not excluded bytes); only the raw
+blob stays gated. Bink's 5 tables moved to mutable runtime storage (sr3binkcodec now a small static lib).
+Skip guards added to the 5 affected tests (exit-77 convention, matching `real_bink_*`).
+**Real measured verification, all passed**: SHA-256 matched the spec's stated hashes for all 6 regions,
+computed independently by the running loader against the real install (DX9 AND the DX11 fallback both
+individually confirmed); a nonexistent path correctly reported "not found," no crash. **Vorbis regression
+(the key check)**: with compiled-in data hidden and the loader pointed at the real install,
+`real_vorbis_decode_test`'s pcmHash was BYTE-IDENTICAL to the compiled-in-data run for all 5 banks, same
+493/493 vorb records/headers/real-decodes. Bink identical either data source. ctest across 3 real
+scenarios: normal (161/0/4 skip), loader-sourced-replacing-compiled-in (161/0/4, identical), data-fully-
+absent (161/0/7 skip - 4 pre-existing + 3 new graceful skips, nothing failed). Not merged, joins queue.
+
+### QUEUED (waiting for group-head-name unit to land) - integration branch for a real combined census
+Per purrsian-4a: create ONE integration branch/worktree (not main) merging all the mission-blocker
+branches together, build+test there, re-run the full mission census - gives real combined numbers without
+touching main, becomes the pre-tested merge candidate once the user's build-permission rule is in. Branch
+list, checked: `feature/vehicle-enter-eligibility-gate`@`30f1252` (eligibility), `fix/ragdoll-state-
+default`@`fdcabd5` (ragdoll), `feature/vehicle-enter-submit-accepted-real-gate`@`8b82232` (submit gate),
+`feature/vehicle-group-check-done-occupant-conflict`@`1645584` (group-check + singular-instant teleport-
+seat fix + heli-class + stateCode501/Hijack - all ALREADY ONE lineage, confirmed via `git log`), `feature/
+attacker-threat-ref-and-reviver-handle`@`66323ee` (attacker-threat/reviver), `feature/group-head-name-
+from-member-list` (once it lands). **Checked, worth noting**: the co-op fix (`a38cba3`,
+`fix/second-player-nonnull-default`) is ALREADY an ancestor of `main` (confirmed via `merge-base --is-
+ancestor`) - no separate merge needed for it, building the integration branch off current `main` inherits
+it automatically.
+
+### DONE - group head-name fix (`feature/group-head-name-from-member-list`@`11ef9a5`, on `265f729`) -
+### BIG real m05 win
+`group_get_first_npc`/`group_get_next_npc` (Sec28.5/28.6) now derive from the SAME ordered member-roster
+`group_members_alive` (Sec18.14) already maintains, reusing the one existing group-membership model
+instead of duplicating it - no new OPEN surface, two dead never-seeded OpenValueMaps removed. Light-group's
+own UNRELATED `+0x40` flags byte confirmed untouched (grepped, diff-reviewed before commit). **Real
+measured delta**: m05 - before `ticks_survived=7` stuck on the OPEN gate -> after **`ticks_survived=721`,
+full budget, parked on a REAL coroutine wait (`m05.lua:1141`, `m05_parachute_in`), not a new OPEN error** -
+genuinely clears this blocker. m07/m09/dlc2_m01/dlc2_m03 confirmed byte-identical; m13 shifts 4->5 ticks
+before the SAME unrelated blocker (shared-EngineState side effect, same established precedent, not a
+regression). 149/149 tests (1 real bug caught+fixed in the agent's own test-edit pass, red->green
+confirmed). Not merged, joins queue.
+
+### IN FLIGHT - integration branch build+test+census (trigger condition met - head-name landed)
+`ab3596319e2da05d7` - NEW worktree `agent-integrationbatch2`, branch `integration/mission-blocker-batch2`
+(off current main `dd21297`, per purrsian-4a's plan) - sequentially merges all 6 branches (eligibility-
+gate, ragdoll-default, vehicle-enter-submit, group-check-done lineage, attacker-threat/reviver, group-
+head-name), conflict-resolving as needed (expect overlap on character_state.h/vehicle_state.h/
+engine_state.h given multiple branches touch the same fields), sanity-builds after each merge, then full
+ctest + full mission-drive census for the real combined numbers on m05/m07/m09/dlc2_m01/dlc2_m03/m13 plus
+a spot-check across the other ~43 missions. **Never touches main** - stays separate until the user's
+build-permission rule is resolved, per explicit instruction.
+
+### DONE - stateCodeByte501 seed + Hijack wiring (`feature/vehicle-group-check-done-occupant-conflict`@
+### `1645584`, on `265f729`)
+`stateCodeByte501` seeded to 0 (CONFIRMED Idle spawn default + 3-writer finding, Sec22.3) at construction.
+New `CharacterState::kAiModeHijack = 0x12` named constant, wired into `vehicle_enter_check_done`'s own
+`+0x504` literal (the task's "0x12 test" - correctly identified as the `+0x504` half of the real compound
+check, `+0x501=='&'(0x26) AND +0x504==Hijack`; `+0x501`'s own comparison value was untouched, out of
+scope). 151/151 tests. **Honest null result on THIS branch specifically, not a flaw in the fix**: this
+branch's own lineage (`265f729`) never incorporated the separate Sec3.4 attacker-threat-ref fix (`66323ee`,
+landed on a DIFFERENT sibling branch stacked on `b706fbb`) - confirmed via `merge-base --is-ancestor`
+(false). So m07 still stops on the OLDER `attackerThreatRef` OPEN item here, byte-identical before/after -
+the real effect of THIS fix won't show until both branches land on main (normal consequence of the
+queue-based multi-branch workflow, not a bug). m05/m09/dlc2_m01/dlc2_m03 confirmed unaffected. Not merged,
+joins queue (will need combining with the attacker-threat-ref branch at merge time, same files/area -
+flagging for whoever does the eventual merge).
+
+### DONE - public-build data exclusion, PART 1 (`feature/public-build-optional-data`@`be602fb`, off main
+### `69cddde`)
+**New file names for the export denylist**: `include/sr3binkcodec/entropy_prestage_tables.h` (the Bink
+static DATA, denylist this one) - `src/wwise_codebook_library_data_stub.cpp` is also new but must NOT be
+denylisted (it's the always-present fallback stub, part of the algorithm side). **Wwise**: CMake picks
+`wwise_codebook_library_data.cpp` if present, else the new stub (zeroed arrays, deliberately-wrong SHA so
+verification never false-reports "verified"); callers check `isWwiseCodebookLibraryDataAvailable()` first
+and report "data not loaded" via this project's existing diagnostic-string convention, not a crash. **Bink**:
+DATA split out of `entropy_prestage.h` into `entropy_prestage_tables.h`, pulled in via `__has_include` with
+a zeroed-placeholder fallback; new `CaseSelectorStatus::TablesNotLoaded` checked first in
+`beginBlockRow()`, falls through the existing `BlockOutcome::PreStageOpen` bucket automatically - no
+exhaustive-switch risk (confirmed, both consumers use if/else chains). **Bink test vectors confirmed
+already external** (gitignored/local-only, regenerated from real shipped assets, SKIP when absent) - no
+embedded binary data found anywhere in-repo, no change needed. **Build/test, both scenarios measured**:
+data PRESENT - 157/161 passed (4 pre-existing unrelated skips). Data ABSENT (real rename-out + full
+reconfigure/rebuild) - 155/161 passed, exactly 2 EXPECTED failures (clean exit(1), not crashes): the
+codebook crosscheck test's own clean "data not loaded" stop, and `synthetic_bink_codec_test` (flagged
+honestly: that "synthetic" test actually bakes in real-table-derived expected byte values with no
+skip-when-absent guard - a real but out-of-scope-for-this-task gap, noted not fixed). Files restored
+before commit (git mv undone), worktree + main checkout both confirmed clean. Not merged, joins queue. PART 2
+(dispatch once PART 1 lands - spec-runtime-data-sources.md IS NOW COMMITTED, so only waiting on PART 1):
+install locations + SHA-256 given for the 599-entry codebook library (both DX9 and DX11 exes, DX11 lower
+confidence) and the 5 Bink static-table regions (file offsets in binkw32.dll). **Bink test vectors are
+this project's OWN research captures, NOT retail data - stay as test fixtures, no loader needed for
+those.** Runtime loader: read each region at startup from the player's install, verify SHA-256, use only
+on a match, copy blindly by spec - clean-room intact (same byte-copy-by-spec convention this project
+already uses elsewhere, e.g. xtbl/zone data). Verification once implemented: audio decode still matches
+the oracle 493/493, Bink unchanged.
+
+### DONE - vehicle-type class enum fix for m05 (`feature/vehicle-group-check-done-occupant-conflict`@
+### `265f729`, on `a10a9ba`)
+**Correction to the dispatch's own premise**: the "per-instance +0x100 AI record" framing was stale - both
+existing fields (`VehicleState::flyingType`, `EngineState::HelicopterFlyTo::qualifies`) already cited the
+CORRECT location (+0xbf4+0x2c), just as unpopulated HYPOTHESIS/OPEN values pending Team A's confirmation
+(now received: field identity marked CONFIRMED). The real gap was nothing POPULATES either field for any
+vehicle. **Deliberately NOT a general name-based heuristic** (would've broken 4 existing tests that assert
+other heli-named vehicles stay OPEN until `.set()`) - instead a single clean-room-sourced hardcoded seed
+for `m05_heli_pierce` specifically (m05.lua's own script comment "Spawn Pierce's helicopter" directly
+above this exact vehicle name, same footing as this project's existing `keyframedPhysicsSpecialCaseCount`
+precedent for the identical name). Values 1/5/6 and any general name->type mechanism remain genuinely
+OPEN/not invented (would need wiring the separate, already-correct `sr3vehicleinfo` xtbl reader into
+`EngineState` - a materially larger feature, flagged not built). **Real measured m05 delta**: before
+`ticks_survived=4` stuck on the heli-class OPEN gate -> after `ticks_survived=7`, new later blocker
+(`group +0x40 head name['m05_grp_guards'] is OPEN, Sec28.6`). m07/dlc2_m01/dlc2_m03 byte-identical. m09's
+outcome category unchanged (still budget-exhausted) but its exact `waiting_at` line shifted - flagged
+honestly as a side effect of the shared `EngineState` across the whole mission batch (m05 running 3 more
+ticks shifts downstream shared state m09's poll happens to see differently), not a regression. 151/151
+tests (1 real bug caught+fixed before commit: first attempt missed that `qualifies` is reached without
+going through `getOrCreateVehicle()`). Not merged, joins queue.
+
+### DONE - Sec3.4 spec-bug fix for m07 (`feature/attacker-threat-ref-and-reviver-handle`@`66323ee`, on
+### `b706fbb`)
+`CharacterState::attackerThreatRef` (an unseeded OpenValue, the actual bug) removed. `set_ignore_ai_flag`'s
+gate re-pointed to the real `stateCodeByte501`/`aiSubStateByte500` fields (ai-runtime Sec2.4/Sec2.5,
+already existed from other work - no new OPEN surface invented). New `CharacterState::reviverHandle`
+(+0x18f0/+0x18f4) added, seeded 0 at construction (CONFIRMED default), cleared on death alongside the
+existing kill-finalizer. **Real measured m07 delta**: no longer stops on the mislabeled field - now
+surfaces a genuinely legitimate blocker instead: `stateCodeByte501 is OPEN (Sec22.3)` - a real engine byte
+Team A has genuinely left OPEN (not an invented field this time), ticks_survived still 8 (expected/
+acceptable per the task brief - the point was fixing the WRONG gate, not forcing completion).
+m05/m09/dlc2_m01/dlc2_m03 confirmed byte-identical. 151/151 tests. Not merged, joins queue.
+
+### DONE - vehicle_enter_do instant-path fix (`feature/vehicle-group-check-done-occupant-conflict`@
+### `a10a9ba`, on `b706fbb`) - real m05/m09 wins
+Same `stateEnum=1`->`3` fix (spec-player-runtime.md Sec7.4b) applied to `vehicle_enter_do`'s own singular
+instant/named-seat path AND `vehicle_enter_guardian_angel` (trivially the same code shape, fixed too).
+Pinned tests updated. **Real measured delta**: m05 - BEFORE budget-exhausted (721 ticks) stuck at
+`vehicle_enter_teleport` -> AFTER real completion at tick 4, new different blocker (heli AI record +0x2c
+OPEN, Sec28.2). m09 - BEFORE same deadlock -> AFTER still budget-exhausted but at a genuinely different,
+DOWNSTREAM location (`m09.lua:2099`, `m09_go_to_boat`) - real progress past the original deadlock, not yet
+resolved. m07/dlc2_m01/dlc2_m03 confirmed byte-identical (own tsv rows unchanged; global completion/
+exhaustion bucket counts shifted exactly as expected from m05 moving out of exhaustion, nothing else
+qualitatively changed). 151/151 tests. Not merged, joins queue.
+
+**m09's real blocker, read directly (no Team A question - not a spec gap)**: `m09.lua:2099` is
+`while not M09_local_on_boat or not M09_remote_on_boat do thread_yield() end`. `M09_local_on_boat` only
+flips true via `m09_player_on_boat_enter_cb`, a trigger-ENTER callback requiring the real player to
+physically walk into the `player_on_boat_trigger` volume - a genuine world/geometry condition this
+headless probe has no player-movement simulation to satisfy (same class as this project's existing "no
+coordinate/physics system" limitation elsewhere). **Concrete in-world test target, queued, not dispatched
+(lean budget)**: run `--mission=m09` in the real playtest (mission-host Phases 1-3 + the trigger-callback
+coroutine branch), with the real player walked into `player_on_boat_trigger` - exactly the case the
+headless probe can't exercise but the live engine loop can.
+
+### DONE - teleport-seating fix (`feature/vehicle-group-check-done-occupant-conflict`@`b706fbb`, on
+### `6213cce`) - real m07 win, per purrsian-4a's correct diagnosis
+Root cause confirmed (code, not disassembly): `attemptGroupInstantEnter()` wrote `stateEnum=1`
+("entering") on an accepted instant placement, never `3` ("seated") - `check_done`'s clear test needs
+`stateEnum==3`+matching vehicle, so every member was a permanent straggler. Fixed: now writes `stateEnum=3`
++ `currentVehicleName` on acceptance, per spec-player-runtime.md Sec7.4b's confirmed synchronous-commit
+rule (no seat contention possible in this project's own no-de-dup group-enter model, so sync commit is the
+only reachable case - not inventing behavior). **Correction to the task's own premise, found along the
+way**: there's no C++ native called `vehicle_enter_teleport` - the real single-character analog is
+`vehicle_enter_do`'s own instant path, which has the EXACT SAME `stateEnum=1`-only limitation, confirmed
+still live (m05/m09 now visibly stuck in the Lua-side `vehicle_enter_teleport` wrapper for this same
+reason). Correctly left OUT of scope (passing tests pinned to `stateEnum==1`, separate task) - **flagged
+as a real, known follow-up, not silently fixed**. **Real measured m07 delta**: before `ticks_survived=721`
+spinning at game_lib.lua:3089; after `ticks_survived=8`, NEW blocker - `m07_start: engine state character
+attacker/threat reference is OPEN (Sec3.4)`. Genuinely past the group-teleport deadlock, not complete.
+m05/m09/dlc2_m01/dlc2_m03 confirmed byte-identical (full-file diff). 151/151 tests. Not merged, joins
+queue. **Next real follow-up, not yet dispatched**: the same `stateEnum=1`-only gap on `vehicle_enter_do`'s
+singular instant path (and `vehicle_enter_guardian_angel`) is what now blocks m05/m09.
+
 ### RESUMED 2026-10-09 - user said "continue"; orchestrator purrsian-4a (new instance) relayed:
 ### stay LEAN (max 2 agents at a time, Sonnet only), re-dispatch the stopped unit only, nothing else new.
-- Re-dispatched the group_check_done + occupant-conflict unit: `a754eedcfb9761d12`, SAME worktree
-  `agent-groupcheckdone`/branch `feature/vehicle-group-check-done-occupant-conflict` (confirmed clean,
-  tip still `8b82232`, no leftover diff from the killed attempt) - same scope as before the stop (seat-
-  pick occupant-conflict per spec-player-runtime.md Sec13.4 steps 6-7, `vehicle_enter_group_check_done`
-  per lua-api Sec38.1's exact member-clear + do_not_reorder rule). Target: real measured m07 delta.
+- **DONE** - group_check_done + occupant-conflict unit (`feature/vehicle-group-check-done-occupant-
+  conflict`@`6213cce`, stacked on `8b82232`). Real Sec13.4 steps 6/7 (tank-only 8-seat team-conflict scan;
+  specific-seat contest check) implemented faithfully, reusing only existing fields. Real Sec38.1
+  `vehicle_enter_group_check_done` implemented (no threshold, dead/state-exemption/seated-here clears,
+  `do_not_reorder` wiring via new shared `attemptGroupInstantEnter()` helper, de-duplicated with
+  `vehicle_enter_group_do`). 151/151 tests (1 real pre-existing test regression found+fixed along the
+  way). Not merged, joins queue.
+  **2 corrections made on review, both flagged honestly rather than left standing:**
+  1. No spec-sync gap - the dispatched agent read a stale Sec38.1 paragraph; the real per-member rule WAS
+     already in the committed spec at ~line 14854. My own earlier relay of a "gap" was wrong.
+  2. The agent's "zero hits for vehicle_enter_group_check_done, m07 never reaches it" was a MEASUREMENT
+     ARTIFACT, not a real finding - read game_lib.lua:3089 directly (project's own already-extracted copy,
+     plain Lua text, no disassembly): it's the `thread_yield()` inside `vehicle_enter_group_teleport`'s own
+     `while (not(vehicle_enter_group_check_done(...))) do` polling loop. Checked the real trace
+     (`verdict_mission_drive.tsv`): m07 ran the FULL 721-tick budget at this exact line - the loop really
+     did execute repeatedly, re-calling check_done each time. The "zero hits" came from checking a
+     `stub_hits` tsv, which only tracks GENERIC/placeholder stub calls - check_done is a real
+     implementation now, so it structurally can't appear there regardless of call count. **Corrected
+     conclusion**: this is the exact faithful stall Team A already predicted (`do_not_reorder=true`
+     hard-coded in this caller -> a straggling group member never gets re-issued the enter order -> spins
+     for the rest of the budget) - not a new upstream blocker. Which specific m07 group member is the
+     straggler, and why it doesn't clear, is unknown without a real instrumented run (a unit, not a quick
+     read) - not dispatched, pending direction.
 - The main-checkout build/inspection lockdown (`cmake --build`/`git log` denied on main after the
   recensus-superset merge `09f3ef6`) is still UNRESOLVED - per purrsian-4a, stays gated on the user's own
   permission rule; not attempting it again without a specific go-ahead.

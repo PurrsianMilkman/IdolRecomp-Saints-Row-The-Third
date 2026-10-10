@@ -75,6 +75,14 @@ long rd(oggpack_buffer& b, int bits, const char* label) {
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (!sr3audioruntime::isWwiseCodebookLibraryDataAvailable()) {
+        // Public build without the excluded compiled-in codebook data (see
+        // include/sr3audioruntime/wwise_codebook_library.h) - nothing
+        // meaningful to trace against a zeroed placeholder library.
+        std::cerr << "wwise codebook library data not loaded (public build without the excluded "
+                     "compiled-in codebook data) - nothing to trace\n";
+        return 1;
+    }
     const std::string archivePath = argc > 1 ? argv[1]
         : "D:/Project Crreish/Saints Row 3 CRREISH/packfiles/pc/cache/cutscene_sounds.vpp_pc";
     const std::string wantName = argc > 2 ? argv[2] : "ct_angel_01_media.bnk_pc";

@@ -259,7 +259,8 @@ struct DecodeTrace {
             case StopReason::HitPreStageOpen:
                 return "stopped: the case-selector entropy pre-stage (entropy_prestage.h) hit its own "
                        "documented OPEN gap before producing a dispatch byte - see that file's own top "
-                       "comment";
+                       "comment (this also covers CaseSelectorStatus::TablesNotLoaded - a public build "
+                       "without the excluded case-selector static lookup tables, not a real OPEN gap)";
             case StopReason::HitCaseSelectorPoison:
                 return "stopped: the case-selector entropy pre-stage hit its own CONFIRMED permanent "
                        "poison state (entropy_prestage.h's CaseSelectorStatus::Poisoned, spec-bink-codec.md "

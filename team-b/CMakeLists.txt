@@ -1106,6 +1106,34 @@ add_test(NAME synthetic_hirc_media_lookup_test COMMAND sr3audio_hirc_tests)
 # NullWwiseBackend. Pure machinery in the shape of sr3player/
 # sr3animruntime: depends only on the header-only sr3luahost/open_state.h
 # (same include root) for the OPEN-state discipline (Sec6's open items).
+# src/wwise_codebook_library_data.cpp holds the real, static, compiled-in
+# Wwise Vorbis codebook-body DATA (71778 raw bytes transcribed from the
+# shipped game executable, spec-audio-codebook-library.md's own Provenance
+# section) - excluded from this project's public source export per the
+# "public repo excludes the game/middleware DATA" decision. OPTIONAL here: if
+# present (as it is in every non-public checkout today), it is compiled in as
+# before; if absent (as it will be from the public export), this target still
+# configures and links cleanly against src/wwise_codebook_library_blob_stub.cpp
+# instead (which sr3runtimedata's runtime loader can fill at runtime from the
+# player's own game install) - see that stub's own header comment and
+# sr3audioruntime::isWwiseCodebookLibraryDataAvailable() (include/
+# sr3audioruntime/wwise_codebook_library.h) for how callers (src/
+# wwise_setup_rebuild.cpp) detect and report the absent-data case instead of
+# silently decoding against a zeroed placeholder.
+# 2026-10-10 (runtime data loader task): the 599-row INDEX table
+# (blobOffset/byteLen etc.) moved out to its own ALWAYS-compiled source
+# (src/wwise_codebook_library_index_data.cpp - derived analysis metadata,
+# not excluded game bytes, per spec-runtime-data-sources.md's own framing -
+# see that file's own header comment). Only the raw 71778-byte blob itself
+# stays EXISTS-gated between a compiled-in dev copy
+# (src/wwise_codebook_library_data.cpp) and a runtime-loadable stub
+# (src/wwise_codebook_library_blob_stub.cpp, filled at runtime by
+# sr3runtimedata's loader instead - see that stub's own header comment).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/wwise_codebook_library_data.cpp")
+    set(SR3AUDIORUNTIME_CODEBOOK_BLOB_SOURCE src/wwise_codebook_library_data.cpp)
+else()
+    set(SR3AUDIORUNTIME_CODEBOOK_BLOB_SOURCE src/wwise_codebook_library_blob_stub.cpp)
+endif()
 add_library(sr3audioruntime STATIC
     src/wwise_backend.cpp
     src/global_rtpc.cpp
@@ -1114,7 +1142,8 @@ add_library(sr3audioruntime STATIC
     src/real_vorbis_decode.cpp
     src/wwise_setup_rebuild.cpp
     src/wwise_codebook_library.cpp
-    src/wwise_codebook_library_data.cpp
+    src/wwise_codebook_library_index_data.cpp
+    ${SR3AUDIORUNTIME_CODEBOOK_BLOB_SOURCE}
     src/wav_writer.cpp
 )
 target_include_directories(sr3audioruntime PUBLIC include)
@@ -1127,6 +1156,37 @@ target_include_directories(sr3audioruntime PUBLIC include)
 # downstream consumer of sr3audioruntime needs to see libvorbis's own
 # headers just to call attemptWwiseVorbisDecode().
 target_link_libraries(sr3audioruntime PRIVATE vorbisstatic)
+
+# 2026-10-10 (runtime data loader task): sr3binkcodec is no longer purely
+# header-only - the 5 static lookup-table regions (kRunLength/kClassByte/
+# kLutOffset/kLutBlob/kIntraQuant/kInterQuant, include/sr3binkcodec/
+# entropy_prestage_runtime.h) are now mutable runtime storage defined once
+# in src/bink_entropy_tables.cpp (filled from the compiled-in dev data when
+# present, or left for sr3runtimedata's loader to fill from the player's
+# own game install otherwise - see that header's own top comment), so every
+# consumer of include/sr3binkcodec/entropy_prestage.h needs this small
+# library linked in, not just "include" on its path. Defined here (not
+# nearer its own Bink section further below) so sr3runtimedata right below
+# - and sr3audioruntime_codebook_library_tests a little further down, which
+# also needs it - can link against it.
+add_library(sr3binkcodec STATIC src/bink_entropy_tables.cpp)
+target_include_directories(sr3binkcodec PUBLIC include)
+
+# --- sr3runtimedata: the runtime loader for the data regions be602fb made
+# build-time-optional (Wwise codebook blob, 5 Bink static table regions),
+# spec-runtime-data-sources.md, 2026-10-10 ---------------------------------
+# CRREISH_GAME_INSTALL_DIR follows the SAME "default to the real install
+# path on this machine, not empty" convention as CRREISH_GAME_CACHE_DIR
+# (set further below, alongside the real_*_test family) - this is the
+# directory that directly holds SaintsRowTheThird.exe/_DX11.exe/binkw32.dll
+# (CRREISH_GAME_CACHE_DIR's own default is a packfiles/pc/cache
+# subdirectory of this same install root).
+set(CRREISH_GAME_INSTALL_DIR "D:/Project Crreish/Saints Row 3 CRREISH" CACHE PATH
+    "Directory holding SaintsRowTheThird.exe/_DX11.exe/binkw32.dll, for sr3runtimedata's runtime loader (data stays absent, not a hard error, when this path or the files in it don't exist)")
+add_library(sr3runtimedata STATIC src/runtime_data_loader.cpp)
+target_include_directories(sr3runtimedata PUBLIC include)
+target_compile_definitions(sr3runtimedata PRIVATE CRREISH_GAME_INSTALL_DIR="${CRREISH_GAME_INSTALL_DIR}")
+target_link_libraries(sr3runtimedata PRIVATE sr3audioruntime sr3binkcodec)
 
 add_executable(sr3audioruntime_tests tests/synthetic_audio_runtime_test.cpp)
 target_link_libraries(sr3audioruntime_tests PRIVATE sr3audioruntime)
@@ -1158,8 +1218,11 @@ add_test(NAME synthetic_wwise_vorbis_setup_test COMMAND sr3audioruntime_vorbis_s
 # this project's own bitstream parse of all 599 real codebook bodies
 # against the spec's own pre-decoded header-field columns.
 add_executable(sr3audioruntime_codebook_library_tests tests/wwise_codebook_library_crosscheck_test.cpp)
-target_link_libraries(sr3audioruntime_codebook_library_tests PRIVATE sr3audioruntime)
+target_link_libraries(sr3audioruntime_codebook_library_tests PRIVATE sr3audioruntime sr3runtimedata)
 add_test(NAME synthetic_wwise_codebook_library_crosscheck_test COMMAND sr3audioruntime_codebook_library_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(synthetic_wwise_codebook_library_crosscheck_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # `.clmesh_pc`/`.glmesh_pc` "Level_Mesh" reader (spec-physics-format.md Sec4,
 # spec-geometry-format.md Sec4.2) - the static-prop/collision-geometry
@@ -2526,7 +2589,7 @@ endif()
 # (exit 77) when CRREISH_GAME_CACHE_DIR is absent, same convention as
 # real_zone_objects_test above.
 add_executable(real_vorbis_decode_tests tests/real_vorbis_decode_test.cpp)
-target_link_libraries(real_vorbis_decode_tests PRIVATE sr3audioruntime sr3audio vpp_container)
+target_link_libraries(real_vorbis_decode_tests PRIVATE sr3audioruntime sr3audio vpp_container sr3runtimedata)
 target_compile_definitions(real_vorbis_decode_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
 add_test(NAME real_vorbis_decode_test COMMAND real_vorbis_decode_tests)
 
@@ -2795,10 +2858,20 @@ target_include_directories(bink_test_vector_extract PRIVATE tests)
 
 # Synthetic regression (no real game data needed): hand-built bitstreams
 # exercising the reader's own confirmed shape and the fully-reconstructed
-# block cases, deterministically.
+# block cases, deterministically. Also, since 2026-10-10, the designated
+# place a skip guard detects caseSelectorTablesAvailable()==false (neither
+# the compiled-in dev tables nor sr3runtimedata's runtime loader supplied
+# real case-selector table data) and SKIPs (exit 77) instead of asserting
+# against the zeroed placeholder and failing - this test's own hardcoded
+# expected output bytes are derived from the REAL table values, so it has
+# no meaningful synthetic-only subset to fall back to.
 add_executable(sr3binkcodec_tests tests/synthetic_bink_codec_test.cpp)
 target_include_directories(sr3binkcodec_tests PRIVATE include)
+target_link_libraries(sr3binkcodec_tests PRIVATE sr3binkcodec sr3runtimedata)
 add_test(NAME synthetic_bink_codec_test COMMAND sr3binkcodec_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(synthetic_bink_codec_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # Real-data regression: frame 0 of the game's own logo_thq_and_voli_hd.bik,
 # extracted by tools/bink_frame0_probe.cpp per spec-bink-codec.md Sec1.5/
@@ -2810,6 +2883,7 @@ add_test(NAME synthetic_bink_codec_test COMMAND sr3binkcodec_tests)
 # same convention as every other real_*_test in this repo.
 add_executable(real_bink_frame0_decode_tests tests/real_bink_frame0_decode_test.cpp)
 target_include_directories(real_bink_frame0_decode_tests PRIVATE include)
+target_link_libraries(real_bink_frame0_decode_tests PRIVATE sr3binkcodec sr3runtimedata)
 target_compile_definitions(real_bink_frame0_decode_tests PRIVATE
     BINK_FRAME0_GOLDEN_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_logo_frame0/frame0_raw.bin")
 add_test(NAME real_bink_frame0_decode_test COMMAND real_bink_frame0_decode_tests)
@@ -2831,6 +2905,7 @@ endif()
 # comment for exactly what this test checks and does NOT claim.
 add_executable(real_bink_test_vector_validation_tests tests/real_bink_test_vector_validation_test.cpp)
 target_include_directories(real_bink_test_vector_validation_tests PRIVATE include)
+target_link_libraries(real_bink_test_vector_validation_tests PRIVATE sr3binkcodec sr3runtimedata)
 target_compile_definitions(real_bink_test_vector_validation_tests PRIVATE
     BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
 add_test(NAME real_bink_test_vector_validation_test COMMAND real_bink_test_vector_validation_tests)
@@ -2852,6 +2927,7 @@ endif()
 # frame0_raw.bin) and the same SKIPPED (exit 77) convention.
 add_executable(real_bink_merge_group_trace_tests tests/real_bink_merge_group_trace_test.cpp)
 target_include_directories(real_bink_merge_group_trace_tests PRIVATE include)
+target_link_libraries(real_bink_merge_group_trace_tests PRIVATE sr3binkcodec)
 target_compile_definitions(real_bink_merge_group_trace_tests PRIVATE
     BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
 add_test(NAME real_bink_merge_group_trace_test COMMAND real_bink_merge_group_trace_tests)
@@ -2871,6 +2947,7 @@ endif()
 # test's own main()).
 add_executable(bink_plane_subchunk_span_tests tests/bink_plane_subchunk_span_test.cpp)
 target_include_directories(bink_plane_subchunk_span_tests PRIVATE include)
+target_link_libraries(bink_plane_subchunk_span_tests PRIVATE sr3binkcodec)
 target_compile_definitions(bink_plane_subchunk_span_tests PRIVATE
     BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
 add_test(NAME bink_plane_subchunk_span_test COMMAND bink_plane_subchunk_span_tests)
@@ -2887,7 +2964,7 @@ endif()
 if(WIN32)
     add_executable(bink_frame0_decode tools/bink_frame0_decode.cpp)
     target_include_directories(bink_frame0_decode PRIVATE include)
-    target_link_libraries(bink_frame0_decode PRIVATE sr3render)
+    target_link_libraries(bink_frame0_decode PRIVATE sr3render sr3binkcodec)
 endif()
 
 # libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.

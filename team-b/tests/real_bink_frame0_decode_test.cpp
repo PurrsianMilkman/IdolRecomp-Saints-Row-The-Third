@@ -35,9 +35,11 @@
 #include "bink_md5.h"
 #include "sr3binkcodec/bitstream_reader.h"
 #include "sr3binkcodec/block_dispatch.h"
+#include "sr3binkcodec/entropy_prestage_runtime.h"
 #include "sr3binkcodec/frame_decoder.h"
 #include "sr3binkcodec/planar_buffer.h"
 #include "sr3binkcodec/yuv_to_rgb.h"
+#include "sr3runtimedata/runtime_data_loader.h"
 
 #ifndef BINK_FRAME0_GOLDEN_PATH
 #define BINK_FRAME0_GOLDEN_PATH "tests/golden/bink_logo_frame0/frame0_raw.bin"
@@ -86,6 +88,18 @@ std::vector<uint8_t> readFile(const std::string& path) {
 }  // namespace
 
 int main() {
+    // 2026-10-10 (runtime data loader task): load the Bink static tables
+    // from the player's own game install, independently SHA-256-verified,
+    // if they aren't already compiled in - see include/sr3runtimedata/
+    // runtime_data_loader.h. A cheap no-op in the ordinary dev build.
+    sr3runtimedata::ensureRuntimeDataLoaded();
+    if (!caseSelectorTablesAvailable()) {
+        std::cout << "real_bink_frame0_decode_test: SKIPPED - Bink case-selector static tables not "
+                      "available (no compiled-in data, and the runtime loader found no verified "
+                      "data at the configured game install path).\n";
+        return 77;
+    }
+
     const std::vector<uint8_t> raw = readFile(BINK_FRAME0_GOLDEN_PATH);
     if (raw.empty()) {
         std::cout << "real_bink_frame0_decode_test: SKIPPED - golden fixture not found at '"

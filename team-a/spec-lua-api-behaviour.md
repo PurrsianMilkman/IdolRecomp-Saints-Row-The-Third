@@ -1877,6 +1877,22 @@ by direct decompilation there). When newly *enabling* ignore-AI, it additionally
 character's action/animation-override state to a fixed id (`0x19`) if the character's own state-enum
 field (`+0x16d4`) reads `3` (the same "in a vehicle" value `character_is_in_vehicle`, §3.10, checks),
 or clears the override to `0` if the character currently carries a nonzero attacker/threat reference.
+**[CORRECTION, 2026-10-09 (routed, mission-blocking: m07) — this "attacker/threat reference" label
+was wrong.** The actual condition this branch tests (`0x00a5e333`-`0x00a5e343`) is the character's
+AI mode byte `+0x501` (nonzero = "not Idle") ANDed with sub-state byte `+0x500` (!= `9`) — i.e.
+"currently in a non-Idle AI mode," not a reference-handle check at all. Both bytes are
+independently documented as the AI mode-machine's own state bytes in `spec-ai-runtime.md` §2.4/§2.5.
+A genuine attacker/threat-style handle field does exist elsewhere, at character offset
+`+0x18f0`/`+0x18f4` (an 8-byte handle pair) — **CONFIRMED zeroed unconditionally at construction**
+(via `0x00954340`→`0x00942920`, so a freshly-spawned/script-created character, the m07 kind, always
+starts at `0`/"no reference") and **CONFIRMED cleared mutually on death** by the kill-pipeline
+finalizer `0x009a7610`. Its only confirmed consumer-side semantics anywhere in this project is the
+"reviver handle" the already-documented native `human_being_revived_by` (`0x00a4f800`) reads — **no
+writer that sets it nonzero during normal gameplay (on taking damage, on engaging/being engaged)
+was found**; whether this field doubles as a genuine combat attacker-reference or is purely a
+reviver handle remains OPEN. For Team B: implement the equivalent field defaulting to "no
+reference" on spawn; do not assume a combat-engagement writer exists for it without further
+tracing. Full detail: `scratchpad/attacker_threat_reference_2026-10-09.md`.]**
 **[Full `+0x16d4` enum cross-reference, 2026-10-08: `spec-player-runtime.md` §7.2/§7.3/§8.0/§8.1 already
 has the complete, confirmed value table for this field — `0 = none, 1 = entering, 2 = exiting, 3 =
 seated` — from an independent direct re-derivation of all 5 writers; see §3.10's own citation below
@@ -10660,7 +10676,24 @@ Second part of the fresh four-part "ranks 351-450" tranche's own gameplay side (
 
 **Body — a genuine, raw-disassembly-confirmed hidden-argument finding.** The decompiled pseudocode shows the vehicle-resolve call as 0x00a281e0() with ZERO visible arguments; raw disassembly proves one argument IS pushed — the arg-3 string result (or the empty-string default) — matching 0x00a281e0's own real 1-argument signature exactly; the decompiler simply dropped it from this specific call site's own rendering. Arg 1 resolves via the generic/`"#PLAYER#"` chain 0x00a281a0; if that fails, the function pushes the constant 2.0 (0x012a2e28, byte-confirmed — the SAME "no active request" sentinel `vehicle_pathfind_check_done`, §9.10, already establishes) and returns. Otherwise: the target vehicle is resolved via 0x00a281e0 on arg 3 (or the empty default, which never resolves) with a fallback, on failure, to the ALREADY-resolved character's own cached vehicle-association pair (+0x16c0/+0x16c4) through the already-established wrapper 0x004dcf00 (§12.20/§18.31 #1: a thin wrapper over the shared handle-table lookup 0x00458230, liveness-gated). If the character currently reads as dead/flagged (the already-established predicate 0x0096f4f0, here confirmed to ALSO trip on a bit 0x1 at the character's own +0xe3 byte, not only the state-5 test §18.14 already documents) — OR ~~is in a "remote/proxy" state (+0x16d4==3, 0x009b9160)~~ is seated (+0x16d4==3, 0x009b9160; the real meaning per the correction at item 21.11 above, not "remote/proxy" — the logic is unaffected, only the label) — OR (only when arg 2 is true) a rich helper 0x009b95c0 (checking the character's cached vehicle-association against the resolved target, branching on the SAME +0x16d4 mode enum, and reading/writing a cached "already checked" bit at +0xe0 bit 0x20, cross-referenced against two animation-tag queries tagged 0x1d95) reports `true` — the result becomes a SECOND status constant, 1.0 (0x012a2d70, byte-confirmed). Otherwise, if the character's own state-code byte pair (+0x501/+0x504) matches `'&'`/0x12, or the predicate 0x009b91e0 (+0x16d4 in {1,2}, ~~"is entering/in-transition"~~ really "entering OR exiting" — two distinct phases, not one bucket, per item 21.11's correction above; which of the two this predicate is meant to catch here was not re-examined this pass) reports true, the result becomes 0.0 (a genuine "done" code). If none of these apply, the result stays at the default 2.0. Finally, if the result differs from a THIRD status constant, 0.0 (byte-confirmed — i.e. "not already the success code"), AND the character's own class-descriptor row has bit 0x2 set at row offset +0xa, a fully-decompiled generic per-character "script-mode" setter, 0x009e3200, runs with mode 0 and no position payload — **a SECOND raw-disassembly-confirmed hidden-`this` finding: the call is rendered 0x009e3200(0,0) with two visible literal arguments, but raw disassembly proves the implicit `this` is the resolved character handle**, matching 0x009e3200's own independently-decompiled `this`/mode/position-struct signature (already established at the SAME address by item 22.15 below, and gated by the SAME single-gate 0x008addb0: false branch → opens a network record, opcode 0x46, two literal debug tags `"player"`+`"script_mode_params"`, serializing a per-object "actor" byte via 0x008add70 — ~~the same serializer `spawn_override_change_hood_alternate_spawning`'s cross-fn note, §16.30, already cites~~ the same per-object id serializer 0x008add70 (§14.29/§15.2) — committed via the genuine multi-target 0x0086f110; true branch → writes the mode into a field at +0x2888 and toggles bit 0x2 of a flags byte at +0x28ac).
 
-**Side effects/subsystem:** polls whether a "vehicle enter" request has finished for a character, returning a 3-value status code (0.0=done, 1.0=still pending/remote, 2.0=nothing to check), and, on a genuine transition, resets a shared per-character "script-mode" record. Subsystem: vehicle-entry/AI state. **[CONFIRMED — disassembly, including both hidden-argument findings and all three byte-confirmed status constants; OPEN — the exact real-world meaning of the +0x501/+0x504 state-code byte pair, and 0x009b95c0's own full internal role beyond its own already-decoded branch structure.]**
+**`+0x501`/`+0x504` spawn default and writers, CONFIRMED (2026-10-09, routed, mission-blocking:
+m07).** A freshly-spawned/script-created character's current-mode byte `+0x501` is **`0x00` =
+`Idle`** at construction — the character base constructor `0x00954340` (via `0x0095440d: LEA
+ECX,[this+0x2b0]; CALL 0x004e46c0` → `0x004dde30`, the AI sub-object embedded in-place at character
+`+0x2b0`, the same base `spec-ai-runtime.md` §2.4 already uses for `+0x508`/`+0x50c`) zeroes it
+unconditionally before the object is ever live. Full spawn state of the sub-object's own byte
+cluster: `+0x500`=`0x09` (sub-state placeholder, practically moot — overwritten the moment any
+begin function runs), `+0x501`=`0x00` (Idle), `+0x502`=`0x2d`/45 (previous-mode "none" sentinel),
+`+0x503`=`0x01` ("just entered"), `+0x504`=`0x2d`/45 (requested-mode "none" sentinel). Exactly
+**3 writers exist in the whole binary**: (1) construction above (one-time, pre-live); (2) the
+transition primitive `0x004dd380(human, new_mode, block_or_null)` (`spec-ai-runtime.md` §3.3, the
+main gameplay writer — every voluntary AI mode change goes through here); (3) the network read
+`0x004ea530` (for a non-owned/proxy human only, overwrites `+0x501` directly from a replicated
+byte, `spec-ai-runtime.md` §2.4 point 3). The full 44-value mode enum is named in `spec-ai-runtime.md`
+§3.2 (0=Idle, 18=Hijack, 43=Player, etc.), with `0x2d`(45) as the shared "no mode" sentinel for the
+previous/requested-mode fields. Full detail: `scratchpad/ai_state_byte_0x501_2026-10-09.md`.
+
+**Side effects/subsystem:** polls whether a "vehicle enter" request has finished for a character, returning a 3-value status code (0.0=done, 1.0=still pending/remote, 2.0=nothing to check), and, on a genuine transition, resets a shared per-character "script-mode" record. Subsystem: vehicle-entry/AI state. **[CONFIRMED — disassembly, including both hidden-argument findings and all three byte-confirmed status constants; CLOSED (2026-10-09, routed, mission-blocking: m07) — `+0x501`/`+0x504` are the character's current-mode/requested-mode AI-state bytes (`spec-ai-runtime.md` §3.1-§3.3; also see `spec-lua-api-behaviour.md` §3.4 above for the spawn-default/writer investigation this closes alongside). The literal `0x12` (18) this function tests is mode `Hijack` in the 44-value mode enum, so the check is "currently in, and not pending a switch out of, `Hijack`." OPEN — 0x009b95c0's own full internal role beyond its own already-decoded branch structure.]**
 
 ### 22.4 `teleport_to_object` (0x00a612a0)
 
@@ -13982,6 +14015,29 @@ Third part of the fresh four-part "ranks 551-650" tranche's own gameplay side (P
 
 Then resolves the target via 0x00a455a0 (already richly documented at §1.12/§4.2/§20.24 as a shared position-lookup helper) — confirmed here with its already-established 3-explicit-argument shape (target name, a 12-byte position-output buffer, a 36-byte extra-output buffer), no hidden `this`. On success, dispatches to 0x00b3f6d0(helicopter, x, y, z) — confirmed via raw disassembly to be a plain 4-explicit-argument cdecl call (helicopter handle passed as a genuine stack argument, not a hidden receiver) — ~~either the raw resolved-target offset triple (if the boolean mode is set) or the delta between the resolved target's position and the helicopter's own +0x40/+0x44/+0x48 fields (otherwise)~~ either the last three floats of the resolved 36-byte orientation record (mode true; record +0x18/+0x1c/+0x20, i.e. the target's +0x64/+0x68/+0x6c when a live object was copied) or the target position minus the helicopter's own +0x40/+0x44/+0x48 (mode false; double arithmetic, float result). 0x00ad31a0(heli) is true only when the dword at (heli+0xbf4)+0x2c is 3 or 4 (false for null). [2026-10-01, jobs pwgq/jxxz].
 
+**`(vehicle+0xbf4)+0x2c` fully characterized, CONFIRMED (2026-10-09, routed, mission-blocking: m05)
+— this is NOT a field on the `vehicle+0x100` "AI record" §28.1 names; it is a dword on a different,
+upstream per-vehicle-TYPE class/definition record reached via `vehicle+0xbf4` (the vehicle instance's
+own class-definition pointer, already used elsewhere in this family of accessors).** Type: dword,
+confirmed by 4 independent accessors (`0x00ad2f80`, `0x00ad31a0` here, `0x00ad3200`, `0x00ad3220`).
+Role: a general **vehicle-class enum**, confirmed values `0` = non-flying/car (gates
+`vehicle_car_alarm_enable`, §20.3), `3` = helicopter (this gate, and `vehicle_is_helicopter`,
+`0x00a66070`), `4` = VTOL (`vehicle_is_vtol_hover`/`vehicle_is_vtol_jet`, `0x00a64700`/`0x00a64770`);
+`2` also observed as a valid value elsewhere; the clamp helper `0x00a4a9d0` treats the field as
+range `0`-`6` — **OPEN which classes occupy `1`/`5`/`6`.** **Spawn-time default: OPEN** — no write to
+this exact offset was found from any of the 30+ callers of `0x00ad2f80` reached this pass; HIGH
+CONFIDENCE this is static per-vehicle-type template data set when the vehicle's type definition
+loads, not written by a per-spawn AI constructor — **effectively read-only to gameplay/Lua, no
+writer native exists.** (Explicitly ruled out: `0x00b37740`'s own `+0x4b0`/`+0x4b4` write, cited two
+paragraphs above, is a different field on the `vehicle+0x100` record and never touches `+0xbf4` at
+all — the two should not be conflated.) Readers (natives, CONFIRMED): `vehicle_is_helicopter`,
+`vehicle_is_vtol_hover`, `vehicle_is_vtol_jet`, `vehicle_car_alarm_enable`,
+`helicopter_enter_retreat` (`0x00a4cb10`), and this native. `0x00a79470` (the "AI record" getter,
+`vehicle+0x100`) itself internally calls the `==3`/`==4` testers on this exact field as dead-looking
+(result-discarded) assertions before returning — likely why this field was originally conflated
+with the `vehicle+0x100` record it merely gates access to. Full detail:
+`scratchpad/heli_ai_record_0x2c_2026-10-09.md`.
+
 **Side effects/subsystem:** sets a helicopter's own "fly-to" goal direction, ~~either as an absolute resolved-target offset~~ either as the target's third orientation vector [2026-10-01, jobs pwgq/jxxz] or as a computed delta from the helicopter's current position, after first priming ~~a local default-position buffer~~ the local 36-byte orientation buffer [2026-10-01, jobs pwgq/jxxz] via the same fixed-transform-constant mechanism (0x01321400) §20.24 already tracks. Subsystem: vehicle AI/pathfinding (helicopter). **[CONFIRMED — disassembly, full chain, including the 0x00da4130/0x01321400 cross-reference and the clean 0x00b3f6d0 4-arg check; ~~OPEN — 0x00b3f6d0/0x00ad31a0's own full internals.~~ 0x00b3f6d0 re-checks 0x00ad31a0 and only stores when the helicopter's AI record (0x00a79470) has +0x4b0 == 1; it then sets bit 0x2 of byte +0x298 and writes the vector to +0x430..+0x438. [CONFIRMED — disassembly.] ~~OPEN — the meaning of +0x4b0/+0x298 and which axis the third orientation row is.~~ [2026-10-01, jobs pwgq/jxxz] [2026-10-01, job 20261001T165637-team-a-tabs, Q15, CONFIRMED — disassembly: per §28.1, `0x00a79470`(vehicle) = `vehicle + 0x100`, so these fields are the vehicle's own `+0x398` (the `+0x4b0` gate), `+0x298` (the bit `0x2` byte) and `+0x530`..`+0x538` (the vector) — not a separate record. OPEN — what those offsets mean and which axis the third orientation row is.]
 
 ~~**Review status (2026-09-30): NEEDS-EXE: 0x00da4130 destination buffer and arg 2/arg 3 defaults unsettled — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation. Executable re-derivation queued (bridge jobs 20260930T215532-team-a-cnbg, 20260930T220434-team-a-tajw).**~~
@@ -14039,6 +14095,29 @@ Then resolves the target via 0x00a455a0 (already richly documented at §1.12/§4
 **Body:** resolves via the SAME 0x005eab60 resolver, re-confirmed here too as a method on singleton 0x02442750. Liveness-gated. On success, if the group's own +0x40 field (member-list head) is non-null, pushes the name string at that head's own +0x18 field and returns 1; else returns 0. (+0x40 head already recorded at §18.14; ~~whether §18.14's "has members" bit 0x2@+0x3a is also tested here is not stated — OPEN.~~ §18.14's bit 0x2@+0x3a is not tested here. [2026-10-01, jobs pwgq/jxxz]) **Raw-disassembly note:** an extra register push appears immediately before the resolver call in the disassembly, but it is confirmed to be an unrelated, deferred callee-saved-register preservation (the compiler saving the caller's original register value for later restore, scheduled adjacent to the call by coincidence) — NOT a second argument to the resolver; this reading is independently confirmed by comparing against item 28.5's own call to the identical resolver, which shows exactly one pushed argument with no such extra push.
 
 **Side effects/subsystem:** none (pure query) — returns a script-group's first member's name via the same group+0x40→+0x18 convention item 28.5 establishes reading the OTHER direction. Subsystem: AI/ambient scripting. **[CONFIRMED — disassembly, full chain; the register-push non-argument reading is cross-checked against item 28.5, not merely assumed.]**
+
+**`+0x40`'s own identity, restated plainly (2026-10-09, routed, mission-blocking: m05) — it is a
+HANDLE, never text, despite the "head name" shorthand this family's own naming invites.** `+0x40`
+is the head pointer of a circular singly-linked member (NPC) list on the AI script-group record
+(resolved via `0x005eab60`, bit `0x20`@`+0xa`, on singleton `0x02442750`), with each member's own
+`+0x9c` field as the "next" link (§18.14). It is not itself a name or an inline string buffer —
+"the head's name" (this native's own return value) is obtained one hop further out, by
+dereferencing `+0x40` and reading that resolved member object's own `+0x18` field (the standard
+name field on character objects). **Creation, CONFIRMED:** neither `group_create_do`
+(`0x00a4c880`) nor `group_create_hidden_do` (`0x00a4c8e0`) writes `+0x40` or takes any argument
+that could seed it — both take only the group-name string and only READ the `+0x40` ring (to queue
+streaming requests); creation does not populate it. **No write site exists anywhere in the
+Lua-exposed `group_*` native family** — every confirmed access across both create variants,
+`group_destroy_do` (`0x00a4c940`, including its two destroy-path callees `0x00679db0`/`0x00a2b490`,
+which only touch a different, generic member ring at `+0x3c`/`+0x88`), `group_members_alive`
+(§18.14), and this native is a READ. **OPEN, genuinely unlocated (not blocking for m05 — none of
+the `group_*` natives m05 itself calls need to write this field):** the actual writer that threads
+an NPC onto the ring (setting both the member's own `+0x9c` and the group's `+0x40`) — almost
+certainly outside the Lua-exposed `group_*` family, most plausibly spawn/placement-marker data
+processing. **Cross-reference warning:** the same offset `+0x40` exists on an unrelated
+light-group record (a different resolver family, `0x00739690`/`0x0062a1f0`) where it is a 1-byte
+flags field, not a handle — do not conflate the two "group" kinds. Full detail:
+`scratchpad/group_record_0x40_head_name_2026-10-09.md`.
 
 ~~**Review status (2026-09-30): DESK-PASS, text fixes applied — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation. Executable re-derivation queued (bridge jobs 20260930T215532-team-a-cnbg, 20260930T220434-team-a-tajw).**~~
 
@@ -16497,4 +16576,48 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   straggler that never seats has no recovery path and the check spins forever, the likely concrete
   m07 stall mechanism. Full detail:
   `scratchpad/mission_block_seatpick_vehiclegroup_2026-10-09.md`. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §3.4: `set_ignore_ai_flag`'s "attacker/threat reference" label CORRECTED, routed
+  mission-blocking (m07)** (SPEC TEAM, agent `a255cd919a3f1b341`). The clear-to-0 branch actually
+  tests the AI mode/sub-state bytes `+0x501`/`+0x500`, not an attacker-reference handle — a
+  documentation bug, now fixed in place with a pointer to `spec-ai-runtime.md` §2.4/§2.5. The real
+  attacker/threat-style handle field, found via a different §3.4-adjacent citation, is
+  `+0x18f0`/`+0x18f4`: CONFIRMED zeroed unconditionally at character construction (spawn default is
+  always 0, including for script-created group members) and CONFIRMED mutually cleared on death;
+  its only confirmed consumer is the already-documented `human_being_revived_by` native, which
+  calls it the "reviver handle" — no combat/damage-side writer was found, left genuinely OPEN. Full
+  detail: `scratchpad/attacker_threat_reference_2026-10-09.md`. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §28.2: `(vehicle+0xbf4)+0x2c` fully characterized, routed mission-blocking (m05)**
+  (SPEC TEAM, agent `a0180ded1fc783c55`). Corrects a conflation: this field is NOT on the
+  `vehicle+0x100` "AI record" §28.1 names, it's on an upstream per-vehicle-type class/definition
+  record. CONFIRMED dword, a general vehicle-class enum (`0`=car, `3`=heli, `4`=VTOL, `2` also
+  valid elsewhere; `1`/`5`/`6` OPEN). No writer found anywhere — HIGH CONFIDENCE static per-type
+  template data, not a per-spawn AI constructor field, effectively read-only to gameplay/Lua. Full
+  detail: `scratchpad/heli_ai_record_0x2c_2026-10-09.md`. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §22.3: character AI-state byte `+0x501`/`+0x504` spawn default and writers
+  CONFIRMED, closing its own OPEN item, routed mission-blocking (m07)** (SPEC TEAM, agent
+  `aa5132e4eb22a9fed`). Spawn default CONFIRMED `0x00` = `Idle`, zeroed unconditionally by the
+  character base constructor (a different sub-object than the task's own suggested lead — caught
+  and corrected before finalizing). Exactly 3 writers exist project-wide: construction, the main
+  gameplay transition primitive `0x004dd380` (already documented, `spec-ai-runtime.md` §3.3), and
+  the proxy-only network read `0x004ea530` (§2.4 point 3). Bonus closure: identifies `0x12`(18) in
+  `vehicle_enter_check_done`'s own body as mode `Hijack` in the 44-value enum, closing that
+  function's own previously-OPEN state-byte-meaning tag. Full detail:
+  `scratchpad/ai_state_byte_0x501_2026-10-09.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §28.6: group record `+0x40` restated plainly as a handle, not text; CONFIRMED
+  no write site in the Lua-exposed family, routed mission-blocking (m05)** (SPEC TEAM, agent
+  `adc0801ae7452394c`). `+0x40` is the head pointer of a circular singly-linked member list
+  (`+0x9c` next-link), not itself a name — the "head's name" is one hop further out via the
+  resolved member's own `+0x18` field. Neither `group_create_do`/`group_create_hidden_do` nor any
+  other `group_*` native writes it; only reads. OPEN, non-blocking: the actual ring-insertion
+  writer, almost certainly outside the Lua-exposed family. Cross-reference warning added: an
+  unrelated light-group record shares this same offset number for a 1-byte flags field. Full
+  detail: `scratchpad/group_record_0x40_head_name_2026-10-09.md`. Cleanroom self-check: strict
   regex 0 hits, C-cast-dereference check 0 hits.

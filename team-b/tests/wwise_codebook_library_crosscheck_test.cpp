@@ -39,6 +39,7 @@
 
 #include "sr3audioruntime/wwise_codebook_library.h"
 #include "sr3audioruntime/wwise_setup_rebuild.h"
+#include "sr3runtimedata/runtime_data_loader.h"
 
 namespace {
 int g_failures = 0;
@@ -52,6 +53,26 @@ int g_failures = 0;
 }  // namespace
 
 int main() {
+    // 2026-10-10 (runtime data loader task): attempt to load the real data
+    // from the player's own game install first (a cheap no-op if the
+    // compiled-in data below is already linked in) - see
+    // include/sr3runtimedata/runtime_data_loader.h.
+    sr3runtimedata::ensureRuntimeDataLoaded();
+
+    // Checked before the SHA pin below: neither the compiled-in codebook
+    // data (src/wwise_codebook_library_data.cpp, see include/
+    // sr3audioruntime/wwise_codebook_library.h) nor the runtime loader above
+    // supplied real data (e.g. a public build with no accessible game
+    // install) - SKIPPED (exit 77), same convention as this project's other
+    // real-data-dependent tests, rather than a hard failure.
+    if (!sr3audioruntime::isWwiseCodebookLibraryDataAvailable()) {
+        std::cout << "synthetic_wwise_codebook_library_crosscheck_test: SKIPPED - wwise codebook "
+                      "library data not available (no compiled-in data, and the runtime loader "
+                      "found no verified data at the configured game install path) - nothing to "
+                      "cross-check.\n";
+        return 77;
+    }
+
     // Pin #1: blob integrity, checked before anything else.
     const bool shaOk = sr3audioruntime::verifyWwiseCodebookLibraryBlobSha256();
     CHECK(shaOk);

@@ -140,7 +140,9 @@
 #include "sr3audio/media_bank.h"
 #include "sr3audioruntime/real_vorbis_decode.h"
 #include "sr3audioruntime/wav_writer.h"
+#include "sr3audioruntime/wwise_codebook_library.h"
 #include "sr3audioruntime/wwise_vorbis_setup.h"
+#include "sr3runtimedata/runtime_data_loader.h"
 #include "vpp/container.h"
 
 namespace {
@@ -202,6 +204,22 @@ int16_t peakAbsAmplitude(const std::vector<int16_t>& pcm) {
 }  // namespace
 
 int main() {
+    // 2026-10-10 (runtime data loader task): load the Wwise codebook blob
+    // from the player's own game install, independently SHA-256-verified,
+    // if it isn't already compiled in - see
+    // include/sr3runtimedata/runtime_data_loader.h. A cheap no-op in the
+    // ordinary dev build (src/wwise_codebook_library_data.cpp already
+    // compiled in). This is the key regression this task asks for: the
+    // decode below must be byte-identical whether the codebook data comes
+    // from that old compiled-in source or from this new loader.
+    sr3runtimedata::ensureRuntimeDataLoaded();
+    if (!sr3audioruntime::isWwiseCodebookLibraryDataAvailable()) {
+        std::cout << "wwise codebook library data not available (no compiled-in data, and the "
+                      "runtime loader found no verified data at the configured game install "
+                      "path) - SKIPPED\n";
+        return 77;
+    }
+
 #ifndef CRREISH_GAME_CACHE_DIR
     std::cout << "CRREISH_GAME_CACHE_DIR not configured - SKIPPED\n";
     return 77;
