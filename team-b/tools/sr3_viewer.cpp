@@ -87,6 +87,7 @@
 #include "sr3render/mesh_renderer.h"
 #include "sr3render/png_writer.h"
 #include "sr3render/quad_renderer.h"
+#include "sr3render/sun_shadow_map.h"
 #include "sr3render/swap_chain.h"
 #include "sr3render/tod_clock.h"
 #include "sr3render/tod_lighting.h"
@@ -210,6 +211,12 @@
 // CityPropAabbCollisionWorld's own doc comment below for exactly what
 // primitive is used and why.
 #include "sr3player/character_collision.h"
+// seated/driving pose (2026-10-09 seated-driving-pose task, spec-player-
+// runtime.md Sec7.4b) - resolves+applies a real seated pose for a vehicle
+// occupant, replacing the bind-pose fallback runPlaytest() previously used.
+// Also pulls in sr3tables_vehicle_world/tables.h and sr3animpose's
+// clip_pose_bridge.h/pose_compose.h transitively (see that header's banner).
+#include "sr3player/seated_ride_pose.h"
 // `drive_demo` (2026-10-08, vehicle twin of `walk`/walk_demo): the real,
 // already-existing sr3physics::VehicleSubstepSimulator (a parallel task's own
 // stable, read-only contract - see runDriveDemo()'s own doc comment) plus the
@@ -13199,17 +13206,24 @@ struct PlaytestVehicleRig {
     // byte-for-byte - runDriveDemo()'s own pre-existing call site (below)
     // passes neither, so its frozen drive_demo_coverage goldens are
     // unaffected; only runPlaytest() passes real values.
+    // `lightViewProjection`/`shadowMap`/`shadowSampler` (this task, 2026-10-09,
+    // sun-shadow-map): forwarded unchanged to MeshRenderer::draw()/
+    // drawTextured() - same byte-for-byte-by-default contract as
+    // sunDirection/ambientColor/sunColor above (every pre-existing caller
+    // passes none of these six trailing parameters).
     void Draw(ID3D11DeviceContext* ctx, const float viewProjection[16], const float vehicleWorld[16],
              const float sunDirection[3] = nullptr, const float ambientColor[3] = nullptr,
-             const float sunColor[3] = nullptr) {
+             const float sunColor[3] = nullptr, const float lightViewProjection[16] = nullptr,
+             ID3D11ShaderResourceView* shadowMap = nullptr, ID3D11SamplerState* shadowSampler = nullptr) {
         if (!ready) return;
         for (auto& ch : channels) {
             if (!perMaterialSrv.empty())
                 ch.renderer->drawTextured(ctx, viewProjection, perMaterialSrv, vehicleWorld, sunDirection,
-                                          ambientColor, sunColor);
+                                          ambientColor, sunColor, lightViewProjection, shadowMap, shadowSampler);
             else
                 ch.renderer->draw(ctx, viewProjection, sr3render::MeshDrawMode::Checker, nullptr, vehicleWorld,
-                                  nullptr, sunDirection, ambientColor, sunColor);
+                                  nullptr, sunDirection, ambientColor, sunColor, lightViewProjection, shadowMap,
+                                  shadowSampler);
         }
         if (catalogWheelReady) {
             const float kTireTint[4] = {0.12f, 0.12f, 0.13f, 1.0f}; // CHOSEN dark neutral tire/rim grey, same as runDriveDemo()
@@ -13217,7 +13231,27 @@ struct PlaytestVehicleRig {
                 float composed[16];
                 sr3render::multiplyMatrix4x4(w.data(), vehicleWorld, composed);
                 catalogWheelRenderer->draw(ctx, viewProjection, sr3render::MeshDrawMode::FlatTint, nullptr, composed,
-                                           kTireTint, sunDirection, ambientColor, sunColor);
+                                           kTireTint, sunDirection, ambientColor, sunColor, lightViewProjection,
+                                           shadowMap, shadowSampler);
+            }
+        }
+    }
+
+    // Sun shadow map depth-only pass (THIS TASK, 2026-10-09, sun-shadow-map):
+    // the SAME body channels + attached wheels as Draw() above, mirrored 1:1
+    // but through MeshRenderer::drawDepthOnly() (lit/texture/material
+    // irrelevant - depth only) and the sun's own light-space matrix instead
+    // of the camera's. Called from runPlaytest()'s own shadow-generation
+    // block, before Draw() runs for the same frame.
+    void DrawDepthOnly(ID3D11DeviceContext* ctx, const float lightViewProjection[16],
+                       const float vehicleWorld[16]) {
+        if (!ready) return;
+        for (auto& ch : channels) ch.renderer->drawDepthOnly(ctx, lightViewProjection, vehicleWorld);
+        if (catalogWheelReady) {
+            for (const auto& w : wheelAttachWorld) {
+                float composed[16];
+                sr3render::multiplyMatrix4x4(w.data(), vehicleWorld, composed);
+                catalogWheelRenderer->drawDepthOnly(ctx, lightViewProjection, composed);
             }
         }
     }
@@ -18186,6 +18220,59 @@ int runPlaytest(int argc, char** argv) {
     sr3animpose::LoopPhaseTracker loopPhase;
     const bool realPoseEnabled = runRecord >= 0 || jogRecord >= 0 || wlkRecord >= 0;
 
+    // ---- seated/driving pose (THIS TASK, 2026-10-09, spec-player-runtime.md Sec7.4b) -------
+    // Replaces the standing BIND POSE this command previously rendered (or, before that,
+    // hid outright - see this function's own "Character rendering" doc comment just above
+    // the render gate below) for a vehicle occupant with a REAL, data-driven seated pose:
+    // seat -> real Vehicle_Interaction_Info row's Ride_Animations name -> real vi_ride.xtbl
+    // Animation string -> a CHOSEN real .anim_pc clip (sr3player::seated_ride_pose.h owns
+    // this whole resolution+application chain - see that header's own banner for exactly
+    // what is spec-CONFIRMED vs. CHOSEN). This command's own hardcoded demo vehicle mesh
+    // (car_4dr_genki_0.ccar_pc) is a DLC mesh absent from the real vehicles.xtbl manifest
+    // (confirmed by the vehicle-occupant-hide-flag task's own investigation, same scope
+    // boundary reused here) with no VehicleEntry::vehicleInteractionInfo of its own to read -
+    // so, same spirit as that task's own --vehicle-interaction-name override, this command
+    // uses a CHOSEN stand-in real row, "truck_2dr_classic01" (an ordinary car, verified this
+    // session to have Driver seat Ride_Animations = "standard driver" -> vi_ride.xtbl
+    // Animation "drive network"), rather than inventing a fake row for the demo mesh.
+    std::vector<sr3tables_vehicle_world::VehicleInteractionAnimationSet> rideSets;
+    sr3tables_vehicle_world::VehicleInteractionInfo demoVehicleInteractionInfo;
+    bool demoVehicleInteractionInfoFound = false;
+    try {
+        const sr3xtbl::Document rideDoc = docOf("vi_ride.xtbl");
+        rideSets = sr3tables_vehicle_world::ParseViRideTable(rideDoc);
+        const sr3xtbl::Document infoDoc = docOf("vehicle_interaction_info.xtbl");
+        for (const auto& row : sr3tables_vehicle_world::ParseVehicleInteractionInfoTable(infoDoc)) {
+            if (row.name.has_value() && *row.name == "truck_2dr_classic01") {
+                demoVehicleInteractionInfo = row;
+                demoVehicleInteractionInfoFound = true;
+                break;
+            }
+        }
+        std::printf("seatpose : vi_ride.xtbl %zu set(s); vehicle_interaction_info.xtbl demo row ('truck_2dr_classic01') "
+                    "%s\n",
+                    rideSets.size(), demoVehicleInteractionInfoFound ? "found" : "NOT FOUND");
+    } catch (const std::exception& ex) {
+        std::printf("seatpose : vi_ride.xtbl/vehicle_interaction_info.xtbl not available (%s) - the vehicle occupant "
+                    "will stay on its bind pose\n",
+                    ex.what());
+    }
+    int32_t rideRecord = -1;
+    if (animArchiveBytes && !animArchiveBytes->empty()) {
+        try {
+            vpp::Container animContainer(vpp::ByteView(animArchiveBytes->data(), animArchiveBytes->size()));
+            rideRecord = clipRegistry.load(animContainer, "auto_ridel.anim_pc");
+        } catch (const std::exception& ex) {
+            std::printf("seatpose : auto_ridel.anim_pc load failed: %s\n", ex.what());
+        }
+    }
+    std::printf("seatpose : real driver ride clip 'auto_ridel.anim_pc' %s\n",
+                rideRecord >= 0 ? "loaded" : "MISSING - occupant will stay on its bind pose");
+    std::unordered_map<std::string, int32_t> rideClipRecords;
+    if (rideRecord >= 0) rideClipRecords["auto_ridel.anim_pc"] = rideRecord;
+    sr3player::SeatedRidePoseApplier seatedPoseApplier;
+    double seatedPoseClockSeconds = 0.0;
+
     // ---- the simulated player: PlaytestMoveSource replaces WalkScriptSource. Live mode
     // polls REAL GetAsyncKeyState; --no-input drives a scripted fallback below in the
     // main loop (SUBSTITUTION 1, see this function's own top doc comment). -------------
@@ -18327,6 +18414,33 @@ int runPlaytest(int argc, char** argv) {
         return 1;
     }
     uint32_t depthWidth = winWidth, depthHeight = winHeight;
+
+    // Sun/cascade shadow map (THIS TASK, 2026-10-09, sun-shadow-map -
+    // include/sr3render/sun_shadow_map.h): ONE owner for the shadow depth
+    // target, the light view-projection computation, and the generation
+    // pass itself - see that header's own banner for the CONFIRMED-real-
+    // mechanism-vs-CHOSEN-v1-simplification breakdown (spec-render-
+    // pipeline.md Sec23.6.4). 2048x2048 (CHOSEN default - see that header's
+    // own initialise() comment). A failure here is non-fatal: the playtest
+    // still renders exactly as it did before this task, just with
+    // kShadowMapReady false so draw() calls fall back to their own
+    // existing null-default (no shadow) behaviour below.
+    // CRREISH_DISABLE_SUN_SHADOW=1 (env var, unset/0 = silent, default): same
+    // convention as SR3_GROUND_TEX_DEBUG/SR3_ANIM_DEBUG_LOG elsewhere in this
+    // file - a debug escape hatch for producing a genuine before/after A-B
+    // comparison (this task's own verification pass) without a second
+    // rebuild, never read by any shipped behaviour path otherwise.
+    const char* disableShadowEnv = std::getenv("CRREISH_DISABLE_SUN_SHADOW");
+    const bool shadowDisabledByEnv = disableShadowEnv != nullptr && disableShadowEnv[0] != '0' && disableShadowEnv[0] != '\0';
+
+    sr3render::SunShadowMap sunShadowMap;
+    std::string shadowMapError;
+    const bool shadowMapReady =
+        !shadowDisabledByEnv && sunShadowMap.initialise(device.device(), 2048, shadowMapError);
+    if (!shadowMapReady && !shadowDisabledByEnv) {
+        std::fprintf(stderr, "sun shadow map init failed (continuing without shadows): %s\n",
+                    shadowMapError.c_str());
+    }
 
     sr3render::MeshRenderer characterRenderer;
     if (!characterRenderer.initialise(device.device(), error)) {
@@ -18938,42 +19052,13 @@ int runPlaytest(int argc, char** argv) {
     // adapting the real CameraSystem, which has no vehicle submode any spec
     // confirms (see this function's own "UPDATED 2026-10-08" doc comment).
     const float kVehCamDistance = 9.0f, kVehCamHeightAbovePivot = 4.0f, kVehPivotHeight = 1.0f, kVehCamFovY = 0.8f;
-    // Driver-seat local offset (THIS TASK, 2026-10-09, vehicle-occupant-hide-flag) - CHOSEN,
-    // clearly NOT the real seat position: the real per-vehicle/per-seat position data this
-    // project DOES already parse (vehicle_animation_modifiers.xtbl's Human_Seat_Offset,
-    // include/sr3tables_vehicle_world/tables.h) ships EMPTY for every real base-game vehicle
-    // (checked empirically this task: misc_tables.vpp_pc's own real `<Vehicles></Vehicles>`
-    // is a bare, row-less element - its global default is also 0,0,0) and the OTHER real
-    // candidate (vehicle_interaction_point_sets.xtbl's own Seat_Offset, CONFIRMED read at
-    // runtime by 0x00b0eac0 per spec-tables-vehicle-world.md Sec4's "Runtime consumer
-    // confirmed" note) needs the same unresolved vehicle-name cross-reference
-    // --vehicle-interaction-name's own doc comment above already explains is out of scope -
-    // so there is no REAL seat-offset this command can resolve for its one loadable vehicle
-    // without guessing which category/row it is anyway. These three constants place the
-    // character at a plausible driver's-seat position in the vehicle's own LOCAL space
-    // (facing +X when heading 0, the same convention vehicleRig.sim's own heading already
-    // uses - see its "parked" assignment above): slightly forward of the vehicle's physics
-    // pivot, offset to the left (driver's) side, at a plausible seated hip height above the
-    // ground - combined with charWorld below using the SAME buildWorldMatrix() rotation
-    // convention the vehicle body itself renders with, so the two stay visually consistent
-    // as the vehicle turns. Visually checked against a real captured frame (see this task's
-    // own results/ captures), not just asserted.
-    // Tuned over 3 real captured frames (this task, --vehicle-interaction-name unset, the
-    // default car_4dr_genki_0.ccar_pc, --capture-frame 70 of the real_playtest_vehicle_
-    // smoke_test.cpp scripted drive): the first-guess constants (forward 0.2/lateral -0.45/
-    // height 0.55) visibly left the character standing behind the seat bucket near the roll
-    // bar, head well above the windscreen. A pixel diff against that first capture (every
-    // pixel, both full 1600x900 frames) confirms these DO move the root - real change, bounded
-    // to a 60x196px region around the character, not a no-op - even though the forward axis
-    // barely shifts screen position from this particular chase-cam angle (it sits almost
-    // directly behind the vehicle, so "more forward" is mostly a depth change along the
-    // camera's own viewing axis, not a lateral one; height is what visibly moves the root
-    // down into the footwell). Final result: legs land inside the seat-bucket footprint, feet
-    // near seat height - the standing bind pose still rises well above the seat back
-    // regardless, an accepted limit of using a static standing pose with no real seated/bent-
-    // knee animation, not something these 3 numbers alone can fix.
-    const float kDrivingSeatForwardOffset = 1.1f, kDrivingSeatLateralOffset = -0.25f,
-                kDrivingSeatHeightAboveGround = 0.15f;
+    // Driver-seat local offset: SUPERSEDED (seated-driving-pose merge, 2026-10-10) - the
+    // vehicle-occupant-hide-flag task's own CHOSEN "stand at an offset" placeholder (three
+    // constants, no real pose) that used to live here is replaced by the real seated/driving
+    // pose composed every frame in the DRIVING branch below (spec-player-runtime.md Sec7.4b,
+    // sr3player::SeatedRidePoseApplier) - see that block's own doc comment for the full
+    // CHOSEN/CONFIRMED breakdown of the seat-offset and ground-height reasoning that now
+    // applies instead.
     // --script-vehicle (--no-input only): a deterministic enter/drive/exit
     // schedule for the headless smoke test - see
     // tests/real_playtest_vehicle_smoke_test.cpp. Frame 10 (well inside the
@@ -19475,9 +19560,14 @@ int runPlaytest(int argc, char** argv) {
         // CameraSystem vehicle submode is used instead).
         float viewProjection[16];
         double headingNow = 0.0;
-        float charWorld[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}; // unused while driving
+        float charWorld[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1}; // overwritten below in BOTH branches now
         sr3animpose::PoseComposeResult poseResult;
         float diagEyeX = 0.0f, diagEyeY = 0.0f, diagEyeZ = 0.0f;
+        // Set by the DRIVING branch below when a real seated pose was actually resolved+
+        // composed this frame (sr3player::SeatedRidePoseApplier) - the render gate near the
+        // bottom of this loop uses it to decide whether the occupant renders with that real
+        // pose or (resolution failed - honest fallback, not fabricated) its own bind pose.
+        bool seatedPoseResolvedThisFrame = false;
         if (!inVehicle) {
         sr3player::Vec3 facing = pm.st.facingA50;
         if (sr3player::IsZero7(facing)) facing = heldFacing; else heldFacing = facing;
@@ -19565,35 +19655,123 @@ int runPlaytest(int argc, char** argv) {
         // runDriveDemo()'s own simplified trailing camera) around the
         // vehicle's real physics state. ----
         const float vHeading = static_cast<float>(vehicleRig.sim->state_.heading);
-        // Driver-seat charWorld (THIS TASK, 2026-10-09) - only computed/uploaded when the
-        // character will actually be drawn this frame (vehicleHideOccupant false, the tank-
-        // hide render condition below): places the character's root at the CHOSEN local
-        // seat offset above, rotated into world space by the SAME buildWorldMatrix()
-        // rotation convention (row-vector, c=cos(h)/s=sin(h): worldX = x + lx*c + lz*s,
-        // worldZ = z - lx*s + lz*c) the vehicle body's own vehWorld uses below, so the seat
-        // tracks the vehicle's heading exactly as the vehicle turns. Also restores the
-        // character's BIND pose (`bindPositions`, the SAME real rest-pose data this
-        // function's own setup already computed and used for the character's very first
-        // upload) - a CHOSEN simplification, clearly labeled: this project has no implemented
-        // seated/driving skeletal animation to play instead (spec-render-pipeline.md
-        // Sec23.14: a real `driving_sm` state machine with real `ride_fire`/`drive_fire` clip
-        // variants IS specced, spec-anim-runtime.md, but not ported to this runtime) - rather
-        // than leaving the character frozen mid-stride in whatever walk/idle pose was last
-        // uploaded before entering, which would look far worse than a plain bind pose.
+        // Driver-seat occupant rendering (seated-driving-pose merge, 2026-10-10): combines
+        // the vehicle-occupant-hide-flag task's gating (skip all pose work when the real
+        // driver-seat `Hide Occupant` flag is set - spec-render-pipeline.md Sec23.14, true
+        // only for the 2 real tank rows) with the real composed seated/driving ride pose this
+        // task adds (spec-player-runtime.md Sec7.4b, sr3player::SeatedRidePoseApplier),
+        // entirely REPLACING the old "stand at a CHOSEN offset, frozen in the bind pose"
+        // placeholder this comment used to describe (that placeholder's own three constants
+        // and reasoning are gone - see the now-superseded comment above this function's own
+        // vehicle-seat-offset declaration block, just above kScriptVehicleEnterFrame).
         if (!vehicleHideOccupant) {
-            const float vc = std::cos(vHeading), vs = std::sin(vHeading);
-            const float seatWorldX = static_cast<float>(vehicleRig.sim->state_.posX) +
-                                     kDrivingSeatForwardOffset * vc + kDrivingSeatLateralOffset * vs;
-            const float seatWorldZ = static_cast<float>(vehicleRig.sim->state_.posZ) -
-                                     kDrivingSeatForwardOffset * vs + kDrivingSeatLateralOffset * vc;
-            const float seatWorldY = finalGroundY + kDrivingSeatHeightAboveGround;
-            sr3render::buildWorldMatrix(seatWorldX, seatWorldY, seatWorldZ, vHeading, 1.0f, charWorld);
-            std::string bindReuploadError;
-            if (!characterRenderer.upload(device.device(), mesh, channelIndex, 0, bindReuploadError, drawGroup,
-                                          &bindPositions, dupPtr)) {
-                std::fprintf(stderr, "frame %d: driving bind-pose re-upload failed: %s\n", frames,
-                            bindReuploadError.c_str());
+            // ---- seated/driving pose: resolve+compose the real driver-seat ride pose every
+            // frame and place the character at the vehicle's own position/heading plus a seat
+            // offset (see this block's own CHOSEN-offset note below), replacing the bind pose
+            // this command previously left frozen (or hid outright) while seated. ----
+            seatedPoseClockSeconds += dt;
+            if (demoVehicleInteractionInfoFound && !rideSets.empty()) {
+                sr3player::SeatedRidePoseApplier::Result seatPose = seatedPoseApplier.ComposeSeatedPose(
+                    demoVehicleInteractionInfo, sr3player::kDriverSeatResolverIndex, rideSets, rideClipRecords,
+                    clipRegistry, seatedPoseClockSeconds, bones.size());
+                if (seatPose.resolved) {
+                    poseResult = std::move(seatPose.pose);
+                    std::vector<sr3rig::Rotation3> rotsRig(bones.size(), sr3rig::identityRotation3());
+                    std::vector<std::array<float, 3>> deltasRig(bones.size(), std::array<float, 3>{0.0f, 0.0f, 0.0f});
+                    for (size_t b = 0; b < bones.size(); ++b) {
+                        const sr3anim::BoneSample& s = poseResult.bones[b];
+                        rotsRig[b] = sr3rig::quatToRotation3(s.rotation.x, s.rotation.y, s.rotation.z, s.rotation.w);
+                        if (frames == 30 && (std::fabs(s.translationDelta[0]) > 1e-4f || std::fabs(s.translationDelta[1]) > 1e-4f || std::fabs(s.translationDelta[2]) > 1e-4f))
+                            std::printf("seatpose-dbg: bone %zu delta = (%.4f %.4f %.4f)\n", b,
+                                        s.translationDelta[0], s.translationDelta[1], s.translationDelta[2]);
+                        deltasRig[b] = s.translationDelta;
+                    }
+                    std::vector<sr3rig::Mat3x4> skinRig = sr3rig::computeAnimatedSkinningMatrices(parentIdx, restRig, &rotsRig, &deltasRig);
+                    std::vector<sr3rig::Mat3x4> skinMesh(bones.size());
+                    for (size_t b = 0; b < bones.size(); ++b)
+                        skinMesh[b] = useBonePalette ? sr3rig::conjugateToMeshSpaceInverted(skinRig[b])
+                                                     : sr3rig::conjugateToMeshSpace(skinRig[b]);
+                    std::vector<std::array<float, 3>> seatedPositions = sr3rig::skinVertices(verts, skinMesh, nullptr);
+                    std::string seatedUploadError;
+                    if (characterRenderer.upload(device.device(), mesh, channelIndex, 0, seatedUploadError, drawGroup,
+                                                 &seatedPositions, dupPtr)) {
+                        seatedPoseResolvedThisFrame = true;
+                    } else {
+                        std::fprintf(stderr, "frame %d: seated-pose re-upload failed: %s\n", frames,
+                                     seatedUploadError.c_str());
+                    }
+                } else if (frames == 0) {
+                    std::printf("seatpose : ComposeSeatedPose() did not resolve this run (animation='%s' clip='%s') - "
+                                "occupant stays on its bind pose\n",
+                                seatPose.animationString.c_str(), seatPose.chosenClipName.c_str());
+                }
             }
+            if (!seatedPoseResolvedThisFrame) {
+                // Honest fallback: re-upload the character's own real BIND pose (the SAME
+                // bindPositions this function's setup already computed) rather than leaving
+                // whatever pose it last walked in frozen on screen.
+                std::string bindUploadError;
+                if (!characterRenderer.upload(device.device(), mesh, channelIndex, 0, bindUploadError, drawGroup,
+                                              &bindPositions, dupPtr)) {
+                    std::fprintf(stderr, "frame %d: bind-pose re-upload failed: %s\n", frames, bindUploadError.c_str());
+                }
+            }
+            // CHOSEN seat offset (not spec-confirmed geometry - this project has no real
+            // Human_Seat_Offset data for this demo vehicle either, same gap the vehicle-
+            // occupant-hide-flag task's own investigation already found for every real base-
+            // game vehicle): forward 0, lateral toward the LEFT (driver) side using the SAME
+            // right-vector convention this function's own vehicle-exit code already uses
+            // (rightX = -sin(heading), rightZ = cos(heading)), height a bit above the chassis
+            // local origin.
+            //
+            // BUG FOUND AND FIXED verifying this task's own captured before/after frames
+            // (2026-10-09, two rounds): an earlier draft based seatY on `finalGroundY +
+            // kVehPivotHeight` (the SAME "pivot" constant the CAMERA uses, just below here,
+            // for `pivot[1]`/the chase-cam's own framing target) and claimed that was "tuned
+            // against captured frames" - it was not actually checked against a captured
+            // frame, and doing so just now showed the occupant floating ~1m above the car,
+            // clearly outside the seat. ROUND 1 FIX: `vehWorld` (the vehicle MESH's own world
+            // matrix, below) is built from the ground height ALONE, no `kVehPivotHeight` term -
+            // that constant exists only to aim the chase camera at cabin height, not to
+            // describe the mesh's local Y=0. Matching `vehWorld`'s own base improved it but
+            // the occupant STILL rendered floating well above the seat. ROUND 2 (real
+            // measurement, not a second guess): a one-off debug dump of real local-space
+            // vertex Y bounds (temporarily instrumented, then removed) measured, at this
+            // exact captured frame: bind (standing) pose local Y [-0.0131, 1.7217] (feet near
+            // 0, head near the real 1.72m bind height - confirms the walking convention: mesh
+            // local origin = feet/ground contact); the COMPOSED SEATED pose's own local Y
+            // [1.5238, 2.6511] - i.e. ~1.53-1.55 HIGHER than the standing convention over the
+            // same mesh, not just re-posed in place; and the real vehicle body mesh's own
+            // local Y [-0.4408, 0.8303] (wheels near the bottom, roof near the top, origin
+            // roughly mid-body). CHOSEN interpretation (the clip's own coordinate convention
+            // was never traced - Sec7.4b's own open item, see this file's seated_ride_pose.h
+            // banner): the composed seated pose's LOWEST point (1.5238) is the occupant's
+            // feet (resting on the floorboard, knees bent - same role the bind pose's ~0
+            // minimum plays for standing feet), so `kSeatHeightAbovePivot` is chosen to land
+            // that floor-contact point near the vehicle's own local floor height (-0.25,
+            // inside its measured [-0.44, 0.83] body range, below the seat cushion):
+            // kSeatHeightAbovePivot = -0.25 - 1.5238 = -1.7738. Re-verified against a real
+            // re-captured frame after this change (results/ cites the before/after this
+            // task's own report describes) - the occupant now renders seated inside the
+            // car's silhouette instead of floating above it; still CHOSEN, not spec-confirmed
+            // geometry (no real Human_Seat_Offset data for this demo vehicle, same gap noted
+            // above).
+            //
+            // SEATED-DRIVING-POSE MERGE NOTE (2026-10-10): `seatY` reads the SAME per-frame
+            // `vehicleGroundY` the vehicle body's own `vehWorld` and the camera `pivot` below
+            // now use (the real-ground-following task, landed on main AFTER this seat-offset
+            // math was originally tuned against the then-current flat `finalGroundY`) - not
+            // the flat fallback - so the seat stays anchored to the vehicle's own real
+            // per-frame render height instead of silently drifting out of sync with it on
+            // sloped ground. The -1.7738 offset itself is unchanged; only its ground-height
+            // base was swapped to match vehWorld's current basis.
+            constexpr float kSeatLateralOffset = 0.0f;
+            constexpr float kSeatHeightAbovePivot = -1.7738f;
+            const float seatRightX = -std::sin(vHeading), seatRightZ = std::cos(vHeading);
+            const float seatX = static_cast<float>(vehicleRig.sim->state_.posX) + kSeatLateralOffset * seatRightX;
+            const float seatZ = static_cast<float>(vehicleRig.sim->state_.posZ) + kSeatLateralOffset * seatRightZ;
+            const float seatY = vehicleGroundY + kSeatHeightAbovePivot;
+            sr3render::buildWorldMatrix(seatX, seatY, seatZ, vHeading, 1.0f, charWorld);
         }
         const float vehForward[3] = {std::cos(vHeading), 0.0f, std::sin(vHeading)};
         const float back[3] = {-vehForward[0], 0.0f, -vehForward[2]};
@@ -19621,6 +19799,70 @@ int runPlaytest(int argc, char** argv) {
                                       viewProjection);
         headingNow = static_cast<double>(vHeading);
         diagEyeX = eye[0]; diagEyeY = eye[1]; diagEyeZ = eye[2];
+        }
+
+        // vehWorld (THIS TASK, sun-shadow-map): hoisted out of the final
+        // vehicle-draw block further below so BOTH the new shadow depth-only
+        // pass immediately below AND that later lit draw use the identical
+        // matrix - the SAME buildWorldMatrix() call that block already made,
+        // just computed once per frame instead of twice. Identity when the
+        // vehicle is disabled (never read in that case either way).
+        float vehWorld[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+        if (vehicleEnabled) {
+            sr3render::buildWorldMatrix(static_cast<float>(vehicleRig.sim->state_.posX), finalGroundY,
+                                        static_cast<float>(vehicleRig.sim->state_.posZ),
+                                        static_cast<float>(vehicleRig.sim->state_.heading), 1.0f, vehWorld);
+        }
+
+        // ===================== SUN/CASCADE SHADOW MAP (THIS TASK, 2026-10-09) =====================
+        // Real-mechanism citation + CHOSEN-v1-simplification breakdown:
+        // include/sr3render/sun_shadow_map.h's own banner (spec-render-
+        // pipeline.md Sec23.6.4). Generates the depth-only shadow map BEFORE
+        // the main lit pass below samples it - the real engine's own
+        // confirmed sun/cascade generation function (`0x00491160`) likewise
+        // runs at the very top of its per-frame lighting driver, before any
+        // lit draw. `lightViewProjection` is recomputed every frame (the sun
+        // moves - ComputeChosenSunDirection() is t-dependent) from the SAME
+        // chosen sun direction formula the lit pass's own todLighting.sunDirection
+        // will use moments below (ComputeTodLighting() calls that identical
+        // function with this identical `todFraction` - verified by reading
+        // src/tod_lighting.cpp, not assumed).
+        float sunDirectionForShadow[3];
+        sr3render::ComputeChosenSunDirection(static_cast<float>(todFraction), sunDirectionForShadow);
+        // CHOSEN v1 scene-bounds fit (see sun_shadow_map.h's own banner): a
+        // single local bounding sphere centred on the camera's current
+        // focus point (the same focusX/focusZ this frame's own
+        // reconcile()/streaming call above already computed), NOT the real
+        // engine's 4 data-driven cascade splits over the whole streamed
+        // world - a fixed 40-unit radius comfortably covers the nearby
+        // ground tiles/props/character/vehicle this pass also draws as
+        // casters, immediately below.
+        const float shadowFocusCentre[3] = {focusX, finalGroundY, focusZ};
+        constexpr float kShadowRadius = 40.0f;
+        float lightViewProjection[16];
+        sunShadowMap.computeLightViewProjection(sunDirectionForShadow, shadowFocusCentre, kShadowRadius,
+                                                 lightViewProjection);
+        if (shadowMapReady) {
+            sunShadowMap.beginDepthPass(device.context());
+            // Casters mirror the lit pass's own object set below (ground
+            // tiles, loaded city props, character when on foot, vehicle when
+            // enabled) - same discipline MeshRenderer::drawDepthOnly()'s own
+            // doc comment describes.
+            for (auto& kv : groundTiles) {
+                CityGroundTile& gt = *kv.second;
+                for (auto& r : gt.renderers) r->drawDepthOnly(device.context(), lightViewProjection, nullptr);
+            }
+            for (auto& kv : loaded) {
+                CityLoadedCell& lc = *kv.second;
+                for (auto& p : lc.props)
+                    for (auto& r : p.renderers) r->drawDepthOnly(device.context(), lightViewProjection, p.world);
+            }
+            if (!inVehicle) {
+                characterRenderer.drawDepthOnly(device.context(), lightViewProjection, charWorld);
+                characterHeadRenderer.drawDepthOnly(device.context(), lightViewProjection, charWorld);
+            }
+            if (vehicleEnabled) vehicleRig.DrawDepthOnly(device.context(), lightViewProjection, vehWorld);
+            sunShadowMap.endDepthPass(device.context(), swapChain.width(), swapChain.height());
         }
 
         swapChain.bind(device.context());
@@ -19664,16 +19906,26 @@ int runPlaytest(int argc, char** argv) {
         // above, so the whole scene is lit consistently - see
         // sr3render::MeshRenderer::draw()'s own comment for the byte-for-
         // byte-by-default contract this relies on.
+        // shadowSrv/shadowSmp (THIS TASK, sun-shadow-map): null when the
+        // shadow map failed to initialise (shadowMapReady == false), which
+        // is exactly the existing byte-for-byte-by-default fallback every
+        // draw()/drawTextured() call below already honours (see
+        // mesh_renderer.h's own comment) - a shadow-map init failure
+        // degrades gracefully to "no shadows", never a crash or a blocked
+        // frame.
+        ID3D11ShaderResourceView* shadowSrv = shadowMapReady ? sunShadowMap.shaderResourceView() : nullptr;
+        ID3D11SamplerState* shadowSmp = shadowMapReady ? sunShadowMap.sampler() : nullptr;
         for (auto& kv : groundTiles) {
             CityGroundTile& gt = *kv.second;
             for (auto& r : gt.renderers) {
                 if (!gt.perMaterialSrv.empty())
                     r->drawTextured(device.context(), viewProjection, gt.perMaterialSrv, nullptr,
-                                    todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+                                    todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor,
+                                    lightViewProjection, shadowSrv, shadowSmp);
                 else
                     r->draw(device.context(), viewProjection, sr3render::MeshDrawMode::MaterialIdAsColour, nullptr,
                            nullptr, nullptr, todLighting.sunDirection, todLighting.ambientColor,
-                           todLighting.sunColor);
+                           todLighting.sunColor, lightViewProjection, shadowSrv, shadowSmp);
             }
         }
         for (auto& kv : loaded) {
@@ -19681,45 +19933,71 @@ int runPlaytest(int argc, char** argv) {
             for (auto& p : lc.props)
                 for (auto& r : p.renderers)
                     r->drawTextured(device.context(), viewProjection, p.perMaterialSrv, p.world,
-                                    todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+                                    todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor,
+                                    lightViewProjection, shadowSrv, shadowSmp);
         }
-        // Character rendering while in a vehicle (REPLACES the prior task's own blanket
-        // "always hide while driving" rule - see this function's own "VEHICLE OCCUPANT
-        // VISIBILITY" doc comment, above the main loop, for the full citation): draw
-        // whenever NOT in a vehicle (unchanged), OR in a vehicle whose own real driver-seat
-        // `Hide Occupant` flag is false (spec-render-pipeline.md Sec23.14) - true for every
-        // ordinary vehicle, false (hidden) only for the 2 real tank rows. Everything above
-        // this point (ground/city props) still draws normally either way.
+        // Character rendering (combines the vehicle-occupant-hide-flag task's gating with
+        // the seated-driving-pose task's "always show where the occupant actually is" fix,
+        // 2026-10-10 merge): draws whenever NOT in a vehicle (unchanged - real walked pose),
+        // OR in a vehicle whose own real driver-seat `Hide Occupant` flag is false
+        // (spec-render-pipeline.md Sec23.14) - true for every ordinary vehicle, false
+        // (hidden) only for the 2 real tank rows. charWorld and the uploaded vertex pose are
+        // set to the correct seated values in the DRIVING branch above (a real resolved
+        // seated pose when ComposeSeatedPose() resolved one this frame, else the honest
+        // bind-pose fallback - spec-player-runtime.md Sec7.4b) under the SAME
+        // `!vehicleHideOccupant` condition, so the two gates now agree on exactly when the
+        // occupant is visible; no more blanket "always hide while driving" and no more
+        // double-guessed CHOSEN stand-at-an-offset placeholder. Everything above this point
+        // (ground/city props) still draws normally either way.
         if (!inVehicle || !vehicleHideOccupant) {
             if (characterTextured)
                 characterRenderer.drawTextured(device.context(), viewProjection, characterPerMaterialSrv, charWorld,
                                                todLighting.sunDirection, todLighting.ambientColor,
-                                               todLighting.sunColor);
+                                               todLighting.sunColor, lightViewProjection, shadowSrv, shadowSmp);
             else
                 characterRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker, nullptr,
                                        charWorld, nullptr, todLighting.sunDirection, todLighting.ambientColor,
-                                       todLighting.sunColor);
+                                       todLighting.sunColor, lightViewProjection, shadowSrv, shadowSmp);
             if (characterHeadTextured)
                 characterHeadRenderer.drawTextured(device.context(), viewProjection, characterHeadPerMaterialSrv,
                                                    charWorld, todLighting.sunDirection, todLighting.ambientColor,
-                                                   todLighting.sunColor);
+                                                   todLighting.sunColor, lightViewProjection, shadowSrv, shadowSmp);
             else
                 characterHeadRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker,
                                            nullptr, charWorld, nullptr, todLighting.sunDirection,
-                                           todLighting.ambientColor, todLighting.sunColor);
+                                           todLighting.ambientColor, todLighting.sunColor, lightViewProjection,
+                                           shadowSrv, shadowSmp);
         }
 
         // Vehicle (THIS TASK) - drawn every frame whenever enabled, parked or
         // driving, from the real sim's CURRENT state (so a parked vehicle
         // renders at its own last-driven resting spot, not just its original
-        // spawn - see PlaytestVehicleRig's own doc comment).
+        // spawn - see PlaytestVehicleRig's own doc comment). A same-named
+        // vehWorld was ALSO computed earlier this frame (hoisted above, for
+        // the shadow depth-only pass) - that is a deliberately separate,
+        // coarser copy (see the comment inside this block for why) and is
+        // NOT reused here.
         if (vehicleEnabled) {
+            // vehWorld (THIS BLOCK) is deliberately recomputed here with
+            // vehicleGroundY rather than reusing the outer hoisted vehWorld
+            // declared above for the shadow depth-only pass: that hoisted
+            // copy uses finalGroundY, an intentional CHOSEN-v1 approximation
+            // good enough for a shadow caster (see its own comment), while
+            // the visible lit draw below must keep using vehicleGroundY -
+            // the per-frame GroundFollower-smoothed height this file's own
+            // "render code reads this INSTEAD OF the flat finalGroundY from
+            // here on" comment (near vehicleGroundY's declaration) already
+            // establishes as the correct value for actually placing the
+            // vehicle on screen. Shadowing the outer vehWorld name in this
+            // nested scope is intentional and does not affect the earlier
+            // depth-only pass, which already captured its own copy by value.
             float vehWorld[16];
             sr3render::buildWorldMatrix(static_cast<float>(vehicleRig.sim->state_.posX), vehicleGroundY,
                                         static_cast<float>(vehicleRig.sim->state_.posZ),
                                         static_cast<float>(vehicleRig.sim->state_.heading), 1.0f, vehWorld);
             vehicleRig.Draw(device.context(), viewProjection, vehWorld, todLighting.sunDirection,
-                            todLighting.ambientColor, todLighting.sunColor);
+                            todLighting.ambientColor, todLighting.sunColor, lightViewProjection, shadowSrv,
+                            shadowSmp);
         }
 
         // Near-field ambient vehicle traffic (THIS TASK) - drawn via the SAME
@@ -19930,6 +20208,30 @@ int runPlaytest(int argc, char** argv) {
                 }
             } else {
                 std::fprintf(stderr, "capture failed: %s\n", error.c_str());
+            }
+            // Shadow-map depth dump (DEBUG ONLY, this task, 2026-10-09,
+            // sun-shadow-map out-of-frustum bug follow-up): reuses the SAME
+            // CRREISH_SUN_SHADOW_DEBUG_FRUSTUM env var mesh_renderer.cpp's
+            // own ps_main debug tint already reads - one switch turns on
+            // BOTH halves of this diagnosis (what the shadow map itself
+            // recorded, and what each sample's own occlusion test decided).
+            // SunShadowMap::dumpDepthToPng()'s own comment explains why this
+            // exists alongside the pixel-shader tint rather than instead of
+            // it. Written next to the normal capture, same naming
+            // convention (`<path>_shadowmap.png`), never on the default
+            // (non-debug) capture path.
+            if (shadowMapReady) {
+                const char* dbgEnv = std::getenv("CRREISH_SUN_SHADOW_DEBUG_FRUSTUM");
+                if (dbgEnv != nullptr && dbgEnv[0] != '0' && dbgEnv[0] != '\0') {
+                    std::string shadowDumpError;
+                    const std::string shadowDumpPath = path + "_shadowmap.png";
+                    if (!sunShadowMap.dumpDepthToPng(device.device(), device.context(), shadowDumpPath,
+                                                     shadowDumpError)) {
+                        std::fprintf(stderr, "shadow map dump failed: %s\n", shadowDumpError.c_str());
+                    } else {
+                        std::printf("shadow dbg: %s\n", shadowDumpPath.c_str());
+                    }
+                }
             }
         }
 

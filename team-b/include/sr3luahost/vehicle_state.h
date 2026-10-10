@@ -79,10 +79,18 @@ struct VehicleState {
     // vehicle_is_vtol_hover/vehicle_is_vtol_jet (Sec33.1: CONFIRMED values 3
     // = helicopter, 4 = VTOL, tested by name) - ONE real field at the SAME
     // offset, unified here under Sec33.1's name since more consumers use
-    // it; the field's own real identity ("class/definition record" +
-    // "flying-type enum") is HYPOTHESIS per Sec33.1's own text. No in-scope
-    // setter writes it (a test sets it directly, same convention as
-    // CharacterState::stateEnum in character_state.h).
+    // it. UPDATE 2026-10-10 (Team A spec sync, HANDOFF.md commit 849a88e):
+    // the field's own real identity, previously HYPOTHESIS here, is now
+    // CONFIRMED - it is NOT on the vehicle instance's own +0x100 AI record;
+    // it is the vehicle-TYPE DEFINITION record's own class enum (static
+    // per-type data, set once at type load, no runtime writer): 0 = car,
+    // 2 = airplane, 3 = heli, 4 = VTOL all CONFIRMED; 1/5/6 remain
+    // genuinely OPEN (no spec text gives them). No in-scope setter writes
+    // it (a test sets it directly, same convention as CharacterState::
+    // stateEnum in character_state.h) - EngineState::getOrCreateVehicle()
+    // now pre-seeds exactly one literal-name exception for this (lua_
+    // engine_state.cpp, "m05_heli_pierce") - see that seed's own doc
+    // comment for why a general name-inference rule would be wrong.
     OpenValue<int32_t> flyingType{"vehicle flying-type enum ((+0xbf4)+0x2c)", "spec-lua-api-behaviour.md Sec30.5/Sec33.1"};
 
     // vehicle_is_vtol_hover / vehicle_is_vtol_jet (Sec33.1): vehicle +0x5e8.
@@ -154,6 +162,15 @@ struct VehicleState {
     // gap as game_audio_get_audio_id's own Wwise-hash resolver elsewhere).
     OpenValue<int32_t> vehicleClass{"vehicle class enum ((+0xbf4)+0x4c4)", "spec-lua-api-behaviour.md Sec33.1"};
     OpenValue<bool> bodyActive{"vehicle body-active flag (+0xbd0)", "spec-lua-api-behaviour.md Sec33.1"};
+    // spec-player-runtime.md Sec13.4 step 5's own gate, `0x00ad3140(vehicle)`:
+    // "(vehicle+0xbf4)+0x4c4 == 0xe" - the SAME physical field as vehicleClass
+    // above, re-read by the real seat-pick validator 0x00b0fdf0 to decide
+    // whether its step 6 (the 8-seat vehicle-wide team-conflict scan) runs at
+    // all. Reused here BY VALUE, not duplicated - see
+    // computeVehicleEnterSubmitAccepted()'s own doc comment in
+    // lua_spec_confirmed_stubs_b15_wave2_core_dispatchers.cpp for the step
+    // 6/7 implementation that consumes it.
+    static constexpr int32_t kVehicleClassTank = 0xe;
 
     // vehicle_set_ambient (Sec33.1): +0x16c0 bit 0x1 marker, the vehicle-AI
     // sub-record's mode/sub-mode (CONFIRMED values 6/0x11, HYPOTHESIS real-

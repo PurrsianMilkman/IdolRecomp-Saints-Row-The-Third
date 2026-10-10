@@ -260,10 +260,38 @@ int main() {
     es.objectResolves().set("ed_nocar", false);
     ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_nocar', true) == false)");
 
-    // Instant path: the submitter's OPEN result.
-    fails(host, gp, "vehicle_enter_do('ed_c1', 'ed_car', true)", "0x00af22a0");
+    // Instant path: 2026-10-09, spec-player-runtime.md Sec7.4a - the
+    // eligibility gate 0x00b0ca60 is now REALLY computed instead of being a
+    // pure OPEN placeholder (see CharacterState::vehicleEnterSubmitAccepted's
+    // own updated doc comment and vehicleEnterEligibilityGate() in the
+    // dispatcher .cpp). For a fresh character, steps 1-3 (seated/mid-enter-
+    // exit/busy-pending) all pass cleanly (seeded/CHOSEN defaults); step 4's
+    // ragdoll state (+0xcd2) is itself CONFIRMED-defaulted to 0, "character
+    // proxy" (fdcabd5, a separate prerequisite fix), not OPEN; step 5 passes
+    // on the seeded lifeState/killFinalizedFlagE3 defaults; forced (instant)
+    // skips steps 6-8 entirely - so the gate is cleanly ELIGIBLE with no
+    // field set at all. 2026-10-09 follow-up (this task): an eligible result
+    // with no test override now resolves via a CHOSEN default (`true`, Sec7.4
+    // step 4's own seat pick, U6.2, still unmodelled - see that doc comment)
+    // instead of throwing on the submitter's own OPEN fact - so this first
+    // call now succeeds directly. This supersedes the test's former
+    // "fails(..., '+0xcd2')" expectation (two independently-committed fixes
+    // landing on top of each other, not a regression - see the dedicated
+    // synthetic_luahost_vehicle_enter_eligibility_gate_test.cpp for full
+    // coverage of every refusal path and the success tail).
+    ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_car', true) == true)");
     CharacterState& ed = es.getOrCreateCharacter("ed_c1");
-    CHECK(ed.vehicleEnterRequestCount == 0); // the refusal left no partial record
+    CHECK(ed.lastVehicleEnterRequest.has_value());
+    CHECK(ed.lastVehicleEnterRequest->accepted == true);
+    CHECK(!ed.vehicleEnterSubmitAccepted.known()); // CHOSEN default resolved it - no override needed
+    // FIXED (2026-10-09): Sec7.4b's confirmed synchronous no-contention
+    // instant commit writes stateEnum = 3 ("seated"), not 1 ("entering") -
+    // see the source file's own FIXED note for the full citation.
+    CHECK(ed.stateEnum.known() && ed.stateEnum.get() == 3);
+    CHECK(ed.currentVehicleName.get() == "ed_car");
+
+    // A test's own override still wins outright (full back-compat with every
+    // pre-existing caller that drives the overall result directly).
     ed.vehicleEnterSubmitAccepted.set(true);
     ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_car', true, 2, true, false) == true)");
     CHECK(ed.lastVehicleEnterRequest.has_value());
@@ -274,23 +302,25 @@ int main() {
     CHECK(ed.lastVehicleEnterRequest->accepted == true);
     // FIXED (2026-10-08, post-merge review): CONFIRMED spec-player-runtime.md
     // Sec7.4 step 11/Sec7.8 - the submitter's own accepted path writes
-    // +0x16d4 = 1 and +0x16c0/+0x16c4 = the vehicle SYNCHRONOUSLY, inside
+    // +0x16d4 and +0x16c0/+0x16c4 = the vehicle SYNCHRONOUSLY, inside
     // its own call - +0x16d4 IS now advanced from here (supersedes this
     // comment's own prior "is not advanced" text).
-    CHECK(ed.stateEnum.known() && ed.stateEnum.get() == 1);
+    // FIXED (2026-10-09): completed to the real Sec7.4b value, 3 ("seated"),
+    // not 1 ("entering") - see the source file's own FIXED note.
+    CHECK(ed.stateEnum.known() && ed.stateEnum.get() == 3);
     CHECK(ed.currentVehicleName.get() == "ed_car");
     ed.vehicleEnterSubmitAccepted.set(false);
     ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_car', true) == false)");
     CHECK(ed.lastVehicleEnterRequest->seatIndex == -1); // CHOSEN default
     CHECK(ed.lastVehicleEnterRequest->accepted == false);
-    CHECK(ed.stateEnum.get() == 1); // a refusal leaves prior state untouched - not reset
+    CHECK(ed.stateEnum.get() == 3); // a refusal leaves prior state untouched - not reset
 
     // Named-seat path (arg 7 given, not instant).
     ed.vehicleEnterSubmitAccepted.set(true);
     ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_car', false, nil, nil, nil, 'driver') == true)");
     CHECK(ed.lastVehicleEnterRequest->path == CharacterState::kVehicleEnterPathNamedSeat);
     CHECK(ed.lastVehicleEnterRequest->seatName == "driver");
-    CHECK(ed.stateEnum.get() == 1); // named-seat path gets the same write too
+    CHECK(ed.stateEnum.get() == 3); // named-seat path gets the same (now Sec7.4b-complete) write too
 
     // AI-order path: OPEN start result; player class -> script mode 2. Does
     // NOT go through the submitter 0x00af22a0 at all (Sec38.1: it starts
@@ -307,7 +337,7 @@ int main() {
     ok(host, gp, "assert(vehicle_enter_do('ed_c1', 'ed_car', false) == true)");
     CHECK(ed.lastVehicleEnterRequest->path == CharacterState::kVehicleEnterPathAiOrder);
     CHECK(ed.scriptControlledMode == 2);
-    CHECK(ed.stateEnum.get() == 1); // AI-order path: unchanged, not newly written
+    CHECK(ed.stateEnum.get() == 3); // AI-order path: unchanged, not newly written
     es.objectResolves().set("ed_npc", true);
     es.playerClassChainResolves().set("ed_npc", false);
     CharacterState& npc = es.getOrCreateCharacter("ed_npc");
@@ -346,16 +376,28 @@ int main() {
     // ==================================================================
     es.objectResolves().set("eg_c", true);
     CharacterState& eg = es.getOrCreateCharacter("eg_c");
-    eg.vehicleEnterSubmitAccepted.set(true); // the ORDINARY result must not be what's read
-    fails(host, gp, "vehicle_enter_guardian_angel('eg_c', 'ed_car')", "forced");
-    eg.vehicleEnterSubmitAcceptedForced.set(true);
+    // 2026-10-09, Sec7.4a: the real gate now runs before the submitter's own
+    // CHOSEN-default fallback (this task's 2026-10-09 follow-up), even for a
+    // forced request (steps 1-5 still apply unconditionally) - every one of
+    // those fields is already satisfied for a fresh character (step 4's
+    // ragdoll state is itself CONFIRMED-defaulted to 0, fdcabd5; the rest are
+    // seeded), so the gate clears with NOTHING explicitly set, and the
+    // eligible result resolves via vehicleEnterSubmitAcceptedForced's own
+    // CHOSEN default (true) rather than throwing. Proven to be the SEPARATE
+    // forced fact, not the ORDINARY one (vehicleEnterSubmitAccepted, set to
+    // the OPPOSITE value below): if the native misread the ordinary field
+    // instead, this call would return false, not true.
+    eg.vehicleEnterSubmitAccepted.set(false); // the ORDINARY result must not be what's read
     ok(host, gp, "assert(vehicle_enter_guardian_angel('eg_c', 'ed_car', 1) == true)");
+    CHECK(!eg.vehicleEnterSubmitAcceptedForced.known()); // CHOSEN default resolved it - no override needed
     CHECK(eg.lastVehicleEnterRequest->path == CharacterState::kVehicleEnterPathGuardianAngel);
     CHECK(eg.lastVehicleEnterRequest->seatIndex == 1);
     // FIXED (2026-10-08): same synchronous Sec7.4 step 11/Sec7.8 write as
     // vehicle_enter_do's instant/named-seat paths - "forced" eligibility
     // only changes which refusals are skipped before acceptance.
-    CHECK(eg.stateEnum.known() && eg.stateEnum.get() == 1);
+    // FIXED (2026-10-09): completed to the real Sec7.4b value, 3 ("seated"),
+    // not 1 ("entering") - see the source file's own FIXED note.
+    CHECK(eg.stateEnum.known() && eg.stateEnum.get() == 3);
     CHECK(eg.currentVehicleName.get() == "ed_car");
     ok(host, gp, "assert(vehicle_enter_guardian_angel('eg_c', 'ed_nocar') == false)");
     ok(host, gp, "assert(vehicle_enter_guardian_angel('ed_unres', 'ed_car') == false)");
@@ -379,17 +421,20 @@ int main() {
     CHECK(gb.lastVehicleEnterRequest->seatIndex == 1);
     CHECK(gc.lastVehicleEnterRequest->seatIndex == 3); // strictly by table position
     CHECK(!es.hasCharacter("gm_x"));
-    // FIXED (2026-10-08): each accepted instant member gets the same
-    // synchronous Sec7.4 step 11/Sec7.8 write as vehicle_enter_do's own
-    // instant path.
-    CHECK(ga.stateEnum.known() && ga.stateEnum.get() == 1);
-    CHECK(gb.stateEnum.known() && gb.stateEnum.get() == 1);
-    CHECK(gc.stateEnum.known() && gc.stateEnum.get() == 1);
+    // FIXED (2026-10-09, mission-drive m07 deadlock - see attemptGroupInstant
+    // Enter()'s own doc comment): each accepted instant member reaches the
+    // real Sec7.4b no-contention synchronous commit - stateEnum = 3
+    // ("seated"), not 1 ("entering") as a prior pass had it. This is what
+    // lets vehicle_enter_group_check_done's own seated-in-this-vehicle clear
+    // test (below) ever observe a cleared member at all.
+    CHECK(ga.stateEnum.known() && ga.stateEnum.get() == 3);
+    CHECK(gb.stateEnum.known() && gb.stateEnum.get() == 3);
+    CHECK(gc.stateEnum.known() && gc.stateEnum.get() == 3);
     CHECK(ga.currentVehicleName.get() == "ed_car");
     gb.vehicleEnterSubmitAccepted.set(false); // any refused instant placement -> false
     ok(host, gp, "assert(vehicle_enter_group_do('ed_car', true, {'gm_a', 'gm_b', 'gm_c'}) == false)");
     CHECK(gc.vehicleEnterRequestCount == 2); // CHOSEN: the walk continues past a refusal
-    CHECK(gb.stateEnum.get() == 1); // refused THIS call - prior state from the first call untouched, not reset
+    CHECK(gb.stateEnum.get() == 3); // refused THIS call - prior seated state from the first call untouched, not reset
     // Non-instant: orders, results never read - no OPEN refusal even when unset.
     es.objectResolves().set("gm_d", true);
     CharacterState& gd = es.getOrCreateCharacter("gm_d");
@@ -415,9 +460,69 @@ int main() {
     // ==================================================================
     // Sec38.1 vehicle_enter_group_check_done
     // ==================================================================
+    // FIXED (2026-10-09, per Team A spec-sync): real per-member completion
+    // rule, no completion threshold - see stub_vehicle_enter_group_check_done's
+    // own doc comment in lua_spec_confirmed_stubs_b15_wave2_core_dispatchers.cpp.
     ok(host, gp, "assert(vehicle_enter_group_check_done('ed_nocar', false, {'gm_a'}) == true)");
     ok(host, gp, "assert(vehicle_enter_group_check_done('ed_driver', false, {'gm_a'}) == true)"); // no character fallback
-    fails(host, gp, "vehicle_enter_group_check_done('ed_car', false, {'gm_a'})", "straggler");
+    // gm_a is already seated (stateEnum==3) in ed_car from the group_do call
+    // above (now that attemptGroupInstantEnter() writes the real Sec7.4b
+    // commit) - it clears on the very first poll, no reorder needed.
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a'}) == true)");
+    // A fresh member whose instant placement is REFUSED this call is a real
+    // straggler: not done, and (do_not_reorder=false) re-issued through the
+    // shared attemptGroupInstantEnter() helper each poll, incrementing its
+    // own request count, but still refused -> still not done.
+    es.objectResolves().set("gm_e", true);
+    CharacterState& ge = es.getOrCreateCharacter("gm_e");
+    ge.vehicleEnterSubmitAccepted.set(false);
+    uint64_t geCountBefore = ge.vehicleEnterRequestCount;
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', false, {'gm_a', 'gm_e'}) == false)");
+    CHECK(ge.vehicleEnterRequestCount == geCountBefore + 1); // straggler re-ordered
+    CHECK(!ge.stateEnum.known() || ge.stateEnum.get() != 3); // still refused -> never reached seated
+    // do_not_reorder=true: still a straggler (not done), but NOT re-issued -
+    // the exact hard-coded shape Team A attributes to vehicle_enter_group_teleport
+    // (that native's own [do_not_reorder]=true argument is Lua-side, out of
+    // this file's scope - see stub_vehicle_enter_group_check_done's own doc
+    // comment).
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_e'}) == false)");
+    CHECK(ge.vehicleEnterRequestCount == geCountBefore + 1); // unchanged - no re-order this time
+    // THE FIX ITSELF: once the straggler's own instant placement is actually
+    // ACCEPTED, the very next re-order (do_not_reorder=false) seats it for
+    // real (stateEnum=3, the Sec7.4b no-contention synchronous commit) -
+    // no manual stateEnum override needed, unlike before this fix - and the
+    // member clears on its OWN very next poll (the poll that issued the
+    // reorder still answers false, matching Sec38.1's "re-issues... each
+    // time it's called" - the result is decided before the reorder runs).
+    ge.vehicleEnterSubmitAccepted.set(true);
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', false, {'gm_a', 'gm_e'}) == false)");
+    CHECK(ge.stateEnum.known() && ge.stateEnum.get() == 3);
+    CHECK(ge.currentVehicleName.get() == "ed_car");
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_e'}) == true)");
+    // No completion threshold: a second, unresolved member is skipped
+    // (CHOSEN - see doc comment), still "done" with gm_a alone clear.
+    es.objectResolves().set("gm_unresolved_straggler", false);
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_unresolved_straggler'}) == true)");
+    // A second REAL, non-clearing member blocks "done" even though gm_a
+    // itself already cleared - no threshold, every member must clear.
+    es.objectResolves().set("gm_straggler2", true);
+    CharacterState& gs2 = es.getOrCreateCharacter("gm_straggler2");
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_straggler2'}) == false)");
+    // The +0x501 state-exemption clears a member too, independent of stateEnum.
+    gs2.stateCodeByte501.set(0x26);
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_straggler2'}) == true)");
+    // Dead also clears, independent of either of the above.
+    CharacterState& gs3 = es.getOrCreateCharacter("gm_straggler3");
+    es.objectResolves().set("gm_straggler3", true);
+    gs3.lifeState.set(6);
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_straggler3'}) == true)");
+    // "Matching handle": seated (==3) in a DIFFERENT vehicle does not clear.
+    CharacterState& gs4 = es.getOrCreateCharacter("gm_straggler4");
+    es.objectResolves().set("gm_straggler4", true);
+    es.objectResolves().set("ed_othercar", true);
+    gs4.stateEnum.set(3);
+    gs4.currentVehicleName.set("ed_othercar");
+    ok(host, gp, "assert(vehicle_enter_group_check_done('ed_car', true, {'gm_a', 'gm_straggler4'}) == false)");
 
     // ==================================================================
     // Sec22.3 vehicle_enter_check_done
@@ -441,9 +546,18 @@ int main() {
 
     CharacterState& ec0 = seatChar(es, "ec_none", 0);
     es.playerClassChainResolves().set("ec_none", false);
-    fails(host, gp, "vehicle_enter_check_done('ec_none')", "+0x501");
+    // CONFIRMED (2026-10-10, spec-lua-api-behaviour.md Sec22.3 sync):
+    // stateCodeByte501 is now pre-seeded 0 (Idle) by getOrCreateCharacter, so
+    // a character that never touches it no longer throws here - it reads as
+    // "not '&'", short-circuits past the still-OPEN stateCodeByte504 entirely
+    // (never read), and returns the default 2.0.
+    ok(host, gp, "assert(vehicle_enter_check_done('ec_none') == 2)");
     ec0.stateCodeByte501.set('&');
-    ec0.stateCodeByte504.set(0x12);
+    // stateCodeByte504 (the requested-mode byte) remains genuinely OPEN
+    // per-character - setting 501 to '&' alone is no longer short-circuited,
+    // so this still throws until a test supplies 504 too.
+    fails(host, gp, "vehicle_enter_check_done('ec_none')", "+0x504");
+    ec0.stateCodeByte504.set(CharacterState::kAiModeHijack); // 0x12 = Hijack (spec-ai-runtime.md Sec3.2 mode 18)
     ok(host, gp, "assert(vehicle_enter_check_done('ec_none') == 0)");
     ec0.stateCodeByte504.set(0x13);
     ok(host, gp, "assert(vehicle_enter_check_done('ec_none') == 2)");
@@ -493,23 +607,28 @@ int main() {
     ok(host, gp, "assert(vehicle_exit_do('sym_x') == false)"); // no longer true again
 
     // Symptom 2 (enter): vehicle_enter_check_done must no longer get stuck.
-    // BEFORE this fix, vehicle_enter_do never wrote stateEnum at all, so
-    // polling vehicle_enter_check_done right after an accepted enter threw
-    // OpenStateError ("+0x16d4" unset) on every call - a mission-driver poll
-    // loop could never progress past its first iteration. After the fix, the
-    // accepted enter itself leaves stateEnum known (1), so the poll resolves
-    // deterministically per Sec22.3's own branch structure (phase 1 is in
-    // the "entering or exiting" bucket -> 0.0) without any test ever
-    // separately seeding it.
+    // BEFORE the 2026-10-08 fix, vehicle_enter_do never wrote stateEnum at
+    // all, so polling vehicle_enter_check_done right after an accepted enter
+    // threw OpenStateError ("+0x16d4" unset) on every call - a mission-driver
+    // poll loop could never progress past its first iteration.
+    // FIXED (2026-10-09): the 2026-10-08 fix only got as far as stateEnum = 1
+    // ("entering"), which made vehicle_enter_check_done resolve deterministically
+    // but PERMANENTLY to 0.0 (Sec22.3's "entering or exiting" bucket) - this
+    // is the real m05/m09 mission-drive deadlock (vehicle_enter_teleport's own
+    // `repeat thread_yield() until vehicle_enter_check_done(...)` poll loop
+    // could never observe a cleared member). Per Sec7.4b's confirmed
+    // synchronous no-contention instant commit, the accepted enter now leaves
+    // stateEnum known as 3 ("seated"), so the poll resolves to 1.0 (done) on
+    // its very first check - see this native's own phase==3 branch above.
     es.objectResolves().set("sym_e", true);
     es.objectResolves().set("sym_e_car", true);
     CharacterState& syme = es.getOrCreateCharacter("sym_e");
     syme.vehicleEnterSubmitAccepted.set(true);
     ok(host, gp, "assert(vehicle_enter_do('sym_e', 'sym_e_car', true) == true)");
     CHECK(syme.stateEnum.known());
-    CHECK(syme.stateEnum.get() == 1);
+    CHECK(syme.stateEnum.get() == 3);
     CHECK(syme.currentVehicleName.get() == "sym_e_car");
-    ok(host, gp, "assert(vehicle_enter_check_done('sym_e') == 0)"); // was: OpenStateError, forever, pre-fix
+    ok(host, gp, "assert(vehicle_enter_check_done('sym_e') == 1)"); // was: OpenStateError forever, then stuck at 0.0 - now really done
 
     // ==================================================================
     // Sec21.22 move_to_do
@@ -808,7 +927,10 @@ int main() {
     CHECK(finalize.currentHitPoints.get() == 0);
     CHECK(finalize.deathTransitionCount == 1);
     CHECK(finalize.deathRagdollActivateCount == 0); // ragdoll never activated on this branch
-    CHECK(!finalize.ragdollStateEnumCd2.known());
+    // CONFIRMED spawn default (fdcabd5): known immediately at construction,
+    // 0 - this branch never touches it, so it stays at that default rather
+    // than remaining OPEN.
+    CHECK(finalize.ragdollStateEnumCd2.get() == 0);
     CHECK(finalize.lifeState.get() == 5);
     CHECK(finalize.killFinalizedFlagE3.get());
     CHECK(finalize.characterKillFinalizerCount == 1);
@@ -826,7 +948,8 @@ int main() {
     CHECK(gated.currentHitPoints.get() == 0);
     CHECK(gated.isDeadHighConfidence);
     CHECK(gated.deathTransitionCount == 0);
-    CHECK(!gated.ragdollStateEnumCd2.known());
+    // CONFIRMED spawn default (fdcabd5) - never touched by this branch.
+    CHECK(gated.ragdollStateEnumCd2.get() == 0);
     CHECK(gated.lifeState.get() == 0);
     CHECK(!gated.killFinalizedFlagE3.get());
 
@@ -845,7 +968,8 @@ int main() {
     CHECK(openGap.currentHitPoints.get() == 0);
     CHECK(openGap.deathTransitionCount == 1);
     CHECK(openGap.deathRagdollActivateCount == 0);
-    CHECK(!openGap.ragdollStateEnumCd2.known());
+    // CONFIRMED spawn default (fdcabd5) - never touched by this branch.
+    CHECK(openGap.ragdollStateEnumCd2.get() == 0);
     CHECK(openGap.lifeState.get() == 0);
     CHECK(!openGap.killFinalizedFlagE3.get());
 

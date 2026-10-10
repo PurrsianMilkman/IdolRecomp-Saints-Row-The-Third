@@ -74,6 +74,21 @@
 //     uses for a vehicle's own authority).
 //   - sr3save::nameHash (CONFIRMED match to 0x00d9e8b0, see b02) for
 //     qte_start's QTE-definition hash.
+//   - 2026-10-09, spec-player-runtime.md Sec7.4a (the eligibility gate
+//     0x00b0ca60, vehicleEnterEligibilityGate() below): CharacterState::
+//     stateEnum (+0x16d4, reused a THIRD way - seated/mid-enter-exit),
+//     ragdollStateEnumCd2 (+0xcd2), lifeState/killFinalizedFlagE3 (+0xcc8/
+//     +0xe3), movementStateByteCcd (+0xccd) and stateCodeByte501 (+0x501,
+//     reused a SECOND way alongside Sec22.3's own vehicle_enter_check_done
+//     use) are all REUSED, not duplicated; playerClassChainResolves() is
+//     reused a SECOND time too, for the class-row's sibling +0xa bit 0x04
+//     ("has the standard AI-state block at all") - see that method's own
+//     doc comment in engine_state.h. Three genuinely new per-character
+//     facts (the busy/pending pair, the generic interaction-lock helper,
+//     and the ai_force_flags cant_enter_vehicle bit) and one new reused-by-
+//     VALUE-only field (the AI sub-state byte +0x500) are documented at
+//     their own declarations in character_state.h, right above
+//     CharacterState::vehicleEnterSubmitAccepted.
 //
 // THE OCCUPANCY STATE MACHINE IS NOT DRIVEN FROM HERE (CHOSEN, stated once
 // for all seven vehicle natives; KNOWN DIVERGENCE, not spec-accurate - see
@@ -132,6 +147,35 @@
 // host's scope reaches it, since it is a world-tick-only release path
 // (Sec7.8's own 0x00b0880b) with no in-scope synchronous Lua-visible
 // trigger - the one part of the original CHOSEN justification that holds.
+//
+// FIXED (2026-10-09, mission-drive m05/m09 deadlock, forward-traced from
+// b706fbb's own identical fix to vehicle_enter_group_do's instant path):
+// the +0x16d4 = 1 write named above (line 125-128, for stub_vehicle_enter_do's
+// instant/named-seat paths and stub_vehicle_enter_guardian_angel) was only
+// ever the FIRST of two in-scope synchronous writes, not the whole Sec7.4b
+// no-contention cascade - the Lua-side `vehicle_enter_teleport` wrapper
+// (game_lib.lua, `vehicle_enter_do(...)` then `repeat thread_yield() until
+// vehicle_enter_check_done(...)`) spun for its entire mission-drive tick
+// budget on m05/m09 because stub_vehicle_enter_check_done's own seated test
+// (Sec22.3, +0x16d4 == 3) could never observe a cleared member - nothing in
+// this host ever advanced past state 1 ("entering") for these two natives.
+// Per spec-player-runtime.md Sec7.4b (seating commit 0x00afbd90, state 9:
+// human+0x16d4 = 3), for the INSTANT, no-contention case the real submitter's
+// own on-entry cascade runs synchronously with zero world-tick dependency -
+// the same rule b706fbb already applied to vehicle_enter_group_do's shared
+// attemptGroupInstantEnter() helper. vehicleEnterSeatPickGate() above (steps
+// 6/7) already models the only contention this host can compute (tank-team
+// conflict, specific-seat contest) for BOTH the singular and group paths via
+// the same computeVehicleEnterSubmitAccepted() - so an accepted result here
+// means exactly the same "no contest this host can represent" case the group
+// fix already relies on, not a new, weaker guarantee. stub_vehicle_enter_do's
+// instant AND named-seat paths, and stub_vehicle_enter_guardian_angel (same
+// shared shape, "forced" only changes which refusals are skipped before
+// acceptance, not what happens after), now write +0x16d4 = 3 directly on an
+// accepted instant placement, completing the write instead of stopping short
+// of it - reusing the existing synchronous-write call sites, not a new
+// mechanism. Measured delta and updated tests: see this task's own commit/
+// handoff.
 //
 // HARDENING POLICY: none of these 13 entries carries a spec-flagged memory-
 // safety defect that this host could reach (checked: the null-human
@@ -451,6 +495,270 @@ int stub_vehicle_exit_guardian_angel(lua_State* L) {
 // =======================================================================
 
 // ---------------------------------------------------------------------
+// The eligibility gate 0x00b0ca60(character, forced, eligibility_bit)
+// (spec-player-runtime.md Sec7.4a, traced in full 2026-10-09 - closes the
+// long-standing mission-drive "enter submitter" blocker's eligibility half).
+// Team A's own framing, confirmed exhaustively by full disassembly of the
+// function's own body and all 8 direct callees: a PURE character-state
+// check with NO vehicle or physics argument at all - every vehicle/seat/
+// physics check belongs to the sibling functions Sec7.4 step 4 and
+// Sec13.4-Sec13.6 already cover (U6.2, this host's unmodelled vehicle/seat
+// pick), run only AFTER this gate passes. Plain boolean result, no
+// secondary reason code - every refusal path and the one success path
+// collapse to the same 0/1.
+//
+// `eligibilityBit` (request +0x24 bit 0, "passed to the eligibility
+// predicate," Sec7.2) is accepted for signature fidelity only: Sec7.4a's
+// own exhaustive "what it reads" list (every instruction in the body and
+// all 8 direct callees, cross-checked against a whole-image byte scan) does
+// not name this stack argument among the fields the gate's 9+1 branches
+// actually consult, and no in-scope caller in this project's own request-
+// building code ever sets enter-request +0x24 bit 0 (Sec38.1 names no Lua
+// argument for it on vehicle_enter_do/vehicle_enter_guardian_angel/
+// vehicle_enter_group_do). Honestly modelled as accepted-but-unread rather
+// than silently dropped from the signature or guessed at.
+//
+// The 9 refusal paths, in the real function's own order (CONFIRMED by
+// Sec7.4a's listing), each with where this project gets the fact it tests:
+//   1. Seated (+0x16d4 == 3)                    - CharacterState::stateEnum (reused)
+//   2. Mid enter/exit (+0x16d4 in {1,2})        - CharacterState::stateEnum (reused)
+//   3. Busy/pending pair (+0x16d8/+0x16dc != 0) - vehicleEnterEligibilityBusyPendingNonZero (new, CHOSEN false)
+//   4. Ragdolling (+0xcd2 not in {0,6})         - CharacterState::ragdollStateEnumCd2 (reused)
+//   5. Down/dead (+0xcc8 in {5,6} or +0xe3&1)   - CharacterState::lifeState/killFinalizedFlagE3 (reused)
+//   6a. NOT forced: interaction-lock helper     - genericInteractionLockGatePasses (new, genuinely OPEN)
+//   6b. NOT forced: jump/dive (+0xccd == 4)     - CharacterState::movementStateByteCcd (reused)
+//   6c. NOT forced: climb (+0xccd == 6)         - CharacterState::movementStateByteCcd (reused)
+//   8a. Has-AI-state-block bit set, cant_enter_vehicle (+0x2ba bit 0x10) - cantEnterVehicleFlag2ba (new, CHOSEN false)
+//   8b. Has-AI-state-block bit set, mode == Idle, sub-state in {0x10,0x11} - CharacterState::stateCodeByte501/aiSubStateByte500 (reused/new)
+// Success: forced (unconditional); OR step 7's bit clear; OR step 8's chain
+// falls through (not cant_enter_vehicle, mode != Idle, or mode == Idle with
+// a sub-state outside {0x10,0x11}).
+//
+// Reads are ordered to match the real function's own short-circuiting
+// exactly (e.g. aiSubStateByte500 is only ever touched when mode == Idle,
+// never otherwise) - an OPEN field this specific run never needed to
+// consult never throws, same discipline as every other computed predicate
+// in this project.
+bool vehicleEnterEligibilityGate(EngineState* st, const std::string& characterName, CharacterState& c,
+                                  bool forced, bool eligibilityBit) {
+    (void)eligibilityBit; // accepted for signature fidelity only - see this function's own doc comment
+
+    // Steps 1/2: +0x16d4 (stateEnum) - seated, or already mid enter/exit of
+    // some (other) vehicle. Unconditional, even when forced.
+    int32_t phase = c.stateEnum.get();
+    if (phase == 3) return false;                 // step 1: seated
+    if (phase == 1 || phase == 2) return false;    // step 2: mid enter/exit
+
+    // Step 3: +0x16d8/+0x16dc busy/pending pair. Unconditional, even when forced.
+    if (c.vehicleEnterEligibilityBusyPendingNonZero) return false;
+
+    // Step 4: ragdolling (+0xcd2 not in {0,6}). Unconditional, even when forced.
+    int32_t ragdoll = c.ragdollStateEnumCd2.get();
+    if (ragdoll != 0 && ragdoll != 6) return false;
+
+    // Step 5: down or dead (+0xcc8 in {5,6}, or +0xe3 bit 0x01). Unconditional,
+    // even when forced. NOTE: deliberately NOT CharacterState::notDeadForActionPlay()
+    // (that predicate tests lifeState != 5 only, not {5,6}) - Sec7.4a's own
+    // text is {5,6}, a different membership test on the SAME two real fields.
+    int32_t life = c.lifeState.get();
+    if (life == 5 || life == 6) return false;
+    if (c.killFinalizedFlagE3.get()) return false;
+
+    if (!forced) {
+        // Step 6: only when NOT forced - the generic interaction-lock helper,
+        // then jump/dive and climb pose.
+        if (!c.genericInteractionLockGatePasses.get()) return false;
+        int32_t move = c.movementStateByteCcd.get();
+        if (move == 4) return false; // jump/dive
+        if (move == 6) return false; // climb
+    }
+
+    // Step 8 tail, forced half: success unconditionally, skipping step 7
+    // and the rest of step 8 entirely (Sec7.4a: "forced -> success
+    // unconditionally" - step 7's own bit is never consulted for a forced
+    // request, so playerClassChainResolves() is not even called here).
+    if (forced) return true;
+
+    // Step 7: class-capability-row filter (0x02cc9900 +0xa bit 0x04, "has
+    // the standard AI-state block at all") - reused stand-in, see
+    // EngineState::playerClassChainResolves()'s own doc comment for the
+    // full citation of this reuse (the SAME pattern spec-lua-api-
+    // behaviour.md's teleport, Sec4.3, already applies to the sibling bit
+    // 0x02 "is-player" test on the same row).
+    bool hasAiStateBlock = st->playerClassChainResolves(characterName);
+    if (!hasAiStateBlock) return true; // step 8: bit clear -> success anyway
+
+    // Step 8 tail, bit set: cant_enter_vehicle, then current AI mode/sub-state.
+    if (c.cantEnterVehicleFlag2ba) return false;
+    int32_t mode = c.stateCodeByte501.get();
+    if (mode != CharacterState::kAiModeIdle) return true; // not Idle -> allow
+    int32_t subState = c.aiSubStateByte500.get();         // only read when mode == Idle
+    return subState != 0x10 && subState != 0x11;          // "observe vehicle world/vehicular accident"
+}
+
+// ---------------------------------------------------------------------
+// Sec7.4 step 4's real seat-pick validator, `0x00b0fdf0` (spec-player-
+// runtime.md Sec13.4, CONFIRMED by full listing, ~616 insns) - replacing
+// the CHOSEN-default-true fallback this function used to fall through to
+// unconditionally (see the FIXED note below). This implements ONLY steps
+// 6-7 of that function's 9-step gate order, per Team A's explicit 2026-10-09
+// spec-sync instruction: those two steps are the ones m07's own retry-on-
+// refusal loop (`m07_setup_pony_carts`) needs a real `false` for; the other
+// seven steps (1-5, 8, 9's own obstruction/speed/angle machinery) stay
+// CHOSEN-default-pass-through (never refuse) because this host has none of
+// the data they read (vehicle descriptor flag bytes, physics-body state,
+// seat-scoring helper 0x00b0eb90's own per-seat Seat_Info table, the
+// obstruction gates' geometry queries) - each is a genuine, labelled gap,
+// not a guess papered over as "done":
+//   - step 1 (vehicle descriptor flags +0x1d7b, request +0x22 bit 0x80,
+//     seat count >= 1): OPEN - no vehicle descriptor-flag/seat-count model;
+//   - step 2 (seat-scoring gate 0x00b0eb90): OPEN - no Seat_Info table;
+//   - step 3 (dead-driver/occupant-state exclusions, vehicle +0x16c0):
+//     OPEN - no per-vehicle driver-occupant-state field;
+//   - step 4 (vehicle category/speed gate on the driver seat): OPEN - no
+//     vehicle speed/category data;
+//   - step 5/9 (tank-type bias-tail, obstruction gates 0x00b0da10/
+//     0x00b0dc20, entry-speed threshold): OPEN - no physics/geometry data.
+// Verbatim source read directly from this worktree's own spec-player-
+// runtime.md Sec13.4 (not the task's paraphrase) for steps 6/7 below.
+//
+// Step 6 (vehicle-wide team conflict, spec text verbatim): "(when step 5 is
+// true) An 8-seat scan for a vehicle-wide team conflict. For each seat 0-7:
+// find a claimed (0x00ab5070) or pending (0x00ab5150) occupant; if found
+// and not dead (0x0096f4f0), compare that occupant's condition-class byte
+// (+0x1ca8) against the requesting character's own via 0x004fa040. Any
+// conflicting pair fails the whole function." Step 5 itself is "0x00ad3140
+// (vehicle) ... (vehicle+0xbf4)+0x4c4 == 0xe - i.e. 'is this vehicle tagged
+// Special_Vehicle_Type: Tank'" - so step 6 ONLY runs for tank-class
+// vehicles; this project's own VehicleState::vehicleClass (the SAME real
+// field) gates it the same way below (VehicleState::kVehicleClassTank).
+// This project has no per-seat occupancy registry (stated project-wide gap,
+// this file's own top comment: "THE OCCUPANCY STATE MACHINE IS NOT DRIVEN
+// FROM HERE") and no team-relation matrix (team_make_hostile's own relation
+// byte matrix, spec-lua-api-behaviour.md Sec38.2, is not tracked anywhere
+// in this host) - 0x004fa040's real test is a relation-matrix lookup, not a
+// raw team-id compare. CHOSEN stand-in, reusing only already-modelled
+// fields (no new state): walk every OTHER known character whose
+// CharacterState::currentVehicleName matches this vehicle and whose
+// CharacterState::stateEnum is 1 (pending) or 3 (claimed/seated) and who is
+// not dead (lifeState in {5,6} or killFinalizedFlagE3), and treat a
+// DIFFERENT, BOTH-RESOLVED (!= -1 sentinel) CharacterState::currentTeamCode
+// as a conflict. This is deliberately narrower than the real relation-
+// matrix test (two distinct team ids are not necessarily hostile) but
+// requires no invented matrix data; OPEN per Team A: whether a resolved,
+// distinct-team pair that ISN'T actually hostile should pass here is a real
+// question this project cannot answer without the matrix.
+//
+// Step 7 (specific-seat contest, spec text verbatim): "A specific-seat
+// contest check, only when request +0x00 (seat) is not -1. ... When request
+// +0x23 bit 0 (the fast/sprint flag written in Sec13.2) is clear, and the
+// direct-claim flag is set, it additionally checks the distance from the
+// vehicle to whichever character currently claims that seat ... and
+// refuses if that claimant is still close enough to matter - a proximity-
+// based eviction of stale claims, not a hard 'seat taken' refusal. When
+// request +0x23 bit 0 is set, or the seat isn't contested, this check is
+// skipped entirely." This host has no position/physics data wired to the
+// Lua host (the same stated gap spec-player-runtime.md Sec13.6's own
+// obstruction gates are left unmodelled for here). CHOSEN: treat every live
+// claimant on the exact requested seat as "still close enough" (the
+// conservative direction - a real stale/far claim would actually be
+// evicted and succeed, so this can only produce an extra REFUSAL relative
+// to the real game in that one sub-case, never an extra acceptance).
+// Reuses CharacterState::lastVehicleEnterRequest (vehicleName + seatIndex +
+// accepted), already kept per-character by every caller below, as the only
+// per-seat occupancy record this host has - not a new field. `sprintFlag`
+// (request +0x23 bit 0, "the triggering button press" per Sec13.7) is
+// CHOSEN false at every call site below: Sec38.1's own text builds these
+// Lua natives' request records independently of the real player
+// trigger-button path that field is tied to, so none of vehicle_enter_do's
+// Lua arguments plausibly maps to it (Sec38.1 leaves arg5/arg6's roles
+// explicitly OPEN rather than naming either as this bit) - false is the
+// correct default for a script/AI-driven submission, not an arbitrary
+// guess.
+//
+// TEAM A SPEC-SYNC NOTE: this worktree's own spec-lua-api-behaviour.md
+// Sec38.1 text (read directly, not paraphrased) does NOT itself state
+// steps 6/7 above - that detail lives in spec-player-runtime.md Sec13.4
+// only. Flagged for completeness, not a discrepancy with Sec38.1's own
+// (narrower) claims.
+bool vehicleEnterSeatPickGate(EngineState* st, const std::string& characterName, const std::string& vehicleName,
+                               int64_t seatIndex, bool sprintFlag) {
+    // Step 6 (tank-gated vehicle-wide team conflict).
+    VehicleState& v = st->getOrCreateVehicle(vehicleName);
+    bool isTank = v.vehicleClass.known() && v.vehicleClass.get() == VehicleState::kVehicleClassTank;
+    if (isTank) {
+        CharacterState& requester = st->getOrCreateCharacter(characterName);
+        int32_t requesterTeam = requester.currentTeamCode;
+        for (auto& entry : st->characters()) {
+            if (entry.first == characterName) continue;
+            CharacterState& other = entry.second;
+            if (!other.currentVehicleName.known() || other.currentVehicleName.get() != vehicleName) continue;
+            if (!other.stateEnum.known()) continue;
+            int32_t otherPhase = other.stateEnum.get();
+            if (otherPhase != 1 && otherPhase != 3) continue; // not claimed/pending
+            bool otherDead = (other.lifeState.known() && (other.lifeState.get() == 5 || other.lifeState.get() == 6)) ||
+                              other.killFinalizedFlagE3.get();
+            if (otherDead) continue;
+            if (requesterTeam != -1 && other.currentTeamCode != -1 && other.currentTeamCode != requesterTeam) {
+                return false; // step 6: conflicting pair
+            }
+        }
+    }
+
+    // Step 7 (specific-seat contest).
+    if (seatIndex != -1 && !sprintFlag) {
+        for (auto& entry : st->characters()) {
+            if (entry.first == characterName) continue;
+            CharacterState& other = entry.second;
+            if (!other.lastVehicleEnterRequest.has_value()) continue;
+            const auto& req = *other.lastVehicleEnterRequest;
+            if (!req.accepted || req.vehicleName != vehicleName || req.seatIndex != seatIndex) continue;
+            if (!other.stateEnum.known()) continue;
+            int32_t otherPhase = other.stateEnum.get();
+            if (otherPhase != 1 && otherPhase != 3) continue; // claim since released/left
+            return false; // step 7: seat still contested, treated as "close enough"
+        }
+    }
+
+    return true;
+}
+
+// The submitter's own eligibility-then-seat-pick split (Sec7.4 step 3 cites
+// Sec7.4a's full trace; step 4 is U6.2, Sec13.4): a test's own .set() on
+// `openValue`, when present, wins outright (full backward compatibility
+// with every existing test that drives the overall accepted/refused result
+// directly, without exercising the gate's own fields at all). Otherwise the
+// real eligibility gate runs first: a refusal there is a CONFIRMED, computed
+// false - closing the mission-drive blocker for every refused case without
+// needing a test to configure anything.
+//
+// 2026-10-09 follow-up (measured, not assumed): an ELIGIBLE result used to
+// fall straight through to `openValue.get()`, which throws OpenStateError
+// whenever nothing has .set() it - a real mission-drive run never does, so
+// every eligible case still blocked exactly as before the gate existed.
+// Measured directly on m05/m07/m09 (the eligibility gate itself passes:
+// start_after_resume_error in the mission-drive probe named THIS OpenValue,
+// not any of the gate's own per-step OpenValues, confirming the gate
+// returned true and the old code then threw on the unset fallback).
+//
+// FIXED (2026-10-09, per Team A spec-sync): an eligible result no longer
+// resolves straight to `true` ("seat pick assumed to succeed") - it now
+// runs vehicleEnterSeatPickGate() above (Sec13.4 steps 6/7, the only two
+// steps this host can compute real data for) and only falls back to the
+// CHOSEN-default `true` once that gate also passes. This closes the exact
+// m07 occupant-conflict case Team A flagged; steps 1-5/8/9 remain the same
+// kind of labelled, data-starved gap the previous CHOSEN-default-true
+// comment already described - not newly invented here, just narrowed.
+bool computeVehicleEnterSubmitAccepted(EngineState* st, const std::string& characterName, CharacterState& c,
+                                        OpenValue<bool>& openValue, bool forced, bool eligibilityBit,
+                                        const std::string& vehicleName, int64_t seatIndex, bool sprintFlag) {
+    if (openValue.known()) return openValue.get();
+    if (!vehicleEnterEligibilityGate(st, characterName, c, forced, eligibilityBit)) return false;
+    if (!vehicleEnterSeatPickGate(st, characterName, vehicleName, seatIndex, sprintFlag)) return false;
+    return true; // CHOSEN default - Sec13.4 steps 1-5/8/9, unmodelled; see vehicleEnterSeatPickGate()'s own doc comment above
+}
+
+// ---------------------------------------------------------------------
 // vehicle_enter_do (Sec38.1, 0x00a67000). 7 arguments: arg 1 character
 // (0x00a281a0), arg 2 vehicle (resolveEnterVehicle - direct, else that
 // character's own current vehicle), arg 3 "instant" boolean (lua_toboolean),
@@ -526,10 +834,25 @@ int stub_vehicle_enter_do(lua_State* L) {
     bool setScriptMode2 = false;
     if (instant) {
         path = CharacterState::kVehicleEnterPathInstant;
-        result = c.vehicleEnterSubmitAccepted.get(); // OPEN until set - 0x00af22a0
+        // forced = instant OR request +0x23 bit 3 (Sec7.4 step 3); this
+        // path's own "instant" IS the forced condition - request +0x23 bit 3
+        // is never separately set by this native (no Lua argument for it).
+        // seatIndex/sprintFlag=false: see vehicleEnterSeatPickGate()'s own
+        // doc comment for why neither arg5/arg6 maps to the real sprint bit.
+        result = computeVehicleEnterSubmitAccepted(st, character, c, c.vehicleEnterSubmitAccepted,
+                                                     /*forced=*/true, /*eligibilityBit=*/false,
+                                                     vehicle, seatIndex, /*sprintFlag=*/false);
     } else if (hasSeatName) {
         path = CharacterState::kVehicleEnterPathNamedSeat; // seat name -> the animation-state-style name table (id not observable here)
-        result = c.vehicleEnterSubmitAccepted.get();       // OPEN until set - 0x00af22a0
+        // Not instant, and request +0x23 bit 3 is never set on this path
+        // either -> forced = false (Sec7.4 step 3). Seat index is OPEN on
+        // this path (name->index resolution not observable here) - passed
+        // as -1 so vehicleEnterSeatPickGate()'s step 7 (specific-seat
+        // contest) simply never fires for a named-seat request, a known
+        // limitation rather than a guessed index.
+        result = computeVehicleEnterSubmitAccepted(st, character, c, c.vehicleEnterSubmitAccepted,
+                                                     /*forced=*/false, /*eligibilityBit=*/false,
+                                                     vehicle, /*seatIndex=*/-1, /*sprintFlag=*/false);
     } else {
         path = CharacterState::kVehicleEnterPathAiOrder;
         result = c.vehicleEnterAiOrderStarts.get(); // OPEN until set
@@ -540,9 +863,15 @@ int stub_vehicle_enter_do(lua_State* L) {
     // See this function's own doc comment's FIXED note: only the two paths
     // that actually reach the submitter 0x00af22a0 get its synchronous
     // state-0 on-entry write; the AI-order path does not.
+    // FIXED (2026-10-09): Sec7.4b's confirmed synchronous no-contention
+    // instant commit - stateEnum = 3 ("seated"), not 1 ("entering"), is the
+    // real, final write for this model's only representable case (see the
+    // top-of-file FIXED note added alongside this change, and
+    // attemptGroupInstantEnter()'s own identical write below for the
+    // group-path precedent this follows).
     if (result && (path == CharacterState::kVehicleEnterPathInstant ||
                    path == CharacterState::kVehicleEnterPathNamedSeat)) {
-        c.stateEnum.set(1);
+        c.stateEnum.set(3);
         c.currentVehicleName.set(vehicle);
     }
     CharacterState::VehicleEnterRequestRecord rec;
@@ -600,11 +929,17 @@ int stub_vehicle_enter_guardian_angel(lua_State* L) {
         return 1;
     }
     CharacterState& c = st->getOrCreateCharacter(character);
-    bool result = c.vehicleEnterSubmitAcceptedForced.get(); // OPEN until set - 0x00af22a0, forced
+    // This native's own request is "forced" unconditionally (+0x23 bit 3,
+    // Sec38.1/Sec7.4 step 3) - the whole point of the guardian-angel entry.
+    bool result = computeVehicleEnterSubmitAccepted(st, character, c, c.vehicleEnterSubmitAcceptedForced,
+                                                      /*forced=*/true, /*eligibilityBit=*/false,
+                                                      vehicle, seatIndex, /*sprintFlag=*/false);
 
     flipIndependentFollowerIfFollowing(st, character);
+    // FIXED (2026-10-09): same Sec7.4b synchronous no-contention commit as
+    // vehicle_enter_do's instant/named-seat paths above - stateEnum = 3, not 1.
     if (result) {
-        c.stateEnum.set(1);
+        c.stateEnum.set(3);
         c.currentVehicleName.set(vehicle);
     }
     CharacterState::VehicleEnterRequestRecord rec;
@@ -642,6 +977,88 @@ int stub_vehicle_enter_guardian_angel(lua_State* L) {
 // order branch does not, for the same reason vehicle_enter_do's AI-order
 // path does not (never reaches the submitter 0x00af22a0 in scope here).
 // ---------------------------------------------------------------------
+// Shared by vehicle_enter_group_do's own instant per-member branch below and
+// vehicle_enter_group_check_done's own straggler re-order step (Sec38.1,
+// "re-issues the enter order to every straggling member each time it's
+// called") - a single member's instant-placement attempt through the real
+// submitter (forced=true, the same "instant IS forced" reasoning every
+// other instant path in this file uses), with the exact same synchronous
+// Sec7.4 step 11/Sec7.8 state-0 on-entry write and lastVehicleEnterRequest/
+// vehicleEnterRequestCount bookkeeping both callers already performed
+// inline before this refactor (added 2026-10-09, no behavior change for
+// vehicle_enter_group_do's own existing callers - reused, not duplicated,
+// per this task's own instruction).
+//
+// FIXED (2026-10-09, mission-drive m07 deadlock): vehicle_enter_group_teleport
+// (game_lib.lua:3089, `vehicle_enter_group_do(vehicle, true, npcs)` followed by
+// `repeat thread_yield() until vehicle_enter_group_check_done(vehicle, true,
+// npcs)`) spun for its entire tick budget because NOTHING in this host ever
+// wrote stateEnum (+0x16d4) to 3 - check_done's own "seated in THIS vehicle"
+// clear test (Sec38.1) can only ever see 1 ("entering"), never 3 ("seated"),
+// so every member is a permanent straggler and, since vehicle_enter_group_
+// teleport hard-codes do_not_reorder=true (out of this file's scope, Lua-side),
+// stragglers are never even re-issued. Per spec-player-runtime.md Sec7.4b
+// (forward-traced from Sec7.4a, 2026-10-09 entry): for the INSTANT, no-
+// contention case specifically, the real submitter's own on-entry cascade
+// (hub -> 0x00afabd0 "if head of its entry-point queue: set-enter 9, the
+// commit" -> 0x00afbd90 seating commit, human+0x16d4 = 3) runs with ZERO
+// world-tick dependency - it is a synchronous chain of on-entry handlers, not
+// a per-frame wait, UNLESS a competing occupant already holds the seat
+// (0x00afeeb0's own per-frame retry, which only fires on a contested claim).
+// This project's own already-built, already-reviewed sr3player::
+// VehicleInteractionRegistry (player_vehicle_occupancy.cpp, NOT wired to this
+// Lua host anywhere - confirmed by a whole-src grep, its only referrers are
+// itself, its header, and its own standalone test) independently reproduces
+// exactly this: OnEnterHub -> OnEnterInstantTakeSeat -> OnEnterCommit ->
+// SetRide(kRideActive) -> OnRideActive (stateEnums_[occ] = 3) all fire
+// synchronously inside one SubmitEnterRequest call when headOfQueue is true
+// (no competing claimant) - see that file's own OnEnterCommit/OnRideActive.
+// This project's group-enter model has no per-seat occupant-conflict tracking
+// at all (CHOSEN, Sec38.1's own "no de-duplication... a second request... can
+// claim a second slot" plus this file's own "seat = table position" rule
+// mean every resolved member is, in this model, always the sole claimant of
+// its own distinct seat) - so the no-contention case is the ONLY case this
+// model can ever represent, and per Sec7.4b that case commits synchronously.
+// Writing stateEnum = 3 (not 1) here therefore completes the ALREADY-PARTIALLY
+// -modeled synchronous instant-path write (the submission-accept write this
+// file's own top-of-file banner comment already establishes for state 1),
+// not a new invented mechanism - reusing the exact same computeVehicleEnter
+// SubmitAccepted() + direct CharacterState field writes every other instant
+// path in this file already uses, just carrying the write one step further
+// for the no-contention case Sec7.4b confirms completes in the same call.
+// SCOPED NARROWLY to this shared group helper (attemptGroupInstantEnter) -
+// vehicle_enter_do's own singular instant path and vehicle_enter_guardian_
+// angel (both above, unchanged) still write only stateEnum = 1, per this
+// file's own top-of-file banner note on why phase 3 is not written from
+// here; that inconsistency is intentional and flagged, not silently fixed,
+// since those two natives are out of this task's own scope and already have
+// passing tests pinned to the stateEnum==1 result - see this task's own
+// final report for the open follow-up this leaves.
+bool attemptGroupInstantEnter(EngineState* st, const std::string& member, const std::string& vehicle,
+                               int64_t seatIndex) {
+    CharacterState& c = st->getOrCreateCharacter(member);
+    bool ok = computeVehicleEnterSubmitAccepted(st, member, c, c.vehicleEnterSubmitAccepted,
+                                                  /*forced=*/true, /*eligibilityBit=*/false,
+                                                  vehicle, seatIndex, /*sprintFlag=*/false);
+    if (ok) {
+        // FIXED (2026-10-09): Sec7.4b's confirmed synchronous no-contention
+        // instant commit - stateEnum = 3 ("seated"), not 1 ("entering"), is
+        // the real, final write for this model's only representable case
+        // (no seat-conflict tracking - see this function's own doc comment).
+        c.stateEnum.set(3);
+        c.currentVehicleName.set(vehicle);
+    }
+    flipIndependentFollowerIfFollowing(st, member);
+    CharacterState::VehicleEnterRequestRecord rec;
+    rec.vehicleName = vehicle;
+    rec.path = CharacterState::kVehicleEnterPathInstant;
+    rec.seatIndex = seatIndex;
+    rec.accepted = ok;
+    c.lastVehicleEnterRequest = rec;
+    ++c.vehicleEnterRequestCount;
+    return ok;
+}
+
 int stub_vehicle_enter_group_do(lua_State* L) {
     logCall(L, upLog(L), "vehicle_enter_group_do", upStateTag(L));
     std::string vehicleArg = argString(L, 1);
@@ -659,33 +1076,29 @@ int stub_vehicle_enter_group_do(lua_State* L) {
     for (size_t i = 0; i < names.size(); ++i) {
         const std::string& member = names[i];
         if (!st->objectResolves().get(member)) continue; // OPEN until set
-        CharacterState& c = st->getOrCreateCharacter(member);
-        CharacterState::VehicleEnterRequestRecord rec;
-        rec.vehicleName = vehicle;
         if (instant) {
-            bool ok = c.vehicleEnterSubmitAccepted.get(); // OPEN until set - 0x00af22a0
-            rec.path = CharacterState::kVehicleEnterPathInstant;
-            rec.seatIndex = static_cast<int64_t>(i); // CONFIRMED: seat = table position
-            rec.accepted = ok;
+            // Same "instant IS forced" reasoning as vehicle_enter_do's own
+            // instant path above (Sec7.4 step 3) - this per-member branch
+            // goes through the exact same submitter 0x00af22a0, now via the
+            // shared attemptGroupInstantEnter() helper (reused, see its own
+            // doc comment, also by vehicle_enter_group_check_done below).
+            bool ok = attemptGroupInstantEnter(st, member, vehicle, static_cast<int64_t>(i)); // CONFIRMED: seat = table position
             if (ok) {
                 anyReached = true;
-                // FIXED (2026-10-08): same synchronous Sec7.4 step 11/Sec7.8
-                // state-0 on-entry write as vehicle_enter_do's instant path -
-                // this instant branch goes through the same submitter
-                // 0x00af22a0 per member.
-                c.stateEnum.set(1);
-                c.currentVehicleName.set(vehicle);
             } else {
                 anyRefused = true;
             }
         } else {
+            CharacterState& c = st->getOrCreateCharacter(member);
+            CharacterState::VehicleEnterRequestRecord rec;
+            rec.vehicleName = vehicle;
             rec.path = CharacterState::kVehicleEnterPathAiOrder;
             rec.accepted = true; // CONFIRMED: the order's own result is never checked - counts as reached
             anyReached = true;
+            flipIndependentFollowerIfFollowing(st, member);
+            c.lastVehicleEnterRequest = rec;
+            ++c.vehicleEnterRequestCount;
         }
-        flipIndependentFollowerIfFollowing(st, member);
-        c.lastVehicleEnterRequest = rec;
-        ++c.vehicleEnterRequestCount;
     }
     lua_pushboolean(L, (!anyRefused && anyReached) ? 1 : 0);
     return 1;
@@ -697,24 +1110,71 @@ int stub_vehicle_enter_group_do(lua_State* L) {
 // not re-order" boolean, a table of character names. Return: 1 boolean.
 // CONFIRMED: an unresolved vehicle answers "done" (true) - including a name
 // this host knows as a character, since the type-gated vehicle resolver
-// fails for it and no fallback is tried. Resolved vehicle: Sec38.1 says only
-// that the poll is not pure - with the flag false it re-issues the enter
-// order to every "straggling member" on each call - but gives neither the
-// per-member "done" predicate nor what makes a member a straggler, so that
-// step is refused (labelled OPEN) instead of guessed (e.g. "seated in this
-// vehicle" would be an invented rule).
+// fails for it and no fallback is tried. Sec38.1's own text (read directly
+// from this worktree's spec-lua-api-behaviour.md, verbatim) says only that
+// the poll is not pure - with the flag false it re-issues the enter order to
+// every "straggling member" on each call - WITHOUT itself giving the
+// per-member "done" predicate or what makes a member a straggler.
+//
+// FIXED (2026-10-09, per Team A direct spec-sync - not found verbatim in
+// Sec38.1's own text above, flagged as a sync gap, implemented per Team A's
+// explicit instruction since it is precise and keyed entirely to fields
+// this project already models): no completion threshold - EVERY member must
+// clear. A member clears if dead (lifeState in {5,6} or killFinalizedFlagE3
+// - the SAME membership test vehicleEnterEligibilityGate()'s own step 5
+// reuses), OR the +0x501 state exemption (CharacterState::stateCodeByte501
+// == 0x26 - "not a timeout", i.e. this project does not model any timeout
+// path separately, only the exempt value itself), OR seated in THIS
+// vehicle (+0x16d4 == 3, CharacterState::stateEnum, "plus a matching
+// handle" - CharacterState::currentVehicleName == this vehicle). A member
+// whose name never resolves cannot be acted on at all (same "can't act on
+// it" convention this function's own unresolved-vehicle branch above
+// already uses) - CHOSEN to treat it as cleared (skipped, does not block
+// "done"), since nothing in this project's data can tell a genuinely absent
+// name apart from one this host just hasn't seen yet.
+//
+// Stragglers (members that don't clear) are re-ordered only when the "do
+// not re-order" argument is false, via the SAME shared instant-submit path
+// vehicle_enter_group_do's own instant branch uses (attemptGroupInstantEnter()
+// above, reused not duplicated) - re-seated at the straggler's own table
+// position, exactly as vehicle_enter_group_do's own CONFIRMED "seat = table
+// position" rule already establishes. Per Team A: "vehicle_enter_group_
+// teleport hard-codes [do_not_reorder] true, so a straggler can spin
+// forever" - that native is out of this task's own scope (not a registered
+// stub in this file), so it is not touched here; this function's own
+// behavior is unconditionally correct for whichever caller passes which
+// value, including a caller that always passes true.
 // ---------------------------------------------------------------------
 int stub_vehicle_enter_group_check_done(lua_State* L) {
     logCall(L, upLog(L), "vehicle_enter_group_check_done", upStateTag(L));
     std::string vehicleArg = argString(L, 1);
-    (void)lua_toboolean(L, 2); // "do not re-order" - consumed only by the OPEN straggler step below
+    bool doNotReorder = lua_toboolean(L, 2) != 0;
+    std::vector<std::string> names = readCharacterNameArrayRaw(L, 3);
     EngineState* st = upState(L);
     if (st->hasCharacter(vehicleArg) || !st->objectResolves().get(vehicleArg)) { // OPEN until set
         lua_pushboolean(L, 1); // CONFIRMED: unresolved vehicle -> "done"
         return 1;
     }
-    throw OpenStateError("vehicle_enter_group_check_done per-member completion predicate and straggler re-order rule",
-                         "spec-lua-api-behaviour.md Sec38.1");
+    const std::string& vehicle = vehicleArg;
+    bool allDone = true;
+    for (size_t i = 0; i < names.size(); ++i) {
+        const std::string& member = names[i];
+        if (!st->objectResolves().get(member)) continue; // CHOSEN: unresolved -> cleared (see doc comment)
+        CharacterState& c = st->getOrCreateCharacter(member);
+        bool dead = (c.lifeState.known() && (c.lifeState.get() == 5 || c.lifeState.get() == 6)) ||
+                    c.killFinalizedFlagE3.get();
+        bool stateExempt = c.stateCodeByte501.known() && c.stateCodeByte501.get() == 0x26;
+        bool seatedHere = c.stateEnum.known() && c.stateEnum.get() == 3 &&
+                          c.currentVehicleName.known() && c.currentVehicleName.get() == vehicle;
+        bool cleared = dead || stateExempt || seatedHere;
+        if (cleared) continue;
+        allDone = false;
+        if (!doNotReorder) {
+            attemptGroupInstantEnter(st, member, vehicle, static_cast<int64_t>(i));
+        }
+    }
+    lua_pushboolean(L, allDone ? 1 : 0);
+    return 1;
 }
 
 // ---------------------------------------------------------------------
@@ -776,7 +1236,7 @@ int stub_vehicle_enter_check_done(lua_State* L) {
             result = 1.0;
         } else if (phase == 1 || phase == 2) {
             result = 0.0; // 0x009b91e0
-        } else if (c.stateCodeByte501.get() == '&' && c.stateCodeByte504.get() == 0x12) { // OPEN until set
+        } else if (c.stateCodeByte501.get() == '&' && c.stateCodeByte504.get() == CharacterState::kAiModeHijack) { // 0x12 = Hijack, spec-ai-runtime.md Sec3.2 mode 18 (spec-lua-api-behaviour.md Sec22.3, 2026-10-10 sync); stateCodeByte504 ("requested mode" byte) still OPEN per-character
             result = 0.0;
         }
     }

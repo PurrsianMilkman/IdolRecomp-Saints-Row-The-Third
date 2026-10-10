@@ -398,6 +398,34 @@ consumer is a genuinely separate subsystem from both the spawn-setup and homing-
 reachable two call-levels deep (not pursued, kept lean per scope). Full detail:
 `scratchpad/wave12_projectile_fuse_homing_2026-10-09.md`.
 
+**All 32 vtable slots now exhaustively checked (2026-10-10 follow-up) — the negative is confirmed
+complete, not sampled; still genuinely OPEN.** Every one of the remaining 30 slots was re-queried
+and grepped for `Fuse_Time`/`NPC_Fuse_Time`, any `Projectile_Flags` bit at all (not just the
+detonate bits), any call to `0x00594460`, and any reference to §2a.5's own Havok contact-listener
+chain (`0x00766990`/`0x007669d0`/`0x00765fa0`/`0x00765f20`/`0x00765c70`/`0x00763350`) or the
+generic damage sink `0x0096fa20` — **zero genuine hits across all 32 slots.** Full per-slot
+characterization (RTTI name accessor, vtable-forwarding thunk, indexed get/set property pair,
+attached-sound-handle lifecycle, transform getter/setter, a per-frame attached-effect fade tick
+reading the sibling field `Fade_Out_Time` at `weapon_def+0x374`, immediately after `NPC_Fuse_Time`)
+is in the scratch file. **Two new structural finds, neither reaching the fuse/detonation
+question:** slot 12 (`0x00920010`) is a target-detach cleanup clearing the target's own `+0x98`
+back-reference — plausibly `Projectile_Flags 0x4` ("sticky") detach-on-target-loss logic, no
+`Fuse_Time`/sink touch. Slot 5 (`0x00923f80`, traced 2-3 call levels through `0x00b81eb0`→
+`0x005cfe00`→`0x005c5fd0`) is HIGH CONFIDENCE an on-expire cleanup-and-AI-reaction-notify method
+(releases attached effect/sound handles, then drives an `Effect_Situations`-keyed notification to
+linked NPCs, advancing an "AI reaction stage" field with ragdoll/physics-toggle calls) — but
+CONFIRMED it does not itself read `Fuse_Time` or call `0x00594460`/`0x0096fa20`; it drives an
+AI-flinch/reaction side channel, not the HP/explosion economy. Its own external (indirect,
+vtable-dispatched) caller could not be found statically — the same standing limitation already on
+record elsewhere in this document (§2.2b/§4.4). **Net: (a) the fuse-timer countdown consumer is
+confirmed absent from the entire projectile vtable, not merely unsampled — it lives entirely
+outside this class, most likely a generic engine timer/entity-component callback; (b) a sibling
+"on-collision" method on the projectile's OWN vtable is now CONFIRMED absent too — no slot tests
+any `Projectile_Flags` bit outside slot 1 (homing), and no slot touches the Havok contact-listener
+chain.** This is now a real, structural negative over an exhaustively-enumerated search space, same
+standard as §4.4's hitscan search and §7's melee search. Full detail:
+`scratchpad/projectile_fuse_detonation_consumer_2026-10-10.md`.
+
 ### 2a.5 The Havok wall, narrowed: new traceable ground on the contact-listener dispatch side
 
 `spec-physics-runtime.md` §10a already fully traces the generic in-tick contact-listener pipeline
@@ -959,4 +987,14 @@ No leaked Volition/Havok/Audiokinetic/RAD material.
   call or a Havok collision-response callback (the §2a.5 shape), or the hit-confirmed state feeds
   something outside this call graph entirely. Full detail:
   `scratchpad/melee_hit_confirmed_consumer_round3_2026-10-09.md`. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §2a.4: all 32 projectile-vtable slots now exhaustively checked for the fuse/
+  detonation consumer — confirmed absent from the class entirely, still OPEN** (SPEC TEAM, agent
+  `adf48f241803d6b4d`). Zero genuine hits for `Fuse_Time`/any `Projectile_Flags` bit/the sink/the
+  Havok chain across all 32 slots. Two new finds that don't close the question: slot 12 is a
+  sticky-detach cleanup; slot 5 is HIGH CONFIDENCE an on-expire AI-reaction-notify method (not the
+  HP/explosion economy). Also newly CONFIRMED: no "on-collision" method exists on the projectile's
+  own vtable either. A genuine structural negative over an exhaustive search space. Full detail:
+  `scratchpad/projectile_fuse_detonation_consumer_2026-10-10.md`. Cleanroom self-check: strict
   regex 0 hits, C-cast-dereference check 0 hits.

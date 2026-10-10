@@ -89,6 +89,20 @@ EngineState::EngineState() {
     // scratch default (see save_game_bridge.h's defaultSaveGameDirectory()
     // for why), never a real game save-data location.
     saveGameDirectory_ = defaultSaveGameDirectory();
+
+    // 2026-10-10: the SAME one literal-name seed getOrCreateVehicle() below
+    // applies to VehicleState::flyingType, applied HERE too for
+    // helicopterFlyTo_.qualifies specifically, because that map is its own
+    // independent EngineState-level field (Sec28.2), NOT nested inside
+    // VehicleState - a caller can reach `helicopterFlyTo().qualifies.get(
+    // name)` directly (e.g. stub_helicopter_fly_to_set_goal_direction)
+    // without ever calling getOrCreateVehicle() first, so seeding only
+    // there would leave this copy of the SAME real field OPEN depending on
+    // call order. See getOrCreateVehicle()'s own doc comment for the full
+    // citation (Team A spec sync, HANDOFF.md commit 849a88e; m05.lua's own
+    // "-- Spawn Pierce's helicopter" comment) - kept in exact sync with
+    // that seed, same single literal name, nothing generalized.
+    helicopterFlyTo_.qualifies.set("m05_heli_pierce", true);
 }
 
 CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
@@ -110,6 +124,10 @@ CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
     // CharacterState::lifeState/killFinalizedFlagE3's own doc comments.
     c.lifeState.set(0);
     c.killFinalizedFlagE3.set(false);
+    // CONFIRMED (2026-10-09, Sec3.4's own in-place correction): +0x18f0/
+    // +0x18f4 is zeroed unconditionally at construction (0x00954340 ->
+    // 0x00942920) - see CharacterState::reviverHandle's own doc comment.
+    c.reviverHandle.set(0);
     // CHOSEN (not CONFIRMED): the 0x008addb0 single gate of the
     // player_controls_*/player_movement_* setters takes the direct-apply
     // branch - see CharacterState::controlLockGatePasses's own doc comment.
@@ -140,6 +158,30 @@ CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
     // (see that field's own doc comment for the full history: the m05/m21/
     // m09 +0x16d4 bucket this settles).
     c.stateEnum.set(0);
+    // CONFIRMED (spec-player-runtime.md Sec5.4.2/Sec5.4.4, cross-confirmed by
+    // Sec7.4a's vehicle-enter eligibility gate step 4 and Sec15.3a's ragdoll
+    // hand-off trace, 2026-10-09): +0xcd2 is the human's physics-
+    // representation byte and 0 = "character proxy," the ordinary state
+    // every freshly constructed, not-yet-ragdolled character holds until an
+    // explicit ragdoll/death event moves it away - see
+    // CharacterState::ragdollStateEnumCd2's own doc comment. A test
+    // exercising a ragdolling/recovering character still overrides this via
+    // .set()/.forget(), exactly as before this pre-seed.
+    c.ragdollStateEnumCd2.set(0);
+    // CONFIRMED (spec-lua-api-behaviour.md Sec22.3, 2026-10-10 Team A spec
+    // sync): the character base constructor 0x00954340 (via its embedded
+    // AI sub-object at +0x2b0, the same base spec-ai-runtime.md Sec2.4
+    // already uses for +0x508/+0x50c) zeroes the AI mode byte +0x501
+    // unconditionally before the object is ever live - mode 0 = Idle in
+    // the 44-value mode enum (spec-ai-runtime.md Sec3.2). Exactly 3
+    // writers exist project-wide: this construction (one-time, pre-live),
+    // the main gameplay transition primitive 0x004dd380 (spec-ai-runtime.md
+    // Sec3.3, every voluntary AI mode change), and the proxy-only network
+    // read 0x004ea530 (non-owned/proxy human only, spec-ai-runtime.md
+    // Sec2.4 point 3) - see CharacterState::stateCodeByte501's own doc
+    // comment. Closes this field's previously-OPEN spawn-default question
+    // (the m07 mission-drive blocker this seed was written to clear).
+    c.stateCodeByte501.set(0);
     return c;
 }
 
@@ -156,6 +198,58 @@ VehicleState& EngineState::getOrCreateVehicle(const std::string& name) {
     // session installed - see VehicleState::forceFlagGatePasses's own doc
     // comment.
     v.forceFlagGatePasses.set(true);
+
+    // Single hardcoded-name seed (2026-10-10), NOT a general "infer class
+    // from name" rule - see the long note below for why a generic rule
+    // would be wrong here.
+    //
+    // Team A spec sync (HANDOFF.md, commit 849a88e) corrected this
+    // project's own prior (wrong) reading of the real field VehicleState::
+    // flyingType / EngineState::HelicopterFlyTo::qualifies already both
+    // cite as "(vehicle+0xbf4)+0x2c": it is NOT a per-vehicle-instance AI
+    // record field, it is the vehicle-TYPE DEFINITION record's own class
+    // enum (static per-type data, set once when the type loads, no runtime
+    // writer anywhere) - CONFIRMED values 0 = car, 2 = airplane, 3 = heli,
+    // 4 = VTOL (1/5/6 remain genuinely OPEN - no spec text gives them, so
+    // they are NOT guessed here or anywhere else in this project).
+    //
+    // This project has no loader that joins a zone-placed vehicle
+    // instance's name back to its real `<name>_veh.xtbl` Vehicle_Type row
+    // (sr3vehicleinfo::ParseAllVehicles exists but is not wired into this
+    // lua host's EngineState at all - see include/sr3vehicleinfo/
+    // vehicle_entry.h), so there is no general mechanism to populate this
+    // field for an arbitrary vehicle name, and inventing a name-substring
+    // heuristic ("contains 'heli' => class 3") would be fabricating data:
+    // confirmed by this project's OWN existing test suite, which
+    // deliberately uses vehicle names like "Heli1"/"heli01"/"Heli25" and
+    // asserts the field is STILL OPEN until a test explicitly .set()s it
+    // (tests/synthetic_luahost_test.cpp ~line 2573, synthetic_luahost_
+    // b10_batch3_test.cpp ~line 308, synthetic_luahost_wave2_w22_test.cpp
+    // ~line 403, synthetic_luahost_wave2_w24b_test.cpp ~line 383) - a
+    // generic heuristic would silently break all four.
+    //
+    // What IS real, clean-room data (not disassembly, not invented): m05's
+    // own shipped mission script (clean dump, D:/Project Crreish/TEAM A/
+    // scratchpad/lua_dumps/m05.lua) hardcodes this EXACT vehicle instance
+    // name and its own comment at line 649 literally reads "-- Spawn
+    // Pierce's helicopter" immediately above the vehicle_enter_teleport/
+    // vehicle_set_keyframed_physics calls against M05_groups.pierce.heli
+    // (== "m05_heli_pierce", declared at line 25). That is a real,
+    // dev-authored primary source identifying this ONE specific named
+    // vehicle instance as a helicopter - the same footing as this header's
+    // other literal-name special cases (e.g. VehicleState::
+    // keyframedPhysicsSpecialCaseCount's own "m05_heli_pierce" case,
+    // Sec14.14, also hardcoded by the real game on this exact name).
+    //
+    // So: seed ONLY this one literal name, honestly labeled CHOSEN (not a
+    // spec-cited numeric fact - the spec gives the field's real values and
+    // location, not which specific instances hold which value), leaving
+    // every other vehicle (including every "Heli*"-named test fixture
+    // above) exactly as OPEN as before.
+    if (name == "m05_heli_pierce") {
+        v.flyingType.set(3);                         // class 3 = heli (CONFIRMED value, Sec28.2/Sec30.5/Sec33.1)
+        helicopterFlyTo_.qualifies.set(name, true);   // same physical field, Sec28.2's own separate per-name map
+    }
     return v;
 }
 
@@ -1803,8 +1897,10 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     map("batch2728", helicopterFlyTo_.applyGate);
     value("batch2728", guardianAngel_.modeIsThree);
     value("batch2728", guardianAngel_.objectPresent);
-    map("batch2728", groupNextNpcName_);
-    map("batch2728", groupFirstNpcName_);
+    // groupFirstNpcName()/groupNextNpcName() (Sec28.5/Sec28.6) no longer have
+    // a separate OPEN-map backing field - they are derived from
+    // groupMemberNames_, already inventoried via groupResolves_/
+    // groupHasMembersBit_'s own Sec18.14 entries below.
     map("batch2728", humansInTriggerCount_);
     map("batch2728", vehicleInAirByCharacter_);
     value("batch2728", effectFinisher_.gamepadMode);
@@ -1823,7 +1919,7 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
 
     // --- Batch 2026-10-02, spec-lua-api-behaviour.md Sec31/Sec32 ---
     // (CharacterState's own per-character OpenValue fields - lifeState here,
-    // like stateEnum/attackerThreatRef/maxHitPoints/currentHitPoints above -
+    // like stateEnum/reviverHandle/maxHitPoints/currentHitPoints above -
     // are not centrally inventoried, matching this function's own existing
     // precedent of only listing EngineState-level slots.)
     value("batch3132", pauseMapTutorialMode_);

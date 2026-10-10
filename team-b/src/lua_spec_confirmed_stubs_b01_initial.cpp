@@ -433,8 +433,26 @@ int stub_set_ignore_ai_flag(lua_State* L) {
         // for this exact gating condition (spec's own words) - the
         // STRUCTURE (state-enum-gated conditional override write) itself
         // is CONFIRMED.
+        //
+        // CORRECTED 2026-10-09 (spec-lua-api-behaviour.md Sec3.4's own
+        // in-place correction, routed from Team A, mission-blocking m07):
+        // the second branch's original "nonzero attacker/threat reference"
+        // label was wrong. The real condition (0x00a5e333-0x00a5e343) tests
+        // the character's AI mode byte +0x501 (nonzero = "not Idle") ANDed
+        // with the AI sub-state byte +0x500 (!= 9) - i.e. "currently in a
+        // non-Idle AI mode," not a reference-handle check at all. Both
+        // bytes are CharacterState::stateCodeByte501/aiSubStateByte500
+        // above (REUSED, not duplicated - see their own doc comments,
+        // spec-ai-runtime.md Sec2.4/Sec2.5), not the separate (and
+        // incorrect) attackerThreatRef field this project used to carry,
+        // now removed. See CharacterState::reviverHandle's own doc comment
+        // for the genuine attacker/threat-style handle this correction
+        // found instead, at +0x18f0/+0x18f4 - confirmed unrelated to this
+        // gate (its only confirmed consumer is human_being_revived_by's
+        // "reviver handle" semantics, not this ignore-AI override write).
         if (character.stateEnum.get() == 3) override = 0x19;
-        else if (character.attackerThreatRef.get() != 0) override = 0;
+        else if (character.stateCodeByte501.get() != CharacterState::kAiModeIdle &&
+                 character.aiSubStateByte500.get() != 9) override = 0;
     }
     character.ignoreAI.set(newValue);
     EngineState::replicateStateChange("set_ignore_ai_flag", name);

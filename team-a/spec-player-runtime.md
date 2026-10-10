@@ -463,7 +463,7 @@ Two observations: the push of **2** at `0x00b94c19` discards its handle, so that
 ### 2.7 Row handlers (entry points; their bodies belong to later units)
 
 - **`0x005aa5f0`** (rows 0/1 enter): `0x005bbf60` (clear latched), then tail-jump to `0x005b7430`. **CONFIRMED.**
-- **`0x005b2170`** (rows 0/1 per-frame; not a defined function in the shared project): if a cutscene is in progress (`0x00720640`), consume-pressed `CBA_SKIP_MODAL_SEQUENCE` (`0x8e`) and, if it fired, tail-call the skip request `0x00720830`; done. Otherwise: camera pre-update `0x00565c60`, `0x0056b220(−1.0)`; when a local player exists and the cinema editor (`0x00bc5610`) is not active, call the movement routine `0x005aee30` with the player's own position (`+0x40`/`+0x44`/`+0x48`) and 0 — i.e. no new intent — then the stance resets `0x00985df0(player, 0, 1, 1)` and `0x009fef60`, and if `0x00611650(player)` is true copy "consume-pressed `CBA_MENU_DP_DOWN` (`0x71`)" into bit `0x08` of `0x0140e684`. Finally, if the cinema editor is active and `0x00707490()` is true, tail-call the camera update `0x00566a40`. **CONFIRMED.**
+- **`0x005b2170`** (rows 0/1 per-frame; not a defined function in the shared project): if a cutscene is in progress (`0x00720640`), consume-pressed `CBA_SKIP_MODAL_SEQUENCE` (`0x8e`) and, if it fired, tail-call the skip request `0x00720830`; done. Otherwise: camera pre-update `0x00565c60`, `0x0056b220(−1.0)`; when a local player exists and the cinema editor (`0x00bc5610`) is not active **(CORRECTED 2026-10-10: `0x00bc5610` is not a general "editor active" test — it is `0x029443bc==2||3`, true only while a machinima recording is stopping/finalizing, see `spec-lua-api-behaviour.md` §3.7's correction. It is false both when idle AND throughout an entire in-progress recording, and true only in the brief stop/finalize window. This is the overwhelmingly common (false) case: the handler takes the ordinary no-op-movement/stance-reset path below in both idle play and during active recording — it only swaps to the camera-update tail-call during that brief finalize window.)**, call the movement routine `0x005aee30` with the player's own position (`+0x40`/`+0x44`/`+0x48`) and 0 — i.e. no new intent — then the stance resets `0x00985df0(player, 0, 1, 1)` and `0x009fef60`, and if `0x00611650(player)` is true copy "consume-pressed `CBA_MENU_DP_DOWN` (`0x71`)" into bit `0x08` of `0x0140e684`. Finally, if the cinema editor is active **(same predicate — i.e. the recorder is stopping/finalizing)** and `0x00707490()` is true, tail-call the camera update `0x00566a40`. **CONFIRMED.**
 - **`0x005ac4f0`** (row 2 exit): if `0x007f0130()` then `0x007f0140(1)`. HYPOTHESIS: closes an on-screen prompt layer.
 - **`0x005b7430`** (row 2 per-frame, 248 instructions) — the skeleton, **CONFIRMED** by full listing, consistent with `review/scoping-player.md` §1.3 with these additions:
   - it clears byte `0x0140e6e5` first, and maintains two flags: `0x0140e6f8` "**controls ran this frame**" (set after the paused check, cleared by every early-out branch; read by the secondary hook) and a local "**run the camera hook**" flag;
@@ -930,7 +930,7 @@ Evidence for the identities (CONFIRMED as call edges):
 - **13:** `0x005674d0(1)` from `0x0083ac4b` and `0x005674d0(0)` from `0x0083a89f`, both in the gang-customization UI code (`spec-lua-api-behaviour.md` §53.1's registrar `0x0083a900`).
 - **15:** `0x0057eb10(position, rows, …)` from the stronghold-unlock helper `0x005f1cc0` (`0x005f1fa0`, `spec-lua-api-behaviour.md` crib unlock), `0x008123de` and `0x00a035cc`; restored by `0x0057ea90` (`0x005f0b0a`, `0x008127d0`, `0x00a00653`) and `0x0057eae0` (`0x00811f26`), each gated by `0x0057ead0`.
 - **16:** `0x00567f80` has 16 callers (`0x005fa9af`…`0x008206a3`), all but two in the store/customization UI band `0x0080c000`–`0x00821000`; its init calls `0x0080c470` and `0x0080b920` in the same band.
-- **17:** `0x00bc6a70`/`0x00bc6160` are in the cinema-editor band (`0x00bc5610` is the editor-active test of §2.7).
+- **17:** `0x00bc6a70`/`0x00bc6160` are in the cinema-editor band (`0x00bc5610` ~~is the editor-active test of §2.7~~ **is the machinima-recorder stopping/finalizing predicate referenced in §2.7's row handler — not a general "editor active" test; see §2.7's correction, 2026-10-10**).
 
 ### 4.2 Mode selection
 
@@ -5006,3 +5006,11 @@ splice) and `scratchpad/vehicle_entry_exit_control_handoff_2026-10-08.md`.
   eligible-and-untested straight to true. Full detail:
   `scratchpad/mission_block_seatpick_vehiclegroup_2026-10-09.md`. Cleanroom self-check: strict
   regex 0 hits.
+- **2026-10-10 — `0x00bc5610` mislabel corrected in this file (2 of 8 project-wide, remainder in
+  `spec-lua-api-behaviour.md`)** (SPEC TEAM, agent `afec7bca7d3a1994e`). §2.7's `0x005b2170` row
+  handler and §4.1's evidence bullet 17 both called it a general "cinema editor (not) active"
+  test, overstating its scope: it is actually `0x029443bc==2||3`, the machinima recorder's
+  stopping/finalizing predicate (see `spec-lua-api-behaviour.md` §3.7's correction) — false both
+  when idle AND throughout an entire in-progress recording, true only in the brief stop/finalize
+  window. Full detail: `scratchpad/bc5610_mislabel_correction_2026-10-10.md`. Cleanroom
+  self-check: strict regex 0 hits.

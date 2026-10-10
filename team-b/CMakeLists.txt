@@ -1326,6 +1326,7 @@ if(WIN32)
         src/mesh_renderer.cpp
         src/composite_renderer.cpp
         src/tod_lighting.cpp
+        src/sun_shadow_map.cpp
     )
     target_include_directories(sr3render PUBLIC include)
     target_include_directories(sr3render PRIVATE
@@ -2255,12 +2256,55 @@ add_test(NAME synthetic_player_camera_test COMMAND sr3player_camera_tests)
 # shared include/ root every target already uses - no link dependency.
 add_library(sr3player_vehicle STATIC
     src/player_vehicle_occupancy.cpp
+    src/player_seated_ride_pose.cpp
 )
 target_include_directories(sr3player_vehicle PUBLIC include)
+
+# seated_ride_pose.cpp (2026-10-09 seated-driving-pose task, spec-player-
+# runtime.md Sec7.4b) calls into sr3animpose's real U4 compose pipeline
+# (pose_compose.h/clip_pose_bridge.h) to turn a resolved ride-clip name into
+# an actual posed skeleton - the ONE new link dependency this target needed
+# (everything else it uses, sr3tables_vehicle_world's own struct types, stays
+# header-only per this target's pre-existing convention, see
+# vehicle_occupancy.h's own banner).
+target_link_libraries(sr3player_vehicle PUBLIC sr3animpose)
 
 add_executable(sr3player_vehicle_tests tests/synthetic_player_vehicle_occupancy_test.cpp)
 target_link_libraries(sr3player_vehicle_tests PRIVATE sr3player_vehicle)
 add_test(NAME synthetic_player_vehicle_occupancy_test COMMAND sr3player_vehicle_tests)
+
+add_executable(sr3player_seated_ride_pose_tests tests/synthetic_seated_ride_pose_test.cpp)
+target_link_libraries(sr3player_seated_ride_pose_tests PRIVATE sr3player_vehicle)
+add_test(NAME synthetic_seated_ride_pose_test COMMAND sr3player_seated_ride_pose_tests)
+
+# Real-data end-to-end test for the same module (Sec7.4b): loads the real
+# shipped vi_ride.xtbl/vehicle_interaction_info.xtbl, a real brad.rig_pc-
+# compatible clip and brad.rig_pc itself, and checks ResolveRideAnimationString()/
+# ChosenRealClipForRideAnimation()/ComposeSeatedPose() end to end against real
+# data. Exit 77 = SKIPPED when the archive is absent.
+# sr3_viewer's playtest command (tools/sr3_viewer.cpp, defined earlier in
+# this file, line ~1239) now calls into sr3player::seated_ride_pose.h -
+# added here, AFTER sr3player_vehicle/sr3tables_vehicle_world both exist,
+# rather than in that earlier target_link_libraries(sr3_viewer ...) call
+# (CMake requires a target to already exist when it is linked against).
+if(TARGET sr3_viewer)
+    target_link_libraries(sr3_viewer PRIVATE sr3player_vehicle sr3tables_vehicle_world)
+endif()
+
+# real_seated_ride_pose_tests itself moved below (seated-driving-pose merge,
+# 2026-10-10 fix): it needs BOTH CRREISH_GAME_CACHE_DIR's own canonical `set(
+# ... CACHE PATH)` declaration AND the CRREISH_VERIFY_BUILD `option()` to have
+# already executed - this file is read top-to-bottom, and both of those live
+# further down (right before real_vintdoc_document_tests, the project's own
+# established convention for every real_*_test target). Defining this block
+# HERE, ahead of either, silently compiled an EMPTY CRREISH_GAME_CACHE_DIR
+# into the test binary on a truly fresh configure (no stale CMakeCache.txt to
+# mask it) - found via this merge's own full fresh-build+ctest run: the test
+# SKIPped (exit 77, "not present under <empty>") instead of exercising the
+# real archive data its own file comment promises. sr3player_vehicle (this
+# target's own link dependency, added just above) is unaffected and stays
+# here; only the two targets that read CRREISH_GAME_CACHE_DIR/
+# CRREISH_VERIFY_BUILD move.
 
 # The zscene / cutscene scene table (Sec26.25 item 5): cutscene.xtbl names +
 # one <name>.cte_xtbl per scene, on sr3xtbl like the other table readers.
@@ -2418,6 +2462,25 @@ if(CRREISH_VERIFY_BUILD)
     message(STATUS "CRREISH_VERIFY_BUILD=ON: real-data tests will FAIL (not SKIP) if "
         "CRREISH_GAME_CACHE_DIR ('${CRREISH_GAME_CACHE_DIR}') is absent at test time")
 endif()
+
+# Real-data end-to-end test for sr3player::seated_ride_pose.h (Sec7.4b,
+# seated-driving-pose task): loads the real shipped vi_ride.xtbl/
+# vehicle_interaction_info.xtbl, a real brad.rig_pc-compatible clip and
+# brad.rig_pc itself, and checks ResolveRideAnimationString()/
+# ChosenRealClipForRideAnimation()/ComposeSeatedPose() end to end against
+# real data. Exit 77 = SKIPPED when the archive is absent. MOVED here
+# (2026-10-10 merge fix) from right after sr3player_vehicle's own definition,
+# above - it must come after CRREISH_GAME_CACHE_DIR's `set(... CACHE PATH)`
+# and CRREISH_VERIFY_BUILD's `option()`, both just above, same as every
+# other real_*_test target below.
+add_executable(real_seated_ride_pose_tests tests/real_seated_ride_pose_test.cpp)
+target_link_libraries(real_seated_ride_pose_tests PRIVATE sr3player_vehicle sr3tables_vehicle_world sr3rig vppcache)
+target_compile_definitions(real_seated_ride_pose_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_seated_ride_pose_test COMMAND real_seated_ride_pose_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_seated_ride_pose_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 add_executable(real_vintdoc_document_tests tests/real_vintdoc_document_test.cpp)
 target_link_libraries(real_vintdoc_document_tests PRIVATE sr3vintdoc sr3luahost vppcache)
 target_compile_definitions(real_vintdoc_document_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
@@ -3216,6 +3279,7 @@ set_tests_properties(
     synthetic_player_movement_test
     synthetic_player_camera_test
     synthetic_player_vehicle_occupancy_test
+    synthetic_seated_ride_pose_test
     synthetic_tables_cutscene_test
     synthetic_vintdoc_test
     synthetic_vintdoc_document_test
@@ -3239,6 +3303,7 @@ set_tests_properties(
     real_vorbis_decode_test
     real_vehicle_engine_torque_crossmap_test
     real_vehicle_interaction_hide_occupant_test
+    real_seated_ride_pose_test
     real_bink_frame0_decode_test
     real_bink_test_vector_validation_test
     real_bink_merge_group_trace_test
@@ -3441,3 +3506,12 @@ target_include_directories(sr3agora PUBLIC include)
 add_executable(sr3agora_tests tests/synthetic_sr3agora_test.cpp)
 target_link_libraries(sr3agora_tests PRIVATE sr3agora)
 add_test(NAME synthetic_sr3agora_test COMMAND sr3agora_tests)
+
+# Vehicle-enter eligibility gate (2026-10-09): spec-player-runtime.md
+# Sec7.4a, 0x00b0ca60 - implemented as vehicleEnterEligibilityGate() in
+# src/lua_spec_confirmed_stubs_b15_wave2_core_dispatchers.cpp. Exercises
+# each of the 9 refusal paths and the success tail through vehicle_enter_do/
+# vehicle_enter_guardian_angel.
+add_executable(sr3luahost_vehicle_enter_eligibility_gate_tests tests/synthetic_luahost_vehicle_enter_eligibility_gate_test.cpp)
+target_link_libraries(sr3luahost_vehicle_enter_eligibility_gate_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_vehicle_enter_eligibility_gate_test COMMAND sr3luahost_vehicle_enter_eligibility_gate_tests)

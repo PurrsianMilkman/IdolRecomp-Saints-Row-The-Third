@@ -85,6 +85,11 @@ int stub_character_kill(lua_State* L) {
             c.lifeState.set(5); // 0x00952760's own confirmed literal write
         }
         c.killFinalizedFlagE3.set(true); // finalizer clears threat/attacker-reference fields - test-observable stand-in only
+        // CONFIRMED 2026-10-09 (Sec3.4's own in-place correction): the SAME
+        // finalizer (0x009a7610) also clears the real attacker/threat-style
+        // handle pair +0x18f0/+0x18f4 - see CharacterState::reviverHandle's
+        // own doc comment.
+        c.reviverHandle.set(0);
         ++c.characterKillFinalizerCount;
     }
     return 0;

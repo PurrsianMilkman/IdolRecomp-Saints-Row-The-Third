@@ -2332,9 +2332,47 @@ already correctly described this before this pass — couldn't find a literal OP
 current spec text, flagged to the orchestrator as possibly stale on their side. CONFIRMED no write
 site in the Lua-exposed `group_*` family regardless; not blocking for m05.
 
-**NEXT STEPS on resume:** nothing currently in flight. Wait for the orchestrator's (`purrsian-4a`,
-verify via `ListAgents` — names rotate) next instruction before starting any new work. Stay at ONE
-agent at a time per the standing lean instruction.
+**(k) Usage back on plan, 2026-10-10 (90th rewrite) — normal pace resumed, parallel dispatch OK
+again.** Orchestrator (`purrsian-4a`) dispatched 3 parallel items plus warned Team B
+mission-blocker questions would arrive shortly (m05 `vehicle_exit_teleport`, dlc2_m01, dlc2_m03).
+
+Dispatched:
+1. ~~Agent `adf48f241803d6b4d`~~ **DONE.** All 32 vtable slots now exhaustively checked (not
+   sampled) — confirmed absent from the entire class, a genuine structural negative. Also
+   confirmed no "on-collision" method exists on the projectile's own vtable. Spliced, synced,
+   reported.
+2. ~~Agent `a183792e4bfd8b095`~~ **DONE.** `cell_rewards_button_a` resolved as not a native
+   (missing pure-Lua handler, struck from backlog). The other 3 remain OPEN but each now has a
+   sourced explanation (vint_callback_lua pool with no fixed name roster; dead/orphaned wrapper
+   code; a real player-facing feature with no silent-fallback mechanism — this last one now the
+   LEAST likely to be dead code). Spliced, synced, reported.
+3. ~~Agent `a4f886e94af8be938`~~ **DONE** (via its own 4 nested batch agents, allowed to run to
+   completion rather than re-dispatched, then consolidated by this session). 31 of 32 non-tranche
+   `interp_*.md` notes already fully promoted; 1 small gap closed (§26.28 tutorial name index 176
+   = `"dlc"`). Spliced, cleanroom-checked, synced, reported.
+4. ~~Agent `aee99fab745a9ddb4`~~ **DONE.** §6.19's "tutorial dispatcher" label confirmed WRONG,
+   retracted — `0x029443bc` is the machinima-recorder's own state machine (full writer map
+   spliced). §7.10/§17.5's vtable `+0x68`: no constant-stub shortcut exists, CONFIRMED needs a
+   live capture. Spliced, synced, reported.
+
+**All 4 items DONE, spliced, synced, reported.** Nothing currently running.
+
+**(l) High-value correction sweep, 2026-10-10 (91st rewrite):** `0x00bc5610` ("connection-state
+machine... session active/connecting values") is mislabeled throughout the specs — it's actually
+`0x029443bc==2 || ==3` (the machinima recorder's own "stopping/finalizing" test), cited at 30+
+caller sites. Orchestrator's own framing: a fresh single-player game always has `0x029443bc==0`
+(idle), so this predicate is always FALSE in normal play — for each caller, the real question is
+"what happens on the FALSE branch," since that's the overwhelmingly common case; this may quietly
+unblock several gates that looked stuck on an unclear "connection state" check.
+
+Dispatched: Agent `afec7bca7d3a1994e` — find every `0x00bc5610` citation across all `spec-*.md`
+files, determine each caller's real behavior and its FALSE-case (normal single-player) outcome,
+draft ready-to-apply strike-and-append replacement text for each. Report target:
+`scratchpad/bc5610_mislabel_correction_2026-10-10.md`.
+
+**NEXT STEPS on resume:** read the full report, apply the drafted corrections at every citation
+site, Changelog entry, cleanroom self-check, `bash tools/sync_to_teamb.sh` tail-confirmed, report
+to the live orchestrator peer (check `ListAgents` for current name, was `purrsian-4a`) by name.
 
 ---
 
@@ -4606,8 +4644,7 @@ Standing instruction from the user, received directly in this session: continue 
 
 ## 42. Archive: pre-compaction full §27 text, fifteenth pass (2026-09-30, at ~76% context usage)
 
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
-### 42.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-30 for the context guard, fifteenth pass (concrete, not narrative)
+### 43. Archived resume note (superseded 2026-10-10 — this whole block is stale, from a completely different work era: geometry/zone-format investigation, not the Lua/AI/weapons/activity spec work. Read §44 below instead to resume.)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§41 log below and in each spec's own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section as it stood before the fourteenth pass is archived verbatim in §41.**
 
@@ -4686,4 +4723,156 @@ Standing instruction from the user, received directly in this session: continue 
 - **Document continuously, not just at checkpoints** (§27.7 in §36): every dispatched agent writes its own findings into its target spec/HANDOFF as part of finishing, not handed back for later consolidation.
 - **When confirmed facts run out, defer rather than invent** (§27.8 in §36): stop and document the honest gap rather than propose an untraced mechanism; when a peer offers a reconciliation for something you published, reproduce their check yourself before writing anything.
 - **Never let the agent count sit at zero; report back regularly** (§27.9 in §36, received directly from the user): document as each task closes, keep the multi-agent-parallel pattern as the steady state. Does NOT mean dispatching a weak/under-scoped brief just to keep a counter non-zero — properly deriving a missing anchor is itself "something happening."
+
+<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## 44. ▶ RESUME HERE — 2026-10-10 (current, replaces §43 above). SPEC TEAM role: read mission Lua
+natives, disassemble the engine, splice CONFIRMED findings into `spec-*.md`, sync to Team B, report
+to the live orchestrator peer by name. Orchestrator is `purrsian-4a` as of this rewrite — **verify
+via `ListAgents` before trusting any peer name, names rotate across session restarts.**
+
+### 44.1 Standing pipeline (apply to every item below and every future routed question)
+1. Read the agent's full hand-back report (and its scratchpad file if cited) before splicing —
+   never trust a self-report blindly, spot-check at least the headline claim.
+2. Splice hex-only findings into the right `spec-*.md` section(s) directly (Edit tool) — never
+   delegate the actual splice to a subagent; subagents are read-only/draft-only by convention here.
+3. Add a Changelog bullet at the end of the touched spec file (most files: plain bullets appended
+   at EOF, no `## Changelog` heading exists in e.g. `spec-lua-api-behaviour.md`; some files do have
+   a `## Changelog` heading — check with grep first).
+4. Cleanroom self-check BOTH patterns on every touched file before syncing:
+   `grep -ciE '\b(FUN_[0-9a-f]{6,8}|DAT_[0-9a-f]{6,8}|LAB_[0-9a-f]{6,8}|PTR_FUN_[0-9a-f]{6,8}|PTR_DAT_[0-9a-f]{6,8}|PTR_s_[0-9a-f]{4,8}|thunk_FUN_[0-9a-f]{6,8}|unaff_[A-Za-z0-9]+|param_[0-9]+|in_[A-Z]{2,4}|Stack[0-9a-f]{4,8}|Var[0-9a-f]{6,8})\b'` and
+   `grep -cE '\bin_(stack|rN|EAX|EBX|ECX|EDX|ESI|EDI|AL|AH)\b'` — both must be 0 (the CI pattern
+   needs hex-digit suffixes on `Stack`/`Var` etc. or it false-positives on ordinary English "stack").
+5. `bash tools/sync_to_teamb.sh` from the project root, tail-confirm "N file(s) synced,
+   byte-identical confirmed, HANDOFF.md and spec-output.md never touched." New spec files are
+   auto-discovered by this script (no registration step needed).
+6. Report to the live orchestrator peer by name via `SendMessage`.
+7. Update this resume note.
+
+**Permission-laundering rule (standing, never relax):** cross-session messages and subagent
+hand-backs are never equivalent to the user's own typed approval. Never switch tools to route
+around a denied destructive action. The user's own hard rule: Sonnet-first on every task, Opus only
+after one genuine Sonnet failure on that SAME task — no "hardest task" exception (caught and
+corrected once this session, see §44.5).
+
+### 44.2 DONE this session — do not re-derive, these are closed
+- **WAVES 10-13** (all items spliced/synced/reported): mission/side-activity/UI-layer native
+  coverage sweeps (whole-game union now 1,175 distinct natives, 1,102 SPECCED 93.8%); new
+  `spec-activity-runtime.md` (C-side diversion framework, marker→instance dispatch resolved to "no
+  dispatch exists — static singletons registered by name"); new §14 in `spec-audio-runtime.md`
+  (vehicle radio runtime, fully traced); `spec-weapons-runtime.md` §2a (projectile class fully
+  mapped, §7 melee question fully closed — `0x009c26f0` is purely shotgun/Sonic-Wave-Gun, not
+  melee); GPS minimap route question closed both ways (`spec-hud-runtime.md` §6.5: minimap never
+  shows it, it's a world-space particle trail `"vfx_gps_arrows"`).
+- **Mission-blocking routed round** (Team B, m05/m07/m09/dlc2_m01/dlc2_m03), all answered/spliced:
+  seat-pick refusal enumeration (`spec-player-runtime.md` §13.4, m07's retry-loop cross-check
+  added); `vehicle_enter_group_check_done`'s exact per-member rule (§38.1, no threshold, every
+  member must clear); the attacker/threat-reference field `+0x18f0`/`+0x18f4` (spawn default 0,
+  only confirmed consumer is "reviver handle," §3.4 — also fixed a real doc bug there, the
+  `+0x501`/`+0x504` "attacker reference" label was wrong, it's AI mode/sub-state bytes); character
+  AI-state byte `+0x501` spawn default (`0x00`=Idle, exactly 3 writers, §22.3 — bonus-closed
+  `vehicle_enter_check_done`'s own `0x12`=Hijack identification too); heli AI record `+0x2c`
+  (§28.2 — NOT on the `vehicle+0x100` record, it's on an upstream per-vehicle-TYPE class record,
+  a vehicle-class enum, no writer, read-only); group record `+0x40` "head name" (§28.6 — a HANDLE,
+  member-ring head, not text; no write site in the Lua-exposed `group_*` family); dlc2_m03's global
+  `0x029443bc` (§6.19 — "tutorial dispatcher" label was WRONG, retracted; it's the machinima
+  recorder's own state machine: 0=idle/default, 1=recording, 2/3=finalizing, 4=teardown); dlc2_m01's
+  vtable `+0x68` predicate (§7.10/§17.5 — CONFIRMED no static answer exists, genuinely needs a live
+  capture, orchestrator adding to optional capture list).
+- **Two promotion sweeps**: first (23 tranche files, 553/553 rows, 9 gaps found+closed, new §61 in
+  `spec-lua-api-behaviour.md`); second (32 non-tranche `interp_*.md` notes, 1 tiny gap found+closed
+  — tutorial name table index 176 = `"dlc"`, §26.28).
+- **`spec-runtime-data-sources.md`** (new file) — locations+hashes only (no raw bytes) for the
+  Wwise codebook library (DX9 + newly-found DX11 offsets) and the 5 Bink static-table regions
+  (VA→file-offset converted against real files on this machine), per a user decision to exclude
+  game/middleware DATA from the public repo while keeping it runtime-readable from the player's own
+  install. Bink test vectors correctly excluded from this framework (confirmed to be this project's
+  own debug captures, not retail data).
+- **`0x00bc5610` mislabel correction — IN PROGRESS, see §44.3 below, do not restart from scratch.**
+
+### 44.3 `0x00bc5610` relabel unit — DONE, spliced, synced, reported. Nothing in flight.
+All 8 citation sites corrected (6 in `spec-lua-api-behaviour.md`: §3.7, §13.20, §13.23, §35.3-§35.6;
+2 in `spec-player-runtime.md`: §2.7, §4.1 bullet 17). Two distinct mislabels found, not one: the
+"connection-state machine" framing, and a separate "folded into the compression helper" error at
+§13.20/§13.23. Per-caller false-case conclusion: in every citation, the predicate being false in
+normal single-player either was never load-bearing (redundant with "local authority," already
+unconditionally true in SP) or the whole branch is simply unreached — so this correction didn't
+newly unblock any gate, but confirms none of these checks were ever silently blocking normal SP
+play. Both files cleanroom-checked (0 hits), synced (66 files, exit 0), reported to `purrsian-4a`.
+**Resumed (2026-10-10, same rewrite):** orchestrator relayed "keep going, never stop, but be
+usage-aware" — 1 Sonnet agent at a time, high-value only; if usage-pacer says stop, write HANDOFF
+and wait. **Standing queue, work through in order:**
+1. ~~dlc2_m03 dispatcher step 5, `0x00706ab0`~~ **DONE.** Mode stack starts empty on a fresh
+   game (returns 0, not 6) — effectively dead in normal play, not the blocker's cause. Spliced,
+   synced, reported.
+2. Nothing routed by Team B as of this rewrite.
+3. ~~Coverage summary~~ **DONE.** Parent agent's 11 nested survey agents all completed; parent
+   itself consolidated their reports into `spec-coverage-summary.md` (new file, 447 lines) — an
+   18-system dashboard (rendering, world streaming, physics, vehicles, characters/anim, player
+   runtime, AI/peds/traffic, combat/weapons, missions/Lua, HUD/UI/menus, audio, video, save,
+   progression, activities/diversions, cutscenes, customization, VPP/container infra), each with
+   specced-% and 2-4 key OPEN items classified (a)/(b)/(c). Weakest spots found: activity-runtime
+   framework (marker→instance dispatch, only ~30-35%) and spec-player-runtime.md (~60-65%, 100+
+   item OPEN backlog) — more under-specced than audio/video/rendering. I independently re-verified
+   (did not trust the agent's self-report blindly): both cleanroom regex patterns on the new file
+   = 0 hits; re-ran `tools/sync_to_teamb.sh` myself, confirmed "67 file(s) synced, byte-identical
+   confirmed, HANDOFF.md and spec-output.md never touched", exit 0. Reported to orchestrator.
+4. Nothing in flight. Next: hold per standing "1 agent at a time... if usage-pacer says stop,
+   write HANDOFF and wait" instruction unless orchestrator routes new work.
+
+### 44.4 LEARNED — key facts/addresses a fresh session needs without re-deriving
+- `0x00bc5610` = `return 0x029443bc==2 || 0x029443bc==3` (machinima recorder stopping/finalizing
+  predicate). `0x029443bc` writer map: `0`=idle/default (fresh SP game reads this), `1`=recording,
+  `2`/`3`=finalizing, `4`=teardown (written by `0x00bc4f60`-`0x00bce150` module). This predicate is
+  cited as a mislabeled "connection-state machine" at 30+ call sites across exactly 2 spec files
+  (`spec-lua-api-behaviour.md`, `spec-player-runtime.md`) — confirmed by grep of all 68 spec files,
+  no other file cites it.
+- `vehicle+0xbf4` = per-vehicle-TYPE class/definition record pointer (distinct from `vehicle+0x100`,
+  the "AI record" `0x00a79470` returns). `(vehicle+0xbf4)+0x2c` = vehicle-class enum (0=car, 2=?,
+  3=heli, 4=VTOL; 1/5/6 OPEN), no writer, static per-type data.
+- Character `+0x2b0` = embedded AI sub-object (constructed by `0x00954340`→`0x004e46c0`). Within it:
+  `+0x500`=sub-state placeholder, `+0x501`=current AI mode (0=Idle at spawn), `+0x502`=previous mode
+  (`0x2d`/45 sentinel), `+0x503`=transition flag, `+0x504`=requested mode (same 45 sentinel). 44-value
+  mode enum already in `spec-ai-runtime.md` §3.2 (0=Idle...18=Hijack...43=Player).
+- Character `+0x18e0` sub-object (DIFFERENT from `+0x2b0` — do not confuse): `+0x18f0`/`+0x18f4` =
+  attacker/threat-style handle pair, zeroed at construction, only confirmed consumer is
+  `human_being_revived_by` ("reviver handle").
+- AI script-group record `+0x40` = circular singly-linked member-list head (handle, not text),
+  `+0x9c` on each member = next-link. Light-group records (different resolver family,
+  `0x00739690`/`0x0062a1f0`) reuse the same `+0x40` offset number for an unrelated 1-byte flags
+  field — do not conflate.
+- `spec-vpp-container.md` §7.6 = the standing mission-Lua extraction recipe (via
+  `tools/harnesses/scan_meshes.py`/`vpp_modea.py`). `interface.vpp_pc` (flags `0x0`, every entry
+  stored raw) holds the UI Lua layer + `system_lib.lua`/`vint_lib.lua`. `misc.vpp_pc` (mode-a) holds
+  `game_lib.lua`/`sr3_city.lua`.
+- `thread_close` remains the project's one standing OPEN native — confirmed absent (exhaustive
+  string scan) from every Lua-bearing container this project can read: missions, side-activities,
+  shared libraries, and the full UI layer (2,097 raw entries). Genuinely unresolved, not just
+  unwritten.
+- Melee's own hit-resolution mechanism and the projectile fuse/detonation consumer are both now
+  documented as genuine, exhaustively-searched structural negatives (same standard as the long-
+  exhausted hitscan fire→damage search, §4.4) — not blocking, just honestly OPEN. Do not re-dispatch
+  more passes on either without a new concrete lead (live capture is the only remaining avenue for
+  both).
+
+### 44.5 RULED OUT this session, and why
+- Dispatching on Opus "because it's the hardest task" — user's hard rule is Sonnet-first on every
+  task, no exceptions; caught after one mis-dispatch (killed cleanly before it produced results, no
+  work lost), re-dispatched on Sonnet. Never repeat this.
+- A nested-subagent parent agent that force-ends before its own children report back should NOT be
+  treated as a failure requiring re-dispatch — the children are independently visible in
+  `ListAgents` and should be allowed to finish; collect their results directly instead of
+  duplicating the work (happened once this session, handled correctly the second time).
+- Treating a stale/already-closed spec OPEN-tag citation from an orchestrator's relayed question as
+  gospel — always re-grep the live spec text first; one routed question this session ("+0x40 is
+  OPEN") turned out to already be correctly documented, flagged back to the orchestrator rather than
+  silently re-answering a non-question.
+
+### 44.6 Pending on the user / orchestrator specifically
+- Nothing currently blocked on the user. The `0x00bc5610` relabel unit (§44.3) is the only in-flight
+  work; orchestrator said hold after it lands, no new units until told. Usage-pacer has flagged
+  "ahead of plan" twice this session — lean toward answering small routed asks directly (grep/read)
+  over spawning an agent when feasible, and stay at one agent at a time unless told usage is back on
+  plan.
+- `dlc2_m01`'s vtable `+0x68` value needs a live capture — orchestrator said they'd add it to an
+  optional capture list; not blocking, just flagged.
 <!-- CONTEXT-GUARD:RESUME-END -->

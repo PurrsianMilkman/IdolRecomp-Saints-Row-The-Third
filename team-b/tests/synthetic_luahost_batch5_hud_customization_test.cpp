@@ -242,10 +242,16 @@ int main() {
 
     // ------------------------------------------------------------------
     // Sec15.14 character_is_ragdolled: unresolved -> false, no OPEN read;
-    // resolved but state unset -> OPEN; then exclusion test.
+    // resolved, CONFIRMED default 0 ("character proxy," spec-player-
+    // runtime.md Sec5.4.2/Sec5.4.4/Sec7.4a/Sec15.3a) -> false with NO
+    // explicit set() needed; forget() still reopens it (override stays
+    // available for a test exercising the ragdolling/unknown path); then
+    // exclusion test.
     es.objectResolves().set("nobody", false);
     ok(host, gp, "assert(character_is_ragdolled('nobody') == false)");
-    fails(host, gp, "character_is_ragdolled('npc1')", "+0xcd2");
+    ok(host, gp, "assert(character_is_ragdolled('npc1') == false)"); // CONFIRMED default 0, pre-seeded by getOrCreateCharacter()
+    es.getOrCreateCharacter("npc1").ragdollStateEnumCd2.forget();
+    fails(host, gp, "character_is_ragdolled('npc1')", "+0xcd2"); // override still available: forget() reopens it
     es.getOrCreateCharacter("npc1").ragdollStateEnumCd2.set(0);
     ok(host, gp, "assert(character_is_ragdolled('npc1') == false)");
     es.getOrCreateCharacter("npc1").ragdollStateEnumCd2.set(3);

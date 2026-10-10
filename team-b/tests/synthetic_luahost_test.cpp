@@ -896,8 +896,27 @@ static void test_block_11() {
         // zeroes +0x16d4 unconditionally - see CharacterState::stateEnum's
         // own doc comment) - a freshly touched character's "newly enabling"
         // branch no longer refuses on stateEnum at all, it now reads a real
-        // 0 and falls through to the NEXT read, attackerThreatRef, which is
-        // still genuinely OPEN until test setup.
+        // 0 and falls through to the NEXT read.
+        //
+        // CORRECTED 2026-10-09 (Sec3.4's own in-place correction, routed
+        // from Team A, mission-blocking m07): that next read used to be the
+        // (incorrect, now-removed) attackerThreatRef field; it is now
+        // CharacterState::stateCodeByte501/aiSubStateByte500 (the real AI
+        // mode/sub-state bytes +0x501/+0x500).
+        //
+        // SUPERSEDED 2026-10-10 (Sec22.3 sync, seeded by
+        // feature/vehicle-group-check-done-occupant-conflict, 1645584):
+        // stateCodeByte501 ALSO now has a CONFIRMED spawn default (0/Idle),
+        // same as stateEnum above. Since the override condition is
+        // `stateCodeByte501 != Idle && aiSubStateByte500 != 9` (short-
+        // circuited, stateCodeByte501 read first), a freshly-spawned
+        // character's own Idle default makes the whole condition false
+        // WITHOUT ever reading aiSubStateByte500 - so npc_a's own
+        // "newly enabling" calls below no longer refuse at all, they
+        // succeed directly (override stays 1, the "leave untouched" value).
+        // The aiSubStateByte500-still-OPEN refusal path is still real code
+        // (see below) - it just needs a character whose stateCodeByte501 was
+        // explicitly set to a non-Idle value first, which npc_a never does.
         {
             // CONFIRMED default (Sec34.1/Sec34.3): known immediately, off,
             // no .set() needed first.
@@ -907,28 +926,42 @@ static void test_block_11() {
             // immediately, 0 ("not in a vehicle"), no .set() needed first.
             CHECK(es.getOrCreateCharacter("npc_a").stateEnum.known());
             CHECK(es.getOrCreateCharacter("npc_a").stateEnum.get() == 0);
+            // CONFIRMED default (Sec22.3): known immediately, 0/Idle.
+            CHECK(es.getOrCreateCharacter("npc_a").stateCodeByte501.known());
+            CHECK(es.getOrCreateCharacter("npc_a").stateCodeByte501.get() == sr3luahost::CharacterState::kAiModeIdle);
             // Default arg2 (true) against the off default is "newly
-            // enabling", which reads stateEnum (now a real, non-vehicle 0 -
-            // no refusal there) then falls through to attackerThreatRef -
-            // still OPEN until test setup, so THAT's what refuses now: both
-            // default-path fixes together moved this call's blocker forward
-            // by two fields from where it started.
-            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "attacker/threat");
-            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false); // unchanged: refused before any write
+            // enabling": stateEnum's real 0 passes (not a vehicle), and
+            // stateCodeByte501's real Idle default short-circuits the
+            // override condition to false before aiSubStateByte500 is ever
+            // read - the call succeeds outright, no override write.
+            auto r0 = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai0.lua");
+            CHECK(r0.loadOk && r0.pcallOk);
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
+            CHECK(!es.getOrCreateCharacter("npc_a").actionOverrideId.known()); // override==1 ("leave") -> no write
 
-            es.getOrCreateCharacter("npc_a").ignoreAI.set(true); // test setup: simulate already-on
-            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch, stateEnum/attackerThreatRef never read
+            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch, stateEnum/stateCodeByte501/aiSubStateByte500 never read
             CHECK(r.loadOk && r.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
 
             auto r2 = host.runChunk(gp, "set_ignore_ai_flag('npc_a', false)", "ignoreai2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
-            // Newly enabling again: stateEnum's real 0 passes, attackerThreatRef
-            // is still OPEN (never set on npc_a in this test) -> refused, flag
-            // unchanged.
-            refusesOpen(gp, "set_ignore_ai_flag('npc_a', true)", "attacker/threat");
-            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
+            // Newly enabling again: same short-circuit as r0 above (stateCodeByte501
+            // on npc_a was never changed from its Idle default) - succeeds directly.
+            auto r2b = host.runChunk(gp, "set_ignore_ai_flag('npc_a', true)", "ignoreai2b.lua");
+            CHECK(r2b.loadOk && r2b.pcallOk);
+            CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
+            CHECK(!es.getOrCreateCharacter("npc_a").actionOverrideId.known());
+
+            // The aiSubStateByte500-still-OPEN refusal path (a real code
+            // path, not removed by the Sec22.3 sync - it only became
+            // unreachable through npc_a's own untouched Idle default):
+            // reached by explicitly setting stateCodeByte501 to a non-Idle
+            // value first and leaving aiSubStateByte500 OPEN.
+            auto& npcD = es.getOrCreateCharacter("npc_d");
+            npcD.stateCodeByte501.set(43); // sr3airuntime::mode::Player - anything != Idle(0)
+            refusesOpen(gp, "set_ignore_ai_flag('npc_d')", "+0x500");
+            CHECK(npcD.ignoreAI.get() == false); // unchanged: refused before any write
 
             auto& npcB = es.getOrCreateCharacter("npc_b");
             npcB.stateEnum.set(3); // test setup - "in a vehicle" (Sec3.4/Sec3.10); ignoreAI already off via the CONFIRMED default
@@ -936,10 +969,11 @@ static void test_block_11() {
             auto r3 = host.runChunk(gp, "set_ignore_ai_flag('npc_b', true)", "ignoreai3.lua"); // false->true: "newly enabling"
             CHECK(r3.loadOk && r3.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_b").actionOverrideId.get() == 0x19); // HIGH CONFIDENCE meaning, CONFIRMED structure
-            // Not in a vehicle, nonzero threat -> override cleared to 0.
+            // Not in a vehicle, AI mode non-Idle and sub-state != 9 -> override cleared to 0.
             auto& npcC = es.getOrCreateCharacter("npc_c");
             npcC.stateEnum.set(0);
-            npcC.attackerThreatRef.set(7);
+            npcC.stateCodeByte501.set(43); // sr3airuntime::mode::Player - anything != Idle(0)
+            npcC.aiSubStateByte500.set(0); // anything != 9
             auto r4 = host.runChunk(gp, "set_ignore_ai_flag('npc_c', true)", "ignoreai4.lua");
             CHECK(r4.loadOk && r4.pcallOk);
             CHECK(npcC.actionOverrideId.get() == 0);

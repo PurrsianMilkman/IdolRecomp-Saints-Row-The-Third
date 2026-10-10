@@ -284,11 +284,27 @@ struct CharacterState {
     // for m09, separate from this field.
     OpenValue<int32_t> stateEnum{"character state enum (+0x16d4)", "spec-lua-api-behaviour.md Sec3.4/Sec3.10"};
 
-    // The other half of the same conditional (Sec3.4): "clears the
+    // REMOVED 2026-10-09 (spec-lua-api-behaviour.md Sec3.4's own in-place
+    // correction, routed from Team A, mission-blocking m07): this field
+    // used to model the other half of Sec3.4's conditional as "clears the
     // override to 0 if the character currently carries a nonzero
-    // attacker/threat reference." Default 0 ("no attacker/threat
-    // reference") - same "no Lua setter in scope" note as stateEnum above.
-    OpenValue<int32_t> attackerThreatRef{"character attacker/threat reference", "spec-lua-api-behaviour.md Sec3.4"};
+    // attacker/threat reference" - that label was a documentation mistake.
+    // The real condition (0x00a5e333-0x00a5e343) tests the AI mode byte
+    // +0x501 (nonzero = "not Idle") ANDed with the AI sub-state byte +0x500
+    // (!= 9); both are CharacterState::stateCodeByte501/aiSubStateByte500
+    // below (REUSED, not duplicated), which `set_ignore_ai_flag`'s own stub
+    // now reads instead - see that stub's own doc comment for the exact
+    // gate. This field was never actually seeded anywhere (no
+    // EngineState::getOrCreateCharacter() .set() call existed for it,
+    // despite its own stale comment claiming a "default 0" - which is
+    // exactly why it surfaced as a mission-blocking OPEN-state gap for m07
+    // in the first place), so removing it drops no modelled behavior.
+    //
+    // A genuine attacker/threat-style handle DOES exist elsewhere, at
+    // character offset +0x18f0/+0x18f4 (an 8-byte handle pair) - see
+    // CharacterState::reviverHandle below for that field. It is NOT the
+    // same thing this (former) field tried to model, and is not read by
+    // set_ignore_ai_flag at all.
 
     // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31) /
     // character spawn state (Sec34.1/Sec34.2): CONFIRMED, cross-checked to
@@ -726,13 +742,122 @@ struct CharacterState {
     uint64_t vehicleExitRequestCount = 0; // 0x00af3cd0 calls issued by this batch's natives
     uint64_t vehicleExitCancelCount = 0;  // 0x00af3e10 calls (vehicle_exit_do's cancel path)
 
+    // 2026-10-09, spec-player-runtime.md Sec7.4a: the eligibility gate
+    // 0x00b0ca60(character, forced, eligibility_bit) itself - Team A traced
+    // it exhaustively and confirmed it is a PURE character-state check, no
+    // vehicle/physics argument at all (9 refusal paths + 1 success path,
+    // plain boolean, no secondary reason code). The three fields below are
+    // new per-character facts this gate reads that nothing in this project
+    // modelled before; every other field it reads (stateEnum +0x16d4,
+    // ragdollStateEnumCd2 +0xcd2, lifeState/killFinalizedFlagE3 +0xcc8/+0xe3,
+    // movementStateByteCcd +0xccd, stateCodeByte501 +0x501 below) is REUSED,
+    // not duplicated - see vehicleEnterEligibilityGate() in
+    // lua_spec_confirmed_stubs_b15_wave2_core_dispatchers.cpp for the full
+    // step-by-step implementation and citation of each reuse.
+    //
+    // Step 3's +0x16d8/+0x16dc "busy/pending" pair (HYPOTHESIS, flagged OPEN
+    // by Sec7.3/Sec13.0/Sec13.1 step 1 and Sec7.4a step 3 alike - a SECOND
+    // confirmed reader with identical polarity, strengthening but not
+    // resolving that open item). Checked first: no existing field models
+    // this pair (sr3player's VehicleInteractionRecord::driverHandle, Sec8.1,
+    // is the SAME relative offset on the VEHICLE object - a different real
+    // field by the project's own object-type-keyed-offset convention, not a
+    // reuse candidate). CHOSEN false (not confirmed): applies UNCONDITIONALLY
+    // even to a forced request (Sec7.4a step 3 is not gated on "forced"), so
+    // leaving this OpenValue-strict would throw OpenStateError on every
+    // single enter attempt including vehicle_enter_guardian_angel's forced
+    // path, which would make implementing this gate at all pointless (same
+    // "a default is needed so as not to block everything" reasoning as
+    // aiTargetOwnerGatePasses/aiTargetActorGateBit33 above) - the common
+    // case for a character who is not already mid some OTHER tracked
+    // interaction is that this pair is zero. A test can still flip it to
+    // exercise the refusal branch.
+    bool vehicleEnterEligibilityBusyPendingNonZero = false; // CHOSEN false - +0x16d8/+0x16dc, Sec7.4a step 3
+
+    // Step 6's generic, non-vehicle-specific interaction-lock helper
+    // (0x009562d0, widely reused elsewhere) - Sec7.4a's own text: "shape
+    // confirmed, exact semantics OPEN, hinges on a +0x1b78-indirected
+    // sub-object and two unidentified hash constants 0x1d56/0x1d7e." The
+    // spec explicitly flags this as unresolved, so - unlike the busy/pending
+    // pair above - this is kept genuinely OPEN (no CHOSEN default), per this
+    // project's "never silently guess at something the spec itself calls
+    // open" discipline: a test must .set() it to get past step 6 for a
+    // NON-forced request (forced skips this check entirely, Sec7.4a step 6's
+    // own "only when NOT forced" gate). True = the lock PASSES (does not
+    // refuse) - same "GatePasses" polarity convention as
+    // forceFlagGatePasses/controlLockGatePasses/behaviorSetVtableGatePasses
+    // above.
+    OpenValue<bool> genericInteractionLockGatePasses{
+        "character generic interaction-lock helper 0x009562d0 (shape confirmed, exact semantics OPEN)",
+        "spec-player-runtime.md Sec7.4a step 6"};
+
+    // Step 8's "+0x2ba bit 0x10, the exact, already-named cant_enter_vehicle
+    // flag" (Sec7.4a). Checked first: this project's OWN cantFleeFlag/
+    // followerCanAbandon/cantCowerFlag fields below are a DIFFERENT real
+    // byte at absolute +0xa (their own doc comments are explicit about that
+    // offset), not this ai_force_flags-table byte at +0x2ba (sub-object
+    // +0x2b0 + 0xa, the same human_ai_data sub-object humanAiDataForceFlagsByte8/
+    // humanAiDataForceFlagsByte9 below already model two OTHER bytes of,
+    // +8/+9) - no existing field is this byte, despite the coincidentally
+    // overlapping flag NAMES (the real engine apparently has two
+    // independent "cant_flee"/"can_leave_behind"-named bits at two different
+    // byte offsets; not reconciled here, out of this task's scope). CHOSEN
+    // false (not confirmed for THIS project's own per-instance data, since
+    // this host has no .xtbl per-class AI data loader): cross-referenced
+    // against sr3airuntime's OWN already-confirmed model of this exact
+    // physical byte, decision.h's ForceFlags::cantEnterVehicle (+0x2ba bit
+    // 4 of the 41-flag table, Sec9.9), which that unit's own A1 pass
+    // defaults to false for every one of its 41 fields - the same
+    // "ai_force_flags default off" conclusion a sibling, independently-
+    // confirmed unit of this project already reached, reused here rather
+    // than re-guessed from nothing (sr3airuntime and sr3luahost are
+    // separate subsystems with no header coupling, so the VALUE is reused,
+    // not the field itself).
+    bool cantEnterVehicleFlag2ba = false; // CHOSEN false - +0x2ba bit 0x10, Sec7.4a step 8
+
     // The shared enter submitter 0x00af22a0 (spec-player-runtime.md Sec7.4,
     // completing Sec38.1): its boolean result depends on the eligibility
-    // predicate 0x00b0ca60 and the vehicle/seat pick 0x00b0fdf0/0x00b105c0
-    // (U6.2 - world state this host has no model of), so it is OPEN per
-    // character. Two separate facts, because a "forced" request (request
-    // +0x23 bit 3, vehicle_enter_guardian_angel) skips several of the
-    // eligibility refusals an ordinary one is subject to (Sec7.4 step 3).
+    // predicate 0x00b0ca60 (Sec7.4a, IMPLEMENTED above as
+    // vehicleEnterEligibilityGate() - a refusal there is now a CONFIRMED
+    // false, computed, not OPEN) and the vehicle/seat pick
+    // 0x00b0fdf0/0x00b105c0 (U6.2 - world state this host still has no
+    // model of). A test's own .set() on this field, when present, still
+    // wins outright (checked BEFORE the gate runs at every call site) - full
+    // backward compatibility with every existing test that drives the
+    // overall accepted/refused result directly. Two separate facts, because
+    // a "forced" request (request +0x23 bit 3, vehicle_enter_guardian_angel)
+    // skips several of the eligibility refusals an ordinary one is subject
+    // to (Sec7.4 step 3; Sec7.4a step 6).
+    //
+    // 2026-10-09 follow-up: an ELIGIBLE gate result used to fall through to
+    // this OpenValue's own .get(), which throws OpenStateError whenever no
+    // test has .set() it - in practice this meant EVERY real mission-drive
+    // run (m05/m07/m09 confirmed by direct measurement) blocked here anyway,
+    // because nothing in a real run ever calls .set() on this field: wiring
+    // the eligibility gate alone did not move a single mission. Sec7.4 step 4
+    // (the seat pick, U6.2) is a genuinely separate, unmodelled unit - no
+    // spec text here gives its success/failure condition, and this host has
+    // no vehicle seat-occupancy/availability state to compute it from. CHOSEN
+    // default, in computeVehicleEnterSubmitAccepted() (lua_spec_confirmed_
+    // stubs_b15_wave2_core_dispatchers.cpp): an eligible gate result with no
+    // test override now resolves to `true` (seat pick assumed to succeed)
+    // rather than throwing - the same "a default is needed so as not to
+    // block everything" reasoning as vehicleEnterEligibilityBusyPendingNonZero
+    // above, applied one level up. This is a genuine, flagged guess, not a
+    // confirmed fact: it is wrong for any real case where the real
+    // 0x00b0fdf0/0x00b105c0 would refuse an eligible character (e.g. a full
+    // vehicle, no free seat matching the request) - this project has no way
+    // to tell that case apart from a successful pick yet. Routed to the
+    // disassembly team as an open question (see this task's own report):
+    // what, concretely, can 0x00b0fdf0 (with a vehicle) / 0x00b105c0
+    // (auto-pick) refuse, beyond "no free seat" - and does any confirmed
+    // mission-script case in m05/m07/m09 actually depend on a refusal here
+    // (i.e. is `true` ever observably wrong for these three missions
+    // specifically)? The OpenValue itself is left in place, name and spec
+    // citation unchanged, so a test's own .set() (exact seat-pick outcome)
+    // still overrides the CHOSEN default exactly as before, and so a future
+    // pass that actually models U6.2 only has to add .set() calls, never
+    // touch this field's shape.
     OpenValue<bool> vehicleEnterSubmitAccepted{
         "0x00af22a0 enter submitter result (eligibility 0x00b0ca60 + seat pick 0x00b0fdf0/0x00b105c0)",
         "spec-player-runtime.md Sec7.4; spec-lua-api-behaviour.md Sec38.1"};
@@ -762,13 +887,62 @@ struct CharacterState {
     uint64_t vehicleEnterRequestCount = 0;
 
     // vehicle_enter_check_done (Sec22.3): the state-code byte pair compared
-    // against '&'/0x12 (meaning OPEN per Sec22.3's own tag), and the "rich
-    // helper" 0x009b95c0 consulted only when arg 2 is true (its internal role
-    // beyond the decoded branch shape is OPEN).
+    // against '&'/0x12. CONFIRMED (2026-10-10 Team A spec sync, closing this
+    // field's own previously-OPEN spawn-default question): +0x501 is the
+    // character's current AI-mode byte, spawn-default 0x00 = Idle, zeroed
+    // unconditionally by the character base constructor 0x00954340 (see
+    // EngineState::getOrCreateCharacter's own seed). Exactly 3 writers exist
+    // project-wide: construction (above), the main gameplay AI-mode
+    // transition primitive 0x004dd380 (spec-ai-runtime.md Sec3.3, every
+    // voluntary mode change), and the proxy-only network read 0x004ea530
+    // (non-owned/proxy human only, spec-ai-runtime.md Sec2.4 point 3). The
+    // full 44-value mode enum is spec-ai-runtime.md Sec3.2 (0=Idle,
+    // 18=Hijack, 43=Player, etc; see kAiModeIdle/kAiModeHijack below). The
+    // "rich helper" 0x009b95c0 consulted only when arg 2 is true (its
+    // internal role beyond the decoded branch shape is OPEN) is unaffected.
     OpenValue<int32_t> stateCodeByte501{"character state-code byte +0x501", "spec-lua-api-behaviour.md Sec22.3"};
+    // +0x504 (requested-mode byte): spawn-default 0x2d/45, the shared
+    // "no mode" sentinel for the previous/requested-mode fields (spec-lua-
+    // api-behaviour.md Sec22.3, same 2026-10-10 sync) - not pre-seeded here
+    // because no test currently depends on its spawn value and the "no
+    // mode" sentinel is not itself a mode-enum value worth a constant; the
+    // vehicle_enter_check_done 0x12 comparison below still names kAiModeHijack.
     OpenValue<int32_t> stateCodeByte504{"character state-code byte +0x504", "spec-lua-api-behaviour.md Sec22.3"};
     OpenValue<bool> enterCheckHelper9b95c0{"0x009b95c0 vehicle-enter re-check helper result (arg 2 true only)",
                                            "spec-lua-api-behaviour.md Sec22.3"};
+    // Reused again, 2026-10-09, by Sec7.4a's eligibility gate step 8: the
+    // SAME physical byte +0x501 is the per-human "current AI mode" field
+    // sr3airuntime's own A0 unit fully models as ModeState::currentMode
+    // (mode_table.h) - a DIFFERENT subsystem with no header coupling to
+    // this one (checked: no sr3luahost header includes sr3airuntime's, and
+    // vice versa - the Lua host's vehicle-enter path does not drive the AI
+    // mode machine). "Idle" is CONFIRMED mode id 0 there (mode::Idle) and
+    // independently by this very spec file's own direct citations
+    // (spec-player-runtime.md lines 647/656: "+0x501 is 0 (Idle)") - a
+    // cross-subsystem CONFIRMED fact, not a guess, so Sec7.4a step 8's
+    // "allow if current AI mode isn't Idle" reuses stateCodeByte501 and
+    // compares it against the literal 0 (kAiModeIdle below) rather than
+    // including sr3airuntime's header for one constant.
+    static constexpr int32_t kAiModeIdle = 0; // sr3airuntime::mode::Idle (mode_table.h) - same physical +0x501
+    // CONFIRMED (spec-ai-runtime.md Sec3.2 mode 18; spec-lua-api-behaviour.md
+    // Sec22.3, 2026-10-10 sync): mode 18 = Hijack in the 44-value mode enum -
+    // the literal 0x12 vehicle_enter_check_done tests against stateCodeByte504
+    // (see stub_vehicle_enter_check_done).
+    static constexpr int32_t kAiModeHijack = 0x12; // sr3airuntime mode::Hijack equivalent - same physical +0x501/+0x504
+
+    // Sec7.4a step 8's AI sub-state byte (+0x500) - CONFIRMED meaning
+    // ("observe vehicle world accident"/"observe vehicular accident" at
+    // values 0x10/0x11, resolved against the already-documented 177-entry
+    // sub-state table 0x012e1168) but, like stateCodeByte504 above (the
+    // requested-mode byte's own per-character runtime value, not its spawn
+    // default), no per-character VALUE is given by any spec this project
+    // has, so it is OPEN until a test sets it - the SAME "+0x500/+0x501" real pair
+    // sr3airuntime's A0 unit already fully owns as ModeState::subState/
+    // currentMode (mode_table.h), reused here only by VALUE citation per
+    // this field's own doc comment above, same cross-subsystem-boundary
+    // reasoning, no new field added on the sr3airuntime side for this.
+    OpenValue<int32_t> aiSubStateByte500{"character AI sub-state byte (+0x500)",
+                                          "spec-player-runtime.md Sec7.4a step 8; spec-ai-runtime.md Sec2.5 (sub-state table 0x012e1168)"};
 
     // move_to_do (Sec21.22): the per-character predicate 0x00a3bae0(target,
     // arg5) - one OPEN fact per value of its boolean argument, since the
@@ -913,6 +1087,35 @@ struct CharacterState {
     // (EngineState::getOrCreateCharacter).
     OpenValue<bool> killFinalizedFlagE3{"character dead/kill-finalized flag (+0xe3 bit 0x01)",
                                         "spec-lua-api-behaviour.md Sec34.5"};
+
+    // Attacker/threat-style handle pair, character +0x18f0/+0x18f4 (found
+    // 2026-10-09 during spec-lua-api-behaviour.md Sec3.4's own in-place
+    // correction - see CharacterState::stateCodeByte501/aiSubStateByte500's
+    // own doc comments and set_ignore_ai_flag's stub for what that
+    // correction actually fixed; this field is the genuine handle the
+    // correction found while tracing where a REAL attacker/threat
+    // reference might live, since Sec3.4's own text did not name one).
+    // CONFIRMED zeroed unconditionally at character construction (via
+    // 0x00954340 -> 0x00942920 - the same zeroing-constructor chain
+    // Sec34.1 already traces for lifeState/stateEnum/maxHitPoints above),
+    // so a freshly-spawned or script-created character (the m07 kind)
+    // always starts at 0 ("no reference") - seeded at construction
+    // (EngineState::getOrCreateCharacter), not left OPEN. CONFIRMED
+    // cleared mutually on death by the SAME kill-pipeline finalizer
+    // (0x009a7610) killFinalizedFlagE3 above already models - see
+    // character_kill's own stub (lua_spec_confirmed_stubs_b30_
+    // tranchef_camera.cpp) for where this is applied. Its only confirmed
+    // consumer anywhere in this project is the already-documented native
+    // human_being_revived_by (Sec54.3) - the "reviver handle" (who can
+    // revive this character). No writer that sets it nonzero during
+    // normal gameplay (taking damage, engaging/being engaged) was found -
+    // whether this field doubles as a genuine combat attacker-reference or
+    // is purely a reviver handle stays OPEN; do not assume a combat-
+    // engagement writer exists for it without further tracing. It is NOT
+    // the same thing as the former (removed) attackerThreatRef field above
+    // and must not be read by set_ignore_ai_flag's own gate.
+    OpenValue<int64_t> reviverHandle{"character attacker/threat-style reviver handle (+0x18f0/+0x18f4)",
+                                     "spec-lua-api-behaviour.md Sec3.4 (2026-10-09 correction)/Sec54.3"};
 
     // character_kill (Sec3.15, 0x00a41a60, cleared 2026-10-08/tranche F).
     // CONFIRMED: resolves via the SAME generic/#PLAYER#-then-fallback chain
@@ -1496,10 +1699,30 @@ struct CharacterState {
     // character_is_ragdolled (Sec15.14): object +0xcd2 state-enum byte.
     // CONFIRMED exclusion test (!=0 && !=6), not a positive equality - the
     // exact "ragdolled" value(s) are OPEN (Sec15.14's own flagged item).
-    // This IS a pure query with no other write path in scope, so OpenValue
-    // is appropriate here (unlike the write-only fields above) - refuses
-    // until a test sets it, matching CharacterState::stateEnum's identical
-    // precedent.
+    //
+    // CONFIRMED default 0 at construction (applied by
+    // EngineState::getOrCreateCharacter(), lua_engine_state.cpp - same
+    // "pre-seed a newly-CONFIRMED default instead of leaving an OpenValue
+    // OPEN" convention as CharacterState::ignoreAI/stateEnum's own
+    // construction-time seeds): spec-player-runtime.md Sec5.4.2 names
+    // +0xcd2 directly as "the human's physics-representation byte: 0 =
+    // character proxy" - the ordinary, ever-present, non-ragdolled state;
+    // Sec5.4.4's closed form for the player on foot independently
+    // corroborates it ("condition row 0, +0xcd2 = 0"). Sec7.4a's full
+    // 9-step vehicle-enter eligibility gate trace (step 4, "refuse if
+    // ragdolling, +0xcd2 ∉ {0,6}") and Sec15.3a's end-to-end damage/death/
+    // ragdoll hand-off trace (ragdoll only ever activates via the real
+    // "activate ragdoll physics" primitive `0x009a5520` on the death path)
+    // together confirm this field only transitions away from 0 through an
+    // explicit ragdoll/death event - there is no other, more-common
+    // starting value a freshly constructed, not-yet-ragdolled character
+    // could hold. Values 3/6 (ragdoll/recovery, Sec5.4.2) and 1/4 (NPC
+    // rig-test pass-through, Sec5.4.1 step 2) remain otherwise OPEN/
+    // HYPOTHESIS exactly as before - only the default changed. Remains a
+    // plain OpenValue, not a bare int: `.set()`/`.forget()` stay available,
+    // so a test exercising a ragdolling/recovering character still
+    // overrides this explicitly, exactly as before this pre-seed (matching
+    // CharacterState::stateEnum's identical OpenValue precedent).
     OpenValue<int32_t> ragdollStateEnumCd2{"character ragdoll/state-enum byte (+0xcd2)",
                                            "spec-lua-api-behaviour.md Sec15.14"};
 
@@ -2119,8 +2342,8 @@ struct CharacterState {
     // human_set_always_sprint (Sec25.10) / character_set_can_take_human_
     // shield (Sec25.26): 2 more confirmed bits on the per-character AI-data
     // sub-object at +0x2b0 (joining alwaysCowerFlag above, Sec15.4, and the
-    // ignoreAI/actionOverrideId/attackerThreatRef fields at the TOP of this
-    // struct, all of which already share this exact +0x2b0 base) - CHOSEN
+    // ignoreAI/actionOverrideId fields at the TOP of this
+    // struct, which already share this exact +0x2b0 base) - CHOSEN
     // default false/true respectively (no CONFIRMED construction value for
     // either), plain bools, same "no in-scope reader beyond this batch's own
     // test" convention. character_set_can_take_human_shield's own real

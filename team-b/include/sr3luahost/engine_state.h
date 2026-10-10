@@ -266,6 +266,16 @@ public:
     CharacterState& getOrCreateCharacter(const std::string& name);
     bool hasCharacter(const std::string& name) const;
     size_t characterCount() const { return characters_.size(); }
+    // Same convention as vehicles() below - exposed by mutable reference so
+    // the real seat-pick validator's step 6/7 occupant-conflict scan
+    // (spec-player-runtime.md Sec13.4, computeVehicleEnterSubmitAccepted() /
+    // attemptGroupInstantEnter() in lua_spec_confirmed_stubs_b15_wave2_core_
+    // dispatchers.cpp) and vehicle_enter_group_check_done's per-member
+    // completion walk (spec-lua-api-behaviour.md Sec38.1) can walk every
+    // character this host currently knows about, reusing the one existing
+    // map rather than a parallel occupancy registry this project does not
+    // have (added 2026-10-09).
+    std::unordered_map<std::string, CharacterState>& characters() { return characters_; }
 
     // Same convention as getOrCreateCharacter/hasCharacter/characterCount
     // above, for VehicleState (spec-lua-api-behaviour.md Sec30.5/Sec33.1).
@@ -1903,7 +1913,18 @@ public:
     // Lua-visible flag per this batch's own no-networking-layer convention).
     std::unordered_map<std::string, bool>& helicopterDontDeathSpiral() { return helicopterDontDeathSpiral_; }
 
-    // Sec28.2 `helicopter_fly_to_set_goal_direction`.
+    // Sec28.2 `helicopter_fly_to_set_goal_direction`. UPDATE 2026-10-10
+    // (Team A spec sync, HANDOFF.md commit 849a88e): "heli AI record +0x2c"
+    // in this label's own name is now known to be a holdover from this
+    // project's prior (wrong) reading - the real field is the vehicle-TYPE
+    // definition record's own class enum at (vehicle+0xbf4)+0x2c, static
+    // per-type data with no runtime writer (CONFIRMED values 0 car/2
+    // airplane/3 heli/4 VTOL; 1/5/6 OPEN) - the SAME physical field
+    // VehicleState::flyingType above already models under its own,
+    // already-corrected doc comment. Label text kept verbatim (it is also
+    // this field's own OpenStateError diagnostic string, matched by
+    // existing tests - see lua_engine_state.cpp's getOrCreateVehicle() for
+    // the one literal-name seed ("m05_heli_pierce") this update adds.
     struct HelicopterFlyTo {
         OpenValueMap<bool> qualifies{"0x00ad31a0: heli AI record +0x2c in {3,4}", "spec-lua-api-behaviour.md Sec28.2"};
         OpenValueMap<bool> applyGate{"heli AI record (0x00a79470) +0x4b0 == 1", "spec-lua-api-behaviour.md Sec28.2"};
@@ -1991,10 +2012,39 @@ public:
     // doc comment above for the unconditional-release-first shape.
     void guardianAngelStartZonePinning(const std::string& zoneSetName); // .cpp
 
-    // Sec28.5 `group_get_next_npc` / Sec28.6 `group_get_first_npc`: an empty known string means "no
-    // next/no members" (the real null-pointer/wraparound-stop case); unknown means OPEN.
-    OpenValueMap<std::string>& groupNextNpcName() { return groupNextNpcName_; }   // keyed by current NPC name
-    OpenValueMap<std::string>& groupFirstNpcName() { return groupFirstNpcName_; } // keyed by group name
+    // Sec28.5 `group_get_next_npc` / Sec28.6 `group_get_first_npc`: the group's own
+    // +0x40 member-list head and each member's own +0x9c "next" link (Sec28.6/
+    // Sec18.14 - NOT the light-group's unrelated +0x40 flags byte, Sec17.24,
+    // which this project never touches here). Re-derived directly from the SAME
+    // ordered member roster `group_members_alive` (Sec18.14) already maintains
+    // (`groupMemberNames_`/`registerGroupMemberForTesting`) instead of a second,
+    // separately-seeded OPEN map - this project has only ever modelled one
+    // "which characters belong to which named group" registry, and Sec28.5/
+    // Sec28.6 read the exact same list Sec18.14 counts, just from the other end.
+    // An empty/unregistered group is a well-defined "no members known" answer
+    // (nothing pushed) - the same "collapses to 0" precedent groupMembersAliveCount
+    // already established for this registry - not a fabricated name and not OPEN.
+    const std::string* groupFirstNpcName(const std::string& groupName) const {
+        auto it = groupMemberNames_.find(groupName);
+        if (it == groupMemberNames_.end() || it->second.empty()) return nullptr;
+        return &it->second.front();
+    }
+    // Returns the member immediately after currentName in groupName's own
+    // registered order, or nullptr if currentName is not a registered member,
+    // is the last registered member (wraps back to the head - Sec28.5's own
+    // documented stop condition), or the group has no registered members.
+    const std::string* groupNextNpcName(const std::string& groupName, const std::string& currentName) const {
+        auto it = groupMemberNames_.find(groupName);
+        if (it == groupMemberNames_.end()) return nullptr;
+        const auto& members = it->second;
+        for (size_t i = 0; i < members.size(); ++i) {
+            if (members[i] == currentName) {
+                if (i + 1 < members.size()) return &members[i + 1];
+                return nullptr; // wraps back to the group head: stop, push nothing
+            }
+        }
+        return nullptr;
+    }
 
     // Sec28.7 `get_num_humans_in_trigger`.
     OpenValueMap<int32_t>& humansInTriggerCount() { return humansInTriggerCount_; }
@@ -4118,6 +4168,21 @@ public:
     // adjacent vehicle names ('Starting_Vehicles', 'Script_Vehicle 001',
     // Sec4.4) - see looksLikeVehicleNameForPlayerClassGate()'s own doc
     // comment just below for the exact two-part string match.
+    // REUSED AGAIN, 2026-10-09 (spec-player-runtime.md Sec7.4a step 7, the
+    // vehicle-enter eligibility gate 0x00b0ca60): a SECOND class-row bit on
+    // the SAME 0x02cc9900 row, +0xa bit 0x04 ("has the standard AI-state
+    // block at all," HIGH CONFIDENCE by analogy to this row's own
+    // already-named +0xa bit 0x02 "is-player" test this map already stands
+    // in for) - exactly the teleport (Sec4.3) precedent just above: NOT a
+    // claim the two bits are the SAME physical bit, only that this project
+    // answers both class-row questions with the one map it already has for
+    // the purpose. In every real call site this gate reaches, the "character"
+    // argument has already resolved as a character (never a vehicle) before
+    // the gate runs, so in practice this almost always reads true for a
+    // legitimate vehicle-enter attempt - consistent with "has an AI-state
+    // block at all" being closer to a baseline capability than a rare
+    // exception, and with this project not modelling any non-AI-capable
+    // character class.
     OpenValueMap<bool>& playerClassChainResolves() { return playerClassChainResolves_; }
 
     // CHOSEN (not spec-confirmed - see playerClassChainResolves(name)'s own
@@ -9852,9 +9917,10 @@ private:
     HelicopterFlyTo helicopterFlyTo_;
     float hdrBloomMultiplier_ = 1.0f; // Sec28.3, CONFIRMED initial 1.0
     GuardianAngel guardianAngel_;
-    OpenValueMap<std::string> groupNextNpcName_{"character +0x9c next name (circular list, group head stops it)",
-                                                "spec-lua-api-behaviour.md Sec28.5"};
-    OpenValueMap<std::string> groupFirstNpcName_{"group +0x40 head name", "spec-lua-api-behaviour.md Sec28.6"};
+    // groupFirstNpcName()/groupNextNpcName() above (Sec28.5/Sec28.6) are
+    // derived directly from groupMemberNames_ (declared alongside
+    // groupResolves_/groupHasMembersBit_ below, Sec18.14) - no separate
+    // backing field needed here.
     OpenValueMap<int32_t> humansInTriggerCount_{"trigger occupancy count (0x0075d4b0/category 47)",
                                                 "spec-lua-api-behaviour.md Sec28.7"};
     OpenValueMap<bool> vehicleInAirByCharacter_{"character's cached active vehicle is airborne (0x00ad4040)",

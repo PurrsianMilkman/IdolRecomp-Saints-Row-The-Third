@@ -23,6 +23,28 @@ void safeRelease(T*& p) {
     if (p != nullptr) { p->Release(); p = nullptr; }
 }
 
+// CRREISH_SUN_SHADOW_DEBUG_FRUSTUM=1 (env var, unset/0 = silent, default) -
+// same escape-hatch convention as CRREISH_DISABLE_SUN_SHADOW/
+// SR3_GROUND_TEX_DEBUG elsewhere in this project. Used to CONFIRM (not just
+// fix blind) a reviewer-reported out-of-frustum shadow bug: when on, every
+// shadowed draw's pixel shader shortcuts to a flat debug tint instead of its
+// normal shaded colour - magenta for a pixel whose light-space UV falls
+// outside the shadow map's own [0,1] coverage, cyan for a pixel whose
+// light-space DEPTH falls outside the shadow frustum's configured near/far
+// range (even though its UV is in range - the bug purrsian-5b diagnosed:
+// SunShadowMap's sampler already borders UV correctly, but nothing
+// previously range-checked depth), green otherwise (covered, in range, used
+// for genuine shadow testing). Read once per process (a function-local
+// static), not per draw call - cheap, and this is a debug-only path never
+// read by any shipped behaviour otherwise.
+bool shadowDebugVizEnabled() {
+    static const bool enabled = [] {
+        const char* e = std::getenv("CRREISH_SUN_SHADOW_DEBUG_FRUSTUM");
+        return e != nullptr && e[0] != '0' && e[0] != '\0';
+    }();
+    return enabled;
+}
+
 struct GpuVertex {
     float position[3];
     float uv[2];
@@ -51,6 +73,30 @@ struct Constants {
     // (every pre-existing call site).
     int useRealLighting;
     float useRealLightingPad[3];
+    // Sun shadow map (this task, 2026-10-09, sun-shadow-map -
+    // include/sr3render/sun_shadow_map.h). APPENDED after every pre-existing
+    // field - this preserves every existing field's own byte OFFSET, which is
+    // the same discipline the sunDirection/ambientColor/sunColor fields above
+    // already established when THEY were added (see useRealLighting's own
+    // comment for why that offset-preservation mattered empirically, not just
+    // in theory). `lightWvp` is `world * lightViewProjection` composed CPU-
+    // side exactly like `viewProjection` above (draw()'s own comment) - NOT
+    // the same matrix as `viewProjection` (that one is the CAMERA's wvp, used
+    // for SV_Position/rasterisation; this one is the SUN's, used only for the
+    // shadow-map texture lookup in ps_main - see vs_main's new, purely
+    // ADDITIVE `lightClipPos` output below for why these have to be two
+    // separate matrices rather than one).
+    float lightWvp[16];
+    int useShadow;
+    // shadowDebugViz (this task, 2026-10-09, sun-shadow-map out-of-frustum
+    // fix): REPURPOSES one float of useShadow's own pre-existing padding -
+    // total struct size/byte offsets are UNCHANGED (useShadow (4 bytes) +
+    // useShadowPad (was float3/12 bytes, now int+float2/12 bytes) is still
+    // exactly 16 bytes), so this is not a new field in the byte-layout sense,
+    // just a previously-wasted pad slot put to use. See
+    // shadowDebugVizEnabled()'s own comment for what this drives in ps_main.
+    int shadowDebugViz;
+    float useShadowPad[2];
 };
 
 // Byte-for-byte reproduction of the OLD fixed "headlight" term's INPUT
@@ -79,6 +125,10 @@ cbuffer Constants : register(b0) {
     float  sunColorPad;
     int    useRealLighting;
     float3 useRealLightingPad;
+    row_major float4x4 lightWvp;
+    int    useShadow;
+    int    shadowDebugViz;
+    float2 useShadowPad;
 };
 
 struct VSIn {
@@ -88,9 +138,19 @@ struct VSIn {
 };
 
 struct VSOut {
-    float4 pos    : SV_Position;
-    float2 uv     : TEXCOORD0;
-    float3 normal : NORMAL;
+    float4 pos         : SV_Position;
+    float2 uv          : TEXCOORD0;
+    float3 normal      : NORMAL;
+    // Sun shadow map (this task, 2026-10-09): a purely ADDITIVE output -
+    // every pre-existing line above (pos/uv/normal) is textually UNCHANGED
+    // from before this task, same discipline useRealLighting's own comment
+    // documents for ps_main (an independent new computation reading only
+    // NEW cbuffer fields does not touch the instructions any EXISTING
+    // computation compiles to). This is the light-space clip position
+    // (world * lightWvp, composed CPU-side the same way viewProjection's own
+    // world composition already works) - ps_main below turns it into a
+    // shadow-map UV + light-space depth for the sun-shadow comparison.
+    float4 lightClipPos : TEXCOORD1;
 };
 
 VSOut vs_main(VSIn i) {
@@ -98,11 +158,17 @@ VSOut vs_main(VSIn i) {
     o.pos    = mul(float4(i.position, 1.0), viewProjection);
     o.uv     = i.uv;
     o.normal = i.normal;
+    o.lightClipPos = mul(float4(i.position, 1.0), lightWvp);
     return o;
 }
 
 Texture2D    tex : register(t0);
 SamplerState smp : register(s0);
+// Sun shadow map (this task, 2026-10-09) - a SEPARATE texture/sampler slot
+// from the material texture above, so binding (or not binding) a shadow map
+// never disturbs `tex`/`smp`.
+Texture2D    shadowMap : register(t1);
+SamplerState shadowSampler : register(s1);
 
 float4 ps_main(VSOut i) : SV_Target {
     // Real sun-direction-driven diffuse term PLUS a genuine ambient colour
@@ -127,7 +193,95 @@ float4 ps_main(VSOut i) : SV_Target {
     float3 shadeRGB;
     if (useRealLighting != 0) {
         float lambert = saturate(dot(normalize(i.normal), normalize(sunDirection)));
-        shadeRGB = ambientColor + lambert * sunColor;
+        // Sun shadow map (this task, 2026-10-09, sun-shadow-map): darkens
+        // (shadowFactor -> 0) the SUN term specifically - ambientColor above
+        // is untouched either way, matching a real shadow map's own scope
+        // (it only affects the one light it was generated for; see this
+        // task's own brief). useShadow is a STATIC branch on a per-draw
+        // UNIFORM value, the SAME pattern useRealLighting itself already
+        // uses one level up, for the identical reason: shadowFactor defaults
+        // to 1.0 via a plain literal assignment (no cbuffer/texture read at
+        // all) for every draw that does not pass a shadow map, so THAT
+        // numeric path is untouched by this addition.
+        float shadowFactor = 1.0;
+        if (useShadow != 0) {
+            float3 lightNdc = i.lightClipPos.xyz / i.lightClipPos.w;
+            float2 shadowUv = float2(lightNdc.x * 0.5 + 0.5, 1.0 - (lightNdc.y * 0.5 + 0.5));
+            float pixelLightDepth = lightNdc.z;
+            // Out-of-frustum defensive fix (this task, 2026-10-09,
+            // sun-shadow-map reviewer follow-up). purrsian-5b's ORIGINAL
+            // diagnosis for the specific "uniformly dark far wall" capture
+            // (build/Release/final_before.png vs final_after.png) was that a
+            // pixel's shadowUv or light-space depth was landing OUTSIDE the
+            // shadow map's own coverage and a clamped/cleared sample was
+            // misreading as "occluded". Directly measured with the
+            // shadowDebugViz tint below (magenta/cyan would mark exactly
+            // that): for that exact repro frame, EVERY dark wall pixel was
+            // already uvInRange AND depth in [0,1] - this diagnosis does
+            // NOT hold for that symptom (see this task's own handback report
+            // for the full trail: distance-banded caster bisection
+            // identified a single large prop, sh_megabrothel.clmesh_pc - the
+            // SAME building the wall belongs to, bounding box up to ~45
+            // units tall - whose own upper mass/roof legitimately shadows
+            // its lower facade given this frame's near-overhead sun
+            // (ComputeChosenSunDirection() at this todFraction has a 0.75-
+            // 0.99 Y component); the predicted depth gap from that geometry
+            // alone, ~15-30 world units, matches the ~14-37 unit gaps
+            // actually measured). That symptom was real shadow-map math
+            // working correctly on a close-up, hard-edged, un-PCF'd single
+            // shadow map, not a sampling bug.
+            //
+            // uvInRange alone (the PRE-EXISTING check before this task -
+            // still needed: SunShadowMap's BORDER-addressed sampler only
+            // makes border READS sane, it can't stop the MANUAL comparison
+            // below from running with a nonsense shadowUv) was, however,
+            // still genuinely INCOMPLETE on its own: a pixel can sit
+            // squarely inside the light's XY footprint while its light-space
+            // DEPTH is beyond the shadow frustum's own near/far planes (a
+            // receiver far outside the 40-unit casting radius along the
+            // light's forward axis) - pixelLightDepth then exceeds 1.0,
+            // which always compares as "more distant than" the depth map's
+            // cleared-to-1.0 value, so the old UV-only check would still
+            // wrongly read such a pixel as occluded. depthInRange closes
+            // that real, independent gap defensively - kept because it is
+            // correct and costs nothing when never hit, not because it
+            // explains the symptom above.
+            bool uvInRange = shadowUv.x >= 0.0 && shadowUv.x <= 1.0 && shadowUv.y >= 0.0 && shadowUv.y <= 1.0;
+            bool depthInRange = pixelLightDepth >= 0.0 && pixelLightDepth <= 1.0;
+            if (shadowDebugViz != 0) {
+                // Debug-only early-out (see shadowDebugVizEnabled()'s own
+                // comment) - never taken unless CRREISH_SUN_SHADOW_DEBUG_FRUSTUM
+                // is set, so this cannot affect any normal render/golden test.
+                // EXTENDED (diagnosis follow-up): also surfaces the actual
+                // occlusion-test RESULT for in-range pixels (red/green), not
+                // just range membership - distinguishes "wrongly occluded by
+                // a real depth-compare result" from "wrongly occluded because
+                // the sample was out of range", since initial range-only
+                // debug output alone showed the whole frame in-range, which
+                // did not yet explain the reported uniform dark wall.
+                if (!uvInRange) return float4(1.0, 0.0, 1.0, 1.0);   // magenta: outside shadow-map XY footprint
+                if (!depthInRange) return float4(0.0, 1.0, 1.0, 1.0); // cyan: outside near/far depth range
+                const float kShadowBias = 0.01;
+                float shadowMapDepthDbg = shadowMap.Sample(shadowSampler, shadowUv).r;
+                bool occludedDbg = (pixelLightDepth - kShadowBias) > shadowMapDepthDbg;
+                if (occludedDbg) return float4(1.0, 0.0, 0.0, 1.0); // red: in range, occlusion test says SHADOWED
+                return float4(0.0, 1.0, 0.0, 1.0);                  // green: in range, occlusion test says LIT
+            }
+            // Small constant depth bias (v1 CHOSEN, not spec-derived - there
+            // is no real-engine bias value to match since this whole shadow
+            // map is this task's own new clean-room addition): guards against
+            // self-shadowing acne from the depth-only pass's own finite
+            // precision, at the cost of a slight "peter-panning" offset at
+            // contact shadows - the standard, well-understood trade-off for a
+            // single hard-edged depth compare (no PCF this pass - see this
+            // file's own sun_shadow_map.h banner).
+            const float kShadowBias = 0.01;
+            if (uvInRange && depthInRange) {
+                float shadowMapDepth = shadowMap.Sample(shadowSampler, shadowUv).r;
+                if (pixelLightDepth - kShadowBias > shadowMapDepth) shadowFactor = 0.0;
+            }
+        }
+        shadeRGB = ambientColor + shadowFactor * lambert * sunColor;
     } else {
         // UNCHANGED from before this task - do not "simplify" this to share
         // code with the branch above; that would reintroduce the exact
@@ -508,7 +662,9 @@ bool MeshRenderer::upload(ID3D11Device* device, const sr3mesh::MeshBlock& mesh,
 void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection[16],
                         MeshDrawMode mode, ID3D11ShaderResourceView* texture,
                         const float world[16], const float tint[4], const float sunDirection[3],
-                        const float ambientColor[3], const float sunColor[3]) {
+                        const float ambientColor[3], const float sunColor[3],
+                        const float lightViewProjection[16], ID3D11ShaderResourceView* shadowMap,
+                        ID3D11SamplerState* shadowSampler) {
     if (context == nullptr || vertexBuffer_ == nullptr || indexBuffer_ == nullptr) return;
 
     // world == nullptr (every pre-existing call site) takes wvp == the
@@ -533,6 +689,19 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
     // there, selecting ps_main's OLD, textually-unchanged literal branch.
     const int useRealLighting = (sunDirection != nullptr || ambientColor != nullptr || sunColor != nullptr) ? 1 : 0;
 
+    // Sun shadow map (this task, 2026-10-09) - same null-default contract:
+    // every pre-existing call site passes neither lightViewProjection nor
+    // shadowMap, so useShadow is 0 there and ps_main's new shadow branch
+    // (gated independently of useRealLighting) never reads lightClipPos.
+    float combinedLightWvp[16];
+    const float* lightWvp = lightViewProjection;
+    if (lightViewProjection != nullptr && world != nullptr) {
+        multiplyMatrix4x4(world, lightViewProjection, combinedLightWvp);
+        lightWvp = combinedLightWvp;
+    }
+    const int useShadow = (lightViewProjection != nullptr && shadowMap != nullptr) ? 1 : 0;
+    const int shadowDebugViz = shadowDebugVizEnabled() ? 1 : 0;
+
     auto writeConstants = [&](const float tint[4]) {
         D3D11_MAPPED_SUBRESOURCE m{};
         if (FAILED(context->Map(constantBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
@@ -544,6 +713,9 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
         std::memcpy(constants.ambientColor, effectiveAmbientColor, sizeof(constants.ambientColor));
         std::memcpy(constants.sunColor, effectiveSunColor, sizeof(constants.sunColor));
         constants.useRealLighting = useRealLighting;
+        if (lightWvp != nullptr) std::memcpy(constants.lightWvp, lightWvp, sizeof(constants.lightWvp));
+        constants.useShadow = useShadow;
+        constants.shadowDebugViz = shadowDebugViz;
         std::memcpy(m.pData, &constants, sizeof(constants));
         context->Unmap(constantBuffer_, 0);
     };
@@ -565,6 +737,8 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
     context->PSSetConstantBuffers(0, 1, &constantBuffer_);
     context->PSSetShaderResources(0, 1, &texture);
     context->PSSetSamplers(0, 1, &sampler_);
+    context->PSSetShaderResources(1, 1, &shadowMap);
+    context->PSSetSamplers(1, 1, &shadowSampler);
     context->OMSetDepthStencilState(depthState_, 0);
     context->RSSetState(rasterState_);
 
@@ -588,7 +762,9 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
 void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewProjection[16],
                                 const std::vector<ID3D11ShaderResourceView*>& perMaterial,
                                 const float world[16], const float sunDirection[3],
-                                const float ambientColor[3], const float sunColor[3]) {
+                                const float ambientColor[3], const float sunColor[3],
+                                const float lightViewProjection[16], ID3D11ShaderResourceView* shadowMap,
+                                ID3D11SamplerState* shadowSampler) {
     if (context == nullptr || vertexBuffer_ == nullptr || indexBuffer_ == nullptr) return;
     if (subDraws_.empty()) return;
 
@@ -604,6 +780,16 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
     const float* effectiveSunColor = sunColor != nullptr ? sunColor : kDefaultSunColor;
     const int useRealLighting = (sunDirection != nullptr || ambientColor != nullptr || sunColor != nullptr) ? 1 : 0;
 
+    // Sun shadow map (this task, 2026-10-09) - see draw()'s own identical comment.
+    float combinedLightWvp[16];
+    const float* lightWvp = lightViewProjection;
+    if (lightViewProjection != nullptr && world != nullptr) {
+        multiplyMatrix4x4(world, lightViewProjection, combinedLightWvp);
+        lightWvp = combinedLightWvp;
+    }
+    const int useShadow = (lightViewProjection != nullptr && shadowMap != nullptr) ? 1 : 0;
+    const int shadowDebugViz = shadowDebugVizEnabled() ? 1 : 0;
+
     UINT stride = sizeof(GpuVertex);
     UINT offset = 0;
     context->IASetInputLayout(inputLayout_);
@@ -615,6 +801,8 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
     context->PSSetShader(ps_, nullptr, 0);
     context->PSSetConstantBuffers(0, 1, &constantBuffer_);
     context->PSSetSamplers(0, 1, &sampler_);
+    context->PSSetShaderResources(1, 1, &shadowMap);
+    context->PSSetSamplers(1, 1, &shadowSampler);
     context->OMSetDepthStencilState(depthState_, 0);
     context->RSSetState(rasterState_);
 
@@ -635,6 +823,9 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
         std::memcpy(constants.ambientColor, effectiveAmbientColor, sizeof(constants.ambientColor));
         std::memcpy(constants.sunColor, effectiveSunColor, sizeof(constants.sunColor));
         constants.useRealLighting = useRealLighting;
+        if (lightWvp != nullptr) std::memcpy(constants.lightWvp, lightWvp, sizeof(constants.lightWvp));
+        constants.useShadow = useShadow;
+        constants.shadowDebugViz = shadowDebugViz;
 
         D3D11_MAPPED_SUBRESOURCE m{};
         if (SUCCEEDED(context->Map(constantBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
@@ -644,6 +835,49 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
         context->PSSetShaderResources(0, 1, &srv);
         context->DrawIndexed(sd.indexCount, sd.startIndex, 0);
     }
+}
+
+void MeshRenderer::drawDepthOnly(ID3D11DeviceContext* context, const float lightViewProjection[16],
+                                 const float world[16]) {
+    if (context == nullptr || vertexBuffer_ == nullptr || indexBuffer_ == nullptr) return;
+
+    // Same CPU-side world composition convention as draw()'s own
+    // `viewProjection`/`world` - uploaded into the SAME `viewProjection`
+    // cbuffer field vs_main already reads for SV_Position, just fed the
+    // sun's own light-space matrix instead of the camera's. This is exactly
+    // what makes this a depth-only GENERATION pass rather than a second
+    // lit draw: no texture/sunDirection/ambientColor/sunColor/shadow fields
+    // are written at all (left zero-initialised - PSSetShader(nullptr, ...)
+    // below means no pixel shader ever reads them).
+    float combinedWvp[16];
+    const float* wvp = lightViewProjection;
+    if (world != nullptr) {
+        multiplyMatrix4x4(world, lightViewProjection, combinedWvp);
+        wvp = combinedWvp;
+    }
+
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (SUCCEEDED(context->Map(constantBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
+        Constants constants{};
+        std::memcpy(constants.viewProjection, wvp, sizeof(constants.viewProjection));
+        std::memcpy(m.pData, &constants, sizeof(constants));
+        context->Unmap(constantBuffer_, 0);
+    }
+
+    UINT stride = sizeof(GpuVertex);
+    UINT offset = 0;
+    context->IASetInputLayout(inputLayout_);
+    context->IASetVertexBuffers(0, 1, &vertexBuffer_, &stride, &offset);
+    context->IASetIndexBuffer(indexBuffer_, DXGI_FORMAT_R32_UINT, 0);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context->VSSetShader(vs_, nullptr, 0);
+    context->VSSetConstantBuffers(0, 1, &constantBuffer_);
+    // Depth-only: no pixel shader at all - the standard D3D11 technique for
+    // a target with zero bound colour render targets (SunShadowMap::beginDepthPass()).
+    context->PSSetShader(nullptr, nullptr, 0);
+    context->OMSetDepthStencilState(depthState_, 0);
+    context->RSSetState(rasterState_);
+    context->DrawIndexed(indexCount_, 0, 0);
 }
 
 // A stable, well-separated colour per material id. Golden-ratio hue

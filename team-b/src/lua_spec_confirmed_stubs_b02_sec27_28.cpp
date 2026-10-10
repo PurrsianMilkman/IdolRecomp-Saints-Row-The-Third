@@ -616,11 +616,15 @@ int stub_guardian_angel_enable_indicators(lua_State* L) {
 // count 0 with nothing pushed on every failure path (CONFIRMED).
 // CONFIRMED structure: both names resolve via the shared singleton
 // (reuses objectResolves()); walks the current NPC's own +0x9c "next"
-// link, stopping at the group's own +0x40 head. This project treats an
-// unresolved group OR character as a safe "return 0" rather than
-// reproducing the real binary's own null-deref fault on a bad group
-// handle with a live character (a deliberate, labelled simplification -
-// this project does not simulate crashes).
+// link, stopping at the group's own +0x40 head (the SAME ordered member
+// roster group_members_alive, Sec18.14, already maintains via
+// registerGroupMemberForTesting - no separate membership model
+// invented). This project treats an unresolved group OR character as a
+// safe "return 0" rather than reproducing the real binary's own
+// null-deref fault on a bad group handle with a live character (a
+// deliberate, labelled simplification - this project does not simulate
+// crashes). NOT the unrelated light-group +0x40 flags byte (Sec17.24) -
+// a different structure, untouched here.
 // ---------------------------------------------------------------------
 int stub_group_get_next_npc(lua_State* L) {
     logCall(L, upLog(L), "group_get_next_npc", upStateTag(L));
@@ -629,9 +633,9 @@ int stub_group_get_next_npc(lua_State* L) {
     EngineState* st = upState(L);
     if (!st->objectResolves().get(group)) return 0;   // OPEN until set
     if (!st->objectResolves().get(current)) return 0; // OPEN until set
-    const std::string& next = st->groupNextNpcName().get(current); // OPEN until set
-    if (next.empty()) return 0; // null +0x9c, or wraparound back to the group head
-    lua_pushstring(L, next.c_str());
+    const std::string* next = st->groupNextNpcName(group, current);
+    if (!next) return 0; // null +0x9c, unregistered member, or wraparound back to the group head
+    lua_pushstring(L, next->c_str());
     return 1;
 }
 
@@ -639,16 +643,22 @@ int stub_group_get_next_npc(lua_State* L) {
 // 58. group_get_first_npc (Sec28.6, 0x00a4c520). 1 mandatory string
 // (script-group name). Return: 1 Lua value (string) or nothing pushed
 // on failure. CONFIRMED: resolves via the SAME singleton resolver; if
-// the group's own +0x40 head is non-null, pushes that member's name.
+// the group's own +0x40 head is non-null, pushes that member's name -
+// the first entry of the SAME ordered member roster group_members_alive
+// (Sec18.14) already maintains, not a separately-seeded value. An
+// unregistered/empty group pushes nothing (a well-defined "no members
+// known" answer, the same "collapses to 0" precedent
+// groupMembersAliveCount already established for this registry), not an
+// OPEN item. NOT the unrelated light-group +0x40 flags byte (Sec17.24).
 // ---------------------------------------------------------------------
 int stub_group_get_first_npc(lua_State* L) {
     logCall(L, upLog(L), "group_get_first_npc", upStateTag(L));
     std::string group = argString(L, 1);
     EngineState* st = upState(L);
     if (!st->objectResolves().get(group)) return 0; // OPEN until set
-    const std::string& first = st->groupFirstNpcName().get(group); // OPEN until set
-    if (first.empty()) return 0;
-    lua_pushstring(L, first.c_str());
+    const std::string* first = st->groupFirstNpcName(group);
+    if (!first) return 0;
+    lua_pushstring(L, first->c_str());
     return 1;
 }
 

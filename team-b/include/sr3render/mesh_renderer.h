@@ -219,10 +219,29 @@ public:
     // them and which parts are this task's own CHOSEN, explicitly-labelled
     // choices (sun direction has no spec-confirmed source at all - Sec18 is
     // a substantiated negative there).
+    //
+    // `lightViewProjection`/`shadowMap`/`shadowSampler` (this task, 2026-10-09,
+    // sun-shadow-map - include/sr3render/sun_shadow_map.h): sample the sun
+    // shadow map to darken (not zero - see ps_main) the SUN term specifically,
+    // leaving the ambient term untouched, consistent with a real shadow map
+    // only affecting the one light it was generated for (this task's own
+    // brief). ALL THREE default to null, which is the exact byte-for-byte-
+    // unchanged-by-default contract `sunDirection`/`ambientColor`/`sunColor`
+    // above already established: no pre-existing call site passes them, and
+    // the shader's useShadow branch (mesh_renderer.cpp) is gated independently
+    // of useRealLighting, so a null here costs nothing even for callers that
+    // DO pass real lighting values (e.g. runPlaytest()'s ground-tile fallback
+    // draw() call, which has no shadow pass reason to need one).
+    // `lightViewProjection` is the SAME row-major, row-vector convention as
+    // `viewProjection` - composed with `world` CPU-side exactly like the
+    // camera matrix above (see this function's own `world` comment), never
+    // uploaded raw when `world` is non-null.
     void draw(ID3D11DeviceContext* context, const float viewProjection[16], MeshDrawMode mode,
               ID3D11ShaderResourceView* texture, const float world[16] = nullptr,
               const float tint[4] = nullptr, const float sunDirection[3] = nullptr,
-              const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr);
+              const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr,
+              const float lightViewProjection[16] = nullptr, ID3D11ShaderResourceView* shadowMap = nullptr,
+              ID3D11SamplerState* shadowSampler = nullptr);
 
     // Textured draw with ONE TEXTURE PER MATERIAL, issuing a separate
     // indexed draw per draw range and binding that range's material
@@ -237,10 +256,30 @@ public:
     // what `sunDirection`/`ambientColor`/`sunColor` do (same byte-for-byte-
     // unchanged-by-default contract when null, every pre-existing call
     // site).
+    // See draw()'s comment (above) for `lightViewProjection`/`shadowMap`/
+    // `shadowSampler` - identical byte-for-byte-by-default contract, same
+    // CPU-side world composition.
     void drawTextured(ID3D11DeviceContext* context, const float viewProjection[16],
                       const std::vector<ID3D11ShaderResourceView*>& perMaterial,
                       const float world[16] = nullptr, const float sunDirection[3] = nullptr,
-                      const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr);
+                      const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr,
+                      const float lightViewProjection[16] = nullptr, ID3D11ShaderResourceView* shadowMap = nullptr,
+                      ID3D11SamplerState* shadowSampler = nullptr);
+
+    // Depth-only draw into whatever depth-stencil view is CURRENTLY bound
+    // (the caller's job - see sr3render::SunShadowMap::beginDepthPass()) -
+    // this task, 2026-10-09, sun-shadow-map. Reuses THIS renderer's own
+    // already-uploaded vertex/index buffers and existing vertex shader
+    // (vs_main only ever needs position to produce SV_Position; uv/normal
+    // are harmless unused outputs here), with NO pixel shader bound at all
+    // (the standard D3D11 depth-only technique: PSSetShader(nullptr, ...) -
+    // color writes have nowhere to go anyway since the caller bound zero
+    // render targets). `lightViewProjection`/`world` follow the exact same
+    // CPU-side composition convention as draw()'s `viewProjection`/`world` -
+    // null `world` uploads `lightViewProjection` unmodified (ground tiles,
+    // whose vertex positions are already in world space).
+    void drawDepthOnly(ID3D11DeviceContext* context, const float lightViewProjection[16],
+                       const float world[16] = nullptr);
 
     // Bounding box of the uploaded positions, for framing a camera.
     const float* boundsMin() const { return boundsMin_; }

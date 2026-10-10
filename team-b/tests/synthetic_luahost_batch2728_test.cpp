@@ -377,6 +377,23 @@ int main() {
     CHECK(es.helicopterFlyTo().lastRequest.at("heli01").useOrientationMode == true);
     CHECK(es.helicopterFlyTo().lastRequest.at("heli01").applied == true);
 
+    // 2026-10-10 regression test: EngineState::getOrCreateVehicle()'s one
+    // literal-name seed for "m05_heli_pierce" (Team A spec sync, HANDOFF.md
+    // commit 849a88e - the real field at (vehicle+0xbf4)+0x2c is the
+    // vehicle-TYPE class enum, CONFIRMED 3 = heli, static per-type data).
+    // Unlike "heli01" just above (which still needed an explicit
+    // qualifies.set()), this ONE hardcoded name must already qualify with
+    // NO test setup at all, and its VehicleState::flyingType must already
+    // read 3 - while a vehicle with "heli" in its name that is NOT this
+    // exact literal string must still behave exactly like "heli01" (OPEN
+    // until set), proving this is a single hardcoded exception, not a
+    // general name-substring heuristic.
+    es.objectResolves().set("m05_heli_pierce", true);
+    ok(host, gp, "helicopter_fly_to_set_goal_direction('m05_heli_pierce', '')"); // no qualifies.set() needed
+    CHECK(es.getOrCreateVehicle("m05_heli_pierce").flyingType.get() == 3);
+    es.objectResolves().set("another_heli_gunship", true);
+    fails(host, gp, "helicopter_fly_to_set_goal_direction('another_heli_gunship', 'target01')", "0x00ad31a0");
+
     // Sec28.3 hdr_bloom_set_multiplier: no rounding.
     CHECK(es.hdrBloomMultiplier() == 1.0f);
     ok(host, gp, "hdr_bloom_set_multiplier(2.5)");
@@ -392,18 +409,26 @@ int main() {
     ok(host, gp, "guardian_angel_enable_indicators(true)");
     CHECK(es.guardianAngel().indicatorsEnabled == true);
 
-    // Sec28.5/28.6 group_get_next_npc / group_get_first_npc.
+    // Sec28.5/28.6 group_get_next_npc / group_get_first_npc: re-derived
+    // directly from the SAME ordered member roster `group_members_alive`
+    // (Sec18.14) already maintains (registerGroupMemberForTesting) - an
+    // unresolved name still refuses (named-object resolution, unchanged),
+    // but an unregistered/empty group is now a well-defined "nothing
+    // pushed" answer, not a second, separately-seeded OPEN item.
     fails(host, gp, "group_get_next_npc('group01', 'npc01')", "named-object resolution");
     es.objectResolves().set("group01", true);
     es.objectResolves().set("npc01", true);
-    fails(host, gp, "group_get_next_npc('group01', 'npc01')", "+0x9c");
-    es.groupNextNpcName().set("npc01", "");
     ok(host, gp, "local a, b = group_get_next_npc('group01', 'npc01'); assert(a == nil and b == nil)");
-    es.groupNextNpcName().set("npc01", "npc02");
+    ok(host, gp, "local a, b = group_get_first_npc('group01'); assert(a == nil and b == nil)");
+    es.registerGroupMemberForTesting("group01", "npc01");
+    es.registerGroupMemberForTesting("group01", "npc02");
+    es.objectResolves().set("npc02", true);
+    ok(host, gp, "assert(group_get_first_npc('group01') == 'npc01')");
     ok(host, gp, "assert(group_get_next_npc('group01', 'npc01') == 'npc02')");
-    fails(host, gp, "group_get_first_npc('group01')", "+0x40");
-    es.groupFirstNpcName().set("group01", "npc03");
-    ok(host, gp, "assert(group_get_first_npc('group01') == 'npc03')");
+    // npc02 is the last registered member: its "next" wraps back to the
+    // group's own head (npc01) - the real binary's own stop condition
+    // (Sec28.5), so nothing is pushed rather than looping back a name.
+    ok(host, gp, "local a, b = group_get_next_npc('group01', 'npc02'); assert(a == nil and b == nil)");
 
     // Sec28.7 get_num_humans_in_trigger: always pushes, 0 for an
     // unresolved trigger.
