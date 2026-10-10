@@ -367,6 +367,25 @@ int main() {
     es.objectResolves().set("bystander", true);
     ok(host, gp, "assert(npc_is_in_party('bystander') == false)");
 
+    // party_add_do (Sec32.4, 2026-10-08 backlog cross-reference pass): a
+    // failed leader resolve now retries via the closest-player redirect
+    // when the leader name is "#CLOSEST_PLAYER#" or the literal
+    // "#PLAYER#" - both collapse to this project's single-player-only
+    // "#PLAYER1#" identity (applySpecInitialState() already seeds it
+    // resolved=true). Any OTHER unresolved leader name stays a safe no-op.
+    es.objectResolves().set("some_unknown_leader", false);
+    ok(host, gp, "party_add_do('some_unknown_leader', {'follower1'}, true)"); // no fallback trigger - safe no-op
+    CHECK(es.party().membersByLeader.count("some_unknown_leader") == 0);
+    es.objectResolves().set("follower8", true);
+    es.objectResolves().set("#CLOSEST_PLAYER#", false); // the literal sentinel name itself is not pre-seeded - OPEN until a test sets it
+    ok(host, gp, "party_add_do('#CLOSEST_PLAYER#', {'follower8'}, true)");
+    CHECK(es.party().membersByLeader["#PLAYER1#"].size() == 1);
+    CHECK(es.party().membersByLeader["#PLAYER1#"].back() == "follower8");
+    es.objectResolves().set("follower9", true);
+    es.objectResolves().set("#PLAYER#", false); // "#PLAYER#" itself is not pre-seeded like "#PLAYER1#"/"#PLAYER2#" - OPEN until a test sets it
+    ok(host, gp, "party_add_do('#PLAYER#', {'follower9'}, true)"); // the literal "#PLAYER#" is an equally-valid trigger
+    CHECK(es.party().membersByLeader["#PLAYER1#"].size() == 2);
+
     // Sec32.4 npc_go_idle: reuses set_ignore_ai_flag's own stateEnum rule (Sec3.4).
     es.objectResolves().set("npc4", true);
     es.getOrCreateCharacter("npc4").stateEnum.set(0); // not in a vehicle

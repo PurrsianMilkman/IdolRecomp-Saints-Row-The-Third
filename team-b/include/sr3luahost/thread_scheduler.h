@@ -160,16 +160,27 @@ private:
     std::unordered_map<int64_t, ThreadHandleEntry> handles_;
 };
 
-// Registers the 5 real thread_* globals into `L`, backed by `scheduler`,
-// logging every real call into `log` via the exact same HitLog::record()
-// every generic stub (stub_registry.h) uses - so these 5 names fold into
-// the SAME whole-run stub-hit ranking the verdict tool
-// (tools/lua_host_run.cpp) already reports, rather than needing a second,
-// separate counter. `stateTag` ("gameplay"/"ui") is the real state this
-// particular registration call is for - passed through to every
-// HitLog::record() call these 5 functions make (same real per-state
-// tracking added to registerStubs(), stub_registry.h/.cpp, same day).
-void registerThreadScheduler(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag);
+// registerThreadScheduler() - the FULL 5-name version (thread_new/
+// thread_yield/thread_kill/thread_check_done/thread_close) - was REMOVED
+// 2026-10-08 (lua-natives registration unification task, see results/
+// lua_natives_backlog_recount_20261008.md): superseded for 4 of its 5
+// names since 2026-10-01 (thread_new/thread_yield/thread_kill/
+// thread_check_done are now the CONFIRMED bare globals of 0x00e0f900 -
+// bare_globals.h - which Host registers instead), it had been dead code
+// ever since (re-confirmed by grep for this task: no call site anywhere
+// but its own now-deleted declaration/definition). Keeping it around was a
+// silent latent trap, not a harmless leftover: Host registers the bare
+// globals FIRST, so a future pass that called this by mistake would have
+// had its own lua_setglobal calls silently REPLACE the real, disassembly-
+// CONFIRMED bare-globals implementations with this scaffold's inferior
+// stand-ins, with no warning. Its own 4 now-unreachable trampolines
+// (stub_thread_new/_yield/_kill/_check_done, lua_thread_scheduler.cpp) were
+// deleted with it; stub_thread_close stays, still used by
+// registerThreadClose() below. ThreadScheduler's own newThread()/isDone()
+// methods are kept even though this removal leaves them with no internal
+// caller - host.h's own threadScheduler() accessor deliberately exposes
+// the raw object for a tool's direct liveCount()/isDone() introspection, a
+// separate, still-valid contract this task did not touch.
 
 // thread_close only (2026-10-01). thread_new/thread_yield/thread_kill/
 // thread_check_done are now the CONFIRMED bare globals of 0x00e0f900
@@ -179,5 +190,23 @@ void registerThreadScheduler(lua_State* L, ThreadScheduler& scheduler, HitLog& l
 // all is OPEN; Host keeps this scaffold's thread_close (a no-op on any id the
 // bare-global thread table hands out, since the two tables are separate).
 void registerThreadClose(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag);
+
+// The single name registerThreadClose() installs (2026-10-08, same
+// unification task as above): exposed so specConfirmedStubNames()
+// (spec_confirmed_stubs.h) can union it into the ONE list of every name
+// this project's Host actually registers through a real, non-generic-stub
+// implementation, without a second copy of the literal string
+// "thread_close" anywhere else. Deliberately NOT folded into
+// bareGlobalRoster() (bare_globals.h) even though both end up unioned the
+// same way into specConfirmedStubNames(): thread_close is NOT one of the
+// disassembly-CONFIRMED "24 bare globals of 0x00e0f900" (it is a pre-spec
+// scaffold name whose real engine existence is OPEN, per
+// registerThreadClose()'s own doc comment above) - mixing it into that
+// roster would misstate its provenance and would have forced rewriting
+// every "24" assertion this project already has
+// (bareGlobalRoster().size() == 24, the roster test's own CHECK, etc.) for
+// a name that was never part of that disassembly finding. A separate,
+// one-name accessor is the smaller, cleaner change.
+const std::vector<std::string>& threadCloseNames();
 
 } // namespace sr3luahost

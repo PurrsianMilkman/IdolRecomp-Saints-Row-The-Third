@@ -63,6 +63,25 @@
 // throw too: Sec6.8 finds that machinery inert in shipped data (+0x27 = 0 for
 // every record) and its arming formula is cited from Q13.2, which is not a
 // spec.
+//
+// 2026-10-07: U5/U4/U6/U7 (Sec9-Sec12) checked against this file, no new
+// ground found here. All four new units describe what happens to a SAMPLED
+// POSE (bone matrices, a rig's own hierarchy, an animation-instance pool with
+// a real per-layer array) after this evaluator's output list is produced:
+// Sec9/Sec12 are the human spine-bend/look chain and motion-warp corrections
+// (bone rotations); Sec10 is the vehicle/object_rig/held-weapon pose clients
+// (same, plus a per-bone matrix overlay); Sec11 is the pose-request queue and
+// the bone-hierarchy compose pipeline. This project has no rig/skeleton model
+// and does not decode `.anim_pc` keyframe tracks (sr3anim's own README), so
+// none of that is implementable here without inventing the missing object -
+// exactly the boundary LayerApi already exists to inject rather than guess.
+// The one LayerApi-relevant finding from this pass is the Sec6-vs-Sec11.7
+// address contradiction on setLayerRate/setLayerPhase, flagged at each
+// virtual below rather than resolved by guessing. Sec8's two precision fixes
+// (output-list margin 30->31, the 0.4 s ramp 12->13 updates) were both
+// already exactly what this project's own code and tests produce; see
+// NodeGraphRuntime::multiWayPass1's ramp comment (anim_node_graph_runtime.cpp)
+// and the output-list-bound test in real_anim_node_graph_test.cpp.
 
 #include <cstdint>
 #include <optional>
@@ -215,10 +234,35 @@ public:
     // clip's layer and raise its posted weight to `weight` if larger; handle.
     virtual int32_t postClip(int32_t clipIndex, uint32_t layerFlags, float weight, float a, float b) = 0;
     virtual void fadeOutLayer(int32_t handle, float seconds) = 0;  // 0x004c6d90 / 0x004c6c70
-    virtual void setLayerRate(int32_t handle, float rate) = 0;     // 0x004be510
-    virtual void setLayerPhase(int32_t handle, float phase) = 0;   // 0x004c7510
+    // Addresses per Sec6.6 (stop-with-fade: "the layer's rate is set to 0.0
+    // (0x004be510, layer +0x18)"), Sec6.7 ("set the current layer's phase...
+    // to 0.0 / to p (0x004c7510)") and Sec6.8 (a child's rate "scaled by...
+    // (0x004be510)") - three independent, mutually consistent Sec6 passages,
+    // matching these call sites' own semantics (setLayerRate(h, 0.0f) to
+    // freeze; setLayerPhase(h, 0.0f) / setLayerPhase(h, p) to restart/sync a
+    // phase). NOT CHANGED to match U4 Sec11.7, which names the SAME two
+    // addresses with the roles swapped (0x004c7510 "the rate setter", storing
+    // at a newly-named layer +0x1c; 0x004be510 "the explicit-phase setter",
+    // storing at layer +0x18) and does not cross-reference or acknowledge
+    // Sec6 at all. This is an unresolved internal contradiction between two
+    // CONFIRMED-labelled passages of the same spec file, found while checking
+    // U4 against this project's existing code - relayed, not silently
+    // resolved either way (no clean-room way to re-disassemble and settle it
+    // here). Behaviour is unaffected either way: the real address is a
+    // citation on an abstract virtual, not something this port calls by
+    // address.
+    virtual void setLayerRate(int32_t handle, float rate) = 0;     // 0x004be510 per Sec6.6/6.8; Sec11.7 says 0x004c7510
+    virtual void setLayerPhase(int32_t handle, float phase) = 0;   // 0x004c7510 per Sec6.7; Sec11.7 says 0x004be510
     virtual float layerWeight(int32_t handle) const = 0;           // 0x004bdb50 (layer +0x24)
-    // 0x004bdd40: instance invalid, or layer missing / inactive with zero weight.
+    // 0x004bdd40: a THIRD reading, not yet reconciled with the other two.
+    // Original: instance invalid, or layer missing / inactive with zero
+    // weight. Changelog 2026-10-03: "the second condition is no play time
+    // left (0x004c6350), not zero weight." Sec11.7 (2026-10-07, "CONFIRMED by
+    // full listing past its first ret"): "returns true iff the handle is -1,
+    // out of pool bounds, or fails the self-index check" - an instance-handle
+    // validity test with no second, layer-specific condition at all. All
+    // three may be describing different call sites/signatures of the same
+    // address rather than one function; not resolved here, flagged for relay.
     virtual bool layerGone(int32_t handle) const = 0;
     // Instance +0x5c x 16, or nullopt when the instance holds no layer.
     virtual std::optional<int32_t> heldLayerHandle() const = 0;

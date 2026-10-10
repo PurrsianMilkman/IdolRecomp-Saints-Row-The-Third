@@ -174,13 +174,72 @@ cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%LUAINC%" ^
   "%PROJ%\src\player_input.cpp" "%PROJ%\src\player_control_state.cpp" ^
   "%PROJ%\src\lua_stub_registry.cpp" "%PROJ%\src\lua_host.cpp" "%PROJ%\src\lua_hook_registry.cpp" ^
   "%PROJ%\src\lua_thread_scheduler.cpp" "%PROJ%\src\lua_engine_state.cpp" "%PROJ%\src\vint_property_types.cpp" ^
-  "%PROJ%\src\lua_spec_initial_state.cpp" "%PROJ%\src\lua_spec_confirmed_stubs.cpp" "%PROJ%\src\lua_screen_fade.cpp" ^
+  "%PROJ%\src\lua_spec_initial_state.cpp" "%PROJ%\src\lua_screen_fade.cpp" ^
   "%PROJ%\src\lua_cutscene.cpp" "%PROJ%\src\lua_vint_resolution.cpp" "%PROJ%\src\lua_tutorial_names.cpp" ^
   "%PROJ%\src\lua_bare_globals.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b01_initial.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b02_sec27_28.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b03_vintui_r03_r05.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b04_r04_r06_08.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b05_invuln_r15_23.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b06_playerrt_sec6_7.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b07_sec8_9_teamA.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b08_batch1_core.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b09_batch2_hud_audio.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b14_batch7_tranche03.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b12_batch5_hud_customization.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b11_batch4_flags_combat.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b10_batch3_pcr_vehicle.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b15_wave2_core_dispatchers.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b16_wave2_sec20_21.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b22_wave2_sec22.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b23_wave2_sec24_25.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b26_wave2_vehicles_helicopter.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b27_wave2_spawn_world_audio.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b24_wave2_pcu_pcr.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b25_wave2_vcust_store_garage.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b17_wave2_ui_frontend_a.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b18_wave2_ui_frontend_b.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b19_wave2_char_npc_inv.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_b20_wave2_hud_minimap_hooks.cpp" "%PROJ%\src\lua_spec_confirmed_stubs_b21_wave2_sec17_18.cpp" ^
+  "%PROJ%\src\lua_spec_confirmed_stubs_registry.cpp" ^
   /Fo"%VOUT%\\"
 if errorlevel 1 (echo VINT_LUAHOST_COMPILE_FAILED & exit /b 1)
 lib.exe /nologo /OUT:"%OUT%\vint_luahost.lib" "%VOUT%\*.obj"
 if errorlevel 1 (echo VINT_LUAHOST_LIB_FAILED & exit /b 1)
+
+echo === extra readers for sr3_viewer's `walk` command (sr3player movement/locomotion/camera + sr3playeranim + sr3animruntime + sr3tables_animation) ===
+REM sr3_viewer.cpp's new `walk` command (2026-10-07, player<->animation
+REM walking demo - see runWalkDemo()'s own doc comment) needs:
+REM   - sr3player::PlayerMovement's own movement/locomotion/camera-math
+REM     translation units (player_input.cpp/player_control_state.cpp are
+REM     ALREADY compiled above into vint_luahost.lib for the `vint-doc`
+REM     command - do NOT recompile those two here, that would duplicate-
+REM     define their symbols against vint_luahost.lib at link time);
+REM   - player_follow_camera.cpp: `walk` constructs a real
+REM     sr3player::CameraSystem (to keep its target genuinely in sync with
+REM     the bridge-driven character every frame, per runWalkDemo()'s own
+REM     doc comment) - CameraSystem's OWN constructor builds its static
+REM     mode-row table with lambdas that reference followEnter/
+REM     followPreUpdate/followUpdate/followSnap (defined ONLY in
+REM     player_follow_camera.cpp), so those symbols are needed at link time
+REM     the moment a CameraSystem is constructed AT ALL, even though this
+REM     command never calls push()/preUpdate()/update() itself (confirmed
+REM     directly: the first build attempt here linked without this file and
+REM     failed with exactly these 4 unresolved externals from
+REM     player_camera.obj - the SAME lesson this script's own comments
+REM     already name twice, for le_strings.cpp and player_input.cpp/
+REM     player_control_state.cpp);
+REM   - sr3playeranim (the new player<->animation bridge library itself);
+REM   - sr3animruntime (control-parameter/node-graph loader+evaluator -
+REM     sr3anim's own sources are ALREADY compiled above, in the `vehicle`
+REM     command's block; sr3xtbl's xtbl.cpp is ALREADY compiled above too,
+REM     in the weather/tables block - neither is recompiled here);
+REM   - sr3tables_animation (anim_states.xtbl/anim_actions.xtbl/
+REM     anim_triggers.xtbl row parsing).
+REM Same self-contained treatment as every other reader here - fresh from
+REM src\, not from build_verify\*.obj.
+cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%PROJ%\third_party\zlib" /I "%PROJ%\build\third_party\zlib" ^
+  "%PROJ%\src\player_movement.cpp" "%PROJ%\src\player_locomotion.cpp" "%PROJ%\src\player_camera.cpp" ^
+  "%PROJ%\src\player_follow_camera.cpp" ^
+  "%PROJ%\src\player_anim_bridge.cpp" ^
+  "%PROJ%\src\anim_control_parameters.cpp" "%PROJ%\src\anim_crossfade.cpp" "%PROJ%\src\anim_controller.cpp" ^
+  "%PROJ%\src\anim_node_graph.cpp" "%PROJ%\src\anim_node_graph_runtime.cpp" ^
+  "%PROJ%\src\tables_animation.cpp" ^
+  "%PROJ%\src\anim_pose_compose.cpp" "%PROJ%\src\clip_pose_bridge.cpp" ^
+  "%PROJ%\src\player_character_collision.cpp" ^
+  "%PROJ%\src\physics_frame_contract.cpp" "%PROJ%\src\physics_lifecycle.cpp" ^
+  "%PROJ%\src\physics_character_proxy.cpp" "%PROJ%\src\physics_job_dispatch.cpp" ^
+  /Fo"%OUT%\\"
+if errorlevel 1 (echo WALK_LIB_COMPILE_FAILED & exit /b 1)
 
 echo === tree_baseline_render.cpp ===
 cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\include" /I "%PROJ%\third_party\zlib" /I "%PROJ%\build\third_party\zlib" ^
@@ -303,6 +362,16 @@ link.exe /nologo /OUT:"%OUT%\sr3_viewer.exe" ^
   "%OUT%\xtbl.obj" "%OUT%\tables_environment.obj" "%OUT%\vint_luahost.lib" ^
   "%OUT%\png_writer.obj" "%OUT%\device.obj" "%OUT%\texture_upload.obj" ^
   "%OUT%\quad_renderer.obj" "%OUT%\window.obj" "%OUT%\swap_chain.obj" "%OUT%\mesh_renderer.obj" ^
+  "%OUT%\player_movement.obj" "%OUT%\player_locomotion.obj" "%OUT%\player_camera.obj" ^
+  "%OUT%\player_follow_camera.obj" ^
+  "%OUT%\player_anim_bridge.obj" ^
+  "%OUT%\anim_control_parameters.obj" "%OUT%\anim_crossfade.obj" "%OUT%\anim_controller.obj" ^
+  "%OUT%\anim_node_graph.obj" "%OUT%\anim_node_graph_runtime.obj" ^
+  "%OUT%\tables_animation.obj" ^
+  "%OUT%\anim_pose_compose.obj" "%OUT%\clip_pose_bridge.obj" ^
+  "%OUT%\player_character_collision.obj" ^
+  "%OUT%\physics_frame_contract.obj" "%OUT%\physics_lifecycle.obj" ^
+  "%OUT%\physics_character_proxy.obj" "%OUT%\physics_job_dispatch.obj" ^
   "%ZOUT%\adler32.obj" "%ZOUT%\compress.obj" "%ZOUT%\crc32.obj" "%ZOUT%\deflate.obj" ^
   "%ZOUT%\gzclose.obj" "%ZOUT%\gzlib.obj" "%ZOUT%\gzread.obj" "%ZOUT%\gzwrite.obj" ^
   "%ZOUT%\infback.obj" "%ZOUT%\inffast.obj" "%ZOUT%\inflate.obj" "%ZOUT%\inftrees.obj" ^
@@ -316,12 +385,16 @@ cl.exe /nologo /std:c++17 /EHsc /O2 /c /I "%PROJ%\third_party\zlib" /I "%PROJ%\b
 if errorlevel 1 (echo HARNESS_COMPILE_FAILED & exit /b 1)
 
 echo === link golden_scene_check.exe ===
+REM advapi32.lib added 2026-10-07 for queryHostEnvironmentInfo()'s RegGetValueA
+REM call (B3 build-infra task, host OS-build sidecar logging for forced-WARP
+REM goldens) - the CMake build already links it implicitly; build.bat does not.
 link.exe /nologo /OUT:"%OUT%\golden_scene_check.exe" ^
   "%OUT%\golden_scene_check.obj" ^
   "%ZOUT%\adler32.obj" "%ZOUT%\compress.obj" "%ZOUT%\crc32.obj" "%ZOUT%\deflate.obj" ^
   "%ZOUT%\gzclose.obj" "%ZOUT%\gzlib.obj" "%ZOUT%\gzread.obj" "%ZOUT%\gzwrite.obj" ^
   "%ZOUT%\infback.obj" "%ZOUT%\inffast.obj" "%ZOUT%\inflate.obj" "%ZOUT%\inftrees.obj" ^
-  "%ZOUT%\trees.obj" "%ZOUT%\uncompr.obj" "%ZOUT%\zutil.obj"
+  "%ZOUT%\trees.obj" "%ZOUT%\uncompr.obj" "%ZOUT%\zutil.obj" ^
+  advapi32.lib
 if errorlevel 1 (echo HARNESS_LINK_FAILED & exit /b 1)
 
 echo BUILD_OK

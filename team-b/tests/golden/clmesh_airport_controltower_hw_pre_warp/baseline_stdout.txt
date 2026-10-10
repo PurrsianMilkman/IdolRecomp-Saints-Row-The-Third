@@ -1,0 +1,64 @@
+[clmesh] airport_controltower.clmesh_pc (11032 bytes) + airport_controltower.glmesh_pc (270472 bytes)
+[clmesh] materialCount=19 renderGroupCount=2 headMeshRefs=0 landsOnEof=1
+[materials] 19 material record(s):
+  material[0]: hash0=0x454731FD (real shaderHash - reported, not wired to a compiled shader here) texCount=5 -> [slot=0 hash=0x2808EB90 'airport_terminal_glass_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_glass.tga'] [slot=2 hash=0xF73A1423 'airport_terminal_glass_s.tga'] [slot=3 hash=0x46AA914E 'airport_terminal_glass_tod.tga'] [slot=4 hash=0xDBEA623E 'windows_skyscraper_noise.tga']
+  material[1]: hash0=0x5B024F97 (real shaderHash - reported, not wired to a compiled shader here) texCount=4 -> [slot=0 hash=0x2808EB90 'roof_gravel01_n.tga'] [slot=1 hash=0x69B48F91 'roof_gravel01_d.tga'] [slot=2 hash=0xE848C9CA 'trim_artdeco01_s.tga'] [slot=3 hash=0x433202E1 'roof_decal_grime01_d.tga']
+  material[2]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+  material[3]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+  material[4]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'door_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'door_skyscraper_d.tga']
+  material[5]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'warehouse01_a_foundation_n.tga'] [slot=1 hash=0x69B48F91 'warehouse01_a_foundation_d.tga']
+  material[6]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile02_d.tga']
+  material[7]: hash0=0x4B8E4452 (real shaderHash - reported, not wired to a compiled shader here) texCount=3 -> [slot=0 hash=0x2808EB90 'metal_suports_skyscraper_n.tga'] [slot=1 hash=0x69B48F91 'metal_suports_skyscraper_d.tga'] [slot=2 hash=0xE848C9CA 'metal_suports_skyscraper_s.tga']
+  material[8]: hash0=0x2CA87F92 (real shaderHash - reported, not wired to a compiled shader here) texCount=3 -> [slot=0 hash=0x69B48F91 'glass_tiled.tga'] [slot=1 hash=0xFFB521EF 'windowgrime_dcl02.tga'] [slot=2 hash=0xC14A2F45 'refgenericinside.tga']
+  material[9]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+  material[10]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone01_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone01_d.tga']
+  material[11]: hash0=0x4B8E4452 (real shaderHash - reported, not wired to a compiled shader here) texCount=3 -> [slot=0 hash=0x2808EB90 'ap_hangar02_a_door02_n.tga'] [slot=1 hash=0x69B48F91 'ap_hangar02_a_door02_d.tga'] [slot=2 hash=0xE848C9CA 'ap_hangar02_a_door02_s.tga']
+  material[12]: hash0=0xB4803FCF (real shaderHash - reported, not wired to a compiled shader here) texCount=3 -> [slot=0 hash=0x69B48F91 'chandeliera_d.tga'] [slot=1 hash=0x2808EB90 'chandeliera_n.tga'] [slot=2 hash=0xE848C9CA 'chandeliera_s.tga']
+  material[13]: hash0=0xA9E6EB9E (real shaderHash - reported, not wired to a compiled shader here) texCount=1 -> [slot=0 hash=0x69B48F91 'airventindustriala_d.tga']
+  material[14]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_stone02_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_stone02_d.tga']
+  material[15]: hash0=0xF510FE89 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_tile_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_tile_d.tga']
+  material[16]: hash0=0xD28715E8 (real shaderHash - reported, not wired to a compiled shader here) texCount=2 -> [slot=0 hash=0x2808EB90 'airport_terminal_decal_n.tga'] [slot=1 hash=0x69B48F91 'airport_terminal_decal_d.tga']
+  material[17]: hash0=0x5A8E5EE3 (real shaderHash - reported, not wired to a compiled shader here) texCount=1 -> [slot=0 hash=0x69B48F91 'roof_decal_patch_d.tga']
+  material[18]: hash0=0x786DE88A (real shaderHash - reported, not wired to a compiled shader here) texCount=0 -> (no real texture binding on this material)
+[renderGroup 0] flags=0x01 channels=4 indexCount=13138 drawGroupsLocated=1
+  range materialId=0 submeshIndex=0 startIndex=0 indexCount=496 minVertex=2208 maxVertex=2548
+  range materialId=1 submeshIndex=0 startIndex=496 indexCount=417 minVertex=208 maxVertex=487
+  range materialId=2 submeshIndex=0 startIndex=913 indexCount=611 minVertex=208 maxVertex=2819
+  range materialId=3 submeshIndex=0 startIndex=1524 indexCount=82 minVertex=2152 maxVertex=2207
+  range materialId=4 submeshIndex=0 startIndex=1606 indexCount=311 minVertex=0 maxVertex=207
+  range materialId=5 submeshIndex=0 startIndex=1917 indexCount=2446 minVertex=488 maxVertex=2151
+  range materialId=6 submeshIndex=1 startIndex=4363 indexCount=220 minVertex=0 maxVertex=117
+  range materialId=7 submeshIndex=0 startIndex=4583 indexCount=5151 minVertex=2820 maxVertex=6381
+  range materialId=8 submeshIndex=2 startIndex=9734 indexCount=773 minVertex=0 maxVertex=559
+  range materialId=9 submeshIndex=0 startIndex=10507 indexCount=999 minVertex=6382 maxVertex=7045
+  range materialId=10 submeshIndex=0 startIndex=11506 indexCount=930 minVertex=7046 maxVertex=7653
+  range materialId=11 submeshIndex=0 startIndex=12436 indexCount=269 minVertex=7744 maxVertex=7889
+  range materialId=12 submeshIndex=3 startIndex=12705 indexCount=58 minVertex=0 maxVertex=39
+  range materialId=13 submeshIndex=0 startIndex=12763 indexCount=134 minVertex=7654 maxVertex=7743
+  range materialId=14 submeshIndex=0 startIndex=12897 indexCount=134 minVertex=7890 maxVertex=7985
+  range materialId=15 submeshIndex=0 startIndex=13031 indexCount=107 minVertex=352 maxVertex=8026
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+  texture[mat 0]: airport_terminal_glass.tga from sr3_city_awld.cpeg_pc (256x256, BC1_UNORM)
+  texture[mat 1]: roof_gravel01_d.tga from sr3_city_awld.cpeg_pc (256x256, BC1_UNORM)
+  texture[mat 2]: airport_terminal_tile02_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 3]: airport_terminal_stone01_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 4]: door_skyscraper_d.tga from sr3_city_awld.cpeg_pc (512x512, BC3_UNORM)
+  texture[mat 5]: warehouse01_a_foundation_d.tga from sr3_city_awld.cpeg_pc (256x256, BC3_UNORM)
+  texture[mat 6]: airport_terminal_tile02_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 7]: metal_suports_skyscraper_d.tga from sr3_city_awld.cpeg_pc (512x256, BC1_UNORM)
+  texture[mat 8]: glass_tiled.tga from sr3_city_awld.cpeg_pc (256x256, BC3_UNORM)
+  texture[mat 9]: airport_terminal_stone02_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 10]: airport_terminal_stone01_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 11]: ap_hangar02_a_door02_d.tga from sr3_city_awld.cpeg_pc (256x256, BC1_UNORM)
+  texture[mat 12]: chandeliera_d.tga from chandeliera_d.cvbm_pc (256x256, BC1_UNORM)
+  texture[mat 13]: airventindustriala_d.tga from airventindustriala_d.cvbm_pc (128x128, BC1_UNORM)
+  texture[mat 14]: airport_terminal_stone02_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 15]: airport_terminal_tile_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)
+  texture[mat 16]: airport_terminal_decal_d.tga from airport_terminal_decal_d.cvbm_pc (512x512, BC3_UNORM)
+  texture[mat 17]: roof_decal_patch_d.tga from sr3_city_awld.cpeg_pc (512x512, BC3_UNORM)
+  texture[mat 18]: no real texture binding at all - flat colour
+bounds   : 74.489 x 69.656 x 49.722   (min Y -2.052)
+topology : 4 channel target(s), 16581 indices -> 5527 non-degenerate triangles total, 16 distinct materialId(s) used
+camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)
+captured : _work/clmesh_airport_controltower.png (frame 0)
+frames   : 1 presented

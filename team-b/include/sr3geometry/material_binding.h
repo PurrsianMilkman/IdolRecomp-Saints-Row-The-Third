@@ -167,6 +167,16 @@ public:
     // Indexed by material id. Empty when !located().
     const std::vector<MaterialBinding>& materials() const { return materials_; }
 
+    // Non-const access, for a real-bind follow-up (spec-tables-
+    // customization.md §12.1f, tools/sr3_viewer.cpp's `--head-matlib-bind`)
+    // that overwrites a TextureRef's already-role-identified `.name` (e.g.
+    // a diffuse-role slot's placeholder "missing.tga") with a resolved real
+    // name from the character's own matlib - never adds/removes an entry,
+    // never changes a slot index or parameter hash, only `.name`. Every
+    // existing caller that never calls this keeps its current behaviour
+    // unchanged.
+    std::vector<MaterialBinding>& materialsMutable() { return materials_; }
+
     // Convenience: the diffuse name for a draw range's material id, or
     // nullptr if unavailable for any reason.
     const std::string* diffuseFor(uint32_t materialId) const {

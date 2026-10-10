@@ -152,7 +152,21 @@ void PlayerMovement::integrate(const MoveFrameInput& f) {
     // (Sec5.9 item 2); no support query, slope removal, gravity or speed
     // cap - those are 0x007a5b10 internals (OPEN 35), not the contract.
     capsuleVelocity = vel;
-    st.capsulePosition = st.capsulePosition + vel * f.dt;
+    if (collisionHook) {
+        // Real collision integrator (2026-10-07 follow-up task) - see
+        // collisionHook's own doc comment. Still "consumes the same
+        // per-frame velocity and publishes the same fields" (Sec5.11 item
+        // 5): collisionHook may clip/slide the actual displacement and
+        // report a different realised velocity (e.g. after sliding along a
+        // wall, or gravity integration), both published below exactly like
+        // the plain direct-integrator path.
+        const CollisionHookResult r = collisionHook(st.capsulePosition, vel, f.dt);
+        st.capsulePosition = r.position;
+        capsuleVelocity = r.velocity;
+        st.grounded = r.grounded;
+    } else {
+        st.capsulePosition = st.capsulePosition + vel * f.dt;
+    }
     capsuleStepped = true;
 }
 

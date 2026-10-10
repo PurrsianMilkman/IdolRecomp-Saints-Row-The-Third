@@ -182,15 +182,23 @@ void testBarePrepPromotesNextFrame() {
 void testBarePrepPromotedWithCutsceneStateOpen() {
     // 2026-10-02 correction (Sec26.25's corrected Host summary, the `mm_p_01`
     // zscene-promotion-driver investigation): a bare zscene_prep made with no
-    // cutscene machine ever engaged - cutscene state 0x0153b520 has no
-    // specced start-up value and nothing in this host ever writes it, so it
-    // is genuinely OPEN for the whole test, exactly as it is for mm_p_01's
-    // own real-archive run - must still be promoted the next frame, not
-    // refused. M12 (added with this test): re-gate promotion on cutscene
+    // cutscene machine ever engaged must still be promoted the next frame,
+    // not refused. M12 (added with this test): re-gate promotion on cutscene
     // state *known* and in {0,2} (i.e. refuse instead of proceed when OPEN)
     // and this test's CHECKs below fail.
+    //
+    // UPDATE 2026-10-07 (Sec60.4's own closure, mm_p_06 blocker fix,
+    // probe_blockers_ranked_20261007.md item 6): cutscene state 0x0153b520 is
+    // no longer genuinely OPEN by default (applySpecInitialState now sets it
+    // to 0/"idle", the real zero-fill .data default) - a fresh Host already
+    // starts known. This test's own point (M12's guard must not re-refuse
+    // when the state IS unknown) still matters as its own defensive
+    // guarantee, so it is kept by explicitly forgetting the state back to
+    // OPEN here, the same "force the OPEN case directly" convention
+    // testTeardownGuard()/the `g.es.cutsceneState().forget()` call below use.
     Fixture f;
     f.installTable();
+    f.es.cutsceneState().forget();
     CHECK(!f.es.cutsceneState().known());
     f.ok(f.gp, "zscene_prep('Z_A')");
     CHECK(f.es.zscenePending().get() == "z_a" && f.es.zsceneCurrent().get().empty());
@@ -206,12 +214,28 @@ void testBarePrepPromotedWithCutsceneStateOpen() {
     // zscene_is_loaded must answer false (not throw: Sec14.23), now that the
     // entry is no longer pending.
     f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
-    // Another frame: this host was never given a handle class for 'z_a' (no
-    // streaming model), so completion can never see it as resident - the
-    // scene stays at load state 1 forever, which is the documented engine
-    // property (Sec26.25 Host summary, "No timeout"), not a host error.
+    // Another frame: zscenePromotionStep() gave 'z_a' a real default handle
+    // class (1, not live/null - 2026-10-09 zscene_prep blocker fix) the
+    // instant it promoted it above, since no test set one - this host never
+    // "never has a class" the way it used to (always-OPEN, silently caught).
+    // Completion reads class 1 (neither 3 nor 5) and waits, no transition -
+    // but the SAME frame's promotion also runs its own reset-check on the
+    // current entry, which (Sec26.25's corrected Globals table) treats a
+    // class-1 CURRENT handle as "never went live": state := 0, current := 0,
+    // not re-queued (0x0153b542 is CONFIRMED permanently false). This is the
+    // OTHER half of the Host summary's own "No timeout" finding, named right
+    // next to it ("a refused handle start silently drops the scene ... the
+    // scene is silently forgotten and zscene_is_loaded stays false for good
+    // unless the script preps again") - both describe the identical
+    // documented engine property, not a host error.
     f.tick(100);
-    CHECK(f.es.zsceneStateCode().get() == 1);
+    CHECK(!f.blocked());
+    CHECK(f.es.zsceneStateCode().get() == 0 && f.es.zsceneCurrent().get().empty());
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+    // Steady state: every further frame repeats the same clean no-op forever
+    // (exactly mm_p_06/mm_p_01's own real mission-drive outcome).
+    f.tick(100);
+    CHECK(!f.blocked() && f.es.zsceneStateCode().get() == 0 && f.es.zsceneCurrent().get().empty());
     f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
 }
 
@@ -347,11 +371,12 @@ void testIdleDriver() {
     f.installTable();
     f.idleZscene();
     f.es.zsceneAutoSelectNearest().set(true);
-    // Load state 0 with 0x0153b541 set: the nearest scene-bearing world object
-    // (no world objects in this host): OPEN.
-    f.tick(10);
-    CHECK(f.blocked() && f.blocker().find("0x03171a64") != std::string::npos);
-    f.es.zsceneNearestWorldObjectScene().set("");
+    // Load state 0 with 0x0153b541 set: the nearest scene-bearing world
+    // object query (list 0x03171a64) now has a CONFIRMED default of "" (none
+    // found) - this host has no world-object manager anywhere, so the real
+    // list is unconditionally empty, not merely unpopulated
+    // (applySpecInitialState, 2026-10-09 zscene_prep blocker fix) - the idle
+    // driver's own early return fires at once, cleanly, no OPEN refusal.
     f.tick(10);
     CHECK(!f.blocked() && f.es.zscenePending().get().empty());
     // An object whose scene is z_a: prepped through the idle driver and
@@ -381,14 +406,15 @@ void testIdleDriver() {
     // checks 0x0153b541 at the *start* of this same step, before its own
     // reset-check's write lands. Not until the *next* frame, with 0x0153b541
     // already set, does the idle driver take the nearest-world-object
-    // branch - OPEN in this host.
+    // branch - now a clean "" (none found, CONFIRMED default) in this host,
+    // 2026-10-09, not an OPEN refusal.
     Fixture h;
     h.installTable();
     h.idleZscene();
     h.tick(10);
     CHECK(!h.blocked() && h.es.zsceneAutoSelectNearest().get() == true && h.es.cutsceneCounters().zscenePromotions == 0);
     h.tick(10);
-    CHECK(h.blocked() && h.blocker().find("0x03171a64") != std::string::npos);
+    CHECK(!h.blocked());
     CHECK(h.es.zsceneAutoSelectNearest().get() == true && h.es.cutsceneCounters().zscenePromotions == 0);
 }
 
@@ -430,9 +456,10 @@ void testResetCheckWithNothingPending() {
     CHECK(g.es.zsceneCurrent().get().empty() && g.es.zscenePending().get().empty() && g.es.zsceneStateCode().get() == 0);
     CHECK(g.es.cutsceneCounters().zscenePromotions == 0 && g.es.zsceneAutoSelectNearest().get() == true);
     // Next frame: the idle driver (0x0153b541 now set) takes the
-    // nearest-world-object branch - OPEN in this host, same as testIdleDriver.
+    // nearest-world-object branch - a clean "" (none found, CONFIRMED
+    // default) in this host, 2026-10-09, same as testIdleDriver.
     g.tick(10);
-    CHECK(g.blocked() && g.blocker().find("0x03171a64") != std::string::npos);
+    CHECK(!g.blocked());
     // Outside states 0 / 2 the reset-check is not run by 0x007258a0: the
     // loading entry with a not-live handle just waits in 0x007285c0.
     Fixture h;
@@ -605,18 +632,25 @@ void testMachineStates() {
         k.tick(10);
         CHECK(k.es.cutsceneState().get() == 5 && !k.es.cutsceneManager().sceneKey.known());
     }
-    // The cutscene state itself has no specced start-up value. Before the
-    // 2026-10-02 correction this aborted the whole frame on that one read
-    // (blocker 0x0153b520); now promotion proceeds anyway (nothing was ever
-    // prepped, so it refuses on the still-OPEN pending slot instead) and
-    // completion separately refuses on the still-OPEN zscene load state -
-    // still exactly one blocked frame, for a different, more specific
-    // reason. See testBarePrepPromotedWithCutsceneStateOpen for the case
-    // this host actually needs to handle (a real prep pending).
+    // Before the 2026-10-02 correction, an unknown cutscene state aborted the
+    // whole frame on that one read (blocker 0x0153b520); promotion proceeds
+    // anyway regardless (nothing was ever prepped, so it refuses on the
+    // still-OPEN pending slot instead) and completion separately refuses on
+    // the still-OPEN zscene load state - still exactly one blocked frame,
+    // for a different, more specific reason. See
+    // testBarePrepPromotedWithCutsceneStateOpen for the case this host
+    // actually needs to handle (a real prep pending).
+    //
+    // UPDATE 2026-10-07 (Sec60.4's own closure, mm_p_06 blocker fix): the
+    // cutscene state is no longer unknown on a fresh Host - it is now known
+    // (0/"idle") from construction - so this fixture now also exercises the
+    // "rest of the cutscene machine" block (cutsceneMachineStep/
+    // cutsceneSecondStep), which runs a no-op for state 0 and does not
+    // change which read blocks the frame.
     Fixture z;
     z.tick(10);
     CHECK(z.blocked() && z.blocker().find("0x0153b538") != std::string::npos);
-    CHECK(!z.es.cutsceneState().known());
+    CHECK(z.es.cutsceneState().known() && z.es.cutsceneState().get() == 0);
     CHECK(z.es.cutsceneCounters().framesRun == 1 && z.es.cutsceneCounters().framesBlockedOnOpen == 1);
 }
 
@@ -655,6 +689,70 @@ void testTeardownGuard() {
     h.es.zsceneHandleClass().set("story_b", 3);
     h.ok(h.gp, "zscene_prep('z_a')");
     CHECK(h.es.zscenePending().get() == "z_a" && h.es.zsceneStateCode().get() == 0);
+}
+
+void testBareSceneWithNoStreamingSettlesClean() {
+    // 2026-10-09: the exact real mission-drive shape (results/
+    // probe_blockers_ranked_20261008_post_missioncontextname.md item 5,
+    // mm_p_06 and mm_p_01, scene names 'p_z01'/'02_z01') - a host with NOTHING
+    // ever set by a test except its own real walk-order precondition (see
+    // below), which then preps a real kind-1 scene and is driven for many
+    // ticks with no handle class, no re-queue-on-reset, no nearest-world-
+    // object override. Before this fix every one of these ticks refused
+    // (handle class OPEN); now it must settle into a clean, non-throwing
+    // steady state and stay there, matching Sec26.25's own documented
+    // "silently dropped" property.
+    //
+    // Uses idleZscene(), deliberately, instead of a from-construction-only
+    // Fixture: tools/lua_host_run.cpp's own real mission-drive loop runs all
+    // 49 missions against ONE persistent, shared EngineState "in walk order"
+    // (its own top comment, STEP 1) - mm_p_01/mm_p_06 are not the first
+    // mission to ever touch zscene state in that walk, so by the time either
+    // one calls its own zscene_prep, an EARLIER mission's own full
+    // prep/live-teardown cycle has already left the subsystem at exactly its
+    // natural idle resting state (load state 0x0153b51c := 0, current := "",
+    // pending := "", 0x0153b541 := false, soundtrack inactive - precisely
+    // idleZscene()'s own 8 fields) - independently confirmed against the
+    // real verdict TSV (results/verify_player_class_chain_gate_default_20261008/
+    // verdict_mission_drive.tsv): both missions' own first_error_message
+    // already names the handle-class gate, never the load state or the
+    // 0x0153b541 auto-select read (either of which a TRULY virgin host - one
+    // whose zscene subsystem nothing has EVER touched - would hit first
+    // instead, since 0x0153b51c/0x0153b541 have no specced start-up value of
+    // their own, engine_state.h's own doc comment; that from-construction
+    // scenario is different and genuinely OPEN, not modelled by this test).
+    // idleZscene() does not touch the handle class or the nearest-world-
+    // object query, so the two real defaults under test are still exercised
+    // exactly as if nothing had set them.
+    Fixture f;
+    f.installTable(); // 'Z_A' is kind 1 (installTable's own row 0)
+    f.idleZscene(); // this mission's own real walk position (above)
+    f.ok(f.gp, "zscene_prep('Z_A')");
+    CHECK(f.es.zscenePending().get() == "z_a" && f.es.zsceneCurrent().get().empty());
+    f.tick(50); // promotes: current := 'z_a', state := 1, handle class defaulted to 1
+    CHECK(!f.blocked());
+    CHECK(f.es.zsceneCurrent().get() == "z_a" && f.es.zsceneStateCode().get() == 1);
+    CHECK(f.es.zsceneHandleClass().known("z_a") && f.es.zsceneHandleClass().get("z_a") == 1);
+    CHECK(f.es.zsceneRequeueOnReset().known() && f.es.zsceneRequeueOnReset().get() == false);
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+    // Many further ticks (standing in for the real probe's own 721-tick
+    // budget): the reset-check drops the never-live entry once, then every
+    // following frame is an identical, silent no-op - never another refusal.
+    for (int i = 0; i < 20; ++i) {
+        f.tick(50);
+        CHECK(!f.blocked());
+    }
+    CHECK(f.es.zsceneCurrent().get().empty() && f.es.zscenePending().get().empty() &&
+          f.es.zsceneStateCode().get() == 0);
+    f.ok(f.gp, "assert(zscene_is_loaded('z_a') == false)");
+    // An explicit test value still always wins over the default - the
+    // default only ever fills a genuinely untouched name.
+    Fixture g;
+    g.installTable();
+    g.es.zsceneHandleClass().set("z_a", 3); // resident from the first tick
+    g.ok(g.gp, "zscene_prep('Z_A')");
+    g.tick(50);
+    CHECK(g.es.zsceneHandleClass().get("z_a") == 3); // untouched by the default
 }
 
 void testVintInit() {
@@ -774,6 +872,7 @@ int main() {
     testCutsceneStateTwo();
     testMachineStates();
     testTeardownGuard();
+    testBareSceneWithNoStreamingSettlesClean();
     testVintInit();
     testVintResolutionChange();
     testSafeFrame();

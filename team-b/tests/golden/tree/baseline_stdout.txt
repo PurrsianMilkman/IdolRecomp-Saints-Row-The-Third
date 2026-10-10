@@ -19,6 +19,6 @@ indexCount      : 4836 total across 3 LOD slot(s)
 trianglesEmitted: 1612 total
 subDraws        : 3 range(s) total
 bounds (renderer, combined): X[-6.148 8.047] Y[0.000 44.688] Z[-6.941 7.809]
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (Microsoft Basic Render Driver)
 size     : 800x600
 wrote    : tree.png

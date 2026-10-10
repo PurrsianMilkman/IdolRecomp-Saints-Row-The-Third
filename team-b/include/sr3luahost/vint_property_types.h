@@ -28,7 +28,13 @@
 //               document_name (Sec9.2), 0xa = bitmap/bitmap_circle image and
 //               7 = bitmap source_nw/source_se, bool = bitmap
 //               custom_source_coords (spec-vint-doc-format.md Sec8 item 7),
-//               8 = tween end_event (Sec20.1 case 8 + vint_lib.lua:1172).
+//               8 = tween end_event (Sec20.1 case 8 + vint_lib.lua:1172),
+//               3 = sr2_map zoom (spec-hud-runtime.md Sec6, 2026-10-08 pass:
+//               the get/set bodies 0x00e34420/0x00e34460 are read directly
+//               and read/write this+0xa0 as a float - added 2026-10-08,
+//               minimap live-transform task; previously left Open because
+//               spec-lua-bindings.md Sec9.2's own table lists property names
+//               only, not a per-row code column).
 //   FieldType - element's 17 rows (and their identical re-listings on
 //               group/point/text/bitmap_circle): spec-vint-render.md Sec1
 //               CONFIRMS the object field behind every one (3 floats, 2
@@ -38,7 +44,7 @@
 //               float -> 3, bool byte -> 5, signed int -> 1). This is a
 //               deduction from two confirmed texts, not a stated per-row
 //               code - flagged so Team A can confirm the column.
-//   Open      - no clean text gives the code (53 of 96 rows). vint_set_property
+//   Open      - no clean text gives the code (52 of 96 rows). vint_set_property
 //               / vint_get_property store and echo such a row's value as the
 //               Lua caller gave it (CHOSEN pass-through - the pre-descriptor
 //               behaviour), never a parsed/converted guess.

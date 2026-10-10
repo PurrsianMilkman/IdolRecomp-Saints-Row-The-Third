@@ -20,8 +20,11 @@
 //    fade frame (CHOSEN order; the engine's drivers 0x00702a50 / 0x00bdbc54
 //    are not ordered against the fade routine in the spec), on the host clock
 //    screenFadeClockMs();
-//  - streaming, audio and world objects: the handle class, the soundtrack's
-//    end and the nearest world object are OPEN values a test sets.
+//  - streaming, audio and world objects: the soundtrack's end is an OPEN
+//    value a test sets; the handle class and the nearest world object get a
+//    real, CONFIRMED default for this host's own "no streaming/world-object
+//    subsystem" case (2026-10-09 correction below), which an explicit test
+//    .set()/.forget() still always overrides.
 //
 // 2026-10-02 correction (the `mm_p_01` zscene-promotion-driver investigation,
 // Sec26.25's corrected Host summary): completion and promotion are REAL,
@@ -55,7 +58,32 @@
 // machine and the second step's other 3 cases (4, 5, 15) still require the
 // cutscene state to actually be known - they cannot do anything with it
 // otherwise, and nothing above depends on them running.
+//
+// 2026-10-09 correction (the `mm_p_06`/`mm_p_01` zscene_prep blocker,
+// results/probe_blockers_ranked_20261008_post_missioncontextname.md item 5):
+// past the above fix, a bare `zscene_prep` for a REAL (zone-resolved) scene
+// name still refused one frame after promotion - EngineState::
+// zsceneCompletionStep()'s own class-at-state-1 read and zsceneResetPlan()'s
+// own class-at-current read both throw for any name no test has pre-set, and
+// this host's real mission-drive run never pre-sets one (there IS no real
+// streaming subsystem to source it from). Sec26.25's Host summary already
+// settles exactly this host shape, in full prose, under two of its own
+// 2026-10-02 findings ("No timeout"/"A refused handle start silently drops
+// the scene"), and Sec2.7 independently confirms "null handle" as the
+// classifier's own first-checked, catch-all state (1) - so the fix is not a
+// guess: zscenePromotionStep() below now WRITES that real default (once, the
+// first time a name is promoted, never overriding an explicit test value or
+// a prior LIVE teardown's own deliberate .forget()); applySpecInitialState()
+// (lua_spec_initial_state.cpp) now also defaults the re-queue-on-reset byte
+// (CONFIRMED permanently false, Sec26.25 Globals) and the nearest-world-
+// object query (CONFIRMED "" - this host has no world-object manager at
+// all) the same way. Together the three let a bare prep settle into a
+// clean, silently-dropped steady state (exactly Sec26.25's own documented
+// property) instead of refusing - see each field's own doc comment
+// (engine_state.h) for the precise, narrow scope of each default.
 #include "sr3luahost/engine_state.h"
+
+#include <stdexcept>
 
 namespace sr3luahost {
 
@@ -98,6 +126,12 @@ EngineState::ZsceneResolved EngineState::zsceneResolve(const std::string& name) 
                        "' (CutsceneType absent or a case-only spelling variant)");
             }
             r.loadable = *row.kind == 1;
+            // 2026-10-08 (cutscene_play_do camera-script wiring task): surface
+            // the resolved kind and the row's CameraScript text too - reached
+            // only when the refuse() above did not fire, so kind is never
+            // OPEN here.
+            r.kind = row.kind;
+            r.cameraScriptName = row.cameraScriptName;
             return r;
         }
         r.key = zsceneTableKey(name); // missing from the installed table (REAL: no entry)
@@ -265,12 +299,71 @@ void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::strin
     // (CONFIRMED, Sec26.25 - this call IS that same mechanism, not a
     // reimplementation of it).
     zsceneGateApply(zsceneGatePlan(name));
+    // Real camera-script pipeline (spec-lua-api-behaviour.md Sec57.2a /
+    // spec-cutscene-camera-format.md Sec10.6 item 7, 2026-10-08 wiring
+    // task): the SAME engine entry 0x00725df0 this whole function already
+    // models starts the 20-state cutscene machine whose own load path this
+    // step implements - see EngineState::cutsceneCameraScriptStep()'s own
+    // doc comment and the public API comment above cutsceneCameraScript
+    // Outcome() in engine_state.h for the full design.
+    cutsceneCameraScriptStep(name);
     // "request a 500 ms fade-out" (CONFIRMED) - the SAME screenFadeRequest()
     // mechanism fade_out's own stub uses, with no callback and no special
     // flag (flag 0, the established convention for a plain request - see
     // stub_fade_out/stub_fade_in in lua_spec_confirmed_stubs.cpp).
     screenFadeRequest(true, 500, nullptr, 0);
     cutscenePlayInProgress_ = true;
+}
+
+// cutsceneCameraScriptStep / sampleCutsceneCamera: see the doc comments on
+// EngineState::cutsceneCameraScriptOutcome()/installCameraScriptOpener()/
+// sampleCutsceneCamera() in engine_state.h for the full design citation.
+void EngineState::cutsceneCameraScriptStep(const std::string& name) {
+    cutsceneCameraScript_.reset();
+    const ZsceneResolved r = zsceneResolve(name); // may throw OpenStateError (pre-existing: same resolve the zscene gate call above already runs)
+    if (!r.kind) {
+        // CHOSEN conservative default: no scene table installed, or the
+        // name resolves to no entry - kind is not determinable, so never
+        // guess whether a camera script is needed.
+        cutsceneCameraScriptOutcome_ = CutsceneCameraScriptOutcome::SkippedKindUnknown;
+        return;
+    }
+    if (*r.kind == 0) {
+        // REAL: Designer kind, the 0x00721bc0 gate - skip the load
+        // entirely. The opener is NOT consulted (cutsceneCameraScript
+        // OpenerCalls() stays exactly as it was before this call).
+        cutsceneCameraScriptOutcome_ = CutsceneCameraScriptOutcome::SkippedDesignerKind;
+        return;
+    }
+    // kind 1 (Zscene) or 2 (Story): both require and load a script (REAL,
+    // Sec10.6 item 7: "Zscene and Story kinds both require and load one").
+    std::optional<std::vector<uint8_t>> bytes;
+    if (cameraScriptOpener_ && r.cameraScriptName) {
+        ++cutsceneCameraScriptOpenerCalls_;
+        bytes = cameraScriptOpener_(*r.cameraScriptName);
+    }
+    if (!bytes) {
+        // REAL: "a missing or unparsable script aborts the cutscene load" -
+        // covers no opener installed, no CameraScript name recorded for
+        // this entry, and the opener itself finding nothing, all alike.
+        cutsceneCameraScriptOutcome_ = CutsceneCameraScriptOutcome::Aborted;
+        return;
+    }
+    try {
+        cutsceneCameraScript_ = sr3cutscene::CameraScript::parse(sr3cutscene::ByteView(bytes->data(), bytes->size()));
+        cutsceneCameraScriptOutcome_ = CutsceneCameraScriptOutcome::Loaded;
+    } catch (const sr3cutscene::FormatError&) {
+        // REAL: "unparsable" also aborts the load (same citation as above).
+        cutsceneCameraScript_.reset();
+        cutsceneCameraScriptOutcome_ = CutsceneCameraScriptOutcome::Aborted;
+    }
+}
+
+sr3cutscene::CameraSample EngineState::sampleCutsceneCamera(double t) const {
+    if (!cutsceneCameraScript_) {
+        throw std::logic_error("sampleCutsceneCamera: no camera script loaded (outcome is not Loaded)");
+    }
+    return cutsceneCameraScript_->sample(t);
 }
 
 bool EngineState::zsceneIsLoaded(bool hasName, const std::string& name) {
@@ -409,6 +502,23 @@ void EngineState::zscenePromotionStep() {
     zsceneSoundtrackActive_.set(true);
     zsceneSoundtrackStartMs_.set(screenFadeClockMs_);
     zsceneSoundtrackEnded_.forget(); // a new stream's status: no audio here, OPEN
+    // 0x00dafea0 (the handle-start call) is simulated here too, narrowly: this
+    // host has no streaming subsystem anywhere (engine_state.h's own zscene
+    // doc comment), so a handle this host has never been told otherwise about
+    // is CONFIRMED null the instant its load is "started" here - Sec2.7's own
+    // classifier names "null handle" as its first-checked, catch-all case,
+    // and Sec26.25's Host summary gives the full, CONFIRMED consequence for
+    // exactly a host like this one ("a host whose streaming model never
+    // marks the group resident leaves the scene at load state 1 forever"/"a
+    // refused handle start silently drops the scene ... the scene is
+    // silently forgotten"). `!known()` only wins here when a test has NOT
+    // already given this name a class (an explicit .set() - resident,
+    // failed, or otherwise - always stands); it never fires for a name a
+    // prior LIVE teardown has since .forget()-en, since that represents the
+    // separate, still-OPEN "what 0x00dafad0 leaves the flag word as"
+    // question (Sec26.25 review status), not "never started" - this write
+    // only runs for a FRESH promotion, before that or any other write below.
+    if (!zsceneHandleClass_.known(promoted)) zsceneHandleClass_.set(promoted, 1);
     zsceneCurrent_.set(promoted);
     zscenePending_.set("");
     zsceneStateCode_.set(1);

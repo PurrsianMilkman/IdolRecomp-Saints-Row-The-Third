@@ -12,8 +12,8 @@ skinning stats: bind  lanesDropped=323 maxOutOfRangeIdx=-1
 bbox (CPU, mesh space):
   bind : X[-0.693 0.693] Y[-0.013 1.722] Z[-0.219 0.185]
   posed: X[-0.330 0.693] Y[-0.013 1.722] Z[-0.219 0.185]
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (software) (Microsoft Basic Render Driver)
 bounds(renderer, bind): 1.385 x 1.735 x 0.404
 wrote    : _work/brad_bind.png
 wrote    : _work/brad_posed.png
-pixel diff (bind vs posed): 10149 / 648000 pixels differ (1.57%)
+pixel diff (bind vs posed): 10148 / 648000 pixels differ (1.57%)

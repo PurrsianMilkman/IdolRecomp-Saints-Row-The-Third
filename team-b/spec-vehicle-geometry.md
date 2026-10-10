@@ -8,7 +8,7 @@
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
-**Review status summary (2026-09-30)** — adversarial desk review of 36 units (`review/adv_vehicle_geometry.md`): **14 DESK-PASS** (§2, §7.2 Q1, §7.2 Q2, §8, §9, §11.4, §11.6, §11.8, §11.9 intro, §11.9.4, §11.9.6, §11.9.7, §11.9.8, §11.10); **9 DESK-PASS, text fixes applied** (§1, §4.1, §7, §7.2 constructor paragraph, §10, §11.5, §11.9.1, §11.9.3, §11.12); **3 VALIDATED-BY-DATA** (§7.1 core association — Team B 393/393 vehicles, 17,026 materials / 36,010 entries, `team-b/HANDOFF.md` §9.69; §11.1 — Team B 393/393 vehicles, 90,290/90,290 draw ranges, §9.89; §11.2 layout — Team B 393/393 bindings §9.69 and byte-exact array B/C on `car_4dr_genki_0` §9.106); **10 NEEDS-EXE** (§3, §4, §5, §6, §7.2 Q3, §11.3, §11.7, §11.9.2, §11.9.5, §11.11). A desk pass alone does not clear a unit: it means the text is internally consistent and matches the other specs, not that it was re-derived from the executable; VALIDATED-BY-DATA units are already backed by Team B's full-population runs. Note on populations: Team B's *part-record* run is **372/372 files, 9,536 parts** (`team-b/HANDOFF.md` §9.25), not 393/9,951 — the 393/9,951 part figures in §1/§4 are this spec's own; Team B's 393/393 runs are the channel/layout decode (§9.102), the material bindings (§9.69) and the `high16 < channelCount` join (§9.89). **Awaiting the executable:** §3 (`FUN_007524f0`/`FUN_007527b0` alignment base of the blob skip; the uncharacterised header spans), §4 (`FUN_00aaad50`/`FUN_00aaaea0`: part `+0x60`..`+0x7F` vs the `+0x68` flag byte; `+0x50`/`+0x54` child array), §5 (special-case compare rules in `FUN_00ab1080`), §6 (`FUN_00ab0730` remap layout; the three bbox type masks), §7.2 Q3 (runtime writer of `Base_Paint_Color`, if any), §11.3 (`+0xA4` target), §11.7 (`FUN_00760c30` return value), §11.9.2 (device-wrapper slots), §11.9.5 (range-stride factors; `this+0xfc` array), §11.11 (~~steps 3–4~~ **[step 3 re-derived 2026-10-03: a Havok `hkpBoxShape` is built for the part; step 4 is narrowed but still open]**). **Awaiting real data:** §3 `u32(ccar+0x04) mod 16` over all 393 and the `30/386`/`347` denominators; §4 parts with flag `0x200`, float-vs-byte view of part `+0x60`..`+0x7F`. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+**Review status summary (2026-09-30)** — adversarial desk review of 36 units (`review/adv_vehicle_geometry.md`): **14 DESK-PASS** (§2, §7.2 Q1, §7.2 Q2, §8, §9, §11.4, §11.6, §11.8, §11.9 intro, §11.9.4, §11.9.6, §11.9.7, §11.9.8, §11.10); **9 DESK-PASS, text fixes applied** (§1, §4.1, §7, §7.2 constructor paragraph, §10, §11.5, §11.9.1, §11.9.3, §11.12); **3 VALIDATED-BY-DATA** (§7.1 core association — Team B 393/393 vehicles, 17,026 materials / 36,010 entries, `team-b/HANDOFF.md` §9.69; §11.1 — Team B 393/393 vehicles, 90,290/90,290 draw ranges, §9.89; §11.2 layout — Team B 393/393 bindings §9.69 and byte-exact array B/C on `car_4dr_genki_0` §9.106); **10 NEEDS-EXE** (§3, §4, §5, §6, §7.2 Q3, §11.3, §11.7, §11.9.2, §11.9.5, §11.11). A desk pass alone does not clear a unit: it means the text is internally consistent and matches the other specs, not that it was re-derived from the executable; VALIDATED-BY-DATA units are already backed by Team B's full-population runs. Note on populations: Team B's *part-record* run is **372/372 files, 9,536 parts** (`team-b/HANDOFF.md` §9.25), not 393/9,951 — the 393/9,951 part figures in §1/§4 are this spec's own; Team B's 393/393 runs are the channel/layout decode (§9.102), the material bindings (§9.69) and the `high16 < channelCount` join (§9.89). **Awaiting the executable:** §3 (`0x007524f0`/`0x007527b0` alignment base of the blob skip; the uncharacterised header spans), §4 (`0x00aaad50`/`0x00aaaea0`: part `+0x60`..`+0x7F` vs the `+0x68` flag byte; `+0x50`/`+0x54` child array), §5 (special-case compare rules in `0x00ab1080`), §6 (`0x00ab0730` remap layout; the three bbox type masks), §7.2 Q3 (runtime writer of `Base_Paint_Color`, if any), §11.3 (`+0xA4` target), §11.7 (`0x00760c30` return value), §11.9.2 (device-wrapper slots), §11.9.5 (range-stride factors; `this+0xfc` array), §11.11 (~~steps 3–4~~ **[step 3 re-derived 2026-10-03: a Havok `hkpBoxShape` is built for the part; step 4 is narrowed but still open]**). **Awaiting real data:** §3 `u32(ccar+0x04) mod 16` over all 393 and the `30/386`/`347` denominators; §4 parts with flag `0x200`, float-vs-byte view of part `+0x60`..`+0x7F`. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
 
 ---
 
@@ -51,11 +51,11 @@ Offsets from file start. "Offset" fields are file-relative on disk and fixed up 
 | `+0x08` | **Offset of the embedded Morph block** (`0x1337BEEF`/v5 → `0x0BADBEEF`/v3), or `-1`. Exact in 326/326; `-1` in the 67 morph-less files. | **[CONFIRMED — disassembly + empirical.]** |
 | `+0x0C` | **Offset into `.gcar_pc`** handed to the morph as its secondary buffer, or `-1`. Within the paired `.gcar_pc` in 326/326, and ≥ the `.ccar_pc` size in all 326 (it is *not* a `.ccar_pc` offset). | **[CONFIRMED — disassembly + empirical.]** |
 | `+0x10` `+0x18` `+0x28` `+0x2C` `+0x38` | Offsets, never `-1` (393/393); fixed up by the constructor; targets not characterized | **[CONFIRMED — disassembly; OPEN — what they point at.]** |
-| `+0x1C` | Offset (`-1`=null), added 2026-09-12 §11.7 — previously absent from this table (a real gap, not a zero). **Fixed up lazily inside `FUN_00ab0ef0`, not eagerly with the row above.** Feeds the part reference-record remap (§11.7): a small header (own `+0x4` gated `>= 7`, own `+0xC` a count `≤ 100`) followed by a chunked-list array of 16-byte elements. **Added 2026-09-20 (agent AF): the constructor passes the vehicle's `Preload` flag (vehicle-info entry `+0x870` bit 14, `spec-vehicle-data.md` §7.6) as the mode argument of this remap.** | **[CONFIRMED — disassembly.]** |
+| `+0x1C` | Offset (`-1`=null), added 2026-09-12 §11.7 — previously absent from this table (a real gap, not a zero). **Fixed up lazily inside `0x00ab0ef0`, not eagerly with the row above.** Feeds the part reference-record remap (§11.7): a small header (own `+0x4` gated `>= 7`, own `+0xC` a count `≤ 100`) followed by a chunked-list array of 16-byte elements. **Added 2026-09-20 (agent AF): the constructor passes the vehicle's `Preload` flag (vehicle-info entry `+0x870` bit 14, `spec-vehicle-data.md` §7.6) as the mode argument of this remap.** | **[CONFIRMED — disassembly.]** |
 | `+0x20` | Offset of a byte array the loader *writes*: the part→rig-bone remap (§6) | **[CONFIRMED — disassembly.]** |
 | `+0x3C` | Name pointer, looked up as a bone before any part (an anchor/root bone name) | **[CONFIRMED — disassembly; content not tabulated.]** |
 | `+0x60`–`+0x7F` | Eight floats seeding the bounding-box accumulation (two `vec4`: min / max) | **[HIGH CONFIDENCE — inferred from use.]** |
-| `+0xBC` `+0xC4` | Optional offsets (`-1` in 30 / 386 files) — fixed up by the constructor with the other header offsets (§11.12, the `FUN_00ab1080` `+0xC4` use at `0xab119c`-`0xab11b1`) | **[CONFIRMED present; OPEN.]** **[OPEN — desk review 2026-09-30: the denominator 386 is not explained against the 393 used everywhere else; to be settled against real data.]** |
+| `+0xBC` `+0xC4` | Optional offsets (`-1` in 30 / 386 files) — fixed up by the constructor with the other header offsets (§11.12, the `0x00ab1080` `+0xC4` use at `0xab119c`-`0xab11b1`) | **[CONFIRMED present; OPEN.]** **[OPEN — desk review 2026-09-30: the denominator 386 is not explained against the 393 used everywhere else; to be settled against real data.]** |
 | `+0xC8` | Optional offset to a further embedded resource resolved by a separate loader | **[CONFIRMED — disassembly; OPEN — type.]** |
 | `+0xCC` / `+0xD0` | Offset + count (0…3,216) passed through a name-resolution routine | **[CONFIRMED — disassembly; OPEN — very likely a material/name table, see §7.]** |
 | `+0xD8` | Optional offset (`-1` in 347) | **[OPEN.]** *(Desk review 2026-09-30: "347" has no stated denominator.)* |
@@ -65,7 +65,7 @@ Offsets from file start. "Offset" fields are file-relative on disk and fixed up 
 | `+0x3A0` | **Part records**, `0xE0` (224) bytes each (§4) | **[CONFIRMED — disassembly + empirical.]** |
 | `+0x14`, `+0x24`, `+0x30`, `+0x34`, `+0x40`–`+0x5F`, `+0x80`–`+0xBB`, `+0xC0`, `+0xD4`, `+0xE4`–`+0x133`, `+0x144`–`+0x38F`, `+0x394`–`+0x39F` | **Not characterised** — spans between the rows above that this table does not describe (added 2026-09-30 by desk review, read off this table itself; `+0xE4`–`+0x133` assumes `+0xE0` is a 4-byte pointer) | **[OPEN.]** |
 
-**Sub-header alignment (desk review 2026-09-30).** The `+0x04` row states the sub-header is "already 8-aligned". The two blob-skip rules in use differ exactly when the sub-header offset is ≡ 8 (mod 16): `spec-geometry-format.md` §4.1.2's `align16(sub + 0x88 + 4) + 1` gives `sub + 0x91` when `sub ≡ 0 (mod 16)` and `sub + 0x99` when `sub ≡ 8`, while Team B's reader uses the constant `sub + 0x91` (same section's cross-check). The first rule passes 367/367 against an independent oracle and Team B's constant passes 372/372 (`spec-geometry-format.md` §4.1.2), so both can pass on their populations only if **every vehicle in both populations is 16-aligned** (at least 346 of 393 by inclusion–exclusion; up to 367 if the 367 are a subset of the 372). **[OPEN — desk review 2026-09-30: the general case (a vehicle sub-header ≡ 8 mod 16) is unsettled; measure `u32(ccar+0x04) mod 16` over all 393 files, and settle the alignment base (file offset vs pointer) of the blob skip against the executable, `FUN_007524f0` / `FUN_007527b0`.]**
+**Sub-header alignment (desk review 2026-09-30).** The `+0x04` row states the sub-header is "already 8-aligned". The two blob-skip rules in use differ exactly when the sub-header offset is ≡ 8 (mod 16): `spec-geometry-format.md` §4.1.2's `align16(sub + 0x88 + 4) + 1` gives `sub + 0x91` when `sub ≡ 0 (mod 16)` and `sub + 0x99` when `sub ≡ 8`, while Team B's reader uses the constant `sub + 0x91` (same section's cross-check). The first rule passes 367/367 against an independent oracle and Team B's constant passes 372/372 (`spec-geometry-format.md` §4.1.2), so both can pass on their populations only if **every vehicle in both populations is 16-aligned** (at least 346 of 393 by inclusion–exclusion; up to 367 if the 367 are a subset of the 372). **[OPEN — desk review 2026-09-30: the general case (a vehicle sub-header ≡ 8 mod 16) is unsettled; measure `u32(ccar+0x04) mod 16` over all 393 files, and settle the alignment base (file offset vs pointer) of the blob skip against the executable, `0x007524f0` / `0x007527b0`.]**
 
 *(Data note, desk review 2026-09-30: `+0x04`, `+0x08`, `+0x0C`, `+0x390` and `+0x3A0` are implemented by Team B and validated on 372/372 files — 0 parse failures, morph 315 present / 57 absent, `.gcar_pc` morph offset ≥ `.ccar_pc` size 315/315 (`team-b/HANDOFF.md` §9.25). The other rows rest on this spec's own disassembly and 393-file figures.)*
 
@@ -80,15 +80,15 @@ Offsets from file start. "Offset" fields are file-relative on disk and fixed up 
 | `+0x44` | **Part type** enum, values 1–26 (§4.1) | **[CONFIRMED present; enum decoded HIGH CONFIDENCE.]** |
 | `+0x48` | Flags. Bit `0x8000` is set by the constructor's special cases (§5); bit `0x2000` is cleared when the parent's type is 2 or 3 (a wheel); bit `0x200` gates a nested pointer fixup. Common low-16 values: `1`, `0x41`, `0x201B`, `5`, `7`, `0x43`. | **[CONFIRMED — disassembly for the three bits; OPEN — the rest.]** |
 | `+0x4C` | **Parent index**, `-1` or `< count` in **9,951 / 9,951**. Roots per vehicle are typically 14–21: the hierarchy is a *forest* (most parts attach directly to the body/rig), not a single tree. | **[CONFIRMED — empirical.]** |
-| `+0x50` | *(Row added 2026-09-30 by desk review.)* No section of this spec establishes a field here (a count for the `+0x54` child array is plausible but was not read). | **[OPEN — desk review 2026-09-30: to be settled against the executable, `FUN_00aaad50`.]** |
-| `+0x54` `+0xA0` `+0xA4` `+0xAC` `+0xB4` `+0xBC` `+0xC4` `+0xD0` | Offset fields, fixed up with `-1` = null. *(Desk review 2026-09-30: `+0x54` is the part's child array, walked recursively by the bbox accumulator `FUN_00aaad50` — §11.12; `+0xA4`'s target has its own conditional pointer at `+0x08` — §11.3.)* | **[CONFIRMED — disassembly; OPEN — targets.]** |
-| `+0x60`–`+0x7F` | *(Row added 2026-09-30 by desk review, from §11.12.)* Two bbox `vec4`s (min, max) accumulated with SSE min/max by `FUN_00aaad50` | **[CONFIRMED — disassembly, §11.12.]** **[CONFLICT — desk review 2026-09-30: the `+0x68` byte row below lies inside this range (it would be the third float of the min `vec4`); one of the two readings is wrong, or one of them belongs to the vehicle header's `+0x60` (§3) rather than the part record. To be settled against the executable (`FUN_00aaad50`/`FUN_00aaaea0`) / a float-vs-byte dump of part `+0x60`..`+0x7F`.]** |
+| `+0x50` | *(Row added 2026-09-30 by desk review.)* No section of this spec establishes a field here (a count for the `+0x54` child array is plausible but was not read). | **[OPEN — desk review 2026-09-30: to be settled against the executable, `0x00aaad50`.]** |
+| `+0x54` `+0xA0` `+0xA4` `+0xAC` `+0xB4` `+0xBC` `+0xC4` `+0xD0` | Offset fields, fixed up with `-1` = null. *(Desk review 2026-09-30: `+0x54` is the part's child array, walked recursively by the bbox accumulator `0x00aaad50` — §11.12; `+0xA4`'s target has its own conditional pointer at `+0x08` — §11.3.)* | **[CONFIRMED — disassembly; OPEN — targets.]** |
+| `+0x60`–`+0x7F` | *(Row added 2026-09-30 by desk review, from §11.12.)* Two bbox `vec4`s (min, max) accumulated with SSE min/max by `0x00aaad50` | **[CONFIRMED — disassembly, §11.12.]** **[CONFLICT — desk review 2026-09-30: the `+0x68` byte row below lies inside this range (it would be the third float of the min `vec4`); one of the two readings is wrong, or one of them belongs to the vehicle header's `+0x60` (§3) rather than the part record. To be settled against the executable (`0x00aaad50`/`0x00aaaea0`) / a float-vs-byte dump of part `+0x60`..`+0x7F`.]** |
 | `+0x68` | Byte; bit `0x80` excludes the part from bounding-box accumulation | **[CONFIRMED — disassembly.]** **[CONFLICT — desk review 2026-09-30: overlaps the `+0x60`–`+0x7F` bbox row above; see there.]** |
-| `+0x80` | *(Row added 2026-09-30 by desk review, from §11.11.)* Per-part scalar, `-1` = unresolved: remapped through the same 100-entry table as the 64-byte records' `+0x04`; if still `-1`, `FUN_00ab0a10` supplies a value (a slot handle from the 5,000-entry registration table) **[2026-10-03: the object `FUN_00ab0a10` registers is a freshly built Havok box collision shape (`hkpBoxShape`, RTTI-confirmed) — §11.11 step 3. What `FUN_00760c30` hands back is still the §11.7/§11.11 CONFLICT.]** | **[CONFIRMED — disassembly, §11.11, `0xab0fd3`-`0xab0fe3`; OPEN — meaning.]** |
+| `+0x80` | *(Row added 2026-09-30 by desk review, from §11.11.)* Per-part scalar, `-1` = unresolved: remapped through the same 100-entry table as the 64-byte records' `+0x04`; if still `-1`, `0x00ab0a10` supplies a value (a slot handle from the 5,000-entry registration table) **[2026-10-03: the object `0x00ab0a10` registers is a freshly built Havok box collision shape (`hkpBoxShape`, RTTI-confirmed) — §11.11 step 3. What `0x00760c30` hands back is still the §11.7/§11.11 CONFLICT.]** | **[CONFIRMED — disassembly, §11.11, `0xab0fd3`-`0xab0fe3`; OPEN — meaning.]** |
 | `+0xC0` / `+0xC4` | Count + pointer to 64-byte records whose `+0x04` index is remapped through a 100-entry table built by a resolution call | **[CONFIRMED — disassembly; ~~HIGH CONFIDENCE — per-part sub-mesh/material references.~~]** *(Material-reference reading REFUTED: the remap resolves through a generic deferred request-registration mechanism, not a material-index lookup — §11.7, §11.5; target domain OPEN.)* |
 | `+0xCC` | `u32`, clamped to at least `4` for type `17` | **[CONFIRMED — disassembly; OPEN — meaning.]** |
 
-*(Desk review 2026-09-30: §11.12 also has `FUN_00aaad50` reading flag bit `0x40000` of `+0x48`, not listed in the `+0x48` row above.)*
+*(Desk review 2026-09-30: §11.12 also has `0x00aaad50` reading flag bit `0x40000` of `+0x48`, not listed in the `+0x48` row above.)*
 
 *(Data note, desk review 2026-09-30: Team B implements the transform, parent and name fields and validates them on **372/372 files, 9,536 parts** — row-major transform signature 9,536/9,536, column-major control 1,627/9,536, parent `-1` or `< count` 9,536/9,536 (`team-b/HANDOFF.md` §9.25). The 9,951/9,951 figures in this table are this spec's own, over 393 files.)*
 
@@ -131,7 +131,7 @@ The constructor compares the vehicle's name against four literals and, on a matc
 
 These are behaviour, not data — a reimplementation that reads the files faithfully will still differ on these four vehicles unless it reproduces them. **Added 2026-09-20 (agent AF): two further per-name special cases live in the vehicle-info reader rather than the constructor — `car_4dr_genki` and `bike_jet01` (`spec-vehicle-data.md` §7.6).**
 
-**[OPEN — desk review 2026-09-30: a reimplementation cannot reproduce these from the text alone — the compared name is the vehicle-info entry's `+0x00` name (`spec-vehicle-data.md` §7), not the `_0`..`_4`-suffixed file stem, but whether the vehicle and part compares are exact, prefix or case-insensitive, and whether "every hinged part" tests type `== 4` exactly are not stated; to be settled against the executable (the special-case block in `FUN_00ab1080` between the `FUN_00aaf690` and `FUN_00ab0ef0` calls).]**
+**[OPEN — desk review 2026-09-30: a reimplementation cannot reproduce these from the text alone — the compared name is the vehicle-info entry's `+0x00` name (`spec-vehicle-data.md` §7), not the `_0`..`_4`-suffixed file stem, but whether the vehicle and part compares are exact, prefix or case-insensitive, and whether "every hinged part" tests type `== 4` exactly are not stated; to be settled against the executable (the special-case block in `0x00ab1080` between the `0x00aaf690` and `0x00ab0ef0` calls).]**
 
 **Review status (2026-09-30): NEEDS-EXE: compare semantics and name source of the four special cases — desk review (not re-derived from the executable).**
 
@@ -141,13 +141,13 @@ After parsing, the loader fetches the vehicle's rig (referenced from the global 
 
 Three bounding boxes are computed from root parts (parent `-1`) filtered by type bitmask, seeded from `+0x60` — **[HIGH CONFIDENCE — inferred: three AABBs for three purposes]**.
 
-**[OPEN — desk review 2026-09-30: the byte remap array at `+0x20` is under-specified — entry order and count (anchor + parts + four camera names?), the "missing" sentinel, what "compacted" drops, and the width limit a byte index puts on bone numbers; the three bbox type-bitmask values (`FUN_00aaaea0` call sites `0xab157d`/`0xab15ca`/`0xab1617`, §11.12) are not given, and "seeded from `+0x60`" (header, §3) vs the part record's `+0x60`..`+0x7F` bbox (§4, §11.12) needs settling; to be settled against the executable (`FUN_00ab0730` at `0xab165f`, `FUN_004bc880`, `FUN_00aaaea0`).]**
+**[OPEN — desk review 2026-09-30: the byte remap array at `+0x20` is under-specified — entry order and count (anchor + parts + four camera names?), the "missing" sentinel, what "compacted" drops, and the width limit a byte index puts on bone numbers; the three bbox type-bitmask values (`0x00aaaea0` call sites `0xab157d`/`0xab15ca`/`0xab1617`, §11.12) are not given, and "seeded from `+0x60`" (header, §3) vs the part record's `+0x60`..`+0x7F` bbox (§4, §11.12) needs settling; to be settled against the executable (`0x00ab0730` at `0xab165f`, `0x004bc880`, `0x00aaaea0`).]**
 
 **Review status (2026-09-30): NEEDS-EXE: remap array layout/sentinel and the three bbox masks — desk review (not re-derived from the executable).**
 
 ## 7. What is embedded, and what is not
 
-- **Mesh** (`+0x04`): the `.ccmesh_pc` machinery in full. The "Mesh" sub-block's flags bit 0 is set in **393 / 393** — vertex data lives in `.gcar_pc`, as for character meshes. Its primary buffer count/stride reads as a 2-byte-element stream (e.g. 19,728 × 2) — the same shape documented in `spec-geometry-format.md` §4.1.2. **[CONFIRMED — empirical.]** The g-side cursor initialisation traced for character meshes (`FUN_00751f60`) is *not* the code path here; the vehicle constructor passes a single cursor. The primary buffer starting at `.gcar_pc` offset `0x10` is therefore **[HIGH CONFIDENCE — inferred from the shared code path, not re-derived for vehicles]**. *(See also `spec-vertex-format.md` §4.2: exact `g`-side replay — check value, align 16, index buffer, then channels — validates 388/388 `.ccar_pc`/`.gcar_pc` pairs.)*
+- **Mesh** (`+0x04`): the `.ccmesh_pc` machinery in full. The "Mesh" sub-block's flags bit 0 is set in **393 / 393** — vertex data lives in `.gcar_pc`, as for character meshes. Its primary buffer count/stride reads as a 2-byte-element stream (e.g. 19,728 × 2) — the same shape documented in `spec-geometry-format.md` §4.1.2. **[CONFIRMED — empirical.]** The g-side cursor initialisation traced for character meshes (`0x00751f60`) is *not* the code path here; the vehicle constructor passes a single cursor. The primary buffer starting at `.gcar_pc` offset `0x10` is therefore **[HIGH CONFIDENCE — inferred from the shared code path, not re-derived for vehicles]**. *(See also `spec-vertex-format.md` §4.2: exact `g`-side replay — check value, align 16, index buffer, then channels — validates 388/388 `.ccar_pc`/`.gcar_pc` pairs.)*
 - **Morph** (`+0x08`, `.gcar_pc` data at `+0x0C`): mode **0** in 326/326 — descriptor stride `0x18`, 12-byte elements read from the secondary buffer with per-target `0x0BADBEEF` bookends, exactly the layout `spec-morph-format.md` §6 derived from the loader but could not observe. Now observed. The morph region always follows the vertex data in `.gcar_pc` (326/326), typically ~350 KiB later — the intervening space being the mesh's remaining channel/index streams. **[CONFIRMED — empirical.]**
 - **Materials — substantially resolved 2026-09-11, see §7.1.** What vehicles lack is only the material-*reference* block; they **do** carry the mixed-case name blob and the same per-material texture-binding entries as `.ccmesh_pc`.
 - **Materials (original entry):** the shared material-reference block is absent from every vehicle file. The `+0xCC`/`+0xD0` table passed through a name-resolution routine, together with `spec-geometry-format.md` §5's per-vehicle `.cvtf_pc` color/material catalogue, is the likely source — **[HYPOTHESIS; OPEN.]** **[Superseded (desk review 2026-09-30): the materials are the per-material records inside the embedded Mesh block (§7.1, §11.2); the per-material paint colour is in those records too (§7.2 Q3 note).]**
@@ -199,7 +199,7 @@ All at or below chance — **including the sub-mesh index, which this document p
 
 ~~**Where the answer probably is not:** more count-matching. In `.ccmesh_pc` the association is direct because the tail is one record per material with the runs inside it; vehicles have no such clean periodic array (periodicity 0.74–0.90 against 0.98–0.99 for meshes), so a tail scan finds runs without knowing their record boundaries. **Segmenting the vehicle-side record structure has to come first.**~~
 
-**RESOLVED, 2026-09-18 — this document's own §11.2 already did the segmentation this item called for, six days before this item was updated to reflect it; the two were never cross-referenced until now.** §11.2 (2026-09-12) fully disassembled and validated the vehicle per-material loop's helper (`FUN_00e71090`, the shared inline-material-definition parser also used by trees/foliage) and found each material's own record has a **fixed-offset array A** — 12-byte `{blob offset, sampler hash, slot index}` entries, the exact "binding run" shape this item is asking about — sitting immediately after that material's own `0x30`-byte header. That parser (`tools/harnesses/veh_pairing.py`'s `parse_materials()`) is already validated 393/393 on a hard exact-consumption gate (every material's header+arrayA+arrayB+arrayC must sum to exactly its own self-declared size, or the file is excluded rather than mismeasured — zero exclusions in practice). **§11.2 itself stopped short of the connection**, reading its own negative ("no identity field in the record") as "route (b) supplies no additional handle for the association task" — true for identity-by-name, but the record's own array A *is* its binding run by direct construction, needing no separate identity field at all: association is positional (material `i`'s own array A belongs to material `i`), the same way the per-material loop's own indexing already establishes material identity (§11.2's own "material identity is purely positional" finding, one paragraph earlier). **[CONFIRMED — disassembly, `spec-vehicle-geometry.md` §11.2, re-verified this session by running `parse_materials()` fresh across all 393 `.ccar_pc` files: 0 parser-untrusted (the exact-consumption gate holds 393/393), 16,781 total binding-run entries recovered this way.]**
+**RESOLVED, 2026-09-18 — this document's own §11.2 already did the segmentation this item called for, six days before this item was updated to reflect it; the two were never cross-referenced until now.** §11.2 (2026-09-12) fully disassembled and validated the vehicle per-material loop's helper (`0x00e71090`, the shared inline-material-definition parser also used by trees/foliage) and found each material's own record has a **fixed-offset array A** — 12-byte `{blob offset, sampler hash, slot index}` entries, the exact "binding run" shape this item is asking about — sitting immediately after that material's own `0x30`-byte header. That parser (`tools/harnesses/veh_pairing.py`'s `parse_materials()`) is already validated 393/393 on a hard exact-consumption gate (every material's header+arrayA+arrayB+arrayC must sum to exactly its own self-declared size, or the file is excluded rather than mismeasured — zero exclusions in practice). **§11.2 itself stopped short of the connection**, reading its own negative ("no identity field in the record") as "route (b) supplies no additional handle for the association task" — true for identity-by-name, but the record's own array A *is* its binding run by direct construction, needing no separate identity field at all: association is positional (material `i`'s own array A belongs to material `i`), the same way the per-material loop's own indexing already establishes material identity (§11.2's own "material identity is purely positional" finding, one paragraph earlier). **[CONFIRMED — disassembly, `spec-vehicle-geometry.md` §11.2, re-verified this session by running `parse_materials()` fresh across all 393 `.ccar_pc` files: 0 parser-untrusted (the exact-consumption gate holds 393/393), 16,781 total binding-run entries recovered this way.]**
 
 **One honest methodology note, not a doubt about the finding above.** A natural sanity check — does concatenating each material's own `entries` reproduce what the *original*, boundary-blind periodicity scanner (`car_matassoc.py`'s `guarded_run`, the tool that produced the six-candidate refutation table above) finds when run independently over the same raw bytes? — does **not** cleanly match (1/393 files exact). Traced to ground, not left as an unexplained wrinkle: `guarded_run` requires a run length ≥ 2 before it will report a match at all (a sensible guard when you have no record boundaries and need to reject coincidental single-triplet false positives in raw bytes) — but real materials legitimately carry exactly **one** texture binding (`a_count == 1`), which that guard silently drops. Confirmed directly on `car_4dr_standard03_0.ccar_pc`: materials 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28 (12 of 36) each have `a_count == 1` with the identical single entry `(168, 1773440913, 0)`, all silently excluded by the ≥2 filter. Relaxing the guard to accept length-1 runs was tried and made agreement *worse* (365 found vs. 76 expected on the same file) — without record boundaries to anchor it, a length-1 acceptance threshold picks up unrelated coincidental matches elsewhere in the blob, which is exactly why the ≥2 guard existed in the first place. **The disagreement is fully explained by the older heuristic's own known trade-off, not by any defect in the exact parser** — `parse_materials()`'s own internal validation (byte-exact consumption, 393/393) is strictly stronger evidence than agreement with a heuristic that was only ever a workaround for not having record boundaries, which this item no longer needs.
 
@@ -208,7 +208,7 @@ New harness: `tools/harnesses/veh_matassoc_final.py` (the re-verification + meth
 **Cross-team implementation, 2026-09-18 (relayed, independently verified on their end before acting on it — they re-read this section and §11.2 directly rather than the summary alone).** Team B rewrote their reader's `MaterialBindings::parse()` from a sliding-window guess-and-check search to direct arithmetic over the fixed-stride descriptor arrays + self-declaring chain — no `runs found == declared count` guess needed, which is exactly why it unblocks vehicles specifically (they declare roughly 2× the materials their draw ranges reference, so that guard was structurally unsatisfiable for them before). **Real-data result: vehicles went from 3/372 located to 393/393**, recovering 17,026 binding runs / 36,010 texture entries; characters stayed unregressed at 1,995/2,002 (the 7 unlocated are one already-explained class, tiny censor-overlay placeholders too small for a full record). They separately found their own project already had an independent copy of this same finding on file (`spec-vertex-format.md` §12.8 on their side, since 2026-09-12/13, flagged "stated but not applied") — this closure connected that too. **Provenance note, per `HANDOFF.md` §36, archived item 27.8: relayed, not independently rerun against their binary on this side.** One figure checked directly against this session's own re-verification run and matches exactly: 36,010 texture entries (this side's own `veh_matassoc_final.py` rerun independently gets 36,010 flat entries across the same 393 files). **Update — fully reconciled, exactly, 2026-09-18.** The 17,026 vs. 16,781 gap was not a data disagreement: their harness counts one "run" per **material**, regardless of whether it has any texture bindings; this side's 16,781 counted only materials with `a_count > 0`. `17,026 − 16,781 = 245` — and `245` is exactly the count of non-null materials with `a_count == 0` across the same 393-vehicle population (independently re-verified on this side, not just accepted: `total non-null materials 17,026`, `a_count==0: 245`, `a_count>0: 16,781`, matching Team B's own reconciliation digit-for-digit). Real and expected, not an artifact: vehicles declare roughly twice the materials their draw ranges reference (`spec-vertex-format.md` §8.4.3), so a real chunk of materials legitimately carry zero texture bindings. Two different quantities sharing the word "run," now fully reconciled rather than left as an unexplained wrinkle.
 
 **Scope note Team B stated themselves, not overclaimed:** this closes their reader/parsing path only — their interactive viewer still has no rendering surface for vehicle files, a separate open task on their side.
-2. **Where vehicle paint comes from.** The runs are dominated by shared/generic textures — `shd_damagenormal_n.tga` leads nearly every run, then `burn_test`, `viewsphere_chrome`, `viewsphere_rubber`, `missing-alpha`. The car's own livery (`al_veh_universal.tga` and siblings) is *present in the blob* but was not observed bound. That is consistent with paint being applied at runtime from the `.cvtf_pc` customisation catalogue — which is what §7 hypothesised — rather than baked into the model. **[HYPOTHESIS.]** **[Resolved for the source: CONFIRMED — disassembly, §7.2 Q3; the application path is still unread.]** **[Superseded 2026-09-30 (desk review): the `.cvtf_pc`-catalogue source above and Q3's "source" answer are superseded — the per-material paint colour `Base_Paint_Color` is a `{name-hash → Vector4}` constant authored in the vehicle's own `.ccar_pc` material record (§11.2's array B hash / array C `Vector4`), per `spec-render-pipeline.md` §20.12.6 (disassembly, `FUN_00e71090`/`FUN_00e70d30`) and Team B's byte-exact reproduction on `car_4dr_genki_0` (`team-b/HANDOFF.md` §9.106). See the note under §7.2 Q3.]**
+2. **Where vehicle paint comes from.** The runs are dominated by shared/generic textures — `shd_damagenormal_n.tga` leads nearly every run, then `burn_test`, `viewsphere_chrome`, `viewsphere_rubber`, `missing-alpha`. The car's own livery (`al_veh_universal.tga` and siblings) is *present in the blob* but was not observed bound. That is consistent with paint being applied at runtime from the `.cvtf_pc` customisation catalogue — which is what §7 hypothesised — rather than baked into the model. **[HYPOTHESIS.]** **[Resolved for the source: CONFIRMED — disassembly, §7.2 Q3; the application path is still unread.]** **[Superseded 2026-09-30 (desk review): the `.cvtf_pc`-catalogue source above and Q3's "source" answer are superseded — the per-material paint colour `Base_Paint_Color` is a `{name-hash → Vector4}` constant authored in the vehicle's own `.ccar_pc` material record (§11.2's array B hash / array C `Vector4`), per `spec-render-pipeline.md` §20.12.6 (disassembly, `0x00e71090`/`0x00e70d30`) and Team B's byte-exact reproduction on `car_4dr_genki_0` (`team-b/HANDOFF.md` §9.106). See the note under §7.2 Q3.]**
 
 *(Desk review 2026-09-30: the whole-population figures in this section mix the 372-vehicle scan (binding runs, the refuted-candidates table, 77,886/87,012) with the 393-vehicle exact parser (§11.2, 16,781/17,026/36,010); the 372 vs 393 gap is Team B's scan scope, `team-b/HANDOFF.md` §9.25.)*
 
@@ -270,7 +270,8 @@ Part records are walked by a dedicated pointer-fixup pass over `count` records o
 (`+0x54`, `+0xA0`, `+0xA4`, `+0xAC`, `+0xB4`, `+0xBC`, `+0xC4`, `+0xD0`), several of
 which have no documented semantics. So per-part scoping is **structurally possible
 and the candidate fields are enumerable**, but nothing read in this pass shows a
-material count or index inside a part record. **[OPEN.]**
+material count or index inside a part record. **[OPEN.]** *(2026-10-08, §12.2: still
+genuinely open as of the wheel/door-loading pass — restated there, not re-chased.)*
 
 **A caution about how this question was approached**, because it cost a pass: a
 whole-binary scan for functions touching `+0x390` together with `0xE0` returned 23
@@ -299,9 +300,11 @@ that binds what the mesh names is behaving correctly. This resolves §7.1's
 "where vehicle paint comes from" from **[HYPOTHESIS]** to **[CONFIRMED —
 disassembly]** for the *source*; the paint application path itself is still unread.
 
-**[Superseded 2026-09-30 (desk review) — the "YES" answer above, "the mesh is not the source of truth", and the §7.1 item 2 resolution it produced.]** The per-material paint colour is **in the vehicle's own `.ccar_pc` material record**: `Base_Paint_Color` is an entry of the record's `{name-hash → Vector4}` table — array B (`B_count` at record `+0x0E`, one CRC-32 name hash per entry) paired positionally with array C (`C_count` at `+0x0F`, one `Vector4` per entry), §11.2's layout — read by the material binder `FUN_00e70d30` once per material at mesh-load time (`spec-render-pipeline.md` §20.12.6, CONFIRMED — disassembly). Team B reproduced it byte-exact on `car_4dr_genki_0`: hash `0x3E344564`, materials 0/1 and 2/3 under shader `0x09B15FCE` (`ir_sr3carpaint_gr`), 12 hits in 4 value groups across 3 shaders (`team-b/HANDOFF.md` §9.106). The `.cvtf_pc` registration and the paint-subsystem name strings cited above say nothing about where the mesh-side value comes from (`spec-render-pipeline.md` §20.12.11: the `Base_Paint_Color` name is also referenced by `FUN_008188b0`/`FUN_00818ef0`, a paint-swatch nearest-colour utility). The narrower point — that the bound *textures* are generic and the paint is not a texture — is consistent with §9.106 ("NOT a texture"), but was not itself tested against a render. **[OPEN — desk review 2026-09-30: whether any runtime customisation (e.g. `.cvtf_pc` variants) overwrites the authored array-C value is unread; to be settled against the executable (writers of the material's array-C buffer, callers of `FUN_008188b0`/`FUN_00818ef0`).]**
+**[Superseded 2026-09-30 (desk review) — the "YES" answer above, "the mesh is not the source of truth", and the §7.1 item 2 resolution it produced.]** The per-material paint colour is **in the vehicle's own `.ccar_pc` material record**: `Base_Paint_Color` is an entry of the record's `{name-hash → Vector4}` table — array B (`B_count` at record `+0x0E`, one CRC-32 name hash per entry) paired positionally with array C (`C_count` at `+0x0F`, one `Vector4` per entry), §11.2's layout — read by the material binder `0x00e70d30` once per material at mesh-load time (`spec-render-pipeline.md` §20.12.6, CONFIRMED — disassembly). Team B reproduced it byte-exact on `car_4dr_genki_0`: hash `0x3E344564`, materials 0/1 and 2/3 under shader `0x09B15FCE` (`ir_sr3carpaint_gr`), 12 hits in 4 value groups across 3 shaders (`team-b/HANDOFF.md` §9.106). The `.cvtf_pc` registration and the paint-subsystem name strings cited above say nothing about where the mesh-side value comes from (`spec-render-pipeline.md` §20.12.11: the `Base_Paint_Color` name is also referenced by `0x008188b0`/`0x00818ef0`, a paint-swatch nearest-colour utility). The narrower point — that the bound *textures* are generic and the paint is not a texture — is consistent with §9.106 ("NOT a texture"), but was not itself tested against a render. **[OPEN — desk review 2026-09-30: whether any runtime customisation (e.g. `.cvtf_pc` variants) overwrites the authored array-C value is unread; to be settled against the executable (writers of the material's array-C buffer, callers of `0x008188b0`/`0x00818ef0`).]**
 
-**Review status (2026-09-30): NEEDS-EXE: runtime writer (if any) of the authored paint constant (text fix applied: paint-source answer superseded by `spec-render-pipeline.md` §20.12.6 / `team-b/HANDOFF.md` §9.106) — desk review (not re-derived from the executable).**
+**ANSWERED, 2026-10-09 — the material record's own array-C value is never overwritten at runtime; a separate, parallel mechanism exists instead, with its final hop still open.** Direct follow-up (`spec-render-pipeline.md` §20.12.16 carries the full trace). Short version: `0x008188b0`/`0x00818ef0` are confirmed, by exhaustive caller enumeration, to be display-only (menu "already applied" swatch highlighting and a one-time name-hash pre-cache) — neither writes anything. The material binder that actually populates a mesh's register buffer from array B/C (`0x00e70d30`/`0x00e71090`) has exactly two callers in the whole executable, the ordinary mesh-load path and a synthetic shadow-caster bootstrap — nothing in the player's paint-shop "apply" chain reaches it, so the authored array-C value genuinely never gets touched again after load. Instead, picking a swatch writes into a wholly separate, generic, per-vehicle-instance "applied customization option" tree (rooted at the driven vehicle entity's own `+0xa88` field, gated on its own `+0xbd0` "am I the one being driven" byte) via `0x0081f8d0`→`0x00819b30`→`0x00a999f0`/`0x00a99b70` — plain bookkeeping, no `Vector4`/register-write code anywhere in it. **How a value in that tree ever reaches the live shader registers at a specific vehicle's draw call was not found** — the two systems are proven architecturally separate, but the connecting hop between them remains a genuine, bounded OPEN item (candidate: the per-render-item dirty-constant table discussed at `spec-render-pipeline.md` §20.12.13, not disambiguated from a competing identity for the same object). Full detail: `scratchpad/vehicle_paint_material_texture_2026-10-09.md`.
+
+**Review status (2026-09-30): NEEDS-EXE: runtime writer (if any) of the authored paint constant (text fix applied: paint-source answer superseded by `spec-render-pipeline.md` §20.12.6 / `team-b/HANDOFF.md` §9.106) — desk review (not re-derived from the executable). Updated 2026-10-09: the runtime-writer question is now answered (no writer of array-C itself exists; a separate instance-level tree is written instead) — independently re-derived from the executable, re-verified a second time same-day; the one remaining gap (the tree-to-register hop) is tracked at `spec-render-pipeline.md` §20.12.16.**
 
 #### The registered constructor, which this spec never named
 
@@ -311,7 +314,7 @@ constructor — so the vehicle-side entry point was one indirection away from an
 reading here. Recorded now: the vehicle constructor is reached only through the
 resource registration table's stored function pointer, never called directly, and
 its callee list is the index to everything above (embedded mesh+morph, name table,
-`+0xE0` records, `+0x134`/`+0x140` arrays, part records, part-to-rig-bone mapping). *(Desk review 2026-09-30: the constructor is `FUN_00ab1080`, 1,531 bytes — named in §11.12 and `spec-vehicle-data.md` §7.)*
+`+0xE0` records, `+0x134`/`+0x140` arrays, part records, part-to-rig-bone mapping). *(Desk review 2026-09-30: the constructor is `0x00ab1080`, 1,531 bytes — named in §11.12 and `spec-vehicle-data.md` §7.)*
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (constructor address added) — desk review (not re-derived from the executable).**
 
@@ -342,6 +345,7 @@ its callee list is the index to everything above (embedded mesh+morph, name tabl
 9. The Mesh header `+0x48`/`+0x50` `u16` table that each group's `+0x28` slots hold pre-resolved pointers into — confirmed NOT the index buffer (§11.9.2), contents still unknown.
 10. The `0x28`-byte runtime record array at the render holder's `+0xfc`, whose `u16` at `+0x24` is a group index — its remaining fields and its element count (§11.9.5); ~~if it is also sized `3 × k`, it meets item 7~~ (moot: item 7 is resolved).
 11. *(Added 2026-09-30, desk review.)* Vehicle sub-header 16- vs 8-alignment and the blob-skip alignment base (§3); part `+0x60`..`+0x7F` vs `+0x68` conflict and `+0x50` (§4); paint-constant runtime writer (§7.2 Q3).
+12. *(Added 2026-10-08, §12.3.)* Who writes the render-object `+0x84` override-matrix pointer each frame with the real steer/spin/suspension values for the primary 4 wheels (the equip-time content-swap writer, `0x00a8de70`, is now found and closed — this is the separate, still-open per-frame numeric writer). Wheel spin (rolling rotation) specifically has no accumulator or bone write located at all yet.
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (item 1 widened, item 5 data note, item 11 added) — desk review (not re-derived from the executable).**
 
@@ -417,7 +421,7 @@ range itself is the clue worth carrying forward:** `high16` is capped at 14
 irrespective of any per-vehicle structural count, which argues for a small,
 fixed-size enumeration (an engine-level constant, not a per-file array size) rather
 than an index recoverable from this file's own declared counts. ~~**[OPEN -- what the
-15-value cap (0-14) actually enumerates.]**~~ **RESOLVED 2026-09-28, jointly (SPEC TEAM disassembly + Team B population test) -- see the corrected row later in this section's summary table and `spec-render-pipeline.md` §16.4/§18.6: `high16` is a vertex-CHANNEL index. Disassembly (`spec-render-pipeline.md` §18.6, `FUN_00b13bf0`) shows it read directly from the draw-range record and used with no scaling or offset as a plain index (times the array's own stride) into the vertex-channel array at the mesh header's `+0x18` -- the exact array `meshHeader+0x10`(count)/`+0x18`(array), stride `0x18` this document's own ~~line 955-956~~ §11.9.2 'vertex channels' bullet (pre-dating this pass) already documents as the ordinary vertex-channel array `spec-vertex-format.md` describes. Team B independently confirmed the MEANING survives a full-population, same-vehicle join with zero counterexceptions: 393/393 vehicles and all 90,290/90,290 draw ranges have `high16` (their `submeshIndex`) `<` that same vehicle's own real channel count; the real per-vehicle channel-count range is 2-15, so the population-wide max valid index is exactly 14 -- matching `high16`'s own already-measured maximum to the integer. Two independent methods (causal disassembly, exhaustive real-data join), same field, same answer, zero exceptions either side -- the same bar that killed the four earlier candidates for this field.**
+15-value cap (0-14) actually enumerates.]**~~ **RESOLVED 2026-09-28, jointly (SPEC TEAM disassembly + Team B population test) -- see the corrected row later in this section's summary table and `spec-render-pipeline.md` §16.4/§18.6: `high16` is a vertex-CHANNEL index. Disassembly (`spec-render-pipeline.md` §18.6, `0x00b13bf0`) shows it read directly from the draw-range record and used with no scaling or offset as a plain index (times the array's own stride) into the vertex-channel array at the mesh header's `+0x18` -- the exact array `meshHeader+0x10`(count)/`+0x18`(array), stride `0x18` this document's own ~~line 955-956~~ §11.9.2 'vertex channels' bullet (pre-dating this pass) already documents as the ordinary vertex-channel array `spec-vertex-format.md` describes. Team B independently confirmed the MEANING survives a full-population, same-vehicle join with zero counterexceptions: 393/393 vehicles and all 90,290/90,290 draw ranges have `high16` (their `submeshIndex`) `<` that same vehicle's own real channel count; the real per-vehicle channel-count range is 2-15, so the population-wide max valid index is exactly 14 -- matching `high16`'s own already-measured maximum to the integer. Two independent methods (causal disassembly, exhaustive real-data join), same field, same answer, zero exceptions either side -- the same bar that killed the four earlier candidates for this field.**
 
 **Further corroboration, 2026-09-29 (Team B, a real shader-driven draw of `car_4dr_genki_0`).** A tighter, per-channel version of the same check: across all 57 real draw groups of that vehicle, the maximum vertex index actually used by draw ranges pointing at `submeshIndex`=N equals channel N's own `elementCount − 1` exactly, for all 9 real channels (elementCounts 6954, 3662, 15, 1605, 1917, 11, 1046, 1145, 2), zero exceptions. This is a stronger bound than the earlier population join (which checked `high16` stays within the valid channel-count range) -- it confirms a draw range pointing at channel N never reads a vertex index outside that specific channel's own real bounds, on real geometry that has now actually been drawn. **[CONFIRMED -- empirical, real data, one real vehicle's full draw-group population.]**
 
@@ -432,7 +436,7 @@ as a lead, not a result.)*
 
 ### 11.2 Route (b): the per-material loop's helper has no identity field -- and is not vehicle- or mesh-specific at all
 
-`FUN_007522f0` (503 bytes, the material-set walk named in `HANDOFF.md` section 26.16)
+`0x007522f0` (503 bytes, the material-set walk named in `HANDOFF.md` section 26.16)
 was dumped in full this session (`VehMatHelper.java`, output in
 `scratchpad/veh/mathelper.txt`) together with its callees. Its body matches
 `spec-vertex-format.md` section 8.4's published pseudocode exactly: an `N2`-count
@@ -440,7 +444,7 @@ fixed-stride pass (arrays of `N2*8` and `N2*4` raw bytes, 8-aligned), then an
 `N`-count (`materialCount`) fixed-stride array (`N*8`), then a loop of exactly `N`
 iterations calling one helper per material with a **variable** advance.
 
-**That helper is `FUN_00e71090` -- and it is the same shared inline
+**That helper is `0x00e71090` -- and it is the same shared inline
 material-definition parser this project already characterised for trees and
 foliage**, per a bookmark comment already present in this Ghidra project from that
 earlier work (33/33 foliage records, 37/37 tree records, exact-size gated). Reading it
@@ -485,7 +489,7 @@ replay with every material record's consumed byte count matching its own declare
 size exactly** (`veh_pairing.py`, function `parse_materials`) -- a hard gate, not a
 heuristic: any file that failed this would have been excluded rather than silently
 mismeasured. *(One methodology note volunteered because it cost a debugging pass: the
-declared size in `FUN_00e71090` is compared against `cursor - (the position of the
+declared size in `0x00e71090` is compared against `cursor - (the position of the
 size field itself)`, not against `cursor - (the position right after the size
 field)`. Using the latter -- the more natural reading of "consumed since the size was
 read" -- undercounts by exactly 4 on every record and makes every material after the
@@ -503,7 +507,7 @@ field holds a base at all.)*
 
 ### 11.3 Per-part scoping: the eight pointer fields, and the +0xC0/+0xC4 mechanism read in full
 
-`FUN_00aaf690` (the part-record pointer-fixup pass, already on file in
+`0x00aaf690` (the part-record pointer-fixup pass, already on file in
 `tools/car_parts.txt` from an earlier pass, re-read here) walks `partCount` records of
 `0xE0` bytes at file `+0x3A0`. Re-deriving its eight fixed-up offsets independently
 from the disassembly's own pointer arithmetic (the fixup loop's own cursor enters
@@ -521,19 +525,19 @@ structure's contents.]**
 
 **The `+0xC0`/`+0xC4` mechanism, previously recorded as `HIGH CONFIDENCE` from an
 earlier pass, was read in full this session** (`VehPartRefs.java`; the ctor's own
-direct callee `FUN_00ab0ef0`, 388 bytes, called immediately after the four hardcoded
+direct callee `0x00ab0ef0`, 388 bytes, called immediately after the four hardcoded
 per-vehicle special cases and before the three bounding-box passes -- see
 `scratchpad/veh/ctor_full.txt`):
 
 1. It builds a table of up to 100 entries, each entry a 4-byte value, by calling
-   `FUN_007616c0` (2,060 bytes, read in full together with its own callee
-   `FUN_0075f880`). **That function is a generic, exception-handling-instrumented
+   `0x007616c0` (2,060 bytes, read in full together with its own callee
+   `0x0075f880`). **That function is a generic, exception-handling-instrumented
    chunked-list copy/pointer-fixup utility using per-thread TLS allocation -- it is
    not name- or material-specific.** It fixes up three embedded pointer fields per
    16-byte source element and copies elements one at a time into the destination
    buffer. This refutes my own working hypothesis while investigating it (that this
    was a material-name-to-handle resolver, by analogy with the material lookup seen
-   in `FUN_00e3fcb0` during route (b)'s reading) -- **read before trusting the
+   in `0x00e3fcb0` during route (b)'s reading) -- **read before trusting the
    analogy, and the analogy was wrong.** **[CONFIRMED -- disassembly.]**
 2. For every part record (`partCount` iterations, stride `0xE0`, base = the part
    array), it reads `count = part+0xC0` and walks that many 64-byte records at the
@@ -543,7 +547,7 @@ per-vehicle special cases and before the three bounding-box passes -- see
    per-record index through the 100-entry table built in step 1.
    **[CONFIRMED -- disassembly, independently reproducing the mechanism the existing
    spec table already asserted.]**
-3. A companion function, `FUN_00ab0d20` ("unresolved reference"), is called when a
+3. A companion function, `0x00ab0d20` ("unresolved reference"), is called when a
    64-byte record's `+0x04` reads `-1` while its own `+0x00` reads `0` -- i.e. a
    record of one particular kind that was expected to resolve and did not. Its
    457-byte body carries **no string literals** (checked directly), so it does not
@@ -563,7 +567,7 @@ disassembly-confirmed shape; the concrete next step is to read what writes the 6
 records' `+0x00` field (the "kind" tested by the unresolved-reference path) at file
 build time, since that is the field this pass never explained.
 
-**[OPEN — desk review 2026-09-30: the targets of the eight pointer fields (in particular `+0xA4` and its nested `+0x08`) and the on-disk meaning of the 64-byte records' `+0x04` remain unread; how many parts set flag `0x200` is not measured; to be settled against the executable (`FUN_00aaf690`) / real data.]**
+**[OPEN — desk review 2026-09-30: the targets of the eight pointer fields (in particular `+0xA4` and its nested `+0x08`) and the on-disk meaning of the 64-byte records' `+0x04` remain unread; how many parts set flag `0x200` is not measured; to be settled against the executable (`0x00aaf690`) / real data.]**
 
 **Review status (2026-09-30): NEEDS-EXE: pointer-field targets — desk review (not re-derived from the executable).**
 
@@ -662,7 +666,7 @@ them as open guesses:
 | Question | Status |
 |---|---|
 | Does draw-range `high16` track a per-vehicle part-TYPE taxonomy (the task's own candidate)? | **REFUTED** -- passes feasibility (max 13 distinct types/vehicle, cap 15) but flat dose-response (mean 6-11 across distinctTypes 1-13), the same shape as the materialCount refutation (§11.6) |
-| Is the high half read/tested anywhere in the load-time construction chain? | ~~**REFUTED, as a real negative** -- zero `SHR/SAR 0x10` and zero `CMP` against 14/15 in the entire named neighbourhood (§11.6)~~ **NARROWED 2026-09-28 -- that negative was scoped to `SHR/SAR`+`CMP`-shaped code, a real instruction-form blind spot (same class already on record, `HANDOFF.md` §27.4 at the time — that list has since moved to `WALLS.md`, "Whole-binary predicate/census dead ends"; see the archived pointer in `HANDOFF.md` §36, item 27.4): `spec-render-pipeline.md` §16.4 independently found a render-time (not load-time) consumer, `FUN_00e58480`, that reads this exact field via a direct sub-field load (a `u16` at the packed dword's `+0x2` byte -- byte-identical, little-endian, to "the high 16 bits", so almost certainly the same field) rather than a shift+compare. Team B cross-checked the value-range match independently from real data (this section's own 90,290-draw-range population: max 14 = 15 values = the render-pipeline side's independently-derived "≤15-valued selector") before either side had compared notes -- two methods, same byte offset, same value width. Does not resolve what the field means (still OPEN below) *(resolved separately: vertex-channel index, row above / §11.1)*; does confirm `FUN_00e58480` is reading the real field, not a lookalike. `this+0x130`'s vtable+`0x1c` target -- what actually consumes the selector after `FUN_00e58480` forwards it -- is the open next hop, being pursued in `spec-render-pipeline.md`'s own follow-up passes, not re-derived here.** |
+| Is the high half read/tested anywhere in the load-time construction chain? | ~~**REFUTED, as a real negative** -- zero `SHR/SAR 0x10` and zero `CMP` against 14/15 in the entire named neighbourhood (§11.6)~~ **NARROWED 2026-09-28 -- that negative was scoped to `SHR/SAR`+`CMP`-shaped code, a real instruction-form blind spot (same class already on record, `HANDOFF.md` §27.4 at the time — that list has since moved to `WALLS.md`, "Whole-binary predicate/census dead ends"; see the archived pointer in `HANDOFF.md` §36, item 27.4): `spec-render-pipeline.md` §16.4 independently found a render-time (not load-time) consumer, `0x00e58480`, that reads this exact field via a direct sub-field load (a `u16` at the packed dword's `+0x2` byte -- byte-identical, little-endian, to "the high 16 bits", so almost certainly the same field) rather than a shift+compare. Team B cross-checked the value-range match independently from real data (this section's own 90,290-draw-range population: max 14 = 15 values = the render-pipeline side's independently-derived "≤15-valued selector") before either side had compared notes -- two methods, same byte offset, same value width. Does not resolve what the field means (still OPEN below) *(resolved separately: vertex-channel index, row above / §11.1)*; does confirm `0x00e58480` is reading the real field, not a lookalike. `this+0x130`'s vtable+`0x1c` target -- what actually consumes the selector after `0x00e58480` forwards it -- is the open next hop, being pursued in `spec-render-pipeline.md`'s own follow-up passes, not re-derived here.** |
 | Do the +0xC0/+0xC4 remap's written values coincide with the unreferenced material range `[k, materialCount)` -- the sharpest test named in `HANDOFF.md` §27.2 item 5? | **REFUTED, disassembly + empirical.** The remap resolves through a generic deferred request-registration mechanism, not a material-index lookup (domain mismatch, §11.7); the on-disk pre-remap value also lands in `[k, materialCount)` at chance rate (10.4% real vs 10.5% shuffled control, n=6,727). **This settles per-part scoping and the 2x pairing's identity as independent questions, not as one still open** |
 
 *(Desk review 2026-09-30: the original table's "Is per-part material scoping established? — Still OPEN" row is answered, as a negative for the `+0xC0`/`+0xC4` mechanism, by the last amendment row above (§11.7); the original row is left as published.)*
@@ -694,11 +698,11 @@ checking rather than another per-file count.
 ("not a whole-binary scan -- start from a named entry point... and read
 outward").** Every function already on file as part of the mesh/vehicle
 draw-chain neighbourhood -- the nested "Mesh" sub-block parser and its channel
-sibling (`FUN_00e71410`, `FUN_00e71740`, both decompiled in full this session
-for the first time), the shared geometry-loader chain (`FUN_00751f60` →
-`FUN_007527b0` → `FUN_007524f0` → `FUN_007522f0`), the vehicle constructor
-chain (`FUN_00ab1080`, `FUN_00aaf7c0`, `FUN_00aaf690`, `FUN_00ab0ef0`), and the
-shared per-material helper (`FUN_00e71090`) -- was scanned for two things: any
+sibling (`0x00e71410`, `0x00e71740`, both decompiled in full this session
+for the first time), the shared geometry-loader chain (`0x00751f60` →
+`0x007527b0` → `0x007524f0` → `0x007522f0`), the vehicle constructor
+chain (`0x00ab1080`, `0x00aaf7c0`, `0x00aaf690`, `0x00ab0ef0`), and the
+shared per-material helper (`0x00e71090`) -- was scanned for two things: any
 `SHR`/`SAR` by `0x10` (the idiom that extracts a packed high half) and any
 `CMP` against `0xd`/`0xe`/`0xf` (14/15, the observed cap). **Zero hits, in
 every one of these eleven functions.** (`Veh2HighHalf.java`, output
@@ -716,7 +720,7 @@ static vtable calls to `CreateVertexDeclaration`/`DrawIndexedPrimitive`
 interpreted anywhere *before* that abstraction, and every function read here
 sits before it.** *(Superseded in part: the "zero static vtable calls" half
 was later REFUTED for `CreateVertexDeclaration` — it IS called, through device
-vtable slot `+0x158` from `FUN_00476ca0`; the earlier zero came from a census of
+vtable slot `+0x158` from `0x00476ca0`; the earlier zero came from a census of
 only the `CALL [reg+disp]` form, while the compiler loads the slot into a register
 and calls the register. See `spec-render-pipeline.md` §4/§8 and `WALLS.md`,
 "Specific refuted claims".)*
@@ -767,7 +771,7 @@ memory* the group/range array occupies. That is a materially larger search
 than this session's scope and is recorded as the honest next step rather than
 attempted here.
 
-> **▶ EXECUTED 2026-09-13 — read §11.9 for the result.** The anchor is Mesh header `+0x08` (`FUN_00e71310` is the group/draw-range array parser); the runtime holder class keeps it at its own `+0x30`; the cross-reference set is 10 call sites, and the negative above extends to a controlled **168-function** closure with **zero** high-half extractions. The search did find the engine's own packed 16:16 draw-range handle (`FUN_00e72d00`), but a population test **refutes** identifying the file field with it, and a sixth candidate (`high16` → `g mod 3`) is refuted too. The cap is now characterised as **`3 × 5`, occasionally minus one** — §11.9.8 replaces this paragraph's next step with a sharper one.
+> **▶ EXECUTED 2026-09-13 — read §11.9 for the result.** The anchor is Mesh header `+0x08` (`0x00e71310` is the group/draw-range array parser); the runtime holder class keeps it at its own `+0x30`; the cross-reference set is 10 call sites, and the negative above extends to a controlled **168-function** closure with **zero** high-half extractions. The search did find the engine's own packed 16:16 draw-range handle (`0x00e72d00`), but a population test **refutes** identifying the file field with it, and a sixth candidate (`high16` → `g mod 3`) is refuted too. The cap is now characterised as **`3 × 5`, occasionally minus one** — §11.9.8 replaces this paragraph's next step with a sharper one.
 
 **Review status (2026-09-30): DESK-PASS (superseded content) — desk review (not re-derived from the executable).**
 
@@ -785,8 +789,8 @@ two questions are genuinely independent — this specific mechanism does not
 carry the association, whatever else might.
 
 **The mechanism, read two levels deeper than the existing table
-(`FUN_00ab0ef0`, `FUN_007616c0`, and — new this session — their own callees
-`FUN_00c960c0` and `FUN_00760c30`).** The calling convention was checked
+(`0x00ab0ef0`, `0x007616c0`, and — new this session — their own callees
+`0x00c960c0` and `0x00760c30`).** The calling convention was checked
 against raw disassembly rather than trusted from the decompiler's variable
 names alone, because a plausible-looking substitution is exactly the failure
 mode `HANDOFF.md` §5 records as this component's worst published error
@@ -796,12 +800,12 @@ correct as published. **New:** the `this` argument (register `ECX` at the call s
 a pointer to a **previously undocumented outer-header field at file offset
 `+0x1C`** — this spec's §3 table jumps from `+0x18` straight to `+0x20`; that
 gap was a real gap, not an oversight elsewhere. It is fixed up **lazily,
-inside `FUN_00ab0ef0` itself**, using the same `-1`⇒null / else `+=fileBase`
+inside `0x00ab0ef0` itself**, using the same `-1`⇒null / else `+=fileBase`
 idiom every other outer-header offset uses, rather than eagerly at ctor entry
 with the rest. **[CONFIRMED — disassembly.]**
 
 That `+0x1C` structure is the actual *source* for the "100-entry remap table"
-(the 100-entry table), read via `FUN_007616c0` (re-decompiled in full this session —
+(the 100-entry table), read via `0x007616c0` (re-decompiled in full this session —
 the earlier pass had truncated 76 of its ~340 lines, `scratchpad/veh/resolve_chain.txt`):
 
 - gated on `(structure+0x4) >= 7` (a version/size floor);
@@ -810,7 +814,7 @@ the earlier pass had truncated 76 of its ~340 lines, `scratchpad/veh/resolve_cha
   names — **and** handed whole to a dictionary/hashmap constructor;
 - a chunked-list array of 16-byte-stride elements at `structure+0x10`, walked
   by the **same generic chunked-list pointer-fixup utility** already
-  characterised in section 11.3 (`FUN_0075f880`, read in full: it fixes up
+  characterised in section 11.3 (`0x0075f880`, read in full: it fixes up
   three embedded pointer fields per 16-byte element and advances a
   linked-list cursor — generic, not domain-specific, exactly as before).
 
@@ -820,12 +824,12 @@ exactly `9`; (b) calls a **virtual method** at that object's own vtable slot
 `+0x14` with `(index, buffer)` — "get the key *at this position*", not "get
 the value *for this key*" — where `buffer` is **524 bytes**, a size far more
 consistent with a name/string than with any numeric index; then (c) hands
-that result to `FUN_00760c30`.
+that result to `0x00760c30`.
 
-**`FUN_00760c30` (202 bytes, read in full) does not compute or return a
+**`0x00760c30` (202 bytes, read in full) does not compute or return a
 designed value.** It writes its four inputs, plus eight further caller-stack
 dwords, into a **fixed-capacity global table of 5,000 slots**
-(`DAT_0163a8f0`/`DAT_0163f710`), silently declining once past slot 4,999; it
+(`0x0163a8f0`/`0x0163f710`), silently declining once past slot 4,999; it
 invokes a **virtual call at vtable slot `+0x1C`** on its own first argument
 (the shape of "register a pending reference", not "compute an answer"); and
 its **last instruction before the return copies the `EDI` register into the
@@ -833,7 +837,7 @@ return register, and `EDI` is never assigned anywhere in this function's body**
 *(instruction text reworded to prose, desk review 2026-09-30)* — it returns whatever its caller
 happened to leave in `EDI`, not a value this function designed.
 **[CONFIRMED — disassembly; raw tail in `scratchpad/veh/highhalf.txt`.]**
-**[OPEN — desk review 2026-09-30: §11.11 step 5 describes the same `FUN_00760c30` as returning "the slot handle in `EAX`", which conflicts with the reading above. To be settled against the executable (raw tail of `FUN_00760c30`, and how `FUN_00ab0ef0` uses the returned value).]**
+**[OPEN — desk review 2026-09-30: §11.11 step 5 describes the same `0x00760c30` as returning "the slot handle in `EAX`", which conflicts with the reading above. To be settled against the executable (raw tail of `0x00760c30`, and how `0x00ab0ef0` uses the returned value).]**
 
 **So the value eventually written into the 64-byte reference record's own
 `+0x04` field — the 100-entry table's entry at the original value's index — is drawn from the domain of this
@@ -885,7 +889,7 @@ the chance-level overlap already measured above, this is recorded as a
 curiosity, not a finding — it would need its own shuffled control before it
 means anything, and that control was not built this pass.)*
 
-**Review status (2026-09-30): NEEDS-EXE: the return value of `FUN_00760c30` and its use in `FUN_00ab0ef0` (text fix applied: instruction text to prose) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: the return value of `0x00760c30` and its use in `0x00ab0ef0` (text fix applied: instruction text to prose) — desk review (not re-derived from the executable).**
 
 ### 11.8 The 64-byte reference record's `+0x00` "kind" field (task 3)
 
@@ -901,7 +905,7 @@ kind/type tag than a hash or a free-running counter. **[HYPOTHESIS —
 unconfirmed]** what each band denotes; not pursued further this pass.
 
 **The disassembly-derived "unresolved reference" predicate reproduces exactly
-on real files.** Section 11.3 established that `FUN_00ab0d20` (the
+on real files.** Section 11.3 established that `0x00ab0d20` (the
 "unresolved reference" reporter) fires when a record's `+0x04 == -1` **and**
 `+0x00 == 0`. Measured directly: of the **852** null (`+0x04 == -1`) records,
 `kind == 0` in **852 / 852 (100.0%)**; conversely, every one of the **43**
@@ -919,7 +923,7 @@ the data to suggest it should be). The kind field identifies a different axis
 `kind == 0` is overwhelmingly the common case — than either the packed-id cap
 (section 11.6) or the pairing/scoping question (section 11.7). **[Formerly
 OPEN, resolved (negative) in section 11.11: the concrete next probe this entry
-named, `FUN_00ab0a10`, was read in full and turned out not to be part of the
+named, `0x00ab0a10`, was read in full and turned out not to be part of the
 64-byte record machinery at all -- it is the fallback resolver for an unrelated
 single per-part field. What the non-zero bands denote is still OPEN; see 11.11
 for exactly what was ruled out and what remains untried.]**
@@ -955,12 +959,12 @@ calls 60x and read as a clean confirming negative.
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
-#### 11.9.1 Step 1 answered: the anchor is `FUN_00e71310`, and it is the group/draw-range array parser
+#### 11.9.1 Step 1 answered: the anchor is `0x00e71310`, and it is the group/draw-range array parser
 
-`FUN_00e71310` -- previously on file only as "helper called from the Mesh
+`0x00e71310` -- previously on file only as "helper called from the Mesh
 sub-block parser after the channel array, takes an implicit register-passed
 argument, OPEN" -- **is the group and draw-range array parser.** Read from raw
-disassembly at the call site `00e7156e`-`00e71590` inside `FUN_00e71410`: the call
+disassembly at the call site `00e7156e`-`00e71590` inside `0x00e71410`: the call
 passes the file buffer base and the shared parse cursor, together with
 `Mesh header + 0x38` as a third argument, while the register that will hold the
 call's return value is separately loaded beforehand with `Mesh header +0x04` (the
@@ -972,7 +976,7 @@ the pointer must be non-null -- and either check failing routes to a parse failu
 
 **[CONFIRMED -- disassembly.] The runtime anchor asked for by section 11.6's step 1
 is Mesh header `+0x08`/`+0x0C`** -- an 8-byte pointer slot holding the group array
-base, gated by the group count at `+0x04`. `FUN_00e71310` returns it.
+base, gated by the group count at `+0x04`. `0x00e71310` returns it.
 
 Its body then yields the **full `0x30`-byte group record**, which this document
 previously knew only by its first field:
@@ -980,11 +984,11 @@ previously knew only by its first field:
 | Offset | Size | Meaning | Evidence |
 |---|---|---|---|
 | `+0x00` | 4 | **draw-range count** for this group | already on file (section 8.2 of `spec-vertex-format.md`); re-derived here from the loader's own `count * 0x14` and `count * 8` arithmetic |
-| `+0x04` | 12 | **vec3 A** -- bounding-box minimum | `FUN_007524f0` copies `+0x04..+0x0F` and `+0x10..+0x1B` into a 24-byte struct and calls `FUN_00749230`, which computes `(B-A)*0.5` as half-extents, `A + halfExtent` as centre, and `SQRT(hx²+hy²+hz²)` as a radius -- an AABB-to-sphere conversion. `FUN_0074d260` does the same by passing the addresses of group `+0x04` and `+0x10` to `FUN_0042e160`, a plain two-vec3 copy |
+| `+0x04` | 12 | **vec3 A** -- bounding-box minimum | `0x007524f0` copies `+0x04..+0x0F` and `+0x10..+0x1B` into a 24-byte struct and calls `0x00749230`, which computes `(B-A)*0.5` as half-extents, `A + halfExtent` as centre, and `SQRT(hx²+hy²+hz²)` as a radius -- an AABB-to-sphere conversion. `0x0074d260` does the same by passing the addresses of group `+0x04` and `+0x10` to `0x0042e160`, a plain two-vec3 copy |
 | `+0x10` | 12 | **vec3 B** -- bounding-box maximum | as above |
 | `+0x1C` | 4 | **unknown** -- the only undetermined dword in the record | -- |
-| `+0x20` | 8 | **pointer to this group's `0x14`-byte draw-range array**, fixed up at load (`+0x24` zeroed) | `FUN_00e71310` pass 1: group `+0x20` is set to the current cursor plus the file base, then the cursor advances by the group's `+0x00` count times `0x14` *(reworded from pseudocode, desk review 2026-09-30)* |
-| `+0x28` | 8 | **pointer to an array of `rangeCount` 8-byte slots**, present only when Mesh header `+0x48` is non-zero, else zeroed (`+0x2C` zeroed) | `FUN_00e71310` pass 2 |
+| `+0x20` | 8 | **pointer to this group's `0x14`-byte draw-range array**, fixed up at load (`+0x24` zeroed) | `0x00e71310` pass 1: group `+0x20` is set to the current cursor plus the file base, then the cursor advances by the group's `+0x00` count times `0x14` *(reworded from pseudocode, desk review 2026-09-30)* |
+| `+0x28` | 8 | **pointer to an array of `rangeCount` 8-byte slots**, present only when Mesh header `+0x48` is non-zero, else zeroed (`+0x2C` zeroed) | `0x00e71310` pass 2 |
 
 **[CONFIRMED -- disassembly.]** The `+0x28` array's own contents are *generated at
 load*, not read: each 8-byte slot's first dword is written as
@@ -1010,38 +1014,38 @@ this section enumerates.
 
 #### 11.9.2 The runtime class that holds the Mesh header, and its field `+0x30`
 
-`FUN_00e71410` returns the Mesh-header pointer to exactly **two** callers
-(`getReferencesTo`, CONTROL A below): `FUN_00e718b0` (the known 8-caller generic
-wrapper) and `FUN_00e71910` (3 callers). Both pass it out in `EAX`, giving
+`0x00e71410` returns the Mesh-header pointer to exactly **two** callers
+(`getReferencesTo`, CONTROL A below): `0x00e718b0` (the known 8-caller generic
+wrapper) and `0x00e71910` (3 callers). Both pass it out in `EAX`, giving
 **10 distinct call sites** that store a loaded Mesh header somewhere. At several of
 them the pointer is immediately handed to a pooled renderer object: the code calls
-the class-specific pool allocator (`0x00482de0`, a thunk to `FUN_00482d20`) to
+the class-specific pool allocator (`0x00482de0`, a thunk to `0x00482d20`) to
 obtain a new instance, then invokes that instance's own virtual method at vtable
 slot `+0x10`, passing the Mesh header pointer and a literal `0`.
 
-That class is now identified. `FUN_00482e00`, the constructor run on the popped
+That class is now identified. `0x00482e00`, the constructor run on the popped
 free-list node, installs the vtable (the function pointer table at `0x012a0418`); the pool's globals are
-`DAT_01353a00` (free-list head), `DAT_013539f8` (live count), `DAT_013539fc`
-(peak), `DAT_01353a04`/`DAT_01353a05` (overflow flags). The vtable has **six**
+`0x01353a00` (free-list head), `0x013539f8` (live count), `0x013539fc`
+(peak), `0x01353a04`/`0x01353a05` (overflow flags). The vtable has **six**
 slots:
 
 | Slot | Target | Role |
 |---|---|---|
-| `+0x00` | `FUN_00482e70` | destructor-with-delete-flag (calls `FUN_00482e90`) |
-| `+0x04` | `FUN_00476fe0` | empty stub (`RET`) |
-| `+0x08` | `FUN_00482d90` | release -- returns the node to the pool |
-| `+0x0C` | `FUN_00482d80` | returns the constant `0x7f903b60` (a type tag) |
-| `+0x10` | `FUN_00483110` | **initialise from a Mesh header** |
-| `+0x14` | `FUN_00483140` | **re-upload the vertex channels** |
+| `+0x00` | `0x00482e70` | destructor-with-delete-flag (calls `0x00482e90`) |
+| `+0x04` | `0x00476fe0` | empty stub (`RET`) |
+| `+0x08` | `0x00482d90` | release -- returns the node to the pool |
+| `+0x0C` | `0x00482d80` | returns the constant `0x7f903b60` (a type tag) |
+| `+0x10` | `0x00483110` | **initialise from a Mesh header** |
+| `+0x14` | `0x00483140` | **re-upload the vertex channels** |
 
 **The class's field `+0x30` holds the Mesh-header pointer, and `+0x48` holds the
-created index-buffer object.** Proof, from `FUN_00482f00` (called out of slot
-`+0x10`) and `FUN_00483140` (slot `+0x14`), both of which
+created index-buffer object.** Proof, from `0x00482f00` (called out of slot
+`+0x10`) and `0x00483140` (slot `+0x14`), both of which
 return immediately when the pointer at `this+0x30` is null:
 
 - **vertex channels:** count from `meshHeader+0x10`, array from `meshHeader+0x18`,
   stride `0x18`; per channel, create a buffer through the device wrapper
-  `DAT_03171ac4`'s vtable slot **`+0x68`**, store the handle in the channel record's
+  `0x03171ac4`'s vtable slot **`+0x68`**, store the handle in the channel record's
   own `+0x08`, then `Lock` (buffer vtable `+0x2c`), `memcpy` from the channel
   record's `+0x10` data pointer, `Unlock` (`+0x30`).
 - **index buffer:** when Mesh header `+0x20` is non-zero, create through the device
@@ -1061,7 +1065,7 @@ constant here **confirms it a second, independent way, from the consumer**, and 
 the stronger form of the proof. Second, and this *is* a correction: the surviving
 hypothesis that `+0x48`/`+0x50` is "a cleaner, more direct match for a plain
 16-bit index buffer" (`spec-geometry-format.md` section 4.1.1, and the plate
-comment on `FUN_00e71410`) is **REFUTED** -- the index buffer is created from
+comment on `0x00e71410`) is **REFUTED** -- the index buffer is created from
 `+0x20`/`+0x28`/`+0x30`, and `+0x48`/`+0x50` is a separate `u16` table, the one the
 group record's `+0x28` slots hold pre-resolved pointers into. The `D3DFMT_INDEX16`/`INDEX32` constant is
 what makes this a proof rather than an inference, and the per-channel vertex data
@@ -1070,11 +1074,11 @@ consistent with `spec-vertex-format.md`'s channel table throughout.
 
 Incidentally this also names, for the first time in this project, the renderer's
 own device abstraction that `HANDOFF.md` section 5 and section 26 describe as
-wrapping Direct3D: the singleton `DAT_03171ac4`, vtable slot `+0x68` = create
+wrapping Direct3D: the singleton `0x03171ac4`, vtable slot `+0x68` = create
 vertex buffer, `+0x6c` = create index buffer; and on the returned buffer objects,
 `+0x2c` = Lock, `+0x30` = Unlock, `+0x08` = release.
 
-**[OPEN — desk review 2026-09-30: the device-wrapper slot numbers and the 14 virtual call sites in this class's closure (§11.9.4) are runtime-wrapper details not checkable from data; to be settled against the executable (`FUN_00482f00`, `FUN_00483140`, `FUN_00482e00`). Not load-bearing for file parsing.]**
+**[OPEN — desk review 2026-09-30: the device-wrapper slot numbers and the 14 virtual call sites in this class's closure (§11.9.4) are runtime-wrapper details not checkable from data; to be settled against the executable (`0x00482f00`, `0x00483140`, `0x00482e00`). Not load-bearing for file parsing.]**
 
 **Review status (2026-09-30): NEEDS-EXE: runtime device-wrapper slots (text fix applied: vtable auto-label replaced by its address, pseudocode conditions reworded) — desk review (not re-derived from the executable).**
 
@@ -1082,49 +1086,49 @@ vertex buffer, `+0x6c` = create index buffer; and on the returned buffer objects
 
 | Caller | Site | What it does with the returned Mesh header |
 |---|---|---|
-| `FUN_0043e420` | `0043e774` | stores into an 8-byte slot at `[[EBP+0xc]+0x48] + EDI + 0x58`; also carries the pool allocator inlined |
-| `FUN_007524f0` | `00752672` | keeps it in `EBX`; allocates the renderer object into `[EDI+0x50]`, calls slot `+0x10`, then reads `meshHeader+0x08` and copies **group[0]** `+0x04`/`+0x10` into `FUN_00749230` |
-| `FUN_0074d260` | `0074d314` | tests `meshHeader+0x04` (group count) > 0, resolves a material via `FUN_00e401d0`/`FUN_00e71090`, allocates the renderer object, calls slot `+0x10`, then `FUN_0042e160(grp+0x04, grp+0x10)` -> `FUN_00749230` |
-| `FUN_007512f0` | `0075137b` | tests `meshHeader+0x04` > 0, same material path |
-| `FUN_00864c60` | `00864f26` | tests `meshHeader+0x04` > 0, allocates the renderer object, calls slot `+0x10` |
-| `FUN_00e3c4e0` | `00e3c58a` | stores into `[ESI]` (8-byte slot), allocates the renderer object into `[ESI+0x8]`, calls slot `+0x10` |
-| `FUN_00e7a5a0` | `00e7a65c` | stores into `[[ESI+0x38] + EBP]` -- the per-LOD-slot array already documented for `.csrt_pc` trees |
-| `FUN_007499d0` | `00749a71` | stores into `[EBP + EBX*8]` -- an 8-byte-slot array indexed by a loop counter bounded by `[EDI+0x48]` |
-| `FUN_00747b50` | `00747b79` | stores into `[ESI+0x8]`, then allocates the renderer object into `[ESI+0x8]`'s neighbour |
-| `FUN_00e3c4e0` | `00e3c56d` | the inline (`FUN_00e71910`) variant of the same |
+| `0x0043e420` | `0043e774` | stores into an 8-byte slot at `[[EBP+0xc]+0x48] + EDI + 0x58`; also carries the pool allocator inlined |
+| `0x007524f0` | `00752672` | keeps it in `EBX`; allocates the renderer object into `[EDI+0x50]`, calls slot `+0x10`, then reads `meshHeader+0x08` and copies **group[0]** `+0x04`/`+0x10` into `0x00749230` |
+| `0x0074d260` | `0074d314` | tests `meshHeader+0x04` (group count) > 0, resolves a material via `0x00e401d0`/`0x00e71090`, allocates the renderer object, calls slot `+0x10`, then `0x0042e160(grp+0x04, grp+0x10)` -> `0x00749230` |
+| `0x007512f0` | `0075137b` | tests `meshHeader+0x04` > 0, same material path |
+| `0x00864c60` | `00864f26` | tests `meshHeader+0x04` > 0, allocates the renderer object, calls slot `+0x10` |
+| `0x00e3c4e0` | `00e3c58a` | stores into `[ESI]` (8-byte slot), allocates the renderer object into `[ESI+0x8]`, calls slot `+0x10` |
+| `0x00e7a5a0` | `00e7a65c` | stores into `[[ESI+0x38] + EBP]` -- the per-LOD-slot array already documented for `.csrt_pc` trees |
+| `0x007499d0` | `00749a71` | stores into `[EBP + EBX*8]` -- an 8-byte-slot array indexed by a loop counter bounded by `[EDI+0x48]` |
+| `0x00747b50` | `00747b79` | stores into `[ESI+0x8]`, then allocates the renderer object into `[ESI+0x8]`'s neighbour |
+| `0x00e3c4e0` | `00e3c56d` | the inline (`0x00e71910`) variant of the same |
 
 Only **two** of the ten read the group array at all, and both only to take
 **group[0]**'s two vec3s for a bounding volume. **No call site walks the draw
 ranges.**
 
-**Rows 4/5 (`FUN_007512f0`/`FUN_00864c60`) identified, 2026-09-30 — both are genuine `.czn_pc`
+**Rows 4/5 (`0x007512f0`/`0x00864c60`) identified, 2026-09-30 — both are genuine `.czn_pc`
 zone-side consumers, completing this table's domain attribution to 10/10** (the other 8 rows
-were already attributed elsewhere: `FUN_0043e420` = Effects, `FUN_007524f0`/`FUN_0074d260`/
-`FUN_00e3c4e0` = vehicle-material, `FUN_007499d0`/`FUN_00747b50` = physics (`spec-physics-format.md`),
-`FUN_00e7a5a0` = trees, the inline `FUN_00e71910` variant = foliage). `FUN_00864c60` handles
+were already attributed elsewhere: `0x0043e420` = Effects, `0x007524f0`/`0x0074d260`/
+`0x00e3c4e0` = vehicle-material, `0x007499d0`/`0x00747b50` = physics (`spec-physics-format.md`),
+`0x00e7a5a0` = trees, the inline `0x00e71910` variant = foliage). `0x00864c60` handles
 top-level `.czn_pc` record id `0x2237` ("Region", the exact id `spec-terrain-format.md` §3's own
-real sample already found preceding readable `"Region<003>"`/`"Region"` strings); `FUN_007512f0`
-handles id `0x2251`, reached via `FUN_00864000` (which calls it at `0x00864081`). Both are called
-from one master dispatcher, `FUN_008652d0`, whose sole caller `FUN_00866580` sits in the same
+real sample already found preceding readable `"Region<003>"`/`"Region"` strings); `0x007512f0`
+handles id `0x2251`, reached via `0x00864000` (which calls it at `0x00864081`). Both are called
+from one master dispatcher, `0x008652d0`, whose sole caller `0x00866580` sits in the same
 tight `0x863000`–`0x866000` code module as the already-documented `.czh_pc` header parser
-(`FUN_00863080`, `HANDOFF.md` §2b `CTORLESS_TYPES`). This directly corrects
+(`0x00863080`, `HANDOFF.md` §2b `CTORLESS_TYPES`). This directly corrects
 `spec-zone-data-format.md` §9.1/§9.2's own "no top-level `.czn_pc` walker found anywhere"
 negative — the walker exists, compiled with a masking idiom (`& 0x80000003`, a branching
 round-up rather than a literal AND-mask, `& 0x7fffffff`) that census's own predicate never
 covered; see that document's own correction for the full account. **[CONFIRMED — disassembly,
-full chain traced from `FUN_00866580` down through both zone consumers and their tag-match
-reads (`DAT_013026f4 = 0x2237`, `DAT_0130279c = 0x2251`, both real reads against the on-disk
+full chain traced from `0x00866580` down through both zone consumers and their tag-match
+reads (`0x013026f4 = 0x2237`, `0x0130279c = 0x2251`, both real reads against the on-disk
 `{id (high bit set), length}` chain, `spec-zone-data-format.md` §6).]** **Note on this row's own scope, added after a peer flagged it 2026-09-30:** everything stated above about these two rows is derived purely from disassembling the game's own executable code (which functions call which, and the literal tag constants `0x2237`/`0x2251` embedded in that code) — none of it required reading any real `.czn_pc` file's own content. The separate, more detailed field-level record layout (`{meshRefCount,...}` etc.) is flagged as provisional pending a scope question about the PARKED `.czn_pc` interior — see `spec-terrain-format.md` §5 open item 2's own pending-scope note for the full account; this row's own claims are not affected by that question.
 
-**[Recount — desk review 2026-09-30: the table above has 10 rows = 10 call sites in 9 distinct functions (`FUN_00e3c4e0` appears twice, at `00e3c58a` and `00e3c56d`). The reference counts given for the two wrappers — 8 to `FUN_00e718b0` plus 3 to `FUN_00e71910` (§11.9.2 and CONTROL A in §11.9.4) — sum to 11, not 10, so one wrapper reference is not accounted for in this table (a non-call reference, a site counted under both wrappers, or a missing row). OPEN — to be settled against the executable (the reference lists of `FUN_00e718b0` and `FUN_00e71910`).]**
+**[Recount — desk review 2026-09-30: the table above has 10 rows = 10 call sites in 9 distinct functions (`0x00e3c4e0` appears twice, at `00e3c58a` and `00e3c56d`). The reference counts given for the two wrappers — 8 to `0x00e718b0` plus 3 to `0x00e71910` (§11.9.2 and CONTROL A in §11.9.4) — sum to 11, not 10, so one wrapper reference is not accounted for in this table (a non-call reference, a site counted under both wrappers, or a missing row). OPEN — to be settled against the executable (the reference lists of `0x00e718b0` and `0x00e71910`).]**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (call-site recount flagged) — desk review (not re-derived from the executable).**
 
 #### 11.9.4 Step 3: the negative, with its controls
 
 **CONTROL A (does the xref technique work at all?).** `getReferencesTo` recovered
-2 callers of `FUN_00e71410`, 1 of `FUN_00e71310`, 8 of `FUN_00e718b0`, 3 of
-`FUN_00e71910`, 2 data references to the vtable constant, and 8/7/6/8/3 references
+2 callers of `0x00e71410`, 1 of `0x00e71310`, 8 of `0x00e718b0`, 3 of
+`0x00e71910`, 2 data references to the vtable constant, and 8/7/6/8/3 references
 to the five pool globals -- every one of them a known-correct edge. **The
 technique finds hits.**
 
@@ -1157,11 +1161,11 @@ negative.
 **The negative itself.** With all four controls passing:
 
 - Breadth-first scan of the entire static call graph reachable from all ten
-  Mesh-header call sites plus `FUN_00e718b0`/`FUN_00e71910`/`FUN_00e71410`/
-  `FUN_00e71310`, to depth 3: **168 functions, zero high-half extractions** of any
+  Mesh-header call sites plus `0x00e718b0`/`0x00e71910`/`0x00e71410`/
+  `0x00e71310`, to depth 3: **168 functions, zero high-half extractions** of any
   draw-range field. The six high-half instructions found in that closure are
-  `_rand` (a fixed-point RNG), `FUN_00dab2b0` (already documented as a Thomas
-  Wang integer mixer) and `FUN_00c1f540` (a fixed-point math helper).
+  `_rand` (a fixed-point RNG), `0x00dab2b0` (already documented as a Thomas
+  Wang integer mixer) and `0x00c1f540` (a fixed-point math helper).
 - Breadth-first scan from all six slots of the renderer class's vtable, depth 4:
   **31 functions, zero.** That closure contains **14 virtual call sites**, so the
   static graph is genuinely blind at those edges -- recorded rather than ignored.
@@ -1179,7 +1183,7 @@ anchor rather than by a hand-picked neighbourhood.
 retried.** (a) A register-tracked two-step dereference `MOV rX,[rY+0x30]` then
 `MOV rZ,[rX+0x08]` -- the literal anchor path -- gives **51 hits in 44 functions**;
 its controls `(0x30,0x10)` and `(0x30,0x18)` give 15 and 27 hits and do recover
-`FUN_00483140`, so the technique works, but `+0x30` and `+0x08` are too common for
+`0x00483140`, so the technique works, but `+0x30` and `+0x08` are too common for
 the result to mean anything. (b) The draw-range record's unique four-field
 signature (loads at `+0x04`, `+0x08`, `+0x0C`, `+0x10` off one base register, the
 `DrawIndexedPrimitive` argument set) funnels 3,848/2,465 -> 1,179/837 -> **384 hits
@@ -1188,16 +1192,16 @@ heap records. Both are the shape `HANDOFF.md` section 5 / 26.12 / 26.15 warns
 about and both behaved exactly as warned.
 
 **One honest correction to my own predicate:** `TEST reg,0xf` was initially
-counted as a "bound against 15". It is not -- in `FUN_00e71310` and
-`FUN_00e71740` it is the 16-byte **alignment** check. The bound counts above use
+counted as a "bound against 15". It is not -- in `0x00e71310` and
+`0x00e71740` it is the 16-byte **alignment** check. The bound counts above use
 `CMP` only.
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 #### 11.9.5 The hit: the engine's own packed 16:16 draw-range handle, fully decoded
 
-Three sites in the `0xe7xxxx` Mesh module -- `FUN_00e72c60`, `FUN_00e72d00`, and
-`FUN_00e73e80` -- carry the exact idiom the whole search was for. `FUN_00e72d00`
+Three sites in the `0xe7xxxx` Mesh module -- `0x00e72c60`, `0x00e72d00`, and
+`0x00e73e80` -- carry the exact idiom the whole search was for. `0x00e72d00`
 in full raw form (103 bytes), reads `this+0xbc` (the mesh-resource holder pointer)
 and, from that holder's own `+0x30` field, the loaded Mesh header pointer; it also
 separately reads `this+0xfc` (a runtime record array pointer). The holder value is
@@ -1209,7 +1213,7 @@ bounds-checked value is then multiplied by 3 and by 16 in turn (an effective `x4
 = `0x30`, the group-record stride) and added to Mesh header `+0x08` (the group
 array base) to land on one group record. That group record's own `+0x20` field
 (the draw-range array) is then indexed by the packed value's low half, multiplied
-by 4 and by 4 again (an effective `x16` = `0x14`, the draw-range stride) **[Arithmetic check, desk review 2026-09-30: ×4×4 is ×16 = `0x10`, not `0x14` (= 20). The draw-range stride `0x14` is established independently (§11.9.1, `spec-vertex-format.md` §8.2), and §11.9.4's predicate repair gives the compiler's form of a ×20 as ×5 (shift-and-add) followed by ×4 — so "by 4 and by 4 again" is most likely a transcription slip for ×5 then ×4. OPEN — the actual factors to be settled against the executable (`FUN_00e72d00`).]**: the
+by 4 and by 4 again (an effective `x16` = `0x14`, the draw-range stride) **[Arithmetic check, desk review 2026-09-30: ×4×4 is ×16 = `0x10`, not `0x14` (= 20). The draw-range stride `0x14` is established independently (§11.9.1, `spec-vertex-format.md` §8.2), and §11.9.4's predicate repair gives the compiler's form of a ×20 as ×5 (shift-and-add) followed by ×4 — so "by 4 and by 4 again" is most likely a transcription slip for ×5 then ×4. OPEN — the actual factors to be settled against the executable (`0x00e72d00`).]**: the
 resulting draw-range record's `+0x0C` field is written to the function's first
 output parameter, and its `+0x10` field to the second.
 
@@ -1223,9 +1227,9 @@ parameters are the draw range's **lowest and highest vertex index** --
 **consumer** side rather than from validation statistics alone. The function is a
 `getVertexRange(handle, &minVertex, &maxVertex)`.
 
-`FUN_00e72c60` (146 bytes) is the same lookup with a different tail;
-`FUN_00e73e80` (448 bytes) is the same lookup followed by real work and is called
-directly from `FUN_00b138a0`, itself a vtable slot (`01186c4c`). All three appear
+`0x00e72c60` (146 bytes) is the same lookup with a different tail;
+`0x00e73e80` (448 bytes) is the same lookup followed by real work and is called
+directly from `0x00b138a0`, itself a vtable slot (`01186c4c`). All three appear
 as slots in the vtables at `01186c60`/`0125b2c0`/`0125c4e0` and `0125b2ac`/
 `0125c4cc`, i.e. three related classes override the same two adjacent slots.
 
@@ -1233,15 +1237,15 @@ as slots in the vtables at `01186c60`/`0125b2c0`/`0125c4e0` and `0125b2ac`/
 its decoding is: **low half = draw-range index within a group (`x0x14`); high half
 = a slot index into a `0x28`-byte record array at `this+0xfc`, whose `u16` at
 record `+0x24` is the GROUP index** (bounds-checked against the group count).
-Candidate writers of `this+0xfc` in the same module: `FUN_00e72220`,
-`FUN_00e726e0`, `FUN_00e75720`, `FUN_00e7cfd0`, `FUN_00e7f120`. **[OPEN -- the
+Candidate writers of `this+0xfc` in the same module: `0x00e72220`,
+`0x00e726e0`, `0x00e75720`, `0x00e7cfd0`, `0x00e7f120`. **[OPEN -- the
 `0x28`-byte record's remaining fields and its element count.]**
 
-**Review status (2026-09-30): NEEDS-EXE: the range-stride factors and the `this+0xfc` record array (writers `FUN_00e72220`, `FUN_00e726e0`, `FUN_00e75720`, `FUN_00e7cfd0`, `FUN_00e7f120`); runtime handle, not load-bearing for file parsing (text fix applied: ×16 vs `0x14` flagged) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: the range-stride factors and the `this+0xfc` record array (writers `0x00e72220`, `0x00e726e0`, `0x00e75720`, `0x00e7cfd0`, `0x00e7f120`); runtime handle, not load-bearing for file parsing (text fix applied: ×16 vs `0x14` flagged) — desk review (not re-derived from the executable).**
 
 #### 11.9.6 Candidate 5 REFUTED: the file's draw-range `+0x00` is not a handle of that runtime form
 
-If the file's packed `+0x00` were a value of the kind `FUN_00e72d00` consumes,
+If the file's packed `+0x00` were a value of the kind `0x00e72d00` consumes,
 four things must hold. `veh3_handle.py`, full population 393/393 vehicles,
 90,290 draw ranges:
 
@@ -1517,36 +1521,36 @@ factors to ask that question about.]**
 
 **Review status (2026-09-30): DESK-PASS (§11.10.1–§11.10.5, superseded content; tables sum to 393) — desk review (not re-derived from the executable).**
 
-### 11.11 Section 11.8's named next probe executed: `FUN_00ab0a10` read in full -- it is not part of the 64-byte record machinery at all, and no function in this chain branches on a non-zero `kind` value
+### 11.11 Section 11.8's named next probe executed: `0x00ab0a10` read in full -- it is not part of the 64-byte record machinery at all, and no function in this chain branches on a non-zero `kind` value
 
-Method: disassembly only, no new data harness. `FUN_00ab0a10` (775 bytes) was
+Method: disassembly only, no new data harness. `0x00ab0a10` (775 bytes) was
 decompiled and disassembled in full, together with its five callees and the full
-disassembly of its one caller (`FUN_00ab0ef0`, the same 388-byte per-part walker
+disassembly of its one caller (`0x00ab0ef0`, the same 388-byte per-part walker
 section 11.3 already read), to settle section 11.8's own named next step. New
 scripts `tools/scripts/VehKindResolver.java` and `tools/scripts/VehOuterDisasm.java`;
 output `tools/vehkind_resolver_run.txt`, `tools/veh_outer_disasm.txt`.
 
-**`FUN_00ab0a10` does not touch the 64-byte record array, or its `+0x00` kind field,
-at all.** Its only caller is `FUN_00ab0ef0` at a single call site (disassembly
+**`0x00ab0a10` does not touch the 64-byte record array, or its `+0x00` kind field,
+at all.** Its only caller is `0x00ab0ef0` at a single call site (disassembly
 `0xab0fd3`-`0xab0fe3`): the part object's own `+0x80` field is compared against `-1`,
-and only when it still equals `-1` does the code call `FUN_00ab0a10` (passing the
+and only when it still equals `-1` does the code call `0x00ab0a10` (passing the
 part object itself as its argument) and store the call's result back into that same
 `+0x80` field.
 
 `ESI`/`EBX` here is the same per-part walking pointer section 11.3 describes --
-**not** a 64-byte-record pointer. `FUN_00ab0a10` is the fallback resolver for one
+**not** a 64-byte-record pointer. `0x00ab0a10` is the fallback resolver for one
 single scalar field living directly on the part object, `part+0x80`, gated by
 the identical "try the 100-entry table, fall back if still `-1`" shape the
 64-byte records' own `+0x04` field uses (`part+0x80 != -1` remaps through
 that same 100-entry table earlier in the same function; if it is *still* `-1` afterward,
-`FUN_00ab0a10` supplies a value). `part+0x80` is a structurally separate field
+`0x00ab0a10` supplies a value). `part+0x80` is a structurally separate field
 from the `+0xC0`/`+0xC4` record array described in section 11.3 -- the task's own
-framing of `FUN_00ab0a10` as "the fallback resolver called when a runtime cache
+framing of `0x00ab0a10` as "the fallback resolver called when a runtime cache
 slot needs a fresh value" is accurate, but that cache slot belongs to the part,
 not to a reference record. **[CONFIRMED -- disassembly, `0xab0fd3`-`0xab0fe3`.]**
 
 Read start to end (`0xab0a10`-`0xab0d16`, matching the known 775-byte size),
-`FUN_00ab0a10`'s body:
+`0x00ab0a10`'s body:
 
 1. Reads six floats from a pointer chain rooted at its own first argument
    (three successive dereferences — the argument's pointed-to value, then its `+4`, then that
@@ -1557,12 +1561,12 @@ Read start to end (`0xab0a10`-`0xab0d16`, matching the known 775-byte size),
    vtable, `0xab0b76`-`0xab0b86`) and tags its `+4` field with ~~type~~ `0x30`
    **[2026-10-03: this is the block's own size, written into the referenced-object
    size field, not a type tag -- see the note after step 4]**.
-3. Calls `FUN_00d4d7f0` (130 bytes) -- sets a vtable pointer
+3. Calls `0x00d4d7f0` (130 bytes) -- sets a vtable pointer
    (the function pointer at `0x01243174`) on ~~a second, stack-local object and copies/clamps
    values into it from a global constant (at `0x0131e81c`)~~ **[corrected 2026-10-03: the
    0x30-byte block from step 2, which is the new shape; it copies in a stack-local half-extent
    vector and takes a radius from the global at `0x0131e81c` -- see the note after step 4]**.
-4. Calls `FUN_00c8a890` (271 bytes) and `FUN_004f00f0`/`FUN_00da4170` --
+4. Calls `0x00c8a890` (271 bytes) and `0x004f00f0`/`0x00da4170` --
    further floating-point packing/combination steps. **What these two
    specifically compute (e.g. a basis, a support point, a normalized extent)
    was not pinned down this pass and is reported as unconfirmed rather than
@@ -1572,16 +1576,16 @@ Read start to end (`0xab0a10`-`0xab0d16`, matching the known 775-byte size),
 
 **[Re-derived from the executable 2026-10-03.** This checks the claim in
 `review/scoping-physics-vehicle.md` §6 that `0x01243174` is Havok's box shape. Method: a
-local Ghidra `func` dump of `FUN_00ab0a10`, `FUN_00d4d7f0` and the physics bring-up
+local Ghidra `func` dump of `0x00ab0a10`, `0x00d4d7f0` and the physics bring-up
 function, plus an RTTI read through `tools/harnesses/exe_va.py`. **Result: CONFIRMED --
-disassembly + RTTI structure decode. `FUN_00d4d7f0` is Havok's `hkpBoxShape`
-constructor, and `FUN_00ab0a10` builds a Havok box collision shape for the part.**
+disassembly + RTTI structure decode. `0x00d4d7f0` is Havok's `hkpBoxShape`
+constructor, and `0x00ab0a10` builds a Havok box collision shape for the part.**
 
 - **The RTTI chain.** The dword just before vtable `0x01243174` points to a Complete
   Object Locator at `0x012ba2a0`. Its type descriptor, at `0x0131e800`, names
   `.?AVhkpBoxShape@@`. The class-hierarchy descriptor lists the bases `hkpConvexShape`,
   `hkpSphereRepShape`, `hkpShape`, `hkReferencedObject` and `hkBaseObject`.
-  `FUN_00d4d7f0` itself sits in Havok's collision-shape code range, the scoping note's
+  `0x00d4d7f0` itself sits in Havok's collision-shape code range, the scoping note's
   range B.
 - **What the constructor does.** It is called with the object in ECX and two stack
   arguments: a pointer to a 4-float vector and a float. It:
@@ -1592,17 +1596,17 @@ constructor, and `FUN_00ab0a10` builds a Havok box collision shape for the part.
   - then overwrites `+0x2c` with the **smallest** of the three half-extents. This is a
     minimum, not a clamp.
 
-  The object it builds is step 2's heap block -- `FUN_00ab0a10` passes that block in ECX
+  The object it builds is step 2's heap block -- `0x00ab0a10` passes that block in ECX
   -- not a stack-local object. Only the half-extent vector is stack-local. Step 2's
   `0x30` at `+4` is the block size the caller writes into the referenced-object size
   field, which fits a 0x30-byte `hkpBoxShape`.
 - **The radius.** The float argument is read from the global `0x0131e81c`, not a
   constant:
   - its static value is 0.05;
-  - the game's physics bring-up `FUN_0075f370` overwrites it with 0.005 once, just before
+  - the game's physics bring-up `0x0075f370` overwrites it with 0.005 once, just before
     it builds the Havok world (`spec-physics-format.md` §3). That is the global's only
     write among 24 uses in 21 functions, and one of those readers is
-    `spec-physics-format.md` §4.4.6(g)'s `FUN_00d56010`;
+    `spec-physics-format.md` §4.4.6(g)'s `0x00d56010`;
   - stored at the shape's `+0x10`, it lands in the convex-radius slot of Havok's public
     convex-shape layout. **HIGH CONFIDENCE -- inferred** for that name.
 - **Step 1's arithmetic, now read in full.** The six floats are two triples: A at
@@ -1615,10 +1619,10 @@ constructor, and `FUN_00ab0a10` builds a Havok box collision shape for the part.
   This is consistent with A being a centre and B a half-extent, with the code rebuilding
   max − min and then trimming the box height to 80%. **HIGH CONFIDENCE -- inferred** for
   the centre/half-extent reading. Which file field feeds this object is **not traced**.
-- **Step 4, narrowed but still OPEN.** `FUN_00c8a890` (in Havok's range A) is called
+- **Step 4, narrowed but still OPEN.** `0x00c8a890` (in Havok's range A) is called
   with three arguments: the new box shape, the constant 1.0, and a zeroed stack output
-  block. `FUN_004f00f0` then repacks that output, and the result is written from `+0x84`
-  onward in the object the part's first field points to. Step 5's `FUN_00760c30` then
+  block. `0x004f00f0` then repacks that output, and the result is written from `+0x84`
+  onward in the object the part's first field points to. Step 5's `0x00760c30` then
   receives the box shape and that block. The call pattern fits a unit-mass
   mass-properties computation. **HYPOTHESIS, not traced** -- it is inside Havok's own
   code, which is out of scope.
@@ -1627,34 +1631,34 @@ constructor, and `FUN_00ab0a10` builds a Havok box collision shape for the part.
   direct call with no wrapper layer. `spec-physics-format.md` §4.3 cross-references it.
   It is a different data path from that section's `.clmesh_pc`-to-Havok question, so it
   does not close that question.
-- **Not read.** The reference manager lists nine other call sites of `FUN_00d4d7f0` (not raw-scanned), and none of them was read. Among them
-  are `FUN_00ab1bb0` and `FUN_00ab8620` in this same vehicle neighbourhood, and
-  `FUN_00757100` next to the game's world wrapper.**]**
-5. Calls `FUN_00760c30` (202 bytes) -- registers the new object into a fixed
-   global table capped at 5000 entries (`DAT_0163a8f0` freelist,
-   `DAT_0163f710` count, parallel per-slot arrays `DAT_0163f720`-`DAT_0163f750`)
+- **Not read.** The reference manager lists nine other call sites of `0x00d4d7f0` (not raw-scanned), and none of them was read. Among them
+  are `0x00ab1bb0` and `0x00ab8620` in this same vehicle neighbourhood, and
+  `0x00757100` next to the game's world wrapper.**]**
+5. Calls `0x00760c30` (202 bytes) -- registers the new object into a fixed
+   global table capped at 5000 entries (`0x0163a8f0` freelist,
+   `0x0163f710` count, parallel per-slot arrays `0x0163f720`-`0x0163f750`)
    and returns the slot handle in `EAX`. This is the "runtime cache slot"
    mechanism the task's framing named. **[CONFLICT — desk review 2026-09-30: §11.7 reads the same function's return value as an unassigned `EDI` left by the caller, not a slot handle; see the OPEN note there.]**
 
-None of these five steps, nor any of the five callees (`FUN_00c8a890`,
-`FUN_00d4d7f0`, `FUN_004f00f0`, `FUN_00da4170`, `FUN_00760c30`, plus
+None of these five steps, nor any of the five callees (`0x00c8a890`,
+`0x00d4d7f0`, `0x004f00f0`, `0x00da4170`, `0x00760c30`, plus
 `TlsGetValue`), reads a byte/dword at an offset matching the 64-byte record
 layout's `+0x00`, branches on a small-integer enum, or carries a string literal
 naming a resource domain. **[CONFIRMED -- disassembly, full function body plus
 full callee bodies.]**
 
 **The only place in this entire neighborhood that reads the record's `+0x00`
-kind field is `FUN_00ab0ef0`'s own second loop** -- the same loop section 11.3
-already identified as calling `FUN_00ab0d20`. Read at the instruction level
+kind field is `0x00ab0ef0`'s own second loop** -- the same loop section 11.3
+already identified as calling `0x00ab0d20`. Read at the instruction level
 (`0xab101e`-`0xab102f`): the record's own `+0x00` kind field is compared against
-`0`, and the call to `FUN_00ab0d20` -- passing the part-level context, the
+`0`, and the call to `0x00ab0d20` -- passing the part-level context, the
 record's index, and the record array's base pointer -- is only made when that
 kind field reads exactly `0`.
 
 `kind` is compared **only** for equality to zero, and is **not** itself passed
-to `FUN_00ab0d20` -- the call forwards the record's index, the record array's
+to `0x00ab0d20` -- the call forwards the record's index, the record array's
 base pointer, and the part-level context, never the kind value. There is no
-comparison anywhere in `FUN_00ab0ef0`, `FUN_00ab0a10`, or any of their combined
+comparison anywhere in `0x00ab0ef0`, `0x00ab0a10`, or any of their combined
 callees against 1, 2, 3, 4, 20, 21, 50, 51, 70, 71, 72, 73, 75, 135, 136, or
 137. **[CONFIRMED -- disassembly, `0xab101e`-`0xab102f`, cross-checked against
 the decompiled C in section 11.3.]**
@@ -1662,7 +1666,7 @@ the decompiled C in section 11.3.]**
 **Net result: a clean, disassembly-confirmed negative.** The task's own named
 next probe turns out not to belong to the kind-aware machinery at all -- it
 resolves an unrelated per-part scalar. The actual kind-reading code
-(`FUN_00ab0ef0`'s second loop) treats kind as a **binary gate** (zero vs.
+(`0x00ab0ef0`'s second loop) treats kind as a **binary gate** (zero vs.
 non-zero) at ctor time, never a multi-way branch. **What the non-zero bands
 (1-4, 20-21, 50-51, 70-75, 135-137) denote remains OPEN** -- this pass rules out
 load-time dispatch in this call chain as the place that distinguishes them.
@@ -1670,58 +1674,58 @@ The next place to look, not attempted this pass (per the task's own scope:
 named-function-and-call-graph only, no whole-binary predicate search), is
 whatever consumes the already-remapped `record+0x04` handle *after*
 construction -- code downstream of the ctor that dereferences a resolved
-reference record, which lies outside `FUN_00aaf690`/`FUN_00ab0ef0`'s own call
+reference record, which lies outside `0x00aaf690`/`0x00ab0ef0`'s own call
 graph and was not searched for here. **[OPEN -- what the non-zero kind bands
-denote; CONFIRMED -- that `FUN_00ab0a10` and every function it or
-`FUN_00ab0ef0` calls are blind to that distinction.]**
+denote; CONFIRMED -- that `0x00ab0a10` and every function it or
+`0x00ab0ef0` calls are blind to that distinction.]**
 
-**Review status (2026-09-30): NEEDS-EXE: ~~steps 3–4 of `FUN_00ab0a10` (`FUN_00d4d7f0`, `FUN_00c8a890`, `FUN_004f00f0`, `FUN_00da4170`) and~~ the `FUN_00760c30` return-value conflict with §11.7 (text fixes applied: pointer-chain notation and auto-labels reworded; part `+0x80` added to §4) — desk review (not re-derived from the executable).** **Review status (2026-10-03, re-derived from the executable; checks `review/scoping-physics-vehicle.md` §6):**
-- **Step 3:** CONFIRMED — disassembly + RTTI structure decode. `FUN_00d4d7f0` is the `hkpBoxShape` constructor, applied to step 2's heap block, with the radius taken from the global `0x0131e81c`.
+**Review status (2026-09-30): NEEDS-EXE: ~~steps 3–4 of `0x00ab0a10` (`0x00d4d7f0`, `0x00c8a890`, `0x004f00f0`, `0x00da4170`) and~~ the `0x00760c30` return-value conflict with §11.7 (text fixes applied: pointer-chain notation and auto-labels reworded; part `+0x80` added to §4) — desk review (not re-derived from the executable).** **Review status (2026-10-03, re-derived from the executable; checks `review/scoping-physics-vehicle.md` §6):**
+- **Step 3:** CONFIRMED — disassembly + RTTI structure decode. `0x00d4d7f0` is the `hkpBoxShape` constructor, applied to step 2's heap block, with the radius taken from the global `0x0131e81c`.
 - **Steps 1–2:** refined. The half-extents are B's X, 0.8 × B's Y and B's Z; the `+4` value `0x30` is the block size.
-- **Step 4:** narrowed but still OPEN (`FUN_00c8a890` is inside Havok; HYPOTHESIS: unit-mass mass properties).
-- **Untouched by this pass:** the `FUN_00760c30` return-value CONFLICT with §11.7.**
+- **Step 4:** narrowed but still OPEN (`0x00c8a890` is inside Havok; HYPOTHESIS: unit-mass mass properties).
+- **Untouched by this pass:** the `0x00760c30` return-value CONFLICT with §11.7.**
 
 ### 11.12 Section 11.11's named next probe executed: every real downstream consumer of `part+0xC0`/`+0xC4` traced -- clean negative, and the offset-only search this task explicitly forbade was tried anyway (on a sharper anchor) to confirm why it was forbidden
 
 Method: two complementary approaches, both disassembly-only (`VehKindDownstream.java`
 through `VehKindDownstream7.java`, outputs `tools/vehkind_downstream*_run.txt`), per
-11.11's own named next step -- find code, other than `FUN_00aaf690`/`FUN_00ab0ef0`
+11.11's own named next step -- find code, other than `0x00aaf690`/`0x00ab0ef0`
 and their already-read callees, that reads a resolved reference record's `+0x04`
 handle or `+0x00` kind field after construction.
 
-**(A) Real call-graph tracing from the ctor's own siblings of `FUN_00ab0ef0`.** The
-vehicle ctor `FUN_00ab1080` (1,531 bytes, `scratchpad/veh/ctor_full.txt`) calls, in
-order: `FUN_00aaf690` (part fixups) -> hardcoded per-vehicle special cases ->
-`FUN_00ab0ef0` (the ref-record resolver, already fully read) -> `FUN_00aaaea0` three
-times (`0xab157d`, `0xab15ca`, `0xab1617`) -> `FUN_00ab0730` (`0xab165f`). These two
+**(A) Real call-graph tracing from the ctor's own siblings of `0x00ab0ef0`.** The
+vehicle ctor `0x00ab1080` (1,531 bytes, `scratchpad/veh/ctor_full.txt`) calls, in
+order: `0x00aaf690` (part fixups) -> hardcoded per-vehicle special cases ->
+`0x00ab0ef0` (the ref-record resolver, already fully read) -> `0x00aaaea0` three
+times (`0xab157d`, `0xab15ca`, `0xab1617`) -> `0x00ab0730` (`0xab165f`). These two
 are the ctor's *only* other per-part-array consumers, i.e. the concrete place 11.11
 pointed at ("downstream of the ctor that dereferences a resolved reference record").
 Both were read in full for the first time this pass:
 
-- **`FUN_00aaaea0`** (145 bytes, "bbox accumulation over root parts") walks the part
+- **`0x00aaaea0`** (145 bytes, "bbox accumulation over root parts") walks the part
   array itself (reading the part count from its own first argument's `+0x390` field,
   and addressing each part at `+0x3A0` plus index times the `0xE0` stride, matching
   section 11.3's own layout exactly) and, per part passing a
   `part+0x44` type-bitmask test and a `part+0x4c == -1` ("is root") test, calls
-  **`FUN_00aaad50`** (331 bytes) with the part pointer directly. `FUN_00aaad50` is
+  **`0x00aaad50`** (331 bytes) with the part pointer directly. `0x00aaad50` is
   recursive -- it walks each part's children via `part+0x54`'s own array (section
   11.3's first nested-pointer field), reads `part+0x48` flag bits `0x2000`/`0x40000`,
   and accumulates min/max over `part+0x60`..`+0x7F` (two bbox vec4s) with SSE
   `MINPS`/`MAXPS`. **Neither function contains a single instruction touching
   `+0xC0` or `+0xC4` on any register** -- confirmed by an exhaustive instruction scan
-  of both bodies plus their own callees (`FUN_00583580`, `FUN_004c0170`,
-  `FUN_00533de0`): 0 hits in all five. **[CONFIRMED -- disassembly, full bodies.]**
-- **`FUN_00ab0730`** (724 bytes, "part -> rig-bone binding") reads the vehicle
+  of both bodies plus their own callees (`0x00583580`, `0x004c0170`,
+  `0x00533de0`): 0 hits in all five. **[CONFIRMED -- disassembly, full bodies.]**
+- **`0x00ab0730`** (724 bytes, "part -> rig-bone binding") reads the vehicle
   header's `+0x20` bone-remap byte array and `+0x390`/`+0x3E0` (part count and each
   part's name field, stride `0xE0`, offset by the name field's own `+0x40` position)
-  to resolve bone indices by name via `FUN_004bc880`. **Zero instructions touch
+  to resolve bone indices by name via `0x004bc880`. **Zero instructions touch
   `+0xC0`/`+0xC4`.** **[CONFIRMED -- disassembly, full body plus callees
-  `FUN_00753b90`, `FUN_004bc9c0`, `FUN_004bc880`, `FUN_004bc7d0`.]**
-- `FUN_00aaaea0` has exactly one caller *besides* the ctor, found by an unrestricted
-  binary-wide xref search (not an offset guess): **`FUN_0092d300`** (701 bytes,
-  called once, from `FUN_0092ff20` at `0x930197` -- a genuine runtime/post-construction
+  `0x00753b90`, `0x004bc9c0`, `0x004bc880`, `0x004bc7d0`.]**
+- `0x00aaaea0` has exactly one caller *besides* the ctor, found by an unrestricted
+  binary-wide xref search (not an offset guess): **`0x0092d300`** (701 bytes,
+  called once, from `0x0092ff20` at `0x930197` -- a genuine runtime/post-construction
   call site). It resolves a hardpoint/attach-target transform via a `switch` on a
-  type field and, in case 0, calls `FUN_00aaaea0` against a *different* object
+  type field and, in case 0, calls `0x00aaaea0` against a *different* object
   (read from that object's own `+0x10` field, not a part pointer) purely to get a bbox centre. **Zero
   instructions in its own 701-byte body touch `+0xC0`/`+0xC4`.** **[CONFIRMED --
   disassembly, full body; its own single caller also checked.]**
@@ -1751,30 +1755,30 @@ documents for this technique:**
    narrowed this to **38** functions. Of those, only **7** had a genuine
    (non-stack) `+0xC0`/`+0xC4` hit, and every one was individually read in full and
    ruled out:
-   - `FUN_00aaad50`/`FUN_00aaaea0` -- already covered by (A), clean.
-   - `FUN_00ab1080` (the ctor itself) -- its `+0xC4` use (`0xab119c`-`0xab11b1`) is
+   - `0x00aaad50`/`0x00aaaea0` -- already covered by (A), clean.
+   - `0x00ab1080` (the ctor itself) -- its `+0xC4` use (`0xab119c`-`0xab11b1`) is
      the **vehicle-header**-level fixup field this same file's own ctor-decompile
      comment already names (`"fixes up offset fields +0x10,+0x18,+0x28,+0x2c,+0x38,
      +0xbc,+0xc4"`) -- a different structural level from the per-part 64-byte record
      array, not a downstream consumer of it.
-   - `FUN_0043e420` -- already independently identified this session as Effects
+   - `0x0043e420` -- already independently identified this session as Effects
      (`71BW`-magic) format code, not vehicle code at all (`HANDOFF.md` section
      27.1's "Tree layout 11/13 declaration-builder caller" row).
-   - `FUN_004cea50` -- its `EBX+0xC0`/`+0xC4` pair is two floats on an
+   - `0x004cea50` -- its `EBX+0xC0`/`+0xC4` pair is two floats on an
      animation-blend/time object (`EBX` = a parameter tested at `+0x30` bit `0x10`,
-     feeding `CVTSS2SD`/`SUBSD` against a value from `FUN_004bc550`, the same
-     bone-lookup family as `FUN_00ab0730`'s callees but operating on an anim state,
+     feeding `CVTSS2SD`/`SUBSD` against a value from `0x004bc550`, the same
+     bone-lookup family as `0x00ab0730`'s callees but operating on an anim state,
      not a part).
-   - `FUN_00b75390` -- its `EBX+0xC0` is reached through a **double indirection**
+   - `0x00b75390` -- its `EBX+0xC0` is reached through a **double indirection**
      (the object at `EDI+8`, then the pointer at its `+0xC`, then that object's `+0xC0`) into an unrelated
      object amid dense SSE lerp/clamp math (`MULPS`/`CMPLTPS`/`ANDPS`) -- not the
      single-hop part-array addressing every genuine part consumer in this project
      uses.
-   - `FUN_00c81a90` -- reads `ESI+0x340` through `ESI+0x3B0` as eight consecutive
+   - `0x00c81a90` -- reads `ESI+0x340` through `ESI+0x3B0` as eight consecutive
      SSE quadwords (a bone/matrix-palette buffer) before writing `ESI+0xC0`; those
      source offsets alone exceed the part record's own `0xE0`-byte size, so `ESI`
      cannot be a part pointer.
-   - `FUN_00f10e40` -- reaches `ESI+0xC0` through C++ vtable dispatch
+   - `0x00f10e40` -- reaches `ESI+0xC0` through C++ vtable dispatch
      (an indirect call through slot `+0x14` of the `ECX` object's vtable) into what reads as a stat/event-counter object
      (it adds a register value into a dword counter at `+0x40`), unrelated to vehicle parts.
 
@@ -1790,7 +1794,7 @@ documents for this technique:**
 
    Note the technique's own blind spot, for completeness: a function that receives
    an *already-computed* part/record pointer as a parameter -- the exact shape
-   `FUN_00ab0ef0` itself uses, and the shape a genuine downstream consumer would
+   `0x00ab0ef0` itself uses, and the shape a genuine downstream consumer would
    most plausibly take -- carries no `0x3A0` literal of its own and cannot appear in
    this list. (A) is not subject to that blind spot, since it follows real xrefs
    regardless of how each callee's pointer arithmetic is written; (B) is reported
@@ -1801,7 +1805,7 @@ documents for this technique:**
 Between the ctor's own two downstream siblings (and their one further runtime
 caller) and a structurally-anchored scan of every function that actually computes a
 part-record address, no code was found anywhere in the binary that reads a resolved
-reference record's `+0x04` handle or `+0x00` kind field after `FUN_00ab0ef0`
+reference record's `+0x04` handle or `+0x00` kind field after `0x00ab0ef0`
 constructs it. **What the non-zero kind bands (1-4, 20-21, 50-51, 70-75, 135-137)
 denote remains OPEN** -- this task's own scope (named-function/call-graph tracing,
 explicitly not a literal-band search) has now been exhausted twice (11.11, this
@@ -1811,20 +1815,80 @@ disassembly-only tooling cannot perform) rather than a third static sweep of the
 same call graph. **[CONFIRMED -- disassembly, exhaustive within the scope described;
 OPEN -- the non-zero kind bands' meaning.]**
 
-*(Desk review 2026-09-30: the part fields read by `FUN_00aaad50`/`FUN_00aaaea0` above — `+0x44`, `+0x48` bits `0x2000`/`0x40000`, `+0x4C`, `+0x54` children, `+0x60`..`+0x7F` bbox — are now folded into §4; the `+0x60`..`+0x7F` bbox reading conflicts with §4's `+0x68` flag byte, marked there.)*
+*(Desk review 2026-09-30: the part fields read by `0x00aaad50`/`0x00aaaea0` above — `+0x44`, `+0x48` bits `0x2000`/`0x40000`, `+0x4C`, `+0x54` children, `+0x60`..`+0x7F` bbox — are now folded into §4; the `+0x60`..`+0x7F` bbox reading conflicts with §4's `+0x68` flag byte, marked there.)*
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (part fields folded into §4, `+0x68` conflict cross-referenced, instruction text reworded) — desk review (not re-derived from the executable).**
 
+## 12. Wheel/rim asset loading, door/panel geometry, and the render-pose bridge (2026-10-08)
+
+**Scope.** Direct follow-up to Team B's own report that their loader only ever extracts a vehicle's single embedded body mesh — `vehicle_genki` renders with an open cabin, no wheels, no doors. Three questions: (a) where a wheel/rim model actually comes from and how a `.cvtf_pc` wheel-style name maps to it; (b) whether doors/panels are a separate loaded asset like wheels; (c) whether the already-traced steer/spin/suspension render mechanism targets the same slot a loaded wheel mesh binds to. **A note on terminology before anything else, to avoid a real conflation risk:** everything in this section about `+0x80`/`+0x84` refers to fields of the **runtime render-object instance** built in memory from a part record — a different struct from the on-disk `0xE0`-byte part record §4 documents (whose own, unrelated `+0x80` field is a per-part scalar/Havok-shape handle, §11.11). The render-object's own `+0x80` field happens to be a pointer *to* that file-format record (its "static descriptor"); the two are related but structurally distinct, and this section always says "render-object `+0x80`" or "static descriptor" explicitly to keep them apart.
+
+### 12.1 Wheels/rims: one shared, hardcoded asset pair, not per-vehicle, not per-style-name files
+
+**Wheel and rim geometry does not live in any vehicle's own `.ccar_pc`/`.gcar_pc` pair.** It lives once, globally, in `vehicles_preload.vpp_pc`'s top-level `externalized_components.cvcomp_pc`/`.gvcomp_pc` (+ a `.cpeg_pc`/`.gpeg_pc` texture pair) — a single shared catalogue covering every vehicle. Direct extraction and decompression of `externalized_components.cvcomp_pc` found a flat list of ~90 literal rim-style tokens (`R100`-`R254`, sparse, not contiguous) — the exact bare-token family (`R125` etc.) a vehicle's own `.cvtf_pc` Region 3 style preset names with `_F`/`_R` suffixes (§5.1 of `spec-geometry-format.md`: `R_125_F`/`R_125_R`). **[CONFIRMED — direct extraction of the real shipped file.]**
+
+**This reuses existing machinery, not a new format.** The literal string `"externalized_components"` occurs exactly once in the whole executable, used by exactly one function, `0x00aa93e0`, which hardcodes all four filenames (bypassing the generic 43-type resource-registration dispatcher entirely — this extension never appears in that registry) and calls `0x00ab1680`, whose own call sequence is, instruction for instruction, the same chain the real `.ccar_pc` constructor uses: the same PEG texture validator (`0x00dcefa0`) every other `.cpeg_pc`/`.gpeg_pc` pair uses; the same Mesh sub-block parser, `0x007527b0` (§8 of `spec-geometry-format.md`, the identical function this document's own §1 already documents `.ccar_pc` embedding at its own header `+0x04`); and the same two part-hierarchy remap functions, `0x00aaf690`→`0x00ab0ef0`, this document's own §5 already names as the vehicle constructor's own part-reference-record remap step. **A wheel/rim style resolved this way is an ordinary part record of the exact `0xE0`-byte format §4 already specifies** — nothing new to reverse-engineer for the record layout itself, confirmed directly: the by-name lookup, `0x00aa9590(name)`, returns `index * 0xE0 + 0x30 + catalogueBase`, the identical part-record stride. The container's own leading header reads `15`, not the `0x38` the real `.ccar_pc` constructor requires — confirming `0x00ab1680` is a sibling driver with its own shorter header, not the registered constructor reused unchanged; everything downstream of that header is the same code, confirmed by address. Lifecycle: loaded once at vehicle-system bring-up (`0x00aa93e0`'s sole caller, `0x00ac2010`) and torn down once at shutdown (`0x00aa9450`, from `0x00ac16c0`) — not per-vehicle, not per-frame. **[CONFIRMED — disassembly, every hop address-for-address against already-documented machinery.]**
+
+**Numeric cross-check, exact, against the real `vehicle_genki` DLC sample.** `car_4dr_genki.cvtf_pc` (`dlc1.vpp_pc`), read per `spec-geometry-format.md` §5.1's own 48-byte header formula with that section's documented "+8" fixup applied to the offset *fields themselves* (the one-file hex check that section had asked for, now done): 45 wheel-profile name entries, split exactly **20 front (`_F`) / 25 rear (`_R`)** — the task's own reported figure, confirmed byte-for-byte on the named golden sample, not assumed from a different vehicle. **Correction for `spec-geometry-format.md` §5.1 (not applied there — scratch-only per the one-direct-editor rule, flagged here for that file's own next edit):** these 45/7-entry arrays are offset fields themselves, needing the file's global `+8` fixup applied to the header field's *value* before reading the array (`realArrayStart = headerFieldValue + 8`) — not read as an already-absolute file offset. **[CONFIRMED — direct extraction, exact population match.]**
+
+**Naming precision:** the 20/25 `W_0NN_*_*_Profile` names are wheel/tire-profile shapes (height × axle), resolved via the Component-name resolver `0x00a96040` (`spec-tables-vehicle-world.md` §5.2) — a different customization axis from the bare `R1NN` rim-style tokens living inside `externalized_components.cvcomp_pc` itself. Both ultimately resolve through the same `externalized_vehicle_components.xtbl` `Component` catalogue (`spec-tables-vehicle-world.md` §7) and the same shared `.cvcomp_pc`/`.gvcomp_pc` container — a wheel style is "profile shape + rim skin" layered together, not one flat name.
+
+**For Team B:** point the loader at `vehicles_preload.vpp_pc`'s `externalized_components.cvcomp_pc`/`.gvcomp_pc` (+ its texture pair) using the SAME Mesh-sub-block + part-record reader already written for `.ccar_pc`/`.gcar_pc` — this is not a new format to implement. Resolve an equipped wheel/rim name against this file's part-name list the same way any other by-name part lookup works (§6).
+
+### 12.2 Doors/panels: ordinary parts of the vehicle's own file, not a separate asset like wheels
+
+**Unlike wheels, door/panel geometry needs no additional asset load.** Part type 4 ("hinged/openable panels" — `hood`, `trunk`, `door_r`, `door_l`, §4.1, 1,606 records population-wide) are ordinary part records inside each vehicle's OWN `.ccar_pc`, bound to rig bones the same way as everything else (§6). Confirmed directly: the shared externalized-components container's own string content (§12.1) is wheel/tire-texture names and rim tokens only — nothing door- or hood-shaped. **If Team B's loader only reads the single embedded body mesh and never walks the part array (header `+0x390` count / `+0x3A0` records, §4), that is the likely fix for missing doors/panels — not a missing file.**
+
+**What remains genuinely open — unchanged from §7.2 Q2, not newly discovered or newly solved:** whether each part (door included) selects its own geometry subset out of the vehicle's one combined embedded mesh, or whether door panels are simply part of that one mesh's geometry already and only need their own `+0x00` 4×4 transform applied to hinge correctly. §7.2 Q2's own standing caution applies unchanged: **"is the material set scoped per-part? — not established; do not assume it."** This is the same still-partially-open series as §11.1-§11.12 (draw-range/material association) — this pass did not advance it, and flags it as the next thing to chase if doors/panels are still missing once the loader walks the part array.
+
+**One small piece of the §4 part-record pointer fields resolved as a byproduct of §12.3 below:** render-object `+0x54` (the runtime render-object's own cached-bone-slot field, not a §4 file-format offset) is written, on part equip/attach, from one of three vehicle-level cached bone values (`vehicle+0x968`/`+0x96c`/`+0x970`), selected by the attached part's own type — `+0x970` specifically for part types `3`/`0x17`/`0x18` (all three rear-wheel types per §4.1's own table), the other two cases sharing `+0x96c`/`+0x968`. This explains one bone-slot field; the other seven part-record pointer fields (§4) and the draw-range segmentation series (§11) remain exactly as open as before.
+
+**Honest framing for Team B, in order of how cheaply each is to check if doors are still missing after fixing the above:** (1) the loader never walks `+0x390`/`+0x3A0` at all (cheapest fix, the data is already in the file); (2) the loader walks parts but never applies each part's own `+0x00` 4×4 transform, so hinge-bound geometry sits at its raw encoded pose rather than the closed resting pose; (3) the still-open per-part/draw-range segmentation question above. Which of the three is actually true for Team B's own renderer cannot be determined from the executable alone.
+
+### 12.3 The render-pose bridge: steer, suspension, spin, and where a loaded wheel mesh actually attaches
+
+**Headline: there is no single "wheel render" function.** Steer, spin and suspension are three separate, address-distinct mechanisms of differing confidence, and §12.1's wheel-equip path and the pose mechanism below meet at exactly one function — closing this document's own prior gap on "where does an equipped wheel's geometry actually attach for posing."
+
+**Steering — formula CONFIRMED, primary-wheel render call site not pinned.** `0x00a926b0(vehicle)` is the generic current-steering-angle getter: for ordinary wheeled vehicles (kinds 0-2, and bikes), it returns the float at offset `+0x130` of the per-vehicle "handling" sub-object, whose own pointer is stored at vehicle `+0x808` — written somewhere in the already-documented Havok driving-slice steering path (`spec-physics-runtime.md` §10.1, writer not traced this pass). `0x00b21b90(vehObj, outPosition, outRotation, isRightSide)` builds one wheel/handlebar side's visual position+rotation: `visualAngle = sign * -0.5 * vehicleType[+0x5c0] * steerAngle`, built into a quaternion (`0x00da3ca0`→`0x00da45d0`, the `-0.5` half-angle factor being the standard quaternion convention), with position offset along the local right axis by a per-wheel lateral constant. **This formula is solid and directly reusable for a cleanroom implementation**, but all 3 static callers of `0x00b21b90` turned out to be gameplay heuristics (tire-mark/stopping-distance prediction, motorcycle wheelie detection), not the render path — the actual per-frame call site writing this into a bike's handlebar/front-wheel bone is very likely reached through the bike's own vtable (the function opens with a virtual call) rather than a direct call this scan's xref listing would show. For cars, the already-documented 6 named animation-controller parameters (`spec-anim-runtime.md` §10.3) include no wheel-steer parameter, confirming car wheel-steer is NOT delivered through that system — consistent with the override-matrix mechanism below. **[CONFIRMED for the formula; OPEN for the primary-wheel/car render call site and the handling-cache writer.]**
+
+**The primary 4-wheel mechanism — an override-matrix pointer swap, mechanism found, writer now found (§12.1 closes it).** Inside the generic post-compose per-part loop (`0x00a76690`/`0x00a76550`), a part's bone-matrix source is chosen as: read the part's static descriptor (render-object `+0x80`); if `descriptor+0x4c != -1` (HIGH-CONFIDENCE a Havok wheel index 0-7, by analogy with the confirmed suspension function below) AND a runtime render flag (`+0xf0` bit `0x2000`) is set, substitute an ALTERNATE matrix pointer at render-object `+0x84` instead of the normal composed-skeleton pose. **§12.1's equip handler closes the "who writes `+0x84`" question this document previously could not answer:** `0x00a99130` (a real "equip a customization component" handler — resolves a CVTF-equipped style name via §12.1's `0x00aa9590`, walks the live vehicle's render parts by type) calls **`0x00a8de70`**, which writes render-object `+0x80 = <the vehicle's own native part-record pointer, unchanged>` and **`+0x84 = <the externalized-catalogue part just resolved by name>`** — exactly the override-matrix slot. **This is a direct, address-level confirmation that equipping a wheel/rim lands in the exact same render-object slot the steer/suspension pose mechanism already targets** — there is no separate "wheel mesh bone" to find; it is the identical part slot, content switched at equip time from the vehicle's own default geometry to the resolved shared-catalogue geometry. **What remains open, narrowed by this finding, not closed by it: who computes and writes the steer/spin/suspension NUMBERS through this same `+0x84` slot every frame** (as opposed to the equip-time content swap, which is now fully traced) — the search is now "who else writes render-object `+0x84` besides `0x00a8de70`" rather than "does this field even get written." **[CONFIRMED — disassembly, the full equip→splice chain `0x00a99130`→`0x00a8de70`; HIGH CONFIDENCE, not independently disassembled, for `descriptor+0x4c` specifically meaning "Havok wheel index" (inferred by the identical field/pointer pattern in the suspension function below); OPEN — the per-frame writer of the steer/spin/suspension values themselves.]**
+
+**Suspension — CONFIRMED for secondary/dual-axle wheel sets, mechanism likely shared with primary wheels.** The top-level per-vehicle visual-pose driver, `0x00a85ec0` (called once/frame from `0x00ac3610`→`0x00ac54b0`), runs a second per-part loop (separate from the generic skeleton-pose loop above) that, for part-kind 6/0x18 (additional axles, gated on vehicle flag `+0x551`), calls `0x00a89470`: resolves the part to a Havok wheel slot 0-7 via `descriptor+0x4c` against an 8-entry table at `vehicle+0x68c`, reads a target value from the SAME `0xE0`-stride per-wheel Havok array `spec-physics-runtime.md` §10 already documents (a newly-identified field, `+0xc0`, strong candidate: current suspension-compressed length), and eases a smoothed per-part visual value toward it (5% exponential ease per unit time, scaled by frame dt — a damped approach, not a raw 1-frame snap). **A cleanroom implementation reproducing correct-looking suspension bounce should ease toward the Havok value the same way, not copy it directly.** Whether PRIMARY wheels (types 2/3/18/22/23, which fall to this loop's default/no-op branch) use this same function or have their suspension baked directly into the `+0x84` override matrix above is unresolved — flagged explicitly so the case-number correspondence between this runtime switch and the file-format part-type enum is never assumed identity. **[CONFIRMED — disassembly, full decompile, for secondary/dual-axle wheel sets; OPEN — whether primary wheels share this mechanism or a sibling, and field `+0xc0`'s exact relationship to `spec-physics-runtime.md` §10.4's own suspension formula.]**
+
+**Wheel spin — NOT FOUND, honest negative result.** No rolling-angle accumulator or its bone write was located. Consistent with everything already confirmed (`spec-physics-runtime.md` §10.5: wheels are raycast/AABB line-segment tests, not simulated Havok rigid bodies, so spin must be a separately-accumulated visual angle, not read off a body) but not independently confirmed as a formula. Most likely location, per the override-matrix finding above: whatever writes render-object `+0x84` per frame for the primary 4 wheels may assemble steer+spin+suspension as one consolidated "build this wheel's full local transform" function, rather than three separate mechanisms the way bikes/secondary-axles have — narrowing, not finding, the search. **[Honest negative — not found this pass.]**
+
+**Frame order:** the visual-pose driver (`0x00a85ec0`, via `0x00ac3610`) is architecturally a sibling of the Havok physics step (`spec-physics-runtime.md` §4), not nested inside it — `0x00ac3610` does not itself call the physics pre-collision entry `0x00ac3f40`. Every render-side function found this pass reads already-finalized cached values off the per-vehicle `handling` object (`vehicle+0x808`) rather than recomputing them, the natural signature of "physics runs to completion, leaves results in a stable cache, render reads afterward" — a well-supported architectural conclusion, not a byte-exact ordering proof.
+
+**A corrected prior reading, for the record:** open item 41 (`spec-anim-runtime.md` §5.1, flagging `0x00a76690` step 5 as possibly wheel-spin/suspension/turret/landing-gear) is REFUTED as wheel-related — it is a generic "cache the vehicle's anchor bone's world transform for other systems to query" mechanism (reads the composed pose for the reserved `remap[0]` anchor-bone slot, not a wheel). Already resolved and spliced into `spec-anim-runtime.md` directly; restated here only as context for why §12.3 does not revisit it. Separately, a prior-session reading of `0x00abf740` as a matrix writer is corrected: it is a visited/dirty bitmask flood-fill over attached children, running immediately AFTER the real matrix write at every site — the real sink is `0x004c00d0` (called immediately before it everywhere), not independently opened this pass (next step for anyone continuing: read it in full, it is the literal final bone-matrix-to-mesh-instance write).
+
+**Evidence anchors:** `0x01181dec` (sole `"externalized_components"` string); `0x00aa93e0`/`0x00ab1680` (hardcoded loader + real driver); `0x00aa9590`/`0x00aa94c0` (by-name lookup); `0x00a99130`/`0x00a8de70` (equip handler + the render-object `+0x80`/`+0x84` splice); `0x00a945f0` (per-part-type match predicate, not independently opened); `0x00a926b0`/`0x00b21b90` (steering query + visual formula); `0x00a76690`/`0x00a76550` (generic per-part pose loop, override-matrix check); `0x00a85ec0`/`0x00a89470` (top-level visual-pose driver + secondary-axle suspension damper); `0x00abf740`/`0x004c00d0` (dirty-propagation vs. the real commit sink). Full detail, every address, and the real extracted-file bytes behind §12.1: `scratchpad/vehicle_wheel_render_pose_2026-10-08.md` (original pose material + its own "ADDENDUM" top section, loading chain).
+
+**Review status (2026-10-08): CONFIRMED for §12.1's loading chain (direct file extraction + address-for-address disassembly against already-documented machinery), §12.3's equip→override-matrix splice, and the steering/suspension formulas; HIGH CONFIDENCE for `descriptor+0x4c`'s specific "Havok wheel index" meaning and the primary-wheel/secondary-wheel suspension-sharing question; OPEN, honestly, for the per-frame steer/spin/suspension writer of render-object `+0x84` and the §12.2 per-part/draw-range segmentation question (unchanged from §7.2 Q2) — independently re-derived from the executable and the real shipped game files.**
 
 ## Changelog
 
+- **2026-10-09 — §7.1 item 2's long-standing runtime-paint-writer OPEN item ANSWERED** (SPEC TEAM, agent
+  `a68a2a0cc661fd568`, re-run after a rate-limit kill, independently re-verified address-for-address
+  same-day). The material record's own array-C paint value is never overwritten at runtime — the
+  material binder has exactly 2 callers in the whole executable, neither reached from the player's
+  paint-shop apply path. Instead, picking a swatch writes into a wholly separate, generic, per-vehicle-
+  instance "applied customization option" tree (rooted at the driven vehicle's own `+0xa88` field,
+  gated on its `+0xbd0` "am I the one being driven" byte) — the two systems are proven architecturally
+  separate. How a value in that tree reaches the live shader registers at draw time is a new, genuine,
+  bounded OPEN item, tracked at `spec-render-pipeline.md` §20.12.16 (which also independently confirms
+  vehicle paint is a flat shader constant, never a texture — Team B's flat-colour-swatch rendering is a
+  faithful simplification). Full detail: `scratchpad/vehicle_paint_material_texture_2026-10-09.md`.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-08 — new §12: wheel/rim asset loading, door/panel geometry, and the render-pose bridge** (SPEC TEAM, agent `a0621230accc40242`, relayed from Team B via the coordinator — their loader only reads a vehicle's single embedded body mesh, `vehicle_genki` renders with an open cabin, no wheels, no doors). **§12.1: wheel/rim meshes are NOT per-vehicle or per-style-name files** — they live once, globally, in `vehicles_preload.vpp_pc`'s `externalized_components.cvcomp_pc`/`.gvcomp_pc` (+ texture pair), confirmed by direct extraction of the real shipped file (a flat ~90-entry `R100`-`R254` rim-token list) and by tracing the loader (`0x00aa93e0`→`0x00ab1680`) address-for-address to the SAME Mesh sub-block parser and part-remap functions the real `.ccar_pc` constructor already uses — not a new format. By-name lookup `0x00aa9590` confirmed to return an ordinary `0xE0`-byte part record (§4's own stride). Numeric cross-check exact on the real `vehicle_genki` DLC sample: 20 front/25 rear wheel-profile names, byte-for-byte. Flags a correction for `spec-geometry-format.md` §5.1 (the 45/7-entry arrays are offset FIELDS needing the file's own `+8` fixup applied to the field value, not already-absolute offsets) — not applied there, scratch-only per the one-direct-editor rule. **§12.2: doors/panels are ordinary parts of the vehicle's own `.ccar_pc`**, not a separate asset like wheels — ties Team B's missing-door symptom most likely to the loader never walking the part array (`+0x390`/`+0x3A0`), not a missing file; the §7.2 Q2 per-part material-scoping question remains exactly as open as before. **§12.3: the render-pose bridge** — confirms the already-traced steer/suspension override-matrix mechanism (render-object `+0x80`/`+0x84`) is the EXACT slot a wheel-equip operation (`0x00a99130`→`0x00a8de70`) writes into, closing this document's "who writes `+0x84`" question for the equip-time content swap (the separate per-frame numeric writer for steer/spin/suspension values remains open, §10 item 12). Also includes the steering formula (`0x00a926b0`/`0x00b21b90`), the secondary-axle suspension damper (`0x00a89470`, confirmed 5%-per-unit-time eased approach to the Havok value, not a raw snap), an honest wheel-spin negative (not found), and a frame-order conclusion (render pose is a sibling of, not nested in, the Havok physics step). Restates (does not re-derive) the already-spliced `spec-anim-runtime.md` §5.1 item 41 REFUTE. Full detail, every address, and the real extracted file bytes: `scratchpad/vehicle_wheel_render_pose_2026-10-08.md`. Cleanroom self-check: 0 strict hits, unchanged. Synced to Team B.
+
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 2 cross-references (§8.4.1→`spec-vertex-format.md` §8.4.3; "line 955-956"→§11.9.2); marked stale text superseded in place (§7.1 `+0x0C` "upper bound" and `high16` "part index", §4 `+0xC0`/`+0xC4` material-reference reading downgraded per §11.7); marked 6 stale OPEN/HYPOTHESIS items resolved (§7.1 paint source, §10 items 7 and 10, §11.5 amendment row, §11.6 "enumeration" OPEN, and superseded-notes under the §11.6/§11.9.8/§11.10 headings); added pointers to `spec-vertex-format.md` §4.2's 388/388 replay at §7 and §10 item 5 (labels unchanged); reworded 3 decompiler-shaped lines (§11.7, §11.9.2, §11.11).
 - 2026-09-30 (cloud, self-containment pass): restated 1 load-bearing HANDOFF/WALLS-only fact inline (§11.6: the "zero static `CreateVertexDeclaration` calls" premise marked REFUTED per `WALLS.md`, citing `spec-render-pipeline.md` §4/§8); repointed 4 `HANDOFF.md` §27.x references to the archived headings (§7.1 §27.8 → §36 item 27.8; §11.5, §11.12 ×2 §27.4 → `WALLS.md` / §36 item 27.4); 5 left (see review).
-- 2026-09-30 (format-spec desk review, `review/adv_vehicle_geometry.md`): added review-status lines to 36 units and a summary; superseded §7.2 Q3 / §7.1 item 2 paint-source answer (`Base_Paint_Color` lives in the vehicle's own material record, array B hash / array C `Vector4` — `spec-render-pipeline.md` §20.12.6, `team-b/HANDOFF.md` §9.106); marked the stale 86/86 label (§7.1) and the §7 "Materials (original entry)" hypothesis superseded; added §4 rows `+0x50` (OPEN), `+0x60`–`+0x7F` (from §11.12) and `+0x80` (from §11.11), with a CONFLICT marker against the `+0x68` flag byte; listed the uncharacterised §3 header spans and flagged the `30/386`/`347` denominators; added the sub-header 16-alignment finding (§3, OPEN in general); flagged §11.9.5 ×4×4 = `0x10` ≠ `0x14`, the §11.9.3 8+3 = 11 vs 10-site recount, and the §11.7/§11.11 `FUN_00760c30` return-value conflict; stated Team B population scopes (parts 372/372, 9,536; 393/393 only for channel decode, bindings, `high16` join); corrected the front-matter cleanroom statement; reworded raw instruction text, pseudocode cells and `PTR_FUN_`/`_DAT_` auto-labels to prose/addresses (§11.7, §11.9.1, §11.9.2, §11.11, §11.12).
+- 2026-09-30 (format-spec desk review, `review/adv_vehicle_geometry.md`): added review-status lines to 36 units and a summary; superseded §7.2 Q3 / §7.1 item 2 paint-source answer (`Base_Paint_Color` lives in the vehicle's own material record, array B hash / array C `Vector4` — `spec-render-pipeline.md` §20.12.6, `team-b/HANDOFF.md` §9.106); marked the stale 86/86 label (§7.1) and the §7 "Materials (original entry)" hypothesis superseded; added §4 rows `+0x50` (OPEN), `+0x60`–`+0x7F` (from §11.12) and `+0x80` (from §11.11), with a CONFLICT marker against the `+0x68` flag byte; listed the uncharacterised §3 header spans and flagged the `30/386`/`347` denominators; added the sub-header 16-alignment finding (§3, OPEN in general); flagged §11.9.5 ×4×4 = `0x10` ≠ `0x14`, the §11.9.3 8+3 = 11 vs 10-site recount, and the §11.7/§11.11 `0x00760c30` return-value conflict; stated Team B population scopes (parts 372/372, 9,536; 393/393 only for channel decode, bindings, `high16` join); corrected the front-matter cleanroom statement; reworded raw instruction text, pseudocode cells and Ghidra auto-generated labels to prose/addresses (§11.7, §11.9.1, §11.9.2, §11.11, §11.12).
 - 2026-10-03 (local, executable re-derivation of §11.11 step 3, checking `review/scoping-physics-vehicle.md` §6; private Ghidra copy `tools\gp_havokfup`, deleted afterwards; RTTI read with `tools/harnesses/exe_va.py`):
-  - **Step 3 — CONFIRMED (disassembly + RTTI).** Vtable `0x01243174` is `.?AVhkpBoxShape@@`, so `FUN_00d4d7f0` is Havok's box-shape constructor and `FUN_00ab0a10` builds a Havok box collision shape for the part. Struck the "second, stack-local object" and "copies/clamps … from a global constant" wording: the shape is step 2's heap block, `+0x2c` takes the minimum half-extent, and the radius comes from the runtime-written global `0x0131e81c`.
+  - **Step 3 — CONFIRMED (disassembly + RTTI).** Vtable `0x01243174` is `.?AVhkpBoxShape@@`, so `0x00d4d7f0` is Havok's box-shape constructor and `0x00ab0a10` builds a Havok box collision shape for the part. Struck the "second, stack-local object" and "copies/clamps … from a global constant" wording: the shape is step 2's heap block, `+0x2c` takes the minimum half-extent, and the radius comes from the runtime-written global `0x0131e81c`.
   - **Steps 1–2 refined.** Half-extents are B's X, 0.8 × B's Y and B's Z; the `+4` value `0x30` is a size, not a type.
   - **Step 4 narrowed, still OPEN.**
   - **Also updated:** the §11.11 review-status line, the summary's NEEDS-EXE list, and the §4 `+0x80` row (bracket added).
   - **Cross-reference:** `spec-physics-format.md` §4.3 now points here; this is a different path from `.clmesh_pc`, so it does not close that question.
-  - **Not touched:** the `FUN_00760c30` CONFLICT.
+  - **Not touched:** the `0x00760c30` CONFLICT.

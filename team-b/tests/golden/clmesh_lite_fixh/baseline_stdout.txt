@@ -7,7 +7,7 @@
 [renderGroup 0] flags=0x01 channels=1 indexCount=145 drawGroupsLocated=1
   range materialId=0 submeshIndex=0 startIndex=0 indexCount=9 minVertex=96 maxVertex=103
   range materialId=1 submeshIndex=0 startIndex=9 indexCount=136 minVertex=0 maxVertex=95
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (software) (Microsoft Basic Render Driver)
   texture[mat 0]: lightfixtures_d.tga from lightfixtures_d.cvbm_pc (256x256, BC1_UNORM)
   texture[mat 1]: lightfixtures_d.tga from lightfixtures_d.cvbm_pc (256x256, BC1_UNORM)
   texture[mat 2]: no real texture binding at all - flat colour

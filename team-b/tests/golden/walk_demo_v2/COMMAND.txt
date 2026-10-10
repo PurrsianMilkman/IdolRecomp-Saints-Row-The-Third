@@ -1,0 +1,109 @@
+Golden scene: walk_demo_v2, consolidated `walk --v2` demo - ALL FOUR walk-demo fixes
+together for the first time (sr3_viewer `walk --v2`)
+========================================================================================
+
+FROZEN 2026-10-08 (walk_demo_v2 consolidated-capture task, orchestrator request) - the
+first-ever capture of `walk --v2` with all 4 of this session's independently-landed fixes
+present at once on main's current tip (d6844a6, past 45f9899). Each of the 4 fixes was
+previously tested in isolation, in its own now-deleted worktree, with its own gitignored
+baseline that only reflected that one fix: (1) headless-brad texture-loading fix (FIX 1
+in runWalkDemo()'s own "V2" doc comment, tools/sr3_viewer.cpp), (2) black-ground fix
+(the unconditional ground/terrain reconciliation, "FIX 4" in the same doc comment - see
+walk_demo/COMMAND.txt's own note on why THIS scene's ground still renders black: a real
+data limitation, not a missed fix), (3) the character-proxy collision system (`--collision`,
+opt-in, see below), (4) the real `sr3animpose` pose-compose/skinning library replacing the
+old rigid T-pose render. This is the first capture with all 4 present simultaneously.
+
+THIS DIRECTORY = the WARP-forced, ctest-gated baseline, WITHOUT --collision, matching
+tools/golden_scene_check.cpp's checkWalkDemoV2Scene() hardcoded command EXACTLY (that
+check function was already wired up by an earlier task and expects no --collision - see
+its own doc comment, "the frozen tests/golden/walk_demo and tests/golden/walk_demo_v2
+baselines pass neither --collision nor anything that would change pm.collisionHook, so
+BOTH stay byte-for-byte unchanged", tools/sr3_viewer.cpp's own --collision doc comment
+confirms the same). A SEPARATE sibling, tests/golden/walk_demo_v2_hw_pre_warp/, carries
+the --collision-enabled, real-HARDWARE-rendered capture the orchestrator specifically
+asked for to show the human user - see that directory's own COMMAND.txt for why it is a
+separate directory rather than a hand-edit of this one.
+
+Real command (run with cwd = tests/golden/, same convention every other baseline in this
+directory tree uses; SR3_FORCE_WARP=1 in the environment, this project's standing policy
+for the ctest-gated baseline):
+
+    <sr3_viewer.exe> walk \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\characters.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        --no-input --frames 80 --v2 --capture _work/walk_demo_v2 --capture-frames 0,15,30,45
+
+No --eye/--yaw/--pitch: --v2 ignores them for the render view (the real follow camera
+drives the capture instead - FIX 2, see runWalkDemo()'s own "V2" doc comment).
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh this session from
+tools/sr3_viewer.cpp via the normal top-level CMake build (both sr3_viewer and
+golden_scene_check are now real CMake targets, CMakeLists.txt:1019/1844).
+
+SANITY CHECKS PERFORMED (visual inspection, mandatory per this project's golden-scene
+convention, not skipped):
+  frame 0  - Brad in a starting stance (arms slightly out from the body), NOT headless,
+             NOT floating, NOT upright-T-pose-locked. Real per-material textures bound
+             (dark suit jacket/trousers, skin-tone head/hands - FIX 1) - confirmed
+             directly against this run's own stdout: "character: 5 real material(s),
+             resolving real diffuse textures" / "mat 0: Brad_SM_Upper_D.tga" etc. (the
+             head's own single material, "missing.tga", is UNRESOLVED/flat-colour - an
+             honest, stated gap, not hidden - hence the red head in every frame).
+  frame 15 - genuine mid-stride pose: forward leg bent, trailing arm swung back behind
+             the body - visibly different from frame 0's stance, confirmed by direct
+             comparison of the two PNGs, not assumed from the node-graph's own weight
+             numbers alone.
+  frame 30 - continued walking gait: opposite-leg/opposite-arm swing from frame 15,
+             consistent with a real alternating stride, not a static or looping-identical
+             pose.
+  frame 45 - mid-turn stance (the scripted sequence's 'turning' phase - see runWalkDemo()'s
+             own NOTE on this not being a true turn-in-place): both hands drawn in close
+             together, one leg lifted/bent - a dynamic, clearly non-T-pose silhouette.
+  Ground: solid black under Brad's feet in all 4 frames - NOT a missed fix. This run's own
+  stdout carries the 3 "[ground] frame 0 tile NNNN: SKIPPED (no real ground rendered):
+  ... no block carries a vertex-layout-code-0 channel" lines - the ground-fix code path
+  DOES run (unconditionally, FIX 4) but this scene's 3 resident tiles (0916/1015/1016)
+  genuinely have no renderable ground geometry at this location, same real, measured
+  finding walk_demo/COMMAND.txt documents for v1. A future tile with real ground data
+  would legitimately change this baseline's pixels - not a regression if it ever happens.
+  Collision: --collision NOT passed in this directory's own command (see above) - N/A
+  here by design; see walk_demo_v2_hw_pre_warp/COMMAND.txt for the --collision capture
+  and its own finding (no wall reached in this capture window, trajectory byte-identical
+  either way - confirmed directly, not assumed).
+
+Determinism / WARP vs hardware: this directory's own 4 PNGs + stdout were captured with
+SR3_FORCE_WARP=1 (device line reads "WARP (software) (Microsoft Basic Render Driver)").
+Diffed this session's own WARP-no-collision stdout against the hardware-collision stdout
+captured for the sibling directory: the ONLY differences are the "device" line itself and
+individual "NNN ms"/"N.N s" wall-clock timing fields - every player-position/heading/
+locomotion/playback-rate/follow-cam field, on every captured frame, is byte-identical
+between the two runs. checkWalkDemoV2Scene() therefore uses compareTextMaskingTiming()
+for the stdout comparison (masks only the timing fields), same treatment as every other
+scene in this directory tree with per-cell load-time text.
+
+Frozen here:
+  baseline_capture_frame0.png  (MD5 9167a0b7434da7dd8b30d32b2cf20332)
+  baseline_capture_frame15.png (MD5 b1450eb5f70272c4b094dc160edd9e6a)
+  baseline_capture_frame30.png (MD5 4c7914a0cde04b4bbb707d153b991cde)
+  baseline_capture_frame45.png (MD5 ab032f277cc07566aa6c2cee7d070531)
+  baseline_stdout.txt - sr3_viewer's own real stdout for this exact invocation.
+
+Re-run and check with: tools/golden_scene_check.cpp's checkWalkDemoV2Scene().
+
+
+================================================================================
+UPDATED 2026-10-08 (spec-zone-data-format.md Sec13.2 spec-sync task): same
+stdout wording fix as walk_demo/COMMAND.txt's own 2026-10-08 note above
+(loadCityGroundTile()'s layout-code-0-only channel selection was a real bug,
+now also accepts layout code 2 per Sec13.2's real road-textured `0x2237`
+population finding) - the 3 "[ground] ... SKIPPED" lines reword "no
+layout-code-0 channel" to "no layout-code-0/2 channel". All 4 frames
+re-captured and MD5-diffed directly against this fix - byte-identical to the
+4 MD5s above in every case, since this scene's own 3 resident tiles still
+genuinely carry 0 Mesh sub-blocks in their BASE zones (re-confirmed, not
+assumed - see walk_demo/COMMAND.txt's own 2026-10-08 note for the full
+account). Ground stays solid black in all 4 frames for the same honest,
+real-data reason already documented above - not a bug, not changed by this
+fix.

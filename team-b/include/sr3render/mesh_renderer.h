@@ -198,9 +198,31 @@ public:
     // parameter is purely additive). A null `tint` with mode == FlatTint
     // draws black (the constant buffer's zero-initialised default), not a
     // guessed colour.
+    //
+    // `sunDirection`/`ambientColor`/`sunColor` (this task, 2026-10-08, sky/
+    // lighting/TOD - spec-tables-environment.md Sec18's weather/TOD runtime
+    // blend, include/sr3render/tod_lighting.h): REPLACE the shared pixel
+    // shader's old fixed "headlight" term (CHOSEN direction (0.3,0.5,-0.8),
+    // shade = 0.35 + 0.65*lambert applied as ONE scalar to all 3 channels)
+    // with a real sun-direction-driven diffuse term PLUS a genuine ambient
+    // colour term, each a full RGB value rather than one shared scalar. ALL
+    // THREE default to null, which reproduces the OLD fixed term BYTE-FOR-
+    // BYTE (see src/mesh_renderer.cpp's kDefaultSunDirection/
+    // kDefaultAmbientColor/kDefaultSunColor: (0.3,0.5,-0.8) / (0.35,0.35,
+    // 0.35) / (0.65,0.65,0.65) - substituting these into the new per-channel
+    // formula collapses it back to the exact old scalar formula) - so every
+    // PRE-EXISTING call site (none of which passes these new trailing
+    // parameters) renders pixel-for-pixel identically to before this task.
+    // Only tools/sr3_viewer.cpp's runPlaytest() passes real, non-null values
+    // (computed per frame by sr3render::ComputeTodLighting()) - see that
+    // function's own doc comment for which spec-confirmed table fields feed
+    // them and which parts are this task's own CHOSEN, explicitly-labelled
+    // choices (sun direction has no spec-confirmed source at all - Sec18 is
+    // a substantiated negative there).
     void draw(ID3D11DeviceContext* context, const float viewProjection[16], MeshDrawMode mode,
               ID3D11ShaderResourceView* texture, const float world[16] = nullptr,
-              const float tint[4] = nullptr);
+              const float tint[4] = nullptr, const float sunDirection[3] = nullptr,
+              const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr);
 
     // Textured draw with ONE TEXTURE PER MATERIAL, issuing a separate
     // indexed draw per draw range and binding that range's material
@@ -211,10 +233,14 @@ public:
     // would render a plausible, silently wrong character - the failure a
     // screenshot cannot catch (HANDOFF §9.18).
     // See draw()'s comment for what `world` does and why it is composed
-    // CPU-side rather than added to the shader's constant buffer.
+    // CPU-side rather than added to the shader's constant buffer, and for
+    // what `sunDirection`/`ambientColor`/`sunColor` do (same byte-for-byte-
+    // unchanged-by-default contract when null, every pre-existing call
+    // site).
     void drawTextured(ID3D11DeviceContext* context, const float viewProjection[16],
                       const std::vector<ID3D11ShaderResourceView*>& perMaterial,
-                      const float world[16] = nullptr);
+                      const float world[16] = nullptr, const float sunDirection[3] = nullptr,
+                      const float ambientColor[3] = nullptr, const float sunColor[3] = nullptr);
 
     // Bounding box of the uploaded positions, for framing a camera.
     const float* boundsMin() const { return boundsMin_; }

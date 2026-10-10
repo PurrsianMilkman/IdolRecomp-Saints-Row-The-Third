@@ -1,16 +1,27 @@
 // The tutorial name table (spec-lua-api-behaviour.md Sec26.28, batch
-// 2026-10-01): the 210 strings the static, file-backed pointer table at
+// 2026-10-01; Sec6.19's own full re-transcription, 2026-10-08, commit
+// 3816870): the 210 strings the static, file-backed pointer table at
 // 0x012f5930 points at, in index order, as the spec lists them. These are
 // functional identifiers that scripts pass to tutorial_start /
 // tutorial_advance and that the engine resolves by name (owner's content
 // ruling 2026-10-01, quoted in Sec26.28); they are spec text, transcribed by
 // a script from the spec's table, not read from any game file.
 //
-// CONFIRMED - disassembly (static data) for 209 names; index 176 is OPEN
-// (the dump did not resolve its string: shorter than 4 characters or
-// non-ASCII), so it is nullptr here and EngineState::tutorialLookup treats
-// it as unknown. Index 36 and 129 are both "escort_minigame" in the spec;
-// the resolver's linear scan returns the first.
+// CONFIRMED - disassembly (static data), all 210 names. UPDATE 2026-10-08:
+// index 176 was previously OPEN here (an earlier dump could not resolve its
+// string: shorter than 4 characters or non-ASCII, so it was modelled as
+// nullptr). Sec6.19's own 2026-10-08 full re-transcription directly off the
+// executable's .data section settles it: index 176 is "dlc" (3 ASCII
+// characters - consistent with the earlier dump's own "too short" read),
+// verified there as part of a 210/210, zero-null re-read. Fixed here to
+// match; EngineState::tutorialLookup's own couldBeIndex176 heuristic
+// (lua_engine_state.cpp) is now dead code for every query (any name that
+// could have been the OPEN string either matches "dlc" directly through the
+// ordinary scan, or is confirmed NOT to be index 176 - there is no longer
+// a genuine ambiguity for it to flag), left in place rather than torn out
+// so existing callers/tests are undisturbed. Index 36 and 129 are both
+// "escort_minigame" in the spec; the resolver's linear scan returns the
+// first.
 #include "sr3luahost/engine_state.h"
 
 namespace sr3luahost {
@@ -193,7 +204,7 @@ const char* const kTutorialNames[EngineState::kTutorialEntryCount] = {
     "sprint_recharge", // 173
     "radio_control", // 174
     "human_shield_general", // 175
-    nullptr, // 176: OPEN (Sec26.28: string at 0x01124348 not resolved by the dump)
+    "dlc", // 176 (Sec6.19, 2026-10-08 full re-transcription; previously nullptr/OPEN here, see file's own top comment)
     "dlc_mancannon", // 177
     "nag_change_clothes", // 178
     "nag_crib_stash", // 179

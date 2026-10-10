@@ -185,3 +185,201 @@ Re-run and check with: tools/golden_scene_check.cpp's
 checkClmeshAirportControlTowerLitScene() (updated this session to invoke
 prototype_lit_clmesh_tower2.exe instead of prototype_lit_clmesh_tower.exe,
 same golden directory).
+
+
+================================================================================
+RE-FROZEN 2026-10-07 (WARP-migration task, orchestrator decision): this
+scene's baseline_*.png / baseline_stdout.txt were re-captured under the
+D3D11 WARP software rasterizer - golden_scene_check.cpp's own forced
+SR3_FORCE_WARP=1 is now this project's standing policy for every golden
+(the B3 infra task that added the unconditional _putenv_s("SR3_FORCE_WARP",
+"1") call had silently broken byte-exact comparison for every pre-existing
+golden, which had all been frozen under real hardware - NVIDIA GeForce RTX
+3090 on this machine - before WARP-forcing existed).
+
+The OLD real-hardware baseline this replaces is preserved, unmodified,
+under the sibling directory (this scene's own name)_hw_pre_warp/ - same
+COMMAND.txt/baseline_*.png/baseline_stdout.txt shape as this directory -
+NOT deleted, per this project's own re-freeze-preserves-the-old-one
+convention (precedent: clmesh_airport_controltower_lit/
+COMMAND_sparse_silhouette_v1.txt).
+
+Verified before freezing, not assumed: a real hardware render and a real
+WARP render of this exact same command (both through the same fresh
+tests/golden/_bin/sr3_viewer.exe build) were diffed with
+comparePngTolerance() (tools/golden_scene_check.cpp, B3 task) AND visually
+inspected pixel-by-pixel against the actual diff PNG, not just the numeric
+tolerance gate - see results/golden_warp_migration_20261007.md for the
+full per-scene table, pixel-diff numbers, and this session's own visual
+read.
+
+WARP build this was frozen under: see this directory's own new ENV.txt
+(OS build + d3d10warp.dll fingerprint, via B3's queryHostEnvironmentInfo()).
+
+Hardware rendering remains available on demand via golden_scene_check's
+own --hw flag (or SR3_FORCE_HW=1 in the environment) - see that flag's own
+doc comment in tools/golden_scene_check.cpp's main().
+
+
+================================================================================
+RE-FROZEN 2026-10-07, second time same day (adversarial-review follow-up
+task): the "RE-FROZEN 2026-10-07" section directly above this one was
+WRONG. This scene was never actually WARP-rendered at all.
+
+ROOT CAUSE: tools/prototype_lit_clmesh_tower2.cpp - this scene's own
+STANDALONE tool, not sr3_viewer.exe - has always had its own private,
+hand-duplicated `RenderDevice` struct (a plain copy of
+prototype_lit_clmesh_tower.cpp's/prototype_lit_car.cpp's own device-setup
+boilerplate, predating SR3_FORCE_WARP's existence entirely) that NEVER read
+SR3_FORCE_WARP or SR3_FORCE_HW - zero references anywhere in the file,
+confirmed by grep. It always tried a hardware adapter first,
+unconditionally, with no escape hatch of any kind. The first
+"RE-FROZEN 2026-10-07" pass above therefore re-captured this scene under
+golden_scene_check's forced SR3_FORCE_WARP=1 exactly like the other 11
+migrated scenes, but this tool silently ignored that env var and rendered
+hardware again - the SAME hardware render as before, by coincidence,
+written out under a new "WARP" label. Caught by a fresh adversarial-
+reviewer agent (who did not do the migration work): the "WARP" baseline
+PNG was byte-identical (MD5 f68d18c6097e219ba6883dff9b621539) to this
+scene's own preserved clmesh_airport_controltower_lit_hw_pre_warp/
+baseline_capture.png - not real cross-renderer agreement, just the same
+bytes twice. Independently re-confirmed this session: both files' own
+baseline_stdout.txt read "[device] kind=Hardware" even though
+SR3_FORCE_WARP=1 was set for both captures.
+
+FIX (tools/prototype_lit_clmesh_tower2.cpp only): the file's own local
+`RenderDevice` struct (previously ~60 lines of hand-duplicated
+D3D11CreateDevice/hardware-then-WARP logic, lines ~328-386) now DELEGATES
+to the real sr3render::RenderDevice (src/device.cpp) for all device
+creation - the SAME single code path sr3_viewer.exe and every other
+golden-scene tool already uses, including its SR3_FORCE_WARP/SR3_FORCE_HW
+handling verbatim, so there is nothing left in this tool to drift out of
+sync again (this was a second independent copy of the exact same logic,
+never updated when device.cpp's was - the actual root cause of the gap).
+`device`/`context`/`rtv`/`isWarp` keep their old names/shapes so none of
+this file's own ~80 call sites needed touching. device.obj was already
+linked into this tool's .exe (CMakeLists.txt's prototype_lit_clmesh_tower2
+target links sr3render, unchanged), so this needed no new build-system
+wiring - just one #include "sr3render/device.h" added.
+
+VERIFIED before/after, directly, not assumed:
+  - Before (stale source): default run (no env var) = Hardware (MD5
+    f68d18c6097e219ba6883dff9b621539); SR3_FORCE_WARP=1 = STILL Hardware,
+    same MD5 - the bug.
+  - After (fixed source): default run (no env var) = Hardware, MD5
+    f68d18c6097e219ba6883dff9b621539 (UNCHANGED - confirms the fix does not
+    alter default/no-env-var behaviour for any normal caller);
+    SR3_FORCE_WARP=0 (explicit force-hardware) = Hardware, same MD5
+    f68d18c6097e219ba6883dff9b621539 (confirms the SR3_FORCE_HW escape
+    hatch's own underlying mechanism - golden_scene_check's --hw sets
+    exactly this env var to 0 - works correctly for this scene too);
+    SR3_FORCE_WARP=1 = genuinely WARP now, MD5
+    df05d007b471049ab7812944765e9a5c, DIFFERENT from the hardware MD5 for
+    the first time ever for this scene. "[device] kind=" line in stdout
+    confirmed to say "WARP (software rasterizer)" only when
+    SR3_FORCE_WARP=1, "Hardware" otherwise - matching src/device.cpp's own
+    contract exactly.
+  - Determinism: 3 independent SR3_FORCE_WARP=1 runs (fresh process each
+    time) -> MD5 df05d007b471049ab7812944765e9a5c all 3 times. Not flaky.
+  - Source-drift ruled out as a confound: a FRESH hardware capture from
+    TODAY's current source is byte-identical (same MD5
+    f68d18c6097e219ba6883dff9b621539) to the ORIGINAL 2026-10-01
+    clmesh_airport_controltower_lit_hw_pre_warp/baseline_capture.png, so
+    hardware rendering itself has not changed in the interim - the hw-vs-
+    WARP diff below is a genuine device-only difference, not contaminated
+    by unrelated source changes between the two captures' dates.
+
+HW-VS-WARP TOLERANCE DIFF - BY FAR THE LARGEST OF ALL 12 GOLDEN SCENES,
+flagged prominently rather than silently migrated, per this project's
+"report possibly renderer-bug" convention (precedent: walk_demo's own
+flagged-but-migrated diff in the first "RE-FROZEN 2026-10-07" section's own
+underlying report, results/golden_warp_migration_20261007.md):
+
+    44226 / 480000 pixels exceed the +/-2/255 per-channel band;
+    maxAbsDiff = 255 (limit 32), meanAbsDiff = 5.59 (limit 1.5)
+
+compared against the OTHER 11 scenes' own range of maxAbsDiff 1-172,
+meanAbsDiff 0.0001-0.166 (see results/golden_warp_migration_20261007.md's
+own per-scene table) - this scene's maxAbsDiff is a full saturated
+0-vs-255 difference on some pixels, and its meanAbsDiff is >30x the next-
+worst scene (walk_demo, 0.166).
+
+Localized directly via this tool's own existing diagnostic G-buffer/light-
+buffer readback printfs (baseline_stdout.txt vs the fresh capture, both
+frozen below) rather than guessed at:
+  - [gbuffer Normals (oC0)] (the actual geometry rasterization stage):
+    hw R:min=0,max=243,mean=20.65 G:min=0,max=231,mean=21.80 vs WARP
+    R:min=0,max=231,mean=20.63 G:min=0,max=220,mean=22.57 - a normal,
+    small rasterizer-level difference, same category/magnitude as every
+    other migrated scene's own G-buffer-stage noise.
+  - [light-accumulation buffer] (the directional-light pass's own output,
+    the full-screen quad that reads that G-buffer): hw is PERFECTLY
+    uniform - R:min=21,max=21,mean=21.00 G:min=46,max=46,mean=46.00
+    B:min=65,max=65,mean=65.00 A:min=91,max=91,mean=91.00, i.e. literally
+    the identical RGBA value at every one of 480000 pixels, both inside
+    and outside the drawn silhouette - while WARP's genuinely varies with
+    the input G-buffer (R:min=20,max=255 G:min=43,max=255 B:min=56,
+    max=254 A:min=0,max=255). The geometry silhouette itself is
+    essentially unchanged (67922 px / 14.15% hw vs 67921 px / 14.15%
+    WARP) - this is a lit-COLOR divergence within the same silhouette,
+    not a geometry/rasterization difference.
+
+VISUAL judgement (both full renders + the diff PNG opened and inspected
+directly, not just the numeric gate): the WARP render shows the SAME
+recognizable tower+terminal-building silhouette, correctly positioned,
+undistorted, with MORE of each surface genuinely lit (not just a thin
+edge rim) than the hw render's mostly-near-black surfaces with only a
+saturated cyan/magenta rim at silhouette edges. The diff image's red
+region is confined EXACTLY to the geometry silhouette with a clean,
+sharp boundary (no scattered noise, no stray artifacts, no misalignment
+outside the model's own outline) - consistent with "same geometry, two
+renderers computing a genuinely different final lit colour for it", not
+corruption, a crash, or a geometry/alignment bug.
+
+HONEST READ, not smoothed over: this tool's own top-of-file comment
+ALREADY documents this exact shader pipeline as carrying FIVE genuine,
+named CTAB constants (eyePos, Object_instance_params, Specular_Color,
+Specular_Map_Amount, Self_Illumination) with "NO established real
+per-material source anywhere in this codebase", filled from a generic
+zero/default template, explicitly flagged OPEN there. A zero eyePos in
+particular degenerates any view-dependent (Fresnel/specular-angle) term
+into effectively `normalize(-worldPos)` - a per-pixel direction that is
+far more sensitive to small numeric differences than an authored,
+well-conditioned view vector would be, which is a plausible mechanism for
+hardware and WARP's independent float implementations to diverge more
+sharply here than on any of the other 11 (more conventionally-constant-
+filled) scenes once actually fed through a non-linear lighting term. This
+is a real hypothesis consistent with the measured localization above
+(G-buffer stage close, lighting-pass stage diverges sharply), NOT an
+independently-traced root cause - tracing the light pass's exact HLSL to
+confirm it would be a new, separate investigation into this scene's own
+already-flagged OPEN placeholder-constant gap, out of this task's own
+scope (fixing the device-creation bug + re-freezing under real WARP).
+Flagged here plainly as a candidate for that follow-up, not silently
+treated as ordinary AA noise.
+
+DECISION: migrate anyway, same as all 12 scenes in the original pass -
+WARP is this project's own standing policy for every golden from here on,
+is itself a fully-conformant D3D11 rasterizer (not a bug by definition),
+and the alternative (leaving the stale hardware-disguised-as-"WARP"
+baseline in place) is a CONFIRMED bug, not a judgment call. The old
+hw_pre_warp/ sibling directory is UNCHANGED and still correct (it really
+was always a genuine hardware capture, unaffected by this fix) - no
+update needed there.
+
+Frozen here (both REPLACED from the previous, WRONG "RE-FROZEN 2026-10-07"
+pass above - that pass's files were never distinguishable from true WARP
+output anyway, being hardware bytes under a WARP label, so there is no
+separate "wrong WARP v1" artifact worth preserving the way
+COMMAND_sparse_silhouette_v1.txt was - the wrong baseline's own bytes are
+fully reproducible on demand, being byte-identical to
+clmesh_airport_controltower_lit_hw_pre_warp/baseline_capture.png, which IS
+preserved):
+  baseline_capture.png - genuine WARP render, MD5
+                         df05d007b471049ab7812944765e9a5c.
+  baseline_stdout.txt  - this run's real stdout, "[device] kind=WARP
+                         (software rasterizer)" confirmed on line 247.
+
+Re-run and check with: tools/golden_scene_check.cpp's
+checkClmeshAirportControlTowerLitScene() (unchanged by this task - scope
+was prototype_lit_clmesh_tower2.cpp + this scene's own baseline only).

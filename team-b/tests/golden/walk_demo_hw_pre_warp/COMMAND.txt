@@ -1,0 +1,111 @@
+Golden scene: walk_demo, the player<->animation bridge walking demo (sr3_viewer `walk`)
+========================================================================================
+
+FROZEN 2026-10-07 - the viewer-demo deliverable for sr3playeranim (merged separately as
+373613e / results/verify_player_anim_bridge_20261007.md): brad driven by the real
+sr3playeranim::PlayerAnimBridge through the real "player state machine" node graph
+(spec-anim-runtime.md Sec7.13), on the real city_corner ground (same cells/textures as
+tests/golden/city_corner), with the real follow camera's target kept in sync every frame.
+See tools/sr3_viewer.cpp's runWalkDemo() for the full REAL/CHOSEN/judgement-call doc
+comment this baseline is frozen against.
+
+Real command (run with cwd = tests/golden/, same convention every other baseline in this
+directory tree uses):
+
+    <sr3_viewer.exe> walk \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\characters.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        --eye -957.66 15 -691.66 --yaw -20 --pitch -55 --no-input \
+        --frames 80 --capture _work/walk_demo.png --capture-frame 79
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by tests/golden/build.bat
+straight from tools/sr3_viewer.cpp - SAME mechanism as city_corner/zone/clmesh, EXCEPT
+build.bat needed a real additive change for this one (the first golden command needing
+sr3player's movement/locomotion/camera translation units + sr3playeranim +
+sr3animruntime's own node-graph sources + sr3tables_animation - see build.bat's own new
+"extra readers for sr3_viewer's `walk` command" block, and its own comment on why
+player_follow_camera.cpp is needed even though this command never calls
+CameraSystem::update()/preUpdate() - confirmed directly: the first build attempt without
+it failed at link time with 4 unresolved externals from player_camera.obj, because
+CameraSystem's own constructor builds a static mode-row table whose lambdas reference
+those symbols regardless of which methods a caller actually invokes at runtime).
+
+WHY THIS SCRIPTED SEQUENCE (see runWalkDemo()'s own doc comment for the full citation
+list): frames 0-39 B=1.0 (walk forward), frames 40-59 A=0.6 (strafe + facing swings to
+match - NOT a true turn-in-place, this movement model has no separate yaw stick),
+frames 60-79 A=B=0 (decelerate to a stop). Captured at frame 79 (the last frame, fully
+stopped) so the baseline shows the END state of a complete walk-turn-stop cycle. Real,
+measured end state (this baseline's own stdout): player position (-957.66, 0.00,
+-686.66), heading 90.0 deg (started facing +z/heading 0, net displacement ~13.5 units
+over the 80-frame/2.67s sequence - consistent with the synthetic MoveTweaks acceleration
+of 20 units/s^2 against a 10 units/s max run speed, not instantaneous), locomotion state
+0 (kLocoIdle - correctly settled back to idle after stopping), playback rate 1.280
+(within the real [0.1, 1.5] clamp, not stuck at either boundary - the graph's own T
+root-motion magnitude and the composer's desired speed are both genuinely driving this
+number, not a fallback/default value). follow-cam target exactly equals player position/
+heading on every print - sr3playeranim::DriveCameraTarget() is being called for real,
+every frame, not merely present in source.
+
+CAMERA - CHOSEN DEVIATION, documented in full (not silent) in both runWalkDemo()'s own
+doc comment and checkWalkDemoScene()'s own comment in tools/golden_scene_check.cpp:
+the task's own initial reuse recipe for this demo was city_corner's own literal framing,
+`--eye -960 250 -700 --yaw 0 --pitch -75`. That framing IS still the command's own
+--eye/--yaw/--pitch DEFAULT (a caller who wants it back needs no flags) - but it was
+NOT used for this frozen baseline, because of a real, measured problem: decoding the
+captured PNG at that framing and locating the character by its own real simulated world
+position (via the exact eye/right/up/forward math runWalkDemo()'s own
+buildFreeViewProjection uses) found the character rendered as EXACTLY a 1x4 pixel sliver
+in the 1400x900 frame - present, and provably in the geometrically correct place (its
+on-screen location matched the hand-computed camera projection of the real end-of-
+sequence position to the pixel), but not legible as "a character" to a human viewer by
+any reasonable standard. Since this specific scene's whole point (per the task brief) is
+a VISIBLE character-walking milestone - not a ground/texture regression check, which
+city_corner already owns - a closer, oblique framing was chosen instead by direct
+iteration against the real render (7 camera candidates tried this session; the first few
+clipped into nearby fake-grid-placed building geometry - an expected consequence of this
+scene's start position sitting exactly at the city_corner "focus" point where 4 cells'
+own independently-fake-gridded props all come close together, see runCity()'s own top
+comment on the within-cell placement limitation). The final choice renders brad as a
+clearly recognisable ~40x70 px checkered humanoid figure standing on real streamed city
+geometry (a highway-ramp support column, a dumpster, a building corner - all real
+textures/meshes from sr3_city_0.vpp_pc, not fabricated set dressing), right next to the
+same real start corner city_corner's own golden names.
+
+Determinism: confirmed directly this session by running this EXACT command three times
+into separate --capture paths and MD5-comparing the resulting PNGs - byte-identical every
+time (MD5 02a7ba3fdfc1fa03cf94d2271ebc2205). Per city_corner's own already-established
+precedent, the stdout captures are NOT expected byte-identical: `walk` reuses runCity()'s
+own loadCell() verbatim, so it embeds the SAME real per-cell "NNN ms" wall-clock load-time
+text city_corner's own baseline already documented as genuine run-to-run jitter (confirmed
+again directly this session: diffing two of this command's own stdout captures showed
+differences ONLY on lines ending " ms" or " s", with every other field - including the
+final captured player position/heading/locomotion/playback-rate/follow-cam-target line -
+byte-identical). checkWalkDemoScene() therefore uses compareTextMaskingTiming(), not
+compareTextExact(), for the stdout comparison - same treatment as checkCityCornerScene().
+
+Visual inspection (mandatory per this project's golden-scene convention, not skipped):
+the captured frame was read and looked at directly. The character is a clearly visible,
+recognisable checkered-pattern humanoid figure - roughly man-shaped (a narrower "head/
+torso" tapering to a wider "leg" base), standing upright on the ground near real city
+geometry (dumpster, ramp support column, building corner), not off-screen, not NaN'd away,
+not drawn in a broken colour. This is a RIGID BODY render (one bind-pose skin moved/
+rotated as a whole, per runWalkDemo()'s own "Judgement call 2") - it is not re-posed
+per frame, so it does not show walking LEG motion; what the demo actually demonstrates is
+the character's WORLD position/orientation responding to the real bridge-driven
+simulation (confirmed by this baseline's own heading/position numbers above), which is
+the real, non-fabricated thing this project has to show for "a character walks" right now.
+
+Frozen here:
+  baseline_capture.png - the real captured frame at the chosen close framing (see CAMERA
+                         above): the checkered rigid-body character on real city_corner
+                         ground, real per-material textures, real cell-boundary outline.
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact invocation (the
+                         REAL/CHOSEN/NOTE banner, brad's real bone count, the real graph
+                         population count and found index, per-cell LOAD lines with real
+                         prop/texture counts, the captured-frame summary line with the
+                         real measured player/camera-target state). Re-run and check with
+                         compareTextMaskingTiming(), not a raw diff (see Determinism above
+                         - timing text will differ run to run by design).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkWalkDemoScene().

@@ -1,0 +1,167 @@
+=== vint-doc: Vint UI render (spec-vint-render.md Sec12/Sec15, units U3+U6) ===
+REAL       : element tree + properties (real .vint_doc), image-setter side effects (Sec12.1),
+             sheet sub-images (Sec17.4), render walk/cull/compose/sort (Sec2-Sec6), bitmap quad
+             (Sec12.1/12.4: source_se = EXTENT; Sec15.7: half-texel UV offset + -0.5px vertex
+             shift, both real now), group = empty stub (Sec12.3), mask (Sec15.6: real stencil
+             clear/write/test, modes 0/1/2), all 5 render_mode blend codes (Sec15.4: filter/
+             additive/additive_alpha/subtractive/multiply), wrap sampler addressing (Sec15.7)
+REAL TEXT  : `text` (Sec14, U5): shipped .vf3_pc fonts (spec-vint-font-format.md Sec2), default
+             font table (Sec4.2 "anything else" row), metrics incl. the kerning quirk (Sec2.3/Sec6),
+             insertion syntax (Sec14.2), layout/wrap/align/vertical centring (Sec14.3), markup
+             format/color/scale/image (Sec14.4/14.5: explicit colour REPLACES, -1 inherits), glyph
+             quads + near-edge half-texel UV inset (Sec14.1), shadow pass (Sec12.2), auto_offset
+             re-applied from the measured size (Sec12.2/Sec5.4); localisation-key text_tag/
+             text_tag_crc resolution against the US .le_strings tables (spec-localization-format.md,
+             library sr3locstr)
+CHOSEN TEXT: a STRING text_tag not found as a real key falls back to raw text (Sec14.2 step 2
+             /spec-localization-format.md Sec7 item 2); a key-hash text_tag/text_tag_crc miss (never
+             shipped) falls to "no source text"; insert_values localisation (a string value as a key,
+             {N:text_tag_crc}) and 0x80-tagged strings = still OPEN (not drawn, not exercised by any
+             shipped document); layout settled once before the walk (refresh hook timing not specced);
+             only the DEFAULT language arrangement (no derived fonts); fonts and .le_strings tables
+             read from --fonts archives, else the --textures archives; line frames (Sec14.6, no
+             shipped use) not drawn; force_case ignored (dead, Sec14.2)
+CHOSEN     : doc canvas 1280.000x720.000 (--doc-size; source of document +0x5a0/+0x5a4 not specced),
+             fit to height (Sec5.1 HIGH: height), clear colour (40,40,48); `render_mode` above 5
+             falls back to filter rather than the real engine's own sticky "previous code"
+             (Sec13.5, not exercised by any real content found); scissor test not yet wired
+             (Sec15.9 item 1, separate from this pass); `background`'s own depth mode 1 not
+             yet wired (Sec15.5, separate from this pass - every draw uses depth mode 0)
+CHOSEN     : sRGB colour decode (Sec12.4 context byte +0x09) = off (default off, HIGH per Sec11 item 9);
+             sRGB texture decode (UI sampler, untraced) = off (default off)
+NOT DRAWN  : clip, bitmap_circle, gradient, document, point, sr2_map, video - counted below
+document   : hud_running_man.vint_doc (34895 bytes) - 297 records, lands exactly: yes
+sheets     : 63 bitmap_sheets.xtbl rows, 63 sheet .xtbl files found, 1148 sub-image records (0 duplicate names - first wins, 0 over the 0x680 cap)
+tables from: patch_compressed.vpp_pc=9 misc_tables.vpp_pc=55 (first archive holding a file wins - CHOSEN layering)
+device     : HARDWARE (NVIDIA GeForce RTX 3090), target 1280x720 RGBA8 offscreen
+loaded     : 297 objects, 2275 applied file records; image side effects (Sec12.1): 60 applied, 60 source-coord resets, 0 unresolved; auto_offset applier: 0 wrote offset, 60 left it
+images     : 28 distinct - 28 sheet sub-images, 0 standalone, 0 not in the pool, 0 with no texture found
+  [image] ui_blank                             mode 1 ui_bms_00 page (50,1006) size 16.000x16.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc
+  [image] ui_rm_5x                             mode 1 ui_bms_rm page (773,476) size 130.000x84.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_cat_eye                        mode 1 ui_bms_rm page (961,1) size 16.000x71.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_clock_hand                     mode 1 ui_bms_rm page (936,588) size 80.000x153.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_exit                           mode 1 ui_bms_rm page (327,867) size 130.000x124.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_exit_spawn_head                mode 1 ui_bms_rm page (1,411) size 325.000x181.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_exit_spawn_mouth               mode 1 ui_bms_rm page (865,295) size 137.000x54.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_fire                           mode 1 ui_bms_rm page (1,240) size 350.000x170.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_genki_body                     mode 1 ui_bms_rm page (773,810) size 142.000x183.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_genki_head                     mode 1 ui_bms_rm page (614,240) size 250.000x141.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_genki_hulk                     mode 1 ui_bms_rm page (558,763) size 196.000x240.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_health                         mode 1 ui_bms_rm page (735,1) size 225.000x133.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_health_cross                   mode 1 ui_bms_rm page (250,593) size 40.000x40.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_health_head                    mode 1 ui_bms_rm page (1,593) size 248.000x154.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_money_dollar                   mode 1 ui_bms_rm page (936,847) size 79.000x112.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_money_shot                     mode 1 ui_bms_rm page (1,1) size 406.000x133.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_money_yen                      mode 1 ui_bms_rm page (936,742) size 87.000x104.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_panda_shocked                  mode 1 ui_bms_rm page (773,588) size 162.000x221.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_present                        mode 1 ui_bms_rm page (1,748) size 246.000x220.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_sad_panda                      mode 1 ui_bms_rm page (558,588) size 214.000x174.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_starburst                      mode 1 ui_bms_rm page (938,412) size 62.000x62.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_test_tube                      mode 1 ui_bms_rm page (382,135) size 280.000x68.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_text_ethical                   mode 1 ui_bms_rm page (352,240) size 261.000x130.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_text_unethical                 mode 1 ui_bms_rm page (408,1) size 326.000x128.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_tiger                          mode 1 ui_bms_rm page (327,411) size 230.000x196.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_time_bonus                     mode 1 ui_bms_rm page (1,135) size 380.000x104.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_tube1                          mode 1 ui_bms_rm page (773,411) size 163.000x64.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [image] ui_rm_tube2                          mode 1 ui_bms_rm page (865,240) size 153.000x54.000 texture ui_bms_rm.tga found 1024x1024 in interface.vpp_pc > ui_bms_rm.cvbm_pc
+  [font] game id 0 font_body.vf3_pc       from misc.vpp_pc: 336 glyphs, 1668 kerning pairs, line height 36, cell 36, default advance 14, adjust -3, origin (0,0); texture font_body_nobdr.tga found 512x512 in misc.vpp_pc > font_body_nobdr.cvbm_pc
+  [font] game id 1 font_header_pc.vf3_pc  from misc.vpp_pc: 336 glyphs, 2036 kerning pairs, line height 58, cell 100, default advance 24, adjust -6, origin (-1,-20); texture font_header_pc_nobdr.tga found 2048x1024 in misc.vpp_pc > font_header_pc_nobdr.cvbm_pc
+  [font] game id 2 ug-debug.vf3_pc        from misc.vpp_pc: 224 glyphs, 0 kerning pairs, line height 17, cell 20, default advance 8, adjust -5, origin (-1,-1); texture ug-debug_nobdr.tga found 256x256 in misc.vpp_pc > ug-debug_nobdr.cvbm_pc
+  [loc] 10/11 US .le_strings tables loaded (10201 records total) -> text_tag/text_tag_crc tried as a localisation key first (spec-localization-format.md Sec6.1/Sec7 item 2)
+screen fit : scale 1.000 offset (0.000,0.000)
+[elem] screen_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]   unethical_grp : group  group: draws nothing (Sec12.3)  screen_nw (103.000,249.000) screen_se (653.000,423.000)
+[elem]     unethical_txt : bitmap  DRAW image=ui_rm_text_unethical nw=(0,0) se=(326,128) colour=(255,255,255,255) quad (327.000,282.000) (653.000,282.000) (327.000,410.000) (653.000,410.000)  screen_nw (327.000,282.000) screen_se (653.000,410.000)
+[elem]     panda_img : bitmap  DRAW image=ui_rm_sad_panda nw=(0,0) se=(214,174) colour=(255,255,255,255) quad (103.000,249.000) (317.000,249.000) (103.000,423.000) (317.000,423.000)  screen_nw (103.000,249.000) screen_se (317.000,423.000)
+[elem]   health_grp : group  group: draws nothing (Sec12.3)  screen_nw (86.000,259.000) screen_se (580.000,415.000)
+[elem]     health_cross2 : bitmap  DRAW image=ui_rm_health_cross nw=(0,0) se=(40,40) colour=(255,255,255,255) quad (221.000,370.000) (261.000,370.000) (221.000,410.000) (261.000,410.000)  screen_nw (221.000,370.000) screen_se (261.000,410.000)
+[elem]     health_cross3 : bitmap  DRAW image=ui_rm_health_cross nw=(0,0) se=(40,40) colour=(255,255,255,255) quad (322.000,370.000) (362.000,370.000) (322.000,410.000) (362.000,410.000)  screen_nw (322.000,370.000) screen_se (362.000,410.000)
+[elem]     health_cross1 : bitmap  DRAW image=ui_rm_health_cross nw=(0,0) se=(40,40) colour=(255,255,255,255) quad (122.000,370.000) (162.000,370.000) (122.000,410.000) (162.000,410.000)  screen_nw (122.000,370.000) screen_se (162.000,410.000)
+[elem]     health_cross5 : bitmap  DRAW image=ui_rm_health_cross nw=(0,0) se=(40,40) colour=(255,255,255,255) quad (526.000,370.000) (566.000,370.000) (526.000,410.000) (566.000,410.000)  screen_nw (526.000,370.000) screen_se (566.000,410.000)
+[elem]     health_cross4 : bitmap  DRAW image=ui_rm_health_cross nw=(0,0) se=(40,40) colour=(255,255,255,255) quad (424.000,370.000) (464.000,370.000) (424.000,410.000) (464.000,410.000)  screen_nw (424.000,370.000) screen_se (464.000,410.000)
+[elem]     health_txt : bitmap  DRAW image=ui_rm_health nw=(0,0) se=(225,133) colour=(255,255,255,255) quad (355.000,282.000) (580.000,282.000) (355.000,415.000) (580.000,415.000)  screen_nw (355.000,282.000) screen_se (580.000,415.000)
+[elem]     health_head : bitmap  DRAW image=ui_rm_health_head nw=(0,0) se=(248,154) colour=(255,255,255,255) quad (86.000,259.000) (334.000,259.000) (86.000,413.000) (334.000,413.000)  screen_nw (86.000,259.000) screen_se (334.000,413.000)
+[elem]   ethical_grp : group  group: draws nothing (Sec12.3)  screen_nw (538.000,238.000) screen_se (1036.000,434.000)
+[elem]     tiger : bitmap  DRAW image=ui_rm_tiger nw=(0,0) se=(230,196) colour=(255,255,255,255) quad (538.000,238.000) (768.000,238.000) (538.000,434.000) (768.000,434.000)  screen_nw (538.000,238.000) screen_se (768.000,434.000)
+[elem]     ethical_txt : bitmap  DRAW image=ui_rm_text_ethical nw=(0,0) se=(261,130) colour=(255,255,255,255) quad (775.000,280.000) (1036.000,280.000) (775.000,410.000) (1036.000,410.000)  screen_nw (775.000,280.000) screen_se (1036.000,410.000)
+[elem]   present_grp : group  group: draws nothing (Sec12.3)  screen_nw (451.000,35.000) screen_se (697.000,255.000)
+[elem]     present_img : bitmap  DRAW image=ui_rm_present nw=(0,0) se=(246,220) colour=(255,255,255,255) quad (451.000,35.000) (697.000,35.000) (451.000,255.000) (697.000,255.000)  screen_nw (451.000,35.000) screen_se (697.000,255.000)
+[elem]   fire_grp : group  group: draws nothing (Sec12.3)  screen_nw (-36.000,363.000) screen_se (1374.000,731.600)
+[elem]     fire_panda : bitmap  DRAW image=ui_rm_panda_shocked nw=(0,0) se=(162,221) colour=(255,255,255,255) quad (914.000,363.000) (1070.480,404.929) (856.801,576.470) (1013.281,618.398)  screen_nw (856.801,363.000) screen_se (1070.480,618.398)
+[elem]     fire_img1 : bitmap  DRAW image=ui_rm_fire nw=(0,0) se=(350,170) colour=(255,255,255,255) quad (-36.000,480.000) (482.000,480.000) (-36.000,731.600) (482.000,731.600)  screen_nw (-36.000,480.000) screen_se (482.000,731.600)
+[elem]     fire_img1_2 : bitmap  DRAW image=ui_rm_fire nw=(0,0) se=(350,170) colour=(255,255,255,255) quad (856.000,480.000) (1374.000,480.000) (856.000,731.600) (1374.000,731.600)  screen_nw (856.000,480.000) screen_se (1374.000,731.600)
+[elem]     fire_img1_1 : bitmap  DRAW image=ui_rm_fire nw=(0,0) se=(350,170) colour=(255,255,255,255) quad (932.000,480.000) (414.000,480.000) (932.000,731.600) (414.000,731.600)  screen_nw (414.000,480.000) screen_se (932.000,731.600)
+[elem]   exit_spawned_grp : group  group: draws nothing (Sec12.3)  screen_nw (477.500,-90.500) screen_se (802.500,245.000)
+[elem]     exit_bg : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(150,47,103,255) quad (571.000,43.000) (705.000,43.000) (571.000,89.185) (705.000,89.185)  screen_nw (571.000,43.000) screen_se (705.000,89.185)
+[elem]     exit_mouth : bitmap  DRAW image=ui_rm_exit_spawn_mouth nw=(0,0) se=(137,54) colour=(255,255,255,255) quad (571.500,85.000) (708.500,85.000) (571.500,139.000) (708.500,139.000)  screen_nw (571.500,85.000) screen_se (708.500,139.000)
+[elem]     exit_head : bitmap  DRAW image=ui_rm_exit_spawn_head nw=(0,0) se=(325,181) colour=(255,255,255,255) quad (477.500,-90.500) (802.500,-90.500) (477.500,90.500) (802.500,90.500)  screen_nw (477.500,-90.500) screen_se (802.500,90.500)
+[elem]     exit_text : bitmap  DRAW image=ui_rm_exit nw=(0,0) se=(130,124) colour=(255,255,255,255) quad (575.000,121.000) (705.000,121.000) (575.000,245.000) (705.000,245.000)  screen_nw (575.000,121.000) screen_se (705.000,245.000)
+[elem]   fan_grp : group  group: draws nothing (Sec12.3)  screen_nw (-251.250,-531.250) screen_se (1531.250,1251.250)
+[elem]     fan3 : group  group: draws nothing (Sec12.3)  screen_nw (-251.250,188.750) screen_se (640.000,529.036)
+[elem]       fan_edge2_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (640.000,188.750) (-251.250,188.750) (640.000,359.250) (-251.250,359.250)  screen_nw (-251.250,188.750) screen_se (640.000,359.250)
+[elem]       fan_edge1_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (640.000,529.037) (-251.250,529.036) (640.000,358.537) (-251.250,358.536)  screen_nw (-251.250,358.536) screen_se (640.000,529.036)
+[elem]     fan7 : group  group: draws nothing (Sec12.3)  screen_nw (-109.736,-391.301) screen_se (761.092,479.527)
+[elem]       fan_edge2_1_1_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (761.092,238.908) (130.883,-391.301) (640.530,359.470) (10.321,-270.739)  screen_nw (10.321,-391.301) screen_se (761.092,359.470)
+[elem]       fan_edge1_1_1_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (520.473,479.527) (-109.736,-150.682) (641.035,358.965) (10.826,-271.244)  screen_nw (-109.736,-271.244) screen_se (641.035,479.527)
+[elem]     fan6 : group  group: draws nothing (Sec12.3)  screen_nw (-111.301,238.908) screen_se (759.527,1109.736)
+[elem]       fan_edge2_1_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (518.908,238.908) (-111.301,869.117) (639.470,359.470) (9.261,989.679)  screen_nw (-111.301,238.908) screen_se (639.470,989.679)
+[elem]       fan_edge1_1_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (759.527,479.527) (129.318,1109.736) (638.965,358.965) (8.756,989.174)  screen_nw (8.756,358.965) screen_se (759.527,1109.736)
+[elem]     fan2 : group  group: draws nothing (Sec12.3)  screen_nw (468.750,360.000) screen_se (809.036,1251.250)
+[elem]       fan_edge2_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (468.750,360.000) (468.750,1251.250) (639.250,360.000) (639.250,1251.250)  screen_nw (468.750,360.000) screen_se (639.250,1251.250)
+[elem]       fan_edge1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (809.037,360.000) (809.036,1251.250) (638.537,360.000) (638.536,1251.250)  screen_nw (638.536,360.000) screen_se (809.036,1251.250)
+[elem]     fan8 : group  group: draws nothing (Sec12.3)  screen_nw (520.473,-389.736) screen_se (1391.301,481.092)
+[elem]       fan_edge2_1_1_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (761.092,481.092) (1391.301,-149.117) (640.530,360.530) (1270.739,-269.679)  screen_nw (640.530,-269.679) screen_se (1391.301,481.092)
+[elem]       fan_edge1_1_1_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (520.473,240.473) (1150.682,-389.736) (641.035,361.035) (1271.244,-269.174)  screen_nw (520.473,-389.736) screen_se (1271.244,361.035)
+[elem]     fan4 : group  group: draws nothing (Sec12.3)  screen_nw (470.963,-531.250) screen_se (811.250,360.000)
+[elem]       fan_edge2_1_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (811.250,360.000) (811.250,-531.250) (640.750,360.000) (640.750,-531.250)  screen_nw (640.750,-531.250) screen_se (811.250,360.000)
+[elem]       fan_edge1_1_1_1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (470.963,360.000) (470.963,-531.250) (641.463,360.000) (641.463,-531.250)  screen_nw (470.963,-531.250) screen_se (641.464,360.000)
+[elem]     fan5 : group  group: draws nothing (Sec12.3)  screen_nw (518.908,240.473) screen_se (1389.736,1111.301)
+[elem]       fan_edge2_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (518.908,481.092) (1149.117,1111.301) (639.470,360.530) (1269.679,990.739)  screen_nw (518.908,360.530) screen_se (1269.679,1111.301)
+[elem]       fan_edge1_2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (759.527,240.473) (1389.736,870.682) (638.965,361.035) (1269.174,991.244)  screen_nw (638.965,240.473) screen_se (1389.736,991.244)
+[elem]     fan1 : group  group: draws nothing (Sec12.3)  screen_nw (640.000,190.964) screen_se (1531.250,531.250)
+[elem]       fan_edge2 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (640.000,531.250) (1531.250,531.250) (640.000,360.750) (1531.250,360.750)  screen_nw (640.000,360.750) screen_se (1531.250,531.250)
+[elem]       fan_edge1 : bitmap  DRAW image=ui_rm_starburst nw=(0,0) se=(62,62) colour=(227,59,58,255) quad (640.000,190.964) (1531.250,190.964) (640.000,361.464) (1531.250,361.464)  screen_nw (640.000,190.964) screen_se (1531.250,361.464)
+[elem]   money_shot_grp : group  group: draws nothing (Sec12.3)  screen_nw (68.000,212.400) screen_se (608.800,340.800)
+[elem]     money_symbol5 : bitmap  DRAW image=ui_rm_money_dollar nw=(0,0) se=(79,112) colour=(255,255,255,255) quad (544.000,296.000) (575.600,296.000) (544.000,340.800) (575.600,340.800)  screen_nw (544.000,296.000) screen_se (575.600,340.800)
+[elem]     money_symbol1 : bitmap  DRAW image=ui_rm_money_dollar nw=(0,0) se=(79,112) colour=(255,255,255,255) quad (97.600,296.000) (129.200,296.000) (97.600,340.800) (129.200,340.800)  screen_nw (97.600,296.000) screen_se (129.200,340.800)
+[elem]     money_symbol4 : bitmap  DRAW image=ui_rm_money_yen nw=(0,0) se=(87,104) colour=(255,255,255,255) quad (432.000,296.000) (466.800,296.000) (432.000,337.600) (466.800,337.600)  screen_nw (432.000,296.000) screen_se (466.800,337.600)
+[elem]     money_symbol2 : bitmap  DRAW image=ui_rm_money_yen nw=(0,0) se=(87,104) colour=(255,255,255,255) quad (208.000,296.000) (242.800,296.000) (208.000,337.600) (242.800,337.600)  screen_nw (208.000,296.000) screen_se (242.800,337.600)
+[elem]     money_symbol3 : bitmap  DRAW image=ui_rm_money_dollar nw=(0,0) se=(79,112) colour=(255,255,255,255) quad (324.000,296.000) (355.600,296.000) (324.000,340.800) (355.600,340.800)  screen_nw (324.000,296.000) screen_se (355.600,340.800)
+[elem]     money_shot_txt : bitmap  DRAW image=ui_rm_money_shot nw=(0,0) se=(406,133) colour=(255,255,255,255) quad (284.000,225.600) (608.800,225.600) (284.000,332.000) (608.800,332.000)  screen_nw (284.000,225.600) screen_se (608.800,332.000)
+[elem]     money_head_grp : group  group: draws nothing (Sec12.3)  screen_nw (68.000,212.400) screen_se (268.000,325.200)
+[elem]       money_shot_head : bitmap  DRAW image=ui_rm_genki_head nw=(0,0) se=(250,141) colour=(255,255,255,255) quad (68.000,212.400) (268.000,212.400) (68.000,325.200) (268.000,325.200)  screen_nw (68.000,212.400) screen_se (268.000,325.200)
+[elem]       money_eye_yen : bitmap  DRAW image=ui_rm_money_yen nw=(0,0) se=(87,104) colour=(255,255,255,255) quad (166.000,226.400) (235.600,226.400) (166.000,309.600) (235.600,309.600)  screen_nw (166.000,226.400) screen_se (235.600,309.600)
+[elem]       money_eye_dollar : bitmap  DRAW image=ui_rm_money_dollar nw=(0,0) se=(79,112) colour=(255,255,255,255) quad (103.600,222.400) (166.800,222.400) (103.600,312.000) (166.800,312.000)  screen_nw (103.600,222.400) screen_se (166.800,312.000)
+[elem]   do_nothing_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     do_nothing_txt : text  CULLED (visible=false)
+[elem]   hunter_grp : group  group: draws nothing (Sec12.3)  screen_nw (506.000,164.000) screen_se (776.000,404.000)
+[elem]     genki_hulk : bitmap  DRAW image=ui_rm_genki_hulk nw=(0,0) se=(196,240) colour=(156,48,107,255) quad (547.000,164.000) (743.000,164.000) (547.000,404.000) (743.000,404.000)  screen_nw (547.000,164.000) screen_se (743.000,404.000)
+[elem]     genki_normal_grp : group  group: draws nothing (Sec12.3)  screen_nw (566.000,182.400) screen_se (716.000,402.000)
+[elem]       genki_body : bitmap  DRAW image=ui_rm_genki_body nw=(0,0) se=(142,183) colour=(150,194,69,255) quad (596.200,255.600) (709.800,255.600) (596.200,402.000) (709.800,402.000)  screen_nw (596.200,255.600) screen_se (709.800,402.000)
+[elem]       genki_head_hulk : bitmap  DRAW image=ui_rm_genki_head nw=(0,0) se=(250,141) colour=(150,194,69,255) quad (566.000,182.400) (716.000,182.400) (566.000,267.000) (716.000,267.000)  screen_nw (566.000,182.400) screen_se (716.000,267.000)
+[elem]     tube1 : bitmap  DRAW image=ui_rm_tube1 nw=(0,0) se=(163,64) colour=(255,255,255,255) quad (613.000,169.000) (776.000,169.000) (613.000,233.000) (776.000,233.000)  screen_nw (613.000,169.000) screen_se (776.000,233.000)
+[elem]     tube2 : bitmap  DRAW image=ui_rm_tube2 nw=(0,0) se=(153,54) colour=(255,255,255,255) quad (506.000,175.000) (659.000,175.000) (506.000,229.000) (659.000,229.000)  screen_nw (506.000,175.000) screen_se (659.000,229.000)
+[elem]   trap_electric_grp : group  group: draws nothing (Sec12.3)  screen_nw (549.677,52.861) screen_se (730.323,287.139)
+[elem]     panda_shocked : bitmap  DRAW image=ui_rm_panda_shocked nw=(0,0) se=(162,221) colour=(255,255,255,255) quad (568.939,52.861) (730.322,66.980) (549.678,273.020) (711.061,287.139)  screen_nw (549.677,52.861) screen_se (730.323,287.139)
+[elem]   multiplier_grp : group  group: draws nothing (Sec12.3)  screen_nw (506.000,97.667) screen_se (786.000,182.333)
+[elem]     test_tube : bitmap  DRAW image=ui_rm_test_tube nw=(0,0) se=(280,68) colour=(255,255,255,255) quad (506.000,109.762) (786.000,109.762) (506.000,178.301) (786.000,178.301)  screen_nw (506.000,109.762) screen_se (786.000,178.301)
+[elem]     tube_fill : bitmap  DRAW image=ui_blank nw=(0,0) se=(16,16) colour=(86,58,73,255) quad (530.000,126.500) (772.000,126.500) (530.000,155.516) (772.000,155.516)  screen_nw (530.000,126.500) screen_se (772.000,155.516)
+[elem]     5x : bitmap  DRAW image=ui_rm_5x nw=(0,0) se=(130,84) colour=(255,255,255,255) quad (575.000,97.667) (705.000,97.667) (575.000,182.333) (705.000,182.333)  screen_nw (575.000,97.667) screen_se (705.000,182.333)
+[elem]   genki_head_grp : group  group: draws nothing (Sec12.3)  screen_nw (36.556,-6.540) screen_se (234.760,146.061)
+[elem]     genki_head : bitmap  DRAW image=ui_rm_genki_head nw=(0,0) se=(250,141) colour=(255,255,255,255) quad (36.556,53.314) (201.002,-6.540) (70.313,146.061) (234.760,86.208)  screen_nw (36.556,-6.540) screen_se (234.760,146.061)
+[elem]     cat_eye1 : bitmap  DRAW image=ui_rm_cat_eye nw=(0,0) se=(16,71) colour=(255,255,255,255) quad (109.462,65.328) (114.724,63.412) (117.961,88.679) (123.223,86.764)  screen_nw (109.462,63.412) screen_se (123.223,88.679)
+[elem]     cat_eye2 : bitmap  DRAW image=ui_rm_cat_eye nw=(0,0) se=(16,71) colour=(255,255,255,255) quad (161.008,47.311) (166.271,45.396) (169.508,70.663) (174.770,68.747)  screen_nw (161.008,45.396) screen_se (174.770,70.663)
+[elem]   time_bonus_grp : group  group: draws nothing (Sec12.3)  screen_nw (608.000,241.600) screen_se (1132.800,429.440)
+[elem]     clock_second_hand_grp : group  group: draws nothing (Sec12.3)  screen_nw (619.661,282.672) screen_se (660.339,364.000)
+[elem]       clock_second_hand : bitmap  DRAW image=ui_rm_clock_hand nw=(0,0) se=(80,153) colour=(147,212,52,255) quad (619.661,282.672) (660.339,282.672) (619.661,364.000) (660.339,364.000)  screen_nw (619.661,282.672) screen_se (660.339,364.000)
+[elem]     time_bonus_img : bitmap  DRAW image=ui_rm_time_bonus nw=(0,0) se=(380,104) colour=(255,255,255,255) quad (768.000,329.600) (1132.800,329.600) (768.000,429.440) (1132.800,429.440)  screen_nw (768.000,329.600) screen_se (1132.800,429.440)
+[elem]     clock_hand_grp : group  group: draws nothing (Sec12.3)  screen_nw (608.000,241.600) screen_se (672.000,364.000)
+[elem]       clock_hand : bitmap  DRAW image=ui_rm_clock_hand nw=(0,0) se=(80,153) colour=(216,120,177,255) quad (608.000,241.600) (672.000,241.600) (608.000,364.000) (672.000,364.000)  screen_nw (608.000,241.600) screen_se (672.000,364.000)
+[elem]   timer_grp : group  group: draws nothing (Sec12.3)  screen box OPEN
+[elem]     timer_txt : text  text: DRAW '88' font=header_n (entry 3, drawn with font_header_pc) scale (0.600,0.600) wrap 0.000 align 0 leading 0 kerning 0 -> size 49.200x34.800, 1 line(s), 1 record(s), 40 stream bytes; auto_offset 3 offset (-24.600,0.000) origin (130.047,131.325) +shadow pass; glyph quads 4, inline images 0
+         [run] '88' at (0.000,0.000) scale (0.600,0.600) spacing 0 line 0
+summary    : 90 elements visited, 1 culled; bitmaps drawn 60, no image 0, no texture 0; groups (empty draw) 28; text PLACEHOLDER markers 0; inside mask subtrees (real stencil mask now, Sec15.6) 0
+summary    : text (Sec14, U5) drawn 1 element(s), 4 glyph quads, 0 inline images; OPEN 0, no font 0, no source text 0; glyphs skipped for a missing font texture 0; unrecognized tags 0; stream truncations 0; resolved via a real localisation key 0 (spec-localization-format.md)
+summary    : non-filter render_mode elements (real distinct blend codes, Sec15.4) 0; background-flag elements 0; geometry OPEN 0; scratch-capacity drops 0; non-integral source coords 0
+not drawn  : none
+wrote      : _work/vint_hud_running_man.png

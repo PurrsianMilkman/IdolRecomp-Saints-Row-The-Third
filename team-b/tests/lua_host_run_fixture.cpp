@@ -3,13 +3,15 @@
 //
 //   lua_host_run_fixture <out_dir>
 //
-// Three uncompressed containers (misc, dlc1 and - 2026-10-01 - a small
-// cutscene_tables for the zscene scene table) laid out per spec-vpp-container.md Sec1-2 (the
-// same layout tests/synthetic_archive_test.cpp builds, raw entries only). The
-// Lua sources are written for this test; nothing here comes from game files.
-// The mission stems (dlc1_mm_02..06) are names from this project's own
-// mission list (tools/, the one lua_host_run reads), so the mission-driving
-// pass picks them up.
+// Five uncompressed containers (misc, dlc1, - 2026-10-01 - a small
+// cutscene_tables for the zscene scene table, and - 2026-10-08 - a
+// misc_tables/patch_compressed pair for the spawn_info_ranks.xtbl
+// archive-precedence fast-follow fix) laid out per spec-vpp-container.md
+// Sec1-2 (the same layout tests/synthetic_archive_test.cpp builds, raw
+// entries only). The Lua sources are written for this test; nothing here
+// comes from game files. The mission stems (dlc1_mm_02..06) are names from
+// this project's own mission list (tools/, the one lua_host_run reads), so
+// the mission-driving pass picks them up.
 //
 // 2026-10-02: dlc1_mm_05_start now also regression-tests the real dlc2_m02
 // "attempt to index local 'cp_data' (a nil value)" bug
@@ -122,6 +124,60 @@ int main(int argc, char** argv) {
          "<Name>X</Name><Mesh>npc_fixture</Mesh></Character></Characters></Cutscene></Table></root>\n"},
         {"dlc_skipped.cte_xtbl", "<root><Table><Cutscene><CutsceneType>Zscene</CutsceneType></Cutscene></Table></root>\n"},
     };
+    // spawn_info_ranks.xtbl archive-precedence fixture (2026-10-08 fast
+    // follow, probe_blockers_ranked_20261007_post_item2346_fixes.md's
+    // flagged gap): installSpawnRankHitPointsFromCache (tools/lua_host_run.cpp)
+    // must prefer a same-named "patch_compressed.vpp_pc" copy over
+    // "misc_tables.vpp_pc", exactly as installContinuousExplosionTableFromCache
+    // already does for continuous_explosions.xtbl - the real archives both
+    // ship this table (spec-tables-progression.md Sec14.12: 54 rows base, a
+    // 55-row patch superset adding "Homie - Kwilanna"), but that extra row's
+    // own Hit_Points value happens to duplicate one already in the 54-row
+    // set, so the real archives alone cannot distinguish "reads the patch
+    // copy" from "reads the base copy" by their installed VALUES - only by
+    // the "rows=" row count, which this project's tests don't otherwise
+    // assert on. This fixture instead gives the two copies a genuinely
+    // disjoint-ish Hit_Points set (base: 100/150; patch: 100/150/400) so a
+    // regression back to the pre-fix "misc_tables.vpp_pc only" behaviour is
+    // directly, observably caught (400 would never install) rather than
+    // merely "the archive that happens to be picked is formally present."
+    // weapons.xtbl (spec-lua-api-behaviour.md Sec4.10/Sec4.11; tools/
+    // lua_host_run.cpp's own installWeaponDefinitionTableFromCache,
+    // 2026-10-09 fast-follow): the real loader merges misc_tables.vpp_pc's
+    // base weapons.xtbl with dlc2.vpp_pc/dlc3.vpp_pc's own dlc2_weapons.xtbl/
+    // dlc3_weapons.xtbl - this fixture has neither DLC archive, so only the
+    // base file's one row should install; the two DLC files are expected to
+    // report "missing" (their own ARCHIVE is absent, not just the file
+    // inside it). The row's Name is deliberately mixed-case so the
+    // integration test can confirm the install path folds it the SAME way
+    // the native stubs' own AsciiLowerFold lookup does.
+    const std::vector<Entry> miscTables = {
+        {"spawn_info_ranks.xtbl",
+         "<root><Table>\n"
+         "<Rank><Name>fixture_base_1</Name><type>Civilian</type><rank_numeric>1</rank_numeric>"
+         "<Hit_Points>100</Hit_Points><Bleed_Out_Hit_Points>50</Bleed_Out_Hit_Points><Knockdown_Points>30</Knockdown_Points></Rank>\n"
+         "<Rank><Name>fixture_base_2</Name><type>Gang</type><rank_numeric>2</rank_numeric>"
+         "<Hit_Points>150</Hit_Points><Bleed_Out_Hit_Points>75</Bleed_Out_Hit_Points><Knockdown_Points>40</Knockdown_Points></Rank>\n"
+         "</Table></root>\n"},
+        {"weapons.xtbl",
+         "<root><Table>\n"
+         "<Weapon><Name>Fixture_Weapon</Name></Weapon>\n"
+         "</Table></root>\n"},
+    };
+    const std::vector<Entry> patchCompressed = {
+        {"spawn_info_ranks.xtbl",
+         "<root><Table>\n"
+         "<Rank><Name>fixture_base_1</Name><type>Civilian</type><rank_numeric>1</rank_numeric>"
+         "<Hit_Points>100</Hit_Points><Bleed_Out_Hit_Points>50</Bleed_Out_Hit_Points><Knockdown_Points>30</Knockdown_Points></Rank>\n"
+         "<Rank><Name>fixture_base_2</Name><type>Gang</type><rank_numeric>2</rank_numeric>"
+         "<Hit_Points>150</Hit_Points><Bleed_Out_Hit_Points>75</Bleed_Out_Hit_Points><Knockdown_Points>40</Knockdown_Points></Rank>\n"
+         // The patch-only extra row (stands in for the real "Homie - Kwilanna"
+         // row, spec-tables-progression.md Sec14.12), deliberately given a
+         // Hit_Points value absent from the base copy above.
+         "<Rank><Name>fixture_patch_extra</Name><type>Homie</type><rank_numeric>3</rank_numeric>"
+         "<Hit_Points>400</Hit_Points><Bleed_Out_Hit_Points>200</Bleed_Out_Hit_Points><Knockdown_Points>60</Knockdown_Points></Rank>\n"
+         "</Table></root>\n"},
+    };
     const std::vector<Entry> dlc1 = {
         // 'scene_a' is a kind-1 entry of the fixture's scene table, so the
         // next read is the skip_all_cutscenes byte 0x0153b556 (false at start,
@@ -167,7 +223,9 @@ int main(int argc, char** argv) {
         {"broken_syntax.lua", "function broken(\n"},
     };
     if (!save(dir + "/misc.vpp_pc", buildContainer(misc)) || !save(dir + "/dlc1.vpp_pc", buildContainer(dlc1)) ||
-        !save(dir + "/cutscene_tables.vpp_pc", buildContainer(cutsceneTables))) {
+        !save(dir + "/cutscene_tables.vpp_pc", buildContainer(cutsceneTables)) ||
+        !save(dir + "/misc_tables.vpp_pc", buildContainer(miscTables)) ||
+        !save(dir + "/patch_compressed.vpp_pc", buildContainer(patchCompressed))) {
         std::cerr << "lua_host_run_fixture: cannot write into " << dir << "\n";
         return 1;
     }

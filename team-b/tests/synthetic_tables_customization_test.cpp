@@ -398,27 +398,51 @@ void testCustomizationNormals() {
 
 // ===========================================================================
 // 9.3 customization_compositing.xtbl
+//
+// diffuse/normal fixture shape CORRECTED 2026-10-08 (real-data finding, no
+// disassembly involved): misc_tables.vpp_pc's own shipped
+// customization_compositing.xtbl wraps the filename in a nested `Filename`
+// child (`<diffuse><Filename>tat_hand_live.tga</Filename></diffuse>`), NOT a
+// flat leaf text node (`<diffuse>lips_d.tga</diffuse>`, this fixture's
+// previous, incorrect shape) - confirmed against 403 real `<diffuse>`
+// occurrences, zero of them flat. The old flat fixture passed ONLY because
+// it tested a schema real shipped data never actually uses, silently
+// masking a reader bug (0/374 real rows resolved a diffuse texture before
+// this fix - found while rendering real data for the skin-composite
+// renderer task). See materials.h's own CompositeLayer::diffuseTexture
+// comment for the full citation.
 // ===========================================================================
 void testCustomizationCompositing() {
     Document d = P(R"(<root><Table>
       <Composite_Layer>
         <Name>lips_base</Name>
-        <diffuse>lips_d.tga</diffuse>
+        <diffuse><Filename>lips_d.tga</Filename></diffuse>
+        <normal><Filename>lips_n.tga</Filename></normal>
         <Slot>lips</Slot>
         <x_coord>10</x_coord><y_coord>20</y_coord><Alpha>0.5</Alpha><Layer>2</Layer>
         <Flags><Flag>Colorizable</Flag><Flag>No_diffuse</Flag></Flags>
         <Price>50</Price><Is_DLC>no</Is_DLC>
       </Composite_Layer>
+      <Composite_Layer>
+        <Name>no_textures_row</Name>
+        <Slot>eyes</Slot>
+        <x_coord>0</x_coord><y_coord>0</y_coord><Alpha>1</Alpha><Layer>0</Layer>
+        <Price>0</Price><Is_DLC>yes</Is_DLC>
+      </Composite_Layer>
     </Table></root>)");
     std::vector<CompositeLayer> rows = ParseCustomizationCompositingTable(d);
-    CHECK(rows.size() == 1);
+    CHECK(rows.size() == 2);
     CHECK(rows[0].diffuseTexture == "lips_d.tga");
-    CHECK(!rows[0].normalTexture.has_value());
+    CHECK(rows[0].normalTexture == "lips_n.tga");
     CHECK(rows[0].xCoord.value == 10 && rows[0].yCoord.value == 20);
     CHECK(near(rows[0].alpha.value, 0.5f, 1e-6f));
     CHECK(rows[0].colorizable && rows[0].noDiffuse && !rows[0].playerCreation && !rows[0].showAlphaSelection);
     CHECK(rows[0].price.value == 50);
     CHECK(rows[0].isDlc.present && rows[0].isDlc.value == false);
+    // A row with neither element at all (real data has rows like this too)
+    // must still parse cleanly to nullopt, not throw or crash.
+    CHECK(!rows[1].diffuseTexture.has_value());
+    CHECK(!rows[1].normalTexture.has_value());
 }
 
 // ===========================================================================

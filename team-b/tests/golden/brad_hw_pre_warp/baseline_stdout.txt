@@ -1,0 +1,19 @@
+mesh     : brad.ccmesh_pc (4080 bytes) + brad.gcmesh_pc (186180 bytes)
+rig      : brad.rig_pc (7160 bytes)
+mesh blk : check 0x59154050, g-length 186180 (file 186180), 1 channel(s), 12373 indices
+channel  : layout 3, 1 texcoord set(s), stride 32, 5044 vertices (stride matches the spec law)
+rig      : 68 bones, hash table OK
+pose     : joint [16] "l-upperarmtwist1"  subtree 18/68 bones  +45.0 deg about Z (mesh space)
+skinning : bone-palette + (-x,-y,-z)  [DEFAULT since HANDOFF Sec9.63.9]
+palette  : 56 entries (rig 68 bones); lanes remapped=10457 dropped(no palette slot)=0 dropped(rig index out of range)=0
+bind-pose identity check: max |v' - v| = 2.407e-07 over 5044 verts (tol 1e-5, matches stage 1's validate_pose.cpp figures)
+skinning stats: bind  lanesDropped=323 maxOutOfRangeIdx=-1
+                pose  lanesDropped=323 maxOutOfRangeIdx=-1
+bbox (CPU, mesh space):
+  bind : X[-0.693 0.693] Y[-0.013 1.722] Z[-0.219 0.185]
+  posed: X[-0.330 0.693] Y[-0.013 1.722] Z[-0.219 0.185]
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+bounds(renderer, bind): 1.385 x 1.735 x 0.404
+wrote    : _work/brad_bind.png
+wrote    : _work/brad_posed.png
+pixel diff (bind vs posed): 10149 / 648000 pixels differ (1.57%)

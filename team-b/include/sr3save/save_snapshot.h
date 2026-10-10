@@ -21,6 +21,20 @@
 // to a serializer by Sec6.4; the *contents* are mostly undecoded) is not
 // mapped here.
 //
+// Sec16 (2026-10-08, "Write/Read Symmetry") independently re-confirms this
+// reader's/writer's header offsets from the LOAD side, not just the save
+// side's own region map (Sec6.3/6.4): the real header load routine
+// (0x00B9B530) consumes EXACTLY the two spans the header save routine
+// (0x00B9A380) writes - the 20-byte clock struct at 0x08C (kOffsetClockStruct)
+// and the 256-bit flag set at 0x0A4, each through its own dedicated
+// apply/build routine pair at the same offset on both sides. This project
+// still only models the clock struct's trailing float32 sub-field
+// (kOffsetClockPlayFloat, 0x09C) and the separate playTimeSeconds word right
+// after the struct ends (0x0A0) - no in-game calendar clock and no meaning
+// for the flag set are in this project's EngineState scope - so nothing
+// changes here; Sec16 confirms the offsets this file already used were
+// right, it does not add new fields to populate.
+//
 // Hash policy: the snapshot hash is written on save and NEVER verified by the
 // game on load (Sec11.1, CONFIRMED - static). Consequently parse() does not
 // fail on a hash mismatch; hashValid() reports it. The only content gate the
@@ -55,9 +69,9 @@ constexpr size_t kOffsetSaveTime = 0x060;        // UTF-16LE "HH:MM:SS", 18 byte
 constexpr size_t kOffsetSaveDate = 0x072;        // UTF-16LE "MM.DD.YY", 18 bytes reserved
 constexpr size_t kOffsetLabelIndex = 0x084;      // active-mission index / display-label id (Sec12.10.1, HIGH CONFIDENCE)
 constexpr size_t kOffsetCompletionPercent = 0x088; // Sec6.5 (weights CONFIRMED; meaning HIGH CONFIDENCE)
-constexpr size_t kOffsetClockStruct = 0x08C;     // 20-byte in-world clock struct copy (Sec6.2)
+constexpr size_t kOffsetClockStruct = 0x08C;     // 20-byte in-world clock struct copy (Sec6.2; load-side offset re-confirmed Sec16)
 constexpr size_t kOffsetClockPlayFloat = 0x09C;  // float32 play-time clock (last dword of the struct)
-constexpr size_t kOffsetPlayTimeSeconds = 0x0A0; // u32 whole game-clock SECONDS (Sec6.2, CONFIRMED)
+constexpr size_t kOffsetPlayTimeSeconds = 0x0A0; // u32 whole game-clock SECONDS (Sec6.2, CONFIRMED; immediately after the Sec16-confirmed 20-byte clock struct, NOT part of it)
 constexpr size_t kOffsetPlayTimeTicks = kOffsetPlayTimeSeconds; // legacy name; the unit is seconds, not ticks
 constexpr size_t kOffsetCheatsUsed = 0x0C8;      // byte, cheats-used flag (Sec10.3, CONFIRMED)
 constexpr size_t kOffsetCheatCount = 0x0CC;      // u32 count, then u32 ids at 0x0D0 (Sec9.5)
@@ -148,6 +162,50 @@ struct SaveTimestamp {
     int hour = 0, minute = 0, second = 0;
 };
 
+// A from-spec WRITER's input: the subset of the real snapshot this project
+// can actually populate from live state (added 2026-10-08 to implement
+// spec-save-format.md Sec15's save-trigger wiring - mission_autosave/
+// game_autosave/mission_set_checkpoint, all funneling through the single
+// real save entry 0x00B94A10, Sec6.3). Every member below is a field
+// SaveSnapshot::parse() above already reads back (same offsets, same
+// shapes) - this struct is deliberately NOT a full 32-entry model: bytes it
+// does not mention are left at the all-zero value Sec6.3 itself specifies
+// ("allocate... zero the whole buffer") for every serializer this project
+// has no live counterpart for, which is the format's OWN placeholder
+// convention, not an invented one. Defaults below match the real "new
+// game" save's own reported values (Sec6.5/Sec10.3: level 0, respect 0,
+// difficulty 1 "normal", cheats unused, 0 barnstorms/stunt jumps, no active
+// mission) - see sr3luahost::SaveGameState (save_game_state.h) for the
+// live engine-state struct this is built from.
+struct SaveSnapshotFields {
+    uint32_t formatVersion = kSnapshotFormatVersion; // 94, Sec3/Sec11.1
+    uint32_t secondaryVersion = 1;                   // Sec3
+    uint32_t buildStamp = 0x000F0F6E;                // Sec6.3/Sec6.5, current-build literal
+    std::string levelName;                           // Sec6.3 header; must leave room for a NUL (< kLevelNameMaxBytes)
+    uint32_t objectHandleLo = 0, objectHandleHi = 0; // Sec6.4 shape; no real handle modeled, left 0
+    std::string saveTime = "00:00:00";               // "HH:MM:SS", Sec3
+    std::string saveDate = "01.01.00";               // "MM.DD.YY", Sec3
+    uint32_t labelIndex = 0x7F;                       // 0x084, Sec12.10.1: 0x7F = "no active mission"; display-only on load
+    uint32_t completionPercent = 0;                   // 0x088, Sec6.5
+    float playClockFloat = 0.0f;                      // 0x09C; this project tracks no in-game clock
+    uint32_t playTimeSeconds = 0;                      // 0x0A0; same reason
+    uint8_t cheatsUsed = 0;                            // 0x0C8, Sec10.3
+    uint32_t difficulty = 1;                           // 0x2B64, Sec6.5: 0 casual/1 normal/2 hardcore
+    uint32_t barnstormsFound = 0;                      // 0x3F0, Sec10.3
+    uint32_t stuntJumpsFound = 0;                      // 0x3F8, Sec10.3
+    uint32_t respectTotal = 0, respectInLevel = 0, playerLevel = 0; // 0x4418/0x441C/0x4420, Sec10.3
+    int32_t cashRaw = 0;                               // 0x4A70, cash on hand x100, clamped +-2,000,000,000 (Sec10.3)
+    std::vector<CollectibleRecord> collectibles;       // 0x3FC, Sec10.3; must fit kCollectibleCapacity (80)
+    std::vector<RegionRecord> regionRecords;           // 0x113B8/0x113C0, Sec12.4.1; must fit kRegionRecordCapacity (156)
+    std::vector<ActivityRecord> activityRecords;       // 0x2B90, Sec9.3a; must fit kActivityTableCapacity (64)
+    uint64_t activityMarkerFlags = 0;                  // 0x2E98, Sec9.3b
+    std::vector<uint32_t> activeCheatIds;              // 0x0CC, Sec9.5; must fit kCheatIdCapacity (200)
+    // 0x3340: statistics 68..216 (Sec12.6.1). Optional - defaults to all
+    // zero (every statistic's own documented "not yet earned" value), same
+    // placeholder convention as every other un-modeled span.
+    std::array<SnapshotStat, kSnapshotStatCount> statistics{};
+};
+
 class SaveSnapshot {
 public:
     // Parses `bytes`, which must be exactly kSaveSnapshotSize bytes (the game's
@@ -155,6 +213,24 @@ public:
     // or if the level-name / time / date strings have no terminator in their
     // reserved room. Does NOT throw on a hash mismatch or a version other than 94.
     static SaveSnapshot parse(ByteView bytes);
+
+    // Builds a real kSaveSnapshotSize-byte buffer from `fields`, following
+    // Sec6.3's own write recipe: start from an all-zero buffer (every
+    // un-modeled span stays zero, the format's own documented placeholder,
+    // never an invented value), write each field this project models at its
+    // real offset, then (iff `computeHash` - default true) stamp the Sec6.1
+    // CRC at offset 0x000, exactly as the real save entry does for a file
+    // write. Pass `computeHash = false` for Sec11.2's OTHER real mode - a
+    // mission checkpoint, built into caller-owned memory with "no hash, no
+    // file" (left 0, matching the real zeroed-and-never-hashed buffer) -
+    // SaveSnapshot::parse() accepts either, since the game's own loader
+    // never checks this field either way (Sec11.1).
+    //
+    // Throws FormatError if a field does not fit its real format room
+    // (levelName/saveTime/saveDate too long to leave a terminator, or a
+    // collection past its real capacity) - the same "a CONFIRMED hard rule,
+    // never a HYPOTHESIS/OPEN one" discipline errors.h documents for parse().
+    static std::vector<uint8_t> build(const SaveSnapshotFields& fields, bool computeHash = true);
 
     // ---- hash (Sec6.1; written on save, never verified on load) ----------
     uint32_t hashStored() const { return checksumRaw_; }

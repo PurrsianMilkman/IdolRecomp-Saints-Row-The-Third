@@ -540,7 +540,7 @@ These two tables are a pair: **`effects.xtbl` names a gameplay/effect entry and 
 
 ### 10.1 `effects.xtbl` **[CONFIRMED — disassembly + CONFIRMED — empirical (§14)]**
 
-**Loader** `0x005C4B10(table name, framework, start slot)`. **Root/row:** `Table` → repeated **`Effect`**. **Runtime array:** base `0x0143CB38`, stride **`0x98`**, **capacity `0x2A3` = 675** (the loader stops reading rows when the slot index reaches it), live-effect count `0x0143CB28`. **The slot index of an entry is the *effect index* other tables store** (`rain`, `groundfires`, `skybox_effects`, the TOD orbital objects): `0x005C50B0(name)` = CRC-32 of the name → open-addressing (linear-probing) hash table of slot indices → the slot number, `0xFFFFFFFF` if absent; the table compares against the entry's stored CRC at `+0x44`. **[CONFIRMED — disassembly.]** **[Desk review 2026-09-30: `spec-tables-weapons-combat.md` §1.6 (`FUN_005C50B0`) gives the probe start as `hash mod capacity`.]** ~~**[OPEN — desk review 2026-09-30: bytes `+0x40`–`+0x43` (after the `char[0x40]` name, before the CRC at `+0x44`) are not described; and what happens when two rows share a `Name` (first kept, last kept, or both inserted) is not stated — relevant because the base game ships two copies of this table (§17); `0x005C4B10`; to be settled against the executable.]**~~ **[CONFIRMED — disassembly 2026-10-01: `+0x40`–`+0x43` are not written (padding). Duplicate `Name`: the hash table is consulted (`0x005C49D0`) before insertion (`0x005C4970`); a repeated name is not inserted again, so lookups keep the first row and the later row occupies a slot unreachable by name (and, if it has neither visual nor sound, its drop path tombstones the first row's bucket) — HIGH CONFIDENCE, the lookup/insert helpers not read. Also: a switch-name text without `:` writes neither half; with a `NULL` framework argument the row filter is skipped; a `Damage_Region` without `Region_Shape`, or a `Proximity_Refraction` without `Situation`, hands a `NULL` text to `_stricmp`/the hash (hazard, not exercised).]**
+**Loader** `0x005C4B10(table name, framework, start slot)`. **Root/row:** `Table` → repeated **`Effect`**. **Runtime array:** base `0x0143CB38`, stride **`0x98`**, **capacity `0x2A3` = 675** (the loader stops reading rows when the slot index reaches it), live-effect count `0x0143CB28`. **The slot index of an entry is the *effect index* other tables store** (`rain`, `groundfires`, `skybox_effects`, the TOD orbital objects): `0x005C50B0(name)` = CRC-32 of the name → open-addressing (linear-probing) hash table of slot indices → the slot number, `0xFFFFFFFF` if absent; the table compares against the entry's stored CRC at `+0x44`. **[CONFIRMED — disassembly.]** **[Desk review 2026-09-30: `spec-tables-weapons-combat.md` §1.6 (`0x005c50b0`) gives the probe start as `hash mod capacity`.]** ~~**[OPEN — desk review 2026-09-30: bytes `+0x40`–`+0x43` (after the `char[0x40]` name, before the CRC at `+0x44`) are not described; and what happens when two rows share a `Name` (first kept, last kept, or both inserted) is not stated — relevant because the base game ships two copies of this table (§17); `0x005C4B10`; to be settled against the executable.]**~~ **[CONFIRMED — disassembly 2026-10-01: `+0x40`–`+0x43` are not written (padding). Duplicate `Name`: the hash table is consulted (`0x005C49D0`) before insertion (`0x005C4970`); a repeated name is not inserted again, so lookups keep the first row and the later row occupies a slot unreachable by name (and, if it has neither visual nor sound, its drop path tombstones the first row's bucket) — HIGH CONFIDENCE, the lookup/insert helpers not read. Also: a switch-name text without `:` writes neither half; with a `NULL` framework argument the row filter is skipped; a `Damage_Region` without `Region_Shape`, or a `Proximity_Refraction` without `Situation`, hands a `NULL` text to `_stricmp`/the hash (hazard, not exercised).]**
 
 | Element (child of `Effect`) | Type | Offset / effect | Notes |
 |---|---|---|---|
@@ -954,7 +954,7 @@ Checkpoint state at the coordinator's pause (2026-09-20): **schemas complete at 
 
 **Open items**
 
-1. **Run-time consumers** were not traced for any table: how `weather` stage transitions use `Chance`/`Average_Duration`/`Variance`/`Next_Stage_List`; how the wind state machine (`0x005A9990`) picks stages; how a `Lightning_Type` is picked; what reads the `external_light_override` records (slot 1) and the `weather_time_of_day` cells (blending between segments/stages, the presence-bit semantics — "override present" is the reading fitted to the parser, not seen in a consumer); the readers of the `0x0290FBB0` orbital-object list (its origin and the meaning of its `0x5D0` stride).
+1. ~~**Run-time consumers** were not traced for any table: how `weather` stage transitions use `Chance`/`Average_Duration`/`Variance`/`Next_Stage_List`~~ **RESOLVED, §18 (2026-10-08): the weighted-`Chance` stage picker, schedule tick, and the `weather_time_of_day` cell blending (presence-bit-gated 2×2 bilinear corner selection, formulas given) are all now traced.** Still OPEN from this item: how the wind state machine (`0x005A9990`) picks stages; how a `Lightning_Type` is picked; what reads the `external_light_override` records (slot 1); the readers of the `0x0290FBB0` orbital-object list (14 reader functions now enumerated, §18, none opened for their field offsets — its origin and the meaning of its `0x5D0` stride remain OPEN).
 2. **Absent-element behaviour of the always-write accessors** (§1.4): the run-time value is stack residue; not modelled. Worth a one-line check in `spec-vehicle-data.md` §7.2 by its owner (that section says "0 if absent"). *(Already done: `spec-vehicle-data.md` §7.2 was corrected 2026-09-20.)*
 3. **The cloud-layer naming disagreement** (§15.3): which vocabulary names the four per-band strength slots correctly.
 4. **The mission-override family** (§15): the `0x00BA4A10` sibling reader, the `0x00BA25E0` orbital sub-reader, the `0x006E2150` call into the light-override reader, and the meaning of the vocabulary indices 82–93 (`day_begin`, `day_end`, `tod_segments`, `segment`, …) — the last suggest another, TOD-*definition* file format read at `0x00B9E4D0`/`0x00BB6400` that has no filename literal in this group and was not chased.
@@ -1072,9 +1072,108 @@ Because `0x00DAB9E0(lod, "Distance")` (and `"Spawning"`, `"Update"`) finds no su
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (copied real values and two verbatim excerpts replaced by descriptions; OPEN notes on the effects copies, the 12-of-16 instance count and the §17.4 record layout); NEEDS-DATA: hash of both base `effects.xtbl` copies; NEEDS-EXE: `0x00E21F70` record layout. Row counts agree with Team B `team-b/HANDOFF.md` section "9.80 `sr3tables_environment`" where both report (weather 5, skybox 8, lens_flares 6, motion_blur 1, color_entry 145, camera_shake 70, decal_info 14, effects 1,272 = 606 + 606 + 60, vfx 589 = 529 + 60, refraction 27 = 26 + 1) — desk review (not re-derived from the executable).**
 
+## 18. Weather/TOD runtime: state machine, blend formulas, per-frame consumer chain (2026-10-08)
+
+**Closes §16 item 1's "weather state machine"/"weather_time_of_day cell blending" questions.** (Item 4's
+mission-override-family sub-functions — `0x00BA4A10`/`0x00BA25E0`/`0x006E2150` and the vocabulary-index
+82-93 TOD-definition-file question — are untouched by this pass; still OPEN as before.)
+Method: Ghidra disassembly/decompile via this project's own read-only query server, PowerShell only.
+Confidence labels as elsewhere in this document.
+
+**The weather stage schedule/transition state machine** lives at `0x005A6270`-`0x005A7C7D`, structurally
+parallel to the already-documented wind state machine (§4.1): a weighted-random `Chance`-based stage
+picker (`0x005A6270`, the exact mechanism item 1 flagged as unknown), a 20-byte schedule-entry array
+(`0x0140E320` current index / `0x0140E324` array base, stride `0x14`), and a main tick (`0x005A6FE0`)
+that seeds/advances the schedule and reuses the identical random-duration-jitter and smoothing primitive
+wind already uses (`avg ± variance·avg`, same function address as wind's own). **Confirmed new runtime
+consumer**: `weather.xtbl`'s `Temp_Settings` fields (`Min_Temp_Day`/`Max_Temp_Day`/`Min_Temp_Night`/
+`Max_Temp_Night`, §2) are read once per schedule transition to roll a randomized day/night temperature —
+previously documented as data only. **CONFIRMED.**
+
+**The TOD-segment crossfade and the weather-stage blend are computed together, once per frame, by one
+function, `0x005A6300`** (sole caller `0x005A8320`, itself called once per frame from the master
+per-frame dispatcher `0x00702A50`, §4.1/§7.3's own citation). Literal formulas:
+- **TOD-segment blend** (the direct runtime consumer of `weather_time_of_day.xtbl`'s own `Ramp_Out_Time`
+  field, previously data-only): given the bracketing segment pair `[low, high]` by current TOD fraction,
+  `timeToNextStart = high.Start_Time - t` (wrapped); if that falls inside `low.Ramp_Out_Time`,
+  `blend = 1.0 - timeToNextStart/low.Ramp_Out_Time`, else `0.0`. A second code path (gated by a
+  not-independently-opened toggle function) instead snaps to the single closest segment, for a
+  no-crossfade mode.
+- **Weather-stage blend**: an elapsed-fraction-of-current-schedule-entry term, smoothed by the SAME
+  smoothing primitive wind's own transition already uses (confirmed by exact function-address reuse, not
+  just structural similarity).
+
+Both resolve a **2×2 bilinear "corner cell" selection** — four `weather_time_of_day` cell pointers
+(segment-low×stage-A, segment-high×stage-A, segment-low×stage-B, segment-high×stage-B) plus the two
+blend scalars, using the cell addressing (`stageIndex*0xE48 + segment.CellArrayBase`) already documented
+at §3.1/§3.2 — exposed via 6 small accessor functions (`0x005A6970`/`0x005A6990`/`0x005A69B0` + 3
+thunks). The "segment-high" accessor pair was not found this pass (OPEN: either read directly as a
+global or a second accessor pair exists unidentified).
+
+**The per-frame consumer that reads those four corners and produces this frame's live, fully-blended
+lighting values**: `0x00702A50` → `0x005A8320` (weather/TOD tick) → `0x005A23F0` (TOD clock advance) →
+`0x00BB6690` → **`0x00BA8540`**, a single ~53KB function that blends essentially every live
+`weather_time_of_day` field via two small generic primitives — `0x00BA38E0` for color/Vec4 fields
+(gated by a per-element presence bit, consistent with `Orbital_Objects`' own presence scheme, §3.3),
+`0x00B9F090` for plain-float fields (confirmed by its own caller census: roughly 500 call sites inside
+`0x00BA8540` alone — direct structural confirmation this function blends each field by its own inlined
+call, not a data-driven loop). A mission-override short-circuit (`0x006E1D60`, already cited at §15.1)
+is checked per field before the generic blend runs. **CONFIRMED mechanism; OPEN for the full ~100+ field
+enumeration** (budget did not allow exhausting the 53KB body field-by-field).
+
+**A second, finer temporal-smoothing layer**, found as a byproduct: `0x00BA2E30` reads a 48-entry
+(half-hour) resample cache off one of the four corner pointers plus a large offset (`+0x5BB0` —
+HYPOTHESIS, not proven, that this is a sub-block of the TOD-definition object `0x0290FBB0`/`0x0290FBB8`
+already on file at §15.5/§9.2) and interpolates between adjacent half-hour samples. Its one fully-traced
+output — two groups of 5 floats each (`0x0291EA8C`-`0x0291EA9C` and `0x0291EAA0`-`0x0291EAB0`, confirmed
+zero other writers anywhere in the binary) — are HIGH CONFIDENCE the per-frame blended appearance
+parameters (tint/scale/opacity-shaped) for the two named `Orbital_Objects` entries ("02-noonsun",
+"04-moon," §15.4), not independently confirmed field-by-field. A debug readout (`0x00B9F710`) exists for
+group 1 but carries no field-name semantics beyond labeling the whole group "TOD Driven"/"Overridden."
+
+**Sun/moon direction — OPEN, sharpened to a genuine, substantiated negative, not just untried.** No
+`Sun_Angle`/`Sun_Direction`-shaped field exists in `weather_time_of_day.xtbl`'s schema (re-confirmed
+against §3.3's own exhaustive field list before any disassembly). The full consumer chain above was
+traced specifically looking for a TOD-fraction-to-angle computation and found none: a family of
+functions that also read the TOD fraction turned out to be a cloud/water texture-scroll phase
+normalizer (REFUTED as a direction candidate); the two 5-float celestial groups are appearance
+parameters, not a placement vector (field count, debug-toggle shape, and smoothing-cadence all argue
+against "angle"); the orbital-object master list (`0x0290FBB0`, already flagged OPEN at §16 item 1/§3.2)
+remains the most likely place a direction *would* live if one exists in data at all, but none of its 14
+confirmed reader functions were opened for their field offsets this pass. Working HYPOTHESIS, offered
+explicitly as unconfirmed: sun/moon apparent motion is a fixed, artist-authored skydome placement (the
+default `rfg_skybox`, §15.5), with any perceived movement coming from a whole-dome rotation driven by
+one of two unexplained phase accumulators found alongside the hour-of-day clock inside `0x00BB6690`
+(`0x0290FB24`/`0x0290FB28`, wrapping at 10.0 — an odd modulus for a plain angle) — not traced to a
+confirmed mechanism.
+
+**Render-pipeline cross-reference**: one previously-uncharacterized candidate for the role-1
+`Fog_color`/`V_ambient_render` shader-constant producer, `0x004935B0` (flagged in
+`spec-render-pipeline.md` §20.9/§20.10/§23.9 as "post-process/blur/DoF-shaped," never opened), is
+**CONFIRMED REFUTED** — full decompile shows it is a camera depth-linearization/viewport-scale constant
+uploader, with no reference anywhere in its body to any of the weather/TOD blend globals above. The
+exact CPU-side global feeding the role-1 shader constants is still OPEN, but the recipe is now
+mechanical rather than a cold search: inside `0x00BA8540`'s own body, find the specific blend-primitive
+call cluster whose field offset matches `weather_time_of_day`'s own `Ambient_Color`/`Fog_Color`/
+`TOD_Light_Color` offsets (or `weather.xtbl`'s own `Sun_Color_Multiply`/`Sun_Glow_Color_Multiply`/
+`Sun_Opacity` on the stage pointers, a structurally different, weather-scalar-only corner set), then
+`xref` its output global.
+
+Full detail, complete address index, and the 14 unopened orbital-list reader functions:
+`scratchpad/sky_lighting_tod_runtime_2026-10-08.md`.
+
 ## Changelog
 
-- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 9 cross-references (§17.10→§17.8 ×6, §17.7→§17.6 ×2, §17.8→§17.7; dropped a dangling §17.9) and 1 external ref (`spec-xtbl-format.md` §8→§2–§3); marked resolved: §11.7 heading (§17.4), §12.2 flag map and `Vehicle_Aims` base (§17.5), §16 items 2 and 10; corrected the camera_free/decal "same convention" slip (decal takes the cosine, §17.3, §14.2); reworded 2 `param_1` tokens.
+- **2026-10-08 — new §18: the weather/TOD runtime fully traced** (SPEC TEAM, agent `a99d0f8e76c2d1d73`).
+  Closes §16 item 1's weather-state-machine question; confirms `Temp_Settings`/`Ramp_Out_Time` as
+  runtime-consumed (previously data-only); finds and maps the per-frame field-blend producer
+  (`0x00BA8540`) and a second half-hour smoothing cache; refutes one render-pipeline shader-constant
+  candidate (`0x004935B0`, cross-referenced to `spec-render-pipeline.md`); substantiates sun/moon
+  direction as a genuine negative (no angle computation found anywhere in this pipeline) rather than
+  simply untraced. Full detail: `scratchpad/sky_lighting_tod_runtime_2026-10-08.md`. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 9 cross-references (§17.10→§17.8 ×6, §17.7→§17.6 ×2, §17.8→§17.7; dropped a dangling §17.9) and 1 external ref (`spec-xtbl-format.md` §8→§2–§3); marked resolved: §11.7 heading (§17.4), §12.2 flag map and `Vehicle_Aims` base (§17.5), §16 items 2 and 10; corrected the camera_free/decal "same convention" slip (decal takes the cosine, §17.3, §14.2); reworded 2 parameter-placeholder tokens.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 2 `HANDOFF.md` §27.x references to the archived headings (§27.2/§27.1 → §30; header and §16); 0 left (see review).
 - 2026-09-30 (cloud, manager ruling): shortened a `PersistFilename` example in §17 to its file name (`…\ui_cell_frame_left.tga`); the developer's local machine path prefix is omitted. Rule: no developer machine paths or usernames in specs.
 - 2026-09-30 (cloud): §1.3: the loader's failure message is paraphrased instead of quoted verbatim (manager clean-room line).

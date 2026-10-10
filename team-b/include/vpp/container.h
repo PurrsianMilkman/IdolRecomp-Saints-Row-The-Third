@@ -63,6 +63,37 @@ struct DecompressResult {
     std::string diagnostic;    // human-readable explanation, always set when status != Ok
 };
 
+// Pluggable persistent cache for decompressEntry() results (added for the
+// "persistent decoded-asset cache" task, 2026-10-08). `vpp` itself only
+// defines this interface and calls it when a caller supplies one - this
+// library's own dependency footprint (zlib only) is unchanged. The real,
+// content-hash-keyed, disk-backed implementation lives in the `vppcache`
+// library (include/vppcache/archive_cache.h) specifically so this
+// low-level format library never has to know about filesystems, hashing
+// or eviction policy. Every existing call site that constructs a
+// Container the old way (`Container(bytes)`) is completely unaffected -
+// that constructor sets cache_ = nullptr, so decompressEntry() behaves
+// exactly as before (plain zlib, no caching).
+class DecodeCache {
+public:
+    virtual ~DecodeCache() = default;
+
+    // `sourceKey` identifies the exact byte-identical source container
+    // this entry came from (normally a content hash of the whole archive
+    // file - Container never computes this itself, it only threads
+    // whatever string the caller supplied through to these calls).
+    // `expectedSize` is the entry's own +0x0C decompressedLength field;
+    // an implementation that validates cached data against it (recommended)
+    // turns silent on-disk cache corruption into a cache miss (falls back
+    // to a real decode) rather than a wrong byte-identical-output claim.
+    // Returns true and fills `outData` with the entry's already-
+    // decompressed bytes on a hit.
+    virtual bool get(const std::string& sourceKey, size_t entryIndex, uint32_t nameHash,
+                      size_t expectedSize, std::vector<uint8_t>& outData) = 0;
+    virtual void put(const std::string& sourceKey, size_t entryIndex, uint32_t nameHash,
+                      const std::vector<uint8_t>& data) = 0;
+};
+
 // Parses one `.vpp_pc` / `.str2_pc` container. Per spec §5, both use
 // exactly the same header/directory/filename-table format - a nested
 // `.str2_pc` is just this same parser pointed at a directory entry's
@@ -80,6 +111,14 @@ public:
     // FormatError if the header fails CONFIRMED validation (magic,
     // version range, or the directory-table-size invariant).
     explicit Container(ByteView bytes);
+
+    // Same as above, but decompressEntry() consults `cache` first (a hit
+    // returns the cached bytes with zero zlib work) and persists every
+    // fresh decode into it. `cache` must outlive this Container; passing
+    // nullptr is identical to the constructor above. `sourceKey` is
+    // opaque to Container - see DecodeCache's own comment. Does not
+    // affect rawEntryBytes()/openNested() (nothing to decompress there).
+    Container(ByteView bytes, DecodeCache* cache, std::string sourceKey);
 
     const Header& header() const { return header_; }
     const std::vector<Entry>& entries() const { return entries_; }
@@ -161,6 +200,12 @@ private:
     uint64_t sharedTotal_ = 0;
     bool sharedLayoutValid_ = false;
     mutable std::vector<uint8_t> sharedStream_; // decoded prefix of the shared stream
+
+    // Optional persistent decode cache (see DecodeCache above). Never
+    // owned by Container; nullptr (the default, set by the original
+    // constructor) means "no caching, exactly the pre-existing behaviour".
+    DecodeCache* cache_ = nullptr;
+    std::string sourceKey_;
 };
 
 } // namespace vpp

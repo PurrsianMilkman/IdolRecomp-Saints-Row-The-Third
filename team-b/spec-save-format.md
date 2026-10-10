@@ -291,7 +291,7 @@ The table lists, for every span written by a serializer's own code, its offsets,
 - ~~**The alternate serializers** (entries 2, 3, 7, 9, 16, 19, 23, 25, 28) are chosen under a session-state condition whose meaning I did not establish; a snapshot written in that mode may use the alternate layout for the affected block.~~ **DONE 2026-09-20 (§11.7, agent X): the condition is "this machine is a guest in someone else's hosted online session"; the alternate's file layout is identical to the primary's — only the data source/sink (a shadow global block) differs. Open: who fills the shadow copies.**
 - ~~**A different `0x246C`-byte structure** is guarded by the same CRC routine (hash at +0, a type byte at +4 that must equal 2, CRC over the following `0x2468` bytes; build routine `0x00B990B0`, check `0x00B99100`, called from the code around `0x0080F1A0`, `0x0080FB40`, `0x00BD1700`, `0x00BD14E0`, `0x00BD2010`). It is not one of the three files in this document (its size matches none) and was not examined; its `0x2254`-byte inner block has the same shape as the record at `0x900`.~~ **DONE 2026-09-20 (§11.6, agent X): an online-gallery "avatar" upload/download blob (the customised character), built and checked by the gallery screen with the same fill routine as the `0x900` record.**
 - **Untested behaviour:** nothing here was observed by running the game; whether an edited snapshot with a stale hash loads is a static inference (§6.1). *(2026-09-20: §11.1 read the load path; the verdict is still static.)*
-- **The player's saved world position and heading — checked directly, 2026-10-03, answer: not present.** Team B asked whether the save confirms the player's world position/heading anywhere in the player record. It does not, and the negative is well-supported rather than merely unobserved: §6.4's region map already covers **99.5% of the file with 0 non-zero bytes left unaccounted for** (every gap is a zero-filled pad, confirmed in all 16 samples), and no span anywhere in that map has the shape of a position (no float/int32 triple or larger transform-sized block appears outside the already-named fields — morph sliders, colours, respect/cash counters, and so on). The one object-handle field that could have been a candidate, the header's `0x058` (entry 0), is independently confirmed by §12.7.1 to be used on load only as a **reference point to place a recruited crew member near the player**, not as a stored coordinate the player is placed at. The header does store a **zone-name string** (`0x014`, §6.3) that selects which level/district loads, but nothing in the mapped file carries where in that zone the player ends up. **Reading, not yet independently confirmed from the spawn side:** the likely real mechanism is that the player's post-load position comes from the zone/mission system itself (an active-mission entry point, keyed by `0x084`'s mission index, or a crib/safehouse default, §10.5) rather than from any saved transform — consistent with an open-world game that resumes at a logical point (mission start, crib) rather than the exact spot the player quit at. **Not independently traced this pass** (would need the load driver's own post-restore hand-off to the world/spawn system, and is a different investigation from this file's own scope). **For Team B:** do not look for a player position field in the save; the first real in-world position will have to come from wherever the zone/mission/crib spawn logic places the player after load, which is outside `spec-save-format.md`'s own subject matter.
+- **The player's saved world position and heading — checked directly, 2026-10-03, answer: not present.** Team B asked whether the save confirms the player's world position/heading anywhere in the player record. It does not, and the negative is well-supported rather than merely unobserved: §6.4's region map already covers **99.5% of the file with 0 non-zero bytes left unaccounted for** (every gap is a zero-filled pad, confirmed in all 16 samples), and no span anywhere in that map has the shape of a position (no float/int32 triple or larger transform-sized block appears outside the already-named fields — morph sliders, colours, respect/cash counters, and so on). The one object-handle field that could have been a candidate, the header's `0x058` (entry 0), is independently confirmed by §12.7.1 to be used on load only as a **reference point to place a recruited crew member near the player**, not as a stored coordinate the player is placed at. The header does store a **zone-name string** (`0x014`, §6.3) that selects which level/district loads, but nothing in the mapped file carries where in that zone the player ends up. ~~**Reading, not yet independently confirmed from the spawn side:** the likely real mechanism is that the player's post-load position comes from the zone/mission system itself (an active-mission entry point, keyed by `0x084`'s mission index, or a crib/safehouse default, §10.5) rather than from any saved transform — consistent with an open-world game that resumes at a logical point (mission start, crib) rather than the exact spot the player quit at. **Not independently traced this pass** (would need the load driver's own post-restore hand-off to the world/spawn system, and is a different investigation from this file's own scope).~~ **CONFIRMED from the spawn side, 2026-10-07** (`spec-zone-data-format.md` §11.7's own "Empirical confirmation" paragraph, real shipped `.czn_pc` bytes, not code alone): the "crib/safehouse default" hypothesis is exactly right. Zone data stores player spawn/entry-point markers as ordinary objects (`ctg_object_name` values like `player_start`, `local_player_start`/`remote_player_start`, `<zone>_local/remote_player_start`) in the same generic Objects-section format every other placed object uses — 83 such markers found across 29 real zone files (safehouses, missions, minigame sub-zones), all resolving to one generic named-point/marker class with no dedicated "spawn" type. The brand-new-game opening (the Stilwater bank-heist intro) is the one case confirmed NOT covered by this mechanism — its own zone files carry no such marker, consistent with `spec-lua-api-behaviour.md` §4.3/§35/§48.2's already-landed finding that the opening is placed by script (`teleport`/`teleport_coop`), not a passive zone marker. **For Team B:** do not look for a player position field in the save; for ordinary zone entry, read the target zone's own `.czn_pc` Objects section for a `player_start`-named object (position property id `3367956165`, see `spec-zone-data-format.md` §11.7); for the literal new-game opening, replicate the intro mission's own scripted placement instead.
 
 **Review status (2026-09-30), §6.6: DESK-PASS — desk review (not re-derived from the executable). Player-position sub-item added 2026-10-03, re-derived from this file's own already-exhaustive region-map coverage, not a fresh desk pass.**
 
@@ -419,6 +419,16 @@ The exact int-versus-float assignment of each *non-complex* id lives in the game
 | `+0x60` | `0x2064` | u8 flags | bit0 **vehicle camera snap**; bit1 **airplane controls** | 0 / 0 / 2 |
 
 **[CONFIRMED — disassembly]** for every named field (label ↔ storage ↔ struct offset is shown by three independent routines — collect, apply, and the menu set/reset bindings). **Empirical:** the real values above are all in range for their stated types (floats in `[0,2]`, flags within the named bits). The `0x2004` struct is *also* exactly what the game keeps as its live "options" object; the collect routine fills it from live settings on save, the apply routine pushes it into the live settings on load.
+
+**Cross-reference, 2026-10-08, runtime reader now CONFIRMED:** `+0x21`/`0x2025`'s "static minimap"
+boolean is applied directly (no setter call) to a live global, `0x022c03e0`, by the options-apply
+routine `0x00841320`. That global is read three times by a previously-undocumented, indirectly-
+dispatched corner-minimap update function, `0x00809910` (`spec-hud-runtime.md` §6.4), gating a live-
+heading read vs. a fixed/zeroed orientation and whether a computed rotation is applied to the on-screen
+draw-position math — **confirming** (not merely implying) that the corner minimap's own live feed
+includes the player's heading, not just position, and that this option toggles exactly that
+player-heading-rotating mode vs. a fixed north-up one. Full detail:
+`scratchpad/weapons_fire_damage_and_player_blip_2026-10-08.md`.
 
 **Review status (2026-09-30), §7.5: DESK-PASS, text fixes applied (`+0x23` store width OPEN) — desk review (not re-derived from the executable).**
 
@@ -579,6 +589,8 @@ The S/C extents of §6.4 for these entries are now literal and each joins its ne
 
 Load (`0x00B96A20`): empty the list (`0x005F8CD0`), restore the id counter (`0x005F6090`), then construct one node per record (`0x005F7880`), copying the record back field by field; each rebuilt node's handle is set to a fixed null-handle constant (binding to the live vehicle happens later, in code not followed here).
 
+**Still open as of 2026-10-08 — a follow-up pass looked for the binding step and did not find it.** No further callers of the node-creation helpers (`0x005F7880`/`0x005F7990`) beyond this load routine itself, and no cross-spec document (`spec-tables-vehicle-world.md`, `spec-player-runtime.md`) documents a garage-to-world vehicle-spawn connection either — both checked directly, zero hits. Net reading (HIGH CONFIDENCE, not independently proven): the save restores vehicle *ownership* as a list of null-bound records; the in-world vehicle object is most plausibly spawned on demand later (e.g. retrieving it from a garage location), not automatically as part of load — consistent with there being no vehicle *position* field anywhere in the save format. Recorded so a future pass doesn't repeat the same two dead-end cross-spec greps. Full detail: `scratchpad/save_load_gameplay_runtime_2026-10-08.md`.
+
 **Record layout** (`rec = 0xB764 + 0x70·i`):
 
 | Offset | Size | Field | Evidence |
@@ -687,7 +699,7 @@ The keys/ids of §9.3a, §9.5, §9.6 and §9.7 are produced by one routine (`0x0
 
 - **The local-player record.** A single large runtime object whose pointer lives in a global at `0x0262EDFC` (getter `0x009DA4E0`, ≈2,240 call sites). Entry 1 copies most of its scalars straight out of it; the setters used on load (respect, cash, wardrobe, stat counters) are all small clamping/assigning routines around that object. **[CONFIRMED — disassembly.]**
 - **Cash.** The writer used by the crib-purchase code (`0x005F1E50`) compares a property's purchase price against one player-record field and subtracts the price from it; prices are stored as *float × 100* (the constant `100.0`) — the same ÷100 the save list applies (§3). The clamp routine (`0x00960160`) limits any such value to ±2,000,000,000. **[CONFIRMED — disassembly.]**
-- **Two lists owned by the player record** (§10.3): the *wardrobe* (up to 2,048 runtime entries of 24 bytes, base `0x0262EE00`) and the *outfit list* (up to 128 runtime entries of 8 bytes, base `0x0262E9F8`). Entry 1 saves them through helpers that convert each entry to a compact form; entry 28's load routine (`0x00B9AE60`) calls the same three helpers (`0x00822CF0`, `0x00823D30`, `0x00824300`), which is why §6.4 shows entry 28 repeating entry 1's block shapes. The wardrobe filler takes a selector (0 in entry 1's call) that tests whether an entry's registry pointer lies inside the first `DAT_022DB98C` items of the 0x7C-byte item registry at `0x022DB9C8`; entry 1 keeps those. **[CONFIRMED — disassembly for the selector and the shared helpers; HIGH CONFIDENCE — inferred for "entry 28 keeps the rest = the later-registered, DLC, items".]**
+- **Two lists owned by the player record** (§10.3): the *wardrobe* (up to 2,048 runtime entries of 24 bytes, base `0x0262EE00`) and the *outfit list* (up to 128 runtime entries of 8 bytes, base `0x0262E9F8`). Entry 1 saves them through helpers that convert each entry to a compact form; entry 28's load routine (`0x00B9AE60`) calls the same three helpers (`0x00822CF0`, `0x00823D30`, `0x00824300`), which is why §6.4 shows entry 28 repeating entry 1's block shapes. The wardrobe filler takes a selector (0 in entry 1's call) that tests whether an entry's registry pointer lies inside the first `0x022db98c` items of the 0x7C-byte item registry at `0x022DB9C8`; entry 1 keeps those. **[CONFIRMED — disassembly for the selector and the shared helpers; HIGH CONFIDENCE — inferred for "entry 28 keeps the rest = the later-registered, DLC, items".]**
 
 **Review status (2026-09-30), §10.1: DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -766,11 +778,11 @@ Notes on the record semantics (all **CONFIRMED — disassembly** unless stated):
 
 ### 10.6 Entry 13 — unlockables ("upgrades") state and the modifier scalars they leave behind
 
-**Identity CONFIRMED by string and structure:** the 350-slot block is the state of the game's **unlockables/upgrades** table. Evidence: the loader `0x0071FD30` matches each saved id to a record of the runtime unlockables table (base `0x01522750`, `0x100`-byte records, count `DAT_015226FC`) and re-applies it through the "apply reward" routine `0x0071F170`; the parser near `0x0071E5E0` reads an unlockables data table with fields Category, Price, Auto_Unlock, Is_DLC, Amount, Level, Modifier, Gang_Type, Vehicle_Group, Damage_Mult and Crib_Name; the file name `unlockables.xtbl` occurs beside it (`0x0071EF40`).
+**Identity CONFIRMED by string and structure:** the 350-slot block is the state of the game's **unlockables/upgrades** table. Evidence: the loader `0x0071FD30` matches each saved id to a record of the runtime unlockables table (base `0x01522750`, `0x100`-byte records, count `0x015226fc`) and re-applies it through the "apply reward" routine `0x0071F170`; the parser near `0x0071E5E0` reads an unlockables data table with fields Category, Price, Auto_Unlock, Is_DLC, Amount, Level, Modifier, Gang_Type, Vehicle_Group, Damage_Mult and Crib_Name; the file name `unlockables.xtbl` occurs beside it (`0x0071EF40`).
 
 | Offsets | Shape | Meaning | Label |
 |---|---|---|---|
-| `0x4428`–`0x499F` | 350 × `u32` (`0x578` bytes) | **Unlockable ids** (name hashes), indexed by slot. **312 slots are non-zero (slots 0–311); 312–349 are 0; the table is identical in all 16 samples.** 312 = the first part of the runtime table (`DAT_015226F8`); the remainder is entry 28's twin block (§6.4 `0x15D90`). **Names recovered by the name hash for 85 of the 312 slots** (slot: name): 28 `DLC_gameplay02_alert`; 29 `Cash_Bonus_Modifier`, 30–33 `Cash_Bonus_1`–`4`; 34 `Weekly_cash_for_hos`, 35–38 `Weekly_Payment_1`–`4`; 39 `Lump_Sum_of_Money`; 40 `Respect_Bonus_Purchase1`, 41 `Respect_Bonus_Modifier`, 42–44 `Respect_Bonus_Purchase2`–`4`; 45 `Character_Customization`; 47/48 `Auto_Complete_City_Takeover_District`/`_All`; 51–58 `Crib_3Count`, `Crib_Angels`, `Crib_Nuke`, `Crib_Kinzie`, `Crib_BDSM`, `Crib_SaintsHQ`, `Crib_Shaundis_Ex`, `Crib_Zimos`; 79 `Vehicle_Customization_Price`, 80 `Weapon_Customization_Price`; 98/102 `DLC_preorder03_alert`/`DLC_preorder01_alert`; 103–105 `HomieSlot1`–`3`; 122 `Gang_Customization`; 140 `Homie_Mayor_Reynolds`, 145 `Homie_Josh`, 147 `Homie_Nyteblayde`, 152 `Homie_SWAT_Backup`. **Cross-check with entry 9:** the set-A bits of slots 50–59 (the crib unlockables) have the same population count as the unlocked-crib set in 12 of 16 samples (7/7, 2/2, 10/10, 0/0) and are one higher in the other four (10 vs 9, 3 vs 2). | **CONFIRMED — disassembly + empirical** |
+| `0x4428`–`0x499F` | 350 × `u32` (`0x578` bytes) | **Unlockable ids** (name hashes), indexed by slot. **312 slots are non-zero (slots 0–311); 312–349 are 0; the table is identical in all 16 samples.** 312 = the first part of the runtime table (`0x015226f8`); the remainder is entry 28's twin block (§6.4 `0x15D90`). **Names recovered by the name hash for 85 of the 312 slots** (slot: name): 28 `DLC_gameplay02_alert`; 29 `Cash_Bonus_Modifier`, 30–33 `Cash_Bonus_1`–`4`; 34 `Weekly_cash_for_hos`, 35–38 `Weekly_Payment_1`–`4`; 39 `Lump_Sum_of_Money`; 40 `Respect_Bonus_Purchase1`, 41 `Respect_Bonus_Modifier`, 42–44 `Respect_Bonus_Purchase2`–`4`; 45 `Character_Customization`; 47/48 `Auto_Complete_City_Takeover_District`/`_All`; 51–58 `Crib_3Count`, `Crib_Angels`, `Crib_Nuke`, `Crib_Kinzie`, `Crib_BDSM`, `Crib_SaintsHQ`, `Crib_Shaundis_Ex`, `Crib_Zimos`; 79 `Vehicle_Customization_Price`, 80 `Weapon_Customization_Price`; 98/102 `DLC_preorder03_alert`/`DLC_preorder01_alert`; 103–105 `HomieSlot1`–`3`; 122 `Gang_Customization`; 140 `Homie_Mayor_Reynolds`, 145 `Homie_Josh`, 147 `Homie_Nyteblayde`, 152 `Homie_SWAT_Backup`. **Cross-check with entry 9:** the set-A bits of slots 50–59 (the crib unlockables) have the same population count as the unlocked-crib set in 12 of 16 samples (7/7, 2/2, 10/10, 0/0) and are one higher in the other four (10 vs 9, 3 vs 2). | **CONFIRMED — disassembly + empirical** |
 | `0x49A0`–`0x49CB`, `0x49CC`–`0x49F7`, `0x49F8`–`0x4A23` | 3 × 44-byte bit sets (352 bits each) | Three per-unlockable state bits for slot *i*: **A** = purchased/active (loader stores it in the record's first state byte and, if set, **re-applies the unlockable's effect**), **B** = unlocked/available (second byte), **C** = third state byte. Written from the runtime records by `0x0071DBD0` (`A = state0 ∨ forced`, `B = state1 ∨ forced`, `C = state2`). **Empirical, 16/16: A ⊆ B; C ∩ A = ∅ (so C ⊆ B∖A); all set bits < 312.** Set sizes: A = 1 (new game), 62 (level 22), 157–218 (later); B∖A = 0…88; C = 0…88. I read C as **"unlocked but flagged (new/unseen)" (HYPOTHESIS)**; in the one save where A is unusually small (49) C equals all of B∖A (88). | **CONFIRMED (structure, A ⊆ B, C ⊆ B∖A) / HIGH CONFIDENCE (A = purchased) / HYPOTHESIS (C)** |
 | `0x4F5C`–`0x4F6B` | 16 bytes = 128 bits | **One bit per weapon definition** (definition *i*, for the first *count − 12* definitions of the 0x7EC-byte table at `0x028DC4DC`): the value of bit 31 of the definition's state word at `+0x10`, a runtime bit **cleared for every definition by the new-game routine `0x00B7E770`** and restored from this bit set on load (`0x00B83BF0`). The new-game save has **2 bits set and holds exactly 2 weapon-inventory records**; popcount grows 2 → 25 → 35 → 37 → 53. Reading: **"weapon has been acquired/unlocked" (HYPOTHESIS for the exact name; bit and its persistence CONFIRMED).** *(See `spec-tables-weapons-combat.md` §13.1/§2.2: bit 31 of weapon record `+0x10` is the runtime "unlocked" bit that `crib_weapons.xtbl` sets or clears.)* *[desk review 2026-09-30: `spec-tables-weapons-combat.md` §2.1 calls `0x028DC4E0` the capacity (= base `<Weapon>` rows + 12) and counts 82 base rows (its §18.4), so "count − 12" = 82 definitions if this loop bound is that word — within the 128 bits here (max popcount seen 53); which word the loop reads (`0x00B83BF0` / `0x00B7E770`) was not re-checked.]* | **CONFIRMED (source) / HYPOTHESIS (meaning)** |
 | `0x4A24`–`0x4A33` | 4 × `float32` | **Notoriety multipliers, one per notoriety category (4 categories).** Default 1.0; an unlockable of type 10 sets `category := 1.0 + amount`; the debug overlay computes the decay rate as *rate × this multiplier*. Seen: `[1,1,1,1]` and `[1.15, 1.3, 1.3, 1.3]` — index 0 differs from the other three, which move together; the debug overlay's text splits the decay into a "police" and a "gang" rate, so index 0 = police is the natural reading, but **which index is which category was not shown by code**. **[Resolved 2026-09-20 by agent AI, `spec-tables-progression.md` §4.6: the unlockable parser maps `Score` to 0 = luchadores, 1 = deckers, 2 = morningstar, **3 = police** — index 0 is NOT police.]** | **CONFIRMED (source/effect) / HYPOTHESIS (which index is which)** *(index order: CONFIRMED for the parse/apply numbering in `spec-tables-progression.md` §4.6; label left as is)* |
@@ -831,7 +843,7 @@ Notes on the record semantics (all **CONFIRMED — disassembly** unless stated):
 
 **Verdict: the snapshot's leading hash is never verified on load. ~~[CONFIRMED — disassembly, static.]~~** **[HIGH CONFIDENCE — static (downgraded 2026-09-30, desk review 2026-09-30): evidence line 2 below says the walk follows resolved call references only and that "indirect (virtual) calls are not followed", so a vtable-reached verifier is excluded only by the structural argument of line 3.]** **[OPEN — desk review 2026-09-30: indirect / vtable references to `0x00D9E790` and to the table `0x01320DA0`; to be settled against the executable.]** A snapshot whose hash field is stale, zero, or garbage is applied exactly like a valid one. (The directory hash of §6.1 *is* verified; that is a different file.)
 
-**The chain, in call order** (file load; menu "load slot" handlers `0x007D0CA0`/`0x007D0C50` and the main-menu "continue" `0x007AE420` all funnel into the first row):
+**The chain, in call order** (file load; menu "load slot" handlers `0x007D0CA0`/`0x007D0C50` and the main-menu "continue" `0x007AE420` all funnel into the first row). **Cross-reference, 2026-10-08:** `0x007AE420`'s own full per-frame body is now independently traced from the menu side (`spec-frontend-menu-runtime.md` §3) and confirmed to call step 1 (`0x00B95210`) and step 3a (`0x00B947A0`) **directly** — `0x007ae5b3`/`0x007ae620` respectively — the first time either call site has been shown rather than inferred structurally; that same trace also independently confirms the `+0x5C`/`+0x5D` "skip this slot" flag (step 2c) is read back by the continue picker exactly as described below.
 
 | Step | Code | What it does — and everything it checks |
 |---|---|---|
@@ -864,7 +876,7 @@ For a from-spec **reader**: check the version word (94), the size you actually g
 
 ### 11.2 Checkpoints are the same snapshot, in memory (found along the way)
 
-The save entry `0x00B94A10` takes an optional allocator object. With none (menu save, autosave) it allocates from the save arena and, after building, hashes and queues the file write (§6.3). **With an allocator object it builds the same `0x1AA00`-byte layout into that allocator's memory and returns the pointer — no hash, no descriptor write, no file** (the `0x00B944C0` hash-and-write call sits only in the no-allocator branch). The mission checkpoint code (`0x006D43D0`, the call at `0x006D4722`) does exactly this and keeps the pointer in the second word of its checkpoint slot; the restore in `0x006D3780` (call at `0x006D3B90` region) feeds that pointer to the load gate with the **full flag = 0**. The flag gates the world-wide parts of the load routines: in entry 28's load every one of the following is inside a `flag ≠ 0` test — the item table, the `0x308` struct, the mission-record loop, the `74 × u32` block and the `32 × 0x114` records — so a checkpoint restore skips them. **[CONFIRMED — disassembly for the flag's effect on entries 1, 6 and 28; the save-side flag argument stays unidentified]** (entry 23's save behaves differently only when its flag is 0, consistent with 0 = "checkpoint build"; not otherwise verified).
+The save entry `0x00B94A10` takes an optional allocator object. With none (menu save, autosave) it allocates from the save arena and, after building, hashes and queues the file write (§6.3). **With an allocator object it builds the same `0x1AA00`-byte layout into that allocator's memory and returns the pointer — no hash, no descriptor write, no file** (the `0x00B944C0` hash-and-write call sits only in the no-allocator branch). The mission checkpoint code (`0x006D43D0`, the call at `0x006D4722`) does exactly this and keeps the pointer in the second word of its checkpoint slot; the restore in `0x006D3780` (call at `0x006D3B90` region) feeds that pointer to the load gate with the **full flag = 0**. **Confirmed 2026-10-08** (`spec-player-runtime.md` §15.4): a player's death-triggered respawn is NOT a separate, bespoke "teleport back to spawn" routine — it is this exact checkpoint-restore mechanism, reached via player death (`0x00702810`) → mission-failure → the generic mission-retry flow → `0x006D3780`, with the "checkpoint" being whatever name the mission's own script last reported through `mission_set_checkpoint` (or `"mission start"` if none was reported). The flag gates the world-wide parts of the load routines: in entry 28's load every one of the following is inside a `flag ≠ 0` test — the item table, the `0x308` struct, the mission-record loop, the `74 × u32` block and the `32 × 0x114` records — so a checkpoint restore skips them. **[CONFIRMED — disassembly for the flag's effect on entries 1, 6 and 28; the save-side flag argument stays unidentified]** (entry 23's save behaves differently only when its flag is 0, consistent with 0 = "checkpoint build"; not otherwise verified).
 
 **Review status (2026-09-30), §11.2: DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -873,7 +885,7 @@ The save entry `0x00B94A10` takes an optional allocator object. With none (menu 
 - **Entry 29's save routine (`0x00B97220`) stores the constant `9` at `0x11D88`** and copies `0x388` dwords from a global block at `0x0290DF88` to `0x19AC8`; its load routine (`0x00B97250`) copies the block back and does not look at the word. **The word is consumed by entry 28's load (§11.4)**, which reads it as a *sub-version of the DLC-side block* and gates each sub-block on it. So `0x11D88` is not an independent field: it is the format stamp of entry 28's region, written by the entry that happens to sit at `0x11D88`. [CONFIRMED — disassembly.]
 - **Gates in entry 28's load**, in the order they run: word `≠ 0` → item table (full flag only) and the `0x578` struct with its three bit sets; `> 1` → the `0x308` struct (full only); `> 2` → the `16 × 8` item-state block; `> 3` → the `74 × u32` block and the `32 × 0x114` records (full only); `> 4` → the seven hint slots; `> 5` → the mission records plus the host-only six-mission step; `> 6` → the `64 × 8` handle block; `> 7` → the `20 × 0x70` records; `> 8` → the `0x28` slot struct. **HYPOTHESIS (unconfirmed): the thresholds record the order in which sub-blocks were added.**
 - **Empirical (16 snapshots).** Word values: `9` in 14 files, `8` in one (build stamp `0xEA708`), `0` in one (build stamp `0xE8CE7`). **The version-0 file has all 12 sub-blocks of entry 28 (the 11 rows of §11.4, counting row 2's `0x578` struct and its three bit sets as two) entirely zero (0 non-zero bytes), consistent with its load skipping the whole region** — even though its file version at `0x008` is 94 like the others. The version-8 file has non-zero bytes in the item table, the `0x578` struct, the `0x308` struct, the `16 × 8` block, the hints and the mission records, and none in the `74 × u32`, `32 × 0x114`, `64 × 8`, `20 × 0x70` blocks or the `0x28` struct.
-- **The `904 × u32` block at `0x19AC8` is inert storage.** Its global (`0x0290DF88`–`0x0290EDA7`) is referenced by no code in the executable other than these two routines: Ghidra's cross-reference list for `[0x0290DF80, 0x0290EDB0]` shows, besides the routine pair, only references to the neighbouring *other* variables (`0x0290DF80`, `0x0290EDA8`, `0x0290EDB0`), and a byte-level scan of every section for any 4-byte operand inside `[0x0290DF88, 0x0290EDA8)` found only the three operands in entry 29's own routines (ten further matches were unaligned byte coincidences straddling the opcode and operand of a relative call/jump, checked by hand). The word `0x0290DF80` just before it is a *different* variable: a counter cleared by the load driver and bumped by the item-state restore (§11.4). **Zero in 16/16** (also 16/16 by the harness). It is a pass-through: whatever a file carries is loaded into the global and re-emitted on the next save. **[CONFIRMED — disassembly for "no other accessor"; HIGH CONFIDENCE — inferred for "reserved/forward-compatibility".]**
+- **The `904 × u32` block at `0x19AC8` is inert storage.** Its global (`0x0290DF88`–`0x0290EDA7`) is referenced by no code in the executable other than these two routines: Ghidra's cross-reference list for `[0x0290DF80, 0x0290EDB0]` shows, besides the routine pair, only references to the neighbouring *other* variables (`0x0290DF80`, `0x0290EDA8`, `0x0290EDB0`), and a byte-level scan of every section for any 4-byte operand inside `[0x0290DF88, 0x0290EDA8)` found only the three operands in entry 29's own routines (ten further matches were unaligned byte coincidences straddling the opcode and operand of a relative call/jump, checked by hand). The word `0x0290DF80` just before it is a *different* variable: a counter cleared by the load driver and bumped by the item-state restore (§11.4). **Zero in 16/16** (also 16/16 by the harness). It is a pass-through: whatever a file carries is loaded into the global and re-emitted on the next save. **[CONFIRMED — disassembly for "no other accessor"; HIGH CONFIDENCE — inferred for "reserved/forward-compatibility".]** **Cross-reference, 2026-10-08:** the new-game code path (`spec-frontend-menu-runtime.md` §2) zeroes this exact global block directly (`0x00b97270`→`memset(0x0290df88, 0, 0xE20)`), explaining the empirical "reads all-zero in fresh/new-game saves" observation above with its actual code cause, not just an inference.
 
 **Review status (2026-09-30), §11.3: VALIDATED-BY-DATA: `0x11D88` words 9:14, 8:1, 0:1, same two files as the older build stamps (Team B); text fixes applied — desk review (not re-derived from the executable).**
 
@@ -955,7 +967,7 @@ Not every guest-mode difference is in a table entry: **entry 1's difficulty word
 
 **Still open (honest gaps):**
 - **What the objects are.** Entry 28's blocks are shown to be DLC-restricted copies of entries 1, 3, 4, 5, 6, 10 and 13's blocks through shared helpers; the game meaning of each underlying table is taken from the sibling sections (§9, §10, §12) and cited in the rows of §11.4. What is *not* resolved anywhere: the flag bits of the mission-object records and of the host-only six-mission step, what the `0x246C` blob's wire encoding is, and which named entries the DLC slot ids of §11.5 are.
-- **Load routines not read:** entries 0, 1 (partly), 2–27 and 30's load routines were read only where quoted above; a per-block "consumed as" table for the rest is not built. The negative for the hash needs none of them (§11.1).
+- **Load routines not read:** ~~entries 0,~~ 1 (partly), 2–27 and 30's load routines were read only where quoted above; a per-block "consumed as" table for the rest is not built. **Entry 0 (header) struck 2026-10-08: its load routine, `0x00B9B530`, is now read in full, §16.** The negative for the hash needs none of them (§11.1).
 - **Untested:** no edited snapshot was loaded; the wrong-version and truncated-file outcomes are static inferences.
 - **The alternates' shadow fillers** and the producer of error code 5 (§11.1, §11.7).
 - **The avatar blob's wire encoding** and what the 512 trailing bytes are reserved for (§11.6); the `DLC Bundles` field is zero on the path read.
@@ -1130,7 +1142,7 @@ Save `0x00B96C00` → `0x007053E0`; load `0x00B96C20` → `0x00705410`. The **ga
 
 ### 12.7 Roster and inventory
 
-#### 12.7.1 Entry 4 — the crew ("homie") roster `0x4334`–`0x4417`  **[structure CONFIRMED; meaning HIGH CONFIDENCE]**
+#### 12.7.1 Entry 4 — the crew ("homie") roster `0x4334`–`0x4417`  **[structure CONFIRMED; meaning CONFIRMED 2026-10-08, upgraded from HIGH CONFIDENCE — §16 reads the header's load routine directly and confirms the `+0x058` handle is cross-referenced into entry 6's own mission-object table to source a live world position, not inferred from the save side alone]**
 
 Save `0x00B97AA0`; load `0x00B9A580`. Source: the homie table (`0x022AD780`, stride `0x180`, count at `0x022AD758`; loaded from the homies data table at `0x007E6E70`; the neighbouring strings are the crew notifications — killed, left you, dismissed, fallen, hospital bill).
 
@@ -1166,9 +1178,9 @@ Save `0x00B96D50` (`0x0055C280` + `0x0055C040`; alternate `0x00B99430`), load `0
 - `0xFBE0 + 12·i`, 8 records: `+0` **event id hash**, `+4` **the event timer's value** (read by the timer helper, restored by its setter), `+8` **times-played byte** — the up-to-8 entries of the **posted radio events** ring (events from the radio-events data table are posted with a `Post_Time`-hours timer; the load re-posts them with the saved timer). Unused records hold the invalid-id constant (0). **All 8 × 12 bytes are 0 in 16/16** (no radio event was pending at any save).
 - `0xFC40`, 30 bytes: **one 0/1 flag per commercial event** (30 events named in the commercial-events data table, slot = its `EventValue`); a commercial is enabled/disabled by events it names, so these are the flags behind the ads that play. Two bytes at `0xFC5E` are pad (0). **Data**: new game has flags **1, 2, 6 and 27** set; the level-49/65 %+ saves have up to 14 set.
 
-#### 12.8.3 Entry 18 — flagged radio stations `0xB320`–`0xB35F`  **[structure CONFIRMED; flag meaning OPEN]**
+#### 12.8.3 Entry 18 — flagged radio stations `0xB320`–`0xB35F`  **[structure CONFIRMED; flag meaning CONFIRMED 2026-10-09]**
 
-Save `0x00B96DF0` → `0x0055E2A0`; load `0x00B96E10` → `0x005608C0` (→ `0x00560820`). **16 dwords**: for each station (index ≥ 1) whose **bit 7 at station `+0x689`** is set, its id (`+0x140`); the rest 0. On load each id is matched to a station and the bit is set again (the setter also refreshes the player's current station). **Data: at most one non-zero id in every sample (`0xD11F2385` in the two level-49/65 % saves, all others empty).** The bit's meaning (unlocked? favourite? discovered?) is **OPEN**.
+Save `0x00B96DF0` → `0x0055E2A0`; load `0x00B96E10` → `0x005608C0` (→ `0x00560820`). **16 dwords**: for each station (index ≥ 1) whose **bit 7 at station `+0x689`** is set, its id (`+0x140`); the rest 0. On load each id is matched to a station and the bit is set again (the setter also refreshes the player's current station). **Data: at most one non-zero id in every sample (`0xD11F2385` in the two level-49/65 % saves, all others empty).** **Bit 7's meaning, CONFIRMED (2026-10-09, `spec-audio-runtime.md` §14.1): hidden/disabled by the player via the music menu** — `0x00560820` is the native backing `cell_music_menu_toggle_station`; setting the bit also forces the player off that station onto the next selectable one if currently tuned there, and the station-switch function (`0x005602e0`) refuses to tune into any station with this bit set. Not "unlocked"/"favourite"/"discovered" as previously hypothesized.
 
 **Review status (2026-09-30), §12.8: DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -1195,6 +1207,8 @@ The struct is `0x28` = 40 bytes, so the last two pad bytes are part of it (this 
 #### 12.10.1 Entry 7 — `0x084` `[HIGH CONFIDENCE]`
 
 Save `0x00B96AD0` (alternate = same routine), load `0x00B96AF0`. `0x084` is a `u32` from a global at `0x012F252C` (getter `0x006CEF90`, the value the save list uses to look up the slot's display label, §6.5). **The writer (`0x006D2B20`) sets it to the index of the current mission in a 50-entry table (`0x014E9500`) by matching the mission object's id against the table; the mission-manager initialiser (`0x006D6010`) sets it to `0x7F` (= no mission).** Samples: 1, 22, 23, 32 (×6), 35 (×3), 41 (×2). *[Tally (desk review 2026-09-30): these cover 14 of 16 samples; OPEN — to be settled against real data.]* The `0x088` completion percentage in the same routine is unchanged from §6.5.
+
+**Load-side effect, CONFIRMED 2026-10-08 (gameplay-runtime follow-up): none.** The load routine, `0x00B96AF0` (2 instructions), reads the saved `u32` and passes it straight to `0x006CEFA0` — a 6-instruction range-validated setter (`if (v < 50) or (v == 0x7F): global@0x012F252C = v; else: no-op`) whose **only caller in the entire executable is this load routine**. The global it writes has exactly one other confirmed reader anywhere in this project's findings — the same save-browser display getter (`0x006CEF90`) named above. There is no mission-object lookup, no mission-start call, and no second reader of this global anywhere in the binary. **Loading a save does not re-arm, resume, or otherwise touch any mission object through this field** — it exists purely so the save-browser screen can show a plausible-looking "last known location" label without walking the full per-object mission state (that real restoration is carried entirely by the entries 6/8/28 mechanism, §9.3/§9.4/§11.4 row 8). Full detail: `scratchpad/save_load_gameplay_runtime_2026-10-08.md`.
 
 **Review status (2026-09-30), §12.10.1: NEEDS-DATA: the sample tally covers 14 of 16 — desk review (not re-derived from the executable).**
 
@@ -1268,10 +1282,225 @@ With the base tables readable (`spec-vpp-container.md` §7), saved name-hash ids
 
 **Review status (2026-09-30), §14: VALIDATED-BY-DATA: cheats 151/151, unlockables 4,992/4,992 (Team B and SPEC TEAM) — desk review (not re-derived from the executable).**
 
+## 15. Save Triggers — what actually calls the save entry (added 2026-10-08)
+
+**Scope: this section covers the gameplay-runtime question §6/§11 never addressed — what in-game event
+calls the save entry point at all.** §6.3 already identifies `0x00B94A10` as the save entry (allocate the
+save arena, zero it, run the 32-entry serializer driver, hash, queue the file write) and §11.2 already
+traces the one checkpoint call site it needed for its own purposes; neither traces every caller. An
+exhaustive `call rel32` scan of `.text` for every instruction whose displacement target is exactly
+`0x00B94A10` found **exactly four call sites in the whole executable** — every save/checkpoint operation
+in the shipped game funnels through one of these four instructions. **[CONFIRMED — disassembly,
+exhaustive scan.]**
+
+**The call's own argument shape** (read at all four sites; CONFIRMED shape, HYPOTHESIS semantic role):
+`0x00B94A10` takes **three** `cdecl` arguments, not the looser "(buffer, flag)"/"optional allocator"
+wording §6.3/§11.2 use. Argument 1 (last pushed) is always a nonzero address — a fixed global at 3 of the
+4 sites (`0x02297D28` for both menu-save sites, `0x0290D7E8` for the autosave site) and a local stack
+variable's address at the checkpoint site — never a literal 0, so "optional allocator, omitted for a
+normal save" is not quite what the bytes show; it reads more like "a caller-owned context/descriptor
+struct, always supplied, whose own internals determine arena-vs-caller-memory." Argument 3 (first pushed,
+the still-unidentified "flag argument" §6.3 flags) reads **0 at both menu-save sites** and **1 at the one
+autosave site** readable numerically this pass (the checkpoint site passes a register, `ebx`, whose value
+wasn't pinned down). **Candidate reading, HYPOTHESIS, not confirmed against any serializer body:** "this
+is an autosave" (1) vs. "this is an explicit/checkpoint save" (0) — a possibly-different bit from the
+"full vs. checkpoint" guess §11.2 separately offers for entry 23's own save-side behavior; the two
+sections may be describing different bits. Settling this needs opening one serializer's own body (e.g.
+entry 1's save routine, `0x00B991C0`, §10) to see which branch, if any, keys off it.
+
+### 15.1 Explicit menu "Save Game" action `[CONFIRMED]`
+
+`0x007D0B70`–`0x007D0C48` (full body read, ~140 instructions) is a `this`-based method (`ecx` = the fixed
+save/load-screen object `0x02297D88`) whose `this+0x88` field is the slot index the player picked. Three
+branches: **slot `0x63`** (the "new save" sentinel) checks a slot-availability predicate (`0x00B95340`,
+on failure: a one-button `MENU_TITLE_WARNING` dialog, body `SAVELOAD_NOT_ENOUGH_SLOTS_NEW`) and a
+device-space predicate (`0x00B94880`, on failure: same dialog, body `SAVELOAD_NOT_ENOUGH_SPACE_NEW`) before
+reaching `call 0x00B94A10` at `0x007D0BFB`; **a valid existing slot** computes that slot's `0x60`-byte
+menu-descriptor address (the exact stride §11.1 step 2c already names), calls a per-slot prep helper
+(`0x00B94750`), then reaches `call 0x00B94A10` at `0x007D0C2C` directly, with no confirmation dialog inside
+this function itself; any other value is a no-op. The confirmation dialog for the existing-slot case lives
+one level up: the caller `0x007D0DD0` reads the save-slot list's selected index and, for an occupied slot,
+opens a two-button dialog (`SAVELOAD_SAVE_GAME` / `SAVELOAD_SAVE_GAME_CONFIRM_EXPOSITION` — literal
+on-disk strings at `0x1159E1C`/`0x0115A050`) with `0x007D0D60` as the "Yes"-only callback into
+`0x007D0B70`. **This handler sits immediately next to, and is driven by the identical selected-index idiom
+as, the already-documented load-slot handler (`0x007D0CA0`/`0x007D0C50`, §11.1)** — the save/load
+slot-list screen's own button-handler pair.
+
+### 15.2 Script-driven autosave `[CONFIRMED]`
+
+Two Lua-callable natives, both already fully traced and cleared elsewhere in `spec-lua-api-behaviour.md` —
+just not previously cross-referenced to this save-entry address:
+- **`mission_autosave`** (`0x00A52B10`, §17.23 there) → `0x00B94FF0`.
+- **`game_autosave`** (`0x00841F50`, reachable from a 113-entry Lua-native loop registrar — a much broader
+  set of scripts, §27.12 there) → `0x00B95060` → `0x00B94FF0` (gated on "startup finished," "not already
+  saving," "no mission blocking," and two session/menu checks) → `0x00B96230` (one failure path, a
+  `SAVELOAD_AUTOSAVE_DEVICE_FULL` dialog; otherwise invokes its callback argument directly).
+- **The callback, `0x00B94D50`** (new this pass, full 24-instruction body): bumps the on-screen autosave
+  indicator counter (`0x0059FAF0(1)`), sets status bytes, stores a helper's result into the SAME
+  last-error global (`0x0130F5D4`) the load path (§11.1) uses, checks a buffer-redirect helper
+  (`0x00B94CC0`), then **calls `0x00B94A10` directly** at `0x00B94DA2` with argument 1 = `0x0290D7E8` and
+  argument 3 (flag) = `1`. This is the exact point a script-triggered autosave becomes a real file write,
+  structurally parallel to §15.1's two menu-save sites.
+
+Net effect: any mission script can request a story-beat autosave; effectively any script can request a
+lighter-weight autosave almost anywhere — both gated identically, both bottoming out in the same real
+save call §15.1's menu path uses.
+
+### 15.3 Mission checkpoint `[CONFIRMED]`
+
+Already traced from the save-format side in §11.2: `0x006D43D0` (singleton `0x014D8D18`) calls
+`0x00B94A10` at `0x006D4722` with a pointer to caller-owned memory, producing the same `0x1AA00`-byte
+layout **in memory only** — no hash, no file write. Closed from the Lua side this pass:
+`mission_set_checkpoint` (`0x00A52600`, §1.6 of `spec-lua-api-behaviour.md`, already fully traced —
+captures the player's/current-vehicle's position+orientation and a full weapon/loadout snapshot) →
+`0x006D5060` → `0x006D43D0` — confirmed by direct re-disassembly to be the exact same function
+`0x006D4722` calls, closing what was previously an un-cross-referenced coincidence of addresses between
+the two documents into one confirmed mechanism.
+
+### 15.4 Two further leads, neither closed `[HYPOTHESIS / OPEN]`
+
+- **A UI screen-close handler that also fires an autosave check.** `0x0080DF00`/`0x0080DE20` are a matched
+  close/open method pair (both SEH-prologued, structurally near-identical, both reference a `safe_frame`
+  UI string). Only the close variant (`0x0080DF00`) calls `0x00B95060` — the same autosave gate
+  `game_autosave` uses — as part of its sequence. Neither function has any direct `call rel32` site
+  anywhere in the binary (reached only via indirect/vtable dispatch, consistent with a UI-framework
+  `OnOpen`/`OnClose` callback for a specific menu object cached at `0x022CCE60`, not identified by name or
+  screen type). **OPEN:** which menu/screen this is.
+- **A per-frame autosave poll tied to the mission-flow state machine.** `0x00614800` is a 2-instruction
+  trampoline: `call 0x00B94FF0` (the same gate) immediately tail-jumping into `0x0059FA20` (the cutscene
+  machine's "fade settled" predicate), whose only two callers sit inside the mission-flow/checkpoint
+  state-machine address range (§15.3). `0x00614800` itself has zero direct callers. **OPEN:** the
+  installer of this function pointer and which mission phase(s) it is active during.
+
+### 15.5 Cross-check against the rest of this document
+
+No contradictions found. §6.3's "flag argument not identified" is extended (not closed) by this section's
+own candidate reading above. §9.2's garage live-binding open item and §12.10.1's entry-7 load routine are
+addressed in place at their own subsections (cross-referenced from here, not duplicated).
+
+**[CONFIRMED as marked per subsection above.]** Full detail, every address, and the complete raw evidence:
+`scratchpad/save_load_gameplay_runtime_2026-10-08.md`.
+
+## 16. Write/Read Symmetry (2026-10-08)
+
+**Scope.** §6/§11 already cover the save and load mechanics separately; this section is the direct
+side-by-side comparison neither existing section performs, dispatched for Team B (who already have
+the read/apply path working) to confirm the write path mirrors it structurally.
+
+**Driver-level symmetry — CONFIRMED.** The load driver (`0x00B98C00`) walks the exact same 32-entry ×
+`0x14`-byte serializer table (`0x0118BE58`-`0x0118C0D8`) the save driver (`0x00B98BB0`) walks, via a
+pointer offset `+0xC` from the save driver's own anchor (landing on each entry's *load*-routine field
+instead of its *save*-routine field) — base `0x0118BE64`, same stride, same bound shape
+(`0x0118BE64`-`0x0118C0E4`, the identical 0x280-byte span). **Both drivers advance in the same
+ascending direction, entry 0 → entry 31.** The per-entry primary-vs-alternate routine choice uses the
+identical guest-mode predicate on both sides (§11.7's own characterization, now independently
+confirmed from both drivers' own bodies, not one side only).
+
+**Field-level symmetry, confirmed for one entry (header, entry 0), genuinely open for the rest.** The
+header's load routine, `0x00B9B530` — previously unread (§11.8 listed entry 0 as read "only where
+quoted") — consumes exactly the offsets the header's save routine (`0x00B9A380`) writes: the 20-byte
+game-clock structure at `+0x08C`, and the 256-bit flag set at `+0x0A4` (passed to a dedicated "apply"
+routine, `0x00BC0CA0`, mirroring the save side's dedicated "build" routine at the same offset,
+`0x0045AFC0`). A direct, offset-for-offset "does the load routine touch fields in the same order the
+save routine wrote them" comparison was not extended to the other 31 entries — the region map's own
+contiguity checks (§9-§12) already establish that the two sides agree on *shape* (offsets, strides,
+counts), but byte-exact ordering inside each entry's own pair of routines remains unconfirmed beyond
+this one example. **[OPEN — a further pass if byte-exact ordering, not just offset agreement, is ever
+needed.]**
+
+**A load-side mechanism confirmed as a side effect, upgrading §12.7.1:** the header's object-handle
+field (`+0x058`/`+0x05C`) is read back by the load routine, matched against entry 6's own
+mission-object handle/flag table (`+0x37E8`/`+0x37F0`), and — when a flag bit on the matched record is
+clear — the *live*, currently-loaded world object's current position (not anything stored in the save
+file) is fed to a further call (`0x00861AA0`). **This upgrades §12.7.1's existing HIGH-CONFIDENCE
+reading ("a reference point to place a recruited crew member near the player") to CONFIRMED**, and
+sharpens it: the position used is live at load time, cross-referenced through entry 6's table, not
+stored in the header itself. A literal string, `"tss01"` (`0x0118C0E8`), gates part of this logic —
+role not determined, OPEN. **New on the save side, found incidentally:** the header's save routine
+does not simply copy a stored handle for this same field — when solo, or a guest in someone else's
+session, it searches a live in-world list (count `0x0290F180`, records `0x0290F188`, 24-byte stride)
+for the nearest entry by straight-line distance to the player; when host, it instead takes a handle
+from a single getter (`0x009DA4E0`→`0x005EF440`).
+
+**Asymmetries — mostly already documented (§11.2/§11.1), plus two new structural facts:**
+- Hash-and-file-write (`0x00B944C0`) remains confirmed save-only, gated on "no caller context" —
+  independently re-confirmed from the save side this pass (previously confirmed mainly from the load
+  side's complete absence of any hash check).
+- **New: the load driver is bracketed by a begin/end call pair with no save-side counterpart**
+  (`0x00B6E420`/`0x00B6E430`); it also saves/restores a byte flag (`0x0151D5A6`) around its loop and
+  sets a "load finished" byte (`0x0290CEC8`) after. Purpose of all three — OPEN, not investigated.
+- **New: the load driver's post-loop "world refresh" step is now a concrete, gated sequence**, not
+  just a placeholder phrase — it unconditionally calls `0x006D0C10`/`0x007105C0`, and additionally
+  calls `0x006A44C0`/`0x006D2A60` only when no network session exists (or this machine is host) AND a
+  separate predicate (`0x006A3A60`) is false AND the "full load" flag is set. Functional meaning of
+  each call — OPEN.
+- A second, lower-level device-space check exists **inside** the save entry itself (`0x00B96170`,
+  size `0x1AA00`), beneath the already-documented UI-level check (§15.1) — gated on no-caller-context
+  plus a global "already checked" flag (`0x0290CECC`); on failure sets the shared error global
+  (`0x0130F5D4` = 1), matching the existing error-code table exactly.
+- The save arena is a lazily-created, **named** 1MiB pool (tag `"gamesave_saving"`, cached in
+  `0x0290CEC4`), not a fresh per-save allocation — a refinement of "dedicated save arena," not a
+  correction; the 0x1AA00-byte buffer and its zero-fill are exactly as already documented.
+- **Possible wording clarification flagged for §11.2 (not asserted as a correction):** fresh
+  disassembly shows the display-descriptor builder (`0x00B99C50`) and a further buffer-finalizing call
+  (`0x00B96210`) both run **unconditionally** on every save-entry call, including checkpoint builds —
+  only the hash-and-enqueue step itself is gated on "no caller context." §11.2's "no descriptor write"
+  may mean something narrower (nothing written to on-disk save-list metadata) than "a local descriptor
+  structure is never built" — as written it reads as the latter, which this does not support. Left for
+  the file's own editor to reconcile.
+- Already documented, restated here only for completeness: entry 31 is load-only (a DLC-availability
+  guard after entry 28); entry 29's save routine writes the sub-version stamp entry 28's **load**
+  routine alone consults (§11.3) — the clearest two structural asymmetries in the design, unchanged by
+  this pass.
+
+Full detail, address index: `scratchpad/save_game_write_path_2026-10-08.md`.
+
 ## Changelog
+
+- **2026-10-08 — new §16 "Write/Read Symmetry," dispatched for Team B (who already have read/apply
+  working)** (SPEC TEAM, agent `a01d57e61cae518f0`). Both drivers independently re-confirmed to walk
+  the same 32-entry table in the same ascending order; the header's load routine (`0x00B9B530`,
+  previously unread, struck from §11.8's unread list) read for the first time, confirming field-level
+  symmetry for the clock/flag block and **upgrading §12.7.1's crew-placement reading from HIGH
+  CONFIDENCE to CONFIRMED**. New structural findings: the save entry's internal device-space check,
+  its named/cached save-arena pool, a descriptor-build step that runs unconditionally (flagged as a
+  possible wording clarification for §11.2, not asserted as a correction), the load driver's
+  begin/end call bracket, and its gated post-loop world-refresh calls. Full detail:
+  `scratchpad/save_game_write_path_2026-10-08.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- 2026-10-08 — §11.2 gains a confirmed cross-reference: a player's death-triggered respawn is confirmed (`spec-player-runtime.md` §15.4) to reach this exact checkpoint-restore mechanism via the generic mission-failure/retry flow, not a separate implementation. Full detail: `scratchpad/player_combat_aim_melee_damage_respawn_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced to Team B.
+- 2026-10-08 — new §15 "Save Triggers": closes this document's total silence on what actually calls the
+  save entry (`0x00B94A10`) to three confirmed mechanisms (explicit menu "Save Game," two Lua-callable
+  autosave natives, mission checkpoint) plus two HYPOTHESIS-level leads (a UI screen-close handler, a
+  per-frame mission-flow poll), from an exhaustive 4-call-site xref census. Added a load-side closure to
+  §12.10.1 (entry 7's load routine is confirmed cosmetic/display-only, no gameplay effect) and a
+  still-open restatement to §9.2 (the garage live-vehicle-binding step, searched for and not found again,
+  recorded so it isn't re-searched blind). Full detail: `scratchpad/save_load_gameplay_runtime_2026-10-08.md`.
+  Cleanroom self-check: 0 strict hits (standard convention for this file). Synced to Team B.
+- 2026-10-08 — §7.5's "static minimap" option row (`+0x21`/`0x2025`) gains a consumer-side
+  cross-reference to new `spec-hud-runtime.md` §6.4, which discusses this option's plausible
+  runtime meaning (player-heading minimap rotation); its own runtime reader remains OPEN in both
+  files. No new disassembly in this file. Cleanroom self-check: 0 new hits. Synced to Team B.
+
+- 2026-10-08 — follow-up: this option row's own runtime reader is now CONFIRMED (not merely plausible).
+  `0x00841320` applies it directly to `0x022c03e0`, read by the corner-minimap's own update function
+  `0x00809910` (`spec-hud-runtime.md` §6.4) to gate live-heading-vs-fixed rotation — closing the gap the
+  entry above left OPEN. No new disassembly in this file. Full detail:
+  `scratchpad/weapons_fire_damage_and_player_blip_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+  Synced to Team B.
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the `0x4A60` cash-gain reading superseded (melee-damage HYPOTHESIS, §3/§10.6) and the stats-table base `0x01517230` superseded by `0x01517228` (row-count arithmetic, §12.6.1); annotated 10 stale OPEN items as resolved (§3 rows `0x4A58`/`0x4A68`/`0x4A6C`, §6.6, §8.2 row 7, §9.5, §9.9 item 6, §10.6 four scalars, §10.8, §12.12); corrected nag-postpone "defaults" (§12.6.3); added conflict markers for the `items_inventory` live-bit offset (§10.3) and a capacity/count note on `0x028DC4E0` (§12.7.2); clarified §7.6 index 29, §8.4, §8.5 item 2, §14 "151/151"; flagged `spec-output.md` as unpublished.
 - 2026-09-30 (cloud): removed five player-typed outfit names quoted from the owner's real save (§10 user-saved-outfits row); the structural facts (item counts 7/11/8/4/8, 73/82 items in the wardrobe) are unchanged.
 - 2026-09-30 (desk adversarial review, `review/adv_save.md`): per-unit review status on 71 units plus a summary after the front matter; §8.1 bit-order sentence corrected to "high bits" from §8.2's own table (simulation reproduces 21/21 rows only that way); §6.4 entry-28 row (`0x16694`) superseded by §11.4's count-before order; snapshot-hash verdict downgraded to HIGH CONFIDENCE — static (§6.1, §11.1, §6.6, §11.8) because the walk skips indirect calls; cross-spec evidence added to the `+0x2C`/`+0x30` conflict (§10.3, still OPEN); count slips flagged OPEN after recount (§9.6 19 vs 22; §9.3 bits 3/4; seven sample tallies in §10.5, §12.4.3 ×2, §12.5, §12.10.1, §12.10.3, §12.10.4); smaller fixes: §1 file-name wording, §3 stale intro, §6.1 call-site count, §6.4 basis and pad notes, §6.5 sort-key attribution and `0x084` pointer, §9.4 gap, §10.2 rule unification, §10.6 count−12, §11.3 sub-block count, §11.5 stale byte-order note, §12.5 19a extent, §12.7.2 `+0x7F0`, §13 item 6 (stat 164 vs `0x3F8`).
 - 2026-10-01 (cloud, manager relay of Team B save job `hzim` on the owner's current saves): §10.7 table and the §6.4 coverage figure marked as a dated sample of the 2026-09-20 save set (now 15/16 rows; 201,281 vs 201,363 non-zero bytes); the `0x3F8` row no longer implies equality with statistic 164 — OPEN pending the executable. No label raised. *(Attribution corrected the same day from Team B job `nnyi`: the drift is LocalAppData `sr3save_00`, re-saved 2026-09-25; the statistic-164 counterexample is Documents `sr3save_04`, saved 2011-12-20, already in the table.)*
 - 2026-10-01 (interpretation pass, `review/exe-notes-2026-10-01/interp_qohu.md`, job `20261001T173022-team-a-qohu`): two confirmed fixes from fresh disassembly dumps. (1) §7.1 item 4: the stat handler-table slot 1 is **requirement-evaluate** `(row, requirement) → truth value`, not a getter — "get" struck and corrected, evidenced by the two slot-1 bodies `0x00712330`/`0x00712380` and the slot-0 (`update`) consumer `0x00710CB0`. (2) §10.6: the entry-13 save writer `0x00B982B0` (full body read, `0x00B982B0`–`0x00B98566`) confirms two scalar copies from the save-write side — player `+0x1B70` → `0x4A60` (corroborating `spec-tables-progression.md` §4.6's melee-multiplier HYPOTHESIS from both read and write sides) and player `+0x276C` → `0x4A48` (the sixth/last slot of the `+0x2758`..`+0x2768` incoming-damage-scale array, by position) — and confirms that writer does *not* refresh `0x4418`–`0x4420`, `0x4A58`, `0x4A5C` or `0x4A6C` (§10.8's Still-OPEN list narrowed accordingly, not closed).
+
+- 2026-10-08 — §11.1 and §11.3 gain cross-references to new `spec-frontend-menu-runtime.md` (front-end/
+  menu-flow investigation): `main_menu_continue`'s own full per-frame body is now independently traced
+  and confirmed to call this section's step-1 (`0x00B95210`) and step-3a (`0x00B947A0`) addresses
+  directly — the first time either has been shown reached from the menu side rather than inferred
+  structurally — and new game's own code is confirmed to be the writer that zeroes §11.3's "inert
+  storage" block (`0x00b97270`→`memset(0x0290df88,0,0xE20)`). No new disassembly in this file. Full
+  detail: `scratchpad/frontend_menu_flow_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced to
+  Team B.

@@ -29,10 +29,24 @@ public:
     Window(const Window&) = delete;
     Window& operator=(const Window&) = delete;
 
-    // Creates and shows a `width` x `height` (client area) window titled
-    // `title`. Returns false with `error` set if the window class or the
-    // window itself could not be created.
-    bool create(const std::string& title, uint32_t width, uint32_t height, std::string& error);
+    // Creates a `width` x `height` (client area) window titled `title`.
+    // Returns false with `error` set if the window class or the window
+    // itself could not be created.
+    //
+    // `visible` (default false, window-focus-stealing fix, 2026-10-08):
+    // every caller in this project renders through an offscreen D3D11 swap
+    // chain/render target (WARP-friendly, and this project's goldens/tests
+    // already force WARP via SR3_FORCE_WARP=1) - the window itself only
+    // needs a valid HWND for SwapChain::create() to present into, not an
+    // on-screen presence. Leaving this false means the window is created
+    // WITHOUT WS_VISIBLE, is never SW_SHOW'd, and carries
+    // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW so it can never steal focus or
+    // flash on top of whatever the user is doing on their own desktop
+    // (goldens/ctest run this way). Pass true only for an actual
+    // interactive/--visible invocation, where a developer deliberately
+    // wants to watch the render happen.
+    bool create(const std::string& title, uint32_t width, uint32_t height, std::string& error,
+                bool visible = false);
 
     // Processes all pending messages. Returns false once the window has
     // been closed (or Escape pressed), which is the caller's cue to stop

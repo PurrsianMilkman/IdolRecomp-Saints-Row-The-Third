@@ -1,0 +1,24 @@
+archive  : sr3_city_0.vpp_pc
+stem     : st_pine_tall (.csrt_pc 3792 bytes + .gsrt_pc 182180 bytes)
+materials: 4 decoded, 4 present, 13 material-set names
+           distinct shader hash(es): 0x967A81C0
+LOD slots: 3 present of 4 total
+capsules : 2 (radius 1.1000 1.0000)
+wind     : steady-state @ level=0.1, band0(amp=1.5150 freq=1.0100) band1(amp=0.5020 freq=2.0060) band2(amp=0.0000 freq=1.6750) band3(amp=0.0089 freq=10.3348)
+drawing  : 3 LOD slot(s) rendered together (each its own group 0): 0 1 2
+  lod slot 0: 1 channel(s), 3150 index(es), index%3==0, draw-groups-located=yes, group0 has 1 range(s)
+             channel 0: layout 11, 1 texcoord set(s), stride 36, 1710 element(s)
+  lod slot 1: 1 channel(s), 405 index(es), index%3==0, draw-groups-located=yes, group0 has 1 range(s)
+             channel 0: layout 12, 1 texcoord set(s), stride 36, 153 element(s)
+  lod slot 2: 1 channel(s), 4865 index(es), index%3==nonzero (expected for a strip), draw-groups-located=yes, group0 has 1 range(s)
+             channel 0: layout 11, 1 texcoord set(s), stride 36, 2728 element(s)
+  lod slot 0: indexCount=2982 trianglesEmitted=994 subDraws=1 range(s) [mat=0 idx=0..2982]
+  lod slot 1: indexCount=204 trianglesEmitted=68 subDraws=1 range(s) [mat=1 idx=0..204]
+  lod slot 2: indexCount=1650 trianglesEmitted=550 subDraws=1 range(s) [mat=2 idx=0..1650]
+indexCount      : 4836 total across 3 LOD slot(s)
+trianglesEmitted: 1612 total
+subDraws        : 3 range(s) total
+bounds (renderer, combined): X[-6.148 8.047] Y[0.000 44.688] Z[-6.941 7.809]
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+size     : 800x600
+wrote    : tree.png

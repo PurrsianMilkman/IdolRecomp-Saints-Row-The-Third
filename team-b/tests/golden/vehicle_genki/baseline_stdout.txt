@@ -54,7 +54,7 @@
     PLACEHOLDER: a resolved shader on this channel declares TANGENT0, but layoutCode=100 genuinely has no tangent data - filling a constant placeholder tangent for all 3663 vertices
 [channel 2] layoutCode=101 vertices=16 hasNormal=1 hasTangent=1
 [bounds] object-space (after real per-part transform): min(-1.753 -0.751 -2.168) max(2.031 0.989 3.520)  clamped rigidPartIndex: 0
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (software) (Microsoft Basic Render Driver)
 [paint] shader='ir_bbsimple_1uv_decal_v.fxo_pc' materialId=11 PS constant 'Normal_Map_Height' -> REAL array-B/C value (0.0000, 0.0000, 0.0000, 0.0000)
 [paint] shader='ir_bbsimple_1uv_decal_v.fxo_pc' materialId=11 PS constant 'Specular_Power' -> REAL array-B/C value (60.0000, 0.0000, 0.0000, 0.0000)
 [paint] shader='ir_bbsimple_1uv_decal_v.fxo_pc' materialId=13 PS constant 'Normal_Map_Height' -> REAL array-B/C value (0.0000, 0.0000, 0.0000, 0.0000)

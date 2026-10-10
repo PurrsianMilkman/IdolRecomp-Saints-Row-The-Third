@@ -20,15 +20,25 @@
 //     emits W/M/E pieces here. A host that turns them on gets no frame.
 //   * `force_case` - dead in the shipped build (Sec14.2, CONFIRMED): never
 //     read, never changes anything. Deliberately absent from LayoutParams.
-//   * the localisation-key form of `text_tag` (key hash) and every
-//     insertion that needs a game table (localisation lookup, named symbol,
-//     value-to-text conversion) - OPEN: reported, never fabricated.
+//   * the localisation-key form of `text_tag` (key hash) is resolved by the
+//     caller before the source string reaches this file (the caller's own
+//     sr3locstr::LeStringsLookup - see tools/sr3_viewer.cpp's `drawText`).
+//     Within formatInsertions itself, Sec14.2's `{N}` row (a string value
+//     "first tried as a localisation key") and `{N:text_tag_crc}` row (a
+//     hash looked up directly) are wired to a LeStringsLookup parameter -
+//     spec-localization-format.md Sec9 item 3: slot +0x00 (lookupByKey)
+//     and slot +0x04 (lookup(hash)) respectively. Still OPEN, reported
+//     never fabricated: a named insertion symbol (`{NAME}`, slot +0x0c,
+//     outside sr3locstr's scope) and the plain number/boolean-to-text
+//     conversion (`0x00e23f40`, no spec section documents its format).
 
 #include <cstdint>
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "sr3locstr/le_strings.h"
 
 namespace sr3font {
 
@@ -63,7 +73,23 @@ struct FormatResult {
 // {N}/{}/%s vanishes (specified behaviour - `{0} and {1}` -> ` and `).
 // `valuesSet` true = the builder passes a fixed count of 32 (Sec14.2);
 // entries past `values` are nil.
-FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const std::vector<InsertValue>& values);
+//
+// `locStrings`: the real `.le_strings` lookup (spec-localization-format.md
+// Sec6), used for two of Sec14.2's rows - spec-localization-format.md Sec9
+// item 3 ("slot +0x00, not +0x04, is the 'game lookup' Sec14.2's insertion
+// table means by 'a string value is first tried as a localisation key',
+// call site 0x00e22e98"):
+//   * `{N}` with a string value: `locStrings.lookupByKey(...)` (slot +0x00,
+//     0x00842b40 -> 0x00849df0: hash the string, then look it up) - the
+//     looked-up text on a hit, the string as plain text on a miss.
+//   * `{N:text_tag_crc}`: `locStrings.lookup(hash)` directly (slot +0x04,
+//     0x00849950, call site 0x00e22e49) - N is already a key HASH, never
+//     re-hashed as a string.
+// Pass a default-constructed (empty) LeStringsLookup when no tables are
+// loaded: every lookup then misses, which is exactly the fallback/"{Hash
+// not found!}" the spec describes for that case.
+FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const std::vector<InsertValue>& values,
+                              const sr3locstr::LeStringsLookup& locStrings);
 
 // ---- Sec14.3 layout ------------------------------------------------------
 

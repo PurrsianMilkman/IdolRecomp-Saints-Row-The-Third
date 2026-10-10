@@ -83,6 +83,12 @@ Container::Container(ByteView bytes) : bytes_(bytes) {
     }
 }
 
+Container::Container(ByteView bytes, DecodeCache* cache, std::string sourceKey)
+    : Container(bytes) {
+    cache_ = cache;
+    sourceKey_ = std::move(sourceKey);
+}
+
 Container Container::openNested(size_t index) const {
     if (index >= entries_.size()) {
         throw FormatError("Container::openNested: directory entry index out of range");
@@ -134,7 +140,26 @@ DecompressResult Container::decompressEntry(size_t index) const {
             "' is stored raw (directory field +0x10 == sentinel, spec "
             "Sec3.1) - read it directly instead of decompressing");
     }
-    return loc.sharedStream ? decompressModeB(index) : decompressModeA(index);
+    if (cache_) {
+        std::vector<uint8_t> cached;
+        if (cache_->get(sourceKey_, index, entries_[index].nameHash, loc.decompressedLength, cached)) {
+            DecompressResult hit;
+            hit.status = DecodeStatus::Ok;
+            hit.data = std::move(cached);
+            return hit;
+        }
+    }
+
+    DecompressResult result = loc.sharedStream ? decompressModeB(index) : decompressModeA(index);
+
+    // Persist only a clean Ok decode - never cache a short/erroring result,
+    // so a transient failure (or a format edge case this reader doesn't
+    // yet handle) can never "poison" the cache with wrong or partial bytes
+    // that a later run would then trust without re-checking.
+    if (cache_ && result.status == DecodeStatus::Ok) {
+        cache_->put(sourceKey_, index, entries_[index].nameHash, result.data);
+    }
+    return result;
 }
 
 DecompressResult Container::decompressModeA(size_t index) const {

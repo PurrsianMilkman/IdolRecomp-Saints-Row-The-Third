@@ -12,12 +12,14 @@ REAL TEXT  : `text` (Sec14, U5): shipped .vf3_pc fonts (spec-vint-font-format.md
              quads + near-edge half-texel UV inset (Sec14.1), shadow pass (Sec12.2), auto_offset
              re-applied from the measured size (Sec12.2/Sec5.4); localisation-key text_tag/
              text_tag_crc resolution against the US .le_strings tables (spec-localization-format.md,
-             library sr3locstr)
+             library sr3locstr); insert_values' {N} (string value as a key) and {N:text_tag_crc}
+             (value as a key hash) insertions resolve against the same tables (Sec9 item 3)
 CHOSEN TEXT: a STRING text_tag not found as a real key falls back to raw text (Sec14.2 step 2
              /spec-localization-format.md Sec7 item 2); a key-hash text_tag/text_tag_crc miss (never
-             shipped) falls to "no source text"; insert_values localisation (a string value as a key,
-             {N:text_tag_crc}) and 0x80-tagged strings = still OPEN (not drawn, not exercised by any
-             shipped document); layout settled once before the walk (refresh hook timing not specced);
+             shipped) falls to "no source text"; a named insertion symbol ({NAME}) and a
+             non-string insert_values value's text conversion (0x00e23f40, no spec section) and
+             0x80-tagged strings = still OPEN (not drawn, not exercised by any shipped document);
+             layout settled once before the walk (refresh hook timing not specced);
              only the DEFAULT language arrangement (no derived fonts); fonts and .le_strings tables
              read from --fonts archives, else the --textures archives; line frames (Sec14.6, no
              shipped use) not drawn; force_case ignored (dead, Sec14.2)
@@ -33,7 +35,7 @@ NOT DRAWN  : clip, bitmap_circle, gradient, document, point, sr2_map, video - co
 document   : hud_running_man.vint_doc (34895 bytes) - 297 records, lands exactly: yes
 sheets     : 63 bitmap_sheets.xtbl rows, 63 sheet .xtbl files found, 1148 sub-image records (0 duplicate names - first wins, 0 over the 0x680 cap)
 tables from: patch_compressed.vpp_pc=9 misc_tables.vpp_pc=55 (first archive holding a file wins - CHOSEN layering)
-device     : HARDWARE (NVIDIA GeForce RTX 3090), target 1280x720 RGBA8 offscreen
+device     : WARP (software) (Microsoft Basic Render Driver), target 1280x720 RGBA8 offscreen
 loaded     : 297 objects, 2275 applied file records; image side effects (Sec12.1): 60 applied, 60 source-coord resets, 0 unresolved; auto_offset applier: 0 wrote offset, 60 left it
 images     : 28 distinct - 28 sheet sub-images, 0 standalone, 0 not in the pool, 0 with no texture found
   [image] ui_blank                             mode 1 ui_bms_00 page (50,1006) size 16.000x16.000 texture ui_bms_00.tga found 1024x1024 in misc.vpp_pc > interface-backend.cpeg_pc

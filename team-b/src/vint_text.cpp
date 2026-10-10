@@ -61,7 +61,8 @@ std::optional<std::u16string> decodeRawTextTag(const std::string& raw, std::stri
     return out;
 }
 
-FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const std::vector<InsertValue>& values) {
+FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const std::vector<InsertValue>& values,
+                              const sr3locstr::LeStringsLookup& locStrings) {
     FormatResult r;
     // Sec14.2: count 32 when set, otherwise no values at all.
     const size_t count = valuesSet ? 32 : 0;
@@ -81,8 +82,10 @@ FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const s
         }
     };
     // Inserts value `idx` per the `{N}` rule: beyond the count -> nothing;
-    // nil -> the literal; a string -> localisation lookup first (OPEN here);
-    // other types -> 0x00e23f40's text conversion (OPEN here).
+    // nil -> the literal; a string -> localisation lookup first (Sec14.2's
+    // `{N}` row; spec-localization-format.md Sec9 item 3's slot +0x00,
+    // lookupByKey), plain text on a miss; other types -> 0x00e23f40's text
+    // conversion (OPEN here - no spec section documents that format).
     auto insertValue = [&](size_t idx, const std::u16string& modifier) {
         if (idx >= count) { ++r.insertionsVanished; return; }
         const InsertValue v = valueAt(idx);
@@ -101,14 +104,27 @@ FormatResult formatInsertions(const std::u16string& src, bool valuesSet, const s
         if (mod == "text_tag_crc") {
             const bool integral = v.kind == InsertValue::Kind::Number && std::trunc(v.number) == v.number;
             if (!integral) { out(u"{Invalid insertion value for a hash!}"); return; }
-            r.open.push_back("insert_values: {N:text_tag_crc} needs the game's localisation table (not in this host)");
+            // Sec14.2's `{N:text_tag_crc}` row: value N is a key HASH, looked
+            // up directly - spec-localization-format.md Sec9 item 3's slot
+            // +0x04 (0x00849950, call site 0x00e22e49) - never re-hashed as
+            // a string. double -> int64_t -> uint32_t avoids the UB of a
+            // direct (and here, impossible-per-spec-but-unchecked) negative
+            // double -> unsigned cast.
+            const uint32_t hash = static_cast<uint32_t>(static_cast<int64_t>(v.number));
+            if (auto found = locStrings.lookup(hash)) { out(*found); return; }
+            out(u"{Hash not found!}");
             return;
         }
         // CHOSEN: an unknown modifier keyword is treated as no modifier (the
         // spec lists only the two keywords and does not say what others do).
         if (v.kind == InsertValue::Kind::String) {
-            r.open.push_back("insert_values: a string value is first tried as a localisation key (game lookup, not in "
-                             "this host) before being used as plain text");
+            // Sec14.2's `{N}` row: "a string value is first tried as a
+            // localisation key (game lookup) and used as plain text if that
+            // fails" - spec-localization-format.md Sec9 item 3's slot +0x00
+            // (0x00842b40 -> 0x00849df0: hash the string, then
+            // 0x00849950 - i.e. lookupByKey), call site 0x00e22e98.
+            if (auto found = locStrings.lookupByKey(narrowLow(v.text))) { out(*found); return; }
+            out(v.text);
             return;
         }
         r.open.push_back("insert_values: number/boolean values are converted to text by 0x00e23f40 (format not in "

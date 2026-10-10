@@ -32,6 +32,10 @@ namespace sr3render {
 //
 // Returns false and sets `error` on any failure - a bad size, a short
 // buffer, a zlib failure, or a file that could not be opened/written.
+// Also refuses (false + `error`, nothing opened or truncated) any `path`
+// that sr3io::isOutputPathSafe() rejects - inside the game install tree,
+// an existing non-.png file, or an existing file over 8 MiB; see
+// include/sr3io/output_path_guard.h for the 2026-10-08 incident behind it.
 // Deliberately does not throw: this is verification scaffolding and its
 // callers are usually already in an error path.
 bool writePng(const std::string& path, uint32_t width, uint32_t height,

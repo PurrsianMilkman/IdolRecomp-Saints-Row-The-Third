@@ -762,10 +762,16 @@ struct Eval {
                 w = target;
             } else {
                 // Float arithmetic on the float fields (the spec gives no
-                // precision). Sec8.10's "12 updates" for 0.4 s comes from a
-                // double-precision replay at an exact boundary (12 x (1/30) /
-                // 0.4 = 1); with the weight stored as a float the 12th update
-                // lands within rounding of 1.0 and the 13th snaps it.
+                // precision). Sec8.10 originally said "12 updates" for 0.4 s,
+                // from a double-precision replay at an exact boundary
+                // (12 x (1/30) / 0.4 = 1); with the weight stored as a float
+                // the 12th update lands within rounding of 1.0 and the 13th
+                // snaps it - this project's own 13 was flagged as a finding
+                // against that text, not assumed. 2026-10-07: Sec8.10 was
+                // corrected to 13, re-derived by Team A from disassembling
+                // the real 0x004bc0d0 (pure SSE/SSE2, no x87) rather than
+                // from abstract reasoning - CONFIRMS this comment's own
+                // account exactly, including the float32-ULP mechanism.
                 const float step = dt() / bi.maxBlendRate;
                 if (std::fabs(target - w) <= step) w = target;
                 else w += (target > w) ? step : -step;

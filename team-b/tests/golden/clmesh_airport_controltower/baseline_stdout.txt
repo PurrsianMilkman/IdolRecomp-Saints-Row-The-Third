@@ -37,7 +37,7 @@
   range materialId=13 submeshIndex=0 startIndex=12763 indexCount=134 minVertex=7654 maxVertex=7743
   range materialId=14 submeshIndex=0 startIndex=12897 indexCount=134 minVertex=7890 maxVertex=7985
   range materialId=15 submeshIndex=0 startIndex=13031 indexCount=107 minVertex=352 maxVertex=8026
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (software) (Microsoft Basic Render Driver)
   texture[mat 0]: airport_terminal_glass.tga from sr3_city_awld.cpeg_pc (256x256, BC1_UNORM)
   texture[mat 1]: roof_gravel01_d.tga from sr3_city_awld.cpeg_pc (256x256, BC1_UNORM)
   texture[mat 2]: airport_terminal_tile02_d.tga from sr3_city_awld.cpeg_pc (512x256, BC3_UNORM)

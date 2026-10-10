@@ -1,0 +1,115 @@
+Golden scene: clmesh_lite_fixh, real `.clmesh_pc`/`.glmesh_pc` static-prop render
+==================================================================================
+
+NEW SCENE, not a re-freeze - no old baseline exists for this command. Frozen
+2026-09-30, follow-on to this session's own `.clmesh_pc` texturing task (see
+HANDOFF.md Sec9.133 and the follow-on report this scene was requested in).
+
+Real command (run with cwd = tests/golden/ so the "captured:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <sr3_viewer.exe> clmesh ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" ^
+        lite_fixh.clmesh_pc ^
+        --rendergroup 0 --frames 1 --capture _work/clmesh_lite_fixh.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by
+tests/golden/build.bat straight from tools/sr3_viewer.cpp (unmodified by this
+freeze) - NOT build_verify/sr3_viewer.exe, which predates the `clmesh` command
+entirely and does not recognise it, same reasoning as every other scene in
+this directory besides `brad`. build.bat was extended this session to also
+compile src/level_mesh.cpp (sr3clmesh - the `clmesh` command's own reader)
+and link it into sr3_viewer.exe; see build.bat's own new "extra reader for
+sr3_viewer's `clmesh` command" section.
+
+Real data: sr3_city_0.vpp_pc (the whole shipped open-world streaming archive,
+1.5 GB), lite_fixh.clmesh_pc/.glmesh_pc, nested inside 1018h0.str2_pc within
+sr3_city_0.vpp_pc (a real "Zone (High LOD)" fine-cell container,
+spec-world-streaming.md Sec10.1/Sec10.5) - sr3_viewer's own findEntry()
+already recurses into nested .str2_pc containers, so only the top-level
+archive path is given here.
+
+Why lite_fixh: this is spec-geometry-format.md Sec4.2's OWN literal worked
+example for the `.clmesh_pc`/`.glmesh_pc` format ("Worked example:
+lite_fixh.clmesh_pc (1,856 bytes) / lite_fixh.glmesh_pc (2,552 bytes), a
+streetlight-fixture prop... one texture reference in this sample
+(...lightfixtures_d.tga)") - this baseline reproduces that exact citation
+byte for byte: material[0]/[1] both resolve to 'lightfixtures_d.tga' (see
+baseline_stdout.txt's own "[materials]" lines), found in the real archive at
+`lightfixtures_d.cvbm_pc` (256x256, BC1_UNORM).
+
+Why --rendergroup 0: LevelMesh's own two independent render groups (each its
+own embedded Mesh sub-block - NOT LOD tiers of one shared mesh, and NOT
+established by this project to have any particular semantic relationship to
+each other; see include/sr3clmesh/level_mesh.h's own MiddleLayout comment).
+Group 0 is the higher-index-count, more geometrically complete one on every
+real sample checked (145 indices / 60 triangles here, vs render group 1's 18
+indices / 10 triangles) and renders a recognisable streetlight base + curved
+fixture arm - the natural default for a single-scene freeze. Render group 1
+was also rendered and inspected during this task (not frozen here): a small,
+flat, back-facing-from-this-angle silhouette whose relationship to render
+group 0 is not established by this project (LOD? separate piece? unknown) -
+an honest open question, not silently resolved.
+
+Why the real texture binding works here at all (the load-bearing finding this
+scene demonstrates): `.clmesh_pc` does NOT carry the vehicle-style
+`0x424BD00D` GeometryBlock sub-header material_binding.h's mechanism needs
+(spec-geometry-format.md Sec4.2, and directly re-confirmed this session by an
+exhaustive byte scan of this exact file's own raw bytes - 0 occurrences, both
+byte orders, see tools/clmesh_probe.cpp's own "DEEP TEST" section). Instead,
+each material record's own texture-binding array (the SAME shared per-
+material-record parser foliage/trees/vehicles/characters already use,
+spec-vertex-format.md Sec12.8) resolves its name offset against THIS
+format's own material-set-local name table
+(LevelMesh::middle().nameTableOffset/nameTableLength, already decoded by the
+existing materialSetStep() before this task) - measured 143/143 across the
+whole real population reachable from 1018h0.str2_pc (22/22 files), not
+assumed. See include/sr3clmesh/level_mesh.h's own doc comment on
+materialTextureBinding() for the full measurement.
+
+Shader scope, stated here too (not just in code): real per-material shader
+identity (`hash0`) WAS found to resolve to a real .fxo_pc stem for this
+prop's own materials (see baseline_stdout.txt's own "hash0=... (real
+shaderHash...)" lines) but is reported only, not compiled/bound - this scene
+renders through the plain diffuse-textured MeshRenderer::drawTextured()
+pipeline (the same one `mesh --mode textured` already uses for `.ccmesh_pc`
+characters), a deliberate, stated scope decision - see runClmesh()'s own doc
+comment in tools/sr3_viewer.cpp for the full reasoning.
+
+Why --frames 1 --capture-frame 0: the same single-frame capture convention
+every other scene in this directory uses - a static, CHOSEN orbit camera
+(yaw=0.6 rad/34.4deg, pitch=0.35 rad/20.1deg, distanceScale=1.8, the
+`clmesh` command's own defaults - see baseline_stdout.txt's own "camera :"
+line), never animated, so frame 0 is the only frame that ever needs
+capturing.
+
+Determinism: confirmed directly this session by running this exact command
+twice in a row into two different --capture paths and MD5-comparing the
+resulting PNGs - byte-identical both times (MD5
+a44e42f41ba0e1b330caeb5e66a9eefc), and the two stdout captures differed ONLY
+in the "captured : <path>" line echoing back the --capture argument itself -
+the same caller-chosen-path convention every other baseline in this directory
+documents. No RNG, no wall-clock input: a fixed real-hardware D3D11 device
+(reported in stdout rather than hidden), a fixed camera, the same real
+archive bytes every time.
+
+Frozen here:
+  baseline_capture.png - the real captured frame: a streetlight base with a
+                         curved fixture arm, textured with the real
+                         `lightfixtures_d.tga` (a weathered/streaked
+                         concrete-and-rust-look material) on both of the two
+                         materials that carry a real texture binding;
+                         material 2 (no real texture binding on this prop)
+                         is not used by any range in render group 0, so it
+                         does not affect this particular image.
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (real material record dump incl. hash0/
+                         texCount and every real texture-binding entry,
+                         render-group walk incl. real per-range materialId/
+                         submeshIndex/vertex span, real per-material texture
+                         resolution incl. which real .cvbm_pc pack each came
+                         from, object-space bounds, device, topology, camera
+                         framing, capture path, frame count).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkClmeshLiteFixhScene().

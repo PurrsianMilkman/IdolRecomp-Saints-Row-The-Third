@@ -1,0 +1,108 @@
+Golden scene: hud_mask, real stencil masking + non-filter render_mode blend codes + REAL TEXT (vint-doc)
+========================================================================================================
+
+RE-FROZEN 2026-10-03, localisation lookup follow-up (spec-localization-format.md, library sr3locstr).
+`text_tag` is now tried as a real `.le_strings` key before falling back to the raw string
+(Sec6.1/Sec7 item 2). The OLD baseline (pre-lookup wording) is kept at tests/golden/hud_mask_pre_locstr/
+(same command, same pixels). PIXELS UNCHANGED - capture.png is byte-identical (MD5
+c0ec2b5c599e78ce6abe208288b0d079, same hash as before this change): none of this document's 18 text
+elements' text_tag strings are real localisation keys (confirmed directly - the run's own new summary
+field reads "resolved via a real localisation key 0"), so every one still falls back to the same raw
+text as before. Only stdout's WORDING changed: the REAL TEXT/CHOSEN TEXT banner describes the new
+lookup instead of the old blanket "key-hash/text_tag_crc = OPEN" text, a new `[loc]` line reports the
+10/11 loaded US tables (10,201 records; patch0 is absent because this command's --textures list does not
+include patch_compressed.vpp_pc), and the text summary line gained the "resolved via a real localisation
+key" field.
+
+Determinism: the command below run twice into the same _work/hud_mask.png path (Bash redirection) - PNG
+byte-identical (MD5 c0ec2b5c599e78ce6abe208288b0d079) and stdout byte-identical (MD5
+703cbf1f0df7d15c4b68854ac3010427, the frozen baseline's hash).
+
+PREVIOUSLY RE-FROZEN 2026-10-03, orchestrator request (UI render unit U5 - text: spec-vint-render.md
+Sec14 + the new spec-vint-font-format.md, both on main at 3a4105d). The 18 text PLACEHOLDER outlines are
+replaced by real text. The OLD baseline is kept at tests/golden/hud_mask_pre_text/ (same command; that PNG
+is still reproducible bit-for-bit by appending --text-placeholder, verified). What changed in this frame:
+  - all 18 non-culled text elements lay out and draw (0 OPEN, 0 missing fonts; 237 glyph quads incl. shadow
+    passes): fonts thin / thin_overlay -> font_body (512x512 texture), header_n -> font_header_pc
+    (2048x1024); `_overlay` names draw once (secondary == primary in the default arrangement). Visible on
+    the 1280x720 canvas: "GANG OPERATIONAL 10/20" and "GANG OPERATION" (header font, tinted purple),
+    "$12,000", "888/888", "88", and "999/999" partly under the backdrop/mask; the combo_* texts sit at
+    x >= 1316 (off-canvas, as their placeholders were); lockon_txt_2 is drawn at text_scale 0.1. Six
+    elements' text_tag is a lone backslash (mp_name, multiplier_txt, cash_txt, 3x follower_count), drawn as one `\` glyph (a lone backslash is ordinary text,
+    Sec14.3 - only `\n`/`\N` break a line).
+  - every one of the 18 composed origins is IDENTICAL to its placeholder's (the placeholder used the
+    document's stored offset; real text re-applies auto_offset from the measured size, Sec12.2/Sec5.4) -
+    for the 13 elements whose auto_offset depends on the size (6 c, 4 w, 1 e, 1 s, 1 ne), the document's own
+    baked offset agrees exactly with this project's measured width/height (e.g. cash "$3000,0000" = 142
+    wide, sniper_ammo_txt "999/999" = 104, collection_cash_txt "$12,000" = 116.4 at scale 1.2).
+  - text draws through the same quad path, so masks/blend modes apply to it as to bitmaps.
+  - stdout: REAL TEXT / CHOSEN TEXT banner, three [font] lines, per-element layout on each text [elem] line
+    plus [run] lines, and a new text summary line.
+Visually inspected before freezing (enlarged crops of the header-font and body-font text): clean glyphs,
+natural kerning, shadows in place, no texel bleed.
+
+Determinism: the command below run twice into the same _work/hud_mask.png path through cmd.exe redirection
+(exactly how checkHudMaskScene() runs it) - PNG byte-identical (MD5 c0ec2b5c599e78ce6abe208288b0d079, the
+frozen baseline's hash) and stdout byte-identical (MD5 3b8779effe9e10a3dec2157e09b5ddd5); the CMake-built
+sr3_viewer.exe produced the same PNG hash.
+
+---------------------------------------------------------------------------------------------------------
+Previous history of this scene (unchanged below):
+
+Golden scene: hud_mask, real stencil masking + non-filter render_mode blend codes (sr3_viewer vint-doc)
+========================================================================================================
+
+FROZEN 2026-10-03, orchestrator request (UI render unit U6: spec-vint-render.md Sec15/spec-render-pipeline.md
+Sec2/Sec21 synced at main 3e661de). A fixed regression scene for `sr3_viewer vint-doc` covering the two
+biggest U6 additions that hud_running_man.vint_doc's own golden does NOT exercise (its own COMMAND.txt's
+"why this document" note: zero mask elements, zero non-filter render_mode elements):
+  - real stencil masking (Sec15.6): this document has 7 real mask elements (mask_nw/mask_ne/mask_sw/mask_se
+    forming the health-bar corner mask, plus mask1-4 forming a second grid mask) - 11 elements total render
+    while inside a mask subtree (write-mode for the mask quads themselves, test-mode for their masked
+    siblings), per this run's own summary line;
+  - all 5 real render_mode blend codes (Sec15.4): 15 elements in this document use a non-filter render_mode
+    (additive/additive_alpha/subtractive/multiply), each now drawn with its own real D3D11 blend state
+    instead of the old blanket "filter" placeholder.
+Visually confirmed (not just byte-compared) before freezing: the rendered frame shows the ammo-wheel ring
+(bottom-left) and the melee-weapon icon (bottom-right) both correctly circle-masked - a real, visible stencil
+cutout, not the square quad either would be without masking.
+
+Real command (run with cwd = tests/golden/, same convention as every other baseline here):
+
+    <sr3_viewer.exe> vint-doc \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\interface_startup.vpp_pc" \
+        hud.vint_doc \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        _work/hud_mask.png \
+        --tables "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\patch_compressed.vpp_pc" \
+        --textures "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc.vpp_pc" \
+        --textures "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\interface.vpp_pc"
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built by tests/golden/build.bat (no build.bat changes
+needed for this scene - it reuses the exact same `vint-doc` reader section hud_running_man.vint_doc's own
+golden already added).
+
+Why hud.vint_doc (the document hud_running_man.vint_doc's own COMMAND.txt deliberately avoided, for the
+opposite reason it's needed here): 218 elements visited, 101 bitmaps drawn, 59 groups, 18 text PLACEHOLDER
+markers, 23 culled. 11 elements inside mask subtrees, 15 non-filter render_mode elements - exactly the two
+code paths this golden exists to cover. Not drawn (separately OPEN, unrelated to this pass): bitmap_circle=6,
+clip=1, document=9 (sub-document instancing not modelled), sr2_map=1.
+
+What is REAL vs CHOSEN vs stubbed in this frame: same breakdown as hud_running_man's own golden (see that
+scene's COMMAND.txt and runVintDoc()'s own top-of-output banner, printed into this scene's own
+baseline_stdout.txt) - this scene uses the SAME renderer, SAME CHOSEN defaults (1280x720 canvas, fit to
+height, sRGB off, clear colour 40/40/48), just a different, mask/blend-mode-exercising document.
+
+Determinism: confirmed by running this exact command twice into the same _work/hud_mask.png path and
+MD5-comparing - byte-identical (MD5 d7c3200162d5211f795117f4a8731e1d, the frozen baseline's hash); stdout
+captures also diffed byte-identical across both runs (no wall-clock-timing text in this command's output,
+so checkHudMaskScene() compares stdout byte-exactly via compareTextExact, same as hud_running_man's own).
+
+Frozen here:
+  baseline_capture.png - the real rendered frame (1280x720 RGBA8, offscreen D3D11 target).
+  baseline_stdout.txt  - sr3_viewer's own real stdout: the REAL/CHOSEN/PLACEHOLDER banner, sheet/image
+                         resolution, load-time side-effect counters, one [elem] line per visited element,
+                         and the summary counts (including the mask/non-filter-render_mode counts this
+                         scene exists to cover).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkHudMaskScene().

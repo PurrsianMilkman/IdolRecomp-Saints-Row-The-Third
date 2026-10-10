@@ -574,6 +574,34 @@ int main() {
             std::vector<uint8_t> b9 = buildSnapshot(s2);
             CHECK(std::string(SaveSnapshot::parse(ByteView(b9.data(), b9.size())).difficultyName()) == "unknown");
         }
+        // Sec16 (2026-10-08) boundary check: the real header load routine
+        // consumes EXACTLY the 20-byte clock struct at 0x08C and the 256-bit
+        // flag set at 0x0A4 that the header save routine writes - field-level
+        // symmetry now confirmed from the load side, not just save-side
+        // region-map contiguity (Sec6.3/6.4). This project deliberately does
+        // not model either span's full content (no in-game calendar clock,
+        // no decoded flag meaning - see save_snapshot.h's top note), so the
+        // real regression risk Sec16 raises for THIS reader is an off-by-a-
+        // few-bytes boundary bug: garbage in those un-modeled bytes leaking
+        // into the fields on either side of them (labelIndex 0x084,
+        // completionPercent 0x088, playClockFloat 0x09C, playTimeSeconds
+        // 0x0A0, cheatsUsed 0x0C8). Poke non-zero garbage into exactly the
+        // clock struct's un-modeled leading 16 bytes (0x08C..0x09B, before
+        // the play-float sub-field this reader does use) and the full
+        // 256-bit flag set (0x0A4..0x0C3), and confirm every modeled field
+        // still parses to its real, untouched value.
+        {
+            std::vector<uint8_t> bad = buildSnapshot(sp);
+            for (size_t i = 0; i < 16; ++i) bad[0x08C + i] = 0xAA; // clock struct's un-modeled leading bytes
+            for (size_t i = 0; i < 32; ++i) bad[0x0A4 + i] = 0x55; // the full 256-bit flag set
+            SaveSnapshot g = SaveSnapshot::parse(ByteView(bad.data(), bad.size()));
+            CHECK(g.labelIndex() == 35 && g.completionPercent() == 55); // 0x084/0x088, just before the clock struct
+            CHECK(static_cast<uint32_t>(g.playClockFloat()) == 39688 && g.playTimeSeconds() == 39688); // 0x09C/0x0A0, untouched
+            CHECK(!g.cheatsUsed());                                      // 0x0C8, just after the flag set
+            CHECK(g.activeCheatIds().size() == 2 &&                      // 0x0CC+, further after the flag set
+                  g.activeCheatIds()[0] == nameHash("dlc_car_mass"));
+            CHECK(g.hashValid() == false); // the garbage changed the content, so the stale stored hash no longer matches
+        }
         // directory built from the derived summary of this snapshot
         {
             std::vector<uint8_t> dirBlob(kSaveDirectorySize, 0);
@@ -584,6 +612,99 @@ int main() {
             put32(dirBlob, 0, refCrc(dirBlob.data() + 8, 600));
             SaveDirectory dd = SaveDirectory::parse(ByteView(dirBlob.data(), dirBlob.size()));
             CHECK(dd.slots()[0].summary == snap.deriveDirectorySummary(true));
+        }
+
+        // ---- SaveSnapshot::build() (the from-spec WRITER, added 2026-10-08 for
+        // spec-save-format.md Sec15's save-trigger wiring): build() then parse()
+        // must round-trip every field it populates. ----
+        {
+            SaveSnapshotFields f;
+            f.levelName = "sr3_city";
+            f.saveTime = "22:04:51";
+            f.saveDate = "07.27.26";
+            f.labelIndex = 35;
+            f.completionPercent = 55;
+            f.difficulty = 2;
+            // Sec16 (2026-10-08): the real header load routine now confirmed to
+            // consume exactly the 20-byte clock struct (0x08C, last dword at
+            // 0x09C = playClockFloat) and the separate playTimeSeconds word
+            // right after it (0x0A0) that the save routine writes - exercise
+            // both explicitly so this round trip covers the exact span Sec16
+            // re-confirmed, not just the fields around it.
+            f.playClockFloat = 185165.890625f; // a real sample's value (Sec6.2 worked example)
+            f.playTimeSeconds = 185165;        // trunc(playClockFloat), Sec6.2
+            f.cheatsUsed = 1;
+            f.barnstormsFound = 2;
+            f.stuntJumpsFound = 3;
+            f.respectTotal = 73628;
+            f.respectInLevel = 533;
+            f.playerLevel = 22;
+            f.cashRaw = 51722765;
+            f.collectibles = {{0xAAA00000, 0xBBB00000, 0, 0}, {0xAAA00001, 0xBBB00001, 0, 0}, {0xAAA00002, 0xBBB00002, 1, 0}};
+            f.regionRecords.resize(5);
+            for (uint32_t i = 0; i < 5; ++i) {
+                f.regionRecords[i].handleLo = 0xC0000000 + i;
+                f.regionRecords[i].handleHi = 0x80E4;
+                f.regionRecords[i].controlled = (i % 2 == 0);
+            }
+            f.activityRecords.resize(3);
+            f.activityRecords[0].nameHash = nameHash("_a_es_ne_02");
+            f.activityRecords[0].levelsCompleted = 1;
+            f.activityRecords[0].completedMask = 1;
+            f.activityMarkerFlags = 0xF;
+            f.activeCheatIds = {nameHash("dlc_car_mass"), nameHash("hohoho")};
+            f.statistics[93 - kFirstSnapshotStatId].rawValue = 533;
+            f.statistics[94 - kFirstSnapshotStatId].rawValue = 367;
+            f.statistics[94 - kFirstSnapshotStatId].denominatorStatId = 93;
+
+            std::vector<uint8_t> built = SaveSnapshot::build(f);
+            CHECK(built.size() == kSaveSnapshotSize);
+            SaveSnapshot rt = SaveSnapshot::parse(ByteView(built.data(), built.size()));
+            CHECK(rt.hashValid()); // build() stamps a real, verifiable hash by default
+            CHECK(rt.versionSupported() && rt.formatVersion() == 94);
+            CHECK(rt.levelName() == "sr3_city" && rt.saveTime() == "22:04:51" && rt.saveDate() == "07.27.26");
+            CHECK(rt.labelIndex() == 35 && rt.completionPercent() == 55);
+            CHECK(rt.difficultyIndex() == 2 && rt.cheatsUsed());
+            CHECK(rt.playClockFloat() == 185165.890625f && rt.playTimeSeconds() == 185165); // Sec16 span
+            CHECK(rt.barnstormsFound() == 2 && rt.stuntJumpsFound() == 3);
+            CHECK(rt.respectTotal() == 73628 && rt.respectInLevel() == 533 && rt.playerLevel() == 22);
+            CHECK(rt.cashRaw() == 51722765);
+            CHECK(rt.collectibles().size() == 3 && rt.collectibles()[2].group == 1);
+            CHECK(rt.regionRecords().size() == 5 && rt.controlledRegionCount() == 3);
+            CHECK(rt.activityRecords().size() == 3 && rt.activityRecords()[0].nameHash == nameHash("_a_es_ne_02"));
+            CHECK(rt.activityMarkerFlagsRaw() == 0xF);
+            CHECK(rt.activeCheatIds().size() == 2 && rt.activeCheatIds()[1] == nameHash("hohoho"));
+            CHECK(rt.statistic(93)->asInt() == 533 && rt.statistic(94)->asInt() == 367 && rt.statistic(94)->denominatorStatId == 93);
+
+            // Sec11.2's checkpoint mode: computeHash=false leaves offset 0x000 at
+            // the zero-fill it already had - the real "no hash" in-memory layout,
+            // and SaveSnapshot::parse() accepts it exactly as the game's own
+            // loader does (Sec11.1: never checked on load either way).
+            std::vector<uint8_t> checkpointBuf = SaveSnapshot::build(f, /*computeHash=*/false);
+            CHECK(checkpointBuf[0] == 0 && checkpointBuf[1] == 0 && checkpointBuf[2] == 0 && checkpointBuf[3] == 0);
+            SaveSnapshot cpRt = SaveSnapshot::parse(ByteView(checkpointBuf.data(), checkpointBuf.size()));
+            CHECK(!cpRt.hashValid()); // stored 0 != the real computed hash of non-empty content
+            CHECK(cpRt.respectTotal() == 73628 && cpRt.cashRaw() == 51722765); // content still round-trips
+
+            // An empty SaveSnapshotFields{} (the "new game" defaults) builds a
+            // valid, parseable snapshot too - every un-modeled span just stays
+            // zero, never an invented value.
+            SaveSnapshotFields empty;
+            empty.levelName = "new_game_zone";
+            std::vector<uint8_t> emptyBuilt = SaveSnapshot::build(empty);
+            SaveSnapshot emptyRt = SaveSnapshot::parse(ByteView(emptyBuilt.data(), emptyBuilt.size()));
+            CHECK(emptyRt.hashValid() && emptyRt.respectTotal() == 0 && emptyRt.playerLevel() == 0 &&
+                  emptyRt.difficultyIndex() == 1 && !emptyRt.cheatsUsed() && emptyRt.collectibles().empty() &&
+                  emptyRt.labelIndex() == 0x7F);
+
+            // over-capacity collections are refused (same "CONFIRMED hard rule"
+            // discipline parse() already applies) rather than silently truncated.
+            SaveSnapshotFields tooMany;
+            tooMany.collectibles.resize(kCollectibleCapacity + 1);
+            CHECK(throwsFormatError([&] { SaveSnapshot::build(tooMany); }));
+            SaveSnapshotFields longName;
+            longName.levelName = std::string(kLevelNameMaxBytes, 'x'); // no room left for the NUL
+            CHECK(throwsFormatError([&] { SaveSnapshot::build(longName); }));
         }
     }
 

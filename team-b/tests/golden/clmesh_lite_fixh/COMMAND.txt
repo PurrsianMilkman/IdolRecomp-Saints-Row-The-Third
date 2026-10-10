@@ -113,3 +113,37 @@ Frozen here:
                          framing, capture path, frame count).
 
 Re-run and check with: tools/golden_scene_check.cpp's checkClmeshLiteFixhScene().
+
+
+================================================================================
+RE-FROZEN 2026-10-07 (WARP-migration task, orchestrator decision): this
+scene's baseline_*.png / baseline_stdout.txt were re-captured under the
+D3D11 WARP software rasterizer - golden_scene_check.cpp's own forced
+SR3_FORCE_WARP=1 is now this project's standing policy for every golden
+(the B3 infra task that added the unconditional _putenv_s("SR3_FORCE_WARP",
+"1") call had silently broken byte-exact comparison for every pre-existing
+golden, which had all been frozen under real hardware - NVIDIA GeForce RTX
+3090 on this machine - before WARP-forcing existed).
+
+The OLD real-hardware baseline this replaces is preserved, unmodified,
+under the sibling directory (this scene's own name)_hw_pre_warp/ - same
+COMMAND.txt/baseline_*.png/baseline_stdout.txt shape as this directory -
+NOT deleted, per this project's own re-freeze-preserves-the-old-one
+convention (precedent: clmesh_airport_controltower_lit/
+COMMAND_sparse_silhouette_v1.txt).
+
+Verified before freezing, not assumed: a real hardware render and a real
+WARP render of this exact same command (both through the same fresh
+tests/golden/_bin/sr3_viewer.exe build) were diffed with
+comparePngTolerance() (tools/golden_scene_check.cpp, B3 task) AND visually
+inspected pixel-by-pixel against the actual diff PNG, not just the numeric
+tolerance gate - see results/golden_warp_migration_20261007.md for the
+full per-scene table, pixel-diff numbers, and this session's own visual
+read.
+
+WARP build this was frozen under: see this directory's own new ENV.txt
+(OS build + d3d10warp.dll fingerprint, via B3's queryHostEnvironmentInfo()).
+
+Hardware rendering remains available on demand via golden_scene_check's
+own --hw flag (or SR3_FORCE_HW=1 in the environment) - see that flag's own
+doc comment in tools/golden_scene_check.cpp's main().

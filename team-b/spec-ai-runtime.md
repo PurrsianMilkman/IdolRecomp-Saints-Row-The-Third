@@ -365,6 +365,14 @@ into a single 177-entry name table at `0x012e1168` (entries 0–176, all engine 
   sub-state 26 `special animation`. Examples: the `Player` enter sets sub-state 138 `normal`; the
   `Combat Movement` enter sets 3 `move`; `Aim` enter sets 57 `aiming`.
 
+**Seven further entries confirmed and traced to their real owning tick functions, 2026-10-09 (full detail
+§20.2):** 13 `sidewalk start`, 14 `sidewalk`, 15 `sidewalk formation` (all three ticked by `0x0051bc60`,
+inside `Idle`); 32 `wander pause`, 33 `wander choose dest`, 34 `wander move` (all three ticked by
+`0x0051c860`, inside `Idle`); 35 `wander to sidewalk` (a one-frame transitional no-op, not separately
+ticked). These, plus the already-documented 36 `sleeping`/37 `sitting` exceptions above, are the only
+sub-states `Idle` dispatches specially — every other value (including 10, 11, 35-56) falls to ordinary
+per-frame `Idle` bookkeeping.
+
 ---
 
 ## 3. Mode switching: request, apply, transition
@@ -891,7 +899,14 @@ empty.
    sets `+0x2a` bit 0. Record `+0x18`/`+0x1c` is the recipient handle, `+0x20` a creation timer, `+0x30`… an
    optional `0x20`-byte payload. Perception posts kinds 0, 2, 11, 12, 18, 71, 76, 78, 86, 87 and 100;
    kinds 46, 81 and 108 come from elsewhere and their producers remain OPEN.]** **[A3, §11.7 item 3:
-   kinds 5 and 97 are consumed by `follow avoid LOF` and `follow browse`; producers OPEN.]**
+   kinds 5 and 97 are consumed by `follow avoid LOF` and `follow browse`; producers OPEN.]** **[A4, §12.3:
+   two further kinds found, 56 and 300, posted by the "fire in the hole" producer `0x00501d80`; kinds
+   46, 81 and 108 remain OPEN.]** **[2026-10-09, §20.2: kind 81's producer is now CONFIRMED — the
+   wander-destination-commit step (`Idle` sub-state 33→34 transition), posted via `0x004f5dd0`, sub-state
+   filter 34, delay randomized 15-35s. §20.4 separately found a parallel family of event kinds (14, 38,
+   48) also feeding `Flee`/`Cower` directly from the same `Idle`-private sink `0x005113e0` — none of the
+   three is in this item's own catalogued perception-posted list, and their producers remain OPEN too,
+   alongside kind 67 (a 250-750ms delayed gunfire re-check, §20.4).]**
 3. **The default event handler `0x004ebc70`** (a large body) was dumped but not read beyond its setter
    calls. It is the reactive-mode dispatcher for every mode whose `+0x10` returns 0.
 4. **How `Aim`, `Gunfire evade` and `Veh enter` are entered.** None has a direct caller of the transition
@@ -960,9 +975,14 @@ empty.
     - `+0x244`: time since the last clear line of fire to the target; `+0x250`: an ally link (§10.6);
     - `0x004fcce0`: uses `Investigate/seen_in_last` as a maximum age — CONFIRMED (§10.7).
 
-    Still open inside A2: who sets list-0 flags `0x2` and `0x4` (no setter in the perception range),
+    ~~Still open inside A2: who sets list-0 flags `0x2` and `0x4` (no setter in the perception range),
     the tunables block `0x013b7fd8`…`0x013b8450`, the team-relationship table `0x009b7100`, and lists
-    12, 17–21 in detail.
+    12, 17–21 in detail.~~ **[Resolved by A4, §12]:** the tunables block is the `tweak_table.xtbl`
+    registry, real names and values given (§12.1); the team-relationship table's write side is already
+    specified in `spec-lua-api-behaviour.md` §20.6/§30.6, and its read accessor is a 12-instruction
+    lookup with an id-9 guard (§12.7); list 12 is decoded — a `Pain_sound_radius`-gated distress notice
+    (§12.3). Still open: who sets list-0 flags `0x2`/`0x4`, and lists 17–21 in detail (cover-memory
+    lists, outside this unit's sensing-primitive scope).
 13. **Unidentified helpers the decision layer calls:**
     - in the gate: ~~`0x009aa360` and the class bit tested by `0x00971cf0`~~ **[A3, §11.6: "held in
       a grab" (HIGH), and the player class, is-a bit `0x21`]**;
@@ -991,6 +1011,66 @@ empty.
     the inner and outer edges of the engagement band, which raises that reading to HIGH.]**
 17. **Indeterminate reason byte** (§9.10 item 4): confirm on a live run what `+0x444` holds after an
     `ignore_ai` or re-asserted-order commit; a port should not depend on it.
+18. **The FOV cone/frustum geometry itself** (§12.2 step 4): `0x004fdf70`, `0x004fdc90`, `0x0075d7e0`
+    and `0x00525d30` were traced only as far as their call shape, not read instruction-by-instruction.
+    The actual inside/outside arithmetic (dot products, the min/max blend of two scaled bounding
+    offsets) is OPEN.
+19. ~~**The underlying LOS raycast execution** (§12.4): `0x004ecfc0`, `0x004ecf40` and `0x004ed320` were
+    not traced past the request-queue/answer-decode layer. This is a physics-domain primitive and may
+    belong with `spec-physics-runtime.md` rather than here.~~ **CLOSED 2026-10-08.** Those three are
+    confirmed pure cache/queue code (no raycast inside them at all); the real resolver is a sibling,
+    `0x004eda70`, which calls `spec-physics-runtime.md` §8.8's shared ray wrapper directly — full
+    chain in §12.4's own updated text above and `spec-physics-runtime.md` §8.11.
+20. **Three unnamed is-a/class bits and one state pair used by the FOV test** (§12.2): the
+    "carried/witnessed" bit (descriptor `+0x6` bit 6), the gating bit tested before any narrowing runs
+    at all (`+0xa` bit 0, via `0x00853b30(target, 0x20)`), and perception's own sub-state values 2 and 6
+    (`+0x292`) that, together with a target/own-focus handle match, trigger the full bypass. None was
+    identified beyond its bit position or numeric value.
+21. **The ally-link cylinder radii's full derivation** (§12.8): `0x013ba290`/`0x013ba2b0` are themselves
+    built at start-up from further zero-fill values (`0x013ba260`/`0x013ba270`/`0x013ba280`/`0x013ba2a0`),
+    traced one level, not to a final metres value.
+22. **The exact field mapping of the two new event kinds** (§12.3, kinds 56 and 300 posted by
+    `0x00501d80`): the push-order-to-parameter mapping onto `0x004f5dd0`'s seven-field signature was
+    inferred from the dword count, not decompiler-verified; and their consumers (which mode/handler
+    reacts to kind 56 or 300) are unknown, joining item 2's list.
+23. **`Player_friendly_fire_threshold`** (§12.1): shares its registration pattern and memory
+    neighbourhood with the `Ai_fov_*` block but belongs to a different subsystem (`AI:Follower`); no
+    reader was found in the perception range. Its real consumer belongs to whichever future unit covers
+    the player's AI-follower/companion logic, not this one.
+24. **`0x0097e9b0`'s own argument shape**, called inside `Cower`'s begin (§13.1.1) while packing the
+    final flags byte — the call site's stack-offset arithmetic does not resolve cleanly to a simple
+    cdecl/thiscall signature by hand; only the result (one bit of a packed flags byte) is established,
+    not its source (A5).
+25. **`Veh evade`'s own `rep movsd` directly into `[human+0x8d0]`** immediately before calling the
+    transition primitive with a block pointer that appears to alias the same bytes (§13.1.6) — whether
+    this is harmless belt-and-suspenders double-writing or the manual copy does work the primitive's own
+    copy would not otherwise reach is not confirmed (A5).
+26. **The virtual-dispatch gate inside `Veh threat`'s own call** (`0x00523db0`, §13.1.7): a 4-link chain
+    ending in two vtable calls (slots `0x68`/`0x70`), declining if the second result equals the human.
+    HYPOTHESIS "don't flag vehicle-threat on whatever the camera/possession system currently focuses" is
+    a guess from the chain's shape, not confirmed against any already-named concept; the vtable's owning
+    class was not identified (worth checking against `scratchpad/rtti_classes.json` before a fresh RTTI
+    walk) (A5).
+27. **Whether `0x0054c630`'s second output buffer (`outB`) is genuinely dead** at the `throw weapon` call
+    site or consumed by some other, unexamined caller of the shared trajectory-solver core (§13.2.1) — a
+    raw call-site scan for `0x0054c630` across the whole binary would close this cheaply (A5).
+28. **The sign/axis convention of `0x0054c630`'s vertical output component** (§13.2.1): increasing `arc`
+    makes it more negative and increasing `speed` makes it less negative — backwards from a naive
+    "more arc ⇒ aim higher" intuition. Two explanations remain open: a gravity-down-positive local frame
+    re-flipped by some caller, or `arc` is not a gravity constant at all but a lob-fraction/undershoot
+    term with the real upward arc living in the (possibly-unused, per item 27) `outB` branch (A5).
+29. **`0x0054d930`'s own body past its first ~280 instructions** (§13.2.2) — the post-solve geometry pass
+    and the full field layout of the large working struct it receives by `ECX` beyond the offsets already
+    confirmed. Deliberately not given a second synthetic Unicorn harness, since its trajectory math is
+    confirmed-by-listing to delegate to the already-oracle-tested `0x0054c630` (A5).
+30. **`0x00853b30(thrower, 0x22)` inside `0x0054c770`** (§13.2.1) — structurally identical to the
+    confirmed "is a player" test at bit `0x21` used throughout this file, but at a different bit index;
+    not claimed to mean the same thing, not found named elsewhere in this spec (A5).
+31. **`0x004e8070`'s dead-looking double call to `0x008addb0(human, 0)`** (§13.1.3 step 1) — confirmed
+    byte-identical with no intervening side effect on the one call path this unit needed (apply's
+    `Gunfire wary` dispatch, `flag=0`); most likely a compiler-folded shared tail from two originally
+    separate source conditions, live only on some other caller's path. Does not change observable
+    behaviour on the path this unit traced (A5).
 
 ---
 
@@ -1490,6 +1570,18 @@ literals' suffixes after `ai_force_flags`, quoted as engine data.
 A 42nd routine in the same run, `0x004e36b0`, uses the same tag mechanism to write the **personality
 index** `+0x314` (sub-object `+0x64`), not a flag.
 
+**Real consumer/caller census for `sidewalking`/`wandering`/`sidewalk_leashed`/`dont_use_sidewalk`,
+2026-10-09 (`spec-ai-runtime.md` §20.1 has the full detail) — all four previously listed with no known
+reader.** An exhaustive `CALL rel32` opcode census found: every confirmed caller operates on an
+already-EXISTING human (session/handle resolution), never a fresh spawn — a named/tracked-character task
+dispatcher, a "release back to civilian defaults" batch resetter (sets both `wandering`/`sidewalking`
+together), the inverse "leaving sidewalk behavior on entering combat/alert states" (7 near-identical case
+blocks, cross-referenced to §20.4's gunfire-reaction chain), and the generic Lua/network by-name
+force-flag dispatcher `0x008b14c0`. **Surprising negative, directly checked: the near-field pedestrian
+spawn routine (§20.1's `0x0090b0a0`) never calls any of these 4 setters** — `sidewalking` is most
+plausibly the AI sub-object's own default state at construction rather than something the spawner sets
+explicitly; not independently confirmed which.
+
 **Flags the decision layer reads** (CONFIRMED at the cited sites):
 
 | Flag | Where it is read | Effect |
@@ -1566,7 +1658,10 @@ tick `0x00507520`, the producers that fill each list, the entry flags, the damag
 `0x004fc8b0`, the timer `+0x244` and handle `+0x250`, and perception's public query `0x004fcce0`. It
 answers §8 item 12 and part of item 2. It does not trace the vision line-of-sight service
 (`0x004ed1e0`/`0x004ed550`), the 3-D maths helpers, or the zero-fill perception tunables block
-(`0x013b7fd8`…`0x013b8450`), which is filled at run time from a source not traced here.
+(`0x013b7fd8`…`0x013b8450`), which is filled at run time from a source not traced here. **[A4, §12.1/
+§12.4: the tunables block is the `tweak_table.xtbl` registry (real names and shipped values given); the
+LOS service's answer-decode and request-queue halves are read in full, leaving the underlying raycast
+execution itself as a physics-domain boundary.]**
 **Method.** As for A1: a private disposable Ghidra project copy (`tools\gp_aiA2`, deleted after the
 dumps); `func`/`range`/`ptrs`/`xref`/`calls` dumps; a private function-list script for the range
 `0x004f8000`–`0x0050b000` (252 functions); a byte-level read of float constants with
@@ -1682,7 +1777,8 @@ back-pointer to the human (§9.8). With no human it returns at once. In order:
       `0x10`/`0x1`);
    7. re-arm `+0x210`: 650–800 ms, or 350–450 ms when the activity level is below 6 and `0x00943ea0`
       fails.
-6. **Slow pass** `0x00502f10` when timer `+0x21c` fires (every 1500–2000 ms; not read).
+6. **Slow pass** `0x00502f10` when timer `+0x21c` fires (every 1500–2000 ms; not read). **[A4, §12.6:
+   read — a world-wide (not proximity-gated) down/dead sweep of every live human, feeding list 7.]**
 7. **Projectile pass** `0x00507290` every 120–200 ms (`+0x220`) and **vehicle pass** `0x00507440`
    every 200–400 ms (`+0x228`) (lists 10 and 9, 10.3).
 8. Clear `+0x25f` bit 0.
@@ -1770,6 +1866,9 @@ the score scales below.
      re-notice it at the object's true position; then run the vision test and `0x00503940`;
   3. for objects that are gone or dead, remove the entity from lists 0, 4, 14 and 16;
   4. choose the target (`0x004fc100`), and post event 78 to the human when the target handle changed.
+     **[A4, §12.5: corrected — `0x004fc100` RE-VALIDATES the current target handle (actively known,
+     non-dismissed), it does not pick a new one by priority. Event 78 fires when validation fails and
+     the handle is cleared, not when a new target replaces the old.]**
 
 **The attitude `0x004fe0f0(obj)`** returns 0…4+, lower meaning more hostile. Its base is the
 team-relationship table `0x009b7100(team, team)` on the team bytes `+0x1ca8`. It is overridden by the
@@ -1885,8 +1984,12 @@ equal, so the lane-by-lane comparisons of §9.6 reduce to one number.
 
 `0x004fc960(handle)` is the same sum for one attacker.
 
-**Score scales.** K = 100 is the common pivot: a distance score is 100 at a reference radius.
-- `0x004fa9f0` gives 100·d²/r², with r the tunable `0x013b8010`.
+**Score scales.** K = 100 is the common pivot: a distance score is 100 at a reference radius. **[A4,
+§12.9: K (`0x0137fa60`) and the 2500 below (`0x0137fa80`) are compiled literals, each set by its own
+one-instruction startup stub — not `tweak_table.xtbl` entries.]**
+- `0x004fa9f0` gives 100·d²/r², with r the tunable `0x013b8010`. **[A4, §12.1/§12.2: that tunable is
+  `Ai_fov_length_low` (35 m) — named for the field-of-view system but, in this build, read only by this
+  distance scorer, never by the FOV test itself.]**
 - `0x004fbdb0` is piecewise: 0…100 inside an inner radius, then 100…2500 out to an outer radius
   (`0x0137fa80` = 2500).
 
@@ -1901,11 +2004,15 @@ the radii are run-time tunables.
   `0x005058e0`; flags `0x2000`/`0x800`. List 11 is also fed from here.
 - **10:** a snapshot list rebuilt every 120–200 ms by `0x00507290`/`0x00505f10` over the manager's
   `+0xac` list; flags `0x1000`/`0x8000`/`0x800`; self-entries allowed. HYPOTHESIS: projectiles and
-  thrown objects. Also fed by `0x00501d80` (from `0x004ec660` and `0x009286a0`).
+  thrown objects. Also fed by `0x00501d80` (from `0x004ec660` and `0x009286a0`). **[A4, §12.3: read in
+  full — a "fire in the hole" shout producer gated by `Grenade_shout_radius` (25 m), fixed score 4.0,
+  posting new event kinds 56/300.]**
 - **11:** imminent threats, 1 s: `0x004fecf0` (from the list-9/10 passes) and `0x004fee30`, called by
   the sense pass for objects with `+0xe8` bit `0x100` within 20 units. The pass also posts **event 18**,
   and the new-entry hook posts **event 2**.
-- **12:** `0x00502130` (from the witness routine and `0x004e7010`); not decoded.
+- **12:** `0x00502130` (from the witness routine and `0x004e7010`); not decoded. **[A4, §12.3: decoded
+  — gated by `Pain_sound_radius` (8 m); "a nearby human is in distress"; says "call a doctor" when not
+  in combat; forwards a now-dead source to list 7.]**
 - **17, 18, 20:** written by cover and movement code, not by sensing: `0x005027a0` (from the
   cover-abandon check `0x0050a000` and the cover and combat-movement routines) writes 18 and 20;
   `0x00502650`/`0x00502710` (cover pop-out) write 20; `0x005028f0` writes 17. HYPOTHESIS: memory of
@@ -2003,7 +2110,9 @@ CONFIRMED by listing of `0x004f5dd0` and `0x004f5ae0`.
     - the target's last known position is available (`0x004fe390`);
     - the two are not in the same vehicle;
     - `0x0050cc40(human, friend, position, 0)`, not read. HYPOTHESIS: the friend stands in or near this
-      human's line of fire to the target.
+      human's line of fire to the target. **[A4, §12.8: read in full — CONFIRMED as a point-to-segment
+      distance test (self to target) with a cylindrical tolerance around the friend, the same cylinder
+      the unrelated `0x0050cdb0` aim-cone test (§9.6 `cover` rule 8) uses.]**
   - **Cleared** by the tick when `0x004ff450` stops holding; the friend's back-link is cleared too if
     it still points here, and timer `+0x218` is restarted. Also cleared by the full reset.
   - `flush out` refuses while the link is live (§9.6).
@@ -2206,7 +2315,9 @@ with the "true position when in view" flag).
     brute, 15.0 for the `0x0052a2e0` brute, else its maximum weapon range b);
   - `+0x08` = the threat with the largest radius;
   - `+0x18` = a navmesh point (`0x00539200`) on the far side of the radius-weighted centroid. It must
-    end at least 3.5 (`0x01118d48`) farther from the centroid than the human is now.
+    end at least 3.5 (`0x01118d48`) farther from the centroid than the human is now. **This snap always
+    fails in the shipped game (§14); the action's own decline exit is taken every time it is evaluated,
+    and the radius/centroid logic above it is unreachable in retail.**
 - **26 `move sidestep`** (`0x0053e870`; the only reader of `dodge_chance`, 11.5):
   - not in a vehicle state (`+0xccc`), not `0x00985cd0`;
   - T exists; `0x004fdae0`; **not** at the human's own cover point (`0x00540a70`, 11.6);
@@ -2255,8 +2366,11 @@ with the "true position when in view" flag).
 - **15 `melee stand back`** (`0x0053d140`):
   - T within a run-time radius (`0x013bad60`, latched);
   - a human holding a ranged weapon needs `+0xf4` → `+0xe8` bit `0x40`;
-  - if T is in the state `0x009826e0` (`+0xcc8` = 12 with `+0xcce` 20 or 21): `+0x24` = the object
-    linked at `+0xda8` (or T's position plus its facing), `+0x30` = T's position;
+  - if T is in the state `0x009826e0` (`+0xcc8` = 12 `Fire spray` with `+0xcce` 20 or 21 — CONFIRMED by
+    listing, §13.1.6b): `+0x24` = the position of the object linked at T's own `+0xda8`/`+0xdac` (a handle
+    pair, resolved through the generic handle resolver `0x004d7f30` then its own `+0x40` position
+    sub-vector; CONFIRMED, §13.1.6a), or T's position plus its facing if the link does not resolve;
+    `+0x30` = T's position;
   - otherwise it walks list 5 for an ally on the same T, or a player within `0x013bad40` who is facing
     T, and uses that one's position as `+0x24`.
 - **67 `killbane strafe`** (`0x00538d40`): T at least 2.5 away (6.25 squared, `0x01115350`). It arms
@@ -2314,9 +2428,10 @@ in 11.6: `+0x964` find-new-cover, `+0x968` stay-down, `+0x96c` time-in-cover.
 **F. Picking an object to act on (`+0x08`).**
 - **45 `pickup weapon`** (`0x004f0b70`):
   - refused by `cant_pickup_weapons` (`+0x2ba` bit 7);
-  - up to eight pickups within 225 that pass `0x004f0810` are navmesh-snapped;
+  - up to eight pickups within 225 that pass `0x004f0810` (CONFIRMED clean/live — does not touch the dead registry below) are navmesh-snapped via `0x00a12180`;
   - one multi-target path query (`0x00a12a80`, path limit 22.5) chooses the reachable one → `+0x08`;
   - none: back-off 700 ms.
+  - ~~**CORRECTION, 2026-10-08 (§14.7):** statically, "none" is the unconditional outcome... STATICALLY DEAD; RUNTIME CONFIRMATION PENDING.**~~ **LIVE-REFUTED, 2026-10-08 (§14.7a):** the live hook check confirmed `0x00447770` (the gate both `0x00a12180` here and `0x00a12a80` depend on) succeeds 99.25% of the time in real gameplay (87,262/87,918 calls), and `pickup_weapon_attempted` fired 90 times in one captured gunfight — the "always declines" claim does not hold. Action 45's real success rate in retail is not yet separately measured (the capture logged attempts, not per-attempt outcomes for this specific action), but the upstream "always dead" premise is refuted. See §14.7a; implement as potentially-working, not as always-declines, pending the real-writer follow-up.
 - **46 `human shield grab`** (`0x0050dfe0`):
   - `0x009aa520` (can grab);
   - **a follower must be within `seperated_distance` of its player** (`_interior` when `+0x317` bit 0
@@ -2335,11 +2450,19 @@ in 11.6: `+0x964` find-new-cover, `+0x968` stay-down, `+0x96c` time-in-cover.
   - none: back-off 1000 ms.
 - **52 `brute car flip`** (`0x00526240`):
   - T in a vehicle that resolves;
-  - a game-mode switch (`0x00614d00`, a byte jump table);
-  - the vehicle is not in any of the states `0x00ad31a0`, `0x00ad3270`, `0x00ad3290`, `0x00ad3140`;
+  - a game-mode switch (`0x00614d00`, a byte jump table) — **resolved 2026-10-07: for game-mode values
+    0, 1, 4 or 11 the routine declines outright, skipping every check below; any other mode falls
+    through to the checks that follow**;
+  - **the vehicle's class is none of: Helicopter or VTOL (`0x00ad31a0`, `Vehicle_Type` `+0x2c` == 3 or
+    4), Motorcycle (`0x00ad3270`, `+0x2c` == 1), Watercraft (`0x00ad3290`, `+0x2c` == 5), or Tank
+    (`0x00ad3140`, a separate special-type sub-field `+0x4c4` == 14)** — **corrected 2026-10-07: these
+    are vehicle-*class* exclusions, not transient-state exclusions**;
   - vehicle `+0x5c` ≥ 0.1;
-  - T visible;
-  - a clearance probe around the vehicle must be clear;
+  - T visible (`0x004fc6d0` on the acting human's own target handle);
+  - a clearance probe around the vehicle must be clear (the same vtable `+0x60` box, clamped against
+    the transformed human position, then run through a sibling of `0x004f2970`'s formula,
+    `0x004fa670`, against a fixed `(2,2,2,2)` constant — the exact intent of that last comparison is
+    OPEN);
   - `+0x08` = the vehicle.
 - **63 `quick kill`** (`0x0052cbe0`, `Commando`): the first in-view (flag `0x40`) list-0 entry that
   passes `0x004fe730` and `0x00963d40`, has no riot shield, and whose position predicted from its
@@ -2361,16 +2484,55 @@ in 11.6: `+0x964` find-new-cover, `+0x968` stay-down, `+0x96c` time-in-cover.
   - `0x00548590`; refused by `always_follow_in_alternate_vehicle` (`+0x2ba` bit 0);
   - the group leader's vehicle within 30 (900 squared), and not more than 5.0 above the human when
     `0x00ad4810`;
-  - a seat from `0x005457f0` → `+0x3c`;
-  - the seat's entry point (`0x00b0eac0`), transformed to world space (`0x004e44b0`, `0x004f4770`)
-    → `+0x24`;
+  - a seat from `0x005457f0(human, vehicle, &block+0x3c)` → `+0x3c`. **CONFIRMED — full listing,
+    387 insns:** `0x005457f0` takes a raw output-byte pointer as its 3rd argument and writes the
+    winning seat index through it directly — it never computes a `+0x3c` offset itself, so the caller
+    must already be passing `&block+0x3c` here, not `&block`. On failure (no eligible seat) it returns
+    false and leaves that byte **untouched**. Selection, when more than one seat is eligible via
+    `0x00b0eb90` (`spec-player-runtime.md` §13.5, called here as
+    `0x00b0eb90(vehicle, seat, -1, human, 0, 1, 0, 0)` — resolving that spec's own "not checked" flag
+    for this exact call site), is **closest-to-self by squared distance** (human world position vs.
+    each candidate seat's `0x00b0eac0`-resolved, untransformed local offset), with two hardcoded
+    priority overrides: the driver seat (0) always wins outright if eligible; the front-passenger seat
+    (1) also wins outright under a narrower group/difficulty-gated condition;
+  - the seat's entry point (`0x00b0eac0(vehicle, seat, -1, 0, 0, &out1, &out2)`), transformed to world
+    space (`0x004e44b0`, `0x004f4770`) → `+0x24`. **CONFIRMED — full listing:** `out1` = the seat's
+    local-space entry position (sourced from `vehicle_interaction_point_sets.xtbl`'s
+    `Interaction_Point_Set_Element.Seat_Offset`), `out2` = a local-space 3×3 rotation matrix (from that
+    same element's `Heading` field) — a position+orientation pair, vehicle-local, matching this unit's
+    own cited world-space transform step exactly;
   - the vehicle → `+0x08`.
 - **38 `follow other car`** (`0x00548e80`): the same, for a group member's vehicle that is not the
   leader's. A member in `Hijack` (18) offers its own committed block's handle (`+0x458`); a member in
   `Passenger` (25) or `Veh trans` (41) offers its vehicle. The vehicle must also not be `0x00ad4810`.
-- **39 `follow carjack`** (`0x00549080`): `0x00548590`. A candidate vehicle, chosen by vehicle class
-  (`0x00ad2f80`, 0…5, through a jump table) or by `0x0051cc80` / `0x0051ce60` / `0x0051cd70` → `+0x08`;
-  it also sets `+0x56` bit 5 and clears `+0x3c` and `+0x50`.
+  **Shares `0x005457f0`/`0x00b0eac0` with action 37 verbatim — no separate seat/entry-point logic
+  exists for 38.** `0x005457f0` itself (not action 38's own top-level logic) additionally walks the
+  human's own group a second time internally, checking each OTHER member's mode byte (`+0x501`)
+  against `0xE` (14) and, on a match, that member's own `+0x458`/`+0x45c` committed-block handle
+  against the target vehicle — the same field pair this entry already names for `Hijack`, but tested
+  against a different mode constant; not reconciled with 18/25/41 above, flagged open.
+- **39 `follow carjack`** (`0x00549080`): `0x00548590`; resolves the GROUP LEADER (`0x0097e7b0`, the
+  same leader concept 37/38 use). If the leader has a cached vehicle handle (`+0x16c0`/`+0x16c4`) that
+  resolves, clears a per-vehicle disqualifying flag (`+0x33` bit `0x10`), passes the per-type carjack
+  flag (`0x02cc9900[type]+6` bit `0x80`) and `0x00853b10`'s generic validity gate: that cached
+  vehicle's own class (`0x00ad2f80` — the vehicle's `+0xbf4`→`+0x2c` field; `0x00ad2f80` itself is an
+  8-byte getter, NOT a jump table) selects ONE of three candidate-search functions via a 6-entry (0…5)
+  jump table that lives IN THIS FUNCTION at `0x00549170`: class 5 → `0x0051cc80`; class 2/3/4 →
+  `0x0051cd70`; class 0/1 → `0x0051ce60`. If the leader has no such cached/valid vehicle, falls back
+  instead to a simple boolean gate on the leader (`0x009b5690`, leader `+0x1858` ≠ 0) choosing between
+  `0x0051cc80` (true) and `0x0051ce60` (false) — `0x0051cd70` is reachable ONLY via the class-based
+  path. All three search functions walk the global vehicle list (head `0x027c2eac`, next `+0xbec`),
+  independently re-filtering every candidate by the SAME class grouping and picking the nearest by
+  squared distance (`0x00da1330`), subject to a shared gate (`+0x3a` bit `0x80`, `+0x3b` bit `0x1`,
+  `0x00853b10`, `+0x16c0` bits `0x80`/`0x200`, `0x00a77e10(this)→+0x1564 > 0`, `+0xc6d` bit `0x2`,
+  `+0x1d7b` bit `0x40`, `0x00ad5180`); `0x0051ce60` additionally runs a second pass over a second list
+  (head `0x027c2eb8`, same class 0/1 filter, an extra `+0xc68` byte gate (0 or 8), and an
+  ellipsoid-weighted distance), returning whichever of its two passes found the closer candidate.
+  Result → `+0x08`; it also sets `+0x56` bit 5 and clears `+0x3c` and `+0x50`. **[CONFIRMED — full
+  disassembly of `0x00549080`, `0x0051cc80`, `0x0051cd70`, `0x0051ce60`, `0x0097e7b0`, `0x009b5690`,
+  `0x00853b10`, `0x00ad5180` (shallow on its own two sub-calls), `0x00a77e10`, `0x00da1330`; the exact
+  field identities of `+0x1564` (0x00a77e10's target), `+0x1858` (0x009b5690's target) and the second
+  list `0x027c2eb8`'s specific population are OPEN.]**
 - **42 `investigate look`** (`0x00550c40`):
   - the candidate's position is navmesh-snapped and written back into the entry (11.2);
   - it needs the candidate's flag `0x10` (position verified);
@@ -2457,7 +2619,8 @@ in 11.6: `+0x964` find-new-cover, `+0x968` stay-down, `+0x96c` time-in-cover.
     - holder and riot-shield rules as for 51; the `frustrated` goal test (`0x004f3cf0`) as a
       tie-break;
     - finally a navmesh path between the two humans' cells (`0x00a12180` twice, then `0x00a11e10`)
-      must exist.
+      must exist. **This query always fails in the shipped game (§14); this final clause always
+      refuses first, so the tie-break logic above it decides nothing in retail.**
 
 **H. Thrown weapons (geometry builders).**
 - **5 `throw weapon`** (`0x005531a0`):
@@ -2638,9 +2801,15 @@ CONFIRMED by listing unless marked.
   posture family. The meaning of each pose number stays OPEN.
 - **The vehicle-geometry tail of `advance`** (§9.6 step 7). It takes the human's position into T's
   vehicle frame (`0x004e44b0` matrix, `0x004f4770` transform) and measures the squared distance to the
-  vehicle's local bounding box (`0x004f2970`, a clamp-and-measure point-to-box distance). It returns
-  true only when that exceeds 0.5 (`0x01116a20`) on every lane (`0x004bc680` = "argument < this in all
-  lanes"). So for a `0x009422d0`-class human against a T in a vehicle, `advance` holds only while the
+  vehicle's local bounding box. **That box is T's own vtable `+0x60` getter's result** (`0x00a7a4e0`,
+  resolved 2026-10-07 — a per-instance cached box, not a direct read of the three load-time asset
+  boxes; see `spec-physics-runtime.md` §8.6). `0x004f2970` is CONFIRMED (full disassembly) to be an
+  exact clamp-per-axis-then-squared-distance AABB formula with no embedded tolerance of its own — a
+  pure geometric primitive, no rotation handling (the point is already in the box's local frame by the
+  time it runs). It returns true only when that exceeds 0.5 (`0x01116a20`) on every lane (`0x004bc680`,
+  also now fully disassembled: a lane-wise less-than test between its two vector arguments via
+  `CMPLTPS`/`MOVMSKPS`/`CMP …,0xF`, no constant of its own). So for a `0x009422d0`-class human
+  against a T in a vehicle, `advance` holds only while the
   human is more than about 0.71 from the vehicle's body. **[resolves §8 item 13]**
 - **Owners of the cover timers `+0x964`/`+0x968`/`+0x96c`** (whole-program scan of every timer arm,
   read and write at these offsets in the AI range):
@@ -2698,7 +2867,2054 @@ CONFIRMED by listing unless marked.
 
 ---
 
-## ~~9.~~ ~~10.~~ ~~11.~~ 12. Clean-room check
+## 12. Perception's sensing primitives (unit A4)
+
+**Scope.** `review/scoping-ai.md` proposed this unit as "the perception body — the `0x00507520`
+subtree, ~10k instructions" on the theory that A2 (§10) specified only the *write-side format* (the 22
+lists, their flags, the producers' call graph) while A4 would specify *how well NPCs notice things* —
+the vision cone, hearing, line-of-sight and memory/decay algorithms themselves. **That framing does not
+survive contact with §10.** A2's own listing of `0x00507520` (306 instructions, §10.2) already *is* the
+perception body's dispatcher, and A2 already read most of what feeds it: the vision test, `notice`,
+the damage-memory decay formula, the attitude function, the score-scale conventions. What A2's own scope
+note (§10, opening paragraph) and its "not read"/"OPEN" asides explicitly left out is a short, specific
+list of sensing primitives: the vision cone/FOV test's real geometry and tunables, the line-of-sight
+*service* behind the async answer it reads, two sound-radius producers it found but did not decode
+(lists 10 and 12), the perception tunables block itself, the slow pass, the team-relationship table, the
+target-handle validity check, and the ally-link geometry test. **This section reads exactly that list.**
+It is therefore much smaller than ~10k instructions — the real gap A2 left behind, not a re-derivation
+of the subtree A2 already covered. It answers the rest of §8 item 12 and closes §10.3's and §10.6's
+smaller "not read"/"not decoded" asides.
+**Method.** `tools/harnesses/exe_va.py` (file-backed VA reads, no Ghidra) plus `capstone`, run through
+small scratch scripts (branch-following single-function disassembly; a raw byte-pattern scan of the
+whole `.text` section for a literal absolute address, used to find both readers and writers of a global
+without a disassembler database; a scan for the `push addr; push name; mov ecx,slot; call` tweak-registry
+idiom). Every function cited CONFIRMED below was read in full by this method. Tunable values are read
+from the shipped `tools/ai_base_xtbl/tweak_table.xtbl` (the real base-game file, 601 rows) and cross-checked
+against `tools/ai_tweak_registry.tsv` (the 586-name registry `spec-tables-progression.md` §10.10 already
+specifies in full).
+
+### 12.1 The perception tunables are ordinary `tweak_table.xtbl` entries
+
+A2 flagged "the zero-fill perception tunables block `0x013b7fd8`…`0x013b8450`, filled at run time from a
+source not traced" (§10, scope note). That source is the **same tweak-table mechanism
+`spec-tables-progression.md` §10.10 already specifies in full**: a registration stub
+`push <var addr>; push <name string>; mov ecx, <registry slot>; call 0x0071B580; ret`, one stub per
+tunable, in the range `0x00fecd40`–`0x00fed55f`. `0x0071B580` is that document's own float constructor
+(type 1 of 4). The real names and shipped values (base `tweak_table.xtbl`, `Entries:AI:Perception:FOV:*`
+and `Entries:AI:Perception`/`Entries:AI:Follower`):
+
+| Name | VA | Value | Unit | Category |
+|---|---|---|---|---|
+| `Ai_fov_length_low` | `0x013b8010` | 35 | m | FOV:Normal |
+| `Ai_fov_length_high` | `0x013b800c` | 45 | m | FOV:Normal |
+| `Ai_fov_width` | `0x013b8008` | 150 | deg | FOV:Normal |
+| `Ai_fov_height` | `0x013b8004` | 80 | deg | FOV:Normal |
+| `Ai_fov_length_low_spotted` | `0x013b8000` | 80 | m | FOV:Spotted |
+| `Ai_fov_length_high_spotted` | `0x013b7ffc` | 90 | m | FOV:Spotted |
+| `Ai_fov_width_spotted` | `0x013b7ff8` | 190 | deg | FOV:Spotted |
+| `Ai_fov_height_spotted` | `0x013b7ff4` | 140 | deg | FOV:Spotted |
+| `Ai_fov_length_zombie` | `0x013b7ff0` | 20 | m | FOV:Zombie |
+| `Ai_fov_width_zombie` | `0x013b7fec` | 80 | deg | FOV:Zombie |
+| `Ai_fov_height_zombie` | `0x013b7fe8` | 80 | deg | FOV:Zombie |
+| `Ai_fov_length_cover` | `0x013b7fe4` | 50 | m | FOV:In Cover |
+| `Ai_fov_width_cover` | `0x013b7fe0` | 220 | deg | FOV:In Cover |
+| `Ai_fov_height_cover` | `0x013b7fdc` | 180 | deg | FOV:In Cover |
+| `Pain_sound_radius` | `0x013b8050` (vec4) | 8.0 | m | AI:Perception |
+| `Grenade_shout_radius` | `0x013b8070` (vec4) | 25.0 | m | AI:Perception |
+| `Player_friendly_fire_threshold` | `0x013b7fd8` | 150 | HP | AI:Follower |
+
+`Player_friendly_fire_threshold` sits immediately below the FOV block in memory and shares its
+registration pattern, but its category is `AI:Follower`, not `AI:Perception` — a different subsystem
+(the player's AI-follower turning hostile after enough damage) reusing adjacent storage, **not** a
+perception input. No reader for it was found in the perception range (`0x004f8000`–`0x0050b000`); it is
+flagged here only so a reader who finds it beside the FOV block does not mistake it for one. The real
+degree→radian constant the FOV test uses is confirmed as plain π/180 (`0x012a30d8`, read as a double,
+= 0.0174529999…).
+
+### 12.2 The view-cone/FOV test `0x004fef80` (327 instructions, full listing)
+
+CONFIRMED by listing. Signature `bool(this=perception, target, out-position-struct)`. A null target
+returns false. Otherwise it picks a **length** (metres, used as-is) and a **width**/**height** (degrees,
+multiplied by π/180) from one of five tunable sets, then builds and tests a cone/frustum against the
+target:
+
+1. **Default:** `Ai_fov_length_high` / `Ai_fov_width` / `Ai_fov_height` (45 m / 150° / 80°).
+2. **Carried/witnessed override** — the target is-a type with descriptor bit `+0x6` bit 6 (looked up via
+   the shared type-bit tester `0x00853b30`, the same accessor §10.1 and §9.10 already use for the player
+   and human-typed bits; this bit's own identity was not named): length is replaced outright by a
+   compiled constant **40.0 m** (`0x012a2e70`, broadcast to `0x013b8220`, not a named tunable), and width
+   **and** height are each widened by a flat **+40°** (`0.6981317…` rad, double constant `0x011175b0`).
+   HYPOTHESIS: a human who is carrying or has just witnessed something gets a wider cone around it.
+3. Otherwise, gated on the target's own is-a bit `+0xa` bit 0 (`0x00853b30(target, 0x20)`; unidentified
+   class — a network-proxy-adjacent or non-character object type, HIGH) — a target lacking it keeps the
+   step-1 default outright, skipping everything below:
+   - **full bypass:** `0x004faaa0(this=perception, target)` compares the target's own handle
+     (`target+8`/`+0xc`) against perception's **own** `+0x280`/`+0x284` (the same field §10.6 names as
+     "the friend's own perception threat handle", here read on the observer itself) and, if they match
+     **and** the observer's own sub-state byte `+0x292` is 6 or 2, returns false. When it does, the whole
+     test returns **true at once**, skipping every check below. HYPOTHESIS: "don't bother cone-testing
+     the thing I am already actively engaged with."
+   - otherwise, the cone narrows by context, but **only the spotted/reduced branch below is additionally
+     gated on local authority** (`0x008addb0`, the same authority test §1.1 uses) — the zombie and cover
+     branches run for a network proxy too:
+     - **zombie:** `0x009422d0(self)` (descriptor `+0xf0` byte `+0x48` bit 7 — the same unnamed class bit
+       §9.6 step 7 and §11.6 already cite as "a `0x009422d0`-class human", now additionally the selector
+       for the zombie FOV set) → 20 m / 80° / 80°;
+     - **in cover:** else `0x004dd640(self)` (the cover-posture state test, §11.6) → 50 m / 220° / 180°;
+     - else, only while locally authoritative:
+       - **spotted:** the target's own list-0 entry (looked up by `0x004fae50(this, 0, target)`, a
+         by-list-and-handle sibling of §10.1's `0x004fae00`) is tested against flag mask `0x182` —
+         exactly the mask §10.4 already names as "tested by the view-cone test" — and, if any of those
+         bits are set (the target has been noticed before, visually or otherwise), the cone switches to
+         the `_spotted` set, high or low sub-variant chosen by a team-rule lookup (`0x00605220`, §10.3's
+         attitude helper), HIGH, not fully bit-traced;
+       - **reduced:** else (not yet spotted), when the target is on foot (`0x009b9160`) and a further
+         gate (`0x004dd640(target)` or an object flag) holds, length is halved and width cut to a third
+         (constants 0.5 / 0.33, `0x012a2dc0`/`0x012a2e00`) — HIGH: a "target doing something that
+         narrows its own visibility" reduction (crouch/prone-adjacent), not otherwise identified;
+       - a non-authoritative observer, or one past the zombie/cover tests with neither holding, keeps
+         the step-1 default.
+4. **Combine:** the chosen length/width/height build a frustum via `0x004fdf70` and the actual
+   inside/outside test runs through `0x004fdc90`/`0x0075d7e0`/`0x00525d30` — these geometry primitives
+   were traced only as far as their call shape (a min/max blend of two scaled bounding offsets around the
+   mid-point between observer and target), not read instruction-by-instruction; the cone/dot-product
+   arithmetic itself is OPEN.
+
+**`Ai_fov_length_low` (35 m) is never read here.** A raw scan of all of `.text` for its address found
+exactly two references: the registration stub, and one read inside the generic distance-score helper
+`0x004fa9f0` (§10.3's own "100·d²/r², with r the tunable `0x013b8010`" — now identified by name and real
+value). So despite its name, `Ai_fov_length_low` is not consulted by any field-of-view test in this
+build; it is reused purely as a distance-normalisation radius for list-6 hearsay scoring. **[extends
+§10.3]**
+
+### 12.3 Hearing: two sound-radius producers A2 found but did not decode
+
+A2 already names both functions below as list producers (§10.3) but marks them "not decoded". Both are
+short and were read in full.
+
+- **List 12 — distress noticed nearby, gated by `Pain_sound_radius` (8.0 m).** `0x00502130` (174
+  instructions): needs activity level `+0x260` above 4 and the source object within `Pain_sound_radius`
+  of self (`0x004defd0`, the same proximity test §10.3 cites for the unsighted-notice path); on success
+  writes a list-12 entry (score still via the generic `0x004fa9f0` scorer, not a `Pain_sound_radius`-based
+  score — the tunable only gates whether to notice, not how urgently). It then reads the source's
+  attitude (`0x004fe0f0`): if hostile-ish (≤ 2) and no matching event already queued, posts an event
+  (500–1000 ms random delay via the already-cited `0x004f5f80`); if friendly and the human is **not** in
+  combat (`0x004fd720`, §10.2's own activity-level helper), the human says the voice line **"call a
+  doctor"** (`0x011175c0`, via the same sayer `0x00754410` that already says "ouch"/"stop it"/"sounds like
+  trouble" for list 3/16, §10.3). Independently, if the source object is now down or dead (`0x0096f4f0`),
+  it is forwarded to the body-found pipeline `0x004ffa50` (→ list 7) regardless of the list-12 outcome.
+  **List 12 = "a nearby human is in pain/distress"; it can lead straight into the body-found report
+  once that human actually dies.** **[resolves list 12 of §8 item 12 and §10.3's "not decoded"]**
+- **List 10 extended — "fire in the hole", gated by `Grenade_shout_radius` (25.0 m).** `0x00501d80`,
+  already named in §10.3 as a list-10 feeder, now read in full (CONFIRMED): needs activity level above 3
+  and the position source within `Grenade_shout_radius`; clears self `+0x317` bit 2 (the same bit list 16
+  clears on taking damage, §10.3); writes a list-10 entry with a **fixed** score of 4.0 (constant
+  `0x0137fa40`, §12.9), deduplicated against an existing entry for the same handle. It then posts an event
+  — kind `0x38` (56) when a specific shout source handle is known, else kind `0x12c` (300) generic — HIGH
+  confidence only on the kind values themselves (the nine pushed dwords match §10.5's seven-field
+  signature once the two handle fields are counted as two dwords each), not on the exact field-by-field
+  mapping. **Both kinds are new — they are not in §10.5's existing list of 0, 2, 11, 12, 18, 71, 76, 78,
+  86, 87, 100.** **[extends §10.3 and §10.5]**
+
+### 12.4 The line-of-sight service: the async answer, and the request queue
+
+A2's own scope note excluded "the vision line-of-sight service (`0x004ed1e0`/`0x004ed550`)". Both halves
+were read in full.
+
+- **`0x004ed1e0` (40 instructions) — decode the cached answer.** Looks up an existing result via
+  `0x004ecfc0(args)`; if one exists, decodes byte `[result+0x1c]` bit 0 into **2 = visible** (bit clear)
+  or **3 = blocked** (bit set) — exactly the two values §10.3 already quotes for this function, now with
+  the decode shown. If no cached result exists yet, it falls back to `0x004ecf40(args)` and normalises
+  that call's result to a plain 0/1 (HIGH: "pending"/some other immediate state, not decoded further).
+- **`0x004ed550` (119 instructions) — the request queue.** Gets or creates a per-caller container via
+  `0x004ed320`; walks the container's existing requests and **dedupes**: a pending request with the same
+  four key dwords (two positions, or a position and a handle) and the same mode byte is left alone and
+  the call returns without re-queuing. Otherwise it pulls a free node from a global free-list
+  (`0x01357798`), fills the four key dwords, the mode byte, and filter bytes `+0x24 = 0x2d` /
+  `+0x25 = 0xb2` — **the identical "any mode / any sub-state" sentinel pair** the event pool's default
+  filters use (§10.5) — and optionally copies a 32-byte ray/segment payload (two positions) before
+  linking the node into the container's doubly-linked list.
+- **Scope boundary — CLOSED, 2026-10-08 (`spec-physics-runtime.md` §8.11).** `0x004ecfc0`/`0x004ecf40`/
+  `0x004ed320` themselves are, by direct disassembly, confirmed pure cache/queue data-structure code —
+  zero calls to Havok or any geometry primitive, zero indirect/vtable calls at all (leaf binary-tree/
+  linked-list lookups over self-referencing sentinel nodes `0x01357790`/`0x0135779c`). **The real
+  raycast resolver is a previously-unnamed sibling, `0x004eda70`**, reached from a scheduler,
+  `0x004edc80` (which walks the pending-request tree and resolves at most the single most-overdue node
+  per invocation, matching this section's own "re-check interval 700-4000 ms" framing) — not from
+  `0x004ed1e0`/`0x004ed550` directly. `0x004eda70` calls `spec-physics-runtime.md` §8.8's shared ray
+  wrapper `0x0075d7e0` directly with a zero-initialized input (the closest-ray-hit-collector branch),
+  reaching the EXACT SAME Havok `castRay` chain already confirmed there for AI's "line of fire" probe,
+  and writes its boolean result into this section's own `+0x1c` bit 0 (the byte `0x004ed1e0` above
+  decodes). **So the vision/line-of-sight service and the line-of-fire probe are two different
+  higher-level consumers of one identical low-level Havok path** — the entire async/dedup/scheduler
+  apparatus this section documents exists purely to throttle and cache calls into that one shared
+  wrapper, not to avoid a physics dependency. A port needs the dedup/async-queue behavior described
+  above on top of whatever raycast primitive it implements, matching `spec-physics-runtime.md` §8.8's
+  own contract. This also closes this document's own OPEN item 19 (listed earlier in §11).
+
+### 12.5 The target-handle validity check `0x004fc100` — corrects the target-refresh framing
+
+§10.3 labelled one step of the target-refresh pass "choose the target (`0x004fc100`)". Read in full (41
+instructions), it is not a priority chooser. `0x004fc100(this=perception, list, handleLow)` calls
+`0x004faf40(this, list, handleLow, 0)` — a by-list-and-handle lookup sibling of the `0x004fae00`/
+`0x004fae50` family (§10.1, §12.2) — to find the **given** handle's own entry in the **given** list, and
+returns that handle unchanged only if the entry carries flag `0x8` (actively known hostile, §10.4) **and**
+its score is below the "dismissed/maximum" sentinel (≈3.0625×10³⁸ at `0x0137fa90`; §12.9, the same
+sentinel the dismiss pass and direct-awareness use, §10.3). Otherwise it returns a null handle
+(`{0,0}`, constant `0x01117488`). **So the target-refresh pass is re-validating that the human's current
+target is still a live, known, non-dismissed hostile — it is not picking a new target by priority.** A
+handle that fails this check becomes null, and *that* is what fires event 78 ("target handle changed",
+§10.5) — not a fresh pick replacing the old one. Target *acquisition* (writing a new handle into `+0x1330`
+in the first place) happens elsewhere, outside this check. **[corrects §10.3's "choose the target" step
+label]**
+
+### 12.6 The slow pass `0x00502f10` — a world-wide, not a local, sweep
+
+A2 flagged this "not read" (§10.2 step 6). It is short (49 instructions) and simple. Gated on activity
+level above 4, it walks the **object manager's own human list** (`[0x03171a64]+0x1e4`/`+0x1ec`/`+0x58`)
+— the identical manager and list the main sense pass walks (§10.3) — rather than anything
+proximity-filtered, i.e. **every live human in the world, not just nearby ones**. For each one, if self
+is valid and active (`+0x33` bit 3) and the candidate is down or dead (`0x0096f4f0`), it is forwarded to
+the same body-found pipeline (`0x004ffa50` → list 7) the two producers above also feed. This explains
+the pass's own throttle (re-armed every 1500–2000 ms, §10.2): it is the one perception sub-pass whose
+cost scales with total world population rather than with nearby entity count, so it is the one that
+must run least often. **[resolves §10.2 step 6's "not read"]**
+
+### 12.7 The team-relationship table `0x009b7100` — read side of an already-specified write side
+
+§8 item 12 names this table "not decoded". The read accessor is trivial (12 instructions, CONFIRMED): if
+either team byte equals 9, return 2 unconditionally; otherwise return
+`byte[0x0262d940 + teamA·8 + teamB]`. That matrix's **write side is already fully specified**:
+`spec-lua-api-behaviour.md` §20.6/§30.6 documents `set_team`, `team_make_allies` (writes 4), `_unfriendly`
+(writes 1) and `_hostile` (writes 0) as the matrix's only writers, each writing both `[a][b]` and `[b][a]`
+symmetrically through `0x009b7130`, with the already-flagged defect that an unrecognised team name
+resolves to sentinel id 9 and corrupts row/column 9. **The read side defends against exactly that case**
+— unlike the write side, a read with either team equal to 9 is special-cased to return 2 (neutral)
+rather than reading the (possibly corrupted) row 9 — a fact the write-side document's own defect note
+did not have occasion to mention. Observed relation values (0/1/4) line up with perception's own attitude
+scale (§10.3: "0…4+, lower meaning more hostile"): hostile relation → low attitude, allied relation →
+high attitude. **[closes §8 item 12's "team-relationship table" clause by citation, not re-derivation]**
+
+### 12.8 The ally-link geometry test `0x0050cc40`
+
+§10.6 flagged this "not read", with the HYPOTHESIS "the friend stands in or near this human's line of
+fire to the target". Read in full (117 instructions), that HYPOTHESIS is correct and more precise than
+stated: `0x0050cc40(self, friend, targetPosition, outClosestPoint)`, gated on self being in a particular
+movement/vehicle sub-state (`0x009b9160`) or in combat (`0x00943a20`), computes the closest point on the
+**segment from self to targetPosition** to the friend's position (a clamped projection, rejecting the
+friend outright if the projection falls before the segment start or after its end), then accepts only if
+the friend lies within a **cylinder** around that closest point: a horizontal radius² (`0x013ba290`) and
+an independent vertical radius² (`0x013ba2b0`), not a single sphere. These are the same two "zero-fill
+run-time tunables" §11.6 already names as the aim-cone radii of the unrelated "is aiming at" test
+`0x0050cdb0` — both tests share the one cylinder. The two radii are themselves derived at start-up from a
+short chain of further zero-fill values (traced one level: `0x013ba290 = 0x013ba280 · 0x01117a70 (0.5) +
+0x013ba260`, `0x013ba2b0 = (0x013ba2a0 + 0x013ba270)²`, with `0x013ba270` itself built from a literal
+0.15 at `0x00111643c`); the chain was not followed to a final metres value — left OPEN (§8 item 21), it is
+not load-bearing for the mechanism, only for its exact size. **[resolves §10.6's "not read", raises its
+HYPOTHESIS to CONFIRMED]**
+
+### 12.9 The score-scale constants, resolved to their real literal sources
+
+§10.3 asserts several "K = 100", "= 2500" style constants as facts without naming where those literals
+come from. Each one turns out to have its own tiny startup stub (`0x00fec970`–`0x00feca73`, one `ret`-only
+function per constant: load a scalar, broadcast to 4 lanes, store) — a different, simpler mechanism than
+the tweak-table registry of §12.1: these are **compiled literals**, not named or overridable tunables.
+
+| Address | Value | Literal source | Consumer |
+|---|---|---|---|
+| `0x0137fa40` | 4.0 | `0x012a2f6c` | list-10 entry score (§12.3) |
+| `0x0137fa60` | 100.0 | `0x00111645c` | the damage/distance "K" pivot (§10.3) — confirms the existing citation |
+| `0x0137fa80` | 2500.0 | `0x011173a4` | list-0 proximity outer-radius score (§10.3) — confirms the existing citation |
+| `0x0137fa90` | ≈3.0625×10³⁸ | `0x011173a8` | the "dismissed/maximum" score sentinel (§10.3, §12.5) |
+| `0x0137faa0` | 3.4028235×10³⁸ (`FLT_MAX`) | `0x012a2ea0` | a generic "no ceiling" clamp |
+| `0x013b8220` | 40.0 m | `0x012a2e70` | the FOV carried/witness override length (§12.2) |
+
+### 12.10 Corrections and port notes
+
+1. **[corrects the scoping note, `review/scoping-ai.md` §4 item 5]** The `0x00507520` subtree is not an
+   unopened ~10k-instruction body distinct from A2's "write-side format". A2 already read the dispatcher
+   and most of its producers; this unit's real content was the handful of specific primitives A2's own
+   text flagged as not traced. A future reader should not expect a further ~10k-instruction subtree
+   still waiting under this heading.
+2. **[extends §10.3]** `Ai_fov_length_low` (35 m) is dead as a field-of-view value in this build; its
+   only live reader is the generic distance scorer `0x004fa9f0`, used for list-6 scoring, not for any
+   cone test.
+3. **[corrects §10.3's step label]** "Choose the target" (`0x004fc100`) validates the *existing* target
+   handle; it does not select a new one by priority.
+4. **Port note.** The FOV test's state-dependent length/width/height selection (normal / spotted /
+   zombie / cover / carried-witness-bonus / reduced-visibility) is a priority chain evaluated in a fixed
+   order (zombie, then cover, then spotted, then reduced), not an additive blend; a port should preserve
+   the order, not just the five value sets.
+5. **Port note.** `Pain_sound_radius` and `Grenade_shout_radius` only gate *whether* an entity is
+   noticed; neither feeds the entry's score. A port that tries to derive urgency from these radii will
+   not match the shipped behaviour.
+
+---
+
+## 13. Begin-function gating and thrown-weapon trajectory solvers (unit A5)
+
+**Scope.** Closes two spec gaps Team B's AI-runtime build flagged in §3.2's "Begin function" row (13 begin
+functions listed by call signature only) and in §11.3 part H (two undecoded trajectory solvers for family
+H, "thrown weapons"). This unit fully specifies the internal gating logic of 7 of the 13 begin functions
+(`Cower`, `Flee` ×2 bodies, `Gunfire wary` ×2 calls, `Passenger`, `RollerBlader`, `Veh evade`, `Veh threat`'s
+own call `0x00523db0`) and the two trajectory solvers behind action 5 `throw weapon` and action 4
+`throw grenade`.
+
+**Method.** Ghidra-free: capstone linear disassembly over a small reader built on this project's existing
+`tools/harnesses/exe_va.py` (read-only VA→file-offset mapping), reading every cited function in full from
+its own listing, the same CONFIRMED-by-listing standard the landed A1–A4 units use. Field names already
+established elsewhere in this file (`+0x4a5`/`+0x4a6` force-flag bytes, `+0x317`/`+0x44c`/`+0x500`–`+0x50c`
+mode-machinery bytes, `+0x8d0` live mode-parameter block, `+0x450` committed block, `0x2cc9900` the per-type
+descriptor table, `0x008addb0` the network-authority test, `0x00853b30` the shared is-a bit tester,
+`0x0097e280` the group-leader/"is a follower" accessor, `0x00614d00` the game-mode switch) are cited, not
+re-derived, and are the anchor for most of this unit's CONFIRMED/HIGH calls. For the two trajectory
+solvers, per the orchestrator's direction, this unit additionally used the project's Unicorn-based
+CPU-emulation harness (`tools/harnesses/unicorn_call.py`) to call the real function bytes in isolation with
+controlled inputs and capture real outputs — full input/output vectors are given alongside the closed-form
+reading. No decompiler output appears below; all addresses are plain hex; no Ghidra auto-names are used.
+
+---
+
+### 13.1 The 7 begin functions
+
+#### 13.1.0 Shared preamble, confirmed across all 7
+
+Every one of the 7 begins with the same two-test gate, byte-for-byte identical in each listing:
+
+1. Null-check the human argument; decline (return false / no-op) if null.
+2. **Class gate**: `type = [0x02cc9900 + [human+0x34]*4]`; decline unless `[type+0xa]` bit 2 is set. This is
+   the *generic* "this type of AI slot can run a scripted mode entry" gate — it is not Cower-specific
+   despite surfacing first in Cower's own listing; the identical three instructions open `Flee`'s, `Veh
+   evade`'s and `Veh threat`'s listings too. HIGH (type-descriptor row layout not otherwise named here;
+   the table itself is `0x02cc9900`, already load-bearing throughout §1–§12).
+
+Six of the seven (`Cower`, `Flee`'s full evaluator `0x004da0b0`, `Gunfire wary`'s `0x004dbd90`,
+`Passenger`, `Veh evade`, `Veh threat`'s `0x00523db0`) then run the **network-authority check**
+`0x008addb0(human, 0)` (already named by §1 item 4) and, on failure (not locally owned), build and send
+the *same* shaped network message as the apply step's own generic-mode case (§3.2): `0x0086f5f0(0x41)`
+constructs a message object, offset `+0x10` of it is set to the literal `0x1b` (the network opcode, not a
+mode id — matches §3.2's own "message type `0x1b`, built at `0x0086f5f0(0x41)`"), the human's own handle is
+written via `0x0050f790`, the mode's own extra parameters (target handle, flag bits) are written via
+`0x0086f4b0`/`0x004d46e0`, and the message is handed to `0x008ae020` then released via `0x0086f110`/
+`0x0086eb20`. **This is new**: §3.2 had only shown this pattern at the apply step's own generic-mode case
+and (implicitly) at the `Idle` begin. It is now confirmed as the *general* convention for every
+not-locally-owned begin function that isn't in the apply step's own "Generic" group — the begin function,
+not apply, carries the network-forward responsibility. `RollerBlader`'s begin is the one exception: it
+declines outright, with no network forward, when not owned (§1.5 below).
+
+---
+
+#### 13.1.1 `Cower` begin `0x004d5050(human, target_handle, flag5, flag6, flag7, flag0)`
+
+CONFIRMED by listing (ends `0x004d5342`, 754 bytes). Called from apply (§3.2) as the mode-9 case at
+`0x004e8455`.
+
+**Real call-site signature (push survey of `0x004e8310`'s mode-9 case).** Apply does not call this with
+just "flags from `+0x4a5`/`+0x4a6`" as a single value — it unpacks 4 individual bits and passes them as 4
+separate boolean arguments:
+
+```
+0x004d5050(human,
+            target_lo = [human+0x508], target_hi = [human+0x50c],   // the pending target handle, raw
+            flag5 = bit 5 of [human+0x4a5],
+            flag6 = bit 6 of [human+0x4a5],
+            flag7 = bit 7 of [human+0x4a5],
+            flag0 = bit 0 of [human+0x4a6])
+```
+
+**Apply-side bracket (context, not inside `0x004d5050` itself).** When `[human+0x4a6]` bit 1 is set, apply
+calls a helper `0x004e0870(&human+0x2b0, 0)` immediately *before* calling Cower's begin and
+`0x004e0870(&human+0x2b0, 1)` immediately *after* it returns; when that bit is clear, neither extra call
+happens. HYPOTHESIS: a pause/resume pair bracketing the begin call specifically for this case — not
+resolved further, flagged OPEN.
+
+**Body, in order:**
+
+1. Null + class gate (shared preamble).
+2. `0x008addb0(human, 0)`: if not owned, build+send the network message (flags byte `0x1b` type, target
+   handle via `0x0086f4b0`, the 4 flag bits via four separate `0x004d46e0` calls) and **return false**.
+3. If owned: `0x004eaa40(human)` — a second gate; false declines. HYPOTHESIS (not identified elsewhere in
+   this spec): "is usable / not mid-cleanup."
+4. `0x004d4c70(target_lo, target_hi, 0)`: if this resolves (nonzero) **or** force-flag `always_cower`
+   (`+0x2b9` bit 7, already named by §9.3) is set, continue; otherwise decline.
+5. Unless `+0x2ba` bit 5 (an ability/force-disable bit in the same byte region as `always_follow_in_
+   alternate_vehicle` bit 0, §11.3 F) is set, both `0x004d8ff0(human, target_lo, target_hi, 0)` **and**
+   `0x00a00560(human)` must additionally hold, else decline. `0x004d8ff0` reappears identically in `Flee`'s
+   gating below (§1.2) with the 4th argument swapped for a per-mode field rather than a literal 0.
+6. **If the human is already in mode `Cower` (current mode `+0x501` == 9):** the function does **not**
+   call the transition primitive again. It only updates the stored target handle
+   (`+0x8d8`/`+0x8dc` ← `target_lo`/`target_hi`) and returns true. If, additionally, the sub-state
+   `+0x500` == `0x54`, it also calls an animation/pose helper `0x0094b070` and requests a **sub-state**
+   change to `0x53` via `0x004dd2d0(human, 9, 0x53)` — a different, lighter-weight call than the real mode
+   transition primitive (§3.3's `0x004dd380`). This is a genuine example of a begin function declining the
+   full transition while still reporting success, because the human is already in the target mode.
+7. **Otherwise** (not currently Cower): calls `0x004e51d0(human)` (a per-entry reset/prep helper reused by
+   several other begins, §1.2/§1.6 below), then packs a single flags byte from: bit 0 ← the result of a
+   helper call `0x0097e9b0(…)` (its own argument shape could not be pinned down with confidence — see OPEN
+   item 1); bit 1 ← (`flag6` *or* `[human+0xe8]` bit `0x200`); bit 2 ← `flag5`; bit 4 ← `flag7`; bit 5 ←
+   `flag0` (bit 3 is left untouched — a standard MSVC bitfield-assignment codegen pattern, confirmed by
+   reading, not a hash). That byte is embedded at offset 4 of a small local block, and
+   `0x004dd380(human, 9, &block)` — the real transition primitive (§3.3) — is called. Returns true.
+
+**Net:** Cower's begin can (a) forward to the network and decline, (b) decline outright on failed gates,
+(c) silently refresh an already-cowering human without ever calling the transition primitive, or (d) really
+transition into mode 9 with a packed 6-bit flags byte built from the apply-unpacked `+0x4a5`/`+0x4a6` bits
+plus two extra locally-computed bits.
+
+---
+
+#### 13.1.2 `Flee` — both bodies, selected by `[human+0x4a6]` bit 2
+
+CONFIRMED by listing and by the apply-step selector itself (`0x004e8310`, `0x004e847b`):
+`test byte [human+0x4a6], 4; je → call 0x004da0b0` (bit clear) `/ fall-through → call 0x004d91a0` (bit set).
+
+**Bit set → `0x004d91a0(human, target_lo, target_hi, &escape_point, field_0x4a0)`.** Before this call, apply
+itself computes `escape_point` via `0x00da38e0(&human+0x474, &escape_point)` — i.e. when the selector bit is
+set, apply pre-computes a single escape direction from the human's own `+0x474` sub-object and hands it
+straight to this function.
+
+`0x004d91a0` (CONFIRMED by listing, ends `0x004d9383`), in order:
+1. Null + class gate; on failure the human is treated as unusable for the rest of the function (a `0` is
+   substituted for the "reference object", not an outright decline) — then, separately, if the *raw*
+   argument pointer was null, it does decline.
+2. `0x008addb0(human, 0)`: **if not owned**, this body does *not* send a network message. It instead calls
+   a shared helper `0x004d7b80(target_lo, target_hi, escape_point_or_null, field_0x4a0)` and returns **true**
+   unconditionally, without ever calling the transition primitive. HYPOTHESIS: a lightweight local
+   replication/prediction of the flee movement for a remotely-owned human, distinct from the
+   request-and-wait convention used elsewhere.
+3. If owned: `0x004d8ff0(human, target_lo, target_hi, field_0x4a0)` must hold, else decline (same helper as
+   Cower's gate, §1.1 step 5, with the literal `0` swapped for `field_0x4a0`).
+4. Resolve a reference point: `0x004d4c70(target_lo, target_hi, 0)`; if it fails, fall back to the human's
+   own position (self-reference).
+5. **If current mode is already `Cower` (9):** call `0x004d5d20(human, ref.x, ref.z)`; if that holds,
+   **skip straight to the success return without transitioning** — Flee is absorbed into staying in Cower.
+   HYPOTHESIS for `0x004d5d20`: "still too exposed/close to break cover."
+6. Otherwise, build an escape point (`0x004d6980`, `0x004d7fa0`), consult a navmesh/path query
+   `0x00a12180(&point, 0x0130c230, [human+0xb40], 0)` (the same navmesh-cell-list global and query helper
+   §11.3 D's `brute bull rush` and this unit's own `Flee`/`Veh evade` all independently reach — a shared
+   resource, not mode-specific; **this query always fails in the shipped game, §14 — `Flee`'s own
+   candidate search still has two other, non-navmesh escape-direction candidates tried earlier in this
+   same step's search order, so this specific failure narrows rather than blocks the behaviour**), read
+   two globals at `0x01115300`/`0x01115304`, and call
+   `0x004e5d20(&human+0x2b0, …)` (the per-mode-group `+0x2b0` scratch object reused all over this spec's
+   begin functions). Packs a flags byte from `field_0x4a0`'s own bits plus two locally-derived bits, and
+   calls **`0x004dd380(human, 13, &block)`** — the real transition into `Flee`.
+
+**Bit clear → `0x004da0b0(human, target_lo, target_hi, field_0x4a0)`.** CONFIRMED by listing (a much larger
+function, candidate-search style). Preamble: class gate (same shared one, but structured so that a failed
+gate zeroes the "reference object" used later rather than declining outright — only a null human argument
+declines immediately). `0x008addb0`-not-owned path calls the **same** `0x004d7b80(...)` helper (with a
+literal `0` in place of the escape-point pointer) and returns true, mirroring `0x004d91a0`'s shortcut
+exactly. If owned: `0x004d8ff0(human, target_lo, target_hi, field_0x4a0)` gates, as above.
+
+Then, **CONFIRMED, and the most interesting structural finding of this unit**: `0x004da0b0` is the
+*caller* of `0x004d91a0` — it tries several candidate escape directions in turn and, for each candidate
+that passes its own validity test, calls `0x004d91a0(human, target, &candidate, field_0x4a0 | extra_bits)`
+to actually attempt the commit; `0x004d91a0` returning true ends the whole search successfully. In order:
+
+1. **Already-fleeing-same-target short-circuit**: if current mode is already `Flee` (13) and (the stored
+   target handle `+0x8d8`/`+0x8dc` already equals the new one, or `0x00456920` says they're equivalent) and
+   `+0x8d0` bit 5 is set, jump straight to the success exit with **no re-transition**.
+2. **Cower-redirect**: if current mode is `Cower` (9), call `0x004d5d20` as in §1.2's other body; if it
+   holds, skip to success without transitioning. **If current mode is *not* `Cower`**, and `0x004eaa40
+   (human)` holds (the same secondary gate `Cower`'s owned-path uses, §1.1 step 3), it tries entering
+   `Cower` directly: `0x004d5050(human, target_lo, target_hi, 0, 0, 0, 0)` (all four flag args forced to
+   0). **If that succeeds, `Flee`'s own begin returns success without ever reaching its own transition
+   call** — a confirmed, concrete instance of "a begin function may … enter a different mode" (§3.2). A
+   second call to `0x004d5050` immediately follows (reached by both the "already Cower" and the
+   "just-redirected-into-Cower" paths); since the human's current mode is now 9, that second call takes
+   `0x004d5050`'s own "already Cower" fast path (§1.1 step 6: just refresh the target handle, no re-entry).
+   Only when the Cower redirect is refused does evaluation continue to the candidate search below.
+3. **Candidate search** (reached only past both short-circuits): tries, in order —
+   - a "near cover" candidate, gated on `[human+0x1e00]` bit 7, `[human+0x1da8] != 0`, and `field_0x4a0`
+     bit 6 clear, using a geometry probe `0x00bc0800` compared against 1.0; a failing ratio here is what
+     triggers the Cower-redirect check in step 2 (the near-cover probe and the Cower-redirect are the same
+     branch, not two independent features);
+   - a normalized-direction candidate built from `0x00bbfbe0` + `0x00dab810` + validated by `0x004d4bf0`,
+     which — if valid — itself calls `0x004d91a0(human, target, &dir, field_0x4a0|0x20)` directly;
+   - a longer path-search candidate (`0x004d7e20`/`0x00b71950`, elapsed-time-budgeted via `0x00dab5e0`/
+     `0x00d9e250`), which, on success, **builds its own point and calls `0x004dd380(human, 13, &block)`
+     directly** rather than delegating to `0x004d91a0` — so `0x004da0b0` is not a pure dispatcher, it also
+     performs its own direct transition on this one path.
+   - Along the way, when current mode is `Idle` (0) and `field_0x4a0` bit 3 is clear and `[human+0xe8]` bit
+     `0x200` is clear, and insufficient time (`0x00dab5e0()` vs a tunable) has passed, it declines outright.
+   - Every reachable success path converges on one shared tail (`0x004da792`) that packs the final flags
+     byte and calls `0x004dd380(human, 13, &block)`.
+
+**Net:** `Flee` is the richest of the 7 — a full multi-candidate escape-point search with an internal
+redirect into `Cower`, a sub-routine (`0x004d91a0`) that is itself directly callable by apply for the
+"already have a point" case, and two independent code paths that can call the real transition primitive
+(the sub-routine, and the long path-search candidate inside the main evaluator).
+
+---
+
+#### 13.1.3 `Gunfire wary` — `0x004e8070(human, 0)` then `0x004dbd90(human, target)`
+
+CONFIRMED by listing of both. **Important correction to the call-signature-only framing**: `0x004e8070`,
+called first and unconditionally, **never itself transitions the human into mode 17.** The real `Gunfire
+wary` entry is entirely inside `0x004dbd90`, called second and only if a target resolved.
+
+**`0x004e8070(human, flag)`** (apply always passes `flag = 0`), in order:
+1. `0x008addb0(human, 0)`: if true (owned), continue to the real branch below. If false, it checks the
+   **same predicate a second time** (`0x008addb0(human, 0)` again, byte-identical call) — this second check
+   is always false when the first was false (no observable side effect runs between them), so the branch it
+   guards is dead code on this call path; it is reachable only from `0x004e8070`'s other callers with a
+   different value already on their own stack frame, not analysed here. With `flag = 0` (apply's case) and
+   not owned, the function falls through to building and sending a record via the same
+   `0x004f5dd0`/`0x004f5f80`/`0x004f6420` helper family seen inside `Cower`'s and `Flee`'s own bodies
+   (HYPOTHESIS: a debug/telemetry log of the attempted action, tagged with small integer codes that do not
+   correspond to any mode or action id in range — not followed further) and returns, **with no mode
+   change**.
+2. If owned: `0x00853b30(human, 0x21)` — the already-named "is a player" test (§1 item "Idle begin" etc.).
+   - **Not a player**: draws a weapon if needed (`0x00600720(13,1,0,0)`), runs several checks
+     (`0x0097cdd0`+`+0x1c9a` bit 0, a float compare on `+0x9b0` against a tunable, `0x009bd730`,
+     `0x00943ea0`), resolves a "threat" object (falling back to `0x004e58a0` on `+0x1330` if none was
+     already supplied), and then: **if in a vehicle, requests `Passenger` (25) via the request layer
+     `0x004e4130`**; else if force-flag `always_cower` (`+0x2b9` bit 7) is set, **requests `Cower` (9)** via
+     `0x004e4130` and also calls `0x004dd990(human,0,0,0,0,0)`; else checks `0x004f3a90`/`0x004f50b0`. None
+     of these paths call the transition primitive directly — they stage *requests* (§3.1), to be picked up
+     on a later apply pass. If a target resolved, it is also forwarded to `0x00505080(&human+0x510,0,
+     target)` and the per-mode `+0x2b0` scratch is updated with the target's position.
+   - **Is a player**: after several decline checks mirroring the acceptance test (§3.4) almost exactly
+     (`Stunned`-lock, `0x0060b530` captured check, `+0xcc8` in {5,6,7}, in-vehicle restricted to the §3.4
+     whitelist via `0x004dd410(0x2b)`, and a pending-switch-to-`Stunned` guard), it **directly writes the
+     pending-request fields apply itself reads**: clears the pending target handle
+     (`0x004e3830(&human+0x2b0, null-handle-literal 0x01115d50)`, the exact helper+literal §3.2 cites for
+     `Idle`'s own null-handle clear), sets `+0x317` bit 3 (pending switch) again, clears `+0x44c` bits 0/1,
+     and **sets `+0x504` (requested mode) = `0x2b` = 43 = `Player`** — then calls `0x008addb0(human,0)` once
+     more and ignores the result entirely before returning. **For a player human, `Gunfire wary`'s own entry
+     hook stages a request for `Player` instead and never reaches mode 17 at all.**
+
+**`0x004dbd90(human, target)`** (target is the already-resolved object pointer, not a raw handle),
+CONFIRMED by listing — this is where mode 17 is actually entered:
+1. Null/self/class checks (human null, class gate, target null, `human == target`) all decline.
+2. `0x008addb0(human,0)`: not owned → build+send the `0x1b` network message (tag byte `0x11` = 17 =
+   `Gunfire wary`, target handle only, no extra flag bytes) and decline.
+3. Owned: decline if `0x0097e280(human)` (follower, §9's own naming) holds; decline if in a vehicle
+   (`0x009b9160`); decline if force-disable bits `+0x2b9` bit 3 or `+0x2b8` bit 4 are set; if
+   `0x008c01b0(human)` holds, call its paired handler `0x008c0240(human)` and still decline (the same
+   paired-helper pattern reused by `Veh evade`, §1.6).
+4. Otherwise: build a watch-stance point (`0x004dbc00`), read the target's position, and call
+   **`0x004dd380(human, 17, &block)`** for real. Returns true.
+
+---
+
+#### 13.1.4 `Passenger` begin `0x0051ed00(human)`
+
+CONFIRMED by listing (ends `0x0051eeec`). Takes only the human — no target/flags argument, matching the
+call-signature-only table exactly.
+
+1. **Action-level pre-check, ahead of the usual preamble**: if the human's *current committed action*
+   `+0x445` equals `0x32` (50 decimal — `vehicle extract`, §11.3 F), **decline outright**. This is a direct,
+   independently checkable cross-reference to the action table rather than to mode state.
+2. `0x00853b30(human, 0x21)` ("is a player"): **if true, call `0x004f13a0(human)` — the `Player` begin
+   (§3.2) — and return exactly what it returns.** `Passenger`'s begin redirects players into `Player`
+   outright; it never runs its own logic for a player human.
+3. Non-player: `0x008addb0(human, 0)` for ownership; if false, **also** checks a second, argument-less
+   global predicate `0x00889d10()` — if *either* holds, continue to the real gate; only if *both* are false
+   does it build+send the `0x1b` network message and decline. HYPOTHESIS: `0x00889d10` is a global
+   "single-player game" (or similar session-mode) flag that makes the per-object ownership test moot.
+4. Real gate: resolve a handle pair at `[human+0x16c0]`/`[human+0x16c4]` via `0x004dcf00(lo, hi, 0)`
+   (HYPOTHESIS: "the vehicle/seat the human is entering"). **If it fails to resolve, call
+   `0x004e8070(human)` — the same `Gunfire wary` pre-hook examined in §1.3 — as a side effect, then
+   decline.** This is a second, independent confirmation that `0x004e8070` is a general-purpose reaction
+   helper reused outside the `Gunfire wary` mode, not mode-17-specific.
+5. If it resolves: sets the *current action* `+0x445 = 0x30` (48 — `vehicle passenger`, §11.3 G), resets the
+   live mode-parameter area at `+0x450` from a fixed global template `0x0012e14e0` (`0x58` bytes, matching
+   the template-block concept already named by §4.1), builds a one-bit flags byte from an elapsed-time
+   check against tunable `0x012a2ff0`, and calls **`0x004dd380(human, 0x19, &block)`** (`0x19` = 25 =
+   `Passenger`). Returns true.
+
+---
+
+#### 13.1.5 `RollerBlader` begin `0x00530530(human, target)`
+
+CONFIRMED by listing (ends `0x005305d4`) — the simplest of the 7.
+
+1. Ownership check, but via **`0x008ae480([human+8], [human+0xc], 0)`** rather than `0x008addb0` — this is
+   the exact "is its own handle locally owned" helper §3.2 already cites for `Stunned`'s begin. **If false,
+   it declines outright, with no network-forward fallback** — the one begin among the 7 that skips the
+   `0x1b`-message convention entirely.
+2. `edx = [human+0xf0]` (the AI sub-object, already a named concept per §11.3 B/E's "AI sub-object"
+   references); decline unless bit 6 of `[edx+0x48]` is set. **This is the exact same gate byte §11.3 G's
+   action 68 `roller blader change` (`0x005303c0`) already documents** — a confirmed cross-check, not a
+   coincidence.
+3. Calls `0x009659f0(human, target)` purely for its side effect (the return value is explicitly discarded).
+   HYPOTHESIS: "snap to/attach to a skate path."
+4. Builds a parameter block of **four `-1` sentinel dwords and a zero word** — no target handle, no flag
+   byte, unlike every other begin in this unit — and calls **`0x004dd380(human, 0x1e, &block)`** (`0x1e` =
+   30 = `RollerBlader`). Always returns true past the two gates above.
+
+---
+
+#### 13.1.6 `Veh evade` begin `0x005232a0(human, [human+0x458], [human+0x45c])`
+
+CONFIRMED by listing (ends `0x00523642`, the longest and most heavily-gated of the 7). The two stack
+arguments are the low/high dwords of a handle stored at the human's own `+0x458`/`+0x45c` — the same field
+pair `Human shield`'s begin (§3.2) stores its victim handle in, confirming `+0x458` is a shared
+general-purpose "linked object" slot, not mode-specific.
+
+1. Preamble + `0x008addb0`-not-owned → network-forward (tag byte `0x27` = 39 = `Veh evade`, target handle
+   only) and decline.
+2. Owned: a long decline chain, each term independently gating —
+   - target resolve `0x004dcf00(lo, hi, 0)` fails → decline;
+   - in a vehicle, either variant (`0x009b9160` or `0x009b91e0`) → decline;
+   - `0x00a00560(human)` (the same helper `Cower`'s gate uses, §1.1 step 5) → decline;
+   - `0x009b9210(human)` (the "entering a vehicle" sub-state selector §2.5 already names) → decline;
+   - `[human+0xe8]` bit `0x1000` set → decline;
+   - `0x009422d0(human)` (the specific brute-subtype test §11.3 G's `brute qte player` also reads) →
+     decline;
+   - `0x008c01b0(human)` holds → run its paired handler `0x008c0240(human)` (the same pair `Gunfire wary`'s
+     begin uses, §1.3) → decline;
+   - `0x00614d00()` (the already-named game-mode switch) == 2 **and** `0x0097e9b0(human)` holds → decline.
+3. Build an escape point via `0x00da38e0(&human+0x40, &outbuf)`, the same per-object `+0x40` sub-vector and
+   helper `Flee`'s own tail uses (§1.2); read the FOV/arc tunable `0x01187ecc` (the same "random 2.0–3.0"
+   tunable §11.3 B's `move close in` and `Flee` both already use) and `[human+0xb40]` (the same field
+   `Flee` reads too); run the navmesh query `0x00a12180(&outbuf, 0x0130c230, [human+0xb40], …)` (the same
+   query `Flee`, §11.3 D's `brute bull rush`, and family D all independently reach) — fails → decline.
+   **This query always fails in the shipped game (§14); unlike `Flee`, `Veh evade` has no other escape-
+   point candidate at this step, so this clause's "decline" is the behaviour's actual, permanent,
+   retail-shipped outcome, not a narrowing.**
+4. A current-mode/substate gate: if current mode is `Idle` (0) and substate `+0x500 == 0x26`, decline; if
+   current mode is `Idle` (0) and `[human+0xe8]` bit `0x200` is set, call `0x00511010(human, 1)` and
+   decline; if current mode is `Idle` (0) and an elapsed-time check against tunable `0x0114a1560` has **not**
+   yet passed, arm a randomized back-off (`0x00d9e180`, 3000 ms range / 1500 ms jitter) on the human and
+   decline.
+5. Otherwise: a second elapsed-time check (tunable `0x0114a1564`) and two vehicle-state tests on the target
+   object (`[target+0x163c]` bit 5, `[target+0x163d]` bit 0, else `0x00ad31a0(target)` — the same vehicle
+   state-byte family §11.3 F's `brute car flip` already documents) pack a 2-bit flags byte; a lookup
+   `0x00ab5070(0, target, &vec, handle_lo, handle_hi)` can override the position fields if it resolves.
+6. **Uniquely among the 7**: before calling the transition primitive, the function performs its own
+   explicit `0x24`-dword (`0x90`-byte — the *exact* size §3.3 names for the live mode-parameter-block copy)
+   `rep movsd` directly into `[human+0x8d0]`, and only then calls **`0x004dd380(human, 0x27, &block)`**
+   (`0x27` = 39 = `Veh evade`) with a block pointer that appears to alias the same bytes just copied. HIGH,
+   not fully resolved (OPEN item 2 below): whether this is a harmless duplicate write of identical data
+   reaching `+0x8d0` by two routes, or the manual copy does work the primitive's own §3.3-step-3 copy would
+   not otherwise do.
+
+---
+
+#### 13.1.6a A second "linked object" slot: `+0xda8`/`+0xdac`, the interaction-partner handle (CONFIRMED by listing, 2026-10-07)
+
+`+0xda8`/`+0xdac` is a second, independent handle-pair "linked object" slot on the character object
+— structurally identical to, but distinct from, `+0x458`/`+0x45c` (§13.1.6): `0x0052adc0` tests a
+candidate object's handle against *both* pairs in the same function, for two different purposes,
+proving they are tracked separately.
+
+**Writers (3, all CONFIRMED by listing):**
+- `0x00954340`, the character base constructor (`spec-lua-api-behaviour.md` §34.1), default/null-
+  initializes `+0xda8`/`+0xdac` together with five sibling handle-pair fields (`+0xd60`/`+0xd64`,
+  `+0xd78`/`+0xd7c`, `+0xd80`/`+0xd84`, `+0xd88`/`+0xd8c`, `+0xdb0`/`+0xdb4`) from one fixed sentinel
+  pair, and `+0xda0`/`+0xda2` to `0xffff`.
+- `0x0095d970` (one argument): the clear/release routine — resets `+0xda8`/`+0xdac` (from a second,
+  different sentinel pair) and `+0xda0`, after touching the object's own animation-controller
+  sub-object (`+0xd24` → `+0x10`). Called twice in a row, once per side of a pairing, by `0x0095f250` —
+  the generic mutual-unlink entry point (17 callers across 14 functions).
+- `0x0095fc00` (two object arguments plus a small interaction-type index): the mutual link-setter.
+  After releasing any existing grab on either side (`0x00971cf0`/`0x009da5f0`, §11.6's "held in a grab"
+  pair) and checking the two are not already linked (`0x00456920`), it writes each side's own handle
+  into the other's `+0xda8`/`+0xdac`, and a role byte (0 / 1) into each side's own `+0xdb8`. Called from
+  8 otherwise-unidentified sites — a shared, generic utility, not feature-specific.
+
+**Readers**, besides action 15 (§11.3 C): `0x0052adc0` (a "is this candidate already my partner"
+check, called only from `0x0096dcd0`), and `0x0096dcd0`/`0x009a02a0` directly (a small
+evaluate/maintain-partner chain, independent of action 15's own code path). Resolution always goes
+through the generic handle resolver already used for other handle-pair fields in this spec
+(`0x004d7f30` here), and the resolved object's own `+0x40` position sub-vector (§13.1.6) is what gets
+used — never the handle or the object's identity directly.
+
+**What it links:** every write stores the *other character's own handle* (its own `+8`/`+0xc` pair,
+§13.1.5's "own handle" convention) — i.e. `+0xda8` holds the handle of **the other participant in a
+two-character grab/hold interaction**, not a prop, weapon, or cover node. Applied back to action 15
+(§11.3 C): when T is in the `Fire spray`-tagged pose 20/21 (`0x009826e0`, §13.3 below), the ally
+backs off toward the position of whoever T is currently linked to, not toward T itself — "if the
+target is in the middle of a two-person grab/hold interaction, don't crowd the other participant
+either." HYPOTHESIS, not fully closed: the exact gameplay label for this interaction (hostage hold,
+takedown, execution, shield grab, etc.) and the precise meaning of the `+0xdb8` role byte (0/1) and
+the sibling pair `+0xdb0`/`+0xdb4` are open. See §13.1.6b, immediately below, for the `0x009826e0`
+pose test action 15 gates this on.
+
+#### 13.1.6b The `0x009826e0` state test (`+0xcc8`/`+0xcce`), used by action 15 (CONFIRMED by listing, 2026-10-07)
+
+Full disassembly (12 instructions): null-check the argument; compare the dword at `+0xcc8` against
+`0xc` (12); if equal, read the byte at `+0xcce` and return true iff it is `0x14` (20) or `0x15` (21).
+**`+0xcc8` is the character's current AI mode id — §6's own 44-row table, row 12 is `Fire spray`**
+(re-confirmed against that table with 0 mismatches). **`+0xcce` is a genuinely independent byte from
+`+0xcc8`**, confirmed by `0x004dd640` (the already-flagged "cover posture family" open item), which
+reads the *adjacent* byte `+0xccd` (not a slice of `+0xcc8`) against `9`, then `+0xcce` against
+`0xf`/`0x10`/`0x12` (15/16/18) for a *different* purpose — the two bytes are a true independent pair
+read together by some code and separately by others. A sibling function, `0x00982650`, tests
+`+0xcce`∈{20,21} alone (no `+0xcc8` check), then indexes a per-object record (`+0x15cc`, sentinel
+`-1`) into a runtime-populated table (base `0x0262ba4c`, stride `0x88`) — independent evidence pose
+20/21 is a recognized pair consumed by more than one system, keyed off a per-object "which
+interaction record is active" index, not an incidental Fire-Spray-only animation flag; the table's
+own row contents could not be recovered statically (zero-filled in the image). Callers of
+`0x009826e0`: action 15 itself, mode 23 `Melee`'s own exit/tick functions (`0x00551cc0`/`0x00551cf0`,
+§6 row 23 — a second, independent confirmation this state matters in melee/interaction contexts),
+plus four unidentified call sites not traced further.
+
+---
+
+#### 13.1.7 `Veh threat`'s own call `0x00523db0(human, target_lo, target_hi, 1)`
+
+CONFIRMED by listing (ends `0x00524039`). Note: §3.2 already documents, and this unit did not need to
+re-derive, that `Veh threat`'s case in apply **always** falls through into the `Dbno` begin `0x0050bd40`
+afterward regardless of whether this call runs at all; this entry covers only `0x00523db0` itself. The
+4th argument (`[ebp+0x14]` inside the function) is a literal `1` at this one call site; the function
+itself also supports a `0` value, exercised only from other, unexamined call sites.
+
+1. Preamble + `0x008addb0`-not-owned → network-forward (tag byte `0x28` = 40 = `Veh threat`, target handle
+   only) and decline.
+2. Owned: decline if `0x009b9210(human)` ("entering a vehicle") holds.
+3. A conditional virtual-dispatch gate that is **skipped entirely** (treated as non-blocking) unless every
+   link resolves: a global lookup `0x00614cf0()` → non-null, **and** `0x00680db0()` → true, **and**
+   `[result+0x1c]` → non-null, **and** `[that+0x40]` → non-null. Only then are two virtual calls made
+   through that object's own vtable (slots `0x68` and `0x70`); the first gates whether the second even
+   runs, and if the second's return value equals the human itself, **decline**. HYPOTHESIS, not resolved:
+   plausibly a "don't flag vehicle-threat on whatever the camera/possession system currently focuses,"
+   flagged OPEN (item 3).
+4. Resolve the target handle via `0x004e4ce0(target_lo, target_hi, 1)`; fail → decline.
+5. `0x004e7200(human, target)` → a relevance predicate (its result is used differently depending on the
+   4th argument, below).
+6. With the 4th argument nonzero (apply's own call, always `1`): decline unless step 5's predicate holds;
+   then decline unless `0x004e9110(human)` holds; then decline unless `0x009d8ca0(human, target)` holds
+   (thiscall). Passing all three sets an internal flag `bl = 1`.
+   *(With the 4th argument zero — not exercised by apply's call, but present in the listing: if step 5's
+   predicate holds, an elapsed-time check against tunable `0x0111643c` can set `bl = 1` directly; otherwise
+   a fallback predicate `0x00523a50()` must hold or the call declines, with `bl` left `0`.)*
+7. Packs a 2-bit flags byte from `(arg4 != 0)` and `(bl != 0)`, writes the target handle into the block, and
+   calls **`0x004dd380(human, 0x28, &block)`** (`0x28` = 40 = `Veh threat`). Returns true.
+
+---
+
+### 13.2 The two thrown-weapon trajectory solvers
+
+**Reuse finding (the headline result of this part).** `0x0054c770` (action 5 `throw weapon`'s solver) and
+`0x0054d930` (action 4 `throw grenade`'s solver) are **not two independent trajectory solvers**. Both reach
+the *same* core ballistic-angle routine, `0x0054c630` — confirmed by reading `0x0054d930`'s own listing,
+which contains a direct `call 0x0054c630` (at `0x0054da4d`) built from the same six-argument shape
+`0x0054c770` itself tail-calls into. `0x0054c770` is a thin, 42-byte shim: it reads the thrower's class via
+the already-named `0x00853b30(human, 0x22)` test (a *different* bit than the already-confirmed "is a
+player" bit `0x21` used elsewhere in this file — close, but not provably the same test; flagged OPEN) to
+choose one of two speed tunables (`[weapon_info+0x350]` vs `[weapon_info+0x34c]`) out of the held weapon's
+info struct (`[weapon+0x19c]`, the same held-item sub-struct offset this unit's `Gunfire wary` write-up
+also reads), reads a third tunable (`[weapon_info+0x35c]`, an "arc" value) from the same struct, and
+forwards all of it straight into `0x0054c630`.
+
+#### 13.2.1 The shared core `0x0054c630(outA, outB, originPoint, targetPoint, arc, speed)` — cdecl, 6 args
+
+CONFIRMED by listing (ends `0x0054c760`, no frame, pure `esp`-relative). `originPoint`/`targetPoint` are
+pointers to 3-float vectors; `arc` and `speed` are plain floats passed **by value** (one stack dword each,
+not pointers); `outA`/`outB` are pointers to 3-float output buffers.
+
+**Closed-form reading (static, CONFIRMED structure / HYPOTHESIS on exact trig identity):**
+1. `delta = targetPoint − originPoint` (component-wise, computed in double precision then rounded back to
+   float for each of the 3 components).
+2. `0x00da0730(&delta)` — reads `delta.x² + delta.z²` (the **horizontal-plane** length-squared; `delta.y`
+   is not part of this test) and, **only if that is ~zero** (checked via a shared "is approximately zero"
+   helper `0x00dad830`), overwrites `delta` with a fixed default `(const, 0, 0)` direction. In every other
+   case `delta` is left exactly as computed in step 1 — this is a degenerate-input guard, not a true
+   vector-normalize.
+3. `speed` and `arc` are handed, together with a cross-product-based local basis built by
+   `0x0054c1d0`/`0x00da5aa0` (the latter a Vector3 cross-product utility with its own degenerate-case
+   fallback `0x00da57b0` — a reusable math-library routine, not specific to this solver) against a 3-float
+   global reference `0x013213e4`, to solve for a launch elevation angle. The actual angle value is run
+   through two CRT transcendental calls, `0x00ea2470` and `0x00ea3a70` (both exhibit the standard
+   SSE2-vs-x87 CRT dispatch preamble; which specific trig pair they resolve to was not pinned down
+   statically — see the oracle data below, which settles the *geometric effect* precisely even without the
+   exact function names).
+4. A matrix/basis transform `0x00d9fb90` rotates the resulting local (elevation-angle) 2-vector into the
+   horizontal basis defined by `delta`, writing a full 3-float result into **both** `outA` and `outB` via
+   two structurally identical passes over two different local structures.
+5. Returns a bool in `AL` (propagated from the very first sub-call, `0x0054c1d0`) — `0x00540c760`'s own
+   upper 24 bits of `EAX` are not meaningfully set (compiler contract: callers only read `AL`).
+
+**Empirical confirmation — Unicorn oracle, `conv=cdecl`, cold full-image emulation, zero friction.** All 11
+of the following ran to completion against the real function bytes with no stub needed (no OS/import call,
+no runtime-populated global, lies on the path at all — confirmed by `Emu.va_is_file_backed` on every global
+address the function reads: `0x1187ebc`-style tunables *and* `0x013213e4` are inside their section's raw
+file bytes, not the zero-fill tail). `AL == 1` ("solved") on every case below; all vectors are the literal
+floats read back from the emulated output buffers.
+
+| Case | origin | target | arc | speed | outA | outB |
+|---|---|---|---|---|---|---|
+| flat, same height | (0,0,0) | (10,0,0) | 1.0 | 20.0 | (0.999922, −0.012502, 0.0) | (0.012501, −0.999922, 0.0) |
+| target higher (+2) | (0,0,0) | (10,2,0) | 1.0 | 20.0 | (0.982950, 0.183874, 0.0) | (0.012470, −0.999922, 0.0) |
+| target lower (−2) | (0,0,0) | (10,−2,0) | 1.0 | 20.0 | (0.978046, −0.208390, 0.0) | (0.012532, −0.999921, 0.0) |
+| closer (5 m) | (0,0,0) | (5,0,0) | 1.0 | 20.0 | (0.999980, −0.006250, 0.0) | (0.006250, −0.999980, 0.0) |
+| farther (20 m) | (0,0,0) | (20,0,0) | 1.0 | 20.0 | (0.999687, −0.025007, 0.0) | (0.025008, −0.999687, 0.0) |
+| slower speed (10) | (0,0,0) | (10,0,0) | 1.0 | 10.0 | (0.998746, −0.050063, 0.0) | (0.050063, −0.998746, 0.0) |
+| faster speed (40) | (0,0,0) | (10,0,0) | 1.0 | 40.0 | (0.999995, −0.003125, 0.0) | (0.003125, −0.999995, 0.0) |
+| arc = 9.8 | (0,0,0) | (10,0,0) | 9.8 | 20.0 | (0.992352, −0.123444, 0.0) | (0.123444, −0.992352, 0.0) |
+| arc = 0.0 | (0,0,0) | (10,0,0) | 0.0 | 20.0 | (1.0, 0.0, 0.0) | (1.0, 0.0, 0.0) |
+| target along Z not X | (0,0,0) | (0,0,10) | 1.0 | 20.0 | (0.0, −0.012502, 0.999922) | (0.0, −0.999922, 0.012501) |
+| non-origin start | (5,1,5) | (15,1,9) | 1.0 | 20.0 | (0.928393, −0.013464, 0.371357) | (0.012501, −0.999909, 0.005000) |
+
+**What the numbers confirm, past the closed-form reading above:**
+- `outA` and `outB` are always unit-length 3-vectors.
+- `outA`'s horizontal plane (X,Z) component is always exactly proportional to the horizontal direction from
+  origin to target — e.g. the "non-origin start" row's horizontal delta is (10, 4), magnitude 10.77, and
+  `outA.x/outA.z` = 0.9284/0.3714 = the exact unit vector of (10,4). Confirmed to full float precision in
+  every row.
+- `outB`'s (X,Z) pair is `outA`'s (Z,X) pair, sign-adjusted — i.e. `outB ≈ (outA.y·(horizontal-unit), −outA.
+  "elevation-cosine"·…)`; empirically, `outB`'s first and third components equal `outA`'s second component
+  scaled onto the horizontal unit direction, and `outB.y = −(outA`'s own horizontal magnitude`)`. This is
+  the exact numeric signature of two complementary ballistic-angle roots (θ and 90°−θ) for a flat-ground
+  range equation. **Only `outA`'s buffer is copied into the committed action block** by the real `throw
+  weapon` caller (`0x00553459`'s own code copies `[esp+0x50..0x58]`, matching `outA`'s stack slot, into the
+  committed block's `+0x24`/`+0x30`/`+0x38` fields exactly as §11.3 H already documents) — `outB` is
+  computed every call but, at this call site, is never read back. HYPOTHESIS (OPEN item 4): whether `outB`
+  is dead weight here or consumed by some other caller of `0x0054c630` not examined in this unit.
+- Increasing `arc` increases the magnitude of `outA`'s vertical (Y) component monotonically (confirmed
+  0.0/9.8 → 0.0/−0.123 at fixed distance+speed), and increasing `speed` at fixed distance/arc *decreases*
+  the vertical component toward 0 (confirmed 10/20/40 → −0.0501/−0.0125/−0.0031) — both exactly the
+  qualitative behaviour a real ballistic-range solve should have (a faster throw needs less arc; a bigger
+  gravity/arc constant needs more). The counter-intuitive *sign* (more arc → more **negative** Y) is read
+  plainly as recorded; whether this frame's Y axis is gravity-up or gravity-down, or whether the caller
+  re-flips it before use, was not traced past this function and is left OPEN (item 5).
+
+**Direct oracle run on `0x0054c770` itself (the exact address the task and §11.3 H cite).** The function's
+own class-check call, `0x00853b30`, dereferences a per-type descriptor table at `0x02cc9900` that is
+**confirmed NOT file-backed** (`Emu.va_is_file_backed` returns `False` for every row checked, and for the
+table's own address) — the same WALLS.md-class runtime-populated-table issue already on record for a
+different function, now independently reconfirmed for the table this unit's entire Part 1 class-gate also
+depends on. Calling `0x0054c770` cold with a synthetic human object faults cleanly inside `0x00853b30`
+(`EmuFault` at `0x00853b58`, dereferencing a null type-descriptor row) rather than silently returning a
+wrong answer — an honest failure, not a misleading one. **Resolved by stubbing the one call that touches
+that table** (`emu.stub(0x00853b30, eax=1 or 0)`), disclosed here as a stub, not a result: with the stub
+forced to "is player" `(eax=1)` and the weapon's player-speed tunable set to `999.0` vs non-player tunable
+`20.0`, `0x0054c770` returns `outA=(1.0, 0.0, 0.0)` (so close to flat-trajectory that the 999-speed throw
+needs no visible arc); forced to "not player" `(eax=0)`, it returns `outA=(0.999922, −0.012502, 0.0)` —
+**the exact same vector**, to full float precision, as the `0x0054c630` direct-call "flat, same height"
+case above (speed 20.0, arc 1.0). This proves end-to-end, with only the external class-table dependency
+stubbed and disclosed, that `0x0054c770` really is nothing more than "pick a speed tunable by class, then
+call `0x0054c630`."
+
+#### 13.2.2 `0x0054d930` — the grenade solver, same core plus obstacle screening
+
+CONFIRMED by listing (partial — the function is large; read through its first ~280 instructions, enough to
+confirm the call into the shared core and the block-write tail; the remainder, further geometry after the
+solve succeeds, was not fully read — see OPEN item 6). Called thiscall-style from `0x0054dce0` (`throw
+grenade`) at `0x0054ec58`, with `ECX` = a large working struct the caller has been building across its own
+1822-instruction body (matching §11.3 H's "it collects allies to avoid … it tries aim points in turn"), and
+three stack arguments: the committed action block pointer, a value read from the working struct, and a
+second local buffer.
+
+1. Calls `0x0054d180` first (a precondition this unit did not read further into); false declines
+   (jumps to the same decline target the rest of the function shares, `0x0054dcb0`).
+2. **Obstacle/ally screening, confirmed by listing**: walks a list inside the working struct — base
+   `[this+0x20]`, stride `0x10` bytes, count `[this+0x28]` — and for each entry, computes a squared
+   horizontal distance between the candidate aim point and the entry's position, SIMD-compares all three
+   axes against a per-call radius `[this+0x1d0]`, and **declines the whole candidate** (same shared target,
+   `0x0054dcb0`) if a within-radius hit is found on *any* list entry (`movmskps == 0xf`, i.e. the compare
+   was true on every one of the 4 packed lanes used). This is the concrete mechanism behind §11.3 H's prose
+   "it collects allies to avoid" — now specified as a per-candidate SIMD proximity reject, not previously
+   broken out.
+3. Calls the **shared core `0x0054c630`**, with one input point read from the working struct's own `+0`
+   offset (CONFIRMED: `[this+0]`/`[this+4]`/`[this+8]` are read directly as a 3-float vector right before
+   the call) and the other from the caller-supplied candidate buffer (`EBX` at entry, i.e. the current
+   candidate aim point — `P`, the cover object's position, or a nearby object's position, exactly matching
+   §11.3 H's "it tries aim points in turn" list); the `arc` tunable is read from `[weapon_info+0x35c]`
+   (`weapon_info` itself from `[this+0x1f8]`) — the **same offset** `0x0054c770` reads for the thrown
+   weapon's arc, confirming both solvers pull the arc constant from the same weapon-class sub-struct
+   convention; the `speed` tunable is read from `[this+0x1fc]` directly (no player/non-player branch here —
+   grenades apparently use one fixed throw speed regardless of thrower class, unlike the weapon-throw path).
+   `0x0054c630` failing (`AL == 0`) declines the candidate (`0x0054dcb0`).
+4. On success: a further geometry pass (`0x0054d5b0`, `0x00da38e0`) refines the result, and the function
+   writes the final launch data into the **committed action block** at `+0x30`/`+0x38` (matching §11.3 H's
+   own "`+0x30`…`+0x38` = the launch data" exactly) and, separately, into `+0x24`/`+0x2c` (matching the
+   `+0x24 = P` convention the weapon-throw case also uses) before returning true.
+
+**Oracle note for this solver.** Because `0x0054d930` is reached only via a richly-populated working struct
+(ally/obstacle list, cached origin position, weapon-info pointer, per-call radius — none of it a single
+self-contained argument block), synthesizing a faithful Unicorn call for `0x0054d930` itself would mean
+hand-building that entire struct with made-up list contents rather than exercising real game state — a much
+weaker oracle than directly exercising the shared core. Given `0x0054d930` is confirmed (by listing, not
+inference) to delegate its actual trajectory math to the *same* `0x0054c630` already oracle-tested in full
+in §2.1, this unit treats §2.1's 11-case oracle run as covering grenade's trajectory math as well, and
+limits itself to static confirmation of grenade's own extra logic (obstacle screening, block-write offsets)
+rather than building a second synthetic harness around it. This is a deliberate scoping choice, not a
+friction report — flagged for the record in the companion open-items file (item 6) in case the orchestrator
+wants a direct `0x0054d930` run from real captured game state instead.
+
+---
+
+## 14. The real navmesh/path-point query layer, and why it is dead in every shipped file (2026-10-07)
+
+**🚨 LIVE-REFUTED, 2026-10-08 — do not implement this section's "always dead" conclusion as written; see §14.7a.** A live Frida capture against the real running game (not a static trace) found the registry this section calls dead is actually populated and functioning in real gameplay: of 87,918 real calls to `0x00447770` during one captured street gunfight, only 656 (0.75%) returned the `-1` failure sentinel this section's entire argument rests on — the other 87,262 (99.25%) returned a real, non-sentinel value, and the final path query (`0x00a12a80`, §14.7) returned success 10 of 13 times, closely time-correlated with real cover-selection attempts. **The "exhaustive whole-binary call-site census" below (§14.3) that concluded "no second, alternate... writer... anywhere in the binary" was wrong or incomplete — a real writer exists that it did not find.** The static disassembly below is kept, struck through where superseded, not deleted, per project practice — it correctly describes the registry's SHAPE and the reader's own logic, just not its real population state in retail. §14.7a has the live evidence; the search for the real writer is IN PROGRESS, not yet concluded.
+
+**Scope.** A direct follow-up to `spec-zone-data-format.md` §12 (the `.czn_pc` Navmesh section), which
+proved that section's load gate reads `0` in all 1,647 real occurrences across the full 2,971-file
+shipped population — real wiring to the runtime navmesh-cell API (`0x00446c60`/`0x00445980`), but
+switched off in every shipped file. This section traces where the shipped game's NPC
+pathfinding/destination-point data actually comes from, given that the obvious file-backed candidate
+is dead.
+
+### 14.1 One previously-suspected entry point is not a navmesh query at all
+
+`0x004e91c0` — read in full (203 bytes, `ret`+`int3`-confirmed boundary) — is a plain "is point P
+within my own post radius (`+0x2f0`) of my own post position (`0x004e7d10`)" boolean gate, reused by
+unrelated action preconditions (actions 22/23, §11.3 B/C). It performs no cell/connectivity lookup,
+consults no per-zone registry, and produces no destination point — it only tests a point the caller
+already has. All 6 real call sites project-wide push the identical 3-argument boolean-test signature.
+**This is a dead end, cleanly refuted by direct disassembly** — not a navmesh/path query, and not
+something that leads into cell/connectivity data when traced backward.
+
+### 14.2 The real cross-cutting query: `0x00a12180` and its "snap" sibling `0x00539200`
+
+`0x00a12180` (90 real call sites project-wide — the core AI module, the melee/cover/reload cluster, a
+large cluster overlapping the untraced "human navigator chain" `0x00993e90`/`0x00993630`, and a
+vehicle/traffic-adjacent cluster) builds a packed cell key (`zoneId<<16 | cellIndex`, the same
+convention `0x00446c60` consumes) and calls `0x00447770` (§14.3). On success it resolves an actual
+output position via `0x00444f80`; **on failure, it silently echoes the caller's own original input
+position back unchanged** — a soft, non-fatal fallback. Its thin sibling `0x00539200` ("the navmesh
+point snap," already cited by this document for `Flee`/`Veh evade`) calls `0x00a12180` internally but
+**on failure returns false with no output written at all** — a hard, silent "nothing happened" to its
+own caller, unlike `0x00a12180`'s own soft fallback.
+
+### 14.3 Both bottom out in the exact registry `spec-zone-data-format.md` §12 already proved is dead
+
+`0x00447770` (926 bytes, read in full) runs three internal strategies in order — a direct cell-key
+lookup, a "neighbor of this cell" walk, and a full fallback scan over every registered zone — all
+three independently reading the identical per-zone registry (`0x3171a58` count / `0x3171a5c` array,
+16-byte stride, mode-0 presence bit at `+2`, mode-0 data pointer at `+4`) that `0x00447160`
+(`spec-zone-data-format.md` §12.3) writes. ~~Every strategy fails identically because the registered-zone
+count is always zero; the function's own shared failure exit executes a literal `-1` sentinel.~~ **LIVE-REFUTED, 2026-10-08 (§14.7a): the registered-zone count is NOT always zero in real gameplay — the live capture shows `0x00447770` succeeding 99.25% of the time. This static reading of the function's own logic (three strategies, shared `-1` failure exit) stands; the claim that the gate is always zero does not.**
+
+~~**Exhaustive whole-binary call-site census, closing `spec-zone-data-format.md` §12.7 open item 2
+outright:** `0x00447160` has exactly ONE caller in the entire executable (the already-known dead
+`.czn_pc` Navmesh gate, `0x008642a0`), and its own slot-allocator `0x00447050` has exactly ONE caller
+in the entire executable (`0x00447160` itself). **There is no second, alternate, runtime-generated,
+or collision-geometry-fed writer into this registry anywhere in the binary** — this specific form of
+"maybe it's built from collision geometry at runtime" is refuted by an exhaustive census, not merely
+unobserved.~~ **LIVE-REFUTED, 2026-10-08 (§14.7a): this census was wrong or incomplete — a real writer
+exists somewhere that it did not find (most likely blind spot: the census appears to have been scoped
+to "callers of `0x00447160`/`0x00447050`" by name, not an independent raw data-xref search for the two
+registry addresses themselves, which would also catch a bulk-copy-shaped writer that never references
+the field by its own scalar offset). The real writer search is IN PROGRESS, not yet concluded — do not
+cite "no second writer anywhere in the binary" as settled.** This generalises well beyond the two functions `spec-zone-data-format.md` §12 named:
+`0x00446c60` (cell-resolve) has 44 real callers project-wide, while `0x00445980` (cell-connectivity)
+has exactly 1 real caller in the whole binary (`0x004de5ed`, inside the already-documented "level
+difference" helper `0x004de500`) — **this generalization is now also suspect pending the same real-writer search; not re-verified live this pass.**
+
+### 14.4 A concrete, traced consequence: action 16 `move retreat` cannot be selected in retail
+
+Action 16's own destination step (§11.3 B) calls `0x00539200`; its real call site inside `0x0053d540`
+is `call 0x539200; test al,al; je 0x53d59c` — and `0x53d59c` is the function's own shared decline
+exit, the same tail several of the action's other decline branches already fall through to. This
+branch-target disassembly is correct and unchanged — ~~**Since `0x00539200` fails unconditionally in
+every real shipped zone, this jump is taken every single time `move retreat` is evaluated, and the
+action always declines before reaching its own threat-radius logic.**~~ **LIVE-REFUTED, 2026-10-08
+(§14.7a): `0x00539200` ultimately depends on the same `0x00447770` gate the live capture shows
+succeeding 99.25% of the time — "fails unconditionally" does not hold. `move retreat`'s real
+reachability in retail is now OPEN, not confirmed-always-declines, pending the real-writer
+investigation.** Other callers of the same query are NOT uniformly blocked the same way: `Flee`
+(§13.1.2) and `Veh evade` (§13.1.6) already try several other, non-navmesh escape-direction candidates
+before or alongside this query, so for those two a failed query removes one candidate from a list
+rather than blocking the behaviour outright — a real difference in outcome severity between callers,
+not catalogued exhaustively here. **STATUS, 2026-10-08: LIVE-REFUTED along with §14.7's two newer
+findings — all three rested on the identical underlying fact (`0x00447770` always returns `-1`), now
+shown false 99.25% of the time in real play. See §14.7a.**
+
+### 14.5 The other three candidates for a real pathfinding data source, tested directly
+
+- **A different file family/extension.** `spec-format-inventory.md`'s exhaustive resource-type census
+  contains no unaccounted-for path/waypoint/navgraph type, and no other `.czn_pc` top-level
+  content-kind id can feed the same registry (it would have to call `0x00447160`, and nothing but the
+  Navmesh handler does). Dead end for this specific registry; not tested against a hypothetical,
+  entirely separate parallel system with its own in-memory structures.
+- **AI waypoint/path-node objects inside the Objects (`0x2234`) stream.** Not confirmed or refuted.
+  Blocked by a pre-existing, structural limitation: concrete object class identities inside the
+  runtime-populated `0x02cc9900` table are not statically recoverable from the cold image
+  (`spec-zone-data-format.md` §11's own standing open item) — not something static disassembly from
+  known addresses can get past. Left OPEN.
+- **A traffic/road-spline network reused for general AI pathing.** `spec-tables-traffic-ai.md` §14.4's
+  `Spline_Type` is a one-hot category bitmask for filtering distant/ambient vehicle spawns, not curve
+  geometry, and scoped to vehicle traffic LOD — no evidence any human movement/combat action in §11.3
+  reads it. Dead end for general NPC pathing, though not an exhaustive search for some other,
+  entirely uncatalogued spline/curve format.
+
+### 14.6 Net conclusion
+
+~~**Shipped NPC pathfinding does not get real cell/connectivity data from anywhere.** Every concrete
+"navmesh" touchpoint this project has found — the raw cell-resolve/connectivity API and the much more
+widely used point-query/snap layer on top of it — shares one single registry with an exhaustively-
+confirmed single writer, and that writer is unreachable in all 2,971 real shipped `.czn_pc` files.
+The handful of behaviours that strictly require a successful navmesh query (`move retreat`, action 53
+`brute bull rush`'s final clause, `Veh evade`'s own escape step) are provably unreachable or
+permanently refused in retail.~~ **LIVE-REFUTED, 2026-10-08 (§14.7a).** The registry IS populated in
+real gameplay (99.25% success rate on 87,918 real calls during one captured gunfight) through a writer
+this section's own static census did not find. The behaviours listed as "provably unreachable" are
+not — `move retreat`'s and action 8 `cover take def`'s real reachability in retail is confirmed
+working at least some of the time by the same capture (§15.7's own correction). **What's still true,
+unaffected by this correction:** most of ordinary NPC movement never touches this registry at all — it
+already computes destinations directly from target/post/cover positions through non-navmesh helpers —
+so for most "NPC movement," there never was a navmesh-backed path query to begin with; this reads as
+direct/line-of-sight movement with the engine's own collision/physics layer (`spec-physics-runtime.md`)
+presumably doing local obstacle handling for the cases that don't need the registry at all. One piece
+remains open: who, if anyone, ever writes a non-sentinel value into a human's own `+0xb40` cell-key
+field (a quick opcode scan found no candidate inside the AI address range — suggestive, not confirmed,
+unaffected by this correction either way).
+
+### 14.7a LIVE CAPTURE REFUTES "always dead" — real writer search IN PROGRESS (2026-10-08)
+
+**A Frida capture against the real running game, requested by `purrsian-62` specifically to confirm
+§14.7's own "statically dead, runtime confirmation pending" label before Team B implemented against
+it, came back negative on the "dead" side — i.e. it refutes dead, not confirms it.** Hooked
+`0x00447770` (the registry reader), `0x00a12a80` (the final path query), and entry-counters on
+`0x0050a690`/`0x004f0b70`/`0x0053d540` (cover-select/pickup/retreat-dest attempted) during one real
+street gunfight with armed enemies near cover. Results, from the raw log
+(`scratchpad/live-capture-navmesh-registry_2026-10-08/navmesh_registry_live_log.csv`, 88,037 rows):
+
+- **`0x00447770`: 87,918 calls. Only 656 (0.75%) returned the `-1` failure sentinel; 87,262 (99.25%)
+  returned a real, non-sentinel value.** This directly contradicts §14.3's "registered-zone count is
+  always zero" and the "exhaustive census, no second writer anywhere" claim built on it.
+- **`0x00a12a80`: 13 calls, 10 returning success (`AL=1`).** Most follow a `cover_select_attempted`
+  event within milliseconds — i.e. **`cover take def` (action 8) DOES resolve successfully in shipped
+  retail**, contradicting §15.7's own 2026-10-08 correction (which is itself now superseded, see
+  §15.7's in-place update).
+- `cover_select_attempted` fired 15 times, `pickup_weapon_attempted` 90 times during the capture; the
+  `move_retreat_dest_step_attempted` hook never fired in this particular fight (no data either way for
+  `move retreat` from this capture — absence of the trigger condition, not evidence it still fails).
+- **A known script bug in the same capture, NOT a confound on the above:** the registry-global value
+  reads (`0x3171a58`/`0x3171a5c` themselves, meant to show the live count/array contents) failed with
+  `"READ_ERROR: not a function"` — the script used the deprecated global `Memory.readU16(ptr)`/
+  `Memory.readPointer(ptr)` API, which errored in this Frida version (17.17.0); the fix is the modern
+  method-call style, `ptr.readU16()`/`ptr.readPointer()`. **This bug affects only the raw registry-value
+  columns, not the `0x00447770`/`0x00a12a80` return-value hooks above, which use the Interceptor
+  `retval` object directly and are unaffected.**
+
+**Net effect: §14.3's "exhaustive census, no second writer anywhere in the binary" is wrong or
+incomplete — a real writer exists that it did not find.** Most likely blind spot, not yet confirmed:
+the original census appears to have been scoped to counting callers of the two named writer FUNCTIONS
+(`0x00447160`/`0x00447050`) by name, rather than an independent raw whole-binary data-xref search for
+the two registry ADDRESSES themselves (`0x03171a58`/`0x03171a5c`) — which would also catch a
+bulk-copy-shaped writer (e.g. a `memcpy`-style population that never references the field by its own
+scalar offset the way an individual store would), a previously-uncatalogued zone-content-kind handler,
+or a runtime-built registry fed from collision geometry rather than the `.czn_pc` Navmesh section.
+**A dedicated search for the real writer is IN PROGRESS as of this edit (agent `afac5d6c4a3774487`),
+not yet concluded — this section will be updated again once it reports back.** Do not implement
+against either "always dead" (§14's original claim) or a specific alternate mechanism (not yet found)
+— the honest state right now is "demonstrably alive in real gameplay, real writer not yet located."
+
+**For Team B specifically:** the practical, safe interim position is to implement reachability as
+WORKING (per the live evidence: cover-taking succeeds, weapon-pickup is attempted frequently) rather
+than as "always fails" — the opposite of §14.7's prior advice. A fully specified mechanism (what
+actually populates the registry, and under what conditions) will follow once the real-writer search
+concludes.
+
+### 14.7b The real-writer search, two passes in — the count mystery is SOLVED, the presence-bit mystery is a confirmed, exhausted, STILL-OPEN contradiction (2026-10-08)
+
+**Pass 1 found a real, previously-uncatalogued writer — the registry's COUNT is not file-driven at
+all.** `0x004470a0(count, allocator)` — `0x03171a5c = allocator->Alloc(count<<4, 4, 0, 0); if
+(0x03171a5c) { 0x03171a58 = count; memset(0x03171a5c, 0, count<<4); }` — called exactly once in
+the whole binary, from `0x00a0f870` with a literal constant `count=8`, itself called from exactly one
+place, `0x005d25f0` (a ~4,360-byte, 230+-callee monolithic engine-bootstrap dispatcher with zero
+connection to `.czn_pc`/zone loading). **`0x03171a58` is unconditionally 8 from shortly after
+process boot, independent of all level/zone content.** This directly falsifies §14.3's foundational
+"registered-zone count is always zero" claim — the original census centered on the wrong functions
+(`0x00447050`/`0x00447160`, which only search/mark an already-allocated array, never allocate it) and
+never found the real allocator because it searched callers of NAMED functions rather than raw
+data-xrefs of the registry addresses themselves — exactly the blind spot §14.7a's own "most likely
+blind spot" paragraph predicted. Found via a literal-address xref query against `0x03171a58`/
+`0x03171a5c` directly: **10 functions touch these globals, not 3.** Four more previously-uncatalogued
+sibling READER functions were also found this pass (`0x00446930`, `0x004472f0`, `0x00447b10`,
+`0x00447c50`, `0x0044bb70`) — none of them writers.
+
+**Version/build mismatch, independently checked and RULED OUT.** The capturing agent recorded the
+live-capture exe's MD5 (`d7557158ed721a428162b8e02467f95b`, 16,257,024 bytes); the orchestrating
+session separately hashed the exe currently on disk at the known install path — **exact match.** The
+live capture really was running the identical build every static address in this document is based
+on; the contradiction below is not an artifact of analyzing a different binary than was running.
+
+**Pass 1's own remaining contradiction, stated precisely:** the registry EXISTS (count=8, confirmed)
+but re-tracing every path that could mark a slot "present" still comes up exhaustively dead — the one
+function that ever sets a slot's presence bit, `0x00447160`, has exactly one caller, the already-dead
+`.czn_pc` Navmesh handler (`spec-zone-data-format.md` §12, gate confirmed 0 in all real occurrences).
+By this trace, `0x00447770` should return `-1` on literally every call — directly contradicting the
+live capture's own retvals (99.25% non-`-1`), which decode into exactly the `(upperWord<<16)|index`
+bit-shape only a real "slot present" success branch can produce (e.g. `0x60ee011d`) — not garbage,
+not a misread.
+
+**Pass 2, two more static checks, BOTH exhausted clean negatives — no further static avenue remains
+for this specific contradiction.** (1) `0x00447050`'s own caller count re-verified by literal-address
+xref AND an independent whole-PE-section raw byte-pattern scan (not just `.text`): exactly one caller
+in the whole binary, full stop — `0x00447160` itself. No second caller uses `0x00447050` as a
+"find slot, then write to it myself" helper; the original census's specific caller-COUNT claim for
+this one function was actually correct (only its "allocator" framing was wrong — it is a free-slot
+finder over the array `0x004470a0` allocates, found in pass 1). (2) `0x00447160`'s own reachability
+re-checked the same two ways for any INDIRECT path (vtable slot, function-pointer table, any `DATA`
+reference) — zero hits in `.rdata`/`.data`; the one `.text` byte-pattern hit is a confirmed
+mathematical coincidence (one byte inside an unrelated `CALL`'s relative-displacement operand at
+`0x5405cc`, whose encoded target-minus-next-instruction difference happens to reproduce
+`0x00447160`'s own VA bit-for-bit — read and confirmed directly, not assumed from Ghidra's own `{imm}`
+xref tag). **No hidden indirect caller exists for `0x00447160`**, the same `spec-render-pipeline.md`
+§23.4-style blind spot this check was specifically designed to catch.
+
+**A third hypothesis, raised by `purrsian-62`, tested and REFUTED, same day:** since the `~f<CCRR>`/
+`~s<CCRR>` tile-file-family finding (`spec-zone-data-format.md` §13.2) shows only `~s` carries real
+Mesh geometry, maybe `spec-zone-data-format.md` §12.6's own "gate=0 in all 1,647 occurrences" aggregate
+(all 2,971 files, unstratified) buried a nonzero gate specifically inside the `~s` family. **Re-ran
+the gate scan broken out by family, both real city archives (`sr3_city_0.vpp_pc`/`sr3_city_1.vpp_pc`,
+2,878 files, 1,588 Navmesh-tag occurrences): `~f`=468/468 gate=0, `~s`=468/468 gate=0,
+plain-named=652/652 gate=0 — zero nonzero gates in ANY family, including `~s`.** Cleanly refuted; the
+original aggregate finding was already correct and complete, not an artifact of mixing families.
+
+**Net state, honestly, after two full static passes plus this targeted re-check: the contradiction is
+real and UNRESOLVED by any static method tried.** Three independent checks (literal-address xref,
+whole-PE-section byte-pattern scan, and a population re-scan stratified by the one axis that could
+plausibly have hidden something) all agree with each other and with the corrected static trace: zero
+of the registry's 8 slots should ever show a nonzero presence bit. **The only remaining path is a live
+write-watch directly on the registry's 128-byte block** (`MemoryAccessMonitor` on
+`0x3171a5c`..`0x3171a5c+0x80`, watching specifically whether any slot's own `+2` field is ever nonzero
+at the moment of a real `0x00447770` success) — scoped and ready in
+`scratchpad/live-capture-navmesh-registry_2026-10-08/hook_navmesh_registry.py` (already updated with a
+direct hook on `0x00447160` and a fixed, working registry-value read), not yet run. This needs the
+user to play again; per this project's own standing dynamic-analysis rule, that goes through a written
+sheet from the orchestrator, not something run unilaterally. Full write-up, both passes:
+`scratchpad/navmesh_registry_real_writer_2026-10-08.md`.
+
+**Two final cheap checks, 2026-10-08, PARKED after both came back inconclusive/confirming rather than
+resolving — no third live capture requested today.** (1) `purrsian-62` asked whether the live log's
+~87,918 background calls to `0x00447770` (far more than the 13 calls `0x00a12a80` itself makes) mean
+the "immediately preceding" calls near each of the 10 real path-query successes show `-1` or
+"present" values — if `-1`, `0x00a12a80` might not actually depend on `0x00447770` the way the static
+trace says. **Checked directly against the raw CSV: the handful of `registry_reader_return` rows in
+the same timestamp window as each of the 10 successes are overwhelmingly non-`-1` ("present"-looking")
+values** — but this is NOT informative either way, honestly: at a 99.25% background success rate,
+~96% of any 5 random nearby calls would show "present" by sheer base rate alone, and the existing hook
+has no backtrace/caller-identity field to isolate the SPECIFIC call made from inside `0x00a12a80`'s
+own stack frame from the dominant unrelated background caller(s). **A real methodological limit of
+the existing log, not a finding either for or against dependency.** (2) `0x00a12a80` was
+re-disassembled fresh, instruction by instruction, specifically hunting for any path to a `true`
+return that does NOT depend on the registry call (a cached result, a Navpoint-graph fallback, a
+same-region shortcut) — **found none.** The function has exactly one `true` exit (`mov al,1` at
+`0xa12cdf`) and exactly one `false` exit (`xor al,al` at `0xa12b5d`, reached from TWO places: directly
+on registry failure, or later if the real search/scoring call `0x452e10` itself fails). There is no
+third path. **This confirms, not refutes, the original reading of `0x00a12a80` — the function's own
+logic is correct as previously documented; the mystery is entirely in why its internal call to
+`0x00447770` sometimes succeeds, not in any misreading of `0x00a12a80` itself.** One more data point,
+not independently conclusive but consistent with a real (not glitching) mechanism: the "present"
+retvals are not random — a small set of distinct values repeat thousands of times each (top 3 values
+alone account for 19,699 of the 87,918 calls), the signature of a small, stable set of real resolved
+keys, not noise. **Net: both checks came back clean in the sense of finding no bug in either prior
+reading — this is PARKED as "live-confirmed working, mechanism unresolved," per the orchestrator's own
+call, with the live write-watch script noted above as ready for a future session if ever revisited.**
+
+**UN-PARKED, 2026-10-08: a direct hook on `0x00447160` itself just fired live, for the first time.**
+A fresh capture run (user, ~5+ minutes, drive + gunfight) recorded **16 real calls to `0x00447160`**
+(the presence-bit writer itself, not just the registry reader `0x00447770`), starting ~5 seconds after
+attach. This is more decisive than the already-documented `registry_reader_return` evidence above — it
+is a direct hit on the exact function both static passes proved has exactly one caller and that caller's
+own gate is confirmed 0 in all 1,647 real shipped `.czn_pc` occurrences. **A third static check, run
+immediately after**, re-verified "one level up" from `0x00447160` (the known caller `0x008642a0` itself,
+confirmed via `spec-zone-data-format.md` §12.2 to call `0x00447160` directly with no intermediate
+function, so "one level up" is exactly one target): a direct-call census (1 hit, the already-documented
+`0x00865351` inside dispatcher `0x008652d0`), a literal-dword scan across all 6 PE sections (zero hits,
+not even a coincidental one), a full re-disassembly of `0x008642a0`'s own body (52 instructions, the
+gate check confirmed the only way in or out), and the content-kind table row's own pointer fields (don't
+alias `0x008642a0`) — **all four came back clean. No second caller, entry point, or indirect path
+exists one level up either.** The contradiction remains real and unresolved by any static method tried
+across three full passes now. **Most plausible untested candidate, flagged not guessed:** some
+in-memory mutation of the gate dword AFTER load (the static trace only proves the gate is 0 in every
+shipped FILE, not that it stays 0 for the rest of a session) — not tested this pass. The existing Frida
+hook script (`hook_navmesh_registry.py`) has been updated (not run) with `Thread.backtrace` (top 6
+return addresses, module-relative) and a full arg dump on its `0x00447160` hook, writing to a new file
+(`navmesh_registry_live_log_v2.csv`) to avoid disturbing the existing 170,628-row capture — ready for the
+next capture run whenever one is coordinated. Full detail:
+`scratchpad/navmesh_registry_caller_recheck_2026-10-08.md`.
+
+### 14.7 Expanded blast radius: `0x00a12a80` is a third direct caller, and all three dependent claims are STATICALLY DEAD, RUNTIME CONFIRMATION PENDING (2026-10-08)
+
+Dispatched to settle a real tension `purrsian-62` flagged between this section (dead registry) and
+§15.7's own framing of `0x00a12a80` ("picks the cheapest path-reachable candidate") before Team B
+implemented cover-selection against the latter. Full trace: `scratchpad/action45_covernode_pathquery_reconcile_2026-10-08.md`.
+
+**`0x00a12a80`** (the multi-destination path query §15.7 cites for `cover_node`'s final pick, and §11.3
+F cites for action 45 `pickup weapon`) is a **third direct caller of `0x00447770`** — not previously
+traced this far by §14's own call-site census, alongside `0x00a12180`/`0x00539200`. Read in full
+(`0x00a12a80`-`0x00a12ce9`, 617 bytes): it calls `0x00447770` as its own first step
+(`00a12b4c CALL 0x00447770; 00a12b58 CMP EAX,-0x1; 00a12b5b JNZ ...never taken...; 00a12b5d XOR AL,AL`)
+and returns `false` unconditionally on the registry's `-1` sentinel, before it ever inspects a
+candidate or reaches its own real (and otherwise-functional) per-candidate cell-key builder
+(`0x00a12630`) or multi-destination search/scoring engine (`0x00452e10`). Since §14.3 already proved
+the registered-zone count (`0x3171a58`) is always zero, `0x00a12a80` statically always returns false
+for every caller.
+
+~~**This generalizes §14.4's `move retreat` finding to two more actions, by the same root cause:**
+action 8 `cover take def` (§15.7) and action 45 `pickup weapon` (§11.3 F) are both statically
+unreachable in retail — `cover_node`'s own gather/filter/score pipeline runs for real every time but
+its final claim step always fails; action 45 is doubly dead (its own per-candidate `0x00a12180` snap
+already empties the candidate array before `0x00a12a80` would even be reached).~~ **LIVE-REFUTED,
+2026-10-08 (§14.7a): the live capture shows `0x00a12a80` returning success 10/13 times, time-correlated
+with real cover-select attempts — action 8 is NOT unreachable in retail. Action 45's own upstream
+`0x00a12180` dead-end claim is also now suspect (it rested on the same `0x00447770` gate).**
+
+**A naming trap worth recording (unaffected by the correction above):** `0x3171a58`/`0x3171a5c` sit
+only 12-16 bytes from `0x3171a64`, a separate, unrelated, LIVE global — the `cover_node` object-pool
+singleton `0x008cd960` (§15.7's own AABB-gather) and action 45's pre-filter `0x004f0810` both read
+fields on `0x3171a64` for legitimate, functioning purposes. Do not conflate the two when next touching
+either function.
+
+**STATUS, 2026-10-08: SUPERSEDED by §14.7a.** The "STATICALLY DEAD, RUNTIME CONFIRMATION PENDING"
+label this note originally set, and the live-confirmation check it called for, both happened exactly
+as planned — and the check came back NEGATIVE on "dead": the live capture refutes it for `0x00a12a80`
+specifically (success 10/13 times) and for the underlying `0x00447770` gate generally (99.25% success
+rate). **This is the correctly-cautious outcome of following "implement behind a switch, not
+hard-coded" instead of shipping the static claim as fact** — exactly why that caveat was added. See
+§14.7a for the full capture results and the now-in-progress real-writer search.
+
+---
+
+## 15. The real live movement-target mechanism: Navpoint/`cover_node` (2026-10-08) — why NPCs still move despite §14's dead navmesh
+
+Direct follow-up to §14: if the navmesh query layer is dead, something else must be driving the movement/chase/cover behaviour NPCs visibly exhibit. This section traces that "something else" for one concrete, fully-read consumer.
+
+### 15.1 Neither class carries any on-disk adjacency data
+
+`Navpoint` (classIdx `0x29`, instance vtable `0x0116ceb4`) and `cover_node` (classIdx `4`, instance vtable `0x0116add8`) were each read via their real per-instance tail-readers (`0x008eb410`, `0x008cef40`). Every property either class stores is a scalar (float/byte/small string-resolved enum) or a short designer string — never a link, index, or handle to another instance. `Navpoint`'s real property set: `navpoint_type` (always present, string→enum via table `0x25e7ba0`), `navpoint_flags` (rare bitmask, 9.1% of instances), `navpoint_extra_info` (rare free-text designer string — confirmed NOT adjacency data by reading its handler in full), `audio_marker` (very rare), `navpoint_sync` (rare). `cover_node`'s real property set is **8 properties, not the 3 previously known by name**: `cover_pos`, `cover_orient`, `cover_type`, `cover_index`, `cover_angle_left`, `cover_angle_right`, `cover_def_angle_left`, `cover_def_angle_right` (table `0x024fa768` for `cover_type`). **`cover_type` and `cover_index` are real, readable properties that occur in zero of the 12,956 real shipped `cover_node` objects** — a genuine population-confirmed negative, not an oversight.
+
+### 15.2 The real mechanism: type/flag-driven self-registration into flat arrays, then runtime spatial filtering — not a graph
+
+Navpoints self-register at load time into up to four separate flat global pointer arrays, selected by bits of `navpoint_flags` (bit `0x1`→`0x0289fc08`, `0x2`→`0x0262d528`/cap 256, `0x4`→`0x026236a0`, `0x8`→`0x01503e1c`/cap **1**, a true runtime singleton). Each handler has an exhaustively-confirmed single caller (Navpoint's own tail-reader) — these arrays are Navpoint-specific, not shared with `cover_node`. **There is no adjacency graph anywhere in this mechanism.** "Links" between Navpoints (indices/handles/graph edges) do not exist on disk or in any traced in-memory structure.
+
+### 15.3 The real destination-selection algorithm, traced end to end from its one call site
+
+`0x00b3e180` has exactly one caller in the whole binary (`0x00b42974`, inside a mode-dispatcher `0x00b428d0` in a previously-uncharacterised address range, `0x00b3xxxx`–`0x00b4xxxx`, disjoint from both of this file's existing AI clusters). After several gates (acting-character liveness, target force-flags, a distance bound via the project's generic distance helper `0x00da1330` — the same helper §14.1 cites for the unrelated post-radius gate, not navmesh-specific — and a cooldown check), it reaches the real search:
+
+```
+for each pointer in the bit-0x1 Navpoint array (global count 0x0289fc00 / array 0x0289fc08):
+    if distance(navpoint.pos, target.pos) is within an inner..outer radius pair: add to candidates (cap 10)
+if any candidates: pick one uniformly at random (0x00dab660); output its position
+else: fall through to a separate, untraced fallback
+```
+
+**This is a flat linear scan with a two-radius (annulus) geometric filter and a uniform-random pick among survivors — not a graph search, not nearest-neighbor.** The caller (`0x00b428d0`) hands the chosen position straight to a movement command (`0x00b3da30`) on success, confirming this is a live, working destination-selection path — not a passive query. On failure it degrades to a different function (`0x00b3ac20`), the same graceful-degradation shape §14.4/§14.6 already document for the dead navmesh query, but here degrading away from a LIVE search.
+
+**Action 16 `move retreat`'s dead-navmesh-query failure (§14.4) is confirmed unrelated to this mechanism** — its own routine (`0x0053d540`) never calls `0x00b3e180` or touches the Navpoint arrays; the two call graphs are disjoint. Navpoint-based movement and the dead navmesh registry are two entirely separate systems in the shipped game, not alternate paths through the same action.
+
+### 15.4 Population data
+
+`Navpoint`: 5,982 real objects in 324/2,971 zones (1–206 per zone, mean 18.5), concentrated in large mission/district zones. `cover_node`: 12,956 real objects in 209/2,971 zones (1–463 per zone, mean 62.0), concentrated in enclosed combat interiors/arenas rather than open-world zones — hand-placed per-encounter design data, not a procedurally-dense navmesh substitute.
+
+### 15.5 Correction to a prior pass's working label (propagated to `spec-zone-data-format.md` §11 separately)
+
+The per-class *descriptor* vtable's slot `+0x04` was previously labelled "(tail-reader)" for `general_mover`/`script_npc` (`spec-zone-data-format.md` §11's U2 unit) based on its outer call shape alone. Reading Navpoint's exact analogue in full **refutes that label: slot `+0x04` is Destroy/Release** (it calls the target's own destructor, then unlinks/relinks the per-class object-pool's free list) — paired with slot `+0x00` Create, on a confirmed 144-byte-stride per-class object pool. **The real tail-reader lives on the separate *instance* vtable's own slot `+0x04`**, not the class-descriptor vtable. This was not independently re-checked for `general_mover`/`script_npc` specifically, but the mechanism (two different vtables per class — a shared/transient descriptor vtable and a distinct instance vtable) is now confirmed general, not Navpoint-specific.
+
+### 15.6 Open items
+
+~~The real `cover_node` selection algorithm (who picks which cover a human uses) was not located.~~ **RESOLVED 2026-10-08, §15.7 — direct follow-up.** `cover_orient`'s 6-way jump table, the `navpoint_type`/`cover_type` enum tables' actual named values, `navpoint_sync`'s effect, and the raw-disk `navpoint_flags` bit `0x10`'s meaning remain OPEN, with concrete addresses/offsets in `scratchpad/navpoint_covernode_realformat_2026-10-08.md` for a future unit. The `0x00b428d0` mode-dispatcher cluster is **no longer a dead end for cover specifically** — §15.7 confirms it's where the real cover claim/search path starts (reason bytes 8/9/10), though it is a separate call graph from §15.3's own Navpoint destination search.
+
+### 15.7 The real `cover_node` selection algorithm, traced end to end (2026-10-08)
+
+**The Navpoint-selector cluster named above (`0x00b428d0`/`0x00b3e180`) is confirmed to be a dead end for THIS question — it operates only on the bit-`0x1` Navpoint array (§15.3), never `cover_node`.** The real answer sits under code this document already had on file but hadn't fully pulled: action 8 `cover take def` (`0x00540b90`), whose Body text already noted "the mode picks the cover." That thread gives the full chain:
+
+```
+Cover-stay mode Enter 0x00543480 (dispatch on reason byte)
+  → case 8/9/10: 0x00542bc0 ("claim or find cover")
+      → 0x005429b0 (resolve scripted override, else search)
+          → 0x0050a690  <- THE REAL SEARCH/SCORE/SELECT FUNCTION
+```
+
+**`0x0050a690(human, searchRadius)` — read in full, 1,282 instructions, CONFIRMED:**
+1. Builds an AABB around the human: 14.0 base search radius (≥15.0 for brute-class enemies), fixed 4.0 vertical half-height, clipped to the human's own post/defend area if one is set, widened toward the group leader's own position for followers.
+2. Gathers candidates via `0x008cd960` — a **brute-force linear scan of every live `cover_node` instance in the class's own object pool** (not a spatial grid/BVH, not a Navpoint-style flat flag array), filtered by AABB containment and unclaimed status.
+3. Filters each surviving candidate: not recently failed (a per-human perception-list slot, confirmed list index **20**), an "open/usable" runtime flag, and the separate cover evaluator `0x00509e50` (below).
+4. **Scores** survivors: a cost combining an arc/exposure penalty, path-reachability/distance terms, and group-cohesion penalties; clamped to `[0,100]` and quantized.
+5. **Final pick** via `0x00a12a80` — the same multi-destination navmesh path-query action 45 `pickup weapon` already uses elsewhere in this document. ~~**CORRECTION, 2026-10-08 (§14.7 has the full trace): `0x00a12a80` opens by calling `0x00447770` (§14.3's dead registry) directly as its own first step... Statically, this means the "picks the cheapest path-reachable candidate" framing never actually resolves... STATICALLY DEAD; RUNTIME CONFIRMATION PENDING.**~~ **LIVE-REFUTED, 2026-10-08 (§14.7a): the live hook check this note itself called for has now run, and it refutes "dead" — `0x00a12a80` returned success 10/13 real calls during a captured gunfight, closely time-correlated with real `cover_select_attempted` events. `cover take def` (action 8) DOES successfully resolve in shipped retail at least some of the time. The real population mechanism/conditions are still being investigated (§14.7a) — implement as WORKING, not as always-fails, pending that follow-up.** These two movement-target systems use genuinely different selection philosophies, not variations on one theme: Navpoint is annulus-filtered uniform-random; `cover_node` is AABB-gathered, arc/path-scored, and path-query-resolved — now confirmed live-functional, at least intermittently, not merely statically plausible.
+6. **Claims** the winner via `0x008cfeb0` (compare-and-set an ownership handle at the cover's own `+0x70`/`+0x74`); on contention or total path-query failure, blacklists every survivor into the same perception-list slot 20 and returns "no cover," throttled upstream by a 6-8s random back-off.
+
+**The arc test, direct answer to whether `cover_angle_left`/`cover_angle_right`/`cover_def_angle_left`/`cover_def_angle_right` (§15.1) are actually respected — YES, confirmed exactly, via `0x008cd1d0(coverNode, threat, threatPos)`, read in full:**
+- Reference direction = the cover_node's own generic world-placement yaw (`0x00da3910`, the shared base-class transform) — **NOT** `cover_orient` (that property's own role stays OPEN, narrowed to "not the arc reference," likely feeding its own separate, not-yet-examined 6-way jump table).
+- Primary arc: `bearing = atan2(dz,dx)` from cover to threat, wrapped relative to that yaw, tested against `cover_angle_left` (property offset `+0x80`) / `cover_angle_right` (`+0x81`), each dequantized from their on-disk byte as `(byte/255)*2π − π`.
+- Secondary arc: the identical test run from a point pulled back 0.45 units behind the cover along its own forward vector, against `cover_def_angle_left` (`+0x82`) / **`cover_def_angle_right` (`+0x83` — resolves this document's own previously-unmatched 4th quantize-offset OPEN item)** — with an override that forces "exposed" (fails the test) when a separate open-cover flag is set AND the threat falls within a 30° cone of a third stored direction.
+- An aerial-vehicle threat bypasses the whole arc test.
+- **A hard player gate, independent of score:** inside `0x00509e50`, if any threat in the human's full perception list that resolves to the local player fails a shield/visibility test, the whole candidate cover is instantly disqualified for the `cover take def` action.
+
+**Inputs to the overall selection, for a cleanroom implementer:** the human's own position and personality/class (brute vs. normal), its post/defend area if any, its group leader's position for followers, its ENTIRE perception list (every currently-perceived threat, not just one), each candidate cover's position/yaw/angle-byte properties, each candidate's own per-human failure memory (perception-list slot 20), and real navmesh path distance (via the shared `0x00a12a80` multi-destination query). Distance/radius limits: 14.0 base search radius (≥15.0 for brutes), 4.0 fixed vertical half-height, a 5.0-unit degenerate-proximity special case, a 128/328-unit path-search budget.
+
+**[CONFIRMED — direct, complete disassembly+decompile of the core gather/filter/score/pick pipeline (`0x0050a690`) and the full arc-test formula (`0x008cd1d0`). HIGH CONFIDENCE, not independently disassembled to their own last instruction: a scripted-interrupt early-return edge case inside `0x005429b0`, a "hold position"-only refinement, several additive cost sub-terms inside the scoring step's own path/geometry refinement, and `0x00ad5020`'s exact aerial-vehicle-bypass semantics.]** Full detail, every address, and the complete scoring-formula breakdown: `scratchpad/covernode_selection_2026-10-08.md`.
+
+**Second confirmed consumer, 2026-10-08:** `0x008cd1d0` is also called from the roadblock-spawn system's
+character/ped creation path (§19.7 §3.5, "case 2" of `0x0092ff20`), refining a newly-created occupant's
+placement against the same cover-arc test — the same evaluator this section documents, reused for a
+structurally unrelated system.
+
+---
+
+## 17. Ambient population runtime: distant pedestrian/vehicle spawn-despawn (2026-10-08)
+
+Traces how "distant" (LOD-cheap) pedestrians and traffic vehicles spawn/despawn around the player, from
+runtime code — the question `spec-tables-traffic-ai.md` §14/§18 (the `.xtbl` schema/DATA side) and
+`spec-zone-data-format.md` §13.2/§13.4 (the Traffic/Sidewalks/Parking zone-data side) left open on their
+own runtime-consumer side. All of §17 is new disassembly; nothing below was previously documented.
+
+### 17.1 Verdicts up front
+
+1. **Density/budget is a flat global target count, not per-zone/per-district.** The distant population
+   carries a hardcoded target of **75 live entities** for pedestrians and **75** for vehicles (same
+   literal, two separate addresses), refilled at a capped rate per maintenance pass (25/pass ped,
+   20/pass vehicle). No per-zone/per-district density field exists anywhere in the shipped tables —
+   `map_districts.xtbl` (`spec-tables-environment.md` §11.8, 5 districts) carries only
+   lighting/skybox/audio data, nothing population-shaped.
+2. **Spawn points come from a dynamic algorithm over an authored road/sidewalk graph** — the already-
+   documented Traffic (vehicles) and Sidewalks (pedestrians) zone-data graphs (`spec-zone-data-format.md`
+   §13.2) — filtered by a camera-motion-predicted future position, a randomized distance within the
+   XTBL-configured spawn band, and (vehicles only) a `Spline_Type` one-hot bitmask match between the
+   candidate road segment and the vehicle's traffic type. The final pick among valid candidates is
+   uniform-random.
+3. **Despawn is a distance/angle cull against the predicted camera position**, evaluated once per
+   maintenance pass for every live distant entity, plus an all-at-once mass-despawn path when a whole
+   category is toggled off.
+4. **Driver: a single per-frame dispatcher** (reached from the same per-frame world update §1.1 already
+   documents) unconditionally calls both the vehicle and pedestrian distant tick functions every frame
+   (modulo the global pause/loading gate); each tick's own expensive candidate search is throttled to
+   roughly once per second by a shared one-shot-per-frame latch plus a per-category countdown timer, and
+   the ped/vehicle heavy passes mutually exclude each other within a single frame.
+
+### 17.2 Density/budget — the real in-memory structure
+
+The target live-entity count is a flat engine constant, confirmed by a clean single-reader/zero-writer
+xref census:
+
+```
+@ 0130f41c  static dword 0x0000004b (=75)  — read once, by the ped tick 0x00b90960
+@ 0130f4d4  static dword 0x0000004b (=75)  — read once, by the vehicle tick 0x00b93670
+```
+
+Both sit immediately after the already-documented `distant_ped_spawn_parameters`/
+`distant_vehicle_spawn_parameters` XTBL-loaded structs and have no corresponding `.xtbl` element —
+engine constants, not file-tunable, identical between pedestrians and vehicles. Per-pass refill is
+independently capped: ped via a literal immediate inside `0x00b90960` (`if (0x19 < count) count = 0x19`,
+cap 25/pass); vehicle via a second hardcoded, never-written constant `@ 0130f4d0 = 0x14` (=20, cap
+20/pass).
+
+The already-specced distance/angle tuning (`Base_Spawning_Dist`/`Max_Spawning_Dist`/`Length_Per_Spawn`,
+`spec-tables-traffic-ai.md` §14.3) is consumed exactly where the loader's destinations predict, inside
+the two tick functions, to compute a dynamic spawn-radius multiplier keyed to frame delta-time:
+
+```
+0x00b90960 (ped), confirmed by decompile:
+  if (0.0 < frameDeltaTime) {
+      spawnMul = frameDeltaTime / LengthPerSpawn_recip + 1.0;
+      if (MaxSpawningDist < spawnMul * BaseSpawningDist) spawnMul = MaxSpawningDist / BaseSpawningDist;
+  } else spawnMul = 1.0;
+  ...
+  spawnDist = BaseSpawningDist * randFloat01 * spawnMul;
+  if (MaxSpawningDist <= spawnDist) spawnDist = MaxSpawningDist;
+  despawnRadius = DespawnExpansionDistance + spawnDist;
+```
+
+`0x00b93670` (vehicle) is structurally identical, using `0x0130F4D8`/`0x0130F4DC`/`0x0130F4E0`/
+`0x0130F4E4` in the same roles. **OPEN, not resolved this pass:** the field the vehicle tick uses in the
+`Length_Per_Spawn`-reciprocal-divisor role is `0x0130F4D8`, which `spec-tables-traffic-ai.md` §14.3
+currently maps to `Double_Spawn_Height` (the vehicle loader has no `Length_Per_Spawn` element at all per
+that section's own element list) — either that field-to-offset mapping needs a second look, or
+`Double_Spawn_Height` genuinely double-duties as the vehicle analogue of the ped spacing constant despite
+its name.
+
+No per-zone/per-district density field exists: `map_districts.xtbl` was checked field-by-field (nothing
+population-shaped), and the population-adjacent `.czn_pc` content kinds (Traffic/Sidewalks) carry
+graph/placement geometry, not a density scalar. Density is one global number for the whole city.
+
+### 17.3 Spawn selection, both kinds traced end to end
+
+**Pedestrians (`0x00b90960`, body `0x00b90960`-`0x00b91a00`, read in full):** gated on
+`0x00bbdd90()` — the Sidewalks singleton's own load-gate (`spec-zone-data-format.md` §13.2) — plus a
+session/host check. Distant pedestrians can only spawn when the current zone's Sidewalks data (`.czn_pc`
+content kind `0x2238`) is loaded; candidate positions are drawn from the authored Sidewalks node graph,
+selected dynamically each pass, not a separate procedural ground-walk. Camera-lookahead prediction
+(confirmed by decompile) scales the camera/player velocity by `Camera_Lookahead_Time`
+(`spec-tables-traffic-ai.md` §14.3) and adds it to the current position — every downstream distance/angle
+test runs against this **predicted future** camera/player position, not the current one. Sidewalks graph
+consumption reads the singleton's node-array count field at `+0x10` off `0x02924d40` and indexes the
+`distant_peds` mesh table (`0x0290acb0`, `spec-tables-traffic-ai.md` §14.1). Type/weight selection is a
+population-weighted uniform-random pick: the function tallies how many live distant peds occupy each of
+up to 8 type-slots (walking the live circular list, head `0x0130f434`, next-pointer at `+0x4c`), then
+calls the shared uniform-random-pick primitive `0x00dab660` — **the same helper §15.3 already documents
+for the unrelated Navpoint selector; this is its third confirmed consumer in this project.**
+
+**Vehicles (`0x00b93670`, body `0x00b93670`-`0x009341fb`, read in full):** gated on `0x0290ce9c` (set by
+`0x00a69720()` — the Traffic singleton's own load-gate, `spec-zone-data-format.md` §13.2). Camera-
+lookahead prediction is structurally identical, using `0x0130F4E8`. Traffic-graph consumption allocates a
+candidate buffer sized to the Traffic singleton's (`0x02705fe0`) node count, then fills it with candidates
+within an `[inner, outer]` distance band. Each candidate road-spline node carries its own `Spline_Type`-
+compatible bitmask at `+0x1c`; the `distant_vehicle_traffic_types.xtbl` rows (`spec-tables-traffic-ai.md`
+§14.4, array at `0x0290CE88`, each row's own `+0x04` = `Spline_Type` as a `1<<n` one-hot mask, stride
+`0x1c`=7 dwords) are AND-tested against it — **direct runtime confirmation that `Spline_Type` is a
+vehicle-type-to-road-type eligibility filter**, exactly as its one-hot-mask storage shape implied (a
+highway-only truck type never considers a side-street node, and vice versa). Within an eligible node's
+segment, the function builds a byte array of evenly-spaced slots (segment length ÷ slot count, capped at
+5 slots), marks slots too close to an already-live vehicle as occupied, `qsort`s the remaining valid
+slots, and picks one via the same `0x00dab660` primitive. **Vehicle selection is genuinely different in
+shape from pedestrian selection** — ped is a single weighted-random graph-node pick; vehicle is a
+graph-node pick *followed by* a sorted, occupancy-filtered slot search along that node's own segment —
+not two implementations of one shared algorithm. Final commit (`0x00b92740`) touches
+`0x0290CE88`/`0x0290CE8C`/`0x0290CE90`/`0x0290CEB0`/`0x0290CEB4` — the exact destinations
+`spec-tables-traffic-ai.md` §14.4/§14.5/§14.6 already document from the loader side, independently
+cross-confirming this tick function as the real runtime consumer of every `distant_vehicle_*` table on
+file.
+
+**OPEN, not traced this pass:** whether/how a distant (LOD) entity is ever promoted into a fully-
+simulated near-field character/vehicle as the player approaches (or demoted back) — a separate,
+untraced subsystem from the near-field vehicle population's own spawn-side algorithm (its despawn
+schedule alone is specced, `spec-tables-traffic-ai.md` §18).
+
+### 17.4 Despawn logic
+
+Two distinct mechanisms. **(a) Distant/LOD population — per-entity distance+angle cull against the
+predicted camera position, once per maintenance pass**, before any new spawns are attempted: both tick
+functions walk their own live list (ped head `0x0130f434`; vehicle head `0x0130f51c`), test each entity
+against `Despawn_Angle`/the stored despawn radius via a dedicated cull-test helper
+(`0x00b8f5a0` ped / `0x00b925a0` vehicle), and release+unlink any that fail. **(b) Whole-category mass
+despawn** — when a category's enable flag flips to OFF (§17.6), `0x00b90440`/`0x00b935d0` (§17.5) walk
+the entire live list unconditionally and release every entry regardless of distance, a hard reset, not a
+gradual cull. **(c) Near-field, full-detail vehicles** use the already-specced `vehicle_despawn.xtbl`
+schedule (`spec-tables-traffic-ai.md` §18: bucketed `{num_cars, time}` thresholds, an abandoned-vehicle
+delay, a squared player-distance cutoff) — **RESOLVED 2026-10-08, see new §17.4c below.**
+
+### 17.4c Near-field (fully-simulated) ambient-vehicle population (2026-10-08)
+
+A second, structurally separate ambient-vehicle maintenance system exists, driven from the *same*
+per-frame dispatcher (`0x0090faf0`, §17.5) as the distant tier, via a previously-undocumented sibling
+call:
+
+```
+0x0090faf0 (existing per-frame dispatcher)
+  └─ 0x0090f2c0  (near-field/full-sim vehicle maintenance pass)
+       ├─ 0x0090eaf0   despawn-schedule tick — applies vehicle_despawn.xtbl's thresholds
+       ├─ 0x00906b00   per-vehicle despawn-eligibility predicate (consumes player_vehicle_despawn_distance)
+       ├─ 0x0090f060, 0x0090ef90, 0x00906c40   bookkeeping siblings (not fully resolved)
+       └─ (own body)   spawn-candidate section: 3-slot buffer, shared uniform-random-pick 0x00dab660
+```
+
+**`0x0090eaf0` is the real per-frame tick that applies the `vehicle_despawn.xtbl` schedule — this
+closes the OPEN item above and `spec-tables-traffic-ai.md` §18's own matching note.** Reads the exact
+five runtime destinations §18 already documents from the loader side — `in_view_despawn_info`
+(`0x026092c8`, count at `+0x50`=`0x02609318`), `out_of_view_despawn_info` (`0x0260931c`, count at
+`+0x50`=`0x0260936c`), and `abandon_despawn_delay` (`0x02609370`/`0x02609374`, read into both slots). If
+the live near-field-vehicle count is below the smaller of the two arrays' entry-0 `num_cars` threshold,
+it cancels any pending despawn; otherwise it walks the out-of-view bucket list first (shorter wait the
+more vehicles are live), falling back to the in-view list, each gated by its own
+`abandon_despawn_delay`-derived timer.
+
+**`0x00906b00` is the per-vehicle despawn-eligibility predicate — CONFIRMED consumer of
+`player_vehicle_despawn_distance`.** A candidate is eligible only if (a) not force-no-spawn-blocked
+(`0x008addb0` — see correction below), (b) none of its 8 seats holds a flagged-important occupant
+(`0x00ab5070`/`0x0097e280` loop over seats 0–7), and (c), only when the vehicle is in the player's own
+world-cell, farther from the player than `player_vehicle_despawn_distance` (`vehicle_despawn.xtbl`,
+`spec-tables-traffic-ai.md` §18, destination `0x02609378`) — confirmed stored squared from the runtime
+side too (compared directly against a squared distance, no `sqrt`). The real shipped metres value was
+not re-extracted from a live data file this pass.
+
+**Concrete population numbers:**
+- **Hard cap: 48 concurrently-live near-field vehicles** — `0x0090ee10` gates every spawn attempt on the
+  live counter `0x02609120` staying below `0x30` (48); the counter is incremented on commit (`0x0090cbb0`)
+  and decremented on release (`0x00905790`). Smaller than the distant tier's flat 75 — consistent with
+  full physics/AI simulation being more expensive than LOD rendering.
+- **Shared headroom ceiling: 150 eligible AI humans** — `0x009086d0` walks the live AI-human roster,
+  counts how many pass the generic eligibility gate `0x008addb0(human, 0)`, and returns `150 - count`;
+  the spawn pass only proceeds if this is positive — each new ambient vehicle most plausibly also needs a
+  driver-human instantiated within the same global 150-human ceiling used elsewhere in the engine.
+- **Maintenance cadence:** the whole pass only runs when a randomized 200–300 ms timer (armed by
+  `0x009073a0`/`0x00905b40`) has expired, the `"os_vehicle"` toggle category (§17.6) is enabled, and the
+  Traffic zone-data singleton is loaded (`0x00a69720()`); the despawn-schedule sub-step is itself gated by
+  a second, independent randomized 400–600 ms timer. Net: near-field vehicle maintenance runs roughly
+  3–5× per second, faster than the distant tier's ~1 Hz heavy pass (§17.5).
+- **Spawn side:** a 3-candidate-slot buffer, final pick via the same shared uniform-random-pick primitive
+  `0x00dab660` already documented in §17.3/§15.3 — its fourth confirmed consumer in this project. Spawn
+  rate is a dynamically-computed value (`0x00910940`), scaled by a camera/view-fraction term and clamped
+  by two engine constants — not a fixed literal.
+
+**Promotion/demotion boundary — honest negative result.** No code evidence of an explicit same-entity
+hand-off between the distant (LOD) tier and this near-field tier was found: separate bootstrap chains
+(`0x00908fb0`→`0x009069e0` here vs. `0x00b90900`/`0x00b92e70` for the distant tier), separate live-entity
+lists (`0x026093ac` here vs. `0x0130f434`/`0x0130f51c` distant), no shared pointer traffic found between
+them. Each tier most plausibly maintains its own population band independently, with no object
+continuity across the switch — reported as a negative/inconclusive result from the functions opened,
+not an exhaustive whole-image claim.
+
+**Side finding — corrects §19.4's framing:** `0x008addb0` (the "+0x455 force no spawn" accessor
+`spec-lua-api-behaviour.md` §3.6/§6.10 and §19.4 describe in a human-only/notoriety context) is confirmed
+**not** human-exclusive — `0x00906b00` and `0x0090eaf0` both call it identically on *vehicle* handles. It
+is a generic ambient-actor eligibility flag shared by both human and vehicle instances, not a
+human-specific one.
+
+Full detail: `scratchpad/ped_traffic_density_radius_2026-10-08.md`.
+
+### 17.5 Runtime driver — bootstrap, re-arm, per-frame dispatcher, throttle
+
+**One-time bootstrap (not per-frame): `0x00908fb0`**, unconditionally called from `0x00708330` (a
+load-time/zone-bring-up function, confirmed not the per-frame path). Resets pool counters, writes
+compiled-in default `Base_Spawning_Dist`/`Max_Spawning_Dist`-shaped defaults, then calls 5 subsystem
+inits (`0x009069e0`; `0x009142a0`; `0x0092ed10` registers a `"roadblock"` toggle category — not itself a
+population pool; `0x007e2df0` registers a `"cell_disabled"` per-session world-cell kill switch, also not
+a pool; `0x00917d10`), registers all 6 `"os_*"` toggle categories (§17.6), and ends by calling the
+already-documented `vehicle_despawn.xtbl` parser `0x00905c20` — confirming that spec's own "which
+function this loader hangs off" note exactly.
+
+**Correction, 2026-10-08: the "reserve N/cap M" framing above for `0x009069e0`/`0x009142a0`/`0x00917d10`
+is wrong — all three are timer-arm calls, not pool-capacity setters.** Their shared callee
+(`0x00d9e180`/`0x00d9e3c0`, fully disassembled this pass) is a member of this project's generic
+countdown-timer family (`0x00d9e140`/`0x00d9e1e0`/`0x00d9e250`/`0x00d9e4c0`, running on a wraparound
+global clock): `0x00d9e180(timerSlot, min, max)` literally computes `*timerSlot = clock + rand[min,max]`
+— "arm this countdown to fire after a random duration between `min` and `max` ms," not "reserve `min`
+cap `max` objects." Re-reading each call site: `0x009069e0` calls `0x00d9e180(slot, 400, 600)` — arms a
+**400–600 ms** randomized timer (the exact slot §17.4c's despawn-schedule tick checks/re-arms every
+invocation), not a "reserve 400/cap 600" pedestrian pool; `0x00917d10` calls `0x00d9e180(slot, 20000,
+60000)` — arms a **20–60 second** randomized timer, not a "reserve 20000/cap 60000" pool; `0x009142a0`
+calls the fixed-interval sibling `0x00d9e3c0(5000)` — a fixed 5000 ms re-fire. **`0x009069e0` itself also
+builds a genuine small free-list pool** (6 blocks × 5 circular sub-lists) alongside the timer-arm, and
+zeroes the near-field *vehicle* list head/live-counter §17.4c documents — HIGH CONFIDENCE this pool is
+near-field **vehicle** state, not "pedestrian" as the removed framing claimed (the pool's own entity
+type was not independently opened; inferred from the shared list head/timer slots/`vehicle_despawn.xtbl`
+consumption in the same call chain, not a direct type-tag read). `0x009142a0`/`0x00917d10`'s own
+subsystem identities beyond "arms a timer" remain OPEN. Full detail:
+`scratchpad/ped_traffic_density_radius_2026-10-08.md`.
+
+**Idempotent re-arm, also from `0x00708330`:** `0x00b90900` (ped, latch-guarded on `0x0290acac` — does
+real work only the first call after the latch clears, cleared by `0x00b903f0`, plausibly zone-unload,
+not independently confirmed) and `0x00b92e70` (vehicle, un-guarded, always re-evaluates `0x00a69720()`
+and rewrites `0x0290ce9c`/`0x0290ce9d`; also called twice more from an untraced `0x0072d660`, HIGH
+CONFIDENCE a save/load or host-migration path).
+
+**The real per-frame dispatcher: `0x0090faf0`**, called unconditionally from `0x00702a50` — **the same
+per-frame world update §1.1 already documents** as driving the per-character AI update once per human
+per frame. Its body: short-circuits on the global pause/loading gate (`0x00720640`/`0x006e44f0`), resets
+the shared ped/vehicle heavy-pass-exclusion latch `0x026093b0` to 0 every frame, conditionally runs a
+block of unrelated per-frame subsystems (roadblocks, cells, etc.) behind two secondary gates, then calls
+`0x00b93670()` (vehicle tick) and `0x00b90960()` (ped tick) **unconditionally, regardless of whether the
+two secondary gates held.** HIGH CONFIDENCE rather than hard-CONFIRMED only insofar as `0x00702a50`'s own
+body wasn't re-read in full to check for a further wrapping conditional.
+
+**Cross-reference, 2026-10-08:** `spec-player-runtime.md` §5.1 has the full cross-subsystem per-frame
+order `0x00702a50` sits inside (cutscene step → controls → player-human AI pass (§1.1 above) → **this
+dispatcher's own NPC-AI pass** → vehicles → animation → velocity composer → Havok physics step →
+character-controller step → post-step/post-move → camera late update) — see there for how this
+dispatcher's own call fits relative to everything else ticked that same frame. `spec-render-pipeline.md`
+§6.6 has the outer OS-thread topology (this dispatcher runs on the main/game thread) and the boot
+sequence.
+
+**The real throttle: a shared 1-shot-per-frame latch plus a ~1-second countdown.** Inside each tick, the
+actual candidate-search/spawn/despawn work only runs `if (026093b0 == 0 && countdown-expired)`, then sets
+`026093b0 = 1`. Net cadence: lightweight per-entity bookkeeping (spawn/despawn-radius refresh from the
+current frame's camera prediction) runs every frame for both kinds; the expensive graph walk/cull/
+spawn/despawn runs on a countdown timer (seen reset to 1000ms on the ped side, so roughly once per
+second) — and the ped/vehicle heavy passes mutually exclude each other within any single frame (vehicle
+runs first by call order if both timers expire the same frame; the other defers to its own next
+expiry).
+
+### 17.6 Correction to `spec-zone-data-format.md` §13.4: 8 toggle slots, not 0–18
+
+§13.4's existing claim that `0x02609394` is "a city-wide ambient-vehicle spawn-budget/eligibility layer,
+slots capped 0–18" does not match the executable. `0x00908fb0` registers **six** named,
+session-replicated, independently Lua-toggleable categories through one shared primitive
+`0x0086d770(name, byteArrayPtr, count, hostFlag, notifyCallback)`, each owning its own **8-byte** enable
+array (confirmed directly from the accessor functions `0x00905dc0`/`0x00905ea0`/`0x00905ec0` — the query
+accessor's "all" branch loops a hard `8`, and the set accessor's "all" branch writes exactly 2 adjacent
+dwords = 8 bytes):
+
+| Category string | Array base | Notify/apply callback |
+|---|---|---|
+| `"os_distant_vehicle"` | `0x0260937c` | `0x00b935d0` |
+| `"os_distance_ped"` | `0x02609384` | `0x00b90440` |
+| `"os_boat"` | `0x0260938c` | none |
+| `"os_parking"` | `0x02609394` | none (matches `spec-zone-data-format.md` §13.4's existing address exactly) |
+| `"os_vehicle"` | `0x0260939c` | `0x009073a0` |
+| `"os_ped"` | `0x026093a4` | none — **but NOT inert, 2026-10-09 correction, see §20.1**: it is the enable toggle the near-field pedestrian spawn chain (`0x0090fa60`) polls directly every frame, reading the 8-byte array inline rather than being pushed a change notification — a different wiring style, not disuse. |
+
+`spec-zone-data-format.md` §13.4 should read "8 slots, shared architecture across 6 named ambient-
+population toggle categories, each independently network-replicated and Lua-controllable via
+`0x0086d770`" — a toggle/eligibility layer (mission scripts turning a whole category on or off, e.g. "no
+ambient boats during this mission"), not a density control and not zone-indexed.
+
+### 17.7 Confidence summary and recommended cross-references
+
+**CONFIRMED (full disassembly, this pass):** `0x00908fb0` (bootstrap), `0x00b90900`/`0x00b92e70`
+(re-arm latches), `0x0090faf0` (per-frame dispatcher body), `0x00b90960` (ped distant tick, full
+2454-line dump), `0x00b93670` (vehicle distant tick, full 1801-line dump), the 6-category `0x0086d770`
+registration block, the 8-slot bound of the `os_*` arrays, the hardcoded-constant status of
+`0x0130f41c`/`0x0130f4d4`/`0x0130f4d0`, the Traffic/Sidewalks-singleton consumption (`0x02705fe0`/
+`0x02924d40` now have a confirmed runtime consumer — previously "load-time only" per
+`spec-zone-data-format.md` §13.2), the `Spline_Type` bitmask AND-test, the despawn-cull list-walks.
+
+**HIGH CONFIDENCE:** `0x00702a50`→`0x0090faf0` with no further frame-skip wrapper; `0x009142a0`/
+`0x00917d10`'s own pool identities (not pinned down); the countdown-timer pair as generic shared engine
+utilities (not individually read).
+
+**OPEN:** the near-field vehicle population's own spawn-candidate algorithm and despawn-schedule tick
+(§17.4c); the distant-to-near promotion/demotion boundary (§17.3); the `0x0130F4D8` field-identity
+cross-check (§17.2); `0x00b903f0`'s own role; the two extra `0x0072d660` call sites into `0x00b92e70`.
+
+**[CONFIRMED/HIGH/OPEN as marked above.]** Full detail, every address, and the complete raw disassembly/
+decompile evidence: `scratchpad/ambient_population_spawn_despawn_2026-10-08.md` (raw Ghidra query output
+preserved under `scratchpad/ambient_pop_q/`). `spec-tables-traffic-ai.md` §14/§18 and
+`spec-zone-data-format.md` §13.2/§13.4 carry short cross-reference notes pointing back here rather than
+duplicating this material.
+
+---
+
+## 18. Traffic AI lane-following: consumer module, pool mechanics, and Havok integration (2026-10-08)
+
+Traces how traffic-AI-controlled (non-player, ambient) vehicles follow the road network documented from
+the data-format side in `spec-zone-data-format.md` §13.2 (`0x2236` "Traffic"). That section covers the
+record layout (14 count/pointer pairs, the segment→point graph, the two position codecs); this section
+covers the consumer code that reads it, how far the actual steering decision could be traced, and the
+integration point with the Havok driving slice. Method: Ghidra-free, direct `capstone` disassembly of
+every address below (the shared Ghidra server was saturated with concurrent jobs this pass).
+
+### 18.1 Lane selection/following — closer to graph-hopping than to a continuous spline formula (partial)
+
+The consuming code (empirically bounded by an exhaustive absolute-reference census of the
+`0x02705fe0` Traffic-record singleton to roughly `0x00a69000`-`0x00a6e000` and `0x00b1a000`-`0x00b65000`,
+~90 KB of code) walks the segment↔point graph by **index** (pointer-to-index recovery via the
+signed-division-by-24 idiom, `spec-zone-data-format.md` §13.2) and by **handle** (the `0x028921d0` pool),
+decoding real 3-D geometry via the two codecs documented there. This is structurally much closer to "hop
+between graph nodes/segments and read out their point data" than to a single closed-form analytic spline
+with a cross-track-error term — no cross-track/projection-onto-curve math (a closest-point-on-segment
+solve, or a PID-style heading-error correction) was found in any function opened this pass.
+
+**Explicitly OPEN, not guessed:** the actual function that takes a vehicle's current position/segment and
+produces a target point or steering angle. Every function opened this pass (the record fixup, the pool
+methods, the two position-decode codecs) is pure **data-resolution** code — none reads a vehicle
+position, heading, or velocity. That logic almost certainly lives elsewhere in the same ~90 KB module (or
+in the sibling `0x00b31e7a`-`0x00b4e495` cluster §14.5/§14.7 already know calls `0x00a12180`, the general
+navmesh/path-point query — plausibly related, not proven). Whether a chosen point is a single "next
+waypoint" or a continuously re-sampled curve parameter is undetermined from the data alone — the
+per-segment variable-length point list supports either interpretation equally well. Most promising
+follow-up target: the caller(s) of `0x00b1c5a0` (not traced upward this pass).
+
+### 18.2 Junction/branch handling — a kind flag exists, the choice algorithm does not (partial)
+
+The 2-bit "segment kind" field (`spec-zone-data-format.md` §13.2, extractor `0x00a69af0`) has at least one
+real consumer (inside `0x00b1c5a0`) that branches away from its "normal" path whenever the value is
+non-zero — the data format already distinguishes at least two segment kinds, and at least one piece of
+consumer code treats a non-"kind 0" segment specially. The same function also scans a small array for a
+pointer match against the just-popped segment handle and, if a flag byte is set, calls a cache-check
+function before falling back to a cached alternate result — the general shape of "is this candidate
+already selected/cached — reuse or defer," plausible groundwork for junction arbitration (e.g. avoiding
+two vehicles claiming the same merge point).
+
+**Explicitly OPEN:** the branch-selection algorithm itself. No RNG call, no destination/goal-comparison
+code, and no lowest-cost-neighbor loop was found in any function opened this pass — not answered, not
+inferred from the thin evidence above.
+
+### 18.3 Integration with the physics driving slice — one shared input surface, exact write-site open
+
+`spec-physics-runtime.md` §10.6 already documents `hk_custom_vehicle_driver_input` (`0x00ae30c0`) as the
+ONE RTTI override class (row 35, §2.1) that converts the game's raw control fields into Havok's
+analog-input struct — re-disassembled in full (53 instructions) this pass to pin every field it reads:
+
+```
+esi+0x128  (float) -> out+0x00   ; steering, copied straight through
+esi+0x12c  (float) -> out+0x04   ; copied straight through, role not independently named
+esi+0x130, esi+0x138 (floats, summed, then a sign-preserving-squared curve unless instance
+                       flag +0x164 bit 1 is set) -> out+0x08; the post-curve value is ALSO
+                       written back to esi+0x134 (a cached/smoothed value)
+esi+0x14f  (byte)  -> out+0x0c
+esi+0xb0   (byte)  -> out+0x0d   ; the same status byte spec-physics-runtime.md §10.7 names as
+                                    the component-array slot +0x20 (driver input) bookkeeping field
+```
+
+There is exactly ONE class in the entire 39-class/72-slot RTTI census that overrides this Havok interface
+— no second, traffic-specific driver-input class exists anywhere in the binary's RTTI. Whatever writes a
+vehicle's steering/throttle (player, AI-passenger, or ambient traffic) has no second code path available:
+it MUST write into these same six vehicle-instance fields, because Havok only ever calls this one
+override. Independent corroboration from `spec-player-runtime.md`'s pre-existing "Vehicle Steering"
+animation-parameter query (`0x00a926b0(vehicleHandle)`) — a vehicle-agnostic "live steering value" read
+used to drive the steering-wheel-holding animation for any vehicle, including presumably
+ambient-traffic-driven ones.
+
+**What was NOT found: the literal write site inside the traffic module.** A disp32 byte-pattern scan for
+the literal `0x128` restricted to the known traffic address range (`0x00a60000`-`0x00b70000`) found 79
+occurrences; spot-checking 10 found every one is a `[esp+0x128]`-style stack-frame-local reference, not a
+`[reg+0x128]` struct-field write on a vehicle-instance pointer — too common a stack offset to discriminate
+this way. **Reported as an honest negative/inconclusive result, not as "no such write exists."** HIGH
+CONFIDENCE, not fully closed: ambient traffic feeds the identical fields player/AI-passenger vehicles use;
+the exact function was not located (most promising next step: trace backward from `0x00ae30c0`'s own
+caller, the Havok component-array slot `+0x20` virtual dispatch inside sub-step `0x00c55f80`,
+`spec-physics-runtime.md` §6.3/§6.4 item 1, to find every concrete vehicle instance stepped, then check
+whether an ambient-traffic-flagged instance's `+0x128`/`+0x130` were written by the traffic module earlier
+the same frame — a data-flow trace, not a byte scan).
+
+### 18.4 Open items
+
+Not individually decoded/traced this pass: the segment-entry fields the main graph fixup leaves alone
+(`spec-zone-data-format.md` §13.2); the `0x00a69330` tail-jump target; the record `+0x70` name/key buffer;
+the `0x0115a220` quantization constant's value; whether `0x007d1040`/`0x007d3830`'s object is pair #8's
+point pool or a shared generic point-list class (not cross-checked against any camera/cutscene-spline
+spec); the steering/target-point computation and junction branch-choice algorithms (§18.1/§18.2); the
+literal Havok driver-input write site (§18.3); whether the Traffic record is strictly one-per-zone-file
+(not population-checked); `0x00b1a560` (the shared growth/removal helper both pool mutators tail-call
+into, not opened).
+
+**[CONFIRMED — disassembly for everything attributed above to a specific address. HIGH CONFIDENCE — the
+Havok single-input-surface argument. OPEN — the steering/junction decision algorithms and the literal
+Havok write site, reported honestly rather than inferred.]** Full detail, every address, and the complete
+raw disassembly: `scratchpad/traffic_ai_lane_following_2026-10-08.md`.
+
+---
+
+## 19. Notoriety (wanted-level) tracking and police-response dispatch (2026-10-08)
+
+Traces where the live per-player notoriety value lives, what raises/lowers it, and how a level change
+propagates toward police response — extending `spec-tables-progression.md` §6's XTBL loader-side account
+(`notoriety.xtbl`/`notoriety_levels.xtbl`/`notoriety_spawn.xtbl`) and `spec-tables-traffic-ai.md` §6's
+(`roadblock_notoriety.xtbl`) with their runtime consumers. Placed here, next to §17/§18, because its
+central finding is exactly the same shape as those two: a system that is structurally separate from
+ambient population but shares its underlying infrastructure (the Traffic zone-data singleton, the
+`0x00d9e140`/`0x00d9e1e0` countdown-timer primitive family) rather than duplicating it.
+
+### 19.1 The live record: a 4-slot array, {level, fraction} per track
+
+The live value is a 4-slot array at `0x014A4F70` (stride `0x4C`) — one slot per "track": **0 = Luchadores,
+1 = Deckers, 2 = Morningstar, 3 = Police**, confirmed from the runtime side (a 4-iteration loop bound) and
+matching `spec-tables-progression.md` §4.6's save-file-side mapping exactly, via the same `track==3`
+police test used independently in multiple functions below. Each slot stores **{level: s32 at `+0x00`,
+fraction: float at `+0x04`}** — the fraction is points banked toward the next level, scaled against that
+level's own `NotorietyLevelLimit` entry; crossing the threshold rolls the integer level up or down. A
+per-track min/max **bound stack** (two independent 3-deep arrays each for min/max, at `+0x1c`/`+0x34` and
+`+0x28`/`+0x40`, `-1` = unconstrained) backs the already-documented `notoriety_set_min`/`notoriety_set_max`
+Lua natives (`spec-lua-api-behaviour.md` §6); the max-bound getter (`0x00605640`) defaults to **5** when
+fully unconstrained, matching `notoriety_levels.xtbl`'s 5-level scheme directly from the runtime side.
+Record `+0x10` is the decay-interval countdown timer (§19.3). Several other fields (`+0x08`/`+0x0c`,
+`+0x14`, `+0x18` bit 0) are confirmed to exist and be written but their exact roles are OPEN.
+
+`notoriety_set`'s core setter (`0x006079c0`, `spec-lua-api-behaviour.md` §6.7 names it but had not opened
+its body) clamps the input against the bound stacks, truncates to an integer level index into
+`NotorietyLevelLimit`, splits the fractional remainder into the native {level, fraction} pair, and — on an
+actual level change — calls the shared dispatcher `0x00606b80` (§19.4). `notoriety_reset`'s helper
+(`0x00609030`, `spec-lua-api-behaviour.md` §6.16) zeroes level/fraction, optionally clears the bound
+stacks, re-arms the same 500ms decay-timer slot, prunes a small 800-byte "active notoriety alert/spawn
+record" registry (`0x014A4C50`, stride `0x14`, keyed by a per-level "heat code" at `0x011286C4`) of
+entries belonging to the reset track, and also calls `0x00606b80` on change.
+
+### 19.2 What raises it: a crime-report consumer, confirming `Check_Detection` is real
+
+`0x006076a0` (newly opened) is the runtime reader of `notoriety.xtbl`'s per-activity records
+(`spec-tables-progression.md` §6.1), confirmed field-for-field against that loader-side layout: it selects
+the gang or police sub-block of the activity record, checks the current level is within that activity's
+configured `Min_Level`/`Max_Level` window, and — when `Check_Detection` is set — additionally requires a
+live player (local or remote co-op) to currently be detecting the actor (via `0x00606570`) before awarding
+points. **This is the first direct runtime confirmation that `Check_Detection` really does gate on live
+player detection**, not just a documented gloss. Points then flow through the add-points primitive
+(`0x00606f40`): an early-out respects a newly-identified **`0x014A4C0D`** "gain suppressed" flag (the
+direct sibling of the already-documented `0x014A4C0F` "decay suppressed" flag,
+`notoriety_set_can_decay` — together they let a script freeze either direction of notoriety change
+independently); otherwise the delta is added to the fraction and a roll-over loop advances the level while
+the fraction exceeds each successive level's own point threshold, calling `0x00606b80` on a resulting
+change.
+
+### 19.3 What lowers it: a genuine decay tick, sharing a primitive with ambient population
+
+`0x00607200` is a real, timer-gated decay tick: it tests the per-track decay-interval timer (record
+`+0x10`) via **`0x00d9e1e0`** — **the exact countdown-timer-expiry primitive §17 §4.4 already documents
+as the shared throttle underlying the ambient-population distant-tick's own ~1-second cadence.** On
+expiry it computes a decay amount from the same `NotorietyLevelLimit` table (scaled by a constant at
+`0x01123400`, value not read), subtracts it from the fraction, rolls the level down in the same manner as
+§19.2's roll-up (in reverse), and calls `0x00606b80` on a resulting change. A separate, read-only HUD
+decay-preview tick exists purely for display and is confirmed NOT to write back to the live record. **This
+resolves `spec-tables-progression.md` §6.2's own flagged OPEN item** ("which `NotorietyLevels` set is
+police vs. gang is positional... the loader alone does not say"): a decay-rate reader branches explicitly
+on `track==3`, confirming **Set 0 (`0x014A45C4`) = Gang (tracks 0-2), Set 1 (`0x014A45DC`) = Police
+(track 3)** — by positional analogy (not independently re-derived), `NotorietyLevelLimit`/
+`NotorietyFirstDecay` are HIGH CONFIDENCE to follow the same Set 0/Set 1 = Gang/Police convention.
+
+**No distance-based "lost the cops" mechanic was found** — an explicit search, not a skip: the decay tick
+is purely timer/table-driven with no position read anywhere in its body, the crime-report function reads
+player detection only for GAIN not decay, and the level-change dispatcher (§19.4) does no distance/position
+computation anywhere in its own body. Reported as a negative result from the specific functions opened,
+not an exhaustive whole-image claim.
+
+### 19.4 The shared level-change dispatcher, and the police-response question
+
+**Every real path that changes a track's level — `notoriety_set`, `notoriety_reset`, and organic
+crime/decay — funnels through one shared dispatcher, `0x00606b80`** (9 confirmed call sites). ~~Its
+body: (1) looks up the per-level "heat code" and calls a global heat/difficulty setter; (2) walks the
+entire live AI-human roster...; (3) walks up to 2 (co-op) player pointers...; (4) re-arms a 2000ms
+per-track timer — described as if these ran unconditionally, every call.~~ **CORRECTED, 2026-10-09
+(full re-disassembly, `scratchpad/notoriety_rules_synthesis_2026-10-09.md`): the function branches on
+the SIGN of the new level, and only the `newLevel <= 0` branch runs the roster/player/timer sequence.**
+
+```
+0x00606b80(newLevel, track):
+    heatCode = heatCodeTable[track]      // indexed by TRACK, not level — corrected below
+    call 0x004f6540(heatCode)             // generic AI state-rewrite, unconditional — corrected below
+
+    if newLevel > 0:
+        record[track].+0xc = -1
+        call 0x009b7130(0, heatCode, 0, 1)      // team-relationship matrix write, see below
+        return                                  // NO roster walk, NO player dispatch, NO timer rearm
+
+    else (newLevel <= 0):
+        call 0x009b7130(0, heatCode, 1, 1)
+        [roster walk, player dispatch, timer rearm — as already documented below]
+```
+
+An ordinary **upward** step (organic crime gain, or a scripted increase staying positive) takes the
+cheap branch only — it never touches the roster, never dispatches to a player, never re-arms the timer.
+This sharpens why Handlers 1/2/3 (below) were never going to be "spawn a pursuer" calls: by construction
+they are reachable **only on the clear-to-zero path**, exactly where a "release whatever was held for
+this pursuit" cleanup belongs, not an escalation.
+
+**Two further corrections to the heat-code step itself.** First, the 4-byte table at `0x011286c4`
+(values `1, 2, 3, 5`) is indexed by the function's own **track** argument, not by level — proven by the
+same index value being reused immediately after to address the live per-track notoriety-record array
+itself (`0x014a4f7c` base, stride `0x4c`), which is unambiguously track-indexed. So the codes are
+**Luchadores=1, Deckers=2, Morningstar=3, Police=5** — a track→code mapping, not a level→code one.
+Second, `0x004f6540` is NOT "a global heat/difficulty setter" — full disassembly shows it is a generic
+**AI known-hostiles state-rewrite pass**: for every live human on the roster, it walks two of that
+human's own linked lists (`+0x1c54`/`+0x1c50`, most plausibly "known hostile" target lists) and, for each
+node whose target is live/class-eligible and whose team matches the function's input value, rewrites the
+node's own state byte from `{11, 12, 0x4e}` to `0x77` if currently one of those — a bookkeeping pass over
+EXISTING AI's own threat-tracking state, unrelated to spawning, run unconditionally on every level change
+regardless of direction.
+
+**Genuine, previously-undocumented finding: `0x00606b80` is a fourth writer of the already-documented
+team-relationship matrix (§12.7, `0x0262d940`), via its write primitive `0x009b7130`** — the same
+primitive the Lua natives `team_make_allies`/`_unfriendly`/`_hostile` already use. Called from team 0
+(the player/civilian baseline — the one team value the roster-loop switch above doesn't map to any gang/
+police track) against the heat-coded team slot: **`newLevel > 0` writes `0` = HOSTILE** (matching
+`_hostile`'s own write value exactly); **`newLevel <= 0` writes `1` = UNFRIENDLY** (matching
+`_unfriendly`'s own write value — a stand-down, not a return to full neutrality). **This is the real,
+confirmed answer to "which levels trigger police response" for the dimension of making EXISTING nearby
+police/gang NPCs actually hostile: a binary trigger at the zero boundary** (any level ≥1 on a track flips
+that track's relationship cell to hostile; the specific magnitude 1-5 is never read by this function, only
+the sign) — **not** graduated by level. The graduated, level-specific part (how many NEW units, of what
+kind, at what rate) is the separate spawn-production question, §19.5/§19.7.
+
+The roster/player/timer sequence, confirmed only on the clear-to-zero branch: (2) walks the entire
+live AI-human roster and, for each human on the affected track, re-checks eligibility and calls
+`0x008addb0(human, 0)`. **Correction, 2026-10-08: `0x008addb0` is NOT the `+0x455` "force no spawn" flag
+setter** — full disassembly (7 instructions: null-check, else forward to `0x00884760(*(param+0x3c))`)
+shows it is a generic "single-gate numeric-mode" liveness wrapper, the exact one
+`spec-lua-api-behaviour.md` §3.6/§7.33 independently document as "variant 2... a thin wrapper over
+`0x00884760`," reused across dozens of unrelated systems (also confirmed NOT human-exclusive —
+`spec-ai-runtime.md` §17.4c finds it gating vehicle eligibility identically). **The real `+0x455`
+force-no-spawn setter is `0x008ecda0`** (a genuine single `mov byte ptr [ecx+0x455],al`), per
+`spec-lua-api-behaviour.md` §3.6 itself. This does not change the higher-level structural claim — the
+roster loop still has no allocation call in it either way — confirming this half is a
+spawn-SUPPRESSION-eligibility reconsideration pass over already-existing pursuers, not a creation pass;
+(3) walks up to 2 (co-op) player pointers and dispatches each through a 10-case jump table to one of 3
+player-state handlers, each managing a different handle-pair field; (4) re-arms a 2000ms per-track timer
+via the same `0x00d9e140` primitive family.
+
+Of the three player-state handlers, one (terminal call `0x00b63ac0`) was opened in full: it gates on the
+**Traffic zone-data singleton `0x02705fe0`** (`spec-zone-data-format.md` §13.2, the same singleton §17/§18
+already use) and releases a vehicle/slot handle pair — but it has **46 distinct callers project-wide**, so
+it is a shared generic utility, not a notoriety-specific spawn call; it's reported as HIGH-CONFIDENCE
+circumstantial placement (something road/vehicle-related is released/reassigned here), not a confirmed
+spawn primitive. A second handler is a trivial 2-field setter (2 callers, genuinely notoriety-specific, but
+not itself a spawn call). **The third, Handler 3 (`0x00606e39`), opened 2026-10-08 (§19.7): confirmed a
+third instance of the same "resolve a handle, check class/liveness, release it" shape as Handlers 1/2 —
+not a spawn call either. `0x00606b80`'s own chain is now exhaustively characterized: none of its 3
+handlers creates anything.** **The literal instruction that instantiates a police vehicle or roadblock at
+a resolved world position was NOT found in `0x00606b80`'s own chain — it lives on a separate, sibling
+per-frame tick instead, see §19.7.**
+
+**Net verdict: police response is CONFIRMED structurally separate from the ambient "distant/LOD"
+population system** (`spec-ai-runtime.md` §17) — no call-graph edge connects `0x00606b80`'s chain to
+either `0x00b90960`/`0x00b93670` or their `0x0090faf0` dispatcher, and none of §17's 6 `"os_*"` toggle
+categories names police/roadblocks. **The separate `"roadblock"` toggle registered at `0x0092ed10` is
+NOT an apply/notify callback for a toggle category — §19.7 found it to be a plain debug-console cvar
+registration, and traced the real roadblock-spawn tick as an independent sibling of `0x0090faf0`'s own
+ambient-population ticks, not downstream of `0x00606b80` at all.** **But it is not wholly separate
+either**:
+Handler 1's gate on the Traffic singleton places it inside the exact same ~90 KB road-network consumer
+region §18's traffic-AI lane-following material already identified. The honest reading: police-response
+vehicle placement most plausibly rides the same underlying road-network graph ambient traffic AI walks,
+through its own dedicated per-player trigger path, not through the LOD-cheap distant-population spawner.
+
+### 19.5 `roadblock_notoriety.xtbl`/`notoriety_spawn.xtbl` — no runtime consumer found (honest negative)
+
+An exhaustive literal-dword xref scan against `roadblock_notoriety.xtbl`'s destination grid (`0x014A50B8`,
+`spec-tables-traffic-ai.md` §6) and `notoriety_spawn.xtbl`'s destination structures (`0x01308098`/
+`0x013080F8`, `spec-tables-progression.md` §6.3) found hits only inside their own already-documented
+loaders — no independent runtime consumer that re-cites either base address directly. Not proof of
+absence (a consumer reached only through an intervening pointer, never re-touching the literal base,
+wouldn't be caught by this method) — flagged as the single largest remaining gap. Most promising next
+step: trace forward from dispatcher Handler 3 (`0x00606e39`, not opened) and from the `"roadblock"` toggle
+category's own apply/notify callback (`0x0092ed10`, not identified). **Narrowed, 2026-10-08 (§19.7 §4):
+both leads were chased and neither is the scheduler — the real, much narrower remaining gap is whoever
+WRITES a `"roadblock"`-class (`0x02cc9900` slot `0x2c`) instance's own `+0xd8`/`+0xe0` slot table** (the
+spawn-consumption side, traced exhaustively in §19.7, never configures its own slot count — it only fills
+pre-populated slots), not a literal-address reference to either XTBL's destination.
+
+### 19.6 Open items
+
+~~The literal police-vehicle/roadblock spawn instruction (§19.4);~~ **RESOLVED 2026-10-08, §19.7**: a
+third, previously-undocumented per-frame tick (`0x00930e20`→`0x00930db0`→`0x00930a40`→`0x0092ff20`),
+sibling to (not downstream of) `0x00606b80`, with a literal position formula and 3 distinct type-specific
+creation dispatches. `roadblock_notoriety.xtbl`/`notoriety_spawn.xtbl`'s runtime consumers (§19.5,
+narrowed but still OPEN); ~~whether `"roadblock"`'s toggle category connects to `0x00606b80`~~ **RESOLVED
+2026-10-08, §19.7: it doesn't — `0x0092ed10` is a plain debug cvar, and the real spawn tick is an
+independent sibling of `0x0090faf0`'s ambient-population calls, not reached from `0x00606b80` at all**;
+the crime-report function's ×3 points-bonus trigger condition; several record fields'
+exact roles (`+0x08`/`+0x0c`/`+0x14`/`+0x18` bit 0, §19.1); the per-frame/per-tick top-level caller of the
+decay-tick driver (the equivalent of §17's own `0x0090faf0`/`0x00702a50` chain, for this system); whether
+a distance/line-of-sight "lost the cops" condition exists in code this pass's call graph didn't reach.
+New OPEN items from §19.7: the upstream notoriety-level→slot-table scheduling link (narrowed per above,
+and further narrowed 2026-10-09 — the allocation primitive itself is now named, `0x00930950`, only its
+caller remains unfound); `0x0092c280`/`0x0092d300`/`0x0092c580`'s own interiors; a slot's real authored
+forward-offset distance; case 4's real-world identity (§19.7 §3.7, still blocked 2026-10-09 on a
+zero-filled-at-rest class-table entry — needs a live capture or a broader static sweep); the innermost
+allocation/placement-constructor instruction inside `0x0096eb30`/`0x00456e30` (substantially advanced
+2026-10-09 for the roadblock-manager instance itself, §19.7; still open one hop deeper for the
+ped/vehicle/case-4 occupant-creation path — the indirect `+0x2c` virtual call target was not opened).
+
+**[CONFIRMED/HIGH/OPEN as marked above.]** Full detail, every address, and the complete raw evidence:
+`scratchpad/notoriety_police_response_2026-10-08.md`.
+
+### 19.7 The literal police/roadblock spawn instruction — found, on a track separate from `0x00606b80` (2026-10-08)
+
+**FOUND — a complete, CONFIRMED chain from the per-frame driver to three distinct type-specific
+creation calls, with an explicit position-resolve step.** This is a **third, previously-undocumented
+per-frame population system**, riding the exact same per-frame dispatcher (`0x0090faf0`) §17.5 already
+names but left unopened behind its own parenthetical "(roadblocks, cells, etc.)" — this section opens
+exactly that parenthetical. It is NOT `0x00606b80`'s own chain (§19.4) — Handler 3 was opened and
+confirmed to be another generic handle-release pattern, not a spawn call.
+
+```
+0x00702a50 (main per-frame world update, spec-player-runtime.md §5.1)
+  -> 0x0090faf0 (per-frame dispatcher, §17.5 — SAME dispatcher ambient population uses)
+       -> 0x00930e20  (per-frame "roadblock" population tick — gated on debug cvar 0x026171b0)
+            -> 0x00930db0  (per-instance eligibility + despawn-timer test)
+                 -> 0x00930a40  (THE SPAWN-ATTEMPT walk: re-centers anchor near a tracked reference
+                                 position, walks a slot table, enforces a per-category per-TICK
+                                 spawn-rate throttle)
+                      -> 0x0092ff20  (POSITION-RESOLVE + 5-way TYPE DISPATCH)
+                           -> case 2 -> 0x0092f160 -> 0x009d73f0 -> 0x0096eb30   [character/ped creation]
+                           -> case 3 -> 0x0092f9d0 -> 0x00456e30(0x1e), vtable+0x84 [vehicle creation,
+                                                                incl. a literal "Spike_strip" name check]
+                           -> case 4 -> 0x0092fc20 -> 0x00456e30(0x2f)           [third, unidentified category]
+```
+
+**`0x0092ed10` is a plain debug-console cvar registration, not a toggle-category apply/notify
+callback.** Full disassembly: unconditionally forces byte `0x026171b0` (the `"roadblock"` cvar) to 1 at
+bootstrap, then registers it through the generic named-cvar primitive `0x0086d770` (thousands of
+unrelated callers project-wide) — exactly matching §17.5's own careful phrasing ("registers a
+`"roadblock"` toggle category — not itself a population pool"). The real per-frame gate reading this
+flag is `0x00930e20`, called directly from inside `0x0090faf0`, structurally parallel to but entirely
+independent of the ambient-population ticks (`0x00b93670`/`0x00b90960`) — a genuinely new call-graph
+edge.
+
+**The spawn-attempt walk (`0x00930a40`):** walks the roadblock-manager's own pre-populated slot table
+(`this+0xd8`, stride `0x18`, count `this+0xe0`). Per unfilled slot, enforces a per-category, per-TICK
+spawn-rate throttle (NOT a total-live-count cap — these 3 counters are zeroed fresh every tick by
+`0x00930e20`): categories 0/1 share counter `0x026171a4` (at most 1/tick), category 2 uses `0x026171a8`
+(at most 2/tick), category 3 uses `0x026171ac` (at most 4/tick), category 4 has no counter (always
+allowed). If under the throttle, calls `0x0092ff20` (below). When no unfilled slot exists, instead
+re-centers two tracked anchor positions by subtracting the delta a reference position moved since the
+last tick (`this+0x40/+0x44/+0x48`) — HIGH CONFIDENCE, not independently proven, that this reference is
+the owning player's own position.
+
+**Position answer: `spawn_xyz = anchor_xyz + direction_xyz * slot->forward_offset`** — a point a
+configured distance ahead along a resolved road-network direction (`0x0092c280`, sign-corrected via a
+dot-product test, normalized), starting from an anchor that re-centers every tick against the tracked
+reference position above. **Not on top of the player, and not a fixed world point — a point "down the
+street," sliding as the player moves.** `slot->forward_offset`'s real authored metres value was not
+resolved this pass (no live game state to read it from) — OPEN; the mechanism itself is CONFIRMED.
+
+**Type dispatch (`0x0092ff20`, 5 cases):** case 0/1 writes into the resolved object's own `+0xc68` — the
+exact per-player state-dispatch-byte offset `0x00606b80` itself reads (§19.4) — HIGH CONFIDENCE a "a
+live co-op player is standing in this slot" hand-off, not creation. **Case 2 (`0x0092f160`): the literal
+character/ped creation path** — reuses the cover-arc evaluator `0x008cd1d0` already documented at §15.7
+for `cover_node` selection (a genuinely new, confirmed second consumer), then stages a creation request
+through the project-wide-shared `0x009d73f0`/`0x00bb9070` pair (resolved against the global singleton
+`0x02442750` — the same singleton `spec-tables-traffic-ai.md` §7's `roadblock_stag_lockdown.xtbl`
+consumer already documents). **Case 3 (`0x0092f9d0`): the literal vehicle creation path** — includes an
+explicit `__stricmp` match against the literal string `"Spike_strip"` (the classic SR3 police
+spike-strip roadblock prop), then creates via a virtual call through a type-selected factory object
+(`0x00456e30(0x1e, ...)`, vtable slot `+0x84`). **Case 4 (`0x0092fc20`): a third category**, same shape
+(`0x00456e30(0x2f, ...)`), real-world identity unresolved — OPEN.
+
+**What remains genuinely OPEN: the upstream notoriety→schedule link.** None of the functions above read
+the live notoriety record (`0x014A4F70`) or `roadblock_notoriety.xtbl`'s own destination grid
+(`0x014A50B8`, §19.5) — every one treats the manager instance's own slot table as pre-populated data.
+This directly explains §19.5's own honest negative: the real consumer is most plausibly whatever
+creates/(re)configures a `"roadblock"`-class (`0x02cc9900` slot `0x2c`, registered by `0x009306f0`)
+instance's slot table in the first place — the next pass should look for whoever WRITES
+`this+0xd8`/`this+0xe0` on such an instance (reached via that class's own vtable, `0x01170108`), not
+re-scan for literal XTBL-address references (already shown not to work).
+
+Full detail: `scratchpad/notoriety_police_spawn_instruction_2026-10-08.md`.
+
+**Narrowed further, 2026-10-09: the class's own creation primitive is now named, address and all — who
+calls it is still the open part.** The `"roadblock"` class descriptor's global address is pinned down:
+**`0x026171d0`** (constructed at process start by a static initializer at `0x01004010`,
+`MOV ECX, 0x026171d0 / CALL 0x009306f0`, with a matching atexit-registered destructor; an exhaustive
+check — Ghidra's own reference index plus an independent raw-byte literal/call scan of the whole
+image — found exactly these 2 references anywhere in the binary, nothing else touches this object
+directly). Its 9-slot vtable (`0x01170108`) was read in full: 4 slots are generic base-class virtuals
+shared by 100+ other classes (not roadblock-specific); the other 5 are class-specific and resolve to a
+classic **fixed-size free-list pool allocator embedded inside the class descriptor itself** —
+**slot 0** (`0x00930950`) allocates and tags a new element as class `0x2c`; **slot 1** (`0x00930850`)
+bounds-checks and releases one back to the pool; **slot 6** (`0x00930830`→`0x009307c0`) is the pool's
+own initializer, sized for exactly **32 elements of `0x3f0` (1008) bytes each** (large enough to hold
+every field offset this section already found on the roadblock-manager "this" object, up to `+0x3e8`,
+8 bytes from the end — strong structural evidence this pool IS the allocator for every live
+roadblock-manager instance `0x00930e20`'s own roster walks, meaning **at most 32 can exist
+simultaneously**); slot 4 (`0x009307b0`) returns a class-specific literal constant `0x7e94` (32404,
+exact consumer not identified); slot 8 is the standard scalar-deleting destructor. **This makes
+vtable slot 0 (`0x00930950`) the real creation primitive for a roadblock-manager instance** — but
+WHO calls it, and whether/how that's gated on live notoriety level or `roadblock_notoriety.xtbl`'s
+per-(team,level) row, was still not found: one hop further into the generic creation entrypoint
+`0x00456e30` (already used for case-3/case-4 occupant creation above) shows it resolves via
+`0x00456be0` through the same `0x02cc9900`/class-table chain, then makes an indirect virtual call
+through the CALLING object's own `+0x2c` vtable slot (not the roadblock descriptor's) — a generic
+"resolve-or-create, validate, commit-or-rollback" shape used by 133 distinct call sites project-wide,
+which did not resolve to a roadblock-specific call this pass. **The open item is now precisely
+bounded: whoever holds a pointer to `0x026171d0` (or resolves class id `0x2c` generically) and invokes
+its vtable slot 0** — not found by static disassembly within this pass's budget; a live capture
+(breakpoint/log on `0x00930950`, or on writes to a freshly-allocated element's own `+0xd8`/`+0xe0`) is
+the natural next step. Full detail: `scratchpad/notoriety_rules_synthesis_2026-10-09.md`.
+
+**CLOSED, 2026-10-09 — found, and the answer is "both": one of (at least) 6 named call paths into this
+allocator is genuinely notoriety-gated; the other 5 are scripted/placement-triggered and bypass
+notoriety entirely.** A direct-literal-reference search for `0x00930950` itself is exhaustively
+negative (its only citation anywhere in the binary is inside its own vtable), proving any real caller
+must resolve the roadblock class descriptor indirectly, through the generic engine-wide class-id table
+at `0x02cc9900` (already documented elsewhere in this file) rather than by holding the descriptor's own
+address. Since the class id is the literal `0x2c`, the compiler folds the table lookup into one fixed
+address, `0x02cc99b0` — and an exhaustive scan of every reference to that exact address finds precisely
+3 external functions reading it, each calling the generic creation dispatcher `0x00456e30(0x2c, ...)`
+directly (byte-exact, confirmed by direct disassembly at every call site), which — via `0x00456be0`'s
+own capacity-gate-then-allocate shape, already documented above — terminates at the allocator.
+
+Tracing those 3 functions to their own real callers finds exactly one notoriety-gated path: **a
+dedicated per-frame scheduler, `0x0060a8d0`**, driven from the identical per-frame dispatcher
+(`0x0090faf0`) that already drives the ambient-population and roadblock-consumption ticks documented
+above — a structural sibling of the consumption tick `0x00930e20`, not a separate mechanism. Every
+frame it runs, `0x0060a8d0` loops 5 roadblock-grid "team" slots (4 distinct tracks — Luchadores,
+Deckers, Morningstar, Police — with grid slots 3 *and* 4 both mapping to the Police track, confirmed
+directly from the resolved switch statement), reads each track's own live notoriety level through a
+6-instruction getter (`0x00605200`, confirmed to return `record[track].level` out of the already-
+documented live notoriety array `0x014A4F70`, stride `0x4C`), and **requires that level to be in
+`[1,5]` — level 0 ("no notoriety") skips the track entirely for that tick, not merely deprioritized.**
+Only past that gate does it cross-reference `roadblock_notoriety.xtbl`'s own per-(level,team) grid for
+a capacity/cooldown check (a byte-exact, field-by-field match against this project's own already-
+published XTBL schema, §6 of `spec-tables-traffic-ai.md` — the real consumer's literal base address is
+one row before the documented grid start, exactly the "intervening pointer arithmetic" blind spot that
+explains why an earlier literal-address scan for the documented grid base itself came back negative)
+and a per-track suppression flag from `notoriety_spawn.xtbl`, before finally calling into the same
+`0x00456e30(0x2c)` chain that reaches the allocator. **This is checked fresh every time the scheduler
+runs, every frame — not a one-shot gate evaluated once and cached.**
+
+The other 5 named call paths found all bypass notoriety: two are the already-documented
+`roadblock_stag_lockdown.xtbl` scenario's own state-machine drivers (a scripted boolean + count gate,
+confirmed by address-cluster match against this file's own §7 traffic-AI documentation); one is a named
+placed "spawn point" trigger object (resolved by handle, not notoriety); one is a per-object placed
+trigger-volume "think" method (its own further caller not traced, OPEN); and one is a second, previously
+undocumented "roadblock" subsystem — a separate singleton object (`0x024e7fe8`, distinct from the class
+descriptor `0x026171d0`) registered under the literal name `"roadblock"` into a generic named-system
+registry, whose own real trigger (what actually invokes its vtable slot) was not found this pass —
+flagged honestly OPEN, HIGH CONFIDENCE it is a Lua-exposed or debug/console "request a roadblock now"
+entry point given its registration and staging-buffer shape, not confirmed further. Full detail,
+every address and cross-check: `scratchpad/notoriety_roadblock_spawn_caller_2026-10-09.md`.
+
+---
+
+## ~~9.~~ ~~10.~~ ~~11.~~ ~~12.~~ ~~13.~~ ~~14.~~ ~~15.~~ ~~16.~~ ~~18.~~ ~~19.~~ 20. Clean-room check
 
 - Addresses are plain hex throughout. There are no Ghidra auto-names for functions, globals or labels,
   no decompiler variable names, and no pasted pseudocode. Two shared stubs carry library symbol names in
@@ -2742,3 +4958,616 @@ CONFIRMED by listing unless marked.
   - the word-bounded regex: **0 hits**;
   - the plain-substring backstop: **0 hits**;
   - **0/0**, unchanged from the A1/A2 baseline.
+- **A4 (§12), 2026-10-07.** The same conventions hold. The voice line quoted in §12.3 ("call a doctor")
+  is an engine data string at `0x011175c0`. Tunable names (`Ai_fov_*`, `Pain_sound_radius`,
+  `Grenade_shout_radius`, `Player_friendly_fire_threshold`) are the shipped `tweak_table.xtbl` element
+  names, cited from the real base-game file (`tools/ai_base_xtbl/tweak_table.xtbl`) and the registry
+  `spec-tables-progression.md` §10.10 already specifies. Float and double values are read from the
+  executable image (or, where the image reads zero, from the literal operand of that constant's own
+  one-instruction startup stub) and quoted as plain numbers. No Ghidra project was used for this unit;
+  all reads were done with `tools/harnesses/exe_va.py` plus `capstone` through disposable scratch
+  scripts, deleted at the end of the session along with the rest of the session scratchpad.
+- **Scan result after the A4 edit** (run on this file as saved, 2026-10-07), with the same two checks
+  as for A1:
+  - the word-bounded regex: **0 hits**;
+  - the plain-substring backstop: **0 hits**;
+  - **0/0**, unchanged from the A1/A2/A3 baseline.
+- **A5 (§13), 2026-10-07.** The same conventions hold. All addresses are plain hex; field/offset names
+  already established elsewhere in this file (`+0x4a5`/`+0x4a6`, `+0x8d0`, `+0x450`, `0x02cc9900`,
+  `0x008addb0`, `0x00853b30`, `0x0097e280`, `0x00614d00`) are cited, not re-derived. The two trajectory
+  solvers' confirmation includes an empirical Unicorn-emulation oracle (11 input/output vectors against
+  the real function bytes, §13.2.1) — one disclosed stub (`0x00853b30` forced to a literal `eax` value)
+  was needed only for the one call site that depends on the runtime-populated `0x02cc9900` table (the
+  same table §13.1's own class gate depends on, confirmed not file-backed); the stub is reported as a
+  stub, not silently folded into a CONFIRMED result. No Ghidra project was used for this unit; all reads
+  were done with `tools/harnesses/exe_va.py` plus `capstone`, and the oracle runs with
+  `tools/harnesses/unicorn_call.py`, through disposable scratch scripts, deleted at the end of the
+  session along with the rest of the session scratchpad.
+- **Scan result after the A5 edit** (run on this file as saved, 2026-10-07), with the same two checks
+  as for A1:
+  - the word-bounded regex: **0 hits**;
+  - the plain-substring backstop: **0 hits**;
+  - **0/0**, unchanged from the A1/A2/A3/A4 baseline.
+- **Navpoint/`cover_node` unit (§15), 2026-10-08.** The same conventions hold. All addresses are plain
+  hex. Property/class name strings (`navpoint_type`, `navpoint_flags`, `navpoint_extra_info`,
+  `audio_marker`, `navpoint_sync`, `cover_pos`, `cover_orient`, `cover_type`, `cover_index`,
+  `cover_angle_left`/`_right`, `cover_def_angle_left`/`_right`, `"navpoint"`, `"cover_node"`) are
+  shipped engine/content strings read directly from `.rdata`, cited the same way this file already
+  cites comparable strings elsewhere. No Ghidra project was used; all reads were done with
+  `tools/harnesses/exe_va.py` plus `capstone` through disposable scratch scripts (never committed to
+  `tools/harnesses/`), deleted at the end of the session.
+- **Scan result after the Navpoint/`cover_node` edit** (run on this file as saved, 2026-10-08), with
+  the same two checks as for A1:
+  - the word-bounded regex: **0 hits**;
+  - the plain-substring backstop: **0 hits**;
+  - **0/0**, unchanged from the A1-A5 baseline.
+
+---
+
+## 20. On-foot ambient pedestrian runtime: sidewalk spawn, path-following, idle behaviour, and the
+gunfire-to-flee trigger chain (2026-10-09)
+
+Closes `purrsian-04`'s wave 6 item 2. Dispatched as 3 parallel sub-investigations (spawn/placement;
+walking+idle; gunfire-to-flee), cross-verified against each other and against this project's own
+existing text, with one connective thread closed by the orchestrating synthesis itself.
+
+### 20.1 Spawn/placement — a genuinely separate near-field pedestrian subsystem, traced end to end
+
+**The near-field (close-to-player, fully-simulated) on-foot pedestrian population is NOT spawned by the
+distant/LOD tick `0x00b90960` (§17.3).** A second, previously entirely undocumented near-field
+PEDESTRIAN spawn subsystem exists, structurally parallel to §17.4c's near-field VEHICLE system, traced
+end to end from the shared per-frame dispatcher `0x0090faf0` to the literal human-creation call. **This
+directly closes §17.3's open promotion/distant-vs-near-field question for pedestrians the same way
+§17.4c closed it for vehicles: no promotion/hand-off exists — the near-field tier spawns its own,
+independent population directly on the sidewalk graph.**
+
+**Full chain, CONFIRMED by direct disassembly, every link:**
+
+```
+0x00908fb0 (bootstrap, existing spec) -> 0x009142a0 (subsystem init)
+0x00702a50 -> 0x0090faf0 (per-frame dispatcher, re-read in full, extends §17.5)
+  -> 0x009149a0 (throttle gate: not blocked, "os_ped" toggle on, both registries non-empty, two
+                 independent per-registry elapsed-time checks both pass)
+  -> 0x0090fa60 (dual-purpose: configure vs. per-frame work; checks "os_ped" toggle array
+                 0x026093a4..+7, then Sidewalks load-gate 0x00bbdd90)
+       -> 0x0090c6d0 (THE NEAR-FIELD PEDESTRIAN TICK)
+            -> 0x009085f0 (builds a filtered candidate-segment array, Sidewalks singleton 0x02924d40)
+            -> per candidate: resolves two endpoint node positions from a 24-byte-stride Sidewalks
+               sub-array (distinct from the already-documented 36-byte-stride one, spec-zone-data-
+               format.md §13.2), computes real-world segment length (0x00da1290), builds a
+               LENGTH-WEIGHTED cumulative distribution — a genuine consumption of the graph's real
+               topology, not just its node count (unlike the distant tick, §17.3)
+            -> spawn budget = min(local headroom, the SAME shared 150-human ceiling 0x009086d0 §17.4c
+               already documents) x a rate constant
+            -> per attempt (<=3 retries): weighted-random segment pick (0x00dab5e0) -> 0x0090b840
+                 -> 0x0090b840 (ONE SPAWN ATTEMPT): random point along the chosen segment, offset
+                    sideways -> 0x0090b0a0
+                      -> 0x0090b0a0 (CREATE + INITIALIZE ONE NEW PEDESTRIAN, ~1980 bytes, the largest
+                         function in the chain): difficulty gate; rejects within ~90 units of the
+                         camera (no pop-in next to the player) and beyond a second distance threshold;
+                         rejects if visible to the current (or splitscreen) camera; a ground-validity
+                         check; resolves a character model; several attribute/eligibility rolls ->
+                         call 0x00bb9070 (the actual human-object creation call) -> post-creation setup
+```
+
+**Critical, directly-checked negative: the creation routine `0x0090b0a0` never calls any of the 4
+`sidewalking`/`wandering`/`sidewalk_leashed`/`dont_use_sidewalk` force-flag setters** (zero occurrences,
+checked by grepping the complete disassembly of its own body). This refutes the task's own working
+premise that finding a caller of the `sidewalking` setter would lead to the spawn code — the spawner was
+found by a completely different route (the per-frame-dispatcher chain above) and, once found, does not
+touch the flag at all. Two HYPOTHESIS/OPEN explanations, not resolved: (1) `sidewalking` may simply be
+the AI sub-object's own default state at construction, with the 41 force-flag setters existing to
+*override* that default for scripted/network/Lua purposes, not to establish it; (2) the flag may be set
+by a later step outside the creation routine (e.g. the human's first AI/goal-evaluation tick). The
+question is sharply narrowed from "find the spawn code" (now DONE) to "find why newly-spawned near-field
+peds walk sidewalks without an explicit force-flag call."
+
+**The 4 flag setters, their bit positions, and an exhaustive caller census (all CONFIRMED):**
+
+| Flag | Address | Byte/bit |
+|---|---|---|
+| `sidewalking` | `0x004e2c50` | `+0x2b8` bit 0 |
+| `wandering` | `0x004e3530` | `+0x2b8` bit 1 |
+| `sidewalk_leashed` | `0x004e2ad0` | `+0x2b8` bit 2 |
+| `dont_use_sidewalk` | `0x004e1a60` | `+0x2bb` bit 5 |
+
+An exhaustive raw `CALL rel32` opcode census (not this project's usual literal-4-byte-match method,
+which does not catch relative calls — flagged as a gap in the standing xref method, worth fixing for
+future "who calls this" work) found: **every confirmed caller of all 4 setters operates on an
+already-resolved, already-EXISTING human** (session/handle lookup, never fresh allocation) — a named/
+tracked-character task dispatcher, a "release back to civilian defaults" batch resetter, the inverse
+("leaving sidewalk behavior on entering combat/alert states," 7 near-identical case blocks, cross-
+referenced to §20.4 below), and the generic Lua/network by-name force-flag dispatcher (`0x008b14c0`).
+**No caller is a bulk/population spawner.** One caller (`0x006af664`) has zero references anywhere in
+the whole PE image by either direct call or static pointer — reached only by an indirect/vtable call
+this method can't find, or a function-boundary misidentification; flagged OPEN.
+
+**Side finding: `0x009142a0` (the bootstrap init) builds real infrastructure, not just a timer** — two
+instances of a generic registry/container class (vtable `0x0116f124`) and one of a different class
+(vtable `0x0116f1f8`), a 9-slot sentinel pool, and the standard 5000ms re-arm timer (matching §17.5). A
+second, smaller, related pool/timer (`0x00917d10`, its own 2-node circular linked list, 20-60s cadence)
+is functionally CONNECTED to the same subsystem (one of its own helpers, `0x00917da0`, calls into
+`0x00914390`, the same candidate-picker `0x009142a0`'s own registry feeds) but its distinguishing role
+is not pinned down — HIGH CONFIDENCE a secondary/related entry point (e.g. scripted or notoriety-
+triggered), not independently confirmed. **Checked and found inconclusive, not resolved either way:**
+whether `action_node_groups.xtbl`'s `Convert_to_ped_min_delay`/`Convert_to_ped_max_delay` fields
+(`spec-tables-traffic-ai.md` §13.1) connect to this subsystem — all 8 real references to that array were
+read directly and none touches those two record offsets; `0x00917d10`'s own literal 20000-60000ms timer
+is suggestively similar in shape but is a hardcoded engine constant, not a value read from the xtbl.
+
+**Correction to §17.6: `"os_ped"` (`0x026093a4`) is NOT inert despite having no registered notify
+callback** — it IS the enable toggle this entire near-field pedestrian chain checks every frame
+(`0x0090fa60` reads the 8-byte array inline). It has no callback because this subsystem polls the toggle
+directly rather than being pushed a change notification — a different wiring style from the categories
+that do have one, not an indication of disuse.
+
+### 20.2 Walking/pathing — sidewalk and wander are `Idle`-mode sub-behaviours, not separate modes
+
+**Confirms the task's own hypothesis directly.** No mode among the already-documented 44 is named
+"Sidewalk" or "Wander" — the mechanism lives entirely inside `Idle`'s (mode 0) own tick dispatch on the
+shared sub-state byte (`human+0x500`), via seven previously under-documented entries in the 177-entry
+sub-state name table (`0x012e1168`, §2.5 had only ever quoted two of these seven as bare examples):
+
+| Index | Name | Index | Name |
+|---|---|---|---|
+| 13 | `sidewalk start` | 32 | `wander pause` |
+| 14 | `sidewalk` | 33 | `wander choose dest` |
+| 15 | `sidewalk formation` | 34 | `wander move` |
+| | | 35 | `wander to sidewalk` |
+
+**The Sidewalks singleton `0x02924d40` (`spec-zone-data-format.md` §13.2) has 121 real uses across 50
+functions** — a whole-binary reference census found this directly; the existing spec had only ever read
+its loader. Layout, now read at the instruction level: `+0x00`/`+0x04` is a **24-byte-stride segment
+array** (two `u16` node-index fields per record, with dedicated pointer↔index conversion helpers,
+`0x00bbdda0`/`0x00bbddf0`) — this is a DIFFERENT sub-array from the already-documented 36-byte-stride
+one (`+0x18`/`+0x1c`, cross-linked to the Traffic singleton); `+0x10`/`+0x14` is the already-documented
+node-count array §17.3 already cites; `+0x08`/`+0x0c` remains uncharacterized (OPEN); `+0x20`/`+0x24` is
+a spatial-index handle built via the generic "register a named spatial collection" primitive
+`0x00dc6190`. **`human+0xb94` is a per-human pointer directly into the pair-0 segment array** — the
+human's own "current segment," confirmed network-replicated exactly like other per-character state.
+
+A dense, previously entirely unread ~28-function Sidewalks query/steering-support cluster
+(`0x00bbdc30`-`0x00bc0970`) was opened in full — segment acceptance tests, bounding-box computation,
+endpoint-position/direction-vector resolution (sharing the Traffic graph's own position-quantization
+codec), and the real multi-destination path query (`0x00a12a80` — the SAME primitive the existing §14.7
+navmesh material already confirms works in retail via a live Frida capture for combat cover-selection;
+Sidewalks destination-resolution sharing it is HIGH CONFIDENCE to work too, by shared-code-path
+inference, not independently re-tested for pedestrian wandering specifically — this does not reopen or
+contradict the explicitly-parked navmesh saga, §14.6/§14.7a/§14.7b, still no writer found for
+`human+0xb40`, now with two further readers confirmed, not a contradiction).
+
+**The actual per-frame movement tick, `Idle`'s own `0x00513270`, confirmed in full:** sub-states 13/14/15
+all route to `0x0051bc60` ("sidewalk" tick); sub-states 32/33/34 all route to `0x0051c860` ("wander"
+tick); sub-state 35 is a one-frame transitional no-op. `0x0051bc60` advances along the segment via
+`0x0051b960` (HIGH CONFIDENCE, not independently disassembled to its own last instruction) or, on
+sub-state 13/gate failure, calls the "snap onto the graph" init `0x0051bb70`, which reads the human's own
+cached cell-key (`+0xb40`) and calls `0x00bbfbe0` — one of the Sidewalks-cluster functions, shared with
+the already-named-but-untraced "human navigator chain" (`0x00a1b000`-`0x00a1d000`, **closing that
+cross-reference from §14.2**). `0x0051c860`'s wander tick resolves a target handle, computes a steering
+direction, and (for "wander choose dest," sub-state 33) generates a validated random candidate point,
+transitioning to sub-state 34 and calling `0x00993630` — **CONFIRMED to be the exact "human navigator
+chain" function §14.2 already named and left untraced; this closes that cross-reference too.** A small
+helper (`0x0051bd20`) force-transitions "sidewalk"→"wander choose dest," the real abandon/retarget path.
+**Event kind 81 (previously OPEN, §8 item 2) is now CONFIRMED** produced by the wander-destination-commit
+step (posted via `0x004f5dd0`, sub-state filter 34, delay 15-35s).
+
+**Honest OPEN items:** `0x0051b960` (the literal per-frame "advance along segment" math) and several
+sibling helpers were identified by call shape, not independently disassembled to their own last
+instruction; singleton pair 1 (`+0x08`/`+0x0c`) uncharacterized; the near-field candidate system found
+alongside this investigation (a block inside `0x0090faf0`'s own neighbourhood checking "os_ped" and the
+Sidewalks gate, calling `0x0090c6d0`→`0x0090c520`/`0x0090c3f0`→`0x00907f50`) could not be cleanly
+separated from §20.1's own spawn-side scope by static code alone — flagged as an honest scoping overlap,
+not resolved either way; it is most plausibly the SAME chain §20.1 traces (both check "os_ped" + the
+Sidewalks gate and call `0x0090c6d0`), not a second, independent system.
+
+### 20.3 Idle behaviour selection for a background pedestrian
+
+`Idle`'s own `enter` (`0x00512300`) picks exactly one of four sub-states from PRE-EXISTING flag bits, not
+a live random roll each time: `human+0xe8` bit `0x1000` → sub-state 36 "sleeping"; bit `0x200` → 37
+"sitting" (both matching §2.5's already-documented exception); an inventory-held-item check → 11 "wait to
+holster weapon"; otherwise the default, sub-state 9 "idle," with a genuine cooldown roll via `0x00dab660`
+(250-1000ms or 3000-5000ms) — the same per-action cooldown idiom §4.1's decision-layer finish routine
+already documents, now confirmed used directly inside `Idle`'s own enter too, independently. "Sleeping"/
+"sitting" are gated on pre-set flag bits whose own writer was not traced — HIGH CONFIDENCE reachable only
+via scripted/action-node placement, flagged OPEN not invented. `Idle`'s tick jump table is confirmed the
+single dispatcher for sidewalk/wander (§20.2) and structurally separate from everything else (ordinary
+per-frame bookkeeping for every other sub-state).
+
+**Action-node idle/loitering behaviour is DATA-DRIVEN** — `action_node_npcs.xtbl` (`spec-tables-traffic-
+ai.md` §13) already carries a complete per-role idle-animation state machine (`Enter_anim`/`Exit_anim`/
+`Startle_anim`, up to 4 `States`×4 `Animation_action`s, `CowerAnims`, `Min_anim_delay`/`Max_anim_delay`,
+and the `Spawn_Priority` flag distinguishing `Sidewalk (normal)` from `Action Node (high)`). The 177-entry
+sub-state table confirms this is wired through the SAME mechanism as sidewalk/wander (indices 43/27/139/
+101/102/26, all in the identical table). **The specific runtime function that reads a record's
+`State`/`Action` array and rolls the anim-delay timers was not found this pass** — out of budget, not
+absent; the data-driven reading stands confirmed, the runtime consumer remains the one genuinely open
+item here, most plausibly near the action-node loaders (`0x008c9760`/`0x008c87d0`/`0x008c9fd0`).
+
+### 20.4 The real flee-or-react-to-gunfire chain
+
+**Confirms the task's own hypothesis, with the mechanism pinned down precisely.** Flee/Cower are
+genuinely what an ordinary ambient (non-combat) pedestrian does in response to nearby gunfire — but the
+branch between "become combat-alert" (`Gunfire wary`, mode 17) and "panic/hide" (`Flee` mode 13/`Cower`
+mode 9) is gated almost entirely by **the human's own team byte, `human+0x1ca8`, being exactly 7** — not
+by any abstract "is this a civilian" flag, and not through the mode machinery's own already-documented
+Flee/Cower begin functions (§13.1.1/§13.1.2) directly — those are the downstream machinery this
+investigation did not need to re-read. **`Panic` (mode 24) is never requested anywhere in this entire
+chain** — it is explicitly guarded against being overridden by a pending request, but nothing in the
+gunfire/attack reaction path ever requests it.
+
+**`Idle`'s own event handler does not special-case gunfire — a shared, Idle-private sink does.**
+`0x00512680` (mode-table row 0) dispatches event kind 76 ("gunfire heard"/"shot at," already-documented
+perception producer `0x005046e0`, §10.3) into a generic default case, tail-calling **`0x005113e0`** (824
+instructions, confirmed by whole-binary caller census to have NO other caller — `Idle`'s own private
+reactive-event dispatcher, not the generic cross-mode default handler `0x004ebc70`, which is very likely
+never reached for an ordinary `Idle` human at all). Gated on non-player and class-descriptor checks, and
+a secondary "has an ordered/scripted action pending" gate (`0x004dd460`, testing `human+0x44c` bits 2/3)
+that narrows the handled kind range only when an order IS pending — no restriction for an ordinary
+free-roaming pedestrian.
+
+**Full confirmed chain for kind 76:**
+```
+kind 76 -> 0x00512680 -> 0x005113e0 -> case 0x00511b1f
+  -> resolve shooter (0x004e4ce0) -> 0x00950550(human, shooter): same-entity guard
+     FALSE -> 0x004ebb00(human, event)
+        -> no-ops on down/dead/ignore_attacks/combat_disabled/dont_react_to_player
+        -> 0x00943ea0(human): NOT-follower AND team==7 ?
+             FALSE -> 0x004e8070 pre-hook + REQUEST MODE 17 "Gunfire wary" (0x004e4130(human,0x11))
+             TRUE  -> crime/witness notify attempt; resolve weapon lethality (0x00b818b0);
+                      -> 0x004eaf80(human, shooter, is_lethal, 0, 1)
+```
+`0x004eaf80` is ALSO the direct entry for event kind 12 ("attacked"/distress, via `0x004eb920`, always
+lethal-flagged). It re-tests `0x00943ea0`: if team==7 and NOT lethal/attacked (heard distant non-lethal
+gunfire), it only speaks a line and posts a 250-750ms delayed re-check (kind 67) — no mode change.
+Otherwise it gates on flee/cower eligibility and calls **`0x004eaae0`, the real Flee/Cower chooser**:
+guards against clobbering a pending `Panic` (the only `Panic` reference in the whole chain, never a
+request), computes a "prefer Flee" boolean, and either **requests mode 9 "Cower" (`0x004e4130(human,9)`)**
+gated by `0x004eaa40`'s full eligibility check, or **requests mode 13 "Flee" (`0x004e4130(human,0xd)`)**
+gated by the same helper (`0x004d8ff0`) `Flee`'s/`Cower`'s own begin functions already use — a failed
+Flee falls through to attempt Cower, not mutually exclusive.
+
+**A second, parallel reactive-trigger family, found in the same shared sink, for event kinds not
+currently in the project's catalogued perception-posted-kind list** ({0,2,11,12,18,71,76,78,86,87,100},
+§8 item 2): kind 14 (`0x00511612`) gates on the same team-7 test but makes NO Cower call (a mis-
+attribution from an earlier draft, corrected on cross-check and byte-exact re-disassembly); kind 38
+(`0x005119a7`) calls `Cower`'s own begin function directly, bypassing the request layer; kind 48
+(`0x005118d8`) calls `Flee`'s own begin function directly, same bypass. **The producers of kinds 14, 38,
+and 48 were not found** — none is in the catalogued list, so whether they're genuinely gunfire-adjacent
+or a different combat/threat stimulus is a real, honestly-flagged OPEN item, not assumed.
+
+**Team byte value 7 — HIGH CONFIDENCE "ordinary civilian"/non-combatant, confirmed behaviourally at six
+independent code sites** (the dismiss pass, the gunfire-perception producer, and four sites inside this
+chain itself), but **not confirmed by name** — no string/line table was read to find an English label,
+and a whole-`.text` scan for a literal `MOV byte [reg+0x1ca8], 7` found zero hits, meaning team-id
+assignment is dynamic (through the already-documented team-registry write side, §12.7's `0x009b7130`),
+not a compile-time literal in any spawn/placement path — not independently traced this pass.
+
+### 20.5 Cross-references and summary of what remains OPEN
+
+- **§9.9** (force-flag table): add real consumer citations for `sidewalking`/`wandering`/
+  `sidewalk_leashed`/`dont_use_sidewalk` per §20.1 above (previously listed with no known reader).
+- **§2.5** (sub-state table): the seven sidewalk/wander entries (§20.2) and their real owning tick
+  functions now join the already-documented sleeping/sitting exceptions.
+- **§14.2/§14.6**: the "human navigator chain" cross-reference is closed (§20.2); the parked navmesh
+  saga's own `human+0xb40` open item is extended (two further readers, still no writer) not reopened.
+- **§8 item 2**: event kind 81's producer is confirmed (§20.2); kinds 14/38/48/67's producers remain open
+  (§20.4).
+- **`spec-zone-data-format.md` §13.2**: the Sidewalks content kind's runtime consumer is now
+  substantially detailed (§20.2) — a 24-byte-stride segment sub-array distinct from the already-
+  documented 36-byte-stride one, plus the full query/steering-support cluster.
+- **`spec-tables-traffic-ai.md` §13**: the data-driven idle/loitering reading (§20.3) stands confirmed;
+  the runtime consumer of `action_node_npcs.xtbl`'s own anim-delay fields remains the one open item.
+- Genuinely unresolved across this whole unit: why newly-spawned near-field pedestrians walk sidewalks
+  without an explicit `sidewalking` force-flag call (§20.1); the caller of `0x006af664` (zero references
+  anywhere in the PE image); the `action_node_groups.xtbl` `Convert_to_ped_*_delay` consumer
+  (inconclusive); `0x00917d10`'s own distinguishing role; producers of event kinds 14/38/48/67; the
+  English name for team byte value 7.
+
+Full detail, every address, and the complete raw evidence for all four sub-parts:
+`scratchpad/ambient_pedestrian_onfoot_behavior_2026-10-09.md` (parts b/c/d) — the spawn/placement
+sub-investigation's own full report (part a) was delivered directly as this unit's own hand-back and is
+not separately filed under `scratchpad/`, per the task's own file-count instruction; its content is
+fully absorbed into §20.1 above.
+
+---
+
+## Changelog
+
+- **2026-10-09 — §19.7's spawn-production gap CLOSED: who calls the roadblock allocator, and whether it's
+  notoriety-gated** (SPEC TEAM, agent `a4fa47508ae3a24bd`, re-run after infrastructure loss — report
+  found complete in scratch, spliced from the finished file). Answer: both — of 6 named call paths
+  reaching the allocator (`0x00930950`), exactly one (`0x0060a8d0`, a dedicated per-frame scheduler,
+  sibling to the already-documented roadblock-consumption tick under the same `0x0090faf0` dispatcher)
+  reads the live per-track notoriety level (`0x00605200`, requiring it `≥1`) and cross-references
+  `roadblock_notoriety.xtbl`'s own grid, byte-exact against this project's published schema; the other 5
+  are scripted/placement-triggered (two STAG-lockdown drivers, a named spawn-point trigger, a trigger-
+  volume think-method, and a second, previously-undocumented "roadblock"-named subsystem whose own real
+  trigger stays OPEN) and bypass notoriety entirely. Exhaustive literal-reference search proves the
+  3-external-reader set at the class-id table slot is complete, not a sample. Full detail:
+  `scratchpad/notoriety_roadblock_spawn_caller_2026-10-09.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-09 — new §20: on-foot ambient pedestrian runtime — spawn, path-following, idle behaviour,
+  and the gunfire-to-flee trigger chain, all traced end to end** (SPEC TEAM, agents `a8d92819c0b386b77`
+  + nested `a9647422c65e6f757`, wave 6 item 2). **Spawn (§20.1):** a genuinely separate near-field
+  pedestrian spawn subsystem found and traced in full, from the per-frame dispatcher `0x0090faf0` to the
+  literal human-creation call `0x00bb9070` — closes §17.3's open promotion question for pedestrians the
+  same way §17.4c closed it for vehicles. Surprising, directly-checked negative: the creation routine
+  never calls any of the 4 sidewalk/wander force-flag setters. **Walking/pathing (§20.2):** confirmed
+  sidewalk and wander are `Idle`-mode sub-behaviours, not separate modes; opened a previously entirely
+  unread ~28-function Sidewalks query/steering cluster; closes the "human navigator chain" cross-
+  reference (§14.2) and event kind 81's producer (§8 item 2). **Idle behaviour (§20.3):** confirmed
+  mostly data-driven via `action_node_npcs.xtbl`, runtime reader honestly left open. **Gunfire-to-flee
+  (§20.4):** confirmed and precisely mechanized — the real discriminator is team byte `+0x1ca8`==7
+  (civilian), `Panic` guarded against but never requested. Corrections applied in place: §17.6 (`"os_ped"`
+  is polled directly, not inert despite no callback); §9.9 (real consumer census for all 4 sidewalk/
+  wander force flags); §2.5 (7 new sub-state entries); §8 item 2 (kind 81 closed, kinds 14/38/48/67
+  opened). Full detail: `scratchpad/ambient_pedestrian_onfoot_behavior_2026-10-09.md` (parts b/c/d; part
+  a delivered directly via hand-back, fully absorbed into §20.1). Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-08 — new §19.7: the literal police/roadblock spawn instruction, found** (SPEC TEAM, agent
+  `ad2c811107eef4dac`). A third, previously-undocumented per-frame population tick
+  (`0x00930e20`→`0x00930db0`→`0x00930a40`→`0x0092ff20`), sibling to (not downstream of) `0x00606b80`'s
+  own notoriety dispatcher, with a literal position formula (anchor near a tracked reference position
+  plus a configured road-direction offset) and 3 type-specific creation dispatches (character/vehicle/
+  third-category), including a literal `"Spike_strip"` name check. Closes §19.6's "literal spawn
+  instruction" and "roadblock toggle connects to `0x00606b80`" items; corrects §19.4's `0x008addb0`
+  misattribution (the real `+0x455` setter is `0x008ecda0`) and its Handler-3/`0x0092ed10` framing;
+  narrows §19.5's own OPEN item. Cross-references added to §15.7 (second `0x008cd1d0` consumer) and
+  `spec-tables-traffic-ai.md` §7 (second `0x02442750` consumer). Full detail:
+  `scratchpad/notoriety_police_spawn_instruction_2026-10-08.md`. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §19.4 corrected: `0x00606b80` branches on the sign of the new level, and a
+  previously-undocumented 4th writer of the team-relationship matrix found; §19.7's own "who creates a
+  roadblock-manager instance" item narrowed to the exact allocation primitive** (SPEC TEAM, agent
+  `a961a3cb913d385d8`, wave 6 item 4, mostly a synthesis pass over already-solid existing material —
+  §6.1/§6.2's crimes/points and decay-timing tables both re-confirmed unchanged). §19.4's own
+  description of the roster/player/timer-rearm sequence corrected from "runs every call" to "runs only
+  on the `newLevel<=0` clear branch"; the heat-code table corrected from level-indexed to track-indexed;
+  `0x004f6540` corrected from "heat/difficulty setter" to a generic AI known-hostiles state-rewrite pass.
+  **New finding: `0x00606b80` is a 4th writer of the already-documented team-relationship matrix
+  (§12.7, `0x0262d940`, via `0x009b7130`)** — writes HOSTILE on `newLevel>0`, UNFRIENDLY on
+  `newLevel<=0`, a binary (not graduated) trigger that is the real, confirmed mechanism for "which
+  levels make existing nearby police/gang NPCs actually hostile." §19.7's own spawn-production gap
+  narrowed further: the `"roadblock"` class descriptor's global address (`0x026171d0`), its full 9-slot
+  vtable, and its embedded 32×1008-byte free-list pool are now named — vtable slot 0 (`0x00930950`) is
+  the real creation primitive; only its own caller (gated on live notoriety level or not) remains
+  unfound. Full detail: `scratchpad/notoriety_rules_synthesis_2026-10-09.md`. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-08 — new §17.4c: the near-field (fully-simulated) ambient-vehicle population, resolving a
+  long-standing OPEN item; correction to §17.5's "pool reserve/cap" framing** (SPEC TEAM, agent
+  `a65b1c1a745e444d3`). Found the per-frame tick (`0x0090f2c0`→`0x0090eaf0`/`0x00906b00`) that applies
+  the `vehicle_despawn.xtbl` schedule and confirmed the runtime consumer of
+  `player_vehicle_despawn_distance`; concrete 48-vehicle/150-human caps. **Correction**: the three
+  "pool reserve/cap" bootstrap calls in §17.5 (`0x009069e0`/`0x009142a0`/`0x00917d10`) are timer-arm
+  calls, not pool-capacity setters — their shared callee is this project's generic countdown-timer
+  family, not a pool allocator; `0x009069e0` re-attributed from "pedestrian pool" to near-field
+  *vehicle* pool (HIGH CONFIDENCE). Also corrects §19.4's `0x008addb0` human-exclusivity claim (confirmed
+  it also gates vehicles). Promotion/demotion boundary between distant and near-field tiers: honest
+  negative result, no hand-off found. Full detail:
+  `scratchpad/ped_traffic_density_radius_2026-10-08.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-08 — §14.7b un-parked: a direct live hook on `0x00447160` fired 16 times in a fresh capture,
+  and a third independent static re-check (one level up from the known caller) still found zero second
+  path.** The navmesh-registry presence-bit contradiction is now live-confirmed at the most direct
+  possible level (the writer function itself, not just its downstream reader) and remains statically
+  unexplained after three full passes. Flagged the most plausible untested candidate (post-load in-memory
+  gate mutation) without guessing it as fact. Frida script updated (backtrace + arg dump) and ready, not
+  run. Full detail: `scratchpad/navmesh_registry_caller_recheck_2026-10-08.md`. Cleanroom self-check: 0
+  new hits. Synced to Team B.
+
+- **2026-10-08 — new §19: notoriety tracking and police-response dispatch; clean-room check renumbered
+  to §20.** Opens the live per-track notoriety record (`0x014A4F70`, 4 slots) and its add-points/decay-
+  tick/level-change-dispatch chain at the runtime level for the first time — previously only the XTBL
+  loader side (`spec-tables-progression.md` §6, `spec-tables-traffic-ai.md` §6) was documented. Confirms
+  `Check_Detection` is real live-detection gating, not just a field-name gloss; identifies a new "gain
+  suppressed" flag sibling to the already-documented "decay suppressed" one; resolves
+  `spec-tables-progression.md` §6.2's own flagged OPEN item (which `NotorietyLevels` set is police vs
+  gang). Police-response spawn is confirmed structurally separate from the ambient-population distant-
+  tick system (§17) but shares the Traffic zone-data singleton and the `0x00d9e140`/`0x00d9e1e0` timer-
+  primitive family with it and with §18's traffic-AI road-network module — a genuinely new cross-system
+  link. Honest gaps left open: the literal police-vehicle/roadblock spawn instruction, and
+  `roadblock_notoriety.xtbl`/`notoriety_spawn.xtbl`'s runtime consumers (exhaustive scans found neither).
+  Full detail: `scratchpad/notoriety_police_response_2026-10-08.md`. Cleanroom self-check: 0 hits. Synced
+  to Team B.
+
+- **2026-10-08 — new §18: Traffic AI lane-following consumer module, pool mechanics, Havok integration;
+  clean-room check renumbered to §19.** Companion to the same-day `spec-zone-data-format.md` §13.2 data-
+  format splice (the `0x2236` Traffic record layout). Traces the consumer module as far as this pass's
+  budget allowed: lane-following is structurally closer to graph/segment-hopping over the record's own
+  segment→point graph than to a continuous analytic spline-with-cross-track-error formula, but the actual
+  steering-decision function was not reached (honest OPEN, not guessed); a 2-bit segment-"kind" field
+  exists and at least one consumer branches on it (consistent with junction/intersection handling), but
+  the branch-choice algorithm itself was not found; and the Havok integration argument is HIGH confidence
+  structural (there is exactly ONE RTTI class, `hk_custom_vehicle_driver_input`/`0x00ae30c0`, that can
+  feed Havok's vehicle step, re-disassembled in full to pin all 6 fields it reads) but the literal
+  write-site inside the traffic module for those fields was not located (a disp32 byte-scan for `0x128`
+  found only false-positive stack-frame-local matches, reported as an honest negative). Full detail:
+  `scratchpad/traffic_ai_lane_following_2026-10-08.md`. Cleanroom self-check: 0 hits. Synced to Team B.
+
+- **2026-10-08 — new §17: ambient population runtime (distant pedestrian/vehicle spawn-despawn);
+  clean-room check renumbered to §18.** Full trace of the distant-LOD ped/vehicle population: a flat
+  hardcoded 75-entity target per kind (not per-zone/per-district); spawn candidates drawn dynamically
+  from the already-documented Traffic/Sidewalks zone-data graphs (`spec-zone-data-format.md` §13.2, now
+  confirmed to have a real runtime consumer — previously "load-time only"), filtered by camera-
+  lookahead-predicted position and (vehicles only) a `Spline_Type` one-hot bitmask eligibility test
+  against `distant_vehicle_traffic_types.xtbl` (`spec-tables-traffic-ai.md` §14.4); despawn via a
+  distance/angle cull against the same predicted position, plus a whole-category mass-despawn path;
+  driven by a single per-frame dispatcher (`0x0090faf0`, called from the same per-frame world update
+  §1.1 already documents) that unconditionally ticks both populations every frame, each internally
+  throttled to its own heavy pass roughly once per second. **Corrects `spec-zone-data-format.md` §13.4**:
+  `0x02609394` and its 5 sibling `"os_*"` toggle-category arrays are 8 slots each (confirmed directly
+  from the query/set accessor functions), not "capped 0–18" as previously claimed. Full detail:
+  `scratchpad/ambient_population_spawn_despawn_2026-10-08.md`. Cleanroom self-check: 0 new strict-regex
+  or C-cast-dereference hits from this section. Synced to Team B.
+
+- **2026-10-07 — A4 appended as §12 (perception's sensing primitives); the clean-room check renumbered
+  to §13.**
+  - Corrected the scoping note's framing: the `0x00507520` subtree is not a further ~10k-instruction
+    body A2 left unopened. A2 already read the tick and most of its producers; A4's real scope was the
+    specific primitives A2's own text flagged as not traced.
+  - The perception tunables block identified as ordinary `tweak_table.xtbl` entries, with real shipped
+    names and values for all 14 `Ai_fov_*` tunables plus `Pain_sound_radius`/`Grenade_shout_radius`.
+  - The view-cone/FOV test `0x004fef80` read in full: five context-dependent tunable sets (normal,
+    spotted, zombie, cover, carried/witnessed), validated against the real base `tweak_table.xtbl`.
+  - Two sound-radius producers A2 had found but not decoded (lists 10 and 12) read in full, including
+    two previously uncatalogued event kinds (56, 300) and the voice line "call a doctor".
+  - The line-of-sight service's answer-decode and request-queue halves read in full, with the
+    underlying raycast execution left as an explicit physics-domain boundary.
+  - The target-refresh pass's "choose the target" step corrected to a target-*validity* re-check.
+  - The slow pass, the team-relationship read accessor (citing the already-specified Lua write side),
+    and the ally-link cylinder-distance test all read in full, closing the remaining "not read"/"not
+    decoded" asides of §10.2/§10.3/§10.6 and most of §8 item 12's "still open inside A2" clause.
+
+- **2026-10-07 — A5 appended as §13 (begin-function gating and thrown-weapon trajectory solvers); the
+  clean-room check renumbered to §14.** OPEN items 24-31 appended.
+  - §3.2's "Begin function" row closed for 7 of its 13 functions: `Cower`, both bodies of `Flee`,
+    `Gunfire wary`'s two-call entry, `Passenger`, `RollerBlader`, `Veh evade`, and `Veh threat`'s own
+    `0x00523db0`. A shared two-test gate (null-check, class-descriptor bit) opens all 7; a shared
+    network-forward convention on not-owned (building and sending message type `0x1b`) is confirmed as
+    general across begin functions, not specific to the one case §3.2 had already shown it from —
+    `RollerBlader` is the one exception, declining outright with no forward.
+  - `Flee`'s real structure resolved as a multi-candidate escape-point search (`0x004da0b0`) that can
+    itself call its own "already have a point" sub-routine (`0x004d91a0`, separately callable by apply)
+    or redirect into `Cower` entirely before ever reaching its own transition call — a concrete,
+    disassembly-confirmed instance of a begin function entering a different mode than the one it was
+    asked to enter.
+  - `Gunfire wary`'s entry hook corrected: `0x004e8070` never itself transitions into mode 17 — for a
+    player human it instead stages a request for `Player` and never reaches `Gunfire wary` at all; the
+    real mode-17 entry is entirely inside the second call, `0x004dbd90`.
+  - §11.3 part H's two undecoded trajectory solvers (`throw weapon`/`throw grenade`) resolved as two
+    thin callers of one shared ballistic-angle core, `0x0054c630` — confirmed both statically (full
+    listing) and empirically, via an 11-vector Unicorn-emulation oracle run directly against the real
+    function bytes (zero stubs needed for the core itself; one disclosed stub only for the outer
+    `0x0054c770` shim's dependence on a runtime-populated class table). Grenade's solver additionally
+    confirmed to perform its own SIMD per-candidate ally/obstacle proximity reject before ever reaching
+    the shared core — the concrete mechanism behind §11.3 H's prose "it collects allies to avoid."
+  - No other spec file edited by this unit; no `.czn_pc` data touched; no leaked Volition/Havok/
+    Audiokinetic/RAD material read. Ghidra-free (capstone over `exe_va.py`, plus `unicorn_call.py` for
+    the oracle runs). Cleanroom self-check (word-bounded regex + plain-substring backstop) on the entire
+    finished file: **0/0**, unchanged from the A1-A4 baseline.
+- **2026-10-08 — §15 added: the real Navpoint/`cover_node` movement-target mechanism, direct follow-up
+  to §14's dead-navmesh finding.** Traces one concrete, fully-read consumer end to end
+  (`0x00b428d0`→`0x00b3e180`): neither class carries on-disk adjacency data; Navpoints self-register
+  into up to four flat global arrays by `navpoint_flags` bits; the real destination-selection algorithm
+  is a flat linear scan with a two-radius annulus filter and a uniform-random pick, not a graph search
+  or nearest-neighbor — confirming the standing "spatial proximity at runtime" hypothesis directly, not
+  merely leaving it standing. `cover_node`'s real property set is 8 properties (5 more than previously
+  named), two of which (`cover_type`/`cover_index`) are confirmed present in zero of 12,956 real shipped
+  objects — a population-confirmed negative. Confirms action 16 `move retreat`'s dead-navmesh failure
+  (§14.4) is unrelated to and disjoint from this mechanism. Corrects a prior pass's working label (the
+  per-class descriptor vtable's slot `+0x04` is Destroy/Release, not a tail-reader — propagated to
+  `spec-zone-data-format.md` §11 separately). Clean-room check renumbered §15→§16. Ghidra-free
+  (capstone over `exe_va.py`, plus the project's existing `czn_u2_replay.py` extraction primitives for
+  the population census); no leaked material read. Cleanroom self-check: 0/0, unchanged from the
+  A1-A5 baseline. Synced to Team B.
+
+- **2026-10-08 — new §15.7: the real `cover_node` selection algorithm, direct follow-up closing §15.6's
+  own standing OPEN item** (SPEC TEAM, agent `ab8974ffda1933fc1`, requested so Team B could implement
+  cover-selection, previously left unimplemented for lack of a documented mechanism). The Navpoint-
+  selector cluster (`0x00b428d0`/`0x00b3e180`) is confirmed a dead end for this question — a fresh
+  thread through action 8 `cover take def` finds the real chain (`0x00543480`→`0x00542bc0`→
+  `0x005429b0`→`0x0050a690`). `0x0050a690` (1,282 instructions, read in full): brute-force linear scan
+  of the live `cover_node` object pool inside an AABB (14.0 base radius, widened for brutes/post-area/
+  group-leader), filtered by failure-memory/open-flag/the arc evaluator, SCORED (arc/exposure + path-
+  reachability + group-cohesion, clamped [0,100]), and resolved via the same multi-destination navmesh
+  path query action 45 already uses — picking the cheapest path-reachable candidate, not nearest or
+  random. **Genuinely different selection philosophy from Navpoint's own annulus-filtered uniform-
+  random pick (§15.3)** — not two variations on one theme. The arc test (`0x008cd1d0`, read in full)
+  confirms `cover_angle_left`/`_right`/`cover_def_angle_left`/`_right` (§15.1) ARE respected exactly as
+  their names suggest, against the cover's own generic world-placement yaw — NOT `cover_orient`, which
+  narrows but doesn't resolve that property's own role. Resolves this document's own previously-
+  unmatched 4th quantize-offset (`cover_def_angle_right`@`+0x83`). A hard player-shield gate
+  disqualifies a candidate independent of score. `cover_orient`'s 6-way jump table, the enum tables,
+  `navpoint_sync`, and the `navpoint_flags` bit `0x10` remain OPEN (out of scope by the task's own
+  framing, not chased). Full detail: `scratchpad/covernode_selection_2026-10-08.md`. Cleanroom
+  self-check: 0 strict hits, unchanged.
+
+- **2026-10-08 — CORRECTION to §15.7/§11.3 F, new §14.7** (SPEC TEAM, agent `a1e1827309ece527b`,
+  dispatched to settle a real tension `purrsian-62` flagged before Team B implemented against §15.7).
+  §15.7's own framing of `0x00a12a80` ("picks the cheapest path-reachable candidate") does not survive
+  direct disassembly: `0x00a12a80` is a third direct caller of §14.3's dead registry (`0x00447770`)
+  and returns `false` unconditionally in every shipped file, before it ever inspects a candidate.
+  Generalizes §14.4's `move retreat` dead end to two more actions, by the identical root cause: action 8
+  `cover take def` (§15.7) and action 45 `pickup weapon` (§11.3 F, doubly dead — its own per-candidate
+  `0x00a12180` snap already empties the candidate array upstream). New §14.7 records the expanded
+  blast radius and a naming trap (`0x3171a58`/`0x3171a5c` dead vs. the adjacent, unrelated, live
+  `0x3171a64`). **Per `purrsian-62`'s explicit follow-up, all three dependent claims are labeled
+  STATICALLY DEAD, RUNTIME CONFIRMATION PENDING, not hard-confirmed-dead** — the static trace is clean
+  and exhaustive, but a live Frida hook on `0x00447770` during real combat (capture sheet:
+  `scratchpad/live-capture-navmesh-registry_2026-10-08.md`) has not yet ruled out a runtime-only
+  registry-population path the static census could have missed; Team B should implement behind a
+  switch until that lands. Full trace: `scratchpad/action45_covernode_pathquery_reconcile_2026-10-08.md`.
+  Cleanroom self-check: 0 strict hits, unchanged. Synced to Team B.
+
+- **2026-10-08 — LIVE-REFUTED: §14/§14.3/§14.4/§14.6/§14.7's own "statically dead" conclusion, new
+  §14.7a** (relayed from `purrsian-62`, who requested the live capture §14.7 itself called for). A
+  Frida capture against the real running game — not a static trace — found the "file-backed navmesh
+  registry is always empty" conclusion wrong or badly incomplete: of 87,918 real calls to the registry
+  reader `0x00447770` during one captured street gunfight, 87,262 (99.25%) returned a real,
+  non-sentinel value, not the `-1` failure sentinel §14.3's entire argument rested on; the dependent
+  path query `0x00a12a80` returned success 10 of 13 times, closely time-correlated with real
+  cover-selection attempts — `cover take def` (action 8) DOES resolve successfully in shipped retail.
+  §14.3's own "exhaustive whole-binary call-site census, no second writer anywhere in the binary"
+  claim is therefore wrong or incomplete; most likely blind spot (not yet confirmed): it counted
+  callers of the two named writer FUNCTIONS rather than doing an independent raw data-xref search for
+  the two registry ADDRESSES themselves, which would also catch a bulk-copy-shaped writer. Struck
+  through in place, not deleted, at §14 (new banner), §14.3, §14.4 (`move retreat`'s "always declines"
+  claim), §14.6 (net conclusion), §14.7 (the "STATICALLY DEAD, RUNTIME CONFIRMATION PENDING" label —
+  superseded by its own requested check coming back negative on "dead"), §15.7 point 5, and §11.3 F's
+  own correction block. Cross-reference: `spec-zone-data-format.md` §12.7 item 2 similarly re-opened
+  (the file-side gate-dword-always-0 DATA finding stands unchanged; only the inference stacked on it
+  is refuted). **A dedicated search for the real writer is in progress** (agent `afac5d6c4a3774487`,
+  tasked with a fresh raw data-xref scan for the real blind spot before considering any further live
+  capture); this section will be updated again once it reports. Full capture data:
+  `scratchpad/live-capture-navmesh-registry_2026-10-08/navmesh_registry_live_log.csv` (88,037 rows).
+  Cleanroom self-check: 0 strict hits, unchanged.
+
+- **2026-10-08 — new §14.7b: the real-writer search concludes two static passes with the count
+  mystery SOLVED and the presence-bit mystery a confirmed, exhausted, still-OPEN contradiction**
+  (SPEC TEAM, agent `afac5d6c4a3774487`, two passes + an orchestrator cross-check). Pass 1 found the
+  registry's real, previously-uncatalogued count writer: `0x004470a0(count=8)`, called once from the
+  engine-bootstrap dispatcher at process start — `0x03171a58` is unconditionally 8 since shortly
+  after boot, not file-driven at all, falsifying §14.3's "always zero" claim (the original census's
+  blind spot was exactly as predicted: named-function caller-counting, not raw data-xref). Version
+  mismatch ruled out by independent MD5 cross-check (exact match). Pass 2: two more static checks
+  (literal-xref + whole-PE-section byte scan) both came back clean negatives — `0x00447050` really
+  has only one caller, `0x00447160` really has no indirect/vtable reachability — so the ONE confirmed
+  presence-bit writer still traces only to the already-dead `.czn_pc` gate, contradicting the live
+  capture's own retvals (which decode into exactly the "slot present" success bit-shape). A third
+  hypothesis (`purrsian-62`: maybe the file-side gate is set specifically in the `~s` tile-family,
+  buried in §12.6's all-files aggregate) was tested directly and refuted — a fresh per-family re-scan
+  of both city archives found `~f`/`~s`/plain all at gate=0, zero exceptions. **Net: the contradiction
+  is real and unresolved by any static method tried; the only remaining path is a live write-watch**
+  (script already updated and ready, `scratchpad/live-capture-navmesh-registry_2026-10-08/`, not yet
+  run — needs the user to play again). Full detail:
+  `scratchpad/navmesh_registry_real_writer_2026-10-08.md`. Cleanroom self-check: 0 strict hits,
+  unchanged. Synced to Team B.
+
+- **2026-10-08 — §14.7b: two final cheap checks, PARKED, no third live capture requested** (direct
+  orchestrator follow-up, no new agent dispatch). CSV-correlation check (do calls near each real
+  path-query success show `-1` or "present"?) came back inconclusive/uninformative — a real
+  methodological limit (no caller-stack discrimination in the log, and a 99.25% background success
+  rate makes "nearby calls look present" statistically meaningless either way). Fresh instruction-by-
+  instruction re-disassembly of `0x00a12a80` found no alternate `true`-return path (exactly one `true`
+  exit, exactly one `false` exit reached two ways) — confirms, does not refute, the function's own
+  already-documented logic. Parked as "live-confirmed working, mechanism unresolved" per the
+  orchestrator's own call. Cleanroom self-check: 0 strict hits, unchanged.
+
+- **2026-10-08 — §12.4 "scope boundary" updated, OPEN item 19 CLOSED** (cross-file follow-up from
+  `spec-physics-runtime.md`'s new §8.8-§8.11, unit Q-U1). The three addresses previously described as
+  "not traced" (`0x004ecfc0`/`0x004ecf40`/`0x004ed320`) are confirmed pure cache/queue code with zero
+  geometry/Havok calls; the real raycast resolver is a previously-unnamed sibling, `0x004eda70`,
+  reached from scheduler `0x004edc80`, which calls the shared Havok ray wrapper directly — the exact
+  same chain already confirmed for AI's line-of-fire probe. Vision/line-of-sight and line-of-fire are
+  two throttled/cached consumers of one identical low-level path, not two separate mechanisms. Cleanroom
+  self-check: 0 strict hits, unchanged. Synced to Team B.
+
+- **2026-10-08 — §17.5 gains a cross-reference** to new `spec-render-pipeline.md` §6.6 (outer OS-thread
+  topology and boot sequence) and to `spec-player-runtime.md` §5.1 (the full cross-subsystem per-frame
+  order this dispatcher's own call from `0x00702a50` sits inside). No new disassembly in this file.
+  Cleanroom self-check: 0 new hits. Synced to Team B.

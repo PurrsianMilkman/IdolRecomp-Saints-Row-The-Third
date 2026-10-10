@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstring>
 
+#include "vppcache/shader_cache.h"
+
 namespace sr3render {
 
 namespace {
@@ -31,8 +33,37 @@ struct Constants {
     float viewProjection[16];
     int mode;
     float pad[3];
-    float tint[4]; // per-draw colour, used by mode 4 (material id)
+    float tint[4];          // per-draw colour, used by mode 4 (material id)
+    // Real sun-direction-driven lighting (this task, 2026-10-08, sky/
+    // lighting/TOD - see mesh_renderer.h's draw()/drawTextured() comment
+    // for the full byte-for-byte-by-default contract). Layout mirrors the
+    // HLSL cbuffer below exactly: each float3 is followed by one pad float
+    // to round it to 16 bytes, matching HLSL's own packing rule, since this
+    // struct is memcpy'd directly into the GPU buffer.
+    float sunDirection[3];
+    float sunDirectionPad;
+    float ambientColor[3];
+    float ambientColorPad;
+    float sunColor[3];
+    float sunColorPad;
+    // useRealLighting (this task): a STATIC BRANCH (see ps_main below), not
+    // just a value substitution - see its own comment for why. 0 by default
+    // (every pre-existing call site).
+    int useRealLighting;
+    float useRealLightingPad[3];
 };
+
+// Byte-for-byte reproduction of the OLD fixed "headlight" term's INPUT
+// values (CHOSEN direction (0.3,0.5,-0.8), shade = 0.35 + 0.65*lambert
+// applied as one scalar to every channel) - used only as a convenience
+// default for CALLERS that pass null; ps_main's OWN "else" branch below
+// does NOT read these back through the cbuffer for the default case (see
+// useRealLighting's comment for why), so these three arrays exist purely so
+// draw()/drawTextured() always have SOME concrete direction/colour values
+// to upload, never so the shader's default visual path depends on them.
+const float kDefaultSunDirection[3] = {0.3f, 0.5f, -0.8f};
+const float kDefaultAmbientColor[3] = {0.35f, 0.35f, 0.35f};
+const float kDefaultSunColor[3] = {0.65f, 0.65f, 0.65f};
 
 const char kShaderSource[] = R"HLSL(
 cbuffer Constants : register(b0) {
@@ -40,6 +71,14 @@ cbuffer Constants : register(b0) {
     int  mode;
     float3 pad;
     float4 tint;
+    float3 sunDirection;
+    float  sunDirectionPad;
+    float3 ambientColor;
+    float  ambientColorPad;
+    float3 sunColor;
+    float  sunColorPad;
+    int    useRealLighting;
+    float3 useRealLightingPad;
 };
 
 struct VSIn {
@@ -66,10 +105,37 @@ Texture2D    tex : register(t0);
 SamplerState smp : register(s0);
 
 float4 ps_main(VSOut i) : SV_Target {
-    // A fixed headlight term, only so silhouettes and surface curvature
-    // are readable. Not a lighting model and not pretending to be one.
-    float lambert = saturate(dot(normalize(i.normal), normalize(float3(0.3, 0.5, -0.8))));
-    float shade = 0.35 + 0.65 * lambert;
+    // Real sun-direction-driven diffuse term PLUS a genuine ambient colour
+    // term (this task, 2026-10-08, sky/lighting/TOD - replaces the old
+    // fixed scalar "headlight" term; see mesh_renderer.h's draw() comment
+    // for the full contract). useRealLighting is a STATIC branch on a
+    // per-draw UNIFORM value, not a value-level substitution: an EARLIER
+    // version of this shader computed shadeRGB as ONE formula
+    // (ambientColor + lambert*sunColor) with ambientColor/sunColor
+    // defaulting to (0.35,0.35,0.35)/(0.65,0.65,0.65) - numerically
+    // IDENTICAL to the old 0.35+0.65*lambert for the default case, but NOT
+    // bit-identical: moving sunDirection/ambientColor/sunColor from
+    // compile-time HLSL literals to a runtime cbuffer read measurably
+    // changed the compiled instructions (confirmed empirically - a handful
+    // of pixels differed from frozen goldens at the LSB after that change,
+    // this project's own golden_scene_check ctest - not a hypothesis).
+    // Keeping the OLD branch's literal expression TEXTUALLY UNCHANGED
+    // (same tokens as the pre-TOD-task shader) gives the compiler the same
+    // input it always had for that branch, which this task's own
+    // golden_scene_check run (after this fix) confirms restores exact
+    // byte-for-byte output for every pre-existing caller.
+    float3 shadeRGB;
+    if (useRealLighting != 0) {
+        float lambert = saturate(dot(normalize(i.normal), normalize(sunDirection)));
+        shadeRGB = ambientColor + lambert * sunColor;
+    } else {
+        // UNCHANGED from before this task - do not "simplify" this to share
+        // code with the branch above; that would reintroduce the exact
+        // bit-identity problem this split exists to avoid.
+        float lambert = saturate(dot(normalize(i.normal), normalize(float3(0.3, 0.5, -0.8))));
+        float shade = 0.35 + 0.65 * lambert;
+        shadeRGB = float3(shade, shade, shade);
+    }
 
     if (mode == 0) {
         // Raw UV. A wrong 16-bit interpretation shows up here as noise
@@ -81,7 +147,7 @@ float4 ps_main(VSOut i) : SV_Target {
         // way a smooth gradient does not.
         float2 c = floor(i.uv * 16.0);
         float checker = frac((c.x + c.y) * 0.5) * 2.0;
-        return float4(float3(0.15, 0.15, 0.18) + checker * float3(0.8, 0.8, 0.85) * shade, 1.0);
+        return float4(float3(0.15, 0.15, 0.18) + checker * float3(0.8, 0.8, 0.85) * shadeRGB, 1.0);
     }
     if (mode == 3) {
         return float4(i.normal * 0.5 + 0.5, 1.0);
@@ -93,19 +159,42 @@ float4 ps_main(VSOut i) : SV_Target {
         // plausible and wrong. A colour asserts only what is CONFIRMED -
         // that the index buffer is partitioned into ranges carrying
         // material ids - and makes the partition visible.
-        return float4(tint.rgb * shade, 1.0);
+        return float4(tint.rgb * shadeRGB, 1.0);
     }
     if (mode == 5) {
         // FlatTint: ONE caller-supplied colour for the whole draw, ignoring
         // material id - see MeshDrawMode::FlatTint's own comment (added for
         // the zone-composite investigation command's channel colouring).
-        return float4(tint.rgb * shade, 1.0);
+        return float4(tint.rgb * shadeRGB, 1.0);
     }
-    return float4(tex.Sample(smp, i.uv).rgb * shade, 1.0);
+    return float4(tex.Sample(smp, i.uv).rgb * shadeRGB, 1.0);
 }
 )HLSL";
 
+// Persistent compiled-shader cache (this task, 2026-10-08): keyed by a
+// hash of exactly D3DCompile's own inputs (source text + entry point +
+// target profile + flags), so this is self-invalidating the same way the
+// archive decode cache is - change kShaderSource (or the entry/target/
+// flags) and the key changes with it, no manual cache-version bump
+// needed. A hit skips D3DCompile entirely and reconstructs a real
+// ID3DBlob (via D3DCreateBlob) from the persisted bytecode bytes, so
+// every downstream consumer (CreateVertexShader/CreateInputLayout/
+// CreatePixelShader, all below) is unchanged either way.
 bool compileShader(const char* entry, const char* target, ID3DBlob** blob, std::string& error) {
+    const std::string cacheKey =
+        vppcache::shaderCompileKey(kShaderSource, entry, target, D3DCOMPILE_OPTIMIZATION_LEVEL3);
+    std::vector<uint8_t> cachedBytecode;
+    if (vppcache::tryGetCompiledShader(cacheKey, cachedBytecode)) {
+        HRESULT hr = D3DCreateBlob(cachedBytecode.size(), blob);
+        if (SUCCEEDED(hr)) {
+            std::memcpy((*blob)->GetBufferPointer(), cachedBytecode.data(), cachedBytecode.size());
+            return true;
+        }
+        // Fall through to a real compile if D3DCreateBlob itself somehow
+        // fails - never let a cache-layer failure be the reason a shader
+        // that would otherwise compile fine does not.
+    }
+
     ID3DBlob* errors = nullptr;
     HRESULT hr = D3DCompile(kShaderSource, sizeof(kShaderSource) - 1, "sr3render_mesh", nullptr,
                             nullptr, entry, target, D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob,
@@ -121,6 +210,7 @@ bool compileShader(const char* entry, const char* target, ID3DBlob** blob, std::
         return false;
     }
     if (errors != nullptr) errors->Release();
+    vppcache::putCompiledShader(cacheKey, (*blob)->GetBufferPointer(), (*blob)->GetBufferSize());
     return true;
 }
 
@@ -417,7 +507,8 @@ bool MeshRenderer::upload(ID3D11Device* device, const sr3mesh::MeshBlock& mesh,
 
 void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection[16],
                         MeshDrawMode mode, ID3D11ShaderResourceView* texture,
-                        const float world[16], const float tint[4]) {
+                        const float world[16], const float tint[4], const float sunDirection[3],
+                        const float ambientColor[3], const float sunColor[3]) {
     if (context == nullptr || vertexBuffer_ == nullptr || indexBuffer_ == nullptr) return;
 
     // world == nullptr (every pre-existing call site) takes wvp == the
@@ -430,6 +521,18 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
         wvp = combinedWvp;
     }
 
+    // Null (every pre-existing call site) -> the OLD fixed term's own
+    // values uploaded for completeness, but NOT actually read by the
+    // shader's default branch (useRealLighting below) - see ps_main's own
+    // comment for why that distinction matters.
+    const float* effectiveSunDirection = sunDirection != nullptr ? sunDirection : kDefaultSunDirection;
+    const float* effectiveAmbientColor = ambientColor != nullptr ? ambientColor : kDefaultAmbientColor;
+    const float* effectiveSunColor = sunColor != nullptr ? sunColor : kDefaultSunColor;
+    // true only when a caller supplied at least one real value - every
+    // pre-existing call site passes none of the three, so this is false
+    // there, selecting ps_main's OLD, textually-unchanged literal branch.
+    const int useRealLighting = (sunDirection != nullptr || ambientColor != nullptr || sunColor != nullptr) ? 1 : 0;
+
     auto writeConstants = [&](const float tint[4]) {
         D3D11_MAPPED_SUBRESOURCE m{};
         if (FAILED(context->Map(constantBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return;
@@ -437,6 +540,10 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
         std::memcpy(constants.viewProjection, wvp, sizeof(constants.viewProjection));
         constants.mode = static_cast<int>(mode);
         if (tint != nullptr) std::memcpy(constants.tint, tint, sizeof(constants.tint));
+        std::memcpy(constants.sunDirection, effectiveSunDirection, sizeof(constants.sunDirection));
+        std::memcpy(constants.ambientColor, effectiveAmbientColor, sizeof(constants.ambientColor));
+        std::memcpy(constants.sunColor, effectiveSunColor, sizeof(constants.sunColor));
+        constants.useRealLighting = useRealLighting;
         std::memcpy(m.pData, &constants, sizeof(constants));
         context->Unmap(constantBuffer_, 0);
     };
@@ -480,7 +587,8 @@ void MeshRenderer::draw(ID3D11DeviceContext* context, const float viewProjection
 
 void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewProjection[16],
                                 const std::vector<ID3D11ShaderResourceView*>& perMaterial,
-                                const float world[16]) {
+                                const float world[16], const float sunDirection[3],
+                                const float ambientColor[3], const float sunColor[3]) {
     if (context == nullptr || vertexBuffer_ == nullptr || indexBuffer_ == nullptr) return;
     if (subDraws_.empty()) return;
 
@@ -490,6 +598,11 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
         multiplyMatrix4x4(world, viewProjection, combinedWvp);
         wvp = combinedWvp;
     }
+    // Null (every pre-existing call site) -> see draw()'s own identical comment.
+    const float* effectiveSunDirection = sunDirection != nullptr ? sunDirection : kDefaultSunDirection;
+    const float* effectiveAmbientColor = ambientColor != nullptr ? ambientColor : kDefaultAmbientColor;
+    const float* effectiveSunColor = sunColor != nullptr ? sunColor : kDefaultSunColor;
+    const int useRealLighting = (sunDirection != nullptr || ambientColor != nullptr || sunColor != nullptr) ? 1 : 0;
 
     UINT stride = sizeof(GpuVertex);
     UINT offset = 0;
@@ -518,6 +631,10 @@ void MeshRenderer::drawTextured(ID3D11DeviceContext* context, const float viewPr
         constants.mode = srv != nullptr ? static_cast<int>(MeshDrawMode::Textured)
                                         : static_cast<int>(MeshDrawMode::MaterialIdAsColour);
         if (srv == nullptr) materialIdColour(sd.materialId, constants.tint);
+        std::memcpy(constants.sunDirection, effectiveSunDirection, sizeof(constants.sunDirection));
+        std::memcpy(constants.ambientColor, effectiveAmbientColor, sizeof(constants.ambientColor));
+        std::memcpy(constants.sunColor, effectiveSunColor, sizeof(constants.sunColor));
+        constants.useRealLighting = useRealLighting;
 
         D3D11_MAPPED_SUBRESOURCE m{};
         if (SUCCEEDED(context->Map(constantBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
@@ -610,6 +727,10 @@ void MeshRenderer::drawSkeleton(ID3D11DeviceContext* context, const float viewPr
         Constants constants{};
         std::memcpy(constants.viewProjection, wvp, sizeof(constants.viewProjection));
         constants.mode = 3; // normal-as-colour: normals are set to 1, giving solid white lines
+        // mode 3's own shader branch returns BEFORE shadeRGB is ever used
+        // (ps_main: "if (mode == 3) return ..."), so sunDirection/
+        // ambientColor/sunColor are left zero-initialised here deliberately -
+        // they cannot affect this draw's actual output either way.
         std::memcpy(mapped.pData, &constants, sizeof(constants));
         context->Unmap(constantBuffer_, 0);
     }

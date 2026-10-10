@@ -27,6 +27,23 @@
 // recognises those tags, and re-deriving public Wwise internals is exactly
 // what this project's cleanroom rule exists to avoid.
 //
+// UPDATE 2026-10-09 (spec-audio-runtime.md Sec8/Sec9.7/Sec9.8, "wave 6"
+// spec sync): the premise above is now closed properly, not worked around,
+// for the PLAIN `.bnk_pc` SIBLING specifically - Team A's own
+// disassembly-based RE (never Team B's, and this project never reads that
+// disassembly directly, only the resulting spec text) has since CONFIRMED
+// the real per-HIRC-kind dispatch table, the real Sound(kind 2)/
+// Action(kind 3)/Event(kind 4) class identities, and the Sound object's own
+// on-disk source-descriptor layout - exactly the gap this paragraph used to
+// describe as out of reach. See include/sr3audio/hirc.h, a SEPARATE module
+// that implements that walker, kept separate deliberately: THIS file's own
+// scope is unchanged by that spec sync - it still only reads the
+// `_media.bnk_pc` wrapper's own directory, still returns opaque byte
+// ranges, and still decodes no payload byte. hirc.h's job stops at
+// recovering which record THIS wrapper's own `tag` field (Sec4.2) matches -
+// no Vorbis decode, no further Wwise-internal derivation beyond what
+// spec-audio-runtime.md Sec9.8 confirms.
+//
 // ---------------------------------------------------------------------
 // Header layout (offsets relative to the start of the entry's OWN payload -
 // i.e. the first byte after the outer `.vpp_pc` container has located it;

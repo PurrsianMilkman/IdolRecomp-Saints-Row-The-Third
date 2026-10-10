@@ -80,11 +80,25 @@ public class CrreishDump extends GhidraScript {
 
     @Override
     public void run() throws Exception {
-        String[] args = getScriptArgs();
+        try {
+            processJob(getScriptArgs());
+        } finally {
+            disposeDecompiler();
+        }
+    }
+
+    /** 2026-10-08: extracted from run() so CrreishServer.java (persistent, loop-mode variant that keeps
+     * this same project/program open across many jobs instead of one analyzeHeadless process per job) can
+     * call this repeatedly against one already-open currentProgram. Behavior for a single CrreishDump
+     * invocation is unchanged: run() still does exactly one job then disposes the decompiler. resetOptions()
+     * guards against option values (depth/maxfuncs/...) leaking from one job to the next when this is called
+     * more than once in the same process. */
+    protected void processJob(String[] args) throws Exception {
         if (args.length < 3) {
             printerr("usage: CrreishDump <outDir> <lua|func|xref|str> [key=value ...] <item> ...");
             return;
         }
+        resetOptions();
         outDir = new File(args[0]);
         outDir.mkdirs();
         String mode = args[1];
@@ -113,7 +127,9 @@ public class CrreishDump extends GhidraScript {
         }
         listing = currentProgram.getListing();
         mem = currentProgram.getMemory();
-        if (decompile) {
+        if (decompile && decomp == null) {
+            // created once, reused across jobs in a CrreishServer loop (openProgram() against a 467MB
+            // project is most of this script's cost; do it at most once per process, not once per job)
             decomp = new DecompInterface();
             decomp.setOptions(new DecompileOptions());
             decomp.openProgram(currentProgram);
@@ -142,7 +158,21 @@ public class CrreishDump extends GhidraScript {
             index.flush();
         }
         index.close();
-        if (decomp != null) decomp.dispose();
+    }
+
+    /** Reset every option field to its single-shot default before parsing a job's own key:value args, so
+     * a job that omits an option never inherits the previous job's value when run inside CrreishServer. */
+    private void resetOptions() {
+        depth = 1; maxFuncs = 40; maxInsn = 600; xrefCap = 25; window = 6; count = 16; decompile = true;
+    }
+
+    /** Dispose the decompiler (if one was opened). Safe to call more than once. CrreishDump.run() calls
+     * this once after its single job; CrreishServer calls it once after its whole serve loop exits. */
+    protected void disposeDecompiler() {
+        if (decomp != null) {
+            decomp.dispose();
+            decomp = null;
+        }
     }
 
     // ---------------------------------------------------------------- lua / str

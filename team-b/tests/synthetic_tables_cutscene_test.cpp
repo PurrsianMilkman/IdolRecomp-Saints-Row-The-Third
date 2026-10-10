@@ -146,6 +146,22 @@ void testResources() {
     CHECK(!parseCutscene(chars).resources);
 }
 
+void testCameraScript() {
+    // Absent / no text: OPEN (nullopt), same convention as every other
+    // optional text field here (ChildText's own "absent OR no text" rule).
+    CHECK(!parseCutscene("<CutsceneType>Zscene</CutsceneType>").cameraScriptText);
+    CHECK(!parseCutscene("<CameraScript/>").cameraScriptText);
+    CHECK(!parseCutscene("<CameraScript></CameraScript>").cameraScriptText);
+    // Present: the raw text, unresolved (no extension/path logic invented).
+    const SceneFields s = parseCutscene("<CameraScript>01_z01</CameraScript>");
+    CHECK(s.cameraScriptText == std::optional<std::string>("01_z01"));
+    const SceneFields withExt = parseCutscene("<CameraScript>02_z02.csc_pc</CameraScript>");
+    CHECK(withExt.cameraScriptText == std::optional<std::string>("02_z02.csc_pc"));
+    // Case-insensitive element-name match, same as every other field here.
+    CHECK(parseCutscene("<cameraSCRIPT>x</cameraSCRIPT>").cameraScriptText ==
+          std::optional<std::string>("x"));
+}
+
 Document names(const std::vector<std::string>& list) {
     std::string x = "<Root><Table>";
     for (const auto& n : list) x += "<Cutscene><Name>" + n + "</Name></Cutscene>";
@@ -221,6 +237,7 @@ int main() {
     testLightset();
     testSoundtrack();
     testResources();
+    testCameraScript();
     testNameFilter();
     testBuild();
     std::cout << "sr3tables_cutscene: " << g_checks << " checks, " << g_failures << " failures\n";

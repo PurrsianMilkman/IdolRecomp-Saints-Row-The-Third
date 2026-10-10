@@ -520,10 +520,12 @@ int realMain() {
         w.load();
         const NodeGraphRuntime rt(w.lib, w.registry, w.filters);
         Services svc;
-        // Sec8.10: 3, 12 and 30-31 updates for 0.1, 0.4 and 1.0 s. Those counts
-        // come from a double-precision replay; 12 x (1/30) / 0.4 is exactly 1,
-        // so with the float weight the 12th update lands within float rounding
-        // of 1.0 (asserted) and a 13th snaps it.
+        // Sec8.10 (as of 2026-10-07): 3, 13 and 30-31 updates for 0.1, 0.4 and
+        // 1.0 s (originally "12" for 0.4 s, corrected by Team A after this
+        // project reported the float-vs-double mismatch; 12 x (1/30) / 0.4 is
+        // exactly 1 only in double precision - with the float weight the 12th
+        // update lands within float rounding of 1.0 (asserted) and the 13th
+        // snaps it, now the spec's own number too).
         std::map<std::string, int> updates;
         std::map<std::string, float> afterNominal;
         const std::map<std::string, int> nominal = {{"0.1", 3}, {"0.4", 12}, {"1.0", 30}};

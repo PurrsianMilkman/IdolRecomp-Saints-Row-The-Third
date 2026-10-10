@@ -215,6 +215,65 @@
 //   eyePos on the VS side) rather than a per-material authored value -
 //   exactly the same standard, not a new one.
 //
+// HYPOTHESIS TEST, ADDED 2026-10-08 (orchestrator task, relayed from Team A
+// via spec-render-pipeline.md Sec20.12.14 point 5): Team A's exhaustive
+// negative confirms NOTHING in the shipped executable ever writes VS c35
+// (Object_instance_params) or c36 (Object_instance_params_2) - full stop, no
+// name-hash mechanism, no per-material array, no literal register upload
+// anywhere. Team A's own working HYPOTHESIS (explicitly labelled HYPOTHESIS,
+// not CONFIRMED, in the spec): the real game's D3D9 renderer never clears
+// unused constant registers between draws, so these two registers hold
+// whatever the PREVIOUS draw call happened to leave in them, while this
+// project's clean-room renderer zero-inits every cbuffer fresh each draw -
+// meaning this scene's saturated/neon-looking render could be an artifact of
+// OUR OWN cleaner state management, not a missing data source.
+//
+// Tested concretely this session via a new opt-in switch,
+// SR3_TEST_OBJ_INSTANCE_PARAMS=1 (unset = zero behaviour change from before
+// this switch existed, verified by MD5: default-mode output is byte-
+// identical, df05d007b471049ab7812944765e9a5c, to the existing frozen
+// baseline both with and without this switch's code present). See
+// fillVsCbuffer()'s own "object_instance_params" branch below for the full
+// reasoning and the CHOSEN test value: (1,1,1,1), the multiplicative
+// identity for the one concrete real use of this constant this project has
+// ever traced (`Diffuse_Color * Object_instance_params` in ir_bbsimple1's
+// real role6 pass2 VS, this file's own LEAD/HONEST section above) - NOT a
+// confirmed value, NOT a captured real "previous draw" value (this
+// standalone tool gives every material its OWN freshly-zeroed per-material
+// cbuffer, so there is no genuine prior-draw GPU register state to inherit
+// here - option (a) from the task brief was not testable in this tool for
+// that reason).
+//
+// RESULT: NEGATIVE / does not fix the symptom. The test value DOES produce a
+// real, measurable change (MD5 of the WARP capture changes from
+// df05d007b471049ab7812944765e9a5c to 287f5d71e2c875512eba0b965a91ba58;
+// comparePngTolerance against the default-mode capture: 8744/480000 pixels
+// exceed a +-64/255 band, maxAbsDiff=127, meanAbsDiff=0.68 over the whole
+// 800x600 frame) - but it is small, localized to only 2 of this scene's 14
+// drawable materials (the terminal-building roof and a small tower-cap/door
+// region - confirmed by rendering the actual tolerance-diff PNG, not just
+// reading the numbers; the main tower shaft, which does not reference
+// Object_instance_params/_2 in its own resolved shader, shows ZERO diff
+// pixels), and it does NOT change the render's dominant visual character.
+// Both before and after are flat, hard-edged, saturated cyan/blue/magenta -
+// still a Fresnel/rim-looking "specular-only" silhouette with no visible
+// diffuse texture/albedo detail, on both the changed AND unchanged parts of
+// the geometry (including the tower shaft, where this constant plays no
+// role at all and the render is pixel-identical either way) - i.e. this
+// hypothesis test does NOT explain this scene's dominant visual symptom.
+// This is consistent with, and does not override, this file's own earlier,
+// independently-documented, more specific candidate explanation for that
+// SAME saturated/neon look (see tests/golden/clmesh_airport_controltower_lit
+// /COMMAND.txt's own "HONEST READ" section, 2026-10-07 WARP-migration pass):
+// a zero `eyePos` placeholder degenerating the view-dependent Fresnel/
+// specular term - a separate, still-untraced lead, out of this task's own
+// scope. Per this project's own "don't freeze on a hunch" standing
+// discipline, NO new golden baseline was frozen from this test - the
+// existing baseline (hardware-and-WARP MD5s both confirmed unchanged by this
+// session) remains the frozen truth for this scene. Full reasoning, the
+// diff-PNG description, and every number above: this session's own
+// SubagentHandback report.
+//
 // Standalone: not wired into CMakeLists.txt, build_verify/ untouched. Built
 // via a direct cl.exe/link.exe compile (see this session's own report for
 // the exact commands) - the SAME convention every prototype_*.cpp in this
@@ -227,6 +286,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -247,6 +307,7 @@
 #include "sr3fxo/wrapper_header.h"
 #include "sr3geometry/material_binding.h"
 #include "sr3mesh/mesh_block.h"
+#include "sr3render/device.h" // sr3render::RenderDevice - the shared SR3_FORCE_WARP/SR3_FORCE_HW device-creation path (see this file's own RenderDevice wrapper below for why)
 #include "sr3render/mesh_renderer.h" // buildOrbitViewProjection/buildWorldMatrix/multiplyMatrix4x4
 #include "sr3render/png_writer.h"
 #include "sr3render/texture_upload.h"
@@ -322,66 +383,68 @@ bool endsWithNoCase(const std::string& s, const std::string& suffix) {
 size_t alignUp(size_t v, size_t a) { return (v + a - 1) / a * a; }
 
 // ===========================================================================
-// Plain (non-swapchain) D3D11 device - identical to prototype_lit_car.cpp's
-// own.
+// Plain (non-swapchain) D3D11 device.
+//
+// FIX (adversarial-review follow-up task, 2026-10-07): this struct used to
+// be a hand-duplicated copy of sr3render::RenderDevice's own
+// hardware-then-WARP creation logic (identical in kind to
+// prototype_lit_car.cpp's own, per this file's original top comment) that
+// never read SR3_FORCE_WARP/SR3_FORCE_HW at all - it always tried hardware
+// first, unconditionally, with no escape hatch. That made this scene's
+// "WARP" golden baseline a silent no-op under the B3/WARP-migration tasks:
+// golden_scene_check.cpp's forced SR3_FORCE_WARP=1 env var (inherited by
+// every subprocess it spawns, including this tool's) was never read here,
+// so this scene kept rendering on whatever hardware adapter happened to be
+// present on the freezing machine while all 11 other migrated scenes
+// genuinely switched to WARP. Caught by an adversarial review: this
+// scene's "WARP" baseline PNG was byte-identical (MD5
+// f68d18c6097e219ba6883dff9b621539) to its own preserved
+// *_hw_pre_warp copy - coincidental same-bytes from the SAME hardware
+// render twice, not real cross-renderer agreement.
+//
+// Rather than re-adding a second independent copy of the same env-var read
+// (two unsynchronized copies of "hardware-first, WARP on SR3_FORCE_WARP" is
+// exactly how this gap was introduced in the first place - this tool's own
+// copy was simply never updated when src/device.cpp's was), this struct now
+// DELEGATES to the real sr3render::RenderDevice (src/device.cpp) for all
+// device creation - the SAME single code path sr3_viewer.exe and every
+// other golden-scene tool already uses, including its SR3_FORCE_WARP
+// (forced WARP) / SR3_FORCE_HW (forced hardware, via golden_scene_check's
+// --hw clearing SR3_FORCE_WARP back to 0) handling verbatim, with nothing
+// left here to drift out of sync again. device.obj is already linked into
+// this tool's .exe (see tests/golden/build.bat's existing link step for
+// prototype_lit_clmesh_tower2.exe), so this needs no new build-system
+// wiring.
+//
+// `device`/`context`/`rtv`/`isWarp` keep their pre-existing names and
+// shapes so every one of this file's own ~80 call sites below
+// (dev.device->..., dev.context->..., &dev.rtv, dev.isWarp) is untouched -
+// they are now raw pointers captured ONCE from the real device right after
+// a successful initialise(), not independently created or owned. `real`
+// owns the actual COM objects and releases them on its own destruction;
+// this wrapper's destructor is the implicit default (it owns nothing to
+// release).
 // ===========================================================================
 struct RenderDevice {
+    sr3render::RenderDevice real; // the one real device-creation path (src/device.cpp)
     ID3D11Device* device = nullptr;
     ID3D11DeviceContext* context = nullptr;
-    ID3D11Texture2D* target = nullptr;
     ID3D11RenderTargetView* rtv = nullptr;
-    ID3D11Texture2D* staging = nullptr;
     uint32_t width = 0, height = 0;
     bool isWarp = false;
 
-    ~RenderDevice() {
-        safeRelease(staging);
-        safeRelease(rtv);
-        safeRelease(target);
-        safeRelease(context);
-        safeRelease(device);
-    }
-
     bool initialise(uint32_t w, uint32_t h, std::string& error) {
-        width = w; height = h;
-        const D3D_FEATURE_LEVEL wanted[] = {D3D_FEATURE_LEVEL_11_0};
-        D3D_FEATURE_LEVEL got = D3D_FEATURE_LEVEL_11_0;
-        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, wanted, 1,
-                                        D3D11_SDK_VERSION, &device, &got, &context);
-        if (FAILED(hr)) {
-            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, 0, wanted, 1, D3D11_SDK_VERSION,
-                                    &device, &got, &context);
-            if (FAILED(hr)) { error = "D3D11CreateDevice failed for both hardware and WARP: " + hrToString(hr); return false; }
-            isWarp = true;
-        }
-        D3D11_TEXTURE2D_DESC td{};
-        td.Width = width; td.Height = height; td.MipLevels = 1; td.ArraySize = 1;
-        td.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-        td.SampleDesc.Count = 1;
-        td.Usage = D3D11_USAGE_DEFAULT;
-        td.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-        hr = device->CreateTexture2D(&td, nullptr, &target);
-        if (FAILED(hr)) { error = "CreateTexture2D (target) failed: " + hrToString(hr); return false; }
-        hr = device->CreateRenderTargetView(target, nullptr, &rtv);
-        if (FAILED(hr)) { error = "CreateRenderTargetView failed: " + hrToString(hr); return false; }
-        D3D11_TEXTURE2D_DESC sd = td;
-        sd.Usage = D3D11_USAGE_STAGING; sd.BindFlags = 0; sd.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        hr = device->CreateTexture2D(&sd, nullptr, &staging);
-        if (FAILED(hr)) { error = "CreateTexture2D (staging) failed: " + hrToString(hr); return false; }
+        if (!real.initialise(w, h, error)) return false;
+        device = real.device();
+        context = real.context();
+        rtv = real.renderTargetView();
+        width = w;
+        height = h;
+        isWarp = (real.kind() == sr3render::DeviceKind::Warp);
         return true;
     }
     bool readBack(std::vector<uint8_t>& rgba, std::string& error) {
-        context->CopyResource(staging, target);
-        D3D11_MAPPED_SUBRESOURCE m{};
-        HRESULT hr = context->Map(staging, 0, D3D11_MAP_READ, 0, &m);
-        if (FAILED(hr)) { error = "Map(staging) failed: " + hrToString(hr); return false; }
-        rgba.resize(static_cast<size_t>(width) * height * 4);
-        const uint8_t* src = static_cast<const uint8_t*>(m.pData);
-        for (uint32_t y = 0; y < height; ++y)
-            std::memcpy(rgba.data() + static_cast<size_t>(y) * width * 4, src + static_cast<size_t>(y) * m.RowPitch,
-                        static_cast<size_t>(width) * 4);
-        context->Unmap(staging, 0);
-        return true;
+        return real.readBack(rgba, error);
     }
 };
 
@@ -748,6 +811,13 @@ struct CompiledShader {
     int normalMapSamplerReg = -1;   // NEW: s-register of this material's real Normal_MapSampler (role4)
     int diffuseMapSamplerReg = -1;  // NEW: s-register of this material's real Diffuse_MapSampler (role6)
     int specularMapSamplerReg = -1; // NEW: s-register of this material's real Specular_MapSampler (role6)
+    int dsfDataSamplerReg = -1;     // NEW (orchestrator task, 2026-10-08): s-register of IR_GBuffer_DSF_DataSampler
+                                     // (role6, @s9 for every one of this shader family's real occurrences per
+                                     // spec-render-pipeline.md Sec23.8's own 844-file population scan). Previously
+                                     // declared-but-unbound in this tool - always fell through to the white
+                                     // placeholder. Bound in PASS C below to dsfDataRT.srv, the G-buffer-fill
+                                     // pass's own real oC1 output, per Sec23.8's "which pass writes it - CLOSED"
+                                     // finding.
     std::vector<UINT> allTexBindPoints;
     std::vector<UINT> allSamplerBindPoints;
     size_t rangesUsing = 0;
@@ -781,6 +851,11 @@ CompiledShader compileOnePass(ID3D11Device* device, const std::vector<uint8_t>& 
         if (containsCI(c.name, "normal_mapsampler")) cs.normalMapSamplerReg = c.registerIndex;
         if (containsCI(c.name, "diffuse_mapsampler")) cs.diffuseMapSamplerReg = c.registerIndex;
         if (containsCI(c.name, "specular_mapsampler")) cs.specularMapSamplerReg = c.registerIndex;
+        // NEW (orchestrator task, 2026-10-08, spec-render-pipeline.md
+        // Sec23.8/Sec23.13): resolve IR_GBuffer_DSF_DataSampler's own
+        // s-register so PASS C below can bind it to the real G-buffer-fill
+        // output instead of letting it fall through to a placeholder.
+        if (containsCI(c.name, "ir_gbuffer_dsf_datasampler")) cs.dsfDataSamplerReg = c.registerIndex;
     }
 
     ID3DBlob *vsErr = nullptr, *psErr = nullptr;
@@ -1028,8 +1103,67 @@ int main(int argc, char** argv) {
     std::string outPath = "D:/Project Crreish/TEAM B/tools/prototype_lit_clmesh_tower2_output.png";
     if (argc >= 2) outPath = argv[1];
 
+    // HYPOTHESIS TEST SWITCH (2026-10-08, orchestrator task, relayed from Team
+    // A via spec-render-pipeline.md Sec20.12.14 point 5): OPT-IN ONLY, via
+    // SR3_TEST_OBJ_INSTANCE_PARAMS=1. Unset (the default, and the only mode
+    // this scene's own frozen golden is checked against unless/until a future
+    // session explicitly re-freezes it) leaves EVERY byte of this tool's
+    // output unchanged from before this test switch existed - see
+    // fillVsCbuffer()'s own "object_instance_params" branch below for exactly
+    // what this does and does not change, and this file's own top comment /
+    // this session's own report for the full reasoning and result. This is a
+    // TEST of an unconfirmed HYPOTHESIS (Team A's own spec text: "HYPOTHESIS
+    // - plausible mechanism, not shader-bytecode-traced"), not an
+    // implementation of a confirmed mechanism - do not mistake a test run's
+    // output for a new default.
+    const char* testEnvRaw = std::getenv("SR3_TEST_OBJ_INSTANCE_PARAMS");
+    const bool kTestObjInstanceParams = (testEnvRaw != nullptr) && (std::string(testEnvRaw) == "1");
+
+    // PROMOTED TO REAL DEFAULT BEHAVIOUR (2026-10-08, orchestrator task,
+    // spec-render-pipeline.md Sec20.12.15). This was previously an opt-in
+    // hypothesis-test switch (SR3_TEST_TARGET_DIMENSIONS=1, commit
+    // 57fc8ef) testing whether `rcp(Target_dimensions=0)=INF` feeding a NaN
+    // into the IR_GBuffer_DSF_DataSampler UV explains this scene's flat/
+    // hard-edged/saturated-per-face symptom (all 5 distinct real role6 PS
+    // shaders this tower resolves to open with `r0.x = rcp(c[47].x);
+    // r0.z = rcp(c[47].y)` then immediately use c48/IR_Pixel_Steps as a
+    // UV-space multiplier). That test alone was verified NEGATIVE (output
+    // byte-identical to the broken default) because PASS C never bound
+    // IR_GBuffer_DSF_DataSampler to anything but a placeholder - see the
+    // dsfDataSamplerReg binding added to PASS C below for the other half of
+    // today's fix.
+    //
+    // Team A's direct disassembly (Sec20.12.15) now makes this the REAL
+    // recommended fix, not just a hypothesis: an exhaustive whole-exe string
+    // scan found neither name exists anywhere as a literal, and all three
+    // most-likely literal/fixed-register producer functions were fully
+    // decompiled and contain zero SetPixelShaderConstantF/
+    // SetVertexShaderConstantF calls - there is no engine-side producer for
+    // either constant anywhere in the executable to reproduce. Team A's own
+    // stated practical recommendation: "synthesize (width,height,0,0)/
+    // (1/width,1/height,0,0) directly at PS c47/c48 rather than chasing a
+    // producer that doesn't exist." This is therefore now the unconditional
+    // default in fillPsCbufferTemplate()'s own "target_dimensions"/
+    // "ir_pixel_steps" branches below, not gated behind any env var -
+    // CHOSEN values (800,600,0,0)/(1/800,1/600,0,0), this tool's own actual
+    // render resolution, UNCHANGED from the original hypothesis test.
+
     printf("=== Lit-clmesh prototype: real G-buffer prepass -> real directional light -> real material pass ===\n");
     printf("(forked from prototype_lit_car.cpp - see this file's own top comment)\n\n");
+    if (kTestObjInstanceParams) {
+        printf("[HYPOTHESIS TEST] SR3_TEST_OBJ_INSTANCE_PARAMS=1: Object_instance_params/Object_instance_params_2\n");
+        printf("  (VS c35/c36) will be filled with a CHOSEN (1,1,1,1) identity value instead of the real-\n");
+        printf("  confirmed-zero placeholder, testing spec-render-pipeline.md Sec20.12.14 point 5's stale-D3D9-\n");
+        printf("  constant-carryover HYPOTHESIS for this scene's diffuse-vanishes/specular-only symptom. NOT a\n");
+        printf("  confirmed value, NOT the default - see fillVsCbuffer()'s own comment and this session's report.\n\n");
+    }
+    printf("[DEFAULT, 2026-10-08] Target_dimensions/IR_Pixel_Steps (PS c47/c48) are synthesized as CHOSEN\n");
+    printf("  (800,600,0,0)/(1/800,1/600,0,0) screen-metadata values (this tool's own actual render resolution),\n");
+    printf("  NOT the real-confirmed-zero placeholder - spec-render-pipeline.md Sec20.12.15's own recommendation,\n");
+    printf("  since no engine-side producer for either constant exists anywhere in the executable (exhaustive\n");
+    printf("  negative). PASS C also now binds IR_GBuffer_DSF_DataSampler@s9 to PASS A's real oC1 output\n");
+    printf("  (Sec23.8/Sec23.13) instead of a placeholder - see fillPsCbufferTemplate()'s own comment and this\n");
+    printf("  session's report for both halves of this fix.\n\n");
 
     // -----------------------------------------------------------------
     // 1. Real stem -> .fxo_pc table (identical mechanism to
@@ -1322,8 +1456,11 @@ int main(int argc, char** argv) {
     //    checked, same convention the existing clmesh golden scenes use.
     // -----------------------------------------------------------------
     std::vector<sr3mesh::MeshBlock> headBlocks = lm.resolveReferencedMeshes(clView, glView);
-    size_t gCursor = 0;
-    for (auto& hb : headBlocks) if (hb.bulkInGFile()) gCursor += hb.gLength();
+    // gCursorAfterHeadChain() rounds the HEAD-chain sum up to 16 at this
+    // HEAD -> MIDDLE handoff (level_mesh.h note 9) - a bare sum of
+    // headBlocks' gLength() is wrong whenever that sum is not already
+    // 16-aligned.
+    size_t gCursor = sr3clmesh::LevelMesh::gCursorAfterHeadChain(headBlocks);
 
     sr3mesh::MeshBlock chosenMesh;
     bool haveChosenMesh = false;
@@ -1468,6 +1605,65 @@ int main(int argc, char** argv) {
         litShaders[kv.second.vsFileName] = std::move(kv.second.lit);
     }
     printf("\n");
+
+    // -----------------------------------------------------------------
+    // NEW IN THIS FORK (diagnostic task, 2026-10-08, orchestrator relay of
+    // a sibling agent's finding): the ONLY role6 (lit material pass) PS
+    // body this file's own top comment ever independently re-traced
+    // byte-for-byte this session is ir_bbsimple1's (materialId 7/11 only)
+    // - confirmed there to end with a real lit-composite shape
+    // (`output.oC0.xyzw = r2.xyzw * c[37].xyzw`, c[37]=Tint_color). The
+    // OTHER 12 of this tower's 14 drawable materials (materialId
+    // 0,2,3,4,5,6,9,10,12,13,14,15) resolve, via this fork's OWN
+    // generalized candidateTryOrder() (Lead 1 above - try every real
+    // candidate file for a stem, not just _v/_mv, until ONE fully
+    // compiles for BOTH role4 AND role6), to OTHER real stems/candidate
+    // files whose role6 PS body was never individually read this session
+    // - the try-order mechanism only checks that a candidate COMPILES for
+    // both roles, not that its role6 PS is semantically a lit-material
+    // composite (the "role" a file is reached through is a T8 role-table
+    // SLOT NUMBER, not a verified semantic guarantee - see Lead 1's own
+    // "which one is tried first only matters if an earlier candidate
+    // fails to compile" caveat above). A sibling agent flagged this
+    // scene's final image as "solid, highly-saturated FLAT colors per
+    // face... visually match[ing] a raw G-buffer surface-normal-encoding
+    // debug view" and hypothesised PASS C might be reading the wrong
+    // intermediate target - independently re-checked THIS session by MD5
+    // (the flagged capture is byte-identical, df05d007b471049ab7812944
+    // 765e9a5c, to this scene's own already-frozen baseline, so it is the
+    // SAME already-documented state, not a new symptom) AND by direct
+    // RTV-wiring code read (PASS A writes normalsRT/dsfDataRT/
+    // lightingParamRT + gbufferDepth.dsv; PASS B writes lightBufferRT.rtv;
+    // PASS C writes dev.rtv + finalDepth.dsv - three disjoint
+    // ID3D11RenderTargetView* sets, no shared pointer, no RTV mixup as
+    // literally written). This block settles the REMAINING open part of
+    // that lead directly: does every one of this tower's real role6 PS
+    // bodies actually end in a lit-composite write, or could SOME of the
+    // 12 never-traced ones instead be a disguised G-buffer-shaped encode
+    // (reached only because the try-order mechanism never checks for
+    // that)? Prints the REAL translated HLSL (sr3d3d9bc::translateToHlsl,
+    // this project's own existing SM2/SM3-bytecode-to-HLSL clean-room
+    // translator - operating on this shader's own already-extracted real
+    // bytecode bytes, the SAME translation every compiled pass in this
+    // tool already goes through to reach D3DCompile, not a new
+    // mechanism) for EVERY distinct real role6 shader this tower
+    // resolves to, in full, OPT-IN via SR3_DUMP_ROLE6_HLSL=1 (unset =
+    // this block never prints, zero byte change to any existing golden).
+    // -----------------------------------------------------------------
+    const char* dumpHlslRaw = std::getenv("SR3_DUMP_ROLE6_HLSL");
+    const bool kDumpRole6Hlsl = (dumpHlslRaw != nullptr) && (std::string(dumpHlslRaw) == "1");
+    if (kDumpRole6Hlsl) {
+        printf("=== [DUMP, SR3_DUMP_ROLE6_HLSL=1] Real translated role6 (lit material pass) PS HLSL, "
+               "one per DISTINCT resolved shader (%zu distinct real VS file(s)) ===\n", litShaders.size());
+        for (auto& kv : litShaders) {
+            if (!kv.second.ok) continue;
+            std::vector<uint32_t> usedBy;
+            for (const auto& rr : resolutions) if (rr.ok && rr.vsFileName == kv.first) usedBy.push_back(rr.materialId);
+            printf("--- role6 PS for resolved VS file '%s' (stem '%s', used by materialId(s):", kv.first.c_str(), kv.second.stem.c_str());
+            for (uint32_t m : usedBy) printf(" %u", m);
+            printf(") ---\n%s\n--- end role6 PS HLSL for '%s' ---\n\n", kv.second.psTr.hlsl.c_str(), kv.first.c_str());
+        }
+    }
 
     // A range is drawable in this pipeline only if BOTH its real role-4 and
     // role-6 passes compiled - reported honestly either way.
@@ -1695,6 +1891,65 @@ int main(int argc, char** argv) {
                 }
                 decision = "PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a "
                            "static prop is already in one real object space)";
+            } else if (containsCI(c.name, "object_instance_params")) {
+                // HYPOTHESIS TEST branch (2026-10-08, orchestrator task, spec-
+                // render-pipeline.md Sec20.12.14 point 5). Matches BOTH
+                // Object_instance_params (VS c35) and Object_instance_params_2
+                // (VS c36) via substring - confirmed as the only two real CTAB
+                // constants carrying this name prefix in this shader family
+                // (this file's own top comment / Sec20.12.14 item 4: 1 VS
+                // register = 1 Vector4 each).
+                //
+                // Team A's exhaustive negative (spec-render-pipeline.md
+                // Sec20.12.14): NOTHING in the shipped executable ever writes
+                // VS c35 or c36 - not a name-hash mechanism, not a per-material
+                // array, not a literal register upload anywhere. Working
+                // HYPOTHESIS offered there (explicitly labelled HYPOTHESIS, not
+                // CONFIRMED): the real game's D3D9 renderer never clears unused
+                // constant registers between draws, so these two registers hold
+                // whatever the PREVIOUS draw call happened to leave in them -
+                // while this project's own renderer zero-inits every cbuffer
+                // fresh each draw (cs.vsCbufCpu.assign(cs.vsCbSize, 0) above),
+                // which may be an artifact of cleaner state management rather
+                // than a missing data source to wire up.
+                //
+                // Testing this concretely: this standalone tool gives every
+                // drawable material its OWN freshly-allocated per-material
+                // cbuffer (step 10b below, mc.litVsCpu etc., all starting from
+                // THIS generic template's own zeroed buffer) - there is no
+                // genuine prior-draw GPU register state anywhere in this
+                // tool's own pipeline to actually inherit, so option (a) from
+                // the task brief ("feed from the previous draw's own actual
+                // values") is NOT testable here: there is no real "previous
+                // draw value" to capture, only ever more zero. Option (b) is
+                // what IS testable: a representative, plausible stand-in value.
+                //
+                // CHOSEN test value (NOT a confirmed fact, NOT derived from
+                // any real captured register state - an explicit stand-in):
+                // (1,1,1,1). Picked specifically because this file's own
+                // earlier, independently-traced finding (top comment) is that
+                // ir_bbsimple1's real role6 pass2 VS computes its diffuse-
+                // texture multiplier as `Diffuse_Color * Object_instance_
+                // params` - so (1,1,1,1) is the multiplicative IDENTITY for
+                // the one concrete real use of this constant this project has
+                // ever actually traced, making it the most natural "a draw
+                // happened to leave a neutral value here" stand-in to test
+                // specifically whether the HARD ZERO (as opposed to the mere
+                // absence of a deliberate value) is what is actually killing
+                // diffuse. A genuinely different leftover value (e.g. a stale
+                // tint/damage-blend scalar from some other object's own prior
+                // draw) would be equally "plausible" and equally unconfirmed;
+                // this is simply the one this session picked and tested, not
+                // the only one that could have been chosen.
+                if (kTestObjInstanceParams) {
+                    for (uint16_t r = 0; r < c.registerCount; ++r) regs.push_back({1.0f,1.0f,1.0f,1.0f});
+                    decision = "CHOSEN TEST VALUE (HYPOTHESIS TEST, NOT confirmed, spec-render-pipeline.md "
+                               "Sec20.12.14 point 5, SR3_TEST_OBJ_INSTANCE_PARAMS=1): identity (1,1,1,1) stand-in "
+                               "for an assumed stale-D3D9-carryover value - see fillVsCbuffer()'s own comment";
+                } else {
+                    for (uint16_t r = 0; r < c.registerCount; ++r) regs.push_back({0,0,0,0});
+                    decision = "PLACEHOLDER: zero (untraced per-instance parameter)";
+                }
             } else {
                 for (uint16_t r = 0; r < c.registerCount; ++r) regs.push_back({0,0,0,0});
                 decision = "PLACEHOLDER: zero (untraced per-instance parameter)";
@@ -1728,6 +1983,54 @@ int main(int argc, char** argv) {
                 decision = "PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 "
                            "would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for "
                            "every pixel - see top comment for this session's own direct HLSL re-trace";
+            } else if (containsCI(c.name, "target_dimensions")) {
+                // REAL DEFAULT BEHAVIOUR (2026-10-08, orchestrator task,
+                // spec-render-pipeline.md Sec20.12.15 - see this file's own
+                // top-of-main comment for the full finding). Previously an
+                // opt-in hypothesis-test branch (SR3_TEST_TARGET_DIMENSIONS=1,
+                // commit 57fc8ef); promoted unconditionally because Team A's
+                // direct disassembly closed the question this was testing -
+                // there is NO engine-side producer for this constant anywhere
+                // in the executable (exhaustive whole-exe string scan, zero
+                // hits; the three most-likely literal/fixed-register producer
+                // functions fully decompiled, zero constant-upload calls in
+                // any of them) - so the real-confirmed-zero-when-unauthored
+                // regime that correctly applies to genuinely per-material
+                // constants (Sec20.12.11) does not apply here: render-target
+                // size is not a per-material-authored property, and there is
+                // no traced mechanism to reproduce even if it were. Team A's
+                // own stated recommendation: synthesize it directly.
+                //
+                // CHOSEN value (NOT a disassembly-confirmed producer value -
+                // flagged as such per Sec20.12.15 point 5 itself): (800, 600,
+                // 0, 0), this tool's own actual render resolution (kW/kH).
+                // The 3rd/4th components are 0 for the same reason given
+                // historically - matches the ONE existing real precedent for
+                // this exact constant name already in this file:
+                // ir_light_directional's own VS cbuffer fill (PASS B below)
+                // already special-cases "target_dimensions" as REAL
+                // {kW, kH, 0, 0} for that shader's own unrelated VS use of it.
+                regs.push_back({static_cast<float>(kW), static_cast<float>(kH), 0.0f, 0.0f});
+                decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
+                           "negative, no engine-side producer exists for this constant anywhere in the executable): "
+                           "(800,600,0,0), this tool's own actual render resolution - matches this file's own "
+                           "ir_light_directional VS-fill precedent for the SAME constant name (PASS B below)"
+                           " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                           " registerCount=" + std::to_string(c.registerCount) + "]";
+            } else if (containsCI(c.name, "ir_pixel_steps") || containsCI(c.name, "pixel_steps")) {
+                // Same REAL DEFAULT promotion as target_dimensions immediately
+                // above (both constants are read together by the real role6
+                // PS preamble - see that branch's own comment for the full
+                // Sec20.12.15 finding). CHOSEN value: the reciprocal of this
+                // tool's own actual render resolution (1/800, 1/600), the
+                // natural "one pixel step in UV space" reading of this
+                // constant's own name for an 800x600 render target.
+                regs.push_back({1.0f / static_cast<float>(kW), 1.0f / static_cast<float>(kH), 0.0f, 0.0f});
+                decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
+                           "negative, no engine-side producer exists for this constant anywhere in the executable): "
+                           "(1/800,1/600,0,0), reciprocal of this tool's own actual render resolution"
+                           " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                           " registerCount=" + std::to_string(c.registerCount) + "]";
             } else {
                 for (uint16_t r = 0; r < c.registerCount; ++r) regs.push_back({0,0,0,0});
                 decision = "REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero";
@@ -1848,6 +2151,98 @@ int main(int argc, char** argv) {
     printf("\n");
 
     // -----------------------------------------------------------------
+    // 10c. NEW IN THIS FORK (diagnostic task, 2026-10-08, orchestrator
+    //    comparative per-material investigation of the tower's own
+    //    "Fresnel/rim-looking specular-only" symptom): a SINGLE
+    //    consolidated per-material dump, OPT-IN via SR3_DUMP_MATERIALS=1
+    //    (unset = this exact block never prints - zero byte change to
+    //    every existing frozen golden's own baseline_stdout.txt, same
+    //    opt-in-switch convention as SR3_TEST_OBJ_INSTANCE_PARAMS above).
+    //    Makes NO new real/placeholder decision and changes NO render
+    //    state or cbuffer fill - it only re-presents, per materialId in
+    //    one place, decisions this file's own earlier steps already made
+    //    (resolutions/materialNormalTex/materialDiffuseTex/
+    //    materialSpecularTex/gbufferShaders/litShaders/fillLog, all
+    //    already populated above): the real shaderHash/stem/resolved VS
+    //    file, every real CTAB sampler NAME each material's role4/role6
+    //    shader declares (not just the 3 already-named ones) with what
+    //    that slot actually got bound to this run, and the render-state
+    //    this tool's own code sets for these draws (stated once, since it
+    //    is shared across every material in this pipeline - see depthState
+    //    /rasterState above: no OMSetBlendState call anywhere in this file
+    //    means the implicit D3D11 default blend state, i.e. opaque, no
+    //    blending, for every pass and every material alike - there is no
+    //    per-material blend/depth/raster divergence to report here).
+    // -----------------------------------------------------------------
+    const char* dumpMaterialsRaw = std::getenv("SR3_DUMP_MATERIALS");
+    const bool kDumpMaterials = (dumpMaterialsRaw != nullptr) && (std::string(dumpMaterialsRaw) == "1");
+    if (kDumpMaterials) {
+        auto samplerNameForSlot = [](const sr3d3d9bc::ConstantTable& ctab, UINT slot) -> std::string {
+            for (const auto& c : ctab.constants)
+                if (c.registerSet == sr3d3d9bc::RegisterSet::Sampler && static_cast<UINT>(c.registerIndex) == slot)
+                    return c.name;
+            return "(unnamed real sampler slot)";
+        };
+        std::map<uint32_t, uint32_t> matIdToHash0;
+        std::map<uint32_t, std::string> matIdToStem;
+        for (const auto& rr : resolutions) if (rr.ok) { matIdToHash0[rr.materialId] = rr.shaderHash; matIdToStem[rr.materialId] = rr.stem; }
+        printf("=== [DUMP, SR3_DUMP_MATERIALS=1] Per-material consolidated diagnostic "
+               "(%zu drawable material(s)) ===\n", drawableMaterialIds.size());
+        for (uint32_t matId : drawableMaterialIds) {
+            auto vfIt = materialIdToVsFileName.find(matId);
+            if (vfIt == materialIdToVsFileName.end()) { printf("  material[%u]: NOT in materialIdToVsFileName (unexpected)\n", matId); continue; }
+            CompiledShader& gb = gbufferShaders[vfIt->second];
+            CompiledShader& lit = litShaders[vfIt->second];
+            printf("  material[%u]: shaderHash(hash0)=0x%08X stem='%s' resolvedVsFile='%s'\n", matId,
+                   matIdToHash0[matId], matIdToStem[matId].c_str(), vfIt->second.c_str());
+            printf("    role4 (G-buffer prepass) PS real texture slots:\n");
+            for (UINT slot : gb.allTexBindPoints) {
+                std::string name = samplerNameForSlot(gb.psCtab, slot);
+                std::string resolved;
+                if (static_cast<int>(slot) == gb.normalMapSamplerReg) {
+                    auto it = materialNormalTex.find(matId);
+                    resolved = (it != materialNormalTex.end() && it->second.srv)
+                        ? "REAL uploaded texture (see [texture] material[.] normal: line above for the filename)"
+                        : "NOT FOUND this run - falls back to white placeholder";
+                } else {
+                    resolved = "WHITE PLACEHOLDER (no real binding wired for this slot in this tool)";
+                }
+                printf("      s%-2u %-32s : %s\n", slot, name.c_str(), resolved.c_str());
+            }
+            printf("    role6 (lit material pass) PS real texture slots:\n");
+            for (UINT slot : lit.allTexBindPoints) {
+                std::string name = samplerNameForSlot(lit.psCtab, slot);
+                std::string resolved;
+                if (static_cast<int>(slot) == lit.lBufferSamplerReg) {
+                    resolved = "REAL: pass B's own light-accumulation buffer output (not a texture file)";
+                } else if (static_cast<int>(slot) == lit.diffuseMapSamplerReg) {
+                    auto it = materialDiffuseTex.find(matId);
+                    resolved = (it != materialDiffuseTex.end() && it->second.srv)
+                        ? "REAL uploaded texture (see [texture] material[.] diffuse: line above for the filename)"
+                        : "NOT FOUND this run - falls back to white placeholder";
+                } else if (static_cast<int>(slot) == lit.specularMapSamplerReg) {
+                    auto it = materialSpecularTex.find(matId);
+                    resolved = (it != materialSpecularTex.end() && it->second.srv)
+                        ? "REAL uploaded texture (see [texture] material[.] specular: line above for the filename)"
+                        : "NOT FOUND this run - falls back to white placeholder";
+                } else if (static_cast<int>(slot) == lit.dsfDataSamplerReg) {
+                    resolved = "REAL: pass A's own real oC1 (DSF_DATA) output (not a texture file) - "
+                               "spec-render-pipeline.md Sec23.8, bound 2026-10-08";
+                } else {
+                    resolved = "WHITE PLACEHOLDER (no real binding wired for this slot in this tool - untraced, see top comment)";
+                }
+                printf("      s%-2u %-32s : %s\n", slot, name.c_str(), resolved.c_str());
+            }
+            printf("    render-state for both passes above (SHARED across every material in this pipeline, "
+                   "not per-material): depth=D3D11_COMPARISON_LESS/DepthWriteMask=ALL  "
+                   "raster=FILL_SOLID/CULL_NONE/DepthClipEnable  "
+                   "blend=IMPLICIT D3D11 DEFAULT (no OMSetBlendState call anywhere in this file - opaque, "
+                   "no alpha blending, for every pass/material alike)\n");
+        }
+        printf("\n");
+    }
+
+    // -----------------------------------------------------------------
     // 11. Per-channel GPU vertex/index buffers - identical to
     //     prototype_lit_car.cpp's own step 7.
     // -----------------------------------------------------------------
@@ -1868,18 +2263,31 @@ int main(int argc, char** argv) {
     // 12. Real off-screen G-buffer targets (3 colour + 1 depth) and the
     //     light-accumulation buffer - identical to prototype_lit_car.cpp's
     //     own step 8.
+    //
+    // NAMING CORRECTION (2026-10-08, orchestrator task, relayed from
+    // spec-render-pipeline.md Sec23.8/Sec23.13): this target was previously
+    // named `depthParamRT`, reflecting HANDOFF.md Sec9.109's own "oC1 Depth
+    // by elimination" guess. Team A's direct disassembly closes this: oC1 is
+    // the real backing texture for `IR_GBuffer_DSF_DataSampler`
+    // (RL_RENDER_TEXTURE_GBUFFER_DSF_DATA, descriptor slot 0x2788,
+    // D3DFMT_G16R16) - NOT a depth copy. Real depth comes only from the
+    // separate INTZ depth-stencil surface (`gbufferDepth` below), untouched
+    // by this correction. Renamed `dsfDataRT` to match; this is a rename
+    // only, the OffscreenTarget object and its real GPU contents are
+    // unchanged.
     // -----------------------------------------------------------------
-    OffscreenTarget normalsRT, depthParamRT, lightingParamRT, lightBufferRT;
+    OffscreenTarget normalsRT, dsfDataRT, lightingParamRT, lightBufferRT;
     OffscreenDepth gbufferDepth;
     std::string tErr;
     bool targetsOk = normalsRT.create(dev.device, kW, kH, kGBufferFormat, tErr);
-    if (targetsOk) targetsOk = depthParamRT.create(dev.device, kW, kH, kGBufferFormat, tErr);
+    if (targetsOk) targetsOk = dsfDataRT.create(dev.device, kW, kH, kGBufferFormat, tErr);
     if (targetsOk) targetsOk = lightingParamRT.create(dev.device, kW, kH, kGBufferFormat, tErr);
     if (targetsOk) targetsOk = lightBufferRT.create(dev.device, kW, kH, kGBufferFormat, tErr);
     if (targetsOk) targetsOk = gbufferDepth.create(dev.device, kW, kH, tErr);
     if (!targetsOk) { printf("FATAL: off-screen target creation failed: %s\n", tErr.c_str()); return 1; }
-    printf("[gbuffer] created 3 real off-screen colour targets (Normals/Depth/Lighting, CHOSEN format %s, %ux%u) "
-           "+ 1 real depth-stencil surface + 1 real light-accumulation target.\n", "DXGI_FORMAT_R8G8B8A8_UNORM", kW, kH);
+    printf("[gbuffer] created 3 real off-screen colour targets (Normals/DSF_DATA/Lighting, CHOSEN format %s, %ux%u) "
+           "+ 1 real depth-stencil surface + 1 real light-accumulation target. [DSF_DATA, not Depth - "
+           "spec-render-pipeline.md Sec23.8, corrects HANDOFF.md Sec9.109]\n", "DXGI_FORMAT_R8G8B8A8_UNORM", kW, kH);
 
     ID3D11DepthStencilState* depthState = nullptr;
     { D3D11_DEPTH_STENCIL_DESC dsDesc{}; dsDesc.DepthEnable = TRUE; dsDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -1923,7 +2331,7 @@ int main(int argc, char** argv) {
     // texture (step 7 above) instead of the white placeholder every OTHER
     // texture slot still gets.
     // -----------------------------------------------------------------
-    ID3D11RenderTargetView* gbufferRtvs[3] = {normalsRT.rtv, depthParamRT.rtv, lightingParamRT.rtv};
+    ID3D11RenderTargetView* gbufferRtvs[3] = {normalsRT.rtv, dsfDataRT.rtv, lightingParamRT.rtv};
     dev.context->OMSetRenderTargets(3, gbufferRtvs, gbufferDepth.dsv);
     { const float clr[4] = {0,0,0,0}; for (auto rtv : gbufferRtvs) dev.context->ClearRenderTargetView(rtv, clr); }
     dev.context->ClearDepthStencilView(gbufferDepth.dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
@@ -1971,6 +2379,14 @@ int main(int argc, char** argv) {
     // is non-trivial even though the FINAL composited colour (PASS C) later
     // comes out flat black for this prop's drawable materials.
     printTargetStats(dev.device, dev.context, normalsRT.tex, kW, kH, "gbuffer Normals (oC0)");
+    // NEW (orchestrator task, 2026-10-08): this target was never stat-dumped
+    // before the Sec23.8 naming correction above - direct check of whether
+    // PASS A's own real role-4 PS genuinely writes non-trivial DSF_DATA
+    // content into oC1, or whether this specific tower material's shader
+    // leaves it at the clear colour (0,0,0,0), per this session's own task
+    // point 5 ("check what the G-buffer-fill pass's own PS currently writes
+    // to oC1").
+    printTargetStats(dev.device, dev.context, dsfDataRT.tex, kW, kH, "gbuffer DSF_DATA (oC1) [renamed from 'Depth' - Sec23.8]");
     printTargetStats(dev.device, dev.context, lightingParamRT.tex, kW, kH, "gbuffer Lighting-parameter (oC2, encodes real Specular_Power)");
 
     // -----------------------------------------------------------------
@@ -2114,10 +2530,15 @@ int main(int argc, char** argv) {
     // prototype_lit_car.cpp's own PASS C - Diffuse_MapSampler/
     // Specular_MapSampler bound to that material's REAL uploaded diffuse/
     // specular textures (step 7 above) wherever this pass's own real PS
-    // CTAB declares them. Any other real texture slot (e.g.
-    // IR_GBuffer_DSF_DataSampler - real, present, untraced this session)
-    // gets the same neutral white placeholder every other unknown real
-    // texture slot in this tool family already uses.
+    // CTAB declares them, PLUS (orchestrator task, 2026-10-08,
+    // spec-render-pipeline.md Sec23.8/Sec23.13 - the other half of today's
+    // fix alongside fillPsCbufferTemplate()'s Target_dimensions/IR_Pixel_
+    // Steps synthesis below) IR_GBuffer_DSF_DataSampler@s9 now bound to
+    // dsfDataRT.srv - PASS A's own real oC1 output - instead of falling
+    // through to the white placeholder it used before this session. Any
+    // OTHER still-unidentified real texture slot keeps the same neutral
+    // white placeholder every other unknown real texture slot in this tool
+    // family already uses.
     // -----------------------------------------------------------------
     OffscreenDepth finalDepth;
     std::string fdErr;
@@ -2158,6 +2579,16 @@ int main(int argc, char** argv) {
             } else if (static_cast<int>(slot) == cs.specularMapSamplerReg) {
                 auto it = materialSpecularTex.find(rr.materialId);
                 if (it != materialSpecularTex.end() && it->second.srv) srv = it->second.srv;
+            } else if (static_cast<int>(slot) == cs.dsfDataSamplerReg) {
+                // NEW (orchestrator task, 2026-10-08): IR_GBuffer_DSF_DataSampler
+                // bound to PASS A's own real oC1 output - spec-render-pipeline.md
+                // Sec23.8's "which pass writes it - CLOSED" finding, the second
+                // half of today's fix. Previously fell through to
+                // whitePlaceholderSrv (a 1x1 constant texture), which this
+                // project's own prior diagnostic found makes the PS preamble's
+                // Target_dimensions/IR_Pixel_Steps synthesis converge with the
+                // broken default regardless of the UV fed into it.
+                srv = dsfDataRT.srv;
             }
             dev.context->PSSetShaderResources(slot, 1, &srv);
         }

@@ -141,8 +141,19 @@ std::vector<Normals> ParseCustomizationNormalsTable(const Document& doc);
 struct CompositeLayer {
     std::optional<std::string> name;           // Name (hashed, FUN_00db12c0)
     std::optional<std::string> displayName;     // Display_Name (optional)
-    std::optional<std::string> diffuseTexture;  // diffuse (required texture ref)
-    std::optional<std::string> normalTexture;   // normal (optional texture ref)
+    // diffuse/normal are NOT leaf text nodes in real shipped data (confirmed
+    // directly against misc_tables.vpp_pc's own customization_compositing.xtbl,
+    // 2026-10-08, zero disassembly involved - just the shipped xtbl bytes):
+    // each is a WRAPPER element holding a single nested `Filename` child, e.g.
+    // `<diffuse><Filename>tat_hand_live.tga</Filename></diffuse>`, not
+    // `<diffuse>tat_hand_live.tga</diffuse>`. The reader below reads
+    // `diffuse > Filename` / `normal > Filename` accordingly - this doc
+    // comment and spec-tables-customization.md §9.3's own prose text ("diffuse
+    // texture (required)") both previously implied a flat leaf text node; that
+    // text should be corrected at the next spec sync (a real-data finding, not
+    // a disassembly one, so safe for Team B to report directly).
+    std::optional<std::string> diffuseTexture;  // diffuse > Filename (required texture ref)
+    std::optional<std::string> normalTexture;   // normal > Filename (optional texture ref)
 
     // Slot: matched against a SEPARATE 34-entry name array (`0x0130b7f0`),
     // distinct from both the §6.1 24-slot array and the §9.2 4-race array

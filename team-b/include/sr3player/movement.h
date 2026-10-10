@@ -47,7 +47,9 @@
 //   * Turn angle +0xa68 (Sec3.5.4 step 20, HIGH only) - not computed; the
 //     writer's step 3 zero is still applied. The step-19 fallbacks that
 //     need it (q = old +0xa50 rotated by old +0xa68) throw OPEN.
-//   * The look slot 0x005ab6a0 (Sec3.4), the classify 0x005ac620 (Sec3.2)
+//   * The look slot 0x005ab6a0 (Sec3.4) - implemented with the camera, U4:
+//     CameraSystem::cameraHook()/lookSlot() in sr3player/camera.h - and
+//     the classify 0x005ac620 (Sec3.2)
 //     - the +0x2078 permission mask is an INPUT here - the dormant pivot
 //     branch 0x005ad510 (Sec3.5.6, dead in the shipped build), jump/climb,
 //     aim, melee (Sec3.6.4-Sec3.6.6).
@@ -181,6 +183,13 @@ struct PlayerMovementState {
     Vec3 velocityD04;             // +0xd04/+0xd08/+0xd0c published velocity (Sec5.6.6)
     double speedD1c = 0;          // +0xd1c published speed
     Vec3 capsulePosition;         // the integrator's own body (replaces the proxy)
+    // CONFIRMED meaning of controller+0x08 bit 0x04 ("supported" -
+    // spec-player-runtime.md Sec5.6.1), tracked when a CollisionHook is
+    // wired (sr3player/character_collision.h); true at construction
+    // (CHOSEN: matches SeedOnFootCommonCase()'s own on-foot/on-ground
+    // common case) and left unchanged by the plain direct integrator below
+    // when no CollisionHook is set.
+    bool grounded = true;
 
     // Timers (Sec3.7 table, Sec5.5). +0x2068/+0x206c/+0x205c are not kept:
     // they feed only the animation requests / sprint style of Sec3.5.4
@@ -544,6 +553,29 @@ public:
     void composeVelocity(const MoveFrameInput& f);          // 0x0099d1b0, player branch
     void integrate(const MoveFrameInput& f);                // replaces Sec5.6.3-Sec5.6.6
     void publish();                                         // Sec5.6.6 write-back + Sec5.7 sync
+
+    // Optional real collision integrator (2026-10-07 character-proxy/
+    // collision follow-up task; sr3player/character_collision.h's
+    // CharacterProxyDriver is the real implementation, wired to the REAL
+    // sr3physics::CharacterProxyStepper lock-step loop and
+    // CharacterProxyListener queue-only contract). When set, integrate()
+    // asks it to resolve the capsule's movement against real collision
+    // geometry INSTEAD OF this class's own licensed-but-naive direct
+    // integrator ("position += velocity*dt", spec-player-runtime.md
+    // Sec5.11 item 5). Left unset (nullptr) by default - every existing
+    // caller/test keeps the EXACT prior behaviour, byte for byte. Kept
+    // header-only in movement.h (only Vec3, no other dependency) so this
+    // file does not need to include character_collision.h, which itself
+    // includes THIS header - CollisionHookResult is the minimal shape the
+    // hook needs to return; CharacterProxyDriver::step()'s own richer
+    // CapsuleStepResult (pass count, wall-hit records) is a tool-side
+    // diagnostic concern, not part of this library's own contract.
+    struct CollisionHookResult {
+        Vec3 position;
+        Vec3 velocity;
+        bool grounded = true;
+    };
+    std::function<CollisionHookResult(Vec3 fromPosition, Vec3 desiredVelocity, double dt)> collisionHook;
 
     // Integrator output between integrate() and publish() (the "proxy").
     Vec3 capsuleVelocity;

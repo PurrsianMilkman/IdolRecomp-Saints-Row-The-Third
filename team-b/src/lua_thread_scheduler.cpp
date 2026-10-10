@@ -79,54 +79,12 @@ void logCall(lua_State* L, HitLog* log, const char* name, const char* state) {
     log->record(name, argc, types, state ? state : "");
 }
 
-int stub_thread_new(lua_State* L) {
-    logCall(L, upLog(L), "thread_new", upStateTag(L));
-    int64_t handle = upScheduler(L)->newThread(L);
-    lua_pushinteger(L, static_cast<lua_Integer>(handle));
-    return 1;
-}
-
-int stub_thread_yield(lua_State* L) {
-    logCall(L, upLog(L), "thread_yield", upStateTag(L));
-    // real Lua 5.1 API: lua_pushthread pushes L's own thread object and
-    // returns 1 iff L IS the main thread of its global state. Popped
-    // immediately - only the return value is used.
-    int isMain = lua_pushthread(L);
-    lua_pop(L, 1);
-    if (isMain) {
-        // No active coroutine to yield from. Every call this project's
-        // own firing loop makes (Host::runChunk's top-level pcall, and
-        // Host::fireConfirmedHooks's hook calls) executes on the main
-        // thread of gameplay_/ui_, never inside a lua_resume()'d
-        // coroutine - see thread_scheduler.h's own top "SCOPE" note - so
-        // this is the branch every call observed by this pass actually
-        // takes. Recorded honestly as a real no-op rather than silently
-        // "succeeding" as a real yield would, or erroring.
-        return 0;
-    }
-    // Real yield - only reachable once something in this project actually
-    // lua_resume()s a thread_new()-created thread, which nothing does yet.
-    return lua_yield(L, 0);
-}
-
-int stub_thread_kill(lua_State* L) {
-    logCall(L, upLog(L), "thread_kill", upStateTag(L));
-    if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
-        upScheduler(L)->killOrClose(static_cast<int64_t>(lua_tointeger(L, 1)));
-    }
-    return 0;
-}
-
-int stub_thread_check_done(lua_State* L) {
-    logCall(L, upLog(L), "thread_check_done", upStateTag(L));
-    bool done = true;
-    if (lua_gettop(L) >= 1 && lua_isnumber(L, 1)) {
-        done = upScheduler(L)->isDone(static_cast<int64_t>(lua_tointeger(L, 1)));
-    }
-    lua_pushboolean(L, done ? 1 : 0);
-    return 1;
-}
-
+// stub_thread_new/_yield/_kill/_check_done (the full 5-name scaffold's
+// other 4 members) were removed 2026-10-08 along with their sole caller,
+// registerThreadScheduler() (see thread_scheduler.h's own doc comment at
+// the removed declaration's former spot for why: dead since 2026-10-01,
+// a latent trap if ever wired back in). stub_thread_close stays - it is
+// still the real body registerThreadClose() installs below.
 int stub_thread_close(lua_State* L) {
     logCall(L, upLog(L), "thread_close", upStateTag(L));
     // Identical to thread_kill - see thread_scheduler.h's own doc note on
@@ -148,16 +106,17 @@ void registerOne(lua_State* L, ThreadScheduler& sched, HitLog& log, const std::s
 
 } // namespace
 
-void registerThreadScheduler(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag) {
-    registerOne(L, scheduler, log, stateTag, "thread_new", stub_thread_new);
-    registerOne(L, scheduler, log, stateTag, "thread_yield", stub_thread_yield);
-    registerOne(L, scheduler, log, stateTag, "thread_kill", stub_thread_kill);
-    registerOne(L, scheduler, log, stateTag, "thread_check_done", stub_thread_check_done);
+void registerThreadClose(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag) {
     registerOne(L, scheduler, log, stateTag, "thread_close", stub_thread_close);
 }
 
-void registerThreadClose(lua_State* L, ThreadScheduler& scheduler, HitLog& log, const std::string& stateTag) {
-    registerOne(L, scheduler, log, stateTag, "thread_close", stub_thread_close);
+const std::vector<std::string>& threadCloseNames() {
+    // The one name registerThreadClose() installs - see thread_scheduler.h's
+    // own doc comment on this accessor for why it exists as a named,
+    // single-source-of-truth function rather than a literal string
+    // duplicated at specConfirmedStubNames()'s own call site.
+    static const std::vector<std::string> names = {"thread_close"};
+    return names;
 }
 
 } // namespace sr3luahost

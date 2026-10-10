@@ -337,8 +337,15 @@ int main() {
     // ------------------------------------------------------------------
     // Sec27.25: the three branches, reusing the Sec27.1 minigame singleton.
     es.catMouseMinigame().present.set(false);
-    fails(host, ui, "game_get_in_progress_type()", "0x014c8460");
-    es.inProgressType().activeMissionPresent.set(false);
+    // Fixed 2026-10-08 (spec-lua-api-behaviour.md Sec21.27a):
+    // inProgressType().activeMissionPresent is now KNOWN false by default
+    // (the real engine's own idle start-up phase, 0x014c7a14 == 0, not an
+    // unmodelled value) - so with catMouseMinigame also false, the call now
+    // falls through past BOTH of the first two branches to the third
+    // (activityPresent), which is still genuinely OPEN here, hence the
+    // throw now cites THAT global (0x014c8328) rather than 0x014c8460.
+    fails(host, ui, "game_get_in_progress_type()", "0x014c8328");
+    es.inProgressType().activeMissionPresent.set(false); // redundant with the real default - kept explicit for clarity
     es.catMouseMinigame().present.set(true);
     ok(host, ui, "assert(game_get_in_progress_type() == 4)");
     es.catMouseMinigame().present.set(false);
@@ -439,22 +446,38 @@ int main() {
     CHECK(es.debrisFlowRecycleCount().at(5) == 1);
 
     // Sec28.12 customization_restore_player_rig. Bit 0's own gender read
-    // and count increment happen before bit 1's OPEN read is reached, so
-    // the two "fails" calls below that get as far as bit 0 succeeding
-    // already bump restorePlayer1Count - the openGuard trampoline does not
-    // roll back side effects that ran before the throw (same honest
-    // "partial information" shape as dialog_box_force_close's own gates).
+    // and count increment happen before bit 1 is reached, so the "fails"
+    // call below that gets as far as bit 0 succeeding already bumps
+    // restorePlayer1Count - the openGuard trampoline does not roll back
+    // side effects that ran before the throw (same honest "partial
+    // information" shape as dialog_box_force_close's own gates).
+    // coopPlayerPresent now defaults to false (applySpecInitialState item
+    // 13, 2026-10-09: "0x009df3d0" scans the live network-client roster for
+    // a second entry, and this host never installs a session - Sec26.28 -
+    // so that roster never grows past the local player), so bit 1 is a
+    // CONFIRMED no-op by default rather than an OPEN read.
     fails(host, gp, "customization_restore_player_rig()", "0x009da4e0"); // default mask 3: bit 0 first
     CHECK(es.playerRig().restorePlayer1Count == 0); // threw before bit 0's own increment
     es.playerRig().localPlayer1Gender.set(1);
-    fails(host, gp, "customization_restore_player_rig()", "0x009df3d0"); // bit 0 succeeds, bit 1 throws
-    CHECK(es.playerRig().restorePlayer1Count == 1); // bit 0's own increment already happened
-    es.playerRig().coopPlayerPresent.set(false);
-    ok(host, gp, "customization_restore_player_rig()");
-    CHECK(es.playerRig().restorePlayer1Count == 2);
+    ok(host, gp, "customization_restore_player_rig()"); // bit 0 succeeds, bit 1 now a confirmed no-op (coopPlayerPresent == false)
+    CHECK(es.playerRig().restorePlayer1Count == 1);
     CHECK(es.playerRig().restoreCoopCount == 0);
     ok(host, gp, "customization_restore_player_rig(1)"); // bit 0 only
-    CHECK(es.playerRig().restorePlayer1Count == 3);
+    CHECK(es.playerRig().restorePlayer1Count == 2);
+    CHECK(es.playerRig().restoreCoopCount == 0);
+
+    // Explicitly setting a co-op partner present (test-only - never the
+    // default in this host) re-opens bit 1's own gender read, which stays
+    // genuinely OPEN until a test sets it - only coopPlayerPresent itself
+    // has a CONFIRMED default, not coopPlayerGender.
+    es.playerRig().coopPlayerPresent.set(true);
+    fails(host, gp, "customization_restore_player_rig()", "co-op player's own +0xa41 gender byte");
+    CHECK(es.playerRig().restorePlayer1Count == 3); // bit 0 ran again before bit 1 threw
+    CHECK(es.playerRig().restoreCoopCount == 0);
+    es.playerRig().coopPlayerGender.set(1);
+    ok(host, gp, "customization_restore_player_rig()");
+    CHECK(es.playerRig().restorePlayer1Count == 4);
+    CHECK(es.playerRig().restoreCoopCount == 1);
 
     // Sec28.13/28.14: the second manager-flagged example - a shared
     // setter with literal 0 (disable), read from the entry's own body.

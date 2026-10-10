@@ -3,21 +3,21 @@
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process)
 **Phase:** 1. **This version supersedes the original one-sample pass** (a 4-bone door prop). It was re-derived against **585 real rigs** after the format was found to block vehicles as well as characters (`spec-vehicle-geometry.md` §6). §9 lists exactly what the original got wrong.
 **Scope:** The `.rig_pc` skeleton file: header, the per-bone name-hash table, the bone array (name, rest position, ~~rotation~~ offset-to-parent **[corrected §4.1: the bone record holds no rotation]**, parent), the attachment/IK-target array, and the name region. Standalone, not `c`/`g`-paired.
-**Method:** The loader's pointer-fixup function (`FUN_004d0bb0`, bookmarked) read in full to derive the layout; every derived field then tested against all 585 shipped rigs — 40 in `preload_rigs.vpp_pc` (character bodies and the vehicle rigs) and 545 in `characters.vpp_pc` — with control baselines for every offset and identity claim. Several slot readings were found by *search* (which record offset satisfies a property across the population, against random-offset controls) rather than by assumption.
-**Cleanroom compliance:** ~~No decompiled code or original identifiers appear below.~~ **[Corrected, desk review 2026-09-30: inaccurate as stated. §1–§10, §12 and §13 carry no decompiled code, but §11.12–§11.16 contain paraphrased decompiler/disassembly-derived pseudocode and one raw instruction listing, left in place pending a rewrite into plain prose (not done in this pass): the fenced blocks in §11.12.1 (the two registry accessors; the `FUN_004c1350` fill loop, which uses C-style casts), §11.12.2 (the `FUN_00e71410` parser excerpt, which uses `*(u16*)(mesh+0x38)`, and the site-A three-line block), §11.13.1 (`FUN_004be9c0` vs `FUN_004be950`), §11.16.1 (raw instructions with addresses at both gather call sites) and §11.16.2 (the `FUN_004c79a0` allocator). Decompiler artefact names are mentioned in prose only (`unaff_…`, §11.14.2; `undefined4`, §11.18.2). Identifiers taken from the executable also appear: short `.rdata` strings (the `PCC_*` debug labels and one message format, §11.18.1; `mvi_mesh_variant`, `material_color_variants.xtbl`, `_Entry_ID`, `color_entry`, §11.18.3/§11.18.5; the mixed-case lookup names, §13.1) and RTTI class names (`object_rig`, `anim_rig`, `rig_bone_info`, `concrete_instantiator<object_rig>`, §11.19.2). The RTTI names await an owner decision and are listed here only.]** Offsets, strides and the hash algorithm's shape are load-bearing format data. Bone and attachment names quoted (`spine2`, `hsattach`, `l_elbow_targeta`…) are shipped data. Function addresses are cited as evidence only.
+**Method:** The loader's pointer-fixup function (`0x004d0bb0`, bookmarked) read in full to derive the layout; every derived field then tested against all 585 shipped rigs — 40 in `preload_rigs.vpp_pc` (character bodies and the vehicle rigs) and 545 in `characters.vpp_pc` — with control baselines for every offset and identity claim. Several slot readings were found by *search* (which record offset satisfies a property across the population, against random-offset controls) rather than by assumption.
+**Cleanroom compliance:** ~~No decompiled code or original identifiers appear below.~~ **[Corrected, desk review 2026-09-30: inaccurate as stated. §1–§10, §12 and §13 carry no decompiled code, but §11.12–§11.16 contain paraphrased decompiler/disassembly-derived pseudocode and one raw instruction listing. The two C-style-cast expressions originally flagged here (§11.12.1's `0x004c1350` fill loop and §11.12.2's `0x00e71410` parser excerpt) were reworded into plain "the TYPE at EXPR" prose in a later pass (2026-10-09); still left in place pending a rewrite: §11.12.1's two registry accessors, §11.12.2's site-A three-line block, §11.13.1 (`0x004be9c0` vs `0x004be950`), §11.16.1 (raw instructions with addresses at both gather call sites) and §11.16.2 (the `0x004c79a0` allocator). Decompiler-style register names are mentioned in prose at §11.14.2 (unresolved/"leftover" register artefacts — the gate's own pattern list has no rule for this shape, flagged separately). Identifiers taken from the executable also appear: short `.rdata` strings (the `PCC_*` debug labels and one message format, §11.18.1; `mvi_mesh_variant`, `material_color_variants.xtbl`, `_Entry_ID`, `color_entry`, §11.18.3/§11.18.5; the mixed-case lookup names, §13.1) and RTTI class names (`object_rig`, `anim_rig`, `rig_bone_info`, `concrete_instantiator<object_rig>`, §11.19.2). The RTTI names await an owner decision and are listed here only.]** Offsets, strides and the hash algorithm's shape are load-bearing format data. Bone and attachment names quoted (`spine2`, `hsattach`, `l_elbow_targeta`…) are shipped data. Function addresses are cited as evidence only.
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (clean-room claim corrected; the pseudocode blocks of §11.12–§11.16 listed, not rewritten; RTTI names listed for the owner, not changed) — desk review (not re-derived from the executable).**
 
-**Review status summary (2026-09-30):** an adversarial desk review (`review/adv_rig.md`) graded 48 units: **DESK-PASS 19** (§2, §4.1, §7, §8, §9, §10, §11.2, §11.6, §11.8, §11.9, §11.10, §11.14, §11.16.4–.5, §11.18.2–.3, §11.18.5, §11.19, §12, §13.3, §13.6–§13.7); **DESK-PASS-WITH-FIXES 13** (front matter, §3.1, §4, §6, §8.1, §11 intro, §11.3, §11.4, §11.7, §11.11, §11.13, §11.16.3, §11.17 — the fixes are applied in place, old text struck or annotated); **VALIDATED-BY-DATA 6** (§1, §3, §5, §11.15, §13.2, §13.4); **NEEDS-EXE 8** (§11.1, §11.12, §11.16.1, §11.16.2, §11.16.6, §11.18.4, §13.1, §13.5); **NEEDS-DATA 2** (§11.5/§11.5.1, §11.18.1). A desk pass alone does **not** clear a unit for implementation — it was checked against the other specs and Team B's files, not re-derived from the executable; the VALIDATED-BY-DATA units are the ones already backed by Team B's full-population runs (585/585 rigs, `team-b/HANDOFF.md` l.2385–2387, l.2647, l.10937–10940; 318/318 mesh/rig triples, §9.63.6/§9.63.10). **Awaiting the executable / real data:** the `N` = 68 gather bound against palettes reaching rig bone 81 and 69-bone player rigs (§11.16.2, §11.18.1, §11.18.4 — array-4 population count and the type-5 descriptor trace `0x00751f60` → `0x004c1730`); the §11.1 range-check bounds (`FUN_00476ca0`); the limit operand's stack depth (§11.16.1, `0x00e7b027`); record `+0x04`'s role (§11.16.6 vs §13.4, `FUN_004d0f40`/`FUN_004d0fe0`); first vs last attachment-name match (§13.1); bone `+0x14`'s sign in the pose accumulator (§13.5); the descriptor/fix-up function claims of §11.12; and the data measurements flagged OPEN in §3/§3.1 (header `+0x3C`–`+0x4C` on disk), §4 (root split 300 + 275 = 575 vs 585), §11.4 (the "12 omitted" meshes) and §11.5.1 (66,822 = 3 × 22,274).
+**Review status summary (2026-09-30):** an adversarial desk review (`review/adv_rig.md`) graded 48 units: **DESK-PASS 19** (§2, §4.1, §7, §8, §9, §10, §11.2, §11.6, §11.8, §11.9, §11.10, §11.14, §11.16.4–.5, §11.18.2–.3, §11.18.5, §11.19, §12, §13.3, §13.6–§13.7); **DESK-PASS-WITH-FIXES 13** (front matter, §3.1, §4, §6, §8.1, §11 intro, §11.3, §11.4, §11.7, §11.11, §11.13, §11.16.3, §11.17 — the fixes are applied in place, old text struck or annotated); **VALIDATED-BY-DATA 6** (§1, §3, §5, §11.15, §13.2, §13.4); **NEEDS-EXE 8** (§11.1, §11.12, §11.16.1, §11.16.2, §11.16.6, §11.18.4, §13.1, §13.5); **NEEDS-DATA 2** (§11.5/§11.5.1, §11.18.1). A desk pass alone does **not** clear a unit for implementation — it was checked against the other specs and Team B's files, not re-derived from the executable; the VALIDATED-BY-DATA units are the ones already backed by Team B's full-population runs (585/585 rigs, `team-b/HANDOFF.md` l.2385–2387, l.2647, l.10937–10940; 318/318 mesh/rig triples, §9.63.6/§9.63.10). **Awaiting the executable / real data:** the `N` = 68 gather bound against palettes reaching rig bone 81 and 69-bone player rigs (§11.16.2, §11.18.1, §11.18.4 — array-4 population count and the type-5 descriptor trace `0x00751f60` → `0x004c1730`); the §11.1 range-check bounds (`0x00476ca0`); the limit operand's stack depth (§11.16.1, `0x00e7b027`); record `+0x04`'s role (§11.16.6 vs §13.4, `0x004d0f40`/`0x004d0fe0`); first vs last attachment-name match (§13.1); bone `+0x14`'s sign in the pose accumulator (§13.5); the descriptor/fix-up function claims of §11.12; and the data measurements flagged OPEN in §3/§3.1 (header `+0x3C`–`+0x4C` on disk), §4 (root split 300 + 275 = 575 vs 585), §11.4 (the "12 omitted" meshes) and §11.5.1 (66,822 = 3 × 22,274).
 
 ---
 
 ## 1. Headline results
 
 - **The layout in the original spec was wrong.** There is a `u32`-per-bone table *before* the bone array, and the bone array begins at an 8-aligned offset past it. Under the loader-derived layout, **22,274 / 22,274** bone-name offsets resolve to real names; under the original "bones at `+0x50`" layout, **168 / 22,274** — the chance rate. **[CONFIRMED — empirical.]**
-- **That per-bone table is the engine's filename hash applied to the lowercased bone name — 22,274 / 22,274**, against **0 / 22,274** for uppercase. The rotate-left-6 / XOR hash `spec-vpp-container.md` §2.2 documented for archive filenames is an **engine-wide string hash**, and header `+0x38` points at this table (585/585). ~~It is the lookup table behind the bone-by-name function the vehicle and animation loaders call. **[CONFIRMED — empirical + disassembly.]**~~ **[REFUTED 2026-09-20 — §13.1: the bone-by-name routine (`FUN_004bc880`) compares bone-name *strings* case-insensitively and never reads this table; no runtime reader of the table was found. The table's content (hash of the lowercased name, 22,274/22,274) is unaffected.]** **Update (2026-09-10, foliage pass): the hash routine itself has now been read in disassembly** (`FUN_00da7890`, called by the `.cfmesh_pc` constructor) — rotate-left-6 / XOR with an explicit `A–Z` → lowercase fold inside the routine, which is *why* the lowercased form matches. See `spec-foliage-format.md` §1.
+- **That per-bone table is the engine's filename hash applied to the lowercased bone name — 22,274 / 22,274**, against **0 / 22,274** for uppercase. The rotate-left-6 / XOR hash `spec-vpp-container.md` §2.2 documented for archive filenames is an **engine-wide string hash**, and header `+0x38` points at this table (585/585). ~~It is the lookup table behind the bone-by-name function the vehicle and animation loaders call. **[CONFIRMED — empirical + disassembly.]**~~ **[REFUTED 2026-09-20 — §13.1: the bone-by-name routine (`0x004bc880`) compares bone-name *strings* case-insensitively and never reads this table; no runtime reader of the table was found. The table's content (hash of the lowercased name, 22,274/22,274) is unaffected.]** **Update (2026-09-10, foliage pass): the hash routine itself has now been read in disassembly** (`0x00da7890`, called by the `.cfmesh_pc` constructor) — rotate-left-6 / XOR with an explicit `A–Z` → lowercase fold inside the routine, which is *why* the lowercased form matches. See `spec-foliage-format.md` §1.
 - **Bone record:** name, **model-space rest position**, the **offset back to the parent**, and a **parent index** that forms a valid tree in 585/585 rigs. **The rest pose is purely positional — the bone record holds no orientation at all** (corrected 2026-09-11, §4.1; the field previously called a rotation triple is `pos(parent) − pos(bone)`, exact in 22,274/22,274). Consequently, composing bind transforms as pure translations is correct rather than an approximation. **[CONFIRMED.]**
 - **The second array is attachment / IK-target points**, not a second bone list: named entries (`hsattach`, `l_elbow_targeta/b/c`, `l_knee_target*`, and per-bone attach points named after their bone), each with a parent-bone index (**12,480 / 12,480** valid) and ~~a quaternion (**12,473 / 12,480** within 10% of unit)~~ **[CORRECTED 2026-09-20, §13.4: a 3×3 rotation matrix plus a translation — the rows are orthonormal with determinant +1 in 12,480 / 12,480; there is no quaternion]**. **[CONFIRMED for names/parent; HIGH CONFIDENCE for the interpretation.]**
 - Maximum bone count across all rigs is **109 — exactly the maximum of the `.anim_pc` header's `+0x0B` count** (`spec-anim-format.md` §2), supporting that field as the target rig's bone count. **[HIGH CONFIDENCE — inferred.]**
@@ -77,7 +77,7 @@ Offsets from file start. Alignment is **8-byte** after the hash table (the loade
 | `+0x00` | Name offset into the name region (`-1` = none); fixed up to a pointer | **[CONFIRMED — 22,274/22,274 resolve.]** Common names: `spine2`, `head`, `neck`, `l-eye`, `r-eye`, `pelvis`, `root`, `l-thigh`, `r-thigh`, `l-calf`, `r-calf`, `spine`. |
 | `+0x04` | Runtime slot, zeroed by the loader | **[CONFIRMED — disassembly.]** |
 | `+0x08` | **Rest position, `vec3 f32`, model-space** — root bones have median magnitude 0.30, child bones 1.18 (p95 1.76 ≈ head height). Parent-relative offsets would make children *smaller* than roots; these are larger. **Upgraded to CONFIRMED 2026-09-11 by a direct test rather than that indirect argument** — accumulating the vector down the parent chain (the parent-relative reading) scores a median residual of **3.04** against **0.126** for using it as stored, when matched against the mesh vertices actually weighted to each bone (§8.1). | **[CONFIRMED — empirical.]** |
-| `+0x14` | **⚠ NOT a rotation — corrected 2026-09-11 (§4.1). It is the offset from this bone back to its parent: `pos(parent) − pos(bone)`**, with the origin standing in when there is no parent (so a root's value is `−pos(bone)`). **Exact on the whole population: 20,564 / 20,564 child bones and 1,710 / 1,710 roots**, median residual exactly `0.0`, maximum `3.8e−06` (float32 rounding). Fully derivable from `+0x08` and `+0x20` — a precomputed convenience, not independent data. **Consumer note (2026-09-20, §13.5): the runtime pose code reads *this* field (`FUN_004c21a0`, `FUN_004be9f0`); `+0x08` is read only on an attachment un-posed path (`FUN_004d0fe0`).** *(Previously recorded here as a rest rotation on the strength of "every component within `±π`" — see §4.1 for why that was not evidence.)* | **[CONFIRMED — empirical, exact, whole population.]** |
+| `+0x14` | **⚠ NOT a rotation — corrected 2026-09-11 (§4.1). It is the offset from this bone back to its parent: `pos(parent) − pos(bone)`**, with the origin standing in when there is no parent (so a root's value is `−pos(bone)`). **Exact on the whole population: 20,564 / 20,564 child bones and 1,710 / 1,710 roots**, median residual exactly `0.0`, maximum `3.8e−06` (float32 rounding). Fully derivable from `+0x08` and `+0x20` — a precomputed convenience, not independent data. **Consumer note (2026-09-20, §13.5): the runtime pose code reads *this* field (`0x004c21a0`, `0x004be9f0`); `+0x08` is read only on an attachment un-posed path (`0x004d0fe0`).** *(Previously recorded here as a rest rotation on the strength of "every component within `±π`" — see §4.1 for why that was not evidence.)* | **[CONFIRMED — empirical, exact, whole population.]** |
 | `+0x20` | **Parent bone index**, `-1` = root. Parent < child in 22,274/22,274; every bone reachable from a root in 585/585; genuine fan-out (2–7 children share a parent), so this is the parent link and not a list pointer. Rigs have 1 root (300) or several (275 — typically 5, e.g. vehicles / multi-root props). **[OPEN — desk review 2026-09-30: 300 + 275 = 575, not 585; ten rigs are missing from this split and no recount is recorded on either side (the total of 1,710 roots in the `+0x14` row does not decide it); to be settled against real data.]** | **[CONFIRMED — empirical.]** |
 | `+0x24` | **`-1` in every shipped bone** (22,274/22,274). A runtime slot. | **[CONFIRMED — the on-disk value; ~~OPEN — its runtime meaning.~~ ADVANCED 2026-09-20, §13.5: no runtime reader or writer found in the scopes of §13.6 — a bounded negative, not "confirmed unused"; still OPEN.]** *(An intermediate reading of this slot as a second hierarchy link was vacuous — it passed tree tests only because it is always `-1`.)* |
 
@@ -103,7 +103,7 @@ The row above previously read "**rest rotation, three `f32`**, every component w
 
 ## 5. The hash table
 
-Each entry is the hash of the bone's **lowercased** name under the algorithm `spec-vpp-container.md` §2.2 describes for archive filenames (accumulate: rotate the 32-bit hash left by 6, XOR in the character) **[desk review 2026-09-30, from `spec-vpp-container.md` §2.2: start from `0`; for each byte up to the terminator, fold `A`–`Z` to lowercase, rotate the 32-bit hash left by 6, then XOR in the byte (rotate first, XOR second)]** — since the foliage pass also read directly in disassembly at `FUN_00da7890`, which performs the lowercase fold itself:
+Each entry is the hash of the bone's **lowercased** name under the algorithm `spec-vpp-container.md` §2.2 describes for archive filenames (accumulate: rotate the 32-bit hash left by 6, XOR in the character) **[desk review 2026-09-30, from `spec-vpp-container.md` §2.2: start from `0`; for each byte up to the terminator, fold `A`–`Z` to lowercase, rotate the 32-bit hash left by 6, then XOR in the byte (rotate first, XOR second)]** — since the foliage pass also read directly in disassembly at `0x00da7890`, which performs the lowercase fold itself:
 
 | Variant tested | Matches |
 |---|---|
@@ -111,7 +111,7 @@ Each entry is the hash of the bone's **lowercased** name under the algorithm `sp
 | name as stored (mostly already lowercase) | 21,634 / 22,274 |
 | uppercased name (control) | **0 / 22,274** |
 
-**[CONFIRMED — empirical.]** The table is **not sorted** (ascending in 6/585), ~~so lookup is a linear scan by hash in bone order.~~ Header `+0x38` resolves to it, and ~~the bone-by-name routine the vehicle loader calls for every part name and for `camera`/`camtarget`/`camFOV`/`camDOF` (`spec-vehicle-geometry.md` §6) is its consumer — **[HIGH CONFIDENCE — inferred from the call pattern; the routine itself (`FUN_004bc880`) was not decompiled this pass.]**~~ **[REFUTED 2026-09-20 — §13.1: `FUN_004bc880` was decompiled; it is a case-insensitive string compare over the bone names and never reads this table. No runtime reader of the hash table was found (bounded: §13.1, §13.6).]** Practical consequence: **one hash function serves archive filenames and bone names** — the same one. *(Scope correction, 2026-09-10: that does **not** make it the engine's only string hash. A table-driven CRC-32 also exists and keys the mission-conversation registry; `.ctdg_pc` uses both at once. See `spec-conversation-format.md` §6.)*
+**[CONFIRMED — empirical.]** The table is **not sorted** (ascending in 6/585), ~~so lookup is a linear scan by hash in bone order.~~ Header `+0x38` resolves to it, and ~~the bone-by-name routine the vehicle loader calls for every part name and for `camera`/`camtarget`/`camFOV`/`camDOF` (`spec-vehicle-geometry.md` §6) is its consumer — **[HIGH CONFIDENCE — inferred from the call pattern; the routine itself (`0x004bc880`) was not decompiled this pass.]**~~ **[REFUTED 2026-09-20 — §13.1: `0x004bc880` was decompiled; it is a case-insensitive string compare over the bone names and never reads this table. No runtime reader of the hash table was found (bounded: §13.1, §13.6).]** Practical consequence: **one hash function serves archive filenames and bone names** — the same one. *(Scope correction, 2026-09-10: that does **not** make it the engine's only string hash. A table-driven CRC-32 also exists and keys the mission-conversation registry; `.ctdg_pc` uses both at once. See `spec-conversation-format.md` §6.)*
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: hash == hash of the lowercased name in 585/585 rigs (`team-b/HANDOFF.md` l.2387); algorithm now stated inline from `spec-vpp-container.md` §2.2 — desk review (not re-derived from the executable).**
 
@@ -126,8 +126,8 @@ Each entry is the hash of the bone's **lowercased** name under the algorithm `sp
 | `+0x30` | A `f32`: `0.0` (54%), `-0.0` (14%), small values otherwise. **RESOLVED 2026-09-20 (§13.4): the translation's `y` (translation = `+0x2C`, `+0x30`, `+0x34`); zero-translation is exactly the same-name-as-parent attachments** | **[CONFIRMED — a float; ~~OPEN — meaning (a weight or limit).~~ meaning CONFIRMED, disassembly + empirical.]** |
 | `+0x08` | *(added 2026-09-20, §13.4)* **3×3 rotation matrix, nine `f32`, rows at `+0x08` / `+0x14` / `+0x20`** — orthonormal, determinant +1 in 12,480 / 12,480 (shifted-offset controls 0 / 12,480). Row 0 of the same-name attachments points along the bone (71% vs 4.5% control): these are the per-bone orientation frames | **[CONFIRMED — disassembly + empirical.]** |
 | `+0x2C` | *(added 2026-09-20, §13.4)* **Translation, `vec3 f32`** — bone-local (median `|t|` 0, p95 0.44) | **[CONFIRMED — disassembly + empirical.]** |
-| `+0x38` | **Parent bone index** — `< bone_count` in **12,480 / 12,480**; read by the attachment-transform getter `FUN_004d0fe0` | **[CONFIRMED — empirical + disassembly.]** |
-| `+0x3C` | *(added 2026-09-20, §13.4)* **Signed int tag, `-1` in 12,480 / 12,480**; read only by the tag-filtered by-name lookup `FUN_004d0e70` | **[CONFIRMED — disassembly + empirical.]** |
+| `+0x38` | **Parent bone index** — `< bone_count` in **12,480 / 12,480**; read by the attachment-transform getter `0x004d0fe0` | **[CONFIRMED — empirical + disassembly.]** |
+| `+0x3C` | *(added 2026-09-20, §13.4)* **Signed int tag, `-1` in 12,480 / 12,480**; read only by the tag-filtered by-name lookup `0x004d0e70` | **[CONFIRMED — disassembly + empirical.]** |
 | others | ~~not characterized~~ none: all 64 bytes are accounted for (§13.4) | ~~**[OPEN.]**~~ |
 
 **[desk review 2026-09-30: this table keeps the withdrawn rows in their original order, so it does not read top-down by offset (the struck `+0x10`/`+0x20` rows lie inside the 36-byte `+0x08` rotation, `+0x30` inside the `+0x2C` translation). The normative layout is §13.4's table: `+0x00` name · `+0x04` runtime slot · `+0x08` 3×3 rotation (36 B) · `+0x2C` translation (12 B) · `+0x38` parent · `+0x3C` tag = 64 bytes.]**
@@ -160,7 +160,7 @@ It is always a valid bone index, and the bone it names is remarkably consistent 
 
 ~~**Blend indices in the mesh address this bone array directly.** There is no palette indirection **on the path a vertex's blend index travels** — ⚠ **qualified 2026-09-13, see §11.4:** an indirection table *does* exist, both in the engine (the render library's palette gather substitutes `source[table[i]]` per slot) and in the mesh file (the flags-bit-1 byte array at Mesh header `+0x38`, which is the ascending list of rig bones this mesh may be skinned to). It is simply **not** what the blend index resolves through: routing the blend index via that array scores a left/right side match of **0 / 87** against this reading's **68 / 78** and a shuffled control's **40 / 80**. The claim in this paragraph stands and is strengthened; the words "no palette indirection" were too broad. Candidate constant offsets from −6 to +6 were tested with the axis transform re-fitted independently for each; shift 0 with `+X −Y −Z` is the consistent winner (medians 0.080–0.144 across six characters), and the two characters where another shift scored marginally lower disagree with each other on both the shift and the axis mapping, i.e. noise. **[CONFIRMED — empirical.]**~~
 
-**⚠ RETRACTED 2026-09-13, see §11.15 — the same-day qualification above was itself wrong, in a subtle and instructive way.** The Mesh-header-`+0x38` array **is** exactly what the blend index resolves through — it is a genuine bone-palette table (character meshes specifically; not tested for the other five carriers that share this Mesh sub-block, `spec-geometry-format.md` §4.1.1). The `0 / 87` side-match score that seemed to refute it was real, but it was measuring the palette reading under the **wrong** sign convention (the `+X −Y −Z` transform just retracted above, two paragraphs up) — under the correct transform (`−X −Y −Z`, a point inversion), the palette reading scores **171 / 172 (0.9942)** on the identical predicate, against a shuffled control at **0.5364** and the direct-index reading at **0.2566** under the same corrected sign (§11.15). A `0 / 87` this close to deterministic anti-correlation, rather than the ~0.50 a genuinely wrong mapping produces against its own shuffled control, was itself a clue this session read as "refutation" rather than "sign error" — recorded in `HANDOFF.md` §5 as a methodology lesson. The shift-search in this paragraph is undermined by the same root cause: it could only ever find a **constant offset**, and a bone-palette lookup is a **permutation**, a category of error that search was structurally incapable of detecting no matter how many shifts it tried. *(The highest blend index seen anywhere in the population is 63, against rigs of 66–68 bones.* ~~*That resembles a 64-entry palette limit and is not one — the high-numbered bones are helpers that nothing is skinned to.*~~ ⚠ **REFUTED 2026-09-13, see §11.2: it IS a 64-entry limit.** One of the engine's two palette load paths clamps the bone count to `0x40` = 64 outright (`FUN_00e649f0`, raw at `0x00e64a2f`). The observation that the high-numbered bones are helpers nothing is skinned to remains true and is separately confirmed — §11.4 names them — but it is not why the maximum is 63.)
+**⚠ RETRACTED 2026-09-13, see §11.15 — the same-day qualification above was itself wrong, in a subtle and instructive way.** The Mesh-header-`+0x38` array **is** exactly what the blend index resolves through — it is a genuine bone-palette table (character meshes specifically; not tested for the other five carriers that share this Mesh sub-block, `spec-geometry-format.md` §4.1.1). The `0 / 87` side-match score that seemed to refute it was real, but it was measuring the palette reading under the **wrong** sign convention (the `+X −Y −Z` transform just retracted above, two paragraphs up) — under the correct transform (`−X −Y −Z`, a point inversion), the palette reading scores **171 / 172 (0.9942)** on the identical predicate, against a shuffled control at **0.5364** and the direct-index reading at **0.2566** under the same corrected sign (§11.15). A `0 / 87` this close to deterministic anti-correlation, rather than the ~0.50 a genuinely wrong mapping produces against its own shuffled control, was itself a clue this session read as "refutation" rather than "sign error" — recorded in `HANDOFF.md` §5 as a methodology lesson. The shift-search in this paragraph is undermined by the same root cause: it could only ever find a **constant offset**, and a bone-palette lookup is a **permutation**, a category of error that search was structurally incapable of detecting no matter how many shifts it tried. *(The highest blend index seen anywhere in the population is 63, against rigs of 66–68 bones.* ~~*That resembles a 64-entry palette limit and is not one — the high-numbered bones are helpers that nothing is skinned to.*~~ ⚠ **REFUTED 2026-09-13, see §11.2: it IS a 64-entry limit.** One of the engine's two palette load paths clamps the bone count to `0x40` = 64 outright (`0x00e649f0`, raw at `0x00e64a2f`). The observation that the high-numbered bones are helpers nothing is skinned to remains true and is separately confirmed — §11.4 names them — but it is not why the maximum is 63.)
 
 **How this was measured, because the obvious method fails.** Comparing the rig's bounding box against the mesh's does not work: a rig contains **helper bones deliberately placed outside the body**, so its box is not the body's box. On `brad` the rig's Z extent is 1.126 against the mesh's 0.404, which looks like a scale or an axis remap and is neither — **it is one bone**, index 47, named `camera`, at `(0, 0, 1.000)` with no parent, sitting a metre in front of the character. Excluding it, the rig's Z matches the mesh's.
 
@@ -188,8 +188,8 @@ It is always a valid bone index, and the bone it names is remarkably consistent 
 2. ~~`+0x2C`'s true meaning (§7 hypothesis).~~ **ADVANCED 2026-09-20 (§13.2): `+0x28` (new) `+ +0x2C = bone_count` in 585/585; no runtime reader of either field found in the bounded scopes of §13.6; the bone-LOD hypothesis is UNSUPPORTED. What the authoring side uses them for stays OPEN.**
 3. ~~Bone `+0x24` and attachment `+0x10`/`+0x30`/`+0x3C`… runtime vs on-disk meaning.~~ **Attachment fields RESOLVED 2026-09-20 (§13.4): 3×3 rotation at `+0x08`, translation at `+0x2C`, parent at `+0x38`, tag `-1` at `+0x3C`. Bone `+0x24`: no runtime reader or writer found (§13.5, a bounded negative) — remains OPEN.**
 4. ~~Header fields other than those in §3.1.~~ **ADVANCED 2026-09-20 (§13.2–§13.3): `+0x28` characterized; `+0x00`–`+0x23` and `+0x34` are zero in 585/585 (runtime name/flag overlay). No uncharacterized header dword remains.**
-5. ~~The bone-by-name routine (`FUN_004bc880`) — assumed the hash table's consumer, not decompiled.~~ **RESOLVED 2026-09-20 (§13.1): decompiled — a case-insensitive string compare over the bone names, not a hash-table consumer; all 61 call sites enumerated.**
-6. ~~`"Customization_Rig"` (registration type 13) — a separate constructor on the same extension, still untraced (`spec-format-inventory.md`).~~ **RESOLVED 2026-09-18, see §12 — stash-only into the customization singleton (`DAT_0263e0f4` `+0x1a8`/`+0x1ac`), same family as ID 11/12's morph stashes; does not parse `.rig_pc` at all.**
+5. ~~The bone-by-name routine (`0x004bc880`) — assumed the hash table's consumer, not decompiled.~~ **RESOLVED 2026-09-20 (§13.1): decompiled — a case-insensitive string compare over the bone names, not a hash-table consumer; all 61 call sites enumerated.**
+6. ~~`"Customization_Rig"` (registration type 13) — a separate constructor on the same extension, still untraced (`spec-format-inventory.md`).~~ **RESOLVED 2026-09-18, see §12 — stash-only into the customization singleton (`0x0263e0f4` `+0x1a8`/`+0x1ac`), same family as ID 11/12's morph stashes; does not parse `.rig_pc` at all.**
 7. **The runtime skinning path — partly resolved 2026-09-13, see §11.** Located end to end: the blend happens in a Direct3D 9 vertex shader, from a palette of 48-byte affine matrices. Still open from that pass: the shader's own arithmetic (unreadable from this side), the palette gather's bone-index limit, the conflict between the gather's addressing and the measured addressing, and the §11.4 side-match residual — each with a next step in §11.7. **[Update: the bone-index limit is resolved (§11.12.1), the addressing conflict is resolved (§11.15/§11.16), and the side-match residual is resolved (§11.17); the shader's own arithmetic (§11.7 item 1) remains open.]**
 8. Whether `.anim_pc`'s tracks are laid out in this bone order — tested as far as the population allows (§8, `spec-anim-format.md` §6a): binding is by index, not name, and the index map lives inside the undecoded track payload. Closable only with the runtime sampling code.
 
@@ -226,7 +226,7 @@ It is always a valid bone index, and the bone it names is remarkably consistent 
 The blend is **not** performed by CPU code. Blend indices and blend weights are declared
 as Direct3D 9 vertex-stream attributes and handed to a vertex shader.
 
-The engine builds its vertex declarations in one function, `FUN_00476ca0`, which assembles
+The engine builds its vertex declarations in one function, `0x00476ca0`, which assembles
 an array of 8-byte records and passes it to the device method at vtable displacement
 `+0x158` — index 86 of `IDirect3DDevice9`, `CreateVertexDeclaration`. The records are
 `D3DVERTEXELEMENT9`: a `u16` stream index, a `u16` byte offset, then four bytes holding
@@ -270,11 +270,11 @@ Three further checks, all of which could have failed:
 - The terminator constant at `0x01351c5c` is byte-exact `D3DDECL_END()`:
   `FF 00 00 00 11 00 00 00`, i.e. stream `0xFF`, offset `0`, type `17`
   (`D3DDECLTYPE_UNUSED`), method/usage/usage-index `0`.
-- `FUN_00476ca0` validates each incoming element against the table bounds before using it
+- `0x00476ca0` validates each incoming element against the table bounds before using it
   — semantic code `< 0x34`, encoding code `< 0x12`, stream `< 8` — which is where the
   51-entry and 17-entry table sizes above come from rather than being guessed. Reading one
   entry past either table returns obvious garbage (`0x129e53c`), confirming the bound.
-  **[OPEN — desk review 2026-09-30: `< 0x34` admits 52 semantic codes and `< 0x12` admits 18 encoding codes, one more than the 51-entry and 17-entry tables, so the bounds cannot be exactly "where the sizes come from"; and `spec-vertex-format.md` §12.9 (l.1393–1394) pairs the same two constants the other way round (type `< 0x34`, usage `< 0x12`) and calls the third check a method byte, not the stream. To be settled against the executable: the three compares in `FUN_00476ca0` and which table each guards.]**
+  **[OPEN — desk review 2026-09-30: `< 0x34` admits 52 semantic codes and `< 0x12` admits 18 encoding codes, one more than the 51-entry and 17-entry tables, so the bounds cannot be exactly "where the sizes come from"; and `spec-vertex-format.md` §12.9 (l.1393–1394) pairs the same two constants the other way round (type `< 0x34`, usage `< 0x12`) and calls the third check a method byte, not the stream. To be settled against the executable: the three compares in `0x00476ca0` and which table each guards.]**
 
 **[CONFIRMED — disassembly, all of the above.]**
 
@@ -287,7 +287,7 @@ entry-0-only rule applies (`spec-fxo-format.md` §5, `HANDOFF.md` §5). **That b
 where a CPU-side trace necessarily stops, and it is reached here rather than assumed.**
 **[CONFIRMED — disassembly for the handoff point; OPEN / UNKNOWN for the shader body.]**
 
-**Review status (2026-09-30): NEEDS-EXE: range-check bounds `< 0x34`/`< 0x12` vs the 51/17-entry tables, and the swapped pairing in `spec-vertex-format.md` §12.9 (`FUN_00476ca0`); the D3D9 facts check out against the public enums — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: range-check bounds `< 0x34`/`< 0x12` vs the 51/17-entry tables, and the swapped pairing in `spec-vertex-format.md` §12.9 (`0x00476ca0`); the D3D9 facts check out against the public enums — desk review (not re-derived from the executable).**
 
 ### 11.2 The palette the shader is given: 48-byte affine matrices, one per bone
 
@@ -297,10 +297,10 @@ skinning-constant layout, three constant registers per bone.
 
 | Fact | Evidence | Confidence |
 |---|---|---|
-| Allocation is `bone_count × 0x30` bytes, 16-aligned | `FUN_00e7b170`; raw at `0x00e7b1c9` computes `EAX×3` then shifts left 4 | **CONFIRMED — disassembly** |
-| Accepted bone count is `1 … 256` | `FUN_00e651c0` tests `n − 1 < 0x100` | **CONFIRMED — disassembly** |
-| Two backing pools, chosen at a threshold of **40** bones | `FUN_00e7b170` raw at `0x00e7b1a3`: `CMP EAX,0x28`, then one of two pool objects | **CONFIRMED — disassembly** |
-| Palette record: `+0x00` reference count, `+0x04` live count, `+0x08` capacity, `+0x0C` matrix pointer, `+0x10` a flag byte cleared after every load | `FUN_00e7b170` (construct), `FUN_00e7ae90` (add-ref), `FUN_00e7b230` (release), `FUN_00e7ad30` / `FUN_00e7aff0` (load) | **CONFIRMED — disassembly** |
+| Allocation is `bone_count × 0x30` bytes, 16-aligned | `0x00e7b170`; raw at `0x00e7b1c9` computes `EAX×3` then shifts left 4 | **CONFIRMED — disassembly** |
+| Accepted bone count is `1 … 256` | `0x00e651c0` tests `n − 1 < 0x100` | **CONFIRMED — disassembly** |
+| Two backing pools, chosen at a threshold of **40** bones | `0x00e7b170` raw at `0x00e7b1a3`: `CMP EAX,0x28`, then one of two pool objects | **CONFIRMED — disassembly** |
+| Palette record: `+0x00` reference count, `+0x04` live count, `+0x08` capacity, `+0x0C` matrix pointer, `+0x10` a flag byte cleared after every load | `0x00e7b170` (construct), `0x00e7ae90` (add-ref), `0x00e7b230` (release), `0x00e7ad30` / `0x00e7aff0` (load) | **CONFIRMED — disassembly** |
 | The out-of-range fallback matrix at `0x01321424` is an **affine identity** | bytes are exactly `1,0,0,0 / 0,1,0,0 / 0,0,1,0` as `f32` | **CONFIRMED — disassembly** |
 | The subsystem's own static block is tiny — the union of referencing sites over `0x013336c0 … 0x01333760` is **8** | data-side enumeration (`SkinProbe2.java`) | **CONFIRMED — disassembly** |
 
@@ -316,7 +316,7 @@ shader bytecode itself was not read (§11.1).]**
 **The 64-entry palette has a code literal behind it now, not only a data inference —
 but read the scope at the end of this paragraph before quoting it.** The palette
 load path that takes no per-mesh table **clamps the bone count to `0x40` = 64** —
-`FUN_00e649f0`, raw at `0x00e64a2f`: `CMP EAX,0x40`, and on `>=` the value is replaced by
+`0x00e649f0`, raw at `0x00e64a2f`: `CMP EAX,0x40`, and on `>=` the value is replaced by
 `0x40` before the copy runs. `spec-vertex-format.md` §6.3 recorded "the largest
 non-sentinel blend index observed is 63, consistent with a 64-entry bone palette" as
 **CONFIRMED — empirical** for the value and **HIGH CONFIDENCE — inferred** for the palette
@@ -336,10 +336,10 @@ inferred that 64 is the palette size the authoring pipeline targets.]**
 
 Two load paths exist, selected by whether the mesh supplies a bone index table.
 
-**Straight copy**, `FUN_00e7ad30(palette, source, count)`: copies `count` × 48 bytes when
+**Straight copy**, `0x00e7ad30(palette, source, count)`: copies `count` × 48 bytes when
 `count` does not exceed the palette's capacity, then clears the flag byte at `+0x10`.
 
-**Gather**, `FUN_00e7aff0`: the destination slot `i` receives `source[table[i]]`, and
+**Gather**, `0x00e7aff0`: the destination slot `i` receives `source[table[i]]`, and
 receives the **identity** matrix instead whenever `table[i]` is at or beyond a limit.
 
 The decompiled argument list for the gather is not trustworthy — this is the register-passed
@@ -355,12 +355,12 @@ instructions at `0x00e7aff0`–`0x00e7b060`:
 
 **[CONFIRMED — disassembly, raw instructions.]**
 
-Both call sites were read raw as well. `FUN_00e649f0` reaches the table through three
+Both call sites were read raw as well. `0x00e649f0` reaches the table through three
 dereferences from the skinned instance (`+0xbc`, then `+0x30`, then `+0x38`) **[desk review 2026-09-30: two loads and one address addition — the last step is `ADD 0x38`, not a load, §11.16.1]**, takes the
 gather path only when that `u16` count is non-zero, and otherwise falls through to the
-straight copy with the 64-bone clamp. `FUN_00b91a10` calls the gather with the source
+straight copy with the 64-bone clamp. `0x00b91a10` calls the gather with the source
 matrix array and the limit fetched from the animation subsystem's instance registry
-(`FUN_004be9c0` returns the registry record's `+0x00`; `FUN_004be910` returns the value at
+(`0x004be9c0` returns the registry record's `+0x00`; `0x004be910` returns the value at
 `+0x04` of the object at the record's `+0x3c`; the registry has stride `0x3a0` and
 validates a self-index at `+0x50`). **[CONFIRMED — disassembly.]** The runtime *value* of
 the limit is ~~**OPEN / UNKNOWN** — see §11.7.~~ **[Resolved: §11.12.1/§11.16.2 — `N` from the binding descriptor's `+0x04`; see the OPEN conflict marker in §11.16.2.]**
@@ -754,13 +754,13 @@ Assessment credited to Team B's own full read; cross-checked against this docume
    entry 0, the blocker is the container, not the shader.
    **[Stale — desk review 2026-09-30: Team B has since built a Direct3D 9 SM2/SM3 shader disassembler (`team-b/HANDOFF.md` §9.97) and drawn real geometry with the real per-range shaders (§9.103–§9.104), so the skinned-character shader's blend arithmetic (weighted sum, index × 3 scaling, `c52` base, weight normalisation) is now readable on tooling grounds; not yet read.]**
 2. **The runtime value of the gather's bone-index limit** (§11.3). It arrives from the
-   animation instance registry via `FUN_004be910`. ~~**Next step:** decompile the registry
+   animation instance registry via `0x004be910`. ~~**Next step:** decompile the registry
    record's producer to establish whether `+0x04` of the object at record `+0x3c` is the
    rig's bone count or something smaller.~~
    **RESOLVED 2026-09-13 — see §11.12.1.** It is neither: `+0x04` is a caller-supplied
    **subset size**, filled wholesale by a generic "named-bone-list binding" constructor
-   (`FUN_004c1350`) that never consults the rig object at all — the same construction path
-   the vehicle loader uses for part→rig-bone binding (`FUN_00ab0730`, already documented in
+   (`0x004c1350`) that never consults the rig object at all — the same construction path
+   the vehicle loader uses for part→rig-bone binding (`0x00ab0730`, already documented in
    `spec-vehicle-geometry.md`). Every consumer of the object treats the count as a bound
    (`≤` the rig's own bone count), never an equality.
 3. **The gather's addressing versus the measured addressing — a real conflict, not a
@@ -771,9 +771,9 @@ Assessment credited to Team B's own full read; cross-checked against this docume
    indexed by rig bone index**. `spec-anim-format.md` §6b and §10.1 independently show the
    animation subsystem working in *track* order with a bone→track reverse lookup, which is a
    plausible candidate ordering. ~~**Next step:** confirm what the object at mesh-resource
-   `+0x30` actually is by reading where the `.ccmesh_pc` parser (`FUN_007524f0`,
-   `FUN_00e71410`) stores a fixed-up pointer at Mesh header `+0x40`, and establish the
-   source array's ordering from `FUN_004be9c0`'s producer. Until then the identification of
+   `+0x30` actually is by reading where the `.ccmesh_pc` parser (`0x007524f0`,
+   `0x00e71410`) stores a fixed-up pointer at Mesh header `+0x40`, and establish the
+   source array's ordering from `0x004be9c0`'s producer. Until then the identification of
    the gather's table with the `+0x38` array is **HIGH CONFIDENCE — inferred**, not
    confirmed.~~
    **RESOLVED 2026-09-13 — see §11.15, superseding the "partially resolved" note below.**
@@ -799,13 +799,13 @@ Assessment credited to Team B's own full read; cross-checked against this docume
    arithmetic* (`ADD EAX,0x38` / `ADD ECX,0x38`), each followed by the vacuous null-test a
    compiler emits for `&mesh->member`, so the one alternative reading (a pointer *loaded*
    from `mesh+0x38`) is refuted rather than merely unlikely; and (ii) `source` is allocated
-   by `FUN_004c79a0` as an array of **exactly `limit`** 48-byte matrices — `limit` being the
+   by `0x004c79a0` as an array of **exactly `limit`** 48-byte matrices — `limit` being the
    identical value (the dword at `+0x04` of the object that `rec+0x3c` points to) the gather receives — so **the gather's own
    `table[i] >= limit → identity` test is an array-bounds check on `source`**, which is only
    type-correct if `table`'s values and `source`'s indices share one index space. §11.15's
    file-side 171/172 is what names that space rig-bone order; the two sides meet there.
    A bulk-copy palette fill was also located and read in full, though on the *sibling*
-   no-table path (`FUN_00abfad0` → `FUN_00e7ad30`, a third straight-copy call site not
+   no-table path (`0x00abfad0` → `0x00e7ad30`, a third straight-copy call site not
    previously documented). What remains unlocated is the per-frame writer of the matrices
    *inside* that block — and §11.16.3 now explains why three prior passes could not find one:
    `rec+0x00` is written exactly three times in the binary (ctor zero, allocator, release
@@ -861,7 +861,7 @@ Assessment credited to Team B's own full read; cross-checked against this docume
 1. **⚠ `HANDOFF.md` §5 and this project's standing claim that "the binary makes zero D3D9
    vertex-shader-related COM vtable calls at the usual `CreateVertexDeclaration` /
    `DrawIndexedPrimitive` slots" is REFUTED as stated.** `CreateVertexDeclaration` **is**
-   called, at `0x00476e58` inside `FUN_00476ca0`, through the device vtable at displacement
+   called, at `0x00476e58` inside `0x00476ca0`, through the device vtable at displacement
    `+0x158` (§11.1). The claim's *operational advice* — do not expect to recover the vertex
    layout by reading that call — happens to remain good, because the layout is assembled
    from the tables in §11.1 rather than being visible at the call site. But the stated fact
@@ -1122,7 +1122,7 @@ the §11.10 residual. **[Superseded: §11.17 — slot 15 resolves to `head` thro
 
 ### 11.12 §11.7 items 2 and 3 — the bone-index limit identified as a caller-supplied subset (not the rig's own count); the `+0x40` pointer CONFIRMED as the same array; the source array's own ordering remains OPEN (2026-09-13)
 
-**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `FUN_004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
 
 > **Scope.** This section executes §11.7's items 2 and 3 together, since they are two ends of
 > the same investigation: item 2 asks what `+0x04` of the object at registry-record `+0x3c`
@@ -1141,36 +1141,36 @@ the §11.10 residual. **[Superseded: §11.17 — slot 15 resolves to `head` thro
 Raw disassembly of the two accessors themselves, confirming §11.3's account byte-for-byte:
 
 ```
-FUN_004be9c0(selfIndex):                       FUN_004be910(selfIndex):
+0x004be9c0(selfIndex):                       0x004be910(selfIndex):
   if selfIndex == -1: return 0                   if selfIndex == -1: return 0
-  if selfIndex >= DAT_0344c91a: return 0          if selfIndex >= DAT_0344c91a: return 0
-  rec = selfIndex*0x3a0 + DAT_0344c924            rec = selfIndex*0x3a0 + DAT_0344c924
+  if selfIndex >= 0x0344c91a: return 0          if selfIndex >= 0x0344c91a: return 0
+  rec = selfIndex*0x3a0 + 0x0344c924            rec = selfIndex*0x3a0 + 0x0344c924
   if rec == 0: return 0                           if rec == 0: return 0
   if rec[+0x50] != selfIndex: return 0            if rec[+0x50] != selfIndex: return 0
   return rec[+0x00]                               return the dword at offset +0x04 of
                                                    the object rec[+0x3c] points to
 ```
 
-`DAT_0344c924`/`DAT_0344c91a` are the registry's base pointer and count; stride `0x3a0`,
+`0x0344c924`/`0x0344c91a` are the registry's base pointer and count; stride `0x3a0`,
 self-index re-validated at `+0x50` — exactly as §11.3 already stated. **[CONFIRMED —
 disassembly, re-derived independently.]**
 
 **The object at `+0x3c` is not the rig.** The rig pointer is a *different* field of the same
-record, `+0x14` (set once at construction, `FUN_004c1730`, which stores its argument 1 there, and read
+record, `+0x14` (set once at construction, `0x004c1730`, which stores its argument 1 there, and read
 throughout the same family of accessors by following `record+0x14` to the rig object and then
 reading that rig object's own `+0x24` for the rig's bone count and `+0x40` for its bone array —
 both exactly the confirmed `.rig_pc` fields from ~~§2~~ §3.1/§4).
-`+0x3c` points into a **separate global table**, `DAT_02f5e010`: 160 slots (`0xa0`), stride
-`0x410` bytes, a live-count at `DAT_02f5e008`, looked up by a **linear scan matching a
+`+0x3c` points into a **separate global table**, `0x02f5e010`: 160 slots (`0xa0`), stride
+`0x410` bytes, a live-count at `0x02f5e008`, looked up by a **linear scan matching a
 caller-supplied ID against each slot's own `+0x00`** — not derived from the rig, the mesh, or
 the registry record in any way. **[CONFIRMED — disassembly:** the lookup loop appears
-identically in `FUN_004bcac0` (the function that *binds* one of these slots into a registry
-record's `+0x3c`) and in `FUN_004c1730` itself (the registry-record constructor).**]**
+identically in `0x004bcac0` (the function that *binds* one of these slots into a registry
+record's `+0x3c`) and in `0x004c1730` itself (the registry-record constructor).**]**
 
-**The slot's own constructor, `FUN_004c1350`, fills `+0x04` wholesale from a caller-supplied
-argument block — never from the rig.** Reached through a 12-byte thin wrapper, `FUN_004bc9c0`
-(`EDI = arg2; CALL FUN_004c1350`), which is the *only* path to `FUN_004c1350` in the whole
-binary. `FUN_004c1350`, reading the register-passed block (`{u32 id; s32 count; u32*
+**The slot's own constructor, `0x004c1350`, fills `+0x04` wholesale from a caller-supplied
+argument block — never from the rig.** Reached through a 12-byte thin wrapper, `0x004bc9c0`
+(`EDI = arg2; CALL 0x004c1350`), which is the *only* path to `0x004c1350` in the whole
+binary. `0x004c1350`, reading the register-passed block (`{u32 id; s32 count; u32*
 recordArrayPtr}`):
 
 ```
@@ -1179,20 +1179,20 @@ memset(slot, 0xFF, 0x410)
 slot[+0x00] = block.id
 slot[+0x04] = block.count                     // <-- item 2's target field
 for i in 0 .. block.count-1:
-    boneIdx = *(u32*)(block.recordArray + i*4)          // low u16 is the meaningful part
+    boneIdx = the u32 at (block.recordArray + i*4)      // low u16 is the meaningful part
     slot[+0x10 + i*2]        = (u16)boneIdx             // slot i -> raw rig bone index
     slot[+0x110 + boneIdx*2] = (u16)i                   // raw rig bone index -> slot i  (reverse)
     slot[+0x210 + i*4] = 0
 ```
 
 **`block.count` is supplied by the caller, byte for byte — no rig object is consulted to
-produce it.** **[CONFIRMED — disassembly, `FUN_004c1350` read in full, register-passed block
+produce it.** **[CONFIRMED — disassembly, `0x004c1350` read in full, register-passed block
 pinned from the raw instructions at the one real call site, `0x004bc9c5`.]**
 
 **Every other consumer of this object treats its count as a subset, never as the rig's full
 bone count:**
 
-- `FUN_004bcb30` (bone-name **retargeting** between two registered instances) explicitly bounds
+- `0x004bcb30` (bone-name **retargeting** between two registered instances) explicitly bounds
   it: `subsetCount <= rig->+0x24 (bone count)`, then walks slots `0..subsetCount-1`, reading
   each slot's raw bone index from `+0x10`, looking that bone's **name** up in the current
   rig's own bone-name array (`rig+0x40`, the confirmed `.rig_pc` field, §4/§5) **[desk review 2026-09-30: `rig+0x40` is the bone array (§3.1); each name is reached through a bone record's `+0x00`]**, searching for
@@ -1200,26 +1200,26 @@ bone count:**
   second instance's own subset-relative slot (via *its* `+0x110` reverse lookup) into the
   first instance's `+0x34` array. This is a `<=` bound the code checks and relies on, never an
   equality. **[CONFIRMED — disassembly.]**
-- `FUN_004be8b0` (`selfIndex, slotIndex → parent's slotIndex`) walks the **raw** rig hierarchy
+- `0x004be8b0` (`selfIndex, slotIndex → parent's slotIndex`) walks the **raw** rig hierarchy
   through the bone record's own confirmed parent-index field (`+0x20`, §4) to find the raw
   parent bone index, then converts it back into **slot space** through the same object's
   `+0x110` reverse array. Input and output are both slot-space; the object's own internal
   indexing is never the rig's raw bone order. **[CONFIRMED — disassembly.]**
 - By contrast, `record+0x34` (a *different* field of the registry record itself, not of the
   `+0x3c` object) is a full-bone-count array, addressed directly by raw bone index and bounds-
-  checked against `rig->+0x24` (`FUN_004bcca0`/`FUN_004bccf0`). The project's two array
+  checked against `rig->+0x24` (`0x004bcca0`/`0x004bccf0`). The project's two array
   families sit side by side and are not interchangeable: one is subset/slot-sized, the other
   is rig-sized. **[CONFIRMED — disassembly.]**
 
 **The construction path is a generic, reused mechanism, not something specific to the anim
-registry.** `FUN_004bc9c0` (the wrapper into the slot constructor) has exactly **four callers
+registry.** `0x004bc9c0` (the wrapper into the slot constructor) has exactly **four callers
 project-wide**:
 
 | Caller | What it is |
 |---|---|
-| `FUN_00ab0730` | **Already documented** — `spec-vehicle-geometry.md`'s vehicle **part → rig-bone binding** function (`HANDOFF.md` §2b). |
-| `FUN_009f36d0` | A mesh/rig construction routine. A few dozen lines before the `FUN_004bc9c0` call it runs the `.ccmesh_pc` payload chain (`FUN_007527b0`→`FUN_007524f0`), then resolves a rig handle via `FUN_004bc810` (the `"Rig"` cache-check/handle resolver, `HANDOFF.md` §2a) from data embedded in that just-parsed mesh payload, then immediately builds the `{id, count, array}` block and registers both the subset slot and the animation-instance record (`FUN_004c1730`). **This mechanism runs as one step of ordinary mesh loading.** The two source fields feeding the block (read at `+0xA` and `+0x20` of the parsed mesh object) were **not** pinned to the already-catalogued Mesh-header `+0x38`/`+0x40` skinnable-bone array — they are read from a different level of the parsed object than the Mesh sub-block struct itself (§11.12.2 below establishes that struct's own layout precisely, and `+0xA`/`+0x20` do not match it), so that specific numeric identification is deliberately **not** claimed. |
-| `FUN_00753d40`, `FUN_008cb170` | Each builds the identical `{id, count-at-`+0xA`, array-at-`+0x20`}` block from a small input structure; not otherwise characterized this pass. |
+| `0x00ab0730` | **Already documented** — `spec-vehicle-geometry.md`'s vehicle **part → rig-bone binding** function (`HANDOFF.md` §2b). |
+| `0x009f36d0` | A mesh/rig construction routine. A few dozen lines before the `0x004bc9c0` call it runs the `.ccmesh_pc` payload chain (`0x007527b0`→`0x007524f0`), then resolves a rig handle via `0x004bc810` (the `"Rig"` cache-check/handle resolver, `HANDOFF.md` §2a) from data embedded in that just-parsed mesh payload, then immediately builds the `{id, count, array}` block and registers both the subset slot and the animation-instance record (`0x004c1730`). **This mechanism runs as one step of ordinary mesh loading.** The two source fields feeding the block (read at `+0xA` and `+0x20` of the parsed mesh object) were **not** pinned to the already-catalogued Mesh-header `+0x38`/`+0x40` skinnable-bone array — they are read from a different level of the parsed object than the Mesh sub-block struct itself (§11.12.2 below establishes that struct's own layout precisely, and `+0xA`/`+0x20` do not match it), so that specific numeric identification is deliberately **not** claimed. |
+| `0x00753d40`, `0x008cb170` | Each builds the identical `{id, count-at-`+0xA`, array-at-`+0x20`}` block from a small input structure; not otherwise characterized this pass. |
 
 **Answer to item 2:** `+0x04` of the object at registry-record `+0x3c` is **not the rig's bone
 count** — it is a caller-supplied **subset size**, one instance of a generic "named-bone-list
@@ -1230,18 +1230,18 @@ named as the natural next step below (§11.12.3).
 
 #### 11.12.2 Item 3(a): Mesh header `+0x40` CONFIRMED as the fixed-up pointer of the *same* `+0x38` array — strengthens, not weakens, the existing identification
 
-Read directly from the `.ccmesh_pc` "Mesh" sub-block parser, `FUN_00e71410` (excerpt, offsets
+Read directly from the `.ccmesh_pc` "Mesh" sub-block parser, `0x00e71410` (excerpt, offsets
 exactly as in the disassembly):
 
 ```
 if (flags & 2) == 0:                         // flags bit 1 clear
     mesh[+0x40 .. +0x47] = 0
-elif *(u16*)(mesh+0x38) == 0:                 // the count is zero
+elif (the u16 at mesh+0x38) == 0:             // the count is zero
     mesh[+0x40 .. +0x47] = 0
 else:
     mesh[+0x40] = cursor + base                // <-- the fixed-up pointer, unconditional
     mesh[+0x44 .. +0x47] = 0
-    cursor += *(u16*)(mesh+0x38)                // advance by the count, IN BYTES
+    cursor += (the u16 at mesh+0x38)            // advance by the count, IN BYTES
 ```
 
 `mesh+0x38` is the same `u16` element count already established (`spec-vertex-format.md`'s
@@ -1249,7 +1249,7 @@ walk advances the cursor by exactly this many bytes when flags bit 1 is set — 
 skinnable-bone list, §11.4). **`mesh+0x40` is unconditionally that same array's fixed-up
 absolute pointer, written 8 bytes after its count, in the same branch, by the same parser
 statement.** There is no second, different object at `+0x40` to confuse it with. **[CONFIRMED
-— disassembly, `FUN_00e71410` read in full.]**
+— disassembly, `0x00e71410` read in full.]**
 
 This lines up exactly with the gather's own table-struct shape, already pinned from raw
 instructions in §11.3 (`u16` element count at the table structure's own `+0x00`, pointer to a
@@ -1262,16 +1262,16 @@ that reads it.**
 This is independently re-derived at **both** established gather call sites, not merely inferred
 once:
 
-- `FUN_00e649f0` (already documented, §11.3): reaches the table through the skinned instance's
+- `0x00e649f0` (already documented, §11.3): reaches the table through the skinned instance's
   own `+0xbc → +0x30 → +0x38` chain — that trailing `+0x38` is this exact pair, reached from a
   completely different pointer chain than the one below.
-- `FUN_00b91a10` (re-read fresh this pass with its register-argument hazard fully resolved —
+- `0x00b91a10` (re-read fresh this pass with its register-argument hazard fully resolved —
   the whole function decompiles cleanly once the self-index accessors are recognised):
   ```
   meshPtr = the pointer reached by following renderEntry+0x5c → +0x64 → +0x50 → +0x30
             (four successive pointer hops)
   table   = (meshPtr == 0) ? 0 : meshPtr + 0x38
-  FUN_00e7aff0(source, limit, table)
+  0x00e7aff0(source, limit, table)
   ```
   the exact same `mesh+0x38`/`mesh+0x40` landing point, reached through the render-entry chain
   instead of the skinned-instance chain.
@@ -1288,10 +1288,10 @@ table is definitely the skinnable-bone list" with "blend index equals rig bone i
 
 #### 11.12.3 Item 3(b): the source array's own ordering — pursued to a named stopping point, OPEN
 
-**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `FUN_004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
 
 **Predicate, stated before searching.** A positive finding is the function that writes a
-non-null value into a registry record's own `+0x00` (the pointer `FUN_004be9c0` returns,
+non-null value into a registry record's own `+0x00` (the pointer `0x004be9c0` returns,
 confirmed via raw instructions in §11.3 to be the gather's `source` argument), read closely
 enough to see whether its fill loop indexes by raw rig bone index, by the item-2 subset's own
 slot index, or by something else (e.g. an animation track index, per the candidate this item
@@ -1299,27 +1299,27 @@ was opened on, drawn from `spec-anim-format.md` §6b/§10.1's track↔bone rever
 negative finding is a documented, bounded search — stated as a claim about the search, not
 about the format — that reaches no such writer.
 
-**What was tried.** `FUN_004be9c0` has exactly **7 callers project-wide** — verified by a
+**What was tried.** `0x004be9c0` has exactly **7 callers project-wide** — verified by a
 full-binary reference search, deliberately wider than item 2's ~123-function set (which only
 covers functions that re-derive the self-index via the registry's own two globals directly; a
 per-frame pose writer need not do that at all if it already holds the record pointer, which is
 exactly why it could sit outside that set). None of the ~123 direct accessors of
-`DAT_0344c924`/`DAT_0344c91a` writes a non-zero value into a record's `+0x00` — the only writes
-found there are the constructor's own zero-initialisation (`FUN_004c1730`, twice). The generic
-accessor that supplies the self-index at the skin-gather call site itself, `FUN_00487e80`
+`0x0344c924`/`0x0344c91a` writes a non-zero value into a record's `+0x00` — the only writes
+found there are the constructor's own zero-initialisation (`0x004c1730`, twice). The generic
+accessor that supplies the self-index at the skin-gather call site itself, `0x00487e80`
 (which simply returns the dword at `+0x20` of its argument), has **198 callers project-wide** and carries no discriminating power
 as a search anchor — the exact "small struct displacements have no selectivity" trap
 `HANDOFF.md` §5 already names. **[CONFIRMED — disassembly, both negative counts.]**
 
-Of `FUN_004be9c0`'s 7 real callers:
+Of `0x004be9c0`'s 7 real callers:
 
 | Caller | Finding |
 |---|---|
-| `FUN_00b91a10` | The already-documented skin gather (§11.3, re-confirmed in §11.12.2 above). |
-| `FUN_0073f650` | Feeds the **identical** `(FUN_004be9c0, FUN_004be910)` pair straight into `FUN_00e649f0(source, limit)` — the *other* already-documented gather call site. **New confirmation, not previously stated**: both established gather entry points draw the same `(source, limit)` pair from the same two accessors, so `record+0x00` is genuinely one shared skin-palette source used identically by both paths, not two coincidentally-similar arrays. **[CONFIRMED — disassembly.]** |
-| `FUN_00782880` | ~~An unrelated per-slot smoothing/lag computation running over the *same* item-2 subset object (calls `FUN_004be910` for its loop bound and `FUN_004be8b0` per slot). It indexes its own 48-byte-stride buffer with the **slot-space** value `FUN_004be8b0` returns — suggestive that slot/subset-local ordering is the house convention for buffers this subsystem owns — but that buffer (a stack-allocated buffer at `[ESP+0x38]` inside `FUN_00782880`) was not confirmed to be `record+0x00` itself, so this is a **lead, not a proof**.~~ **RESOLVED 2026-09-13, see §11.13.1: that `[ESP+0x38]` stack buffer is `record+0x04`, not `record+0x00` — REFUTED by raw disassembly, not merely unconfirmed — and the whole call graph it sits in (`FUN_00782880`→`FUN_00781e70`→`FUN_004bccf0`→`FUN_004c7640`) is positively identified as the attachment/prop spring-lag subsystem (§6 of this document), reading `record+0x04` as its own smoothing-state cache. Not a lead into the skin palette. |
-| `FUN_0058b5b0` | Indexes `record+0x00` with stride `0x30` (48 bytes, matching the palette element size, §11.2) using a plain integer parameter whose own provenance (bone index vs. something else) was not traced back to source at the caller. |
-| `FUN_00784a60`, `FUN_0094e6b0`, `FUN_009edc20` | Each is a large function (1.2–4.7 KB) that reuses the same local variable for several unrelated purposes; where it touches `record+0x00`-shaped data, it does so either by a sequential `+0x30` walk across consecutive entries (which visits every entry without revealing what index 0 means) or via large fixed offsets belonging to an unrelated object once the variable is reassigned. Read in full; neither settles bone-order vs. subset/track-order. |
+| `0x00b91a10` | The already-documented skin gather (§11.3, re-confirmed in §11.12.2 above). |
+| `0x0073f650` | Feeds the **identical** `(0x004be9c0, 0x004be910)` pair straight into `0x00e649f0(source, limit)` — the *other* already-documented gather call site. **New confirmation, not previously stated**: both established gather entry points draw the same `(source, limit)` pair from the same two accessors, so `record+0x00` is genuinely one shared skin-palette source used identically by both paths, not two coincidentally-similar arrays. **[CONFIRMED — disassembly.]** |
+| `0x00782880` | ~~An unrelated per-slot smoothing/lag computation running over the *same* item-2 subset object (calls `0x004be910` for its loop bound and `0x004be8b0` per slot). It indexes its own 48-byte-stride buffer with the **slot-space** value `0x004be8b0` returns — suggestive that slot/subset-local ordering is the house convention for buffers this subsystem owns — but that buffer (a stack-allocated buffer at `[ESP+0x38]` inside `0x00782880`) was not confirmed to be `record+0x00` itself, so this is a **lead, not a proof**.~~ **RESOLVED 2026-09-13, see §11.13.1: that `[ESP+0x38]` stack buffer is `record+0x04`, not `record+0x00` — REFUTED by raw disassembly, not merely unconfirmed — and the whole call graph it sits in (`0x00782880`→`0x00781e70`→`0x004bccf0`→`0x004c7640`) is positively identified as the attachment/prop spring-lag subsystem (§6 of this document), reading `record+0x04` as its own smoothing-state cache. Not a lead into the skin palette. |
+| `0x0058b5b0` | Indexes `record+0x00` with stride `0x30` (48 bytes, matching the palette element size, §11.2) using a plain integer parameter whose own provenance (bone index vs. something else) was not traced back to source at the caller. |
+| `0x00784a60`, `0x0094e6b0`, `0x009edc20` | Each is a large function (1.2–4.7 KB) that reuses the same local variable for several unrelated purposes; where it touches `record+0x00`-shaped data, it does so either by a sequential `+0x30` walk across consecutive entries (which visits every entry without revealing what index 0 means) or via large fixed offsets belonging to an unrelated object once the variable is reassigned. Read in full; neither settles bone-order vs. subset/track-order. |
 
 **Answer to item 3(b): OPEN.** The fill loop for `record+0x00` was not located within this
 pass's traced call graph. **Item 3's conflict is therefore not resolved** — §11.12.2 removed
@@ -1329,14 +1329,14 @@ the gather's table with the mesh's `+0x38` skinnable-bone array stays exactly wh
 left it: CONFIRMED at the structural level (§11.12.2), with the addressing conflict against
 §11.4's direct-index reading still standing.**
 
-**Next step, named:** both established gather call sites (`FUN_00e649f0`, `FUN_00b91a10`) are
+**Next step, named:** both established gather call sites (`0x00e649f0`, `0x00b91a10`) are
 themselves called from a higher-level per-frame "update this skinned instance" driver that
 necessarily already holds the registry record (it is the thing calling the gather at all) —
 that driver, not a fresh search from the registry's own globals, is where `record+0x00`'s fill
 loop will actually be sitting; §11.12's search stopped at the gather call sites and their
 sibling accessors precisely because going further meant leaving the traced, named surface this
 pass covered. A second, independent angle worth trying first: confirming or refuting whether
-`FUN_00782880`'s stack buffer at `[ESP+0x38]` (§11.12.3's lead) is literally `record+0x00` would
+`0x00782880`'s stack buffer at `[ESP+0x38]` (§11.12.3's lead) is literally `record+0x00` would
 settle the ordering question immediately in either direction, without needing the fill loop at
 all.
 
@@ -1349,10 +1349,10 @@ bounded further, not closed.
 
 ### 11.13 §11.12.3's two named next steps executed — the live lead identified and ruled out (attachment/prop lag, not skinning), both driver chains traced one level further, item 3(b) still OPEN (2026-09-13)
 
-**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `FUN_004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
 
 > **Scope.** This section executes, in the priority order §11.12.3 itself named, its own two
-> named next steps: (1) confirm or refute whether `FUN_00782880`'s stack buffer at `[ESP+0x38]`
+> named next steps: (1) confirm or refute whether `0x00782880`'s stack buffer at `[ESP+0x38]`
 > is literally `record+0x00`; (2) if not, trace the higher-level per-frame "update this skinned
 > instance" driver for both established gather call sites. Both were executed to a definite
 > conclusion in the same Ghidra project copy, `tools/gp_rig3`, using seventeen new scripts
@@ -1367,24 +1367,24 @@ bounded further, not closed.
 
 #### 11.13.1 Step 1: the stack buffer at `[ESP+0x38]` is `record+0x04`, not `record+0x00` — REFUTED, and explained rather than left dangling
 
-Raw disassembly of `FUN_00782880`'s entry (`0x00782909`–`0x00782924`) pins down what the
-decompiler had misrepresented as a single call, `FUN_00487e80(&buf)` (`buf` being the stack
+Raw disassembly of `0x00782880`'s entry (`0x00782909`–`0x00782924`) pins down what the
+decompiler had misrepresented as a single call, `0x00487e80(&buf)` (`buf` being the stack
 buffer at `[ESP+0x38]`), for what it actually is — two back-to-back calls whose arguments the
 decompiler misattributed (the same register-passed-argument hazard already on file,
 §11.3/~~§11.9.1~~/`HANDOFF.md` §5 **[no §11.9.1 exists; §11.9 item 1 is a different hazard]**). In instruction order: the address of the `[ESP+0x38]` buffer is
 loaded into ECX and pushed as the **second** argument to the *next* call, not to
-`FUN_00487e80`; ECX is then reloaded from `[EDI+0x10]`, the real `thiscall` receiver for
-`FUN_00487e80`; that call returns the value at `ECX+0x20` (`selfIndex`) without touching the
+`0x00487e80`; ECX is then reloaded from `[EDI+0x10]`, the real `thiscall` receiver for
+`0x00487e80`; that call returns the value at `ECX+0x20` (`selfIndex`) without touching the
 stack; `selfIndex` is pushed as the first argument (`cdecl`, right-to-left, so the last-pushed
-argument is read first); and the call that follows is `FUN_004be950(selfIndex, &buf)`.
+argument is read first); and the call that follows is `0x004be950(selfIndex, &buf)`.
 
-`FUN_004be950` was disassembled directly (`0x004be950`–`0x004be988`) and shares
-`FUN_004be9c0`'s exact validated preamble byte-for-byte (selfIndex bounds-check against
-`DAT_0344c91a`, `rec = selfIndex*0x3a0+DAT_0344c924`, `rec[+0x50]==selfIndex`) before
+`0x004be950` was disassembled directly (`0x004be950`–`0x004be988`) and shares
+`0x004be9c0`'s exact validated preamble byte-for-byte (selfIndex bounds-check against
+`0x0344c91a`, `rec = selfIndex*0x3a0+0x0344c924`, `rec[+0x50]==selfIndex`) before
 diverging at the very last step:
 
 ```
-FUN_004be9c0(selfIndex):            FUN_004be950(selfIndex, int *outPtr):
+0x004be9c0(selfIndex):            0x004be950(selfIndex, int *outPtr):
   ... identical validated rec ...     ... identical validated rec ...
   return rec[+0x00]                   *outPtr = rec[+0x04]
                                        returns a 32-bit value whose low byte is
@@ -1398,56 +1398,56 @@ FUN_004be9c0(selfIndex):            FUN_004be950(selfIndex, int *outPtr):
 accessors' validated preambles and final step.]**
 
 This is corroborated, not merely asserted, by the record's own lifecycle. The constructor
-(`FUN_004c1730`, already on file as the source of the "zero-init, twice" note in §11.12.3)
+(`0x004c1730`, already on file as the source of the "zero-init, twice" note in §11.12.3)
 zeroes `rec[+0x00]` and `rec[+0x04]` as **two separate
 statements**, and does so **twice** in its own body (once early, once again just before the
 `+0x3c` slot lookup) — the "twice" was always about this *pair*, not one field zeroed
-redundantly. A second function, `FUN_004c14f0`, was identified in this pass as the record's
+redundantly. A second function, `0x004c14f0`, was identified in this pass as the record's
 **release/unregister** counterpart: it walks the anim-registry hash chain
-(`DAT_0344c918`/`DAT_0344c920`/`DAT_0344c922`, the same `*0x3a0+DAT_0344c924` rec
+(`0x0344c918`/`0x0344c920`/`0x0344c922`, the same `*0x3a0+0x0344c924` rec
 computation) and, on release, explicitly zeroes `rec[+0x00]`, `rec[+0x04]` **and** `rec[+0x08]`
 as three separate `MOV dword ptr [ESI+N],EBX` statements (`EBX` held `0` throughout),
 alongside a byte flag at `+0x38`, before running a completely unrelated doubly-linked-list
-unlink over a second, smaller object family (the `+0xc`/`+0x6d` fields `FUN_004bd700`
+unlink over a second, smaller object family (the `+0xc`/`+0x6d` fields `0x004bd700`
 separately reads). **[CONFIRMED — disassembly: three explicitly separate fields, zeroed
 identically at construction and at release — not one buffer under two names, and not
 aliased.]**
 
 **Having refuted the lead, this pass did not stop at the refutation — the stack buffer passed as
-`rec[+0x04]` was traced to what it actually is.** `FUN_00782880`'s early-exit branch (taken when
-`*(context+0x15b0) != 0`) calls `FUN_00781e70` directly with a fixed placeholder vector; that
-same function, `FUN_00781e70`, is *also* the **sole caller** of `FUN_004bccf0`
+`rec[+0x04]` was traced to what it actually is.** `0x00782880`'s early-exit branch (taken when
+`*(context+0x15b0) != 0`) calls `0x00781e70` directly with a fixed placeholder vector; that
+same function, `0x00781e70`, is *also* the **sole caller** of `0x004bccf0`
 (`getReferencesTo` returns exactly one hit, `0x00781e70`), which is itself a thin
 selfIndex-validating wrapper that forwards the record plus its own arguments 2–5 into
-`FUN_004c7640` — one of the ten candidates the wider sweep below surfaced. Reading
-`FUN_00781e70` in full settles what this whole call graph is: it walks a **fixed** list of
+`0x004c7640` — one of the ten candidates the wider sweep below surfaced. Reading
+`0x00781e70` in full settles what this whole call graph is: it walks a **fixed** list of
 eleven small integer constants (`{2,3,4,5,6,7,8,9,10,11,0}` — not derived from any mesh's
 skinnable-bone list) against a per-instance context object's own `+0x1410`/`+0x1310` arrays
-(the *same* context and the *same* two field offsets `FUN_00782880` itself reads,
+(the *same* context and the *same* two field offsets `0x00782880` itself reads,
 `0x0077b0e0()`'s return value), builds a filtered index table of the *active* ones, and — for
-each — either reads a physics/attachment transform directly or asks `FUN_004bccf0`/
-`FUN_004c7640` for a **spring-damper-smoothed** version of it (`FUN_004c7640` reads
+each — either reads a physics/attachment transform directly or asks `0x004bccf0`/
+`0x004c7640` for a **spring-damper-smoothed** version of it (`0x004c7640` reads
 `rec[+0x04]` as its own previous-frame smoothing-state cache, indexed by that same filtered
 table, and writes the smoothed result into *the caller's own local output arrays* — never back
 into `rec[+0x00]` or `rec[+0x04]`), then **hands the result to a virtual call, dispatched
 through the function-pointer table reached via `attachmentObj+0xe0`** (slot `+0x40` or `+0x44`,
 chosen by a condition) on a per-slot attachment object. **This is the attachment/IK-target lag subsystem already named in §6 of this same
 document (`0x40`-byte attachment record) — camera, weapon, prop and similar helper bones —
-not the skin palette.** **[desk review 2026-09-30: not the same array as §6 — this dispatch runs over the registry record's inline slot array (stride `0x50`, 9 entries, §11.16.6 `+0x70`), not the rig file's `0x40`-byte, 43–45-entry attachment array; read "a runtime attachment/prop slot array"]** **[HIGH CONFIDENCE — inferred from the full read of `FUN_00781e70`
-and `FUN_004c7640`; the fixed constant list, the shared context object, and the
+not the skin palette.** **[desk review 2026-09-30: not the same array as §6 — this dispatch runs over the registry record's inline slot array (stride `0x50`, 9 entries, §11.16.6 `+0x70`), not the rig file's `0x40`-byte, 43–45-entry attachment array; read "a runtime attachment/prop slot array"]** **[HIGH CONFIDENCE — inferred from the full read of `0x00781e70`
+and `0x004c7640`; the fixed constant list, the shared context object, and the
 attachment-record-shaped virtual dispatch all point the same way, but the vectorised
 spring-damper arithmetic itself was not verified instruction-by-instruction the way the
 offset comparisons above were.]**
 
-**One further fact surfaced inside `FUN_004c7640`, offered as context and explicitly not as
-evidence about `rec[+0x00]`'s ordering:** it calls `FUN_004c31b0(rec, ...)` (also bare-`rec`,
+**One further fact surfaced inside `0x004c7640`, offered as context and explicitly not as
+evidence about `rec[+0x00]`'s ordering:** it calls `0x004c31b0(rec, ...)` (also bare-`rec`,
 also in the ten-candidate list below), which reads `rec[+0x14]` (the confirmed rig pointer),
 `rec[+0x3c]` (the confirmed subset object) and — new this pass — `rec[+0x30]` (a *second*
 self-index, into the *same* registry, read to fetch **another instance's** `+0x04` field) and
-`rec[+0x34]` (a retarget slot-map array, matching `FUN_004bcb30`'s already-documented
+`rec[+0x34]` (a retarget slot-map array, matching `0x004bcb30`'s already-documented
 cross-instance retargeting, §11.12.1). Inside it, the per-slot loop indexes its own bind-pose
 input array by **subset slot index** (a stack-local counter using the same 0…N−1 numbering
-`FUN_004c1350` assigns), not by raw bone index. **This says something about the attachment-lag subsystem's
+`0x004c1350` assigns), not by raw bone index. **This says something about the attachment-lag subsystem's
 own source data — slot-ordering, cross-instance retargeting via a second self-index — not
 about `rec[+0x00]`, which this function never touches. Recorded because it is new and
 because a future pass chasing `rec+0x30`/`rec+0x34` should not have to re-derive it, not as
@@ -1456,43 +1456,43 @@ uncorrelated with the skin gather's own source array.]**
 
 #### 11.13.2 Step 2: both established drivers traced one level further; a wider registry-accessor sweep; still no writer
 
-**`FUN_00b91a10`'s one and only caller was invisible to a direct reference search because
+**`0x00b91a10`'s one and only caller was invisible to a direct reference search because
 Ghidra had never carved a `Function` out of the bytes containing it — not because no caller
-exists.** `getReferencesTo` on `FUN_00b91a10` returns exactly one hit, `0x0070314d`, and
+exists.** `getReferencesTo` on `0x00b91a10` returns exactly one hit, `0x0070314d`, and
 `getFunctionContaining` returns `null` there; the surrounding bytes (`0x0070300d`–
 `0x00703199`, ending in a clean `RET`, immediately preceding a separate, already-recognised
-`FUN_007031e0`) disassemble as one coherent function body with no gaps. A `Function` was
-created there (`createFunction`, name `FUN_007030d0`, in this session's own `gp_rig3` copy
+`0x007031e0`) disassemble as one coherent function body with no gaps. A `Function` was
+created there (`createFunction`, name `0x007030d0`, in this session's own `gp_rig3` copy
 only) and decompiled: it is a **top-level per-frame world-update tick**, gated by three calls
-to `FUN_00706ab0()` excluding game-mode/kind values 7, 8 and 9, that then calls roughly
+to `0x00706ab0()` excluding game-mode/kind values 7, 8 and 9, that then calls roughly
 eighteen unrelated subsystem-update functions in a fixed sequence — physics-list maintenance,
-audio, particle/prop culling, and, unconditionally among them, `FUN_00b93540()` immediately
-followed by `FUN_00b91a10()` (the gather) and then `FUN_00823310()`/`FUN_00bdd520()`.
+audio, particle/prop culling, and, unconditionally among them, `0x00b93540()` immediately
+followed by `0x00b91a10()` (the gather) and then `0x00823310()`/`0x00bdd520()`.
 **All three of these immediate neighbours were opened and are unrelated to the registry**:
-`FUN_00b93540` walks a `0x60`-stride free-list releasing entries and a separate linked list
-calling `FUN_00b929b0()`; `FUN_00823310` maintains two unrelated culling/pool arrays
-(`DAT_01300b98`/`PTR_DAT_01300b90`, stride 4, and `DAT_022d6168`/`DAT_022d6160`, stride
-`0x58`); `FUN_00bdd520` walks a `0x128`-stride registry unrelated to `DAT_0344c924`
-dispatching to `FUN_00bdd470`/`FUN_00bdc730`. **[CONFIRMED — disassembly/decompilation, all
+`0x00b93540` walks a `0x60`-stride free-list releasing entries and a separate linked list
+calling `0x00b929b0()`; `0x00823310` maintains two unrelated culling/pool arrays
+(`0x01300b98`/`0x01300b90`, stride 4, and `0x022d6168`/`0x022d6160`, stride
+`0x58`); `0x00bdd520` walks a `0x128`-stride registry unrelated to `0x0344c924`
+dispatching to `0x00bdd470`/`0x00bdc730`. **[CONFIRMED — disassembly/decompilation, all
 three.]**
 
-`FUN_007030d0` is itself registered as one of four items passed together to
-`FUN_00706a40(5, &array, 0)` from `FUN_007041b0` (`FUN_00706a40` is a plain 5-slot table
-setter, `DAT_01503bc0`-family, gated on argument 1 being below `0xb` — a small fixed roster of registration
+`0x007030d0` is itself registered as one of four items passed together to
+`0x00706a40(5, &array, 0)` from `0x007041b0` (`0x00706a40` is a plain 5-slot table
+setter, `0x01503bc0`-family, gated on argument 1 being below `0xb` — a small fixed roster of registration
 slots, not specific to animation). The other three items in that same array —
-`LAB_00702f90`, `FUN_00703c00`, `FUN_00703f50` — were checked and are **UI/map-load
+`0x00702f90`, `0x00703c00`, `0x00703f50` — were checked and are **UI/map-load
 transition lifecycle code** (`"ui_map_world_city"` string references, checkpoint/loading-state
-flags such as `DAT_014ff6c1`–`DAT_014ff6c6`), not per-frame animation sub-steps — ruling out
+flags such as `0x014ff6c1`–`0x014ff6c6`), not per-frame animation sub-steps — ruling out
 the hypothesis that the fill loop is a sibling phase-step registered alongside the tick.
 **[CONFIRMED — decompilation, both.]**
 
-**`FUN_00b91a10`'s full body — previously only a three-line excerpt was on file
+**`0x00b91a10`'s full body — previously only a three-line excerpt was on file
 (§11.3/§11.12.2) — reveals a structural fact about the consumer side not previously
 recorded.** It is not a per-entity render callback; it is a single **global per-frame batch
-pass** with a nested loop: an outer loop over up to `DAT_0290ac9c` render entries (base
-`DAT_0290acb0`, stride `0x888`), and — for each — an **inner loop of exactly five skin
+pass** with a nested loop: an outer loop over up to `0x0290ac9c` render entries (base
+`0x0290acb0`, stride `0x888`), and — for each — an **inner loop of exactly five skin
 slots** (`EBP+0x60`, stride `8` bytes: `slot[+0x00]` a pointer to that slot's own
-self-index-holder object, read via `FUN_00487e80` for the gather's selfIndex; `slot[+0x04]`
+self-index-holder object, read via `0x00487e80` for the gather's selfIndex; `slot[+0x04]`
 the destination palette pointer, the gather's own `thiscall` receiver). The
 skinnable-bone-list `table` (`renderEntry+0x5c→+0x64→+0x50→+0x30→+0x38`) is read once per
 *outer* iteration and reused for all five inner slots. **This means one render entry can carry
@@ -1504,41 +1504,41 @@ framing this document previously carried for this call site. **[CONFIRMED — di
 `rec[+0x00]` — no write to it appears anywhere in this loop.
 
 **The other established call site's own driver was traced the same distance.**
-`FUN_0073f650` (site A) has two resolved callers, `FUN_009226b0` (new this pass) and the
-already-known `FUN_0094e6b0`, plus two call sites (`0x009022f3`, `0x009024bd`) that — like
-`FUN_00b91a10`'s own caller — sit in a second Ghidra analysis gap, one coherent uncarved
-function spanning roughly `0x00902070`–`0x009026ec+` that calls `FUN_0073f650` **twice**
+`0x0073f650` (site A) has two resolved callers, `0x009226b0` (new this pass) and the
+already-known `0x0094e6b0`, plus two call sites (`0x009022f3`, `0x009024bd`) that — like
+`0x00b91a10`'s own caller — sit in a second Ghidra analysis gap, one coherent uncarved
+function spanning roughly `0x00902070`–`0x009026ec+` that calls `0x0073f650` **twice**
 (a "cheap path" using a fixed transform, and a "blended path" that interpolates against a
-per-bone rest pose first). `FUN_009226b0` was decompiled in full: a per-object animation-rate/
+per-bone rest pose first). `0x009226b0` was decompiled in full: a per-object animation-rate/
 LOD gate (walks a "kind" flag at `+0x3a`/`+0x3b`, a vtable call at `+0x54`) that calls
-`FUN_0073f650` once at its tail — unrelated to the registry's own fields otherwise.
+`0x0073f650` once at its tail — unrelated to the registry's own fields otherwise.
 **[CONFIRMED — decompilation.]** Neither of these two call chains was left unread; neither
 contains a write to `rec[+0x00]`.
 
 **The registry-accessor sweep from §11.12.3 was re-run wider, not merely re-counted.** All
-123 functions referencing `DAT_0344c924` were fully disassembled (not sampled) and scanned
+123 functions referencing `0x0344c924` were fully disassembled (not sampled) and scanned
 two ways: (a) any register-relative write at a small, literal displacement — this reproduces
 §11.12.3's own negative and additionally surfaces only already-characterised getters/
-out-param setters (`FUN_004bd700`, another `record[+0xc]` accessor sharing the same
-validated preamble) and the release path (`FUN_004c14f0`, §11.13.1); (b) the bare validated
+out-param setters (`0x004bd700`, another `record[+0xc]` accessor sharing the same
+validated preamble) and the release path (`0x004c14f0`, §11.13.1); (b) the bare validated
 `rec` pointer (offset **zero**, not `rec+N`) pushed and passed whole into a further `CALL` —
 added this pass specifically because a bulk-copy/`memcpy`-style fill would write through a
 *callee's* body, not via a `MOV [reg],val` at the call site itself, and so would be invisible
 to predicate (a). Predicate (b) found exactly **ten** sites in ten distinct functions.
-`FUN_004b0080` and `FUN_004b2280`'s hits are writes to unrelated physics/blend objects at the
+`0x004b0080` and `0x004b2280`'s hits are writes to unrelated physics/blend objects at the
 same generic `[reg]`/`[reg+4]` shape (false positives of the broad register-only match);
-`FUN_004becb0` writes into a *caller-supplied* output array, not the record; the remaining ~~six~~ **[seven names are listed — desk review 2026-09-30; the tally against the ten sites is not reconciled here]**
-distinct call targets (`FUN_004c64d0`, `FUN_004c6540`, `FUN_004c2170`, `FUN_004c6b30`,
-`FUN_004c58c0`, `FUN_004c5d40`, `FUN_004c6830` — one first surfaced via `FUN_004be660`) were
+`0x004becb0` writes into a *caller-supplied* output array, not the record; the remaining ~~six~~ **[seven names are listed — desk review 2026-09-30; the tally against the ten sites is not reconciled here]**
+distinct call targets (`0x004c64d0`, `0x004c6540`, `0x004c2170`, `0x004c6b30`,
+`0x004c58c0`, `0x004c5d40`, `0x004c6830` — one first surfaced via `0x004be660`) were
 each decompiled and are small helper functions over unrelated `0x50`-stride
-attachment/physics sub-arrays (two shown in full above); **`FUN_004c7640`/`FUN_004c31b0`
+attachment/physics sub-arrays (two shown in full above); **`0x004c7640`/`0x004c31b0`
 are the one substantive hit, and they are the attachment-lag subsystem identified in
 §11.13.1 — already resolved, not a second open lead.** **[CONFIRMED — disassembly, the full
 ten-site enumeration and every target's disposition.]**
 
 #### 11.13.3 Net verdict
 
-**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `FUN_004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
 
 **Item 3(b) stays OPEN.** Both of §11.12.3's own named next steps were carried to a definite
 conclusion: step 1 is a clean REFUTE, with the lead positively re-identified rather than left
@@ -1555,10 +1555,10 @@ surfaced, run to ground — not as a claim that no such writer exists anywhere i
 **Next step, named for whoever picks this up, ranked above another registry-accessor
 sweep:** this pass found **two** coherent function bodies that a plain `getReferencesTo`-then-
 decompile sweep silently skips because Ghidra's own analysis never carved a `Function` out of
-them (`0x0070300d`–`0x00703199`, now named `FUN_007030d0` in `gp_rig3` only; the
+them (`0x0070300d`–`0x00703199`, now named `0x007030d0` in `gp_rig3` only; the
 `0x00902070`-ish region, still unnamed). Both happened to be the *drivers* this task went
-looking for, found only because their single call to a *known* address (`FUN_00b91a10`,
-`FUN_0073f650`) was followed manually rather than trusted as "0 callers." If the fill loop
+looking for, found only because their single call to a *known* address (`0x00b91a10`,
+`0x0073f650`) was followed manually rather than trusted as "0 callers." If the fill loop
 for `record[+0x00]` itself sits in a similarly uncarved region, it would be **invisible to
 `getReferencesTo` on any of this record's known accessors** regardless of how wide the
 predicate is made — the productive next move is a targeted scan for uncarved-but-coherent
@@ -1573,7 +1573,7 @@ same 123 named accessors.
 > **Scope.** This is the third dispatched pass on item 3(b) (the skin gather's source array,
 > `record[+0x00]`, and who fills it). Passes 1 and 2 (§11.12.3, §11.13) each produced a clean,
 > bounded negative and are not repeated here — not the 123-accessor sweep, not the 7-caller
-> enumeration, not `FUN_00782880`'s call graph. §11.13 named one untried angle: a **targeted
+> enumeration, not `0x00782880`'s call graph. §11.13 named one untried angle: a **targeted
 > scan for uncarved-but-coherent code** (a `Function`-shaped byte range with no owning
 > `Function` object) inside the three address ranges this investigation has already implicated
 > — `0x0070xxxx`, `0x0090xxxx`, `0x004bxxxx`–`0x004cxxxx` — rather than a fourth registry-
@@ -1589,65 +1589,65 @@ same 123 named accessors.
 > a bounded claim about the search — which ranges, what predicate, what was found instead — not
 > a claim about the format.** **Net result: every function this pass carved or read — 36 newly
 > created plus the full callee set of the driver at the centre of it — was checked by direct
-> reference to the registry's own two globals (`DAT_0344c924`/`DAT_0344c91a`) and none touches
+> reference to the registry's own two globals (`0x0344c924`/`0x0344c91a`) and none touches
 > them. This is a clean negative. Recommendation at the end: deprioritize item 3(b) rather than
 > dispatch a fourth pass.**
 
 #### 11.14.1 The second known gap, precisely bounded: `0x00902140`–`0x00902756`, a third driver of the site-A gather — not a writer
 
 §11.13.2 left this gap approximately located (`~0x00902070`–`0x009026ec`) and only partially
-read (it knew the gap called `FUN_0073f650` — site A's own driver — twice, and nothing more).
-Precise boundaries, from raw disassembly: the existing `FUN_00902070` (already a named
+read (it knew the gap called `0x0073f650` — site A's own driver — twice, and nothing more).
+Precise boundaries, from raw disassembly: the existing `0x00902070` (already a named
 function) ends cleanly at `0x00902137` (`RET`); real code resumes immediately at `0x00902140`
 with a standard `thiscall` prologue (`SUB ESP,0x16c; PUSH EBP; PUSH ESI; MOV ESI,ECX`) and ends
 with a shared epilogue (`POP EDI; POP ESI; POP EBP; ADD ESP,0x16c; RET`, three exit paths, two
 of which tail-jump instead) at `0x00902756`, immediately followed by the already-named
-`FUN_00902760`. **One coherent function, no internal gaps. [CONFIRMED — disassembly,
+`0x00902760`. **One coherent function, no internal gaps. [CONFIRMED — disassembly,
 `0x00902140`–`0x00902756` read in full, byte-for-byte.]**
 
-A `Function` was created there (`createFunction`, named `FUN_00902140`, in `gp_rig4` only) and
+A `Function` was created there (`createFunction`, named `0x00902140`, in `gp_rig4` only) and
 decompiled in full. It is a per-instance "compute this bone-like thing's transform" method
 (argument 1 = a large render/animation-instance object reaching fields past `+0x190`, sharing
-the exact `+0xf4`-subobject/`FUN_00d9e4c0`/`FUN_00d9e210`/`FUN_00d9e250` rate-scaling idiom
-`FUN_00782880` uses — the attachment/prop spring-lag subsystem's own object family, §11.13.1 —
+the exact `+0xf4`-subobject/`0x00d9e4c0`/`0x00d9e210`/`0x00d9e250` rate-scaling idiom
+`0x00782880` uses — the attachment/prop spring-lag subsystem's own object family, §11.13.1 —
 **not** the 0x3a0-stride registry record). Depending on a flag it either builds a **cheap**
 fixed transform from constant data or interpolates a **blended** one against a rate computed
-from an animation-instance handle, then calls `FUN_0073f650` with pointers to dwords `0x10` and `0x13` of argument 1 (plus further arguments)
+from an animation-instance handle, then calls `0x0073f650` with pointers to dwords `0x10` and `0x13` of argument 1 (plus further arguments)
 — confirming §11.13.2's "cheap path... blended path" characterisation exactly. **[CONFIRMED —
 decompilation, full body.]**
 
-A direct, mechanical scan of every instruction in `FUN_00902140`'s body for a reference to
-`DAT_0344c924` or `DAT_0344c91a` (the registry's own base-pointer/count globals) found **zero**
-hits. Its full call list — `FUN_004d7f30`, `FUN_0091f5e0`, `FUN_00d9e4c0`, `FUN_00d9e210`,
-`FUN_0073f650`, `FUN_0074e840`, `FUN_004bd700`, `FUN_0074e490`, `FUN_00ea23b0`,
-`FUN_0074e710`, `FUN_00e65770`, `FUN_00456920`, `FUN_00d9e250`, `FUN_00752c70`,
-`FUN_00e649a0`, `FUN_008cc1a0`, `FUN_00e63120`, `FUN_008cc950`, `FUN_00e39b50`,
-`FUN_008fba80` — was each decompiled or resolved: `FUN_00e649a0` is a small array filter
+A direct, mechanical scan of every instruction in `0x00902140`'s body for a reference to
+`0x0344c924` or `0x0344c91a` (the registry's own base-pointer/count globals) found **zero**
+hits. Its full call list — `0x004d7f30`, `0x0091f5e0`, `0x00d9e4c0`, `0x00d9e210`,
+`0x0073f650`, `0x0074e840`, `0x004bd700`, `0x0074e490`, `0x00ea23b0`,
+`0x0074e710`, `0x00e65770`, `0x00456920`, `0x00d9e250`, `0x00752c70`,
+`0x00e649a0`, `0x008cc1a0`, `0x00e63120`, `0x008cc950`, `0x00e39b50`,
+`0x008fba80` — was each decompiled or resolved: `0x00e649a0` is a small array filter
 (bounds-checks a list of raw ids against a mesh-header count, unrelated stride/shape to the
-registry record); `FUN_00456920` is a 2-int equality predicate; `FUN_004bd700` operates on the
+registry record); `0x00456920` is a 2-int equality predicate; `0x004bd700` operates on the
 already-catalogued `+0xc`/`+0x6d` object family (§11.13.1), not the registry record; the rest
 are generic lock/notify/lookup helpers already named in §11.13's own traces or clearly unrelated
-by signature. **None references `DAT_0344c924`/`DAT_0344c91a`, and none receives a pointer
-shaped like the validated `rec` (bounds-checked against `DAT_0344c91a`, strided `0x3a0` off
-`DAT_0344c924`, re-validated at `+0x50`). [CONFIRMED — disassembly/decompilation, all 20 call
+by signature. **None references `0x0344c924`/`0x0344c91a`, and none receives a pointer
+shaped like the validated `rec` (bounds-checked against `0x0344c91a`, strided `0x3a0` off
+`0x0344c924`, re-validated at `+0x50`). [CONFIRMED — disassembly/decompilation, all 20 call
 targets.]**
 
-**New fact, beyond what §11.13.2 had:** `FUN_0073f650` was read in full for the first time this
+**New fact, beyond what §11.13.2 had:** `0x0073f650` was read in full for the first time this
 pass (previously only excerpted). It does two things, not one: (1) it writes a computed
 translation/rotation into **an object reached through the third entry of its own local
 pointer array** — an object at the attachment-record family's own offsets (`+0x28`/`+0x30`/`+4`/`+0xc`/`+0x14`/`+0x1c`/`+0x24`/`+0x34`/`+0x70`/`+0x60`/`+0x68`/
-`+0x6c`, the *identical* write pattern `FUN_00902140` itself uses on the object at dword 100
+`+0x6c`, the *identical* write pattern `0x00902140` itself uses on the object at dword 100
 of its own argument 1, and the same shape as §6's `0x40`-byte attachment record) — this is attachment-lag
 state, not the skin palette; (2) only when a branch flag is clear, it calls
-`FUN_00487e80()`/`FUN_004be9c0()`/`FUN_004be910()`/`FUN_00e649f0()` — the confirmed site-B
+`0x00487e80()`/`0x004be9c0()`/`0x004be910()`/`0x00e649f0()` — the confirmed site-B
 gather chain — purely as a **consumer**, exactly as §11.12.3 already established for this
-function. **`FUN_0073f650` straddles both subsystems (attachment lag and the skin-gather
+function. **`0x0073f650` straddles both subsystems (attachment lag and the skin-gather
 driver) but writes `record[+0x00]` in neither branch. [CONFIRMED — decompilation, full body,
 correcting §11.13.2's three-line excerpt to the complete picture.]**
 
 **Answer for this gap: it is a third driver of the site-A gather chain** (alongside
-`FUN_009226b0` and `FUN_0094e6b0`, both already on file), computing a cheap-vs-blended
-transform and handing it to `FUN_0073f650` — not a writer of `record[+0x00]`, and nothing it
+`0x009226b0` and `0x0094e6b0`, both already on file), computing a cheap-vs-blended
+transform and handing it to `0x0073f650` — not a writer of `record[+0x00]`, and nothing it
 calls is either.
 
 #### 11.14.2 The scan methodology and its two blind spots, both closed
@@ -1656,7 +1656,7 @@ A gap can be uncarved in two different states, and a single technique only sees 
 
 1. **Already-disassembled, but no owning `Function`.** Ghidra's disassembler reached the bytes
    (via some other flow) and created real `Instruction`s, but no `Function` object wraps them —
-   this was `FUN_00902140`'s state, and pass 2's `FUN_007030d0` gap's state *inside `gp_rig3`
+   this was `0x00902140`'s state, and pass 2's `0x007030d0` gap's state *inside `gp_rig3`
    after that session's edit*. Detected by walking every pair of address-adjacent `Function`s
    inside each range and checking whether the byte gap between them (≥ 8 bytes, to skip plain
    alignment stubs) already contains real `Instruction`s.
@@ -1674,24 +1674,25 @@ byte-pattern search of the binary, it only walks the existing function table ins
 windows and inspects the gaps between neighbouring functions, per the task's own scope.
 
 **Technique 1 found 4 candidates**: the `0x00902140` gap (§11.14.1, above); three trivial
-one-line leaf methods (`FUN_00903730` — a conditional cleanup call; `FUN_00903930` — `return
-400;`; `FUN_00905500` — a wrapper returning a bool) whose *only* cross-references are `DATA`
+one-line leaf methods (`0x00903730` — a conditional cleanup call; `0x00903930` — `return
+400;`; `0x00905500` — a wrapper returning a bool) whose *only* cross-references are `DATA`
 type (i.e. they are reached exclusively through a vtable slot or callback-pointer table, never
 a direct `CALL` — which is exactly why a `getReferencesTo`-then-decompile sweep starting from a
 known accessor would never surface them, the same blind spot pass 2 named, just via a different
 mechanism than a missing-`Function`-at-a-`CALL`-target); and one **false positive**,
 `0x004c511c`, which `createFunction` carved into a 95-byte "function" whose decompile leaked
-`unaff_EBX`/`unaff_ESI`/`unaff_EDI` — the tell that the boundary is wrong. Raw disassembly
-proved it: the real function is the pre-existing `FUN_004c50f0`, whose body ends at `0x4c511b`
+three leftover-register artifacts (values read from registers the carved boundary never actually
+initialized) — the tell that the boundary is wrong. Raw disassembly
+proved it: the real function is the pre-existing `0x004c50f0`, whose body ends at `0x4c511b`
 right before a `JMP dword ptr [ECX*4 + 0x4c55dc]` — `0x4c511c` is **case 0 of that switch**, not
 a hidden call target (its only xref is a `DATA` reference *from* the jump table itself, at
 `0x4c55f4`). The whole switch body (`0x4c511c`–`0x4c55d6`, 8 cases, ending in the same
 `__security_check_cookie` epilogue and `RET 0x8` throughout) was read and mechanically scanned
-for `DAT_0344c924`/`DAT_0344c91a`: zero hits — it is a 4×4-matrix compose/translate helper
-(calls into `FUN_004bc470`, `FUN_004bc640`, `FUN_0048d0a0`, `FUN_0048d110`, `FUN_0048cf50`,
-`FUN_004c0170`, `FUN_004c07e0`, `FUN_004c0a70`, `FUN_004c0d10`, `FUN_004c01d0`, `FUN_004c0230`
+for `0x0344c924`/`0x0344c91a`: zero hits — it is a 4×4-matrix compose/translate helper
+(calls into `0x004bc470`, `0x004bc640`, `0x0048d0a0`, `0x0048d110`, `0x0048cf50`,
+`0x004c0170`, `0x004c07e0`, `0x004c0a70`, `0x004c0d10`, `0x004c01d0`, `0x004c0230`
 — the animation pose-blend composition family, distinct object shapes throughout, no `0x3a0`
-stride anywhere). **The erroneous `FUN_004c511c` Function was removed** (`removeFunction`) so
+stride anywhere). **The erroneous `0x004c511c` Function was removed** (`removeFunction`) so
 `gp_rig4`'s database does not carry a wrong boundary. **[CONFIRMED — disassembly for the
 boundary/switch-table proof; mechanical reference scan for the registry-touch negative.]**
 
@@ -1705,60 +1706,60 @@ failed decompile, or a degenerate ≤2-byte body as a non-function artifact, rem
 erroneous `Function`) resolved this into **29 genuine small functions** (sizes 3–375 bytes) and
 **40 rejected non-function artifacts** (jump tables, switch-case fragments, and one-off stray
 bytes between real functions). Every genuine function was mechanically scanned for
-`DAT_0344c924`/`DAT_0344c91a`: **zero hits across all 29.** The two largest were also read in
-full as an extra check (size alone doesn't prove innocence): `FUN_0070f690` (195 bytes) is a
-game-mode-gated audio/state dispatcher (`FUN_00a29be0`, `FUN_008810b0`, `FUN_0070cba0`,
-`FUN_004db850`, `FUN_00853b10`, `FUN_0070ced0`, `FUN_0070d9b0`, `FUN_00941c40`,
-`FUN_00754410`); `FUN_004ba050` (375 bytes) is a UI/name-hash table-entry manager, striding its
+`0x0344c924`/`0x0344c91a`: **zero hits across all 29.** The two largest were also read in
+full as an extra check (size alone doesn't prove innocence): `0x0070f690` (195 bytes) is a
+game-mode-gated audio/state dispatcher (`0x00a29be0`, `0x008810b0`, `0x0070cba0`,
+`0x004db850`, `0x00853b10`, `0x0070ced0`, `0x0070d9b0`, `0x00941c40`,
+`0x00754410`); `0x004ba050` (375 bytes) is a UI/name-hash table-entry manager, striding its
 own object at `0x5c` bytes (not `0x3a0`) via an index-times-`0x5c` address computation, with unrelated virtual-call
 dispatch. Neither is anywhere near the registry. **[CONFIRMED — disassembly/decompilation for
 the two large ones; mechanical reference scan for all 29.]**
 
-#### 11.14.3 The region immediately bracketing pass 2's own `FUN_007030d0` — resolved into three functions, one of them entirely new
+#### 11.14.3 The region immediately bracketing pass 2's own `0x007030d0` — resolved into three functions, one of them entirely new
 
 Pass 2 (§11.13.2) described this neighbourhood as "the surrounding bytes (`0x0070300d`–
-`0x00703199`... immediately preceding a separate, already-recognised `FUN_007031e0`)" and named
-the `Function` it created there `FUN_007030d0` — **the two numbers don't actually match each
+`0x00703199`... immediately preceding a separate, already-recognised `0x007031e0`)" and named
+the `Function` it created there `0x007030d0` — **the two numbers don't actually match each
 other** (`0x0070300d` vs `0x007030d0` is a digit transposition), and re-deriving the region from
 scratch in this fresh, independent copy resolves it precisely: the true unowned span the
 technique-2 scan reported is `0x00702f8b`–`0x007031df` (597 bytes, bounded by the pre-existing
-`FUN_00702a50` and `FUN_007031e0`), and it contains **three** distinct coherent functions, not
+`0x00702a50` and `0x007031e0`), and it contains **three** distinct coherent functions, not
 one:
 
-- **`FUN_00702f90`** (`0x00702f90`–`0x007030c5`, 310 bytes) — this is pass 2's own
-  `LAB_00702f90`, which that pass disassembled ad hoc and characterised as "UI/map-load
+- **`0x00702f90`** (`0x00702f90`–`0x007030c5`, 310 bytes) — this is pass 2's own
+  `0x00702f90`, which that pass disassembled ad hoc and characterised as "UI/map-load
   transition lifecycle code" but never carved as a `Function`. Confirmed exactly right: it
-  zeroes `DAT_014ff6c3`/`DAT_014ff6c5`, sets `DAT_014ff6c6`, and calls a long, fixed sequence of
-  UI/streaming-adjacent helpers (`FUN_007f3940`, `FUN_0058ebc0`, `FUN_0059eec0`,
-  `FUN_0059f8c0`, `FUN_007c6850`, `FUN_00704c30`, `FUN_0087ba20`, `FUN_0087dfc0`,
-  `FUN_00831f70`, `FUN_008b9e90`, `FUN_00710b80`, `FUN_008318f0`, `FUN_00831f60`,
-  `FUN_008b8880`, `FUN_0086bd40`, `FUN_00871550`, `FUN_00e217f0`, `FUN_00755410`,
-  `FUN_007553c0`, `FUN_00db98d0`, `FUN_005dcbc0`). No registry touch.
-- **`FUN_007030d0`** (`0x007030d0`–`0x00703199`, 202 bytes) — re-derives pass 2's own finding
-  exactly: three `FUN_00706ab0()` game-mode gates excluding kinds 7/8/9, then the fixed
-  eighteen-ish-call sequence including `FUN_00b93540()`, `FUN_00b91a10()` (the gather),
-  `FUN_00823310()`, `FUN_00bdd520()`. No registry touch (re-confirming §11.13.2).
-- **`FUN_007031a0`** (`0x007031a0`–end, a few dozen bytes) — **new this pass**, sitting in the
-  small tail gap between `FUN_007030d0`'s `RET` at `0x00703199` and `FUN_007031e0`'s entry at
+  zeroes `0x014ff6c3`/`0x014ff6c5`, sets `0x014ff6c6`, and calls a long, fixed sequence of
+  UI/streaming-adjacent helpers (`0x007f3940`, `0x0058ebc0`, `0x0059eec0`,
+  `0x0059f8c0`, `0x007c6850`, `0x00704c30`, `0x0087ba20`, `0x0087dfc0`,
+  `0x00831f70`, `0x008b9e90`, `0x00710b80`, `0x008318f0`, `0x00831f60`,
+  `0x008b8880`, `0x0086bd40`, `0x00871550`, `0x00e217f0`, `0x00755410`,
+  `0x007553c0`, `0x00db98d0`, `0x005dcbc0`). No registry touch.
+- **`0x007030d0`** (`0x007030d0`–`0x00703199`, 202 bytes) — re-derives pass 2's own finding
+  exactly: three `0x00706ab0()` game-mode gates excluding kinds 7/8/9, then the fixed
+  eighteen-ish-call sequence including `0x00b93540()`, `0x00b91a10()` (the gather),
+  `0x00823310()`, `0x00bdd520()`. No registry touch (re-confirming §11.13.2).
+- **`0x007031a0`** (`0x007031a0`–end, a few dozen bytes) — **new this pass**, sitting in the
+  small tail gap between `0x007030d0`'s `RET` at `0x00703199` and `0x007031e0`'s entry at
   `0x007031e0` that pass 2 never inspected. It is a small "is a map-load/transition in progress"
-  predicate (checks a render-list emptiness condition via `FUN_0087ba20`, then
-  `DAT_014ff6c1`/`DAT_014ff6c2`) — same flag family as `FUN_00702f90`, unrelated to the
+  predicate (checks a render-list emptiness condition via `0x0087ba20`, then
+  `0x014ff6c1`/`0x014ff6c2`) — same flag family as `0x00702f90`, unrelated to the
   registry.
 
-All three mechanically scanned for `DAT_0344c924`/`DAT_0344c91a`: zero hits. **[CONFIRMED —
+All three mechanically scanned for `0x0344c924`/`0x0344c91a`: zero hits. **[CONFIRMED —
 disassembly/decompilation, full bodies, all three.]**
 
 #### 11.14.4 Net verdict and recommendation
 
-**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `FUN_004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+**⚠ RESOLVED 2026-09-13 — item 3(b) is resolved by §11.15 (sign fix) and §11.16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
 
 **Clean negative, third pass running.** Across both scan techniques, all three implicated
-ranges, and every function this pass carved (`FUN_00902140`, `FUN_00702f90`, `FUN_007030d0`,
-`FUN_007031a0`, the 3 trivial DATA-only leaf methods, the 29 recovered small functions from the
+ranges, and every function this pass carved (`0x00902140`, `0x00702f90`, `0x007030d0`,
+`0x007031a0`, the 3 trivial DATA-only leaf methods, the 29 recovered small functions from the
 undefined-byte sweep — 36 genuinely new `Function` boundaries in total) plus every one of their
-directly-called functions read this pass (`FUN_0073f650` in full, `FUN_00e649a0`,
-`FUN_00456920`, and the rest of `FUN_00902140`'s 20-function call list) — **not one references
-the registry's own globals (`DAT_0344c924`/`DAT_0344c91a`), and not one receives a pointer
+directly-called functions read this pass (`0x0073f650` in full, `0x00e649a0`,
+`0x00456920`, and the rest of `0x00902140`'s 20-function call list) — **not one references
+the registry's own globals (`0x0344c924`/`0x0344c91a`), and not one receives a pointer
 shaped like the validated `rec`.** One erroneous `Function` boundary (`0x004c511c`, a
 switch-case body misread as a standalone function) was created, diagnosed, and removed rather
 than left in the database. This is stated as a claim about the search: **the uncarved-code
@@ -1874,7 +1875,7 @@ same `{u16 count, ptr}` shape, and the `+0x38`/`+0x40` coincidence would be exac
 It is not a load. Both established call sites form the table by **address arithmetic**:
 
 ```
-FUN_00e649f0  (site B)                         FUN_00b91a10  (site A)
+0x00e649f0  (site B)                         0x00b91a10  (site A)
   00e649fc  MOV EAX,[ECX + 0xbc]                 00b91a7e  MOV ECX,[EBP + 0x5c]
   00e64a06  MOV EAX,[EAX + 0x30]      ; mesh     00b91a81  MOV EDX,[ECX + 0x64]
   00e64a0b  TEST EAX,EAX / JZ                    00b91a84  MOV ECX,[EDX + 0x50]
@@ -1888,9 +1889,9 @@ FUN_00e649f0  (site B)                         FUN_00b91a10  (site A)
 `ADD EAX,0x38` / `ADD ECX,0x38`, not `MOV reg,[reg+0x38]`. The value pushed as the gather's
 third argument is **the address `mesh+0x38` itself**, and the very next instruction at site B
 reads the element count as `word ptr [EAX]` — i.e. *at* `mesh+0x38`. Inside the callee
-(`FUN_00e7aff0`, re-read in full at `0x00e7aff0`–`0x00e7b0e2` this pass) the byte-array pointer
+(`0x00e7aff0`, re-read in full at `0x00e7aff0`–`0x00e7b0e2` this pass) the byte-array pointer
 is fetched at `00e7b020 MOV EDX,[EBX+0x8]`, i.e. **`mesh+0x38+0x08 = mesh+0x40`** — exactly the
-fixed-up pointer `FUN_00e71410` writes (§11.12.2). **[CONFIRMED — disassembly, raw
+fixed-up pointer `0x00e71410` writes (§11.12.2). **[CONFIRMED — disassembly, raw
 instructions, both call sites.]**
 
 A detail worth keeping, because it says what the *source code* looked like: at both sites the
@@ -1909,7 +1910,7 @@ the `thiscall` receiver is the destination palette (`[ECX+0x4]` live count, `[EC
 capacity, `[ECX+0xc]` matrix pointer, `[ECX+0x10]` the flag byte cleared at the end — §11.2's
 palette record exactly). Site A's push order confirms it from the other end: `PUSH ECX`
 (table) → `MOV ECX,[ESI+0x4]` (receiver = destination palette) → `PUSH EDI` (limit, from
-`FUN_004be910`) → `PUSH EAX` (source, from `FUN_004be9c0`) → `CALL`. **[CONFIRMED —
+`0x004be910`) → `PUSH EAX` (source, from `0x004be9c0`) → `CALL`. **[CONFIRMED —
 disassembly.]** This reproduces §11.3's account exactly, from scratch.
 
 **Answer to task half (a): `table` and the Mesh-header `+0x38` bone palette are the same
@@ -1922,22 +1923,22 @@ array, not two arrays of the same shape.** The disproof branch of the predicate 
 The decisive fact this pass adds is **where `source` comes from**, found by abandoning the
 anchor all three prior passes used.
 
-`FUN_004be9c0` was first confirmed to return a **loaded pointer** (`004be9ec MOV EAX,
+`0x004be9c0` was first confirmed to return a **loaded pointer** (`004be9ec MOV EAX,
 dword ptr [EAX]`), not the address `rec+0x00` — so passes 1–3 were hunting the right object
 class, and the alternative "the array is inline at the record's start" is refuted.
 **[CONFIRMED — disassembly.]**
 
-Then: the record's release path `FUN_004c14f0` calls a pool free on `rec+0x394` and immediately
+Then: the record's release path `0x004c14f0` calls a pool free on `rec+0x394` and immediately
 zeroes `rec+0x00`, `rec+0x04`, `rec+0x08` and `rec+0x38` together (`004c1573`–`004c157e`,
 duplicated at `004c1628`). Three pointers freed by one release means one block — and the pool
 it goes back to is one of two globals, `0x0344c850` / `0x0344c8b0`, selected by a flag bit
 `0x10`. **Those two pool globals are a completely different search anchor from
-`DAT_0344c924`/`DAT_0344c91a`**, which is what §11.12.3, §11.13 and §11.14 all keyed on.
+`0x0344c924`/`0x0344c91a`**, which is what §11.12.3, §11.13 and §11.14 all keyed on.
 Scanning for them found five functions, three of which are named nowhere in §11.12–§11.14.
 One of them is the allocator:
 
 ```
-FUN_004c79a0   (thiscall; ESI = the 0x3a0-stride registry record)
+0x004c79a0   (thiscall; ESI = the 0x3a0-stride registry record)
   if (rec[0x00] != 0) { rec[0x390] = 2; return true; }        // already allocated
   N     = the dword at +0x04 of the object rec[0x3c] points to  // the binding descriptor's count
   block = pool(N < 0x20 ? 0x344c8b0 : 0x344c850).alloc(N * 0x6c, 0x10)
@@ -1951,10 +1952,10 @@ FUN_004c79a0   (thiscall; ESI = the 0x3a0-stride registry record)
 
 **The arithmetic closes exactly: `0x30 + 0x30 + 0x0c = 0x6c`.** One pooled block is carved into
 three parallel N-length arrays — two 48-byte-matrix arrays and one `vec3` array — and every
-offset and the total size agree. **[CONFIRMED — disassembly, `FUN_004c79a0` read in full, raw
+offset and the total size agree. **[CONFIRMED — disassembly, `0x004c79a0` read in full, raw
 and decompiled.]**
 
-**`N` here is literally the value the gather receives as its `limit`.** `FUN_004be910` returns
+**`N` here is literally the value the gather receives as its `limit`.** `0x004be910` returns
 the dword at `+0x04` of the object that `rec+0x3c` points to — the same value, from the same descriptor field. So:
 
 > **`source` contains exactly `limit` matrices, and the gather's own test
@@ -1968,33 +1969,33 @@ construction**, and blend indices naming a bone outside that space receive the i
 rather than reading past the array. §11.15's file-side result (171/172, palette + corrected
 sign) is what names that space **rig-bone order**. The two halves meet here.
 
-**[OPEN — desk review 2026-09-30, conflict: if `N` is the binding-descriptor count, the suppliers traced in §11.18 give `N` = 68 (array 4 = `0..67`, 2 sampled files, §11.18.1) or 128 (`FUN_008cb170`'s global, §11.18.2). But palette entries reach rig bone 81 (`zimos`; 5,307 of 66,822 lanes resolve to bones ≥ 64, §11.5.1 item 1), the player rigs have 69 bones (`cm_body`/`cf_body`, §8), and Team B bounds palette entries only by the paired rig's bone count (318/318, `team-b/HANDOFF.md` l.8902). With `N` = 68, bones 68 and above would receive the identity matrix in game. §11.18.4 records that the plain "Character mesh" (type 5) path uses none of the three traced suppliers, so the descriptor, and `N`, serving the validated character meshes is untraced. The file-side decode (§11.15) is unaffected; this runtime account is not reconciled with it. To be settled against real data (array-4 count and content over every `.ccmesh_pc`/`.csmesh_pc`, compared with the paired rig's bone count on the 318 triples) and the executable (type-5 constructor `0x00751f60` → record constructor `0x004c1730` → which descriptor key it looks up).]**
+**[OPEN — desk review 2026-09-30, conflict: if `N` is the binding-descriptor count, the suppliers traced in §11.18 give `N` = 68 (array 4 = `0..67`, 2 sampled files, §11.18.1) or 128 (`0x008cb170`'s global, §11.18.2). But palette entries reach rig bone 81 (`zimos`; 5,307 of 66,822 lanes resolve to bones ≥ 64, §11.5.1 item 1), the player rigs have 69 bones (`cm_body`/`cf_body`, §8), and Team B bounds palette entries only by the paired rig's bone count (318/318, `team-b/HANDOFF.md` l.8902). With `N` = 68, bones 68 and above would receive the identity matrix in game. §11.18.4 records that the plain "Character mesh" (type 5) path uses none of the three traced suppliers, so the descriptor, and `N`, serving the validated character meshes is untraced. The file-side decode (§11.15) is unaffected; this runtime account is not reconciled with it. To be settled against real data (array-4 count and content over every `.ccmesh_pc`/`.csmesh_pc`, compared with the paired rig's bone count on the 318 triples) and the executable (type-5 constructor `0x00751f60` → record constructor `0x004c1730` → which descriptor key it looks up).]**
 
 Two further instruction-level facts sharpen what the alternative would have had to look like:
 
 - **The engine does carry an explicit slot ↔ rig-bone permutation, and the gather applies
-  neither direction of it.** `FUN_004c1350` (the binding-descriptor constructor, §11.12.1's
+  neither direction of it.** `0x004c1350` (the binding-descriptor constructor, §11.12.1's
   item-2 resolution) builds each descriptor from a caller-supplied `{key, N, u32 *values}`
-  triple into a **shared global table at `DAT_02f5e010`, up to `0xa0` = 160 entries of `0x410`
+  triple into a **shared global table at `0x02f5e010`, up to `0xa0` = 160 entries of `0x410`
   bytes** — not a per-record allocation, which is why the record constructor only *searches*
-  that table by key (`FUN_004c1730`, `004c181d`). Descriptor layout, read from the constructor's
+  that table by key (`0x004c1730`, `004c181d`). Descriptor layout, read from the constructor's
   own stores: `+0x00` key, `+0x04` N, `+0x10` `u16[]` **slot → value**, `+0x110` `s16[]` **value
   → slot** (the inverse permutation, written as `desc[0x110 + values[i]*2] = i`), `+0x210`
   `u32[]` per-slot flags. `0x210 + 128*4 = 0x410` — all three tables are 128 entries, and the
-  stride confirms the layout. `FUN_004be8b0` and `FUN_004be9f0` both convert with
+  stride confirms the layout. `0x004be8b0` and `0x004be9f0` both convert with
   `desc[0x10 + slot*2]` *before* indexing the rig's own `0x28`-stride bone array (reached as
   `[rec+0x14] → +0x40`; `0x28` = the `.rig_pc` bone-record stride, §4), which is what makes the
   `values[]` **rig bone indices**. Every other consumer of this record converts; the gather does
   not. **[CONFIRMED — disassembly.]**
 - **A bulk-copy palette fill, located and read in full — on the sibling no-table path.**
-  `FUN_00e7ad30` (the straight copy, `destination[i] = source[i]`) has a **third call site never
-  previously documented**, `FUN_00abfad0` at `0x00abfe27`. That function builds its source on
-  the stack: slot 0 is the 48-byte affine identity copied verbatim from `DAT_01321424`…
-  `_DAT_0132144c` (§11.2's fallback matrix), then a loop over the `N` pointers at `obj+0x68c`
+  `0x00e7ad30` (the straight copy, `destination[i] = source[i]`) has a **third call site never
+  previously documented**, `0x00abfad0` at `0x00abfe27`. That function builds its source on
+  the stack: slot 0 is the 48-byte affine identity copied verbatim from `0x01321424`…
+  `0x0132144c` (§11.2's fallback matrix), then a loop over the `N` pointers at `obj+0x68c`
   (count at `obj+0x688`) writes one 48-byte matrix per entry (advancing its output cursor by
   6 qwords, i.e. 48 bytes, each time), substituting
   the identity for any entry whose flag word `[entry+0xf0] & 0x80e00000` is set, and finally
-  `FUN_00e7ad30(&stackBuffer, N+1)` bulk-copies the whole thing into the palette at `obj+0xa98`.
+  `0x00e7ad30(&stackBuffer, N+1)` bulk-copies the whole thing into the palette at `obj+0xa98`.
   This is the vehicle/part carrier (the `0x00ab`–`0x00ad` module, `obj+0xa98` next to the
   already-documented vehicle `+0xa88`), not the animation registry — but it shows the engine's
   convention concretely, on the one path where no `table` intervenes: **the array handed to the
@@ -2006,8 +2007,8 @@ Two further instruction-level facts sharpen what the alternative would have had 
 #### 11.16.3 Why three passes could not find a writer of `record[+0x00]` — the reason, not another negative
 
 `rec+0x00` is written in exactly **three** places in the whole binary **[desk review 2026-09-30: no search predicate or label is stated for "the whole binary", and four functions are named below (constructor, allocator, two releases); read as HIGH CONFIDENCE, bounded by the scans this pass ran (§11.16.5), not as an exhaustive result]**, and this pass has read
-all three: zeroed by the constructor (`FUN_004c1730`), set once by the allocator
-(`FUN_004c79a0`), zeroed again by the two releases (`FUN_004c14f0`, `FUN_004c7ad0`). **There is
+all three: zeroed by the constructor (`0x004c1730`), set once by the allocator
+(`0x004c79a0`), zeroed again by the two releases (`0x004c14f0`, `0x004c7ad0`). **There is
 no per-frame writer of the pointer, and there cannot be one** — the per-frame pose is written
 *through* the pointer, into the pooled block. Passes 1–3 were searching for an object that does
 not exist by construction, which is why each of them returned a clean negative while every
@@ -2017,8 +2018,8 @@ The allocator was nonetheless reachable, and the two specific reasons it was mis
 recording as search-design lessons rather than as a criticism of those passes, whose predicates
 were each stated honestly and each did what it said:
 
-1. **`FUN_004c79a0` is a `thiscall` method — the record arrives in `ESI`/`ECX`, and the function
-   never references `DAT_0344c924` or `DAT_0344c91a` at all.** It is therefore not one of the
+1. **`0x004c79a0` is a `thiscall` method — the record arrives in `ESI`/`ECX`, and the function
+   never references `0x0344c924` or `0x0344c91a` at all.** It is therefore not one of the
    123 functions any of the three passes swept. The registry's own globals are the anchor for
    *accessors*, and the allocator is not an accessor; the pool globals are its anchor, and
    nothing pointed at them until the release path was read at the instruction level.
@@ -2041,19 +2042,19 @@ only as broad as its predicate" lesson, at the level of *which object* the predi
   a third predicate again — a store of 48-byte blocks through a pointer held in a record
   method's `this`, by a function that need not reference the registry globals, the pool globals,
   or any named accessor. Not attempted here; the honest boundary of this pass.
-- **`FUN_00753d40` / `FUN_008cb170` / `FUN_009f36d0` supply the binding descriptor's `values[]`
-  list for the non-vehicle carriers** (the fourth supplier, `FUN_00ab0730`, is the already-
-  documented vehicle loader). `FUN_00753d40` was read: it takes `N` from a `u16` at `param+0x0a`
+- **`0x00753d40` / `0x008cb170` / `0x009f36d0` supply the binding descriptor's `values[]`
+  list for the non-vehicle carriers** (the fourth supplier, `0x00ab0730`, is the already-
+  documented vehicle loader). `0x00753d40` was read: it takes `N` from a `u16` at `param+0x0a`
   and the array from `param+0x20` of a resource-shaped object, mints a fresh key from the global
-  counter `DAT_012f7ba8`, and hands the triple to the descriptor constructor. ~~**Which resource
+  counter `0x012f7ba8`, and hands the triple to the descriptor constructor. ~~**Which resource
   that object is, and therefore whether `values[]` is the identity permutation over the rig's
   bones for characters, was not traced**~~ **RESOLVED for two of the three, 2026-09-13 — see
-  §11.18. `FUN_009f36d0`'s object is CONFIRMED to be the `.ccmesh_pc`/`.csmesh_pc` outer
+  §11.18. `0x009f36d0`'s object is CONFIRMED to be the `.ccmesh_pc`/`.csmesh_pc` outer
   `0x424BD00D` sub-header's own "array 4" (`spec-geometry-format.md` §4.1/§4.1.2), whose content
   is independently already-confirmed to be the fixed identity table `0..67` — so for this
-  supplier, yes, `values[i] == i`. `FUN_008cb170` uses a materially different mechanism (a fixed
+  supplier, yes, `values[i] == i`. `0x008cb170` uses a materially different mechanism (a fixed
   engine global, not a per-resource field) that is ALSO the identity, `0..127`, confirmed from
-  its own initializer loop in disassembly. `FUN_00753d40`'s own object was traced one hop
+  its own initializer loop in disassembly. `0x00753d40`'s own object was traced one hop
   short of full confirmation — high-confidence by field-shape analogy, not independently proven
   the same way.**
 - Nothing here changes item 3's status. It was RESOLVED on the sign-fix before this pass started
@@ -2064,14 +2065,14 @@ only as broad as its predicate" lesson, at the level of *which object* the predi
 
 Both are instances of `HANDOFF.md` §5's "put a known-positive in every scan and assert it fires."
 
-1. **A field-access scan reported `FUN_004be9c0` does not read `rec+0x00` — its own known
+1. **A field-access scan reported `0x004be9c0` does not read `rec+0x00` — its own known
    positive, and false.** The scan walked each function in **address order** and dropped the
-   tracked record register on clobber; `FUN_004be9c0`'s error-path `XOR EAX,EAX` at `0x004be9e9`
+   tracked record register on clobber; `0x004be9c0`'s error-path `XOR EAX,EAX` at `0x004be9e9`
    sits physically *before* the success-path `MOV EAX,[EAX]` at `0x004be9ec`, so tracking died
    one instruction early. A linear scan follows layout, not control flow, and the two differ
    exactly where a function has an early-out. Fixed by keeping the register live to the end of
    the function (over-reporting, then verifying every hit against raw disassembly — which is how
-   `FUN_004bd3d0`, `FUN_004bdc30`, `FUN_004bf100` and `FUN_004be9f0`'s apparent `rec+0x00`
+   `0x004bd3d0`, `0x004bdc30`, `0x004bf100` and `0x004be9f0`'s apparent `rec+0x00`
    touches were each shown to be register reuse). The corrected scan reproduces §11.13.2's
    123-function count **exactly**.
 2. **A scan for the registry globals returned a uniform zero across 3.5M instructions.** The
@@ -2082,7 +2083,7 @@ Both are instances of `HANDOFF.md` §5's "put a known-positive in every scan and
    123 functions.
 
 A third, smaller tooling caveat, recorded because later work will otherwise trust it:
-**`getReferencesTo(FUN_004be9c0)` returns 3 of the 8 direct `CALL` sites** a raw instruction
+**`getReferencesTo(0x004be9c0)` returns 3 of the 8 direct `CALL` sites** a raw instruction
 scan finds — it misses `0x00b91a72`, the site-A gather's own call, among others. Reference-
 manager counts are not trustworthy in these project copies; §11.12.3's "exactly 7 callers" is
 nevertheless **reproduced exactly** by the raw scan (8 call sites in 7 distinct functions), so
@@ -2093,32 +2094,32 @@ that pass's own number was right and evidently not obtained this way.
 #### 11.16.6 Registry record layout, as far as it is now read
 
 Consolidated because four passes have each added a field and none has collected them. Record
-stride `0x3a0`, base `DAT_0344c924`, count `DAT_0344c91a` (`u16`), self-index validated at
+stride `0x3a0`, base `0x0344c924`, count `0x0344c91a` (`u16`), self-index validated at
 `+0x50`.
 
 | Offset | Content | Source |
 |---|---|---|
-| `+0x00` | `matrix48[N]` — **the skin gather's `source`**; block base | `FUN_004c79a0`, `FUN_004be9c0` |
-| `+0x04` | `matrix48[N]` — attachment/prop spring-lag state cache **[OPEN — desk review 2026-09-30: §13.4 calls `rec+0x04` "a live pose array" feeding the attachment-transform getter `FUN_004d0fe0`; one reading is wrong or the field has two roles; to be settled against the executable (`FUN_004d0f40` → `FUN_004d0fe0`: which record field is passed).]** | `FUN_004c79a0`; §11.13.1, `FUN_004be950` |
-| `+0x08` | `vec3[N]`, zeroed at allocation | `FUN_004c79a0`, `FUN_004c1730` |
-| `+0x0c` | a separately-allocated `0x300`-byte block on a free list | `FUN_004c7b20` |
-| `+0x14` | the rig-holder object; `[+0x14]→+0x40` is the rig's `0x28`-stride bone array | `FUN_004be8b0`, `FUN_004be9f0` |
-| `+0x38` | flag byte, cleared at allocation and at release | `FUN_004c79a0`, `FUN_004c14f0` |
-| `+0x3c` | → shared binding descriptor in `DAT_02f5e010[160]`, `0x410` bytes each | `FUN_004c1730`, `FUN_004c1350` |
+| `+0x00` | `matrix48[N]` — **the skin gather's `source`**; block base | `0x004c79a0`, `0x004be9c0` |
+| `+0x04` | `matrix48[N]` — attachment/prop spring-lag state cache **[OPEN — desk review 2026-09-30: §13.4 calls `rec+0x04` "a live pose array" feeding the attachment-transform getter `0x004d0fe0`; one reading is wrong or the field has two roles; to be settled against the executable (`0x004d0f40` → `0x004d0fe0`: which record field is passed).]** | `0x004c79a0`; §11.13.1, `0x004be950` |
+| `+0x08` | `vec3[N]`, zeroed at allocation | `0x004c79a0`, `0x004c1730` |
+| `+0x0c` | a separately-allocated `0x300`-byte block on a free list | `0x004c7b20` |
+| `+0x14` | the rig-holder object; `[+0x14]→+0x40` is the rig's `0x28`-stride bone array | `0x004be8b0`, `0x004be9f0` |
+| `+0x38` | flag byte, cleared at allocation and at release | `0x004c79a0`, `0x004c14f0` |
+| `+0x3c` | → shared binding descriptor in `0x02f5e010[160]`, `0x410` bytes each | `0x004c1730`, `0x004c1350` |
 | `+0x50` | **self index** (the validation field) | all accessors |
-| `+0x58` | attachment count | `FUN_004bdc30` |
-| `+0x6c` | flag byte; bit `0x10` records which pool `+0x394` came from | `FUN_004c79a0`, `FUN_004c14f0` |
-| `+0x70 …` | inline attachment array, stride `0x50`, `memset` `0x2d0` at construction (9 entries) | `FUN_004bdc30`, `FUN_004c1730` |
-| `+0x390` | state word, set to `2` when the block is live | `FUN_004c79a0`, `FUN_004c7ad0` |
-| `+0x394` | pool handle for the `N*0x6c` block | `FUN_004c79a0`, `FUN_004c14f0` |
-| `+0x39c` | copied from `[ctorArg1 + 0x50]` | `FUN_004c1730` |
+| `+0x58` | attachment count | `0x004bdc30` |
+| `+0x6c` | flag byte; bit `0x10` records which pool `+0x394` came from | `0x004c79a0`, `0x004c14f0` |
+| `+0x70 …` | inline attachment array, stride `0x50`, `memset` `0x2d0` at construction (9 entries) | `0x004bdc30`, `0x004c1730` |
+| `+0x390` | state word, set to `2` when the block is live | `0x004c79a0`, `0x004c7ad0` |
+| `+0x394` | pool handle for the `N*0x6c` block | `0x004c79a0`, `0x004c14f0` |
+| `+0x39c` | copied from `[ctorArg1 + 0x50]` | `0x004c1730` |
 
-Binding descriptor (`+0x3c`), `0x410` bytes, shared, up to 160 in `DAT_02f5e010`:
+Binding descriptor (`+0x3c`), `0x410` bytes, shared, up to 160 in `0x02f5e010`:
 `+0x00` key · `+0x04` N · `+0x10` `u16[128]` slot → rig bone · `+0x110` `s16[128]` rig bone →
-slot · `+0x210` `u32[128]` per-slot flags. **[CONFIRMED — disassembly, `FUN_004c1350` read in
+slot · `+0x210` `u32[128]` per-slot flags. **[CONFIRMED — disassembly, `0x004c1350` read in
 full; the `0x410` stride and the three table origins agree exactly.]**
 
-**Review status (2026-09-30): NEEDS-EXE: record `+0x04` role (spring-lag cache here vs "live pose array" in §13.4; `FUN_004d0f40` → `FUN_004d0fe0`) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: record `+0x04` role (spring-lag cache here vs "live pose array" in §13.4; `0x004d0f40` → `0x004d0fe0`) — desk review (not re-derived from the executable).**
 
 ### 11.17 §11.7 item 4's re-examination executed: all 10 of §11.10's mismatches, and all three of §11.11's slot-15 instances, resolve exactly under the corrected decode (2026-09-13)
 
@@ -2151,9 +2152,9 @@ full; the `0x410` stride and the three table origins agree exactly.]**
 ### 11.18 §11.16.4's own named next step executed — two of the three non-vehicle suppliers confirmed identity, the third traced to a sibling registration-table row one hop short of full confirmation (2026-09-13)
 
 > **Scope.** §11.16.4 left one live, well-anchored question: which resource object
-> `FUN_00753d40` (and, by the same field shape, `FUN_009f36d0`) reads its `{N, values[]}` pair
+> `0x00753d40` (and, by the same field shape, `0x009f36d0`) reads its `{N, values[]}` pair
 > from — `u16` count at `param+0x0a`, array pointer at `param+0x20` — and whether that array is
-> the identity permutation over rig-bone indices. `FUN_008cb170` was named as a third supplier
+> the identity permutation over rig-bone indices. `0x008cb170` was named as a third supplier
 > worth a quick look. **Fresh, independent Ghidra project copy `tools/gp_rig7`; new scripts
 > `RigSrc10.java` … `RigSrc14.java` in `tools/scripts/`; one `createFunction` call (on
 > previously-uncarved code at `0x007542a0`, this independent copy only) — otherwise read-only.**
@@ -2167,26 +2168,26 @@ full; the `0x410` stride and the three table origins agree exactly.]**
 > unresolved generic-dispatch call site, or a value this project's static image cannot read)
 > without settling either way for that specific supplier. **Result: (a), confirmed two
 > independent ways, for the two suppliers whose object this pass could fully identify
-> (`FUN_009f36d0`, `FUN_008cb170`); a well-anchored but short-of-confirmed (a) for the third
-> (`FUN_00753d40`) — recorded honestly as such, not rounded up to a third confirmation.**
+> (`0x009f36d0`, `0x008cb170`); a well-anchored but short-of-confirmed (a) for the third
+> (`0x00753d40`) — recorded honestly as such, not rounded up to a third confirmation.**
 
-#### 11.18.1 `FUN_009f36d0`'s object is the `.ccmesh_pc` outer sub-header's own "array 4" — already-confirmed identity table, now connected to this mechanism
+#### 11.18.1 `0x009f36d0`'s object is the `.ccmesh_pc` outer sub-header's own "array 4" — already-confirmed identity table, now connected to this mechanism
 
-`FUN_009f36d0` builds a runtime mesh-instance object (its argument 2) from a loaded resource
+`0x009f36d0` builds a runtime mesh-instance object (its argument 2) from a loaded resource
 (its argument 1). Late in its body it does exactly what §11.16.4 flagged:
 
 - instance dword `0x1b` ← the `u16` at offset `+0x0a` of the object held in instance dword 1,
   widened to a full int (this is `N`);
 - instance dword `0x1c` ← the `u32` at offset `+0x20` of that same object (this is `vals`);
-- it then calls `FUN_004bc9c0` with instance dword `0x1d` and the address of instance dword
+- it then calls `0x004bc9c0` with instance dword `0x1d` and the address of instance dword
   `0x1a` (the `{key, N, vals}` triple), which reaches the binding-descriptor constructor.
 
 Instance dword 1 — the object read at `+0x0a`/`+0x20` — is set a few lines earlier from
-`FUN_007527b0`'s return value. **`FUN_007527b0` already carries a pre-existing SPEC TEAM Ghidra
+`0x007527b0`'s return value. **`0x007527b0` already carries a pre-existing SPEC TEAM Ghidra
 comment from an earlier pass, independent of this one**, identifying it as "the real direct
-caller of `FUN_007524f0` (`.ccmesh_pc` payload parser)" and confirming the fixed sub-header is
+caller of `0x007524f0` (`.ccmesh_pc` payload parser)" and confirming the fixed sub-header is
 exactly `0x88` bytes — this is the *identical* function `spec-geometry-format.md` §4.1.2 item 1
-already used to pin the `0x424BD00D` sub-header's own `+0x88` offset. Reading `FUN_007527b0`
+already used to pin the `0x424BD00D` sub-header's own `+0x88` offset. Reading `0x007527b0`
 confirms it returns the **address of the sub-header's own magic field** — an aligned cursor
 address (computed as an offset added to argument 1) at which the dword there reads `0x424BD00D`
 and the `u16` four bytes later falls strictly between `0x28` and `0x2B` — the documented
@@ -2212,95 +2213,95 @@ engine constant table… plausibly tied to a fixed max-bone-influence or max-slo
 supplier.** **[Scope — desk review 2026-09-30: the content half rests on 2/2 sampled files (`spec-geometry-format.md` §4.1.2 item 3); array 4's count and content over the population are not measured. OPEN — to be settled against real data; see the `N` conflict marker in §11.16.2.]** `slot` space and rig-bone space coincide outright for this carrier — the last
 residual ambiguity §11.16.2 flagged is answered for this specific supplier.
 
-**Whose carrier this actually is, traced rather than assumed.** `FUN_009f36d0` has exactly two
+**Whose carrier this actually is, traced rather than assumed.** `0x009f36d0` has exactly two
 raw callers, both inside a resource-finalize dispatch table read from a switch on an event-kind
 byte with debug labels literally named `"PCC_DELETE"` / `"PCC_SWAP"` / `"PCC_FINALIZE"` /
-`"IGNORED"` (`FUN_009f46f0`, case `3`, message `"PCC_FINALIZE: %s"`; and case `2` via a thin
-trampoline `FUN_009f4550` that reaches the same call). `FUN_009f36d0` copies raw byte ranges out
+`"IGNORED"` (`0x009f46f0`, case `3`, message `"PCC_FINALIZE: %s"`; and case `2` via a thin
+trampoline `0x009f4550` that reaches the same call). `0x009f36d0` copies raw byte ranges out
 of argument 1's own array-pointer/length pairs (dwords `0x16`/`0x18`, `0x17`/`0x19`,
 `0x2b`/`0x2c`, `0x40`/`0x42`, `0x41`/`0x43`) into a freshly-owned buffer before handing
-that buffer to `FUN_007527b0` — i.e. argument 1 is a loaded raw resource holding several byte
+that buffer to `0x007527b0` — i.e. argument 1 is a loaded raw resource holding several byte
 ranges, assembled into one contiguous `.ccmesh_pc`-shaped stream. This whole chain
-(`LAB_009f08c0`-family addresses immediately preceding `FUN_009f36d0`/`FUN_009f46f0`/
-`FUN_009f4550` in the same small module) matches `spec-format-inventory.md` §2 row **9, "Pcust
-mesh"** — `.ccmesh_pc`/`.gcmesh_pc`, constructor `LAB_009f08c0`, explicitly flagged there as
+(`0x009f08c0`-family addresses immediately preceding `0x009f36d0`/`0x009f46f0`/
+`0x009f4550` in the same small module) matches `spec-format-inventory.md` §2 row **9, "Pcust
+mesh"** — `.ccmesh_pc`/`.gcmesh_pc`, constructor `0x009f08c0`, explicitly flagged there as
 **"this variant's constructor untraced"**. **This pass traces it**: type 9 is the
 player-customization loading path for the shared `.ccmesh_pc` format (clothing/body pieces a
 player equips), a separate registration from the plain "Character mesh" type 5
-(`FUN_00751f60`, confirmed to share none of `FUN_00753d40`/`FUN_008cb170`/`FUN_009f36d0`'s raw
+(`0x00751f60`, confirmed to share none of `0x00753d40`/`0x008cb170`/`0x009f36d0`'s raw
 callers). **[CONFIRMED — disassembly, the caller chain and the shared-format identity; HIGH
 CONFIDENCE — inferred, that this closes spec-format-inventory.md row 9's specific "untraced"
 flag, since the address-range/PCC-dispatch evidence is strong but this pass did not separately
-re-verify `LAB_009f08c0` itself.]** *(Later, consistent: `spec-format-inventory.md` row 9 was
+re-verify `0x009f08c0` itself.]** *(Later, consistent: `spec-format-inventory.md` row 9 was
 since traced, 2026-09-20, and `spec-geometry-format.md` §8 checks this chain at instruction level.)*
 
 **Review status (2026-09-30): NEEDS-DATA: array 4 = `0..67` rests on 2/2 sampled files; count and content over every `.ccmesh_pc`/`.csmesh_pc` not measured (OPEN marker added) — desk review (not re-derived from the executable).**
 
-#### 11.18.2 `FUN_008cb170` is a materially different mechanism — no per-resource field at all — and it is ALSO the identity, confirmed from its own fill loop
+#### 11.18.2 `0x008cb170` is a materially different mechanism — no per-resource field at all — and it is ALSO the identity, confirmed from its own fill loop
 
-`FUN_008cb170` does not read a resource's `+0x0a`/`+0x20` at all. Its own body (raw + decompiled,
+`0x008cb170` does not read a resource's `+0x0a`/`+0x20` at all. Its own body (raw + decompiled,
 `gp_rig7`) reads `N` from offset `+0x24` of the object at `this+0xa0` — a field with no
 correspondence to any of `spec-geometry-format.md`'s six array count-field offsets — and hands
-the descriptor constructor a **fixed global array address, `&DAT_024fa348`**, not a value read
+the descriptor constructor a **fixed global array address, `&0x024fa348`**, not a value read
 from the resource at all. At the instruction level (`0x008cb1cf`–`0x008cb1e4`): the object
 pointer already in EAX is used to load that `+0x24` field into ECX for `N`; the literal address
 `0x24fa348` is stored directly as `vals`, with no field read at all; and the descriptor
-constructor `FUN_004bc9c0` is then called with `{key, N, vals}`.
+constructor `0x004bc9c0` is then called with `{key, N, vals}`.
 
-`DAT_024fa348`'s static image is all-zero (Ghidra: `undefined4`, length 4 — a BSS-shaped,
+`0x024fa348`'s static image is all-zero (a 4-byte, untyped slot — a BSS-shaped,
 runtime-populated slot, not stored file data), so the identity-or-not question had to be settled
 by finding its **writer**, not by reading bytes. A targeted operand scan for every instruction
 touching the address range `0x024fa340`–`0x024fa400` (rather than trusting reference-manager
 counts, per the `getReferencesTo` caveat §11.16.5 already recorded) found exactly one writer,
-`FUN_008ca670`. Its entire body is a simple loop: starting from index 0, it stores the loop
-counter itself into `DAT_024fa348[index]` and increments, repeating while the index is below
+`0x008ca670`. Its entire body is a simple loop: starting from index 0, it stores the loop
+counter itself into `0x024fa348[index]` and increments, repeating while the index is below
 `0x80`.
 
-**`DAT_024fa348[i] = i` for `i` in `0..127` — 128 entries, exactly the shared binding
+**`0x024fa348[i] = i` for `i` in `0..127` — 128 entries, exactly the shared binding
 descriptor's own max slot count (`u16[128]`/`s16[128]`/`u32[128]`, §11.16.2/§11.16.6).**
 **[CONFIRMED — disassembly, the exact loop body and bound — no inference needed, the fill is
 the identity function by construction.]** Whatever `N` (`≤ 128`, gated by `[this+0xa0]+0x24`)
-`FUN_008cb170` actually uses for a given instance, the values it supplies for indices `0..N-1`
+`0x008cb170` actually uses for a given instance, the values it supplies for indices `0..N-1`
 are unconditionally `0, 1, …, N-1`.
 
-**`FUN_008cb170` is itself a virtual method, not a directly-called function** — a raw scan found
+**`0x008cb170` is itself a virtual method, not a directly-called function** — a raw scan found
 **zero** direct `CALL` sites to it anywhere in the binary, and its address appears exactly once
 as a plain data word, at `0x0116aaf4`, inside a 17-entry function-pointer table
-(`0x0116aae0`–`0x0116ab20`) that also contains **`thunk_FUN_00754410`** — the shared destructor
+(`0x0116aae0`–`0x0116ab20`) that also contains **`0x00754410`** — the shared destructor
 `spec-format-inventory.md` §2/§3 already names as used by registered types **8 ("Character
 cvtf"), 9 ("Pcust mesh") and 13 ("Customization Rig")**, i.e. the player-customization family.
 **[⚠ Refined §11.19.2: this stub is a generic no-op destructor shared by 11 registered types
 (`spec-format-inventory.md` §3), so it is weak evidence of subsystem.]**
-**This ties `FUN_008cb170`'s class into the same customization subsystem as `FUN_009f36d0`**,
+**This ties `0x008cb170`'s class into the same customization subsystem as `0x009f36d0`**,
 independently of the fact that both happen to feed the same low-level descriptor constructor.
 **[CONFIRMED — disassembly for the vtable slot and its neighbour; HIGH CONFIDENCE — inferred for
 the customization-subsystem membership, from the shared destructor alone.]**
 
-#### 11.18.3 `FUN_00753d40` — traced to a sibling registration-table row, one hop short of full confirmation
+#### 11.18.3 `0x00753d40` — traced to a sibling registration-table row, one hop short of full confirmation
 
 A raw scan (not `getReferencesTo`, per the same §11.16.5 caveat) finds exactly **one** direct
-caller of `FUN_00753d40`, at `0x007542be` — inside sixty-odd bytes of code Ghidra had never
+caller of `0x00753d40`, at `0x007542be` — inside sixty-odd bytes of code Ghidra had never
 carved into a `Function` (`getFunctionContaining` returned none). Defining it
 (`createFunction`, this independent copy only) and decompiling gives a thin pass-through:
 
 `0x007542a0` is a thin pass-through: it calls `0x00753d40` with the same five arguments, and if that call's own low byte reads as `0`, returns that same result immediately. Otherwise it zeroes five further fields on the receiver, sets two of them to `-1` and one to `1`, then returns `1`.
 
-Both `FUN_00753d40` (`0x01152d58`) and `FUN_007542a0` (`0x01152d68`) turn up, sixteen bytes
+Both `0x00753d40` (`0x01152d58`) and `0x007542a0` (`0x01152d68`) turn up, sixteen bytes
 apart, as **plain data words** in `.rdata` — not reached by any `CALL` at all for
-`FUN_007542a0` either (zero raw callers). Reading the surrounding `.rdata` bytes as a string
+`0x007542a0` either (zero raw callers). Reading the surrounding `.rdata` bytes as a string
 decodes cleanly, byte-for-byte, to **`mvi_mesh_variant`** (16 characters, null-terminated
 exactly at the following aligned dword), followed by two more function-pointer slots
-(`FUN_00753ba0`, `FUN_007543b0`) and, further along the same `.rdata` run, the string
+(`0x00753ba0`, `0x007543b0`) and, further along the same `.rdata` run, the string
 **`material_color_variants.xtbl`**. **[CONFIRMED — disassembly/data, the exact string bytes and
 the table-slot layout.]**
 
 This is a **previously-uncatalogued name found in `.rdata`** — `mvi_mesh_variant` does
 not appear anywhere in `spec-format-inventory.md`'s existing 43-row inventory (built from
-`FUN_00700780`). ~~So either it is registered through a separate, smaller table specific to a
+`0x00700780`). ~~So either it is registered through a separate, smaller table specific to a
 material/mesh-variant subsystem, or it is the *real* internal name behind an already-catalogued
 row under a different display label. **Not resolved this pass — flagged as a fresh lead for
 `spec-format-inventory.md`, not chased further here.**~~ **RESOLVED 2026-09-14 — see §11.18.5:
-neither. It is not read by `FUN_00700780` at all (confirmed by direct cross-reference, two
+neither. It is not read by `0x00700780` at all (confirmed by direct cross-reference, two
 independent methods), and it is not itself a second registration table either — it is a pair of
 class vtables/object pools unrelated to the resource-registration system.** Likewise, whether
 `material_color_variants.xtbl`'s textual proximity in `.rdata` reflects a real field of the same
@@ -2316,8 +2317,8 @@ argument 3 actually is at runtime was not reached — this hits the same class o
 `spec-geometry-format.md` §4.1.2 item 8 already named and stopped at deliberately ("a genuine
 scope boundary… the real invocation happens through an indirect call"). What *is* established:
 Argument 3 is read at the identical `+0x0a` (`u16` count) / `+0x20` (array pointer) offsets as
-`FUN_009f36d0`'s confirmed sub-header object, `FUN_00753d40` sits in the same small module as
-`FUN_007527b0`/`FUN_007524f0` (the `.ccmesh_pc` payload parser itself), and it is registered as a
+`0x009f36d0`'s confirmed sub-header object, `0x00753d40` sits in the same small module as
+`0x007527b0`/`0x007524f0` (the `.ccmesh_pc` payload parser itself), and it is registered as a
 constructor for a type that is very likely another consumer of the same shared `.ccmesh_pc`
 payload format (matching the project's own "one format, several registered entry points"
 precedent — `.ccmesh_pc` alone already has at least two, types 5 and 9). **[⚠ §11.18.5: this
@@ -2326,16 +2327,16 @@ same kind of object as §11.18.1, i.e. array 4 of a `.ccmesh_pc`-shaped sub-head
 CONFIDENCE — inferred. It is not CONFIRMED to the same standard as §11.18.1, and is reported
 honestly at that lower confidence rather than rounded up.**
 
-**Review status (2026-09-30): DESK-PASS — `DAT_024fa348` identity fill and the sibling-row trace are labelled at the right level — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): DESK-PASS — `0x024fa348` identity fill and the sibling-row trace are labelled at the right level — desk review (not re-derived from the executable).**
 
 #### 11.18.4 Answer to §11.16.4's question, stated plainly
 
 **For the two suppliers whose object this pass could fully identify, `values[]` IS the identity
-permutation — confirmed two independent ways, not the same way twice.** `FUN_009f36d0`'s
+permutation — confirmed two independent ways, not the same way twice.** `0x009f36d0`'s
 supplier is array 4 of the `.ccmesh_pc`/`.csmesh_pc` outer sub-header, whose *file content* was
 already confirmed identity (`0..67`) on real shipped data before this pass connected the
-mechanism. `FUN_008cb170`'s supplier is a fixed engine global whose *fill code* is an explicit
-identity loop (`0..127`), confirmed this pass from scratch. **For the third (`FUN_00753d40`),
+mechanism. `0x008cb170`'s supplier is a fixed engine global whose *fill code* is an explicit
+identity loop (`0..127`), confirmed this pass from scratch. **For the third (`0x00753d40`),
 the object is highly likely the same kind of thing by field-shape and module-locality analogy,
 but its own construction site was not reached — recorded as HIGH CONFIDENCE, not CONFIRMED.**
 
@@ -2359,10 +2360,10 @@ into the headline.
 
 **Review status (2026-09-30): NEEDS-EXE: the plain "Character mesh" (type 5) path that serves the validated characters uses none of the three suppliers; its descriptor and `N` are untraced (`0x00751f60` → `0x004c1730`) — desk review (not re-derived from the executable).**
 
-#### 11.18.5 The (a)/(b) registration-mechanism question, settled: neither — `mvi_mesh_variant` is not read by `FUN_00700780`, and it is not itself a second registration table (2026-09-14)
+#### 11.18.5 The (a)/(b) registration-mechanism question, settled: neither — `mvi_mesh_variant` is not read by `0x00700780`, and it is not itself a second registration table (2026-09-14)
 
 > **Scope.** Direct follow-up to §11.18.3's own open lead: is the `.rdata` address `0x01152d58`
-> (where `FUN_00753d40`'s pointer sits) read by `FUN_00700780` — the function that builds the
+> (where `0x00753d40`'s pointer sits) read by `0x00700780` — the function that builds the
 > already-catalogued 43-row table (`spec-format-inventory.md`) — meaning that table has a gap, or
 > by a different function entirely? **Deliberately out of scope, per the brief this pass was given:
 > the argument-3/generic-dispatcher boundary §11.18.3 already named and stopped at — not reopened
@@ -2370,7 +2371,7 @@ into the headline.
 > `RegXref2.java` in `tools/scripts/`; read-only, no `createFunction`, no edits.
 >
 > **Predicate, stated before searching (per `HANDOFF.md` §5/§36 ([archived] 27.8)).** A positive finding is either
-> (a) confirmation that `FUN_00700780` itself reads `0x01152d58`, or (b) confirmation that a
+> (a) confirmation that `0x00700780` itself reads `0x01152d58`, or (b) confirmation that a
 > different, identifiable function reads it — characterized: what subsystem, how large, what else
 > is nearby worth cataloguing. A negative is a documented, bounded search finding no traceable
 > consumer at all (dead data, or reached only through an indirect mechanism this pass can't
@@ -2381,8 +2382,8 @@ into the headline.
 > system `spec-format-inventory.md` documents at all.**
 
 **Part 1 — the cross-reference itself.** `getReferencesTo(0x01152d58)` returns exactly **one**
-reference in the entire binary: from `0x00753f96`, inside `FUN_00753f40` (a function in the same
-`0x753xxx` address cluster as `FUN_00753d40`/`FUN_00753ba0`, nowhere near `FUN_00700780`). An
+reference in the entire binary: from `0x00753f96`, inside `0x00753f40` (a function in the same
+`0x753xxx` address cluster as `0x00753d40`/`0x00753ba0`, nowhere near `0x00700780`). An
 independent raw scan of every instruction in the binary for any operand (address or scalar
 immediate) equal to `0x01152d58` — the same technique ~~`HANDOFF.md`~~ this document's §11.16.5 already established as
 necessary because `getReferencesTo` can under-report — returns the **identical single hit**, same
@@ -2393,66 +2394,66 @@ initialized non-`.text` memory block (`.rdata`/`.data`) for any data dword whose
 disassembly, three independent search methods agreeing, one of them exhaustive over the whole
 binary's data segments.]**
 
-**`FUN_00700780` itself was checked directly, not inferred from the above.** Its full body
+**`0x00700780` itself was checked directly, not inferred from the above.** Its full body
 (`0x00700780`–`0x00701d9f`, 5,664 addresses) was scanned instruction-by-instruction for any operand
 in a padded window around the row (`0x01152cf0`–`0x01152f58`). Four hits came back, all at two
 addresses (`0x01152cf0`, `0x01152d04`) sitting 0x68/0x54 bytes *before* the row's own data window —
-two unrelated globals `FUN_00700780` happens to read for its own bookkeeping, not connected to
+two unrelated globals `0x00700780` happens to read for its own bookkeeping, not connected to
 `mvi_mesh_variant`'s row in the row dump (§11.18.3's own bytes, re-verified this pass). This is
 exactly the "an address window is a population you did not inspect" trap (`HANDOFF.md` §5) turned
 the other way — proximity in an address range is not evidence of a relationship, and here it
-positively isn't one: **`FUN_00700780` does not reference `0x01152d58` by any method, at all.**
+positively isn't one: **`0x00700780` does not reference `0x01152d58` by any method, at all.**
 **This settles (a): refuted, directly.**
 
-The neighbouring slot `0x01152d68` (`FUN_007542a0`'s row, per §11.18.3) shows the identical shape:
-exactly one reference in the whole binary, from a *different* function again (`FUN_00754770`,
-`0x007547c9`), also nowhere near `FUN_00700780`.
+The neighbouring slot `0x01152d68` (`0x007542a0`'s row, per §11.18.3) shows the identical shape:
+exactly one reference in the whole binary, from a *different* function again (`0x00754770`,
+`0x007547c9`), also nowhere near `0x00700780`.
 
-**Part 2 — what actually reads it, decompiled in full.** `FUN_00753f40` and `FUN_00754770` are
+**Part 2 — what actually reads it, decompiled in full.** `0x00753f40` and `0x00754770` are
 **pool-allocator / vtable-installer functions**, identical in shape apart from their object size:
 each pops a slot from its own fixed-size free-list pool (own base/count/free-list fields at
-object `+0xc`/`+0xe`/`+0x14`/`+0x18`, guarded through `FUN_005f6640`), then unconditionally stamps
+object `+0xc`/`+0xe`/`+0x14`/`+0x18`, guarded through `0x005f6640`), then unconditionally stamps
 the freshly-popped slot's first dword with the literal address of the row itself:
-`FUN_00753f40` computes the slot address as its pool base plus `slotIndex * 0x68` and stores
-`0x01152d58` there as the object's vtable pointer; `FUN_00754770` computes its slot address as
+`0x00753f40` computes the slot address as its pool base plus `slotIndex * 0x68` and stores
+`0x01152d58` there as the object's vtable pointer; `0x00754770` computes its slot address as
 its own pool base plus `slotIndex * 0x28c` and stores `0x01152d68` there as the object's vtable
 pointer.
 
 This is the standard MSVC vtable-pointer idiom — the "row" **is** the class's own vtable, and
-`FUN_00753d40`/`FUN_007542a0` (the values stored at `0x01152d58`/`0x01152d68`) are each that
+`0x00753d40`/`0x007542a0` (the values stored at `0x01152d58`/`0x01152d68`) are each that
 class's virtual slot 0. **[CONFIRMED — disassembly and decompile, both functions.]** The two pools
-use different object strides — `0x68` (104 bytes) for `FUN_00753f40`'s pool, `0x28c` (652 bytes)
-for `FUN_00754770`'s — i.e. **two distinct classes**, each with its own dedicated fixed-size object
-pool (roots `DAT_01600930` and `DAT_01603380` respectively — not traced further; identifying these
+use different object strides — `0x68` (104 bytes) for `0x00753f40`'s pool, `0x28c` (652 bytes)
+for `0x00754770`'s — i.e. **two distinct classes**, each with its own dedicated fixed-size object
+pool (roots `0x01600930` and `0x01603380` respectively — not traced further; identifying these
 singletons would mean following the same generic-construction chain this pass was told not to
 reopen).
 
 **Each installer has exactly one caller in the whole binary**, and both callers are structurally
 identical:
 
-`FUN_007540c0` (the caller of `FUN_00753f40`) takes a lock, calls `FUN_00753f40` to allocate the
+`0x007540c0` (the caller of `0x00753f40`) takes a lock, calls `0x00753f40` to allocate the
 object and install its vtable (`0x01152d58`), releases the lock, and — if the allocation
-succeeded — calls through the object's vtable slot 0 (`FUN_00753d40`) with the same 5
+succeeded — calls through the object's vtable slot 0 (`0x00753d40`) with the same 5
 arguments the caller itself received; a non-zero result returns success (`1`), otherwise it
-takes the lock again, releases the object via `FUN_00753ca0`, and returns `0`.
+takes the lock again, releases the object via `0x00753ca0`, and returns `0`.
 
-`FUN_00754930` (the sole caller of `FUN_00754770`) is byte-for-byte the same shape, calling through
-vtable slot 0 (`FUN_007542a0`) and releasing via `FUN_00754490` on failure. **This is a
+`0x00754930` (the sole caller of `0x00754770`) is byte-for-byte the same shape, calling through
+vtable slot 0 (`0x007542a0`) and releasing via `0x00754490` on failure. **This is a
 virtual-dispatch construct-and-call pattern — allocate, install vtable, call through vtable[0] with
-the same 5 arguments `FUN_00753d40`/`FUN_007542a0` are already known to take (§11.18.3) — not a
-resource-registration call in the `FUN_00700780` sense at all.** **[CONFIRMED — disassembly and
+the same 5 arguments `0x00753d40`/`0x007542a0` are already known to take (§11.18.3) — not a
+resource-registration call in the `0x00700780` sense at all.** **[CONFIRMED — disassembly and
 decompile, both callers.]**
 
 The row's other two function-pointer slots were also decompiled, briefly, for context (not chased
-further — this is the row-shape question, not the argument-3 question): `FUN_00753ba0` (`0x1152d60`)
-releases one field (`FUN_004bc9d0` on object `+0x4c`) — destructor-shaped; `FUN_007543b0`
-(`0x1152d70`) tears down three fields and then itself calls `FUN_00753ba0` — also destructor-shaped,
+further — this is the row-shape question, not the argument-3 question): `0x00753ba0` (`0x1152d60`)
+releases one field (`0x004bc9d0` on object `+0x4c`) — destructor-shaped; `0x007543b0`
+(`0x1152d70`) tears down three fields and then itself calls `0x00753ba0` — also destructor-shaped,
 and its reuse of the other slot's own destructor is consistent with a base/derived or partial/full
 teardown split between the two classes. **[CONFIRMED — disassembly and decompile, both functions;
 their exact role (simple vs. deleting destructor, base vs. derived) not further pursued.]**
 
 **Net verdict.** (a) is refuted directly and doubly (two independent whole-binary searches agreeing
-exactly, plus an explicit negative check of `FUN_00700780`'s own body). (b) holds, but more
+exactly, plus an explicit negative check of `0x00700780`'s own body). (b) holds, but more
 narrowly than the original framing anticipated: this is **not** a second, smaller *resource-type
 registration table* — no file extension, no destructor-column shape matching `spec-format-inventory.md`'s
 43 rows, and above all **no indexed/looped table mechanism at all** (each installer has exactly one
@@ -2471,14 +2472,14 @@ registered resource type in `spec-format-inventory.md`'s sense — no sibling ty
 nearby (the neighbouring strings are xtbl schema field names, not other registered-type names), and
 there is no "table" of rows to catalogue at any scale beyond this one pair.
 
-**What was deliberately left untouched, per this pass's own scope.** What `DAT_01600930` /
-`DAT_01603380` are, what calls `FUN_007540c0`/`FUN_00754930`, and where their arguments 1–5
+**What was deliberately left untouched, per this pass's own scope.** What `0x01600930` /
+`0x01603380` are, what calls `0x007540c0`/`0x00754930`, and where their arguments 1–5
 ultimately originate — this is the same argument-3/generic-dispatcher boundary §11.18.3 already
 named and stopped at deliberately, not reopened here.
 
 **Review status (2026-09-30): DESK-PASS — pool strides and the vtable/row reading are consistent — desk review (not re-derived from the executable).**
 
-### 11.19 A fully independent second pass on `FUN_008cb170`/`FUN_009f36d0` — same verdict reached from scratch, plus one new fact §11.18 did not have: `FUN_008cb170`'s class, by RTTI, is `object_rig` itself (2026-09-13)
+### 11.19 A fully independent second pass on `0x008cb170`/`0x009f36d0` — same verdict reached from scratch, plus one new fact §11.18 did not have: `0x008cb170`'s class, by RTTI, is `object_rig` itself (2026-09-13)
 
 > **Scope.** This is the sibling half of the task that produced §11.18 above, run in parallel
 > on a fully independent Ghidra project copy (`tools/gp_rig8`, never shared with `gp_rig7`) and
@@ -2493,7 +2494,7 @@ named and stopped at deliberately, not reopened here.
 > positive finding is confirmation that a supplier's `values[]` is the identity permutation, or
 > confirmation that it is a genuine different permutation; a negative is a documented, bounded
 > trace reaching a genuine boundary. **Result: (a) for both, independently reproduced — see
-> §11.19.1 — plus a new, decisive fact for `FUN_008cb170`'s carrier identity (§11.19.2) that
+> §11.19.1 — plus a new, decisive fact for `0x008cb170`'s carrier identity (§11.19.2) that
 > refines, without overturning, §11.18.2's own "customization subsystem" reading.**
 
 #### 11.19.1 Independent reproduction, point for point
@@ -2501,36 +2502,36 @@ named and stopped at deliberately, not reopened here.
 Without reading §11.18 first, this pass decompiled and disassembled both functions and reached
 every one of the following, matching §11.18 exactly:
 
-- `FUN_009f36d0` reads `N` from a 2-byte field at offset `+0xa` of the object held in argument 2's own
+- `0x009f36d0` reads `N` from a 2-byte field at offset `+0xa` of the object held in argument 2's own
   second field, and `values` from a 4-byte field at that same object's offset `+0x20`, then mints
-  a key and forwards `{key, N, values}` through `FUN_004bc9c0` → `FUN_004c1350` →
-  `thunk_FUN_004c1730` — the identical offsets and chain §11.18.1 documents.
-- `FUN_008cb170` reads `N` from offset `+0x24` of the object reached via `this`'s own `+0xa0`
-  field, and sets `values` to the fixed address `&DAT_024fa348` — matching §11.18.2's disassembly
+  a key and forwards `{key, N, values}` through `0x004bc9c0` → `0x004c1350` →
+  `0x004c1730` — the identical offsets and chain §11.18.1 documents.
+- `0x008cb170` reads `N` from offset `+0x24` of the object reached via `this`'s own `+0xa0`
+  field, and sets `values` to the fixed address `&0x024fa348` — matching §11.18.2's disassembly
   exactly, down to the same instruction pair (register `EAX`'s `+0x24` field read into `ECX`, then
   the literal `0x24fa348` stored to the stack, in this pass's own numbering).
-- `DAT_024fa348` has exactly one writer in the whole binary, `FUN_008ca670`, whose entire body
-  is a loop storing each index 0…127 (`0x80` entries) into the corresponding element of `DAT_024fa348` — byte-for-byte the same finding as
+- `0x024fa348` has exactly one writer in the whole binary, `0x008ca670`, whose entire body
+  is a loop storing each index 0…127 (`0x80` entries) into the corresponding element of `0x024fa348` — byte-for-byte the same finding as
   §11.18.2, reached via a raw xref/operand scan rather than `getReferencesTo` in both passes
-  independently. This pass additionally confirmed the call site: `FUN_008ca670`'s **only**
+  independently. This pass additionally confirmed the call site: `0x008ca670`'s **only**
   caller is `0x005d3006`, inside a long unconditional straight-line run of dozens of unrelated
-  subsystem-`init` calls in `FUN_005d25f0` (no `TEST`/`Jcc` anywhere across
+  subsystem-`init` calls in `0x005d25f0` (no `TEST`/`Jcc` anywhere across
   `0x005d2fc5`–`0x005d3055`) — i.e. the identity fill runs unconditionally at engine start, not
   gated on any per-instance condition. §11.18.2 established *that* it's an identity loop; this
   adds that it is also unconditional and singular, closing off "maybe it's sometimes filled
   differently" as a possibility.
-- `FUN_008cb170` has **zero** direct `CALL` sites anywhere in the binary and exactly one
+- `0x008cb170` has **zero** direct `CALL` sites anywhere in the binary and exactly one
   reference — a plain data word at `0x0116aaf4` — matching §11.18.2's own address and count
   exactly, from an independent raw scan.
-- `FUN_004c1350`/`thunk_FUN_004c1730` were independently decompiled and read at the instruction
-  level this pass (not done in §11.18, which cites §11.16.2's prose): `FUN_004c1350` takes a
+- `0x004c1350`/`0x004c1730` were independently decompiled and read at the instruction
+  level this pass (not done in §11.18, which cites §11.16.2's prose): `0x004c1350` takes a
   pointer to `{key@+0x0, N@+0x4, values_ptr@+0x8}`, allocates/reuses a `0x410`-byte slot in the
-  160-entry `DAT_02f5e010` table, and for `i` in `[0,N)` reads a **32-bit** dword at
+  160-entry `0x02f5e010` table, and for `i` in `[0,N)` reads a **32-bit** dword at
   `values_ptr + i*4` (confirmed `*4` — a real `u32[]`), writing the truncated 16-bit value into
   the slot→value table at `+0x10+i*2` and the inverse `s16` at `+0x110+value*2 = i`; no bound
   check against the 128-slot capacity exists — callers are trusted to keep `N ≤ 128`.
-  `thunk_FUN_004c1730` (confirmed via `getThunkedFunction`) targets `FUN_004c1730`, which
-  linear-scans `DAT_02f5e010` for a matching key and stores the result at the new record's
+  `0x004c1730` (confirmed via `getThunkedFunction`) targets `0x004c1730`, which
+  linear-scans `0x02f5e010` for a matching key and stores the result at the new record's
   `+0x3c`. This reproduces §11.16.2/§11.16.6's account from raw instructions, independently of
   both the original pass and of §11.18.
 
@@ -2539,11 +2540,11 @@ identical mechanism and the identical identity-permutation verdict for both supp
 stronger corroboration than either pass alone** — the kind of redundant-but-cheap
 cross-check `HANDOFF.md` §36 ([archived] 27.8)'s own worked example recommends when a finding matters.
 
-#### 11.19.2 The one new fact: `FUN_008cb170`'s class is `object_rig`, by RTTI — and a caveat on reading its vtable neighbor as customization-specific
+#### 11.19.2 The one new fact: `0x008cb170`'s class is `object_rig`, by RTTI — and a caveat on reading its vtable neighbor as customization-specific
 
-§11.18.2 identifies `FUN_008cb170` as a vtable slot (`0x0116aaf4`) whose table also contains
-`thunk_FUN_00754410`, and reasons from that neighbor to "the same customization subsystem as
-`FUN_009f36d0`" (types 8/9/13's shared destructor). This pass instead read the vtable's own
+§11.18.2 identifies `0x008cb170` as a vtable slot (`0x0116aaf4`) whose table also contains
+`0x00754410`, and reasons from that neighbor to "the same customization subsystem as
+`0x009f36d0`" (types 8/9/13's shared destructor). This pass instead read the vtable's own
 RTTI, which neither pass had used before: the slot-4 table at `0x0116aae4` has a standard MSVC
 complete-object-locator at `vtable-4` (`0x0116aae0 = 0x012afb30`), whose `+0xc` field points at
 a `TypeDescriptor` at `0x01305d5c` whose name string (`+0x8`, standard layout) reads literally
@@ -2557,7 +2558,7 @@ compiler-emitted data, citable per this project's own convention for literal str
 `spec-format-inventory.md`'s methodology note.]**
 
 **This refines §11.18.2's carrier reading rather than contradicting its mechanism finding.**
-`thunk_FUN_00754410` is independently documented, by this project's own earlier work, as a
+`0x00754410` is independently documented, by this project's own earlier work, as a
 **generic no-op stub reused as the destructor by 11 different registered types**
 (`spec-format-inventory.md` §3: *"a generic/no-op destructor for types needing no special
 teardown, not a meaningful format relationship"* — confirmed there from the function's own
@@ -2567,19 +2568,19 @@ this exact stub once before applies again here. `object_rig`, by contrast, reads
 **generic runtime rig-instance wrapper** — the natural class for *any* rigged game object
 (player, NPC, or a non-customization rigged entity) to carry its skinning/attachment state on,
 not a class scoped to customization items specifically. This is consistent with, not opposed
-to, §11.18.4's broader finding that the *specific instances* reaching `FUN_008cb170` in this
+to, §11.18.4's broader finding that the *specific instances* reaching `0x008cb170` in this
 game's actual content are customization pieces (§11.18's evidence for that — the
-`PCC_FINALIZE`/type-9 registration match for `FUN_009f36d0`'s own call chain — is untouched by
+`PCC_FINALIZE`/type-9 registration match for `0x009f36d0`'s own call chain — is untouched by
 this note and remains the stronger, more specific finding of the two); it just means the
 *class* `object_rig` itself is not, by name or by RTTI, a customization-exclusive type — the
 customization-specificity lives in which resource gets attached at a given call, not in the
 vtable slot's own class.
 
-One more data point in `FUN_008cb170`'s own body, not examined in §11.18: **immediately after
+One more data point in `0x008cb170`'s own body, not examined in §11.18: **immediately after
 registering the binding descriptor, the same method formats a name from the two fields it
-gated on at entry (`this+0x8c`/`this+0x90`), hashes it via `FUN_00d9e8b0`** (the engine's
+gated on at entry (`this+0x8c`/`this+0x90`), hashes it via `0x00d9e8b0`** (the engine's
 second, CRC-32 string hash, `HANDOFF.md` §2b `ENGINE_HASH`), **resolves a handle, and starts an
-animation blend at weight `0x3e99999a` = `0.3f` via `FUN_004b2280`.** Read together with the
+animation blend at weight `0x3e99999a` = `0.3f` via `0x004b2280`.** Read together with the
 identity-permutation binding, the method's own shape is "attach a bone-bound sub-object to this
 `object_rig` instance, then start playing an animation on it in the same call" — plausibly the
 mechanism behind attaching a held prop/weapon (with its own small bone set, hence the identity
@@ -2591,12 +2592,12 @@ than guessed, per `HANDOFF.md` §36 ([archived] 27.8).
 #### 11.19.3 Net effect
 
 No change to §11.18's headline verdict: `values[]` is confirmed the identity permutation for
-both `FUN_009f36d0` (`0..67`, via the `.ccmesh_pc` array-4 mechanism) and `FUN_008cb170`
+both `0x009f36d0` (`0..67`, via the `.ccmesh_pc` array-4 mechanism) and `0x008cb170`
 (`0..127`, via the fixed engine-global fill loop), now on two independent traces rather than
-one. The addition here is narrow and specific: `FUN_008cb170`'s own class is `object_rig`,
+one. The addition here is narrow and specific: `0x008cb170`'s own class is `object_rig`,
 confirmed by RTTI rather than inferred from a shared stub, and that class reads as generic
 rig-instance infrastructure rather than customization-exclusive — a refinement worth recording
-precisely because the shared-stub inference it corrects is a pattern (`FUN_00754410` as a
+precisely because the shared-stub inference it corrects is a pattern (`0x00754410` as a
 false-signal neighbor) this project has now been bitten by, or nearly bitten by, more than
 once.
 
@@ -2604,56 +2605,56 @@ once.
 
 ## 12. Registered type ID 13, `Customization Rig` — traced: stash-only into the customization singleton (2026-09-18)
 
-`spec-format-inventory.md` listed ID 13's constructor, `LAB_009f0a20`, as “format yes (`spec-rig-format.md`); this variant explicitly flagged untraced there” (§10 item 6 of this document). Decompiled in full — it is an 8-instruction function, confirmed at the raw x86 level: it loads the customization singleton pointer (`DAT_0263e0f4`) and compares incoming argument 2 against that singleton's own `+0x10` field; on a mismatch it returns `false` immediately. On a match, it stashes incoming arguments 3 and 4 verbatim into the singleton's own `+0x1a8`/`+0x1ac` fields and returns `true`.
+`spec-format-inventory.md` listed ID 13's constructor, `0x009f0a20`, as “format yes (`spec-rig-format.md`); this variant explicitly flagged untraced there” (§10 item 6 of this document). Decompiled in full — it is an 8-instruction function, confirmed at the raw x86 level: it loads the customization singleton pointer (`0x0263e0f4`) and compares incoming argument 2 against that singleton's own `+0x10` field; on a mismatch it returns `false` immediately. On a match, it stashes incoming arguments 3 and 4 verbatim into the singleton's own `+0x1a8`/`+0x1ac` fields and returns `true`.
 
 **[CONFIRMED — disassembly, the complete function body, 8 instructions, one branch.]**
 
-**`DAT_0263e0f4` is the same customization singleton `spec-morph-format.md` §12.3 already names** — 14 users, all in the `0x009e`–`0x009f` module range, with ~~types 11/12's morph stashes writing name/buffer fields into it at `+0x68`/`+0xac..+0xb8` and `+0xbc`/`+0x100..+0x10c`~~ **[CORRECTED 2026-09-20, `spec-morph-format.md` §16.1: `+0x68`/`+0xac..+0xb8` is type 10 `Pcust peg`'s stash, `+0xbc`/`+0x100..+0x10c` is type 11 `Pcust morph`'s, and type 12's is `+0x15c`/`+0x1a0`/`+0x1a4`; §16.3: the "singleton" is really the current job of a 64-entry pool, and 17 functions — not 14 — reference it]**. `LAB_009f0a20` is one of those ~~14~~ users **[17 per the correction just above]**, writing a **different** pair of fields, `+0x1a8`/`+0x1ac`. **[CONFIRMED — disassembly, same global address, same module range.]**
+**`0x0263e0f4` is the same customization singleton `spec-morph-format.md` §12.3 already names** — 14 users, all in the `0x009e`–`0x009f` module range, with ~~types 11/12's morph stashes writing name/buffer fields into it at `+0x68`/`+0xac..+0xb8` and `+0xbc`/`+0x100..+0x10c`~~ **[CORRECTED 2026-09-20, `spec-morph-format.md` §16.1: `+0x68`/`+0xac..+0xb8` is type 10 `Pcust peg`'s stash, `+0xbc`/`+0x100..+0x10c` is type 11 `Pcust morph`'s, and type 12's is `+0x15c`/`+0x1a0`/`+0x1a4`; §16.3: the "singleton" is really the current job of a 64-entry pool, and 17 functions — not 14 — reference it]**. `0x009f0a20` is one of those ~~14~~ users **[17 per the correction just above]**, writing a **different** pair of fields, `+0x1a8`/`+0x1ac`. **[CONFIRMED — disassembly, same global address, same module range.]**
 
-**This is stash-only, the same family as ID 11/12's morph variants (`spec-morph-format.md` §8), but mechanically simpler.** Types 11/12 copy up to `0x41` bytes of the resource's *name string* into the singleton before stashing buffer pointers; `LAB_009f0a20` does no string copy at all — it stores its two raw incoming values (whatever they are: pointers, handles, or plain integers — not determined by this pass) directly, gated on a bare equality test rather than any parsing. **No `.rig_pc` bytes are read anywhere in this function — no buffer is even dereferenced past the singleton itself.** **[CONFIRMED — disassembly.]**
+**This is stash-only, the same family as ID 11/12's morph variants (`spec-morph-format.md` §8), but mechanically simpler.** Types 11/12 copy up to `0x41` bytes of the resource's *name string* into the singleton before stashing buffer pointers; `0x009f0a20` does no string copy at all — it stores its two raw incoming values (whatever they are: pointers, handles, or plain integers — not determined by this pass) directly, gated on a bare equality test rather than any parsing. **No `.rig_pc` bytes are read anywhere in this function — no buffer is even dereferenced past the singleton itself.** **[CONFIRMED — disassembly.]**
 
-**Comparison against ID 20's real `.rig_pc` parser, already fully characterized in this document:** `FUN_00748280` calls a cache-check wrapper into `FUN_004bc810` → `FUN_004d0cb0` (pool allocation) → `FUN_004d0bb0` (the actual bone/hash-table/attachment-point parser this whole document describes). `LAB_009f0a20` calls **nothing** — no callees at all, no file-buffer parameter read, nothing but the singleton touch above. So the answer to this task's question is unambiguous: **stash-only, does not parse `.rig_pc`, matching the shape (though not the exact mechanism) of ID 11/12's morph stashes.** **[CONFIRMED — disassembly.]**
+**Comparison against ID 20's real `.rig_pc` parser, already fully characterized in this document:** `0x00748280` calls a cache-check wrapper into `0x004bc810` → `0x004d0cb0` (pool allocation) → `0x004d0bb0` (the actual bone/hash-table/attachment-point parser this whole document describes). `0x009f0a20` calls **nothing** — no callees at all, no file-buffer parameter read, nothing but the singleton touch above. So the answer to this task's question is unambiguous: **stash-only, does not parse `.rig_pc`, matching the shape (though not the exact mechanism) of ID 11/12's morph stashes.** **[CONFIRMED — disassembly.]**
 
-**RESOLVED 2026-09-20 (`spec-morph-format.md` §16.2, §16.4, §16.6): the consumer is `FUN_009f36d0` itself, and the paragraph below is wrong that it does not touch `+0x1a8`/`+0x1ac` — it reads both (buffer, length), copies the buffer and calls `FUN_004bc810(name+suffix, slot, copy, length, 0)`, the same rig cache-load wrapper that ID 20's constructor `FUN_00748280` reaches with the same name-suffix constant. The gate field `+0x10` is the streaming container the current job is waiting on.** The paragraph as originally written follows, kept for the record.
+**RESOLVED 2026-09-20 (`spec-morph-format.md` §16.2, §16.4, §16.6): the consumer is `0x009f36d0` itself, and the paragraph below is wrong that it does not touch `+0x1a8`/`+0x1ac` — it reads both (buffer, length), copies the buffer and calls `0x004bc810(name+suffix, slot, copy, length, 0)`, the same rig cache-load wrapper that ID 20's constructor `0x00748280` reaches with the same name-suffix constant. The gate field `+0x10` is the streaming container the current job is waiting on.** The paragraph as originally written follows, kept for the record.
 
-**What remains open (as of 2026-09-18), stated honestly rather than guessed at:** which subsystem later reads singleton `+0x1a8`/`+0x1ac` and turns them into an actual loaded rig is not identified by this pass. The one confirmed consumer of the *morph* stash slots, the customization asset assembler `FUN_009f36d0` (`spec-morph-format.md` §12.3), is confirmed to touch only the eight morph-stash fields (`+0x68`, `+0xac`, `+0xb0`, `+0xb4`, `+0xb8`, `+0xbc`, `+0x100`, `+0x104`, `+0x108`, `+0x10c`) — **not** `+0x1a8`/`+0x1ac` — so it is confirmed **not** to be this stash's consumer, and no replacement candidate was searched for in this bounded pass. The gate value's meaning (what singleton `+0x10` actually tracks — a name hash, a selected component ID, something else) is likewise **not pursued**. **[~~OPEN~~ RESOLVED 2026-09-20 — the stash's consumer and the gate field's meaning are identified, `spec-morph-format.md` §16.2/§16.4/§16.6; this paragraph's claim that `FUN_009f36d0` does not touch `+0x1a8`/`+0x1ac` was wrong.]**
+**What remains open (as of 2026-09-18), stated honestly rather than guessed at:** which subsystem later reads singleton `+0x1a8`/`+0x1ac` and turns them into an actual loaded rig is not identified by this pass. The one confirmed consumer of the *morph* stash slots, the customization asset assembler `0x009f36d0` (`spec-morph-format.md` §12.3), is confirmed to touch only the eight morph-stash fields (`+0x68`, `+0xac`, `+0xb0`, `+0xb4`, `+0xb8`, `+0xbc`, `+0x100`, `+0x104`, `+0x108`, `+0x10c`) — **not** `+0x1a8`/`+0x1ac` — so it is confirmed **not** to be this stash's consumer, and no replacement candidate was searched for in this bounded pass. The gate value's meaning (what singleton `+0x10` actually tracks — a name hash, a selected component ID, something else) is likewise **not pursued**. **[~~OPEN~~ RESOLVED 2026-09-20 — the stash's consumer and the gate field's meaning are identified, `spec-morph-format.md` §16.2/§16.4/§16.6; this paragraph's claim that `0x009f36d0` does not touch `+0x1a8`/`+0x1ac` was wrong.]**
 
 **Review status (2026-09-30): DESK-PASS — agrees with `spec-format-inventory.md` and `spec-morph-format.md` on the five-argument stash — desk review (not re-derived from the executable).**
 
 ## 13. The runtime rig object, consumer-side: bone-by-name is a string compare, header `+0x28`/`+0x2C`, the attachment record is a rotation matrix (2026-09-20)
 
-> **Scope.** Agent AD (`gp_rig10`), 2026-09-20: the **consumer side** of the rig's runtime fields — §10 items 2, 3 and 5 (header `+0x2C`, bone `+0x24` and the attachment fields, and the bone-by-name routine `FUN_004bc880`). Method: full decompile plus raw disassembly of the accessor family (`0x004bc7c0`–`0x004bcd00`, the loader `0x004d0bb0`–`0x004d0d50` and the bone/attachment getters `0x004d0a50`–`0x004d1160`), raw-instruction call-site enumeration (not the reference manager), and the 585-rig population. Harnesses: `tools/harnesses/rig10_header.py`, `rig10_joint.py`, `rig10_names.py`, `rig10_tail.py`, `rig10_validate.py`, `rig10_att.py`, `rig10_att2.py`, `rig10_att3.py`, `rig10_anim_split.py`; Ghidra scripts `tools/scripts/Rig10*.java`; outputs `tools/rig10_*.txt`. **Three results, one of them a correction to this document's own §5/§6, and one honest negative:** (1) bone-by-name is a case-insensitive **string** compare — it never reads the hash table; (2) header `+0x28` exists, is the partner of `+0x2C`, and `+0x28 + +0x2C = bone_count` in 585/585 — but **no runtime reader of either was found**; (3) the attachment record is a **rotation matrix + translation, not a quaternion** (§6's reading is retracted), 12,480/12,480.
+> **Scope.** Agent AD (`gp_rig10`), 2026-09-20: the **consumer side** of the rig's runtime fields — §10 items 2, 3 and 5 (header `+0x2C`, bone `+0x24` and the attachment fields, and the bone-by-name routine `0x004bc880`). Method: full decompile plus raw disassembly of the accessor family (`0x004bc7c0`–`0x004bcd00`, the loader `0x004d0bb0`–`0x004d0d50` and the bone/attachment getters `0x004d0a50`–`0x004d1160`), raw-instruction call-site enumeration (not the reference manager), and the 585-rig population. Harnesses: `tools/harnesses/rig10_header.py`, `rig10_joint.py`, `rig10_names.py`, `rig10_tail.py`, `rig10_validate.py`, `rig10_att.py`, `rig10_att2.py`, `rig10_att3.py`, `rig10_anim_split.py`; Ghidra scripts `tools/scripts/Rig10*.java`; outputs `tools/rig10_*.txt`. **Three results, one of them a correction to this document's own §5/§6, and one honest negative:** (1) bone-by-name is a case-insensitive **string** compare — it never reads the hash table; (2) header `+0x28` exists, is the partner of `+0x2C`, and `+0x28 + +0x2C = bone_count` in 585/585 — but **no runtime reader of either was found**; (3) the attachment record is a **rotation matrix + translation, not a quaternion** (§6's reading is retracted), 12,480/12,480.
 
-### 13.1 `FUN_004bc880` is a string compare — the hash table has no consumer in the runtime paths read
+### 13.1 `0x004bc880` is a string compare — the hash table has no consumer in the runtime paths read
 
-**What it does.** `FUN_004bc880(rig, name)` returns `-1` if `rig` is null; otherwise it tail-calls `FUN_004d0a90`, which walks the bone array (`rig+0x40`, stride `0x28`, exactly `bone_count = rig+0x24` entries) and compares each bone's **name string** (bone `+0x00`, the pointer the loader fixes up) against `name` with the CRT case-insensitive compare (`FUN_00eaa178`, labelled `_stricmp` by the decompiler). It returns the index of the **first** match, or `-1`. **No hash is computed, the per-bone hash table (`rig+0x38`) is not touched, and there is no cache inside the routine** — every call is an `O(bone_count)` scan; callers keep the returned indices. **[CONFIRMED — disassembly, `FUN_004bc880` and `FUN_004d0a90` read in full.]** §5's "assumed the hash table's consumer" is therefore **refuted** (struck in place there). The old bookmark comment's "returns `0xff` when missing" is also not the routine's contract: it returns the 32-bit `-1`; the vehicle binder (below) narrows to a byte itself.
+**What it does.** `0x004bc880(rig, name)` returns `-1` if `rig` is null; otherwise it tail-calls `0x004d0a90`, which walks the bone array (`rig+0x40`, stride `0x28`, exactly `bone_count = rig+0x24` entries) and compares each bone's **name string** (bone `+0x00`, the pointer the loader fixes up) against `name` with the CRT case-insensitive compare (`0x00eaa178`, labelled `_stricmp` by the decompiler). It returns the index of the **first** match, or `-1`. **No hash is computed, the per-bone hash table (`rig+0x38`) is not touched, and there is no cache inside the routine** — every call is an `O(bone_count)` scan; callers keep the returned indices. **[CONFIRMED — disassembly, `0x004bc880` and `0x004d0a90` read in full.]** §5's "assumed the hash table's consumer" is therefore **refuted** (struck in place there). The old bookmark comment's "returns `0xff` when missing" is also not the routine's contract: it returns the 32-bit `-1`; the vehicle binder (below) narrows to a byte itself.
 
 **The sibling accessors, all by string compare** (raw `CALL` enumeration over the whole `.text`; each row's caller list is exhaustive for direct calls). "Registry id" means the anim-instance record index (`spec-rig-format.md` §11.16.6), which reaches the rig through record `+0x14`.
 
 | Routine | Behaviour | Callers (sites) |
 |---|---|---|
-| `FUN_004bc880` `(rig, name)` | exact, case-insensitive, bone array → bone index | **61 sites**: `FUN_00951250` ×18, `FUN_00a856d0` ×3, `FUN_00ab0730` ×6, `FUN_00bddee0` ×28, plus 6 in un-owned code at `0x00bde3ad`–`0x00bde704` |
-| `FUN_004bc860` `(rig, name)` (→ `FUN_004d0a50`) | **case-insensitive substring** (`FUN_00da7780`, a naive scan that does not re-test the mismatching character as a new start) → first bone whose name *contains* the query | `FUN_0077a800` ×24 only |
-| `FUN_004bc8a0` `(rig, name)` (→ `FUN_004d0ad0`) | exact, case-insensitive, **attachment** array (`rig+0x48`, stride `0x40`) → **`bone_count + a`** | 28 sites: `FUN_00951250` ×18, `FUN_00970e70` ×1 (`pelvis`), `FUN_00bddee0` ×7, un-owned code ×2 |
-| `FUN_004be200` `(registryId, name)` (→ `FUN_004d0da0`) | as `FUN_004bc880`, via the record's rig | 9 sites in 5 functions (`0x0057f970`, `0x00729720` ×3, `0x008fb7c0`, `0x00942300`, `0x009b2de0` ×3 — constants `pelvis`, `spinebend`, rest dynamic) |
-| `FUN_004be170` `(registryId, name)` (→ `FUN_004d0e00`) | attachment by name → `bone_count + a` | 14 caller functions |
-| `FUN_004be1b0` (→ `FUN_004d0e70`) `(registryId, name, n, list)` | attachment by name **plus a tag filter** (§13.4, `+0x3C`) | `FUN_00980e20` only |
+| `0x004bc880` `(rig, name)` | exact, case-insensitive, bone array → bone index | **61 sites**: `0x00951250` ×18, `0x00a856d0` ×3, `0x00ab0730` ×6, `0x00bddee0` ×28, plus 6 in un-owned code at `0x00bde3ad`–`0x00bde704` |
+| `0x004bc860` `(rig, name)` (→ `0x004d0a50`) | **case-insensitive substring** (`0x00da7780`, a naive scan that does not re-test the mismatching character as a new start) → first bone whose name *contains* the query | `0x0077a800` ×24 only |
+| `0x004bc8a0` `(rig, name)` (→ `0x004d0ad0`) | exact, case-insensitive, **attachment** array (`rig+0x48`, stride `0x40`) → **`bone_count + a`** | 28 sites: `0x00951250` ×18, `0x00970e70` ×1 (`pelvis`), `0x00bddee0` ×7, un-owned code ×2 |
+| `0x004be200` `(registryId, name)` (→ `0x004d0da0`) | as `0x004bc880`, via the record's rig | 9 sites in 5 functions (`0x0057f970`, `0x00729720` ×3, `0x008fb7c0`, `0x00942300`, `0x009b2de0` ×3 — constants `pelvis`, `spinebend`, rest dynamic) |
+| `0x004be170` `(registryId, name)` (→ `0x004d0e00`) | attachment by name → `bone_count + a` | 14 caller functions |
+| `0x004be1b0` (→ `0x004d0e70`) `(registryId, name, n, list)` | attachment by name **plus a tag filter** (§13.4, `+0x3C`) | `0x00980e20` only |
 
-**[OPEN — desk review 2026-09-30: whether the plain attachment-by-name routines (`FUN_004d0ad0`, `FUN_004d0e00`) return the first or the last name match is not stated; the bone routine returns the first (above), the tag-filtered `FUN_004d0e70` the last (§13.4). It matters only if attachment names repeat within a rig, which is not measured here; to be settled against the executable.]**
+**[OPEN — desk review 2026-09-30: whether the plain attachment-by-name routines (`0x004d0ad0`, `0x004d0e00`) return the first or the last name match is not stated; the bone routine returns the first (above), the tag-filtered `0x004d0e70` the last (§13.4). It matters only if attachment names repeat within a rig, which is not measured here; to be settled against the executable.]**
 
-**So bones and attachments share one index space: `i < bone_count` is bone `i`, `i ≥ bone_count` is attachment `i − bone_count`.** `FUN_004d0f40` bounds its argument with `bone_count + attachment_count`; `FUN_004d0fe0` (the transform getter, §13.4) splits on `bone_count`. **[CONFIRMED — disassembly.]**
+**So bones and attachments share one index space: `i < bone_count` is bone `i`, `i ≥ bone_count` is attachment `i − bone_count`.** `0x004d0f40` bounds its argument with `bone_count + attachment_count`; `0x004d0fe0` (the transform getter, §13.4) splits on `bone_count`. **[CONFIRMED — disassembly.]**
 
 **What callers pass** (constant string sites; the string is the argument nearest the call):
 
-- **`FUN_00ab0730`** (the vehicle part→rig-bone binder, `spec-vehicle-geometry.md` §6): the rig is found by `FUN_004bc7d0(name, -1)`; then **two dynamic sites** (the anchor name at vehicle-header `+0x3C`, then every part name, stride `0xE0`) and four constants `camera`, `camtarget`, `camFOV`, `camDOF`. Any result `≥ 0xFF` (including `-1`) is stored as byte `0xFF`; hits are also set in a 128-bit presence mask, and the binder then **sets every bit `< rig.bone_count`** before building the descriptor's value list. **[CONFIRMED — disassembly.]**
-- **`FUN_00a856d0`**: `camera`, `camFOV`, `camDOF`.
-- **`FUN_00bddee0`** — a per-record initializer over a global table of `0xEC`-byte records (table pointer `0x029972F8`, count `0x029972F4`; each record's rig is found by name at record `+0x20` and key at `+0xD8` and stored at `+0x24`, `FUN_00bde1d0`): 28 bone names (`root`, `spine`, `spine2`, `pelvis`, `head`, `neck`, `l-eye`/`r-eye`, `l/r-thigh`, `l/r-calf`, `l/r-foot`, `l/r-toe0`, `l/r-upperarmtwist1`, `l/r-foretwist`, `L-hand`/`R-hand`, `L-IKNode`/`R-IKNode`, `camTarget`, `Camera`, `CamFOV`, `CamDOF`) and 7 attachment names (`l-handprop`, `r-handprop`, `l/r-foretwist1`, `HSAttach`, `HS-R-Hand`, `flame`). **Mixed-case names (`L-hand`, `CamFOV`) against lowercase shipped bones (`l-hand`, `camfov`) is why the compare must be case-insensitive.**
-- **`FUN_00951250`**: 18 bone lookups — `l/r-foretwist1`, `l/r-upperarmtwist2`/`3`, `l/r-calftwist1`, `l/r-thightwist1`, `l/r-elbow`, `l/r-knee`, and `l/r-hand`, `l/r-foot` — and 18 attachment lookups: the per-bone points `l/r-hand`, `l/r-foot`, `l/r-thigh`, `l/r-calf`, `l/r-foretwist`, `l/r-upperarmtwist1` (twice), and **only the `a` target of each IK triple**, `l_elbow_targeta`, `r_elbow_targeta`, `l_knee_targeta`, `r_knee_targeta` (§6's IK pole targets, named).
-- **`FUN_0077a800`** (substring form): `head` (×3), `root`, `spine1` (×2), `spine2` (×2), `r/l-thigh`, `r/l-calf` (×2), `r/l-upperarm`, `r/l-foretwist` (×2), `r/l-foot`, `r/l-hand` — a 24-slot bone-index table. The substring form is what makes `r/l-upperarm` work: **no humanoid rig has a bone named exactly `l-upperarm`** (0 / 281 of the `T = 45` rigs), while `l-upperarmtwist1` is present in 281 / 281 — the query resolves to the twist bone that plays the upper arm. **[CONFIRMED — empirical for the names; the rationale is HIGH CONFIDENCE — inferred.]**
+- **`0x00ab0730`** (the vehicle part→rig-bone binder, `spec-vehicle-geometry.md` §6): the rig is found by `0x004bc7d0(name, -1)`; then **two dynamic sites** (the anchor name at vehicle-header `+0x3C`, then every part name, stride `0xE0`) and four constants `camera`, `camtarget`, `camFOV`, `camDOF`. Any result `≥ 0xFF` (including `-1`) is stored as byte `0xFF`; hits are also set in a 128-bit presence mask, and the binder then **sets every bit `< rig.bone_count`** before building the descriptor's value list. **[CONFIRMED — disassembly.]**
+- **`0x00a856d0`**: `camera`, `camFOV`, `camDOF`.
+- **`0x00bddee0`** — a per-record initializer over a global table of `0xEC`-byte records (table pointer `0x029972F8`, count `0x029972F4`; each record's rig is found by name at record `+0x20` and key at `+0xD8` and stored at `+0x24`, `0x00bde1d0`): 28 bone names (`root`, `spine`, `spine2`, `pelvis`, `head`, `neck`, `l-eye`/`r-eye`, `l/r-thigh`, `l/r-calf`, `l/r-foot`, `l/r-toe0`, `l/r-upperarmtwist1`, `l/r-foretwist`, `L-hand`/`R-hand`, `L-IKNode`/`R-IKNode`, `camTarget`, `Camera`, `CamFOV`, `CamDOF`) and 7 attachment names (`l-handprop`, `r-handprop`, `l/r-foretwist1`, `HSAttach`, `HS-R-Hand`, `flame`). **Mixed-case names (`L-hand`, `CamFOV`) against lowercase shipped bones (`l-hand`, `camfov`) is why the compare must be case-insensitive.**
+- **`0x00951250`**: 18 bone lookups — `l/r-foretwist1`, `l/r-upperarmtwist2`/`3`, `l/r-calftwist1`, `l/r-thightwist1`, `l/r-elbow`, `l/r-knee`, and `l/r-hand`, `l/r-foot` — and 18 attachment lookups: the per-bone points `l/r-hand`, `l/r-foot`, `l/r-thigh`, `l/r-calf`, `l/r-foretwist`, `l/r-upperarmtwist1` (twice), and **only the `a` target of each IK triple**, `l_elbow_targeta`, `r_elbow_targeta`, `l_knee_targeta`, `r_knee_targeta` (§6's IK pole targets, named).
+- **`0x0077a800`** (substring form): `head` (×3), `root`, `spine1` (×2), `spine2` (×2), `r/l-thigh`, `r/l-calf` (×2), `r/l-upperarm`, `r/l-foretwist` (×2), `r/l-foot`, `r/l-hand` — a 24-slot bone-index table. The substring form is what makes `r/l-upperarm` work: **no humanoid rig has a bone named exactly `l-upperarm`** (0 / 281 of the `T = 45` rigs), while `l-upperarmtwist1` is present in 281 / 281 — the query resolves to the twist bone that plays the upper arm. **[CONFIRMED — empirical for the names; the rationale is HIGH CONFIDENCE — inferred.]**
 
-**Negative for the hash table itself, stated with its predicate.** The engine's name hash `FUN_00da7890` has **12 callers** (raw `CALL`/`JMP` flow scan, whole `.text`): `0x004aded0`, `0x004b1900`, `0x004ca2d0`, `0x004ca340`, `0x004d0260`, `0x00747920`, `0x00747970`, `0x00747ae0`, `0x008df690`, `0x008df740`, `0x00ddab60`, `0x00ddac20`. All 12 were decompiled; **none touches a rig object** (anim-graph trigger names, the foliage-mesh registry, xtbl name registries, a UI table). And no instruction in `[0x004bc000, 0x004d1000)` reads rig `+0x38` other than the loader's own fix-up (§13.6). **Predicate: "no function that calls the shared name hash, and no rig-object read in the accessor range, consumes the hash table."** It does *not* exclude an inlined copy of the rotate-6/XOR loop elsewhere. **[HIGH CONFIDENCE, bounded: the per-bone hash table is loader-side/authoring data with no runtime reader found.]** The table is still exactly the hash of each lowercased bone name (§5's 22,274/22,274 stands); only the sentence about its consumer is withdrawn.
+**Negative for the hash table itself, stated with its predicate.** The engine's name hash `0x00da7890` has **12 callers** (raw `CALL`/`JMP` flow scan, whole `.text`): `0x004aded0`, `0x004b1900`, `0x004ca2d0`, `0x004ca340`, `0x004d0260`, `0x00747920`, `0x00747970`, `0x00747ae0`, `0x008df690`, `0x008df740`, `0x00ddab60`, `0x00ddac20`. All 12 were decompiled; **none touches a rig object** (anim-graph trigger names, the foliage-mesh registry, xtbl name registries, a UI table). And no instruction in `[0x004bc000, 0x004d1000)` reads rig `+0x38` other than the loader's own fix-up (§13.6). **Predicate: "no function that calls the shared name hash, and no rig-object read in the accessor range, consumes the hash table."** It does *not* exclude an inlined copy of the rotate-6/XOR loop elsewhere. **[HIGH CONFIDENCE, bounded: the per-bone hash table is loader-side/authoring data with no runtime reader found.]** The table is still exactly the hash of each lowercased bone name (§5's 22,274/22,274 stands); only the sentence about its consumer is withdrawn.
 
-**Review status (2026-09-30): NEEDS-EXE: first vs last match for the plain attachment-by-name routines (`FUN_004d0ad0`, `FUN_004d0e00`); site tallies 61 and 28 re-added and consistent — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: first vs last match for the plain attachment-by-name routines (`0x004d0ad0`, `0x004d0e00`); site tallies 61 and 28 re-added and consistent — desk review (not re-derived from the executable).**
 
 ### 13.2 Header `+0x28` and `+0x2C`: a partition pair, `+0x28 + +0x2C = bone_count` in 585/585 — and no reader found
 
@@ -2663,17 +2664,17 @@ once.
 
 So the bones split into a **leading group `[0, K)`** with `K = +0x2C` and a **trailing group `[K, bone_count)`** of `T = +0x28` bones. `T` is a *class constant*, not a per-rig measurement: **45** in 281 rigs (the standard humanoid rigs, bone counts 65–109, 29 distinct; the one-off full rigs `tiger` = 31 and `avatar` = 51 differ), **3** in the 260 head rigs (`bone_count` 5; trailing group `[head, l-eye, r-eye]` in 260/260), **1** in 37 rigs (vehicles/props: the last bone), and 2/6/51/8/17/31 in one or two rigs each (nine distinct values in all). **[CONFIRMED — empirical.]**
 
-**What this does to §7's reading.** The boundary bone `bone[K]` is `l-finger1` or `l-hand` in only **186 / 281** of the `T = 45` rigs (29 distinct names — `r-finger4`, `l-finger31`, `r-foretwist`, … fill the rest), and hands move between the groups (`l-hand` is in the leading group in 230 and the trailing group in 51; `l-finger1` in 89 vs 192; extra accessory bones appended to a rig push hands out of the trailing 45). Because `T` stays 45 while the *contents* shift, **`K` is `bone_count − 45` by arithmetic, not "the first detail bone" by name** — the "first bone of a detail section" pattern is a property of the standard humanoid template (leading 23 core bones, then 22 finger bones, then 23 helper bones: `spinebend`, the four camera bones, eyes, `l/r-upperarmtwist2`/`3`, `l/r-foretwist1`, `l/r-thightwist1`, `l/r-calftwist1`, `l/r-elbow`, `l/r-knee`, and the breast bones — most of which §13.1's `FUN_00951250`, `FUN_00bddee0`, `FUN_00a856d0` and `FUN_009b2de0` look up **by name**), not something the field encodes. **[HIGH CONFIDENCE — inferred from the population; `rig10_tail.py`, `rig10_names.py`.]**
+**What this does to §7's reading.** The boundary bone `bone[K]` is `l-finger1` or `l-hand` in only **186 / 281** of the `T = 45` rigs (29 distinct names — `r-finger4`, `l-finger31`, `r-foretwist`, … fill the rest), and hands move between the groups (`l-hand` is in the leading group in 230 and the trailing group in 51; `l-finger1` in 89 vs 192; extra accessory bones appended to a rig push hands out of the trailing 45). Because `T` stays 45 while the *contents* shift, **`K` is `bone_count − 45` by arithmetic, not "the first detail bone" by name** — the "first bone of a detail section" pattern is a property of the standard humanoid template (leading 23 core bones, then 22 finger bones, then 23 helper bones: `spinebend`, the four camera bones, eyes, `l/r-upperarmtwist2`/`3`, `l/r-foretwist1`, `l/r-thightwist1`, `l/r-calftwist1`, `l/r-elbow`, `l/r-knee`, and the breast bones — most of which §13.1's `0x00951250`, `0x00bddee0`, `0x00a856d0` and `0x009b2de0` look up **by name**), not something the field encodes. **[HIGH CONFIDENCE — inferred from the population; `rig10_tail.py`, `rig10_names.py`.]**
 
 **Side observation, not evidence of consumption.** For the 3,658 identity-mapped (`+0x28 == 0`) `.anim_pc` clips whose bone count selects a `T = 45` rig class, the clip's track count `+0x0A` exceeds `K` in 3,657 and `+0x0A − K == 22` (the finger-bone count) in 2,223 (61%) — the clips animate the leading group plus the finger bones and leave the helper tail to code. `+0x0A` is the clip's own field; nothing reads `K` to produce it. **[HIGH CONFIDENCE — empirical association only, `rig10_anim_split.py`.]**
 
-**Consumer search — result: none found.** The two fields are copied verbatim into the runtime object by the loader (§13.3) and are **not read by it**. Scopes and predicates (§13.6): (a) every decoded instruction in `[0x004bc000, 0x004d1000)` — 25,226 instructions, 384 functions, the whole rig accessor / anim-registry / anim-graph region; its 49 non-stack `[reg+0x2C]` operands fall in 13 functions, each read (anim-graph nodes, list nodes, SSE arithmetic); (b) an anchored 681-function set (123 registry-global referencers + 55 direct callers of 22 accessors + 503 direct callees): all 118 non-stack `[reg+0x2C]` operands (in 49 functions) were classified by how their base register was last defined in a ≥ 8-instruction window, 15 of them read in full; (c) 17 named skinning-path functions (`FUN_00e649f0`, `FUN_00b91a10`, the palette allocator/load/gather, `FUN_00476ca0`, `FUN_008cb170`, `FUN_00753d40`, `FUN_004c1350`, `FUN_004c31b0`, `FUN_004c7640`, …). **No operand in any of them is a `+0x2C` (or `+0x28`) read through a rig-object pointer**: every hit resolves to a stack struct copy, a 48-byte pose-matrix row, an anim-graph node, a list node, or SSE arithmetic. **The bone-LOD hypothesis therefore has no code behind it in the ranges read** — the accessors that *do* exist bound by `bone_count` (`+0x24`) and the attachment count (`+0x30`) only. **[CONFIRMED — disassembly, for the stated scopes; HYPOTHESIS "bone-LOD boundary" — UNSUPPORTED, downgraded.]** A whole-binary "register with `+0x2C` and `+0x24`/`+0x40`" predicate returns 459 (function, register) pairs and was abandoned as unselective, per `HANDOFF.md` §5.
+**Consumer search — result: none found.** The two fields are copied verbatim into the runtime object by the loader (§13.3) and are **not read by it**. Scopes and predicates (§13.6): (a) every decoded instruction in `[0x004bc000, 0x004d1000)` — 25,226 instructions, 384 functions, the whole rig accessor / anim-registry / anim-graph region; its 49 non-stack `[reg+0x2C]` operands fall in 13 functions, each read (anim-graph nodes, list nodes, SSE arithmetic); (b) an anchored 681-function set (123 registry-global referencers + 55 direct callers of 22 accessors + 503 direct callees): all 118 non-stack `[reg+0x2C]` operands (in 49 functions) were classified by how their base register was last defined in a ≥ 8-instruction window, 15 of them read in full; (c) 17 named skinning-path functions (`0x00e649f0`, `0x00b91a10`, the palette allocator/load/gather, `0x00476ca0`, `0x008cb170`, `0x00753d40`, `0x004c1350`, `0x004c31b0`, `0x004c7640`, …). **No operand in any of them is a `+0x2C` (or `+0x28`) read through a rig-object pointer**: every hit resolves to a stack struct copy, a 48-byte pose-matrix row, an anim-graph node, a list node, or SSE arithmetic. **The bone-LOD hypothesis therefore has no code behind it in the ranges read** — the accessors that *do* exist bound by `bone_count` (`+0x24`) and the attachment count (`+0x30`) only. **[CONFIRMED — disassembly, for the stated scopes; HYPOTHESIS "bone-LOD boundary" — UNSUPPORTED, downgraded.]** A whole-binary "register with `+0x2C` and `+0x24`/`+0x40`" predicate returns 459 (function, register) pairs and was abandoned as unselective, per `HANDOFF.md` §5.
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: `+0x28 + +0x2C == bone_count` 585/585 with adjacent-pair controls 0/585 (`team-b/HANDOFF.md` l.10940); the `T` histogram and boundary-bone names are Team A measurements only — desk review (not re-derived from the executable).**
 
 ### 13.3 The runtime rig object (`0x60` bytes, 256 cached slots)
 
-`FUN_004bc810` → `FUN_004d0cb0` allocates from a **256-slot cache of `0x60`-byte objects at `0x035198F0`** (flags live at slot `+0x20`, first flag word at `0x03519910`, bound `0x0351F910`; `0x6000 / 0x60 = 256`); `FUN_004bc7d0` → `FUN_004d0d50` finds a slot by (in-use bit, key at `+0x54`, case-insensitive name at `+0x00`). `FUN_004d0cb0` **rejects names of 32 or more characters**, zeroes the slot, runs `FUN_004d0bb0` (which copies the `0x50`-byte header), then overwrites the front of the copy with the name. **[CONFIRMED — disassembly.]**
+`0x004bc810` → `0x004d0cb0` allocates from a **256-slot cache of `0x60`-byte objects at `0x035198F0`** (flags live at slot `+0x20`, first flag word at `0x03519910`, bound `0x0351F910`; `0x6000 / 0x60 = 256`); `0x004bc7d0` → `0x004d0d50` finds a slot by (in-use bit, key at `+0x54`, case-insensitive name at `+0x00`). `0x004d0cb0` **rejects names of 32 or more characters**, zeroes the slot, runs `0x004d0bb0` (which copies the `0x50`-byte header), then overwrites the front of the copy with the name. **[CONFIRMED — disassembly.]**
 
 | Runtime `+` | Content | On disk |
 |---|---|---|
@@ -2682,8 +2683,8 @@ So the bones split into a **leading group `[0, K)`** with `K = +0x2C` and a **tr
 | `0x24` `0x28` `0x2C` `0x30` | bone count · `T` · `K` · attachment count | as §3.1 / §13.2 |
 | `0x34` | not read or written by the loader | zero in 585/585 |
 | `0x38` `0x40` `0x48` | fixed-up pointers: hash table · bone array · attachment array (`0` if the file field was `-1`); each high-half slot (`0x3C` `0x44` `0x4C`) zeroed | as §3.1 |
-| `0x50` | the buffer length handed to the loader (`FUN_004bc810`'s fourth argument); copied into the anim-instance record at `+0x39C` by `FUN_004c1730` / `FUN_004bca80` | — (runtime) |
-| `0x54` | the cache key (`FUN_004bc810`'s second argument; the vehicle binder looks its rig up with key `-1`) | — |
+| `0x50` | the buffer length handed to the loader (`0x004bc810`'s fourth argument); copied into the anim-instance record at `+0x39C` by `0x004c1730` / `0x004bca80` | — (runtime) |
+| `0x54` | the cache key (`0x004bc810`'s second argument; the vehicle binder looks its rig up with key `-1`) | — |
 | `0x58` | pointer to the loaded file buffer (the bone/attachment arrays live *inside* it, fixed up in place) | — |
 
 **[CONFIRMED — disassembly for the runtime columns; CONFIRMED — empirical for "zero on disk", 585/585.]** Consequence for §3.1: header `+0x00`–`+0x23` and `+0x34` are all-zero reserved space in every shipped file; the loader never reads them.
@@ -2692,16 +2693,16 @@ So the bones split into a **leading group `[0, K)`** with `K = +0x2C` and a **tr
 
 ### 13.4 The attachment record is a rotation matrix + translation, not a quaternion (corrects §6)
 
-`FUN_004d0fe0` — the "get the transform of bone-or-attachment `i`" routine behind `FUN_004bd020` (3 callers), `FUN_004bd840` (7) and `FUN_004d0f40` ← `FUN_004bd7f0` (**54 distinct caller functions**) — reads an attachment `a = i − bone_count` (valid for `0 ≤ a < rig+0x30`) as follows: **the parent bone from record `+0x38`; record `+0x08` as a pointer to nine floats (a 3×3 rotation) and record `+0x2C` as a pointer to three floats (a translation)**, both handed to `FUN_004aac40`, which builds a 4×4 (rows padded with `w = 0`, translation in row 3 with `w = 1` — the same 48-byte affine layout as §11.2's palette matrices). With a live pose array (`rec+0x04` **[role conflicts with §11.16.6 — OPEN marker there]**) the result is *attachment matrix × parent bone's pose matrix* (`FUN_0048cf50`); in the un-posed path the translation row has the parent bone's **`+0x08` rest position subtracted** (`0x004d1100`–`0x004d1118`). **[CONFIRMED — disassembly, `FUN_004d0fe0`, `FUN_004aac40`, `FUN_0048cf50` read in full.]**
+`0x004d0fe0` — the "get the transform of bone-or-attachment `i`" routine behind `0x004bd020` (3 callers), `0x004bd840` (7) and `0x004d0f40` ← `0x004bd7f0` (**54 distinct caller functions**) — reads an attachment `a = i − bone_count` (valid for `0 ≤ a < rig+0x30`) as follows: **the parent bone from record `+0x38`; record `+0x08` as a pointer to nine floats (a 3×3 rotation) and record `+0x2C` as a pointer to three floats (a translation)**, both handed to `0x004aac40`, which builds a 4×4 (rows padded with `w = 0`, translation in row 3 with `w = 1` — the same 48-byte affine layout as §11.2's palette matrices). With a live pose array (`rec+0x04` **[role conflicts with §11.16.6 — OPEN marker there]**) the result is *attachment matrix × parent bone's pose matrix* (`0x0048cf50`); in the un-posed path the translation row has the parent bone's **`+0x08` rest position subtracted** (`0x004d1100`–`0x004d1118`). **[CONFIRMED — disassembly, `0x004d0fe0`, `0x004aac40`, `0x0048cf50` read in full.]**
 
 | Offset | Size | Content | Evidence |
 |---|---|---|---|
-| `+0x00` | 4 | name → pointer (fixed up) | compared by `FUN_004d0ad0` / `FUN_004d0e00` / `FUN_004d0e70` (§13.1) |
+| `+0x00` | 4 | name → pointer (fixed up) | compared by `0x004d0ad0` / `0x004d0e00` / `0x004d0e70` (§13.1) |
 | `+0x04` | 4 | runtime slot, zeroed by the loader | zero on disk 12,480/12,480 |
 | **`+0x08`** | 36 | **3×3 rotation, nine `f32`, three rows of three (rows at `+0x08` / `+0x14` / `+0x20`)** | see below |
 | **`+0x2C`** | 12 | **translation, `vec3 f32`** (bone-local: median `|t|` = 0, p95 0.44) | see below |
-| `+0x38` | 4 | parent bone index | `FUN_004d0fe0`; `< bone_count` 12,480/12,480 (§6) |
-| **`+0x3C`** | 4 | signed int **tag**; **`-1` in 12,480/12,480**. Read only by `FUN_004d0e70`: among the attachments whose name matches, one whose tag is in the caller's list is returned at once (a tag of `0` in a list of two or more is held back as a second choice); an untagged (`-1`) name match is only the **fallback, and the last such match wins**. With shipped data (every tag `-1`) the tag list is therefore inert and the routine returns the **last** name match | disassembly (`0x004d0ebf`–`0x004d0f34`) + empirical |
+| `+0x38` | 4 | parent bone index | `0x004d0fe0`; `< bone_count` 12,480/12,480 (§6) |
+| **`+0x3C`** | 4 | signed int **tag**; **`-1` in 12,480/12,480**. Read only by `0x004d0e70`: among the attachments whose name matches, one whose tag is in the caller's list is returned at once (a tag of `0` in a list of two or more is held back as a second choice); an untagged (`-1`) name match is only the **fallback, and the last such match wins**. With shipped data (every tag `-1`) the tag list is therefore inert and the routine returns the **last** name match | disassembly (`0x004d0ebf`–`0x004d0f34`) + empirical |
 
 **Empirical validation (`rig10_att.py`, 12,480 records).** The three rows at `+0x08` are **orthonormal (`|norm−1| < 0.01`, `|dot| < 0.01`) with determinant `+1` in 12,480 / 12,480** — a proper rotation. Controls: the same test with the first row at any other 4-byte offset from `+0x00` to `+0x1C` (excluding `+0x08`) scores **0 / 12,480** at both `0.01` and `0.05` tolerance; each such control *can* fail and does. The three floats `+0x20`–`+0x2B` are a unit vector within 1% in 12,480/12,480 — which is exactly why §6's "quaternion at `+0x20`, within 10% of unit in 12,473/12,480" looked right: the fourth float of that "quaternion" is the translation's `x`, and the 7 records outside the 10% band are exactly ones with `|t.x| ≥ 0.46` and `|row 2| = 1.0000` (checked). **⚠ §6's `+0x10` / `+0x20` / `+0x30` readings are withdrawn:** `+0x10` is `row0.z`, `+0x14`–`+0x1C` is row 1; `+0x20`–`+0x28` is row 2; `+0x30` is translation `y`. **[CONFIRMED — disassembly + empirical.]**
 
@@ -2713,35 +2714,35 @@ So the bones split into a **leading group `[0, K)`** with `K = +0x2C` and a **tr
 
 | Bone `+` | Runtime reader found | Evidence |
 |---|---|---|
-| `0x00` name | the six by-name routines of §13.1 | `FUN_004d0a90` etc. |
-| `0x08` rest position | `FUN_004d0fe0`'s un-posed attachment path (subtracts it from the attachment translation) | `0x004d1100`–`0x004d1118` |
-| `0x14` offset to parent | the animation update `FUN_004c21a0` (`0x004c3139`: loaded per slot through the binding descriptor and **added (`ADDPS`) into a per-slot 16-byte position accumulator**, stride `0x40`, `w` reset to the unit constant at `0x01249140`) and `FUN_004be9f0` (returns it as a 4-float value to the attachment-lag drivers `FUN_00782880` / `FUN_00784a60`) | disassembly — so §4's "precomputed convenience" is the field the runtime *reads* for pose building (the sampled-translation path that feeds the accumulator was not traced) **[OPEN — desk review 2026-09-30: the stored value is `pos(parent) − pos(bone)` (§4) and it is added into a position accumulator; whether the runtime local translation is this value or its negation depends on that untraced path. A bind pose needs only `+0x08`. To be settled against the executable (`FUN_004c21a0`, `0x004c3139`).]** |
-| `0x20` parent | `FUN_004be8b0`, `FUN_004c1e20`, `FUN_004c31b0`, `FUN_004c36f0`, `FUN_004d0b20` | disassembly |
+| `0x00` name | the six by-name routines of §13.1 | `0x004d0a90` etc. |
+| `0x08` rest position | `0x004d0fe0`'s un-posed attachment path (subtracts it from the attachment translation) | `0x004d1100`–`0x004d1118` |
+| `0x14` offset to parent | the animation update `0x004c21a0` (`0x004c3139`: loaded per slot through the binding descriptor and **added (`ADDPS`) into a per-slot 16-byte position accumulator**, stride `0x40`, `w` reset to the unit constant at `0x01249140`) and `0x004be9f0` (returns it as a 4-float value to the attachment-lag drivers `0x00782880` / `0x00784a60`) | disassembly — so §4's "precomputed convenience" is the field the runtime *reads* for pose building (the sampled-translation path that feeds the accumulator was not traced) **[OPEN — desk review 2026-09-30: the stored value is `pos(parent) − pos(bone)` (§4) and it is added into a position accumulator; whether the runtime local translation is this value or its negation depends on that untraced path. A bind pose needs only `+0x08`. To be settled against the executable (`0x004c21a0`, `0x004c3139`).]** |
+| `0x20` parent | `0x004be8b0`, `0x004c1e20`, `0x004c31b0`, `0x004c36f0`, `0x004d0b20` | disassembly |
 | **`0x24`** | **none found — no reader and no writer** | §13.6 |
 
-**Bone `+0x24` (`-1` in 22,274 / 22,274 bones, re-counted this pass): no runtime read or write was found.** The loader touches only `+0x00` (name fix-up) and `+0x04` (zero) of each bone; the records live inside the loaded file buffer, so a runtime slot would have to be an explicit store into that buffer. In the anim/accessor region every indexed `[base + idx + 0x24]` operand is a 48-byte pose-matrix translation row (`FUN_004c31b0`, `FUN_004c1e20`, `FUN_004c36f0`, …), never a bone record, and no store to a bone's `+0x24` exists in the scanned scopes. It is most simply an **unused reserved slot** that ships as `-1`; a consumer outside the scanned scopes is not excluded. **[OPEN — bounded negative: no reader/writer found in the scopes of §13.6; not "confirmed unused".]**
+**Bone `+0x24` (`-1` in 22,274 / 22,274 bones, re-counted this pass): no runtime read or write was found.** The loader touches only `+0x00` (name fix-up) and `+0x04` (zero) of each bone; the records live inside the loaded file buffer, so a runtime slot would have to be an explicit store into that buffer. In the anim/accessor region every indexed `[base + idx + 0x24]` operand is a 48-byte pose-matrix translation row (`0x004c31b0`, `0x004c1e20`, `0x004c36f0`, …), never a bone record, and no store to a bone's `+0x24` exists in the scanned scopes. It is most simply an **unused reserved slot** that ships as `-1`; a consumer outside the scanned scopes is not excluded. **[OPEN — bounded negative: no reader/writer found in the scopes of §13.6; not "confirmed unused".]**
 
-**Review status (2026-09-30): NEEDS-EXE: sign/role of bone `+0x14` in the pose accumulator (`FUN_004c21a0`, `0x004c3139`); the bind pose needs only `+0x08`, which is validated — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: sign/role of bone `+0x14` in the pose accumulator (`0x004c21a0`, `0x004c3139`); the bind pose needs only `+0x08`, which is validated — desk review (not re-derived from the executable).**
 
 ### 13.6 Scan scopes, predicates, and what stays open
 
 Every negative above is a statement about a **predicate over a scope**, listed so it can be re-opened:
 
-- **Range scope** `[0x004bc000, 0x004d1000)`: 86,016 bytes, 25,226 decoded instructions (3,459 bytes not decoded as instructions), 384 functions with an entry inside. Predicates run on it: non-stack memory operands with displacement `0x24`, `0x28`, `0x2C`, `0x30`, `0x38`, `0x40`, `0x48`, `0x50`, `0x54`, `0x58`, and `0x08`/`0x14`/`0x20` for bone-field reads. Known-positive assertions fired (`FUN_004d0a90` reads `+0x24` and `+0x40`; the loader `FUN_004d0bb0`'s own `+0x24`/`+0x38`/`+0x40`/`+0x48` accesses are listed).
-- **Anchored scope** (`Rig10Anchored.java`): 123 functions referencing `DAT_0344c924`/`DAT_0344c91a` (**reproduces the 123 of §11.13.2 exactly**) ∪ 55 raw direct callers of 22 rig/record accessors ∪ 503 raw direct callees = **681 functions**; `+0x2C`, `+0x28`, `+0x38` in any addressing form and indexed-form `+0x24`, `+0x38`, `+0x3C`, `+0x10`. Known positives asserted (`FUN_004bcca0` ∈ S1, `FUN_0077a800` and `FUN_00951250` ∈ S2).
-- **Whole-binary scans used only for enumeration, not for negatives:** call-site enumeration of the by-name routines and of `FUN_00da7890` (3,546,397 instructions). The displacement-only whole-binary predicate was tried once and abandoned (459 pairs).
+- **Range scope** `[0x004bc000, 0x004d1000)`: 86,016 bytes, 25,226 decoded instructions (3,459 bytes not decoded as instructions), 384 functions with an entry inside. Predicates run on it: non-stack memory operands with displacement `0x24`, `0x28`, `0x2C`, `0x30`, `0x38`, `0x40`, `0x48`, `0x50`, `0x54`, `0x58`, and `0x08`/`0x14`/`0x20` for bone-field reads. Known-positive assertions fired (`0x004d0a90` reads `+0x24` and `+0x40`; the loader `0x004d0bb0`'s own `+0x24`/`+0x38`/`+0x40`/`+0x48` accesses are listed).
+- **Anchored scope** (`Rig10Anchored.java`): 123 functions referencing `0x0344c924`/`0x0344c91a` (**reproduces the 123 of §11.13.2 exactly**) ∪ 55 raw direct callers of 22 rig/record accessors ∪ 503 raw direct callees = **681 functions**; `+0x2C`, `+0x28`, `+0x38` in any addressing form and indexed-form `+0x24`, `+0x38`, `+0x3C`, `+0x10`. Known positives asserted (`0x004bcca0` ∈ S1, `0x0077a800` and `0x00951250` ∈ S2).
+- **Whole-binary scans used only for enumeration, not for negatives:** call-site enumeration of the by-name routines and of `0x00da7890` (3,546,397 instructions). The displacement-only whole-binary predicate was tried once and abandoned (459 pairs).
 - **Not covered:** rig pointers copied into other objects' fields and read by *deeper* (indirect, non-direct-callee) code; inlined copies of the name hash; register-passed record methods outside the range whose callers are not in the anchored set (the §11.16.3 blind spot). Header `+0x28`/`+0x2C` and bone `+0x24` are therefore **"no runtime consumer found"**, not "no consumer".
 
-**Still open:** (a) what the authoring pipeline uses `T`/`K` for; (b) any consumer of bone `+0x24`; (c) the un-posed-path sign of `FUN_004d0fe0` (it subtracts the parent's `+0x08` from a translation that §13.4 shows is bone-local — the convention of the pose array at `rec+0x04` is not pinned); (d) the meaning of row 0 ≠ bone axis for the 29% of same-name attachments.
+**Still open:** (a) what the authoring pipeline uses `T`/`K` for; (b) any consumer of bone `+0x24`; (c) the un-posed-path sign of `0x004d0fe0` (it subtracts the parent's `+0x08` from a translation that §13.4 shows is bone-local — the convention of the pose array at `rec+0x04` is not pinned); (d) the meaning of row 0 ≠ bone axis for the 29% of same-name attachments.
 
 ### 13.7 Cross-document notes (not edited here)
 
-`spec-vehicle-geometry.md` §6 (line ~106) says part names are matched **by hash** against the rig's name-hash table (**HIGH CONFIDENCE — inferred**); §13.1 refutes that — the binder `FUN_00ab0730` uses the string-compare routine, and its per-part results are narrowed to a byte with `0xFF` = missing. `HANDOFF.md` §15 ("Vehicles resolve part names via this hash table") and the `FUN_004bc880` bookmark comment carry the same withdrawn claim. Left to those documents' owners (concurrent edits in flight).
+`spec-vehicle-geometry.md` §6 (line ~106) says part names are matched **by hash** against the rig's name-hash table (**HIGH CONFIDENCE — inferred**); §13.1 refutes that — the binder `0x00ab0730` uses the string-compare routine, and its per-part results are narrowed to a byte with `0xFF` = missing. `HANDOFF.md` §15 ("Vehicles resolve part names via this hash table") and the `0x004bc880` bookmark comment carry the same withdrawn claim. Left to those documents' owners (concurrent edits in flight).
 
 **Review status (2026-09-30): DESK-PASS — scopes and predicates stated (§13.6, §13.7) — desk review (not re-derived from the executable).**
 
 ## Changelog
 
-- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked stale quaternion/rotation text superseded (Scope, §4, §9 item 4, §10 item 1 → §4.1/§13.4), struck §11.8 item 4 as retracted (§11.15), inverted-lesson note on §11.9 note 6 and the §11.7 verdict table; marked stale OPEN items resolved in place (§10 item 7, §11.7 verdict row, §11.12/§11.12.3/§11.13/§11.13.3/§11.14.4 item 3(b) → §11.15/§11.16, three §11.15 bullets → §11.5.1/§11.16.1); annotated §11.18.2/§11.18.3/§11.18.4 with the §11.18.5/§11.19.2 refinements, §11.8 item 3's retracted figures, the 260 head-rig count (§3.1), the 14→17 user count (§12), the function-count slip (2,900 vs ~41,785) and the later tracing of inventory row 9; fixed cross-references (§11.9.1 removed, `HANDOFF.md` §11.16.5 → this document's §11.16.5, §2 → §3.1, bare §5/§27.8 → `HANDOFF.md`); reworded decompiler-shaped text (§11.18.1 code block, `param_N` identifiers throughout §11.12–§11.19, `sVar1`, a C `for` loop, pointer-cast expressions).
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked stale quaternion/rotation text superseded (Scope, §4, §9 item 4, §10 item 1 → §4.1/§13.4), struck §11.8 item 4 as retracted (§11.15), inverted-lesson note on §11.9 note 6 and the §11.7 verdict table; marked stale OPEN items resolved in place (§10 item 7, §11.7 verdict row, §11.12/§11.12.3/§11.13/§11.13.3/§11.14.4 item 3(b) → §11.15/§11.16, three §11.15 bullets → §11.5.1/§11.16.1); annotated §11.18.2/§11.18.3/§11.18.4 with the §11.18.5/§11.19.2 refinements, §11.8 item 3's retracted figures, the 260 head-rig count (§3.1), the 14→17 user count (§12), the function-count slip (2,900 vs ~41,785) and the later tracing of inventory row 9; fixed cross-references (§11.9.1 removed, `HANDOFF.md` §11.16.5 → this document's §11.16.5, §2 → §3.1, bare §5/§27.8 → `HANDOFF.md`); reworded decompiler-shaped text (§11.18.1 code block, parameter-placeholder identifiers throughout §11.12–§11.19, a pseudo-variable name, a C `for` loop, pointer-cast expressions) into plain prose.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec or in the cited sibling spec); repointed 10 `HANDOFF.md` §27.8 references (§11.4, §11.15, §11.18, §11.18.5, §11.19, §11.19.1, §11.19.2) to the archived heading `HANDOFF.md` §36 ([archived] 27.8); 0 left (see review).
 - 2026-09-30 (desk adversarial review, `review/adv_rig.md`): per-unit review status lines and a summary added; front-matter clean-room claim corrected (pseudocode blocks and RTTI names listed, not rewritten); §11.15 decode recipe completed with Team B's file offsets and multi-set rule (`team-b/HANDOFF.md` §9.63.2/§9.63.6/§9.63.7/§9.63.10, cited by line, labelled as Team B results) and the X-only scope of the 171/172 test stated (also §8.1); §11.4's 428/428 rows qualified/superseded by Team B's 272/318 and 268/272; retracted §11 title/headline and §11.11 sentences struck with pointers; §11.7 item 1 marked unblocked; OPEN markers for the `N` = 68 bound conflict (§11.16.2/§11.18.1/§11.18.4), root split 575 vs 585 (§4), 66,822 = 3 × 22,274 (§11.5.1), §11.1 bounds, limit stack depth, record `+0x04` role, attachment first/last match, bone `+0x14` sign, header on-disk values; text fixes: §11.3 dereference count, §11.16.1 site-A null test, §11.16.3 bound, §11.13 target count and array identity, §11.17 brad slot 21 (7 → 6 mm), §5 hash inlined, §6 table order.

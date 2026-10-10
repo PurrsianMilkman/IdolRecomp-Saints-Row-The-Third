@@ -16,7 +16,7 @@
 [groups] 2 LOD group(s) located - rendering channel 1's own ranges from 2 of them (auto: union across every located group, see doc comment)
 [material] 10 draw range(s) across 2 group(s) belong to channel 1 (this channel's own submeshIndex filter), 8 distinct real materialId(s)
 [material] NO confirmed materialId->texture/shader binding for zone data (genuine, checked dead end, not invented): the vehicle-style 0x424BD00D GeometryBlock sub-header never occurs in any real .czn_pc (0/2,971 files); .czh_pc's own alternate name table (ZoneHeader::materialBlock()) is 100% non-texture for this file (71/71 names); a peer-relayed cc:0-texture-stem-family hypothesis was tested population-wide and matches only 1.0% of real Mesh blocks (381/37,147) and 11.5% of real .czn_pc files (53/460, mostly degenerate 1-vs-1 cases) - a clean negative. Each real draw range is still drawn separately with its own real materialId (MeshDrawMode::MaterialIdAsColour - flat colour per material, never a neighbour's texture), not textured.
-device   : HARDWARE (NVIDIA GeForce RTX 3090)
+device   : WARP (software) (Microsoft Basic Render Driver)
 bounds   : 334.822 x 55.310 x 237.104   (min Y -25.083)
 topology : 2 group(s) rendered, 4584 indices -> 1528 non-degenerate triangles total
 camera   : orbit yaw=34.4deg pitch=20.1deg distanceScale=1.80 (CHOSEN framing, not recovered data)

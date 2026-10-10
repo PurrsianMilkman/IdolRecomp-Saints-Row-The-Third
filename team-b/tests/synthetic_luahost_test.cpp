@@ -1,4 +1,4 @@
-// Synthetic tests for sr3luahost (include/sr3luahost/{lua_c_api,
+﻿// Synthetic tests for sr3luahost (include/sr3luahost/{lua_c_api,
 // stub_registry, host}.h). Every fixture below is small and hand-written -
 // no real shipped game data or real registration-list file is read here
 // (that is exercised for real by tools/lua_host_run.cpp against the
@@ -178,9 +178,22 @@ void fadeCbC(EngineState&, uint32_t t) { g_fadeCalls.push_back({'C', t}); }
 
 } // namespace
 
-int main() {
+// NOTE (2026-10-08, stack-overflow fix): this file used to be one giant
+// main() holding all 22 test blocks' locals (many of them Host/EngineState
+// by value, each ~40+ KB) in a single stack frame. EngineState has grown
+// with every wave-2 batch merged so far and will keep growing with the
+// batches still pending (W2-2, W2-8) - the cumulative frame crossed the
+// default 1 MiB thread stack and crashed with STATUS_STACK_OVERFLOW before
+// main() was even entered (verified: the same crash reproduces building
+// this exact, unmodified file against the pre-W2-6 revision in isolation).
+// Splitting each `{ ... }` block into its own function means only the
+// largest SINGLE block's own locals are live on the stack at once, instead
+// of the sum of all 22 - the correct fix for a problem that will otherwise
+// recur with every future batch that adds more EngineState fields, not a
+// one-off stack-size bump.
+
     // --- loadTaggedRegistrationList: the real tab-separated format -------
-    {
+static void test_block_1() {
         std::string path = "synthetic_luahost_test_taglist.tmp.txt";
         {
             std::ofstream f(path);
@@ -199,9 +212,19 @@ int main() {
     }
 
     // --- Host: gameplay/UI split, and the stub's own logging contract ----
-    {
+    // NOTE (2026-10-08, Batch 3/results/lua_natives_sec10_28_fanout_scoping_
+    // 20261008.md): this block's own generic-gameplay-stub example used to
+    // be the real name waypoint_add, until that name itself became a real
+    // spec-confirmed native this same day (Sec12.24) - Host's own
+    // constructor now filters it OUT of the generic tagged-list split (see
+    // its own top comment) and registers the REAL implementation instead,
+    // which no longer returns nil for a 3-arg call. Swapped to a synthetic
+    // placeholder name that can never collide with a real registered
+    // native, so this block tests the GENERIC stub mechanism itself, not
+    // any one real native's own (necessarily changing) behavior.
+static void test_block_2() {
         std::vector<RegisteredName> names = {
-            {"waypoint_add", "gameplay"},
+            {"zzz_generic_stub_example", "gameplay"},
             {"garage_remove_vehicle", "ui"},
         };
         Host host(names);
@@ -223,11 +246,11 @@ int main() {
         // state, and simply absent (nil) in the UI state - proving the
         // split is real, not just a shared roster registered twice.
         {
-            auto r = host.runChunk(host.gameplayState(), "return type(waypoint_add)", "chunk1");
+            auto r = host.runChunk(host.gameplayState(), "return type(zzz_generic_stub_example)", "chunk1");
             CHECK(r.loadOk && r.pcallOk);
         }
         {
-            auto r = host.runChunk(host.uiState(), "assert(waypoint_add == nil)", "chunk2");
+            auto r = host.runChunk(host.uiState(), "assert(zzz_generic_stub_example == nil)", "chunk2");
             CHECK(r.loadOk && r.pcallOk);
         }
         {
@@ -240,37 +263,37 @@ int main() {
         // checked from the Lua side of the real C API round-trip.
         {
             auto r = host.runChunk(host.gameplayState(),
-                                    "local a, b, c = waypoint_add(1, 'x', true)\n"
+                                    "local a, b, c = zzz_generic_stub_example(1, 'x', true)\n"
                                     "assert(a == nil and b == nil and c == nil)",
                                     "chunk4");
             CHECK(r.loadOk && r.pcallOk);
         }
-        CHECK(host.hitLog().hits().count("waypoint_add") == 1);
-        CHECK(host.hitLog().hits().at("waypoint_add").callCount == 1);
-        CHECK(host.hitLog().hits().at("waypoint_add").lastArgc == 3);
-        CHECK(host.hitLog().hits().at("waypoint_add").lastArgTypes == "number,string,boolean");
+        CHECK(host.hitLog().hits().count("zzz_generic_stub_example") == 1);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").callCount == 1);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").lastArgc == 3);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").lastArgTypes == "number,string,boolean");
         // Real per-state tracking (added same-day follow-up pass): a call
         // made against the gameplay state must be tallied under
         // gameplayCallCount, not uiCallCount - measured directly at the
-        // real call site, never inferred from waypoint_add's own
-        // registered cluster tag ("gameplay" here, but that's incidental
-        // to this check).
-        CHECK(host.hitLog().hits().at("waypoint_add").gameplayCallCount == 1);
-        CHECK(host.hitLog().hits().at("waypoint_add").uiCallCount == 0);
+        // real call site, never inferred from this name's own registered
+        // cluster tag ("gameplay" here, but that's incidental to this
+        // check).
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").gameplayCallCount == 1);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").uiCallCount == 0);
 
         // Calling it again accumulates the hit count (a real, whole-run
         // aggregate, not a per-call snapshot).
         {
-            auto r = host.runChunk(host.gameplayState(), "waypoint_add()", "chunk5");
+            auto r = host.runChunk(host.gameplayState(), "zzz_generic_stub_example()", "chunk5");
             CHECK(r.loadOk && r.pcallOk);
         }
-        CHECK(host.hitLog().hits().at("waypoint_add").callCount == 2);
-        CHECK(host.hitLog().hits().at("waypoint_add").lastArgc == 0);
-        CHECK(host.hitLog().hits().at("waypoint_add").lastArgTypes.empty());
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").callCount == 2);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").lastArgc == 0);
+        CHECK(host.hitLog().hits().at("zzz_generic_stub_example").lastArgTypes.empty());
     }
 
     // --- runChunk: a real syntax error and a real runtime error -----------
-    {
+static void test_block_3() {
         std::vector<RegisteredName> names; // no stubs needed for this fixture
         Host host(names);
 
@@ -307,7 +330,7 @@ int main() {
     }
 
     // --- fireConfirmedHooks: existence-gated Group 1/3 behavior ----------
-    {
+static void test_block_4() {
         std::vector<RegisteredName> names; // no stubs needed
         Host host(names);
         lua_State* L = host.gameplayState();
@@ -364,7 +387,7 @@ int main() {
     // --- fireConfirmedHooks: Group 2's real UNCONDITIONAL call (spec
     // Sec12.4) - existence is measured, but the call is attempted
     // regardless, unlike Group 1/3. -------------------------------------
-    {
+static void test_block_5() {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
@@ -401,7 +424,7 @@ int main() {
     // `repeat thread_yield() until <always-nil-returning stub>`, and
     // thread_yield is a genuine no-op on the main thread, so such a loop
     // would otherwise spin forever). --------------------------------
-    {
+static void test_block_6() {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
@@ -427,7 +450,7 @@ int main() {
     // CONFIRMED Sec26.27 behaviour (bare_globals.h; full tests in
     // tests/synthetic_luahost_bare_globals_test.cpp). thread_close stays the
     // ThreadScheduler scaffold's (not in the engine roster; OPEN). ---------
-    {
+static void test_block_7() {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
@@ -454,7 +477,7 @@ int main() {
     // right per-group split, every name non-empty, unique, and every
     // args list EMPTY except the small, explicitly-enumerated set spec
     // Sec14 gives a real argument contract for). -------------------------
-    {
+static void test_block_8() {
         const auto& hooks = confirmedHooks();
         CHECK(hooks.size() == 138);
         // Real, spec-confirmed (Sec14) per-hook argument counts - every
@@ -497,7 +520,7 @@ int main() {
     // literal number, a literal string, and the real per-call
     // scriptFilename context value for HookArgKind::ScriptFilenameString.
     // ------------------------------------------------------------------
-    {
+static void test_block_9() {
         std::vector<RegisteredName> names;
         Host host(names);
         lua_State* L = host.gameplayState();
@@ -538,7 +561,7 @@ int main() {
     // spec-lua-api-behaviour.md Sec5.3's own 5 real I/O vectors -
     // reproduced here exactly, byte-for-byte against those documented
     // vectors, not just "some hash." -----------------------------------
-    {
+static void test_block_10() {
         CHECK(EngineState::multiply33XorHashBucket("Tint_color", 0x20) == 0x5);
         CHECK(EngineState::multiply33XorHashBucket("continuous_spawn_start", 0x20) == 0x16);
         CHECK(EngineState::multiply33XorHashBucket("", 0x20) == 0x0);
@@ -568,7 +591,7 @@ int main() {
     // registration list's own 22 rows (same real cluster tags) - Host's
     // own real per-name-cluster split (lua_host.cpp) is exercised for
     // real, not bypassed. -------------------------------------------
-    {
+static void test_block_11() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         lua_State* ui = host.uiState();
@@ -768,35 +791,87 @@ int main() {
             CHECK(es.pegLoadRequests().back().filenames.empty());
         }
 
-        // 7. ai_add_enemy_target (Sec3.9): the #CLOSEST_PLAYER# sentinel
-        // bit, arg4's bit, the priority (truncated toward zero by 0x00ea2596,
-        // Sec4.1 settled 2026-10-01: 7.9 keys as "7"), and the always-true
-        // resolve-success return (this project's own minimal registry -
-        // see EnemyTargetRecord's own doc comment).
+        // 7. ai_add_enemy_target (Sec3.9, re-derived 2026-10-07, stub
+        // rewritten 2026-10-08, actor gate defaulted true 2026-10-08):
+        // actor must resolve, pass the shared "not dead" predicate, AND
+        // have descriptor-byte +0x33 bit 0x8 set (aiTargetActorGateBit33 -
+        // CHOSEN true by default since a resolved character is presumed
+        // already fully spawned, see that field's own doc comment,
+        // character_state.h); the "#CLOSEST_PLAYER#" sentinel is
+        // redirected to the literal "#PLAYER1#" BEFORE the target resolve
+        // (resolveClosestPlayerSentinel(), this project's single-player-
+        // only degenerate case); the bits are sourced from arg3 (==0/==2),
+        // not arg4/the sentinel match; arg4 fires a SEPARATE, record-free
+        // effect; the owner gate (aiTargetOwnerGatePasses, CHOSEN false)
+        // selects create-vs-fetch.
         {
-            // Name resolution is OPEN until set; unresolved -> false, no record.
+            // Actor unresolved -> OPEN, refuses.
             refusesOpen(gp, "ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true)", "named-object resolution");
             es.objectResolves().set("villain01", true);
-            es.objectResolves().set("#CLOSEST_PLAYER#", false);
-            auto r0 = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true) == false)", "enemy0.lua");
-            CHECK(r0.loadOk && r0.pcallOk);
+            // Actor resolved; the +0x33 bit 0x8 gate defaults true WITHOUT
+            // any explicit set - this is the fix itself (prior to
+            // 2026-10-08 this was an OpenValue that refused here instead).
+            CHECK(es.getOrCreateCharacter("villain01").aiTargetActorGateBit33 == true);
+            // Explicitly clear it to prove the implementation still
+            // honours an explicit false (not just always-true regardless
+            // of the field).
+            es.getOrCreateCharacter("villain01").aiTargetActorGateBit33 = false;
+            auto rGate = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true) == false)",
+                                        "enemy_gate_false.lua");
+            CHECK(rGate.loadOk && rGate.pcallOk);
             CHECK(es.getOrCreateCharacter("villain01").enemyTargets.empty());
-            es.objectResolves().set("#CLOSEST_PLAYER#", true);
+            es.getOrCreateCharacter("villain01").aiTargetActorGateBit33 = true;
+
+            // Gate passes now; target is "#CLOSEST_PLAYER#" -> redirected
+            // to "#PLAYER1#", which applySpecInitialState() already seeds
+            // resolved=true (spec-lua-api-behaviour.md Sec13.6/Sec29.4's
+            // own CONFIRMED pre-resolved player name - no extra setup
+            // needed here).
+            CHECK(es.objectResolves().get("#PLAYER1#") == true);
+
             auto r = host.runChunk(gp,
                 "local ok = ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 5, true)\n"
                 "assert(ok == true)",
                 "enemy1.lua");
             CHECK(r.loadOk && r.pcallOk);
             auto& actor = es.getOrCreateCharacter("villain01");
+            // Default owner gate is CHOSEN false ("common single-player
+            // case") -> unconditional create path, keyed by priority "5".
             CHECK(actor.enemyTargets.count("5") == 1);
             const auto& rec = actor.enemyTargets.at("5");
             CHECK(rec.priorityOrId == 5);
-            CHECK(rec.arg4Flag == true);
-            CHECK(rec.sentinelMatchFlag == true);
+            CHECK(rec.bit02ArgIsZero == false); // arg3 == 5, neither 0 nor 2
+            CHECK(rec.bit04ArgIsTwo == false);
+            CHECK(rec.createdNewRecord == true);
+            // arg4 true fired its OWN separate effect, redirected target name.
+            CHECK(actor.lastAiAddEnemyTargetArg4TargetName == "#PLAYER1#");
+            CHECK(actor.aiAddEnemyTargetArg4CallCount == 1);
+
+            // priority truncated toward zero (7.9 -> "7"); arg3==0/==2 bits.
             auto rt = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 7.9) == true)", "enemy_trunc.lua");
             CHECK(rt.loadOk && rt.pcallOk);
             CHECK(actor.enemyTargets.count("7") == 1 && actor.enemyTargets.count("8") == 0);
-            if (actor.enemyTargets.count("7")) CHECK(actor.enemyTargets.at("7").priorityOrId == 7);
+            CHECK(actor.aiAddEnemyTargetArg4CallCount == 1); // arg4 absent this time - no second fire
+            auto rZero = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 0) == true)", "enemy_zero.lua");
+            CHECK(rZero.loadOk && rZero.pcallOk);
+            CHECK(actor.enemyTargets.count("#PLAYER1#") == 1); // priority 0 -> keyed by the resolved target name
+            CHECK(actor.enemyTargets.at("#PLAYER1#").bit02ArgIsZero == true);
+
+            // Owner gate true -> fetch-existing path: a miss writes
+            // nothing (key "100" was never created).
+            actor.aiTargetOwnerGatePasses = true;
+            auto rFetchMiss = host.runChunk(gp, "assert(ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 100) == true)",
+                                             "enemy_fetch_miss.lua");
+            CHECK(rFetchMiss.loadOk && rFetchMiss.pcallOk);
+            CHECK(actor.enemyTargets.count("100") == 0); // CONFIRMED: fetch-miss writes nothing
+            // A pre-existing record at the same key DOES get updated.
+            actor.aiTargetOwnerGatePasses = false;
+            host.runChunk(gp, "ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 2)", "enemy_seed2.lua");
+            CHECK(actor.enemyTargets.at("2").createdNewRecord == true);
+            actor.aiTargetOwnerGatePasses = true;
+            host.runChunk(gp, "ai_add_enemy_target('villain01', '#CLOSEST_PLAYER#', 2)", "enemy_fetch_hit.lua");
+            CHECK(actor.enemyTargets.at("2").createdNewRecord == false); // fetch path - not re-created
+            CHECK(actor.enemyTargets.at("2").bit04ArgIsTwo == true);
         }
 
         // 8. on_take_damage (Sec3.13): the callback name lands on the
@@ -816,30 +891,43 @@ int main() {
         // name's ignore-AI is now a CONFIRMED default (off), applied by
         // EngineState::getOrCreateCharacter() itself - not OPEN - except
         // for the one path (a bound script NPC, Sec34.4) that correctly
-        // stays OPEN.
+        // stays OPEN. stateEnum ALSO now has a CONFIRMED spawn default
+        // (spec-player-runtime.md, 2026-10-08: constructor 0x00954340
+        // zeroes +0x16d4 unconditionally - see CharacterState::stateEnum's
+        // own doc comment) - a freshly touched character's "newly enabling"
+        // branch no longer refuses on stateEnum at all, it now reads a real
+        // 0 and falls through to the NEXT read, attackerThreatRef, which is
+        // still genuinely OPEN until test setup.
         {
             // CONFIRMED default (Sec34.1/Sec34.3): known immediately, off,
             // no .set() needed first.
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.known());
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
+            // CONFIRMED default (spec-player-runtime.md, 2026-10-08): known
+            // immediately, 0 ("not in a vehicle"), no .set() needed first.
+            CHECK(es.getOrCreateCharacter("npc_a").stateEnum.known());
+            CHECK(es.getOrCreateCharacter("npc_a").stateEnum.get() == 0);
             // Default arg2 (true) against the off default is "newly
-            // enabling", which reads stateEnum next - still OPEN until test
-            // setup, so THAT's what refuses now: the ignore-AI default-path
-            // fix moved this call's blocker forward by one field, it didn't
-            // remove the need for state-enum test setup on the enabling path.
-            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "state enum");
+            // enabling", which reads stateEnum (now a real, non-vehicle 0 -
+            // no refusal there) then falls through to attackerThreatRef -
+            // still OPEN until test setup, so THAT's what refuses now: both
+            // default-path fixes together moved this call's blocker forward
+            // by two fields from where it started.
+            refusesOpen(gp, "set_ignore_ai_flag('npc_a')", "attacker/threat");
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false); // unchanged: refused before any write
 
             es.getOrCreateCharacter("npc_a").ignoreAI.set(true); // test setup: simulate already-on
-            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch, stateEnum never read
+            auto r = host.runChunk(gp, "set_ignore_ai_flag('npc_a')", "ignoreai1.lua"); // no 2nd arg -> default true; already true -> no enable branch, stateEnum/attackerThreatRef never read
             CHECK(r.loadOk && r.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == true);
 
             auto r2 = host.runChunk(gp, "set_ignore_ai_flag('npc_a', false)", "ignoreai2.lua");
             CHECK(r2.loadOk && r2.pcallOk);
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
-            // Newly enabling with the state enum OPEN: refused, flag unchanged.
-            refusesOpen(gp, "set_ignore_ai_flag('npc_a', true)", "state enum");
+            // Newly enabling again: stateEnum's real 0 passes, attackerThreatRef
+            // is still OPEN (never set on npc_a in this test) -> refused, flag
+            // unchanged.
+            refusesOpen(gp, "set_ignore_ai_flag('npc_a', true)", "attacker/threat");
             CHECK(es.getOrCreateCharacter("npc_a").ignoreAI.get() == false);
 
             auto& npcB = es.getOrCreateCharacter("npc_b");
@@ -868,15 +956,34 @@ int main() {
 
         // 10./11. get_max_hit_points (Sec7.12) / set_current_hit_points
         // (Sec7.31): the round-trip this task's own brief specifically
-        // asked for. Default max=100 (this project's own chosen default);
-        // set_current_hit_points clamps into [0, max], leaves max
+        // asked for. set_current_hit_points clamps into [0, max], leaves max
         // untouched (CONFIRMED cross-check, same field); un-gated numeric
         // arg 2 omission resolves to 0 (CONFIRMED); clamped<=0 sets the
         // HIGH-CONFIDENCE-only isDeadHighConfidence flag.
+        //
+        // UPDATE 2026-10-07 (Sec60.4's own closure; probe_blockers_ranked_
+        // 20261007.md item 2, mission `m18`): max hit points is no longer
+        // left OPEN for an ordinary, never-touched character -
+        // drawOrGetMaxHitPoints() (engine_state.h/lua_engine_state.cpp)
+        // draws once and caches. No real spawn-rank table is installed in
+        // this synthetic test (installSpawnRankHitPoints() never called),
+        // so the draw falls back to the single CHOSEN diagnostic constant,
+        // 100 - the exact value this test already asserts below, now via
+        // the real default path rather than an explicit .set().
         {
-            // Max hit points are OPEN until set (no invented 100).
-            refusesOpen(gp, "get_max_hit_points('hero')", "max hit points");
-            refusesOpen(gp, "set_current_hit_points('hero', 50)", "max hit points");
+            auto r0 = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp0.lua");
+            CHECK(r0.loadOk && r0.pcallOk);
+            CHECK(es.getOrCreateCharacter("hero").maxHitPoints.known() &&
+                  es.getOrCreateCharacter("hero").maxHitPoints.get() == 100);
+            // set_current_hit_points on a DIFFERENT, still-untouched name
+            // draws (and caches) the same CHOSEN fallback for its own cap
+            // read - no explicit .set() needed either.
+            auto rcap = host.runChunk(gp, "set_current_hit_points('capdraw', 999)", "hp_capdraw.lua");
+            CHECK(rcap.loadOk && rcap.pcallOk);
+            CHECK(es.getOrCreateCharacter("capdraw").currentHitPoints.get() == 100); // clamped to the drawn cap
+            // Re-asserting .set() still wins outright (explicit value, not
+            // overwritten by the draw) - same "seed on first touch, don't
+            // clobber" convention as every other field in this file.
             es.getOrCreateCharacter("hero").maxHitPoints.set(100);
             auto r = host.runChunk(gp, "assert(get_max_hit_points('hero') == 100.0)", "hp1.lua");
             CHECK(r.loadOk && r.pcallOk);
@@ -912,10 +1019,14 @@ int main() {
             // EngineState::applyCharacterSpawnDefaults() once a caller
             // supplies a resolved Hit_Points value (this project has no way
             // to attach one to a bare name on its own - see
-            // CharacterState::maxHitPoints's own doc comment - so a fresh
-            // name with no such call still stays OPEN, same as 'hero' above;
-            // not a regression).
-            refusesOpen(gp, "get_max_hit_points('grunt')", "max hit points");
+            // CharacterState::maxHitPoints's own doc comment). A fresh name
+            // with no such call no longer stays OPEN (2026-10-07, same
+            // update as 'hero'/'capdraw' above) - it would draw-and-cache
+            // the CHOSEN 100 fallback instead, exactly like 'hero' did, but
+            // applyCharacterSpawnDefaults()'s own unconditional set() below
+            // overwrites that regardless of which ran first, so 'grunt'
+            // ends up at the real 150 either way - demonstrated directly by
+            // skipping the draw here (not calling get_max_hit_points first).
             es.applyCharacterSpawnDefaults("grunt", 150); // M=1.0: round(1.0*150) = 150
             CHECK(es.getOrCreateCharacter("grunt").maxHitPoints.get() == 150);
             CHECK(es.getOrCreateCharacter("grunt").currentHitPoints.get() == 150); // Sec34.1 step 2: spawns at full health
@@ -938,6 +1049,42 @@ int main() {
             CHECK(es.getOrCreateCharacter("maybe_scripted").maxHitPoints.known());
             es.markScriptNpcBoundForTesting("maybe_scripted");
             refusesOpen(gp, "get_max_hit_points('maybe_scripted')", "max hit points");
+
+            // UPDATE 2026-10-08 (zone-data fast-follow, orchestrator follow-up
+            // to commit 50bdb29): once a caller DOES already know a specific
+            // script-NPC-bound character's own script_npc_hp value
+            // (sr3zone::ScriptNpcHp(), spec-zone-data-format.md Sec11.7 - this
+            // project still has no by-name resolver that finds that value on
+            // its own; see CharacterState::scriptNpcHp's own doc comment -
+            // this is the SAME "caller supplies it" pattern
+            // applyCharacterSpawnDefaults() already uses for the table case),
+            // spec-lua-api-behaviour.md Sec34.2's own CONFIRMED precedence
+            // applies: >= 1 wins verbatim over the table. 60000 is the real
+            // value Sec34.2's own cross-reference (spec-zone-data-format.md
+            // Sec11.7) records for Killbane's two full-fight copies.
+            es.applyScriptNpcHitPointsForTesting("scripted_boss", 60000);
+            auto rboss = host.runChunk(gp, "assert(get_max_hit_points('scripted_boss') == 60000.0)", "hp_scriptnpc1.lua");
+            CHECK(rboss.loadOk && rboss.pcallOk);
+            CHECK(es.getOrCreateCharacter("scripted_boss").maxHitPoints.get() == 60000);
+
+            // Sec34.2's own text: a KNOWN value < 1 is the script NPC
+            // constructor's own -1 "use the table" default and falls through
+            // to the ordinary draw, same as a non-scriptNpcBound character -
+            // not left OPEN merely because scriptNpcBound is true.
+            es.applyScriptNpcHitPointsForTesting("scripted_unset", -1);
+            auto runset = host.runChunk(gp, "assert(get_max_hit_points('scripted_unset') == 100.0)",
+                                        "hp_scriptnpc2.lua"); // CHOSEN fallback (no spawn-rank table installed in this test)
+            CHECK(runset.loadOk && runset.pcallOk);
+            CHECK(es.getOrCreateCharacter("scripted_unset").maxHitPoints.get() == 100);
+
+            // Still genuinely OPEN when no override value was ever supplied
+            // at all - the only state any REAL production path in this
+            // project reaches today, since no by-name zone-record resolver
+            // exists (Sec34.4's own "cannot be determined from code alone").
+            // Not a regression: same refusal 'maybe_scripted' above already
+            // demonstrates, just restated for the new scriptNpcHp field.
+            es.markScriptNpcBoundForTesting("scripted_unknown");
+            refusesOpen(gp, "get_max_hit_points('scripted_unknown')", "max hit points");
         }
 
         // 12. ai_clear_scripted_action (Sec7.24): the confirmed resolve
@@ -1093,15 +1240,29 @@ int main() {
             CHECK(std::string(EngineState::tutorialName(122)) == "vehicle entry");
             CHECK(std::string(EngineState::tutorialName(189)) == "dlc1_act_genki_escort_into");
             CHECK(std::string(EngineState::tutorialName(209)) == "dlc3_win");
-            CHECK(EngineState::tutorialName(176) == nullptr && EngineState::tutorialName(210) == nullptr);
+            // UPDATE 2026-10-08 (Sec6.19 full re-transcription, commit 3816870):
+            // index 176 is "dlc" - no longer nullptr/OPEN (see
+            // lua_tutorial_names.cpp's own top comment for the full account).
+            CHECK(std::string(EngineState::tutorialName(176)) == "dlc" && EngineState::tutorialName(210) == nullptr);
             int named = 0;
             for (int i = 0; i < EngineState::kTutorialEntryCount; ++i) named += EngineState::tutorialName(i) ? 1 : 0;
-            CHECK(named == 209);
+            CHECK(named == 210); // all 210 now named (was 209 before the 176 fix above)
             CHECK(EngineState::tutorialLookup("AutoSave").index == 1);
             CHECK(EngineState::tutorialLookup("escort_minigame").index == 36); // also at 129: first wins
             CHECK(EngineState::tutorialLookup("TUT_SIXAXIS_BOAT").index == 185);
             CHECK(EngineState::tutorialLookup("hint_grab_weapon").index == -1);
+            CHECK(EngineState::tutorialLookup("dlc").index == 176 && !EngineState::tutorialLookup("dlc").couldBeIndex176); // the fixed entry itself resolves directly now
             CHECK(!EngineState::tutorialLookup("hint_grab_weapon").couldBeIndex176);
+            // NOTE: couldBeIndex176's own heuristic (lua_engine_state.cpp) is
+            // UNCHANGED by the 176 fix above - it still flags any short/non-
+            // ASCII unmatched name this way, even though entry 176's identity
+            // is no longer genuinely ambiguous (see lua_tutorial_names.cpp's
+            // own top comment) - a harmless, now-vestigial false positive
+            // (tutorial_advance's own stub only acts on it when it would
+            // actually change the answer - never the case now that 176 is
+            // known, see stub_tutorial_advance's own body), not re-derived
+            // here to avoid touching this project's established convention
+            // for an unrelated native's (tutorial_advance) own behaviour.
             CHECK(EngineState::tutorialLookup("ab").couldBeIndex176);                // < 4 characters
             CHECK(EngineState::tutorialLookup("s\xe9ve_x").couldBeIndex176);         // non-ASCII
             CHECK(!EngineState::tutorialLookup("save").couldBeIndex176);              // matched before 176
@@ -1309,10 +1470,14 @@ int main() {
             check("zscene_prep('scene_b')", "zp3.lua");               // already current: no change
             CHECK(!es.zscenePending().known() && es.zsceneStateCode().get() == 2);
             // Teardown of the current scene reads the cutscene guard (cutscene
-            // state 0x0153b520 in 7..13 with a manager whose +8 == 1), then
-            // the handle class; refused with nothing written.
-            refuses("zscene_prep('scene_c')", "0x0153b520");
-            CHECK(!es.zscenePending().known());
+            // state 0x0153b520 in 7..13 with a manager whose +8 == 1). Both
+            // the cutscene state and its manager pointer are zero-fill .data
+            // with no static initializer (spec-lua-api-behaviour.md Sec60.4,
+            // 2026-10-07 closure of the mm_p_06 blocker) - CONFIRMED known at
+            // construction (idle/0, no cutscene ever played), not OPEN - the
+            // explicit guard-off re-check a few lines below already covers
+            // the "reaches the handle class next" behaviour this enables.
+            CHECK(es.cutsceneState().known() && es.cutsceneState().get() == 0);
             es.cutsceneState().set(8);
             es.cutsceneManager().present.set(true);
             es.cutsceneManager().field8.set(1);                       // under a cutscene: no teardown
@@ -1548,7 +1713,7 @@ int main() {
     // batch 2026-10-01), through Lua: the real completion path (the UI
     // script calls Screen_fade_transition_complete), the two labelled
     // host-substitute fallbacks, and the per-frame routine.
-    {
+static void test_block_12() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         lua_State* ui = host.uiState();
@@ -1745,7 +1910,7 @@ int main() {
     // calls the in-flight callback with the TARGET, handles the deferred slot,
     // and a settled request calls back at once. No UI state attached here,
     // so screen_fade_do counts as undefined.
-    {
+static void test_block_13() {
         EngineState es;
         sr3luahost::applySpecInitialState(es);
         auto& f = es.screenFade();
@@ -1787,7 +1952,7 @@ int main() {
     }
 
     // --- UI resolution queries (Sec26.26) through Lua.
-    {
+static void test_block_14() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         lua_State* ui = host.uiState();
@@ -1854,9 +2019,9 @@ int main() {
         refuses("vint_get_safe_frame()", "tie");
     }
 
-    // --- Hook evidence labels (spec-lua-bindings.md §4 desk review,
+    // --- Hook evidence labels (spec-lua-bindings.md Â§4 desk review,
     // 2026-09-30): nothing removed, every Group 1 name labelled.
-    {
+static void test_block_15() {
         int sec8 = 0, pending = 0, refuted = 0, groupLevel = 0;
         for (const auto& h : sr3luahost::confirmedHooks()) {
             switch (h.evidence) {
@@ -1882,7 +2047,7 @@ int main() {
     // --- Engine-state slot inventory and applySpecInitialState (batch
     // 2026-10-01): the CONFIRMED start-up values are set, everything else
     // stays OPEN.
-    {
+static void test_block_16() {
         sr3luahost::EngineState es;
         sr3luahost::applySpecInitialState(es);
         const auto inv = es.openSlotInventory();
@@ -1910,47 +2075,88 @@ int main() {
         // ("ranking16", 2026-10-03 - spawnOverride_.categoryNameResolves;
         // see lua_spec_confirmed_stubs.cpp's own Sec49 batch header - the
         // rest of that batch's own new fields are likewise CHOSEN plain
-        // bools/per-entity maps, so only this 1 lands here) are each
-        // counted separately (dynamically, via perArea) so every batch's
-        // own check stays independent of the others' exact row counts.
+        // bools/per-entity maps, so only this 1 lands here), and the Batch 7
+        // fan-out area ("tranche03batch7", 2026-10-08 - pathfindResult_,
+        // rcSignalRange_, bossBattleMatt_.npcBahamutResolves/
+        // avatarModelResolves/styleTestPcResolves; see
+        // lua_spec_confirmed_stubs_b14_batch7_tranche03.cpp's own Sec30
+        // batch header - the rest of that batch's own new fields are
+        // CHOSEN plain fields/per-character-or-vehicle OpenValue fields,
+        // not centrally inventoried here, same existing precedent), and
+        // Batch 3's own area (2026-10-08, Sec11+Sec12, results/
+        // lua_natives_sec10_28_fanout_scoping_20261008.md - "batch3_pcr_
+        // vehicle", 9 rows: pcrPlasticSurgeonMode_, pcrMorph_.
+        // sessionResolves/slotResolves, pcuStreaming_.rowCounterPending/
+        // listMembershipPending, hordeModeActive_, storeCameraPreset_.
+        // presetResolves, pauseMenuOptions_.acceptGatePasses,
+        // vintRemapStaging_.dialogAlreadyOpen; the rest of that batch's
+        // own new fields are likewise CHOSEN plain bools/per-entity maps
+        // or per-character/per-vehicle fields, not centrally inventoried
+        // here either) are each counted separately (dynamically, via
+        // perArea) so every batch's own check stays independent of the
+        // others' exact row counts.
         CHECK(inv.size() == 60u + static_cast<size_t>(perArea["batch2728"]) +
                              static_cast<size_t>(perArea["batch3132"]) +
                              static_cast<size_t>(perArea["ranking0608"]) +
                              static_cast<size_t>(perArea["batch444546"]) +
                              static_cast<size_t>(perArea["ranking16"]) +
-                             static_cast<size_t>(perArea["player"]));
+                             static_cast<size_t>(perArea["player"]) +
+                             static_cast<size_t>(perArea["tranche03batch7"]) +
+                             static_cast<size_t>(perArea["batch3_pcr_vehicle"]) +
+                             static_cast<size_t>(perArea["wave2w21"])); // wave 2 batch W2-1 (b15), 2 rows
+        CHECK(perArea["batch3_pcr_vehicle"] == 9 && knownPerArea["batch3_pcr_vehicle"] == 0); // all start OPEN/empty
         // Player runtime batch (2026-10-03): the lock-handle global 0x0263ae3c,
         // CONFIRMED null at session/mission start (spec-player-runtime.md
         // Sec2.10, self-balancing - see applySpecInitialState()'s own item 11).
         CHECK(perArea["player"] == 1 && knownPerArea["player"] == 1);
+        // Wave 2 batch W2-1 (b15): move_to_do's action-id counter 0x0130cb94
+        // and 0x00b24fa0's raw result - both genuinely OPEN at start-up.
+        CHECK(perArea["wave2w21"] == 2 && knownPerArea["wave2w21"] == 0);
         CHECK(perArea["co-op"] == 6 && perArea["tutorial"] == 1 && perArea["vehicle-store"] == 1);
         CHECK(perArea["zscene"] == 13 && perArea["cutscene"] == 10 && perArea["fade"] == 14 &&
               perArea["vint"] == 11 && perArea["other"] == 4);
         CHECK(perArea["ranking0608"] == 3 && knownPerArea["ranking0608"] == 0); // all 3 start OPEN/empty
         CHECK(perArea["ranking16"] == 1 && knownPerArea["ranking16"] == 0);     // starts OPEN/empty
+        CHECK(perArea["tranche03batch7"] == 5 && knownPerArea["tranche03batch7"] == 0); // all 5 start OPEN
         CHECK(knownPerArea["co-op"] == 1 && knownPerArea["tutorial"] == 1 && knownPerArea["vehicle-store"] == 1);
         // vint: the two safe-frame constants (CONFIRMED, nnlt) are set at start;
         // vintTimeIndexByDoc_ (a per-name map) starts empty (OPEN, Sec19.1), so
         // it doesn't add to the known count.
-        // zscene: the skip byte 0x0153b556 (false, Sec26.25 Globals, 2026-10-01)
-        // and the current entry 0x0153b530 (null, Sec26.25 Globals, 2026-10-02).
+        // zscene: the skip byte 0x0153b556 (false, Sec26.25 Globals, 2026-10-01),
+        // the current entry 0x0153b530 (null, Sec26.25 Globals, 2026-10-02),
+        // the re-queue-on-reset byte 0x0153b542 (false, CONFIRMED permanently
+        // zero in practice) and the nearest scene-bearing world object list
+        // 0x03171a64 (""/none found, CONFIRMED - no world-object manager
+        // exists in this host) - 4, not 2, since 2026-10-09 (the zscene_prep
+        // / mm_p_06 + mm_p_01 blocker fix). The per-entry handle class
+        // 0x00dafb60 stays unknown here (0 keys): its own real default is
+        // written narrowly at promotion time (zscenePromotionStep), not at
+        // construction - see engine_state.h's own doc comment.
         // other: objectResolves_ now carries 5 known entries (Sec29's closed
         // literal set - "homies"/"shopkeepers"/"-- Cutscene Script Group --"/
         // "#PLAYER1#"/"#PLAYER2#"), so its one inventory record counts as known.
-        CHECK(knownPerArea["zscene"] == 2 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 12 &&
+        // fade: 13, not 12, since 2026-10-07 (Sec60.4's closure) -
+        // applySpecInitialState now also sets the cutscene state 0x0153b520
+        // to 0 ("idle"); only modeStackTop stays OPEN in this area now.
+        CHECK(knownPerArea["zscene"] == 4 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 13 &&
               knownPerArea["vint"] == 2 && knownPerArea["other"] == 1);
         for (const auto& r : inv) {
             if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
             if (r.global.find("0x0151d600") != std::string::npos) CHECK(r.knownKeys == 210);
             if (r.global.find("0x022cdf08") != std::string::npos) CHECK(r.known);
             if (r.global.find("mode stack") != std::string::npos) CHECK(!r.known);
-            if (r.global.find("0x0153b520") != std::string::npos) CHECK(!r.known);
+            if (r.global.find("0x0153b520") != std::string::npos) CHECK(r.known); // 2026-10-07, Sec60.4
             if (r.global.find("0x012f44fc") != std::string::npos) CHECK(!r.known);
+            if (r.global.find("0x009df3d0") != std::string::npos) CHECK(r.known); // 2026-10-09, applySpecInitialState item 13 (Sec28.12)
         }
         // Values (spec text): co-op none; store flag 0; fade globals at their
         // file values; tutorial states after the fill.
         CHECK(es.coopSession().present.get() == false);
         CHECK(!es.coopIsActive() && !es.coopLocalIsHost() && !es.coopLocalIsClient());
+        // 0x009df3d0 (second/co-op player non-null, Sec28.12): no second
+        // client ever joins this host's roster - applySpecInitialState item
+        // 13, 2026-10-09.
+        CHECK(es.playerRig().coopPlayerPresent.get() == false);
         CHECK(es.vehicleStoreActive().get() == false);
         const auto& f = es.screenFade();
         CHECK(f.state.get() == 2 && f.target.get() == 2 && f.flag.get() == 0 && !f.documentLoaded.get());
@@ -1959,11 +2165,19 @@ int main() {
         // 0x0149365c: set to 1 by the start-up 0x005d1a30 (Sec26.24, nnlt).
         CHECK(f.autoSaveCounter.get() == 0 && f.useLoadImages.get() && !f.lastBroadcastWasOut.get());
         CHECK(f.inFlight == nullptr && f.deferred == nullptr);
+        // 0x0153b520: idle (0) at start - Sec60.4, 2026-10-07 closure of the mm_p_06 blocker.
+        CHECK(f.cutsceneState.known() && f.cutsceneState.get() == 0);
         for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
             CHECK(es.tutorialState().get(EngineState::tutorialStateKey(i)) == (i <= 188 ? 0 : 1));
         CHECK(es.zsceneSkipAllCutscenes().known() && es.zsceneSkipAllCutscenes().get() == false);
         CHECK(es.zsceneCurrent().known() && es.zsceneCurrent().get().empty()); // 0x0153b530 null at start
+        // 0x0153b542 CONFIRMED permanently false; the nearest-world-object
+        // query CONFIRMED "" (no world-object manager in this host) - both
+        // 2026-10-09, zscene_prep blocker fix.
+        CHECK(es.zsceneRequeueOnReset().known() && es.zsceneRequeueOnReset().get() == false);
+        CHECK(es.zsceneNearestWorldObjectScene().known() && es.zsceneNearestWorldObjectScene().get().empty());
         CHECK(!es.zsceneStateCode().known() && !es.zscenePending().known());
+        CHECK(!es.zsceneAutoSelectNearest().known()); // no spec gives this one's start-up value
         CHECK(!es.vintDisplayMode().known() && !es.vintRecordFirst().known());
         CHECK(es.vintSafeFrameScale1().get() == static_cast<double>(0.075f) &&
               es.vintSafeFrameScale2().get() == static_cast<double>(0.925f));
@@ -2000,7 +2214,7 @@ int main() {
     // confirms engine code registers unconditionally - everything else,
     // including a mission character's own fixed name, must stay OPEN. This
     // is a regression guard against ever accidentally widening the set.
-    {
+static void test_block_17() {
         sr3luahost::EngineState es;
         sr3luahost::applySpecInitialState(es);
         auto& resolves = es.objectResolves();
@@ -2039,7 +2253,7 @@ int main() {
     // ("male_white", Gender=0) - the mechanism that resolves mission m21's
     // "character +0xa41 gender byte (1=female, else male)['#PLAYER1#'] is
     // OPEN" blocker.
-    {
+static void test_block_18() {
         sr3luahost::EngineState raw; // no applySpecInitialState: the sentinel is never directly observable
         CHECK(!raw.characterGender().known("#PLAYER1#"));
         bool threw = false;
@@ -2075,7 +2289,7 @@ int main() {
     // this is the actual mechanism that closes the dlc3_m01/m19/etc.
     // blocker, since set_time_of_day's own forward-delta arithmetic reads
     // the current hour/minute before anything else.
-    {
+static void test_block_19() {
         sr3luahost::EngineState raw;
         CHECK(!raw.gameClock().hour.known() && !raw.gameClock().minute.known());
 
@@ -2125,7 +2339,7 @@ int main() {
     // vint_internal_dataresponder_request (Sec21). Same "exercised through
     // the real Lua-visible global, a genuine round-trip through the real
     // Lua 5.1 C API" convention as every other spec-confirmed test above.
-    {
+static void test_block_20() {
         Host host(specConfirmedFixtureNames());
         lua_State* ui = host.uiState();
         lua_State* gp = host.gameplayState();
@@ -2348,7 +2562,7 @@ int main() {
     // tranche 05", 25 names) + the Sec14.1 0x0095da50 correction. Same
     // "exercised through the real Lua-visible global" convention as every
     // other spec-confirmed test above.
-    {
+static void test_block_21() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         sr3luahost::EngineState& es = host.engineState();
@@ -2695,7 +2909,7 @@ int main() {
     // opposite emphasis - true for DONE or NO REQUEST, false only while
     // GENUINELY PENDING) - this block pins the corrected polarity
     // directly so that mistake can never silently return.
-    {
+static void test_block_22() {
         Host host(specConfirmedFixtureNames());
         lua_State* gp = host.gameplayState();
         sr3luahost::EngineState& es = host.engineState();
@@ -2775,6 +2989,30 @@ int main() {
             CHECK(host.hitLog().hits().at(name).callCount >= 1);
         }
     }
+
+int main() {
+    test_block_1();
+    test_block_2();
+    test_block_3();
+    test_block_4();
+    test_block_5();
+    test_block_6();
+    test_block_7();
+    test_block_8();
+    test_block_9();
+    test_block_10();
+    test_block_11();
+    test_block_12();
+    test_block_13();
+    test_block_14();
+    test_block_15();
+    test_block_16();
+    test_block_17();
+    test_block_18();
+    test_block_19();
+    test_block_20();
+    test_block_21();
+    test_block_22();
 
     if (g_failures == 0) {
         std::cout << "ALL sr3luahost SYNTHETIC TESTS PASSED\n";

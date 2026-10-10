@@ -19,6 +19,7 @@
 
 #include "sr3locstr/le_strings.h"
 #include "vpp/container.h"
+#include "vppcache/archive_cache.h"
 
 using namespace sr3locstr;
 namespace fs = std::filesystem;
@@ -52,11 +53,6 @@ bool readEntry(const vpp::Container& c, const std::string& name, std::vector<uin
     return false;
 }
 
-std::vector<uint8_t> loadFile(const fs::path& p) {
-    std::ifstream in(p, std::ios::binary);
-    return std::vector<uint8_t>(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-}
-
 std::u16string u16(const char* s) {
     std::u16string out;
     for (; *s; ++s) out.push_back(static_cast<char16_t>(static_cast<unsigned char>(*s)));
@@ -72,8 +68,12 @@ int main() {
         std::cout << "SKIP: " << miscPath.string() << " not present\n";
         return 77;
     }
-    std::vector<uint8_t> miscBytes = loadFile(miscPath);
-    vpp::Container misc(vpp::ByteView(miscBytes.data(), miscBytes.size()));
+    // Through the persistent decoded-asset cache (2026-10-08 task): same
+    // vpp::Container, same byte-for-byte decompressEntry() results as the
+    // old loadFile()+Container(...) pair - see vppcache/archive_cache.h's
+    // file comment for why this is a safe drop-in.
+    auto miscOpened = vppcache::openArchive(miscPath);
+    const vpp::Container& misc = miscOpened->container;
 
     // --- Sec2.4's own worked example, parsed directly (never loaded by
     // the lookup - voice_script is excluded, Sec2.5/Sec5.3 - but still a
@@ -134,8 +134,8 @@ int main() {
     // patch0 lives in patch_compressed.vpp_pc (Sec1), optional for this test.
     const fs::path patchPath = cache / "patch_compressed.vpp_pc";
     if (fs::exists(patchPath)) {
-        std::vector<uint8_t> patchBytes = loadFile(patchPath);
-        vpp::Container patch(vpp::ByteView(patchBytes.data(), patchBytes.size()));
+        auto patchOpened = vppcache::openArchive(patchPath);
+        const vpp::Container& patch = patchOpened->container;
         std::vector<uint8_t> bytes;
         if (readEntry(patch, "patch0_us.le_strings", bytes) && !bytes.empty()) {
             LeStringsTable t = parseLeStrings(bytes);

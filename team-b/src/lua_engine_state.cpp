@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "sr3luahost/save_game_bridge.h"
 #include "sr3luahost/vint_property_types.h"
 #include "sr3save/save_crc.h"
 #include "sr3vintdoc/vint_doc.h"
@@ -33,6 +34,34 @@ int32_t RoundHalfAwayFromZero(double x) {
     return static_cast<int32_t>(t);
 }
 
+// FIX 2026-10-08 (same investigation as the Sec34.2/script_npc_hp fix just
+// above - a sibling defect found in the identical code path, EngineState::
+// loadZoneObjectsSection() below, for the ignore-AI override instead of
+// max HP): spec-lua-api-behaviour.md Sec34.3's own CONFIRMED mechanism is
+// "the flag-name table (0x00a33ff0, built once at startup) hashes
+// 'ignore_ai' to mask 0x00001000" against the record's own space-separated
+// `script_npc_flags` string (Sec11.7's own real example, "never_pickup_
+// weapons ignore_ai should_not_be_grabbed dont_drop_cash use_default_
+// loadout") - i.e. the real engine tokenizes on whitespace and matches
+// each whole token against its flag-name table, not a raw substring probe
+// over the whole string. Implemented here as the real, confirmed
+// tokenization rather than find()/substring (Sec11.7's own "425 of 6,702
+// literally contain the string 'ignore_ai'" population figure is this
+// project's and Team A's shared PROXY measurement for that scan, not a
+// claim that substring matching is the real mechanism).
+bool ScriptNpcFlagsHasIgnoreAiToken(const std::string& flags) {
+    size_t pos = 0;
+    while (pos < flags.size()) {
+        size_t start = flags.find_first_not_of(" \t\r\n", pos);
+        if (start == std::string::npos) break;
+        size_t end = flags.find_first_of(" \t\r\n", start);
+        if (end == std::string::npos) end = flags.size();
+        if (flags.compare(start, end - start, "ignore_ai") == 0) return true;
+        pos = end;
+    }
+    return false;
+}
+
 } // namespace
 
 EngineState::EngineState() {
@@ -41,6 +70,25 @@ EngineState::EngineState() {
     controlStateMachine_.setClearLatched([this] { inputSystem_.clearLatched(); });
     // Sec1.4 step 5: the latch reads the current control state (0x005aa630).
     inputSystem_.setControlStateGetter([this] { return controlStateMachine_.currentState(); });
+
+    // CONFIRMED (spec-lua-api-behaviour.md Sec21.27a, 2026-10-08): the real
+    // mission-phase machine (0x014c7a14) starts at phase 0 ("idle - no
+    // mission bound") with the context pointer (0x014c8460) null, per the
+    // engine's own start-up initialiser 0x006d6010 - so every "context
+    // non-null AND phase != 8" gate this project tracks is a KNOWN false
+    // before any mission is ever bound, not an unmodelled value. See
+    // EngineState::beginMissionPhaseTracking()'s own doc comment (this
+    // header's MissionContext section) for the companion "mission started"
+    // transition and the full root-cause history (probe_blockers_ranked_
+    // 20261008_post_resolver_merge.md item 2, 12/49 missions).
+    missionContext_.activeAndRunning.set(false);
+    inProgressType_.activeMissionPresent.set(false);
+    missionExcludedRewards_.activeAndRunning.set(false);
+
+    // spec-save-format.md Sec15 wiring (2026-10-08): a clearly-labelled
+    // scratch default (see save_game_bridge.h's defaultSaveGameDirectory()
+    // for why), never a real game save-data location.
+    saveGameDirectory_ = defaultSaveGameDirectory();
 }
 
 CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
@@ -71,6 +119,27 @@ CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
     // CharacterState::controlsDisabled/movementDisabled's own doc comments.
     c.controlsDisabled.set(false);
     c.movementDisabled.set(false);
+    // HIGH CONFIDENCE (spec-player-runtime.md Sec2.10 "Question B",
+    // bit-sense polarity resolved 2026-10-08): the third bit at the SAME
+    // +0x1d99 byte, actionsEnableBit20_1d99 (despite its own "Enable" name,
+    // a disabled-sense bit - see its own doc comment), is likewise all-clear
+    // (enabled) at spawn - Sec2.10 names and seeds all three bits together
+    // ("controls/movement/actions disabled ... all clear (0) - enabled").
+    c.actionsEnableBit20_1d99.set(false);
+    // HIGH CONFIDENCE (batch 3, 2026-10-08): gate 0x008addb0 for
+    // player_parachute_wear_backpack (Sec12.28) is the SAME address
+    // controlLockGatePasses above already resolves true for - see
+    // CharacterState::parachuteBackpackGatePasses's own doc comment.
+    c.parachuteBackpackGatePasses.set(true);
+    // CONFIRMED (spec-player-runtime.md, 2026-10-08): constructor 0x00954340
+    // zeroes +0x16d4 unconditionally for every newly-constructed character
+    // (0x00954be8, edi traced back to a single xor edi,edi with no
+    // redefinition before the write) - the object's real default/initial
+    // value, not a fifth vehicle-occupancy transition state. Closes
+    // CharacterState::stateEnum's own previously-OPEN spawn-default question
+    // (see that field's own doc comment for the full history: the m05/m21/
+    // m09 +0x16d4 bucket this settles).
+    c.stateEnum.set(0);
     return c;
 }
 
@@ -102,6 +171,83 @@ void EngineState::applyCharacterSpawnDefaults(const std::string& name, uint32_t 
     c.ignoreAI.set(false);          // Sec34.1 step 3 / Sec34.3: re-cleared, redundant with getOrCreateCharacter's own default but explicit here too
 }
 
+// The damage-apply sink's authoritative-branch core (spec-player-runtime.md
+// Sec15.3a) - see this method's own declaration (engine_state.h) for why it
+// is factored out of stub_character_damage. `targetName` must already be a
+// resolved, created character (the caller's own job); `sourceName` empty
+// means "no resolved instigator."
+void EngineState::applyCharacterDamage(const std::string& targetName, const std::string& sourceName, float amount) {
+    CharacterState& c = getOrCreateCharacter(targetName);
+    int32_t resistancePercent = 100; // CHOSEN neutral default - no instigator, or instigator's own scale unset
+    if (!sourceName.empty()) resistancePercent = getOrCreateCharacter(sourceName).instigatorDamageScalePercent;
+    double scaled = static_cast<double>(amount) * (static_cast<double>(resistancePercent) / 100.0);
+    bool instigatorIsPlayerClass = !sourceName.empty() && playerClassChainResolves(sourceName);
+    if (instigatorIsPlayerClass) scaled *= static_cast<double>(damageDealtDifficultyMultiplier());
+
+    // CORRECTED (this pass): maxHitPoints is resolved through
+    // drawOrGetMaxHitPoints(), NOT a direct c.maxHitPoints.get() - the exact
+    // same Sec60.4 lazy-draw convention get_max_hit_points and
+    // set_current_hit_points already use for this field (see that method's
+    // own doc comment: "this cap is resolved the same way regardless of
+    // which of the two natives a script calls first"). character_damage is
+    // a third such native; calling .get() directly here would reintroduce
+    // the exact OpenStateError-for-an-ordinary-character regression Sec60.4
+    // already fixed (probe_blockers_ranked_20261007.md item 2, 26/49
+    // missions) for any character damaged before its cap was ever queried
+    // or explicitly set. currentHitPoints has NO equivalent lazy-draw
+    // anywhere in this project (get_current_hit_points doesn't do it either)
+    // - staying OPEN until set is the established, uniform behavior for
+    // that field, not a gap introduced here.
+    int32_t maxHp = drawOrGetMaxHitPoints(targetName);
+    int32_t oldHp = c.currentHitPoints.get();  // OPEN until set
+    // 0x0094d520(delta) -> 0x0094cfc0(value), clamped [0, maxHitPoints]. The
+    // real engine's own separate force-snap-to-0.0 pre-write on "a clearly
+    // lethal hit" is a float-precision-only safety measure that collapses
+    // into this exact clamped result once health is int32 (see this
+    // method's own declaration doc comment) - not reproduced as a literal
+    // second write.
+    double newHpD = std::clamp(static_cast<double>(oldHp) - scaled, 0.0, static_cast<double>(maxHp));
+    int32_t newHp = static_cast<int32_t>(std::lround(newHpD));
+    c.currentHitPoints.set(newHp);
+    c.lastDamageMagnitude = std::max(static_cast<double>(oldHp - newHp), 0.0); // +0x1584: max(-delta, 0)
+
+    if (newHp <= 0) finalizeLethalCharacter(c, targetName);
+}
+
+// Shared death-transition/ragdoll-or-finalize tail - see this method's own
+// declaration (engine_state.h, private) for why it is factored out.
+void EngineState::finalizeLethalCharacter(CharacterState& c, const std::string& targetName) {
+    c.isDeadHighConfidence = true; // this project's own pre-existing "HP reached zero" stand-in (Sec7.31)
+    if (!c.lethalHitKillEligible) return; // CHOSEN pass-through - 0x0096f990's own real trigger condition is OPEN
+    ++c.deathTransitionCount;              // 0x00970e70's real death side-effects - host-side bookkeeping only, see field's own doc comment
+    bool victimIsPlayerClass = playerClassChainResolves(targetName);
+    if (c.ragdollActivationEligible) {
+        c.ragdollStateEnumCd2.set(1); // CHOSEN sentinel (!= 0 && != 6) - see field's own doc comment
+        ++c.deathRagdollActivateCount;
+    } else if (victimIsPlayerClass) {
+        // non-ragdoll fallback (locally-owned player-class only, Sec15.3a): the SAME finalizer
+        // character_kill's own arg4=false branch already models (stub_character_kill, b30) - reused, not duplicated.
+        c.lifeState.set(5);
+        c.killFinalizedFlagE3.set(true);
+        ++c.characterKillFinalizerCount;
+    }
+    // else: non-player-class, ragdoll-ineligible - genuinely unspecified by spec (ragdollActivationEligible's own doc comment).
+}
+
+// A guaranteed lethal hit (character_kill's own "-1.0 constant... guaranteed
+// death" shape) - see this method's own declaration (engine_state.h) for
+// the full citation and why it does not require health to already be known.
+void EngineState::applyGuaranteedLethalHit(const std::string& targetName, const std::string& sourceName) {
+    (void)sourceName; // not yet consumed by this deterministic shortcut - see declaration's own doc comment; kept for a future real attribution use
+    CharacterState& c = getOrCreateCharacter(targetName);
+    if (c.maxHitPoints.known()) {
+        int32_t oldHp = c.currentHitPoints.known() ? c.currentHitPoints.get() : c.maxHitPoints.get();
+        c.currentHitPoints.set(0); // force-snap-to-zero, the SAME "clearly lethal hit" shape applyCharacterDamage() models
+        c.lastDamageMagnitude = std::max(static_cast<double>(oldHp), 0.0);
+    }
+    finalizeLethalCharacter(c, targetName);
+}
+
 void EngineState::markScriptNpcBoundForTesting(const std::string& name) {
     CharacterState& c = getOrCreateCharacter(name);
     // Sec34.4: the override question (script_npc_hp / script_npc_flags
@@ -110,6 +256,175 @@ void EngineState::markScriptNpcBoundForTesting(const std::string& name) {
     c.ignoreAI.forget();
     c.maxHitPoints.forget();
     c.currentHitPoints.forget();
+    c.scriptNpcBound = true; // see CharacterState::scriptNpcBound's own doc comment
+    c.scriptNpcHp.forget();  // see CharacterState::scriptNpcHp's own doc comment
+}
+
+void EngineState::applyScriptNpcHitPointsForTesting(const std::string& name, int32_t scriptNpcHp) {
+    CharacterState& c = getOrCreateCharacter(name);
+    // Same "forget the CONFIRMED defaults, draw lazily" shape as
+    // markScriptNpcBoundForTesting() - see that method's own body and
+    // CharacterState::scriptNpcHp's doc comment for the full rationale.
+    c.ignoreAI.forget();
+    c.maxHitPoints.forget();
+    c.currentHitPoints.forget();
+    c.scriptNpcBound = true;
+    c.scriptNpcHp.set(scriptNpcHp);
+}
+
+void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section) {
+    zoneObjects_.ingest(section);
+    for (const sr3zone::ObjectRecord& rec : section.records) {
+        if (!rec.hasName || !rec.nameText.has_value() || rec.nameText->empty()) continue;
+        const std::string& name = *rec.nameText;
+
+        // Step 1: real zone data wins over the flat test-settable map - see
+        // this method's own declaration (engine_state.h) for the full
+        // rationale (exact-case, deliberately not folded - objectResolves()
+        // is the existing shared simplification, left otherwise untouched).
+        objectResolves_.set(name, true);
+
+        // Step 2: script_npc_hp precedence (Sec34.2/Sec34.4), routed for
+        // real - same mechanism bc7ff16's applyScriptNpcHitPointsForTesting()
+        // already modelled as test-only, now driven by real ingested zone
+        // data. Only for records whose class resolves to "script_npc" -
+        // spec-zone-data-format.md's own real Killbane resolution uses this
+        // exact class (crc32l('script_npc') = 0xa518e725, 6,788-object
+        // population match) - a non-script_npc named object (a prop, a
+        // navpoint, a trigger volume, etc.) has no script_npc_hp precedence
+        // rule to apply and is left alone beyond step 1 above.
+        std::optional<std::string> className = sr3zone::ClassNameForHash(rec.classHash);
+        if (!className.has_value() || *className != "script_npc") continue;
+
+        CharacterState& c = getOrCreateCharacter(name);
+        // Same "forget the CONFIRMED defaults, draw lazily" shape as
+        // markScriptNpcBoundForTesting()/applyScriptNpcHitPointsForTesting()
+        // above - see those methods' own bodies and CharacterState::
+        // scriptNpcHp's doc comment for the full rationale. Re-ingesting the
+        // SAME record twice (e.g. two loadZoneObjectsSection() calls over
+        // the same file) is idempotent: forgetting+re-setting the identical
+        // value changes nothing observable.
+        c.maxHitPoints.forget();
+        c.currentHitPoints.forget();
+        c.scriptNpcBound = true;
+
+        // FIX 2026-10-08 (sibling defect to the script_npc_hp fix below,
+        // found while re-measuring this task's probe after that fix: ignore-
+        // AI became the NEW dominant blocker, 31/49 missions, for the exact
+        // same reason). spec-lua-api-behaviour.md Sec34.3's own CONFIRMED
+        // text: ignore-AI's real default is OFF, overridden to ON only when
+        // the resolved record's own `script_npc_flags` property contains the
+        // literal token `ignore_ai` (Sec11.7: true for only 425 of 6,702
+        // script_npc_flags-bearing records, and of course never true for a
+        // script_npc record with no script_npc_flags property at all - 86 of
+        // 6,788). Once this record is resolved (which it now is), that is a
+        // CONFIRMED, fully-decidable fact either way, not an open question -
+        // forgetting it here unconditionally (as the previous code did)
+        // misapplied the SAME "known: no override, use the default" vs
+        // "unknown" conflation Sec34.2's own script_npc_hp fix below
+        // corrects, just for this sibling field.
+        std::optional<std::string> flags = sr3zone::ScriptNpcFlags(rec);
+        c.ignoreAI.set(flags.has_value() && ScriptNpcFlagsHasIgnoreAiToken(*flags));
+
+        std::optional<uint64_t> hp = sr3zone::ScriptNpcHp(rec);
+        if (hp.has_value() && *hp <= static_cast<uint64_t>(INT32_MAX)) {
+            c.scriptNpcHp.set(static_cast<int32_t>(*hp));
+        } else if (!hp.has_value()) {
+            // FIX 2026-10-08 (mission-blockers investigation,
+            // probe_blockers_ranked_20261008_post_resolver_merge.md item 1 -
+            // "character max hit points (+0x1cac) OPEN", 26/49 missions, by
+            // far this project's largest single blocker at the time).
+            //
+            // ROOT CAUSE: no script_npc_hp property on THIS RESOLVED record
+            // is the documented common case (Sec11.7: only 1,028 of 6,788
+            // script_npc objects carry one - the other ~5,760 do not), and
+            // spec-lua-api-behaviour.md Sec34.2 is explicit and CONFIRMED
+            // (disassembly) that the absence has a real, known meaning:
+            // "A script NPC's own constructor defaults that field to -1
+            // ('use the table'); commando_spawn-produced script NPCs ...
+            // never set script_npc_hp, so they always fall back to the
+            // table." A placement record that never authors the property
+            // simply leaves that constructor default untouched - this is a
+            // CONFIRMED FACT about this specific, already-resolved record,
+            // not the separate "which record does an arbitrary Lua name
+            // even map to" gap Sec34.4 flags as needing the (now-lifted)
+            // `.czn_pc` zone-placement interior. The previous code called
+            // c.scriptNpcHp.forget() here, conflating the two: it treated
+            // "known: no override, use the table" the same as "unknown,"
+            // which left drawOrGetMaxHitPoints() (lua_engine_state.cpp)
+            // refusing (OpenStateError) forever for every script_npc
+            // character that lacks an authored override - the large
+            // majority - even though the real engine's own answer for that
+            // exact case is simply "use spawn_info_ranks.xtbl like an
+            // ordinary character." That misclassification, not a genuine
+            // zone-data gap, is what the 26-mission blocker traced back to:
+            // get_max_hit_points/set_current_hit_points (Sec7.12/Sec7.31)
+            // are called 3,133 times across the real mission population,
+            // and every script_npc-bound character without an authored
+            // script_npc_hp hit this exact refusal.
+            //
+            // FIX: set the real, CONFIRMED default (-1) instead of
+            // forgetting it. drawOrGetMaxHitPoints()'s own already-correct
+            // precedence rule (">= 1 wins verbatim over the table; a known
+            // value < 1 falls through to the ordinary table draw, same as a
+            // non-scriptNpcBound character") then takes the table path for
+            // real, exactly as Sec34.2 describes - closing this field for
+            // every script_npc character whose REAL placement record (now
+            // resolved, not guessed) simply has no override. A character
+            // whose name never resolves to any zone record at all never
+            // reaches this method in the first place (scriptNpcBound stays
+            // false, the ordinary non-script-NPC draw path already handled
+            // it) - this fix changes nothing for that case.
+            c.scriptNpcHp.set(-1);
+        } else {
+            // A value this project's own int32_t field genuinely cannot
+            // represent (never observed in the real population, Sec11.7's
+            // own "up to 100,000" figure) - stays OPEN, never guessed at.
+            c.scriptNpcHp.forget();
+        }
+    }
+}
+
+int32_t EngineState::drawOrGetMaxHitPoints(const std::string& name) {
+    // See CharacterState::maxHitPoints's "UPDATE 2026-10-07" doc comment and
+    // this method's own declaration (engine_state.h) for the full rationale.
+    CharacterState& c = getOrCreateCharacter(name);
+    if (!c.maxHitPoints.known()) {
+        // Sec34.2's own CONFIRMED override, reachable only when a caller
+        // already supplied scriptNpcHp (applyScriptNpcHitPointsForTesting() -
+        // see CharacterState::scriptNpcHp's own doc comment for why this
+        // project cannot resolve it on its own): >= 1 wins verbatim over the
+        // table; a known value < 1 is the script NPC constructor's own -1
+        // "use the table" default and falls through to the ordinary draw
+        // below, same as a non-scriptNpcBound character. Genuinely unknown
+        // (scriptNpcBound with no scriptNpcHp ever supplied - the only state
+        // any real production path in this project reaches today) stays
+        // OPEN exactly as before this update.
+        if (c.scriptNpcBound && c.scriptNpcHp.known() && c.scriptNpcHp.get() >= 1) {
+            c.maxHitPoints.set(c.scriptNpcHp.get());
+        } else if (!c.scriptNpcBound || c.scriptNpcHp.known()) {
+            int32_t drawn = 100; // CHOSEN diagnostic fallback - same constant this field's own callers already used
+            if (!spawnRankHitPoints_.empty()) {
+                // splitmix64 (public-domain reference algorithm), same shape as
+                // BareRandomSource::hostStep (bare_globals.h) - a second,
+                // independent HOST SUBSTITUTE instance, seeded from the name
+                // alone (via the already-established CRC-32 name hash,
+                // sr3save::nameHash) so a given name always draws the same
+                // value. Not the real engine's own level-draw generator (OPEN,
+                // Sec34.2's own "0x0096e830" note) - a stated stand-in.
+                uint64_t state = static_cast<uint64_t>(sr3save::nameHash(name)) ^ 0x9E3779B97F4A7C15ull;
+                state += 0x9E3779B97F4A7C15ull;
+                uint64_t z = state;
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+                z ^= z >> 31;
+                drawn = spawnRankHitPoints_[static_cast<size_t>(z % spawnRankHitPoints_.size())];
+            }
+            c.maxHitPoints.set(drawn);
+        }
+        // else: scriptNpcBound with scriptNpcHp genuinely unknown - stays OPEN (Sec34.4).
+    }
+    return c.maxHitPoints.get(); // still throws OpenStateError for a scriptNpcBound character with no known override - CONFIRMED-correct
 }
 
 void EngineState::registerSyncedActionForTesting(const std::string& name, int32_t index) {
@@ -1549,7 +1864,261 @@ std::vector<EngineState::OpenSlotStatus> EngineState::openSlotInventory() const 
     // (not OpenValue - see their own doc comments), so they are not listed
     // here, same convention as vcustPreview_.targetLive above.
     map("ranking16", spawnOverride_.categoryNameResolves);
+
+    // --- Batch 2026-10-08 (Batch 7, dedicated agent), spec-lua-api-
+    // behaviour.md Sec30 ranking tranche 03, the 16 names not already
+    // wired by b03. Per-character/per-vehicle OpenValue fields
+    // (CharacterState::combatMoveSlot1358/caeAdvanceDestinationComputes/
+    // turnRefusalPredicateFires/turnRequestBusy/turnStartRoutineSucceeds
+    // Immediately, VehicleState::teleportNameGateField0xbf8a8) are NOT
+    // centrally inventoried here, matching this function's own existing
+    // precedent above. Only EngineState-level/BossBattleMatt-level slots
+    // are listed, same as bossBattleMatt_.cheatSlot/retryCounter above.
+    value("tranche03batch7", pathfindResult_);
+    value("tranche03batch7", rcSignalRange_);
+    value("tranche03batch7", bossBattleMatt_.npcBahamutResolves);
+    value("tranche03batch7", bossBattleMatt_.avatarModelResolves);
+    value("tranche03batch7", bossBattleMatt_.styleTestPcResolves);
+
+    // --- Batch 3 (2026-10-08), spec-lua-api-behaviour.md Sec11+Sec12 - only
+    // EngineState-level (singleton) slots, same "per-character/per-vehicle
+    // fields are NOT centrally inventoried" precedent as the batch3132
+    // comment above. ---
+    value("batch3_pcr_vehicle", pcrPlasticSurgeonMode_);
+    map("batch3_pcr_vehicle", pcrMorph_.sessionResolves);
+    map("batch3_pcr_vehicle", pcrMorph_.slotResolves);
+    value("batch3_pcr_vehicle", pcuStreaming_.rowCounterPending);
+    value("batch3_pcr_vehicle", pcuStreaming_.listMembershipPending);
+    value("batch3_pcr_vehicle", hordeModeActive_);
+    map("batch3_pcr_vehicle", storeCameraPreset_.presetResolves);
+    value("batch3_pcr_vehicle", pauseMenuOptions_.acceptGatePasses);
+    value("batch3_pcr_vehicle", vintRemapStaging_.dialogAlreadyOpen);
+
+    // Wave 2 batch W2-1 (2026-10-08, lua_spec_confirmed_stubs_b15_wave2_
+    // core_dispatchers.cpp): the two EngineState-level OPEN singletons it
+    // adds. Its per-character OpenValue fields (CharacterState::
+    // vehicleEnterSubmitAccepted/...Forced/vehicleEnterAiOrderStarts/
+    // stateCodeByte501/504/enterCheckHelper9b95c0/moveToPredicateA3bae*/
+    // moveToMode3AnimTagResolves/moveToDispatchSucceeds/
+    // damageImmuneDescriptorBit33) follow the same "not centrally
+    // inventoried" precedent as Batch 7's above.
+    value("wave2w21", moveToActionIdCounter_);
+    value("wave2w21", vehicleNavmeshDispatchResult_);
     return out;
+}
+
+// ===========================================================================
+// Batch 2026-10-08 (Batch 7, dedicated agent) - spec-lua-api-behaviour.md
+// Sec30 ("ranking tranche 03"), the shared engine-state mechanisms backing
+// the 16 of its 25 names NOT already wired by
+// lua_spec_confirmed_stubs_b03_vintui_r03_r05.cpp's own 9 (see
+// src/lua_spec_confirmed_stubs_b14_batch7_tranche03.cpp for the stub bodies
+// themselves). Two genuinely new shared mechanisms, each consumed by more
+// than one of this batch's own natives, kept here rather than duplicated
+// per call site:
+//   1. The 70-entry CAE combat-action table (0x012e1c60, Sec30.4) - a
+//      plain, file-backed name->index roster this project reproduces
+//      VERBATIM from the spec's own text, used by ai_suggest_action/
+//      ai_do_scripted_advance.
+//   2. The shared script-request-id allocator (0x006f62b0, Sec30.5's own
+//      preamble) - used by ai_suggest_action (channel 3), turn_to_do
+//      (channel 0), and vehicle_pathfind_to_do (channel 2).
+// Plus vehicle_stop_do/teleport_vehicle_to_object's own shared
+// EngineState::stopVehicle() (0x00abe510, Sec30.5/Sec30.6).
+// ===========================================================================
+
+namespace {
+
+// The 70 CAE action names, in index order, verbatim from spec-lua-api-
+// behaviour.md Sec30.4's own "All 70 names, read from the file image" text.
+const char* const kCaeActionNames[70] = {
+    "fire", "fire sweep", "fire suppress", "fire chaos", "throw grenade",
+    "throw weapon", "melee", "melee vehicle", "cover take def", "cover take off",
+    "cover advance", "cover stay down", "cover fire", "cover popout", "hold position",
+    "melee stand back", "move retreat", "move regroup", "move advance", "move chase",
+    "avatar chase", "move surround", "move rush", "move rush to melee", "move scripted",
+    "move to navmesh", "move sidestep", "move to post combat", "move to post idle", "move close in",
+    "follow make way", "follow avoid LOF", "follow formation", "follow acquire", "follow player",
+    "follow teleport", "follow lemming", "follow to car", "follow other car", "follow carjack",
+    "follow browse", "investigate move", "investigate look", "investigate peek", "reload",
+    "pickup weapon", "human shield grab", "taunt", "vehicle passenger", "vehicle enter scpt",
+    "vehicle extract", "brute throw prop", "brute car flip", "brute bull rush", "brute qte player",
+    "brute attack brute", "brute gun finisher", "avatar shockwave", "avatar stomp", "avatar taunt",
+    "avatar fireballs", "avatar teleport stomp", "avatar bullrush", "quick kill", "zombie eat",
+    "zombie explode", "killbane chase", "killbane strafe", "roller blader change", "idle",
+};
+
+// Portable ASCII case-insensitive compare - same convention as
+// lua_spec_confirmed_stubs_common.h's caseInsensitiveEquals, duplicated here
+// (rather than included) to avoid a stub-layer header dependency from this
+// engine-state translation unit.
+bool CaeNameEqualsCaseInsensitive(const std::string& a, const char* b) {
+    size_t n = std::strlen(b);
+    if (a.size() != n) return false;
+    for (size_t i = 0; i < n; ++i) {
+        if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i])))
+            return false;
+    }
+    return true;
+}
+
+} // namespace
+
+int32_t EngineState::lookupCaeActionIndex(const std::string& name) const {
+    for (int32_t i = 0; i < 70; ++i) {
+        if (CaeNameEqualsCaseInsensitive(name, kCaeActionNames[i])) return i;
+    }
+    // CONFIRMED sentinel 71 (0x47) - also where the literal "NONE" sentinel
+    // lands (Sec30.4: "'NONE' -> index 71, silent no-op" is the SAME value
+    // 0x004f2610's own "not found" path returns, so no separate special
+    // case is needed for it here).
+    return kCaeActionNotFound;
+}
+
+int32_t EngineState::allocateScriptRequestId(const std::string& objectName, int channel) {
+    auto key = std::make_pair(objectName, channel);
+    int32_t id = nextScriptRequestSeq_++;
+    if (nextScriptRequestSeq_ > 0xFFF) nextScriptRequestSeq_ = 1; // 12-bit sequence, CONFIRMED structure (Sec30.5)
+    // "OR-ed with a machine-index nibble (HYPOTHESIS)" - always 0 here
+    // (this project is single-player/host-only everywhere).
+    activeScriptRequestId_[key] = id; // CONFIRMED: "cancels any tracked request for the same object+channel"
+    return id;
+}
+
+void EngineState::releaseScriptRequestId(const std::string& objectName, int channel) {
+    activeScriptRequestId_.erase(std::make_pair(objectName, channel));
+}
+
+void EngineState::stopVehicle(const std::string& vehicleName, bool authorityPasses) {
+    VehicleState& v = getOrCreateVehicle(vehicleName);
+    if (authorityPasses) {
+        ++v.stopRequestCount; // CONFIRMED direct-apply branch (0x00abe510, 1)
+    } else {
+        replicateStateChange("vehicle_stop", vehicleName); // CONFIRMED: opcode-0x43 stop request to whoever owns the vehicle
+    }
+}
+
+// =============================================================================
+// Wave 2, Batch W2-7 (2026-10-08): spec-lua-api-behaviour.md Sec38-60 - see
+// engine_state.h's own doc comments on each of these methods (and on the
+// fields they touch) for the full per-native citation/reasoning this file
+// keeps terse. src/lua_spec_confirmed_stubs_b26_wave2_vehicles_helicopter.cpp
+// and src/lua_spec_confirmed_stubs_b27_wave2_spawn_world_audio.cpp are the
+// stub bodies that call these.
+// =============================================================================
+
+// roadblock_create / roadblock_destroy (Sec39.2). CONFIRMED: "-1 on any
+// failure." Placement succeeds only when roadblockPlacementResolves_ is
+// known true for placementObjectName (this project has no road-network/
+// geometry data to derive that from; a test sets it, an un-set-up real
+// call takes the honest "fails" branch rather than throwing mid-creation -
+// creation itself is a CONFIRMED-shape operation that must still return a
+// real sentinel on failure, not an engine-state refusal).
+int64_t EngineState::createRoadblock(const std::string& templateName, const std::string& placementObjectName) {
+    bool placementOk = roadblockPlacementResolves_.known(placementObjectName) && roadblockPlacementResolves_.get(placementObjectName);
+    if (!placementOk) return -1;
+    int64_t handle = nextRoadblockHandle_++;
+    roadblocks_[handle] = RoadblockRecord{templateName, placementObjectName};
+    return handle;
+}
+
+bool EngineState::destroyRoadblock(int64_t handle) {
+    auto it = roadblocks_.find(handle);
+    if (it == roadblocks_.end()) return false; // CONFIRMED: "requires the roadblock-kind descriptor bit" - treated as absent otherwise
+    roadblocks_.erase(it);
+    return true;
+}
+
+// guardian_angel_start_zone_pinning / _clear_zone_pinning (Sec53.3).
+// CONFIRMED: the release runs UNCONDITIONALLY before the name lookup, so
+// an empty zoneSetName (the _clear_ entry point) and a failed/oversized
+// zoneSetName both leave currentZonePinSetName cleared - the difference is
+// only whether a NEW name is then recorded (and whether that new pin
+// actually "took," per zonePinSucceeded).
+void EngineState::guardianAngelStartZonePinning(const std::string& zoneSetName) {
+    guardianAngel_.currentZonePinSetName.clear(); // CONFIRMED: unconditional release first
+    guardianAngel_.zonePinSucceeded = false;
+    if (zoneSetName.empty()) return; // the _clear_ entry point: release only, nothing new to pin
+    guardianAngel_.currentZonePinSetName = zoneSetName; // CONFIRMED: recorded as "current" even when it fails below
+    if (guardianAngel_.zoneSetSize.known(zoneSetName) && guardianAngel_.zoneSetSize.get(zoneSetName) <= 8) {
+        guardianAngel_.zonePinSucceeded = true;
+    }
+    // CONFIRMED: ">8 zones pins nothing at all" (zonePinSucceeded stays
+    // false) - also the honest default when the zone-set's own size was
+    // never registered (no real zone-set data table in this project).
+}
+
+// dlc2_m02_clapboards_set (Sec55.5 MEMSAFE) - hardened as ONE unit with the
+// already-registered dlc2ClapboardsGet/_Reset above (same 10-byte array,
+// same dlc2ClapboardCount_ field). SAME signed-index bounding scheme as
+// dlc2ClapboardsGet: argument <= 0 is HOST-SAFETY-refused (own named
+// counter, per this batch's hardening policy of one counter per hardened
+// site); the upper bound is the CONFIRMED real "no-op past the end" shape -
+// _set has no return value to shape, so an out-of-range write is simply
+// skipped (the CONFIRMED real native would write out-of-bounds here; this
+// host instead silently refuses, matching the common in-range case's own
+// observable result of "the array holds what you asked" while never
+// touching memory outside the 10-byte array).
+void EngineState::dlc2ClapboardsSet(int32_t clapboardNumber, bool value) {
+    if (clapboardNumber <= 0) {
+        ++dlc2ClapboardsSetNegativeIndexGuardCount_; // HOST-SAFETY, see doc comment above
+        return;
+    }
+    const int32_t index = clapboardNumber - 1;
+    if (index >= dlc2ClapboardCount_ || index >= static_cast<int32_t>(dlc2ClapboardFlags_.size())) return; // CONFIRMED upper-bound shape, no-op
+    dlc2ClapboardFlags_[static_cast<size_t>(index)] = value;
+}
+
+// world_despawn_all_vehicles / world_despawn_all_pedestrians (Sec46.3).
+uint64_t EngineState::despawnAllVehicles() {
+    uint64_t count = 0;
+    for (auto& entry : vehicles_) {
+        VehicleState& v = entry.second;
+        if (v.despawnPlayerOccupied || v.despawnProtected || v.despawnedPendingDelete) continue;
+        v.despawnedPendingDelete = true;
+        ++count;
+    }
+    return count;
+}
+
+uint64_t EngineState::despawnAllPedestrians() {
+    uint64_t count = 0;
+    for (auto& entry : characters_) {
+        CharacterState& c = entry.second;
+        if (c.despawnProtected || c.despawnedPendingDelete) continue;
+        c.despawnedPendingDelete = true;
+        ++count;
+    }
+    return count;
+}
+
+// Wave 2 batch W2-6 (2026-10-08) - the machinima family's shared path-
+// builder stand-in (spec-lua-api-behaviour.md Sec44.4/Sec56.5): the real
+// builder has 3 failure exits (process-token open, folder lookup, folder
+// creation) that all leave the output buffer unwritten, and NO caller
+// checks this - a confirmed crash/data-loss shape (`game_machinima_delete_
+// clip` can delete the wrong file from uninitialized stack content). This
+// project's own hardened divergence, applied project-wide to the whole
+// family per the orchestrator's standing policy: fail closed instead -
+// every caller below checks `ok` before touching `path`, so the
+// uninitialized-buffer shape cannot reach any of them. `clipName` itself
+// stands in for the real UI-encoded/plain-name distinction (Sec56.7) -
+// this project has no companion encoder, so every name is treated as the
+// real engine's own "plain (non-encoded) input" case, which is exactly
+// the case the hardening must cover.
+EngineState::MachinimaPathResult EngineState::buildMachinimaClipPath(const std::string& clipName) {
+    MachinimaPathResult result;
+    if (clipName.empty()) {
+        ++machinima_.pathBuilderFailureGuardCount; // CHOSEN: an empty name never resolves to a real path
+        return result;
+    }
+    if (!machinimaPathBuilderSucceeds().get()) { // OPEN until set; test controls the "environment failure" scenario
+        ++machinima_.pathBuilderFailureGuardCount;
+        return result;
+    }
+    result.ok = true;
+    result.path = "clips/" + clipName + ".srtt_clip"; // CHOSEN stand-in path, never dereferenced as a real filesystem path
+    return result;
 }
 
 } // namespace sr3luahost

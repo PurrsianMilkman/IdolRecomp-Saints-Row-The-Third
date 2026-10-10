@@ -1,0 +1,371 @@
+STATUS (2026-10-08, dense-codebook-grammar fix task, unit U-W4c): STILL NOT FROZEN,
+but the specific blocker this file used to describe is RESOLVED, and the real
+493-packet sweep made genuine forward progress. Updated, not retired, per this
+file's own prior "update if gaps remain" plan - a gap remains (0/493 full
+decodes), just a different, more precise one than before.
+
+WHAT THIS PASS RESOLVED: the dense/unordered (ordered==0) codebook body
+grammar that every previous pass's own OPEN note pointed at. Root cause (per
+spec-audio-runtime.md Sec11.11.3a's 2026-10-08 UPDATE, directly relayed from
+Team A's own disassembly and cross-checked against real libvorbis
+acceptance): a mandatory 1-bit sparse/dense selector immediately after the
+3-bit length-field-width field, read unconditionally for every ordered==0
+codebook, that this project's prior transcodeOneCodebook() never read at all
+- plus a second, separately-pinned correction needed to actually close the
+budget: the per-entry length field's own bit count is the raw 3-bit
+length-field-width value DIRECTLY (not +1-biased) for both the sparse and
+dense ordered==0 sub-cases; only the ordered branch's own seed-length read
+keeps the +1 bias. Both corrections are now bit-exact verified two ways:
+against ALL 599 real library codebooks
+(tests/wwise_codebook_library_crosscheck_test.cpp: 599/599 full-body match,
+zero parse failures, zero field mismatches - up from 6/599 before this fix),
+and by this task's own hand bit-trace against the spec's own raw codebook-
+library blob (library slots 5 and 7, the dense-proper and sparse worked
+examples) reproducing the documented dim/entries/width/sparse/has_lookup
+values exactly, bit for bit.
+
+WHAT THIS UNLOCKED on the real sweep (tests/real_vorbis_decode_test.cpp,
+cutscene_sounds.vpp_pc, the same 493 real records as always): 5/493 records
+now reach libvorbis's own vorbis_synthesis_headerin() for the setup header
+(rejected there with exactly OV_EBADHEADER, not accepted - but a genuinely
+new high-water mark; previously 0/493 records EVER got past this project's
+own codebook-list transcode to reach libvorbis at all, since the dense-
+grammar bug made almost every record fail on an early codebook's body).
+Real decode success (ok==true) is still 0/493 - this file stays NOT FROZEN.
+
+THE NEW, MORE PRECISE BLOCKER (surfaced only once the above was fixed -
+previously masked because nearly every record failed on a codebook BODY
+before ever reaching this): 488/493 records now fail inside
+rebuildVorbisSetupHeader()'s own OUTER per-codebook loop, which reads a bare
+10-bit index straight off the main packet's shared bitstream cursor for each
+of a record's declared `books` codebooks (see spec-audio-runtime.md
+Sec11.11.3a's MAJOR CORRECTION for this indexing mechanism). For most
+records, one of these indices - most commonly the 3rd-5th codebook in the
+list (a 488-record histogram puts position 2, i.e. the 3rd codebook, alone
+at 322/488) - comes out >= 599, i.e. inside the range
+spec-audio-codebook-library.md's own Provenance section calls "confirmed
+spurious... reading off the end of the real table into an unrelated .data
+float array." This is NOT a Team-B bitstream-reading bug at that position:
+codebook-BODY parsing is now proven airtight (the 599/599 cross-check
+above), and body parsing for any one codebook happens in a completely
+separate, isolated buffer sliced from the static library - it has zero
+ability to feed back into the main packet's own cursor position. Hand
+bit-traced directly against one real record's own raw setup-packet bytes
+(ct_angel_01_media.bnk_pc, books=187) using the now-fully-validated field
+grammar: the 5th codebook's (position 4) 10-bit index reproduces 640 bit for
+bit, exactly matching this project's own computed value - ruling out a
+Team-B bit-drift bug there. The dominant failure value across the whole
+sweep (772, 204/488 occurrences) and the overall distribution (every failing
+value in [600,1023], clustering into short ascending runs) both look exactly
+like the spec's own described "garbage past the real table" shape - but if
+that characterization is complete and correct, the SHIPPED game would
+dereference the identical garbage for these identical shipped files, which
+is implausible for working, presumably-audible cutscene voice lines. Two
+live possibilities, neither of which Team B can settle without disassembly:
+(a) the real compiled table's genuinely-valid range extends further than
+the 599 entries currently transcribed in spec-audio-codebook-library.md
+(the "600-1023 is spurious" check may have sampled too few slots to catch a
+later real/valid stretch), or (b) there is some other per-codebook-slot
+wrinkle in the main packet's own list encoding not yet captured. RELAYED to
+Team A as a spec-sync question, not attempted further here, per this
+project's own "no invented fixes / Team B never disassembles" discipline.
+
+The moment a real record reaches ok==true, this directory should be filled
+in following tests/golden/city_corner's own worked pattern (baseline_<name>.wav
+and a baseline_stdout.txt capturing the real pcmHash/duration/peakAbsAmplitude
+line real_vorbis_decode_test.cpp already prints) and this STATUS.txt finally
+retired - the golden-freeze machinery itself (FNV-1a PCM hash, duration,
+peak-amplitude non-silence check, writeWavPcm16() call) already exists,
+gated behind `if (res.ok)`, ready and unexercised.
+
+UPDATE 2026-10-08 (out-of-range-codebook-index bring-up task): still NOT
+FROZEN, 0/493 real decodes, same as above - but the root cause above ("two
+live possibilities, neither of which Team B can settle without
+disassembly") is now narrowed, with real-data evidence spanning the WHOLE
+493-record population rather than one hand-traced example, to option (b):
+a container/packet-framing bug, not codebook-library incompleteness.
+Using a new diagnostic (`sr3audioruntime::probeSetupPacketBitBudget()`,
+include/sr3audioruntime/wwise_setup_rebuild.h - walks past an out-of-range
+codebook index instead of aborting, since a codebook's body never touches
+the main cursor either way) plus a new tool
+(`tools/wwise_setup_budget_probe.cpp`), this pass found that even the
+5/493 records with every codebook index in-range produce implausible
+floor/residue/mapping/mode counts (noise, not real encoder output) - the
+bug was never confined to the codebook-index list at all. Tracing further:
+the real WAV "data" sub-chunk does not start with a bare Vorbis setup
+packet the way wwise_vorbis_setup.h's walkFramedPackets() (Sec11.11.1)
+assumes. Its first several hundred bytes are a clearly structured,
+non-bitstream-like region - 4-byte groups whose second half, read as an
+LE float32, lands within 1% of a round number for hundreds of consecutive
+bytes, then transitions sharply to real noise. Reading that region as
+(sampleCount: u16, byteSize: u16) entries and summing the sampleCount
+field reproduces the "vorb" chunk's own INDEPENDENT total-sample-count
+field to within 0.2%-7% for ALL 493/493 real records (mean ratio 0.985,
+every record in [0.93, 0.998)) - a population-wide, falsifiable
+confirmation that Sec11.11.1's "no lacing table" claim does not hold for
+the real shipped format: there is a real, leading per-audio-packet
+seek/size table. Genuinely still OPEN, not solved this pass: where the
+actual Vorbis setup packet sits relative to this table. Two concrete
+placements were tried and both empirically rejected against real bytes
+(immediately after the table: decodes as books=1 and more noise; a
+computed trailing region at the very end of "data": its leading bytes do
+look like real high-entropy content, unlike the first guess, but the
+region's own size is wildly inconsistent across records with no
+consistent scaling, and it still produces an implausible books count and
+dozens of out-of-range indices, or an outright EOF). RELAYED to Team A as
+a spec-sync question about Sec11.11.1's packet-framing contract itself
+(not the codebook library, which is very likely fine as transcribed) -
+not attempted further here, per this project's own "no invented fixes /
+Team B never disassembles" discipline. Full detail, including the exact
+per-record numbers for 4 worked examples (2 channel=1, 2 channel=6) and
+the population-wide ratio histogram:
+include/sr3audioruntime/wwise_setup_rebuild.h's own header comment,
+2026-10-08 UPDATE.
+
+UPDATE 2026-10-08 (vorb-chunk explicit-offset-field hypothesis task): still
+NOT FROZEN, 0/493 real decodes. Tested spec-audio-runtime.md Sec11.11.2's
+own table row (vorb bytes [4:8)/[8:12) as explicit setupPacketOffset/
+firstAudioPacketOffset fields) against all 493 real records in three
+placements (literal; boundary-corrected; corrected-boundary + the existing
+CONFIRMED 16-bit length-prefix framing) - ALL THREE REJECTED, 0/493
+plausible each, via tools/wwise_vorb_offset_probe.cpp. Also attempted the
+broader, explicitly-authorized public-format corroboration (ww2ogg/
+vgmstream's generic Wwise-Vorbis container format): a doxygen-documented
+C++ port (xoreos's Sound::WwRIFFVorbisStream) confirms the conceptual field
+PAIR (_setupPacketOffset/_firstAudioPacketOffset) genuinely exists in the
+real public format, by name, but gives no byte-level layout, and no prose
+format-notes document describing the real offsets could be found without
+reading the converters' own source - explicitly out of this task's bounds,
+so not read, and no offset was guessed from memory. One genuine, new, EXACT
+(zero-variance, 493/493) fact emerged as a byproduct: (dataChunkSize -
+vorb[8:12)) - cleanRunEnd == exactly 4 for every real record - pinning the
+prior pass's own heuristically-estimated leading-table boundary exactly,
+via a second, independent measurement. Still genuinely OPEN: where inside
+that now-exactly-pinned leading region the real Vorbis setup packet's own
+bytes begin. RELAYED to Team A as an addition to the existing Sec11.11.1
+spec-sync question. Full detail: results/probe_vorb_explicit_offset_fields_
+20261008.md, include/sr3audioruntime/wwise_setup_rebuild.h's own header
+comment (2026-10-08, second UPDATE).
+
+UPDATE 2026-10-08 (vorb-chunk seek-table-relative-offset confirmation task):
+still NOT FROZEN, 0/493 real decodes. spec-audio-runtime.md Sec11.11.5
+landed a disassembly-CONFIRMED formula (commit 64f705a on `main`, verified
+directly against the real commit object before use, then cherry-picked onto
+this branch as c1f586e): setupPacketStart = dataChunkOffset + vorb[4:8) +
+vorb[16:20); firstAudioPacketStart = dataChunkOffset + vorb[8:12) +
+vorb[16:20) (the common/default path, which the spec's own text says every
+real standalone WAV in this project hits). Re-tested population-wide
+against all 493 real records with the new tools/wwise_vorb_seektable_
+offset_probe.cpp - REJECTED, 0/493 plausible, under the literal formula and
+2 motivated alternate readings (drop the vorb[4:8) term; subtract it
+instead of adding). One EXACT, zero-variance, 493/493 falsification:
+firstAudioPacketStart computes to EXACTLY the end of the "data" sub-chunk
+for every real record (dataEnd - firstAudioPacketStart == 0, min=max=mean=
+0) - zero bytes left for any audio packet, in a corpus where every record
+demonstrably holds hundreds of KB of real compressed audio. A +-64/+256-byte
+local-neighbourhood scan around the computed setupPacketStart found no
+nearby fix either. The one sub-claim corroborated three ways (this
+project's own direct measurement: vorb chunk size is a constant 42/0x2a
+across all 493 records; Team A's disassembly; and - per this round's now-
+superseded, explicitly-authorized public-source reading of ww2ogg/
+vgmstream, stopped once the orchestrator's redirect to the real disassembly
+answer landed - vgmstream's own wwise.c names this exact game by name in
+its `case 0x2a:` vorb-size-variant switch): vorb[16:20) really is the
+leading seek table's own exact byte length. RELAYED to Team A as a
+spec-sync question (what this+0x48/this+0x4c are actually consumed FOR by
+the Seek call once computed - not a disassembly correction, which Team B
+does not do), not attempted further here per "no invented fixes." Full
+detail: results/probe_vorb_seektable_relative_offsets_20261008.md, include/
+sr3audioruntime/wwise_setup_rebuild.h's own header comment (2026-10-08,
+third UPDATE). Production code is unchanged this pass - the rejected
+formula was not wired into the real decode path.
+
+UPDATE 2026-10-08 (vorb-chunk setup/audio-offset-pair re-hypothesis task):
+FIRST REAL DECODES SUCCEEDED - 5/493, up from 0/493 every prior pass on this
+branch. Still not FROZEN (488/493 remain blocked, at a NEW and much later
+stage than ever before - see below) but this is the first genuinely
+non-zero result this file has ever recorded.
+
+THE OFFSET FIX, [CONFIRMED] (Team A's own direct disassembly, commit
+8871fb6 on `main`, spec-audio-runtime.md Sec11.11.5's correction -
+`0x00fa4250`/`0x00fa36b0` read directly, not decompiler output; cherry-
+picked onto this branch spec-text-only): the REJECTED formula from the
+immediately prior pass (results/probe_vorb_seektable_relative_offsets_
+20261008.md) computed a correct NUMBER under the WRONG NAME.
+`this+0x48`/`vorb[4:8)` is NOT an input to the setup-packet offset - it IS
+(summed with vorb[16:20)) the first-audio-packet offset. The real
+setup-packet offset is `dataChunkStart + vorb[16:20)` ALONE:
+
+  setupPacketStart      = dataChunkStart + vorb[16:20)
+  firstAudioPacketStart = dataChunkStart + vorb[20:24)   (== dataChunkStart + vorb[4:8) + vorb[16:20), identity confirmed 493/493 on this project's own corpus, matching Team A's own stated 981/981 identity)
+
+This project independently re-derived the SAME formula, BEFORE Team A's
+correction landed on `main`, via its own real-data bit-trace
+(tools/wwise_vorb_setup_audio_dword_probe.cpp,
+tools/wwise_setup_packet_bit_trace_probe.cpp) plus explicitly-authorized
+public-source reading (vgmstream's `src/meta/wwise.c`, read via WebFetch for
+format understanding only, not transcribed: `case 0x2a:` sets
+`data_offsets=0x10`; `seek_size=vorb[0x10:0x14)`; `audio_offset=
+vorb[0x14:0x18)`; `setup_offset=start_offset+seek_size`; first audio =
+`start_offset+audio_offset` - field-for-field, arithmetic-op-for-arithmetic-
+op the same formula) - population-wide: INVARIANT_EXACT (setupPacketStart +
+2 + declaredSetupLen == firstAudioPacketStart) holds EXACTLY, 493/493, and
+the audio region (dataEnd - firstAudioPacketStart) is positive for 493/493
+(min=19232, max=7267413, mean=382787 bytes - real room for real audio,
+unlike the REJECTED formula's own exact-zero finding). Once Team A's
+correction landed, this branch's own already-tested hypothesis turned out
+to be numerically identical - re-verified directly rather than assumed.
+
+TWO FURTHER BITSTREAM-GRAMMAR FIXES, labelled `agrees-with-public-format`
+(NOT [CONFIRMED] - that label is reserved for direct disassembly, which
+Team B does not do), both found by hand bit-tracing ONE real record
+(tools/wwise_setup_packet_bit_trace_probe.cpp) once the offset was fixed and
+corroborated against vgmstream's own public source
+(`src/coding/vorbis_custom_utils_wwise.c`, read via WebFetch for format
+understanding only):
+
+  1. `residue_type` IS read from the stripped packet as a bare 2-bit field,
+     immediately before `begin`/`end`/`grouping` - this project previously
+     hardcoded it by channel count and never read it at all, a 2-bit drift
+     that corrupted every residue section's own fields onward (groupbook
+     computed as 80 against only 32 real codebooks; every booklist entry
+     likewise out of range). Fixed in wwise_setup_rebuild.cpp's
+     transcodeOneResidue().
+  2. The per-submap "time submap" placeholder byte (8 bits) IS present in
+     the stripped input and must be read-and-discarded (vgmstream's own
+     gloss: "passed through as an unused placeholder") - this project
+     previously assumed it ABSENT and only synthesized it fresh on output,
+     an 8-bit-per-submap drift that zeroed every floorsub/residuesub
+     (floor 1/residue 1 - the far more elaborate config this project's own
+     floor1/residue0 passthrough had already correctly decoded - never
+     referenced by any mapping at all) and put one mode's mapping index
+     out of range. Fixed in wwise_setup_rebuild.cpp's transcodeOneMapping().
+
+With all three fixes applied: `probeSetupPacketBitBudget()`'s full
+plausibility gate (sane books/floors/residues/maps/modes, zero out-of-range
+codebook indices, <=7 leftover bits) now passes 493/493 (up from 0/493) -
+`ranToEnd` 493/493, `outOfRangeCount==0` 493/493, leftover bits 0/2/4 for
+every record (previously 16-39). On the real decode path
+(tests/real_vorbis_decode_test.cpp): `vorbis_synthesis_headerin` now ACCEPTS
+every one of the 3 header packets for ALL 493/493 records (0 OV_EBADHEADER -
+previously the best-ever result was 5/493 reaching headerin and still being
+rejected there) - **5/493 real records decode all the way through
+`vorbis_synthesis_init`/`vorbis_synthesis_blockin`/`vorbis_synthesis_pcmout`
+to real, non-silent, correct-duration 16-bit PCM**:
+
+```
+ct_kinzie_03_media.bnk_pc : 1286720 frames, ch=1, 48000 Hz, 26.8067 s, peak=32767 (full scale)
+zscene_01_01_media.bnk_pc :  509952 frames, ch=1, 44100 Hz, 11.5635 s, peak=32767
+zscene_01_02_media.bnk_pc :  688128 frames, ch=1, 48000 Hz, 14.3360 s, peak=32767
+zscene_01_03_media.bnk_pc :   14912 frames, ch=1, 44100 Hz,  0.3381 s, peak=32767
+zscene_01_04_media.bnk_pc :   29696 frames, ch=1, 44100 Hz,  0.6734 s, peak=1581
+```
+
+First real decoded game audio, saved as a playable WAV:
+`tests/golden/wwise_vorbis_decode/ct_kinzie_03_media_first_success.wav`
+(2,573,484 bytes, 44-byte header + 1286720 frames x 1 channel x 2 bytes PCM
+- exact match, confirming the WAV writer itself is correct).
+
+STILL NOT FROZEN - THE NEW, MUCH LATER BLOCKER (488/493): every record now
+gets a STRUCTURALLY AND SEMANTICALLY valid rebuilt setup header (libvorbis's
+own res0_unpack/floor1_unpack header-time checks all pass, or headerin would
+reject with OV_EBADHEADER as it used to) - the failure moved from
+`vorbis_synthesis_headerin` to `vorbis_synthesis_init` itself. Isolated
+EXACTLY, population-wide (not guessed): every failure's own
+`rebuilt.codebookCount` is either 32 (442 records) or 34 (46 records) -
+442+46=488, an EXACT match to the failure count; the 5 successes are exactly
+the `codebookCount`=35 (4 records) and =42 (1 record) buckets - 4+1=5, an
+EXACT match to the success count. This points at `vorbis_book_init_decode`
+(third_party/libvorbis/lib/sharedbook.c's own `_make_words()` Kraft-
+inequality check - "the lengths must specify an overpopulated tree") failing
+for at least one specific codebook-library slot that is present in the
+32-book and 34-book selections but absent from the 35/42-book ones - a
+codebook-LIBRARY-DATA question (spec-audio-codebook-library.md), not an
+offset or packet-framing question, and explicitly NOT attempted further this
+pass per "no invented fixes" - this is a different, later, narrower residual
+than anything found before, handed off precisely rather than vaguely.
+RELAYED to Team A as a spec-sync question (does the 32/34-book selection
+reference a codebook-library slot whose real codeword-length list differs
+from spec-audio-codebook-library.md's own transcription?) and left as a
+concrete next step for whoever continues this work - never as a disassembly
+guess, which Team B does not do.
+
+Full detail: results/probe_vorb_setup_audio_dword_20261008.md. Production
+code CHANGED this pass (src/wwise_setup_rebuild.cpp: residue_type read,
+time-submap byte read; src/real_vorbis_decode.cpp: setupPacketStart/
+firstAudioPacketStart now computed from vorb[16:20)/vorb[20:24) instead of
+walking from dataChunkOffset with no skip) - the first production-path
+change this branch has made since it started testing offset hypotheses.
+
+UPDATE 2026-10-08 (independent-oracle verification task): the "5/493 real
+decodes" claim directly above is REFUTED, not confirmed - caught by the
+orchestrator's own direct measurement of
+ct_kinzie_03_media_first_success.wav's raw sample statistics (8.2% hard
+clipping, 32% exact-zero samples, RMS 10559, lag-1 autocorrelation 0.74,
+zero-crossing rate 0.16 - a pattern inconsistent with correct
+dialogue/cutscene audio), never checked against an independent oracle until
+now. Ran the real, independent, off-the-shelf `vgmstream-cli` (official
+prebuilt binary, vgmstream/vgmstream release r2117, run as a pure black box -
+never read its source) directly against the SAME raw Wwise-wrapped record
+bytes this project decoded, for ALL 5 claimed successes individually, and
+compared this project's own decoded PCM against vgmstream's reference PCM
+per-sample (Pearson correlation + FFT-exact cross-correlation search over
+the entire overlap range, not just zero lag).
+
+RESULT: REFUTED, 5/5. Every one of the 5 records shows |correlation| < 0.02
+against the real audio at EVERY lag searched (the full overlap length, via
+FFT) - statistically indistinguishable from noise, not "correct but
+time-shifted" and not "mostly right with drift." Durations are also wildly
+short versus the oracle (e.g. zscene_01_03_media: 0.34s decoded vs the real
+21.65s - a 64x shortfall). NONE of the 5 is a correct, or even
+recognizably-related, decode of the real audio. This project has NOT yet
+produced any real decoded game audio; the "first real decoded game audio"
+claim is withdrawn.
+
+ROOT CAUSE, precisely bisected packet-by-packet (tools/wwise_vorbis_
+packet_divergence_probe.cpp, duplicating but not modifying
+real_vorbis_decode.cpp's own per-packet vorbis_synthesis() loop), NOT
+guess-fixed further per "no invented fixes": the packet-framing walk itself
+IS self-consistent to the exact end of "data" for every record (not an
+offset/boundary bug - the already-[CONFIRMED] offset fix above is NOT what
+this refutes), and packet index 1 (the first real audio packet) always
+succeeds with the expected 0 output samples (correct lapped-MDCT priming
+behavior). But packet index 2 (the first REAL-CONTENT audio packet) fails
+`vorbis_synthesis()` with exactly OV_ENOTAUDIO (-135) EVERY TIME, in every
+record examined, starting a long CONTIGUOUS run of failures (16 straight
+for ct_kinzie_03_media; 769 of 948 total packets for zscene_01_03_media) -
+not scattered single-packet noise. Failures continue in further long bursts
+throughout each entire stream (run-length patterns documented in
+results/verify_vorbis_oracle_comparison_20261008.md); population success
+rates per record range 1.7%-49.4% of attempted audio packets. Separately,
+and independently sufficient on its own to explain the garbled output: the
+production decode loop's own success gate (`attemptWwiseVorbisDecode()`,
+`decodedOk == 0` check) treats ANY nonzero decodedOk as `ok = true` and
+splices the surviving, non-contiguous packets' PCM together with no
+gap/silence-fill or decoder reset - breaking every subsequent "successful"
+packet's lapped-MDCT overlap-add against the wrong previous window state
+regardless of whether that packet's own math was otherwise right. This is a
+NEW, more precisely located residual, downstream of and different from the
+already-tracked 488/493 codebook-count/Kraft-inequality issue (explicitly
+out of scope for this task; these 5 records are not among that 488) - most
+consistent with the rebuilt setup header's own mode table or an
+unidentified residue/floor bit-budget error still being wrong for real
+audio-packet content, not yet root-caused to a specific field. RELAYED to
+the orchestrator: commit `a72320a` on `main` (already merged) does not
+necessarily need reverting - the packet-framing self-consistency is real,
+incremental progress this fix produced - but its own "5 real decodes"/
+"first real decoded game audio" claim needs to be walked back in the
+project record, since it was never actually true.
+
+Full detail, per-file correlation/SNR table, and the complete run-length
+failure patterns: results/verify_vorbis_oracle_comparison_20261008.md. Both
+WAVs (this project's own decode and vgmstream's independent reference) for
+all 5 records were copied to D:\Project Crreish\audio-check\ for direct
+listening comparison (kept out of this repo). No production LOGIC changed
+this pass - only new diagnostic-only tools
+(tools/wwise_vorbis_oracle_extract.cpp,
+tools/wwise_vorbis_packet_divergence_probe.cpp), this file, and
+dated-UPDATE comment-only corrections (no behavior change) to
+include/sr3audioruntime/wwise_setup_rebuild.h's and
+tests/real_vorbis_decode_test.cpp's own header comments, so a future reader
+does not mistake the still-unchanged `ok==true` gate for a verified decode.

@@ -13,10 +13,27 @@
 // `soundboot.vpp_pc` and `sound_turbo.vpp_pc` are deliberately NOT in the
 // list: Sec9.1/Sec9.2 record that neither contains a `_media.bnk_pc` at all
 // (one ships `_media.mbnk_pc` under a shared-compressed-stream container
-// where only entry 0 decodes independently, the other ships `.lm_pc`/`DMLV`
-// files that are a different format entirely). Both are flagged OPEN there,
-// not chased here. Pass them on the command line if you want to confirm the
-// zero - the harness will simply report 0 media entries found.
+// where only entry 0 decodes independently). Both are flagged OPEN there,
+// not chased here. Pass `soundboot.vpp_pc` on the command line if you want
+// to confirm its zero - the harness will simply report 0 media entries
+// found.
+//
+// CORRECTED 2026-10-08 (spec-audio-format.md's own archive-inventory table,
+// surfaced by the Wwise HIRC kind population scan, spec-audio-runtime.md
+// Sec8.6): `sound_turbo.vpp_pc` is NOT "a different format entirely" the
+// way this comment used to claim - that was true only of the directory's
+// first ~20 entries (all `.lm_pc`/`DMLV`, sampled by an earlier pass that
+// never looked further). The full 550-entry directory also carries 275 real
+// plain `.bnk_pc` entries, one per voice character. Those entries are still
+// NOT walkable by this harness (nor is `_media.bnk_pc` present among them,
+// as far as sampling has shown) - not because they don't exist, but because
+// they are blocked by the already-documented mode-(a) non-first-entry
+// decoding limitation (spec-vpp-container.md Sec3.3-Sec3.8), a separate,
+// pre-existing, unsolved container-format gap this harness does not attempt
+// to work around. Passing `sound_turbo.vpp_pc` on the command line will
+// still report 0 `_media.bnk_pc` entries found (that part of the old claim
+// holds) - but that is no longer evidence the archive has no `.bnk_pc`
+// content at all.
 //
 // Figures this reproduces or contradicts (spec-audio-format.md Sec4.2/Sec5,
 // Sec10):

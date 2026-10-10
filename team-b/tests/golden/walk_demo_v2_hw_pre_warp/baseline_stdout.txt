@@ -1,0 +1,57 @@
+=== walk: player<->animation bridge demo (sr3playeranim) ===
+REAL   : the 'player state machine' node graph (misc_tables.vpp_pc), driven every
+         frame through sr3playeranim::PlayerAnimBridge::stepFrame(); real city_corner
+         ground cells + textures (same streaming as `city`); brad's real rigged mesh;
+         the follow camera's real target hookup (DriveCameraTarget, every frame).
+CHOSEN : scripted input (40 forward / 20 'turning' [see note below] / 20 stopped);
+         character start (-960,0,-700) - the city_corner golden's own named focus
+         corner, y=0 matching every streamed prop's own fake-grid placement; constant
+         synthetic root-motion rate (no real per-clip root motion anywhere in this
+         project); rigid-body render (one bind-pose skin moved/rotated as a whole -
+         no real per-clip bone rotation data exists here either, so no fake leg
+         motion is invented); the follow camera's OWN submode/collision pipeline is
+         NOT run (its target is, see above) - the capture still uses the SAME fixed
+         debug framing tests/golden/city_corner already froze.
+NOTE   : 'turning' is NOT a true turn-in-place - this movement model has no separate
+         yaw stick; engaging the A axis alone STRAFES the character sideways while
+         facingA50 (= unit(desiredMove)) swings to match the new movement direction,
+         so it reads as a turn+step, not a pure yaw. Said plainly, not hidden.
+character: brad, 68 bones (channel 0, group 0)
+graphs   : 249 loaded from node_graph_files.xtbl
+graph    : 'player state machine' found (index 144 of 249 loaded)
+anim     : real locomotion clips from D:/Project Crreish/Saints Row 3 CRREISH/packfiles/pc/cache/preload_anim.vpp_pc: run=loaded jog=loaded wlk=loaded
+camera   : camera_free.xtbl seeded (40 scalars, 61 submode row(s) applied, 0 incomplete, 0 unknown-name, 8 aspect-filtered)
+camera   : real follow-camera pipeline active (--v2); committed eye after reset (-960.00 1.70 -704.25), fov 60.00 deg
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+character: 5 real material(s), resolving real diffuse textures
+    mat 0: Brad_SM_Upper_D.tga  (512x512 BC1_UNORM)
+    mat 1: Brad_SM_Upper_D.tga  (512x512 BC1_UNORM)
+    mat 2: Brad_SM_Upper_D.tga  (512x512 BC1_UNORM)
+    mat 3: Brad_SM_Lower_D.tga  (512x512 BC1_UNORM)
+    mat 4: Brad_SM_Lower_D.tga  (512x512 BC1_UNORM)
+character: brad_head_lod, 68 bones (shared rig, channel 0, group 0)
+character: head 1 real material(s), resolving real diffuse textures
+    head mat 0: missing.tga  UNRESOLVED - flat colour
+camera   : eye (-960.0 250.0 -700.0) yaw 0.0 pitch -75.0 [--no-input]
+[stream] frame 0 focus (-960.0, -700.0): wanted = {1016h0,0916h1,1015h2,1015h3}
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 17.3 s
+[stream]   1016h0: prop hwy_yellow_st_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x50d21c90
+[stream] frame 0 LOAD  1016h0   (sr3_city_0.vpp_pc, col 10 row 16 N 0) centre (-880.0, -770.0): 52/53 props uploaded, 1 failed, 2 larger than their fake-grid slot, textures 125/136 (0 of them from another archive), 17723 ms
+[stream]   0916h1: prop terminal_sign_a.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0xf857cee4
+[stream]   0916h1: prop terminal_sign_c.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1a34fc47
+[stream] frame 0 LOAD  0916h1   (sr3_city_0.vpp_pc, col 9 row 16 N 1) centre (-1040.0, -770.0): 46/48 props uploaded, 2 failed, 1 larger than their fake-grid slot, textures 122/128 (0 of them from another archive), 487 ms
+[stream] frame 0 LOAD  1015h2   (sr3_city_0.vpp_pc, col 10 row 15 N 2) centre (-1040.0, -630.0): 114/114 props uploaded, 0 failed, 10 larger than their fake-grid slot, textures 318/327 (0 of them from another archive), 991 ms
+[stream]   1015h3: prop hwy_sw_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_sw_l.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_sw.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x1d02c724
+[stream]   1015h3: prop hwy_yellow_ap_r.clmesh_pc SKIPPED: renderGroup[0] Mesh sub-block parse failed: segment does not open with the block's check value: found 0x0, expected 0x7b9df258
+[stream] frame 0 LOAD  1015h3   (sr3_city_0.vpp_pc, col 10 row 15 N 3) centre (-880.0, -630.0): 42/46 props uploaded, 4 failed, 5 larger than their fake-grid slot, textures 146/146 (0 of them from another archive), 441 ms
+[ground] frame 0 tile 0916: SKIPPED (no real ground rendered): sr3_city~f0916.czn_pc: no block carries a vertex-layout-code-0 channel
+[ground] frame 0 tile 1015: SKIPPED (no real ground rendered): sr3_city~f1015.czn_pc: no block carries a vertex-layout-code-0 channel
+[ground] frame 0 tile 1016: SKIPPED (no real ground rendered): sr3_city~f1016.czn_pc: no block carries a vertex-layout-code-0 channel
+captured : _work/walk_demo_v2_hw_frame0.png (frame 0, player pos (-960.00 0.00 -699.87) heading 0.0 deg, locomotion 1, playback rate 1.033, follow-cam target (-960.00 0.00 -699.87) heading 0.0 deg, follow-cam committed eye (-959.40 1.70 -704.12) fov 50.00 deg)
+captured : _work/walk_demo_v2_hw_frame15.png (frame 15, player pos (-960.00 0.00 -695.04) heading 0.0 deg, locomotion 2, playback rate 1.500, follow-cam target (-960.00 0.00 -695.04) heading 0.0 deg, follow-cam committed eye (-959.40 1.70 -699.29) fov 50.00 deg)
+captured : _work/walk_demo_v2_hw_frame30.png (frame 30, player pos (-960.00 0.00 -690.04) heading 0.0 deg, locomotion 2, playback rate 1.500, follow-cam target (-960.00 0.00 -690.04) heading 0.0 deg, follow-cam committed eye (-959.40 1.70 -694.29) fov 50.00 deg)
+captured : _work/walk_demo_v2_hw_frame45.png (frame 45, player pos (-959.42 0.00 -686.66) heading 90.0 deg, locomotion 2, playback rate 1.440, follow-cam target (-959.42 0.00 -686.66) heading 90.0 deg, follow-cam committed eye (-958.82 1.70 -690.91) fov 50.00 deg)
+frames   : 80 presented; final player pos (-957.66 0.00 -686.66), locomotion state 0, playback rate 1.280

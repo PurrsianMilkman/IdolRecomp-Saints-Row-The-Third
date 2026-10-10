@@ -1,0 +1,139 @@
+Golden scene: drive_demo_coverage, multi-channel vehicle mesh coverage/bbox
+regression (NOT byte-exact-only - see tools/golden_scene_check.cpp's own
+checkDriveDemoCoverageScene() doc comment for the full design rationale)
+================================================================================
+
+WHY THIS SCENE EXISTS: the drive_demo v2 mesh-shatter fix (merged to main,
+commit range ending ec1694d) masked the vehicle's single upload()/draw() call
+down to draw-group-0's genuinely-channel-0 ranges (16/20) to stop an index-
+buffer corruption bug, but that ALSO silently dropped the OTHER 4 ranges'
+real geometry (submeshIndex 1/2 - the car's middle body, doors/cabin walls) -
+nothing automated caught it; a human had to notice a missing car body from a
+screenshot (HANDOFF.md). This scene exists so that class of regression fails
+a build, not a glance. The actual fix (this task, 2026-10-08): one
+MeshRenderer PER CHANNEL present in draw group 0 (not just channel 0), each
+fed its own decodeChannel(c) and its own rangeMask restricted to that
+channel's own ranges - this file's own already-established multi-channel
+pattern (MultiChannelMultiSetRender, tools/sr3_viewer.cpp).
+
+Real command (run with cwd = tests/golden/ so the "captured:" line in the
+frozen stdout, if ever frozen, would record the exact relative path this
+file records - same convention every other scene's own COMMAND.txt uses):
+
+    <sr3_viewer.exe> drive_demo ^
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\dlc1.vpp_pc" ^
+        car_4dr_genki_0.ccar_pc ^
+        --no-city --frames 1 --capture _work/drive_demo_coverage.png --capture-frames 0
+
+<sr3_viewer.exe> = the real CMake target build output (e.g.
+build_preset_vs2022/Release/sr3_viewer.exe), same binary golden_scene_check's
+own --bin-dir resolves to real a `cmake --build`.
+
+NOTE on --capture-frames (not --capture-frame): drive_demo's own
+--capture-frame alone only sets the FALLBACK frame used when --capture-frames
+resolves EMPTY. Its own default --capture-frames is the non-empty 3-phase
+list {89, 179, 239} (one frame per scripted phase) - that default still wins
+over a bare --capture-frame 0, so --frames 1 --capture-frame 0 alone captures
+NOTHING. --capture-frames 0 explicitly overrides the list to {0}, which
+DOES get hit on the single frame --frames 1 presents. Confirmed directly by
+testing both forms. The written file is "<capture-path>_frame0.png" (the
+same "_frameN.png" suffixing every non-empty --capture-frames run uses),
+NOT the bare --capture path - see runDriveDemo()'s own per-frame capture
+block.
+
+Real data: dlc1.vpp_pc (the whole shipped DLC1 archive), car_4dr_genki_0.ccar_pc
++ .gcar_pc + .cpeg_pc/.gpeg_pc nested inside car_4dr_genki_0.str2_pc within
+dlc1.vpp_pc - the SAME real vehicle tests/golden/vehicle_genki's own golden
+uses (see checkDriveDemoCoverageScene()'s own doc comment for why that
+matters: this scene cross-checks its own coverage/bbox fraction against
+vehicle_genki's as a secondary, deliberately loose sanity signal). --no-city:
+no sr3_city_0.vpp_pc dependency at all - this scene renders the car alone,
+per the task brief's own "render the car alone" instruction.
+
+Why frame 0 of the straight phase: deterministic (fixed VehicleTuning test
+fixture + fixed start pose - see BuildDriveDemoVehicleTuning()/runDriveDemo()'s
+own doc comment - no RNG, no wall-clock input), and the earliest frame
+available, so this is the fastest possible single-frame capture of this
+scene. The trailing chase camera at frame 0 (pos (-960,-700), heading 0 deg)
+still frames the vehicle from behind-and-above per runDriveDemo()'s own fixed
+kCamDistance/kCamHeightAbovePivot/kPivotHeight constants - an angled, non-
+straight-on view (the task brief's "fixed 3/4 view").
+
+Determinism: confirmed directly this session by running this exact command
+twice in a row into two different --capture paths and MD5-comparing the
+resulting PNGs - byte-identical both times (MD5
+620664767edebcce89dc63e9e441844a), matching this project's own existing
+determinism-verification convention (see tests/golden/vehicle_genki/
+COMMAND.txt for the same check on a different scene).
+
+WARP: frozen under the D3D11 WARP software rasterizer (SR3_FORCE_WARP=1),
+this project's own standing policy for every golden (see
+tests/golden/vehicle_genki/COMMAND.txt's own "RE-FROZEN 2026-10-07" section
+for why) - golden_scene_check.cpp's own main() already sets this
+unconditionally before running any scene, including this one.
+
+Frozen here:
+  baseline_capture.png - the real captured frame (device: WARP, real
+                         multi-channel vehicle mesh - draw group 0's 3
+                         distinct channels (0/1/2), 20/20 real draw ranges,
+                         real per-material Base_Paint_Color paint tints).
+  (no baseline_stdout.txt - this scene does NOT byte-compare stdout, unlike
+  every other scene in this file: drive_demo's own stdout includes a
+  per-material [paint] dump whose content depends only on real, stable
+  .ccar_pc data and would be redundant with the PNG compare here, and this
+  scene's own PRIMARY gate is comparePngExact on baseline_capture.png
+  directly - see checkDriveDemoCoverageScene()'s own doc comment for the
+  full 3-gate design: byte-exact self-compare, coverage/bbox self-compare
+  with ~5%/10% tolerance, and a loose cross-vehicle coverage sanity check
+  against tests/golden/vehicle_genki/baseline_capture.png).
+
+Re-run and check with: tools/golden_scene_check.cpp's own
+checkDriveDemoCoverageScene() (see that file's own header comment for the
+general convention this directory follows, and that function's own doc
+comment for why this scene is NOT byte-exact-only like its siblings).
+
+RE-FROZEN 2026-10-08 (car-parts-wheels-doors task, completing the WIP left
+by commit b7bc80d): this scene's baseline_capture.png (+ a new ENV.txt,
+this directory's first) was re-captured now that the wheel/rim catalogue
+load (spec-vehicle-geometry.md Sec12.1), door/panel part-array transform
+(Sec12.2), and steer/spin/suspension pose bridge (Sec12.3) are implemented
+- see tools/sr3_viewer.cpp's own loadExternalizedWheelCatalogV()/
+buildWheelAttachTransformV() doc comments for the full real/CHOSEN
+breakdown. The OLD baseline this replaces (captured before any of Sec12
+existed - a bare floating body with no wheels at all) is preserved,
+unmodified, under the sibling directory drive_demo_coverage_prewheels/
+(same COMMAND.txt/baseline_capture.png shape as this directory), per this
+project's own re-freeze-preserves-the-old-one convention (precedent:
+tests/golden/walk_demo_v2_hw_pre_warp/).
+
+Real before/after numbers (same command, same real car_4dr_genki_0.ccar_pc/
+dlc1.vpp_pc data, only the code changed): old baseline 520x153 px bbox
+(40.6% x 21.2% of frame), 6.04% coverage (55700 px), NO wheels visible -
+new baseline 478x208 px bbox (37.3% x 28.9% of frame, the extra height is
+the two now-attached wheels extending below the body), 5.57% coverage
+(51312 px, net LOWER despite the added wheel geometry - the Sec12.2 door/
+panel real-transform fix measurably tightens the interior floor's own
+boundary per that fix's own doc comment, which costs slightly more
+covered-pixel area than the wheels add back). This is exactly why the
+WHEEL-SPECIFIC gate below exists as a SEPARATE, non-baseline-relative
+check: a coverage-only gate would have no way to tell "pixels moved to a
+more correct position" apart from "wheels silently went missing again".
+
+Determinism re-verified before freezing (same convention as this file's
+own original determinism check above): this exact command run twice in a
+row into two different --capture paths, MD5-compared - byte-identical both
+times (MD5 5ce361eb99b3af76cbdcff8f719d71bd).
+
+Visual confirmation (not just the numbers): both the old and new
+baseline_capture.png were inspected directly - the new one shows two dark
+circular/elliptical wheels attached under the body (front and rear) that
+are simply absent from the old one; the new one also reads an angled grey
+flap near the windshield, a real, honestly-reported residual gap (Sec12.2's
+translation-only door/panel fix cannot supply the rotation a flush-closed
+door needs - see tools/sr3_viewer.cpp's own "HONEST RESIDUAL" doc comment
+at the doors/panels block in runDriveDemo() for the full writeup).
+
+Re-verified after freezing: checkDriveDemoCoverageScene() against this new
+baseline now PASSES all 5 gates (self-baseline byte-exact, self-baseline
+coverage, self-baseline bbox, cross-vehicle sanity, wheel-aspect-ratio) -
+see this task's own commit/report for the full golden_scene_check output.

@@ -63,7 +63,7 @@ Window::~Window() {
 }
 
 bool Window::create(const std::string& title, uint32_t width, uint32_t height,
-                    std::string& error) {
+                    std::string& error, bool visible) {
     if (width == 0 || height == 0) {
         error = "window dimensions must be non-zero";
         return false;
@@ -98,8 +98,15 @@ bool Window::create(const std::string& title, uint32_t width, uint32_t height,
     const DWORD style = WS_OVERLAPPEDWINDOW;
     AdjustWindowRect(&rect, style, FALSE);
 
+    // Focus-stealing fix (2026-10-08): an invisible window gets
+    // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW on top of simply never being
+    // SW_SHOW'n below - belt and suspenders against ever activating,
+    // stealing foreground, or appearing in the taskbar/alt-tab list. A
+    // `--visible` invocation gets the plain old behaviour back (ex-style 0).
+    const DWORD exStyle = visible ? 0 : (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
+
     std::wstring wideTitle(title.begin(), title.end());
-    HWND hwnd = CreateWindowExW(0, kClassName, wideTitle.c_str(), style, CW_USEDEFAULT,
+    HWND hwnd = CreateWindowExW(exStyle, kClassName, wideTitle.c_str(), style, CW_USEDEFAULT,
                                 CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top,
                                 nullptr, nullptr, instance, nullptr);
     if (hwnd == nullptr) {
@@ -112,8 +119,15 @@ bool Window::create(const std::string& title, uint32_t width, uint32_t height,
     WindowState* state = new WindowState{width, height, false};
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
 
-    ShowWindow(hwnd, SW_SHOW);
-    UpdateWindow(hwnd);
+    // Only actually show/activate the window for an explicit `--visible`
+    // request. The default path leaves it created-but-hidden: WARP and this
+    // project's offscreen swap chain render into it exactly the same either
+    // way (see window.h's own doc comment on `visible`), so a hidden window
+    // is never a correctness hit, only a focus-stealing fix.
+    if (visible) {
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+    }
 
     hwnd_ = hwnd;
     width_ = width;

@@ -1,0 +1,66 @@
+police_roadblock_demo: spec-ai-runtime.md Sec19.7 police/roadblock spawn mechanism
+NOTE: the upstream notoriety->schedule trigger (WHEN a roadblock should fire) is honestly OPEN per Sec19.5/19.6/19.7 - this demo explicitly ARMS the driver itself (RoadblockPopulationDriver::armed = true) rather than inventing a notoriety threshold. slot->forward_offset (50.0m) is a CHOSEN value, not a traced one; the direction resolver ("along the reference's current heading") is a CHOSEN straight-line stand-in, not a real road-network resolver. See police_roadblock_spawn.h's own file header for the full CONFIRMED/CHOSEN/OPEN breakdown.
+
+slot table: 20 slots (2 coop, 6 ped, 10 vehicle [1 Spike_strip + 9 generic], 2 third-category)
+confirmed throttle caps per tick: coop0/1 shared<=1, ped(2)<=2, vehicle(3)<=4, third(4)=uncapped
+
+=== SECTION 1: throttle drain over 4 ticks (this table INCLUDES the 2 coop slots) ===
+
+[tick 0] player=(0.0,0.0,8.0) anchor=(0.0,0.0,8.0) anchor_recentered=no
+          attempted=20 throttled=11 dispatched=9 unfilled_remaining=12
+          confirmed throttle numbers held: coop<=1 ped<=2 vehicle<=4 third=uncapped -> see per-category counts in the dispatch list below
+      -> SKIPPED(coop handoff, not creation)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=SPIKE_STRIP def="Spike_strip" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> THIRD_CATEGORY_CREATED def="roadblock_barrier" @ (0.0, 0.0, 58.0)
+      -> THIRD_CATEGORY_CREATED def="roadblock_barrier" @ (0.0, 0.0, 58.0)
+
+[tick 1] player=(0.0,0.0,16.0) anchor=(0.0,0.0,8.0) anchor_recentered=no
+          attempted=12 throttled=5 dispatched=7 unfilled_remaining=6
+          confirmed throttle numbers held: coop<=1 ped<=2 vehicle<=4 third=uncapped -> see per-category counts in the dispatch list below
+      -> SKIPPED(coop handoff, not creation)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+
+[tick 2] player=(0.0,0.0,24.0) anchor=(0.0,0.0,8.0) anchor_recentered=no
+          attempted=6 throttled=1 dispatched=5 unfilled_remaining=2
+          confirmed throttle numbers held: coop<=1 ped<=2 vehicle<=4 third=uncapped -> see per-category counts in the dispatch list below
+      -> SKIPPED(coop handoff, not creation)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> PED_CREATED @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+      -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (0.0, 0.0, 58.0)
+
+[tick 3] player=(0.0,0.0,32.0) anchor=(0.0,0.0,8.0) anchor_recentered=no
+          attempted=2 throttled=1 dispatched=1 unfilled_remaining=2
+          confirmed throttle numbers held: coop<=1 ped<=2 vehicle<=4 third=uncapped -> see per-category counts in the dispatch list below
+      -> SKIPPED(coop handoff, not creation)
+
+SECTION 1 NOTE: every tick's dispatch count stayed within the confirmed 1/1/2/4 caps (verified exactly in tests/synthetic_police_roadblock_spawn_test.cpp's own testManagerThrottleLimitsSpawnsPerTickToConfirmedNumbers). Notice the anchor NEVER recenters in this run (anchor_recentered=no, every tick) - that is a REAL, faithful consequence of this table including 2 coop (case 0/1) slots: because case 0/1 is SKIPPED rather than creating anything (see file header), those 2 slots are never marked "filled", so "no unfilled slot exists" (the CONFIRMED condition that triggers re-centering, Sec19.7) never holds for THIS table - the coop slots, perpetually unfilled, permanently block the recenter branch. SECTION 2 below uses a separate table with no coop slots to isolate and actually demonstrate the sliding anchor.
+
+=== SECTION 2: the anchor actually SLIDES once a (coop-free) table fills (not a fixed point) ===
+
+[tick 0] reference=(0.0,0.0,20.0) anchor=(0.0,0.0,20.0) anchor_recentered=no
+[tick 1] reference=(0.0,0.0,40.0) anchor=(0.0,0.0,0.0) anchor_recentered=YES
+[tick 2] reference=(0.0,0.0,60.0) anchor=(0.0,0.0,-20.0) anchor_recentered=YES
+[tick 3] reference=(0.0,0.0,80.0) anchor=(0.0,0.0,-40.0) anchor_recentered=YES
+[tick 4] reference=(0.0,0.0,100.0) anchor=(0.0,0.0,-60.0) anchor_recentered=YES
+
+SECTION 2 RESULT: once the single slot filled (tick 0), every later tick shows anchor_recentered=YES and the anchor's own Z coordinate changing by the EXACT amount the reference moved that tick (CONFIRMED subtraction formula, Sec19.7: anchor -= delta(reference)) - proof this is a sliding point, never a fixed world position.
+
+=== SECTION 3: spike-strip vs. generic vehicle distinguishability (direct check) ===
+
+spike slot  (configured name "Spike_strip"):                -> VEHICLE_CREATED kind=SPIKE_STRIP def="Spike_strip" @ (100.0, 0.0, 100.0)
+generic slot(configured name "generic_police_cruiser"):       -> VEHICLE_CREATED kind=GENERIC def="generic_police_cruiser" @ (100.0, 0.0, 110.0)
+
+kinds differ: YES (RoadblockVehicleKind::kSpikeStrip vs. ::kGeneric)
+
+police_roadblock_demo: done.

@@ -144,6 +144,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "sr3asm/manifest.h"
@@ -151,7 +152,10 @@
 #include "sr3luahost/host.h"
 #include "sr3luahost/hook_registry.h"
 #include "sr3tables_cutscene/scene_table.h"
+#include "sr3tables_progression/tables.h"
+#include "sr3tables_weapons/combat.h"
 #include "sr3vintdoc/vint_doc.h"
+#include "sr3zone/zone_objects.h"
 #include "vpp/container.h"
 
 namespace fs = std::filesystem;
@@ -246,11 +250,14 @@ std::string installSceneTableFromCache(const fs::path& cacheDir, sr3luahost::Eng
             });
         std::vector<sr3luahost::EngineState::ZsceneTableRow> rows;
         size_t kind0 = 0, kind1 = 0, kind2 = 0, kindOpen = 0, lightsetUnterminated = 0, soundtrackSplitOpen = 0;
+        size_t cameraScriptNames = 0;
         for (const auto& e : table.entries) {
             sr3luahost::EngineState::ZsceneTableRow row;
             row.name = e.name;
             row.crc = e.crc;
             row.kind = e.fields.kind;
+            row.cameraScriptName = e.fields.cameraScriptText; // Sec57.2a/Sec10.6 item 7 wiring (2026-10-08)
+            if (row.cameraScriptName) ++cameraScriptNames;
             if (e.fields.resources) {
                 std::vector<std::string> res;
                 for (const auto& r : *e.fields.resources) {
@@ -270,6 +277,45 @@ std::string installSceneTableFromCache(const fs::path& cacheDir, sr3luahost::Eng
         }
         const size_t installed = rows.size();
         es.installZsceneTable(std::move(rows));
+
+        // Real camera-script byte source (spec-lua-api-behaviour.md
+        // Sec57.2a / spec-cutscene-camera-format.md Sec10.6 item 7,
+        // 2026-10-08 wiring task): EngineState::cutsceneCameraScriptStep()
+        // calls this, by name, for a Zscene/Story-kind scene entry.
+        // CHOSEN scope limitation (stated plainly, not hidden): this only
+        // searches the SAME container cutscene.xtbl/the .cte_xtbl files
+        // came from (archivePath, captured below by an owned COPY of its
+        // bytes so the opener outlives this function) - not the real
+        // engine's own "linear, case-insensitive, name-string search
+        // across every mounted container's directory" (spec-vpp-
+        // container.md Sec2, the same rule installSceneTableFromCache's
+        // own doc comment above already simplifies this way for
+        // .cte_xtbl). A name not found in this one container answers
+        // nullopt, which cutsceneCameraScriptStep treats as a REAL
+        // "missing script aborts the load" outcome, not a crash.
+        auto archiveBytes = std::make_shared<std::vector<uint8_t>>(bytes);
+        es.installCameraScriptOpener(
+            [archiveBytes](const std::string& fileName) -> std::optional<std::vector<uint8_t>> {
+                try {
+                    vpp::Container cc(vpp::ByteView(archiveBytes->data(), archiveBytes->size()));
+                    const std::string w = toLower(fileName);
+                    const auto& entries = cc.entries();
+                    for (size_t i = 0; i < entries.size(); ++i) {
+                        if (toLower(entries[i].name) != w) continue;
+                        if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                            vpp::ByteView raw = cc.rawEntryBytes(i);
+                            return std::vector<uint8_t>(raw.data(), raw.data() + raw.size());
+                        }
+                        vpp::DecompressResult r = cc.decompressEntry(i);
+                        if (r.status != vpp::DecodeStatus::Ok) return std::nullopt;
+                        return r.data;
+                    }
+                    return std::nullopt;
+                } catch (const std::exception&) {
+                    return std::nullopt;
+                }
+            });
+
         return "installed source=" + archivePath.filename().string() +
                " cutscene_elements=" + std::to_string(table.names.cutsceneElements) +
                " names_accepted=" + std::to_string(table.names.accepted.size()) +
@@ -281,10 +327,440 @@ std::string installSceneTableFromCache(const fs::path& cacheDir, sr3luahost::Eng
                " kind0_designer=" + std::to_string(kind0) + " kind1_zscene=" + std::to_string(kind1) +
                " kind2_story=" + std::to_string(kind2) + " kind_open=" + std::to_string(kindOpen) +
                " lightset_unterminated=" + std::to_string(lightsetUnterminated) +
-               " soundtrack_split_open=" + std::to_string(soundtrackSplitOpen);
+               " soundtrack_split_open=" + std::to_string(soundtrackSplitOpen) +
+               " camera_script_names=" + std::to_string(cameraScriptNames);
     } catch (const std::exception& ex) {
         return std::string("not installed (") + ex.what() + ")";
     }
+}
+
+// --- continuous_explosions.xtbl definition table (spec-lua-api-behaviour.md
+// Sec28.16 "`continuous_explosion_start`"; spec-tables-weapons-combat.md
+// Sec10.2) --------------------------------------------------------------
+// The real runtime table (0x014A0310, stride 0x64, cap 3 rows) is read once
+// at start-up from continuous_explosions.xtbl via the resolver 0x005eb390 -
+// a PLAIN cdecl lookup, NOT the shared 0x02442750 singleton family (Sec28.16
+// Body). The file exists in TWO real archives in the real cache with
+// different content: misc_tables.vpp_pc (1 row) and patch_compressed.vpp_pc
+// (3 rows - exactly the loader's own cap, with zero rows rejected by any of
+// Sec10.2's own range checks - spec-tables-weapons-combat.md Sec18.1/
+// Sec18.5's own population census, "row count 3 = the loader's own cap
+// exactly"). Which container the live game actually mounts LAST for this
+// filename (so it is the one 0x005eb390's table-build reads) is not specced
+// - Sec10.2's own review status is "NEEDS-DATA" on exactly this question.
+// CHOSEN: this host prefers patch_compressed.vpp_pc when present in the
+// cache (the copy whose row count already matches the documented cap with
+// nothing rejected - the stronger of the two signals for "this is the
+// operative copy"), falling back to misc_tables.vpp_pc's copy only if no
+// patch_compressed.vpp_pc is in the cache. No DLC archive carries this
+// table (Sec10.2), so no further container is searched. Returns the summary
+// for verdict_summary.txt's continuous_explosion_table= line.
+std::string installContinuousExplosionTableFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    static const char* const kPreferredArchives[] = {"patch_compressed.vpp_pc", "misc_tables.vpp_pc"};
+    std::string notFoundArchives;
+    for (const char* archiveName : kPreferredArchives) {
+        fs::path archivePath;
+        for (auto& ent : fs::directory_iterator(cacheDir)) {
+            if (ent.is_regular_file() && toLower(ent.path().filename().string()) == archiveName) {
+                archivePath = ent.path();
+                break;
+            }
+        }
+        if (archivePath.empty()) {
+            if (!notFoundArchives.empty()) notFoundArchives += ", ";
+            notFoundArchives += archiveName;
+            continue;
+        }
+        try {
+            std::vector<uint8_t> bytes = readFile(archivePath);
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            const auto& entries = c.entries();
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (toLower(entries[i].name) != "continuous_explosions.xtbl") continue;
+                std::string fileBytes;
+                if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                    vpp::ByteView raw = c.rawEntryBytes(i);
+                    fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                } else {
+                    vpp::DecompressResult r = c.decompressEntry(i);
+                    if (r.status != vpp::DecodeStatus::Ok) {
+                        return "not installed (continuous_explosions.xtbl in " + archivePath.filename().string() +
+                               " failed to decompress)";
+                    }
+                    fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                }
+                sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                std::vector<sr3tables_weapons::ContinuousExplosion> rows = sr3tables_weapons::ParseAllContinuousExplosions(doc);
+                for (const auto& row : rows) {
+                    // Every parsed row becomes a real, resolvable definition
+                    // name (CONFIRMED set, this host does not reproduce
+                    // Sec10.2's own per-row reject-and-drop range checks -
+                    // the real population census already found both real
+                    // candidate files' rows clean against them).
+                    es.continuousExplosion().definitionResolves.set(row.name, true);
+                }
+                return "installed source=" + archivePath.filename().string() + " rows=" + std::to_string(rows.size());
+            }
+        } catch (const std::exception& ex) {
+            return std::string("not installed (") + ex.what() + ")";
+        }
+    }
+    return "not installed (continuous_explosions.xtbl not found in " + notFoundArchives +
+           "; the table stays OPEN)";
+}
+
+// --- weapons.xtbl weapon-definition table (spec-lua-api-behaviour.md
+// Sec4.10/Sec4.11 "inv_weapon_add_temporary"/"inv_weapon_remove_temporary";
+// EngineState::weaponDefinitionResolves() - 2026-10-09 fast-follow, probe
+// blockers `m13` ['molotov'], `m19` ['special-sonicgun'], `m24`
+// ['pistol-gang']/['rifle-stag']) ----------------------------------------
+// The real runtime array both natives' shared `_stricmp` scan searches
+// (0x028dc4dc, stride 0x7ec) is NOT a separate thing from this project's
+// own already-built, already-proven sr3tables_weapons::Weapon row reader -
+// weapons.h's own file-level CONVENTIONS comment documents the exact same
+// 0x7EC record stride for the SAME `weapons.xtbl` `<Weapon>` row (spec-
+// tables-weapons-combat.md Sec16.4's independent structural cross-check:
+// "the last field the weapons reader writes ends exactly at the record
+// stride 0x7EC"), so every real `<Weapon>` row this already-existing reader
+// successfully parses IS, by construction, a row that would be loaded into
+// that exact runtime array - the array's own "loaded" filter bit
+// (Sec4.10's own +0x18 bit 0x4) is pure loader-lifecycle bookkeeping, never
+// driven by `<Flag>` XML text (weapons.h's own file-level comment already
+// puts it out of scope for exactly this reason: a per-row/per-file static
+// reader has no "not yet loaded" state of its own to represent). spec-
+// tables-weapons-combat.md Sec18.3/Sec18.4's own real-data population
+// census found all 82 real base rows structurally clean (every enum/flag
+// value documented, no capacity violations, "no value outside any
+// documented set was found anywhere in the 82 rows") - this host does not
+// reproduce a reject-and-drop loader check for the same reason
+// installContinuousExplosionTableFromCache above does not: the real
+// population is already known clean against them.
+//
+// Archives (Sec18.1/Sec18.2, Sec16 - both CONFIRMED, empirical): the 82
+// base rows live in `misc_tables.vpp_pc` and ONLY there - unlike
+// continuous_explosions.xtbl/spawn_info_ranks.xtbl above, `weapons.xtbl`
+// has no larger `patch_compressed.vpp_pc` copy, so there is no archive-
+// precedence question to resolve here. The two real DLC extensions
+// (`dlc2_weapons.xtbl`, 6 rows; `dlc3_weapons.xtbl`, 3 rows - no DLC1
+// weapon-group file exists at all, Sec16) are each a raw top-level entry of
+// their own numbered DLC archive ("the DLC archives store their entries
+// raw, so their tables are trustworthy", Sec16 Sources). All rows found,
+// across every one of these files present, are merged into ONE resolver -
+// the real engine's own loader builds the base pass then applies the DLC
+// passes into the SAME runtime array (Sec2/Sec2.6), never a separate table
+// per archive.
+std::string installWeaponDefinitionTableFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    struct ArchiveFile {
+        const char* archive;
+        const char* xtbl;
+    };
+    static const ArchiveFile kFiles[] = {
+        {"misc_tables.vpp_pc", "weapons.xtbl"},
+        {"dlc2.vpp_pc", "dlc2_weapons.xtbl"},
+        {"dlc3.vpp_pc", "dlc3_weapons.xtbl"},
+    };
+    std::string notFound;
+    size_t filesInstalled = 0;
+    size_t totalRows = 0;
+    for (const ArchiveFile& af : kFiles) {
+        fs::path archivePath;
+        for (auto& ent : fs::directory_iterator(cacheDir)) {
+            if (ent.is_regular_file() && toLower(ent.path().filename().string()) == toLower(std::string(af.archive))) {
+                archivePath = ent.path();
+                break;
+            }
+        }
+        if (archivePath.empty()) {
+            if (!notFound.empty()) notFound += ", ";
+            notFound += std::string(af.archive) + " (for " + af.xtbl + ")";
+            continue;
+        }
+        try {
+            std::vector<uint8_t> bytes = readFile(archivePath);
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            const auto& entries = c.entries();
+            bool found = false;
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (toLower(entries[i].name) != toLower(std::string(af.xtbl))) continue;
+                found = true;
+                std::string fileBytes;
+                if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                    vpp::ByteView raw = c.rawEntryBytes(i);
+                    fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                } else {
+                    vpp::DecompressResult r = c.decompressEntry(i);
+                    if (r.status != vpp::DecodeStatus::Ok) {
+                        if (!notFound.empty()) notFound += ", ";
+                        notFound += std::string(af.xtbl) + " (failed to decompress in " + archivePath.filename().string() + ")";
+                        break;
+                    }
+                    fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                }
+                sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                std::vector<sr3tables_weapons::Weapon> rows = sr3tables_weapons::ParseAllWeapons(doc);
+                for (const auto& row : rows) {
+                    // Every parsed row becomes a real, resolvable weapon-
+                    // definition name (CONFIRMED set, this function's own top
+                    // comment) - case-folded via the SAME AsciiLowerFold the
+                    // native stubs' own `_stricmp`-equivalent lookup already
+                    // uses (engine_state.h's weaponDefinitionResolves() doc
+                    // comment).
+                    es.weaponDefinitionResolves().set(sr3luahost::AsciiLowerFold(row.name), true);
+                }
+                ++filesInstalled;
+                totalRows += rows.size();
+                break;
+            }
+            if (!found) {
+                if (!notFound.empty()) notFound += ", ";
+                notFound += std::string(af.xtbl) + " (not found in " + archivePath.filename().string() + ")";
+            }
+        } catch (const std::exception& ex) {
+            if (!notFound.empty()) notFound += ", ";
+            notFound += std::string(af.xtbl) + " (" + ex.what() + ")";
+        }
+    }
+    std::string summary = "installed files=" + std::to_string(filesInstalled) + "/" +
+                           std::to_string(sizeof(kFiles) / sizeof(kFiles[0])) +
+                           " rows=" + std::to_string(totalRows) +
+                           " names_resolved=" + std::to_string(es.weaponDefinitionResolves().knownCount());
+    if (!notFound.empty()) summary += " missing=" + notFound;
+    return summary;
+}
+
+// --- spawn_info_ranks.xtbl Hit_Points values (spec-tables-progression.md
+// Sec10.6/Sec14.12; EngineState::drawOrGetMaxHitPoints, spec-lua-api-behaviour.md
+// Sec7.12/Sec34.2 - 2026-10-07 closure of the max-hit-points random-per-
+// spawn model, probe_blockers_ranked_20261007.md item 2, mission `m18`)
+// -------------------------------------------------------------------------
+// This is NOT a resolver (no attempt is made here to pick which <Rank>
+// record applies to a given bare Lua name - that resolution is this
+// project's own unmodeled gap, see CharacterState::maxHitPoints's own doc
+// comment). It only installs the REAL set of distinct Hit_Points values the
+// table actually ships, so drawOrGetMaxHitPoints's own uniform draw is
+// grounded in real shipped data rather than an invented range.
+//
+// SAME two-archive situation as continuous_explosions.xtbl above, same
+// archive-priority mechanism (spec-tables-progression.md Sec14.2's own
+// boot/mount trace, generalized explicitly to this table in that same
+// section's text, and restated at Sec14.12): `misc_tables.vpp_pc` carries a
+// 54-row copy, `patch_compressed.vpp_pc` carries a 55-row superset (the
+// extra row is `Homie - Kwilanna`) and the patch copy is the one the real
+// shipped game actually loads. 2026-10-07 fast-follow fix (flagged, not
+// fixed, by commit 50bdb29's own reviewer): this loader used to read ONLY
+// misc_tables.vpp_pc, skipping that same precedence rule - non-observable
+// so far only because both archives happen to yield the same 30 distinct
+// Hit_Points values (`Homie - Kwilanna`'s own value is a duplicate of one
+// already in the 54-row set), not because the rule didn't matter. CHOSEN:
+// same kPreferredArchives order as installContinuousExplosionTableFromCache
+// above - prefer patch_compressed.vpp_pc, fall back to misc_tables.vpp_pc
+// only if no patch_compressed.vpp_pc is in the cache. No DLC archive
+// carries this table either (same census method as the continuous-
+// explosion loader above). Returns the summary for verdict_summary.txt's
+// spawn_rank_hit_points= line.
+std::string installSpawnRankHitPointsFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    static const char* const kPreferredArchives[] = {"patch_compressed.vpp_pc", "misc_tables.vpp_pc"};
+    std::string notFoundArchives;
+    for (const char* archiveName : kPreferredArchives) {
+        fs::path archivePath;
+        for (auto& ent : fs::directory_iterator(cacheDir)) {
+            if (ent.is_regular_file() && toLower(ent.path().filename().string()) == archiveName) {
+                archivePath = ent.path();
+                break;
+            }
+        }
+        if (archivePath.empty()) {
+            if (!notFoundArchives.empty()) notFoundArchives += ", ";
+            notFoundArchives += archiveName;
+            continue;
+        }
+        try {
+            std::vector<uint8_t> bytes = readFile(archivePath);
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            const auto& entries = c.entries();
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (toLower(entries[i].name) != "spawn_info_ranks.xtbl") continue;
+                std::string fileBytes;
+                if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                    vpp::ByteView raw = c.rawEntryBytes(i);
+                    fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                } else {
+                    vpp::DecompressResult r = c.decompressEntry(i);
+                    if (r.status != vpp::DecodeStatus::Ok) {
+                        return "not installed (spawn_info_ranks.xtbl in " + archivePath.filename().string() +
+                               " failed to decompress)";
+                    }
+                    fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                }
+                sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                std::vector<sr3tables_progression::SpawnRank> rows = sr3tables_progression::ParseSpawnInfoRanksTable(doc);
+                std::set<int32_t> distinctValues;
+                for (const auto& row : rows) distinctValues.insert(static_cast<int32_t>(row.hitPoints.value));
+                std::vector<int32_t> values(distinctValues.begin(), distinctValues.end());
+                es.installSpawnRankHitPoints(values);
+                return "installed source=" + archivePath.filename().string() + " rows=" + std::to_string(rows.size()) +
+                       " distinct_hit_points_values=" + std::to_string(values.size());
+            }
+        } catch (const std::exception& ex) {
+            return std::string("not installed (") + ex.what() + ")";
+        }
+    }
+    return "not installed (spawn_info_ranks.xtbl not found in " + notFoundArchives +
+           "; the draw falls back to the CHOSEN 100)";
+}
+
+// --- Zone Objects (0x2234) real-cache install (2026-10-08, zone-data
+// fast-follow): wires sr3zone::ZoneObjects - the existing, already-proven
+// `.czn_pc` Objects reader (include/sr3zone/zone_objects.h, spec-zone-
+// data-format.md Sec11) - into this host's own named-object lookup
+// (EngineState::loadZoneObjectsSection(), include/sr3luahost/
+// zone_object_resolver.h) for the first time, against REAL shipped zone
+// data. Previously NOTHING in this project's scope ever fed a real
+// `.czn_pc` into the Lua host - objectResolves()/CharacterState::
+// scriptNpcHp were only ever reachable via a test manually calling
+// markScriptNpcBoundForTesting()/applyScriptNpcHitPointsForTesting()
+// (commit bc7ff16). This closes that gap for a real mission-drive run.
+//
+// Archive list: the SAME 10 archives spec-zone-data-format.md's own Sec9.4
+// population census uses ("every `.czn_pc`/`.gzn_pc` filename pair found
+// ... in sr3_city_0.vpp_pc, sr3_city_1.vpp_pc, sr3_city_missions.vpp_pc,
+// dlc1.vpp_pc, dlc2.vpp_pc, dlc3.vpp_pc, misc.vpp_pc, startup.vpp_pc,
+// patch_compressed.vpp_pc, patch_uncompressed.vpp_pc - 1,083 pairs") - a
+// CHOSEN, spec-backed scope (not "every archive in the cache", and not a
+// guess at which archives matter).
+//
+// A third, dedicated recursive walk (leaf test: ".czn_pc") - same
+// duplicated-with-attribution convention as the walk()/walkAsm() pair
+// below this function (this file's own top comment: a small recursive
+// walk per tool/per leaf-type, not factored into one shared traversal).
+// Unlike those two, this walk ingests each leaf immediately (one
+// sr3zone::ZoneObjects::locate() + EngineState::loadZoneObjectsSection()
+// call per `.czn_pc` found) rather than collecting every buffer first -
+// 1,083 real files is not large, but there is no reason to hold them all
+// in memory at once when each one is fully consumed on sight.
+namespace zoneobj {
+
+bool endsWithCznExt(const std::string& lowerName) {
+    static const std::string ext = ".czn_pc";
+    if (lowerName.size() < ext.size()) return false;
+    return lowerName.compare(lowerName.size() - ext.size(), ext.size(), ext) == 0;
+}
+
+struct Counters {
+    uint64_t cznFilesFound = 0;
+    uint64_t cznWithSection = 0;
+    uint64_t cznSectionsIncomplete = 0; // located but ZoneObjects' own recordCount could not be satisfied - skipped, not ingested
+};
+
+void ingestCznBuffer(sr3luahost::EngineState& es, Counters& ctr, const uint8_t* data, size_t len) {
+    ++ctr.cznFilesFound;
+    std::vector<sr3zone::ObjectsSection> sections;
+    try {
+        sections = sr3zone::ZoneObjects::locate(vpp::ByteView(data, len));
+    } catch (const std::exception&) {
+        return; // malformed candidate - ZoneObjects::locate() already only returns bounds-checked sections; never silently fabricated
+    }
+    for (const sr3zone::ObjectsSection& section : sections) {
+        if (!section.complete) {
+            ++ctr.cznSectionsIncomplete;
+            continue; // see ObjectsSection::complete's own doc comment - never ingest a section the reader itself flagged as truncated
+        }
+        ++ctr.cznWithSection;
+        es.loadZoneObjectsSection(section);
+    }
+}
+
+void walkCzn(sr3luahost::EngineState& es, Counters& ctr, const vpp::Container& c) {
+    const auto& entries = c.entries();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto& e = entries[i];
+        std::string name = e.name.empty() ? std::string() : e.name;
+        bool isCzn = endsWithCznExt(toLower(name));
+
+        if (e.payload.kind == vpp::PayloadKind::Raw) {
+            bool nested = false;
+            try {
+                vpp::Container child = c.openNested(i);
+                nested = true;
+                walkCzn(es, ctr, child);
+            } catch (const std::exception&) {
+                nested = false;
+            }
+            if (!nested && isCzn) {
+                vpp::ByteView raw = c.rawEntryBytes(i);
+                ingestCznBuffer(es, ctr, raw.data(), raw.size());
+            }
+        } else {
+            vpp::DecompressResult result = c.decompressEntry(i);
+            bool ok = result.status == vpp::DecodeStatus::Ok || result.status == vpp::DecodeStatus::SizeMismatch ||
+                      result.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                      result.status == vpp::DecodeStatus::ContentValidated ||
+                      result.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                      result.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain;
+            if (!ok) continue;
+            bool nested = false;
+            if (result.data.size() >= 4) {
+                uint32_t magic = (uint32_t)result.data[0] | ((uint32_t)result.data[1] << 8) |
+                                  ((uint32_t)result.data[2] << 16) | ((uint32_t)result.data[3] << 24);
+                if (magic == 0x51890ACEu) {
+                    try {
+                        vpp::Container child(vpp::ByteView(result.data.data(), result.data.size()));
+                        nested = true;
+                        walkCzn(es, ctr, child);
+                    } catch (const std::exception&) {
+                        nested = false;
+                    }
+                }
+            }
+            if (!nested && isCzn) {
+                ingestCznBuffer(es, ctr, result.data.data(), result.data.size());
+            }
+        }
+    }
+}
+
+} // namespace zoneobj
+
+std::string installZoneObjectsFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    static const char* const kArchives[] = {
+        "sr3_city_0.vpp_pc",        "sr3_city_1.vpp_pc", "sr3_city_missions.vpp_pc",
+        "dlc1.vpp_pc",              "dlc2.vpp_pc",       "dlc3.vpp_pc",
+        "misc.vpp_pc",              "startup.vpp_pc",
+        "patch_compressed.vpp_pc",  "patch_uncompressed.vpp_pc",
+    };
+    zoneobj::Counters ctr;
+    std::string archivesMissing;
+    size_t archivesFound = 0;
+    for (const char* archiveName : kArchives) {
+        fs::path archivePath;
+        for (auto& ent : fs::directory_iterator(cacheDir)) {
+            if (ent.is_regular_file() && toLower(ent.path().filename().string()) == toLower(std::string(archiveName))) {
+                archivePath = ent.path();
+                break;
+            }
+        }
+        if (archivePath.empty()) {
+            if (!archivesMissing.empty()) archivesMissing += ", ";
+            archivesMissing += archiveName;
+            continue;
+        }
+        ++archivesFound;
+        try {
+            std::vector<uint8_t> bytes = readFile(archivePath);
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            zoneobj::walkCzn(es, ctr, c);
+        } catch (const std::exception& ex) {
+            return "not installed (" + std::string(archiveName) + ": " + ex.what() + ")";
+        }
+    }
+    std::string summary = "installed archives=" + std::to_string(archivesFound) + "/" +
+                           std::to_string(sizeof(kArchives) / sizeof(kArchives[0])) +
+                           " czn_files_found=" + std::to_string(ctr.cznFilesFound) +
+                           " objects_sections=" + std::to_string(ctr.cznWithSection) +
+                           " sections_incomplete=" + std::to_string(ctr.cznSectionsIncomplete) +
+                           " named_objects_resolved=" + std::to_string(es.zoneObjectsLoadedCount());
+    if (!archivesMissing.empty()) summary += " missing_archives=" + archivesMissing;
+    return summary;
 }
 
 struct ScriptInstance {
@@ -805,6 +1281,20 @@ std::string extractNilGlobalName(const std::string& msg) {
 // independently-chosen new number.
 constexpr int kMissionWatchdogInstructionBudget = 5'000'000;
 
+// --probe-autopilot (2026-10-07): CHOSEN, not a spec fact - how many
+// EXTRA ticks (same per-tick shape as the main mission-drive loop: one
+// fade/cutscene/clock frame + kSchedulerPassesPerTick scheduler passes
+// each) to run after synthesizing a callback dispatch, looking for the
+// first new error/wait-location-change/completion past it. Deliberately
+// much smaller than the main --tick-budget=N (default 20, often raised to
+// the hundreds to rule out a long legitimate wait) - a REAL blocker that
+// actually was unblocked by the synthesized event should show up almost
+// immediately on the very next resume; this is "does the mission move at
+// all past this point", not "is this still mid-way through a long wait"
+// (that question was already answered by the real --tick-budget loop
+// BEFORE this mission was classified still_suspended in the first place).
+constexpr int kProbeAutopilotFollowUpTicks = 30;
+
 // --trace-host-calls-before-error=N (DIAGNOSTIC ONLY, CHOSEN tooling, off
 // by default, N=0): when N > 0, every single resume this tool makes (the
 // mission's own initial _start call AND every later scheduler-pass resume
@@ -839,7 +1329,170 @@ constexpr int kMissionWatchdogInstructionBudget = 5'000'000;
 // a short-lived diagnostic).
 size_t g_traceRingSize = 0;
 std::unordered_map<lua_State*, std::vector<std::string>> g_traceRings;
-void resetTraceRing(lua_State* co) { g_traceRings[co].clear(); }
+
+// --probe-autopilot (2026-10-07): declared here (ahead of its own full doc
+// comment, with g_firstResumeRegistrations/isCallbackRegistrationNative
+// below) ONLY because resetTraceRing() needs it a few lines down - see the
+// full doc comment at g_firstResumeRegistrations' own declaration, further
+// below, for why this capture exists at all and what it holds.
+struct CapturedRegistration {
+    std::string nativeName;    // e.g. "on_trigger" - always one of isCallbackRegistrationNative's set
+    std::string callbackName;  // arg 1 on every member of this family: the opaque callback-name string
+    std::string targetName;    // arg 2 (trigger/character/vehicle name); empty for on_qte_animation_trigger,
+                                // which per spec-lua-api-behaviour.md Sec10.7 is single-argument and global
+};
+// Per-coroutine, reset at the top of every resume (resetTraceRing, right
+// below) - holds only THIS resume's own registration calls.
+std::unordered_map<lua_State*, std::vector<CapturedRegistration>> g_registrationCallsThisResume;
+
+void resetTraceRing(lua_State* co) {
+    g_traceRings[co].clear();
+    // --probe-autopilot (2026-10-07): same per-resume reset as the ring
+    // above, purely for memory hygiene across a long-running mission's
+    // many later resumes - by the time any LATER reset runs, a mission's
+    // own FIRST resume's captures have already been copied out into
+    // g_firstResumeRegistrations (callMissionStart, below) and are never
+    // read from this map again.
+    g_registrationCallsThisResume[co].clear();
+}
+
+// First-resume ring (2026-10-07, peer follow-up to this file's own
+// "architectural wait" investigation): g_traceRings above is overwritten by
+// resetTraceRing() at the top of EVERY resume of a coroutine, so it only
+// ever holds a mission's MOST RECENT resume - by the time a mission is
+// classified still_suspended at budget exhaustion (after many later
+// scheduler-pass resumes of its own thread_yield poll), whatever that
+// mission called on its very FIRST resume - its own _start call, where a
+// mission typically does its one-time setup (registering a callback such
+// as trigger_enable/on_trigger/on_vehicle_enter) before ever reaching its
+// wait loop - has long since been discarded. callMissionStart (below) is
+// only ever invoked once per mission's coroutine (this harness only ever
+// drives a fresh start, never a resume/retry - see callMissionStart's own
+// top doc comment), so the ring g_traceRings[co] holds at the instant that
+// one call returns IS, completely, that coroutine's first resume. Captured
+// there into this second map, once, and never reset or overwritten again -
+// purely additive to the existing per-coroutine ring, same diagnostic-only
+// contract (opt-in via the same --trace-host-calls-before-error=N flag;
+// N=0 keeps this empty and unused, same as g_traceRings).
+std::unordered_map<lua_State*, std::vector<std::string>> g_firstResumeTraceRings;
+
+// --probe-autopilot (2026-10-07, this task): a THIRD, further-additive
+// extension of the same ring machinery above, opt-in via its own flag
+// (g_probeAutopilotEnabled), gated the same way (never touches the Lua
+// stack unless explicitly enabled, never changes real engine behavior).
+//
+// The still_suspended classification site (below, in main()) already
+// reads g_firstResumeTraceRings[co] to know WHICH native names a mission
+// called on its own first resume - but that ring, like g_traceRings
+// itself, only ever records a call's NAME (missionWatchdogHook's own
+// LUA_HOOKCALL branch: `info.name`), never its arguments. "Did this
+// mission register a callback" needs the name; "what callback, against
+// what trigger/character/vehicle" - the exact thing --probe-autopilot's
+// own task brief requires ("use only the callback and the exact
+// arguments the script itself registered") - needs the arguments too.
+// This is new: nothing in this project previously retained a registration
+// call's own argument VALUES anywhere retrievable after the call returns
+// (genericStubTrampoline, src/lua_stub_registry.cpp, logs only argument
+// COUNT and TYPE strings, same for src/lua_spec_confirmed_stubs.cpp's
+// logCall(); the few dedicated stubs that DO store a callback name
+// (stub_on_take_damage/stub_on_revived) key it per-character in
+// EngineState, not per-coroutine/per-call, so reading it back for "what
+// did THIS mission's first resume register" would require guessing which
+// character it was for).
+//
+// Measured directly off the Lua stack at the exact LUA_HOOKCALL instant:
+// Lua 5.1's call hook fires with the CALLEE already the active function
+// (lua_getstack(L, 0, ...) below already relies on this to name it), so
+// for the callee - C function or Lua function alike - stack positions
+// 1..argc are already exactly its own arguments at that instant; this is
+// the same stack state genericStubTrampoline's own body reads when IT
+// runs as that callee (`lua_gettop(L)`/`lua_type(L, i)` for i=1..argc,
+// src/lua_stub_registry.cpp:70-92) - not a new or different technique,
+// just applied from a hook instead of from inside the callee itself.
+//
+// Only the ONE family of natives this project has independently verified
+// (spec-lua-api-behaviour.md, CONFIRMED-structure sections, cross-checked
+// against this task's own named examples - see isCallbackRegistrationNative's
+// own doc comment for the full citation list and, importantly, which of
+// the task's own named examples were checked and EXCLUDED after
+// verification) is captured; every other call is untouched, exactly as
+// before. (CapturedRegistration/g_registrationCallsThisResume themselves
+// are declared earlier, next to g_traceRings/resetTraceRing, purely
+// because resetTraceRing needs the map - this comment block covers both.)
+//
+// Captured once, at the same instant/call site g_firstResumeTraceRings is
+// (callMissionStart, below) - never overwritten afterward. Empty unless
+// --probe-autopilot is given.
+std::unordered_map<lua_State*, std::vector<CapturedRegistration>> g_firstResumeRegistrations;
+bool g_probeAutopilotEnabled = false; // set only by --probe-autopilot (main(), below)
+
+// The callback-registration native family --probe-autopilot acts on -
+// see g_registrationCallsThisResume's own doc comment above for why this
+// capture exists at all. Every entry below is CONFIRMED by direct reading
+// of spec-lua-api-behaviour.md (not inferred from this project's own
+// earlier summaries) to take a callback-name string as one argument,
+// registering it for a LATER dispatch this project's own engine state
+// never independently models (every citation below documents only the
+// REGISTRATION side; the consuming/firing side is explicitly OPEN in each
+// one - see this function's callers for how --probe-autopilot handles
+// that gap, by firing the named Lua global with zero arguments rather
+// than inventing an unconfirmed invocation shape):
+//   on_trigger (Sec1.2), on_trigger_exit (Sec1.7), on_death (Sec3.2),
+//   on_vehicle_destroyed (Sec3.3), on_attack_performed (Sec3.12),
+//   on_take_damage (Sec3.13), on_revived (Sec10.8), on_vehicle_enter
+//   (Sec4.12, added 2026-10-08 - see note below), on_vehicle_enter_water
+//   (Sec14.30, added 2026-10-08 - see note below): arg 1 callback name,
+//   arg 2 trigger/character/vehicle name (`hasTargetArg=true`).
+//   on_qte_animation_trigger (Sec10.7): arg 1 callback name ONLY - a
+//   single fixed GLOBAL slot, not per-object (`hasTargetArg=false`).
+//
+// UPDATE 2026-10-08: on_vehicle_enter (Sec4.12) was RE-RESOLVED by commit
+// e07a46a (full re-disassembly of 0x005e4660/0x00a56d50, batch
+// lua_spec_confirmed_stubs_b31_continuous_spawn_vehicle_enter_tutorial.cpp) -
+// the self-contradiction this note used to flag is gone: the earlier
+// "IMMEDIATE numeric-event post" reading was simply wrong, refuted and
+// superseded, not left genuinely ambiguous. Arg 1 IS a callback/hook name,
+// full stop, and the native registers it into one of 3 hook slots
+// depending on how arg 2 resolves - the exact same two-string registration
+// shape as every other entry in this family. Moved into kTwoArgFamily
+// below. on_vehicle_enter_water's OWN exclusion above was only ever "by
+// analogy to on_vehicle_enter's uncertainty" - since that uncertainty is
+// now resolved (and on_vehicle_enter_water's own Sec14.30 text was already
+// independently CONFIRMED on its own terms, and already implemented,
+// b11), it is moved into kTwoArgFamily too, for the same reason.
+//
+// EXPLICITLY CHECKED AND EXCLUDED (this task's own example list named
+// three of these four; verified directly against spec-lua-api-behaviour.md
+// rather than assumed from the list):
+//   trigger_enable (Sec1.1) - has NO callback argument at all (string
+//     trigger name, bool enable, numeric flag) - a toggle on an ALREADY-
+//     registered trigger, not a registration call itself.
+//   on_cellphone - does not exist anywhere in this project's spec docs,
+//     source, or the 1490-name tagged registration list; the only
+//     cellphone-related natives are audio_play_for_mission_cellphone/
+//     audio_remove_mission_cellphone (immediate audio actions, not
+//     registration) and cellphone_animate_start_do/_stop_do.
+// Also surveyed and excluded as a DIFFERENT, more complex mechanism
+// shape (a stored responder/property name or an actual Lua closure, not
+// a simple "callback name string" the way every entry above is):
+// game_sign_into_network, vint_internal_dataresponder_request,
+// game_peg_load_with_cb, vint_set_property's callback-typed case.
+bool isCallbackRegistrationNative(const std::string& name, bool* hasTargetArg) {
+    static const std::unordered_set<std::string> kTwoArgFamily = {
+        "on_trigger", "on_trigger_exit", "on_death", "on_vehicle_destroyed",
+        "on_attack_performed", "on_take_damage", "on_revived",
+        "on_vehicle_enter", "on_vehicle_enter_water"};
+    if (kTwoArgFamily.count(name)) {
+        if (hasTargetArg) *hasTargetArg = true;
+        return true;
+    }
+    if (name == "on_qte_animation_trigger") {
+        if (hasTargetArg) *hasTargetArg = false;
+        return true;
+    }
+    return false;
+}
+
 void printTraceRingIfAny(lua_State* co, const std::string& label, const std::string& errorMessage) {
     if (g_traceRingSize == 0) return;
     const auto& ring = g_traceRings[co];
@@ -862,6 +1515,24 @@ void printTraceRingStillSuspended(lua_State* co, const std::string& label) {
     for (const auto& n : ring) std::cerr << " " << n;
     std::cerr << "\n";
 }
+// Prints a coroutine's FIRST-ever resume ring (2026-10-07, see
+// g_firstResumeTraceRings' own doc comment above) - answers "what did this
+// mission call in its own setup, before it ever reached its wait loop",
+// which printTraceRingStillSuspended's most-recent-resume-only ring cannot
+// once a mission has yielded more than once (every later poll resume
+// overwrites g_traceRings[co] with just that poll's own calls, typically a
+// lone thread_yield). Paired with printTraceRingStillSuspended at the same
+// still_suspended classification call site, never on its own.
+void printTraceRingFirstResume(lua_State* co, const std::string& label) {
+    if (g_traceRingSize == 0) return;
+    auto it = g_firstResumeTraceRings.find(co);
+    if (it == g_firstResumeTraceRings.end()) return;
+    const auto& ring = it->second;
+    std::cerr << "[trace-host-calls] " << label << " first resume (own _start call) - last " << ring.size()
+              << " global calls before it first yielded/finished/errored:";
+    for (const auto& n : ring) std::cerr << " " << n;
+    std::cerr << "\n";
+}
 void missionWatchdogHook(lua_State* L, lua_Debug* ar) {
     if (ar->event == LUA_HOOKCALL) {
         lua_Debug info{};
@@ -869,6 +1540,21 @@ void missionWatchdogHook(lua_State* L, lua_Debug* ar) {
             auto& ring = g_traceRings[L];
             ring.push_back(info.name ? info.name : "?");
             if (ring.size() > g_traceRingSize) ring.erase(ring.begin());
+            // --probe-autopilot (2026-10-07): see g_registrationCallsThisResume's
+            // own doc comment above - gated on g_probeAutopilotEnabled so this
+            // never runs (never touches the Lua stack beyond what the ring
+            // capture above already does) unless --probe-autopilot was given.
+            if (g_probeAutopilotEnabled && info.name) {
+                bool hasTargetArg = false;
+                if (isCallbackRegistrationNative(info.name, &hasTargetArg)) {
+                    CapturedRegistration cr;
+                    cr.nativeName = info.name;
+                    if (lua_gettop(L) >= 1 && lua_isstring(L, 1)) cr.callbackName = lua_tostring(L, 1);
+                    if (hasTargetArg && lua_gettop(L) >= 2 && lua_isstring(L, 2))
+                        cr.targetName = lua_tostring(L, 2);
+                    g_registrationCallsThisResume[L].push_back(std::move(cr));
+                }
+            }
         }
         return;
     }
@@ -1003,6 +1689,20 @@ MissionStartResult callMissionStart(lua_State* L, BareThreadTable& threads, cons
     const uint16_t recordId = rec->id;
     const bool alive = threads.run(L, rec, fetchError); // rec is dangling once this returns false
     lua_sethook(co, nullptr, 0, 0);
+    // Save this coroutine's first-ever resume ring (2026-10-07) - see
+    // g_firstResumeTraceRings' own doc comment above. threads.run() just
+    // above is this function's one and only lua_resume of `co`, and
+    // callMissionStart itself is only ever called once per mission's co
+    // (this function's own top doc comment), so g_traceRings[co] right
+    // here holds exactly, and completely, that coroutine's first resume -
+    // written once into the separate map and never touched again,
+    // regardless of what the mission-drive loop's later scheduler-pass
+    // resumes go on to do to g_traceRings[co] itself.
+    if (g_traceRingSize > 0) g_firstResumeTraceRings[co] = g_traceRings[co];
+    // --probe-autopilot (2026-10-07): same first-resume snapshot, same
+    // instant, for the registration-argument captures - see
+    // g_firstResumeRegistrations' own doc comment above.
+    if (g_probeAutopilotEnabled) g_firstResumeRegistrations[co] = g_registrationCallsThisResume[co];
     if (!fetchError.empty()) {
         r.callOk = false;
         r.callError = "lua_host_run: runner could not fetch " + funcName + ": " + fetchError;
@@ -1108,7 +1808,31 @@ int main(int argc, char** argv) {
                      "      via LUA_HOOKCALL) made during that specific resume before it errored. The ring resets\n"
                      "      fresh before every individual resume and is discarded unless that resume's own call\n"
                      "      ends in a Lua error, so it always reflects what led to one specific error, never a\n"
-                     "      stale trace from an unrelated resume. Never alters real engine behavior.\n";
+                     "      stale trace from an unrelated resume. A mission classified still_suspended at budget\n"
+                     "      exhaustion instead prints TWO rings (2026-10-07): its own LAST resume (what its wait\n"
+                     "      loop polls right now) and its own FIRST resume (its one-time _start-call setup, e.g.\n"
+                     "      a trigger_enable/on_trigger/on_vehicle_enter callback registration, before it ever\n"
+                     "      reached that wait loop) - the first-resume ring is captured once, right when\n"
+                     "      callMissionStart's single resume of that coroutine returns, and is never overwritten\n"
+                     "      afterward, unlike the last-resume ring. Never alters real engine behavior.\n"
+                     "  --probe-autopilot  DIAGNOSTIC ONLY, off by default, NEVER on by default, NEVER changes\n"
+                     "      baseline drive behavior: for EVERY mission classified still_suspended at budget\n"
+                     "      exhaustion, checks that mission's own first-resume trace (g_firstResumeTraceRings,\n"
+                     "      same data --trace-host-calls-before-error=N already prints). If it shows a CONFIRMED\n"
+                     "      callback-registration native (on_trigger/on_trigger_exit/on_death/\n"
+                     "      on_vehicle_destroyed/on_attack_performed/on_take_damage/on_revived/\n"
+                     "      on_qte_animation_trigger - see isCallbackRegistrationNative's own doc comment for the\n"
+                     "      full citation list, and which of this flag's own candidate natives were checked and\n"
+                     "      EXCLUDED, e.g. trigger_enable has no callback argument at all) with its callback-name\n"
+                     "      argument recovered, this flag calls that one Lua global once, zero arguments (no spec\n"
+                     "      section establishes what arguments a FIRED, as opposed to registered, callback\n"
+                     "      receives - a CHOSEN, flagged judgment call, not invented state), tagged SYNTHETIC in\n"
+                     "      [probe-autopilot] stderr output and in verdict_mission_drive.tsv/summary, then runs a\n"
+                     "      bounded follow-up window to see what breaks NEXT. If no such native is recoverable,\n"
+                     "      records \"nothing to synthesize\" explicitly rather than a silent empty result - itself\n"
+                     "      a real finding (the wait is most likely satisfied by polled world state, not a\n"
+                     "      callback). Auto-raises --trace-host-calls-before-error to 200 if not already set (so\n"
+                     "      this flag is self-sufficient), printed to stdout so that is never silent either.\n";
         return 1;
     }
     // Optional flags anywhere after the 3 positionals; the remaining
@@ -1138,6 +1862,9 @@ int main(int argc, char** argv) {
     // --no-vint-docs: turn off real .vint_doc loading + the per-chunk
     // document context (2026-10-03, see the block after the archive walk).
     bool vintDocs = true;
+    // --probe-autopilot: DIAGNOSTIC ONLY, off by default - see its own
+    // usage text above and g_probeAutopilotEnabled's own doc comment.
+    bool probeAutopilot = false;
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
@@ -1152,6 +1879,7 @@ int main(int argc, char** argv) {
             missionTickBudget = std::stoi(v);
         }
         else if (arg == "--probe-unresolved-names") probeUnresolvedNames = true;
+        else if (arg == "--probe-autopilot") probeAutopilot = true;
         else if (arg == "--no-vint-docs") vintDocs = false;
         else if (arg.rfind("--trace-host-calls-before-error=", 0) == 0) {
             std::string v = arg.substr(32);
@@ -1191,6 +1919,23 @@ int main(int argc, char** argv) {
             std::cerr << "unknown option: " << arg << "\n";
             return 1;
         } else extraPositional.push_back(arg);
+    }
+    // --probe-autopilot setup (2026-10-07): enable the capture gate, and
+    // auto-raise the trace ring to a size this project's own earlier pass
+    // (results/trace_host_calls_firstresume_20261007.md) already measured
+    // as large enough to avoid truncating a mission's real first-resume
+    // sequence (that pass's own =15 run hit the cap for 3 of 6 missions;
+    // =200 did not, for any of them) - not re-chosen here, reused. Only
+    // when the caller didn't already pass their own
+    // --trace-host-calls-before-error=N, so an explicit N is never
+    // silently overridden; printed to stdout (below, with the rest of
+    // this run's own option echo) so the auto-raise is never silent.
+    g_probeAutopilotEnabled = probeAutopilot;
+    constexpr size_t kProbeAutopilotAutoRingSize = 200;
+    bool probeAutopilotAutoRaisedRingSize = false;
+    if (probeAutopilot && g_traceRingSize == 0) {
+        g_traceRingSize = kProbeAutopilotAutoRingSize;
+        probeAutopilotAutoRaisedRingSize = true;
     }
     fs::path cacheDir = argv[1];
     std::string registrationListPath = argv[2];
@@ -1245,7 +1990,21 @@ int main(int argc, char** argv) {
     }
     // The scene table (Sec26.25 item 5): real data from the cache.
     const std::string sceneTableSummary = installSceneTableFromCache(cacheDir, host.engineState());
+    // The continuous-explosion definition table (Sec28.16): real data from the cache.
+    const std::string continuousExplosionTableSummary = installContinuousExplosionTableFromCache(cacheDir, host.engineState());
+    // The spawn-rank Hit_Points value set (Sec7.12/Sec34.2): real data from the cache.
+    const std::string spawnRankHitPointsSummary = installSpawnRankHitPointsFromCache(cacheDir, host.engineState());
+    // The weapon-definition name table (Sec4.10/Sec4.11): real data from the cache.
+    const std::string weaponDefinitionTableSummary = installWeaponDefinitionTableFromCache(cacheDir, host.engineState());
+    // Real `.czn_pc` Objects (0x2234) data (spec-zone-data-format.md Sec11):
+    // the real name<->ObjectRecord resolver (2026-10-08 zone-data
+    // fast-follow) - see installZoneObjectsFromCache's own top comment.
+    const std::string zoneObjectsSummary = installZoneObjectsFromCache(cacheDir, host.engineState());
     std::cout << "display_option=" << displayOption << "\nzscene_table=" << sceneTableSummary << "\n";
+    std::cout << "continuous_explosion_table=" << continuousExplosionTableSummary << "\n";
+    std::cout << "spawn_rank_hit_points=" << spawnRankHitPointsSummary << "\n";
+    std::cout << "weapon_definition_table=" << weaponDefinitionTableSummary << "\n";
+    std::cout << "zone_objects=" << zoneObjectsSummary << "\n";
     std::cout << "Host built: gameplay state has " << host.gameplayStubCount()
               << " stubs, UI state has " << host.uiStubCount() << " stubs ("
               << (host.gameplayStubCount() + host.uiStubCount()) << " total, matching the "
@@ -2039,6 +2798,9 @@ int main(int argc, char** argv) {
     line("open_state_slots_with_values_at_start=" + openStateSummary);
     line("display_option=" + displayOption);
     line("zscene_table=" + sceneTableSummary);
+    line("continuous_explosion_table=" + continuousExplosionTableSummary);
+    line("spawn_rank_hit_points=" + spawnRankHitPointsSummary);
+    line("weapon_definition_table=" + weaponDefinitionTableSummary);
     line("vint_docs=" + std::string(vintDocs ? "on" : "off (--no-vint-docs)") + " found=" +
          std::to_string(st.docs.size()) + " parsed=" + std::to_string(parsedDocs.size()) +
          " parse_failed=" + std::to_string(docsParseFailed) + " scripts_indexed=" + std::to_string(docByScript.size()) +
@@ -2167,6 +2929,23 @@ int main(int argc, char** argv) {
                 "\"resolves\" placeholder instead of refusing - every number below past such a miss is "
                 "a synthetic stand-in, not a real measurement)"
               : "off (default: the real, genuinely-OPEN named-object resolution map refuses as normal)"));
+    // probe_autopilot_option (DIAGNOSTIC ONLY, see --probe-autopilot's own
+    // usage text above): same transparency convention as
+    // probe_unresolved_names_option just above - whether this run's
+    // still_suspended missions got a synthesized next-blocker probe, and
+    // whether the trace ring size was auto-raised to get it (never silent).
+    line(std::string("probe_autopilot_option=") +
+         (probeAutopilot
+              ? "on (DIAGNOSTIC: still_suspended missions get a synthesized callback dispatch, tagged "
+                "SYNTHETIC, to find the next blocker past their wait - see probe_autopilot_* lines below "
+                "and verdict_mission_drive.tsv's probe_autopilot_* columns)" +
+                    std::string(probeAutopilotAutoRaisedRingSize
+                                    ? " trace_ring_size auto-raised to " +
+                                          std::to_string(kProbeAutopilotAutoRingSize) +
+                                          " (--trace-host-calls-before-error was not explicitly given)"
+                                    : " trace_ring_size=" + std::to_string(g_traceRingSize) +
+                                          " (explicitly given via --trace-host-calls-before-error)")
+              : "off (default: no synthesized events, no change to any mission's drive)"));
     {
         size_t resolved = 0, ran = 0;
         for (const auto& il : host.bareGlobals().includeQueue().log()) {
@@ -2506,6 +3285,34 @@ int main(int argc, char** argv) {
         std::string stopReason;
         std::string firstErrorMessage;
         std::string firstUnimplementedStub;
+        // --probe-autopilot (2026-10-07) fields - all left at their default
+        // (empty/false) unless --probe-autopilot was given AND this mission
+        // was classified still_suspended above; see that flag's own usage
+        // text and the classification-site block below for how they're
+        // filled. Purely additive reporting - never read by, or fed back
+        // into, any of the REAL fields above.
+        bool probeAutopilotAttempted = false;
+        bool probeAutopilotHadCallback = false;
+        std::string probeAutopilotNative;         // e.g. "on_trigger"; empty if nothing to synthesize
+        std::string probeAutopilotCallbackName;   // the recovered callback-name argument
+        std::string probeAutopilotTargetName;     // the recovered trigger/character/vehicle name (may be empty)
+        std::string probeAutopilotDispatchResult; // outcome of calling the callback-name global once
+        std::string probeAutopilotNextBlocker;    // first new error/wait/completion found in the follow-up window
+        std::string probeAutopilotNote;           // set to the "nothing to synthesize" finding when applicable
+        // THE headline measurement this task (2026-10-08, Sec21.27a/
+        // Sec21.27b) adds: did THIS mission's own mission handle actually
+        // reach the real completion state - EngineState::
+        // missionCompletionFlagBitSet(), the real `+0x88` bit 0x4
+        // (Sec15.10/Sec21.27b's own writer, 0x006d6870) - by the time this
+        // mission's own tick loop stopped (budget exhaustion or the
+        // idempotent-signature "completion" stop below)? Deliberately NOT
+        // named `completion` or folded into stopReason above: stopReason's
+        // own "completion" value only means "2 consecutive identical tick
+        // signatures," a Lua-coroutine-idle measurement that pre-dates this
+        // task and is NOT the same thing as the mission's own completion
+        // flag - conflating the two is exactly the "no error" vs. "really
+        // FINISHED" gap this task was asked to measure honestly.
+        bool missionCompletionFlagSet = false;
     };
     std::vector<MissionResult> missionResults;
     missionResults.reserve(missions.size());
@@ -2569,6 +3376,28 @@ int main(int argc, char** argv) {
         // mission's (not distinguishable here).
         std::set<uint16_t> foreignIds;
         for (uint16_t id : host.bareGlobals().threads().liveIds()) foreignIds.insert(id);
+        // FIX 2026-10-08 (root cause of probe_blockers_ranked_20261008_
+        // post_resolver_merge.md item 2, 12/49 missions): spec-lua-api-
+        // behaviour.md Sec21.27a confirms phase 8 (the real engine's
+        // literal start-up-adjacent "mid-bind" value) auto-resolves to
+        // phase 1 well before any script code is reachable - so the
+        // instant this driver is about to invoke a mission's own `_start`,
+        // the real "mission active, phase != 8" gates are CONFIRMED true,
+        // not an unmodelled fact. See EngineState::beginMissionPhaseTracking
+        // ()'s own doc comment (include/sr3luahost/engine_state.h) for the
+        // full root-cause history and why this is the one correct hook
+        // point ("the instant a mission's own `_start` is invoked").
+        //
+        // UPGRADED this task (2026-10-08, Sec21.27a/Sec21.27b): now also
+        // drives the REAL integer phase machine (bindMissionPhaseMachine())
+        // through its real 8->(2)->1->(3 or 5) sequence for THIS mission's
+        // own name, instead of only flipping the three legacy boolean
+        // facades. `type` is the CHOSEN default 0 (no real +0xa0 population
+        // table for any of these 49 missions, see that method's own doc
+        // comment); `isRestart` is the SAME kMissionStartIsRestart=false
+        // this loop already passes to callMissionStart() just below -
+        // every mission this harness drives is a fresh start.
+        host.engineState().beginMissionPhaseTracking(row.missionLuaStem, /*type=*/0, kMissionStartIsRestart);
         MissionStartResult startResult = callMissionStart(host.gameplayState(), host.bareGlobals().threads(), funcName,
                                                             kMissionStartCheckpoint, kMissionStartIsRestart);
         mr.startExisted = startResult.existedAsFunction;
@@ -2732,6 +3561,163 @@ int main(int argc, char** argv) {
                     // "what does this mission's own wait poll" for the
                     // first time (the global-ring version could not).
                     printTraceRingStillSuspended(rec->co, funcName);
+                    // (2026-10-07) what this same coroutine called on its
+                    // own FIRST resume - its _start call's own setup, before
+                    // it ever reached the wait loop printed just above - see
+                    // g_firstResumeTraceRings' own doc comment above.
+                    printTraceRingFirstResume(rec->co, funcName);
+
+                    // --probe-autopilot (2026-10-07, this task): DIAGNOSTIC
+                    // ONLY, this entire block is skipped unless --probe-
+                    // autopilot was given - never changes mr.startAfterTicks/
+                    // startStillSuspendedAt/any REAL field above, only the
+                    // separate probeAutopilot* fields. See that flag's own
+                    // usage text for the full citation list of which natives
+                    // this synthesizes and which were checked and excluded.
+                    if (probeAutopilot) {
+                        mr.probeAutopilotAttempted = true;
+                        lua_State* missionCo = rec->co; // captured now - `rec` itself is not held past this point
+                        auto regIt = g_firstResumeRegistrations.find(missionCo);
+                        const CapturedRegistration* chosenReg = nullptr;
+                        if (regIt != g_firstResumeRegistrations.end()) {
+                            for (const auto& cand : regIt->second) {
+                                if (!cand.callbackName.empty()) { chosenReg = &cand; break; }
+                            }
+                        }
+                        if (!chosenReg) {
+                            // Real finding, not an omission (this task's own
+                            // instruction): the first-resume trace shows no
+                            // CONFIRMED callback-registration native with a
+                            // recoverable callback-name argument before this
+                            // mission's wait loop - matches the already-
+                            // established answer for m06/m10/m11/m13/m14/m15
+                            // (results/trace_host_calls_firstresume_20261007.md).
+                            mr.probeAutopilotNote =
+                                "nothing to synthesize - wait is likely satisfied by polled world state, not a "
+                                "callback (first-resume trace shows no confirmed callback-registration native "
+                                "call with a recoverable callback-name argument before the wait loop)";
+                            std::cerr << "[probe-autopilot] " << funcName << " nothing to synthesize: "
+                                      << mr.probeAutopilotNote << "\n";
+                        } else {
+                            mr.probeAutopilotHadCallback = true;
+                            mr.probeAutopilotNative = chosenReg->nativeName;
+                            mr.probeAutopilotCallbackName = chosenReg->callbackName;
+                            mr.probeAutopilotTargetName = chosenReg->targetName;
+
+                            // Dispatch: the SAME "lua_getglobal, check
+                            // isfunction, protected call" shape
+                            // Host::fireConfirmedHooks already uses for every
+                            // other confirmed-name call this harness makes
+                            // (src/lua_host.cpp) - zero arguments (see
+                            // isCallbackRegistrationNative's own doc comment
+                            // for why: no spec section this project has read
+                            // establishes the FIRED callback's own argument
+                            // shape, only the registration call's). Runs on
+                            // host.gameplayState(), the same L the mission
+                            // script itself loaded into and _start ran
+                            // against - callback names are plain globals,
+                            // never per-coroutine state.
+                            lua_State* L = host.gameplayState();
+                            std::string targetNote =
+                                chosenReg->targetName.empty() ? std::string() : (", \"" + chosenReg->targetName + "\"");
+                            std::cerr << "[probe-autopilot] " << funcName << " SYNTHETIC dispatch: first-resume "
+                                      << "trace shows " << chosenReg->nativeName << "(\"" << chosenReg->callbackName
+                                      << "\"" << targetNote << ") registered before the wait loop - calling "
+                                      << "global '" << chosenReg->callbackName << "()' once, zero args\n";
+                            lua_getglobal(L, chosenReg->callbackName.c_str());
+                            if (lua_type(L, -1) != LUA_TFUNCTION) {
+                                lua_pop(L, 1);
+                                mr.probeAutopilotDispatchResult =
+                                    "SYNTHETIC: callback name '" + chosenReg->callbackName + "' registered by " +
+                                    chosenReg->nativeName + " is not defined as a global function - nothing to call";
+                            } else {
+                                lua_sethook(L, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+                                int rc = lua_pcall(L, 0, 0, 0);
+                                lua_sethook(L, nullptr, 0, 0);
+                                if (rc != 0) {
+                                    std::string err = (lua_gettop(L) >= 1 && lua_tostring(L, -1))
+                                                           ? lua_tostring(L, -1)
+                                                           : "?";
+                                    lua_pop(L, 1);
+                                    mr.probeAutopilotDispatchResult = "SYNTHETIC dispatch error: " + err;
+                                } else {
+                                    mr.probeAutopilotDispatchResult = "SYNTHETIC dispatch ok (no Lua error)";
+                                }
+                            }
+
+                            // Follow-up window: bounded, CHOSEN
+                            // (kProbeAutopilotFollowUpTicks) - same per-tick
+                            // shape as the main loop above, just shorter.
+                            // Never feeds errorsInOrder/mr.firstErrorMessage/
+                            // mr.startAfterTicks (those are this mission's
+                            // REAL, already-final measurement); collected
+                            // separately into probeErrors below.
+                            std::vector<std::string> probeErrors;
+                            bool ownRecordResumedInFollowup = false;
+                            for (int ftick = 0; ftick < kProbeAutopilotFollowUpTicks; ++ftick) {
+                                host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
+                                host.engineState().cutsceneHostFrame();
+                                host.engineState().gameClockAdvanceFrame(static_cast<double>(kFadeHostMsPerTick) /
+                                                                          1000.0);
+                                for (int pass = 0; pass < kSchedulerPassesPerTick; ++pass) {
+                                    host.runScriptThreadSchedulerPass(
+                                        [&](const BareThreadTable::Record& r2) {
+                                            resetTraceRing(r2.co);
+                                            lua_sethook(r2.co, missionWatchdogHook, missionWatchdogHookMask(),
+                                                        kMissionWatchdogInstructionBudget);
+                                        },
+                                        [&](const BareThreadTable::PassEvent& ev) {
+                                            if (foreignIds.count(ev.id)) return; // not this mission's own concern
+                                            if (ev.id == startResult.recordId && ev.resumed)
+                                                ownRecordResumedInFollowup = true;
+                                            if (!ev.error.empty()) probeErrors.push_back(ev.error);
+                                            if (!ev.fetchError.empty())
+                                                probeErrors.push_back("lua_host_run: runner could not fetch " +
+                                                                       ev.name + ": " + ev.fetchError);
+                                        });
+                                }
+                            }
+                            if (!probeErrors.empty()) {
+                                mr.probeAutopilotNextBlocker = "SYNTHETIC-probe next error: " + probeErrors.front();
+                            } else {
+                                const BareThreadTable::Record* rec2 =
+                                    host.bareGlobals().threads().findAlive(startResult.recordId);
+                                if (rec2 && rec2->name == funcName) {
+                                    std::string nowAt;
+                                    lua_Debug ar2;
+                                    if (lua_getstack(rec2->co, 1, &ar2) && lua_getinfo(rec2->co, "Sln", &ar2)) {
+                                        nowAt = (ar2.short_src[0] ? ar2.short_src : "?") + std::string(":") +
+                                                std::to_string(ar2.currentline) +
+                                                (ar2.name ? (std::string(" (in ") + ar2.name + ")") : "");
+                                    }
+                                    if (!nowAt.empty() && nowAt != mr.startStillSuspendedAt) {
+                                        mr.probeAutopilotNextBlocker =
+                                            "SYNTHETIC-probe: advanced to a new wait, no new error - now parked "
+                                            "at " +
+                                            nowAt;
+                                    } else if (ownRecordResumedInFollowup) {
+                                        mr.probeAutopilotNextBlocker =
+                                            "SYNTHETIC-probe: resumed but parked at the SAME wait location after " +
+                                            std::to_string(kProbeAutopilotFollowUpTicks) +
+                                            " follow-up ticks - the synthesized event did not change where it "
+                                            "waits";
+                                    } else {
+                                        mr.probeAutopilotNextBlocker =
+                                            "SYNTHETIC-probe: thread was never resumed again in " +
+                                            std::to_string(kProbeAutopilotFollowUpTicks) +
+                                            " follow-up ticks after the synthesized dispatch";
+                                    }
+                                } else {
+                                    mr.probeAutopilotNextBlocker =
+                                        "SYNTHETIC-probe: thread no longer in the table after the synthesized "
+                                        "dispatch (finished or released), no error recorded";
+                                }
+                            }
+                            std::cerr << "[probe-autopilot] " << funcName << " dispatch_result=["
+                                      << mr.probeAutopilotDispatchResult << "] next_blocker=["
+                                      << mr.probeAutopilotNextBlocker << "]\n";
+                        }
+                    }
                 } else {
                     mr.startAfterTicks = "released_unobserved"; // left the table outside a scheduler pass
                 }
@@ -2744,6 +3730,13 @@ int main(int argc, char** argv) {
             if (!name.empty()) { mr.firstUnimplementedStub = name; break; }
         }
 
+        // The headline measurement (see MissionResult::missionCompletionFlagSet's
+        // own doc comment above): read back THIS mission's own real +0x88
+        // bit 0x4 now that its tick loop has stopped - whatever got it
+        // there (mission_set_completed called by the mission's own script,
+        // or the organic missionEndDispatch() type-1/2 paths, Sec21.27b).
+        mr.missionCompletionFlagSet = host.engineState().missionCompletionFlagBitSet(mr.stem);
+
         missionResults.push_back(std::move(mr));
         if (missionResults.size() % 10 == 0 || missionResults.size() == missions.size()) {
             std::cout << "  ... " << missionResults.size() << "/" << missions.size() << " missions driven\n";
@@ -2755,7 +3748,10 @@ int main(int argc, char** argv) {
                   "start_func_name\tstart_existed\tstart_attempted\tstart_call_ok\tstart_call_error\t"
                   "ticks_survived\tstop_reason\tfirst_error_message\tfirst_unimplemented_stub\tstart_suspended\t"
                   "start_suspended_at\tstart_after_ticks\tstart_after_resume_error\tstart_still_suspended_at\t"
-                  "scheduler_resumes\tscheduler_thread_errors\tscheduler_foreign_resumes\n";
+                  "scheduler_resumes\tscheduler_thread_errors\tscheduler_foreign_resumes\t"
+                  "probe_autopilot_attempted\tprobe_autopilot_native\tprobe_autopilot_callback_name\t"
+                  "probe_autopilot_target_name\tprobe_autopilot_dispatch_result\tprobe_autopilot_next_blocker\t"
+                  "probe_autopilot_note\tmission_completion_flag_0x4_set\n";
     uint64_t missionsFoundCount = 0, missionsStartExistedCount = 0, missionsStartOkCount = 0;
     uint64_t missionsStartSuspendedCount = 0;
     uint64_t missionsStartStillSuspended = 0, missionsStartFinishedAfterResume = 0;
@@ -2763,11 +3759,19 @@ int main(int argc, char** argv) {
     uint64_t schedulerResumesTotal = 0, schedulerOwnErrorsTotal = 0, schedulerForeignResumesTotal = 0;
     uint64_t stopBudget = 0, stopError = 0, stopCompletion = 0;
     uint64_t ticksSum = 0;
+    // THE headline count this task (2026-10-08) was asked for: how many of
+    // the 49 missions' own mission handles actually reached the real
+    // completion flag (+0x88 bit 0x4, Sec15.10/Sec21.27b) - see
+    // MissionResult::missionCompletionFlagSet's own doc comment above for
+    // why this is deliberately separate from stopReason's own "completion"
+    // bucket (a different, pre-existing, Lua-coroutine-idle measurement).
+    uint64_t missionsCompletionFlagSetCount = 0;
     for (auto& mr : missionResults) {
         if (mr.scriptFound) missionsFoundCount++;
         if (mr.startExisted) missionsStartExistedCount++;
         if (mr.startCallOk) missionsStartOkCount++;
         if (mr.startSuspended) missionsStartSuspendedCount++;
+        if (mr.missionCompletionFlagSet) missionsCompletionFlagSetCount++;
         ticksSum += (uint64_t)mr.ticksSurvived;
         if (mr.stopReason.rfind("budget exhaustion", 0) == 0) stopBudget++;
         else if (mr.stopReason.rfind("error", 0) == 0) stopError++;
@@ -2783,7 +3787,13 @@ int main(int argc, char** argv) {
                    << (mr.startSuspended ? 1 : 0) << "\t" << sanitizeTsv(mr.startSuspendedAt) << "\t"
                    << sanitizeTsv(mr.startAfterTicks) << "\t" << sanitizeTsv(mr.startAfterResumeError) << "\t"
                    << sanitizeTsv(mr.startStillSuspendedAt) << "\t" << mr.schedulerResumes << "\t"
-                   << mr.schedulerThreadErrors << "\t" << mr.schedulerForeignResumes << "\n";
+                   << mr.schedulerThreadErrors << "\t" << mr.schedulerForeignResumes << "\t"
+                   << (mr.probeAutopilotAttempted ? 1 : 0) << "\t" << sanitizeTsv(mr.probeAutopilotNative) << "\t"
+                   << sanitizeTsv(mr.probeAutopilotCallbackName) << "\t"
+                   << sanitizeTsv(mr.probeAutopilotTargetName) << "\t"
+                   << sanitizeTsv(mr.probeAutopilotDispatchResult) << "\t"
+                   << sanitizeTsv(mr.probeAutopilotNextBlocker) << "\t" << sanitizeTsv(mr.probeAutopilotNote)
+                   << "\t" << (mr.missionCompletionFlagSet ? 1 : 0) << "\n";
         if (mr.startAfterTicks == "still_suspended") missionsStartStillSuspended++;
         else if (mr.startAfterTicks == "finished") missionsStartFinishedAfterResume++;
         else if (mr.startAfterTicks == "errored") missionsStartErroredAfterResume++;
@@ -2909,6 +3919,37 @@ int main(int argc, char** argv) {
               " handles_issued:" + std::to_string(csm.handleCounter()) +
               " (spec-player-runtime.md Sec2.5 request stack, capacity 5; pushes are player_controls_disable's only)");
     }
+    // probe_autopilot summary (DIAGNOSTIC ONLY, see --probe-autopilot's own
+    // usage text above): aggregate outcome across every still_suspended
+    // mission this run attempted it on - same "never silent, never implies
+    // a probe happened when it didn't" convention as probed_unresolved_names
+    // just above.
+    if (probeAutopilot) {
+        uint64_t attempted = 0, hadCallback = 0, nothingToSynthesize = 0;
+        std::string missionsWithCallback, missionsWithNothing;
+        for (const auto& mr : missionResults) {
+            if (!mr.probeAutopilotAttempted) continue;
+            attempted++;
+            if (mr.probeAutopilotHadCallback) {
+                hadCallback++;
+                if (!missionsWithCallback.empty()) missionsWithCallback += ", ";
+                missionsWithCallback += mr.stem + "(" + mr.probeAutopilotNative + ")";
+            } else {
+                nothingToSynthesize++;
+                if (!missionsWithNothing.empty()) missionsWithNothing += ", ";
+                missionsWithNothing += mr.stem;
+            }
+        }
+        mline("probe_autopilot_missions_attempted=" + std::to_string(attempted) +
+              " (of this run's own still_suspended missions)");
+        mline("probe_autopilot_synthesized_events=" + std::to_string(hadCallback) +
+              " distinct mission(s) with a SYNTHETIC callback dispatch (DIAGNOSTIC, not real data): [" +
+              missionsWithCallback + "]");
+        mline("probe_autopilot_nothing_to_synthesize=" + std::to_string(nothingToSynthesize) +
+              " mission(s) whose first-resume trace showed no confirmed callback-registration native - a real "
+              "finding (the wait is most likely satisfied by polled world state, not a callback), not an "
+              "omission: [" + missionsWithNothing + "]");
+    }
     mline("scheduler_passes=own_resumes:" + std::to_string(schedulerResumesTotal) +
           " own_thread_errors:" + std::to_string(schedulerOwnErrorsTotal) +
           " leftover_resumes:" + std::to_string(schedulerForeignResumesTotal) +
@@ -2920,6 +3961,18 @@ int main(int argc, char** argv) {
           std::to_string(stopError) + " completion=" + std::to_string(stopCompletion) + " (sum should equal "
           "missions_with_script_found, since a not-found script gets its own separate \"script not found\" "
           "stop reason, counted under neither bucket above)");
+    // THE headline number this task (2026-10-08, Sec21.27a/Sec21.27b real
+    // phase machine + completion-flag writer) was asked to report:
+    // genuinely distinct from stop_reason_histogram's own "completion"
+    // bucket just above (that one only means "2 consecutive identical tick
+    // signatures" - a Lua-idle measurement, not the mission's own
+    // completion state). This counts missions whose own mission handle
+    // actually reached +0x88 bit 0x4 (EngineState::missionCompletionFlagBitSet()).
+    mline("missions_with_real_completion_flag_0x4_set=" + std::to_string(missionsCompletionFlagSetCount) + "/" +
+          std::to_string(missions.size()) +
+          " (the mission's own handle actually marked complete - mission_set_completed called by its own "
+          "script, or an organic missionEndDispatch() type-1/2 path, Sec21.27b - NOT the same thing as "
+          "stop_reason=completion above, which only means the tick loop went idle)");
     mline("total_ticks_survived_across_all_missions=" + std::to_string(ticksSum));
     mline("total_stub_calls_this_step_contributed(ALL-INCLUSIVE minus pre-step-1 snapshot, real HitLog delta)=" +
           std::to_string(missionIncrementalTotal));
@@ -2961,6 +4014,14 @@ int main(int argc, char** argv) {
                     << (mr.startStillSuspendedAt.empty() ? "?" : mr.startStillSuspendedAt) << "]";
             if (!mr.firstErrorMessage.empty()) row << " first_error=[" << mr.firstErrorMessage << "]";
             if (!mr.firstUnimplementedStub.empty()) row << " first_unimplemented_stub=" << mr.firstUnimplementedStub;
+            if (mr.probeAutopilotAttempted) {
+                if (mr.probeAutopilotHadCallback)
+                    row << " probe_autopilot=[" << mr.probeAutopilotNative << "(\"" << mr.probeAutopilotCallbackName
+                        << "\")" << " dispatch=[" << mr.probeAutopilotDispatchResult << "]"
+                        << " next_blocker=[" << mr.probeAutopilotNextBlocker << "]]";
+                else
+                    row << " probe_autopilot=[" << mr.probeAutopilotNote << "]";
+            }
         }
         mline(row.str());
     }

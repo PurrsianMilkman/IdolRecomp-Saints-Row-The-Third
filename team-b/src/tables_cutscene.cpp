@@ -56,6 +56,13 @@ SceneFields ParseSceneFile(const sr3xtbl::Document& cteXtbl, const ParserOptions
         f.kind = kindFromCutsceneType(*t, options);
     }
 
+    // CameraScript: the authoring-path reference to the .csc_pc script
+    // (spec-xtbl-format.md Sec6.4) - raw text only, see the doc comment on
+    // SceneFields::cameraScriptText for what is and isn't known about it.
+    if (const std::string* t = sr3xtbl::ChildText(cs, "CameraScript")) {
+        f.cameraScriptText = *t;
+    }
+
     // +0xac / +0xad lightset: strncpy(dst, text, 64).
     if (const sr3xtbl::Node* ls = sr3xtbl::FindChild(cs, "SceneLightset")) {
         f.hasLightset = true;

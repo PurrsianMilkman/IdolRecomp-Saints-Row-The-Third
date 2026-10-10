@@ -29,6 +29,7 @@
 #include "sr3tables_ui_controls/tables.h"
 #include "sr3xtbl/xtbl.h"
 #include "vpp/container.h"
+#include "vppcache/archive_cache.h"
 
 using namespace sr3animruntime;
 namespace fs = std::filesystem;
@@ -70,12 +71,8 @@ int main() {
         std::cout << "SKIP: " << archivePath.string() << " not present\n";
         return 77;
     }
-    std::vector<uint8_t> archive;
-    {
-        std::ifstream in(archivePath, std::ios::binary);
-        archive.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    }
-    vpp::Container c(vpp::ByteView(archive.data(), archive.size()));
+    auto opened = vppcache::openArchive(archivePath);
+    const vpp::Container& c = opened->container;
     std::vector<uint8_t> bytes;
     CHECK(readEntry(c, "control_parameters.xtbl", bytes));
     if (bytes.empty()) {

@@ -1,0 +1,88 @@
+Golden scene: walk_demo_v2, HARDWARE-rendered + --collision-enabled sibling (sr3_viewer
+`walk --v2 --collision`)
+========================================================================================
+
+FROZEN 2026-10-08 (walk_demo_v2 consolidated-capture task, orchestrator request) - NOT
+part of the WARP-forced ctest gate (tests/golden/walk_demo_v2/ owns that job - see its
+own COMMAND.txt). This directory exists purely for VISUAL REVIEW: the orchestrator
+explicitly asked for this consolidated walk_demo_v2 capture to (a) run under real
+HARDWARE rendering, not the WARP software rasterizer every other golden in this tree now
+defaults to (this project's standing policy since the B3/WARP-migration task - see
+walk_demo_hw_pre_warp/COMMAND.txt for that policy's own history), because a human is
+going to look directly at these specific frames, and (b) have --collision enabled (the
+opt-in character-proxy collision system, one of the 4 fixes being consolidated here for
+the first time) in the captured command. Named "_hw_pre_warp" to match this project's own
+already-established naming idiom for "the hardware-rendered, not-WARP sibling of a
+golden" (brad_hw_pre_warp/, city_corner_hw_pre_warp/, walk_demo_hw_pre_warp/, etc.) -
+unlike those, this is not a historical pre-migration artifact being preserved (walk_demo_v2
+has never been frozen before this task at all); it is a first-time hardware capture
+created alongside this task's own first-time WARP capture, continuing the same naming
+convention for the same underlying reason (hardware output for human eyes, WARP output
+for the byte-exact automated gate).
+
+Real command (run with cwd = tests/golden/; SR3_FORCE_WARP=0 in the environment, i.e.
+explicitly NOT set/forced - sr3_viewer's own device init prefers real hardware whenever
+WARP is not forced, src/device.cpp):
+
+    <sr3_viewer.exe> walk \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\characters.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        --no-input --frames 80 --v2 --collision \
+        --capture _work/walk_demo_v2_hw --capture-frames 0,15,30,45
+
+This run's own stdout confirms real hardware was used: "device   : HARDWARE (NVIDIA
+GeForce RTX 3090)" (vs "WARP (software) (Microsoft Basic Render Driver)" for the sibling
+tests/golden/walk_demo_v2/ capture).
+
+--collision FINDING (real, measured, not assumed): diffed this run's own stdout against
+the sibling WARP/no-collision capture's stdout line-for-line. The ONLY differences are the
+"device" line itself and individual "NNN ms"/"N.N s" wall-clock timing fields - every
+player-position/heading/locomotion-state/playback-rate/follow-cam field, on all 4 captured
+frames, is BYTE-IDENTICAL between the collision-enabled and collision-disabled runs, and
+no "[collision] frame-local wall hit: ..." line appears anywhere in this run's own stdout.
+Per runWalkDemo()'s own --collision doc comment ("--walk-forward-frames N / --walk-turn-
+frames N: ... only useful paired with --collision, to walk far enough to actually reach a
+wall within the capture window"), this is the expected, honest outcome at this scripted
+sequence's DEFAULT 40-forward/20-turn frame counts (not overridden here, matching every
+other walk_demo/walk_demo_v2 baseline's own frame-count convention) - Brad's scripted path
+from (-960,0,-700) never actually reaches any of this scene's loaded collision geometry
+within the 80-frame capture window, so the real CharacterProxyDriver genuinely has nothing
+to resolve here. This is reported plainly, per this task's own instruction ("if not, [he
+doesn't hit a wall] that's fine too... don't force it") - NOT silently omitted, and NOT
+worked around by lengthening the walk, since that would mean this capture no longer
+matches the sibling WARP baseline's own frame-count convention.
+
+SANITY CHECKS PERFORMED (visual inspection; same findings as the WARP sibling - see
+tests/golden/walk_demo_v2/COMMAND.txt for the full per-frame writeup, not repeated here):
+starting stance at frame 0 (not headless/floating/locked T-pose), genuine alternating
+walking gait at frames 15/30 (bent forward leg, swung trailing arm, each frame visibly
+different from the last), a dynamic mid-turn stance at frame 45. Ground is solid black in
+all 4 frames - the same real, measured, location-specific data limitation documented in
+tests/golden/walk_demo_v2/COMMAND.txt (this scene's 3 resident tiles carry zero real
+ground-mesh data; the ground-fix code path runs and logs 3 "[ground] ... SKIPPED" lines
+in this run's own stdout too). Real per-material brad textures bound (dark suit, skin-tone
+hands/head - the head's own single material, "missing.tga", stays unresolved/flat-colour,
+same honest gap as the WARP sibling).
+
+MD5 of this directory's 4 PNGs differs from the WARP sibling's own 4 PNGs (expected: WARP
+software rasterization and real hardware rasterization are not byte-identical even for
+the same geometry/camera/pose - this project's own comparePngTolerance(), not
+comparePngExact(), is the right tool for a hardware-vs-WARP comparison, same as the
+B3/WARP-migration task already established for every other _hw_pre_warp sibling in this
+tree) - frame0 ed28d6a26ea57bbd1f4abf7d8ce669a5, frame15 9082947d84bf9cc695e76567d90e0cdf,
+frame30 fe9f722493effa6b536bed628549e2f2, frame45 5728f634e1f9eab5295ddd9c27935482.
+Visually, side-by-side inspection of each matching frame pair (WARP vs hardware) found no
+human-perceptible difference - same character pose/position, same textures, same visible
+city geometry, same solid-black ground - at this scene's resolution/content.
+
+Frozen here:
+  baseline_capture_frame0.png / frame15 / frame30 / frame45 - the real hardware-rendered
+                         frames, MD5s above.
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact invocation.
+
+NOT wired into tools/golden_scene_check.cpp / ctest - this directory is for direct human/
+orchestrator visual review only, same role every other *_hw_pre_warp sibling in this tree
+already plays (none of them have their own check function either - see
+tools/golden_scene_check.cpp's own registration list, which registers checkWalkDemoScene()
+and checkWalkDemoV2Scene() only, nothing "_hw" named).

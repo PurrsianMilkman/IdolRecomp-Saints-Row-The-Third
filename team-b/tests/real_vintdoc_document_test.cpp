@@ -37,6 +37,7 @@
 #include "sr3save/save_crc.h"
 #include "sr3vintdoc/vint_doc.h"
 #include "vpp/container.h"
+#include "vppcache/archive_cache.h"
 
 using namespace sr3vintdoc;
 namespace fs = std::filesystem;
@@ -107,15 +108,12 @@ bool near(float a, float b) { return std::fabs(a - b) < 1e-4f; }
 
 int main() {
     fs::path archive = fs::path(CRREISH_GAME_CACHE_DIR) / "interface_startup.vpp_pc";
-    std::ifstream f(archive, std::ios::binary | std::ios::ate);
-    if (!f) {
+    if (!fs::exists(archive)) {
         std::cout << "SKIPPED: " << archive.string() << " not found (real-data test; set CRREISH_GAME_CACHE_DIR)\n";
         return 77;
     }
-    std::vector<uint8_t> ab(static_cast<size_t>(f.tellg()));
-    f.seekg(0);
-    f.read(reinterpret_cast<char*>(ab.data()), static_cast<std::streamsize>(ab.size()));
-    vpp::Container root(vpp::ByteView(ab.data(), ab.size()));
+    auto opened = vppcache::openArchive(archive);
+    const vpp::Container& root = opened->container;
     std::vector<Entry> docs;
     collect(root, "", docs);
 

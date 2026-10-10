@@ -1,0 +1,151 @@
+Golden scene: zone_tile, real .czn_pc/.gzn_pc zone geometry, vertex layout code 0
+====================================================================================
+
+RE-FROZEN 2026-09-30 (HANDOFF.md Sec9.116/Sec9.126/Sec9.127) - superseding the
+ORIGINAL vertex-layout-code-24 baseline this directory held before. That
+baseline is preserved VERBATIM (byte-identical, MD5-checked against itself)
+under:
+    COMMAND_code24_proxy.txt
+    baseline_capture_code24_proxy.png
+    baseline_stdout_code24_proxy.txt
+Read that file first for why code 24 was originally chosen - this file only
+explains the switch and the new real command.
+
+Why the switch: spec-vertex-format.md Sec12.13 item 4 (Team A, disassembly
+side) and this project's own independent file-side re-verification (HANDOFF
+Sec9.127) decisively confirmed layout code 24 is a real, UV-less COMPANION
+stream (texcoordCount==0 at full population, 535/535 real code-24 channels) -
+most likely a shadow-caster/occlusion/collision-physics proxy, not proven
+which - that sits ALONGSIDE other, real UV-bearing channels in the SAME Mesh
+sub-block for the SAME geometry. This tile's own Mesh sub-block has exactly
+3 channels: layoutCode=24 (4,642 elements, texcoordCount=0 - the OLD
+baseline's own channel), layoutCode=0 (3,062 elements, texcoordCount=1 - THIS
+baseline's channel, the far larger of the two textured channels), layoutCode=2
+(480 elements, texcoordCount=1 - a smaller textured channel, not used here).
+layoutCode=0 was chosen over layoutCode=2 on element count alone (task's own
+instruction) - it is the better default bet for "the real render geometry".
+
+Real command (run with cwd = tests/golden/, same convention every other
+baseline in this directory tree uses):
+
+    <sr3_viewer.exe> zone \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        sr3_city~f0816~al.czn_pc \
+        --frames 1 --capture _work/zone_tile.png --capture-frame 0
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by
+tests/golden/build.bat straight from tools/sr3_viewer.cpp - unchanged build
+mechanism from the original baseline, see that file's own comments.
+
+NO --group is passed (this is the one real, deliberate change to the command
+line itself, beyond retargeting the channel - see below for why).
+
+Why layout code 0's field layout is trusted: sr3mesh::layoutInfoFor(0) (the
+real API, include/sr3mesh/mesh_block.h / src/mesh_block.cpp) reports
+{known=true, base=16, hasNormal=true, hasTangent=false, hasSkinning=false} -
+NOT assumed to match code 24's own layout (which has different reservedBytes
+handling for its own +16 slot). Position(+0,FLOAT3) + Normal(+12,UBYTE4N) +
+Texcoord0(+16,SHORT2/1024, spec-vertex-format.md Sec6.5's universal texcoord
+convention, kTexcoordScale=1024). This tile's own channel matches the spec's
+stride law exactly: base(16) + 4*texcoordCount(1) == stride(20),
+strideMatchesLaw=1 (see baseline_stdout.txt's own "[channel 1]" lines). A
+direct real-byte UV decode was verified before freezing (not just cited):
+first 5 vertices' raw int16 texcoords divided by 1024 produce sane values
+(e.g. uv0=(0.4141,0.4111) from raw (424,421)), and the whole channel's UV
+range is u[-1.21..2.72] v[-1.10..1.72] - tiling overflow beyond [0,1], the
+expected shape for real, repeating surface UVs, not denormals or garbage.
+
+Why NOT --group 0 (a real, measured finding, not a style change): this
+channel's own real draw ranges (DrawRange::submeshIndex==1, CONFIRMED to
+index MeshBlock::channels() directly) are split, gap-free and
+non-overlapping, across BOTH of this tile's 2 located "groups" - group 0
+holds only 3 tiny ranges (52 of 4,580 real indices: materialId 2/3/4, vertex
+spans [296..310]/[1259..1261]/[2038..2053]), group 1 holds the other 4,528
+(materialId 9/10/11/3/2/12/13, vertex spans covering [0..295]/[311..1258]/
+[1262..2037]/[2054..3061]). Laid end to end these EXACTLY tile [0..3061] once
+each, zero overlap, zero gap - materialId 2 and materialId 3 each appear in
+BOTH groups, on directly adjacent vertex spans. This is the signature of ONE
+seamless surface's draw calls split across two submitted batches, NOT two
+independent alternative LOD levels of it (a real coarser LOD would show
+FEWER triangles over a SIMILAR/overlapping vertex range, not a disjoint
+partition). Rendering group 0 alone (the old --group 0 convention, valid for
+the single-channel vehicle/character case drawGroups()'s own "CONFIRMED to
+be LOD levels" finding was validated against) produces only 14 non-degenerate
+triangles here - a near-empty sliver of the real 1,528-triangle surface.
+sr3_viewer's `zone` command was therefore changed (see tools/sr3_viewer.cpp's
+own runZoneTile() doc comment): with no --group given, it now UNIONS the
+resolved channel's own ranges across EVERY located group by default, reusing
+tools/tree_baseline_render.cpp's own already-established "one MeshRenderer
+per uploaded unit, shared depth buffer, N draw() calls composited into one
+frame" pattern (not a new mechanism) - an explicit --group N still renders
+exactly that one group's own channel-owned ranges, for single-group
+inspection. This baseline was captured with the new default (auto/union).
+
+Why MeshDrawMode::MaterialIdAsColour, not textured or normal-shaded:
+material/texture binding was investigated directly and hit a genuine,
+checked dead end (not invented around) - see baseline_stdout.txt's own
+"[material]" lines and this task's report for the full account:
+  - the vehicle-style 0x424BD00D GeometryBlock sub-header
+    (include/sr3geometry/material_binding.h) never occurs anywhere in real
+    .czn_pc data (0/2,971 files - re-confirmed directly against this exact
+    file's own real bytes this session, not just cited from the earlier
+    population scan);
+  - .czh_pc's own alternate name table (sr3zone::ZoneHeader::materialBlock())
+    doesn't help either: this file's own 71 names are 100% non-texture
+    instance/effect references (zero .tga);
+  - a peer-relayed hypothesis (materialId indexes a `cc:0`-group texture
+    STEM FAMILY) was tested directly against real bytes, population-wide
+    (2,971 real .czh_pc files): match rate 1.0% per Mesh block (381/37,147)
+    and 11.5% per whole .czn_pc file (53/460, almost entirely degenerate
+    1-stem/1-material cases) - a clean statistical negative, not a working
+    rule.
+Each real draw range is still drawn separately with its own real materialId
+(one DrawIndexed call per range, via MeshRenderer::subDraws_/drawTextured()'s
+own established mechanism) - just coloured by materialId rather than
+textured, the SAME "flat colour, never a neighbour's texture" fallback this
+codebase already uses in drawTextured() when a material's texture fails to
+resolve for any other carrier. Genuinely new lead, NOT chased further within
+this task's scope (flagged for whoever continues this thread): a real,
+previously-unreported list of 32 genuine `.tga` building-texture names (e.g.
+`windows_warehouse01_d.tga`, `trim_artdeco01_n.tga`) is embedded DIRECTLY in
+this tile's own .czn_pc content (bytes ~11601..12435, no known magic/header
+precedes it - not 0x424BD00D, not the shared 0x00043854 MaterialBlock magic),
+structurally separate from .czh_pc entirely; suffix-stripped to 13 distinct
+texture-family stems against this channel's 17 distinct real materialIds - a
+plausible but NOT confirmed/tested-at-population-scale lead, left for a
+future pass rather than guessed at.
+
+Why --frames 1 --capture-frame 0: unchanged from the original baseline - a
+static, CHOSEN orbit camera (yaw=0.6 rad/34.4deg, pitch=0.35 rad/20.1deg,
+distanceScale=1.8, same defaults), never animated.
+
+Determinism: confirmed directly this session by running this exact command
+twice in a row into two different --capture paths and MD5-comparing the
+resulting PNGs - byte-identical both times (MD5
+64be9d35e593fa61e5f48d867caa4da6), and the two stdout captures differ ONLY in
+the "captured :" line echoing back the --capture argument itself (same
+caller-chosen-path convention every other baseline here documents).
+
+Frozen here:
+  baseline_capture.png - the real captured frame: real position+normal+UV
+                         geometry (the REAL textured render surface, not the
+                         UV-less proxy), coloured by real materialId
+                         (MeshDrawMode::MaterialIdAsColour - no real texture
+                         is bindable, see above). Visibly far more detailed
+                         (window rows, facade structure) than the old
+                         code-24-proxy capture's simple box shapes - a real,
+                         visual confirmation this is the primary render
+                         surface, not the collision/shadow proxy.
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact
+                         invocation (czn/gzn byte counts, located-block
+                         count, real per-layout-code-0 field layout from
+                         sr3mesh::layoutInfoFor(0), every real draw range
+                         used (materialId/submeshIndex/indexCount/vertex
+                         span) across both located groups, the honest
+                         material/texture-binding dead-end summary, LOD
+                         group count, device, object-space bounds, topology,
+                         camera framing, capture path, frame count).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkZoneTileScene()
+(rebuilt to match this new real command - no --group argument - see that
+function's own header comment).

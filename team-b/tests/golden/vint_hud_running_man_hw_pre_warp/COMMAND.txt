@@ -1,0 +1,162 @@
+Golden scene: vint_hud_running_man, Vint UI render (`sr3_viewer vint-doc`, real bitmap quads + REAL TEXT)
+=========================================================================================================
+
+RE-FROZEN 2026-10-03, localisation lookup follow-up (spec-localization-format.md, library sr3locstr).
+`text_tag` is now tried as a real `.le_strings` key before falling back to the raw string
+(Sec6.1/Sec7 item 2). The OLD baseline (pre-lookup wording) is kept at
+tests/golden/vint_hud_running_man_pre_locstr/ (same command, same pixels). PIXELS UNCHANGED -
+capture.png is byte-identical (MD5 63391aed4dd80590cf8036ae10a021d6, same hash as before this change):
+timer_txt's text_tag is "88", not a real localisation key (confirmed directly - the run's own new
+summary field reads "resolved via a real localisation key 0"), so it still falls back to the same raw
+text as before. Only stdout's WORDING changed: the REAL TEXT/CHOSEN TEXT banner describes the new lookup
+instead of the old blanket "key-hash/text_tag_crc = OPEN" text, a new `[loc]` line reports the 10/11
+loaded US tables (10,201 records; patch0 is absent because this command's --textures list does not
+include patch_compressed.vpp_pc), and the text summary line gained the "resolved via a real localisation
+key" field.
+
+Determinism: the command below run twice into the same _work/vint_hud_running_man.png path (Bash
+redirection) - PNG byte-identical (MD5 63391aed4dd80590cf8036ae10a021d6) and stdout byte-identical (MD5
+f091712c28167a5a0b137f34c7abe1e8, the frozen baseline's hash).
+
+PREVIOUSLY RE-FROZEN 2026-10-03, orchestrator request (UI render unit U5 - text: spec-vint-render.md
+Sec14 + the new spec-vint-font-format.md, both on main at 3a4105d). The text element's magenta
+PLACEHOLDER outline is replaced by real text. The OLD baseline is kept at
+tests/golden/vint_hud_running_man_pre_text/ (same command; that PNG is still reproducible bit-for-bit by
+appending --text-placeholder, verified). What changed in this frame:
+  - timer_txt ("88", font header_n -> font_header_pc, text_scale 0.6, auto_offset n, shadow on) is now 2
+    real glyphs from font_header_pc.vf3_pc's 2048x1024 `_nobdr` texture (misc.vpp_pc), drawn twice (shadow
+    pass + main pass = 4 glyph quads) through the same VintQuadPipeline::quad() bitmaps use. Layout
+    measures it 82 x 58 font units -> 49.2 x 34.8 at scale 0.6 (unscaled_size), and auto_offset n
+    re-applied from that size gives offset (-24.6, 0) - EXACTLY the offset the shipped document already
+    stores for this element (the composed origin (130.047, 131.325) is unchanged from the placeholder's),
+    i.e. the authoring tool's own baked offset independently agrees with this project's measured width.
+  - the magenta marker is gone; nothing else in the frame moved (every bitmap [elem] line unchanged).
+  - stdout: a REAL TEXT / CHOSEN TEXT banner replaces the PLACEHOLDER line, three [font] lines report the
+    loaded fonts and their textures, timer_txt's [elem] line now carries its layout (size, lines, stream
+    bytes, auto_offset, origin, glyph count) plus one [run] line per glyph-run record, and a new text
+    summary line follows the existing summary.
+Visually inspected before freezing (enlarged crop): clean, correctly spaced glyphs following the parent's
+rotation, shadow offset behind them, no neighbouring-glyph texel bleed.
+
+Determinism: the command below run twice into the same _work/vint_hud_running_man.png path through cmd.exe
+redirection (exactly how checkVintHudRunningManScene() runs it) - PNG byte-identical across both runs (MD5
+63391aed4dd80590cf8036ae10a021d6, the frozen baseline's hash) and stdout byte-identical (MD5
+e04cd6f9de8541d96de880995b9deac2). The same PNG hash was also produced by the CMake-built sr3_viewer.exe
+(build_verify_text), not only by build.bat's cl.exe build.
+
+build.bat change for this re-freeze: the `vint-doc` section's compile line gained src\vint_font.cpp and
+src\vint_text.cpp (library sr3font), packed into the same vint_luahost.lib - no other change.
+
+---------------------------------------------------------------------------------------------------------
+Previous history of this scene (unchanged below):
+
+Golden scene: vint_hud_running_man, the FIRST Vint UI render (`sr3_viewer vint-doc`, real bitmap quads)
+=========================================================================================================
+
+RE-FROZEN 2026-10-03, orchestrator request (UI render unit U6: spec-vint-render.md Sec15/spec-render-
+pipeline.md Sec2/Sec21 synced at main 3e661de - the exact D3D9 blend/stencil/sampler state rl_draw itself
+sets). Pixel-exact changes from this re-freeze, all intended per the orchestrator's own "re-freeze, keeping
+the old one as the pre-exact baseline" instruction (the OLD baseline is preserved at
+tests/golden/vint_hud_running_man_pre_exact/, same command, for comparison):
+  - the real half-texel pixel-shader UV offset (0.5/texW, 0.5/texH) plus the matching D3D11 -0.5px vertex
+    shift (Sec15.7) - this document's own CORRECTION from "no half-pixel compensation" (U3/U4's prior CHOSEN
+    stance, which U6 found wrong: the offset is real, in the pixel shader, not the vertex);
+  - wrap texture addressing (was CLAMP) - Sec15.7;
+  - this document (hud_running_man.vint_doc) has no mask elements and no non-filter render_mode elements
+    (COMMAND.txt's own earlier "why this document" note), so the newly-implemented 5 exact blend codes
+    (Sec15.4) and 3 real stencil states for mask modes (Sec15.6) are NOT visually exercised by this specific
+    golden - they are implemented and build-verified (61/61 ctest) but have no dedicated regression scene
+    yet. A future golden using a mask/non-filter-render_mode document (e.g. the main hud.vint_doc, which has
+    7 real mask elements) would close that gap - not done here, flagging rather than silently leaving it
+    unmentioned.
+
+Originally FROZEN 2026-10-03, orchestrator request (UI render unit U3: spec-vint-render.md Sec12 synced at
+main b544558, Sec11 item 9 narrowed at main 3e6cbe2). A fixed regression scene for `sr3_viewer vint-doc` - see
+tools/sr3_viewer.cpp's own runVintDoc() top comment for the full REAL / CHOSEN / stubbed breakdown. This
+golden catches a regression in every link of the chain at once: the .vint_doc reader and loader
+(sr3vintdoc::parseDocument -> EngineState::loadVintDocument, including the new Sec12.1 image-setter side
+effects run at the `image` record's own load position), the bitmap-sheet registry (bitmap_sheets.xtbl ->
+<sheet>.xtbl, spec-tables-environment.md Sec11.7/Sec17.4), the page-texture lookup (TextureSearchCache/
+findAndUploadTexture), the render walk (cull, tint/alpha composition, sibling sort - Sec2-Sec6), the
+query-time pos/M chain mapped through the screen fit (Sec5.1/Sec7.1), and the bitmap quad itself
+(Sec12.1/Sec12.4: source_se is an EXTENT, UV = (page pos + source_nw)/T, no half-texel offset).
+
+Real command (run with cwd = tests/golden/, same convention as every other baseline here):
+
+    <sr3_viewer.exe> vint-doc \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\interface_startup.vpp_pc" \
+        hud_running_man.vint_doc \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        _work/vint_hud_running_man.png \
+        --tables "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\patch_compressed.vpp_pc" \
+        --textures "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc.vpp_pc" \
+        --textures "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\interface.vpp_pc"
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh by tests/golden/build.bat straight from
+tools/sr3_viewer.cpp. build.bat gained ONE new per-reader section for this scene ("extra readers for
+sr3_viewer's `vint-doc` command"): src/vint_doc.cpp + the 13 sr3luahost sources + the vendored Lua 5.1.5
+(compiled as C++, /TP, exactly as third_party/lua51/CMakeLists.txt does), packed into _bin/vint_luahost.lib
+and linked into sr3_viewer.exe together with the xtbl.obj/tables_environment.obj the script already
+compiled; sr3_viewer.cpp's compile line also gained /I third_party/lua51/src. It also gained an optional
+GOLDEN_PROJ override (unset = the main checkout, unchanged) so an unmerged worktree can build/verify against
+its own tests/golden copy - this baseline was frozen that way, from the implementing agent's worktree.
+
+Why this document (enumerated and measured, not assumed): all 159 distinct .vint_doc files in
+interface_startup.vpp_pc were walked with a throwaway probe; the HUD documents' bitmap images were matched
+against the sheet sub-image registry and texture records. Almost every HUD image is a bitmap-SHEET
+sub-image (mode 1, Sec12.1), not a standalone texture. Candidates:
+  * hud.vint_doc (the main HUD): 134 bitmaps, but 7 mask elements (mask pass NOT modelled - its masked
+    siblings would be drawn unmasked), 1 clip, 12 `document` sub-instances (not instanced), 6
+    bitmap_circles, 5 image names in no sheet/texture, and in its as-loaded state full-screen backdrop/
+    vignette layers cover most of the frame. Renders, but the frame is dominated by unmodelled behaviour -
+    a poor regression target.
+  * hud_running_man.vint_doc (CHOSEN): 297 records, 60 bitmaps, 28 groups, 2 text, NO mask, NO clip, NO
+    sub-documents, NO unresolvable image (28 distinct images, all sheet sub-images: 27 on ui_bms_rm -
+    page in interface.vpp_pc > ui_bms_rm.cvbm_pc, 1024x1024 - and ui_blank on ui_bms_00 - page in
+    misc.vpp_pc > interface-backend.cpeg_pc), and it exercises rotation (11 rotated elements, e.g.
+    fire_panda), scale, tint (exit_bg drawn with colour (150,47,103,255) from a tinted ui_blank), a
+    visible=false cull (do_nothing_txt) and a text PLACEHOLDER (timer_txt). Every bitmap stores source_se
+    explicitly AFTER image, and every drawn quad's corners equal the element's query-time screen_nw/
+    screen_se box (unscaled_size-based) - an independent consistency check between Sec7 and Sec12.1 that
+    the stdout records per element.
+
+Why --tables patch_compressed.vpp_pc in front of misc_tables.vpp_pc: patch_compressed carries a 63-row
+bitmap_sheets.xtbl but only 8 per-sheet <sheet>.xtbl files (a partial overlay); misc_tables has the 55-row
+base set. The command layers them (first archive holding a FILE wins - a CHOSEN layering rule, the
+engine's own archive precedence is not modelled), giving 63 sheets / 1,148 sub-images. The rendered frame
+is identical with misc_tables alone (all of this document's images are base-set sub-images).
+
+What is REAL vs CHOSEN vs stubbed in this frame (also printed in the command's own stdout banner):
+  REAL      - every element, property, sheet rectangle and texel; the image-setter side effects; the cull,
+              colour packing (x255 truncated, no clamp), composition, sibling order and quad geometry.
+  CHOSEN    - document canvas 1280x720 (--doc-size; the source of document +0x5a0/+0x5a4 is not
+              specced) with a 1280x720 target, so the screen fit is the identity; fit to height (Sec5.1
+              HIGH); alpha blending for every render_mode (callback +0x18 semantics OPEN); linear/clamp
+              sampler; no D3D9 half-pixel compensation; clear colour (40,40,48); sRGB colour decode OFF
+              (Sec12.4 context byte +0x09 - HIGH per Sec11 item 9 that it stays 0, still CHOSEN) and sRGB
+              texture decode OFF (UI sampler state untraced) - both toggleable (--srgb-colour/--srgb-texture
+              on); custom_source_coords absent = clear (bitmap's constructor default not given; this
+              document never stores it).
+  STUBBED   - `text`: a magenta 24x12 outline at the composed origin is a PLACEHOLDER, NOT real text (the
+              layout/glyph stream that would draw it is not specced). `group`: draws nothing - that IS
+              the real behaviour (Sec12.3, a literal empty stub).
+A future pass that settles any CHOSEN item above (canvas size, blend modes, sRGB, sampler, half-pixel) or
+implements real text will legitimately change this baseline's pixels - an intended re-freeze, not a
+regression.
+
+Determinism: confirmed by running this exact command twice into two different out paths and MD5-comparing
+the PNGs - byte-identical (MD5 622e36bce141f860beb1e94a2d681405, the frozen baseline's hash); the two
+stdout captures differed ONLY in the echoed out path on the "wrote" line. This command prints no wall-clock
+timing, so checkVintHudRunningManScene() compares stdout byte-exactly (compareTextExact). The stdout
+baseline was captured through cmd.exe redirection (raw bytes, no BOM), the same way the harness captures
+its re-run.
+
+Frozen here:
+  baseline_capture.png - the real rendered frame (1280x720 RGBA8, offscreen D3D11 target).
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact invocation: the REAL/CHOSEN/
+                         PLACEHOLDER banner, sheet/image resolution (every image's sheet, page position,
+                         size and texture source), the load-time side-effect counters, one [elem] line per
+                         visited element (drawn quad corners, colour, source coords, screen_nw/screen_se),
+                         and the summary counts.
+
+Re-run and check with: tools/golden_scene_check.cpp's checkVintHudRunningManScene().

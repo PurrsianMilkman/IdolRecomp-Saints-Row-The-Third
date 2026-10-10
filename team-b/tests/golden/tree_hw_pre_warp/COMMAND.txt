@@ -1,0 +1,215 @@
+Golden scene: tree, real .csrt_pc/.gsrt_pc tree geometry, ALL 3 PRESENT LOD slots
+(materials 0/1/2 - trunk+branch+needles) drawn together, vertex layout codes 11/12
+====================================================================================
+
+*** THIS BASELINE SUPERSEDES A PRIOR ONE (2026-09-29 same day) - SEE "WHAT CHANGED
+    AND WHY" BELOW BEFORE READING FURTHER. The prior group-0-only baseline is
+    PRESERVED, not deleted, at COMMAND_group0_only.txt / baseline_render_group0_only.png
+    / baseline_stdout_group0_only.txt in this same directory - open those to see
+    exactly what this task changed relative to. ***
+
+Real command (run with cwd = tests/golden/ so the "wrote:" line in
+baseline_stdout.txt is the exact relative path this file records - absolute
+paths would make the frozen stdout depend on where/who captured it):
+
+    <tree_baseline_render.exe> \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        st_pine_tall _work/tree.png
+
+Identical invocation to the prior baseline's own (same archive, same stem, same
+output path, no new flags) - the command line did not change; the TOOL's own
+DEFAULT BEHAVIOUR changed (see below), so the exact same command line now produces
+a different, MORE COMPLETE real render.
+
+<tree_baseline_render.exe> = tests/golden/_bin/tree_baseline_render.exe, built fresh
+by tests/golden/build.bat straight from tools/tree_baseline_render.cpp - which THIS
+TASK modified (previously unmodified since Sec9.120's own tree golden-scene freeze;
+see that section's own "Files" list, which explicitly said this tool was NOT touched
+that day "confirmed unnecessary" - it needed to be touched THIS time). No sr3mesh/
+sr3tree reader changed - decodeChannel()/layoutInfoFor() are byte-identical to
+Sec9.120; only NEW WIRING in the render tool itself.
+
+============================================================================
+WHAT CHANGED AND WHY (the actual task: HANDOFF Sec9.120's own Addendum flagged
+that st_pine_tall has 4 materials present but the frozen render showed only
+material 0's trunk/branch geometry, because tree_baseline_render.cpp hardcoded
+drawing only "draw group 0" of the LOWEST-INDEX PRESENT LOD SLOT)
+============================================================================
+
+THE ADDENDUM'S OWN GUESS WAS MEASURED, NOT ASSUMED, AND TURNED OUT TO BE SUBTLY
+WRONG IN WHERE THE OTHER MATERIALS LIVE - stated plainly because getting this right
+mattered more than confirming the guess: the Addendum's own wording ("leaves/needles
+almost certainly live in one of the other 3 present materials' own draw range(s)")
+reads as if all 4 materials' ranges sit inside ONE Mesh sub-block's own draw-group
+array (the same shape sr3_viewer's `vehicle` command already handles - many ranges,
+several materials, one group). A real diagnostic dump of st_pine_tall's raw
+structure (every LOD slot's every draw group's every range - a throwaway scratch
+tool built for exactly this check, not guessed from the spec) shows a DIFFERENT real
+shape:
+
+  Tree-level LOD slot 0 (present, layout code 11, 1710 elements, 3 internal draw
+    groups): EVERY range of EVERY group has materialId=0. Textures: Bark_01_D/N/S -
+    this is the TRUNK (the "trunk/branch" label Sec9.120's Addendum used for
+    material 0 is half right - it is trunk ONLY; see slot 1 below for branch).
+  Tree-level LOD slot 1 (present, layout code 12, 153 elements, 1 draw group, 1
+    range): materialId=1. Textures: Branch_01_D/N. This is the BRANCH geometry -
+    a SEPARATE Mesh sub-block from the trunk, not an extra range inside slot 0's
+    own group array.
+  Tree-level LOD slot 2 (present, layout code 11, 2728 elements, 3 internal draw
+    groups): EVERY range of EVERY group has materialId=2. Textures: pineneedles_D/
+    N/S. This is the NEEDLE geometry this task exists to surface.
+  Tree-level LOD slot 3: NOT PRESENT in this tree's shipped data at all (checked
+    directly: `tree.lodSlots()[3].present == false`). Material 3 (textures
+    common_bb_D/N - the "common billboard" impostor) therefore has NO decoded
+    geometry anywhere in st_pine_tall to draw - a real, evidenced DATA ABSENCE, not
+    a decode failure or a bug in this render tool. This is consistent with (not a
+    new finding beyond) spec-tree-format.md Sec7's own already-flagged HYPOTHESIS-
+    tier, no-known-reader impostor/billboard atlas structure - still not built on
+    here, still not guessed at.
+
+So the real, structural rule this task found (measured on st_pine_tall specifically -
+not claimed as a general population statistic across all 11 shipped trees, which
+would need its own separate census) is: EACH PRESENT TREE-LEVEL LOD SLOT IS A
+SEPARATE MESH SUB-BLOCK BOUND TO EXACTLY ONE MATERIAL, not "one mesh whose group
+array partitions several materials". "Draw all the real materials this tree's data
+has" therefore means: draw group 0 of EVERY PRESENT LOD SLOT, not search harder
+inside one LOD slot's own group array. That is the actual code change.
+
+WHY THIS IS NOT THE "DIFFERENT, UNDECODED LAYOUT CODE" DEAD END THE TASK BRIEF
+WARNED ABOUT: checked directly before writing a single line of drawing code, not
+assumed - LOD slot 0 is layout code 11 (known=true, decoded since Sec9.120), LOD
+slot 1 is layout code 12 (known=true, decoded since Sec9.120), LOD slot 2 is layout
+code 11 again (known=true). All three present slots decode successfully
+(decodeChannel(0) returns real, in-bounds vertex data for all three - independently
+exercised with a scratch diagnostic tool before this baseline was captured). No
+`known=false` layout code was ever on the path to drawing the leaves/needles here,
+so the task's own "stop, do not guess" branch was never triggered.
+
+CODE CHANGE (tools/tree_baseline_render.cpp only - no sr3mesh/sr3tree reader
+touched): the tool's default (no `--lod` override) now collects EVERY PRESENT LOD
+slot (ascending) instead of just the lowest-index one, builds ONE
+sr3render::MeshRenderer PER SLOT (each slot is a distinct Mesh sub-block - own
+vertex/index buffers, in general a different layout code/element count - so one
+upload() call cannot span more than one slot), uploads each with the SAME
+drawGroup=0 convention the tool always used, and draws all of them into ONE shared
+render target + depth buffer (only the FIRST slot's renderer owns the depth buffer;
+every later slot's draw() call relies on that same view, bound externally by the
+caller) - the identical compositing pattern tools/sr3_viewer.cpp's
+MultiChannelMultiSetRender already uses for the analogous multi-channel character-
+mesh problem (HANDOFF Sec9.105), adapted here to multiple LOD-slot Mesh sub-blocks
+instead of multiple channels of one Mesh sub-block. The camera now frames the
+COMBINED bounding box across every rendered slot (not just the first), so the whole
+tree - not just whichever part happened to be uploaded first - fits in frame.
+`--lod N` still works exactly as before (draws exactly that one slot, isolated) -
+unchanged single-slot behaviour, useful for inspecting one part alone; the golden
+scene itself does not use it (matches the prior baseline's own command line).
+
+Real numbers - OLD (group0-only, superseded, preserved in
+COMMAND_group0_only.txt/baseline_*_group0_only.*): 1 LOD slot drawn (slot 0), 1
+channel, layout 11, stride 36, 1710 elements, indexCount 2982 -> 994 triangles, 1
+draw range (materialId 0), bounds X[-3.168 4.102] Y[0.000 42.625] Z[-2.418 4.137],
+MD5 3310859e4b462da87bb534667ac144d5.
+
+Real numbers - NEW (this baseline, from baseline_stdout.txt verbatim):
+  lod slot 0 (materialId=0, Bark, trunk): layout 11, stride 36, 1710 elements,
+    indexCount 2982 -> 994 triangles, 1 draw range [mat=0 idx=0..2982].
+  lod slot 1 (materialId=1, Branch): layout 12, stride 36, 153 elements, indexCount
+    204 (post-strip-expansion) -> 68 triangles, 1 draw range [mat=1 idx=0..204].
+  lod slot 2 (materialId=2, pineneedles): layout 11, stride 36, 2728 elements,
+    indexCount 1650 (post-strip-expansion) -> 550 triangles, 1 draw range
+    [mat=2 idx=0..1650].
+  TOTALS: 3 LOD slots rendered, 3 draw ranges (was 1), indexCount 4836 total (was
+    2982, +1854), trianglesEmitted 1612 total (was 994, +618, +62.2%).
+  Combined object-space bounds: X[-6.148 8.047] Y[0.000 44.688] Z[-6.941 7.809] -
+    visibly WIDER in X/Z than the old group0-only bounds (the needle canopy extends
+    well past the trunk's own silhouette) and slightly taller in Y (44.688 vs
+    42.625 - the needle mesh's own highest vertex sits a little above the trunk
+    mesh's own highest vertex).
+  MD5 (new baseline_render.png): f42a751481d5f42d7984826ffdc120b8 - reproduced
+    identically across 3 separate captures (once during exploration, once for this
+    freeze, once immediately after for re-verification), same as the prior
+    baseline's own determinism discipline.
+
+Visual confirmation (both images are in this directory - look at them, not just the
+numbers): baseline_render_group0_only.png shows a bare trunk with small bark-covered
+twig stubs and NO foliage. baseline_render.png (this baseline) shows the SAME trunk
+shape plus a large, dense needle-cluster canopy near the top - a real, recognisable
+pine tree silhouette rather than a bare stick. This is the qualitative result the
+task exists to produce.
+
+Rendering: default MeshDrawMode::Checker (tool default, not overridden - unchanged
+from the prior baseline; the task brief's own note about MeshDrawMode::NormalAsColour
+"unlit fidelity" is about there being no new lighting/texture work needed for either
+mode, not an instruction to switch modes - Checker was already unlit/textureless and
+stays the default here). Camera: tool's own defaults (yaw=0.6 rad, pitch=0.35 rad,
+distance scale 1.8, size 800x600), framed against the COMBINED bounds of all 3
+rendered slots (see code-change note above) - CHOSEN framing parameters, not real
+data, same "chosen framing" convention every other scene in this directory documents.
+
+ALPHA-BLENDING / DOUBLE-SIDED HONEST LIMITATION (task brief's own anticipated
+caveat, confirmed real, not hypothetical): pine needle geometry is real triangle
+mesh here (not billboards - the needle "cards" are actual 3D wedge shapes, 550 real
+triangles), but this renderer draws every material with the SAME opaque, single-
+sided pipeline state every other MeshDrawMode already uses (see
+sr3render::MeshRenderer's own header comment - milestone-3 scope, no per-material
+blend/cull state). Sec9.120's own Checker-mode render already shows this is enough
+to see real geometry clearly; a production-fidelity render of thin, possibly-
+double-sided foliage cards would additionally need alpha-blend and/or two-sided
+rasterizer state THIS RENDERER DOES NOT HAVE - not attempted here, per the task's
+own explicit instruction to report this as an honest limitation rather than build a
+new rendering feature. The needle geometry in baseline_render.png is real, undistorted
+positions - what is NOT attempted is production alpha/double-sided shading of it.
+
+THIS BASELINE'S CORE FIELD (POSITION) CONFIDENCE IS UNCHANGED FROM Sec9.120 - stated
+again here because it applies to ALL THREE rendered slots now, not just the one:
+  LOD slots 0 and 2 (layout code 11) and LOD slot 1 (layout code 12) all carry
+  Position at HIGH CONFIDENCE, NOT CONFIRMED (FLOAT16x3 at channel offset +0 - see
+  Sec9.120 / spec-vertex-format.md Sec12.12 for the full statement of why: empirical
+  full-population evidence, non-denormal, correctly scaled, but no CPU/GPU consumer
+  of the byte range has been found and the +0/+16 duplicate-pair staleness question
+  is still open). Normal (+8) and Tangent (+12) remain CONFIRMED. Nothing about this
+  confidence tier changed by drawing 2 more slots with the same layout family.
+
+Regression (this task's tools/tree_baseline_render.cpp change only - no reader
+touched): a full tests/golden/_bin rebuild (tests/golden/build.bat) and re-check of
+every OTHER frozen scene (brad, vehicle_genki, vehicle_standard, zone_tile) - all 4
+still PASS byte-exact against their own already-frozen baselines, confirming this
+task's change (confined to tools/tree_baseline_render.cpp) did not touch anything
+those scenes depend on. See "Re-run and check with" below for the exact harness
+invocation and its own PASS lines.
+
+History: this directory's PRIOR baseline (Sec9.120, 2026-09-29 earlier the same
+day) drew only the lowest-index present LOD slot's group 0 (material 0, trunk/
+branch bark geometry) - preserved verbatim as COMMAND_group0_only.txt /
+baseline_render_group0_only.png / baseline_stdout_group0_only.txt in THIS SAME
+DIRECTORY (not deleted, not moved elsewhere - "easy for a reader to find the OLD
+single-material render next to the NEW multi-material one", per this task's own
+explicit instruction). Before that, this directory held a STATUS.txt documenting
+the honest "layout code 11/12/13 undecodable" gap (full text preserved verbatim in
+HANDOFF.md Sec9.110). Nothing is lost across either transition - every superseded
+file's content still exists, named so a reader lands on the right one immediately.
+
+Frozen here (ACTIVE baseline - what golden_scene_check.cpp's checkTreeScene()
+compares against):
+  baseline_render.png  - the real captured frame, all 3 present LOD slots (trunk+
+                         branch+needles) composited together, Checker-shaded.
+  baseline_stdout.txt  - tree_baseline_render's own real stdout for this exact
+                         invocation (archive/stem, materials, shader hashes, LOD
+                         presence, capsules, wind params, per-slot mesh/channel
+                         decode summary, per-slot topology/subDraws, combined
+                         totals, combined object-space bounds, device, size, output
+                         path).
+
+Preserved here (HISTORICAL - not read by checkTreeScene(), kept only so a reader can
+see exactly what changed):
+  COMMAND_group0_only.txt        - the prior task's own COMMAND.txt, verbatim.
+  baseline_render_group0_only.png - the prior task's own frozen render, verbatim
+                                    (MD5 3310859e4b462da87bb534667ac144d5, unchanged).
+  baseline_stdout_group0_only.txt - the prior task's own frozen stdout, verbatim.
+
+Re-run and check with: tools/golden_scene_check.cpp's checkTreeScene() (updated by
+this task to describe the multi-slot render in its own comment/name string; its file
+paths were already correct - the ACTIVE baseline filenames did not change, only
+their CONTENT did, with the superseded content preserved alongside under the
+`_group0_only` names above). See that file's own header comment for the convention
+this directory follows.

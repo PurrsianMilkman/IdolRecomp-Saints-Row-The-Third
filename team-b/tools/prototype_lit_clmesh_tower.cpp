@@ -1153,8 +1153,11 @@ int main(int argc, char** argv) {
     //    checked, same convention the existing clmesh golden scenes use.
     // -----------------------------------------------------------------
     std::vector<sr3mesh::MeshBlock> headBlocks = lm.resolveReferencedMeshes(clView, glView);
-    size_t gCursor = 0;
-    for (auto& hb : headBlocks) if (hb.bulkInGFile()) gCursor += hb.gLength();
+    // gCursorAfterHeadChain() rounds the HEAD-chain sum up to 16 at this
+    // HEAD -> MIDDLE handoff (level_mesh.h note 9) - a bare sum of
+    // headBlocks' gLength() is wrong whenever that sum is not already
+    // 16-aligned.
+    size_t gCursor = sr3clmesh::LevelMesh::gCursorAfterHeadChain(headBlocks);
 
     sr3mesh::MeshBlock chosenMesh;
     bool haveChosenMesh = false;

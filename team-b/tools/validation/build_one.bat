@@ -17,7 +17,7 @@ cl.exe /nologo /std:c++17 /EHsc /O2 ^
   "%BUILD%\geometry_block.obj" "%BUILD%\mesh_block.obj" "%BUILD%\rig.obj" "%BUILD%\pose.obj" "%BUILD%\material_binding.obj" "%BUILD%\vehicle.obj" ^
   "%BUILD%\animated_pose.obj" "%BUILD%\bone_palette.obj" "%BUILD%\animation.obj" "%BUILD%\payload.obj" "%BUILD%\sample.obj" ^
   "%BUILD%\zone_header.obj" "%BUILD%\zone_geometry.obj" ^
-  "%BUILD%\media_bank.obj" "%BUILD%\wwise_bank_id.obj" ^
+  "%BUILD%\media_bank.obj" "%BUILD%\wwise_bank_id.obj" "%BUILD%\hirc.obj" ^
   "%BUILD%\level_mesh.obj" "%BUILD%\tree.obj" "%BUILD%\foliage_mesh.obj" ^
   "%BUILD%\save_directory.obj" "%BUILD%\save_snapshot.obj" "%BUILD%\camera_script.obj" ^
   "%BUILD%\effects.obj" "%BUILD%\texture_pair.obj" "%BUILD%\shader_wrapper.obj" "%BUILD%\manifest.obj" "%BUILD%\xtbl.obj" ^

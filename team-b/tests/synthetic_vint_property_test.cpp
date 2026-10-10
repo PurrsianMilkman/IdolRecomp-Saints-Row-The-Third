@@ -78,7 +78,10 @@ int main() {
             }
         }
         CHECK(total == 96);
-        CHECK(typed == 43 && spec + field == 43);
+        // 44/96 typed as of 2026-10-08 (minimap live-transform task): sr2_map
+        // zoom was corrected from Open to Spec/kVintCodeFloat (spec-hud-
+        // runtime.md Sec6 now states the code directly) - was 43 before.
+        CHECK(typed == 44 && spec + field == 44);
         // Exactly the 10 0xd rows of Sec9.2a and the 3 0xe rows.
         size_t enums = 0, variants = 0;
         for (const auto& t : types)
@@ -198,6 +201,36 @@ int main() {
         es.setVintProperty(u, "anything_at_all", {num(1.1), str("x")});
         auto uv = es.getVintProperty(u, "anything_at_all");
         CHECK(uv && uv->size() == 2 && (*uv)[0].number == 1.1);
+
+        // sr2_map (the minimap/pause-map element, spec-hud-runtime.md Sec6):
+        // zoom (float, this+0xa0) / map_mode (enum, this+0xa4, pause_map=0/
+        // minimap=1) round-trip through the SAME typed VINT property store
+        // every other element type uses - 2026-10-08 minimap live-transform
+        // task, closing the "zoom left Open" gap above.
+        uint32_t mm = es.registerTypedVdoObjectForTesting("corner_map", "sr2_map", 0, 0);
+        es.setVintProperty(mm, "zoom", {num(2.5)});
+        CHECK(nums(es.getVintProperty(mm, "zoom")) == std::vector<double>{static_cast<double>(2.5f)});
+        CHECK(es.findVintStoredProperty(mm, "zoom")->typedAs == kVintCodeFloat);
+        // map_mode's SETTER resolves the enum name to its value (CONFIRMED);
+        // the GETTER's own push form for an enum code is explicitly OPEN
+        // (Sec20.2) - the SAME refusal `element.auto_offset` already hits
+        // 2 sections below (code 0xd=13) - so read back via
+        // findVintStoredProperty (the resolved stored value), not
+        // getVintProperty (which throws, matching auto_offset's own
+        // established convention).
+        es.setVintProperty(mm, "map_mode", {str("minimap")});
+        CHECK(es.findVintStoredProperty(mm, "map_mode")->values[0].number == 1);
+        es.setVintProperty(mm, "map_mode", {str("pause_map")});
+        CHECK(es.findVintStoredProperty(mm, "map_mode")->values[0].number == 0);
+        CHECK(es.findVintStoredProperty(mm, "map_mode")->typedAs == kVintCodeEnum);
+        CHECK(throwsOpen([&] { es.getVintProperty(mm, "map_mode"); }, "type code 13"));
+        // Not shared with element's own unrelated rows (sr2_map has no
+        // `alpha`/`offset` row of its own and does not inherit one - Sec6:
+        // "the entire vtable... terminates exactly there... no construct/
+        // update/draw slot past the 2 known properties" is about the real
+        // vtable, but the 2-row descriptor table above is this project's
+        // own separately-confirmed fact, spec-lua-bindings.md Sec9.2 row).
+        CHECK(nums(es.getVintProperty(mm, "alpha")) == std::vector<double>{1}); // inherited from element, default 1
     }
 
     // --- 3. tween start_value/end_value: borrow the TARGET's code, write the

@@ -12,6 +12,7 @@
 
 #include "sr3font/vint_font.h"
 #include "sr3font/vint_text.h"
+#include "sr3locstr/le_strings.h"
 
 using namespace sr3font;
 
@@ -348,28 +349,84 @@ int main() {
 
     // ---- insertion formatter (Sec14.2) --------------------------------------
     {
-        CHECK(formatInsertions(u"{{x}%%%", false, {}).text == u"{x}%");
-        FormatResult r = formatInsertions(u"a{}b%sc{ 2 }d", false, {});
+        sr3locstr::LeStringsLookup emptyLoc; // no tables loaded: every lookup misses
+        CHECK(formatInsertions(u"{{x}%%%", false, {}, emptyLoc).text == u"{x}%");
+        FormatResult r = formatInsertions(u"a{}b%sc{ 2 }d", false, {}, emptyLoc);
         CHECK(r.text == u"abcd" && r.insertionsVanished == 3 && r.open.empty());
         std::vector<InsertValue> v(2);
         v[0].kind = InsertValue::Kind::String;
         v[0].text = u"raw";
         // nil value (value 1, and anything past the list up to 32) -> literal
-        r = formatInsertions(u"[{0:Not_Localized}|{1}|{31}|{32}]", true, v);
+        r = formatInsertions(u"[{0:Not_Localized}|{1}|{31}|{32}]", true, v, emptyLoc);
         CHECK(r.text == u"[raw|{No insertion value specified!}|{No insertion value specified!}|]" && r.open.empty());
         // %s with nil inserts nothing
-        CHECK(formatInsertions(u"<%s>", true, {}).text == u"<>");
-        // text_tag_crc with a non-integer value
-        r = formatInsertions(u"{0:text_tag_crc}", true, v);
+        CHECK(formatInsertions(u"<%s>", true, {}, emptyLoc).text == u"<>");
+        // text_tag_crc with a non-integer value (v[0] is a String, not a Number)
+        r = formatInsertions(u"{0:text_tag_crc}", true, v, emptyLoc);
         CHECK(r.text == u"{Invalid insertion value for a hash!}");
-        // OPEN: a localisation-key lookup / named symbol / number conversion
-        CHECK(!formatInsertions(u"{0}", true, v).open.empty());
-        CHECK(!formatInsertions(u"{PLAYER}", false, {}).open.empty());
+        // {0}: a string value with no match in any loaded table -> plain-text
+        // fallback (Sec14.2's `{N}` row; spec-localization-format.md Sec9
+        // item 3's slot +0x00, lookupByKey) - no longer OPEN.
+        r = formatInsertions(u"{0}", true, v, emptyLoc);
+        CHECK(r.text == u"raw" && r.open.empty());
+        // {PLAYER}: a named game-side symbol (slot +0x0c) - still OPEN, not
+        // in sr3locstr's scope.
+        CHECK(!formatInsertions(u"{PLAYER}", false, {}, emptyLoc).open.empty());
         std::vector<InsertValue> num(1);
         num[0].kind = InsertValue::Kind::Number;
         num[0].number = 5;
-        CHECK(!formatInsertions(u"{0}", true, num).open.empty());
-        CHECK(!formatInsertions(u"{0:text_tag_crc}", true, num).open.empty());
+        // {0}: a non-string (Number) value with no modifier - 0x00e23f40's
+        // number-to-text conversion has no spec section - still OPEN.
+        CHECK(!formatInsertions(u"{0}", true, num, emptyLoc).open.empty());
+        // {0:text_tag_crc}: an integral hash (5) not in any loaded table ->
+        // "{Hash not found!}" (Sec14.2's row) - not OPEN, a determinate answer.
+        r = formatInsertions(u"{0:text_tag_crc}", true, num, emptyLoc);
+        CHECK(r.text == u"{Hash not found!}" && r.open.empty());
+
+        // ---- a real hit, both forms (spec-localization-format.md Sec9 item 3) --
+        sr3locstr::LeStringsTable table;
+        const uint32_t greetingHash = sr3locstr::keyHash("GREETING_KEY");
+        table.byHash[greetingHash] = u"Hello, Key!";
+        sr3locstr::LeStringsLookup loc;
+        loc.addTable(std::move(table));
+
+        // {N} with a string value that IS a key in a loaded table -> the
+        // looked-up text, not the raw string.
+        std::vector<InsertValue> key(1);
+        key[0].kind = InsertValue::Kind::String;
+        key[0].text = u"GREETING_KEY";
+        r = formatInsertions(u"{0}", true, key, loc);
+        CHECK(r.text == u"Hello, Key!" && r.open.empty());
+
+        // {N} with a string value that is NOT a key -> raw string, plain text.
+        std::vector<InsertValue> missKey(1);
+        missKey[0].kind = InsertValue::Kind::String;
+        missKey[0].text = u"NOT_A_KEY";
+        r = formatInsertions(u"{0}", true, missKey, loc);
+        CHECK(r.text == u"NOT_A_KEY" && r.open.empty());
+
+        // {N:text_tag_crc} with the key's own hash -> the same looked-up
+        // text, found by hash directly (slot +0x04), not by re-hashing a string.
+        std::vector<InsertValue> hashVal(1);
+        hashVal[0].kind = InsertValue::Kind::Number;
+        hashVal[0].number = static_cast<double>(greetingHash);
+        r = formatInsertions(u"{0:text_tag_crc}", true, hashVal, loc);
+        CHECK(r.text == u"Hello, Key!" && r.open.empty());
+
+        // {N:text_tag_crc} with a hash not in the table -> "{Hash not found!}".
+        std::vector<InsertValue> missHash(1);
+        missHash[0].kind = InsertValue::Kind::Number;
+        missHash[0].number = static_cast<double>(greetingHash) + 1.0; // not a stored hash
+        r = formatInsertions(u"{0:text_tag_crc}", true, missHash, loc);
+        CHECK(r.text == u"{Hash not found!}" && r.open.empty());
+
+        // {N:text_tag_crc} with a genuine non-integral Number (not just a
+        // non-Number kind, as the `v` case above already covers).
+        std::vector<InsertValue> fractional(1);
+        fractional[0].kind = InsertValue::Kind::Number;
+        fractional[0].number = 5.5;
+        r = formatInsertions(u"{0:text_tag_crc}", true, fractional, loc);
+        CHECK(r.text == u"{Invalid insertion value for a hash!}" && r.open.empty());
     }
     // ---- raw text_tag decode -----------------------------------------------
     {

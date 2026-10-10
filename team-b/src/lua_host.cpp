@@ -117,14 +117,37 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // corroboration: real shipped vint_lib.lua (UI-preloaded, spec Sec16)
     // calls this at its own line 483 unconditionally - the confirmed cause
     // of a real population of nil-global hook-fire errors (HANDOFF.md
-    // Sec9.131). Added into uiNames here, alongside the gameplay entry the
-    // main split loop above already placed it in - a targeted fix for this
-    // one name only, not a change to the tagged file or its own "one
-    // cluster per name" format. 7 sibling names share the tagged list's own
-    // "8 overlaps" note but were NOT individually re-checked by Team A -
-    // deliberately NOT extended to them; each needs its own xref-exhaustive
-    // check before being treated as dual-registered too.
-    uiNames.push_back({"audio_object_post_event", "ui"});
+    // Sec9.131). A targeted fix for this one name only, not a change to the
+    // tagged file or its own "one cluster per name" format. 7 sibling names
+    // share the tagged list's own "8 overlaps" note but were NOT
+    // individually re-checked by Team A - deliberately NOT extended to
+    // them; each needs its own xref-exhaustive check before being treated
+    // as dual-registered too.
+    //
+    // Native-implementation batch 2026-10-07: audio_object_post_event is
+    // now one of the spec-confirmed names (spec-lua-api-behaviour.md
+    // Sec2.4) and so is already filtered out of the generic split loop
+    // above (isSpecConfirmed() == true, same as coop_is_active below) and
+    // placed into specGameplayNames only, per its own tagged "gameplay"
+    // cluster. The dual-registration fix accordingly moves from the
+    // generic `uiNames` (this function's own OLD push_back here, when it
+    // was still a generic stub - removed, since it would otherwise let
+    // registerStubs()'s later ui_ pass silently overwrite the real stub
+    // registerSpecConfirmedStubs() below already installed) to
+    // `specUiNames`, the exact same "NOT uiNames - the generic path never
+    // sees this name at all" pattern coop_is_active's own comment documents
+    // just below.
+    specUiNames.push_back("audio_object_post_event");
+
+    // audio_stop: same dual-registration shape as audio_object_post_event
+    // above - Section 8 batch (2026-10-07, full-document spec sweep) made
+    // it one of the spec-confirmed names (spec-lua-api-behaviour.md
+    // Sec8.9), so it moves from the generic uiNames.push_back below (its
+    // OLD entry, when it was still a generic stub - removed) to
+    // specUiNames here, exactly the migration this file's own comment
+    // above already anticipated ("the dual-registration fix accordingly
+    // moves from the generic uiNames...to specUiNames").
+    specUiNames.push_back("audio_stop");
 
     // The remaining 7 of the "8 overlaps" (spec-lua-bindings.md Sec13.5)
     // - resolved 2026-09-30, prompted by the coordinator peer relaying
@@ -141,17 +164,60 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // which keeps its own "one name, one registrar call site found"
     // convention intact).
     //
-    // 6 of the 7 (game_is_active_input_gamepad, hud_display_set_element,
-    // audio_stop, hud_display_create_state, hud_display_commit_state,
-    // hud_display_remove_state) are generic logging stubs, not among the
-    // 22 spec-confirmed names above - added to uiNames directly, same as
-    // audio_object_post_event.
-    uiNames.push_back({"game_is_active_input_gamepad", "ui"});
-    uiNames.push_back({"hud_display_set_element", "ui"});
-    uiNames.push_back({"audio_stop", "ui"});
-    uiNames.push_back({"hud_display_create_state", "ui"});
-    uiNames.push_back({"hud_display_commit_state", "ui"});
-    uiNames.push_back({"hud_display_remove_state", "ui"});
+    // hud_display_create_state/_commit_state/_remove_state were PROMOTED
+    // to real, spec-confirmed behavior by wave 1 Batch 5 (2026-10-08,
+    // spec-lua-api-behaviour.md Sec15.24/15.25/15.12) - the exact same
+    // migration audio_stop/game_is_active_input_gamepad/coop_is_active
+    // already went through (see their own push_backs below): the OLD
+    // generic `uiNames.push_back(...)` for these 3 is REMOVED (leaving it
+    // would let registerStubs()'s later ui_ pass silently overwrite the
+    // real stub registerSpecConfirmedStubs() below already installs, the
+    // same hazard those comments document), and each is instead added to
+    // specUiNames just below the generic push_back, so
+    // registerSpecConfirmedStubs(ui_, ...) also binds the same real
+    // stub_hud_display_*_state implementation into the UI state (each
+    // already reads its own stateTag as an upvalue per-call via logCall,
+    // so it reports "ui" correctly there, not hardcoded "gameplay").
+    specUiNames.push_back("hud_display_create_state");
+    specUiNames.push_back("hud_display_commit_state");
+    specUiNames.push_back("hud_display_remove_state");
+
+    // hud_display_set_element: the 7th and last of the "8 overlaps" to stay
+    // a generic logging stub was PROMOTED to real, spec-confirmed behavior
+    // too, by wave 2 batch W2-2 (2026-10-08, spec-lua-api-behaviour.md
+    // Sec17.26) - the SAME migration its own 3 siblings just above already
+    // went through. The OLD generic `uiNames.push_back({"hud_display_set_
+    // element", "ui"})` this line used to be is REMOVED (same hazard those
+    // comments document - it would let registerStubs()'s later ui_ pass
+    // silently overwrite the real stub registerSpecConfirmedStubs() below
+    // already installs), and the name is instead added to specUiNames here,
+    // so registerSpecConfirmedStubs(ui_, ...) also binds the same real
+    // stub_hud_display_set_element implementation into the UI state (it
+    // already reads its own stateTag as an upvalue per-call via logCall, so
+    // it reports "ui" correctly there, not hardcoded "gameplay") - it is
+    // already placed into specGameplayNames by the generic split loop above
+    // (isSpecConfirmed("hud_display_set_element") == true, own tagged
+    // "gameplay" cluster), so this one extra push_back is this real
+    // dual-registration's own complete fix, matching audio_object_post_
+    // event/audio_stop/game_is_active_input_gamepad/coop_is_active exactly.
+    specUiNames.push_back("hud_display_set_element");
+
+    // game_is_active_input_gamepad: the 7th of the 7 overlaps, PROMOTED to
+    // a spec-confirmed name by the Team-A-cleared batch (spec-lua-api-
+    // behaviour.md Sec2.6, commit 97a9b8d) - re-confirmed by direct
+    // disassembly as a real dual-registration (0x00842270 in both the
+    // 1,014-entry gameplay table and the 113-entry UI-loop registrar, pair
+    // 41). Already filtered out of the generic split loop above
+    // (isSpecConfirmed("game_is_active_input_gamepad") == true) and placed
+    // into specGameplayNames only, per its own tagged "gameplay" cluster -
+    // the OLD generic `uiNames.push_back(...)` this line used to be (when
+    // the name was still a generic stub) is REMOVED, since leaving it in
+    // uiNames would let registerStubs()'s later ui_ pass silently
+    // overwrite the real stub registerSpecConfirmedStubs() below already
+    // installs (the same hazard coop_is_active's own comment just below
+    // documents). The fix instead moves to specUiNames, the exact same
+    // "NOT uiNames - the generic path never sees this name at all" pattern.
+    specUiNames.push_back("game_is_active_input_gamepad");
 
     // coop_is_active IS one of the 22 spec-confirmed names (real behavior,
     // spec-lua-api-behaviour.md Sec3.1) - it was already filtered out of

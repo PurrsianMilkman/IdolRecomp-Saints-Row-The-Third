@@ -1,5 +1,7 @@
 #include "sr3render/png_writer.h"
 
+#include "sr3io/output_path_guard.h"
+
 #include <cstdio>
 #include <cstring>
 
@@ -81,6 +83,18 @@ bool writePng(const std::string& path, uint32_t width, uint32_t height,
     appendChunk(png, "IHDR", ihdr);
     appendChunk(png, "IDAT", compressed);
     appendChunk(png, "IEND", {});
+
+    // Output-path guard (include/sr3io/output_path_guard.h): refuse game-
+    // install paths, non-.png existing files and oversized existing files.
+    // Added after the 2026-10-08 incident in which a capture tool's raw
+    // argv[1] output path pointed at the live sr3_city_0.vpp_pc and this
+    // function overwrote the 1.5GB archive with a 40584-byte PNG. Checked
+    // immediately before the open so nothing is truncated on refusal.
+    std::string guardReason;
+    if (!sr3io::isOutputPathSafe(path, ".png", sr3io::kMaxOverwriteBytesPng, guardReason)) {
+        error = guardReason;
+        return false;
+    }
 
     FILE* f = nullptr;
     if (fopen_s(&f, path.c_str(), "wb") != 0 || f == nullptr) {

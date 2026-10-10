@@ -1,0 +1,89 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "vs2022",
+      "displayName": "Visual Studio 17 2022 (x64) - existing agent-fleet default",
+      "description": "Same generator/architecture every agent already invokes directly (cmake -S . -B build_verify_X -G \"Visual Studio 17 2022\" -A x64) - this preset does not replace that direct invocation, it just gives it a name. binaryDir uses ${sourceDir} so each git worktree gets its own build directory automatically; concurrent agents in different worktrees never collide on one build tree.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": { "value": "x64" },
+      "binaryDir": "${sourceDir}/build_preset_vs2022"
+    },
+    {
+      "name": "ninja-release",
+      "displayName": "Ninja Release (adds a faster single-config generator alongside VS)",
+      "description": "New in this B1 build-infra task: Ninja is not a replacement for the Visual Studio generator every agent already depends on (that path is untouched - see the vs2022 preset above) - it's an additional, faster option for a plain `cmake --build` loop, especially paired with sccache (see CMakeLists.txt's own sccache section). Single-config, so Release/Debug are separate presets rather than a --config switch at build time.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build_preset_ninja_release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ninja-debug",
+      "displayName": "Ninja Debug",
+      "description": "Same as ninja-release but CMAKE_BUILD_TYPE=Debug, own binaryDir so switching configs never invalidates the other's build tree.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build_preset_ninja_debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "verify",
+      "displayName": "Visual Studio 17 2022 (x64) - verify/gating build",
+      "description": "This task's own canonicalization (2026-10-07): same generator/binaryDir-per-worktree shape as the vs2022 preset above, but with CRREISH_VERIFY_BUILD=ON, so every real_*_test FAILS outright (instead of ctest-SKIPping, exit 77) if CRREISH_GAME_CACHE_DIR is absent at test time - see CMakeLists.txt's own CRREISH_VERIFY_BUILD comment block for the full reasoning. CRREISH_GAME_CACHE_DIR itself is NOT set here: its CACHE PATH default in CMakeLists.txt already points at this machine's real install, and a verify run should fail loudly (not silently fall back to some other path) if that default is ever wrong - pass -DCRREISH_GAME_CACHE_DIR=... explicitly to override it for a different machine. Own binaryDir so a verify configure never invalidates/is invalidated by a plain dev build in the same worktree.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": { "value": "x64" },
+      "binaryDir": "${sourceDir}/build_preset_verify",
+      "cacheVariables": {
+        "CRREISH_VERIFY_BUILD": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release"
+    },
+    {
+      "name": "vs2022-debug",
+      "configurePreset": "vs2022",
+      "configuration": "Debug"
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release"
+    },
+    {
+      "name": "ninja-debug",
+      "configurePreset": "ninja-debug"
+    },
+    {
+      "name": "verify-release",
+      "configurePreset": "verify",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "vs2022-release",
+      "configurePreset": "vs2022",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ninja-release",
+      "configurePreset": "ninja-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "verify-release",
+      "configurePreset": "verify",
+      "configuration": "Release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

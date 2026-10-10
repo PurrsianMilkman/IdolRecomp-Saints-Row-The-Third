@@ -78,6 +78,49 @@ float bitsToFloat(uint32_t v) {
     return f;
 }
 
+uint32_t floatToBits(float f) {
+    uint32_t v;
+    std::memcpy(&v, &f, sizeof v);
+    return v;
+}
+
+// ---- little-endian write helpers (same house style as src/wav_writer.cpp's
+// putU32LE/putU16LE, applied here to an in-place buffer instead of an
+// append-only one since every offset below is a fixed, known position) ----
+void putU32LE(std::vector<uint8_t>& b, size_t off, uint32_t v) {
+    b[off + 0] = static_cast<uint8_t>(v & 0xFF);
+    b[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+    b[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+    b[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFF);
+}
+
+void putAsciiCStringBounded(std::vector<uint8_t>& b, size_t off, const std::string& s, size_t maxLen) {
+    if (s.size() + 1 > maxLen) {
+        throw FormatError("level/zone name '" + s + "' (spec Sec3/Sec6.4, offset 0x014) does not leave room for a "
+                           "NUL terminator within the " + std::to_string(maxLen) + "-byte reserved region");
+    }
+    std::memcpy(&b[off], s.data(), s.size());
+    b[off + s.size()] = 0;
+}
+
+// Encodes `s` (ASCII only) as a NUL-terminated UTF-16LE string, mirroring
+// readAsciiUtf16LEBounded's own reverse convention (low byte = the ASCII
+// char, high byte = 0). Throws FormatError if it would not leave room for
+// the 2-byte terminator within `maxBytes` (Sec3's own 18-byte reserved room
+// for the save-time/save-date fields).
+void putAsciiUtf16LEBounded(std::vector<uint8_t>& b, size_t off, const std::string& s, size_t maxBytes) {
+    if (s.size() * 2 + 2 > maxBytes) {
+        throw FormatError("UTF-16LE field value '" + s + "' (spec Sec3) does not leave room for its 2-byte NUL "
+                           "terminator within the " + std::to_string(maxBytes) + "-byte reserved region");
+    }
+    for (size_t i = 0; i < s.size(); ++i) {
+        b[off + i * 2] = static_cast<uint8_t>(s[i]);
+        b[off + i * 2 + 1] = 0;
+    }
+    b[off + s.size() * 2] = 0;
+    b[off + s.size() * 2 + 1] = 0;
+}
+
 } // namespace
 
 SaveSnapshot SaveSnapshot::parse(ByteView bytes) {
@@ -193,6 +236,110 @@ SaveSnapshot SaveSnapshot::parse(ByteView bytes) {
     }
 
     return s;
+}
+
+std::vector<uint8_t> SaveSnapshot::build(const SaveSnapshotFields& f, bool computeHash) {
+    // Sec6.3: "allocate 0x1AA00 bytes from a dedicated save arena, zero the
+    // whole buffer, run the serializer driver." This project's own writer
+    // only has 108,776 (kSaveSnapshotSize) bytes of that arena to fill -
+    // the trailing 0x118-byte tail the real file never carries either
+    // (Sec6.1) - so every un-modeled span simply stays at this zero-fill,
+    // the format's own documented placeholder.
+    std::vector<uint8_t> b(kSaveSnapshotSize, 0);
+
+    putU32LE(b, kOffsetFormatVersion, f.formatVersion);
+    putU32LE(b, kOffsetSecondaryVersion, f.secondaryVersion);
+    putU32LE(b, kOffsetBuildStamp, f.buildStamp);
+    putAsciiCStringBounded(b, kOffsetLevelName, f.levelName, kLevelNameMaxBytes);
+    putU32LE(b, kOffsetObjectHandle, f.objectHandleLo);
+    putU32LE(b, kOffsetObjectHandle + 4, f.objectHandleHi);
+    putAsciiUtf16LEBounded(b, kOffsetSaveTime, f.saveTime, 18);
+    putAsciiUtf16LEBounded(b, kOffsetSaveDate, f.saveDate, 18);
+    putU32LE(b, kOffsetLabelIndex, f.labelIndex);
+    putU32LE(b, kOffsetCompletionPercent, f.completionPercent);
+    putU32LE(b, kOffsetClockPlayFloat, floatToBits(f.playClockFloat));
+    putU32LE(b, kOffsetPlayTimeSeconds, f.playTimeSeconds);
+    b[kOffsetCheatsUsed] = f.cheatsUsed;
+    putU32LE(b, kOffsetDifficulty, f.difficulty);
+    putU32LE(b, kOffsetBarnstorms, f.barnstormsFound);
+    putU32LE(b, kOffsetStuntJumps, f.stuntJumpsFound);
+    putU32LE(b, kOffsetRespectTotal, f.respectTotal);
+    putU32LE(b, kOffsetRespectInLevel, f.respectInLevel);
+    putU32LE(b, kOffsetPlayerLevel, f.playerLevel);
+    putU32LE(b, kOffsetCash, static_cast<uint32_t>(f.cashRaw));
+
+    if (f.collectibles.size() > kCollectibleCapacity) {
+        throw FormatError("SaveSnapshotFields::collectibles has " + std::to_string(f.collectibles.size()) +
+                           " entries, over the real 80-record capacity (Sec10.3)");
+    }
+    putU32LE(b, kOffsetCollectibleCount, static_cast<uint32_t>(f.collectibles.size()));
+    for (size_t i = 0; i < f.collectibles.size(); ++i) {
+        size_t o = kOffsetCollectibles + i * 16;
+        const CollectibleRecord& r = f.collectibles[i];
+        putU32LE(b, o, r.handleLo);
+        putU32LE(b, o + 4, r.handleHi);
+        putU32LE(b, o + 8, r.group);
+        putU32LE(b, o + 12, r.reserved);
+    }
+
+    if (f.regionRecords.size() > kRegionRecordCapacity) {
+        throw FormatError("SaveSnapshotFields::regionRecords has " + std::to_string(f.regionRecords.size()) +
+                           " entries, over the real " + std::to_string(kRegionRecordCapacity) +
+                           "-record room before 0x11D80 (Sec12.4.1)");
+    }
+    putU32LE(b, kOffsetRegionCount, static_cast<uint32_t>(f.regionRecords.size()));
+    for (size_t i = 0; i < f.regionRecords.size(); ++i) {
+        size_t o = kOffsetRegionArray + i * kRegionRecordStride;
+        const RegionRecord& r = f.regionRecords[i];
+        putU32LE(b, o, r.handleLo);
+        putU32LE(b, o + 4, r.handleHi);
+        b[o + 8] = r.controlled ? 1 : 0;
+        for (size_t k = 0; k < 7; ++k) b[o + 9 + k] = r.tail[k];
+    }
+
+    if (f.activityRecords.size() > kActivityTableCapacity) {
+        throw FormatError("SaveSnapshotFields::activityRecords has " + std::to_string(f.activityRecords.size()) +
+                           " entries, over the real 64-record capacity (Sec9.3a)");
+    }
+    putU32LE(b, kOffsetActivityTable + kActivityTableCountOffset, static_cast<uint32_t>(f.activityRecords.size()));
+    for (size_t i = 0; i < f.activityRecords.size(); ++i) {
+        size_t o = kOffsetActivityTable + kActivityTableRecordsOffset + i * 12;
+        const ActivityRecord& r = f.activityRecords[i];
+        putU32LE(b, o, r.nameHash);
+        putU32LE(b, o + 4, r.levelsCompleted);
+        b[o + 8] = r.completedMask;
+        b[o + 9] = r.secondMask;
+        b[o + 10] = r.pad[0];
+        b[o + 11] = r.pad[1];
+    }
+    putU32LE(b, kOffsetActivityMarkerBits, static_cast<uint32_t>(f.activityMarkerFlags & 0xFFFFFFFFu));
+    putU32LE(b, kOffsetActivityMarkerBits + 4, static_cast<uint32_t>(f.activityMarkerFlags >> 32));
+
+    for (size_t i = 0; i < kSnapshotStatCount; ++i) {
+        putU32LE(b, kOffsetStatistics + 8 * i, f.statistics[i].rawValue);
+        putU32LE(b, kOffsetStatistics + 8 * i + 4, f.statistics[i].denominatorStatId);
+    }
+
+    if (f.activeCheatIds.size() > kCheatIdCapacity) {
+        throw FormatError("SaveSnapshotFields::activeCheatIds has " + std::to_string(f.activeCheatIds.size()) +
+                           " entries, over the real 200-id capacity (Sec9.9)");
+    }
+    putU32LE(b, kOffsetCheatCount, static_cast<uint32_t>(f.activeCheatIds.size()));
+    for (size_t i = 0; i < f.activeCheatIds.size(); ++i) {
+        putU32LE(b, kOffsetCheatIds + 4 * i, f.activeCheatIds[i]);
+    }
+
+    // Sec6.1/Sec6.3: the hash is stamped on save over file[0x004:0x1A8E8]
+    // followed by a 0x118-byte zero tail this project's buffer never
+    // carries (the on-disk size IS kSaveSnapshotSize, so computeSnapshotHash
+    // already applies that tail internally). Sec11.2's checkpoint mode
+    // never hashes at all (the real "no hash" buffer just stays at the
+    // zero-fill offset 0x000 already has).
+    if (computeHash) {
+        uint32_t hash = computeSnapshotHash(ByteView(b.data(), b.size()));
+        putU32LE(b, kOffsetChecksum, hash);
+    }
+    return b;
 }
 
 int64_t SaveSnapshot::saveSortKey() const {

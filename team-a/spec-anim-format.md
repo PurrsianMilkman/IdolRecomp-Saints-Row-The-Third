@@ -149,7 +149,7 @@ So the records above are **not** laid out as a uniform array, and the bulk of th
 
 **The first model is the instructive one.** It reproduced two small clips exactly — durations `1,1,1,1,1,2` summing to a declared `7`, values tracing a clean ease-in curve, and `ac_door_opening` / `ac_door_closing` holding the *same values in reverse* — and it is still wrong. **A model that explains a small sample perfectly, including a satisfying cross-file symmetry, is exactly the kind that survives until someone runs it against the population.** Same lesson as the tree "align 32" rule (`HANDOFF.md` §5).
 
-**Routes ruled out for finding the sampler:** the `ANIM` magic appears as an immediate in **no** instruction in the binary, so there is no magic-compare to anchor on. Walking callers of the loader hand-off (`FUN_004bea70` / `FUN_004bec10` / `FUN_004beb00`) reaches only loader-side code and one large asset-enumeration routine (`FUN_004aea30`, a 30 KB-stack manifest/debug walker) — **not** the sampler. The loader hands the buffer to an animation manager and never parses the payload, so the loader chain does not lead to the decoder.
+**Routes ruled out for finding the sampler:** the `ANIM` magic appears as an immediate in **no** instruction in the binary, so there is no magic-compare to anchor on. Walking callers of the loader hand-off (`0x004bea70` / `0x004bec10` / `0x004beb00`) reaches only loader-side code and one large asset-enumeration routine (`0x004aea30`, a 30 KB-stack manifest/debug walker) — **not** the sampler. The loader hands the buffer to an animation manager and never parses the payload, so the loader chain does not lead to the decoder.
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -308,7 +308,7 @@ in the table above (`team-b/HANDOFF.md` l.4520–4536); the pseudocode does not 
 file-relative explicitly. **[Team B result; not re-derived here.]** (c) Neither
 the overshoot case (last run's span carries `acc` past `rotKeys`) nor a
 translation span of 0 is specified. **[OPEN — desk review 2026-09-30: overshoot
-and span-0 handling; to be settled against the executable (`FUN_004c1020`).]**
+and span-0 handling; to be settled against the executable (`0x004c1020`).]**
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: Team B independently reproduces 4,086 / 4,209 walked, 123 failed, 3,687 landing with bit `0x40` clear and 0 / 518 with it set (`team-b/HANDOFF.md` l.4530–4536); the flag-`0x20` and flag-`0x01`-clear branches are not validated by any landing clip — desk review (not re-derived from the executable).**
 
@@ -542,7 +542,7 @@ independent-decoder agreement — see the 2026-09-11 upgrade note above.]**
    is therefore very probably **exercised by those 4 clips**. **[OPEN — desk review
    2026-09-30: where the extra `rotKeys` bytes sit in the block (after the rotation
    samples, after the control records, or interleaved) is not stated; to be
-   settled against real data and the executable (`FUN_004c1020` / `FUN_004c1260`).]**
+   settled against real data and the executable (`0x004c1020` / `0x004c1260`).]**
    *Data check:* replay §6c.1 on the 4 flags-`0x0C`/`0x1C` clips adding `rotKeys`
    bytes after the rotation samples (then, if that fails, after the control
    records); the prediction is 4 / 4 land on `+0x30`. Then replay the whole
@@ -680,8 +680,8 @@ independently but reports different figures for the real alignment (median
 table reports is not defined here (Euclidean norm? largest axis?), so the table
 cannot be reproduced from the text. **[OPEN — desk review 2026-09-30: whether the
 decoded value replaces the rig bone's local offset or is added to it, and the
-metric behind this table; to be settled against the executable (`FUN_004c21a0`'s
-pose accumulation, the translation decoder `FUN_004c9b90`) and real data.]**
+metric behind this table; to be settled against the executable (`0x004c21a0`'s
+pose accumulation, the translation decoder `0x004c9b90`) and real data.]**
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: decode replicated by Team B on the same 86,051 records (`team-b/HANDOFF.md` l.4545–4555), with differing summary statistics; absolute-vs-additive role and the 16-byte (`0x20`) record's scaling are unvalidated — desk review (not re-derived from the executable).**
 
@@ -757,7 +757,7 @@ pose accumulation, the translation decoder `FUN_004c9b90`) and real data.]**
 ## 8. Open Items
 
 1. ~~**The keyframe/track payload encoding** (§6) — the single most valuable remaining gap,~~ **[Resolved: §6c; the `0x40` extra table in §10.]** and the one thing standing between this spec and a usable animation reimplementation. Needs the runtime sampling code, not the loader.
-2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **[`0x01` resolved since: rotation-mode select, §6c.3 item 3.]** **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `FUN_004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
+2. **Flags bits other than `0x10`** (§2) — `0x01`, `0x04`, `0x08` occur in real files in stable combinations and are not decoded. **[`0x01` resolved since: rotation-mode select, §6c.3 item 3.]** **`0x40` is now partly characterised (§6c.4): it perfectly separates the clips whose payload walk ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `0x004c21a0`; not more keyframe payload, and no offset/size field exists for it because nothing needs one -- its own bytes self-delimit it.** *(`0x80` and `0x20` are now decoded: they widen the payload's per-track counts and translation records respectively — §6c.1.)*
 3. ~~**What `+0x30` points at**~~ — **RESOLVED (§6c.1): it is the end of the keyframe payload.** The per-track walk lands on it exactly in 3,687 of 4,086 clips *(diluted figure, corrected in §6c.1: 3,687 / 3,691 with flags bit `0x40` clear; 518 / 518 with it set once the §10 table is skipped)*. *(Previously: "a valid in-file offset in every file, target unidentified.")*
 4. **`+0x06`, `+0x08`, `+0x09`** — confirmed present and varying; `+0x06`'s frame-count reading is actively undermined by §6. **[Team B result, not a Team A confirmation (desk review 2026-09-30): `team-b/HANDOFF.md` §9.47 reads `+0x06` as the clip's total duration (sum of per-key duration bytes, 81.46% exact in the tracks-agree stratum) and argues §6's refutation concerns the uniform-array model only; §9.47.1 records a 271-clip residue not explained by the 1,099 ceiling. See §2's `+0x06` row. `+0x08`, `+0x09` still OPEN.]** *(`+0x0A`/`+0x0B` are now resolved — see §2 and §6a.)*
 5. **`+0x28` and `+0x34`** — zero or unexamined in every sample checked. **[`+0x28` resolved since: track-to-bone table offset, §6b. `+0x34` still OPEN.]**
@@ -1058,34 +1058,34 @@ concrete unfinished lead, not a claim.]**
 clip's bytes into per-track data — not guessed from struct-displacement search,
 per this project's own standing rule:
 
-- **`FUN_004c1020`** (the per-track stream-setup/walk function, §6c.1's source)
+- **`0x004c1020`** (the per-track stream-setup/walk function, §6c.1's source)
   reads flags bits `0x80` (wide counts) and `0x20` (wide translation records) —
   and **nothing else from the flags byte**. It never tests bit `0x40`.
   **[CONFIRMED — disassembly.]**
-- **`FUN_004c1260`** (the per-clip *bind* function — called once per playing
+- **`0x004c1260`** (the per-clip *bind* function — called once per playing
   instance, before per-track sampling; it builds the bone→track reverse lookup
   from the already-confirmed track-to-bone table at `+0x28`, using the track
   count at `+0x0A` and bone count at `+0x0B`) reads flags bits `0x01`, `0x02` and
   `0x04` into decoder-state fields — and **also never tests bit `0x40`.**
   **Incidental resolution of an existing open item:** the state byte
-  `FUN_004c1020` tests to decide whether the "second rotation mode" extra byte
+  `0x004c1020` tests to decide whether the "second rotation mode" extra byte
   is present is set here from flags bit `0x01` directly — clear takes the
   extra-byte branch, set (true of nearly every shipped file) skips it. Folded
   into §6c.3 item 3 above as **[CONFIRMED — disassembly]**.
 - **The only site among the functions traced that reads bit `0x40` at all** is
-  `FUN_004c21a0`, a large runtime layer-blend sampler that iterates a
+  `0x004c21a0`, a large runtime layer-blend sampler that iterates a
   caller-supplied list of blend layers (its first parameter) and, per track,
   per layer, checks bit `0x40` of the clip's own flags byte at offset `+5` to
   decide whether to consult a **per-layer override array** — a count table and a value table
   reached through fields of that *caller-supplied* layer descriptor, not through
   the clip's own file buffer at that point in the code. A count of exactly 1
   fetches a single override value via an index table; any larger count defers
-  to a separate function (`FUN_004ca010`) not traced in this pass.
+  to a separate function (`0x004ca010`) not traced in this pass.
   **[CONFIRMED — disassembly, for what the check gates.]** **Whether those
   override arrays are themselves populated, elsewhere, from this clip's own
   trailing bytes was not traced — [OPEN], and is the most direct remaining
   lead**: it requires reading the callers of the whole layer-blend chain (two
-  found, `FUN_004c7640` and `FUN_004bd0b0`, decompiled but not yet read for this
+  found, `0x004c7640` and `0x004bd0b0`, decompiled but not yet read for this
   question) to see how a layer's override-array fields get set. **[Resolved: §10.2 —
   parsed fresh from the clip's own bytes on every call.]**
 
@@ -1094,10 +1094,10 @@ explicitly, though not as settled: there may be no `0x40`-keyed extra-block
 structure to find at all — the walk goes off the rails in these clips, full
 stop.**
 
-1. **Nothing in the stream setup tests the bit.** `FUN_004c1020` and
-   `FUN_004c1260` — the two functions that actually turn a clip's bytes into
+1. **Nothing in the stream setup tests the bit.** `0x004c1020` and
+   `0x004c1260` — the two functions that actually turn a clip's bytes into
    per-track data — never reference flags bit `0x40`; the only site that does
-   (`FUN_004c21a0`) gates a *runtime* override lookup against caller-supplied
+   (`0x004c21a0`) gates a *runtime* override lookup against caller-supplied
    data, not a read of the clip's own trailing bytes, as detailed above.
    **[CONFIRMED — disassembly.]**
 2. **The `span == 0` translation-control-record anomaly clusters perfectly
@@ -1116,7 +1116,7 @@ stop.**
    line supporting the same conclusion — recorded honestly rather than folded
    in as if it agreed.]**
 
-> **⚠→✅ SUPERSEDED 2026-09-12 (§10).** The three-way tension below resolved: all of lines 1-3 were measuring a walk started one small table too early. Skipping a per-track layer-override table -- parsed fresh, on every call, straight from the clip's own bytes, by a function this synthesis had not yet traced (`FUN_004c1190`, reached via `FUN_004c1260` from the layer-blend sampler `FUN_004c21a0`) -- makes **518 of 518** bit-`0x40`-carrying clips land exactly on `u32(+0x30)`, with two shift controls and a wrong-population control all collapsing to near-zero (§10.4). There is no third sub-population, no `[55, 69]` bound to settle, and no walk that goes off the rails for a data-dependent reason -- kept below exactly as written, because the reasoning holding two lines solid and one in tension was sound given what was known when it was written.**
+> **⚠→✅ SUPERSEDED 2026-09-12 (§10).** The three-way tension below resolved: all of lines 1-3 were measuring a walk started one small table too early. Skipping a per-track layer-override table -- parsed fresh, on every call, straight from the clip's own bytes, by a function this synthesis had not yet traced (`0x004c1190`, reached via `0x004c1260` from the layer-blend sampler `0x004c21a0`) -- makes **518 of 518** bit-`0x40`-carrying clips land exactly on `u32(+0x30)`, with two shift controls and a wrong-population control all collapsing to near-zero (§10.4). There is no third sub-population, no `[55, 69]` bound to settle, and no walk that goes off the rails for a data-dependent reason -- kept below exactly as written, because the reasoning holding two lines solid and one in tension was sound given what was known when it was written.**
 
 **So the honest synthesis is two solid lines and one that complicates the
 picture, not three that agree.** Lines 1 and 2 are consistent with "the walk
@@ -1134,8 +1134,8 @@ found no code path that would produce such blocks *because* of the bit. **What
 the extra trailing bytes actually are remains [OPEN]**; the leading candidate
 narrows to "real structure that the per-track walker was never designed to
 parse" rather than "more of the same per-track blocks," but that is inferred,
-not located in code. **Concrete next step, unchanged:** trace `FUN_004c7640` /
-`FUN_004bd0b0` and `FUN_004ca010`, the callers and helper this pass identified
+not located in code. **Concrete next step, unchanged:** trace `0x004c7640` /
+`0x004bd0b0` and `0x004ca010`, the callers and helper this pass identified
 but did not read for this question.
 
 **The partner team's per-frame-root-orientation hypothesis, tested and labelled —
@@ -1354,7 +1354,7 @@ stratified test is the answer, and it is OPEN — but it narrows *where* a
 resolution would have to be found in code, which is offered here as the
 concrete next step rather than as a competing verdict.
 
-**Disassembly of `FUN_004c9b90`** (the translation decoder) shows **two** distinct
+**Disassembly of `0x004c9b90`** (the translation decoder) shows **two** distinct
 16-byte (SSE) loads, doing two different jobs:
 
 1. **Over the sample-byte stream.** The decoder holds a cursor to the 3-byte
@@ -1391,7 +1391,7 @@ than resolved.]** The general case — a track whose translation stream has
 **more than one** control record, which is where genuine inter-record blending
 would have to be visible if it exists at all — sits deeper in the same
 1,147-byte function and was **not reached in this pass**. **[OPEN — concrete
-next step: trace the `transKeys > 1` branch of `FUN_004c9b90` specifically for
+next step: trace the `transKeys > 1` branch of `0x004c9b90` specifically for
 whether it dereferences two adjacent record pointers rather than one.]**
 
 **Connecting to §9.3, precisely — and correcting an over-tight coupling in the
@@ -1413,14 +1413,14 @@ would produce") is true but incomplete — continuity is *also* exactly what a
 correct non-blended decoder run over smooth authored motion would produce, so it
 cannot be used to choose between the two.
 
-**Review status (2026-09-30): NEEDS-EXE: the two 16-byte loads in `FUN_004c9b90` (transKeys > 1 branch) and whether the single-record fast path's 8-byte over-read can run past the file end; the null is agreed by Team B §9.41.2 — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: the two 16-byte loads in `0x004c9b90` (transKeys > 1 branch) and whether the single-record fast path's 8-byte over-read can run past the file end; the null is agreed by Team B §9.41.2 — desk review (not re-derived from the executable).**
 
 ## 10. Flags bit `0x40`'s runtime consumer, found: a layer-override table parsed fresh from the clip's own bytes -- the third-sub-population thread closes
 
 > **Scope.** This section answers the item HANDOFF.md flagged as the single
 > highest-value remaining question on the `0x40` thread: who populates the
 > per-layer override arrays that the runtime layer-blend sampler
-> (`FUN_004c21a0`) reads, and when. It traces that sampler's own layout in
+> (`0x004c21a0`) reads, and when. It traces that sampler's own layout in
 > full, follows every caller of the relevant helper functions back to source
 > by raw disassembly (not just decompiled pseudocode, because the decompiler
 > silently drops register-passed arguments under `-noanalysis` for at least
@@ -1430,7 +1430,7 @@ cannot be used to choose between the two.
 > `anim_layer_override_skip.py`.
 >
 > **Headline: the loop closes.** A second, independent site tests flags bit
-> `0x40` -- not to *consult* an override table (that is `FUN_004c21a0`, already
+> `0x40` -- not to *consult* an override table (that is `0x004c21a0`, already
 > known from the prior pass) but to decide whether to *build* one, parsing it
 > directly out of the clip's own bytes at exactly the address the ordinary
 > per-track walker has always started from. Skipping that table before
@@ -1442,9 +1442,9 @@ cannot be used to choose between the two.
 > was starting one small table too early, for every single one of these
 > clips. **[CONFIRMED -- disassembly + empirical.]**
 
-### 10.1 What `FUN_004c21a0` actually reads the override data from
+### 10.1 What `0x004c21a0` actually reads the override data from
 
-`FUN_004c21a0` is a `thiscall` function; its receiver (`ECX`, argument 1
+`0x004c21a0` is a `thiscall` function; its receiver (`ECX`, argument 1
 below) is a per-call **blend/evaluator context**, not the clip buffer. Reading
 its body in full, the fields actually touched are:
 
@@ -1459,7 +1459,7 @@ its body in full, the fields actually touched are:
 
 Within a layer record (indexing from the loop pointer used in the
 decompilation, which sits at record `+0x10`): `-0x10` is the **clip index**
-(into the clip registry, `DAT_030f0c68`, stride `0x24` -- the buffer pointer
+(into the clip registry, `0x030f0c68`, stride `0x24` -- the buffer pointer
 this function reads back out of the registry sits at entry `+0x20`, not
 `+0x10`; this is a distinct field from the previously catalogued `+0x10`
 buffer-pointer symbol and is not reconciled further here), `+0x00` is a small
@@ -1469,10 +1469,10 @@ any override lookup happens.
 
 The actual per-track override data, though, lives **nowhere the caller
 supplies** -- it lives in a **fully local, stack-resident array inside
-`FUN_004c21a0` itself**, `memset` to zero at function entry: 9 slots, stride
+`0x004c21a0` itself**, `memset` to zero at function entry: 9 slots, stride
 `0x2d1` (721) bytes, one slot per active layer. Call this the **bind context**.
-Only for layers whose weight is `> 0` does `FUN_004c21a0` call a bind function
-(`FUN_004c1260`, see below) that fills in one slot fresh, immediately before
+Only for layers whose weight is `> 0` does `0x004c21a0` call a bind function
+(`0x004c1260`, see below) that fills in one slot fresh, immediately before
 that layer's per-track sampling loop runs. Within a bind-context slot, the
 fields the override lookup reads are:
 
@@ -1491,25 +1491,25 @@ used. If it is set, the per-track entry in the `+0x04` index/count table is
 read (1 or 2 bytes wide, chosen by flags bit `0x80`); a value of `0` again
 falls back to the default; a value of exactly `1` fetches a single `i32` from
 the `+0x08` value table at the offset the `+0x10..` prefix-sum array names for
-that track; any larger count defers to a separate function, `FUN_004ca010`,
+that track; any larger count defers to a separate function, `0x004ca010`,
 **not traced in this pass** (see §10.5). **[CONFIRMED -- disassembly, all of
-the above, from a full read of `FUN_004c21a0`'s decompilation.]**
+the above, from a full read of `0x004c21a0`'s decompilation.]**
 
 **Review status (2026-09-30): NEEDS-EXE: layer-record offsets are given relative to a loop pointer at record `+0x10` (clip index at record `+0x00`, bucket `+0x10`, weight `+0x20` in record terms); the value table is called `i32` in §10.1 and `f32`-sized in §10.2; registry buffer pointer `+0x20` vs `+0x10` unreconciled with §5 — desk review (not re-derived from the executable).**
 
 ### 10.2 Traced to source: the override table is parsed fresh from the clip's own file bytes, on every call
 
-`FUN_004c21a0` has exactly two callers (already found by the prior pass,
-re-confirmed here): `FUN_004c7640` and `FUN_004bd0b0`, neither of which builds
+`0x004c21a0` has exactly two callers (already found by the prior pass,
+re-confirmed here): `0x004c7640` and `0x004bd0b0`, neither of which builds
 or passes in any override data itself -- both simply invoke the sampler.
-`FUN_004c21a0` calls the bind function, `FUN_004c1260`, once per active,
-nonzero-weight layer, and `FUN_004c1260` itself decompiles with **zero visible
-call arguments** to the function it tail-calls, `FUN_004c1190` -- a
+`0x004c21a0` calls the bind function, `0x004c1260`, once per active,
+nonzero-weight layer, and `0x004c1260` itself decompiles with **zero visible
+call arguments** to the function it tail-calls, `0x004c1190` -- a
 `-noanalysis` decompiler artefact (register-passed arguments the caller never
 itself reads are invisible to the pseudocode), resolved by reading the raw
 x86 instead:
 
-`FUN_004c1260` computes, unconditionally, a pointer `EBP = clip + hs`, where
+`0x004c1260` computes, unconditionally, a pointer `EBP = clip + hs`, where
 `hs` is `0x38`, or `0x48` if the clip's own flags byte (`+0x05`) has bit
 `0x10` set (`EBP` is first loaded as `clip + 0x38`, then bumped by a further
 `0x10` when that bit is set) -- then adds the clip's own
@@ -1522,7 +1522,7 @@ clips, as the next sentence claims. Either the add is conditional on
 `[clip+0x28] != 0` and the word "unconditionally" is wrong, or the identity case
 is handled elsewhere. Team B's reader adds `+0x0A` only when a table is present
 (`team-b/src/payload.cpp`, `Payload::walk`) and its probe reproduced §10.4's
-518 / 518. OPEN — to be settled against the executable (`0x004c1260`–`0x004c12fc`).]** It then calls `FUN_004c1190` as
+518 / 518. OPEN — to be settled against the executable (`0x004c1260`–`0x004c12fc`).]** It then calls `0x004c1190` as
 `(ECX = bind-context slot, EDX = track count, stack: [clip pointer, EBP])`.
 **That `EBP` value is exactly `clip + payload_start(clip)`** in this project's
 own established sense -- the identical address `anim_layout.payload_start()`
@@ -1532,7 +1532,7 @@ already used, now independently corroborated at the instruction level rather
 than only empirically. **[CONFIRMED -- disassembly, from raw instructions at
 `0x004c1260`-`0x004c12fc`.]**
 
-`FUN_004c1190` is where the second `0x40` test lives (§10.3). When it runs the
+`0x004c1190` is where the second `0x40` test lives (§10.3). When it runs the
 override-table-building path, it treats the memory at that same address --
 **the clip's own resident file buffer**, not a separate allocation, not a
 caller-supplied structure, not anything written by an external system -- as:
@@ -1559,25 +1559,25 @@ the tables are small (§10.4) and the source is immutable file data, so
 re-parsing avoids needing any persistent cache at all. **[CONFIRMED --
 disassembly.]**
 
-A sibling bind function, `FUN_004c1300` (found in the prior pass as "a caller
-of stream setup"), also calls `FUN_004c1190`, but with a visibly different
-setup -- `EDX` (track count in `FUN_004c1260`'s call) is hard-coded to `1`, and
+A sibling bind function, `0x004c1300` (found in the prior pass as "a caller
+of stream setup"), also calls `0x004c1190`, but with a visibly different
+setup -- `EDX` (track count in `0x004c1260`'s call) is hard-coded to `1`, and
 the pointer argument is computed as `clip + u32(clip+0x30)` (the header's own
 declared-end-of-payload field used as a self-relative offset) rather than
-`clip + payload_start(clip)`. `FUN_004c21a0` never calls `FUN_004c1300`
+`clip + payload_start(clip)`. `0x004c21a0` never calls `0x004c1300`
 directly (confirmed absent from its full decompilation), so this is **not**
 part of the chain this task asked about, and is flagged rather than chased
 further: it looks like a distinct, single-slot mechanism belonging to
-whichever *non-layered* single-clip playback path binds via `FUN_004c1300`,
+whichever *non-layered* single-clip playback path binds via `0x004c1300`,
 possibly genuinely keyed off the declared end of the keyframe payload rather
 than its start. **[OPEN / UNKNOWN -- not traced this pass, named so it is not
 lost.]**
 
-**Review status (2026-09-30): NEEDS-EXE: whether the `+0x0A` add at `0x004c1260`–`0x004c12fc` is conditional (conflict with §6b above); `FUN_004c1190`'s wide branches, alignment base and element types; `FUN_004c1300` and its callers — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: whether the `+0x0A` add at `0x004c1260`–`0x004c12fc` is conditional (conflict with §6b above); `0x004c1190`'s wide branches, alignment base and element types; `0x004c1300` and its callers — desk review (not re-derived from the executable).**
 
 ### 10.3 The direct bit-`0x40` test in the populate direction -- the loop closes
 
-`FUN_004c1190` opens by reading the clip's flags byte (`+0x05`) into register
+`0x004c1190` opens by reading the clip's flags byte (`+0x05`) into register
 `AL` and testing bit `0x40` directly, branching past the entire
 table-building path when the bit is clear. When the bit is **clear**, the
 function does nothing but store the passthrough pointer (still exactly
@@ -1588,8 +1588,8 @@ construction described in §10.2. **[CONFIRMED -- disassembly, raw
 instruction at `0x004c11a0`.]**
 
 This is the second, independent test-site the prior pass's disassembly read
-had flagged as the decisive missing piece: `FUN_004c21a0` tests the same bit
-to decide whether to *consult* the override arrays; `FUN_004c1190` tests it to
+had flagged as the decisive missing piece: `0x004c21a0` tests the same bit
+to decide whether to *consult* the override arrays; `0x004c1190` tests it to
 decide whether to *build* them in the first place, from the clip's own bytes,
 at the exact cursor the per-track walker starts from. Both readings are
 mutually consistent and both are now traced to source. **This is exactly the
@@ -1622,7 +1622,7 @@ an untouched sanity check on the same run.
 | Sanity: bit `0x40` clear, walked from `p0` (unchanged) | n = 3,691 | 3,687 / 3,691 -- 99.89% (matches the already-published figure exactly, as it must -- nothing was changed for this population) |
 | **Control A** -- shift the computed `p1` by **+7** bytes before walking | bit `0x40` set, n = 518 | **2 / 518 -- 0.39%** (511 now fail outright) |
 | **Control B** -- shift `p1` by **-5** bytes | bit `0x40` set, n = 518 | **0 / 518 -- 0.00%** |
-| **Control C** -- apply the identical count/value/tail-table formula to bit-`0x40`-**clear** clips too (wrongly -- `FUN_004c1190` never builds this table for them) | bit `0x40` clear, n = 3,691 | **1 / 3,691 -- 0.03%**, collapsed from the unmodified 3,687 / 3,691 |
+| **Control C** -- apply the identical count/value/tail-table formula to bit-`0x40`-**clear** clips too (wrongly -- `0x004c1190` never builds this table for them) | bit `0x40` clear, n = 3,691 | **1 / 3,691 -- 0.03%**, collapsed from the unmodified 3,687 / 3,691 |
 
 **What a failing case would have looked like, stated per the house rule
 before the number is trusted:** if the override-table layout recovered from
@@ -1642,7 +1642,7 @@ reusing `anim_probe.collect()` and `anim_layout.payload_start()` /
 
 **Exhaustively, over the same 518 clips: flags bit `0x80` (wide index table)
 and bit `0x02` (wide tail table) are both clear in every single case (0 / 518
-each).** The narrow-width code paths inside `FUN_004c1190` are the only ones
+each).** The narrow-width code paths inside `0x004c1190` are the only ones
 this corpus exercises; the wide-width branches are read from disassembly only
 and remain **HYPOTHESIS -- unconfirmed** for correctness, since no file in
 hand exercises them.
@@ -1682,17 +1682,17 @@ not.
 
 **Still open, concretely scoped:**
 
-- `FUN_004ca010` (the multi-value override path, taken when a track's override
-  count is `> 1`) and the two functions it defers to (`FUN_004c8990`,
-  `FUN_004c8a00`) are not traced. This governs what happens when a track has
+- `0x004ca010` (the multi-value override path, taken when a track's override
+  count is `> 1`) and the two functions it defers to (`0x004c8990`,
+  `0x004c8a00`) are not traced. This governs what happens when a track has
   *more than one* override value queued, which this pass's descriptive count
   above shows is common (most of the 313 ten-track-override clips likely have
   a nonzero count only occasionally exceeding 1 per track, but this was not
-  checked directly). **Next step:** decompile `FUN_004ca010` the same way
-  `FUN_004c1190` was read here.
-- `FUN_004c1300`'s distinct, `clip+u32(+0x30)`-relative use of `FUN_004c1190`
+  checked directly). **Next step:** decompile `0x004ca010` the same way
+  `0x004c1190` was read here.
+- `0x004c1300`'s distinct, `clip+u32(+0x30)`-relative use of `0x004c1190`
   (§10.2) is a related but separate mechanism, not part of the chain this
-  task traced, and not chased further. **Next step:** find `FUN_004c1300`'s
+  task traced, and not chased further. **Next step:** find `0x004c1300`'s
   own callers to identify the non-layered playback path it belongs to, and
   check whether *that* path is where any remaining `0x40`-adjacent file bytes
   (if any exist beyond what §10.4 already accounts for) actually live.
@@ -1704,15 +1704,15 @@ not.
   asked. The static evidence (100.00% landing against two shift controls and
   a misapplication control, all collapsing as predicted) is as decisive as
   this project's own methodology asks for; a dynamic breakpoint on
-  `FUN_004c21a0` would only reconfirm what the byte-level test already shows.
+  `0x004c21a0` would only reconfirm what the byte-level test already shows.
 
 **`HANDOFF.md` §5-worthy methodology note.** A decompiled call site showing zero visible
 arguments is not evidence the callee takes none -- under `-noanalysis`,
 register-passed arguments that the immediate caller never itself reads (only
 forwards) are invisible to the decompiler's pseudocode, even though the
 callee's own decompilation correctly recovers a full parameter list. The
-tell was a genuine four-parameter callee (`FUN_004c1190`) reached by an
-apparent zero-argument call (`FUN_004c1260`'s call to `FUN_004c1190`, printed with no arguments); the fix was
+tell was a genuine four-parameter callee (`0x004c1190`) reached by an
+apparent zero-argument call (`0x004c1260`'s call to `0x004c1190`, printed with no arguments); the fix was
 reading raw disassembly at the specific call site rather than trusting the
 decompiler's account of it. This is the same shape as the project's standing
 rule about auditing an instrument's whole output list once it is shown wrong
@@ -1724,6 +1724,6 @@ concluding a function has no traceable inputs.
 
 ## Changelog
 
-- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 14 stale OPEN/superseded statements resolved in place with pointers (§1 banner and headline, §2 flags and `+0x30` rows, §6 banner, §6c.2 closing label, §6c.3 items 2/4, §6c.4, §6c.6 item 4, §8 items 1/2/3/5, §9.1 superseded banner, §9.1 L760, §9.1 override-array lead); rewrote §6c.1 translation-branch `align2(p+1)`/`align4(p+3)` as the defined `alignUp2(p)`/`alignUp4(p)`; annotated the ~129 figure (= 121 FAIL + 8 LONG); split a blockquote that swallowed body text (§6c.4); qualified 9 bare `§5`/`§13`/`§26.9`/`§27.1` refs as `HANDOFF.md`; reworded 3 decompiler-shaped tokens (`undefined1 [16]`, `param_1`, a pseudocode call).
+- 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 14 stale OPEN/superseded statements resolved in place with pointers (§1 banner and headline, §2 flags and `+0x30` rows, §6 banner, §6c.2 closing label, §6c.3 items 2/4, §6c.4, §6c.6 item 4, §8 items 1/2/3/5, §9.1 superseded banner, §9.1 L760, §9.1 override-array lead); rewrote §6c.1 translation-branch `align2(p+1)`/`align4(p+3)` as the defined `alignUp2(p)`/`alignUp4(p)`; annotated the ~129 figure (= 121 FAIL + 8 LONG); split a blockquote that swallowed body text (§6c.4); qualified 9 bare `§5`/`§13`/`§26.9`/`§27.1` refs as `HANDOFF.md`; reworded 3 decompiler-shaped tokens (a Ghidra byte-array type label, a parameter placeholder, and a pseudocode call) into plain prose.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (none needed: every cited fact is already stated in this spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 3 left (§6c.6 `HANDOFF.md` §27.1(b), §9.1 and §10.5 `HANDOFF.md` §27.2 item 1: no archived §27 copy from 2026-09-11/12 survives) (see review).
 - 2026-09-30 (format-spec desk review, `review/adv_anim.md`): added the review status summary and a status line per unit (27 units); corrected the front matter's clean-room claim (`FUN_`/`DAT_` labels are used); added the missing `+0x2C` row and scoped the `+0x34` row to the 0x38/0x48 header sizes (both OPEN); annotated bit `0x01` as clear in exactly 4 files; marked §6c.3 item 3's "unexercised" as contradicted by the 4-clip `0x0C`/`0x1C` residual (byte position OPEN, replay added as a data check) and noted this in §6c.1 and §6c.4; qualified §6c.2's two-decoder agreement with the median/p90 gaps and corrected "±1/√2 exactly" to +0.0122%; flagged §6c.2's permutation direction OPEN; marked §10.2's unconditional `+0x0A` add as a CONFLICT with §6b; fixed §6b's 3,803 + 394 = 4,197 arithmetic; annotated §2 `+0x06`, §6c.6 item 2 and §8 item 4 with Team B §9.43 / §9.47 / §9.47.1 as Team B results (labels unchanged); no confidence label raised or lowered.

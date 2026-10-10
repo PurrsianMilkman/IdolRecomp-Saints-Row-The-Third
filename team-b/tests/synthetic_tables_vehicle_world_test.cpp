@@ -147,6 +147,87 @@ void testVehicleInteractionInfo() {
 }
 
 // ===========================================================================
+// 3 (continued) - ResolveDriverHideOccupant/FindSeatByResolverIndex
+// (vehicle-occupant-hide-flag task, 2026-10-09, spec-render-pipeline.md
+// Sec23.14): the shared, testable "which seat is the driver, does it hide
+// its occupant" helper tools/sr3_viewer.cpp's runPlaytest() also calls
+// directly (single implementation, not re-derived at the call site).
+// ===========================================================================
+void testResolveDriverHideOccupant() {
+    Document d = P(R"(<root><Table>
+      <Vehicle_Interaction_Info>
+        <Name>Tank NatGrd</Name>
+        <Seat_Info>
+          <Element>
+            <Seat>Driver</Seat>
+            <Flags><Flag>Hide Occupant</Flag></Flags>
+          </Element>
+          <Element>
+            <Seat>Passenger 1</Seat>
+          </Element>
+        </Seat_Info>
+      </Vehicle_Interaction_Info>
+      <Vehicle_Interaction_Info>
+        <Name>high car 4dr</Name>
+        <Seat_Info>
+          <Element>
+            <Seat>front driver</Seat>
+          </Element>
+        </Seat_Info>
+      </Vehicle_Interaction_Info>
+      <Vehicle_Interaction_Info>
+        <Name>MixedCase</Name>
+        <Seat_Info>
+          <Element>
+            <Seat>DRIVER</Seat>
+            <Flags><Flag>Hide Occupant</Flag></Flags>
+          </Element>
+        </Seat_Info>
+      </Vehicle_Interaction_Info>
+      <Vehicle_Interaction_Info>
+        <Name>NoDriverSeat</Name>
+        <Seat_Info>
+          <Element>
+            <Seat>Passenger 1</Seat>
+            <Flags><Flag>Hide Occupant</Flag></Flags>
+          </Element>
+        </Seat_Info>
+      </Vehicle_Interaction_Info>
+    </Table></root>)");
+    std::vector<VehicleInteractionInfo> rows = ParseVehicleInteractionInfoTable(d);
+    CHECK(rows.size() == 4);
+
+    // The 2 real tank rows (spec-render-pipeline.md Sec23.14): driver seat
+    // ("Driver", the generic alias) correctly resolves and hides.
+    CHECK(ResolveDriverHideOccupant(rows, "Tank NatGrd") == true);
+    // Passenger 1 (the gunner seat) must NOT be consulted - FindSeatByResolverIndex(1)
+    // resolves it directly and confirms it has NO Hide Occupant of its own.
+    const VehicleInteractionSeatInfo* gunner = FindSeatByResolverIndex(rows[0], 1);
+    CHECK(gunner != nullptr && !gunner->hideOccupant);
+
+    // An ordinary vehicle, identified only via the vehicle-SPECIFIC alias
+    // ("front driver", not "driver") - the resolver must accept either
+    // 8-name list for the same index (spec Sec3.1). No Hide Occupant flag
+    // at all -> false, the real default for 129/131 shipped rows.
+    CHECK(ResolveDriverHideOccupant(rows, "high car 4dr") == false);
+
+    // Case-insensitive match ("DRIVER" vs the resolver's own "driver" -
+    // spec Sec3.1: the same real `_stricmp` FUN_00AC1BA0 uses).
+    CHECK(ResolveDriverHideOccupant(rows, "MixedCase") == true);
+
+    // A row with no seat that resolves to driver seat index 0 at all -
+    // Hide Occupant on some OTHER seat must not leak into the driver's own
+    // answer.
+    CHECK(ResolveDriverHideOccupant(rows, "NoDriverSeat") == false);
+    CHECK(FindSeatByResolverIndex(rows[3], 0) == nullptr);
+
+    // Not found / empty override - both documented defaults (shown).
+    CHECK(ResolveDriverHideOccupant(rows, "Nonexistent Vehicle") == false);
+    CHECK(ResolveDriverHideOccupant(rows, "") == false);
+    CHECK(ResolveDriverHideOccupant({}, "Tank NatGrd") == false);
+}
+
+// ===========================================================================
 // 4. vehicle_interaction_point_sets.xtbl
 // ===========================================================================
 void testInteractionPointSet() {
@@ -728,6 +809,7 @@ void testAirplaneCurve() {
 int main() {
     testVehicleInteractionAnimationSet();
     testVehicleInteractionInfo();
+    testResolveDriverHideOccupant();
     testInteractionPointSet();
     testWheelGroup();
     testVehicleAnimModifiers();

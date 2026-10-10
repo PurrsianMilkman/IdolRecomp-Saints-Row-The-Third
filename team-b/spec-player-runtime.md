@@ -1,11 +1,11 @@
 # Saints Row: The Third — Player Runtime: Input Query Contract and Control-State Machine
 
 **Prepared by:** SPEC TEAM (cleanroom reverse-engineering process)
-**Phase:** player runtime, units **U0** (input query contract) and **U1** (control-state machine) of the proposed order in `review/scoping-player.md` §5. This is the first spec file for the player system; later units (U2 normal-condition movement, U3 locomotion bridge, U4 follow camera, …) are expected to be appended here as further sections. **U2 was added as §3 on 2026-10-03** (the OPEN items and clean-room check moved to §4 and §5). **U4 was added as §4 on 2026-10-03** (the OPEN items and clean-room check moved to §5 and §6). **U3 was added as §5 on 2026-10-03** (the OPEN items and clean-room check moved to §6 and §7). **U6.6 was added as §6 on 2026-10-03** (the OPEN items and clean-room check moved to §7 and §8). **U6.0 and U6.4 (the first and fifth sub-units of U6, `review/scoping-player.md` §5a.3) were added as §7 and §8 on 2026-10-03, after U6.6** (the OPEN items and clean-room check moved to §9 and §10). **U6.1 (the element-selection rule, `review/scoping-player.md` §5a.3) was added as §9 on 2026-10-04** (the OPEN items and clean-room check moved to §10 and §11).
+**Phase:** player runtime, units **U0** (input query contract) and **U1** (control-state machine) of the proposed order in `review/scoping-player.md` §5. This is the first spec file for the player system; later units (U2 normal-condition movement, U3 locomotion bridge, U4 follow camera, …) are expected to be appended here as further sections. **U2 was added as §3 on 2026-10-03** (the OPEN items and clean-room check moved to §4 and §5). **U4 was added as §4 on 2026-10-03** (the OPEN items and clean-room check moved to §5 and §6). **U3 was added as §5 on 2026-10-03** (the OPEN items and clean-room check moved to §6 and §7). **U6.6 was added as §6 on 2026-10-03** (the OPEN items and clean-room check moved to §7 and §8). **U6.0 and U6.4 (the first and fifth sub-units of U6, `review/scoping-player.md` §5a.3) were added as §7 and §8 on 2026-10-03, after U6.6** (the OPEN items and clean-room check moved to §9 and §10). **U6.1 (the element-selection rule, `review/scoping-player.md` §5a.3) was added as §9 on 2026-10-04** (the OPEN items and clean-room check moved to §10 and §11). **U6.3 (the enter route: states 0–8, the routing hub and the instant route, `review/scoping-player.md` §5a.3) was added as §10 on 2026-10-07** (the OPEN items and clean-room check moved to §11 and §12). **U6.7 (the animated exit states `0x1a`–`0x21`, `review/scoping-player.md` §5a.3) was added as §11 on 2026-10-07, after U6.3** (the OPEN items and clean-room check moved to §12 and §13).
 **Scope:** everything between the engine library's device block and the ~180 gameplay functions that ask "is this action pressed / held / how far is this axis deflected": the per-frame latch that copies device state into the game's control context at `0x01411b18`, the full layout of that context, the two runtime binding tables (`0x0140ff98`, 164 × `0x20`; `0x01411418`, 34 × `0x34`) and the step that fills them from `control_schemes.xtbl` / `control_binding_sets.xtbl`, the complete query API with its signatures, return values, "out" codes, dead-zone and range handling, and the input-consumption model; then the 8-row control-state machine at `0x012e6bb8` with its request stack, dispatch, push/pop/reset, and the row handlers' entry points. It does **not** specify what the per-frame player controls *do* with the input (that is U2 onward; only the dispatch skeleton of state 2's handler is recorded here, §2.7), nor the engine library's device drivers below the device block (XInput/DirectInput/raw-input code — only the *semantics* the context receives from them are pinned down, §1.3).
 **Method:** Ghidra-free. Direct reads of `SaintsRowTheThird.exe`'s bytes through `tools/harnesses/exe_va.py`, a private recursive-descent capstone disassembler (jump tables followed by hand from their static targets), a raw `E8`/`E9` rel32 scan of `.text` for every call site of every function cited, a raw dword scan of `.text` for every data reference to every global cited, push-argument surveys at call sites, and static reads of the data tables (`0x012e6bb8`, `0x0111f1d0`, `0x012e6c58`, the CBA/CAA/stick/mouse vocabulary tables). Every function named in §1–§2 was read in full in its own listing unless marked otherwise. No Ghidra project was opened or copied, so none needed deleting. No `.czn_pc` data was touched; nothing in U0/U1 reached it.
 **Cleanroom compliance:** no decompiled code, decompiler variable names, or pasted pseudocode appear anywhere below; behaviour is described in prose and tables, and every function, global and field is cited by its plain hex address or offset. Action, axis, key, mouse-button, stick and scheme names (`CBA_OFC_SPRINT`, `CAA_CAMERA_ROTATE`, `LEFT_STICK_DIR_UP`, `MOUSE MIDDLE`, `General Controls`, …) are the engine's own strings read from its own static tables, quoted as data — the same convention every other spec in this project applies. Win32 import names (`ClipCursor`, `IsIconic`, `GetClientRect`) are read from the PE import table.
-**Confidence key:** **CONFIRMED** (read directly in a listing, a static table read, or an exhaustive reference scan this pass); **HIGH CONFIDENCE** (follows from structure, call shape or a vocabulary match, but not traced end to end); **HYPOTHESIS** (plausible, unconfirmed); **OPEN** (collected in §10, with a next step where one exists).
+**Confidence key:** **CONFIRMED** (read directly in a listing, a static table read, or an exhaustive reference scan this pass); **HIGH CONFIDENCE** (follows from structure, call shape or a vocabulary match, but not traced end to end); **HYPOTHESIS** (plausible, unconfirmed); **OPEN** (collected in §14, with a next step where one exists).
 **Relationship to other specs:** the binding *data* (`control_binding_sets.xtbl`, `control_schemes.xtbl`, the CBA/CAA/key/mouse/pad/stick vocabularies) is `spec-tables-ui-controls.md` §2–§4; this file is the runtime that evaluates it. `spec-lua-api-behaviour.md` §2.6 (`game_is_active_input_gamepad`) and §7.22 (`player_controls_disable`) both touch this layer and are cross-referenced in §1.5 and §2.9. `review/scoping-player.md` is the scoping note this file refines; every correction to it is flagged **[corrects scoping]** where it applies, and the list is collected in §1.14.
 
 ---
@@ -134,7 +134,7 @@ A port does not need the engine's drivers, but it must supply the context with v
   - **Dead-zone transform** (`0x00db8af0`): each axis independently — if |v| < dead zone the result is 0, otherwise (v − sign(v)·dz) / (1 − dz). Then disable forces 0 and invert negates. The raw accessor `0x00db86a0` applies invert/disable but no dead zone.
   - **Direction pulses** (computed by the poll from the dead-zoned values): *dir* 0 = y > 0.5, 1 = −y > 0.5, 2 = −x > 0.5, 3 = x > 0.5 (threshold `0x0126d2cc`). A pulse fires on entry, then again after 500 ms, then every 150 ms while held — a menu-navigation repeat.
 - A per-pad "activity" byte (pad base `+0x2c4`) is set whenever any button is down or a stick axis is non-zero.
-- The dead-zone and threshold *values* are written by engine-library code outside the poll that this pass did not locate (§10, OPEN 1).
+- The dead-zone and threshold *values* are written by engine-library code outside the poll that this pass did not locate (§14, OPEN 1).
 
 ### 1.4 The latch `0x005bcde0` (582 instructions) — step by step
 
@@ -474,6 +474,8 @@ Two observations: the push of **2** at `0x00b94c19` discards its handle, so that
 - **`0x005b69c0`** (row 2 secondary): if `0x0140e6f8` is set, run the late context dispatch `0x005b6420` — `0x005ae280` when `0x009b91e0(player)`; else context bit 2 on foot with no vehicle and no rig flag → `0x005ae3f0` (reads `CBA_OFC_ATTACK_PRIMARY`/`SECONDARY` analog values against 0.4); bit 4 in vehicle → `0x005b4e60`; **bit 8 → `0x005ac250`, which reads `CBA_SWC_EXIT_SATELLITE_MODE`, `CBA_MENU_ABORT`, `CBA_SWC_FIRE_GUIDED` and `CBA_SWC_FIRE_FREE`** — so the scoping note's unnamed "third context" (context bit 8) is the **satellite-weapon control context** (HIGH CONFIDENCE from the action names); otherwise `0x009fef60`. If the flag is clear: `0x007f0130`/`0x007f0140(1)` as in the exit, then `0x009da750`. **CONFIRMED** for the dispatch.
 - **`0x005c2800`** (row 7 per-frame, 412 instructions; listed, not read line by line): builds the camera orientation (`0x013c8790`…`0x013c87b0`) and position (`0x013c8750`) itself and, under a mode-3 / pause test, calls the camera update `0x00566a40`. HYPOTHESIS (unchanged from scoping): a free/debug camera.
 
+**Structural note, 2026-10-08 (closes a gap between this section and `spec-weapons-runtime.md`'s own fire-path hunt):** on-foot per-frame controls run **two independently-dispatched action trees, not one**. The "early" tree is `0x005b73c0` (§3.3 below: melee/jump/crouch/sprint/pratfall/skydive/avatar, off this section's own row-2 per-frame `0x005b7430`). The "late"/secondary tree is `0x005b69c0`→`0x005b6420`→`0x005ae3f0` (documented in the bullet above only as a row-handler entry point, never previously cross-referenced against weapon code) — attack-primary/secondary and the grenade slot live here, and `0x005ae3f0` is CONFIRMED (`spec-weapons-runtime.md` §2.2b) to be the player's actual fire-input dispatch, resolving the equipped item's own vtable `+0x8c` slot. The two trees were investigated independently by different units; this note is the first place they are tied together.
+
 ### 2.8 The index `0x012fd5c8` — scoping OPEN item 2 resolved
 
 **What it is.** `0x012fd5c8` is the **current UI screen state** of a small UI state machine (CONFIRMED by listing of `0x007c6610`…`0x007c69b0`): a stack of state ids at `0x02289ab0` with depth `0x02289b14`, a per-state 24-byte callback table at `0x02289ae4` (`+0` enter, `+4` exit, `+0x0c` per-frame), a pending request `0x012fd5c4`, a push-mode byte `0x02289b18` and a pending-pop count `0x02289b1c`. Request functions: `0x007c68f0(id)` (request with push) and `0x007c6850(id)` (request replacing the stack). The processor `0x007c6610` performs pending pops (after each pop the current state becomes the entry below, or **0** when the stack empties), then, if a request differs from the current state and is not −1, calls its enter, pushes or replaces, and **stores it into `0x012fd5c8`**. Getter `0x007c68e0`; `0x007c6830` tests "not paused and state 0".
@@ -553,7 +555,7 @@ The writer `0x005aee30` has exactly seven call sites (raw scan): `0x005b412a` (t
 | Word | Role (consumer evidence) |
 |---|---|
 | `+0x2070` | **dispatch word** for `0x005b73c0`: bit 1 interaction prompts, 2 on-foot actions, 4 in-vehicle actions, 8 satellite actions (§3.3). Also read by `0x005ad830` (bits 1, 2, 4, 8) |
-| `+0x2074` | small flag word. Bit 1 gates the `CBA_GAC_ACTION` stage of the prompt routine (`0x005b70c6`); bit 4 gates `CBA_GAC_RECRUIT_DISMISS` in `0x005ad830` and is also read at `0x0083d8aa`; bit 2 has no reader found by displacement scan (§10, OPEN 14) |
+| `+0x2074` | small flag word. Bit 1 gates the `CBA_GAC_ACTION` stage of the prompt routine (`0x005b70c6`); bit 4 gates `CBA_GAC_RECRUIT_DISMISS` in `0x005ad830` and is also read at `0x0083d8aa`; bit 2 has no reader found by displacement scan (§14, OPEN 14) |
 | `+0x2078` | **on-foot action permission mask** — one bit per action family, tested by the on-foot handlers (§3.2.3) |
 | `+0x207c` | in-vehicle permission mask (written by `0x005b3750`; read at `0x005ad903` bit `0x100` radio, `0x005ad9e5` bit `0x10000` aim). Row 0 leaves it 0 |
 | `+0x2080` | satellite word (row 13 writes 7 or `0x38`; read by `0x005ac2c5`/`0x005ac306`). Row 0 leaves it 0 |
@@ -608,7 +610,7 @@ Bit meanings are CONFIRMED where the reader gates a named action query; otherwis
 | `0x800000`, `0x1000000` | `CBA_SKYDIVE_DIVE`, `CBA_SKYDIVE_FLIP` | `0x005b3055`, `0x005b301f` |
 | `0x2000000` | `CBA_AVATAR_*` (four actions) | `0x005b313c` |
 | `0x10000` | a nearby-object interaction (`0x006040a0`) inside the prompt routine | `0x005b6e84` |
-| `0x2`, `0x8`, `0x8000`, `0x200000`, `0x400000` | — | not attributed: whole-word readers at `0x005ae777`, `0x005aead5`, `0x005b6eac`, `0x005b7018` were not resolved bit by bit (§10, OPEN 14) |
+| `0x2`, `0x8`, `0x8000`, `0x200000`, `0x400000` | — | not attributed: whole-word readers at `0x005ae777`, `0x005aead5`, `0x005b6eac`, `0x005b7018` were not resolved bit by bit (§14, OPEN 14) |
 
 #### 3.2.4 What the pre-hook does around the classify (CONFIRMED by listing of `0x005b3d30`)
 
@@ -640,7 +642,7 @@ Under row 0 (`+0x2070` = 3) step 2 therefore reaches **only `0x005b2ca0` or `0x0
 3. Only when the camera mode `0x013c87c8` is 0 (follow camera), or 2 with `0x005780d0()` = 3: apply the drunk-camera modifier `0x00975ce0(&rot, &elev)` (it calls `0x009786c0`, then while byte `0x02625871` is set adds a ramped drift term clamped to [−1, 1]; read, role HIGH), then `0x0056b100(−rot)` and `0x0056b120(elev)`.
 4. If either value is non-zero: `0x00950b70(player, 0.3)` (below).
 
-The two setters: **`0x0056b100(x)` stores x into `0x013c8990` if `0x005be940()` returns 1, else −x; `0x0056b120(y)` stores −y into `0x013c8994` if `0x005be920()` returns 1, else y.** So the yaw input is +rot normally and −rot with the first option; the pitch input is +elev normally and −elev with the second. `0x005be940`/`0x005be920` choose bytes `0x01411b15`/`0x01411b14` while the camera is mouse-driven (`+0x9f6`) and bits 1/2 of `0x01411b00` otherwise (§1.12.2). **This confirms U0's HYPOTHESIS as behaviour: those options are horizontal and vertical look inversion, one pair per device family** (the options-menu labels are still unread — §10, OPEN 2).
+The two setters: **`0x0056b100(x)` stores x into `0x013c8990` if `0x005be940()` returns 1, else −x; `0x0056b120(y)` stores −y into `0x013c8994` if `0x005be920()` returns 1, else y.** So the yaw input is +rot normally and −rot with the first option; the pitch input is +elev normally and −elev with the second. `0x005be940`/`0x005be920` choose bytes `0x01411b15`/`0x01411b14` while the camera is mouse-driven (`+0x9f6`) and bits 1/2 of `0x01411b00` otherwise (§1.12.2). **This confirms U0's HYPOTHESIS as behaviour: those options are horizontal and vertical look inversion, one pair per device family** (the options-menu labels are still unread — §12, OPEN 2).
 
 `0x00950b70(player, blend)` — **"player gave input"** (CONFIRMED by listing; role HIGH): when `0x008addb0(player, 0)` holds it restarts the idle timer `+0x19b4` to a random 20–60 s (`0x00d9e180(20000, 60000)`) and, when `0x009561f0` holds, ends controller state `0x1d4d` with the given blend (`0x004b41b0(controller, state, blend, flag)`, which also recurses into child controllers — "ends" is HYPOTHESIS for that helper throughout this section); then, when the human passes `0x00853b30(…, 0x21)` ("is a player", `spec-anim-runtime.md` §4.2) and its AI mode `+0x501` is 0 (`Idle`), it begins AI mode 43 `Player` (`0x004f13a0`) — the input-driven exit from `Idle` that scoping §1.3 hypothesised for the `Idle` tick.
 
@@ -703,7 +705,7 @@ Signature (cdecl): `(player, x, y, z, s)`. Constants are read from `.rdata` (dou
 1. **d = (x, y, z) − position `+0x40`.**
 2. **Burst:** if `+0x1d94` bit `0x40` is set and d is zero (1e‑7 test): d = facing `+0x64`, clear the bit, s = 1.0.
 3. **Animation lock:** if the controller flag `0x10` is set (`0x004b4fc0([+0xd24]+0x10, 0x10)`): when s > 0.01 (float), set `+0x1d94` bit `0x80`; then d = 0, s = 0, `+0xa68` = 0.
-4. Timers: controller flag 4 → `+0x2068` set already expired. **While s > 0.8, timer `+0x206c` alternates each frame between "started now" and "unset"** (`0x005aef9f`…`0x005aefb3`; §10, OPEN 12). `+0xd1c` (current speed, `spec-anim-runtime.md` §4.2 row 20) > 0.7 (float) → `+0x2068` = now + 500 ms.
+4. Timers: controller flag 4 → `+0x2068` set already expired. **While s > 0.8, timer `+0x206c` alternates each frame between "started now" and "unset"** (`0x005aef9f`…`0x005aefb3`; §14, OPEN 12). `+0xd1c` (current speed, `spec-anim-runtime.md` §4.2 row 20) > 0.7 (float) → `+0x2068` = now + 500 ms.
 5. **Stance maximum speed** `0x009dca30(player, &M, &M₀)` (CONFIRMED by listing). Let *sp* = `+0x1d94` bit `0x10`, forced false while animation state `0x305` or `0x1d8f` is active. First match wins:
 
    | Condition | M (tweak variable, registered with its name at `0x01007650`…`0x01007790`) |
@@ -920,7 +922,7 @@ Writers and readers from the linear-sweep scan of `+0x1d94`…`+0x1d97` (some 30
 | 17 | — | — | — | — | `0x00bca9b0` (127) | push `0x00bc6a70`, pop `0x00bc6160` | **cinema-editor camera** — scoping's HYPOTHESIS confirmed as to selection | HIGH |
 
 Evidence for the identities (CONFIRMED as call edges):
-- **3:** `0x00564cd0` pushes camera mode 3 and control state 7 (§2.6) and `0x00564d40` pops both; their only entries are tail jumps from `0x0057b660` (taken when the global `0x029cdb88` is non-zero and the mode is not already 3) and `0x0057b680` (when it is 3). Neither of those two has a direct caller or a dword reference (whole-image scans), so they are reached through a table this pass did not find — HYPOTHESIS: a debug command, `0x029cdb88` being a development switch (233 readers; written only by `0x00d9f250`). This advances §10 OPEN 6.
+- **3:** `0x00564cd0` pushes camera mode 3 and control state 7 (§2.6) and `0x00564d40` pops both; their only entries are tail jumps from `0x0057b660` (taken when the global `0x029cdb88` is non-zero and the mode is not already 3) and `0x0057b680` (when it is 3). Neither of those two has a direct caller or a dword reference (whole-image scans), so they are reached through a table this pass did not find — HYPOTHESIS: a debug command, `0x029cdb88` being a development switch (233 readers; written only by `0x00d9f250`). This advances §12 OPEN 6.
 - **4:** pushed at `0x005b25d7` inside condition row 13's look slot `0x005b2540` (row 13 is the satellite condition, §3.9) right after `0x00b6fb90` initialises the satellite controller `0x0130eee8`; popped from the controller's teardowns `0x00b700d0` (`0x00b70160`) and `0x00b709d0` (`0x00b70b5b`; `satellite_weapon_mode_exit`, `spec-lua-api-behaviour.md` §12). `0x005b2540`, `0x00b700d0`, `0x00b709d0` and `0x00b70d10` write the working outputs themselves, which is why the row is empty; the streaming focus uses the player's own position in this mode (scoping §1.6).
 - **6:** pushed by `0x00579ef0` (at `0x0057a2fc`; callers `0x00a27dfc`, `0x00a469ac` in the Lua band) and by the small wrapper `0x00579ec0` (at `0x00579edb`, right after calling the path builder `0x00578d40`, which sums an array of segment durations into a timed path; the wrapper has no direct caller or dword reference); popped by `camera_end_look_through` `0x00a44140` (`0x00a44280`, `spec-lua-api-behaviour.md` §13.16, whose "`0x00564910(6)`" this resolves) and `0x00a27c90` (`0x00a27cd5`), each right after `0x0056cc30`.
 - **9:** pushed by `0x00702810` (uses `MISSION_FAILURE_DIED_TEXT`; caller `0x009504bf`) and by the local-player branch of `0x0098ce40` (`0x0098d592`); never popped — the camera reset clears it at respawn. The enter stores the normalised horizontal offset from the local player to the previous camera position (`0x013c8800`) in `0x013c9240`.
@@ -1165,7 +1167,7 @@ The **camera-angle sets** (`Primary`/`Secondary`/`RC_Camera_Angle` at `+0x628`/`
 - **`spec-tables-ui-controls.md` §8.1:** the follow camera also reads vehicle-record `+0x6dc`/`+0x6e0`/`+0x6e4`, `+0x71c`/`+0x720`/`+0x724` and `+0x878` (presumably from the four unread sub-readers there) and does not read the three camera-angle sets.
 - **`spec-render-pipeline.md` §11** (view-matrix OPEN): its inputs are the committed set (`0x013c8740`, `0x013c8760`/`0x013c8770`/`0x013c8780`, FOV `0x013c87c0` in degrees), right/up/forward rows as above.
 - **`spec-lua-api-behaviour.md` §13.16:** `0x00564910(6)` is "pop camera mode 6 (look-through)"; `0x00567280(0)` requests a follow-camera snap.
-- **This file, §2.7 / §10 OPEN 6:** control state 7's camera is debug mode 3, entered only through `0x0057b660`, gated by `0x029cdb88` (§4.1).
+- **This file, §2.7 / §14 OPEN 6:** control state 7's camera is debug mode 3, entered only through `0x0057b660`, gated by `0x029cdb88` (§4.1).
 
 ---
 
@@ -1179,7 +1181,7 @@ The **camera-angle sets** (`Primary`/`Secondary`/`RC_Camera_Angle` at `+0x628`/`
 1. **The scoping note's chain is not the locomotion bridge [corrects scoping §1.0, §1.4, §2 and this unit's brief].** `0x0099ebe0` is the **post-move per-human pass** (position sync from the proxy, water, death, attachments) and reads none of the intent fields; `0x007a5760` is **not the character controller** but a parameterless **flush of two deferred contact-event queues**; and `0x0079e900` → `0x00961d70` is **the replay of one queued "character touched a vehicle" event** — vehicle-hits-pedestrian damage, knock-down and AI events, plus the upgraded-sprint ram that pushes the car — run once per frame after all movement, never per sub-step, and writing **no velocity or displacement** to the proxy (§5.2, §5.8).
 2. **The real bridge** (CONFIRMED by listing of the world update, §5.1): controls write intent (U2, `0x00702ad4`) → AI and per-human updates → animation jobs, including `0x00958690` and the controller update (`0x00702b9f`) → **velocity composer** `0x009989b0` (`0x00702bb7`) → `0x009a02a0` → **`0x0099d1b0`**, which writes the controller's desired velocity `+0x1cec` → Havok world step `0x0075ac20` (`0x00702c46`), which does **not** move characters → **character-controller step `0x0099e7e0`** (`0x00702c55`): gather `0x0099ae30`, step `0x0099b430` (the controller's motion routine `0x007a5b10` sets the proxy velocity, then at most ten lock-step integrate passes), write-back `0x0099e2a0` (`+0xd04` velocity, `+0xd1c` speed, landing and falling) → `0x00998850` → … → `0x0099ebe0` (`0x00702c9b`): position `+0x40` ← proxy, then the contact flush `0x007a5760`.
 3. **The contract is one vector.** The character controller is driven only by human `+0x1cec`/`+0x1cf0`/`+0x1cf4`, the **controller desired velocity** (world space, units/s), recomposed every frame by `0x0099d1b0`. For the player on foot it is **`+0xa50` · `+0xa60` + R·E/Δt**, where `+0xa50` = unit(r) and `+0xa60` = k·\|r\| (k = `+0xa64`, 1.0 unless scripted) — i.e. **k · `+0x203c`**, U2's smoothed vector — plus the rotated per-frame translation E of the non-locomotion animation layers; **sprinting replaces the direction by the facing axis `+0x64`**. **The desired-move block `+0x2048` (D) is not read anywhere in the bridge**; it only feeds the animation parameters `desired speed` and `desired direction` (`spec-anim-runtime.md` §4.2 rows 6, 21b, 21c). (§5.4.)
-4. **Root motion versus velocity — answered from the movement side** (the open question of `review/scoping-animation.md` §1.7). Horizontal motion is **velocity-driven**: the speed is `+0xa60`, and the root translation T of the phase-synchronised (cyclic) animation layers — the locomotion cycles — is used only to adapt the animation playback rate `+0x1a90` (clamped to [0.1, 1.5]) so the stride matches the speed. It is **root-motion-driven** only while the animation controller's flag `0x100` is set — i.e. while a playing animation record carries `Anim_Movement` (then the velocity is R·T/Δt). The translation E of the non-synchronised layers (non-looping graph clips) is **always** added — that is how climbs and vaults move the body vertically. Orientation is animation-driven and applied before physics; the capsule never rotates (§5.4.3, §5.4.5).
+4. **Root motion versus velocity — answered from the movement side** (the open question of `review/scoping-animation.md` §1.7). Horizontal motion is **velocity-driven**: the speed is `+0xa60`, and the root translation T of the phase-synchronised (cyclic) animation layers — the locomotion cycles — is used only to adapt the animation playback rate `+0x1a90` (clamped to [0.1, 1.5]) so the stride matches the speed. It is **root-motion-driven** only while the animation controller's flag `0x100` is set — i.e. while a playing animation record carries `Anim_Movement` (then the velocity is R·T/Δt). The translation E of the non-synchronised layers (non-looping graph clips) is **always** added — that is how climbs and vaults move the body vertically. Orientation is animation-driven and applied before physics; the capsule never rotates (§5.4.3, §5.4.5). **[Corrected by `spec-anim-runtime.md` §9.7 (U5), 2026-10-07: "animation-driven" holds only inside an authored correction window (`start correction`/`dest correction` triggers). Outside one, `0x004b6530` returns the orientation unchanged, and what turns a human in ordinary locomotion is not established there either — `spec-anim-runtime.md` §5.1 item 35.]**
 5. **No sub-stepping reaches the intent.** Physics takes one world step per frame (`spec-physics-runtime.md` §4.3) and characters are not integrated inside it at all; game code integrates them afterwards with the full frame Δt, in up to ten lock-step cast passes over the remaining time. The desired velocity is composed **once per frame, before physics**, copied into a per-human record and handed to the controller **once**; the passes and the Havok listener callbacks never re-read intent, and the callbacks only queue events, which are replayed once per frame after movement (§5.9). Everything the animation side and U2 read back (`+0xd04`, `+0xd08`, `+0xd1c`, support, `+0x1cec`) is therefore **one frame old** when they run.
 6. **NPCs share every function of the bridge** but diverge inside it (§5.10): the composer's NPC branch shapes direction and speed (acceleration-limited speed, turn-rate-limited heading, `+0xa60` = −1 meaning "the animation's own speed", a procedural lean); the gather **skips the controller step for far, unseen NPCs**; and only the player gets **stick-scaled air control**. The AI throttle of `spec-ai-runtime.md` §1.4 does not throttle locomotion.
 7. **[corrects §3.5.4 step 19 and §3.7 of this file]** `+0xcb0` is the **move target point** (written by `0x00987360`, which the intent writer calls in step 18 with position + r), not an aim point; so for the player `+0xa50` = unit(r), the direction of the smoothed move — which is also what `spec-anim-runtime.md` §4.2 row 21a's "velocity" heading reads.
@@ -1229,7 +1231,7 @@ The character controller proper is the RTTI class `character_controller` (`spec-
 | 24 `Speed Along rvec` | right axis · `+0x1cec` | **`+0x1cec` = the controller desired velocity** (§5.4) | resolves §4.2's HYPOTHESIS ("a velocity"); last frame's value, since `0x0099d1b0` runs after `0x00958690` |
 | 25 `turn angle` | `+0xaac` | a rate-limited follower updated by `0x00956970`, called from the animation job (`0x00994a3d`); its link to U2's `+0xa68` was not traced | OPEN 37 |
 
-§4.2's note that "the sources of those fields are U3's subject": position `+0x40` comes from the proxy (`0x0096e710`, §5.7), the orientation axes `+0x4c`/`+0x58`/`+0x64` from the animation's root rotation (§5.4.1 step 3), `+0xd04`…`+0xd1c` from the proxy (§5.6.6); the movement flags `+0xd40` were not traced (OPEN 38).
+§4.2's note that "the sources of those fields are U3's subject": position `+0x40` comes from the proxy (`0x0096e710`, §5.7), the orientation axes `+0x4c`/`+0x58`/`+0x64` from ~~the animation's root rotation~~ `0x004b6530` (§5.4.1 step 3), `+0xd04`…`+0xd1c` from the proxy (§5.6.6); the movement flags `+0xd40` were not traced (OPEN 38). **[Corrected by `spec-anim-runtime.md` §9.7 (U5), 2026-10-07: `0x004b6530` writes the orientation axes only inside an authored correction window; see §5.4.5's note below.]**
 
 ### 5.4 The velocity composer
 
@@ -1303,6 +1305,8 @@ For the player on foot (condition row 0, `+0xcd2` = 0, animation-controller flag
 | orientation | X → controller `+0x70` → `0x004b6530` → virtual slot `+0x48` | directly on the human, before physics |
 | position | the proxy's position after the integrate passes | `0x0096e710` in `0x0099ebe0` (§5.7) |
 
+**[Corrected by `spec-anim-runtime.md` §9.7 (U5), 2026-10-07.]** The "orientation" row holds only while an authored correction (`start correction`/`dest correction` trigger) window is active: `0x004b6530` then steers the orientation — and, during a start correction, the velocity — by a share of the remaining error each frame, and X feeds only that window's motion warp. **Outside every such window `0x004b6530` returns the human's orientation unchanged.** What turns a human in ordinary locomotion is accordingly still open — `spec-anim-runtime.md` §5.1 item 35.
+
 #### 5.4.6 Synced pairs `0x0095f5b0` (194 instructions) — CONFIRMED by full listing
 
 For a human with a partner handle `+0xdb0`/`+0xdb4` that resolves to a live human (class bit `0x20`) whose animation-controller `+0x1a4` bit `0x80` is clear: find the pair entry for this human's rig id in the table `0x02624b50` (count `0x02624b54`, `0x30`-byte entries keyed at `+0x14`); compute the partner's target = this human's position + this human's `+0x1cec`·Δt + the entry's offset rotated by this human's orientation (with both humans' `+0x1b50` height terms); then set the **partner's** `+0x1cec` = (target − partner position)/Δt, its controller `+0x1a4` |= `0x80`, its `+0xe8` |= `0x80000000`, and its orientation to this one's turned by the entry's angle (`+0x1c`, degrees). It runs after the composers, so the partner's next composer pass adds the pre-set velocity (§5.4.3 step 8). HIGH: grapples and takedowns.
@@ -1354,11 +1358,48 @@ In order: (a) an NPC with \|`+0x1cec`\|² < 1e‑5 has it zeroed. (b) **NPC LOD:
 3. **Lock-step passes** over two ping-pong lists, pass p = 0, 1, …: join the previous casts (`0x0079af00` waits on the scheduler group `0x0223ac40`, which `0x0079b470` creates when it submits them); every listed proxy advances one cast-and-solve over its remaining time (`0x007a1c40` → `0x0079dd50(&{Δt, 1/Δt}, world + 0x10)`); join again; every proxy asks `0x007a2420` → `0x0079ddc0(last = (p = 9))` whether time remains (> 1.19e‑7) and if so joins the next list. **At most 10 passes per frame**; no pass reads the human.
 4. Finish: `0x0079e6e0` → `0x0079b560` for each, then `0x0079e6f0` → `0x0079bbb0` (commit the proxy's new position into the phantom; broadphase update `0x00c838d0`) and `0x007a1c90(human)` (support data → human `+0x1a74`, `+0x1a84`, `+0x1a88`/`+0x1a8c`).
 
-The pass functions are the custom proxy's own cast-and-solve machinery (`0x0079b000`–`0x0079e000`), which calls into Havok range A (`0x00c83xxx`); they are P5 material, read here only for call shape (OPEN 36). `0x00702760` (→ `0x005aa170`, a control-band timer tick) also runs inside this routine and is unrelated.
+**The pass functions, read in full (closes OPEN 36, 2026-10-07, unit W-U2).** The custom proxy's own cast-and-solve machinery composes into one lock-step cycle, each stage a genuinely separate function: **seed** (`0x0079bb00`: snapshot phantom transform → proxy `+0xd0..+0x100`; set remaining time `+0xc0`=Δt; clear iteration count `+0x1a4`; call snapshot+submit) → **snapshot+submit** (`0x0079b5b0`: writes the snapshot into the phantom's live transform, resets both cast sub-objects, submits a 9-field job via the job submitter if the phantom's counter `+0x164` is nonzero) → **submit** (`0x0079b470`: lazily creates the shared job-group object, allocates the next 0x40-byte ring-buffer slot (mod 150), submits as a **CLASS-3 job** — the identical job class and submit/wait API `spec-physics-runtime.md` §4.4 already documents for the main per-frame step's own 2 worker jobs) → **advance** (`0x0079dd50`: calls the real cast-and-solve `0x0079c5f0`; if converged, done; else predicted next position, resubmit) → **cast-and-solve** (`0x0079c5f0`: Havok narrowphase on both cast sub-objects; the integrate/solve call through the proxy's own primary-vtable slot `+0x14` — this IS `0x0079de40` itself, §5.6.4a below, not a separate Havok method; the phantom-interface listener fan-out called directly here; caches the world's gravity vector `world+0x10` → proxy `+0x180` and a velocity snapshot → `+0x190` for the finish step; returns "converged within epsilon" as a boolean) → **ask: time remains?** (`0x0079ddc0`: calls `0x0079d7c0` to resolve one contact + time bookkeeping; if remaining time ≤1.19e-7 or this was pass 10, finish both cast sub-objects and stop; else resubmit) → loop while time remains (≤10 passes) → **finish step 1** (`0x0079b560`: walks a separate provisional touch-list, applies a physical impulse + wakes approaching dynamic entities via `0x0079afe0`) → **finish step 2** (`0x0079bbb0`: refreshes the phantom's AABB, tears down and re-populates the two "currently touching" lists, temporarily swaps in the cached velocity snapshot for the manifold commit `0xc838d0` — Havok-facing half already specified by W-U1 §7.6 — then restores the real velocity). `0x00702760` (→ `0x005aa170`, a control-band timer tick) also runs inside this routine and is unrelated.
 
-#### 5.6.5 Controller motion `0x007a5b10` (1467 instructions) — contract CONFIRMED as call shape; internals P5 (OPEN 35)
+**5.6.4a — `0x0079de40`, the manifold update (reached as a game-introduced virtual, closing `spec-physics-runtime.md` §2.1 row 22's own open question of which vtable/slot and who calls it).** The proxy constructor `0x0079c400` installs three vtables on the proxy: `+0x0`=`0x01154a18` (primary), `+0x8`=`0x011549fc`, `+0xc`=`0x011549e4`. The primary vtable has exactly 6 slots — a destructor plus 4 Havok-interface methods, then, at `+0x14` (past the Havok interface's own 5-slot length), `0x0079de40`. `0x0079c5f0` reads this slot and calls through it with 6 arguments matching `0x0079de40`'s own parameters exactly. **Role:** a contact-identity reconciliation pass — matches each cast sub-step's fresh hit records against a reference/previous set (via a "find closest match" helper, `0x0079b170`) so per-contact tracking state stays keyed to the same physical contact across sub-steps, firing a "collidable changed" notification (`0xc83820`) plus a register/re-attach call (`0xc837e0`, the fourth member of the `0xc83720`/`0xc83760`/`0xc837a0` listener cluster) only when the matched contact's touched object actually changed.
 
-`thiscall` on the controller, `ret 0x1c`: (human, &velocity, float, Δt, b1, b2, b3). It clears state bit `0x80` and `+0x10`, and reads the proxy velocity and position (`0x00c835b0`, `0x00c83570`). **Unless b1, or b2 and b3, are set, it skips the support query and treats the human as supported on an up normal (0, 1, 0)**; otherwise `0x0079d0b0` (the proxy's support check) returns the support state, surface normal and surface velocity, and a surface whose normal · up is below 0.7 has the into-slope part of the desired velocity removed (written back into the record's copy), below 0.55 also setting state bit `0x80` ("too steep"). The rest is the controller's own state logic (timers `+0x154`/`+0x158`/`+0x15c`, `+0x160`, the cap `+0x170`, ray queries through `0x0075d7e0`), and it **ends by setting the proxy's linear velocity** (`0x00c835c0`, called at `0x007a73a5`). It reads no intent field of the human. Its two other callers (`0x007a7413`, `0x007a750e`) are outside this frame path and were not traced.
+**Thread safety (resolves `spec-physics-runtime.md` §11 OPEN item 22 beyond its own "likely but unverified" hedge, and the thread-safety half of OPEN 36).** `MyCharacterListener`'s three callbacks (§5.8) and the phantom-listener fan-out both fire only from inside `0x0079c5f0`/`0x0079d7c0`/`0x0079de40` — all three reached only as the worker body of the CLASS-3 job `0x0079b470` submits. **Class-3 is the game's persistent, multi-worker thread pool** (bring-up submits one class-3 job per active scheduler worker purely to install per-thread Havok memory, per §4.4) — **so both listener mechanisms run on whichever worker thread the pool dispatches that job to, not guaranteed the main thread, and not serialized against other proxies' jobs stepped in the same pass.** This is exactly why §5.8's own "the queue adders take no lock (plain increments)" is a real, load-bearing design choice in the original engine — it works only because each queue slot is ever appended by just the one human/proxy pair that owns it; **a straight reimplementation fanning these jobs across real OS threads must provide its own synchronization** if two humans' proxies can touch the same object in the same pass.
+
+#### 5.6.5 Controller motion `0x007a5b10` (1467 instructions) — CONFIRMED by full listing (closes OPEN 35, 2026-10-07, unit W-U2)
+
+`thiscall` on the controller, `ret 0x1c`: `(this=controller, human, &velocity, heightArg, Δt, b1, b2, b3)`. `heightArg` (the function's own 3rd argument) is a **jump-height parameter**, read only by the jump-launch formula below — zero on the normal per-frame call (§5.6.4 step 1), non-zero at the function's two other callers (end of this subsection). It clears state bit `0x80` and float field `+0x10` (two distinct resets — `+0x10` is a 4-byte float, not the state byte's own bit `0x10`), and reads the proxy velocity and position (`0x00c835b0`, `0x00c83570`).
+
+**Support resolution.** Unless `b1`, or both `b2` and `b3`, are set, it skips the support query and treats the human as supported on an up normal `(0,1,0)` with support-state value `2` ("normally supported"); otherwise `0x0079d0b0` (the proxy's support check) returns the support state, surface normal and surface velocity. **A new per-human-kind capability gate** (byte `human+0x34` indexes a pointer table at `0x02cc9900`; bit `0x02` of the pointed-to record's own `+0xa` byte) gates BOTH of the next two behaviors — not every human kind gets slope removal or the steep-slope-timer override below. Gated on that: a surface whose normal · up is below 0.7 (`0x012a2ff0` = 0.699999988) and state bits `0x10`/`0x40` are both clear has the into-slope part of the desired velocity removed by proper vector projection via the cosine-between helper `0x00434f10` (written back into the record's copy, only when moving INTO the slope); independently, below 0.55 (`0x01154ab0`) sets state bit `0x80` ("too steep") **and forces the support-state variable itself to 0** (airborne for the rest of this call, not just a flag).
+
+**Two independent ways to become "unsupported" that the raw query did not report**, both gated on a "coyote" local (built every call, unconditionally copied into `controller+0x160`) exceeding `1.5` and only while still reporting `state != 0`: (1) a **departure-speed override** — a combined scalar from the cached proxy velocity and the surface-derived vectors, compared against `0.05` (as a double); exceeding it forces support to 0 (moving away from the surface fast enough overrides a "supported" result); (2) a **steep-slope-timer override** — if `normalY < 0.7` and `controller+0x160` (the same coyote-local-derived field) is any positive value, support is also forced to 0. **`controller+0x160` is therefore a monotonically-available "how long has the surface been steep" counter**, extended toward its own previous value plus a fixed margin (`5.0`, units unresolved — plausibly a frame count) whenever the same per-kind gate and state conditions hold, including a check against `heightArg` itself.
+
+**State byte `controller+0x08`, full catalog:** `0x01` gravity-integration suppressed this call (set upstream, not in this function); `0x02` gates the slope-removal re-check/gravity gate, cleared twice in the step-assist tail below; `0x04` **supported** (cleared unconditionally by the jump-launch block); `0x08` **"fall danger"** (consumed by §5.6.6's knock-down check), set under the step-assist ground probe; `0x10` set when the step-down raycast fails; `0x20` set when the step-up raycast fails outright or the global toggle `0x012fc74f` is false; `0x40` set when the step-up raycast succeeds and horizontal speed exceeds ≈1.1 units/s; `0x80` too steep (cleared unconditionally at entry).
+
+**Step-up/step-down/ledge-assist** (independent of the above): a first raycast (`0x0075d7e0`, length 90) that, on failure or if the global toggle `0x012fc74f` is false, clears bit `0x02` and sets bit `0x20`, skipping the rest; on success, tests the hit normal against `0.72`/`0.6` and sets bit `0x40` when horizontal speed² exceeds `1.2`; a second raycast (`0x0075c880`, new address, margin `0.35`) tests a step-up height limit of ≈0.52 units against a squared-speed gate of ≈5.1 units/s; a third raycast (`0x0075d7e0` again, the step-down probe) sets bit `0x10` on failure (accumulating a small vertical correction using the GLOBAL frame Δt `0x0132a0ac`, not this call's own Δt) or clears bit `0x02` on success. A follow-up gate (run when the block didn't just set bit `0x20`, and support confidence is below `0.8`) calls `0x00d9f9d0(human)` ("is climbing/vaulting/otherwise exempt") and, if false, runs the fall-danger ground probe: `0xc8aa60` (a Havok range-A probe, two output buffers) with bit `0x08` cleared first and potentially re-set by a follow-up vector computation when support confidence is below `0.7` or a cosine-between test fails. A three-timer chain (`+0x154` 500ms, `+0x15c` a per-human dynamic duration via `0x00d9e210`, `+0x158` 200ms once `+0x15c` expires) gates the fall-danger re-arming and a Y-velocity soft-damping step (subtracting a runtime-tunable rate, `0x0223d1d0`/`0x0223d1d4`, from vertical velocity while falling gently between 0 and 9.0 units/s).
+
+**Unreconciled discrepancy flagged 2026-10-08, not silently resolved either way:** an independent fresh disassembly of this exact first-raycast call site (`0x007a6475`) reports the hit-normal test as comparing against `0x012a2ff0` (0.7) — **the same shared constant** §2 above uses for slope removal, not two separate `0.72`/`0.6` values as this paragraph's own prior language states. Whoever next touches this section should re-disassemble `0x007a6475` directly to settle which framing is correct (a single shared 0.7 constant vs. two distinct 0.72/0.6 constants) before relying on either number.
+
+**The support query `0x0079d0b0`, opened in full 2026-10-08 (previously cited by name only).** `(this=proxy, out_struct*)`: output struct `+0x00` = support state (`2` if ≥1 qualifying manifold point, else `0`), `+0x10` = averaged surface normal, `+0x20` = averaged surface "velocity," `+0x30` zeroed/unused. Source data: the proxy's own contact manifold, a `hkArray`-shaped buffer at proxy `+0x10`(data)/`+0x14`(count), stride `0x60`, capped at 32 entries considered — this is the manifold the §5.6.4 continuous shape-cast loop fills every frame, directly tying that mechanism to this read. Per manifold entry (before averaging): a virtual call through proxy vtable slot `+0x10` gathers a per-contact velocity sample into a parallel `0x40`-stride buffer (HIGH CONFIDENCE: sampling a touched body's own local velocity at the contact point — this is what lets a moving platform's motion show up in the averaged output). **Qualifying-point filter: a manifold point counts toward the support average only if `dot(up, contactPosition) < −0.08`** (`0x01154a30`) — keeps side/ceiling/wall contacts out of the ground-support average. Normal-averaging has a zero-length guard (`0x0125e270` = 0.0) before a Newton-Raphson `rsqrt`-refined normalize. **Net: this is a textbook multi-contact support algorithm already generic over arbitrary contact geometry — slopes/steps/stairs all "just work" once real collidable shapes are registered; nothing about it is terrain- or plane-specific.** `0x0079d7c0` sits immediately after `0x0079d0b0` in the image (no padding beyond 4 `int3` bytes) and matches the already-documented "ask: time remains?" resolve-one-contact description, §5.6.4 — confirms the two sit back-to-back, not independently opened further.
+
+**Correction flag, not resolved:** the forward-probe's "length 90" field (`0x007a6475`) is written with a plain integer `mov`, not an SSE float store like every other position/direction field in the same struct — mild evidence against "length" being a literal world-space ray length in the same units as the rest of the struct; may be a flags/mode/iteration-count integer instead. Flagged OPEN, not silently carried forward as settled.
+
+Full detail, including the forward-probe's `−2.2` offset constant (axis/meaning unresolved) and what the open "which file supplies the ground collision shape" question bounds (separate from and not blocking any of the above): `scratchpad/havok_character_proxy_ground_following_2026-10-08.md`.
+
+**Gravity integration (the actual formula):**
+```
+if bit 0x01 clear AND state==0 (unsupported) AND (b2==0 OR b3!=0) AND bit 0x02 clear:
+    gravity = world+0x10                        ; the world's gravity vector (−9.8 at construction,
+                                                  ; spec-physics-runtime.md §4.1 step 5)
+    sinkSpeed = −dot(velocity, up)               ; how fast already falling
+    if sinkSpeed > 0:
+        ratio = sinkSpeed / controller+0x170      ; the speed cap (44.704, 100mph, §5.6.1)
+        gravity *= (1.0 − ratio·ratio)            ; quadratic terminal-velocity falloff
+    velocity += gravity * Δt
+```
+`controller+0x170` is therefore the terminal-fall-speed reference gravity scales itself against, not a hard post-hoc clamp — gravity's contribution asymptotically weakens as fall speed nears the cap, never clipped afterward.
+
+**Jump launch:** gated on `heightArg > 0.0`. Formula: `gravityDir = normalize(world+0x10)` (Newton-Raphson rsqrt-refined); `speed = sqrt(2.0 · |gravity| · |heightArg|)` (the classic v=√(2gh) formula); `velocity = −gravityDir · speed` (launched opposite gravity). A small correction softens the launch by up to 2.0 units when already falling faster than −3.0 units/s. **Bit `0x04` (supported) is unconditionally cleared the instant a jump launch is applied.** The function **ends by setting the proxy's linear velocity** (`0x00c835c0`, called at `0x007a73a5`), after a pause/scripted clamp (`0x00530340`: any computed upward Y-velocity is zeroed while paused/scripted) and a surface-material-change notification (gated on the separate byte `controller+0x09` bit `0x02`). It reads no intent field of the human.
+
+**Its two other callers, `0x007a7413` and `0x007a750e`, are internal continuation labels inside a larger shared caller (no prologue of their own), not independent functions** — both are jump triggers, both passing a non-zero `heightArg` (one computed as `1.0/x` off the human's own cast sub-object; the other a fixed `≈0.016667`, suspiciously one 60Hz frame), distinct from the per-frame call's `heightArg = 0`. Both also call `0x007a1c90` (the support-data write-back, §5.6.4 step 4) afterward.
 
 #### 5.6.6 Write-back `0x0099e2a0(records, n)` (336 instructions) — CONFIRMED by full listing
 
@@ -1738,7 +1779,7 @@ When it applies, it takes the second of the three angles that `0x00da48a0` deriv
 
 **Then, for every seat**
 1. Human `+0xdc` |= 8; if `+0xcc0` is set: `0x0094cca0(human, 0, 0)`.
-2. **Local player:** `0x00574e30(0.0, 0)` (camera band). Also `0x007f0140(1)` (§10, OPEN 5), and `0x009dcf10` when in fine aim (`0x009da830`).
+2. **Local player:** `0x00574e30(0.0, 0)` (camera band). Also `0x007f0140(1)` (§14, OPEN 5), and `0x009dcf10` when in fine aim (`0x009da830`).
 3. If the held weapon (`0x00941f40`) passes `0x00b81440`: `0x009c7cc0(human)` and `0x009d1aa0(vehicle)`.
 4. For class bit `0x02` humans: the `+0x2088` sub-object query `0x009f0860(…, 5, …, 1)` → `0x00821740` → `0x009f3530`. HYPOTHESIS: an AI/follower hand-off.
 5. `0x0055f770(human)`, then `0x00943960(human, 0, 0)`.
@@ -2017,7 +2058,7 @@ It has **no transition and no per-frame handler**. No immediate `0x18` appears a
 
 1. `0x0091faf0(character handle)` — the "is the local player" test; **its result is discarded**.
 2. If character `+0x1c9c` bit `0x08` is set, set the request's instant bit. If instant and the character is ragdolling (`0x009a1dc0`), stop it (`0x009a1e10(character, 0)`).
-3. **Eligibility** `0x00b0ca60(character, forced, request +0x24 bit 0)`, forced = instant or request `+0x23` bit 3. Refused → return false.
+3. **Eligibility** `0x00b0ca60(character, forced, request +0x24 bit 0)`, forced = instant or request `+0x23` bit 3. Refused → return false. **Full trace: §7.4a.**
 4. **Vehicle and seat:** with a vehicle, `0x00b0fdf0(character, vehicle, request)` must succeed; without one, `0x00b105c0(character, request)` picks it. Both are U6.2. Failure → false.
 5. A vehicle with descriptor flag `+0x1d7b` bit `0x40` is refused unless request `+0x20` bit 2 is set.
 6. Remote-controlled vehicle (`0x00a77a10`) and player-class character (`0x00853b30(character, 0x21)`, kind-row `+0xa` bit `0x02`) with search mode 1 → mode 2.
@@ -2030,6 +2071,97 @@ It has **no transition and no per-frame handler**. No immediate `0x18` appears a
 Steps 2, 6, 9 and 10 **modify the caller's request record in place** before the copy. Every submission starts at **state 0** (CONFIRMED: the only submitter call of a setter is `0x00af2443`).
 
 Callers outside U6 also include **`0x00b10900`** (115; 21 callers in missions, activities and the UI band), which the `0x1c`-byte options block initialised by `0x00b108c0` (23 callers) accompanies (HIGH).
+
+### 7.4a `0x00b0ca60(character, forced, eligibility_bit)` — the eligibility gate, traced in full: a pure character-state check, no vehicle/physics involved
+
+**Scope.** Direct follow-up requested via a routed mission-scripting question, framed as "does this read vehicle position/distance, seat occupancy, or physics-body state, and what are its result codes." **Both premises are wrong, confirmed by full disassembly: it has no vehicle argument at all, reads only character-local state, and returns a plain boolean with no secondary code** — the vehicle/physics-side checks the question anticipated all belong to the sibling functions §7.4 step 4 and §13.4-§13.6 already cover, called only after this gate passes.
+
+**Signature, confirmed from the body's own stack layout and both real call sites:** `(character, forced: bool, eligibility_bit: bool)`.
+
+**The gate chain, in order (all 9 refusal paths, 1 success path):**
+1. Refuse if already seated (`0x009b9160`, `+0x16d4 == 3`).
+2. Refuse if already mid-entry or mid-exit of some vehicle (`0x009b91e0`, `+0x16d4 ∈ {1,2}`) — a second, previously unnamed predicate on the same phase field.
+3. Refuse if `+0x16d8` or `+0x16dc` is non-zero — the same unnamed "busy/pending" pair already flagged OPEN (§7.3/§13.0 item 2); this is a second confirmed reader with identical polarity, strengthening (not resolving) that open item.
+4. Refuse if ragdolling (`0x009a1dc0`, `+0xcd2 ∉ {0,6}`).
+5. Refuse if down or dead (`0x0096f540`, `+0xcc8 ∈ {5,6}` or `+0xe3` bit 0).
+6. **Only when NOT forced**, three more checks run (forced skips straight past all three to step 7): refuse via a generic, non-vehicle-specific interaction-lock helper (`0x009562d0`, widely reused elsewhere — shape confirmed, exact semantics OPEN, hinges on a `+0x1b78`-indirected sub-object and two unidentified hash constants `0x1d56`/`0x1d7e`); refuse if mid jump/dive pose (`+0xccd == 4`); refuse if mid climb pose (`+0xccd == 6`).
+7. A class-capability-row filter (table `0x02cc9900`, row `+0xa` bit `0x04`, HIGH CONFIDENCE "has the standard AI-state block at all" by analogy to the same row's already-named `+0xa` bit `0x02` "is-player" test) gates the final tail.
+8. **Tail:** forced → success unconditionally. Otherwise, if step 7's bit was clear → success anyway (the final refusal below applies only to kinds that have the bit set). Otherwise: refuse if `+0x2ba` bit `0x10` is set (the exact, already-named `cant_enter_vehicle` flag); else allow if current AI mode (`+0x501`) isn't `Idle`; else allow unless the AI sub-state (`+0x500`) is `0x10`/`0x11` — resolved directly against the already-documented 177-entry sub-state table (`0x012e1168`) to mean, literally, **"observe vehicle world accident"**/**"observe vehicular accident"**: a character currently playing an idle vehicle-accident reaction cannot start entering a vehicle unless forced.
+
+**Return value is a plain boolean, nothing richer** — every refusal path sets the same `0`, the one success path sets `1`; there is no secondary reason code, only which branch fired.
+
+**What it reads — exhaustively, exclusively on the character object:** `+0x16d4`, `+0x16d8`/`+0x16dc`, `+0xcd2`, `+0xcc8`/`+0xe3`, `+0xccd`, the `0x02cc9900` kind-row bit, `+0x2ba` bit `0x10`, `+0x501`/`+0x500`, plus the generic interaction-lock helper's own reads. **It touches no vehicle position/distance, no seat occupancy, and no physics/collision state anywhere, at any depth** — confirmed exhaustively (every instruction in its own body and all 8 direct callees, cross-checked against a raw whole-image byte scan so no indirect caller/callee was missed).
+
+**The "2 physics obstruction queries" question, answered directly rather than assumed:** `0x00b0ca60` calls neither of the two obstruction-gate functions (§13.6's `0x00b0da10`/`0x00b0dc20`) nor their own queries (`0x0075d7e0`/`0x0075c880`, OPEN item #104) at any depth — there is no second, distinct pair of obstruction queries hiding in this function or its call tree. Any "2 obstruction queries still untraced" reference is a restatement of OPEN item #104 against the already-documented `0x00b0da10`/`0x00b0dc20`, not a new finding about this function.
+
+**A second, previously undocumented caller: `0x005b7cc0`, a per-frame "Press [ACTION] to enter watercraft" UI-prompt helper.** It resolves the local-player singleton, runs its own busy/seated/dead pre-checks, then reuses the exact same `0x00b0ca60`→`0x00b105c0` (auto-pick, §13.3)→`0x00ad2f80` (vehicle-category test `== 5`, §13.4 step 4) chain the real submission path uses — not to submit an entry, only to decide whether to render the shared interact-button prompt (`"Press %s to enter watercraft."`, the same `CBA_GAC_ACTION` button §13.1 already names for all 22 vehicle-enter-style prompts). `0x005b7cc0` sits at local slot 15 of a previously-unidentified **second, contiguous 22-slot function-pointer table at `0x0111f488`** (immediately following the two tables §13.1 already names at `0x0111f2d0`/`0x0111f430` — the existing "sibling table" at `0x0111f430` was independently re-confirmed exactly, only slot 7 populated) — the same slot number as the main table's own vehicle-enter/exit handler (`0x009e5e80`). **Checked directly, 2026-10-09 — the table is real, but the lead does NOT close OPEN item #97.** All 22 entries read directly from `.rdata`: 18 populated, 4 empty (local indices 3, 4, 14, 18, 19). Decompiling a 7-slot sample (indices 0, 1, 2, 9, 10, 15, 20) confirms every populated, non-degenerate slot is a single-purpose "build and emit one specific on-screen interact prompt" function sharing the identical tail (a string-table lookup followed by a common "emit this prompt" sink) — the same shape already established for slot 15 alone, now shown to be the table's general rule: index 0 = `HUD_DOWNED_REVIVE`, index 1 = a forced-vehicle-entry prompt keyed on a previously unnamed player handle pair (`+0x28c0`/`+0x28c4`), index 2 = `HUD_ANSWER_CELL`, index 9 = the vehicle-surfing diversion start prompt, index 10 = the base-jumping diversion start prompt, index 15 = the watercraft prompt (already named above), index 20 is a trivial linker-folded stub (coincidentally resolving to a Wwise SDK symbol name, not a real audio-engine connection) acting as a "no prompt" filler. This table's sole walker (`0x005b6540`, a per-frame HUD-update routine, a confirmed 4th member of the same "trigger button" function family as the two already-named sibling tables' own walkers) loops all 22 bits of `+0x2084` and calls whichever populated slot's bit is set, first match wins — **but `+0x2084` is only ever READ in this walker, never written, verified across its entire disassembly.** Slot 15's own function was independently re-decompiled and confirmed to never touch `+0x2084` either — it runs only after the bit is already known set. **So this second table is a real, confirmed sibling consumer of the same bits the main table also only reads — not a producer, and not the setter OPEN item #97 is looking for.** That item remains open exactly as before, unredirected. Bonus, flagged as a new unexplored lead: the same walker also drives a further, previously-unknown **4th contiguous 22-slot table at `0x0111f4e0`** (immediately following this one), gated on a different button, only when this table's own scan finds nothing — not enumerated this pass. **This 4th table was enumerated directly, 2026-10-09, with the same negative result.** It is almost entirely empty — only local indices 16 and 18 are populated (20 of 22 slots null, including index 15, this table's own analog of the watercraft slot, which simply has no function at all). Index 16 (`0x005b8770`) is, byte-for-byte, the *same* function pointer as the first table's own slot 16 — a weapon pickup/replace prompt builder, gated on unrelated fields (`+0x1e18`, `+0x1dc0`/`+0x1dc4`, `+0x1a0`/`+0x1a1`); index 18 (`0x005b7940`) is a weapon-overheat ("cool the weapon") prompt builder, gated on a heat float at `+0x7a8`. **Neither slot references `+0x2084` at all, in either direction — not even as a read — and the walker's own two scan loops (one per table) each `TEST` the bit only, confirmed across the function's full 329-instruction body.** With both tables now fully checked, every function anywhere in the "trigger button" family's reachable code that touches `+0x2084` has been found to be a reader, none a writer — this negative result should be treated as solid, not merely "not yet found." A bounded-effort look at `0x005b6af0` (603 instructions, previously presumed by this item's own framing to hold the setter) found **zero references to `+0x2084` anywhere in its own body**, contradicting that presumption directly; it calls the other 3 confirmed trigger-button family members plus roughly 20 other, not-yet-characterized functions (listed in the scratch report below) that remain the most promising unexamined lead for a future pass. Full detail: `scratchpad/watercraft_prompt_table_open97_2026-10-09.md`, `scratchpad/fourth_prompt_table_0x0111f4e0_2026-10-09.md`.
+
+Full detail, every address: `scratchpad/vehicle_enter_eligibility_0x00b0ca60_2026-10-09.md`.
+
+### 7.4b Driving animation state: the seated/driving pose and enter/exit sequence, forward-traced from §7.4a (2026-10-09, mostly synthesis + new real-data confirmation)
+
+**There is no separate "animation selection" subsystem.** Once `0x00b0ca60` and the sibling
+vehicle/seat validators (§13.4-§13.6) pass, entry proceeds through the same 35-state
+vehicle-interaction state machine (§7.5) that already owns slot/seat allocation; animation
+selection is one more thing that machine's on-entry handlers do, via a shared **element-selection
+rule** (§9, three small functions) that turns a slot's state/variant fields into a **named clip
+lookup** against three shipped tables, `vi_enter.xtbl`/`vi_exit.xtbl`/`vi_ride.xtbl`.
+
+**Forward trace, confirmed by listing:** submitter `0x00af22a0` starts every entry at state 0;
+approach states 0-8 (§10) are pure routing, no clip lookup. The 250ms seat-resolution upkeep
+`0x00af5cb0`/seat-scoring helper `0x00b0eb90` commits the seat. **Seating commit `0x00afbd90`**
+(state 9, §8) is where the character is actually marked seated: `human+0x16d4 = 3`, and —
+critically for the animation question — **`human+0xcc8` = 8 (driver) or 9 (every other seat), the
+"condition row," written via the shared locomotion setter `0x00942110(human, 8/9, 0, -1.0)`** —
+the same mechanism every other named locomotion state (sprinting, climbing, ragdoll) uses, not a
+one-off override. The animated enter states (`0xa`-`0x13`) each call the element-selection rule
+(`0x00b0ad10`) for a matching `Enter_Animations` clip and play it via **`0x00af45a0(human, anim)`**
+on a hit; the per-slot pose driver `0x00af6310` (§12.2-§12.3) runs every frame to pin the character
+to the seat's attach point while the clip plays. Once seated (phase `0x22`), the ride-key builder
+`0x00af4760`/matcher `0x00b08aa0`/`0x00b08b80` picks a `vi_ride.xtbl` clip every relevant frame, and
+the **rider-parameter writer `0x00af4b80`** feeds 11 named controller parameters (`Vehicle
+Steering`, `Vehicle MPH`, lean/tilt, `Wheelie Bool`, `Endo Bool`) every frame from live vehicle
+state — the continuous, non-discrete half of the seated pose. Exit mirrors entry: animated exit
+states `0x1a`-`0x21` (§11) call the same rule against `Exit_Animations` and play via `0x00af45a0`.
+
+**Clip names are real, named, data-driven entries, not hardcoded ids** — confirmed by direct read
+of the real shipped `.xtbl` text (`tools/as_base_xtbl/vi_enter.xtbl`/`vi_ride.xtbl`), not just the
+schema. The `Animation` field of a matched `Element` is a text name (e.g. `"Enter Left Driver"`,
+`"Drive Ready SM"`, `"drive network"`), resolved once at load through `0x004bf810` against the
+merged State/Action registry `0x03171c10` (`spec-tables-animation.md` §1.3/§5). An ordinary car's
+ride set (`"standard driver"`) is a single `Element` (`"drive network"`) covering the entire seated
+loop; a motorcycle's ride set (`"motorcycle driver"`) is a rich combat-ready/aim-direction set
+(`"Drive Ready SM"` + 5 `Alt` variants); a watercraft-flavoured set (`"Wavecraft driver"`) adds
+turn/reverse/fast variants a car/motorcycle set never uses.
+
+**Tie-in to the blend/state-machine system:** the resolved registry index feeds the engine's one
+generic animation-controller API (`0x00af45a0`, the `0x004b44a0`/`0x004b4320`/`0x004b46c0`/
+`0x004b2710` query family, typed parameter setters `0x004b1410`/`0x004b1490`/`0x004b1510`) — not a
+vehicle-specific interface. A real shipped node graph named **`driving_sm`** exists and is the
+largest alias table in the whole 249-graph corpus (10 parameters, nested graphs, confirmed by
+`spec-anim-runtime.md`'s own full-population validation pass, which also found real `ride_fire`/
+`drive_fire` clip-match data consistent with a state machine selecting fire-while-riding vs.
+fire-while-driving variants). **The literal instruction-level link from a specific `Animation`
+registry string (e.g. `"drive network"`) to `driving_sm` itself was not traced by this or any prior
+pass — HIGH CONFIDENCE by naming/structural correlation only, not CONFIRMED by disassembly.** This
+is the single biggest open item from this investigation.
+
+**Vehicle-class dependence is CONFIRMED pure data, zero vtable/code-level class switch.** The
+vehicle descriptor carries a named `Vehicle_Interaction_Info` string reference
+(`spec-vehicle-data.md` line 203/216); that row's per-seat `Enter_Animations`/`Exit_Animations`/
+`Ride_Animations` fields are each an independent named reference into the three tables above. Real
+shipped data proves there is no engine-side "vehicle class" concept at this layer: the shipped
+`Wavecraft` jet-ski's `Ride_Animations` is literally `"motorcycle driver"`, while the shipped `Bike
+Moped`'s `Ride_Animations` is literally `"Wavecraft Driver"` — cross-reuse in both directions. A
+clean-room port only needs to reproduce the two-level string-indirection lookup (vehicle → info row
+→ per-seat animation-set name → token-key match), never a hardcoded car/motorcycle/watercraft
+branch — none exists in the original.
+
+**Open items this pass flagged, not closed:** the `Animation`-string → `driving_sm` link (above);
+`driving_sm`'s own internal node-graph structure (blend trees, parameters, layer masks — never
+opened by any pass); `0x00b08ea0`'s half of the existing OPEN item 71 (the other ride-key-builder
+caller); the SSE position/orientation blending inside `0x00af6310`'s shared tail (confirmed only at
+call-target level). Full detail: `scratchpad/driving_animation_state_2026-10-09.md`.
 
 ### 7.5 The three setters and the numbering of all 35 states
 
@@ -2125,7 +2257,22 @@ It is called from set-enter's cases 0, 1, 6 and 8 and from the nine functions th
 | human `+0x1c48` | the record | slot allocation `0x00b086b6` | CONFIRMED |
 | | 0 | release `0x00b08811` | CONFIRMED |
 
-The band sweep found no other store to `+0x16d4` (the four scoping §5a.1 item 6 listed). Readers outside the band treat `+0x16d4` = 3 as seated (`0x009b9160`) and 1/2 as "entering or exiting" (`0x009b91e0`). **Value 2 means exiting, not mid-entry**, as scoping §5a.1 item 6 said; this refines `spec-lua-api-behaviour.md` §21.11 and §22.3.
+The band sweep (scoped to this vehicle-occupancy code band only) found no other store to `+0x16d4`
+within it — the four sites above remain the only writers *inside the occupancy subsystem*. A fifth,
+earlier write exists far outside this band, in the human constructor itself: **`0x00954be8`
+(`mov [esi+0x16d4],edi`, inside constructor `0x00954340`) zeroes `+0x16d4` unconditionally for every
+newly-constructed character**, confirmed 2026-10-08 by tracing `edi`'s definition back to a single
+`xor edi,edi` at `0x00954388` with no redefinition before the write — this is the object's
+default/initial value, not a fifth occupancy-transition state, and it is consistent with (not a
+correction of) the four-site table above: it simply explains what `+0x16d4` reads as *before* any of
+those four writers has ever touched a given character. This also closes the open question in
+`scratchpad/char_state_enum_0x16d4_full_value_table_20261008.md` (line 174) of whether the constructor's
+own contribution was independently pinned down — it now is. Full citation:
+`scratchpad/named_objects_sentinels_0x954be8_m05_2026-10-08.md` §3.
+
+Readers outside the band treat `+0x16d4` = 3 as seated (`0x009b9160`) and 1/2 as "entering or exiting"
+(`0x009b91e0`). **Value 2 means exiting, not mid-entry**, as scoping §5a.1 item 6 said; this refines
+`spec-lua-api-behaviour.md` §21.11 and §22.3.
 
 State 0's on-entry also sets slot `+0x10`/`+0x14`/`+0x18` = −1, clears request `+0x10`…`+0x1c` unless request `+0x21` bit 0 is set, and disarms the record timer, so the upkeep runs on the next tick. Its other effects are U6.3's.
 
@@ -2161,6 +2308,10 @@ These functions all take a character handle and resolve it the same way: record 
   - **OPEN 48:** slot `+0x10`/`+0x14`/`+0x18` are the per-state variant fields that U6.1's key builder reads. They are reset at states 0, 9 and every U6.6 on-entry, and their writers are U6.3/U6.5/U6.7.
   - **OPEN 52 and 58** are answered by §7.5.
   - **OPEN 55:** `0x00853b30(object, n)` tests bit n mod 8 of kind-row byte `+6` + n/8. So class bits `0x21`/`0x22` *are* row byte `+0xa` bits `0x02`/`0x04`: one set of bits, not two.
+  - **OPEN 55, extended 2026-10-09 — the class-registration mechanism that builds the kind row, confirmed for 43 real classes; the writer of a non-zero kind-row bit itself NOT found, an honest negative after an exhaustive search (dispatched LOW PRIORITY by `purrsian-04`, Team B's "is this a vehicle" classifier currently uses an object-name-string heuristic, labelled CHOSEN, and wanted the real mechanism if findable):**
+    - A whole-`.text` byte-shape scan (not name-guessing) found **43 registered classes total**, including — for the first time — the real runtime `vehicle` (class index `7`), `player` (`0x21`), and `npc` (`0x22`) classes, alongside `general_mover`(5)/`weapon`(0x1f)/`projectile`(6)/`item`(0x1e)/`door`(0x1b)/`script_npc`(0x2a)/`script_vehicle`(0x2b) and 33 more (full table in the scratch report). Every one of the 43 shares one byte-identical registration-stub template: writes a transient shared vtable, the literal class index (`+4`), a second per-class literal byte (`+5`, value differs per class — `player`/`npc`=`0x20`, `vehicle`/`general_mover`=`3`, `weapon`=`0x1e`, `door`=`1`, `script_npc`/`script_vehicle`=`0x24`, meaning unresolved), the name-string pointer (`+0x28`), then writes the descriptor pointer into `0x02cc9900[classIndex]` — directly confirming `spec-zone-data-format.md` §11.5's inferred table mechanism for 9 concrete classes, not just the 2 it originally found. **Each class's `Create()` vtable slot (index 0) is what stamps a NEW OBJECT's own `+0x34` class-index byte** (`player`→`0x009e8660`: `mov [eax+0x34],0x21`; `npc`→`0x009d9ad0`: `0x22`; `vehicle`→`0x00a88640`: `7`) — this is the real, concrete writer of an object's class identity, with zero direct call sites anywhere in `.text` (reached only via the descriptor's own vtable, matching §11.5's "no central create-object-of-class-X dispatcher" note).
+    - **The kind row itself (byte `+6` through `+0x25`, exactly what `0x00853b30` reads) is unconditionally ZEROED by this same registration-stub template, for every one of 9 classes fully disassembled** (`vehicle`, `player`, `npc`, `general_mover`, `weapon`, `door`, `item`, `script_vehicle`, `script_npc`) — no exception. **A later writer that ever sets a kind-row bit to 1 was searched for four independent ways across the full `.text` section (4.14M decoded instructions) and NOT found**: absolute-address writes to the 3 fixed descriptor globals (`player`=`0x0263aef8`, `npc`=`0x0262e940`, `vehicle`=`0x0271a8e0` — only 2 references each exist anywhere, both already-explained construct/destructor calls); register-indirect writes reached via a runtime class-index lookup (2 raw matches, both confirmed false positives on manual inspection); writes via the only 2 hardcoded literal table-slot pointers in the whole binary (`npc`'s and `vehicle`'s own slots, 22 call sites, all a generic pool-query idiom unrelated to the kind row); the x86 `bts`/`bt`/`btr`/`btc` bit instructions (4 occurrences total, all unrelated CRT bitset code); and a broadened "`or` into the `+6..+0x25` range near the reader's own shift-mask idiom" sweep (26 candidates, 3 superficially promising — same displacement, same shift idiom, even a companion bit-clear on byte `+5` — but all 3 traced to an unrelated linked-list subsystem via a different global, `0x024d8590`, that doesn't match the descriptor's own struct layout). **This is a solid, multi-strategy negative, not an incomplete search — but it means no concrete writer address can be cited for either the vehicle bit or the human/player bit as currently understood.**
+    - **A real open question this pass surfaced, not previously flagged: `player`'s classIndex (`0x21`) and `npc`'s (`0x22`) numerically match the bit numbers `0x21`/`0x22` this section already confirmed — this COULD be the actual mechanism (bit = own class index, for these two specific bits) or could be registration-order coincidence (`vehicle`'s own class index is `7`, nowhere near `0x22`, which argues against a simple "kind bit = my class index" reading in general).** Not settled either way this pass — would need a live capture (reading each descriptor's own `+0xa` byte at runtime, correlated with `0x00853b30`'s live return value on a known player/pedestrian/vehicle) or re-deriving this section's own original 4 bit-confirmations' exact call-site arguments from scratch. Flagging, not dispatching — a live-capture decision belongs to `purrsian-04`/the user, consistent with this project's standing convention. Full 43-class table, every registration-stub instruction, and the complete negative-search writeup: `scratchpad/player_vehicle_class_bit_writer_2026-10-08.md`.
 - **`spec-ai-runtime.md` §8 item 4** already belongs to U6.3 (scoping); no change from U6.0.
 
 ---
@@ -2195,7 +2346,7 @@ These functions all take a character handle and resolve it the same way: record 
    - seven calls into the vehicle-AI object (`drunk_driver` handling multipliers from the driver's drunkenness, goal reset, `override_speed` off, `never_go_ambient`).
    See §8.3.
 5. **`Collision Bool`/`Collision Dir`** (§8.5) are set when the vehicle's horizontal velocity changes by more than `VI_collision_min_vel_diff` in a frame. The direction is the change's bearing relative to the occupant's heading. The same routine runs a **body-lag model**: two lag values chase the vehicle's forward and vertical velocity at `VI_forward_vel_accel`/`VI_vert_vel_accel` (± `VI_random_accel_factor`), but only after a random `VI_reaction_delay_min_ms`…`_max_ms` delay. These six tweaks are bss with no initialiser in the image (OPEN 63).
-6. **The camera hand-off reads the vehicle's camera-angle sets.** `0x00b0bc10` passes `Primary_Camera_Angle` (or `RC_Camera_Angle` for a remote-controlled vehicle) and `Secondary_Camera_Angle` (descriptor `+0x628`/`+0x668`, `+0x648`) to the camera band's `0x0056cf60`/`0x0056cd10`. **This answers the core of §10 OPEN 28 and scoping OPEN 8** (§8.6).
+6. **The camera hand-off reads the vehicle's camera-angle sets.** `0x00b0bc10` passes `Primary_Camera_Angle` (or `RC_Camera_Angle` for a remote-controlled vehicle) and `Secondary_Camera_Angle` (descriptor `+0x628`/`+0x668`, `+0x648`) to the camera band's `0x0056cf60`/`0x0056cd10`. **This answers the core of §14 OPEN 28 and scoping OPEN 8** (§8.6).
 7. **The commit can end in an immediate exit.** If another occupant belongs to a different team (`+0x1ca8`), the human is sent straight to the exit request after being seated (§8.2 step 33). Its *completion callback* (request `+0x3c`) has already fired by then.
 
 ### 8.1 The observable end state of the commit (what a stub must reproduce)
@@ -2354,7 +2505,7 @@ All sites are in `0x00afbd90` unless named. The order matters for the port: set-
 33. **Team check**, skipped when any of these holds: request `+0x22` bit 6, the seat's `Ignore Team Disposition` flag (seat byte `+0x09` bit 4), or the human's team is 0, 7 or 9.
     - Otherwise the commit looks for any other occupant (`0x00ab5070`) whose team `+0x1ca8` differs.
     - If it finds one, it builds an exit request (`0x004dccd0`; exit-request `+0x30` bit 0, instant, copied from request `+0x20` bit 0; §6.2), calls **`0x00af3cd0(human, exit request)`** and **returns**, skipping steps 34–36.
-34. Human `+0xe4` bit 4 and `0x00ad3820`: `0x008ccb90(human, 0, 1, 1)`. The seat's `Hide Occupant` flag (seat byte `+0x09` bit 6): `0x00920170(human, 0)` and slot `+0x58` |= 8. State `0x15` undoes it with `0x00920170(human, 1)` (§6.1).
+34. Human `+0xe4` bit 4 and `0x00ad3820`: `0x008ccb90(human, 0, 1, 1)`. The seat's `Hide Occupant` flag (seat byte `+0x09` bit 6): `0x00920170(human, 0)` and slot `+0x58` |= 8. State `0x15` undoes it with `0x00920170(human, 1)` (§6.1). **What these two calls actually do at the render level, and how rarely shipped data sets `Hide Occupant` (2 of 131 vehicles' driver seats — tanks only), is now traced in full: `spec-render-pipeline.md` §23.14.**
 35. Slot `+0xf4` timer; human `+0xe4` bit 4 (not owned); forced flag call.
 36. Human `+0xe4` |= `0x1000`, `+0xec` bit `0x100000` cleared, `0x00bd8240(human, vehicle)`, human `+0x19bc` = −1.
 
@@ -2365,7 +2516,13 @@ All sites are in `0x00afbd90` unless named. The order matters for the port: set-
 ### 8.3 The vehicle-band callees
 
 The census lists **39** distinct callees in `0x00a70000`–`0x00af0000`, which confirms scoping §5a.2's count.
-- **Predicates, 18:** class `0x00ad2f80`; seat count `0x00ab4af0`; seat occupants `0x00ab5070`/`0x00ab5150`; remote control `0x00a77a10`; type tests `0x00ad3140`, `0x00ad3160`, `0x00ad31d0`, `0x00ad3200`, `0x00ad3220`, `0x00ad3270`, `0x00ad3290`, `0x00ad32d0`, `0x00ad33a0`, `0x00ad3590`, `0x00ad3820`, `0x00ab6cd0`, `0x00aef8b0`.
+- **Predicates, 18:** class `0x00ad2f80`; seat count `0x00ab4af0`; seat occupants `0x00ab5070`/`0x00ab5150`; remote control `0x00a77a10`; type tests `0x00ad3140`, `0x00ad3160`, `0x00ad31d0`, `0x00ad3200`, `0x00ad3220`, `0x00ad3270`, `0x00ad3290`, `0x00ad32d0`, `0x00ad33a0`, `0x00ad3590`, `0x00ad3820`, `0x00ab6cd0`, `0x00aef8b0`. Four of these are now individually resolved (2026-10-07, disassembly): `0x00ad3140` = vehicle
+  special-type sub-field (`+0xbf4`→`+0x4c4`) `== 14` (Tank); `0x00ad3270` = `Vehicle_Type`
+  (`+0xbf4`→`+0x2c`) `== 1` (Motorcycle); `0x00ad3290` = same field `== 5` (Watercraft); `0x00ad31a0`
+  (cited elsewhere in this table, not in this specific list) = same field `== 3 or 4` (Helicopter or
+  VTOL) — enum order `Automobile`=0, `Motorcycle`=1, `Airplane`=2, `Helicopter`=3, `Vtol`=4,
+  `Watercraft`=5, pinned from two already-landed cross-references in `spec-lua-api-behaviour.md` and
+  `spec-vehicle-data.md` §5.
 - **The other 21 write the vehicle state** listed in §8.1:
   - `0x00ac2180`, `0x00ad5460`, `0x00ab6cf0`, `0x00ad35b0`, `0x00ab48f0`, `0x00ab4680`, `0x00aa2310`;
   - the door group `0x00aa2080`, `0x00a88e70`, `0x00a88f00`, `0x00a88eb0`, `0x00aa1f60`;
@@ -2374,7 +2531,7 @@ The census lists **39** distinct callees in `0x00a70000`–`0x00af0000`, which c
   - and `0x00a794a0`, the HUD lookup.
 - **Outside that band,** the vehicle-AI object takes seven more: `0x00b2baf0`, `0x00b2e510`, `0x00b24cc0`, `0x00b25c40`, `0x00b29cf0`, `0x00b4d260` and its siblings, and `0x0092cdb0` (all identified by their `vehicle_ai` force-flag strings).
 
-**The exit finaliser `0x00b03d80` (state `0x19`) calls the same routines** (§10, OPEN 53): `0x00ab9c20`, `0x00abcd50`, `0x00ad35b0`, `0x00ad3590`/`0x0094f3e0`, the door group, the force flags, `0x00607ea0` (with (3, −1, 2) against the commit's (3, 5, 2)), `0x00b85fa0`, and `0x00ac2280` beside the commit's `0x00ac2180`. HIGH that these are the commit's undo pairs. U6.6 should check them against this list.
+**The exit finaliser `0x00b03d80` (state `0x19`) calls the same routines** (§14, OPEN 53): `0x00ab9c20`, `0x00abcd50`, `0x00ad35b0`, `0x00ad3590`/`0x0094f3e0`, the door group, the force flags, `0x00607ea0` (with (3, −1, 2) against the commit's (3, 5, 2)), `0x00b85fa0`, and `0x00ac2280` beside the commit's `0x00ac2180`. HIGH that these are the commit's undo pairs. U6.6 should check them against this list.
 
 ### 8.4 The weapon/item calls — holstering
 
@@ -2464,7 +2621,7 @@ It drives U4's machinery and does not duplicate it; the camera-side behaviour of
    - (a) Take the vehicle's camera angles (`0x00a77500`). When vehicle `+0x1a3c` is non-null, add half the vehicle's bounding-box height and depth (its own vtable `+0x60`) to the two values.
    - (b) Pass the descriptor's **`Primary_Camera_Angle`** set — or **`RC_Camera_Angle`** for a remote-controlled vehicle — to `0x0056cf60`: the look-at vector at `+0x628`/`+0x668` and the floats at `+0x63c`/`+0x640` resp. `+0x67c`/`+0x680`.
    - (c) Pass the **`Secondary_Camera_Angle`** set (`+0x648`, floats `+0x65c`/`+0x660`) to `0x0056cd10`.
-   - These are the three sets §4.12 found unreferenced by the camera band itself (§10 OPEN 28).
+   - These are the three sets §4.12 found unreferenced by the camera band itself (§14 OPEN 28).
 7. `0x0056b230()`.
 8. **Placement**, unless `0x0056b200()` holds or a gunner view was chosen:
    - activity state `0x00614d00()` = `0xf` → placement through `0x0063e030`, else as below;
@@ -2483,7 +2640,7 @@ The commit passes (human, vehicle, forced, 0, forced, request `+0x23` bit 0). So
 ### 8.8 Corrections and cross-spec flags raised by U6.4 (no other spec edited)
 
 - **`review/scoping-player.md` §5a.5:** the cheap stub's end state is §8.1. It must include the condition row `+0xcc8` = 8/9, `+0x16c8`, the seat record and the camera, not only `+0x16d4` and the vehicle handle. **§1.7 bullet 1:** the hand-off is the condition-row change (U2 §3.0 item 4), not a bit `0x005ac620` sets from `+0x16d4`. **§5a.2:** `0x00b4d260` belongs to the vehicle-AI object, not the weapon band (§8.4). The commit's 39 vehicle callees are confirmed (§8.3).
-- **This file, §4.12 and §10 OPEN 28:** the camera-angle sets are read by the vehicle-interaction hand-off `0x00b0bc10` (§8.6). §4.12's "not referenced by the camera band" stays true of the camera band itself. **§4.8:** the hand-off's class table maps class 2 to the airplane submodes, 3/4 to the helicopter ones and 5 to the watercraft ones (§8.6 step 3). **§10 OPEN 39:** the commit clears animation-controller `+0x1a4` bits `0x0800`–`0x4000` through `0x004b7f70`. **§10 OPEN 17 (drunk effect):** the driver's drunkenness is applied to the vehicle as the `drunk_driver` multipliers (§8.1).
+- **This file, §4.12 and §12 OPEN 28:** the camera-angle sets are read by the vehicle-interaction hand-off `0x00b0bc10` (§8.6). §4.12's "not referenced by the camera band" stays true of the camera band itself. **§4.8:** the hand-off's class table maps class 2 to the airplane submodes, 3/4 to the helicopter ones and 5 to the watercraft ones (§8.6 step 3). **§12 OPEN 39:** the commit clears animation-controller `+0x1a4` bits `0x0800`–`0x4000` through `0x004b7f70`. **§12 OPEN 17 (drunk effect):** the driver's drunkenness is applied to the vehicle as the `drunk_driver` multipliers (§8.1).
 - **`spec-lua-api-behaviour.md` §38.1 (`vehicle_engine_start`):** that section's HYPOTHESIS "classes 2/3/4 = car/helicopter/VTOL" conflicts with the camera class table — class 2 gets the airplane submodes, 3 and 4 the helicopter ones, and ordinary cars fall into the default branch. **§18.20/item 23:** a driver entering overwrites the vehicle's team `+0x16e0` with its own and keeps the old value in `+0x16e1` (§8.1).
 - **This file, §6 (U6.6):**
   - the commit's two exit-request sites — step 33's team check, and `0x00b24cc0`'s eviction of non-allied occupants for a player — are §6.3.3's "U6's own band" and "Other" rows;
@@ -2786,7 +2943,1539 @@ Each of these keys falls through to −1 and the discarded diagnostic (§9.4.2).
 
 ---
 
-## ~~3.~~ ~~4.~~ ~~5.~~ ~~6.~~ ~~7.~~ ~~8.~~ ~~9.~~ 10. OPEN items
+## 10. U6.3 — The enter route: states 0–8, the routing hub and the instant route
+
+**Scope.** Unit U6.3 of `review/scoping-player.md` §5a.3: the enter states 0–8 (approach, the routing hub, the waits, the arrival router, the cancel) and how an "instant" request reaches the seating commit. The 15 roots are the on-entry handlers of states 0–8 and the per-frame handlers of states 0, 2, 3, 4, 5 and 7 (census own size 3,812 instructions). The helpers owned here are the entry-point queue and seat-claim functions (§10.1) and the cancel-and-resubmit routine `0x00afe980` (§10.4.3). State 9 is U6.4's (§8) and is only reached here; the animated states `0x0a`–`0x13` are U6.5's and are characterised only as far as the routing question needs (§10.4.4). Slot, request and record offsets are §7.2's; states and setters are §7.5's. Network replication stays parked (§7.7); where it touches the routing it is recorded.
+
+**Method.** As §7–§9, Ghidra-free: capstone listings over `tools/harnesses/exe_va.py` with an esp-depth tracker (every stack operand resolved to the resolver's output slots), census call edges, a band sweep of `0x00af0000`–`0x00b12000` for every read and write of the instant bit and of request `+0x08`/`+0x30`/`+0x34`, raw image scans for the tweak globals, static reads of the condition table `0x0111f1e8` and of the submitter wrapper's jump table `0x00b10a68`, and the shipped `tweak_table.xtbl` (`tools/ai_base_xtbl/`). **Read in full:** the 15 roots (`0x00af9a90`, `0x00afd4c0`, `0x00af95d0`, `0x00af9640`, `0x00afabd0`, `0x00af9dd0`, `0x00afb630`, `0x00af96b0`, `0x00afb930`, `0x00afeb30`, `0x00afeca0`, `0x00afed10`, `0x00afeeb0`, `0x00aff1a0`, `0x00affc10`); the helpers `0x00afe980`, `0x00b0cb20`, `0x00b0b460`, `0x00b0b3f0`, `0x00b0b4c0`, `0x00b0c120`, `0x00af1a00`, `0x00b0efe0`, `0x00b0a330`, `0x00b0baf0`, `0x00b0b9a0`, `0x00afb170`, `0x00b0a170`, `0x00b11520`, `0x00ab5070`, `0x00ab5150`, `0x00ab51a0`, `0x00aa2370`, `0x00aa1ff0`, `0x00aa1fc0`, `0x00985d80`, `0x00993d30`, `0x00993d50`, `0x009b5690`, `0x009b9230`, `0x009b92e0`, `0x0097ea20`, `0x00ad2fa0`, `0x00b500f0`, `0x00d9fc60`, `0x0056dc20`, `0x00da1330`; for the routing question also `0x00afd0a0` (state `0x0f` on-entry), the exits of `0x00b01080`, the network applier `0x00af2950`, the resync sender `0x00af3550` and the submitter wrapper `0x00b10900`. `0x00993e90` (435) was read for its interface and exits only. Other callees are cited by role. No Ghidra project was opened or copied. No `.czn_pc` data was touched.
+
+### 10.0 Results up front (U6.3)
+
+1. **The hub `0x00afd4c0` routes on request flags, not on geometry** (§10.3). In order:
+   - **instant** (request `+0x20` bit 0) → **2** when the seat has an occupant, **4** when it is free, **8** when request `+0x08` = 1 or a tank's seat holds a player;
+   - else request `+0x23` bit 0 (the fast-entry request) → **`0x13`**;
+   - else **forced** (`+0x23` bit 3) or an **animation override** (request `+0x30` ≠ −1) → **`0x0f`**;
+   - else → **5**, the walk to the vehicle.
+
+   The target set {2, 4, 5, 8, `0x0f`, `0x13`} of §7.0 item 7 is CONFIRMED, with nothing missing. Every path leaves state 1 inside the same call, so **state 1 is never held across a frame**.
+2. **The instant-route HYPOTHESIS is refuted** (§10.4). `0x0f` is not the instant route. An instant request goes **0 → (upkeep) 1 → 4 → 9**, or 1 → 2 → 4 → 9 when the seat is occupied:
+   - the upkeep skips entry-point choice for it (entry = seat);
+   - the hub evicts the occupant with an instant exit request;
+   - state 4 commits as soon as the human is at the head of its entry-point queue.
+
+   With a free seat and an empty queue the commit runs **inside the first phase tick after the submission** (§7.6). `0x0f` is the "play the enter animation in place" route for forced and override entries. Its on-entry goes straight to 9 only when no `Enter` animation can be found (§10.4.4).
+3. **A second snap route exists: `0x00afe980`, cancel-and-resubmit-as-instant** (§10.4.3). It cancels the slot (state 8) and submits a fresh request with the instant bit set. The approach states fall back to it when they cannot proceed: navigation failure, the vehicle not instantiated, and the state-6 chooser's answer 8.
+4. **State 8 is a one-shot cancel that releases the slot inside its own on-entry handler** (§10.9). That is why it has no per-frame handler. It undoes the hub's claims, queue entry, door, hat and condition row, and returns the camera to the human. **It never calls the completion callback `+0x3c`**: a cancelled entry is reported only through the `+0x34` callback, and only if the hub had not yet run.
+5. **The states:**
+
+   | State | Role |
+   |---|---|
+   | 0 | requested; locks movement (condition row `0xa`); stick abort |
+   | 1 | the hub |
+   | 2 | instant: wait for the seat to empty |
+   | 3 | change seat: wait for the target seat |
+   | 4 | instant: take the seat |
+   | 5 | walk to the entry point |
+   | 6 | arrival router into the animated states |
+   | 7 | **dead** |
+   | 8 | cancel |
+
+   States 1, 6 and 8 are transient.
+6. **OPEN 60 is resolved for state 7, and the same evidence closes it for exit `0x18`/`0x1c`** (§10.8). No local code produces 7, and no packet can carry it. The senders transmit only enter states 0, 1, 6, 8 (`0x00afa400`'s 13 call sites), `0x22` seat snapshots and exit states `0x14`/`0x15`. The applier turns a received `0x22` into a fresh instant entry at state 0, never into 7.
+7. **Request `+0x08` is a request kind**, not a flag (§10.10):
+   - −1 is the default;
+   - **0 is approach only**: walk to the door, report through `+0x34`, cancel;
+   - **1 is "remove the occupant, then stop"** (also the deferred cancel of §6.4.2);
+   - **2 is a normal entry** from the wrapper `0x00b10900`.
+8. **The stick abort exists twice**, and only for the local player:
+   - in state 0, after an 800 ms grace and never for instant requests;
+   - in state 5, after an 800 ms grace from the start of navigation, unless player `+0x28ac` bit `0x02` is set.
+
+   Any non-zero walk-axis value cancels (§10.2, §10.6).
+9. **The instant bit is set at 7 sites and tested at 12** (§10.4.1). This corrects scoping §5a.5's "three places". Two sites in the hub force it: an entry seat with no `Enter_Animations`, and a missing or uninstantiated vehicle.
+10. **Defect (CONFIRMED in code): the entry-point queue is ordered by squared distance from the world origin.** The reference vector is the never-written bss vector `0x029cdb98`, not the entry point (§10.1). Separately, `0x00afe980`'s resubmission keeps none of the original request's callbacks (§10.4.3).
+11. **The approach tweaks were located with their shipped values:**
+    - `VI_pathfind_cancel_dist_multiplier` 1.5;
+    - `VI_pathfind_check_pause_distance` 2.5;
+    - `VI_pathfind_play_stop_dist` 1;
+    - `VI_on_vehicle_entry_max_y_diff` 0.3.
+
+    The same shipped `tweak_table.xtbl` holds **the six ride tweaks of OPEN 63**, which are resolved (§10.6, §10.13).
+
+### 10.1 Seat claims and the entry-point queue (helpers owned here)
+
+**Seat record readers** (vehicle seat record `+0x1340` + `0x30`·seat, §7.3). Each returns the handle resolved as a human through `0x004d7f30(…, 1)`, or 0 when the seat index is out of range (vehicle `+0x824` seats when the body is active, else 8). All CONFIRMED:
+- `0x00ab5070(vehicle, seat)` reads `+0x18`, **the seated occupant**;
+- `0x00ab5150` reads `+0x00`, the **claim**;
+- `0x00ab51a0` reads `+0x08`, the pending handle.
+
+**Claim and enqueue `0x00b0cb20(vehicle, human, seat, entry)`** (220; only caller the hub). Steps (CONFIRMED):
+1. The human becomes the seat's claim if the claim is empty; otherwise it becomes the **next claim** (`+0x10`).
+2. It is inserted into the record's queue for the entry seat's `Queue` (record `+0x10` + `0xd0`·`Queue`; `Queue` is `Vehicle_Interaction_Info` seat sub-record `+0x0C`, §7.1).
+3. Human `+0x16c8` = seat and `+0x16cc` = entry.
+
+The insertion position:
+- **appended** when seat = entry, or when the queue is empty;
+- otherwise **inserted before** the first live queued human that either is farther away by the measure below or is heading for the entry seat itself (its `+0x16c8` = entry). So humans passing through a seat go ahead of the seat's own claimants.
+
+**The distance is `0x00da1330` (squared distance) from the human's controller position to the bss vector `0x029cdb98`, not to the entry point.** `0x029cdb98` is zero in the image, has 555 readers and no store in `.text` (raw store-encoding scan), so it is the shared zero vector (HIGH). **The queue is therefore ordered by distance from the world origin.** CONFIRMED as code; the runtime value is HIGH; **defect HYPOTHESIS** (OPEN 74).
+
+**Queue queries** (CONFIRMED):
+- `0x00b0b460(vehicle, entry)` returns the **queue head**'s handle, or the null handle;
+- `0x00b0b3f0(human, vehicle, entry)` asks "is the human the queue head";
+- `0x00b0b4c0(vehicle, human, entry)` returns the human's 1-based position, or −1.
+
+**Other helpers** (CONFIRMED):
+- `0x00af1a00(handle)`: the character is in phase 1, state 5.
+- `0x00b0c120(vehicle, human, occupant, seat)`: true when the occupant is not dead (`0x0096f4f0`), the seat is 0, and vehicle `+0x16e8` is not already this human. Each caller then **records the hijack**: vehicle `+0x16e8`/`+0x16ec` = the human's handle and `+0x16c0` |= `0x10`. That is the bookkeeping §8.1 reads back.
+- `0x00b0efe0(human, &position, &direction)`: the target of the human's chosen entry point (slot `+0x20`, `+0x24`, through `0x00b0eac0`); −1 without a slot.
+- `0x00b0a330(human, vehicle, flag)`: the **approach radius** — 15.0 for a tank (`0x00ad3140`) or when *flag* is set, else 12.0. It is 12.0 regardless when the human passes `0x0094f690` and `0x00ad39d0(vehicle, 0, 1)` holds.
+
+### 10.2 State 0 — requested
+
+**On-entry `0x00af9a90`** (259; CONFIRMED by full listing; the store and the phase-boundary writes are §7.8):
+1. Human `+0x16d4` = 1; slot phase 1, state 0, `+0x10`/`+0x14`/`+0x18` = −1; human `+0x16c0`/`+0x16c4` = the vehicle handle.
+2. Unless request `+0x21` bit 0 (skip seat resolution): request `+0x10`…`+0x1c` = −1.
+3. **Local player only** (`0x0091f5e0`), with p = `0x009da4e0()`:
+   - call `0x007e2b30()`;
+   - leave fine aim (`0x009da830` → `0x009dcf10`) and scope view (`+0x1d95` bit `0x10` → `0x009e6510(p, 0)`);
+   - p `+0x2054` = −1;
+   - `0x0056dc20(0.0)`, which clears the camera's look-at object when it is the camera target (camera band, role HIGH);
+   - p `+0x1d97` bit `0x10` cleared (a sprint style, §3.7);
+   - the animation-facing velocity `+0x203c` zeroed (`0x00d9fc60`).
+4. Cancel what the human is doing:
+   - reloading (`0x009ba8b0`) → `0x009c07a0`;
+   - skydiving (`0x009adb00`) → `0x009ae150(human, 0)`;
+   - a held weapon that passes `0x00b81440` → `0x009c7cc0` (the driving-request helper of `spec-ai-runtime.md`).
+5. Instantiated human (`+0x33` bit `0x08`):
+   - instant → `0x00957c80(human, 0.2, 0, 0, 0)`;
+   - otherwise, for each of the animation states `0x2fb`, `0x2fc`, `0x2fd` and `0x1d8f` that is active (`0x004b4ce0`): `0x00957ee0(human, id, 0.2, 0, −1, 0)`, then `0x004b7f70` on the controller. HYPOTHESIS: these end those states with a 0.2 blend; §6.9 uses the same call to play `0x1d95`.
+6. **`0x00942110(human, 0xa, 0xff, −1.0)`: condition row `0xa`.** Its slots (static read of `0x0111f260`) are:
+   - classify `0x005ab240`;
+   - **no move slot**;
+   - the standard look slot `0x005ab6a0`.
+
+   So **the human cannot walk but can look** while the entry is pending. Row `0xb`, which exit state `0x15` sets (§6.7), has the same three slots.
+7. Disarm the record timer (`0x00af2660`), so the 250 ms upkeep runs on the next tick.
+8. **Arm slot `+0x84` (request `+0x28`) to 800 ms** — the stick-abort grace.
+9. `0x0094fa00(human)`; human `+0xec` bit `0x100000` cleared.
+
+**Per-frame `0x00afeb30`** (120; CONFIRMED). Only when the occupant is the local player (`0x0091faf0`), the 800 ms timer has expired, and the request is **not** instant:
+- A = |`0x005bb530(2, 0)`| and B = |`0x005bb530(3, 0)`| (`CAA_WALK_FORWARD_BACKWARD` and `CAA_WALK_TURN_LEFT_RIGHT`, §1.9);
+- **any non-zero value** (compared with 0.0, no dead zone of its own) runs an inlined set-enter 8: the `Set Enter` log, the network send `0x00afa400(record, i, 8)`, then the cancel `0x00afb930`.
+
+Nothing else happens in state 0. The way out is the upkeep (§7.6): → 1, or → 8 when no seat can be found.
+
+### 10.3 State 1 — the routing hub `0x00afd4c0` (976; CONFIRMED by full listing)
+
+In order:
+1. Resolve. State 1; `+0x10`/`+0x14`/`+0x18` = −1.
+2. **The "begun" callback.** If request `+0x34` is set, call it once (cdecl) with (vehicle handle, occupant handle, request, **1**), then clear it.
+3. **Surface** slot `+0x1c` (U6.1's surface token):
+   - 3 (`water`) when `0x009b5690` holds (human `+0x1858` ≠ 0; HIGH: swimming);
+   - else 2 (`vehicle`) when request `+0x23` bit 2 is set;
+   - else 1 (`ground`).
+
+   Request `+0x23` bit 2 is written by the upkeep's entry-point chooser `0x00af5840`. HIGH: an entry from on top of a vehicle (§10.6).
+4. `0x00b11520(vehicle)`: when the vehicle is owned here, release the object it holds at `+0xc40` (role only; HYPOTHESIS: a towed or carried object). Then, when the vehicle is owned here, `+0xc72` bit `0x10` is set and `0x00ab6210(vehicle handle)` is 0: `override_speed` off (`0x00b29cf0`, as §8.1).
+5. Animation controller `+0x34` = `0x004b16c0(record +0xea4)` (role only). Human `+0xa50` (16 bytes) and `+0xa68` = 0.
+6. **Local player: clear the way.** While the queue head of the seat's queue (`0x00b0b460(vehicle, request +0x10)`) exists, is **not** a live player-class object, and is in state 5 (`0x00af1a00`): cancel its entry (`0x00af2460(head, 1)`) and look again. The player thus pushes walking NPCs out of its queue.
+7. **Claim and enqueue**: `0x00b0cb20(vehicle, human, request +0x10, request +0x18)` (§10.1). Then `0x009b92e0(human)` (clears `+0x1790`…`+0x17cf`, `+0x17d0` = 0.0, `+0x17d4` = −1; role only). The entry door: `0x00a88eb0(vehicle, 0x00aa2080(vehicle, request +0x18), 0)`, the counterpart of the commit's `(…, 1)` (§8.1).
+8. Combat-ready (`0x00943a20`) → `0x00943960(human, 0, 0)` (clear it). Then `0x00950b70(human, 0.3)` — "player gave input" (§3.4) — and a scripted combat move (`0x009634f0`) → `0x009682d0(human, 0)`.
+9. Player-class (`0x00853b30(human, 0x21)`):
+   - if inventory `0x005fe3e0(…, 1)` returns an item → `0x009bfbc0(human, 1, 0)`;
+   - if `0x005fe460(…, 0)` = `0xa` → `0x009bfbc0(human, 0, 0)` (weapon band, role only).
+10. Human `+0xec` bit `0x100000` = NOT `0x0052a230(human)` (the brute test) AND NOT forced. The commit and the cancel clear it again.
+11. **Force instant** (CONFIRMED):
+    - (a) not instant, and the entry seat's sub-record `+0x18` (`Enter_Animations`, read at descriptor `+0xa7c` → `+0x5c` + `0x24`·request `+0x18`) is NULL → set instant (`0x00afd881`);
+    - (b) no vehicle, or vehicle `+0x33` bit `0x08` clear → set instant (`0x00afd897`).
+12. Local player with request `+0x22` bit `0x20` → `0x00545010(human)`. Bit `0x20` is cleared in every case.
+13. **`Should Hide Big Hats`**: for a player-class human whose seat (`+0x16c8`) has seat byte `+0x0A` bit 7, the human's customization `+0x2088` hides item 5 through `0x009f0860`/`0x00821740`/`0x009f34d0`. The cancel restores it (§10.9).
+14. Instantiated human: end animation states `0x305` and `0x325` (`0x004b41b0(controller, id, 0.0, 0)`; role as §3.4).
+15. **Routing.** Decision table (CONFIRMED; sites in parentheses):
+
+    | Test, in order | Then | → |
+    |---|---|---|
+    | **instant** | §10.4.2 steps H1–H4 | **8** (`0x00afda8c`) when request `+0x08` = 1, or for a tank whose entry seat holds a player; else **2** (`0x00afdbf9`) when the seat has an occupant; else **4** (`0x00afdc21`) |
+    | request `+0x23` bit 0 | record the occupant as victim (slot `+0x48`, `+0x58` bit 0, hijack bookkeeping) — no eviction | **`0x13`** (`0x00afdd3f`) |
+    | otherwise | steps 16–18 | **5** if not forced and request `+0x30` = −1, else **`0x0f`** (shared tail `0x00afe05e` → `0x00afe06c`) |
+
+16. **Vehicle-AI reaction** (vehicle owned here).
+    - The record word `+0x08` is used as a **local variable**: it is set to 1 or 2 and **reset to 0 before the hub returns**, so it is 0 whenever any other code can see it (this answers §7.1's "Meaning: U6.3").
+    - When the seat is 0, or the seat is 1 and the player is the recorded hijacker in activity state 4 (`0x00614d00()`), the driver d = `0x004d7e00(0x00ab5070(vehicle, 0))` is examined. The vehicle-AI type byte `+0xc68` must not be 3, and `0x00b1f6c0` of it must be false.
+    - Then: `0x004e6600(d, human)` → kind 2. Otherwise every occupant on team 7 in AI mode `0x19` (`Passenger`) gets `+0x8d0` |= 2 and condition row 9 (`0x00942110(occupant, 9, 0, −1.0)`), and the kind is 1.
+    - Request `+0x20` bit `0x20` also gives kind 1.
+    - Kind 1 → `0x00b50180(vehicle +0xc68, human handle)` unless `0x00b1f6c0`; kind 2 → `0x00b464c0(…)` and vehicle `+0x1ac4` armed to 5000 ms.
+    - These are role only (vehicle AI). HYPOTHESIS: the driver flees (kind 2) or the vehicle waits for its passengers (kind 1).
+17. **Door unlatch** (descriptor `+0x874` bit 0):
+    - when the entry has a working door (`0x00aa2370`, both outputs) whose open fraction (`0x00aa1ff0`) is at most 0.1, call `0x00aa1eb0(vehicle, part, 0.1, 0, 1, 0.0, 0.0, 1)`;
+    - and **slot `+0x30` = the door part**, which the cancel and the commit reset to −1.
+18. Animation state `0x94` active → request `+0x21` |= `0x20`.
+19. After set-enter 5/`0x0f` returns: a human owned here with request `+0x08` = 2 and not (AI mode `0xe` with action `0x25`) → `0x004e4130(human, 0x26)` (`human_ai_data`).
+
+### 10.4 The instant route
+
+#### 10.4.1 The instant bit (request `+0x20` bit 0 = slot `+0x7c` bit 0)
+
+**Set at** (band sweep, CONFIRMED):
+- the submitter: `0x00af22c8` from character `+0x1c9c` bit 3, and `0x00af2408` when the vehicle has no seat table, §7.4;
+- the network applier `0x00af2add` (§10.8);
+- the upkeep: `0x00af5e03` (objects not instantiated, §7.6) and **`0x00af615f`, when no entry point can be resolved and request `+0x08` ≠ 1**;
+- the hub: `0x00afd881` and `0x00afd897` (§10.3 step 11);
+- the resubmission request of `0x00afe980` (on the stack, §10.4.3).
+
+**Read at:**
+- the submitter (`0x00af22cc`, `0x00af22ea`);
+- the upkeep `0x00af5fa8`;
+- state 0's on-entry `0x00af9c45` and per-frame `0x00afeb64`;
+- the hub (`0x00afd85f`, `0x00afd9b1`);
+- state `0x0a`'s per-frame `0x00afff52`;
+- the commit `0x00afcb66` (§8.2 step 20);
+- seat choice `0x00b0fdf0` (three sites, U6.2).
+
+That is 12 test sites. The commit also copies the bit into its exit request (`0x00afd060`, §8.2 step 33).
+
+#### 10.4.2 The route, branch by branch (CONFIRMED)
+
+1. **Submit** (§7.4) → set-enter 0, which plays `0x00957c80` instead of ending states (§10.2 step 5). **The stick abort is disabled.**
+2. **Upkeep** (next tick, §7.6): an instant slot skips entry-point choice — **request `+0x18` = request `+0x10`** (enter through the seat's own sub-record), slot `+0x20` = −1 — and is sent to set-enter 1. **No seat found → 8.**
+3. **Hub** (§10.3 steps 1–14 run first; queueing in step 7 uses entry = seat), then the instant branch:
+   - **H1.** o = the seat's occupant. With o and request `+0x08` ≠ 0:
+     - slot `+0x48`/`+0x4c` = o's handle and `+0x58` |= 1;
+     - hijack bookkeeping (`0x00b0c120`).
+     - For a **tank** (`0x00ad3140`): v = the occupant of entry seat request `+0x18`. If v is player-class → **set-enter 8 and return**. Otherwise v is killed (`0x0096fa20(v, human, −1.0, null handle, 0, 0)`, the damage routine of `spec-lua-api-behaviour.md`; HIGH: lethal) and, when owned here, destroyed (`0x00853ea0(v, 0, 0)`).
+     - **Any other vehicle**: when this machine owns the entering human (`0x008ae480`), o gets an **instant exit request** (`0x004dccd0`, exit-request `+0x30` bit 0, `+0x28` = −1; `0x00af3cd0`, §6.3).
+   - **H2.** Without o (or with request `+0x08` = 0): slot `+0x48` = null and `+0x58` bit 0 cleared. When the seat is 0 and vehicle `+0x16e8` is not this human, clear it and vehicle `+0x16c0` bit `0x10` (forget an old hijack).
+   - **H3.** Stop a ragdoll (`0x009a1e10(human, 0)`). Instantiated human → `0x00957c80(human, 0.0, 0, 0, 0)`.
+   - **H4.** Request `+0x08` = 1 → **8**; o present → **2**; else → **4**.
+4. **State 2** (§10.5) waits, without a time limit, until the seat has no occupant, then → 4. **With request `+0x08` = 0 nobody evicts the occupant** (the hub skipped it), so the wait lasts until the occupant leaves of its own accord.
+5. **State 4 on-entry** (§10.5): stop a ragdoll. If the human is the **head of its entry-point queue** (`0x00b0b3f0`): tilt fix, then **set-enter 9 — the commit (§8)**. Otherwise it stays in 4, and **the per-frame handler retries every frame**:
+   - it cancels a queue head that is still walking (state 5);
+   - once at the head, it evicts any occupant instantly and commits.
+
+**So a free seat with an empty queue commits inside the first upkeep pass after the submission.** Every step from the upkeep's set-enter 1 to the commit is a synchronous call chain.
+
+#### 10.4.3 Cancel and resubmit: `0x00afe980(record, i)` (136; CONFIRMED)
+
+Builds a fresh `0x44`-byte request on the stack (all −1, `+0x20`…`+0x24` and `+0x34`/`+0x3c` 0), then copies from the old one:
+- `+0x00` (requested seat), `+0x08` (kind) and `+0x0c` (search mode);
+- the dword `+0x20`, **with bit 0 (instant) set and `+0x23` bit 0 (fast) cleared**.
+
+It then runs an inlined set-enter 8 (log, `0x00afa400(record, i, 8)`, the cancel `0x00afb930` — which releases the slot) and **submits the new request** with `0x00af22a0(human, vehicle, &new)`. The human therefore restarts at state 0 as an instant entry and follows §10.4.2.
+
+**Lost on the way:**
+- the callbacks `+0x34` and `+0x3c`;
+- the forced bit is kept (it is in the `+0x20` dword), but `+0x22`/`+0x24`/`+0x28`…`+0x30` are not.
+
+A script waiting on `+0x3c` is never told that its entry completed through a resubmission (OPEN 73).
+
+**Callers** (11): states 5 and 6 (on-entry), the per-frame handlers of 5, `0x0a`, `0x0b`, `0x0c`, `0x0d`, `0x0f`, `0x11` and `0x13`, and `0x00b01460`.
+
+#### 10.4.4 What `0x0f` is (refutes scoping §5a.5's HYPOTHESIS)
+
+**On-entry `0x00afd0a0`** (167; CONFIRMED):
+1. State `0x0f`; `+0x10`/`+0x14` = −1 and `+0x18` = 4.
+2. `+0x14` = 4 when request `+0x21` bit `0x20` is set (the `enter shopper` variant, §9.3).
+3. **Forced**: `+0x10` = 0 (`enter guardian angel`), and the human's attached `ga_cable` object (`0x00afb170`; the cancel and the commit destroy it) plays animation state `0x1d4` (`0x004b1b90`).
+4. The entry door is driven open (`0x00aa1eb0(vehicle, part, 1.0, 0, 1, 0.0, 0.0, 1)`) and the entry seat record's `+0x20` timer is disarmed.
+5. **e = request `+0x30`; if −1, e = the `Element` lookup `0x00b0ad10`** (§9.4).
+6. With e and an animation controller (`0x00487e80`), the element is played (`0x00af45a0(human, e)`). **Otherwise → set-enter 9 directly** (`0x00afd243`).
+7. Unless `0x00b0ae40(human, e)`: the camera hand-off `0x00b0bc10(human, vehicle, 0, slot +0x1c ≠ 2, 0, 0)` (§8.6).
+
+**Per-frame `0x00b01080`** (exits only, U6.5's):
+- when the animation ends: → **9** when the entry seat is the destination (request `+0x18` = `+0x10`, `0x00b012d6`); → `0x11` when the destination is free; → 3 otherwise (all through the set-enter at `0x00b0131d`);
+- `0x00afe980` when the vehicle is gone.
+
+**So:**
+- `0x0f` is reached only from the hub, for forced or override requests, and from the state-6 chooser;
+- it plays the `enter` animation **at the human's current position**, with no walk;
+- the direct jump to 9 is a **fallback for a missing animation**, not an instant path;
+- **instant requests never reach `0x0f`**: the hub tests the instant bit first, and a forced entry resubmitted by `0x00afe980` is instant.
+
+### 10.5 States 2, 3 and 4
+
+**On-entry of 2, 3 and 7** (`0x00af95d0`, `0x00af9640`, `0x00af96b0`; 36 each; CONFIRMED). They are byte-identical except for the stored state: resolve, store the state, `+0x10`/`+0x14`/`+0x18` = −1. Nothing else.
+
+**State 2 per-frame `0x00afeca0`** (40): seat (request `+0x10`) without an occupant → set-enter 4. Reached only from the instant hub.
+
+**State 3 per-frame `0x00afed10`** (135). Entered from `0x0f`'s per-frame when the destination seat is taken (a change of seat after entering through another seat):
+- o = the destination's occupant, p = its claim (0 when the claim is this human);
+- o not already exiting (`0x009b9230`: `+0x16d4` = 2) → **o gets an ordinary exit request** (`0x00af3cd0`, exit request `+0x28` = −1);
+- no o and no foreign claim → inlined set-enter `0x11` (log, then `0x00af99b0`), the change-seat animation (U6.5).
+
+**State 4 on-entry `0x00afabd0`** (193):
+1. State 4.
+2. Human owned here:
+   - stop a ragdoll (`0x009a5520(human, 0, 0)`, `0x009a1e10(human, 0)`);
+   - `0x0097cdd0` → `0x0097cf40(handle, 1)`;
+   - in water (`0x009b5690`) → `0x009b63f0(human, +0xccc)`.
+3. Instantiated human at the queue head → **tilt fix**: a vehicle passing `0x00ad3270` whose orientation angle from `0x00da48a0` (on `+0x4c`), doubled, exceeds 0.5 in magnitude is righted through `0x00a87880` (role only). Then **set-enter 9**.
+4. Hijack bookkeeping for the recorded hijacker (`0x00b0d280(vehicle, human, 1)`).
+5. A seat occupant other than the human that is not already exiting gets an ordinary exit request. After a successful commit the occupant is the human, so this only fires when the commit did not run.
+
+**State 4 per-frame `0x00afeeb0`** (235):
+1. c = the queue head of the seat's queue, j = c's slot (`0x00b08390`). **If slot j is in state 5, j's entry is cancelled** (inlined set-enter 8). With an empty queue, j = −1 and slot −1's state (record `+0x5ac`) is read (OPEN 56).
+2. The local player additionally needs an instantiated vehicle.
+3. Not queue head (`0x00b0b3f0`) → wait.
+4. Occupant o → victim fields and hijack bookkeeping; **o gets an instant exit request** when this machine owns the entering human.
+5. Tilt fix; **set-enter 9** with the network flag = `0x008addb0(human, 0)`.
+
+### 10.6 State 5 — walking to the entry point
+
+**On-entry `0x00af9dd0`** (264; CONFIRMED):
+1. State 5.
+2. **Human not owned here** → `0x00986920(human, 3, 0)` (**`+0xccd` = 3**, §10.13) and return; the owner drives the walk.
+3. **Convertible-style entry.** On a vehicle with `+0x16c8` bit `0x4000` (`0x00ad2fa0`; HYPOTHESIS: open-topped), request `+0x21` bit `0x40` (the `enter convertible` variant, §9.3) is set when either:
+   - the entry has no usable door (`0x00aa2370`); or
+   - all of the following hold: descriptor `+0x870` bit `0x40000` is clear, the human is the queue head, the door works and is closed (`0x00aa1fc0`), and a coin flip (`0x00ea4290` odd) comes up — or the byte `0x02845b1d` is set, which has no writer in `.text`.
+4. **Slot `+0x24` = the `Interaction_Point_Type` the walk targets** (`spec-tables-vehicle-world.md` §4.1), with c = request `+0x21` bit 6:
+   - entry seat occupied or claimed by someone else: 4 + c (`Enter Start Extract`, `… Convertible`) when the seat's point set has a type-4 point for the chosen side (`0x00b0b9a0(vehicle, entry, slot +0x20, 4, 0)`); otherwise c;
+   - free: 2 (`Enter Start Lift`) for request `+0x22` bit 1, 3 (`Enter Start Pull`) for bit 2 (both set by the upkeep from the entry angle), otherwise c (`Enter Start` / `… Convertible`).
+
+   This refines §9.3's "the upkeep (0)".
+5. **Start navigating**: `0x00993e90(human, +0x1714 bit 4, 1, 0)` — the human-side **move-to-entry-point navigator**. While active it sets `+0xccd` = 3 with `+0xcce` = `0xd`/`0xe`, and it returns false when it cannot route (it also sets `+0x1854` bit 0). Role HIGH; internals OPEN 76.
+   - **Success** → arm slot `+0x84` to 800 ms (the abort grace).
+   - **Failure** → set-enter 8 when the seat (request `+0x10`) is occupied or claimed by someone else and `0x0097ea20(human)` is false; **otherwise `0x00afe980`**. `0x0097ea20` is never false for a player-class human; for others it is `0x005088c0`, not read. So the player, and any human facing a free seat, always snaps in.
+
+**Per-frame `0x00aff1a0`** (758; CONFIRMED by full listing). Nothing happens unless the human is owned here. Then, first match wins:
+1. **Stick abort** — local player, player `+0x28ac` bit `0x02` clear, the 800 ms timer expired, any non-zero walk axis → inlined set-enter 8.
+2. No vehicle, or the vehicle not instantiated → **`0x00afe980`**.
+3. **Too far** — unless the entry seat has `Ignore Distance Checks` (seat byte `+0x09` bit 3): when the 3-D distance from the human's controller position to the vehicle position exceeds `0x00b0a330`'s radius (12 or 15) × **`VI_pathfind_cancel_dist_multiplier`** (`0x02845c10`, shipped 1.5) → set-enter 8.
+4. **While navigating** (`+0xccd` = 3). E = the entry point (`0x00b0efe0`).
+   - (a) Request `+0x23` bit 2: when |(E − position) · vehicle up row| exceeds **`VI_on_vehicle_entry_max_y_diff`** (`0x02845b20`, 0.3) → set-enter 8. HIGH: the entry is from on top of a vehicle and the human has fallen off it.
+   - (b) Moving (`+0xccc` ≠ 0) and within **`VI_pathfind_play_stop_dist`** (`0x02845bf0`, 1.0; horizontal distance):
+     - `0x00993d50(human, 1)` ends the walk;
+     - when `0x00af45a0(human, 0x327)` plays the stop, state `0x1d95` is placed by `0x004b7d50` at the computed transform with blend 0.3, and controller `+0x12c` = 0.0;
+     - slot `+0x58` |= 4.
+   - (c) Within **`VI_pathfind_check_pause_distance`** (`0x02845bd0`, 2.5):
+     - wait (`0x00993d30`) while the entry seat has a pending handle (`0x00ab51a0`), or while the human is not the queue head;
+     - at the head: with human `+0xc36` bit 2, `0x009947b0` and collision filter `0x1c` (`0x00759d80`);
+     - otherwise, unless `+0xccd`/`+0xcce` = 3/`0xe` already, re-navigate in final-approach mode (`0x00993e90(…, 1, 1)`): success → filter `0x1c`; failure → `0x00993d50(human, 0)`, which marks the walk as failed.
+   - (d) Otherwise keep navigating (`0x00993e90(…, 1, 0)`). Failure → `0x00993d50(human, 0)`.
+5. **Arrived** (`+0xccd` ≠ 3):
+   - wait for state `0x1d95` to finish (`0x004b4320`);
+   - **walk failed** (`+0x1854` bit 0) → set-enter 8;
+   - with human `+0x2bb` bit `0x10`, re-navigate when farther than 0.36 from E;
+   - wait until the human is **first in the queue** (`0x00b0b4c0` = 1);
+   - when the destination is the entry seat itself, also wait until the human holds its claim;
+   - unless slot `+0x58` bit 2 is set: when the human's position and its `+0xc40` point (role not read) are more than 0.36 apart → re-navigate, or set-enter 8 when that fails.
+6. **At the door:**
+   - **request `+0x08` = 0 (approach only)** → call the `+0x34` callback with 1 (if still set; the hub normally consumed it) and **set-enter 8**;
+   - otherwise → collision filter `0x15`, `0x0094cca0(human, 0, 0)` (the controller parked), for the local player `0x007f0140(1)` (`hud_inventory_hide`), then **set-enter 6**.
+
+### 10.7 State 6 — the arrival router `0x00afb630` (241; CONFIRMED)
+
+1. State 6.
+2. **Snap to the entry point**: when `0x00b0efe0` succeeds, the human's position and then its orientation are set through its own vtable `+0x44`/`+0x48`. The heading is built from the point's direction about (0, 1, 0) (`0x00da05a0`, `0x00da5aa0`).
+3. Controller present: `0x0094cca0(human, 0, 0)` and collision filter `0x15`. Human `+0xa50`/`+0xa68` = 0.
+4. Request `+0x08` = 2 with an occupant → victim fields and hijack bookkeeping.
+5. Vehicle-AI type `0xb` and the local player: for a victim (slot `+0x48`) with a non-zero team, `0x009dd390(player, victim, vehicle)` and `0x00b33dc0(vehicle, player handle, vehicle +0x40, 7, −1)`. Role only; HYPOTHESIS: a carjacking report.
+6. **Request `+0x08` = 1 and an empty entry seat → set-enter 8** (the occupant is already out, §10.10).
+7. Otherwise s = the chooser `0x00afb220(record, i, 0)` (§7.5, §9.5):
+   - **s = 8 → `0x00afe980`** (snap in instead of cancelling);
+   - otherwise → set-enter s (`0x0a`…`0x0f`).
+
+### 10.8 State 7 — dead (resolves OPEN 60 for state 7)
+
+**Per-frame `0x00affc10`** (128; CONFIRMED). When both the human and the vehicle are instantiated (`+0x33` bit `0x08`), it runs an inlined set-enter 9 (log, the commit). If the slot is then in phase 3, it sends the record snapshot **unconditionally** — this copy has no flag test. HIGH: a "wait for both objects, then seat" state for network peers.
+
+**No producer exists:**
+- **Locally**, none. §7.5's survey is confirmed by this unit's full reads of states 0–8: their transitions are 1, 2, 4, 5, 6, 8, 9, `0x0f`, `0x11`, `0x13` and the chooser's set.
+- **Over the network**, none. The applier `0x00af2950` (CONFIRMED by listing) applies the received slot and dispatches on the received new state:
+  - 0 → set-enter 0;
+  - `0x14` → set-exit `0x14`;
+  - **`0x22` → the slot is reset to phase 0 / state −1 with instant and skip-resolution set and request `+0x18` = `+0x10`, then set-enter 0** — a received "seated" becomes a fresh instant entry (§10.4.2);
+  - anything else → the setter of the slot's received phase.
+
+  The values that can arrive are fixed by the senders:
+  - `0x00afa400`, called only from set-enter cases 0, 1, 6, 8 and from the nine inlined state-8 copies, all pushing 8 (raw-scan sites `0x00afe659`, `0x00afe68a`, `0x00afe738`, `0x00afe789`, `0x00afeaf5`, `0x00afec7d`, `0x00afefe1`, `0x00aff34c`, `0x00b00056`, `0x00b00924`, `0x00b00b27`, `0x00b00f07`, `0x00b0177c`);
+  - the phase-3 snapshots (the commit's inlined sends, and the resync `0x00af3550`, which sends every locally owned riding slot), all carrying `0x22`;
+  - `0x00b03010` (set-exit cases `0x14`/`0x15` only).
+
+**So enter state 7 cannot be reached in a session where every machine runs this executable. The same argument covers exit `0x18` and `0x1c`, which no sender carries either.** CONFIRMED for the code paths. A peer running a different build is not excluded (OPEN 60 annotated).
+
+### 10.9 State 8 — the cancel `0x00afb930(record, i)` (355; CONFIRMED by full listing)
+
+It returns at once when *record* is null. Otherwise, in order:
+1. State 8, `+0x10`/`+0x14`/`+0x18` = −1. `0x00af3630(human +0x16c0/+0x16c4, human handle, 1)` drops a queued packet for the pair (as §8.2 step 2).
+2. Slot `+0x30` (the door part) = −1.
+3. **The `+0x34` callback**, if still set: call it with (vehicle handle, occupant handle, request, **0**) and clear it. **`+0x3c` (completion) is not touched**.
+4. `0x00b0b270(vehicle, human, 1)`: leave the entry-point queue and release or promote the seat claim (§7.3).
+5. Player-class human:
+   - `+0x1d95` bit `0x04` cleared;
+   - the hat hidden at step 13 of §10.3 is restored (`0x009f0860`/`0x00821740`/`0x009f3530`). This does not test the seat flag.
+6. Still navigating (`0x00985d80(human, 3, 0)`, i.e. `+0xccd` = 3) → `0x00986920(human, 1, 0)` for a player-class human, `(human, 0, 0)` otherwise.
+7. Vehicle:
+   - owned here, seat-0 occupant of class bit `0x22`, vehicle-AI type `0xb` → `0x00b500f0` (the AI's bytes 0/1 restored from `+0x3c8`/`+0x3c9`);
+   - **the entry seat's `Primary_Access_Seat` and `Secondary_Access_Seat` records**, when unclaimed, get their **`+0x20`** timer armed to a random 250–750 ms. The commit arms `+0x24` of the same records (§8.1), and `0x0f` disarms `+0x20` (OPEN 78);
+   - entry seat 0 → `0x00ab48f0(vehicle, 0)`.
+8. **`0x00b0baf0(human)`** — the camera returns to the human, for the local player only. When the camera is in a vehicle submode (3–`0xc`, `0x11`, `0x14`, `0x26`–`0x2a`, `0x32`, `0x33`) or targets this human:
+   - leave scope view;
+   - request the on-foot submode (`0x19` when `0x00994f60`, else `0x0056db50()`, not when the submode was `0x11`);
+   - camera target = the human;
+   - `0x00574e30(0.0, 0)`.
+
+   The exit finaliser uses the same routine. Then `0x00b0a170(human)`: `+0x16c0`/`+0x16c4` = null.
+9. Not down or dead (`0x0096f540`) → **`0x00942110(human, 0, 0, −1.0)`: condition row 0**, which undoes state 0's row `0xa`.
+10. Controller present → `0x0094f450(human, 1, 0)` (collision filter re-chosen) and `0x0094cca0(human, 1, 0)` (the controller back on).
+11. Forced → the `ga_cable` object is destroyed (`0x00853ea0`).
+12. Human `+0x1b10` = 0 and `+0x1b08`/`+0x1b0c` = null. Slot `+0x2c` = −1. **Release `0x00b086d0(i)`** (§7.3): `+0x16d4` = 0, `+0x1c48` = 0, the slot freed.
+13. Then on the human:
+    - instantiated → `0x00957c80(human, 0.2, 0, 0, 0)`;
+    - `+0xe4` bit 4 with `0x00ad3820` → `0x008ccb90(human, 0, 1, 1)`;
+    - not owned here → `+0xe4` bit 4 cleared;
+    - not ragdolling → **set upright at its current heading** (vtable `+0x48` with a pure yaw from `0x00da3910`);
+    - `+0xe4` |= `0x1000`, `+0xec` bit `0x100000` cleared.
+
+**Callers:**
+- set-enter 8, from: the cancel requests `0x00af2460`, `0x00af3e10` and `0x00af3f20` (§6.4); the upkeep; the hub; states 5 and 6;
+- the inlined copies, from: states 0, 4, 5, `0x0a`, `0x0c`, `0x0d`, `0x0e` and `0x13` per-frame, and `0x00afe980`.
+
+**What a cancel leaves behind:**
+- a free human on condition row 0;
+- the seat claim and queue place given up, the next claim promoted;
+- the camera back on foot;
+- no slot.
+
+**It does not:** close the door it unlatched (only slot `+0x30` is forgotten); undo the `+0x1d97`/scope/fine-aim/reload/skydive cancellations of state 0; reverse the vehicle-AI reactions of hub step 16.
+
+### 10.10 Request, slot and record fields settled here
+
+| Field | Meaning | Evidence |
+|---|---|---|
+| record `+0x08` | **hub-local scratch**: the vehicle-AI reaction kind (1/2), always reset to 0 before the hub returns | §10.3 step 16 |
+| request `+0x08` (slot `+0x64`) | **request kind**: −1 default; **0 approach only** (state 5 ends at the door with `+0x34`(…, 1) and a cancel); **1 remove the occupant, then stop** (instant: evict then 8; state 6: 8 once the seat is empty; set by the submitter for `+0x22` bit 3 with an occupied seat, and by `0x00af2460` as the deferred cancel during `extract`); **2 normal entry** (adds `human_ai_data` `0x26`). The wrapper `0x00b10900` maps its options mode 0–3 → 2, 4 → 1, 5 → 0 (jump table `0x00b10a68`) | CONFIRMED (behaviour); names HYPOTHESIS |
+| request `+0x20` bit `0x20` | the hub treats the request as vehicle-AI kind 1 | CONFIRMED |
+| request `+0x21` bit `0x20` | `enter shopper` (`0x0f`'s `+0x14` = 4); also set by the hub when animation state `0x94` is active | CONFIRMED |
+| request `+0x21` bit `0x40` | `enter convertible`; **also set by state 5's on-entry** (§10.6) | CONFIRMED |
+| request `+0x22` bits 1/2 | lift / pull start point (slot `+0x24` = 2/3) | CONFIRMED |
+| request `+0x22` bit `0x20` | local-player one-shot → `0x00545010`, cleared by the hub | CONFIRMED (role only) |
+| request `+0x23` bit 0 | **fast-entry request**: the hub routes to `0x13`. The upkeep keeps it only when the bearing is under 45° and otherwise clears it and retries; `0x00afe980` clears it | CONFIRMED; refines §7.2's "retry marker" |
+| request `+0x23` bit 2 | **entry from on top of a vehicle**: surface `vehicle`, plus the y-difference cancel of §10.6 step 4(a) | CONFIRMED (use); meaning HIGH |
+| request `+0x28` (slot `+0x84`) | the 800 ms stick-abort grace timer (states 0 and 5) | CONFIRMED |
+| request `+0x30` (slot `+0x8c`) | **animation override**: when ≠ −1 the hub routes to `0x0f`, which plays it instead of looking up an `Element` | CONFIRMED |
+| request `+0x34` (slot `+0x90`) | **"begun" callback** (cdecl: vehicle handle, occupant handle, request, ok). Called once: 1 by the hub, 1 at the door for kind 0, 0 by the cancel when the hub never ran | CONFIRMED |
+| slot `+0x1c` | surface: 3 / 2 / 1 from the hub | CONFIRMED |
+| slot `+0x24` | the walk's target `Interaction_Point_Type` (0–5), set by state 5 | CONFIRMED |
+| slot `+0x30` | the door part the hub unlatched (−1 at cancel and commit) | CONFIRMED |
+| slot `+0x48`/`+0x4c`, `+0x58` bit 0 | the victim's handle and "victim present" | CONFIRMED |
+| slot `+0x58` bit 2 | the stop animation was played at the door | CONFIRMED |
+| human `+0xccd` = 3 | **walking to a vehicle entry point**; `+0xcce` `0xd`/`0xe` while the navigator runs, 0 on a remote copy | CONFIRMED (writes); resolves OPEN 40 for 3 |
+| human `+0x1854` bit 0 | the walk failed | CONFIRMED |
+
+### 10.11 Out-of-band contracts (scoping §5a.2, checked)
+
+The 15 roots call **120 functions outside the band (~7.9k instructions)** and 33 inside (~5.2k), from the census. They are contracts, cited by role above:
+- **Human (~4.8k, the largest share):**
+  - the damage routine `0x0096fa20` (1,502; only the hub's tank branch);
+  - the navigator `0x00993e90` (435), with `0x00993d30`/`0x00993d50`/`0x009947b0`;
+  - ragdoll `0x009a1dc0`/`0x009a1e10`/`0x009a5520`;
+  - scope view `0x009e6510`, fine aim `0x009da830`/`0x009dcf10`;
+  - the animation-request wrappers `0x00957c80`/`0x00957ee0`;
+  - the locomotion setters `0x00942110`/`0x00986920`/`0x00985d80`;
+  - the controller and collision filter `0x0094cca0`/`0x0094f450`/`0x0094fa00`/`0x00759d80`;
+  - combat-ready `0x00943a20`/`0x00943960`, input `0x00950b70`;
+  - the cancellations `0x009c07a0`, `0x009ae150`, `0x009c7cc0`, `0x009682d0`, `0x009b63f0`;
+  - customization `0x009f0860`/`0x009f34d0`/`0x009f3530`.
+- **Vehicle (~0.5k):**
+  - seat readers `0x00ab5070`/`0x00ab5150`/`0x00ab51a0`/`0x00ab4af0`;
+  - the door group `0x00aa2080`/`0x00aa2370`/`0x00aa1ff0`/`0x00aa1fc0`/`0x00aa1eb0`/`0x00a88eb0`;
+  - the tilt fix `0x00a87880`;
+  - predicates `0x00ad3140`/`0x00ad3270`/`0x00ad2fa0`/`0x00ad3820`/`0x00ab6210`;
+  - `0x00ab48f0`.
+- **Vehicle AI (~0.5k):** `0x00b29cf0`, `0x00b50180`, `0x00b464c0`, `0x00b500f0`, `0x00b1f6c0`, `0x00b33dc0`.
+- **Weapon/item band (~0.2k):** `0x00941f40`, `0x005fe3e0`, `0x005fe460`, `0x009bfbc0`, `0x00b81440`. **`0x00600720` is not called by any U6.3 handler**; scoping's attribution comes from the commit (§8.4) and `0x0f`'s per-frame.
+- **AI and HUD:** `0x004e4130`, `0x004e6600`, `0x0052a230`, `0x007f0140`, `0x007e2b30`, `0x00545010`, `0x009dd390`.
+- **Animation API:** `0x004b4ce0`, `0x004b41b0`, `0x004b4320`, `0x004b7d50`, `0x004b7f70`, `0x004b16c0`.
+- **Camera band:** `0x0056dc20`, and through `0x00b0baf0` §4's submode, target and placement calls.
+
+### 10.12 What a port must reproduce (U6.3)
+
+1. The hub's order and decision table (§10.3), including the forced-instant cases and the fact that state 1 never persists.
+2. The instant route of §10.4.2: the upkeep's entry = seat, eviction by an instant exit request, the wait in 2, and the queue-head gate in 4. **A single-player port whose script calls `vehicle_enter_do` with instant set needs exactly this path, §7 and §8.** With the occupant eviction (§6) it is complete.
+3. `0x00afe980`'s cancel-and-resubmit, which every approach state uses as its failure path.
+4. The cancel of §10.9 as a one-shot that releases the slot. The two callback rules: `+0x34` once with a success flag, and `+0x3c` never on cancel.
+5. The two stick aborts with their 800 ms grace and their gates (§10.2, §10.6).
+6. The approach of §10.6 with the four `VI_pathfind_*`/`VI_on_vehicle_entry_*` tweaks at their shipped values. The queue ordering of §10.1 must be copied literally (origin-relative) to reproduce shipped behaviour.
+7. State 7 can be omitted.
+
+### 10.13 Corrections and cross-spec flags raised by U6.3 (no other spec edited)
+
+- **`review/scoping-player.md` §5a.5:**
+  - the instant/snap HYPOTHESIS for `0x0f` is refuted. The instant route is 0 → 1 → (2 →) 4 → 9, and `0x0f` is the forced/override in-place `enter` animation, going straight to 9 only without an animation (§10.4);
+  - "instant is tested at three places" is wrong: 7 set sites and 12 test sites (§10.4.1).
+- **§5a.1 item 4:** the hub's targets are confirmed, with their conditions (§10.3).
+- **§5a.1 item 8:** the stick abort is local-player only, has an 800 ms grace, and has a second copy in state 5. The cancel releases the slot.
+- **§5a.2:** `0x00600720` is not a U6.3 callee (§10.11).
+
+  Folded into that file.
+- **This file, §7:**
+  - §7.1 record `+0x08` is the hub's scratch word (§10.10);
+  - §7.2's request table gains `+0x08` as a kind, `+0x23` bit 0 as the fast-entry request, `+0x23` bit 2, `+0x28`, `+0x30` and `+0x34` (§10.10);
+  - §7.5: **state `0x0f`'s per-frame also passes 9 by register** (`0x00b012d6` → `0x00b0131d`), a ninth producer of 9 that the push survey missed; state 7 is dead (§10.8);
+  - §7.6: the upkeep also forces instant at `0x00af615f`, when no entry point resolves and request `+0x08` ≠ 1.
+- **This file, §9.3:** slot `+0x24` is also written by state 5's on-entry (the target point type 0–5), and request `+0x21` bit 6 (`+0x7d` in the table) is also set by state 5, not only by the submitter's caller.
+- **This file, §14 OPEN 63:** the six ride tweaks' shipped values are in `tools/ai_base_xtbl/tweak_table.xtbl`:
+  - `VI_forward_vel_accel` 13, `VI_vert_vel_accel` 1, `VI_random_accel_factor` 0;
+  - `VI_reaction_delay_min_ms` 100, `VI_reaction_delay_max_ms` 200;
+  - `VI_collision_min_vel_diff` 10.
+
+  The registry rows are in `tools/ai_tweak_registry.tsv`. The DLC tweak table overrides none of them.
+- **`spec-lua-api-behaviour.md` §38.1:** `vehicle_enter_do`'s "instant placement" path is §10.4.2. It is not a separate placement routine: it goes through the same slot, hub and commit and completes on the next world tick when the seat is free.
+- **`spec-ai-runtime.md` §8 item 4:** the hub's AI side is §10.3 steps 6, 16 and 19:
+  - the player cancels walking NPC claimants;
+  - the vehicle-AI reactions `0x00b50180`/`0x00b464c0`;
+  - `human_ai_data` `0x26` for kind-2 requests.
+
+  The `Veh enter` request itself is not issued here.
+
+---
+
+## 11. U6.7 — The animated exit states (`0x1a`–`0x21`)
+
+**Scope.** Unit U6.7 of `review/scoping-player.md` §5a.3: the eight exit-side state numbers `0x1a`–`0x21` left after U6.6 (§6, the non-animated exits `0x14`–`0x19`) and U6.1 (§9, the element-selection rule these states call). Roots: the on-entry and per-frame handlers of every live state in the range — `0x1b` (`0x00b02330`, `0x00b062b0`), `0x1d` (`0x00b02900`, `0x00b05b90`), `0x1f` (`0x00b05560`, `0x00b063c0`) and `0x21` (`0x00b057b0`, `0x00b06d30`) — plus `0x1f`'s exit-kind chooser `0x00b04ae0` and the eject handler `0x00b02cd0` it reaches. It also specifies the three helpers scoping §5a.4 point 6 left to "whichever of U6.5/U6.7 lands first": `0x00afe0d0`, `0x00b01460` and `0x00b0c170`; U6.3 (§10, landed first) did not claim them, so they are specified here in full. States `0x1a`, `0x1e` and `0x20` have no on-entry handler (U6.0 §7.5 already shows this from the setter side; confirmed again here from the handler side) and `0x1c`'s handler is empty; all four are covered at the level that confirms they do nothing, not re-derived. What the hijacker's own *enter*-side slot does (states `0x0a`–`0x13`, U6.5) is cited only where `0x1d` reaches into it.
+
+**Method.** Ghidra-free. Capstone listings over `tools/harnesses/exe_va.py`: all ten roots, the three shared helpers, the eject handler `0x00b02cd0`, the door/side-clearance helper `0x00b02460`, and the cached vehicle-point query `0x00b0eac0`/`0x00b0df70` were read in full; `0x00b034c0`'s own callers `0x00b04990`/`0x00b04ae0` were read at the call site only, since `0x00b034c0` itself is U6.6 §6.8's. The census closure table (53 in-band functions, 6,187 instructions, excluding other units' own roots) was used to confirm every function in range was reached and to find the two listings (`0x00b07d50`, `0x00b08060`) that turned out to be a generic cached vehicle-point utility shared with code outside this unit, not specific to it. No Ghidra project was opened or copied. No `.czn_pc` data was touched.
+
+### 11.0 Results up front (U6.7)
+
+1. **The range holds four live states.** `0x1a`, `0x1e` and `0x20` have no on-entry handler (the 14-entry set-exit table `0x00b05ac4` sends them to the same no-op return as `0x00b05ac4`'s own bounds check) and no per-frame handler either (`0x00b06fdc`); they can never be held, as U6.0 §7.5 already found from the setter side. **`0x1c`'s on-entry `0x00b023f0` is confirmed empty**: it resolves, writes state `0x1c` and resets the three per-state fields to −1, and does nothing else; its per-frame `0x00b024f0` resolves and returns. Neither writes any field a later frame could read. U6.0's OPEN 60 (no local producer for `0x1c`) stands unresolved from this side too. **The four live states are `0x1b` (change seat), `0x1d` (extract), `0x1f` (exit) and `0x21` (traverse)** (§11.2–§11.6).
+2. **The three shared helpers are specified in full, matching the working notes exactly on every point checked against the listings:**
+   - **`0x00b0c170(human)`** (67 instructions) — the "is the held vehicle-interaction animation finished" test: true with no human, an uninstantiated human, or the animation `0x1d95` not active; otherwise true once progress ≥ (duration − blend-out)/duration, blend-out defaulting to 0.3 s (§11.7.1).
+   - **`0x00b01460(record, slot)`** (168 instructions) — starts a fast-entry animation once, latched on request `+0x7d` bit 7 (enter-request `+0x21` bit 7, slot-relative); on a lookup or play failure it cancels and resubmits through `0x00afe980` (U6.3 §10.4.3); otherwise, for the local player, it runs the animated-camera gate `0x00b0ae40` and, failing that, the path-clear check `0x00afe0d0` before falling back to the camera hand-off `0x00b0bc10` (§8.6). **It is called on the hijacker's own slot from `0x1d`'s on-entry, not only on its own enter-state `0x13`'s slot** (§11.7.2, §11.4).
+   - **`0x00afe0d0(vehicle, request, anim; human in `ecx`)`** (219 instructions) — the animated-camera path-clear raycast: true at once for a non-local player, a seat the validator `0x00b0a510` rejects, or an empty `Enter_Animations` set; otherwise it walks the matched `Element`'s `Animated_Camera_Tests`/`Camera_Pos` points (via `0x00b07020`), builds one segment per point (first segment from the committed camera position `0x013c8740`), batch-casts them (`0x0075e490`) and returns false on any hit (§11.7.3).
+3. **`0x00b04ae0` (783 instructions, `0x1f`'s own exit-kind chooser) resolves most of OPEN 69.** It writes slot `+0x10` = `0x15`, `0x16`, `0x17`, `0x18`, `0x1b` or `0x1c` as immediates (never `0x14`, `0x19` or `0x1a` in the traced control flow — the "register-written `0x14`/`0x19`/`0x1a`" guess in OPEN 69 is not borne out for this function), with sub-variant `+0x14` = `9`/`0xa`/`0xb` (`exit fast outward`/`forward`/`backward`) and `0xc`/`0xd` (`exit at speed cruise`/`fast`), exactly the values OPEN 69 named (§11.5.2).
+4. **The exit-request object handle `+0x08`/`+0x0c` (OPEN 47, "reader not in this unit") finally has readers — three, all here:** `0x00b063c0` (`0x1f`'s per-frame) resolves it and requires the resolved object's own `+0x10` field to equal `0x18` before continuing; `0x00b04ae0` resolves it as a second human and reads *that* human's own vehicle-handle pair `+0x16c0`/`+0x16c4` to anchor an eject/guardian-angel placement; `0x00b05b90` (`0x1d`'s per-frame) compares it against a cache on the exiting human (`+0x16e8`/`+0x16ec`, new) to decide whether to fire a change notification. HIGH: a companion human the exit is choreographed around (§11.8).
+5. **New exit-request/slot bits, beyond §6.2's table:** `+0x30` bit 4 forces `0x1f` into the `exit dive` kind past the room predicate `0x00b0a380`; bit 5 selects the `exit eject` kind; bit 6 is *written* by `0x00b04ae0` (not only read) when a companion anchor resolves for eject; bit 7 is also written here, not only by the player's prompt, when no clear `exit fast` side exists. `+0x31` bit 0 is read by `0x00b02460` as a "fixed once" door-clear latch — the same bit position U6.1 §9.3 names as the `convertible` exit variant, a conflict left OPEN (§11.7.4); bit 5 is read only by the eject handler. `+0x32` bit 0 is a per-frame "already started" latch on `0x1f`, distinct from bit 1 (replicated) and bit 2 (vehicle may be gone) (§11.8).
+6. **Slot `+0x18` is not always −1 on entry.** `0x1f`'s on-entry sets it to `6`, not −1 — the one exception to U6.6 §6.1's "every on-entry handler of this unit sets `+0x10`/`+0x14`/`+0x18` to −1". It is a two-stage sub-timer (`6` → `7`) that several of `0x1f`'s per-frame kind-tails use to wait out half of the animated-camera test window before finishing (§11.5.3).
+7. **When the chosen kind has no `Element` (or request `+0x30` bit 6 forces no clip) and the "point-set" flag (request `+0x31` bit 2) is set with a point available, `0x1f` teleports the human directly** through the same virtual `+0x40` transform setter the instant path (§6.9) uses, instead of playing anything. Without a point, or for the eject kind specifically, it takes other dedicated paths (§11.5.1, §11.5.3).
+8. **`0x1f`'s per-frame has exactly one way out when no animation is chosen: an inlined transition to `0x21`** (confirming U6.6 §6.1's citation). **`0x21`'s own per-frame waits for animation `0x1d95` to reach 100% progress, then inlines straight to the finaliser `0x19`** (confirming the same citation) — and along the way reads the walk axes (`0x005bb530`, actions 2 and 3, the same `CAA_WALK_FORWARD_BACKWARD`/`CAA_WALK_TURN_LEFT_RIGHT` pair scoping §5a.1 item 8 names) to decide exit-request `+0x31` bit 1, the bit the finaliser's landing branch reads as the new locomotion state (§6.11 step 11(b)). `0x21`'s own on-entry also, surprisingly, always runs `0x1f`'s entire on-entry first (§11.6).
+9. **"Exit eject" (`0x1b`) writes the player's own physics velocity field directly.** The eject handler `0x00b02cd0` takes the exit request's launch vector (`+0x10`–`+0x1f`, confirming §6.2's HYPOTHESIS for this one kind) and, on the no-parachute path, stores it straight into human `+0x1cec`/`+0x1cf4` — **the same desired-velocity field `spec-player-runtime.md` §5.4 (U3) specifies as the locomotion bridge's own output to physics.** A cross-spec tie between U6.7 and U3 that neither unit's scoping anticipated (§11.5.4, §11.10).
+10. **`0x1d`'s on-entry (`0x00b02900`) matches U6.1 §9.3/§9.5/§9.8's citations exactly**: it copies exit-request `+0x20`/`+0x24` into slot `+0x10`/`+0x20`, runs the element lookup with a miss falling back to the instant exit `0x17`, and — new here — first scans the other seven slots of its own record for the **hijacker's own enter-side slot** (phase 1, state `0x0d` or `0x13`, enter-request `+0x18` equal to this slot's own seat `+0x2c`) and, when found, uses *its* enter-request for the lookup instead of a fallback. The fast-entry branch calls the shared helper `0x00b01460` **on the hijacker's slot**, not the victim's (§11.4.1).
+11. **`0x1d`'s per-frame (`0x00b05b90`) has two shapes.** An occupant that never became instantiated (object flag `+0x33` bit `0x08` clear, or no human at all) finalises at once, inline to `0x19`. An instantiated occupant waits for `0x00b0c170`, then snaps the physics character proxy to the animated end position through `0x0079efb0`/`0x0079efe0` — **confirming scoping §5a.1 item 5's HYPOTHESIS for that pair concretely** — before handing off to one of two deep human-runtime contracts by extract kind (`0x00942110`-derived kind `0xd`, "kill", resolves a per-seat `0xd0`-byte weapon table and calls `0x0096fa20`; every other kind calls `0x009a48e0`). **Neither call was found to drive an explicit state change on this path; how the slot eventually reaches `0x19` for a non-`kill`, instantiated extract is OPEN** (§11.4.2, new OPEN item).
+12. **`0x1b` (change seat) and `0x1c` (empty) are confirmed end to end**, matching the working notes' pre-existing traces exactly, with no corrections needed (§11.2, §11.3).
+13. **Size:** the ten roots own 1,916 instructions; their in-band closure (stopping at the other units' own roots: the resolver, the three setters, U6.1's rule, U6.0's trace/network calls, U6.3's cancel-and-resubmit and U6.4's camera blend) is 53 functions / 6,187 instructions — in line with scoping §5a.3's ~3.8–4.2k exclusive estimate, the difference being the shared helpers the closure still counts.
+
+### 11.1 The eight states at a glance
+
+| State | On-entry (via `0x00b05ac4`) | Per-frame (via `0x00b06fdc`) | Entered from | Leaves to |
+|---|---|---|---|---|
+| `0x1a` | none (shared no-op return) | none | never (no producer, §6.1) | — |
+| `0x1b` change seat | `0x00b02330` | `0x00b062b0` | `0x16`'s per-frame `0x00b06020` (U6.6 §6.8), inlined | `0x1d`/`0x1f` (via `0x00b02150`, U6.6 §6.7.2 step 4), inlined |
+| `0x1c` | `0x00b023f0` (empty) | `0x00b024f0` (empty) | no local producer (U6.0 OPEN 60) | — |
+| `0x1d` extract | `0x00b02900` | `0x00b05b90` | `0x15`'s on-entry `0x00b036c0`, when request `+0x30` bit 3 (U6.6 §6.7.2 step 4) | `0x17` (miss), `0x19` (inlined, both shapes) |
+| `0x1e` | none | none | never (no producer; used only as a key by U6.1 §9.5's temporary slot) | — |
+| `0x1f` exit | `0x00b05560` | `0x00b063c0` | `0x15`'s on-entry, when request `+0x30` bit 3 clear; `0x16`'s per-frame (U6.6 §6.8) | `0x16` (wait for seat, via `0x00b034c0`), `0x19` (teleport/eject paths, inlined), `0x21` (inlined, no-animation fallback) |
+| `0x20` | none | none | never (no producer, §6.1) | — |
+| `0x21` traverse | `0x00b057b0` (calls `0x1f`'s own on-entry body first, as a subroutine, §11.6) | `0x00b06d30` | `0x1f`'s per-frame, no-animation fallback | `0x19` (inlined, once `0x1d95` finishes) |
+
+### 11.2 The empty and dead states (`0x1a`, `0x1c`, `0x1e`, `0x20`)
+
+**`0x1a` and `0x20`** index the set-exit table `0x00b05ac4` at the same target as the table's own out-of-range default (`0x00b05a20`, a bare return). **`0x1e`** likewise has no entry in the table and no per-frame slot in `0x00b06fdc`. None of the three has any local setter: no immediate `0x1a`, `0x1e` or `0x20` appears at a set-exit call site, no inlined copy produces them, and no register-passed chooser (`0x00b02150`, `0x00b04ae0`) returns them. The only shipped way any of the three could ever be held is the network applier replaying a remote value — and since none can be *set* locally either, that remote value could itself only come from another machine's own locally-unreachable state. **They are dead**, consistently with U6.0 §7.5's and U6.1 §9.8's findings from the setter and key-builder sides.
+
+**`0x1c`'s on-entry `0x00b023f0`** (36 instructions, CONFIRMED by full listing): resolve, slot state `+0x0c` = `0x1c`, `+0x10`/`+0x14`/`+0x18` = −1. That is the entire body. **Its per-frame `0x00b024f0`** (27 instructions, CONFIRMED): resolve, return. Neither reads nor writes anything else, and `0x1c` has no per-frame transition anywhere in the dispatch tables. Unlike `0x1a`/`0x1e`/`0x20`, `0x1c` is reachable in principle — it has a real on-entry handler a chooser *could* return — but nothing in this unit's closure, U6.6's, or U6.0's census of every state's register-passed sources produces the value `0x1c`. U6.0's OPEN 60 is correct to leave it open.
+
+### 11.3 State `0x1b`: change seat
+
+#### 11.3.1 On-entry `0x00b02330(record, slot)` (57 instructions, CONFIRMED by full listing)
+
+cdecl, called with `record`/`slot` on the stack. 1. Resolve. 2. State `+0x0c` = `0x1b`; `+0x10`/`+0x14`/`+0x18` = −1. 3. `anim = 0x00b0ad10(vehicle info, slot, request, &exit-seat, 0)` (the element lookup, phase "any other than enter" → `Exit_Animations`, seat = slot `+0x2c` per U6.1 §9.4.1's change-seat exception). 4. If `anim ≠ −1`: `0x00af45a0(human, anim)` plays it. A miss is silently ignored — `0x1b` has no fallback of its own, unlike `0x1d`'s miss-to-`0x17`.
+
+#### 11.3.2 Per-frame `0x00b062b0(record, slot-index)` (88 instructions, CONFIRMED by full listing)
+
+1. Resolve. 2. Unless `0x00b0c170(human)` says the held animation is finished, return (wait). 3. Once finished: `0x00ab4d20(&pos, &mtx, human handle, vehicle, exit seat)` resolves the new seat's transform; `0x004f00f0` turns the matrix into an orientation; the human's own virtual `+0x40` transform setter places it there directly (position + orientation, 1 = instant/no blend). 4. `next = 0x00b02150(record, slot)` — U6.6 §6.7.2 step 4's pure function of request `+0x30` bit 3 (`0x1d` extract when set, `0x1f` exit otherwise). 5. `0x00b058f0(record, slot, next, send = 1, from_network = 0)`.
+
+**So a change-seat is a teleport, not a walk**: it snaps the human to the new seat's transform the instant the old seat's animation ends, then re-enters the normal exit flow (`0x1d`/`0x1f`) for the *new* seat. This matches the working notes exactly; nothing here needed correcting.
+
+### 11.4 State `0x1d`: extract
+
+#### 11.4.1 On-entry `0x00b02900(record, slot in `eax`)` (204 instructions, CONFIRMED by full listing)
+
+1. Resolve. 2. State `+0x0c` = `0x1d`; **`+0x10` = exit request `+0x20`; `+0x14` = −1; `+0x18` = −1; `+0x20` = exit request `+0x24`** — exactly U6.1 §9.3/§9.5/§9.8's citation of this copy (the victim's extract kind and side), confirmed by listing.
+3. **Hijacker-resync scan.** Before anything else, it walks the record's other seven slots (stride `0x100`, matching U6.0 §7.1's layout) looking for one that is phase 1 (entering), state `0x0d` (`extract`) or `0x13` (`fast`), **and whose own enter-request `+0x18` (target seat, U6.1 §9.4.1's `0x00b0a510` input) equals this slot's current seat `+0x2c`.** If found, the resolver is re-run on *that* slot and its enter-request pointer is kept for the lookup below; if not found, a sentinel (−1) stands in for it. This is how `0x1d` finds "the hijacker who is causing this extract", independently of the exit request's own fields, by matching on who else is currently targeting this human's seat.
+4. **Seat reservation and the lookup.** `0x00b0b540` (U6.6 §6.1's seat reservation) reserves the exit seat; `0x00b0ad10(vehicle info, the hijacker's (or the sentinel) request, &exit-seat, slot)` runs the element lookup.
+   - **Miss (`−1`):** request `+0x30` |= 1 (instant), then `0x00b058f0(record, slot, 0x17, send = 1, from_network = 0)` — **the instant fallback**, confirming the working notes.
+   - **Hit:** `0x00af45a0(human, anim)` plays it directly.
+5. **Fast-entry and second-anim branches**, gated on whether a count/override value from the hijacker search is non-zero:
+   - if the hijacker's own enter-request `+0x23` bit 0 (slot-relative `+0x7f`, new field — a "fast entry" flag) is set: **`0x00b01460(hijacker's slot, record)` is called on the hijacker's own slot**, not the victim's — it starts *the hijacker's own* fast-entry animation in lockstep with this extract (§11.7.2);
+   - otherwise: a second `0x00b0ad10` lookup runs (different arguments); on a hit, the second animation is also played, enter-request `+0x7d` bit 7 (new) is set and `+0x84` (new, enter-request `+0x28`) is cleared to −1; then the animated-camera gate `0x00b0ae40(human, anim)` is checked, and failing that the camera hand-off `0x00b0bc10(human, vehicle, cancel-blend = 0, no-gunner-test = 0, snap = 0, place-mode = 0)` runs directly (not through `0x00afe0d0` — that check is `0x1f`'s and `0x00b01460`'s, not this branch's).
+6. **Tail.** For a class-bit-`0x22` occupant (the same "despawn-eligible" bit U6.6 §6.7.2/§7.11 names), `0x0070de70` is called (146 instructions, not traced further here — HIGH: the full-victim removal path the working notes flagged, a human-runtime contract).
+
+#### 11.4.2 Per-frame `0x00b05b90(record, slot-index)` (362 instructions, CONFIRMED by full listing)
+
+**Hijacker-change notification.** First, it compares the exit request's object handle (`+0x08`/`+0x0c`) against a cache on the human, `+0x16e8`/`+0x16ec` (new field pair — HIGH: "the handle this extract was last notified about"). When they differ, the event dispatcher `0x009b0a00(slot, old handle, new handle, event id `0x262d4c8`, 0, 0, −1.0)` fires before the cache is used again; when they already match, the call is skipped.
+
+**Branch on whether the occupant is instantiated** (object flag `+0x33` bit `0x08`, same bit U6.6 §6.7.2/§5.6.3 use):
+
+- **Not instantiated, or no human at all — finalise at once.** A class-bit-`0x21` vehicle gets two extra calls first (`0x00a91dd0`, `0x00a90d40`, vehicle-band, not traced). Then the occupant handle and class row are re-validated exactly as set-exit's own guard does (§6.1: object flag `+0x33` bit `0x10` clear, class row byte `+0xa` bit 0, `0x00853b10`), the `Set Exit` trace is logged with state `0x19`, and `0x00b03d80` (the finaliser, U6.6 §6.11) is called directly — **the inline `0x1d → 0x19` transition**, confirming the set-exit infrastructure table (§6.1).
+- **Instantiated — wait, then snap and hand off.** While the clip is still playing or `0x00b0c170` says it is not finished, nothing happens this frame (with a small local-player-only re-sync sub-check against `0x004b2760`/`0x004b28c0` that can call `0x00b0baf0(human)` early). Once finished:
+  1. `0x00abae00(human, &offset)` reads an offset; it is added to the human's current position (read through the character-proxy enable call `0x0079efb0`) and the result is written back through the character-proxy disable call `0x0079efe0` — **snapping the physics proxy to the animated end position**, confirming scoping §5a.1 item 5's HYPOTHESIS for this exact pair.
+  2. **By extract kind** (slot `+0x10`, copied from the exit request in §11.4.1 — value `0xd` is `kill` on the `0x0d`/`0x1d` extract-kind list, U6.1 §9.3):
+     - **kind `0xd` (kill):** a per-seat, `0xd0`-byte-stride table (indexed by slot `+0x2c`) is read for a handle pair, resolved through `0x004d7f30` to an object, and its held weapon is queried (`0x00941f40`, twice) to find a weapon sub-object (`+0x19c`); then `0x0096fa20` (1,502 instructions, the same deep human-update function scoping §5a.2 names) is called with that weapon.
+     - **every other kind:** a class-bit-`0x22`, driver-seat (`+0x2c` = 0) occupant first gets a vehicle event (`0x00ad3270`, then `0x0070dcf0(0, hash `0x3c673855`, vehicle)`); then, under the network-authority gate (`0x008addb0`), `0x009a48e0` (906 instructions, "Brute Fuel Tank" in U6.6's own caller census) is called.
+
+  **Neither `0x0096fa20` nor `0x009a48e0` is traced further here** (both are deep, already-cited human-runtime contracts), **and no call to `0x00b058f0` or `0x00b03d80` was found on this path.** How an instantiated, non-`kill` extract eventually reaches state `0x19` is **OPEN** (a new item, §11.10) — either one of these two functions drives it internally, or a later frame's check this trace did not reach does.
+
+### 11.5 State `0x1f`: exit
+
+#### 11.5.1 On-entry `0x00b05560(record in `edi`, slot in `esi`)` (185 instructions, CONFIRMED by full listing)
+
+Register call (`edi` = record, `esi` = slot). `0x21`'s own on-entry calls this function directly as a subroutine before doing anything of its own (§11.6), so both states share this exact convention.
+
+1. Resolve. 2. State `+0x0c` = `0x1f`; `+0x10`/`+0x14` = −1. **`+0x18` = `6`** — not −1, the one exception to U6.6 §6.1's "every on-entry handler of this unit sets `+0x10`/`+0x14`/`+0x18` to −1" (that rule was written for the non-animated exits; `0x1f` keeps `+0x18` as a live sub-timer, §11.5.3).
+3. **Point-set retry.** When exit-request `+0x31` bit 2 (the "point-set" flag set by `0x15`'s `0x00b0b9a0` query, §6.2) is set and the old state was not already `0x1f`: call the seat/door-point helper `0x00b04990` (105 instructions, a thin wrapper around U6.6 §6.8's seat router `0x00b034c0`), then re-check the human is still marked exiting (`0x009b9230`, `+0x16d4` = 2); on failure (the occupant stopped exiting mid-call), bail to the epilogue immediately.
+4. **Choose the kind, if not already chosen.** When slot `+0x10` is still −1 (freshly set above): call the exit-kind chooser `0x00b04ae0` (§11.5.2). On its failure, retry `0x00b04990` once more if the retry flag from step 3 allows it; either way, continue.
+5. **Door handling.** If a secondary flag `0x00b04ae0` set is clear, skip; otherwise query the seat's door state through `0x00aa2370` (the same function `0x15`'s on-entry and `0x00b02460` use) and, when it reports the door blocked, release/open it through `0x00aa2080` (the same door-sequence call the finaliser uses, §6.11 step 10).
+6. **Then**, regardless: clear exit-request `+0x32` bit 0 (a per-frame "started" latch, distinct from bit 1 replicated / bit 2 vehicle-may-be-gone, new field), and — only when a flag from step 4/5 was set — clear request `+0x31` bit 2 as well.
+
+#### 11.5.2 The exit-kind chooser `0x00b04ae0(record, human in `ecx`, slot, flag, &out1, &out2; two further out-params in `ecx`/`edx`)` (783 instructions, CONFIRMED by full listing)
+
+Called once, from `0x1f`'s own on-entry. It is the function OPEN 69 names, and the trace resolves almost all of it.
+
+1. **`flag` true — forced kinds.**
+   - Exit request `+0x31` bit 4 set → **kind `0x1c` (`exit guardian angel`)**: `+0x20` = −1; the request's animation override `+0x2c` is copied out; `0x00b0b540` reserves the seat; success.
+   - Otherwise, request `+0x30` bit 5 set → **kind `0x1b` (`exit eject`)**. This is the **writer** for `+0x30` bit 5's selection role and bit 6's companion-resolved flag: it resolves the request's own `+0x08`/`+0x0c` object handle through `0x00af1c40`, and — on success — treats the resolved object as a **second human**, reading *that* human's own `+0x16c0`/`+0x16c4` vehicle-handle pair (resolved through `0x004dcf00`) and running `0x00ac5960` on the result; on success it sets `+0x30` bit 6. **This is the first and only reader of the exit-request object handle `+0x08`/`+0x0c` found anywhere (OPEN 47), and it is HIGH: a companion human the eject trajectory is anchored to or past.**
+2. **`flag` false — cascade by vehicle state.**
+   - The tip-over predicates `0x00ad3b40`/`0x00ad5240` (reused from §6.7.1) gate a vehicle-type speed check (`0x009963f0`); passing both → **kind `0x18` (`exit at altitude`)**, `+0x24` = `0xf` (new, a timing-parameter selector passed to `0x00b0b610` below).
+   - Otherwise, unless request `+0x30` bit 4 is set (which forces this branch regardless), the dive-room predicate `0x00b0a380` gates **kind `0x17` (`exit dive`)**, `+0x24` = `0x10`. **Bit 4 is the first reader found for this bit** (OPEN item in §6.2's table, "read by U6.7 (OPEN)"): set, it skips the room check entirely.
+   - Failing that, a side-clearance cascade (§11.7.4) can set request `+0x30` bit 7 (not only the player's prompt, as §6.2 states) and choose **kind `0x15` (`exit fast`)**, with sub-variant `+0x14` = `9`/`0xa`/`0xb` (`outward`/`forward`/`backward`) chosen by probing the animated-camera test points (`0x00b0eac0`, §11.7.4) and preferring `outward` when it is also valid.
+   - A vehicle-speed test against type-dependent thresholds (`0x00ad2f80`, `0x00ad4160`) can instead choose **kind `0x16` (`exit at speed`)**, with sub-variant `+0x14` = `0xc`/`0xd` (`cruise`/`fast`) by the same thresholds, `+0x24` = `0xd`/`0xe`.
+   - Every successful branch ends by releasing/reserving the seat through `0x00b0b770`/`0x00b0b540`, routing through `0x00b034c0` (U6.6 §6.8), re-confirming the kind has a matching `Element` (`0x00b0ad10`), and — through `0x00b0b610(seat, pos, 5 or 0x1f4)` — setting three timing floats (`0.1`, `1000`, `0.005`) whose consumer was not traced further. **No branch was found that writes kind `0x14` ("exit standard"); it is HIGH: the state's implicit default, left in place when no special-case branch is taken.** Kind `0x19` is not a kind at all in this trace — it is the finaliser's own *state* number, pushed as a literal by the per-frame handlers (§11.5.3, §11.6), which is almost certainly what OPEN 69's "register-written `0x19`" was actually seeing. **Kind `0x1a` (`exit climb`) is read and handled by `0x1f`'s per-frame (§11.5.3) but its producer was not found in this function either; it remains OPEN.**
+
+#### 11.5.3 Per-frame `0x00b06ef0` → `0x00b063c0(record in `ecx`, slot-index in `[ebp+8]`)` (696 instructions, CONFIRMED by full listing)
+
+1. Resolve. 2. **Branch on exit-request `+0x32` bit 0** (the "already started" latch from §11.5.1 step 5):
+   - **Bit clear (first frame in `0x1f`):**
+     a. Unless animation override `+0x2c` is set, run the element lookup `0x00b0ad10`; **on a miss, or with the override set but request `+0x30` bit 6 set (the eject companion-resolved flag), skip playing anything** and fall to step (c).
+     b. Otherwise, **play the chosen (or overridden) animation** `0x00af45a0(human, anim)`. If the human's `+0x31` bit 4 is set and a tag match against the literal `"Jump_Rope"` succeeds, an extra per-rig animation-parameter push runs (`0x008ff850`, `0x009215b0`, `0x008fea50`) — HIGH: a special case for exiting past a mounted jump-rope prop. If the human is not yet instantiated and two cheap predicates (`0x004d47e0`) agree, `0x00ad4b10` instantiates it. Under network authority, force-flag `0x004e4130(human, 0x19)` runs (an OPEN 62 callee, now with a confirmed call site). `0x00b0baf0(human)` runs unconditionally. **If the exit-request object handle (`+0x08`/`+0x0c`) resolves through `0x00456920` and the resolved object's own `+0x10` field equals `0x18`**, and the camera is not busy (`0x0056b200`), **a camera effect is primed** (`0x004c0690`, `0x00b0efe0`, a duration read from animation `0x1d95`'s length via `0x004b44a0`, `0x00574c50`) — HIGH, not traced to a name. Set-exit cleanup bits `+0x32`/`+0x31` are cleared and the function returns, staying in `0x1f`.
+     c. **No animation to play.** If the kind (slot `+0x10`) is `0x1b` (eject): `0x00b02cd0(request; human, vehicle)` runs (§11.5.4) and the function returns, staying in `0x1f` for this frame. Otherwise, if request `+0x31` bit 2 (the "point-set" flag) is set and a point resolves (`0x00b0efe0`): the human is **teleported** there through its own virtual `+0x40` setter (`0x004f00f0` builds the orientation) — the same mechanism the instant path (§6.9) uses. **Failing a point, or with the flag clear, the occupant handle and class are re-validated (the same `0x00458230`/`0x00853b10`/class-row-bit-0 guard as set-exit's own, §6.1) and an inlined set-exit transition to `0x21` runs** (`Set Exit` trace, `0x00b057b0` called directly, state `0x19` not involved) — **confirming U6.6 §6.1's citation "`0x00b063c0` (`0x1f` per-frame) → `0x21`" and showing exactly when it fires.**
+   - **Bit set (a later frame):** re-validate the occupant exactly as above; bail if it fails. Otherwise dispatch on **kind − `0x14`** (a 9-entry table over `0x14`…`0x1c`, the same range `0x1f`'s own key-builder case covers, U6.1 §9.3) using **slot `+0x18`** as a 2-stage sub-timer:
+     - **`exit climb` (`0x1a`) and at least one other table entry share a common tail**: while `+0x18` = `6`, wait until animation `1d95`'s progress passes 0.5, then set `+0x18` = `7` and return (still `0x1f`); once `+0x18` = `7`, open the exit door fully (`0x00aa1e70`, 1.0) and read the walk axes (`0x005bb530`, actions 2 and 3, local player only) to feed the climb.
+     - **several entries re-validate the occupant, open the exit door, and inline a set-exit to `0x19`** directly (the same `Set Exit`-trace-then-handler-call shape as §11.3.2/§11.6).
+     - **one entry calls `0x00af24d0`** (U6.6 §6.4.3's exit fast-forward) after opening the door — the fast-forward path from mid-`1f` straight to `0x19`.
+     - the eject kind's own table entry re-reaches `0x00b02cd0` (§11.5.4) when animation `1d95` is confirmed active.
+
+   **Which of the nine table slots maps to which exact body was not independently verified against the jump table's raw bytes beyond `exit climb`'s position (index 6) and eject's (index 7, inferred from `0x00b02cd0` appearing both here and from the direct kind-`0x1b` check in (c)); the shapes above are CONFIRMED as a set, the kind-to-shape pairing for the other seven is HIGH** (new OPEN item, §11.10).
+
+#### 11.5.4 The eject handler `0x00b02cd0(exit request; human in `edi`, vehicle in `esi`)` (158 instructions, CONFIRMED by full listing)
+
+1. **Reads the request's launch vector `+0x10`–`+0x1f` as a 4-float block** — confirming §6.2's HYPOTHESIS for this field, for the eject kind specifically. Also reads request `+0x31` bit 5 (new field) into a local flag.
+2. Opens the vehicle's "door used" (`+0x16d0`, the same field the finaliser's door sequence reads, §6.11 step 10) fully (`0x00aa1e70`).
+3. Sets human `+0x1a00`/`+0x1a04` = the vehicle's own handle `+0x08`/`+0x0c` (or, with no human resolved, a literal fallback — a guard-quirk OPEN item, §11.10) and `+0x1a08` = now + 1000 ms — **the exact fields and the exact timer the finaliser's own airborne landing branch uses (§6.11 step 11(a))**, set up here directly instead of being deferred to it.
+4. `0x00af24d0(human, replicate = 0)` — the exit fast-forward (U6.6 §6.4.3) — sends the slot straight to `0x19`.
+5. Checks human `+0x1c9c` bit `0x2000` — **OPEN 45's own bit, "standing on a moving support"**, confirmed as a live read here: if set, `0x00ab1b30` runs (vehicle-band, not traced — HIGH: a parachute/safety hook).
+6. Under network authority, by the **same** bit:
+   - **set** (parachute/safety path): `0x009a48e0` runs with two literal strings (`0x1185b18`/`0x1185b1c` — the same pair used as the null-human fallback in step 3) as a named force-flag or event; on success, human `+0xdc` bit `0x80` (new) is set, and — gated on the `+0x31` bit 5 flag read in step 1 — `0x0077b600(human)` fires (HIGH: a sound/scream trigger); `0x007818f0` then applies the launch vector as an impulse.
+   - **clear** (no-parachute path): `0x00941cd0(human, &quaternion from the launch vector)` reorients the human, and — **the key finding** — the launch vector is written directly into **human `+0x1cec`/`+0x1cf4`, the player's own desired-velocity field, `spec-player-runtime.md` §5.4 (U3)'s output of the locomotion bridge to physics.** The controller's own grounded flag (`+0xcc0`→`+8` bit 2) is cleared, human `+0xe8` bit `0x80000000` (new) is set, `0x0094cca0(human, 1, 0)` and `0x0098aa10(human, 1, 1, 0)` run — **the same calls the finaliser's airborne branch makes (§6.11 step 11(a))**, here inlined instead of deferred — and a shuffled copy of the same vector is written to `+0x1c60` (OPEN 45's "added to the velocity" field). A `100 ms` timer is armed at `+0x19d4`.
+7. Tail: a difficulty/mode getter `0x00614d00`, with class-bit `0x21` (`0x00853b30`), gates `0x00623a00(human, 1, 0, 1)` — HIGH, not traced.
+
+**So "eject" does not play a clip at all: it reorients, launches and fast-forwards the human to the finaliser in the same frame, writing the launch vector straight into the locomotion bridge's velocity field for the no-parachute case.**
+
+### 11.6 State `0x21`: traverse
+
+**On-entry `0x00b057b0(slot in `ecx`, record in `edx`)`** (114 instructions, CONFIRMED by full listing). It has exactly two callers — the set-exit table itself and `0x1f`'s per-frame inline transition (§11.5.3) — and both reach the same body:
+
+1. Resolve, set `esi` = slot and `edi` = record (the same convention `0x1f`'s own on-entry expects), and **call `0x1f`'s entire on-entry body `0x00b05560` as a subroutine** — running all of §11.5.1's side effects, including a full run of the exit-kind chooser `0x00b04ae0`, unconditionally. (This is why `0x21` is never entered without first re-running `0x1f`'s on-entry logic, whichever of the two callers reaches it.)
+2. **Only if slot `+0x10` is still −1 afterward** (i.e. `0x1f`'s chooser left the kind unset): overwrite slot state `+0x0c` = `0x21` and reset `+0x10`/`+0x14`/`+0x18` = −1 and `+0x24` = `0x10` (a new field — HIGH: the same timing-parameter role as `0x1f`'s own `+0x24` writes, §11.5.2).
+3. Run `0x00b0eac0` for the animated-camera test points and write the result to slot `+0x1c` (the surface/landing field, U6.1 §9.3), then look up the element for state `0x21`'s own key (first token `traverse`, U6.1 §9.2).
+4. **On a miss:** request `+0x30` |= 1 (instant) and `0x00b058f0(record, slot, 0x17, 1, 0)` — **the same instant fallback `0x1d`'s miss path uses.** **On a hit:** `0x00af45a0(human, anim)` plays it directly.
+
+**Per-frame `0x00b06d30(record in `edi`, slot-index in `[esp+0x30]`)`** (147 instructions, CONFIRMED by full listing):
+
+1. Resolve. 2. Query animation `1d95`'s progress (`0x004b4600`); **while it is below 1.0, do nothing and return** (still `0x21`).
+3. **Once it reaches 1.0:** open the exit door fully (`0x00aa1e70`, 1.0). **Read the walk axes** (`0x005bb530`, actions 2 and 3 — the same `CAA_WALK_FORWARD_BACKWARD`/`CAA_WALK_TURN_LEFT_RIGHT` pair as `0x1f`'s climb case, §11.5.3) and, for the local player, set exit-request **`+0x31` bit 1** when either axis's magnitude is non-zero — **the exact bit the finaliser's landing branch reads as the new locomotion state (0 run / 2 run, §6.11 step 11(b))**, so a player actively pushing a walk axis as a traverse animation ends lands running. For a non-local human, the same bit is set instead when the human itself reports no local-player status *and* request `+0x30` bit 7 is set (the "no clear exit-fast side" / player-prompt bit, §11.5.2, §6.2).
+4. The occupant handle and class are re-validated (the same guard as everywhere else in this unit), and an inlined set-exit transition to **`0x19`** runs directly (`Set Exit` trace with state `0x19`, `0x00b03d80` called with `(slot-index, record)`) — **confirming U6.6 §6.1's citation "`0x00b06d30` (`0x21` per-frame) → `0x19`" and showing it fires exactly once `1d95` completes.**
+
+### 11.7 The three shared helpers
+
+#### 11.7.1 `0x00b0c170(human)` (67 instructions, CONFIRMED by full listing)
+
+1. No human, or `+0x33` bit `0x08` clear (not instantiated) → **true**.
+2. Animation `1d95` not active (`0x004b4ce0`) → **true**.
+3. Otherwise: *p* = progress (`0x004b4600`); *D* = duration (`0x004b44a0`); *r* = the active clip's own blend-out field (via `0x004b46c0` → `0x004bf5e0` → `0x004beff0`), or `0.3` s (`0x01116910`) with no clip resolved. **True when p ≥ (D − r)/D.**
+
+This matches the working notes' formula exactly; no correction needed.
+
+#### 11.7.2 `0x00b01460(record, slot)` (168 instructions, CONFIRMED by full listing)
+
+Register call: `[ebp+8]` = record, `[ebp+0xc]` = slot (matching `0x1d`'s own convention when it calls this function on the hijacker's slot, §11.4.1).
+
+1. Resolve. 2. **Latch check**: enter-request `+0x21` (slot-relative `+0x7d`) bit 7 — if already set, do nothing and return.
+3. `0x00ab4c40(&a, &b, vehicle, 0)` — outputs discarded (confirming the working notes' "outputs unused").
+4. `anim = 0x00b0ad10(vehicle info, slot, request, &exit-seat, 0)`. **On a miss (`−1`), or on a subsequent play failure**, call `0x00afe980(record, slot)` — U6.3 §10.4.3's cancel-and-resubmit — and return.
+5. Otherwise play it (`0x00af45a0`). **Then**: check whether animation `1d95` carries the "critical end" tag (a cached hash at `0x0153be2c`, via `0x004b2760`); **without the tag**, call `0x00759d80(human, 0x15, 0)` then `0x0094cca0(human, 0, 0)` (release the character controller); with the tag, skip both.
+6. Check the request's object handle `+0x08`/`+0x0c` through `0x0091faf0`; when it resolves and the human is the local player: run the animated-camera gate `0x00b0ae40(human, anim)`, and failing that the path-clear check `0x00afe0d0(vehicle, request, anim; human)` (§11.7.3); failing *that* too, run the camera hand-off `0x00b0bc10(human, vehicle, cancel-blend = 0, no-gunner-test = 1, snap = 0, place-mode = 0)` (U6.4 §8.6's signature).
+7. Tail: latch enter-request `+0x21` bit 7, clear `+0x28` (slot-relative `+0x84`) to −1.
+
+**Called on three contexts** (U6.5's enter state `0x13`'s own on-entry and per-frame, and `0x1d`'s on-entry on the hijacker's own slot, §11.4.1) — the same function, whichever side calls it, because the enter-request it latches and plays belongs to whoever is physically entering through the fast-entry route, victim's extract or not.
+
+#### 11.7.3 `0x00afe0d0(vehicle, request, anim; human in `ecx`)` (219 instructions, CONFIRMED by full listing)
+
+1. `seat = 0x00b0a510(request +0x18)` (U6.1 §9.1's seat validator). Not the local player, or seat = −1 → **true**.
+2. `set = Enter_Animations` at vehicle info `+0xa7c` + `0x24`·seat. Null → **true**.
+3. `0x00b07020(set, anim, &count)` finds the matched `Element` and returns its `Animated_Camera_Tests` point array and count. **Count ≥ 32 → false** (with a diagnostic log, `0x00434ed0`/`0x0091f5e0`-style `0x00ea4158`/`0x00ea421b`). **Count ≤ 0 → true** (nothing to check).
+4. For each point *i* (0-based): the segment start is the committed camera position `0x013c8740` for *i* = 0, else the previous point's world position; the end is this point's world position, both via `0x00d9fb90` (rotate by vehicle `+0x4c`) plus vehicle position `+0x40`/`+0x44`/`+0x48`. One `0x70`-byte cast-job entry is built per segment.
+5. `0x0075e490` batch-casts all segments. **Any segment reporting a hit → false. No hits → true** (with the same diagnostic-log shape as step 3's failure branch, confirming it is a shared logging tail, not a second check).
+
+This matches the working notes' description exactly, with the diagnostic-log calls and the `0x70`-byte job stride added as detail.
+
+#### 11.7.4 Supporting functions used by the chooser and the shared helpers (contracts, not derived further)
+
+- **`0x00b0eac0(vehicle, seat, side, flag, 0, &out1, &out2)`** (80 instructions) → **`0x00b0df70`** (117) → **`0x00b07d50`**/**`0x00b08060`** (193/216): a cached vehicle-relative point/orientation query (the `Animated_Camera_Tests`/`Camera_Pos` points, keyed by the global cache slot `0x0288cca0` through `0x00b0c480`/`0x00b0c910`/`0x00b0aeb0`). **This chain is reached from outside this unit too** (`0x0062f1f0`, activity/mission band) — it is generic vehicle-point infrastructure, not U6.7's own logic, so it is named here as a contract rather than derived.
+- **`0x00b02460(request, slot; vehicle in `edi`, request in `esi`)`** (53 instructions, read in full): a door/side-clearance helper called from `0x00b04990` and `0x00b04ae0`. It applies only when the recorded exit seat equals the slot's current seat; **it reads request `+0x31` bit 0 as a one-shot "already handled" latch** — set, it short-circuits to false immediately. **This is the same bit position U6.1 §9.3 reads as the `convertible` exit-variant flag** (slot-relative `+0xd1` bit 0). Whether the two uses are a deliberate bit-reuse (for example because a convertible's door never needs this clearance check) or a misreading of one of the two sites is **OPEN** — no writer of the bit was found in either unit, so which role (if either) is primary cannot be settled here. Absent that conflict, the rest of the function's shape is plain: it queries the seat's door state (`0x00aa2370`, reused from §6.7.2/§11.5.1), tries to clear it (`0x00aa2080` then `0x00aa1fc0`) when blocked, and is gated by a vehicle-info flag (`+0x870` bit `0x40000`) and a periodic random throttle (`0x00ea4290`) — **unless the global byte `0x02845b1d` is set, in which case it always succeeds without the random throttle.** This advances U6.3's OPEN 79 (which already flagged this global as read by `0x00b02460`): the function it gates is a shared door-clearance helper used by both the enter-side hub (U6.3's context) and this unit's `0x1f` kind chooser, and the global's ultimate writer and purpose stay OPEN, as U6.3 left them.
+- **`0x00b034c0`** (U6.6 §6.8's exit-seat router) and **`0x00b02150`** (U6.6 §6.7.2 step 4's `0x1d`/`0x1f` chooser) are cited, not re-derived, since both are already specified there in full and this unit's calls to them pass the same arguments those sections describe.
+
+### 11.8 New and revised exit-request/slot fields (corrections to §6.1/§6.2)
+
+| Field | Role found here | Status |
+|---|---|---|
+| exit request `+0x08`/`+0x0c` | a second human's handle (HIGH: a companion the eject/guardian-angel placement is anchored to); read by `0x00b063c0`, `0x00b04ae0`, `0x00b05b90` | resolves OPEN 47 bullet 1 |
+| exit request `+0x10`–`+0x1f` | confirmed as the launch vector for the eject kind (`0x00b02cd0`) | confirms §6.2's HYPOTHESIS, for this kind |
+| exit request `+0x30` bit 4 | forces `0x1f` into `exit dive` past the room predicate `0x00b0a380` | resolves the "Read by U6.7 (OPEN)" annotation |
+| exit request `+0x30` bit 5 | selects `exit eject` in `0x00b04ae0` | new |
+| exit request `+0x30` bit 6 | *written* by `0x00b04ae0` (companion anchor resolved for eject), not only read | new write site |
+| exit request `+0x30` bit 7 | also written by `0x00b04ae0`'s side-clearance cascade, not only the player's prompt `0x009e5e80` | corrects §6.2 |
+| exit request `+0x31` bit 0 | a one-shot "already cleared" latch `0x00b02460` reads — **the same bit position U6.1 §9.3 names as the `convertible` variant flag**; no writer found for either role | new; conflicts with an existing reading, OPEN |
+| exit request `+0x31` bit 5 | read only by the eject handler `0x00b02cd0`; role HYPOTHESIS (gates a sound/scream call) | new |
+| exit request `+0x32` bit 0 | a per-frame "`0x1f` has begun" latch, distinct from bit 1 (replicated)/bit 2 (vehicle may be gone) | new |
+| slot `+0x18` | **not always −1 on entry**: `0x1f`'s on-entry sets it to `6`, a 2-stage (`6`→`7`) sub-timer its own per-frame advances | corrects §6.1's blanket rule |
+| slot `+0x24` | a small timing-parameter selector (`0xd`/`0xe`/`0xf`/`0x10`) passed to `0x00b0b610`; `0x1f`/`0x21`'s on-entries write it | new |
+| human `+0x16e8`/`+0x16ec` | caches the exit request's `+0x08`/`+0x0c` handle; `0x1d`'s per-frame fires an event (`0x9b0a00`, id `0x262d4c8`) when it changes | new |
+| human `+0xdc` bit `0x80` | set by the eject handler on the parachute/safety path | new |
+| human `+0xe8` bit `0x80000000` | set by the eject handler on the no-parachute path | new |
+| enter request `+0x23` (slot-relative `+0x7f`) bit 0 | "fast entry" flag `0x1d`'s on-entry reads on the hijacker's own enter-request | new |
+| enter request `+0x28` (slot-relative `+0x84`) | cleared to −1 by `0x1d`'s second-anim branch and by `0x00b01460`'s own tail | new |
+
+### 11.9 What a port must reproduce
+
+1. **The four live transitions** (§11.1): `0x1b` teleports to the new seat on its own clip finishing, then re-enters `0x1d`/`0x1f` for it; `0x1d` resolves the hijacker's own slot to source its animation, with the same instant-`0x17` miss fallback `0x1f` uses; `0x1f` chooses an exit kind through the cascade of §11.5.2 (tip-over → dive-room (unless forced) → fast-exit side clearance → speed, with guardian-angel/eject as flag-forced overrides), teleporting instead of playing a clip when the point-set flag holds and no animation is available, and falling back to `0x21` otherwise; `0x21` waits out the traverse clip and finalises, reading the walk axes only to set the landing locomotion bit.
+2. **"Eject" is not an animated state in the usual sense.** It writes the request's launch vector straight into the player's own physics velocity field (`+0x1cec`/`+0x1cf4`, shared with U3 §5.4) and fast-forwards to the finaliser in the same frame it is chosen. A port must reproduce this write, not an eject animation plus a later physics catch-up.
+3. **The three shared helpers** (§11.7.1–§11.7.3) exactly as specified, including the camera-busy and path-clear gating order (`0x00b0ae40` before `0x00afe0d0` before the camera hand-off) and the VI-finished formula's blend-out default.
+4. **The hijacker-resync scan** (§11.4.1): without it, a victim's extract would source its animation from its own (usually empty or stale) exit-request fields instead of the hijacker's enter-request, and the fast-entry branch would start the wrong character's animation.
+5. **The open per-frame transition for a non-`kill`, instantiated extract** (§11.4.2, OPEN item) should be guarded defensively in a port (for example, by timing out to `0x19` after the clip finishes) until the real trigger is found.
+
+### 11.10 Corrections and cross-spec flags raised by U6.7 (no other spec edited)
+
+- **This file, §6 (U6.6):**
+  - §6.1's "every on-entry handler of this unit sets `+0x10`/`+0x14`/`+0x18` to −1" does not hold for `0x1f`, which sets `+0x18` = `6` (§11.5.1).
+  - §6.2's field table: `+0x30` bits 4–7 and `+0x31`/`+0x32` gain the new readers/writers of §11.8; the launch-vector HYPOTHESIS (`+0x10`–`+0x1f`) is confirmed for the eject kind; the object-handle OPEN (`+0x08`/`+0x0c`) is resolved (§11.0 item 4, §11.8).
+  - OPEN item 58's "either those states are never set, or they resolve their keys elsewhere" (for `0x1a`/`0x1c`/`0x20`): **the first holds for `0x1a`/`0x20`, confirmed again from the handler side; `0x1c` resolves no key at all, since its handler is empty** (§11.2).
+- **This file, §9 (U6.1):**
+  - §9.3/§9.5/§9.8's citations of `0x1d`'s field copy and miss fallback are confirmed exactly by the full listing (§11.4.1).
+  - §9.4.1's "exit-seat pointer not validated" for the lookup is confirmed again here: `0x1d`'s and `0x1f`'s own calls pass the hijacker's/chosen seat without a range check.
+- **This file, §10 (U6.3):**
+  - OPEN 79 (`0x02845b1d`) is advanced, not closed: `0x00b02460` is a shared door-clearance helper (§11.7.4) between U6.3's enter-side hub and this unit's `0x1f` kind chooser; the global's writer is still not found.
+  - §10.4.3's `0x00afe980` citation is reused verbatim by `0x00b01460` (§11.7.2); no correction to it.
+- **This file, §8 (U6.4):** `0x00b0bc10`'s 10-caller list (§8.6) already includes `0x00b01460`, consistent with §11.7.2's finding; no correction.
+- **`review/scoping-player.md` §5a.3:** the U6.7 row's "`0x00b063c0` (696) reads the walk axes" is confirmed, and extended: `0x00b06d30` (`0x21`'s per-frame) reads them too (§11.5.3, §11.6). §5a.4 point 6 ("whichever of U6.5/U6.7 lands first owns" `0x00afe0d0`/`0x00b01460`/`0x00b0c170`) is resolved: U6.5 had not landed when this section was written, so all three are specified here (§11.7).
+- **`spec-player-runtime.md` §5.4 (this file, U3):** add a forward cross-reference — the vehicle-interaction eject path (`0x00b02cd0`, §11.5.4) writes `+0x1cec`/`+0x1cf4` directly, outside the locomotion bridge's own composer, as a second writer of that field beyond §5.4's own derivation. §5.4 is not edited; the note is recorded here and at §11.0 item 9.
+
+## 12. U6.8 — Per-slot pose driver and rider parameters
+
+**Scope.** `review/scoping-player.md` §5a.3's row for U6.8: the per-slot pose driver `0x00af6310` and its two walkers (`0x00af8f70`, `0x00af9030`); the rider-parameter writer `0x00af4b80` (called from the human animation-parameter writer `0x00958690`, Player U3's traditional scope — `spec-anim-runtime.md` §4.2, cited not re-derived); `0x00af4150` (called from `0x00952760`); `0x00af4760` (called from `0x0095cbc0`). Dependencies: U6.4 (`spec-player-runtime.md` §8) for the pose half, Player U3 (§12.5) and `spec-anim-runtime.md` §4.1/§4.2 for the rider-parameter contract.
+
+**Method.** Ghidra-free, as every other U6 sub-unit. `tools/harnesses/exe_va.py` for byte/dword/string reads; a purpose-built recursive-descent Capstone walker (`cfg_walk.py`, scratch) that follows `jcc`/`jmp` edges and tracks the `esp` delta from each root's entry, used to resolve stack-relative operands to stable frame offsets; cross-checked by hand at every branch join (x86 requires a consistent `esp` at a merge point, so a mismatch is a tracker bug, not a code fact — one real tracker limitation was found and is noted below). All six roots were read to their `ret`/epilogue: `0x00af6310` (2,149 instructions, confirmed against scoping's own count), `0x00af8f70` (84), `0x00af9030` (83), `0x00af4b80` (498), `0x00af4150` (266), `0x00af4760` (394) — total 3,374 instructions, matching scoping §5a.3's "~3.4k own" for the row. Every jump-table base cited below was read directly as raw dwords/bytes (`0x00af8798`, `0x00af87b4`, `0x00af87d8`, `0x00af87f0`), and every parameter name was read as a string from the literal pushed before its `0x004cbaf0` resolver call. Six tweak globals were traced to their registration stubs at `0x0100a8a0`–`0x0100a914` (registrar `0x0071b580`, the same float registrar `spec-player-runtime.md` §8.5 already cites for the `VI_*` ride tweaks) and read by name. No Ghidra project was opened. No `.czn_pc` zone data was touched.
+
+**One tracker limitation, disclosed:** a handful of small helper calls (e.g. `0x004c0690`, confirmed by listing to end in `ret 4`) pop their own pushed argument instead of leaving cleanup to the caller. The walker does not model callee-side stack cleanup, so a handful of `esp`-relative labels deep inside `0x00af6310`'s common preamble (roughly `0x00af64b6`–`0x00af6908`) could not be resolved to a single stable frame offset with full confidence; those spots are called out as HIGH/role-only below rather than asserted as CONFIRMED. This does not affect any of the five register-based findings (the human/vehicle/slot roles, the dispatch logic, or the rider-parameter computations in `0x00af4b80`), which were cross-checked against already-landed field semantics (`spec-player-runtime.md` §7.2, §8.1, §8.5) and did not depend on the affected stack slots.
+
+### 12.0 Results up front (U6.8)
+
+1. **The "three jump tables" claim is confirmed as three physically distinct dword arrays at exactly the addresses scoping gives — `0x00af8798`, `0x00af87b4`, `0x00af87d8` — but their roles are not what the survey-level note said.** There is no single switch that dispatches "enter states 3–0x13, exit states 0x1b–0x21 and ride 0x22" through three parallel tables. Instead (§12.2 below):
+   - `0x00af6310` tests the slot's **phase** (`+0x08`) first, not the state. **Ride (phase 3)** never touches any of the three tables: it branches straight to a dedicated handler (`0x00af6d7a`).
+   - **Exit (phase 2)** indexes `0x00af8798` directly by `state − 0x1b` (bounds-checked to 0–6): a genuine 7-entry table, exactly scoping's "exit states 0x1b–0x21".
+   - **Enter (phase 1)** does *not* index a 17-entry table by `state − 3`. It first looks up a **byte** in a 17-entry remap table at `0x00af87f0` (keyed by `state − 3`), then uses *that byte* to index a **6-entry deduplicated pointer table at `0x00af87d8`** — the compiler folded the 17 enter states down to 6 unique handlers.
+   - `0x00af87b4` is **not** a top-level phase/state table at all: it is a private 9-entry sub-dispatch inside exit state `0x1f`'s own handler (`0x00af69e9`), keyed on a field of the resolved request (`[eax+0x10] − 0x14`, bounds 0–8), and every one of its 9 targets is a handler address *also* reachable from the enter dispatch (`0x00af69fb`, `0x00af6a3d`, `0x00af6adc`, `0x00af6b3f`, `0x00af69df`, `0x00af69da`). The three tables are laid out back-to-back in memory (`0x8798`–`0x87b0`, `0x87b4`–`0x87d4`, `0x87d8`–`0x87ec`), which is almost certainly why the original survey read them as one continuous structure.
+   - **Net effect:** several enter states and several exit states — and one exit state's own sub-variants — converge on the *same* short handler blocks (most commonly `0x00af69df`/`0x00af6c00`, a shared "nothing case-specific to do" stub). §12.2–§12.3 give the full map.
+2. **`0x00af6310` drives pose and attachment, confirmed per-case.** Past the dispatch, every reachable case funnels into one of two shared tails: the enter/exit tail starting at `0x00af6c00` (which queries the human's animation controller for a cached graph-state id `0x1d95` through `0x004b44a0`/`0x004b46c0`/`0x004b2710`/`0x004b4320`, and reads vehicle seat-descriptor and attach-point fields) or the ride/attachment tail at `0x00af6d7a` (vector/orientation math feeding the character-proxy pair `0x0079efb0`/`0x0079efe0`). The proxy-position snapshot `0x0079ef60` runs once, early, for every case that reaches the main body. §12.3 gives the case-by-case detail that exists (attachment flags, seat-table reads) without re-deriving the SSE orientation math byte-for-byte, consistent with how `spec-player-runtime.md` §8 treats comparably deep internals ("role only").
+3. **`0x00af8f70` and `0x00af9030` are now fully specified, with no ambiguity.** Both are small, single-exit functions. `0x00af8f70` (the per-frame walker, called from the world update at the site scoping's §1.7 and §5a.1 already name) walks all 48 vehicle-interaction registry records and all 8 slots of each, and calls `0x00af6310(record, slot)` for every occupant that passes three exclusion checks shared verbatim with `spec-player-runtime.md` §6.1's own gating idiom (object flag `+0x33` bit `0x10` clear; class-row `0x02cc9900` byte `+0xa` bit 0 set; `0x00853b10` false). `0x00af9030(vehicle)` does the same for one vehicle's record only (found via `0x00b08400`), confirming scoping's "reached from vehicle code (`0x00a9e1d0`)" as an on-demand, single-vehicle refresh.
+4. **`0x00af4b80` is the complete rider-parameter writer, and it is now specified down to the tweak.** It writes exactly the 11 names `spec-anim-runtime.md` §4.1 already lists for it, and only while the slot's resolved phase is 3 (ride) — otherwise all 11 are reset to a neutral value (9 floats to `0.0`, the 2 bools to false) and the function returns. The three lean/tilt values read the **ride body-lag model's error fields** that `spec-player-runtime.md` §8.5/OPEN 63 flagged as unread ("the readers of the lag values slot `+0xe0`/`+0xe8` were not traced… HIGH: U6.8's pose driver") — **this closes that half of OPEN 63**: `0x00af4b80` is a reader of slot `+0xe4` (vertical error) and `+0xec` (forward error), remapped through three further bss tweaks (`VI_forward_diff_max`, `VI_vert_diff_max`, `VI_tilt_rvec_pitch_max`, registered the same way as the six `VI_*` ride tweaks U6.4 found) into the `[-1, 1]` range the parameters expose. §12.4 below is the full per-parameter table.
+5. **`0x00af4150` is *not* a parameter writer, despite scoping's row grouping it with "the rider writer".** It never calls `0x004cbaf0`, `0x004b1510` or `0x004b1410`. It is the **rider fall/eject detector**: gated on the human currently having a resolved vehicle (`+0x16c0`/`+0x16c4`) and being in one of three seat-related states (`+0x16d4` ∈ {1, 2, 3}), it reuses the same knock-down predicate `0x009a48e0` that `spec-player-runtime.md` §5.4.2 already cites for a different context, and on a positive result sets human flag `+0xdc` bit `0x80` and applies a launch impulse (`0x00781 8f0`) built from an extrapolated human/vehicle offset. §12.5 gives the detail that was traced; two gates (`+0x16d4` = 1 or 2, and class-row byte `+6` bit `0x80`) are not independently named and are left OPEN.
+6. **`0x00af4760` is the ride-`Element` key builder, and it resolves half of `spec-player-runtime.md` OPEN item 71 directly.** OPEN 71 asks "who builds the six-token key passed to `0x00b08b80` (callers `0x00b08ea0` and `0x00af4760`)?" — `0x00af4760` is now traced in full: for a slot whose resolved phase is *not* 3 it inspects the state/variant fields and, for a specific subset of enter/exit states (`0x15`, `0x16`, `0x1b`, `0x1d`, and conditional cases under `0x1f`/`0x14`), builds the six-token key and calls **`0x00b08b80`** directly (confirmed by listing: `call 0x00b08b80` at `0x00af4a18`), returning the matched animation id. For every other state it returns one of several small sentinel/animation codes without consulting the ride tables at all. When the slot's phase *is* 3, it skips all of this and just re-snaps the seat pose through `0x00b09400` (the same pose-snap `spec-player-runtime.md` §8.1 already cites for instant entries). `0x00b08ea0`'s own half of OPEN 71 is unaffected and still open.
+
+### 12.1 The two walkers (CONFIRMED by full listing)
+
+**`0x00af8f70()`** (84 instructions, no arguments; called once per frame from the world update's ride-animation hook, `review/scoping-player.md` §1.7/§5a.1's `0x00af8f70`):
+1. Calls `0x00b0bab0()` first (role only — not traced; a per-frame prelude shared with other vehicle-interaction work).
+2. Outer loop over the registry `0x02845cb0` in steps of `0x1640`, stopping before `0x028888b0` — the exact 48-record span `spec-player-runtime.md` §6.1 already documents. A record is skipped whole when its own 8-byte handle (`record+0x00`/`+0x04`) is zero.
+3. Inner loop over the record's 8 slots (`record+0x6a0 + 0x100·i`, `spec-player-runtime.md` §7.2's layout). A slot is skipped when its occupant handle (`+0x00`/`+0x04`) is zero.
+4. For a non-empty slot: resolve the occupant handle to an object pointer through `0x00458230(this=0x024433a8, &handle, 0x031d152c)`; skip if null. Skip if object flag `+0x33` bit `0x10` is set. Skip if the object's class-row (`0x02cc9900`, indexed by object byte `+0x34`) byte `+0xa` bit `0x01` is clear. Skip if `0x00853b10(object)` is true.
+5. Otherwise: `push slot_index; push record_ptr; call 0x00af6310`. This is the exact two-argument convention `0x00af6310` itself expects (§12.2).
+
+**`0x00af9030(vehicle)`** (83 instructions; a second, on-demand caller reached from vehicle code at `0x00a9e1d0` per scoping):
+1. Reads the vehicle's own 8-byte handle (`vehicle+8`/`+0xc`) and finds its registry record through `0x00b08400(0x02845cb0, handle)` (the exact lookup `spec-player-runtime.md` §6.1 already names: "finds a record by the vehicle's handle").
+2. If found: the same 8-slot loop, the same three exclusion checks, the same `0x00af6310(record, slot)` call — byte-for-byte the same body as `0x00af8f70`'s inner loop, just for one record instead of 48.
+
+Both confirm the calling convention **`0x00af6310(record, slot_index)`** independently of reading `0x00af6310`'s own prologue.
+
+### 12.2 `0x00af6310` — the real dispatch structure (confirms and corrects scoping §5a.1 item 5)
+
+**Entry (CONFIRMED by listing).** `0x00af6310(record, slot_index)` (two cdecl arguments, `[ebp+8]`/`[ebp+0xc]`) opens with the shared resolver **`0x00af4500`** (`spec-player-runtime.md` §6.1's documented eight-argument signature), requesting the slot pointer, the enter/exit requests and the vehicle, and passing a null output pointer for the human slot since it is about to re-derive it from the resolved record directly. Two register roles hold for the rest of the function: **`edi` = the occupant human** (confirmed by the immediately following `test byte ptr [edi+0x33], 8`, the same "has an active rig" bit `spec-player-runtime.md` §5.4.1 tests for every human in the composer's player/NPC lists), and, once validated, **`esi` = the same human**, used throughout via the `[[esi+0xd24]+0x10]` controller idiom that `spec-anim-runtime.md` §4.2 already documents as "Controller `= [[human+0xd24]+0x10]`".
+
+**Early-outs (CONFIRMED by listing):**
+- No resolved human, or the human has no active rig: read the slot pointer's state (`+0x0c`) directly; if it is 4, 7 or `0x22` (ride), re-enable the character proxy once (`0x0079ef60(human+0x40, 1)`) and return; otherwise return doing nothing.
+- A resolved, active-rig human that fails a further predicate `0x00af6230(human)` (not traced beyond its boolean result) also returns doing nothing.
+- A resolved, active-rig human whose seat-record lookup `0x00af1cf0(occupant handle)` returns 4 or 7 returns at a third, dedicated epilogue (`0x00af874f`) without running the main body.
+
+**Phase switch (CONFIRMED by listing — this is the part that corrects scoping §5a.1 item 5).** Deep inside the common preamble, at `0x00af6908`, the slot pointer's **phase** field (`+0x08`, `spec-player-runtime.md` §7.2) is read and switched three ways:
+- **phase 1 (enter) → `0x00af6b87`.** Reads state (`+0x0c`), subtracts 3, bounds-checks to `[0, 0x10]` (states 3–`0x13`), then `movzx eax, byte ptr [eax + 0x00af87f0]` — an **8-bit remap table**, 17 entries, read directly: `[0, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 2, 5, 3, 5, 4]` for states 3…`0x13` in order — then `jmp dword ptr [eax*4 + 0x00af87d8]`, a **6-entry pointer table**, read directly: `{0: 0x00af6be6, 1: 0x00af6ba0, 2: 0x00af6ba7, 3: 0x00af6c45, 4: 0x00af6c5f, 5: 0x00af6c00}`. Composing the two tables gives the real per-enter-state target:
+
+  | Enter state | Target | Enter state | Target |
+  |---|---|---|---|
+  | 3 | `0x00af6be6` | `0xb` | `0x00af6ba0` |
+  | 4 | `0x00af6c00` (shared "nothing to do") | `0xc` | `0x00af6ba0` |
+  | 5 | `0x00af6c00` | `0xd` | `0x00af6ba0` |
+  | 6 | `0x00af6c00` | `0xe` | `0x00af6ba0` |
+  | 7 | `0x00af6c00` | `0xf` | `0x00af6ba7` |
+  | 8 | `0x00af6c00` | `0x10` | `0x00af6c00` |
+  | 9 | `0x00af6c00` | `0x11` | `0x00af6c45` |
+  | `0xa` | `0x00af6c00` | `0x12` | `0x00af6c00` |
+  | | | `0x13` | `0x00af6c5f` |
+
+  **Nine of the seventeen enter states (4–`0xa`, `0x10`, `0x12`) share the single stub `0x00af6c00`** — a `test dl,dl` / flag check that, absent the earlier-set attachment flags, calls the predicate `0x004d47e0(human)` and, if true, reads a float parameter off graph-state `0x1d95` through `0x004b2710(controller, 0x1d95)` (the one call site of this function in the whole root — this is one of the "animation API" calls scoping's own survey named at `0x004b2710`). Only states 3, `0xb`–`0xe`, `0xf`, `0x11` and `0x13` have state-specific bodies (below).
+- **phase 2 (exit) → fallthrough at `0x00af6908` itself.** Reads state, subtracts `0x1b`, bounds-checks to `[0, 6]` (states `0x1b`–`0x21`), then `jmp dword ptr [ecx*4 + 0x00af8798]` directly — a genuine 7-entry table, read directly: `{0: 0x00af69c0, 1: 0x00af69df, 2: 0x00af6939, 3: 0x00af69df, 4: 0x00af69e9, 5: 0x00af69df, 6: 0x00af69da}`:
+
+  | Exit state | Target |
+  |---|---|
+  | `0x1b` | `0x00af69c0` |
+  | `0x1c` | `0x00af69df` (shared stub) |
+  | `0x1d` | `0x00af6939` |
+  | `0x1e` | `0x00af69df` |
+  | `0x1f` | `0x00af69e9` |
+  | `0x20` | `0x00af69df` |
+  | `0x21` | `0x00af69da` |
+
+  This confirms `spec-player-runtime.md` §6.1's independent statement, from the U6.6 side, that "the per-slot pose driver `0x00af6310` handles exit states `0x1b`–`0x21` only".
+- **phase 3 (ride) → `0x00af6d7a` directly, no table.** No state read happens on this path at all; `0x00af6d7a` is reached unconditionally for every ride-phase slot. Several enter-state handlers also fall into this exact address once their attachment setup is done (§12.3), so it functions as the shared "apply the computed pose/orientation" tail rather than a ride-only routine.
+
+**The fourth table, `0x00af87b4` (CONFIRMED by listing — not a phase/state table).** Exit state `0x1f`'s handler (`0x00af69e9`) does a second, private dispatch: `ecx = [eax + 0x10] − 0x14` (bounds `[0, 8]`, `ja → 0x00af69df`), then `jmp dword ptr [ecx*4 + 0x00af87b4]`. Read directly, its 9 entries are `{0x00af69fb, 0x00af69fb, 0x00af6a3d, 0x00af6adc, 0x00af6b3f, 0x00af69df, 0x00af69df, 0x00af69da, 0x00af69fb}` — every single one of them is also an enter-dispatch target (`0xb`–`0xe` → `0x00af69fb`... the same addresses the enter table's `0x00af6ba0`/etc. group reaches, confirmed by address equality, not by re-tracing the bodies a second time). `eax` here is the slot pointer again (`[eax+0x10]` is one of the generic per-state scratch fields `spec-player-runtime.md` §6.1 lists at slot `+0x10`/`+0x14`/`+0x18`); this sub-dispatch exists to route exit state `0x1f`'s own variants onto the already-existing shared handlers rather than duplicating them.
+
+### 12.3 `0x00af6310` — what the per-case handlers actually do
+
+All of the following read the vehicle (`edi`, resolved earlier via the same `0x004dcf00` the shared resolver uses) and the human (`esi`). CONFIRMED by listing unless marked.
+
+- **`0x00af69c0`** (exit `0x1b`): reads human `+0x16d0` (not previously documented; stored into a local used by the shared tail as an attach-point selector) and `+0x16c8` (**seat**, `spec-player-runtime.md` §8.1's documented field), sets three local flags, and falls straight into the shared enter/exit tail at `0x00af6c02`.
+- **`0x00af6939`** (exit `0x1d`): role only — not traced past its entry; reached only from this one exit state.
+- **`0x00af69e9`** (exit `0x1f`): the private 9-way sub-dispatch of §12.2.
+- **`0x00af69da`** (exit `0x21`), **`0x00af69df`** (exit `0x1c`/`0x1e`/`0x20`, and the shared out-of-range target for both the exit and the private sub-dispatch): short flag-setting stubs that merge into the same shared tail; not traced beyond their flag writes, which do not touch any named animation parameter.
+- **`0x00af6be6`** (enter 3): reads vehicle `+0x18` off a seat-ish sub-record, sets the same three attachment flags as `0x00af69c0`, and falls into `0x00af6bfb`/`0x00af6c00`.
+- **`0x00af6ba0`** (enter `0xb`–`0xe`): sets one flag and falls into `0x00af6c00`.
+- **`0x00af6ba7`** (enter `0xf`): reads vehicle seat-descriptor data (`eax = [eax+0x18]`, and `edi (human) +0xbf4 → +0xa7c`, the vehicle-interaction descriptor chain `spec-player-runtime.md` §8.4 also walks for the seat-usability test) and tests descriptor flag bit `0x20` at a computed offset (`edi + eax·4·9/... + 0x4d`) before setting flags `+0x15`/`+0x19` and jumping to `0x00af6c00`. HIGH for the exact seat-descriptor semantics (the addressing matches the `Vehicle_Interaction_Info` seat-table pattern `spec-player-runtime.md` §8.1 already uses for `Hide Occupant`, but the specific bit was not independently named).
+- **`0x00af6c45`** (enter `0x11`) and **`0x00af6c5f`** (enter `0x13`): both read vehicle fields `+0x10`/`+0x18` and set the same attachment flags before joining `0x00af6bfb`/`0x00af6c00`.
+- **`0x00af6c00`** (the 9-state shared stub, and the exit stubs' merge point): `test dl,dl` / a local flag; if clear, calls `0x004d47e0(human)` (role: a controller-state predicate, not independently named) and, if true, reads `0x004b2710(controller, 0x1d95)` — a float off graph-state `0x1d95` — into the local the shared tail uses as a blend weight. Then, unless a second local flag (`+0x18`) is clear, builds a 4-argument call to **`0x00ab4d20`** (role only: a seat/vehicle vector query, args include the human's own handle at `+8`/`+0xc` and an attach-point index), does an SSE "all components finite" test (`cmpordps`/`movmskps`) on the result, optionally corrects it through `0x00da38e0` (the same vector helper `spec-anim-runtime.md` §4.2 rows 26–27 already cites for aim-vector transforms), and falls into the shared tail `0x00af6d7a`.
+- **`0x00af6d7a`** (the ride tail, and the shared pose/orientation tail for most enter states): builds a basis from fixed constants at `0x01321400`/`0x0132140c`/`0x01321418` (not read as data — role only) and the vector from the step above, then calls **`0x00b0efe0`** (role only: also called by `0x00af4760`, §12.6 below — likely a ride/attach-key or placement lookup) and branches on whether it returns `-1`.
+- **Shared final application (role only, structurally confirmed):** later in the function (`~0x00af84ba`–`~0x00af86a5`), the character-proxy pair **`0x0079efb0`** (get velocity) and **`0x0079efe0`** (set velocity) are each called exactly once, past all of the per-case setup — this is scoping's "character-proxy enable/disable pair", confirmed by call target but not traced instruction-by-instruction (the intervening ~500 instructions are SSE position/orientation blending that was not fully re-derived; this is the one part of the root left at HIGH confidence rather than CONFIRMED, matching the disclosed tracker limitation above).
+
+**Net reading of scoping §5a.1 item 5:** "drives the occupant's pose and attachment through the animation API (`0x004b44a0`, `0x004b4320`, `0x004b46c0`, `0x004b2710`, …)" is CONFIRMED as to *which four functions* (all four are called, exactly once each, from the common preamble/shared tail, all keyed on the same cached graph-state id `0x1d95`), but the three-jump-table framing is corrected per §12.2.
+
+### 12.4 `0x00af4b80(human)` — the rider-parameter writer, in full
+
+**Signature and gate (CONFIRMED by listing).** Single argument, the human (`esi`). First caches all 11 parameter ids by name (lazy, one guard bit per name in `0x02845bb0`, exactly the latching idiom `spec-anim-runtime.md` §4.2 documents for `0x00958690` itself):
+
+| Cache slot | Parameter name (read as a string literal) | Setter |
+|---|---|---|
+| `0x02845bac` | `Vehicle Steering` | float |
+| `0x02845ba8` | `Vehicle Steering Time` | float |
+| `0x02845ba4` | `Vehicle MPH` | float |
+| `0x02845ba0` | `Vehicle Forward Lean` | float |
+| `0x02845b9c` | `Vehicle Vert Lean` | float |
+| `0x02845b98` | `Vehicle Tilt` | float |
+| `0x02845b94` | `Vehicle Forward Lean Abs` | float |
+| `0x02845b90` | `Vehicle Vert Lean Abs` | float |
+| `0x02845b8c` | `Vehicle Tilt Abs` | float |
+| `0x02845b88` | `Wheelie Bool` | bool |
+| `0x02845b84` | `Endo Bool` | bool |
+
+This is exactly `spec-anim-runtime.md` §4.1's census row for `0x00af4b80` — confirmed by direct string read rather than re-derived.
+
+If the human is null, or `0x00b08380(human)` (the registry's cached-record lookup, `spec-player-runtime.md` §6.1) returns null, or `0x00b08390(record, occupant handle)` (the slot-index lookup, same citation) returns `-1`, the function returns **without writing anything** — the parameters keep whatever value they last held, same latching semantics as the human writer.
+
+Otherwise it resolves `(record, slot)` through the shared resolver `0x00af4500` and reads the resulting **slot pointer's phase field (`+0x08`)**. The register holding it (`ebx` for the rest of the function) is confirmed to be the slot, not the vehicle, by its later use at `+0xe4`/`+0xec` (the ride body-lag error fields, below) — fields that only exist on the slot record (`spec-player-runtime.md` §8.1).
+
+**Phase ≠ 3 (not actually riding — mid-enter or mid-exit): all 11 parameters reset (CONFIRMED by listing).** `Vehicle Steering`, `Vehicle Steering Time`, `Vehicle MPH`, `Vehicle Forward Lean`, `Vehicle Vert Lean`, `Vehicle Tilt`, `Vehicle Forward Lean Abs`, `Vehicle Vert Lean Abs`, `Vehicle Tilt Abs` are all written `0.0`; `Wheelie Bool` and `Endo Bool` are both written `false`. The function then returns. **This means the rider-lean/steering/wheelie parameters are only ever non-zero while the slot is in the ride state** — during the enter and exit animations they are neutral.
+
+**Phase == 3 (riding): the real computation (CONFIRMED by listing; tweak values confirmed by direct read).** Let `V` be the resolved vehicle and `S` the resolved slot:
+
+| Parameter | Value | Evidence |
+|---|---|---|
+| `Vehicle Steering` | `0.0` if `0x00a77a10(V)` (the "is remote-controlled" predicate, `spec-player-runtime.md` §9.1's census) is true; otherwise the float returned by `0x00a926b0(V handle)` | CONFIRMED call sequence; `0x00a926b0`'s internal computation is HIGH ("a steering-angle query") |
+| `Vehicle MPH` | dot(`0x00abae00(V)` — the vehicle's linear velocity, the exact call `spec-player-runtime.md` §8.5 step 2 already cites — , the vehicle's forward row `V+0x64`/`+0x68`/`+0x6c` transformed through `0x00da38e0`) × `2.236936…` | CONFIRMED by listing; the constant at `0x01171c60` is read directly and is the exact m/s→mph conversion factor |
+| `Vehicle Steering Time` | `0.0` (and a per-human timer at `human+0x19e0` reset to "not running", `-1`) while `abs(Vehicle Steering) ≤ 0.8` (constant at `0x01116448`, read directly); otherwise the timer is started if not running (`0x00d9e4c0` query, `0x00d9e140` start) and the parameter is the timer's elapsed time (`0x00d9e250`) × `0.001` (constant at `0x012a2d78`, read directly — ms→s) | CONFIRMED by listing and constant read |
+| `Vehicle Forward Lean` | `remap(S+0xec, [-VI_forward_diff_max, +VI_forward_diff_max], [-1.0, +1.0], clamp)` via `0x00dade20` | CONFIRMED; `S+0xec` is the ride per-frame body-lag model's **forward error** (`spec-player-runtime.md` §8.5 step 4); `VI_forward_diff_max` is `0x02845b18`, registered by name at `0x0100a8c0` through the float registrar `0x0071b580` |
+| `Vehicle Forward Lean Abs` | `abs(Vehicle Forward Lean)` | CONFIRMED (`fabs` immediately after) |
+| `Vehicle Vert Lean` | `remap(S+0xe4, [-VI_vert_diff_max, +VI_vert_diff_max], [-1.0, +1.0], clamp)` via `0x00dade20` | CONFIRMED; `S+0xe4` is the ride per-frame body-lag model's **vertical error** (§8.5 step 5); `VI_vert_diff_max` is `0x02845b14`, registered at `0x0100a8e0` |
+| `Vehicle Vert Lean Abs` | `abs(Vehicle Vert Lean)` | CONFIRMED |
+| `Vehicle Tilt` | `remap(−pitch_lane(0x008f4df0(0x004add90(V+0x1db8))), [-VI_tilt_rvec_pitch_max, +VI_tilt_rvec_pitch_max], [-1.0, +1.0], clamp)` via `0x00dade20` | CONFIRMED by listing; `0x008f4df0` is the exact pitch-extraction call `spec-anim-runtime.md` §4.2 row 26 already cites for `Aim Pitch`; `0x004add90(V+0x1db8)` is HIGH ("a vehicle sub-object orientation/quaternion getter" — not independently named); `VI_tilt_rvec_pitch_max` is `0x02845b10`, registered at `0x0100a900` |
+| `Vehicle Tilt Abs` | `abs(Vehicle Tilt)` | CONFIRMED |
+| `Wheelie Bool` | `0x00ab4790(V)` | CONFIRMED call; the predicate's own internals are HIGH |
+| `Endo Bool` | `0x00ab47e0(V)` | CONFIRMED call; the predicate's own internals are HIGH |
+
+`0x00dade20`'s signature (value, in-low, in-high, out-low, out-high, clamp-flag) is read from all three call sites identically; it is the same generic "remap, optionally clamped" helper `spec-player-runtime.md` §5.4.3 step 5 already cites ("a `0x00dade20` remap capped at 0.5") for an unrelated locomotion lean.
+
+All nine float writes go through **`0x004b1510`** and both bool writes through **`0x004b1410`** — the exact two of the "three typed setters" `spec-anim-runtime.md` §3.2 documents — on controller `= [[human+0xd24]+0x10]` throughout, the same convention `spec-anim-runtime.md` §4.2 uses for `0x00958690` itself.
+
+**This closes the `0x00af4b80` half of `spec-player-runtime.md` §8.5/OPEN 63.** That OPEN item flagged "the readers of the lag values slot `+0xe0`/`+0xe8` were not traced (HIGH: U6.8's pose driver)" and asked for the registrars `0x0071b580`/`0x0071b530`'s loader. The readers are `0x00af4b80` itself (slot `+0xe4`/`+0xec`, the vertical/forward *error* terms, not `+0xe0`/`+0xe8` the *lag* terms — the lag terms feed the error terms inside `0x00b09ab0`, §8.5, and are not read anywhere else); the registrar `0x0071b580` is confirmed (again) as the float tweak registrar, and three more of its registrations (`VI_forward_diff_max`, `VI_vert_diff_max`, `VI_tilt_rvec_pitch_max`) are now named. The tweak loader that supplies their shipped *values* was still not located (same as the original six `VI_*` tweaks) — that half of OPEN 63 stays open.
+
+### 12.5 `0x00af4150(human)` — the rider fall/eject detector (not a parameter writer)
+
+**Gate (CONFIRMED by listing).** Single argument, the human. Returns at once if `0x008addb0(human, 0)` is false (not locally authoritative — the same ownership test `spec-anim-runtime.md` §4.3 uses for network-forwarded parameter writes), or if the human's vehicle handle (`+0x16c0`/`+0x16c4`) does not resolve through `0x00458230(0x024433a8, &handle, 0x031d152c)` — the identical resolver call the two walkers use (§12.1) — to a live object, or if that object's flag `+0x33` bit `0x10` is set, or if its class-row (`0x02cc9900`) byte `+6` bit `0x80` is clear, or if `0x00853b10(object)` is true. The resolved object (`ebx`) is the human's **vehicle**.
+
+**State gate.** Reads human `+0x16d4` (the same field `spec-player-runtime.md` §8.0/§8.1 documents as becoming 3 once seated). Returns if it is ≤ 0. If it is exactly 1 or 2, a short alternate path runs (below); if it is 3, the main body runs; any other value returns doing nothing.
+
+**Main body (CONFIRMED by listing).** Computes a predicted position by extrapolating the human's position (`human+0x40`) one step further along its offset from a vehicle-side reference point (`0x0056e340(vehicle)`, role only), using double-precision subtraction/addition per axis for accuracy, then transforms it through `0x00da38e0`. It then calls **`0x009a48e0(human, …, name-ptrs at 0x01185770/0x01185774, …, 1, 0, 0)`** — the exact knock-down predicate `spec-player-runtime.md` §5.4.2 already cites for a different, non-vehicle context ("every 3 s an 8% chance of a knock-down when moving faster than 25 units/s"). If it returns true and the vehicle is non-null: sets human flag `+0xdc` bit `0x80`, computes a second extrapolated offset the same way, transforms it through `0x004d6210` (the exact aim-point transform `spec-anim-runtime.md` §4.2 rows 26–27 cite), scales it by a 4-float vector constant at `0x02845b60` (not read as data — role only, presumably another `VI_*`-style tweak vector), and finally calls **`0x00781 8f0(human, 0, &scaled_offset, 0)`** — read as an impulse/launch application by its argument shape (position vector + flags on a human), not independently named elsewhere in the landed specs.
+
+**`+0x16d4` ∈ {1, 2} alternate path.** A shorter variant of the same position math (via `0x00b0efe0` — the same function `0x00af6310`'s ride tail calls, §12.3 — and `0x0056e340`/`0x00da38e0`) feeds into the *same* `0x009a48e0` call before the same flag-and-impulse consequence. The two values `+0x16d4` can hold here beyond the documented "3 = seated" were not identified (OPEN, below).
+
+**Conclusion:** `0x00af4150` detects a rider being thrown or falling away from the vehicle it is nominally attached to (via the engine's general knock-down test, reused rather than duplicated) and, when that happens, flags the human and shoves it along the predicted departure vector. It writes no named animation-controller parameter and does not belong next to `0x00af4b80` as "a rider writer" in the literal sense — scoping's row groups it there because it is rider-adjacent and lands in the same instruction band, not because it shares `0x00af4b80`'s contract.
+
+### 12.6 `0x00af4760(human)` — the ride-`Element` key builder (resolves half of OPEN 71)
+
+**Gate (CONFIRMED by listing).** Single argument, the human. Returns `-1` if null, or if `0x00b08380(human)` (the cached-record lookup) returns null, or if `0x00b08390(record, occupant handle)` returns `-1` — the same two calls `0x00af4b80` opens with (§12.4), confirming both functions share the record/slot resolution path. Otherwise resolves `(record, slot)` through `0x00af4500`.
+
+**Phase == 3 (riding): no key is built.** If the resolved slot's phase (`+0x08`) equals 3, the function just calls **`0x00b09400(seat index)`** — the exact pose-snap `spec-player-runtime.md` §8.1 cites for instant entries ("instant entries snap the seat pose (`0x00b09400` → `0x004b21a0`)") — and returns. Ride-key selection happens *before* the slot is actually in the ride phase.
+
+**Phase 1 or 2: a long decision tree over state (`+0x0c`) and a variant field, CONFIRMED by listing.** Most branches return a small sentinel/code (`2`, `0x1a`, `0x1ac`, `0x2c`, a cached value off human `+0x1cc8` or `+0x1ce0`) without touching the ride tables — these codes are consumed by the caller `0x0095cbc0` and were not independently resolved here (OPEN, below). A specific subset of states (`0x15`, `0x16`, `0x1b`, `0x1d`, and `0x1f`/`0x14` under further sub-conditions on a second field) instead:
+1. Builds a **six-token key** from the slot's state/variant fields into stack buffers (the same `lea`+`push` shape `spec-player-runtime.md` §9 (U6.1) documents for the enter/exit key builder `0x00b0a6f0`, just producing six tokens instead of five).
+2. Calls **`0x00b08b80`** directly — confirmed by listing (`call 0x00b08b80` at `0x00af4a18`) — passing the key buffers and the seat/vehicle context.
+3. Returns the matched animation id read back out of one of the buffers.
+
+**This is a direct, confirmed answer to `spec-player-runtime.md` OPEN item 71's "who builds the six-token key passed to `0x00b08b80` (callers `0x00b08ea0` and `0x00af4760`)?"** — the `0x00af4760` half is `0x00af4760` itself, building the key from slot state/variant fields during the enter/exit phases (not during ride), for the purpose of choosing which `vi_ride.xtbl` `Element` the slot should transition into once it reaches phase 3. `0x00b08ea0`'s own key-building path is a separate caller and remains open; this unit does not own `0x00b08ea0`.
+
+One side branch (state `0x1f`, variant `0x14`, with human `+0x1ce8`'s item-in-hand test `0x00941f40` and human flag `+0xec` bit `0x100000` clear) instead calls **`0x004b1630(controller, 0x45)`** — not one of the three typed setters (`0x004b1410`/`0x004b1490`/`0x004b1510`) and not independently named; by its argument shape (controller, small integer id) it is most likely a `play`-family call (`spec-anim-runtime.md` §6.5) triggering a one-shot animation cue (id `0x45`) rather than a parameter write, gated on the rider holding an item. Left HIGH/role-only.
+
+### 12.7 Cross-reference to the animation-controller parameter contract
+
+Every name `0x00af4b80` writes is already in `spec-anim-runtime.md` §4.1's census table for `0x00af4b80`; §12.4 above replaces that row's "value sources are U7's" deferral with the real computation, confirms the controller convention, and supplies the three new tweak names. No other function in this unit writes a named parameter: `0x00af6310` drives pose through the animation *API* (play/query/layer calls on cached graph-state `0x1d95`), not through named controller parameters; `0x00af4150` and `0x00af4760` touch neither. `spec-anim-runtime.md` §4.1's own note that the vehicle/rider/collision writers' "value sources are U7's" should be read as settled for `0x00af4b80` specifically — U7 ("other controllers on demand") should cite this section rather than re-derive it, per the cross-unit ownership note this unit was briefed with.
+
+### 12.8 What a port must reproduce
+
+1. **The dispatch of §12.2** — phase first, then state, with the real (not the originally-surveyed) table shapes; a port can collapse the many single-purpose case addresses into the handful of distinct behaviors §12.3 lists (attachment-point selection, shared "nothing case-specific" stub, seat-descriptor flag test) without losing behavior, since that is what the shipped binary itself does via table-folding.
+2. **The shared pose/orientation tail** and the character-proxy get/set pair, at the role-only level of confidence given in §12.3 (a full re-implementation needs the un-traced SSE orientation math; the call targets and ordering are confirmed).
+3. **`0x00af4b80`'s complete, phase-gated parameter table (§12.4)** — this is the piece most directly reusable by a port or by U7: 11 names, written only in the ride phase, nine of them derived from three bounded tweaks and the ride body-lag model's existing error terms, two from vehicle-side wheelie/endo predicates.
+4. **`0x00af4150`'s fall/eject behavior (§12.5)**, if the port wants riders who can be thrown off; otherwise it can be skipped entirely without affecting any animation parameter.
+5. **`0x00af4760`'s ride-`Element` selection (§12.6)**, needed only if the port wants motion-sensitive ride animations (wheelie/stoppie/turn variants of `vi_ride.xtbl`) rather than a single fixed ride pose.
+
+### 12.9 Corrections and cross-spec flags raised by U6.8
+
+- **`review/scoping-player.md` §5a.1 item 5 and §1.7:** the "three jump tables… covering enter states 3–`0x13`, exit states `0x1b`–`0x21` and ride `0x22`" description is corrected in place (light-touch strikethrough) — see §12.2 above for the real structure. The three addresses themselves were exactly right.
+- **`review/scoping-player.md` §5a.3's U6.8 row:** "the rider writer `0x00af4b80`… `0x00af4150`… `0x00af4760`" is corrected in place — only `0x00af4b80` is a parameter writer; `0x00af4150` is the fall/eject detector and `0x00af4760` is the ride-key builder (see the strikethrough+correction applied to that file).
+- **`spec-player-runtime.md` §8.5 / OPEN item 63** (not edited here — file race; flagged for the splice): the `0x00af4b80` half is closed. The readers of the ride body-lag model's **error** fields (slot `+0xe4`/`+0xec`) are now identified as `0x00af4b80`; the **lag** fields (`+0xe0`/`+0xe8`) have no reader outside `0x00b09ab0` itself. Three more `VI_*` tweaks are now named (`VI_forward_diff_max`, `VI_vert_diff_max`, `VI_tilt_rvec_pitch_max`, all registered through `0x0071b580` alongside the original six). The tweak *values* (loader) remain unlocated for all nine tweaks now on record.
+- **`spec-player-runtime.md` OPEN item 71** (not edited here — file race; flagged for the splice): the `0x00af4760` half is closed (§12.6 above). `0x00b08ea0`'s half is untouched and still open.
+- **`spec-anim-runtime.md` §4.1's writer census** (not edited here — not this session's file to touch, and not raced, but outside this unit's remit to splice): the `0x00af4b80` row's "value sources are U7's" can be replaced with a citation to this section once spliced; §12.4 above is the complete, real specification the cross-unit ownership note asked for.
+
+## 13. U6.2 — Entry trigger and vehicle/seat choice
+
+**Scope.** The second sub-unit of U6 as `review/scoping-player.md` §5a.3 defines it: the enter/exit dispatch `0x009e5e80`, the request builder `0x009e1e60`, the nearest-vehicle auto-pick `0x00b105c0`, the per-vehicle eligibility-and-claim gate `0x00b0fdf0`, the seat-scoring helper `0x00b0eb90` (scoping's HYPOTHESIS, settled below), and the two obstruction gates `0x00b0da10`/`0x00b0dc20`. This unit answers scoping §4.2 OPEN item 9 and confirms §5a.4 point 3's AI-sharing claim. It **ends at the submitter** `0x00af22a0`, which `spec-player-runtime.md` §7.4 (Player U6.0) already specifies in full — cited here, not repeated. The behaviour *inside* a committed slot (the actual seat/door resolution, the state machine, the element-selection rule) belongs to U6.0/U6.1/U6.3–U6.8 and is cited by section, not re-derived.
+
+**Method.** Ghidra-free, as for every other unit in this file: capstone listings over `tools/harnesses/exe_va.py` (a local `listfn.py` harness built for this pass, same disassembly approach — direct byte reads plus `capstone.Cs(CS_ARCH_X86, CS_MODE_32)`, no decompiler), with manual esp-depth tracking to resolve stack-relative operands to request/slot field offsets. Read in full: `0x009e5e80` (109 insns), `0x009e1e60` (74), `0x00b105c0` (~225), `0x00b0fdf0` (~616, across several passes), `0x00b0eb90` (~300), `0x00b0da10` and `0x00b0dc20` (both SEH-wrapped, mid-sized). Read in part, for role only: `0x00614d00`→`0x006d2910` (a session/mode-kind getter), the interaction-prompt dispatcher `0x005b6af0` (603 insns; only the portion around its `CBA_GAC_ACTION` test and its table walk `0x005b6870` was read), and the two AI call sites `0x0051d5b0`/`0x00521200` (read far enough to confirm each calls `0x00b0fdf0`). A static read of the 22-entry prompt-handler table at `0x0111f2d0` (and its sparser sibling at `0x0111f430`) resolved scoping OPEN item 9. No Ghidra project was opened or copied. No `.czn_pc` data was touched.
+
+### 13.0 Results up front
+
+1. **The trigger is a single shared button, not a per-prompt one.** The interaction-prompt routine `0x005b6af0` tests **`CBA_GAC_ACTION` (`0x52`, `spec-tables-ui-controls.md` line 120)** — "held" via `0x005bae10`, gating a walk of a **22-entry handler table at `0x0111f2d0`**, one slot per bit of the player's per-frame context word **`+0x2084`**. **Slot 15 is `0x009e5e80`** (CONFIRMED by a static read of the table), matching scoping's "prompt entry 15". This answers OPEN item 9: there is no per-prompt test function, only the one shared button and a per-prompt availability bit that something else inside `0x005b6af0` sets (not traced here — new OPEN item below).
+2. **`0x009e5e80` is a two-way dispatch, not a single path.** Already seated (`+0x16d4` = 3 via the generic predicate `0x009b9160`) → builds a `0x33`-byte exit request on its own stack (constructor `0x004dccd0`, same constructor U6.0 §7.2 cites for the slot's exit-request field) with its own debounce byte `+0x30` bit `0x80` set, and calls the exit request **`0x00af3cd0`** (U6.6, §6.3 — cited, not re-derived), gated by a per-player cooldown timer at `+0x20c4` (`0x00d9e4c0`/`0x00d9e140`) and the AI sub-state byte `+0x500` (`spec-ai-runtime.md` §2.5). Not seated → reads **`CBA_OFC_SPRINT`** (`0x12`) as an edge test (`0x005bd7b0`) **or** `+0x1d96` bit 2, and calls `0x009e1e60(flag)` — confirming scoping's "flag = sprint pressed or `+0x1d96` bit 2" exactly, including which query and which bit.
+3. **`0x009e1e60` builds the whole `0x44`-byte request record on its own stack** (not a pre-existing one) and ends by calling the submitter directly — with **vehicle = 0 in every ordinary case**, even the forced-seat path. The only two things it customises are the request's **seat** (`+0x00`) and **search mode** (`+0x0c`); it never resolves a vehicle object itself. A co-op/solo special case (session-kind getter `0x00614d00`→`0x006d2910`, the co-op player lookup `0x009df3d0`, `spec-lua-api-behaviour.md` §3.1/§14.31) can force seat = 1 (passenger), mode = 0. A **new baseline value, request `+0x08` = 2**, is preset here before either branch runs — outside the `{0, 1}` domain `spec-player-runtime.md` §7.2 documents for that field from the submitter's side (flagged below).
+4. **Neither `0x00b105c0` nor `0x00b0fdf0` ever writes the chosen seat or door back into the request.** `0x00b105c0` only *finds a candidate vehicle* (nearest-two by squared distance, with a "sticky" override from a previously-unnamed player field) and hands each candidate to `0x00b0fdf0` to *validate*. `0x00b0fdf0` runs a long chain of eligibility gates — including the seat-scoring helper `0x00b0eb90` — but that helper has **no pointer to the request at all**, so it cannot write a result into it either. **The actual seat, door and entry-point fields (slot `+0x20`/`+0x24`, request `+0x7e`/`+0x7f` bit 2) are resolved later**, on the registry record's next 250 ms tick, by the per-record upkeep `0x00af5cb0` (`spec-player-runtime.md` §7.6, Player U6.0 — already specified), which calls `0x00b0eb90` a second time to do the real pick. U6.2 validates feasibility; U6.0's upkeep commits the choice.
+5. **`0x00b0eb90` is confirmed as the seat-scoring/eligibility gate** scoping flagged as HYPOTHESIS. Its signature (8 packed arguments) and full per-seat filter set are recovered below, including the tie-in to the element-selection rule (`spec-player-runtime.md` §9.5) that U6.1 already documented from its own call site — the two passes agree exactly.
+6. **`0x00b0da10` and `0x00b0dc20` are a pair of SEH-wrapped obstruction/clearance checks**, both `(character, vehicle)`, run only when the vehicle's physics body is active (`+0xbd0` = 1). `0x00b0dc20` applies **only to players** (an `is-player` gate up front; an AI caller always passes it trivially). `0x00b0da10` applies to any character but is skipped outright for an **instant** request or when `0x00971cf0(character)` returns null. Either can veto the whole eligibility check. Their own query callees (`0x0075d7e0`, `0x0075c880`) were not traced — flagged as a new OPEN item, likely physics-runtime territory.
+7. **Scoping §5a.4 point 3 is confirmed by direct read, with a refinement.** `0x00b0fdf0` is indeed called from two AI-side functions, `0x0051d5b0` and `0x00521200` (both confirmed by listing), so NPC `Veh enter` does reuse this same validation. Neither address is one of the named mode-38 slots in `spec-ai-runtime.md`'s table (`0x00521320`/`0x00520cd0`/`0x005213d0`/`0x005215a0`/`0x00520ca0`/`0x00521060`/`0x005210d0`/`0x00521f40`), so they are helpers the AI side calls from somewhere in that machinery or from an action routine — which one is AI-side work, not re-derived here.
+
+### 13.1 The trigger: interaction prompt → `0x009e5e80`
+
+- **Button.** `0x005b6af0` (603 insns, the interaction-prompt routine already named in scoping §1.7/§1.3 step 6) gates a whole block on `+0x2074` bit 0 (one of the six per-frame context words zeroed by `0x005b7430`, `spec-player-runtime.md` §3.2), then tests **`CBA_GAC_ACTION`** (`0x52`) three ways in sequence (CONFIRMED by listing around `0x005b70a0`–`0x005b7142`):
+  - **held** (`0x005bae10(0x52, 0)`) → walk table `0x0111f2d0` via `0x005b6870`, starting at bit 0;
+  - else **pressed this frame** (`0x005bd7b0(0x52, 0)`) → call `0x005ac340` directly (a different, single-purpose handler, not a table walk — not traced further, out of scope);
+  - else **held past a duration threshold** (float constant `0x0127e354`, tested by `0x005bde80(threshold, 0x52)`) → walk table `0x0111f430` first, then `0x0111f2d0` starting from a rotated index, via `0x005ac390`.
+  
+  So the three walkers scoping listed (`0x005b6870`, `0x005b68e0`, `0x005ac390`) are three different **dispatch modes of the same button**, not three different buttons. `0x005b68e0` (a fourth test, further down the same function, not traced in this pass) is presumably a repeat of the "held" mode for a second context.
+- **The table itself.** `0x0111f2d0`: **22 entries, 4 bytes each, one function pointer per slot — not a {test, handler} pair** as scoping's diagram implied. `0x005b6870` tests bit `i` of player `+0x2084` for each slot `i` in turn; a set bit with a non-null pointer calls it, and the first handler to return true wins. **Static read (CONFIRMED): slot 15 = `0x009e5e80`.** The sibling table `0x0111f430` (used by `0x005ac390` first) is almost entirely empty (only slot 7 = `0x009dcd60` is populated) — it looks like a small set of higher-priority prompts checked before the main 22.
+  - **What sets bit 15 of `+0x2084`** (i.e., what decides a vehicle-entry prompt is available this frame) was **not traced** — it is somewhere else in `0x005b6af0`'s 603 instructions, outside U6.2's root list. New OPEN item below.
+- **`0x009e5e80` (109 insns, CONFIRMED by full listing).** Single argument, the human/player pointer (`edi`):
+  1. If `edi+0x16d8` or `edi+0x16dc` is non-zero, **returns false immediately** without doing anything else. This pair is read nowhere else in this pass; it is not the human's own vehicle handle (that is `+0x16c0`/`+0x16c4`, tested separately below) and it does not match any field `spec-player-runtime.md` has named at that offset. HYPOTHESIS: some other in-progress interaction (busy/pending) flag. New OPEN item below.
+  2. Otherwise, **`0x009b9160(edi)`** — the generic "`+0x16d4` = 3, seated" predicate `spec-player-runtime.md` §7.8 already names as a reader of that field.
+     - **Seated** → resolve the vehicle (`edi+0x16c4`/`edi+0x16c0` through `0x004dcf00`, same resolver U6.0 §7.3 names), require vehicle flag `+0x33` bit `0x08` and `0x005fb8e0(vehicle)`, then a per-player debounce timer at `edi+0x20c4` (`0x00d9e4c0`/`0x00d9e140`, armed from the global duration `0x0262e9b8`) and the AI sub-state byte `edi+0x500` (`spec-ai-runtime.md` §2.5): unless the timer has not yet elapsed **or** the sub-state is `0x8c`, it builds a fresh `0x33`-byte exit request on its own stack (constructor `0x004dccd0`), sets that request's `+0x30` bit `0x80` (a flag not in `spec-player-runtime.md` §6.2's exit-request field table — new finding), and calls **`0x00af3cd0(edi, &request)`** (the exit request, `spec-player-runtime.md` §6.3). When the debounce/sub-state gate fires instead, it just re-arms the timer and returns true without exiting.
+     - **Not seated** → reads **`CBA_OFC_SPRINT`** (`0x12`) as an edge test `0x005bd7b0(0x12, NULL)`, or `edi+0x1d96` bit `0x4` (bit 2); `flag = 1` if either is true, else `flag = 0` (the fallthrough `eax` is the bool-return register from the sprint query, already 0/1). Calls **`0x009e1e60(flag)`** and returns its result directly.
+
+### 13.2 Building the request: `0x009e1e60(flag)`
+
+**CONFIRMED by full listing (74 insns).** Frameless; `edi` (the player, still live from the caller — this function relies on the caller not having clobbered it, an optimiser artefact, not a passed argument) and `flag` (the one stack argument) are its only inputs. It allocates its own `0x44`-byte request record on the stack and never receives one from outside.
+
+- **Default fields written** (mapped to `spec-player-runtime.md` §7.2's request-field table by offset, esp-depth tracked against the `lea eax,[esp+0xc]` used as `&request` at the call sites below):
+
+  | Request field | Value | Matches §7.2? |
+  |---|---|---|
+  | `+0x00` (seat) | `-1` | yes |
+  | `+0x04` (passenger search start) | `-1` | yes |
+  | `+0x08` | **`2`** | **new** — §7.2 only documents `{0, 1}` here, set by the submitter |
+  | `+0x0c` (search mode) | `1` ("any seat from 0") | yes |
+  | `+0x10`/`+0x14` | `-1` | yes |
+  | `+0x18`/`+0x1c` | `-1` | yes |
+  | `+0x23` bit 0 | `flag` (sprint/`+0x1d96` bit 2) | **refines** — §7.2 attributes this bit only to "a retry/'change seat' marker in the upkeep"; it is first *written* here, at construction, from the caller's intent |
+  | `+0x24` | `0` | — (not previously itemised; eligibility-predicate bit, §7.2's `+0x24` row) |
+  | `+0x28`/`+0x2c`/`+0x30` | `-1` | yes (the "`-1` on reset" range) |
+  | `+0x34` | `0` | yes |
+  | `+0x3c` (completion callback) | `0` (null) | yes |
+
+- **Co-op/solo special case.** `call 0x00614d00` (a thin `jmp` into `0x006d2910`, a session/mode-kind getter) compared against `4`; if equal, `0x009df3d0()` (the co-op-player lookup `spec-lua-api-behaviour.md` §14.31 and `spec-player-runtime.md` §1.5 already cite) is called, and if it returns null (no co-op partner), **`+0x0c` = 0** and **`+0x00` = 1** — i.e. the lone player defaults straight to the passenger seat rather than "any seat". HIGH confidence on the mechanics; the exact enum value `0x006d2910` returns for "4" was not chased (it plausibly backs `coop_is_active`'s session predicate, `spec-lua-api-behaviour.md` §3.1, but that identification is HYPOTHESIS).
+- **Forced seat** (`player_force_vehicle_seat`, `edi+0x2898` ≠ `-1`, `spec-lua-api-behaviour.md` §17.6): `+0x00` is set to the forced seat value in both sub-branches below, and `+0x0c` = 0 (exact seat) when a forced vehicle is also present (`edi+0x28a0`/`edi+0x28a4` non-zero):
+  - if a forced vehicle handle is set, it calls **`0x00b105c0(edi, &request)`** (§13.3 below) and compares the *returned* candidate's own handle (`+0x08`/`+0x0c` on the returned object) against the forced-vehicle handle — purely as a validation that the nearest-vehicle scan agrees the forced vehicle is actually there; **the returned object pointer itself is discarded**, and `+0x0c` is set to 0 regardless of which way the comparison goes. This is a redundant double-resolution: the vehicle object found here is never passed on, because the call below still passes vehicle = 0, and `0x00b105c0` runs its full scan again inside the submitter.
+- **Common tail.** Builds `&request = esp+0xc`, pushes `(request, vehicle=0, character=edi)` and calls **`0x00af22a0`** — the submitter, `spec-player-runtime.md` §7.4 — and returns its result directly. **In no path examined does `0x009e1e60` pass a non-zero vehicle to the submitter**, even when a forced vehicle exists; the submitter's own call to `0x00b105c0` (§7.4 step 4) is what actually resolves a vehicle object for every player-triggered entry.
+
+### 13.3 Auto-pick: `0x00b105c0(character, request)` (CONFIRMED by full listing, ~225 insns)
+
+Called from the submitter (`spec-player-runtime.md` §7.4 step 4, "without one, `0x00b105c0(character, request)` picks it") whenever the submitter's own vehicle argument is null — which, per §13.2, is **every** player-triggered path.
+
+1. Gets the character's position (`0x00da38e0` on `character+0x40`) and the **local-player singleton** (`0x009da4e0`, `spec-lua-api-behaviour.md` §3 preamble).
+2. **A "sticky" override, new finding.** If `character` *is* the local player, it reads a handle pair at **player `+0x1e30`/`+0x1e34`** (not named by `spec-player-runtime.md` §1.5's player-field list). If that handle resolves to a live object (through the generic handle resolver `0x00458230` with type-tag `0x031d152c`, the same pattern U6.0's own champion-handle code uses) **and** the object passes a kind-row bit-`0x80` test **and** `0x00853b10(object)` is false, the object becomes a preferred candidate (held in a local). If `0x00853b10` is true instead, the override is cleared. HYPOTHESIS: this is a "currently-tagged/targeted vehicle" the player is looking at or standing near, carried over from an earlier frame, used to avoid flicker between two nearby vehicles. Not named elsewhere — new OPEN item below.
+3. Walks the global object list through a manager singleton at **`0x003171a64`** (not named by any spec read in this pass) and, for each object:
+   - skips it if `0x00853b10(object)` is true, if the object is null, if vehicle flag `+0x33` bit `0x08` is clear, or if `0x00ad3340(object)` is true;
+   - otherwise computes a squared distance (via a local-space transform through `0x00da38e0`/`0x00467ed0`-style helpers) and rejects it outright if it exceeds a fixed max-range constant at **`0x01115204`**;
+   - inserts it into a 2-slot sorted array by that distance (closest first) — **unless** it is the "sticky" object from step 2, whose key is forced to `0` so it always sorts first.
+4. For each of up to 2 surviving candidates, closest first: calls **`0x00b0fdf0(character, candidate, request)`**. On failure, if request `+0x23` bit 0 is set, it clears that bit and retries the **same** candidate once more before moving on to the next slot. The first candidate that makes `0x00b0fdf0` succeed is returned (the vehicle object pointer); if both candidates fail, returns 0.
+
+So `0x00b105c0` never consults the request's own seat/mode fields to narrow its *vehicle* search — proximity (plus the sticky override) decides the vehicle; `0x00b0fdf0` decides whether that vehicle, with that request, is viable at all.
+
+### 13.4 Validate and claim: `0x00b0fdf0(character, vehicle, request)` (CONFIRMED by full listing, ~616 insns)
+
+Called either directly by the submitter (when a vehicle was already specified — e.g. `vehicle_enter_do` on an explicit target, `spec-lua-api-behaviour.md` §38.1) or once per candidate from `0x00b105c0` above. Returns a single bool; **it writes nothing back into the request or the slot** (see §13.0 item 4). In order:
+
+1. **Vehicle descriptor flags vs. the request, and generic predicates (all refuse on failure):**
+   - vehicle descriptor flag `+0x1d7b` bit `0x40` set → refuse unless request `+0x20` bit 2 is set (this is `spec-player-runtime.md` §7.2's documented bit, here confirmed read a second time, inside this function, not only by the submitter as §7.4 step 5 implied — **both places test it**);
+   - the *same byte's* bit `0x80` (sign bit) — **new, not in §7.2's table** — additionally refused, but only for a player character (`0x00853b30(character, 0x21)`), unless request `+0x20` bit 2 is set;
+   - `0x00853b10(vehicle)` true → refuse;
+   - `0x00a77de0(vehicle)` true → refuse;
+   - request **`+0x22` bit `0x80`** — **new field, not in §7.2's table** — clear, and character is a player, and `0x00ad3820(vehicle)` true → refuse;
+   - seat count (`0x00ab4af0(vehicle)`, forced to 1 when vehicle flag `+0x16c2` bit 0 is set) must be ≥ 1.
+2. **Seat-scoring gate — `0x00b0eb90`** (§13.5 below). Packs 8 arguments from the request and character and asks "does at least one seat match". Failure refuses the whole vehicle.
+3. **Dead-driver / occupant-state exclusions:** `0x007e2d90(vehicle)` true → refuse; vehicle `+0x16c0` negative or with bit `0x200` set, gated by the player-class test again (`0x00853b30`, `0x21`) and `0x0097e280(vehicle)` → refuse.
+4. **Vehicle category / speed gate on the driver seat:** if vehicle flag `+0xc8` bit 0 is set and `+0xc4` (a float) is below a global threshold `0x0126d2cc`, `0x00ad2f80(vehicle)` (the driver-class switch `spec-ai-runtime.md` §1.9 also calls) must equal 5, else refuse.
+5. **`0x00ad3140(vehicle)`** decides which of two large blocks runs next (true → the block at `0xb0ff7a` onward described below; false → `0xb10009`, skipping it). **`0x00ad3140`'s own test is now resolved (2026-10-07, disassembly): it is `(vehicle+0xbf4)+0x4c4 == 0xe` — i.e. "is this vehicle tagged `Special_Vehicle_Type: Tank`," matching this section's own prior "tank" readings elsewhere in this unit exactly.**
+6. **(when step 5 is true) An 8-seat scan for a vehicle-wide team conflict.** For each seat `0`–`7`: find a claimed (`0x00ab5070`) or pending (`0x00ab5150`) occupant; if found and not dead (`0x0096f4f0`), compare that occupant's condition-class byte (`+0x1ca8`) against the requesting character's own via `0x004fa040`. **Any conflicting pair fails the whole function** (jumps to the common refusal tail). This is a vehicle-wide gate, independent of which seat the request itself wants.
+7. **A specific-seat contest check, only when request `+0x00` (seat) is not `-1`.** Re-reads the seat descriptor bit `+0x4d` bit 3 and request `+0x30` (`-1` = "no existing claim id" — a new reading of a field §7.2 only described as "`-1` on reset") to set a local "direct-claim eligible" flag. **When request `+0x23` bit 0 (the fast/sprint flag written in §13.2) is clear**, and the direct-claim flag is set, it additionally checks the *distance* from the vehicle to whichever character currently claims that seat (`0x00b0a330`, then a squared-distance compare via `0x00da1330`) and **refuses if that claimant is still close enough to matter** — a proximity-based eviction of stale claims, not a hard "seat taken" refusal. When request `+0x23` bit 0 is set, or the seat isn't contested, this check is skipped entirely.
+8. **Common success tail (`0xb10263`):** sets a local result byte to `1` (success-so-far) and then runs a further sequence that can still clear it to `0` without aborting the rest:
+   - entry-angle-class bits (request `+0x7e` bits 1/2, written through `0x00ad4160`, the character's bearing) and an "instant" bias pulled from vehicle-size constants `0x01186904`/`0x01186908`;
+   - a grace-period check keyed on **vehicle `+0xc68` == 2** (the same field U6.4's corrections already note is the vehicle's own AI-object mode) with a timer at vehicle `+0x1ac4`;
+   - dead-driver eviction (`0x00ad2ed0`) and, **oddly, the LOCAL PLAYER's own** `cant_enter_exit_vehicles` flag (`+0x28ac` bit `0x10`, `spec-lua-api-behaviour.md` §4.6/§14.29) gating whether an existing driver can be bumped (via `0x00456920`, `0x0097e280`, and a condition-class comparison at `+0x1ca8`) — this reads the **local player's** flag regardless of whether the *requesting* character is the local player; HYPOTHESIS this is intentional (only the local player's own preference should block evicting someone to make room for them) but it was not verified against a non-player caller;
+   - team checks `0x00ad2010`/`0x00ad22f0`;
+   - a **vehicle-type-dependent entry-speed threshold**: `0x00ad32d0`/`0x00ad31d0`/`0x00ad3290` (three single-predicate vehicle-type tests) each select one of three float constants (`0x01117a58`, `0x01187ecc` ×2, `0x01116444`) or, when the character is already the seat's claimed occupant, one of two globals at `0x00288cb0c`/`0x00288cb10`; the character's current speed is compared against it, and unless the request is instant (`+0x20` bit 0) or forced (`+0x23` bit 3), exceeding it clears the result byte;
+   - finally the two obstruction gates, **`0x00b0dc20(character, vehicle)`** then **`0x00b0da10(character, vehicle)`** (§13.6), either of which can also clear it.
+9. Returns the accumulated result byte.
+
+**Routed cross-check against real mission Lua (2026-10-09, mission-blocking: m05/m07/m09).** Team
+B had been resolving an eligible-and-untested seat-pick outcome straight to `true` ("seat pick
+assumed to succeed"). Real mission scripts were extracted (`spec-vpp-container.md` §7.6) and
+checked: **m05 and m09 never check the return value of any vehicle-enter call** — fire-and-forget,
+consistent with (but not a justification for) always resolving true. **m07 is different and is the
+one that actually matters:** `m07_setup_pony_carts()` has `while not
+vehicle_enter_teleport(LOCAL_PLAYER/REMOTE_PLAYER, pony_cart.vehicles[1], seat 1/2) do
+thread_yield() end` — an explicit retry-on-refusal loop, with a mission-author comment ("so Pierce
+doesn't block the co-op player") showing the refusal case anticipated is exactly step 6/7's
+occupant/team-conflict gate above. **A port must not hardcode eligible-and-untested → true** — it
+needs to be able to return false for occupant conflicts on a held seat (the one m07 actually
+exercises), team conflicts, capability/disabled seats, obstruction, and overspeed, or m07's own
+retry loop never progresses. Full detail:
+`scratchpad/mission_block_seatpick_vehiclegroup_2026-10-09.md`.
+
+### 13.5 Seat scoring: `0x00b0eb90` — scoping's HYPOTHESIS, now CONFIRMED (~300 insns, full listing)
+
+**Signature, recovered from the call site inside `0x00b0fdf0` (push order, cdecl):**
+
+`0x00b0eb90(vehicle, seat_index_or_−1, first_seat_for_passenger_search, character, 0, request+0x20 bit 4, request+0x23 bit 4, request+0x23 bit 0)`
+
+(`[ebp+8]`…`[ebp+0x24]` in its own frame, in that order.) The fifth argument is a literal `0` at this call site; whether the other two call sites (`spec-player-runtime.md` §9.5 — the upkeep `0x00af5cb0` and `0x005457f0`) pass something else was not checked.
+
+1. **Seat count** `0x00ab4af0(vehicle)`, forced to 1 if vehicle flag `+0x16c2` bit 0 is set.
+2. **Four character-derived predicate flags**, each a single call on `character`: `0x0052a240` (FLAG_A), `0x0052a270` (FLAG_B), `0x009ba300` **and not** `0x00853b30(character, 0x21)` ("is-player") (FLAG_C — true only for a non-player that `0x009ba300` flags), and `0x00530340` (FLAG_D).
+3. **Per-seat loop, `seat = 0..count-1`:**
+   - the requested-seat argument gates which seats are even considered: a specific index restricts the loop to that one seat; `-1` ("any") additionally skips seats before `first_seat_for_passenger_search`;
+   - when the vehicle's physics body is active (`+0xbd0` = 1) and the seat already has a non-null entry in a quick-lookup array at vehicle `+0x828` + `4·seat`, skip it (already claimed, cheap short-circuit before the heavier checks);
+   - **per-seat eligibility against the `Seat_Info` record** (vehicle `+0xbf4` → descriptor `+0xa7c` → `+0x44` + `0x24·seat`, the same record `spec-player-runtime.md` §9.4.1 reads for `Enter_Animations`/`Exit_Animations`): its flag byte `+8` bits 2/3/4/5 must equal FLAG_A/FLAG_B/FLAG_D/FLAG_C respectively, and its byte `+0xa` bit 1 must equal the sixth argument (request `+0x23` bit 4). Mismatch on any → skip the seat.
+   - seat flag `+8` bit 6 ("disabled") set → skip; seat field `+0x10` (door/entry-point index) == `-1` → skip (no entry point configured);
+   - **seat 0 (driver) only:** if the vehicle is remote-controlled (`0x00a77a10`) and `0x00971cf0(character)` is non-null, skip — the character already has a remote-vehicle assignment elsewhere;
+   - **when the eighth argument (request `+0x23` bit 0, "fast/sprint") is set:** build a **temporary slot** (constructor `0x00af2e40`) in state `0x13` ("fast"), surface = `1` (ground), side = `0x00b0c5e0(vehicle, character)`'s result, and ask the **element-selection rule** `0x00b0ad10(info_record, &temp_slot, &temp_request, &dummy_exit_seat, quiet=1)` — a seat with no `fast` `Element` for that side is skipped. **This is exactly the call site `spec-player-runtime.md` §9.5 already describes from the other direction** ("temporary phase-1, state-`0x13` slot (`fast`), `+0x1c` = 1 (ground), `+0x20` = `0x00b0c5e0`'s side, quiet = 1, exit-seat pointer null") — the two passes agree completely;
+   - seat/occupant conflict resolution: an existing claim (`0x00ab5070`) or pending claim (`0x00ab5150`) that is not dead (`0x0096f4f0`) is checked via `0x00b0c390(vehicle, character, claimant, …)`, which can also skip the seat;
+   - **seat flag `+8` bit `0x80`** (high bit) is a special category gated on the session/mode-kind getter (`0x00614d00`, the same one `0x009e1e60` calls) returning `6` *and* the vehicle body being active — otherwise skip;
+   - if every check above passes, it calls **`0x00b0eac0(vehicle, seat, −1, 0, 0, &out1, &out2)`** and requires it to return `1`. On success the whole function returns **true** — but, consistent with §13.0 item 4, **nothing here writes the winning seat index anywhere the caller can read**: the per-seat loop variable is a callee-saved register, and no output parameter carries it out. `0x00b0eb90` answers "does a matching seat exist", not "which one".
+4. If the loop exhausts without a match, returns **false**.
+
+**`0x00b0eac0`'s own 3rd argument (`dir`) has at least two confirmed shapes beyond the `-1` this
+section's own call site uses** (2026-10-07, from reading `0x00b0b9a0` in full): `dir = -1` accepts
+only an `Interaction_Point_Set_Element` whose own `Direction` field is absent (`-1`,
+"unconstrained/default"); `dir = 7` — one past the last real `Direction` enum literal
+(`spec-tables-vehicle-world.md` §4.1 lists 0–6) — is a deliberate wildcard accepting *any* tagged
+`Direction`, falling back to the `-1` element only if none exists. `spec-ai-runtime.md`'s own
+`0x005457f0` (actions 37/38's seat chooser) calls `0x00b0eac0` with `dir = 7` from its own seat-ranking
+loop, a materially different filter than this section's own `0x00b0fdf0`-rooted call site uses.
+
+**Confirms scoping's three-caller list** (`spec-player-runtime.md` §9.5): this unit's own caller `0x00b0fdf0` (the eligibility pre-check above), the per-record upkeep `0x00af5cb0` (which does the *real*, persisted pick — `spec-player-runtime.md` §7.6, Player U6.0), and `0x005457f0` (**now read in
+full** — the AI-side seat chooser for actions 37/38, `spec-ai-runtime.md` §11.3; it calls
+`0x00b0eb90(vehicle, seat, -1, character, 0, 1, 0, 0)` once per candidate seat in its own scan,
+confirming args 5–8 at this third call site: arg5 = literal `0` (matching `0x00b0fdf0`'s own call),
+args 6–8 = literals `1, 0, 0`, none read from a request structure since this caller has none).
+`0x005457f0` is the function that actually does the "which one" selection this section's own point 3
+flagged as missing from `0x00b0eb90` itself: closest-to-self by squared distance among the seats
+`0x00b0eb90` approves, with hardcoded priority for seat 0 then seat 1.
+
+### 13.6 The obstruction gates: `0x00b0da10`, `0x00b0dc20`
+
+Both `(character, vehicle)`, both wrapped in an SEH frame (`push -1; push <handler>; mov eax, fs:[0]; push eax` — the standard MSVC `__try` prologue), both gated on vehicle `+0xbd0` = 1 (physics body active) and both structured the same way: compute a position (character and/or vehicle `+0x40`/`+0x44`/`+0x48`), scan a short list (stride `0x50`, testing bit `0x10` of a byte at a fixed sub-offset — `+0x48`/`+0x60` depending on which list) for an entry that already satisfies some condition, and call a query helper with the computed position and a fixed small integer "kind"/id constant.
+
+- **`0x00b0dc20(character, vehicle)`** — gated up front on `0x00853b30(character, 0x21)` ("is-player"); **an AI character always passes trivially** (the real check never runs). For a player, it computes positions from `character+0x40` and `vehicle+0x40`, scans the list via `vehicle+0x81c` (stride `0x50`, flag byte `+0x48`), and calls **`0x0075c880`** with the computed midpoint and the constant `0x6d`.
+- **`0x00b0da10(character, vehicle)`** — no is-player gate; applies to any character, but the caller (`0x00b0fdf0`, §13.4 step 8) only invokes it when the request is **not** instant and `0x00971cf0(character)` is non-null. Computes positions from `character+0x40` and `vehicle+0x40`, scans a list through a seat/door sub-record (stride `0x50`, flag byte `+0x38`/`+0x48`), and calls **`0x0075d7e0`** twice (once per candidate position) with the constant `0x6d` and a second constant `0x00ac4c30`.
+
+Both `0x0075d7e0` and `0x0075c880` were **not traced** — they read like a short-range geometry/physics query (HYPOTHESIS: "is there room at the door" or "is this entry point already physically occupied"), but their internals sit outside the vehicle-interaction band and are more likely physics-runtime territory. New OPEN item below. Either function returning its "found something" case clears `0x00b0fdf0`'s accumulated success byte, refusing entry without otherwise unwinding any state.
+
+### 13.7 The hand-off: what reaches the submitter, and what doesn't
+
+Putting §13.2–§13.6 together, by the time **`0x00af22a0`** (`spec-player-runtime.md` §7.4, already specified — cited, not repeated) runs its own steps:
+
+- **Populated, from construction:** request `+0x00` (seat: `-1`, a forced-seat index, or `1` in the co-op-solo case), `+0x0c` (search mode: `1`, `0` forced/co-op, or `2` if the submitter's own step 6 applies), `+0x23` bit 0 (the sprint/fast flag from the triggering button press), and the generic `-1`/`0` resets of `spec-player-runtime.md` §7.2's table (including the newly observed `+0x08` = `2` baseline, §13.2).
+- **Validated, but not written:** everything about *which* seat and *which* door/entry-point will actually be used. `0x00b105c0` and `0x00b0fdf0` (with `0x00b0eb90` inside it) only establish that **some** seat, consistent with the request, is reachable on **this** vehicle, under team/speed/obstruction/occupant constraints — they never store a seat index, a door, or an entry-point into the request or a slot.
+- **Vehicle = 0, always**, for every player-triggered path traced in this unit (§13.2's "common tail"), even when `player_force_vehicle_seat` has pinned both a seat and a vehicle. The submitter's own call to `0x00b105c0` (§7.4 step 4) is what actually produces the non-null vehicle object the rest of the submitter's steps (5–11) operate on.
+- The submitter then does what `spec-player-runtime.md` §7.4 already documents in full: refuses a `+0x1d7b` bit `0x40` vehicle without `+0x20` bit 2 (a *third* read of that same gate, after `0x00b0fdf0`'s two — three checks of the same bit across this call chain, not two as scoping implied); folds search mode 1 into 2 for remote-controlled vehicles and player-class characters; finds or claims a registry record; allocates a slot (no de-duplication); force-instants when the vehicle has no seat/entry table; copies the `0x11`-dword request into the slot; and calls set-enter with state 0. **The actual seat/door resolution happens on the record's next 250 ms upkeep pass**, `0x00af5cb0` (§13.0 item 4).
+- **The AI side reuses this exact chain below the submitter, not above it.** `0x0051d5b0` and `0x00521200` both resolve a human's vehicle handle the same way `0x00b105c0` does (through `0x00458230` with type-tag `0x031d152c`) and both call `0x00b0fdf0` directly — confirming scoping §5a.4 point 3. They do not go through `0x009e5e80`/`0x009e1e60` (those are on-foot player-controls entry points only) or necessarily through `0x00b105c0` (an AI caller may already know its target vehicle). Where in the AI mode-38 `Veh enter` machinery (`spec-ai-runtime.md`'s table row, `0x00521320`/`0x00520cd0`/`0x005213d0`/…) these two functions are themselves called from was not traced — AI-side work, flagged as a new OPEN item rather than guessed at here.
+
+### 13.8 What a port must reproduce
+
+1. The single shared trigger button (`CBA_GAC_ACTION`) and the table-of-handlers shape at `0x0111f2d0` (bit-indexed by context word `+0x2084`), not a per-prompt test/handler pair.
+2. `0x009e5e80`'s seated/not-seated split, including the debounce timer and AI-sub-state override on the exit side, and the sprint-vs-normal flag on the enter side.
+3. `0x009e1e60`'s request defaults (including the `+0x08` = 2 baseline) and its co-op/solo and forced-seat special cases — and the fact that it **always** submits with vehicle = 0, relying on the submitter's own auto-pick.
+4. `0x00b105c0`'s nearest-two-candidate scan with the sticky-override exception, and its one-retry-then-advance pattern against `0x00b0fdf0`.
+5. `0x00b0fdf0`'s full gate order (§13.4), especially that it is a pure validator: a port's equivalent must not treat a true return as "seat chosen" — only as "this vehicle/request combination is submittable".
+6. `0x00b0eb90`'s per-seat filter set and its tie-in to the element-selection rule for `fast` entries — reproducing this is what makes "can I jump in here" answers match the original without having to run the full async upkeep.
+7. The two obstruction gates' asymmetry (player-only vs. universal-but-instant-exempt) even if a port stubs their actual geometry query.
+
+### 13.9 Corrections and cross-spec flags raised by U6.2
+
+- **`review/scoping-player.md` §5a.3:** `0x00b0eb90` is CONFIRMED as the seat-scoring/eligibility helper (not HYPOTHESIS); its signature and full per-seat filter set are §13.5. `0x00b0da10`/`0x00b0dc20` are a pair of obstruction/clearance gates (§13.6), not named by the sub-unit table.
+- **`review/scoping-player.md` §4.2 OPEN item 9:** answered — `CBA_GAC_ACTION` (§13.1). The finer-grained question of what sets bit 15 of `+0x2084` is new and unresolved (below).
+- **`review/scoping-player.md` §5a.4 point 3:** confirmed by direct read (§13.7's last bullet), not merely by caller-list inference.
+- **`spec-player-runtime.md` §7.2 (Player U6.0, the request-field table):** two new fields found — request `+0x22` bit `0x80` (vehicle-eligibility gate, player-only, §13.4 step 1) and request `+0x30` read as "no existing claim id" by the seat-contest check (§13.4 step 7), alongside its already-documented "`-1` on reset" role. Request `+0x08`'s domain is wider than `{0, 1}`: `0x009e1e60` presets it to `2` before the submitter ever runs (§13.2). Request `+0x23` bit 0 is *written* at construction time (§13.2), not only consumed by the upkeep as §7.2 describes it — it is also read twice more inside `0x00b0fdf0`/`0x00b0eb90` (§13.4 step 7, §13.5 step 3).
+- **`spec-lua-api-behaviour.md` §38.1 / `spec-player-runtime.md` §7.4:** the vehicle descriptor flag `+0x1d7b` bit `0x40` vs. request `+0x20` bit 2 is tested **three times** across one submission (twice inside `0x00b0fdf0`, once by the submitter itself per §7.4 step 5), not once.
+- **Player-object fields:** `+0x1e30`/`+0x1e34` (a "sticky"/previously-tagged vehicle handle pair, read only by `0x00b105c0`, §13.3 step 2) is not in `spec-player-runtime.md` §1.5's (nor the original scoping note's §1.5) list of player-only fields. Raised for whoever next extends that list; not added there directly by this unit.
+
+---
+
+## 14. U6.5 — Enter animated states (`0x0a`–`0x13`)
+
+
+**Scope.** Unit U6.5 of `review/scoping-player.md` §5a.3: the on-entry and per-frame handlers of every live state in the enter range `0x0a`–`0x13` — prepare (`0x0a`), traverse (`0x0b`), open (`0x0c`), extract/hijack (`0x0d`), the extract-fail pick (`0x0e`), enter (`0x0f`), close (`0x10`, dead), change seat (`0x11`), activate (`0x12`, dead) and fast (`0x13`) — reached through the set-enter table U6.0 already specifies in full (`spec-player-runtime.md` §7.5). The three shared helpers this range would otherwise need — `0x00afe0d0` (the animated-camera path-clear raycast), `0x00b01460` (the fast-entry starter) and `0x00b0c170` (the "is the held animation finished" test) — are **not re-derived here**: U6.7 already specified all three in full, including the cross-cutting finding that `0x00b01460` runs on the hijacker's own slot when called from exit state `0x1d`'s on-entry (`spec-player-runtime.md` §11.7, cited throughout below). The element-selection rule itself (the key builder `0x00b0a6f0`, the matcher `0x00b0a650`, the lookup `0x00b0ad10`) is U6.1's (`spec-player-runtime.md` §9) and is cited by call, not re-derived; §9.5 in particular already traced the *key-building* fragment of several of this unit's on-entry handlers (`0x00af9720`, `0x00afa0d0`, `0x00afa540`, `0x00afaf90`, `0x00afb220`) in full — this unit fills in the rest of those same functions' bodies (state store, phase-boundary writes, play/camera calls, transition logic) that U6.1 explicitly left to U6.2/U6.5/U6.7. State `0x0f` turned out to be **already fully specified** by U6.3 (`spec-player-runtime.md` §10.4.4), as a byproduct of U6.3 needing to refute the "instant route" hypothesis against it — its on-entry `0x00afd0a0` and per-frame `0x00b01080` are cited verbatim below, not re-read.
+
+**Method.** Ghidra-free, as every other U6 sub-unit. A purpose-built linear Capstone lister over `tools/harnesses/exe_va.py` (`scratchpad/list_fn.py`: disassembles forward from a given VA, tracking every in-range forward `jcc`/`jmp` target so it does not stop at an early `ret` that is itself a mid-function branch target — validated against a function U6.7 had already published byte-for-byte, `0x00b057b0`, which reproduced exactly 114 instructions and the same control flow §11.6 describes). Every stack-relative operand feeding the shared resolver `0x00af4500` and the element lookup `0x00b0ad10` was resolved by hand-tracking the `esp` delta from each function's own entry through its `lea`/`push`/`call` sequence (the same discipline U6.8 §12's method section describes, applied manually rather than with a CFG walker, since every root here is small enough — 57 to ~700+ instructions — to track directly); the six-output-pointer shape of every `0x00af4500` call was independently re-derived at each call site from its own zero-initialisation writes, not assumed from the signature text in §6.1/§7.5. **All sixteen roots were read in full** except state `0x13`'s per-frame `0x00b01630`, whose dominant control flow (the timeout/knockdown/commit skeleton) was read and confirmed but whose "surface-kind" door-opening tail (past `0x00b01f0a`) was not traced to its end — flagged as this unit's one real gap, §U6.5.13 item 1. No Ghidra project was opened or copied. No `.czn_pc` data was touched.
+
+### 14.0 Results up front (U6.5)
+
+1. **The range holds eight live states, exactly as scoping named them**, each with both an on-entry and a per-frame handler — `0x0a` prepare, `0x0b` traverse, `0x0c` open, `0x0d` extract (hijack), `0x0e` the extract-fail pick, `0x0f` enter, `0x11` change seat, `0x13` fast. **`0x10` (close) and `0x12` (activate) have no handler of either kind and are never held** — already established from the setter side by U6.0 §7.5 and from the key-builder side by U6.1 §9.8; this unit confirms it a third way, by direct listing of the set-enter jump table's neighbours (§U6.5.8). That is sixteen roots, matching scoping §5a.3's own count exactly.
+2. **Every on-entry handler follows the same skeleton**: resolve (`0x00af4500`), store the state at slot `+0x0c`, reset the per-state fields `+0x10`/`+0x14`/`+0x18` — **except four handlers that deliberately break this rule**, a new finding parallel to U6.6/U6.7's own exceptions (`spec-player-runtime.md` §11.0 item 6): `0x0a` leaves `+0x18` at `0` (not `−1`); `0x0c` leaves `+0x18` at `2`; `0x0d` leaves `+0x10` at `1` (the extract-kind default, `extract standard`); `0x13` leaves `+0x18` at `4`. Three of these (`0x0a`, `0x0c`, `0x13`) are **sub-timer seeds** — each state's own per-frame advances `+0x18` through further values before anything else reads it, the same pattern U6.7 §11.5.1 found for exit state `0x1f`'s `+0x18` (`6`→`7`). `0x0d`'s `+0x10 = 1` is not a timer; it is simply the key builder's default extract kind, pre-seeded so a hit-less hijack chooser pass still has something to key on (§U6.5.5).
+3. **Three of the eight on-entry handlers call the element lookup `0x00b0ad10` and play the result unconditionally if found, with *no* miss fallback of their own** (`0x0a`, `0x0c`, `0x11`) — a silent miss simply leaves nothing playing, and that is not a bug: U6.7 §11.7.1's own "is the held animation finished" test (`0x00b0c170`) returns **true** at once when no animation is active, so the per-frame handler advances on the very next frame regardless. **One on-entry handler's miss is an explicit transition, not a silent fall-through**: `0x0b`'s miss goes straight to **set-enter 9 (the commit)** — the only state in this range whose on-entry can commit the seating directly without ever reaching a per-frame tick. `0x0d` and `0x0e`'s on-entry handlers call the lookup too, but **not on their own slot** — see item 5.
+4. **State `0x0f` (enter) is already fully specified, by U6.3** (`spec-player-runtime.md` §10.4.4, written to refute the "instant route" hypothesis): on-entry `0x00afd0a0` (167 instructions) and per-frame `0x00b01080` (exits only). Cited verbatim below (§U6.5.7); nothing new was found by re-reading it, and it was not re-read.
+5. **State `0x0d` (extract) never calls the element lookup or plays an animation on its own slot at all.** Its on-entry `0x00afae20` does one of two things instead: for a **tank** seat, it independently re-implements the hub's own instant-hijack logic (`spec-player-runtime.md` §10.4.2's H1 branch) — redirect a player-class occupant to a cancel (set-enter 8) or kill and, if locally owned, destroy a non-player one — using the *same* damage routine (`0x0096fa20`) and the *same* null-handle/−1.0 constants; for every other vehicle, it delegates to the **hijack chooser `0x00afa540`**, already specified in full by U6.1 §9.5. **The hijacker's own animation is driven entirely from the victim's side**: exit state `0x1d`'s on-entry (`spec-player-runtime.md` §11.4.1) is the one that calls `0x00b01460` *on the hijacker's slot* or runs the second-anim/camera-gate branch — confirmed here by the straightforward fact that `0x00afae20` contains no call to `0x00b0ad10` or `0x00af45a0` anywhere in its 129 instructions. `0x0d`'s own on-entry closes with an unresolved call (`0xaf1b80(human+8, human+0xc)`) whose boolean result is folded into **human `+0xec` bit `0x100000`**, a bit already known from three other writers (§U6.5.11).
+6. **State `0x0e` (the extract-fail pick) matches U6.1 §9.5's existing citation of it almost exactly, and extends it with the resolver it uses.** On-entry `0x00afaf90` counts the candidates (`0x00b0ac60`), rolls a pick in range (`0x00dab660`), builds a **temporary phase-2/state-`0x1e` slot** with the hijacker's own `+0x1c`/`+0x20` copied in (exactly as §9.5 describes), and plays **two separate animations on two separate objects** — the hijacker's own (real slot) and the victim's (temporary slot) — both resolved through a previously-uncited helper, `0x00ab6360(a, b, c)`. Its per-frame never calls the chooser `0x00afb220` at all: once the chosen object fails to resolve, or its animation is no longer active, `0x0e`'s per-frame unconditionally cancels (inline set-enter 8) — and then **re-runs the hub's own vehicle-AI-reaction logic** (`spec-player-runtime.md` §10.3 step 16's kind-1/kind-2 split, confirmed here by the identical `0x00b464c0`/5000 ms-timer-arm pair) before returning. So a failed hijack attempt provokes the same vehicle-AI response an instant one does.
+7. **State `0x13` (fast) is the richest handler in the range, and ties together almost every other unit's prior findings.** Its on-entry independently confirms three already-published facts byte-for-byte — the exit-request `+0x20 = 0x13` and `+0x30` bit 3 writes U6.6 §6.2 already attributes to this exact address, and the "carjacking report" pair (`0x009dd390`/`0x00b33dc0`) U6.3 §10.7 step 5 already found at state 6's arrival router, reused here unchanged — and calls both the hijack chooser (§U6.5.5/U6.1 §9.5) and the shared fast-entry starter `0x00b01460` (U6.7 §11.7.2) directly. Its per-frame **never calls the state-chooser `0x00afb220` and never calls set-enter at all**; instead, once the fast-entry animation (driven by `0x00b01460`) finishes, it checks whether the destination seat and its entry-point queue are now completely clear and, if so, **commits directly with an inline call to `0x00afbd90`** (state 9's on-entry) — exactly the "direct calls from states `0x07`/`0x13` per-frame" U6.0 §7.5 already lists as one of state 9's nine producers. If the seat or queue is *not* clear, it applies a knock-down/impulse pair (`0x009a48e0` then `0x007818f0`, the same mechanism `spec-player-runtime.md` §11.5.4/§12.5 already cite for the eject kind and the rider-fall detector) to whoever is blocking, and tries again the following frame.
+8. **A correction to U6.0 §7.5 / U6.1 §9.1's citation of the chooser `0x00afb220`.** Every documented call site before this unit passed a literal `0` as the third argument. **State `0x0c`'s per-frame passes a computed, non-literal value instead** — the chooser's signature is `(record, i, flag)` with *flag* genuinely variable at at least one call site, not always `0`. What the flag selects was not resolved (§U6.5.13 item 2).
+9. **A new, previously undocumented timer field.** Slot `+0x28` (enter side — distinct from the exit request's own `+0x28`, "start time", `spec-player-runtime.md` §6.2) is read through `0x00d9e1e0` ("expired") by both `0x0d`'s and `0x13`'s per-frame handlers, gating their despawn/timeout paths. §7.2's slot-layout table does not currently name this field; it is new (§U6.5.11).
+10. **Stick-abort recurs inside the animated range, asymmetrically.** `spec-player-runtime.md` §10.0 item 8 counted the stick abort twice, both inside U6.3's own states (0 and 5). Within this unit's own range it recurs **twice more**, in `0x0a`'s per-frame (after the usual 800 ms grace, gated on the sub-timer reaching stage 1) and twice over in `0x0d`'s per-frame (after `+0x28` expires) — but **not** in `0x0b`, `0x0c`, `0x0e`, `0x11` or `0x13`'s per-frame handlers, which have no stick-abort path at all. The mechanism (local player only, any non-zero `CAA_WALK_FORWARD_BACKWARD`/`CAA_WALK_TURN_LEFT_RIGHT`, §1.9) is identical every time it appears.
+11. **Size.** Six of the eight states' handlers were read to a complete, confirmed listing: `0x0a` (57 + 263 = 320), `0x0b` (164 + 184 = 348), `0x0c` (124 + 342 = 466), `0x0d` (129 + 515 = 644), `0x0e` (145 + 258 = 403), `0x11` (68 + 63 = 131) — **2,312 instructions**, all CONFIRMED by full listing. `0x0f` is U6.3's 167 (on-entry only; its per-frame was not sized by U6.3 either). `0x13`'s on-entry is a confirmed 184; its per-frame is at least ~733 instructions by direct count across the portions read (control flow fully traced; one tail not fully walked, §U6.5.13 item 1) — **so the unit's total own size is at least ~3,440, consistent with scoping's own "~3.6k own" estimate** without needing to correct it.
+
+### 14.1 The eight states at a glance
+
+| State | On-entry | Per-frame | Entered from | Leaves to |
+|---|---|---|---|---|
+| `0x0a` prepare | `0x00af9720` | `0x00affdb0` | the chooser `0x00afb220` (states 6, `0x0b`–`0x0d` per-frame) | chooser result via set-enter, or `0x00afe980` |
+| `0x0b` traverse | `0x00af97e0` | `0x00b000f0` | chooser `0x00afb220` | miss → **9** (on-entry); else chooser result, or `0x00afe980` |
+| `0x0c` open | `0x00afa0d0` | `0x00b00c60` | chooser `0x00afb220` | chooser result, or `0x00afe980` |
+| `0x0d` extract | `0x00afae20` | `0x00b00310` | hub step 15 (request `+0x23` bit 0, §10.3), or the chooser | inline cancel (state 8), chooser result, or `0x00afe980` |
+| `0x0e` extract-fail pick | `0x00afaf90` | `0x00b00950` | chooser `0x00afb220` (its own hand-built temporary-slot probe) | inline cancel (state 8) unconditionally, or `0x00afe980` |
+| `0x0f` enter — **U6.3's, cited** | `0x00afd0a0` | `0x00b01080` | hub step 15 (forced/override) | **9** (destination = entry seat), `0x11` (destination free), **3** (otherwise), or `0x00afe980` |
+| `0x10` close | **none** | **none** | never (dead, §U6.5.8) | — |
+| `0x11` change seat | `0x00af99b0` | `0x00b013c0` | state 3's per-frame (inlined), `0x0f`'s per-frame | **9** (on finish), or `0x00afe980` |
+| `0x12` activate | **none** | **none** | never (dead, §U6.5.8) | — |
+| `0x13` fast | `0x00afd290` | `0x00b01630` | hub step 15 (request `+0x23` bit 0) | **9** (inline `0x00afbd90`, seat clear), or stay (knockdown retry), or `0x00afe980` |
+
+### 14.2 State `0x0a`: prepare
+
+**On-entry `0x00af9720`** (57 instructions, CONFIRMED by full listing). Pure-stack calling convention (both `record` and `i` arrive on the stack, unlike every per-frame handler in this unit, which take `record` in a register and `i` on the stack — the "mixed conventions" `spec-player-runtime.md` §7.6 already flags, confirmed state-by-state here).
+1. Resolve. State `+0x0c` = `0x0a`. `+0x10 = +0x14 = −1`. **`+0x18 = 0`, not −1** — the exception (§U6.5.0 item 2).
+2. `anim = 0x00b0ad10(vehicle info, slot, enter request, &exit seat, quiet = 0)` — the element lookup, U6.1 §9.1/§9.3's citation of this exact call confirmed by listing (vehicle info reached through `vehicle +0xbf4 → +0xa7c`, the same chain every lookup in this unit uses).
+3. If found: `0x00af45a0(human, anim)` plays it. If not found: nothing — no fallback, no transition (§U6.5.0 item 3).
+
+**Per-frame `0x00affdb0`** (263 instructions, CONFIRMED by full listing).
+1. Resolve. If the vehicle does not resolve, or is not instantiated (object flag `+0x33` bit `0x08`): check ownership of the **human** (`0x008addb0(human, 0)`); if owned here, cancel-and-resubmit (`0x00afe980(record, i)`, U6.3 §10.4.3); otherwise return and wait.
+2. Otherwise, dispatch on slot `+0x18` (the sub-timer the on-entry seeded at `0`):
+   - **`+0x18 = 0`:** wait for animation `0x1d95` to either be inactive (`0x004b4ce0`) or, if active, to carry a cached tag (a hash at `0x153bd9c`, same lazy-cache idiom as U6.7 §11.7.2's "critical end" tag at `0x0153be2c`, name not recovered — §U6.5.13 item 3) via `0x004b29e0`. Once satisfied: a role-only vehicle call (`0x00ab48f0(vehicle, 1)`) runs, then **`+0x18 ← 1`**.
+   - **`+0x18 = 1`:** a role-only vehicle-band call (`0x00ab98c0(vehicle)`, return discarded) runs, then wait for U6.7 §11.7.1's `0x00b0c170(human)` ("held animation finished"). Once finished: compute a vehicle tilt angle (`0x00da48a0` on `vehicle +0x4c`, doubled, compared to `0.5` — the same primitive U6.3 §10.5 step 3 uses for the tilt fix, applied here for a *different* purpose, §U6.5.13 item 4):
+     - **small tilt:** clear enter-request `+0x21` bits 1 and 2 (the "entry-angle class" bits `spec-player-runtime.md` §9.3 cross-references for the lift/pull variant), call the **chooser `0x00afb220(record, i, 0)`** (U6.0 §7.5/U6.1 §9.5), and transition: chooser result `8` → `0x00afe980`; result `0x0f` → also clear slot `+0x24` first; otherwise → `0x00afe570(record, i, result, 1)` (set-enter).
+     - **large tilt:** the stick-abort path — local player only (`0x0091faf0`), the 800 ms grace (`+0x84`) expired, not instant, any non-zero `CAA_WALK_FORWARD_BACKWARD`/`CAA_WALK_TURN_LEFT_RIGHT` — runs the shared inline-cancel idiom (resolve + validate the occupant, log `"Set Enter"` with both network ids through `0x00b0c280`, network-send `0x00afa400(record, i, 8)`, then `0x00afb930(record, i)`).
+   - any other value of `+0x18`: return and wait.
+   - any other value of the vehicle-instantiated check's slot (3, a different field not shown above) is unreachable; omitted for brevity.
+
+### 14.3 State `0x0b`: traverse
+
+**On-entry `0x00af97e0`** (164 instructions, CONFIRMED by full listing).
+1. Resolve (pure-stack convention, as `0x0a`). State `+0x0c` = `0x0b`. `+0x10 = +0x14 = +0x18 = −1` (no exception here).
+2. **`+0x24` (the walk-target `Interaction_Point_Type`, same field U6.3 §10.6 step 4 writes for state 5) is set to `6` or `7`**: if the entry seat (`request +0x10`) has an occupant (`0x00ab5070`), query whether its point set has a type-4 point for the current side (`0x00b0b9a0(vehicle, …, side = −1, type = 4, flag = 0)`, the same point-set query U6.3 §10.6 step 4 uses) and set `+0x24 = 6` or `7` accordingly; with no occupant, `+0x24 = 6` unconditionally. (6/7 are the `traverse standard`/`traverse no door` point-type codes, parallel to `+0x24`'s 2–5 range for states `0x0a` and 5.)
+3. A door-state query/drive sequence (`0x00aa2370`/`0x00aa2080`/`0x00aa1ff0`, the same door-handling family U6.3 §10.3 step 17 and U6.7 §11.5.1 step 5 use) sets or clears enter-request `+0x21` bits 2 and 3 — the "traverse no door" classification bits U6.1 §9.3 already names — and a new human bit (`+0x21` bit 1, role not independently named, §U6.5.13 item 5) is set unconditionally at the start of this block. The exact stack-operand identities inside this block were not pinned to full CONFIRMED certainty (§U6.5.13 item 3); the bit-level outcome (request `+0x21` bits 2/3 set from a door check) is CONFIRMED by the surrounding reads/writes.
+4. `anim = 0x00b0ad10(…)`, the element lookup. **Miss (`−1`) → `0x00afe570(record, i, 9, 1)` — set-enter 9, the commit, directly** — the one on-entry handler in this unit whose miss is an explicit transition rather than a silent no-op (§U6.5.0 item 3). **Hit:** play it (`0x00af45a0`), then the animated-camera gate `0x00b0ae40(human, anim)` (U6.1/U6.7's shared gate); on failure, the camera hand-off `0x00b0bc10(human, vehicle, 0, 0, snap = 1, 0)` — U6.4 §8.6's signature, with a **forced snap** (unlike `0x00b01460`'s own three-step cascade through `0x00afe0d0`, this call goes straight from the gate to the hand-off with no path-clear raycast in between).
+
+**Per-frame `0x00b000f0`** (184 instructions, CONFIRMED by full listing). Register convention: `record` in `esi`, `i` on the stack.
+1. Resolve. Vehicle not resolved/instantiated → ownership check on the human → `0x00afe980` or return (same idiom as `0x0a`'s per-frame).
+2. If instantiated: a tag-hash check (`0x153bdec` — the **same** cached hash `0x0c` and `0x0e`'s per-frame both also read, §U6.5.13 item 6) via `0x004b29e0`; if it passes, drive the door open (`0x00aa2370`/`0x00aa2080`/`0x00aa1ff0` vs a float threshold/`0x00aa1eb0`, writing the door part into slot `+0x30` exactly as U6.3 §10.3 step 17 does) before continuing; if it fails, skip straight to step 3.
+3. Wait for `0x00b0c170(human)`. Once finished:
+   - hijack-bookkeeping, re-using the human `+0x16c0` bit `0x10` / `+0x16e8`/`+0x16ec` cache-compare pattern, calling `0x00b0d280(vehicle, human, 1)` on a match — the same bookkeeping U6.3 §10.5 step 4 names for state 4's per-frame.
+   - set slot `+0x1c = 2` (the `vehicle` surface token, U6.1 §9.1 — makes sense while physically traversing the vehicle's exterior).
+   - **evict the destination seat's occupant with an ordinary (non-instant) exit request** (`0x00af3cd0`, U6.6 §6.3) if it is not already exiting — the exact pattern U6.3 §10.5 names for state 3's and state 4's per-frame.
+   - call the **chooser `0x00afb220(record, i, 0)`** and transition: `8` → `0x00afe980`; otherwise → set-enter(result, 1).
+
+### 14.4 State `0x0c`: open
+
+**On-entry `0x00afa0d0`** (124 instructions, CONFIRMED by full listing). Register convention (`esi` = record, `[ebp+8]`/`[ebp+0xc]` on the stack for `i`/outputs — a third distinct calling shape among this unit's on-entry handlers, alongside the pure-stack and the `ecx`-register ones).
+1. Resolve. State `+0x0c` = `0x0c`. `+0x10 = −1`. **`+0x18 = 2`** (the exception — role not independently resolved, a candidate sub-timer seed by analogy with `0x0a`'s and `0x13`'s own `+0x18` exceptions, but no per-frame read of it was found at this value specifically — §U6.5.13 item 7). `+0x14`: **confirms U6.1 §9.3/§9.5's existing citation exactly** — `2` when enter-request `+0x21` bit 4 is set, `3` when bit 5 is set, else left at the default `2` (`open shady`/`open shopper`/`open standard`).
+2. `anim = 0x00b0ad10(…)`. **Hit:** play it. **Miss: silently continue** (no transition; same reasoning as `0x0a`, §U6.5.0 item 3) — the branch structure here is unusual in that *both* the hit and the miss paths converge on the same next step rather than the miss skipping it, confirmed by listing.
+3. The animated-camera gate `0x00b0ae40(human, anim)`; on failure, the forced-snap camera hand-off `0x00b0bc10(human, vehicle, 0, 0, 1, 0)` — identical shape to `0x0b`'s own camera step.
+4. A per-seat scratch-table clear (`vehicle +0x1360 + 0x30·seat`, the same stride as the seat-claim table at `+0x1340`, written to `−1`) and the same hijack-bookkeeping compare-and-call-`0x00b0d280` pattern `0x0b`'s per-frame uses, here gated by one extra condition (`vehicle +0x20` bit `0x10` clear). Tail: `0x0055b1d0(vehicle, 500)` — role only, not independently named (§U6.5.13 item 8).
+
+**Per-frame `0x00b00c60`** (342 instructions, CONFIRMED by full listing). Register convention: `record` in `ecx`→`edi`, `i` on the stack.
+1. Resolve. If the human does not resolve, is not instantiated, or fails `0x00853b10` (the same validity predicate U6.6 §6.1 uses for the occupant guard — one more condition than `0x0a`/`0x0b`'s equivalent check): ownership-check-then-cancel-resubmit on the vehicle, same idiom as before.
+2. Otherwise, dispatch on slot `+0x18` (seeded at `2` by the on-entry):
+   - **`= 2`:** wait for either the tag-hash check (`0x153bdec`, via a *different* query function, `0x004b2910`, than the `0x004b29e0` every other state's tag check uses — role difference not resolved) or the animation's progress (`0x004b4600`) to exceed roughly `0.5` (a float constant at `0x1117b70`). Once satisfied: drive the door fully open (`0x00aa2080`/`0x00aa1eb0(vehicle, part, 1.0, 0, 1, 0.0, 0.0, 1)`, the exact call shape U6.3 §10.3 step 17 and U6.7 §11.5.1 step 5 both use), store the door part in slot `+0x30`, arm slot `+0x34` to 1000 ms (`0x00d9e140`), and **`+0x18 ← 3`**.
+   - **`= 3`:** re-check the door and re-drive it if still blocked; then wait for **both** `0x00b0c170(human)` *and* (the door fully open, or the `+0x34` 1000 ms timer expired via `0x00d9e1e0`). Once both are satisfied, run the local-player stick-abort check (identical mechanism to `0x0a`'s), and:
+     - **aborting:** the shared inline-cancel idiom (same as `0x0a`'s per-frame).
+     - **not aborting:** the **chooser `0x00afb220(record, i, flag)`**, where *flag* is **not the literal `0`** every other call site in this unit (and every call site U6.0/U6.1 previously documented) uses — it is a value computed earlier in this same branch (§U6.5.0 item 8, §U6.5.13 item 2). Transition: `8` → `0x00afe980`; otherwise → set-enter(result, 1).
+   - any other value: return and wait.
+
+### 14.5 State `0x0d`: extract (hijack)
+
+**On-entry `0x00afae20`** (129 instructions, CONFIRMED by full listing, re-verified instruction-by-instruction after an earlier draft of this subsection was found on review to have cross-contaminated several details from `0x13`'s on-entry — see the three corrections called out below). Mixed convention: `record` via `eax` register, `i` on the stack.
+
+This function is short and has exactly two branches, both converging on one four-instruction tail. It contains **no exit-request construction, no `0x00af3cd0` call, no enter-request `+0x21`/`+0x23` bit write, no UI/stat/carjacking-report call, and no call to `0x00b01460`** — all of which *do* appear in `0x13`'s on-entry (§U6.5.10) and were mistakenly carried over into an earlier draft of this subsection before being caught and removed on review.
+
+1. Resolve. State `+0x0c` = `0x0d`. **`+0x10 = 1`** (not −1 — the default extract kind, `extract standard`). `+0x14 = +0x18 = −1`. `+0x24 = 0`.
+2. **Tank test** (`0x00ad3140(vehicle)`). **Not a tank:** fall straight to step 3 (the hijack-chooser call), unconditionally, with no occupant pre-check. **Is a tank:** resolve the occupant of the seat `request +0x18` names (`0x00ab5070`); then:
+   - **occupant is player-class** (`0x00853b30(occupant, 0x21)`): `0x00afe570(record, i, 8, 1)` — **set-enter 8, and return immediately** (the function exits here — step 3 and the tail never run on this path) — matching `spec-player-runtime.md` §10.4.2 H1's "If v is player-class → set-enter 8 and return" exactly.
+   - **occupant is not player-class** (including no occupant at all, resolved as handle 0): kill it (`0x0096fa20(occupant, human, −1.0, null-handle, 0, 0)`, the same arguments §10.4.2 H1 already documents), and, if locally owned (`0x008addb0`), destroy it (`0x00853ea0(occupant, 0, 0)`) — then fall through to the tail. **This branch is a direct, independent re-implementation of the hub's own instant-hijack logic (§10.4.2's H1), not an animated eviction** — it never touches the element lookup, an exit request, or `0x00af3cd0`.
+3. **Non-tank path**: call the **hijack chooser `0x00afa540`** — U6.1 §9.5's full citation of this function applies unchanged, with no further bit-write around the call site (unlike `0x13`'s own on-entry, which sets enter-request `+0x23` bit 1 after its own call to the same chooser, §U6.5.10 step 3 — `0x0d` does not). Fall through to the tail.
+4. **Tail** (reached from both the tank branch's kill/destroy path and the non-tank path): resolve the human again, call an unresolved 2-argument helper `0xaf1b80(human +8, human +0xc)`, and fold its boolean result (via a branchless XOR/AND idiom) into **human `+0xec` bit `0x100000`** — set when `0xaf1b80` returns false/0, cleared otherwise. This bit already has three other writers (state 0's on-entry, §10.2 step 9; the hub, §10.3 step 10; the cancel, §10.9 step 13); this is a fourth. Role of `0xaf1b80` not resolved (§U6.5.13 item 9).
+
+**No call to `0x00b0ad10` or `0x00af45a0` anywhere in this function** — confirming by omission that the hijacker's own clip for an animated extract is driven from the *victim's* side, not this one (U6.7 §11.4.1's hijacker-resync scan and fast-entry branch).
+
+**Per-frame `0x00b00310`** (515 instructions, CONFIRMED by full listing of the control-flow skeleton; several deep sub-calls left at role level, §U6.5.13 item 10). This is the largest and most complex handler in the unit.
+1. Resolve. Vehicle null/not instantiated → ownership-check-then-cancel-resubmit, as elsewhere.
+2. If instantiated: check **slot `+0x28`** (a new timer field, not in §7.2's table, read through `0x00d9e1e0` — §U6.5.0 item 9) for expiry.
+   - **Not expired:** skip straight to step 3.
+   - **Expired:** a class-bit `0x22` test (`0x00853b30`, the same "despawn-eligible" class U6.6 §6.7.2/§11.4.1 already name) on the extract target — if set, run the shared inline-cancel idiom immediately (resolve+validate+log+network-send(8)+`0x00afb930`), bypassing everything below. If clear, fall into the **local-player stick-abort** check (the same mechanism as elsewhere in this unit) gated on the same `+0x28` expiry, which on a non-zero walk axis sets a flag feeding the *same* cancel decision at the very end of the function (step 4).
+3. **Wait for the entry seat to actually empty** (`0x00ab5070`; if still occupied and a request flag `+0x21` bit `0x80` is clear, return and wait). Once clear (or the bit forces proceeding):
+   - a tag-gated (`0x153be28`) **held-weapon drop sequence**: `0x00941f40` (the held-weapon query U6.6/U6.7's own extract-kill path already cites, §11.4.2), its sub-object at `+0x19c`, through `0x00b81440` (the same predicate U6.3 §10.2 step 4 names for a "held weapon" test) — on success, an unresolved drop/holster call `0x009d14f0`, followed by seat-claim/pending-handle bookkeeping (`0x00ab51a0`) and a short chain of unresolved notification calls (`0x0070bcb0`/`0x004ddc20`/`0x0070ced0`/`0x0070dcf0`) — role only throughout (§U6.5.13 item 10).
+   - two more tag-gated checks (`0x153be24`, `0x153bdec`) selecting between an AI driving-request call (`0x009c7cc0`, the same helper U6.3 §10.2 step 4 names) and a door-open sequence (`0x00aa2080`/`0x00aa1eb0`/`0x00aa1f20` — a third door-drive variant not seen elsewhere in this unit, role only).
+   - two further tag-gated checks (`0x153be20`, `0x153be1c`) selecting between two unresolved, parallel calls (`0x0055a0a0`/`0x0055a190`) — role only.
+   - a wait for the animation to be active (gated on a human bit, `+0x21` bit `0x80`) and then for `0x00b0c170(human)` or a "critical" tag-progress check (`0x004b4320`, hash `0x153bd98`, target `−1` — the same family of calls U6.3 §10.6 step 5(b) uses for a different tag) to be satisfied.
+4. Once everything above is satisfied: a final local-player stick-abort-style check (same `+0x28`-gated mechanism) sets a flag; that flag **or** a class-bit `0x22`/`+0x22` combination both lead to the **same shared inline-cancel idiom**. Failing both, call the **chooser `0x00afb220(record, i, 0)`** and transition normally (`8` → `0x00afe980`; otherwise → set-enter(result, 1)).
+
+### 14.6 State `0x0e`: the extract-fail pick
+
+**On-entry `0x00afaf90`** (145 instructions, CONFIRMED by full listing; the lookup portion of this function was already specified by U6.1 §9.5 and matches exactly). Mixed convention: `[ebp+8]`/`[ebp+0xc]` on the stack.
+1. Resolve. State `+0x0c` = `0x0e`. `+0x10 = +0x14 = +0x18 = −1`.
+2. **Count** the candidate `extract fail` elements: `C = 0x00b0ac60(vehicle info, slot, request, &exit seat)` (U6.1 §9.1's counting sibling of the lookup). The raw count is then incremented in place (`eax += 4`) *before* the roll: `+0x14 ← 0x00dab660(5, C + 4)` — reproducing U6.1 §9.5's documented `5…N+4` exactly, with U6.1's `N` equal to this raw count `C` (an earlier draft of this bullet mis-stated the arithmetic as `0x00dab660(5, N + 3)` after renaming `C + 4` to its own `N`; fixed on review — the roll's second argument is simply the already-incremented value, one addition, not two).
+3. Resolve the hijacker (`0x00ab6360`, a previously-uncited 3-argument resolver — role only, used identically by this unit's `0x0e` per-frame too) and play the lookup's result on it (`0x00b0ad10` on the **real slot**, then `0x00af45a0`).
+4. Build a **temporary phase-2, state-`0x1e` slot** on the stack (constructed with `0x00af2e40`/`0x004dccd0`, matching U6.1 §9.5's description field-for-field): `+0x1c = 1` (ground), `+0x14` = the same roll from step 2, `+0x20` = the hijacker's own `+0x20` (side). Resolve the victim (`0x00ab6360` again) and play *its* lookup result (`0x00b0ad10` on the **temporary slot**, then `0x00af45a0`) — this is U6.1 §9.5's "looks up the victim's extract fail animation in the exit set," confirmed exactly.
+5. Tail: the same per-seat scratch-table clear (`vehicle +0x1360 + 0x30·seat ← −1`) `0x0c`'s on-entry also performs.
+
+**No call to the chooser, no set-enter, in either animation-play branch** — this on-entry handler's entire job is choosing and playing the pair of animations; the transition away from `0x0e` is entirely the per-frame's.
+
+**Per-frame `0x00b00950`** (258 instructions, CONFIRMED by full listing).
+1. A tag-gated (`0x153bdec` — the same hash `0x0b`/`0x0c`'s per-frame also read) door-open sequence, identical in shape to the ones already described, run unconditionally first.
+2. Resolve the hijacker again (`0x00ab6360`). **If it fails to resolve, or its animation `0x1d95` is no longer active** (`0x004b4ce0`), run the **shared inline-cancel idiom** (resolve+validate+log+network-send(8)+`0x00afb930`) **unconditionally — there is no chooser call anywhere in this function.** A failed hijack attempt always ends in a cancel, never a different animated state.
+3. **After** the cancel: re-run the **hub's own vehicle-AI-reaction logic**, confirmed as the same mechanism `spec-player-runtime.md` §10.3 step 16 already documents (kind 1 vs kind 2, the driver-class/team checks, `0x00b464c0`/`0x00b50180` and the vehicle `+0x1ac4` 5000 ms timer arm) — an ownership-gated role-only block (`0x004de260`, `0x004fa060`/`0x00b61cc0`, `0x00b46ca0` fill in the branches not already named by §10.3). So the vehicle's AI reacts identically whether a hijack attempt was stopped instantly (the hub) or animated-and-failed (here).
+
+### 14.7 State `0x0f`: enter — already specified by U6.3, cited not re-derived
+
+On-entry `0x00afd0a0` (167 instructions) and per-frame `0x00b01080` are **U6.3's** (`spec-player-runtime.md` §10.4.4), read there in full to refute the scoping-level "instant route" hypothesis. In brief, for citation:
+- On-entry: state `+0x0c = 0x0f`; `+0x14 = −1`, `+0x18 = 4`; `+0x10 = 0` for `enter guardian angel` when forced; the entry door is driven open and the seat's own `+0x20` timer disarmed; `e = request +0x30`, or the element lookup if `−1`; with `e` and a controller, play it (`0x00af45a0`) and, unless `0x00b0ae40`, the camera hand-off `0x00b0bc10`; **without `e`, set-enter 9 directly** (the only fallback of this kind in the whole `0x0a`–`0x13` range besides `0x0b`'s miss).
+- Per-frame: on animation end, → **9** when the entry seat is the destination; → **`0x11`** when the destination is free; → **3** otherwise; `0x00afe980` when the vehicle is gone.
+
+Nothing in this unit's own reading of its sixteen roots touched `0x00afd0a0`/`0x00b01080` again; no correction is raised against U6.3's account.
+
+### 14.8 States `0x10`, `0x12`: dead
+
+Confirmed a third way, independently of U6.0 §7.5 (the setter-side survey) and U6.1 §9.8 (the key-builder side): the set-enter jump table `0x00afe924`'s entries for `0x10` and `0x12` were read directly and both point at the table's own shared "nothing to do, return" target, exactly as U6.7 §11.2 found for the parallel exit-side dead states `0x1a`/`0x1e`/`0x20`. No per-frame slot exists for either in the enter per-frame table `0x00b02100` either. These two states cannot be held in a session where every machine runs this executable.
+
+### 14.9 State `0x11`: change seat
+
+**On-entry `0x00af99b0`** (68 instructions, CONFIRMED by full listing) — the shortest handler in the unit.
+1. Resolve. State `+0x0c` = `0x11`. `+0x10 = +0x14 = +0x18 = −1`.
+2. **Leave the old entry-point queue without releasing the seat claim**: `0x00b0b270(vehicle, human, flag = 0)` (U6.0 §7.3's queue-leave function, called here with *flag* clear — distinct from the cancel's own call to the same function with *flag* = 1, §10.9 step 4).
+3. `anim = 0x00b0ad10(…)` (the `any`-surface key U6.1 §9.3 documents for this state). Hit → play it (`0x00af45a0`). Miss → nothing (same silent-miss convention as `0x0a`/`0x0c`).
+
+**Per-frame `0x00b013c0`** (63 instructions, CONFIRMED by full listing) — the simplest transition logic in the unit.
+1. Resolve. Vehicle null/not instantiated → ownership check on the human → `0x00afe980` or return.
+2. Otherwise: wait for `0x00b0c170(human)`. **Once finished: `0x00afe570(record, i, 9, 1)` — set-enter 9, unconditionally.** No chooser, no camera step, no fallback branch of any kind.
+
+### 14.10 State `0x13`: fast
+
+**On-entry `0x00afd290`** (184 instructions, CONFIRMED by full listing). Mixed convention: `record` via `ecx` register, `i` on the stack.
+1. Resolve. State `+0x0c` = `0x13`. `+0x10 = +0x14 = −1`. **`+0x18 = 4`** (the third `+0x18` exception in this unit; role/consumer not found — §U6.5.13 item 11).
+2. **Evict a blocking occupant, if any and if eligible.** Read a seat-table field (`vehicle info +0x58 + 0x24·seat` — the same `Seat_Info` array U6.1 §9.4.1 indexes for `Enter_Animations`/`Exit_Animations`, here at a different sub-offset, candidate `Primary_Access_Seat`/`Secondary_Access_Seat` by analogy with U6.3 §10.9 step 7's naming, not independently confirmed — §U6.5.13 item 12) unless a skip condition holds (a request scratch field equals `−1`, or equals `2`). If a seat is found and occupied (`0x00ab5070`) and a role-only predicate `0x00950550(occupant, human)` is **false**: build an exit request (`0x004dccd0`), **write `+0x20 = 0x13` and set `+0x30` bit 3** — the exact pair `spec-player-runtime.md` §6.2 already attributes to this address, independently confirmed by this unit's own listing of `0x00afd290` — and evict with `0x00af3cd0`. **`0x0d`'s on-entry does *not* write these fields** — its own tank branch handles a blocking occupant by killing/destroying it directly (§U6.5.5), never by constructing an exit request; an earlier draft of this section wrongly claimed otherwise and was corrected on review (§U6.5.5 step 2's note).
+3. **Resolve the entry seat's own occupant** (a different seat than step 2's). If present: call the hijack chooser `0x00afa540` (U6.1 §9.5), setting enter-request `+0x23` bit 1 (a new bit, §U6.5.11 — `0x0d`'s on-entry calls the same chooser but does **not** set this bit, §U6.5.5). If absent and step 2's eviction did **not** already fire: call the shared helper **`0x00b01460(record, i)`** directly.
+4. A player-class check (`0x00853b30(…, 0x21)`) gates a role-only UI call (`0x0051b5b0`); an unresolved 3-arg call `0x006bd720`; a local-player check (`0x009da4e0`) gating a role-only achievement/UI call (`0x00710e40(0x41)`) — none of these four appear in `0x0d`'s on-entry (§U6.5.5), despite an earlier draft of this section claiming otherwise; they are specific to `0x13`. **When step 2's eviction fired and the occupant is the local player**, the **carjacking-report pair** `0x009dd390`/`0x00b33dc0` fires — the exact same two-call sequence U6.3 §10.7 step 5 already documents for state 6's arrival router, confirmed here as a second independent user of the same mechanism (not a third — `0x0d`'s on-entry does not call it).
+
+**Per-frame `0x00b01630`** (confirmed control-flow skeleton over ≥ 733 instructions directly read; one tail not fully walked, §U6.5.13 item 1). Register convention: `record` in `esi`/`ecx`, `i` via `[ebp+8]`.
+1. **A timeout-based hard cancel, checked first.** If the vehicle is locally owned (`0x008addb0`) *and* **slot `+0x28`** (the same new timer field `0x0d`'s per-frame reads, §U6.5.0 item 9) has expired (`0x00d9e1e0`): resolve the entry seat's occupant; **no occupant** → `0x00afe980` (cancel-and-resubmit, try again as instant); **occupant still present** → the shared inline-cancel idiom (full cancel, no resubmit). Otherwise (not owned, or not yet expired), fall through to the main body.
+2. **Main body.** Resolve the destination seat's occupant (`0x00ab5070`). If **none**, and enter-request `+0x21` bit `0x80` is clear: call **`0x00b01460(record, i)`** (U6.7 §11.7.2 — the same call `0x13`'s own on-entry can also make, confirming §11.7.2's "called on three contexts," now with `0x13`'s *own per-frame* independently confirmed as one of them, matching that section's citation exactly).
+3. If enter-request `+0x21` bit `0x80` is clear (meaning `0x00b01460` never successfully latched — e.g. it hit a lookup miss and cancel-resubmitted instead): return, nothing more to do this frame.
+4. If the bit is set: wait for `0x00b0c170(human)`. Once finished:
+   - **if the destination seat's occupant (from step 2) still exists:** apply a **knock-down-and-launch pair** — `0x009a48e0(occupant, 0, 0, null-handle, 0, 0, 0, 0, 0)` (the same knock-down predicate `spec-player-runtime.md` §5.4.2/§12.5 already cite for the rider fall/eject detector), then a vector built through an unresolved helper `0x00afa320` and applied as an impulse through `0x007818f0` (the **same** impulse-apply function U6.7 §11.5.4 step 6 uses for the eject kind's no-parachute path), setting human `+0xdc` bit `0x80` (also the **same** bit U6.7 §11.5.4 step 6 sets on its parachute path) — then stop, no transition this frame.
+   - **if the seat is empty, but its entry-point queue (`0x00b0b460`, U6.0 §7.3/U6.3 §10.1's queue-head query) has someone in it:** resolve and re-validate the queue head; if it resolves, apply the **same** knock-down/impulse pair to it instead, then stop.
+   - **if both the seat and its queue are completely clear:** **commit directly** — resolve the slot again, log `"Set Enter"` with both network ids (`0x00b0c280`), and **call `0x00afbd90(record, i)` inline** (state 9's own on-entry) — exactly one of the nine producers of state 9 U6.0 §7.5 already lists (`"direct calls from states 0x07/0x13 per-frame"`). If the resulting slot phase is now 3 (ride), the full `0x1a4`-dword record snapshot is copied and sent (`0x00af2b80`/`0x00af2eb0`) — the **same unconditional-send idiom** U6.3 §10.8 already documents for state 7's per-frame.
+
+   A fourth branch past this (reached when the destination's "surface kind" scratch field, read from `request +0x20`, is `0`, `1` or `2` — a door-opening variant selection, same family as the door-handling seen throughout this unit) was not traced to completion; see §U6.5.13 item 1.
+
+### 14.11 New and revised slot/request/human fields
+
+| Field | Role found here | Status |
+|---|---|---|
+| enter-slot `+0x18 = 0` on `0x0a`'s entry (not −1) | a 2-stage sub-timer (`0`→`1`), advanced by `0x0a`'s own per-frame | new; corrects the blanket "every on-entry sets `+0x10`/`+0x14`/`+0x18` to −1" rule to this unit's range too (U6.6 §6.1 already carved out `0x1f`'s exception on the exit side) |
+| enter-slot `+0x18 = 2` on `0x0c`'s entry (not −1) | a 2-stage sub-timer (`2`→`3`), advanced by `0x0c`'s own per-frame once a door/animation condition is met | new |
+| enter-slot `+0x18 = 4` on `0x13`'s entry (not −1) | role/consumer not found — no per-frame read of this exact value was located | new; OPEN (§U6.5.13 item 11) |
+| enter-slot `+0x10 = 1` on `0x0d`'s entry (not −1) | the default extract kind (`extract standard`), pre-seeded ahead of the hijack chooser | new |
+| enter-slot `+0x24 = 6`/`7` on `0x0b`'s entry | the `traverse standard`/`traverse no door` `Interaction_Point_Type` codes, same field U6.3 §10.6 step 4 uses for states `0x0a`/5 | new (extends the `+0x24` field's documented value range) |
+| enter-slot `+0x28` | a timer (tested via `0x00d9e1e0`), read by `0x0d`'s and `0x13`'s per-frame; distinct from the exit request's own `+0x28` (U6.6 §6.2) | new; exact role/writer not found (§U6.5.13 item 9/10) |
+| enter-request `+0x23` bit 1 (slot-relative `+0x7f` bit 1) | "an occupant is being hijacked via the chooser," set by `0x13`'s on-entry after its own successful `0x00afa540` call — **not** by `0x0d`'s, which calls the same chooser but writes no bit around it (§U6.5.5) | new |
+| human `+0x21` bit 1 | set unconditionally by `0x0b`'s on-entry during its door-handling block; role not independently named | new; HYPOTHESIS |
+| human `+0xec` bit `0x100000` | a fourth writer found: `0x0d`'s on-entry, via an unresolved helper `0xaf1b80` | extends the existing three-writer list (§10.2 step 9, §10.3 step 10, §10.9 step 13) |
+| vehicle `+0x1360 + 0x30·seat` | cleared to −1 by both `0x0c`'s and `0x0e`'s on-entry; same stride as the `+0x1340` seat-claim table | new; role not independently named |
+
+### 14.12 What a port must reproduce
+
+1. **The silent-miss convention for `0x0a`, `0x0c` and `0x11`'s on-entry handlers**, and `0x0b`'s miss-to-9 exception. A port that "fails gracefully" by transitioning away on every lookup miss would diverge from `0x0a`/`0x0c`/`0x11`, which rely on `0x00b0c170` to treat "nothing playing" as "finished at once."
+2. **The three `+0x18` sub-timer seeds** (`0x0a`: `0`→`1`; `0x0c`: `2`→`3`; `0x13`: seeded `4`, consumer not found) and their exact gating conditions (§U6.5.2, §U6.5.4, §U6.5.10).
+3. **`0x0d`'s on-entry plays no animation of its own** — a port must drive the hijacker's clip from the victim's `0x1d` handler (U6.7 §11.4.1), not from `0x0d` itself, or a hijack will play no animation at all.
+4. **`0x13`'s per-frame never transitions through set-enter.** A port's state machine must allow an inline, out-of-band call into state 9's on-entry (`0x00afbd90`) as a first-class transition path, alongside the ordinary set-enter dispatch — the same shape U6.0 §7.5 already requires for state 7.
+5. **The knock-down/impulse pair** (`0x009a48e0` → `0x00afa320` → `0x007818f0`, setting human `+0xdc` bit `0x80`) that `0x13`'s per-frame applies to anyone still blocking the destination seat or its queue, repeated every frame until the obstruction clears.
+6. **The chooser's third argument is not always literal `0`** (§U6.5.0 item 8); a port must treat it as a real parameter, not special-case it to a constant.
+7. **The second independently-confirmed `0x009dd390`/`0x00b33dc0` carjacking-report call site** (`0x13`'s on-entry, alongside U6.3 §10.7 step 5's original — `0x0d`'s on-entry does *not* call it, §U6.5.5) and the hub's vehicle-AI-reaction logic reused verbatim by `0x0e`'s per-frame after a failed hijack.
+
+### 14.13 Corrections and cross-spec flags raised by U6.5
+
+1. **Not fully resolved in this pass:** `0x13`'s per-frame `0x00b01630` is confirmed for its dominant control flow (the timeout/knockdown/direct-commit skeleton, §U6.5.10), but a fourth branch — a "surface kind" (`0`/`1`/`2`) dispatch over door-opening variants, reached when the destination seat and queue are both clear but the slot itself still needs a specific door treatment before `0x00afbd90` is reached — was read partway (through roughly `0x00b01c1f`–`0x00b01f22`) and not walked to its end. This is the single largest open item this unit is leaving; a future pass should finish it before anyone relies on `0x13`'s exact door-handling order. New OPEN item.
+2. **Correction to `review/scoping-player.md` §5a.3 / `spec-player-runtime.md` §7.5 and §9.1's citations of the chooser `0x00afb220`.** Both describe its signature uniformly as `(record, i, 0)`. **State `0x0c`'s per-frame passes a non-literal third argument** at its one call site (§U6.5.4) — the signature should read `(record, i, flag)`, with *flag* generally `0` but not always. What the flag selects was not resolved. New OPEN item.
+3. **A family of per-state cached animation-tag hashes was found but not named**: `0x153bd9c` (`0x0a`'s per-frame), `0x153bdec` (`0x0b`/`0x0c`/`0x0e`'s per-frame, shared), `0x153be28`/`0x153be24`/`0x153be20`/`0x153be1c`/`0x153bdf0` (`0x0d`'s per-frame, five distinct ones), `0x153bd98` (`0x0d`'s per-frame, via a different query function `0x004b4320`). All use the same lazy-cache-by-name idiom U6.7 §11.7.2 already names for its own "critical end" tag (`0x0153be2c`) and U6.8 §12.4 names for its eleven parameter names — but the string literals behind each of these eight were not traced. New OPEN item; a future pass with budget for a targeted string-xref scan could likely resolve all eight in one session.
+4. **`spec-player-runtime.md` §10.5 step 3** (U6.3): the tilt-angle primitive `0x00da48a0` on `vehicle +0x4c`, doubled, compared against `0.5`, is not unique to state 4's "tilt fix." `0x0a`'s per-frame (§U6.5.2) uses the **identical** computation for an unrelated purpose (gating the stick-abort vs. the ordinary chooser-transition path, not righting the vehicle). No correction to §10.5 is needed — it correctly describes state 4's own use — but a future reader should not assume the primitive implies "tilt fix" everywhere it appears.
+5. Several stack-operand identities inside `0x0b`'s on-entry door-handling block (§U6.5.3 step 3) and a handful of role-only helper calls across `0x0c`'s on-entry (`0x0055b1d0`), `0x0d`'s on-entry (`0xaf1b80`) and per-frame (`0x009d14f0`, `0x0070bcb0`/`0x004ddc20`/`0x0070ced0`/`0x0070dcf0`, `0x0055a0a0`/`0x0055a190`, `0x00aa1f20`), and `0x13`'s on-entry (`0x00950550`, `0x0051b5b0`, `0x006bd720`, `0x00710e40`) and per-frame (`0x00afa320`) were left at role-only/HIGH confidence rather than independently named, consistent with how `spec-player-runtime.md` §8/§11/§12 treat comparably deep internals elsewhere in this spec. None of them was found to drive a state transition or write a field this unit's own scope depends on.
+6. **No correction is raised against U6.0 §7.5, U6.1 §9.1–§9.8, U6.3 §10.4.4, or U6.7 §11.7** beyond the items above — every citation of this unit's sixteen roots in those four sections was independently reproduced by direct listing (the element-lookup call shape, the hijack chooser's call sites, state `0x0f`'s full behaviour, and all three shared helpers' call conventions).
+
+---
+
+---
+
+## 15. Combat: aim-assist, melee, and death/respawn (2026-10-08)
+
+Traces the PLAYER's own control/input path through combat. Generic NPC/AI combat and the generic
+weapon-fire → hit-detection → damage-application pipeline are explicitly out of scope — owned by
+`spec-physics-runtime.md` §8.8-§8.11's own chokepoint and by `spec-weapons-runtime.md`; where this
+section's own tracing reaches that generic pipeline, it is cross-referenced, not re-derived.
+
+### 15.1 Aim and target acquisition — two separate mechanisms
+
+**Movement auto-steer** (already on file, §3.5.3): the target-point builder `0x005b31f0` may replace the
+player's raw stick-direction with the normalised vector toward `+0xcb0` under five gate predicates — a
+*movement* nudge, not a weapon reticle effect.
+
+**Weapon aim-assist** (`aim_assist.xtbl`'s five profile blocks, `spec-tables-weapons-combat.md` §9,
+previously data-only) now has a confirmed runtime consumer: **`0x009ec2f0`**, a per-frame profile
+*selector* for the local player — not a continuously blended set of five parameters. Exactly one named
+profile is active on any given frame, chosen by strict priority: **Tank Skydiving** when a resolved
+aim/attack target (via the generic handle-by-property resolver, property id `0x031d152c`) passes a
+class-descriptor check plus two further predicates; else **Zoomed** when scope view is active
+(`+0x1d95` bit `0x10`, the same bit §3.7 names); else **Fine Aim** (`0x009da830`, the same predicate
+§3.5.3 step 3 cites); else **Combat Ready** (`0x00943a20`, the same predicate §3.5.4 step 19 cites); else
+**Normal**. The per-frame caller `0x009ec3c0` resolves the local player, calls the selector, and feeds
+the chosen block's own `slowing→dist→near_dist` field (block `+0x70`) to `0x009eb700` (not opened — the
+per-frame "slow the reticle near a locked target" application, HIGH CONFIDENCE by call shape). The
+`steering` half of each profile (the actual reticle-pull toward a target) has no consumer found —
+**OPEN**, along with `0x009eb700`'s own body and whether the movement auto-steer and this selector ever
+interact.
+
+### 15.2 Melee — trigger already specced; this closes the resolution half
+
+The trigger (§3.6.6, `0x005abd70`) is unchanged — three on-foot context-bit branches each call
+`0x00950c30(player)`. **`0x00950c30`, read in full (410 instructions), is the real starter/resolver.**
+Gates, any failure refuses: not ragdolled; not incapacitated; **AI mode exactly `0x2b` (43, "Player,"
+the exact row `spec-ai-runtime.md` §6 names)**; a specific sub-state (`0x8a`); three further
+can-attack predicates culminating in `0x00985760` (the authoritative "can this attack actually start"
+gate — everything past it only runs when true). On a real start: re-arms the idle timer via the same
+"player gave input" helper (§3.4); runs the identical "interrupt an idle action" sequence movement input
+uses (§3.5.2 step 8, same four calls, same literal `0.2`); leaves scope view if active (§3.6.5); arms a
+melee cooldown timer at `player+0x13a8` for 1000ms via `0x00d9e140` — a second independent confirmed
+consumer of the countdown-timer pair `spec-ai-runtime.md` §17 §4.4 documents for ambient population;
+resolves a target handle pair at `player+0x1360`/`+0x1364` via the generic handle resolver `0x004d7f30`
+(`spec-ai-runtime.md` §11.3 family C); and **fires the already-documented `on_attack_performed` hook
+(slot 8, `spec-lua-api-behaviour.md` §3.12) with `(characterName, weaponName, "melee")`**, confirmed down
+to the literal strings `"unarmed"` (no-weapon fallback, `0x011192E8`) and `"melee"` (`0x01116e0c`), then
+aligns facing via the same animation-alignment primitives (`0x004b7850`/`0x004b7d50`) movement
+turn-around already uses.
+
+**`0x00950c30` never touches `weapon_melee_attacks.xtbl`'s or `melee.xtbl`'s own arrays, and never calls
+the generic damage routine** — confirmed by reading the entire body. Move *selection* (which `MeleeMove`
+row plays) and *damage application* happen later, almost certainly animation-event-driven — this
+boundary is OPEN, with `0x00985760`'s own body as the most promising next step.
+
+**Player melee and NPC melee are confirmed separate code paths**, not one shared mechanism: neither NPC
+AI action 23's handler (`0x00551e20`) nor its tick (`0x00551cf0`) appears anywhere in `0x00950c30`'s own
+body or calls it (full `E8 rel32` caller census) — they execute broadly similar logic independently,
+unlike several other systems this project has found to share exactly one implementation.
+`0x00950c30` has 3 callers outside the player-input band (one in the avatar-sword-sweep branch §3.6.1
+step 10, two unidentified — a shared primitive any sufficiently "Player-mode" entity could reach, gated
+to real effect only by its own internal AI-mode-43 check).
+
+### 15.3 Taking damage — scope note and one player-specific finding
+
+Deliberately NOT re-derived (the generic pipeline's own chokepoint belongs to `spec-weapons-runtime.md`).
+What IS player-specific: the generic "a character just died" notifier (containing call site `0x009504bf`
+→ `0x00702810`, §15.4) tests the dying object's own class-descriptor bit — **the same player-class bit
+(`0x02cc9900` row `+0xa` bit `0x2`) this project has independently confirmed from four other code
+paths** — and only then calls the player-specific death trigger. Health storage itself (`+0x1cac`/
+`+0x1cb0`/`+0x1cb8`) is the generic, shared character layout, not player-exclusive. The one genuinely
+player-specific damage-side storage is **`player+0x276C`**, a 6-float per-damage-type scale array
+(bullet/explosion/vehicle/fire/falling/script, written by the `Damage_Resist` unlockable apply routine,
+`spec-tables-progression.md` §4.4 type 9/§4.6) — its consumer inside the generic damage routine was not
+chased, **OPEN**, explicitly handed to whoever owns that chokepoint.
+
+### 15.3a Generic damage application, death, and ragdoll hand-off (2026-10-09)
+
+Closes `purrsian-04`'s wave 6 item 3: the generic (not player-exclusive) damage/death/ragdoll chain
+§15.3 deliberately deferred. All addresses below are the shared human/character layout, consumed
+identically by players and NPCs.
+
+**Health storage, CONFIRMED.** `+0x1cac` (32-bit int) = max health; `+0x1cb0` = max-health bonus
+(already named, `scratchpad/default_max_hp_1cac_2026-10-08.md`); `+0x1cb8` (float) = current health;
+`+0x1584` = a "last damage magnitude" scratch field, `max(-delta, 0)` of the most recent HP-reducing
+change. A character always spawns at full health: the base constructor zeroes these fields, then a
+spawn-time vtable slot picks a `spawn_info_ranks.xtbl` row (story-progress-weighted random level draw
+for ordinary characters), writes its `Hit_Points` to `+0x1cac`, and immediately mirrors it to `+0x1cb8`.
+
+**The damage-apply sink, `0x0096fa20`, RE-CONFIRMED** (matches `spec-weapons-runtime.md` §4.1,
+`spec-lua-api-behaviour.md` §3.15 exactly). Two of its own internal health-mutation calls are newly
+pinned: **`0x0094cfc0(this, value)`** sets current health, clamped to `[0, +0x1cac]`, gated on local
+network ownership (`0x008addb0`) — writes directly when locally owned, otherwise dispatches a
+networked "apply this" replication request instead of touching the field; **`0x0094d520(this, delta)`**
+is a thin "add signed delta" wrapper around it (`0x0096fa20` calls it with the damage amount
+sign-flipped, i.e. ordinary damage really is `health -= damage` through this exact path). On a clearly
+lethal hit, `0x0096fa20` first force-snaps health to exactly `0.0` via a direct `0x0094cfc0` call before
+still running the ordinary subtract on top — a float-precision safety measure, not a second clamp.
+**Correction to the prior "caller always computes the final amount" phrasing** (`spec-weapons-runtime.md`
+§4.1): the sink itself also applies a resistance scale (an integer percentage read off `attacker+0x1cac`,
+the same max-health field reused generically here) and a difficulty-based scalar when the instigator is
+player-class — the caller computes the base amount, the sink still shapes it further.
+**Vehicle-vs-character damage cross-check:** `spec-vehicle-damage-runtime.md` §3's own
+`0x00a9f4f0` vehicle structure-HP accumulator never checks for HP reaching 0 and has none of this
+sink's death-trigger logic — the two systems are genuinely separate, converging only when a destroyed
+vehicle kills its occupant (`0x00a9d6c0`'s own call sites feed the literal `-1.0` lethal constant into
+this exact same `0x0096fa20`, the identical path every other character-kill route uses).
+
+**The death transition — two real functions.** On detecting a lethal hit (post-mutation re-query of
+`0x0096f4f0`, `character_is_dead`, plus a kill-eligibility predicate `0x0096f990` already named in
+`spec-weapons-runtime.md` §2.3 for the melee finisher), `0x0096fa20` calls **`0x00970e70`** — a dual-role
+function. Reached with a null instigator, it recurses into a standalone "force-kill this object now"
+entry (builds the same `-1.0`/flag-`0x2000` record `character_kill` itself builds, calls `0x0096fa20`
+again). Reached normally (health already at zero), it does the real death side-effects: a virtual call
+through the victim's own vtable `+0x70` (concrete target not resolved — no character-class RTTI/vtable
+dump was available this pass), then probes for a clear nearby position via the already-documented Havok
+on-demand raycast wrapper `0x0075d7e0` (`spec-physics-runtime.md` §8.8-§8.11) and dispatches a push-back
+vector. `0x0096f4f0` (`character_is_dead`) re-confirms exactly as already documented
+(null OR `+0xcc8==5` OR `+0xe3` bit `0x01`); two sibling predicates were found alongside it:
+`0x0096f520` (exactly-dead only) and `0x0096f540` (the already-named "down or dead" query, now confirmed
+to also encode `+0xcc8==6` as a distinct "downed" state). The project's existing finalizer
+**`0x00952760`** (writes `+0xcc8=5` at `0x00952cd4`) is re-confirmed by fresh disassembly to also: drop
+held/attached objects, clear an ownership flag, release a resolved controlling player, and fire a
+notification event (id `0xb`) through the same generic dispatcher the damage sink's own alert-broadcast
+uses. **One honest open seam:** `0x00970e70`'s vtable `+0x70` call and `0x00952760` were not proven
+connected by a direct static call edge (different calling conventions/argument shapes) — what IS
+confirmed is that `0x00952760` is called `(victim, 0)` from inside the ragdoll/death-stage tick below,
+on the branch taken when ragdoll doesn't apply. HYPOTHESIS, not confirmed: the vtable dispatch arms a
+generic "dying" state that the per-frame tick below then finalizes once ragdoll either runs its course
+or never applies.
+
+**The ragdoll/death-animation hand-off — the real decision point, now opened.** The already-named
+`0x0098ce40` (5-case jump table on a per-character sub-stage byte, `+0xcce`, values 8-0xc) is the real
+branch point. The ragdoll-activation case (reached when locally owned and already dead) gates on a
+readiness check (`0x0098cc30`) and an eligibility flag (`0x009a2b00`); when eligible, it resolves an
+attachment point (`+0xcc0`), issues a real ground-clearance raycast through `0x0075d7e0`, and calls the
+real "activate ragdoll physics" primitive **`0x009a5520(victim, 1, 0)`** — distinct from the simpler
+stop/start toggle `0x009a1e10` this file already names elsewhere. A separate, non-ragdoll fallback case
+(when the readiness check fails, locally-owned player-class only) force-sets health to `0.0` and calls
+the finalizer `0x00952760(victim, 0)` directly, with no ragdoll call at all — a genuine scripted/
+animation death. A further already-ragdolled case shares its "animation progress" timing mechanism
+(global `0x01117a4c`, table-hash constant `0x1d5f`) with the melee-finisher/takedown predicate
+`0x0096f990` — ordinary ragdoll death and the scripted takedown sequence are not two independent timing
+systems.
+
+**The hitscan gap — still open, now more precisely bounded.** `spec-weapons-runtime.md` §2.2c named two
+concrete next steps to try closing "hitscan fire does not call the damage sink": `0x008ccb90` and
+`0x00920170`. Both were read in full this pass. `0x00920170` contains no call to the damage sink, the
+kill trigger, `character_is_dead`, or either Havok query wrapper — directly confirming by disassembly
+(not just role inference) that it really is the unrelated vehicle-seat "Hide Occupant" toggle already
+named in this file. `0x008ccb90` (its first ~470 instructions, fully covered) likewise contains no such
+call — it shares some generic record-building helper calls with `0x0096fa20`'s own early bookkeeping,
+not a call relationship. **Neither named next step closes the gap.** The far side of the chain is now
+fully mapped (this section, above) — a future pass has a precise, concrete target chain
+(`0x0096fa20`→`0x0094d520`/`0x0094cfc0`→`0x00970e70`→`0x0098ce40`'s `+0xcce` state machine→`0x009a5520`
+or `0x00952760`) to search for a caller of, rather than an open-ended question. The two live candidates
+remain: a physical projectile/ray whose Havok collision-response callback (not reachable by static
+call-graph tracing) is the real caller; or a live capture directly on `0x0096fa20`'s own callers during
+one real fire sequence. Full detail, every instruction address: `scratchpad/character_damage_death_2026-10-09.md`.
+
+### 15.4 Death and respawn — traced end to end, converges on checkpoint-restore
+
+Player death reaches **`0x00702810(player)`** (full 81-instruction body), gated to the player class at
+its sole caller (`0x009504bf`). It debounces via a per-player timer, reads **`respawn_delay_ms` live
+from `0x014A1370`** (`gameplay_constants.xtbl`'s `Death_and_busted` section, `spec-tables-progression.md`
+§10.2 — first confirmed runtime consumer of this address), sets the player's **"controls disabled" flag
+`+0x1d99` bit `0x08`** (the same flag the control-state machine's per-frame movement gate checks, §2.10/
+§3.5.1), pushes the already-documented death camera (mode 9, §4.1/§4.2), builds a mission-failure
+descriptor tagged with the literal `MISSION_FAILURE_DIED_TEXT` (→ `"You died."`, both strings read
+directly), and calls the project's already-documented mission-end routine `0x006da400`.
+
+From there, this section cross-checks rather than re-derives the already-confirmed chain in
+`review/exe-notes-2026-10-01/interp_fresh_start_checkpoint.md`: mission-end → the mission-failed handler
+records the failing mission for retry → the next mission-begin sets the "is_restart" flag true → the
+game-mode-state enter handler's mission setup conditionally calls **`0x006D3780`, the exact
+checkpoint-restore routine `spec-save-format.md` §11.1/§11.2 already document** (same `0x1AA00`-byte
+in-memory snapshot format, full flag = 0). **A player's death-respawn is confirmed to be the identical
+in-memory checkpoint-restore mechanism as a manual "restart from checkpoint," not a separate
+implementation** — the "checkpoint" restored to is whatever name the mission's own script last reported
+through `mission_set_checkpoint`, or `"mission start"` if none was reported.
+
+Separately, the character's own generic ragdoll/death-stage tick `0x0098ce40` (shared with NPCs, a
+5-case jump table on a per-character sub-stage byte) *also* pushes camera mode 9 at its final stage, but
+only when the dying object equals the local-player singleton — a second, structurally independent
+confirmation of the same player-only camera behavior (harmless double-push; camera-mode push is
+idempotent, §4.2).
+
+**Honest gaps:** the exact `+0xcce` case-value mapping for `0x0098ce40`'s 5 stages; ~~a fresh independent
+re-walk of `0x006DA400`-`0x006D9310` (this section's own claim rests on the pre-existing
+`interp_fresh_start_checkpoint.md` note, not re-walked here)~~ **partly closed, 2026-10-08:
+`0x006D9310` (the "game-mode-state enter handler") is now independently re-walked in full
+(`spec-lua-api-behaviour.md` §21.27a/§21.27b) — on a restart (the exact condition this death/respawn
+chain sets), it skips the mission-phase-2/marker-arm dance entirely and relaunches `script_mission_start`
+directly via the same `0x00e0ca80` primitive the marker-trigger callback uses, consistent with (not
+contradicting) this section's own existing account; `0x006DA400` itself was not independently re-opened
+by that pass**; what decides a "retry this mission" prompt vs. another fail state (two special-cased
+mission ids compared at `0x00702810`'s tail); whether free-roam (no active mission) death follows a
+different respawn path.
+
+**Cross-reference, 2026-10-08:** `spec-lua-api-behaviour.md` §21.27b documents the structural
+counterpart to this death/FAILURE chain — the mission SUCCESS/completion trigger (`0x006d9f70`). The two
+are asymmetric: this section traces a single, clean organic FAILURE trigger (player death); §21.27b
+found no equally clean organic SUCCESS trigger exists, only fail-safes (timeouts, cancel-warps,
+silent-class auto-finish) — the engine does not itself detect "objectives complete," only a mission's own
+Lua script does.
+
+**[CONFIRMED — full disassembly of `0x009ec2f0`/`0x009ec3c0`/`0x00950c30`/`0x00702810`/`0x0098ce40`,
+the full `0x00950c30` caller census, and all 4 literal strings. HIGH CONFIDENCE — several black-box
+predicate names, the melee-target handle fields, the generic mission-retry chain downstream of
+`0x006da400`. OPEN — as listed per subsection above.]** Full detail, every address:
+`scratchpad/player_combat_aim_melee_damage_respawn_2026-10-08.md`.
+
+---
+
+## ~~3.~~ ~~4.~~ ~~5.~~ ~~6.~~ ~~7.~~ ~~8.~~ ~~9.~~ ~~10.~~ ~~11.~~ ~~12.~~ ~~13.~~ ~~14.~~ 16. OPEN items
 
 1. **Engine dead-zone, trigger-threshold and pad repeat-timing values** (`0x029f4440` + pad·`0x488`: stick `+0x248`/`+0x288`, button `+0x08`, `+0x0c`, `+0x10`). The latch and accessors are specified, but the code that writes these values (pad initialisation or options) was not located in the poll's neighbourhood. *Next step:* displacement scan of the engine library for stores at those offsets relative to a pad pointer; or read them from a running process.
 2. **Option bits** `0x01411b00` bits 1–3 and bytes `0x01411b14`/`0x01411b15`: getters and setters specified (§1.12.2); their option names (look-invert per device family is the HYPOTHESIS) need the options-menu code (`0x007e0a33`, `0x007e128d`, `0x007e15b0`, `0x008411c5`…`0x008414f0`). **[Partly resolved by §3.4: the camera input setters `0x0056b100`/`0x0056b120` apply them as horizontal/vertical look inversion — behaviour CONFIRMED; the menu labels are still unread.]**
@@ -2822,26 +4511,26 @@ Each of these keys falls through to −1 and the discarded diagnostic (§9.4.2).
 32. **Look-at assist** (§4.7 step 12): who starts the timer `0x012e41a0` and sets the object `0x013c92e8`/`0x013c92ec`, and what the 20-pass refinement `0x0056e170` converges to, were not traced.
 33. **Camera collision filter** `0x00566070` (407 instructions) and the skipped hit kinds 1, 4, 8 (§4.9): which objects block the camera is not tabulated.
 34. **Small unknowns around the follow update:** the surface clamp `0x0079a420` (HYPOTHESIS: water surface), `0x0056ef10`, `0x0058b470` → `0x00a1f880` after the update, the shake `0x0057c930`, transition-blend type 1 `0x00580430`, the pitch return `0x0056bfe0` (uses `pitch_reset_time`), and the hill-tracking step `0x0057ad60`.
-35. **Controller motion `0x007a5b10`** (§5.6.5): the state logic between the support query and the final velocity set — gravity, jumping, the timers `+0x154`/`+0x158`/`+0x15c`, `+0x160`, the cap `+0x170`, state bits `0x02`/`0x08`/`0x10`/`0x20`/`0x40` — and its two other callers `0x007a7413`/`0x007a750e`. Physics unit P5. *Next step:* full listing together with the support-state values `0x0079d0b0` returns.
-36. **The custom proxy passes** (§5.6.4): `0x0079bb00`, `0x0079dd50` → `0x0079c5f0`, `0x0079ddc0` → `0x0079d7c0`, `0x0079b560`, `0x0079bbb0`, `0x0079b5b0`, the cast-job submitter `0x0079b470` and the manifold update `0x0079de40`, and on which thread the listener callbacks run (the queue adders take no lock) — the character case of `spec-physics-runtime.md` §6 OPEN 5. P5.
+35. ~~**Controller motion `0x007a5b10`** (§5.6.5): the state logic between the support query and the final velocity set...~~ **RESOLVED 2026-10-07 (unit W-U2, full listing).** See §5.6.5: full gravity formula (quadratic terminal-velocity falloff), jump-launch formula (`v=√(2|g|h)`), the full state-bit catalog, the three-timer chain, the step-up/step-down/ledge-assist raycasts, and both other callers (`0x007a7413`/`0x007a750e`, confirmed to be internal continuation labels, both jump triggers). One residual non-blocking item: `controller+0x160`'s margin constant (5.0) and the step-assist raycast lengths' exact real-world units (frames vs. a fixed-point angle) are not pinned down.
+36. ~~**The custom proxy passes** (§5.6.4): ...and on which thread the listener callbacks run...~~ **RESOLVED 2026-10-07 (unit W-U2, full listing).** See §5.6.4's own deepened pass description and §5.6.4a: all 8 named functions read, the lock-step cycle fully traced, `0x0079de40` confirmed reached via the proxy's own primary-vtable slot `+0x14` (not a separate Havok method), and thread safety settled — both `MyCharacterListener` and the phantom-listener fan-out run on the game's persistent class-3 worker-pool thread that services that proxy's job, not guaranteed the main thread, not serialized against other proxies in the same pass.
 37. **`turn angle` (`+0xaac`)** (§5.3): `0x00956970` chases a target computed inside the animation job `0x00994970` (call at `0x00994a3d`); whether that target is U2's `+0xa68` was not traced.
 38. **Movement flags `+0xd40`** (`spec-anim-runtime.md` §4.2 rows 8–19): writers not traced.
-39. **Animation-side inputs of the composer** (§5.4.3). **[Partly resolved 2026-10-03, §5.4.3 "Step 3 in detail".]** ~~the slot flag `+0x80` bit 0 that separates T from E (HYPOTHESIS: `Anim_Movement`)~~ — the discriminator is **animation-instance layer flag bit `0x01`** (layer `+0x10`), the phase-synchronised group mark set by the layer-post API (`0x004c6590`) for plain clips, blend-tree `States` and looping graph clips and left clear for non-looping graph clips; `Anim_Movement` is refuted for this role. ~~the third vector X~~ — X is a translation (the non-synchronised deltas in their start-of-clip root frame, unweighted), not a rotation. ~~which animation states set the animation-controller flags `0x100` and `0x4`~~ — they are the record flags `Anim_Movement` and `Block_Translation` OR'd over every playing animation into controller `+0x198`, so the answer is per record in `anim_files.xtbl`. **Still open:** the orientation step `0x004b6530` (X's consumer), the speed `0x004b49e0`, `0x009987d0`'s state test, controller `+0x1a4` bits `0x40`/`0x100`/`0x800`, the full read of `0x004c8a80` (root-rotation naming HIGH), the override weight `0x004cad00`, and the layer creator at `0x004c6ebb`. Belongs with the root-motion unit of `review/scoping-animation.md` (U5). **[§8.1: the seating commit clears `+0x1a4` bits `0x0800`–`0x4000` through `0x004b7f70`.]**
+39. **Animation-side inputs of the composer** (§5.4.3). **[Partly resolved 2026-10-03, §5.4.3 "Step 3 in detail".]** ~~the slot flag `+0x80` bit 0 that separates T from E (HYPOTHESIS: `Anim_Movement`)~~ — the discriminator is **animation-instance layer flag bit `0x01`** (layer `+0x10`), the phase-synchronised group mark set by the layer-post API (`0x004c6590`) for plain clips, blend-tree `States` and looping graph clips and left clear for non-looping graph clips; `Anim_Movement` is refuted for this role. ~~the third vector X~~ — X is a translation (the non-synchronised deltas in their start-of-clip root frame, unweighted), not a rotation. ~~which animation states set the animation-controller flags `0x100` and `0x4`~~ — they are the record flags `Anim_Movement` and `Block_Translation` OR'd over every playing animation into controller `+0x198`, so the answer is per record in `anim_files.xtbl`. ~~**Still open:** the orientation step `0x004b6530` (X's consumer), the speed `0x004b49e0`, `0x009987d0`'s state test, controller `+0x1a4` bits `0x40`/`0x100`/`0x800`, the full read of `0x004c8a80` (root-rotation naming HIGH), the override weight `0x004cad00`, and the layer creator at `0x004c6ebb`. Belongs with the root-motion unit of `review/scoping-animation.md` (U5).~~ **[Resolved 2026-10-07, `spec-anim-runtime.md` §9 (U5).]** `0x004b6530` is the correction step: outside an authored `start correction`/`dest correction` window it returns the orientation unchanged, and inside one it is a motion-warp and heading-correction step that X (and, for a start correction, the velocity) feeds (§9.7) — so the question of what turns a human in *ordinary* locomotion is still open, newly as that file's §5.1 item 35 (also noted at §5.4.5 above). `0x004b49e0` is the current state's clip speed (0 for a managed/graph slot; §9.9). `0x009987d0` is the `force use velocity start`/`end` trigger-window test, true during a player jump's take-off (§9.9). Controller `+0x1a4`'s bits are named in full at `spec-anim-runtime.md` §9.10. `0x004cad00` is the root track's per-track override value (`spec-anim-format.md` §10; §9.9). `0x004c6ebb` is an in-place clip swap with a timed cross-fade, reached from the controller's slot swap `0x004b73f0` (§9.9). `0x004c8a80` is identified as the bound-track rotation decoder (smallest-three keys, spherical interpolation); its bit-for-bit decode is routed to `spec-anim-format.md` §6c.2/§6c.3, not re-derived there. **[§8.1: the seating commit clears `+0x1a4` bits `0x0800`–`0x4000` through `0x004b7f70`.]**
 40. **`+0xccd` values 2 and 3** (§5.4.3 step 5, §5.4.4): they route the player through `0x009918b0` at stance speed. Values 4 (jump/dive), 5 (climb) and 6/8 are named by `spec-anim-runtime.md` §4.2 and §3.2.2; 1 is "moving" (`0x00987360`); 2 and 3 are not identified.
 41. **The gather's second NPC-LOD branch** (§5.6.3 (b)): as read it never engages, because `+0xaa8` is armed at 0 ms by the human constructor `0x00954340` (at `0x0095559d`) and is re-armed only on the branch's not-expired path. Behaviour HIGH; a port reproducing the shipped game should keep slow NPCs stepped. *Next step:* read `+0xaa8` on a live NPC.
 42. **Contact-replay handlers** (§5.8): `0x007a37f0` (class bits `0x0a`/5), `0x007a2470` (human), `0x007a3fa0` (class bit `0x1e`), `0x007a3640` (class bit 6) and `0x00962c20` (human–human) were read for call shape only; the names of class bits 3, 5, 6, 8, `0x0a` and `0x1e` of the kind rows `0x02cc9900` are not established here.
 43. **Ungated sprint reads** (§5.8, §5.4.3 step 9): `0x00961d70` and `0x0099d1b0` read the local pad's `CBA_OFC_SPRINT` for any human carrying the `+0x1c9c` upgrade bits; whether a remote co-op player can carry them (and would then react to the local pad) was not traced.
 44. **`+0xa64`, the per-human speed multiplier** (§5.5): 1.0 at construction (`0x009544c5`); its writers `0x0062e294`, `0x006ebdc1` and `0x007d3073` were not traced (HYPOTHESIS: script and activity speed overrides).
-45. **`+0x1c9c` bits**: `0x2000` (HIGH: standing on a moving support — it gates the NPC LOD, air control and landing, and adds `+0x1c60` to the velocity), `0x80000` and `0x100000` (the sprint and jump upgrades): writers not traced.
+45. **`+0x1c9c` bits**: `0x2000` (HIGH: standing on a moving support — it gates the NPC LOD, air control and landing, and adds `+0x1c60` to the velocity), `0x80000` and `0x100000` (the sprint and jump upgrades): writers not traced. **[§11.5.4: the vehicle-interaction eject handler also reads bit `0x2000` (to choose its parachute/safety path) and writes `+0x1c60` on the no-parachute path — a second, independent confirmation of this bit's role and of the `+0x1c60` velocity-add, from outside the locomotion bridge.]**
 46. **Small unknowns in the bridge:** `0x0094a3b0(player, 0)` (§5.4.3 step 9); `0x00997b50`'s local-player checks `0x0098a3f0`/`0x00710cb0`; `0x0063c830`; the controller bit `+0x150` bit `0x02` behind `0x00942260`; the visibility test `0x0091f310(·, 2)`; the `+0xcd2` values; the pony-cart case's constant T (`0x0262d030` × Δt); and the second loop of `0x0099ebe0` (shark attack, drowning, cover exits) beyond structure.
 47. **Exit-request fields read outside U6.6** (§6.2). These are:
-    - the object handle `+0x08`/`+0x0c`;
+    - ~~the object handle `+0x08`/`+0x0c`~~;
     - the vector `+0x10`–`+0x1f` (HYPOTHESIS: the launch vector);
     - `+0x20`/`+0x24`;
     - the animation override `+0x2c`;
-    - `+0x30` bits 4–7. Bit 7 is set only by the player's prompt `0x009e5e80`.
+    - ~~`+0x30` bits 4–7. Bit 7 is set only by the player's prompt `0x009e5e80`~~.
 
-    *Next step:* U6.7 (the animated exit states read them). **[§9.5: `+0x20`/`+0x24` are the victim's extract kind (`0x0a`…`0x11`, or `0x13` = `extract fast`) and approach side, written by the hijack chooser `0x00afa540` and copied to slot `+0x10`/`+0x20` by `0x1d`'s on-entry `0x00b02900`.]**
+    *Next step:* U6.7 (the animated exit states read them). **[§9.5: `+0x20`/`+0x24` are the victim's extract kind (`0x0a`…`0x11`, or `0x13` = `extract fast`) and approach side, written by the hijack chooser `0x00afa540` and copied to slot `+0x10`/`+0x20` by `0x1d`'s on-entry `0x00b02900`.]** **[§11: resolved. The object handle `+0x08`/`+0x0c` has three readers (§11.0 item 4, §11.8). The launch vector `+0x10`–`+0x1f` is confirmed for the eject kind (§11.5.4). Bits 4–7 of `+0x30` are now all explained: bit 4 forces `exit dive`, bit 5 selects `exit eject`, bit 6 is also written (not only read) for a resolved eject companion, and bit 7 is also written by the exit-fast side-clearance cascade, not only the prompt (§11.5.2, §11.8).]**
 48. **Slot `+0x10` and the landing kind `+0x1c`** (§6.11 step 11):
     - the finaliser's airborne branch runs only when the slot's old `+0x10` is `0x17` or `0x18`;
     - the landing-kind values 0/1/2 (airborne/ground/water) are HYPOTHESIS;
@@ -2874,30 +4563,184 @@ Each of these keys falls through to −1 and the discarded diagnostic (§9.4.2).
 
     A port should guard these. Whether any shipped caller reaches them is not traced.
 57. **Finaliser speed rescale** (§6.11 step 9): `0x00942110(human, 0, 0xff, +0xa60)` multiplies a positive `+0xa60` by `+0xa64` again. Behaviour CONFIRMED; whether it compounds in practice depends on `+0xa60` at that point, which `0x15` has set to −1.
-58. **`vi_exit.xtbl` has no `Element` whose first token is `deactivate`, `open` or `close`** (§6.12 item 4), the first tokens of exit states `0x1a`, `0x1c` and `0x20`. For U6.7: either those states are never set, or they resolve their keys elsewhere. **[Answered by §7.5: `0x1a` and `0x20` have no on-entry handler and can never be held; `0x1c` has one but no static producer (OPEN 60).]** **[§9.5: none of the handlers of `0x1a`, `0x1c` or `0x20` reaches the element rule (census closure), so none of them would choose an `Element` even if held.]**
+58. **`vi_exit.xtbl` has no `Element` whose first token is `deactivate`, `open` or `close`** (§6.12 item 4), the first tokens of exit states `0x1a`, `0x1c` and `0x20`. For U6.7: either those states are never set, or they resolve their keys elsewhere. **[Answered by §7.5: `0x1a` and `0x20` have no on-entry handler and can never be held; `0x1c` has one but no static producer (OPEN 60).]** **[§9.5: none of the handlers of `0x1a`, `0x1c` or `0x20` reaches the element rule (census closure), so none of them would choose an `Element` even if held.]** **[§11.2: confirmed again from the handler side — `0x1a`/`0x20` have no on-entry handler at all, and `0x1c`'s on-entry is a confirmed no-op that writes no key-relevant field.]**
 59. **Network side of exit** (§6.5, §6.6.3, §6.10): `0x00b03010`'s send conditions (it sends `0x15` only under the `0x008ae480` gate), the record builder `0x00af3630` (queue `0x028888e8`) and the applier's state handling are recorded at call-shape level. They belong to the parked network unit.
 60. **Enter state 7, exit states `0x18` and `0x1c`** (§7.5): each has an on-entry handler that stores its number (7 and `0x1c` also have per-frame handlers), but no setter call site, chooser return or direct handler call produces them; only the network applier `0x00af2950` could, by replaying a remote value. For `0x18` this agrees with OPEN 52. *Next step:* check the applier's received values and any computed state in the network path; otherwise treat them as dormant, like `0x10`/`0x12`/`0x1a`/`0x1e`/`0x20`.
 61. **Unnamed record and slot fields** (§7.1–§7.2): record `+0x08` (0/1/2, written only by the state-1 hub), slot `+0x28` and `+0x34`, the handles `+0x48`/`+0x50`, and request `+0x28`…`+0x34`. The exit fields are in §6.1/§6.2. *Next step:* the units that own those states.
 62. **Commit side effects read for role only** (§8.1–§8.2): which vehicle type each tutorial predicate `0x00ad3140`…`0x00ad32d0` tests, and the meaning of the `0x005bc5d0` variant (§8.1); the report objects keyed 7/`0x16`/`0x17` (§8.2 step 19); `0x00bd8240`'s globals; `0x004e4130(human, 0x19)`; the vehicle-AI passenger block `0x00b47110`/`0x00b4d260`/`0x00b464c0`/`0x00b462a0`, `0x00b24cc0`, `0x00b25c40` and `0x00935130`; `0x00ab9c20`'s seat effect; `0x00aa91c0`; and the meaning of the human bits `+0xe0` `0x100`, `+0x3a` `0x80`, `+0xe4` `0x1000`, `+0xec` `0x100000`, `+0x1b08`/`+0x1b10`, `+0x19bc` and the vehicle bits `+0x16c0` `0x40`/`0x800`/`0x1000`/`0x4000`/`0x100000`, `+0x16c8` `0x08`.
-63. **The six ride tweaks** `VI_forward_vel_accel`, `VI_vert_vel_accel`, `VI_random_accel_factor`, `VI_reaction_delay_min_ms`, `VI_reaction_delay_max_ms`, `VI_collision_min_vel_diff` (`0x0288ca88`…`0x0288ca9c`, §8.5) are bss with no initialiser in the image, so their shipped values come from tweak data that was not located; the readers of the lag values slot `+0xe0`/`+0xe8` were not traced (HIGH: U6.8's pose driver). *Next step:* find the tweak loader for the registrars `0x0071b580`/`0x0071b530`, or read the values from a running process.
+63. **The six ride tweaks** `VI_forward_vel_accel`, `VI_vert_vel_accel`, `VI_random_accel_factor`, `VI_reaction_delay_min_ms`, `VI_reaction_delay_max_ms`, `VI_collision_min_vel_diff` (`0x0288ca88`…`0x0288ca9c`, §8.5) are bss with no initialiser in the image, so their shipped values come from tweak data that was not located; the readers of the lag values slot `+0xe0`/`+0xe8` were not traced (HIGH: U6.8's pose driver). *Next step:* find the tweak loader for the registrars `0x0071b580`/`0x0071b530`, or read the values from a running process. **[§12.4 (U6.8): the `0x00af4b80` half is closed — it reads slot `+0xe4`/`+0xec` (the ride body-lag model's *error* terms, not `+0xe0`/`+0xe8` the *lag* terms) and names three more `VI_*` tweaks (`VI_forward_diff_max`, `VI_vert_diff_max`, `VI_tilt_rvec_pitch_max`), all registered through the same `0x0071b580`. The tweak loader for all nine named values is still not found.]**
 64. **Inventory slots 0 and `0xe`** selected by the holster (§8.4), `0x00600720`'s other arguments, `0x005ffaf0`, and player `+0x28ac` bit 4 (which turns `0xe` into 0). HYPOTHESIS: 0 is empty-handed. *Next step:* the inventory unit.
 65. **The character-controller hand-over at the commit** (`0x0094cca0(human, 0, 0)`, then `0x007a5a90` on `+0xcc0` with `0x00b0e9f0(vehicle)`): HYPOTHESIS that the controller is parked on the vehicle body while seated. P5 / U6.8.
 66. **The count-bounded vehicle queries** `0x00af1770`/`0x00af17e0` (§7.9): defect CONFIRMED in code. Whether it is observable depends on whether a lower slot of a record can be released while a higher one stays occupied (likely with passengers leaving out of order). *Next step:* exercise it.
 67. **Network replication of U6** (parked): the record's shadow `+0xea8`…`+0x163f`, the applier `0x00af2950`, the receiver `0x00af8810`, the queue `0x028888e8`, `0x00af3630`'s packet drop (§8.2 step 2), the ownership request `0x008addd0` (§7.6), and the send conditions of §7.7. Together with OPEN 59.
 68. **The extract-kind override `0x0130e5f4`** (§9.4.3, §9.5): −1 in the image; 13 references, the writers at `0x00af9419`…`0x00af954f` (HIGH: debug commands). When it is not −1 the hijack chooser `0x00afa540` uses it as the extract kind, and the next-state chooser `0x00afb220` skips a class test when it is 9. Not traced.
-69. **Variant-field writers outside this unit** (§9.3): no writer of exit-request `+0x31` bit 0 (the `convertible` exit variants) was found here. Request `+0x21` bits 2/3 (`traverse no door`), 4/5 (`open shady`/`shopper`) and 6 (`enter convertible`) come from the request's creator. The hub's `+0x1c` values, and `0x00b04ae0`'s register-written exit kinds (`0x14`, `0x19`, `0x1a`) and `exit fast` sub-variants (9/`0x0a`/`0x0b`), were not traced. *Next step:* U6.3 (hub), U6.5, U6.7.
+69. **Variant-field writers outside this unit** (§9.3): no writer of exit-request `+0x31` bit 0 (the `convertible` exit variants) was found here. Request `+0x21` bits 2/3 (`traverse no door`), 4/5 (`open shady`/`shopper`) and 6 (`enter convertible`) come from the request's creator. ~~The hub's `+0x1c` values, and `0x00b04ae0`'s register-written exit kinds (`0x14`, `0x19`, `0x1a`) and `exit fast` sub-variants (9/`0x0a`/`0x0b`), were not traced.~~ *Next step:* U6.3 (hub), ~~U6.5,~~ ~~U6.7~~. **[§10.4.1/§10.10: the hub's `+0x1c` values are the target-point type, 0–5.]** **[§11.5.2: `0x00b04ae0` is read in full. It writes kinds `0x15`/`0x16`/`0x17`/`0x18`/`0x1b`/`0x1c` as immediates, with `exit fast` sub-variants `9`/`0xa`/`0xb` exactly as guessed here, plus `0xc`/`0xd` for `exit at speed`. It does **not** write `0x14`, `0x19` or `0x1a` in the traced control flow — `0x14` is HIGH: the implicit default; `0x19` is a state number, not a kind, pushed elsewhere; `0x1a`'s (`exit climb`) producer is still not found (new OPEN item). The exit-request `+0x31` bit 0 writer is still not found either — U6.7 found a *second reader* at the same bit position (`0x00b02460`, a one-shot door-clear latch, §11.7.4) that conflicts with the `convertible` reading and is not resolved; no writer for either role was found.]** U6.5 is still outstanding for the variant-field writers on the enter side.
 70. **Dead and shadowed shipped `Element`s** (§9.6.2–§9.6.3): 5 `vi_exit` `Element`s no key can produce, and 4 shadowed alternatives with distinct animations (`Heli Fighter Rider` `Exit Left Fast`, `RiotCop_Right` Bash/Shoot/Punch). In the shipped build they never play through this rule. Whether they are authoring errors or meant for an older key layout is unknown. A port reproducing the original keeps them as inert data.
-71. **The ride key** (§9.6.4): who builds the six-token key passed to `0x00b08b80` (callers `0x00b08ea0` and `0x00af4760`)? That decides whether all 454 `vi_ride` `Element`s are reachable, including the two whose token 0 is `none`, and how the fallback chain to animation ids `0x10a`…`0x111` is used. *Next step:* U6.4/U6.8.
+71. **The ride key** (§9.6.4): who builds the six-token key passed to `0x00b08b80` (callers `0x00b08ea0` and `0x00af4760`)? That decides whether all 454 `vi_ride` `Element`s are reachable, including the two whose token 0 is `none`, and how the fallback chain to animation ids `0x10a`…`0x111` is used. *Next step:* U6.4/U6.8. **[§12.6 (U6.8): the `0x00af4760` half is closed — it builds the six-token key during the enter/exit phases (not ride) for a specific state subset and calls `0x00b08b80` directly. `0x00b08ea0`'s half remains open.]**
 72. **Guard quirks of the rule** (behaviour CONFIRMED):
     - short keys compare uninitialised stack words, and the discarded diagnostic indexes `0x0130e638` with them (§9.4.3);
     - an out-of-range seat indexes `Seat_Info` −1 (§9.4.1);
     - `0x00dab660(5, N+4)` divides by zero when the count N is 0 (§9.5).
 
     Only the non-hijack `0x1d` exit is known to reach the first in the shipped game. A port should zero-fill and guard all three.
+73. **Callbacks lost on the enter route** (§10.4.3, §10.9):
+    - the cancel never calls the completion callback `+0x3c`;
+    - the cancel-and-resubmit `0x00afe980` drops both `+0x34` and `+0x3c`.
+
+    So a caller that waits on `+0x3c` is never told of a cancel, nor of a completion reached through a resubmission. Which request builders set `+0x34`/`+0x3c`, and whether any shipped caller relies on them (rather than polling, as `vehicle_enter_check_done` does, `spec-lua-api-behaviour.md` §22.3), was not traced. *Next step:* survey the request builders among the submitter's 25 callers for stores at request `+0x34`/`+0x3c`.
+74. **Entry-point queue order** (§10.1): `0x00b0cb20` sorts by squared distance from `0x029cdb98`, a bss vector with no store in `.text` and 555 readers (HIGH: the shared zero vector). So the order is distance from the world origin. Defect HYPOTHESIS: the entry point was meant. *Next step:* read `0x029cdb98` from a running process.
+75. **Request kinds** (§10.10):
+    - which callers of the wrapper `0x00b10900` pass options modes 4 and 5 (kinds 1 and 0);
+    - which other builders leave `+0x08` at −1;
+    - the names of the kinds ("remove the occupant, then stop", "approach only" are HYPOTHESIS).
+
+    The submitter's own kind-1 case (request `+0x22` bit 3 with an occupied seat) is CONFIRMED.
+76. **The human-side approach** (§10.6), all to be named by the human/AI units:
+    - the navigator `0x00993e90` (path planner `0x00993630`) and its helpers `0x00993d30`/`0x00993d50`/`0x009947b0`;
+    - `+0xcce` values `0xd`/`0xe`;
+    - human `+0x1714` bit 4, `+0x2bb` bit `0x10`, `+0xc36` bit 2 and the point `+0xc40`;
+    - player `+0x28ac` bit `0x02`, which disables state 5's stick abort.
+77. **Callees of the enter route read for role only:**
+    - `0x00b11520` (vehicle `+0xc40` object);
+    - `0x004b16c0` (controller `+0x34`);
+    - `0x00545010` (request `+0x22` bit `0x20`);
+    - the vehicle-AI reactions `0x004e6600`, `0x00b1f6c0`, `0x00b50180`, `0x00b464c0`, `0x00b500f0`;
+    - the carjack report `0x009dd390`/`0x00b33dc0`;
+    - `0x009b92e0`'s block `+0x1790`…`+0x17d4`;
+    - `0x0094fa00`, `0x007e2b30`, the tilt fix `0x00a87880`, the condition-row-`0xa` classify `0x005ab240`;
+    - the animation ids `0x2fb`/`0x2fc`/`0x2fd`/`0x1d8f` (state 0), `0x305`/`0x325` (hub), `0x327` (stop), `0x94`, `0x1d4` (`ga_cable`);
+    - the exact semantics of `0x00957c80`/`0x00957ee0` (end-all and end-one HYPOTHESIS).
+78. **Door and seat-record timers** (§10.3 step 17, §10.4.4, §10.9):
+    - `0x00aa1eb0`'s arguments: the hub drives the door to 0.1 (unlatch HYPOTHESIS), `0x0f` to 1.0;
+    - descriptor `+0x874` bit 0, `+0x870` bit `0x40000`, and vehicle `+0x16c8` bit `0x4000` (open-top HYPOTHESIS);
+    - the seat-record timers: `+0x20` is armed by the cancel and disarmed by `0x0f`, `+0x24` is armed by the commit.
+
+    A cancel does not close a door the hub unlatched.
+79. **The byte `0x02845b1d`** (read by state 5's on-entry and by `0x00b02460`; no store in `.text`): when set, it forces the convertible-style choice that is otherwise a coin flip. HYPOTHESIS: a debug toggle, always 0 in the shipped game. **[Advanced by §11.7.4: `0x00b02460` is shared with this unit's `0x1f` kind chooser (`0x00b04990`/`0x00b04ae0` both call it); the global still has no writer. The function's own door-clear-latch bit turned out to be the same storage as the `convertible` exit variant (U6.1 §9.3's `+0xd1` bit 0) — a second, unresolved conflict alongside this one.]**
+80. **The exit-request `+0x31` bit 0 conflict** (§11.7.4, §11.8): `0x00b02460` reads it as a one-shot "door already cleared" latch; U6.1 §9.3 reads the same bit (slot-relative `+0xd1`) as the `convertible` exit-variant flag. No writer was found for either reading in any landed unit. *Next step:* a displacement scan for stores to exit-request `+0x31` restricted to the vehicle-interaction band, or a live trace of a convertible's exit.
+81. **`0x00b04ae0`'s kind-`0x14`/`0x1a` gap** (§11.5.2): no branch writes kind `0x14` (`exit standard`) — HIGH, the implicit default already present when `0x1f` is entered — and no branch writes kind `0x1a` (`exit climb`), though the per-frame handler `0x00b063c0` has a dedicated tail for it (§11.5.3). *Next step:* a register-level trace of every write to slot `+0x10` across the whole vehicle-interaction band, not only this unit's own roots.
+82. **`0x00b063c0`'s nine-entry kind tail, seven of nine not individually matched** (§11.5.3): the table dispatches on kind − `0x14` at slot `+0x18`'s jump, and the shapes are CONFIRMED as a set (wait-for-half, re-validate-and-finalise, fast-forward, eject), but only `exit climb` (index 6) and `exit eject` (index 7, by cross-reference with the direct kind check) were pinned to a specific index. *Next step:* read the jump table's nine raw dwords at the computed address and match each to its target label.
+83. **`0x1d`'s per-frame has no explicit transition for a non-`kill`, instantiated extract** (§11.4.2): the frame that confirms the clip finished hands off to a deep human-runtime contract (`0x0096fa20` or `0x009a48e0`) and returns without calling set-exit or the finaliser directly. *Next step:* read `0x009a48e0`/`0x0096fa20` for a call back into the vehicle-interaction band, or trace a live extract to see which frame actually releases the slot.
+84. **Guard quirks found in this unit** (behaviour CONFIRMED): the eject handler `0x00b02cd0` writes a literal string's bytes into human `+0x1a00`/`+0x1a04` when no human resolves (an edge case that should not occur, since the function is always called with the exiting human); `0x00b02460` and its callers pass seat/handle values without a range check, consistent with the rest of this file's guard-quirk items. A port should guard both.
+85. **The "`Jump_Rope`" special case in `0x00b063c0`** (§11.5.3): a tag-matched literal string gates an extra per-rig animation-parameter push (`0x008ff850`, `0x009215b0`, `0x008fea50`) whose purpose (HIGH: swinging past a mounted jump-rope prop) was not confirmed against any `vi_exit.xtbl` set name. *Next step:* search the shipped tables for a set or prop referencing `Jump_Rope`.
+86. **The camera effect `0x00b063c0` primes when the exit-request object handle resolves to an object whose own `+0x10` field is `0x18`** (§11.5.3): the effect itself (`0x004c0690`, `0x00b0efe0`, `0x00574c50`, sized from animation `1d95`'s duration) was not named, and neither was the object's own `+0x10` field or what kind of object it is. *Next step:* U6.5/U6.8, or a direct read of `0x00574c50`.
+87. **`0x00af6310`'s shared pose/orientation tail (`~0x00af6d7a`–`~0x00af86a5`, roughly 500
+   instructions) was not traced byte-for-byte.** Call targets and ordering are confirmed
+   (`0x00b0efe0`, `0x00569920`, `0x00ab4d20`, `0x00da38e0`, `0x004d6210`-style vector transforms,
+   ending in the character-proxy pair `0x0079efb0`/`0x0079efe0`), and the role (blend/apply the
+   case-specific attachment pose or orientation, then write it back to the Havok character proxy)
+   is HIGH confidence, but the SSE position/orientation math itself was not re-derived. *Next
+   step:* a dedicated pass with a proper per-register symbolic tracker (this unit's `esp`-delta
+   tracker is not enough once SSE registers are involved).
+88. **`0x00af6310`'s enter-state handler `0x00af6ba7` (state `0xf`) reads a seat-descriptor bit
+   whose meaning was not independently named.** The addressing (`human +0xbf4 → +0xa7c`, then a
+   computed offset `+0x4d`-ish, bit `0x20`) matches the `Vehicle_Interaction_Info` seat-table shape
+   `spec-player-runtime.md` §8.1 already uses for the unrelated `Hide Occupant` flag (seat byte
+   `+0x09` bit 6), but this is a *different* byte/bit and was not cross-checked against
+   `spec-tables-vehicle-world.md`'s seat field list. *Next step:* `spec-tables-vehicle-world.md`
+   §3.x's seat-descriptor layout, read against this offset.
+89. **`0x00af6310`'s role-only sub-calls, not independently named:** `0x004d47e0` (a
+   controller-state predicate, called from the shared "nothing case-specific" stub `0x00af6c00`),
+   `0x00ab4d20` (a 4-argument seat/vehicle vector query, args include the human's own 8-byte
+   handle), `0x00569920` (a bool-returning call in the ride tail, args a small local buffer),
+   `0x004add90` (the vehicle sub-object orientation/quaternion getter at `vehicle+0x1db8`, used by
+   `0x00af4b80`'s tilt computation too — see item 6), `0x00ab4790`/`0x00ab47e0` (the wheelie/endo
+   predicates `0x00af4b80` calls directly on the vehicle). None of these change the parameter
+   contract, but a full port would need their return semantics.
+90. **`0x00af4150`'s human field `+0x16d4` values 1 and 2 are not identified.** `3` is documented
+   (`spec-player-runtime.md` §8.0/§8.1, "seated"); `0x00af4150` treats 1 and 2 as valid states for
+   a shorter variant of the same fall-detection math, but what those two states *are* (pre-seated
+   transition? a different seat kind? a ragdoll-adjacent state?) was not traced. *Next step:*
+   a raw scan for every writer of human `+0x16d4` (distinct from the better-documented `+0xcd2`
+   physics-representation byte and `+0xccd`/`+0xcce` condition bytes).
+91. **`0x00af4150`'s class-row test at object `+6` bit `0x80` is a different bit than the walkers'
+   `+0xa` bit `0x01` test**, and was not independently named. *Next step:* a census of every
+   reader of `0x02cc9900`'s per-class-row byte `+6`, cross-checked against `spec-ai-runtime.md`'s
+   class-row documentation if any exists there.
+92. **`0x00af4150`'s and `0x00af4760`'s shared call `0x00b0efe0(human, &out1, &out2)`** returns
+   `-1` on failure and otherwise a value whose meaning was not traced (both callers only branch on
+   `== -1` vs not). Given both callers are rider-adjacent and both then do vehicle-relative
+   position math on success, this is HIGH confidence as "a ride attach-point or placement lookup",
+   but it was not read beyond its entry and return convention. *Next step:* full listing of
+   `0x00b0efe0`.
+93. **`0x00af4760`'s non-ride-key return codes** (`2`, `0x1a`, `0x1ac`, `0x2c`, and the cached
+   human fields `+0x1cc8`/`+0x1ce0`) were read as literal return values but not matched against any
+   known animation-id or state-id space; they are too large to be slot states (max `0x22`) and too
+   small to be the "animation ids `0x10a`…`0x111`" fallback chain scoping's OPEN 71 already
+   mentions. *Next step:* read the caller `0x0095cbc0` in full to see how it consumes each code —
+   this would also settle what `0x0095cbc0` itself is (this unit only confirmed it is a real
+   function entry taking a human-shaped first argument and reading controller state id `0x174`).
+94. **`0x00af4760`'s side branch at state `0x1f`/variant `0x14`'s call `0x004b1630(controller,
+   0x45)`** is not one of the three typed setters and was not independently identified. HIGH
+   confidence it is a `play`-family call (`spec-anim-runtime.md` §6.5) rather than a parameter
+   write, triggering a one-shot cue keyed by id `0x45`, gated on the rider holding an item. *Next
+   step:* cross-check `0x004b1630` against the play-family addresses `spec-anim-runtime.md` §6.5
+   already lists, to see if it is one of those under a different citation or a genuinely new entry
+   point into the same slot machinery.
+95. **The shipped values of the three tweaks this unit newly named** (`VI_forward_diff_max`
+   `0x02845b18`, `VI_vert_diff_max` `0x02845b14`, `VI_tilt_rvec_pitch_max` `0x02845b10`) were not
+   located, same as the original six `VI_*` ride tweaks (`spec-player-runtime.md` OPEN 63). All
+   nine are bss with no initialiser in the image. *Next step*, same as OPEN 63: find the tweak
+   loader for registrar `0x0071b580`, or read the values from a running process.
+96. **A fourth vector-shaped tweak, `0x02845b60`**, read by `0x00af4150` (scaled against an
+    extrapolated launch offset before calling `0x00781 8f0`) but not traced to a registration stub
+    the way the scalar tweaks were (it is read as a 16-byte `movaps` constant, consistent with a
+    3-or-4-float vector tweak, but the registrar search in this pass only covered the three scalar
+    addresses it was specifically looking for). *Next step:* the same registrar-stub search
+    (`0x0100a840`–`0x0100ab00` and beyond) for `0x02845b60`.
+97. **What sets bit 15 of the player's per-frame context word `+0x2084`** — the condition that makes the vehicle-enter/exit prompt (table `0x0111f2d0` slot 15, `0x009e5e80`) available at all. This is decided somewhere else inside the interaction-prompt routine `0x005b6af0` (603 insns), outside U6.2's root list. (§13.1)
+98. **Player fields `+0x16d8`/`+0x16dc`**, tested at the very top of `0x009e5e80`: non-zero on either makes the function refuse immediately, before even the seated/not-seated check. Not the human's own vehicle handle (`+0x16c0`/`+0x16c4`) and not named by `spec-player-runtime.md` §1.5. HYPOTHESIS: some other in-progress-interaction/busy flag. (§13.1)
+99. **Exit-request field `+0x30` bit `0x80`**, set by `0x009e5e80`'s seated branch before calling `0x00af3cd0`. Not in `spec-player-runtime.md` §6.2's `0x33`-byte exit-request field table. (§13.1)
+100. **Player fields `+0x1e30`/`+0x1e34`** — a handle pair read only by `0x00b105c0`, used as a "sticky"/previously-tagged preferred-vehicle override in the nearest-vehicle scan. Not in `spec-player-runtime.md` §1.5's player-only field list (nor the original scoping note's). (§13.3)
+101. **The object-manager-style global at `0x003171a64`**, walked by `0x00b105c0` to enumerate candidate vehicles. Not named by any spec read in this pass; likely the same kind of manager `spec-player-runtime.md` §1.5 touches for the player list (`+0x1f0`), but that attribution was not checked here.
+102. **`0x00b0eac0(vehicle, seat, −1, 0, 0, &out1, &out2)`**, called at the tail of `0x00b0eb90`'s per-seat success case. Its outputs were not traced; given `0x00b0eb90` has no request/slot pointer at all, it is unclear whether this call persists anything or is itself just another validator. (§13.5)
+103. **`0x005457f0`**, the third caller of `0x00b0eb90` per `spec-player-runtime.md` §9.5's call-site table. Not traced by this pass either; band/owner unclear.
+104. **`0x0075d7e0` and `0x0075c880`**, the query helpers `0x00b0da10`/`0x00b0dc20` call with a computed position and a small integer constant (`0x6d`, `0x00ac4c30`). Read as a short-range obstruction/clearance query by shape (SEH-wrapped, scans a short list for a flag bit first) but not traced; likely physics-runtime territory rather than vehicle-interaction. (§13.6)
+105. **Where in the AI mode-38 `Veh enter` machinery `0x0051d5b0` and `0x00521200` (both confirmed callers of `0x00b0fdf0`) are themselves called from.** Neither is one of the named mode-38 table slots in `spec-ai-runtime.md` (`0x00521320`/`0x00520cd0`/`0x005213d0`/`0x005215a0`/`0x00520ca0`/`0x00521060`/`0x005210d0`/`0x00521f40`). AI-side work. (§13.7)
+106. **The session/mode-kind getter `0x00614d00` → `0x006d2910`**, called by both `0x009e1e60` (checked against `4`) and `0x00b0eb90` (checked against `6`). HYPOTHESIS it backs `coop_is_active`'s session predicate (`spec-lua-api-behaviour.md` §3.1) or a similar mode/session enum, but the enum's actual value set was not read. (§13.2, §13.5)
+107. **The local-player-only `cant_enter_exit_vehicles` read inside `0x00b0fdf0`'s common success tail** (`+0x28ac` bit `0x10`, read off the **local player singleton**, not the requesting character) gating a driver-eviction path. Whether this is intentional (only the local player's own preference should block evicting someone to make room) or an oversight that happens to not matter for AI-only entries was not verified. (§13.4 step 8)
+108. **`0x13`'s per-frame `0x00b01630`'s door-opening tail not fully traced.** Confirmed for its dominant control flow (the `+0x28` timeout-based hard cancel, the knock-down/impulse retry loop, and the direct-to-commit inline call to `0x00afbd90` once the destination seat and its queue are both clear, §14.10). A fourth branch, a "surface kind" (`0`/`1`/`2`) dispatch over door-opening variants reached past roughly `0x00b01c1f`, was read partway (through `0x00b01f22`) but not walked to its end — at least one more block (`0x00b01f0a`) was identified but not disassembled. Not expected to change the headline findings. (§14.10, U6.5)
+109. **The chooser `0x00afb220`'s third argument is not always literal `0`.** Every previously-documented call site (§7.5, §9.1, §9.5) passes `0`; state `0x0c`'s per-frame (§14.4) passes a computed, non-literal value at its one call site instead. The signature should read `(record, i, flag)`; what *flag* selects, and whether `0x0c`'s is the only non-literal site, was not traced. (§14.4/§14.13 item 2, U6.5)
+110. **Eight per-state cached animation-tag hashes, unnamed**: `0x153bd9c` (`0x0a`'s per-frame), `0x153bdec` (shared by `0x0b`/`0x0c`/`0x0e`'s per-frame), `0x153be28`/`0x153be24`/`0x153bdf0`/`0x153be20`/`0x153be1c`/`0x153bd98` (all `0x0d`'s per-frame, five distinct gates plus one via a different query function `0x004b4320`). Same lazy-cache-by-name idiom as U6.7's "critical end" tag (`0x0153be2c`) and U6.8's eleven named parameters (§12.4); the string literals behind these eight were not traced — a bounded, mechanical follow-up. (§14.13 item 3, U6.5)
+111. **Enter-slot `+0x18 = 4` on state `0x13`'s on-entry: no consumer found.** `0x0a`'s and `0x0c`'s on-entry both seed `+0x18` to a sub-timer their own per-frame advances through further stages; `0x13`'s on-entry seeds `4`, but no read of `+0x18` at value `4` was found anywhere in `0x13`'s per-frame, including the untraced tail (item 108 may resolve this once closed — also worth checking against U6.8's per-slot pose driver §12.2/§12.3, which has its own per-enter-state dispatch and could read `+0x18` for an unrelated purpose). (§14.11, U6.5)
+112. **A handful of role-only helper calls left unnamed**, none found to drive a state transition or write a field this unit's scope depends on: `0x0b`'s on-entry door-handling block's exact stack-operand identities (bit-level outcome on request `+0x21` bits 2/3 is confirmed); `0x0c`'s on-entry `0x0055b1d0`; `0x0d`'s on-entry `0xaf1b80` (feeds human `+0xec` bit `0x100000`) and per-frame `0x009d14f0`/`0x0070bcb0`/`0x004ddc20`/`0x0070ced0`/`0x0070dcf0`/`0x0055a0a0`/`0x0055a190`/`0x00aa1f20`; `0x0e`'s per-frame `0x004de260`/`0x004fa060`/`0x00b61cc0`/`0x00b46ca0` (filling in branches of the hub's vehicle-AI-reaction logic, §10.3 step 16); `0x13`'s on-entry `0x00950550`/`0x0051b5b0`/`0x006bd720`/`0x00710e40` and per-frame `0x00afa320`. (§14.13 item 5, U6.5)
+113. **Human `+0x21` bit 1: role not independently named.** Set unconditionally by `0x0b`'s on-entry during its door-handling block (§14.3). HYPOTHESIS: an "is traversing the vehicle exterior" or ragdoll-disable-style flag, by analogy with the state's purpose; not confirmed. (§14.11, U6.5)
 
 ---
 
-## ~~4.~~ ~~5.~~ ~~6.~~ ~~7.~~ ~~8.~~ ~~9.~~ ~~10.~~ 11. Clean-room check
+## 16. U7 — In-vehicle driving controls, the input→Havok hand-off (2026-10-08)
+
+**Scope.** Closes the unreserved unit "U7" `review/scoping-player.md` scoped but left untraced
+("the hand-off into `hk_custom_vehicle_driver_input` `0x00ae30c0` was not traced"). Entry (§10, U6.3)
+and exit (§11.4, U6.7) were already essentially DONE in this file — this unit is the one genuine gap
+the brief found: the driving-control input→Havok hand-off once the player is seated, not entry/exit
+itself.
+
+**Full chain, CONFIRMED by direct disassembly:** per-frame controls (`0x00702ad4`→`0x005aa6c0`→
+`0x005b7430`→`0x005b73c0`) → in-vehicle action dispatcher `0x005b5c50` (586 instructions) →
+driving-input readers `0x00a91800` (ground vehicles) / `0x00a91440` (motorcycles) → two input-shaping
+setters, `0x00ae5290` (deadzone/response curve, writes `instance+0x130`) and `0x00ae5420` (writes
+`instance+0x13c`) — both keyed off the vehicle instance via `*(vehicle+0x808)`, the same instance this
+file's own §12 (U6.8) and `spec-physics-runtime.md` already track throughout. The already-documented
+Havok override `0x00ae30c0` reads `instance+0x130`+`0x138` (summed, sign-squared); this file's own
+§12.4 "Vehicle Steering" animation-controller parameter (`0x00a926b0`'s return) reads the SAME
+`instance+0x130` — three independent confirmations (write-side provenance, a fresh read of
+`0x00a926b0`, and this file's own already-published §12.4) agree `instance+0x130`/`0x138` is the real
+steering channel.
+
+**Correction to the original scoping note:** `CAA_DRIVE_STEER` (axis 9) is confirmed read at
+`0x005bb530(9,0)` but is provably *unused* for ordinary cars (kind 0/1), which instead reuse the
+on-foot walk-turn axis — traced to the end of the switch, not just the entry.
+
+Full detail, including the AI-side lead (`0x00abde60`/`0x00b29580` both call the same two setters —
+unverified, relevant to `spec-ai-runtime.md`'s own traffic driving material) and the genuinely OPEN
+items (`instance+0x128`/`0x12c`/`0x138`'s own writers; `instance+0x13c`'s consumer, likely brakes
+`0x00ae2c80`, not checked; `instance+0x164` bits 0/1): `spec-physics-runtime.md` §10.9 (primary
+splice) and `scratchpad/vehicle_entry_exit_control_handoff_2026-10-08.md`.
+
+---
+
+## ~~4.~~ ~~5.~~ ~~6.~~ ~~7.~~ ~~8.~~ ~~9.~~ ~~10.~~ ~~11.~~ ~~12.~~ ~~13.~~ ~~14.~~ ~~15.~~ 16. 17. Clean-room check
 
 - Addresses and offsets are plain hex throughout. No decompiler output was read or quoted; only capstone listings and static table reads were used. No Ghidra auto-names for functions, globals, labels or variables appear.
 - Names quoted are engine data: CBA/CAA action names, the stick/axis/mouse/gamepad vocabularies and scheme names read from the executable's own tables, the tweakable names `grenade_disable`/`grenade_disable_veh` read at `0x0111f708`/`0x0111f6f4`, and Win32 import names from the PE import table.
@@ -2907,11 +4750,183 @@ Each of these keys falls through to −1 and the discarded diagnostic (§9.4.2).
 - U6.6 (§6) additionally quotes, as data read from the executable or from the specs cited: the trace strings `Set Exit`/`Set Enter`, the force-flag record tag `human_force_flagsbeing_vacuumed` (`0x01167ea8`) and the tag `human`, the weapon names `Rifle-NG`, `Rifle-STAG`, `Rifle-Gang` and `SMG-Gang`, the `vehicle_interaction_info.xtbl` flag name `Equip Rifle on Exit` (loader string `0x0118640c`), the 83-entry key-token names (`none`, `exit`, `extract`, `change seat`, `traverse`, `deactivate`, `open`, `close`, `prepare`, `fast`, `enter`) of the table `0x0130e638`, caller-classifying literals (`ACT_TORCH_FAIL_WATER`, `ACT_TRAFFIC_*`, `ACT_ESCORT_*`, `DIVERSION_CHOP_SHOP_*`, `fail_hos_all_died`, `STORE_AMBULANCE_MSG`, `mission_purchase`, `Homie force to exit vehicle!`, `-- Cutscene Script Group --`, `Shark`, `Brute Fuel Tank`), force-flag names (`cannot_exit_vehicles`, `cannot_exit_rc_vehicle`) and Lua function names as `spec-lua-api-behaviour.md` gives them. U6.6 was Ghidra-free (capstone recursive-descent and linear listings over `exe_va.py`, raw `E8`/`E9` rel32 and dword scans of the whole image, a push-corrected request-field survey of all 79 exit-request call sites, census call-graph closures, static table reads of `0x00b05ac4`, `0x00b06fdc`, `0x00b0abe4` and `0x0130e638`); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched; the only data file read was the extracted `vi_exit.xtbl`/`vi_enter.xtbl` under `tools/as_base_xtbl`. **U6.6 self-check (strict regex + plain-substring backstop, Python `re`) on the entire file after the U6.6 edit: regex 0 hits, backstop 0 hits** (control string 5/5 on both).
 - U6.0 and U6.4 (§7, §8) additionally quote, as data read from the executable or from the specs cited: the log strings `Set Enter`, `Set Exit`, `Set Ride`; the animation-parameter names `Collision Bool`/`Collision Dir`; the tweak names `VI_forward_vel_accel`, `VI_vert_vel_accel`, `VI_random_accel_factor`, `VI_reaction_delay_min_ms`, `VI_reaction_delay_max_ms`, `VI_collision_min_vel_diff` (read at their registration stubs `0x0100aa50`…`0x0100aaff`); the `vehicle_ai`/`vehicle` force-flag strings (`drunk_driver`, `degrade_info`, `goal_stop_override`, `override_speed`, `never_go_ambient`, `infinite_vehicle_collision_mass`, `cheat_no_damage`, `cheat_smash`); `hud_inventory_hide`, `player_last_vehicle_handle`, `human_ai_data`; the model names `sp_mdsphere_genki`/`truck_2dr_classic01`; the camera submode names of §4.8; the `vehicle_cameras.xtbl` set names of `spec-tables-ui-controls.md` §8.1; and the `vehicle_interaction_info.xtbl` field and flag names of `spec-tables-vehicle-world.md` §3.2 (`Queue`, `Primary_Access_Seat`, `Secondary_Access_Seat`, `Hide Occupant`, `Ignore Team Disposition`, `Hold Weapon in Left Hand`). U6.0/U6.4 were Ghidra-free (capstone listings with an esp-depth tracker, census call edges, raw rel32/dword scans of the whole image, a band displacement sweep, push surveys including shared call tails); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.0/U6.4 self-check (strict regex + plain-substring backstop, Python `re`) on the entire file after the U6.0/U6.4 edit: regex 0 hits, backstop 0 hits** (control string 5/5 on both).
 - U6.1 (§9) additionally quotes, as data read from the executable or from the specs cited: all 83 key-token names of the table `0x0130e638` (`none`, `any`, `prepare lift`, `extract fail 1`, `exit at speed cruise`, `front left`, `hostage a`, `combat ready`, `alternate`, …) and the six strings that follow it (`request pending`, `start`, `wait for exit exterior`, `wait for exit interior`, `teleport`, `pathfind`); the diagnostic format string `Couldn't find animation for %s -> %s -> %s -> %s -> %s` (`0x01186848`); the loader strings `Vehicle_Interaction_Animation_Set`, `Animation_Grid`, `Element`, `Animation`, `Parameter%d`, `Animated_Camera_Tests`, `Camera_Pos`; the `vehicle_interaction_info.xtbl` field names `Enter_Animations`, `Exit_Animations`, `Ride_Animations` as `spec-tables-vehicle-world.md` §3.2 gives them; and, from the shipped `vi_enter.xtbl`/`vi_exit.xtbl`/`vi_ride.xtbl` (extracted copies under `tools/as_base_xtbl`), the set names `Bike Rocket Rider`, `Bulldozer Right`, `BRUTE`, `Heli Fighter Rider`, `RiotCop_Right`, `medium passenger right`, `VTOL2 …`, `motorcycle driver`, `JetBike driver` and animation names (`Exit Right Rider`, `Exit Right Fast`, `Exit Left Fast`, `Exit Right Extracted Pull`/`Bash`/`Shoot`/`Punch`, `Drive Ready SM`, …). U6.1 was Ghidra-free (capstone listings over `exe_va.py`, raw `E8`/`E9` rel32 and whole-image dword scans, census closures of every state handler, static table reads of `0x00b0abe4`, `0x00b0ac44`, `0x00b0a554`, `0x00b0a628` and `0x0130e638`, and a re-implementation of the key builder run over the three shipped tables); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.1 self-check (strict regex + plain-substring backstop, Python `re`) on the entire file after the U6.1 edit: see the Changelog entry.**
+- U6.3 (§10) additionally quotes, as data read from the executable or from the specs cited: the trace string `Set Enter`; the tweak names `VI_pathfind_cancel_dist_multiplier`, `VI_pathfind_check_pause_distance`, `VI_pathfind_play_stop_dist` and `VI_on_vehicle_entry_max_y_diff` (read at their shipped values in `tools/ai_base_xtbl/tweak_table.xtbl`, registrars not re-traced); the `Interaction_Point_Type` names (`Enter Start`, `Enter Start Lift`, `Enter Start Pull`, `Enter Start Extract`, and their `Convertible` variants) as `spec-tables-vehicle-world.md` §4.1 gives them; and the `vehicle_interaction_info.xtbl` field names `Primary_Access_Seat`/`Secondary_Access_Seat`, `Ignore Distance Checks` and `Queue` (seat byte `+0x0A` bit 7, `Should Hide Big Hats`) as `spec-tables-vehicle-world.md` §3.2 gives them. U6.3 was Ghidra-free (capstone listings over `exe_va.py` with an esp-depth tracker, census call edges, raw `E8`/`E9` rel32 and whole-image dword scans for the instant flag and the request fields, a band displacement sweep of `0x00af0000`–`0x00b12000`, static reads of the condition table `0x0111f1e8` and the submitter wrapper's jump table `0x00b10a68`, and the shipped `tweak_table.xtbl`); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.3 self-check (strict regex + plain-substring backstop, Python `re`) on the entire file after the U6.3 edit: see the Changelog entry.**
+- U6.7 (§11) additionally quotes, as data read from the executable or already identified by the unit's own prior investigation and re-confirmed here: the trace string `Set Exit` (already declared for U6.6/U6.0); the literal `Jump_Rope` (`0x0112b5e4`) gating a special-cased animation-parameter push; and the "critical end" animation tag cached at `0x00153be2c`. U6.7 was Ghidra-free (capstone listings over `exe_va.py`, a census closure of every in-band function in range, raw rel32/dword scans for jump-table and call-site confirmation); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.7 self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: see the Changelog entry.**
+- U6.8 (§12) additionally quotes, as data read from the executable or from the specs cited: the 11 animation-controller parameter names `Vehicle Steering`/`Vehicle Steering Time`/`Vehicle MPH`/`Vehicle Forward Lean`/`Vehicle Vert Lean`/`Vehicle Tilt`/`Vehicle Forward Lean Abs`/`Vehicle Vert Lean Abs`/`Vehicle Tilt Abs`/`Wheelie Bool`/`Endo Bool`, read as string literals pushed before their `0x004cbaf0` resolver call; the tweak names `VI_forward_diff_max`, `VI_vert_diff_max`, `VI_tilt_rvec_pitch_max`, read at their registration stubs `0x0100a8c0`–`0x0100a900`; and the controller convention already established by prior sections (`spec-anim-runtime.md` §4.1/§4.2). U6.8 was Ghidra-free (capstone listings over `exe_va.py` with a purpose-built `esp`-delta tracker for stack-relative operands, raw dword/byte reads of the jump/remap tables and tweak registration stubs); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.8 self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: see the Changelog entry.**
+- U6.2 (§13) additionally quotes, as data read from the executable or from the specs cited: the action name `CBA_GAC_ACTION` (`spec-tables-ui-controls.md` line 120) and `CBA_OFC_SPRINT`; Lua function names (`player_force_vehicle_seat`, `vehicle_enter_do`) as `spec-lua-api-behaviour.md` gives them; and a static read of the 22-entry prompt-handler table at `0x0111f2d0` and its sibling at `0x0111f430`. U6.2 was Ghidra-free (capstone listings over `tools/harnesses/exe_va.py` via a local `listfn.py` harness, manual esp-depth tracking, static table reads); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. **U6.2 self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: see the Changelog entry.**
+- U6.5 (§14) additionally quotes, as data read from the executable or from the specs cited: nothing beyond plain hex addresses and offsets already established by this file's own prior sections (U6.0/U6.1/U6.3/U6.6/U6.7/U6.8) and `spec-player-runtime.md` §5.4.2/§12.5's knock-down/impulse mechanism, all cited not re-derived. U6.5 was Ghidra-free (a purpose-built linear Capstone lister over `tools/harnesses/exe_va.py`, validated against an already-published U6.7 function it reproduced byte-for-byte before being trusted on new code; manual `esp`-delta tracking); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. U6.5's own draft disclosed one self-caught and corrected error (a cross-contamination of three details from state `0x13`'s on-entry into state `0x0d`'s write-up, plus one arithmetic mis-statement in `0x0e`'s, both fixed and left visible in §14.5/§14.6/§14.10 rather than silently edited away) — flagged here so the integration is known to have received an already-self-corrected draft. **U6.5 self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: regex 0 hits, backstop 0 hits.**
 - Self-check result: recorded in the Changelog entry below, run on the finished file as the last step.
 
 ---
 
 ## Changelog
+
+- **2026-10-09 — new §7.4b: driving animation state, forward-traced from §7.4a** (SPEC TEAM, agent
+  `a594c8196df8fb117`, WAVE 8 item 3). Mostly a synthesis pass over already-landed material
+  (§§6-13, `spec-tables-vehicle-world.md` §2-3, `spec-tables-animation.md` §1.3/§5,
+  `spec-anim-runtime.md` §7.11-7.13), plus new empirical confirmation via direct reads of the real
+  shipped `vi_enter.xtbl`/`vi_ride.xtbl`/`vehicle_interaction_info.xtbl` text. Confirms: no separate
+  animation-selection subsystem — it's the same 35-state vehicle-interaction machine's on-entry
+  handlers calling the shared element-selection rule (§9); the seated pose is a dedicated locomotion
+  condition (`human+0xcc8` = 8/9, same mechanism as every other named movement state), not a
+  one-off override; clip names are real data-driven `.xtbl` entries resolved through the merged
+  State/Action registry, not hardcoded ids; vehicle-class dependence is CONFIRMED pure data with
+  zero code-level class switch — proved conclusively by real cross-reuse data (the shipped
+  `Wavecraft` jet-ski's ride set is literally named `"motorcycle driver"`, and the shipped `Bike
+  Moped`'s ride set is literally `"Wavecraft Driver"`). Biggest open item: the literal
+  instruction-level link from an `Animation` registry string (e.g. `"drive network"`) to the real
+  shipped `driving_sm` node graph is HIGH CONFIDENCE by naming/structural correlation only, not
+  CONFIRMED by disassembly. Full detail: `scratchpad/driving_animation_state_2026-10-09.md`.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §7.4a's 4th-table follow-up on OPEN item #97: same negative result, the presumed-setter
+  function cleared** (SPEC TEAM, agent `a35cc7455a222c76a`). The newly-flagged 4th 22-slot table at
+  `0x0111f4e0` was enumerated: almost entirely empty (only local indices 16, 18 populated; index 15,
+  the direct analog of the watercraft slot, has no function at all). Both populated slots
+  (`0x005b8770`, shared verbatim with the first table's own slot 16; `0x005b7940`) are unrelated
+  single-purpose prompt builders (weapon pickup/replace, weapon-overheat) with zero reference to
+  `+0x2084` in either direction. The shared walker `0x005b6540`'s full 329-instruction body re-read
+  end to end: every `+0x2084` reference across both of its scan loops is a `TEST`, never a write.
+  **With both tables now fully checked, no write to `+0x2084` exists anywhere in the trigger-button
+  family's reachable code — a solid negative, not "not yet found."** `0x005b6af0` (603 insns,
+  previously presumed to hold the setter) was bounded-effort-checked and found to contain **zero**
+  references to `+0x2084` in its own body, clearing that presumption; it calls the other 3 family
+  members plus ~20 uncharacterized functions, flagged as the most promising remaining lead for a
+  future pass. Full detail: `scratchpad/fourth_prompt_table_0x0111f4e0_2026-10-09.md`. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §7.4a's own watercraft-prompt-table lead on OPEN item #97, checked directly: a real
+  confirmed sibling table, but a clean negative for closing the item** (SPEC TEAM, agent
+  `a3544b2114c92da7a`). The second 22-slot table at `0x0111f488` is real — all 22 entries read, 7
+  sampled by decompile, every populated slot a per-prompt message/UI-text builder sharing slot 15's
+  own shape. Its sole walker (`0x005b6540`, a confirmed 4th member of the existing trigger-button
+  function family) reads `+0x2084` bit-by-bit to pick which already-active prompt to render — exactly
+  the same reader relationship the main table's own walker has to that word. **`+0x2084` is never
+  written anywhere in this walker or in slot 15's own function — this table is a consumer, not the
+  producer OPEN item #97 is looking for; the item stays open, unredirected.** New, unexplored lead
+  found along the way: a 4th contiguous 22-slot table at `0x0111f4e0`, driven by the same walker on a
+  second button, not yet enumerated. Full detail:
+  `scratchpad/watercraft_prompt_table_open97_2026-10-09.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-09 — new §7.4a: the vehicle-enter eligibility gate `0x00b0ca60` traced in full — a pure
+  character-state check, no vehicle/physics involved** (SPEC TEAM, agent `a4a20628e601754f4`, routed
+  mission-scripting question). Corrects the question's own framing on both counts: the function has no
+  vehicle argument at all (confirmed from its signature and both real call sites) and reads exclusively
+  character-local state (vehicle-interaction phase, a busy/pending pair, ragdoll, down-or-dead, pose
+  sub-state, a class-capability bit, `cant_enter_vehicle`, AI mode/sub-state) — never vehicle position,
+  seat occupancy, or physics/collision state. Returns a plain boolean, no secondary code. The "2 physics
+  obstruction queries" the question asked about are confirmed to be the already-documented pair at
+  §13.6/OPEN item #104, not a new pair hiding in this function — it calls neither of them nor the two
+  obstruction gates, at any depth, exhaustively checked. New: a second, previously undocumented caller
+  (`0x005b7cc0`, a watercraft-enter UI-prompt helper reusing the same eligibility/auto-pick/category
+  chain) sitting in a previously-unidentified second 22-slot function-pointer table — a plausible,
+  unconfirmed lead on OPEN item #97. Full detail:
+  `scratchpad/vehicle_enter_eligibility_0x00b0ca60_2026-10-09.md`. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §8.2 step 34 gains a cross-reference: the "Hide Occupant" seat toggle's real render-
+  level mechanism, and its real shipped-data prevalence, now traced in full** (SPEC TEAM, agent
+  `ab4f4e1b4a76d7a98`, wave 6 rendering-gap item (b)). `0x00920170` confirmed to flip a generic
+  "logically hidden" bit (`+0x3a` bit `0x80`), distinct from the engine's other generic `visible`
+  property path (`0x008ccb90`). Critical finding for Team B: reading the real shipped
+  `vehicle_interaction_info.xtbl` directly, `Hide Occupant` is set on a driver seat for only 2 of 131
+  vehicles (both tanks) — every ordinary car/motorcycle/helicopter/boat/VTOL driver seat has it absent,
+  so a renderer hiding the character for every vehicle while driving is reproducing the tank-only
+  special case universally, not retail behaviour. Full detail: `spec-render-pipeline.md` §23.14;
+  `scratchpad/invehicle_character_render_2026-10-09.md`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-09 — new §15.3a: generic damage application, death, and ragdoll hand-off, traced end to
+  end** (SPEC TEAM, agent `a9c8ae1260dd97f53`, wave 6 item 3). Health storage, the damage-apply sink
+  (`0x0096fa20`, re-confirmed, 2 of its own internal health-mutation calls newly pinned —
+  `0x0094cfc0`/`0x0094d520`), a resistance/difficulty-scaling correction to the sink's own prior
+  "caller always computes the final amount" phrasing, the death transition (`0x00970e70`, newly found,
+  called by the sink at health≤0), and the real ragdoll/death-animation branch point
+  (`0x0098ce40`'s `+0xcce` state machine, real ragdoll-activate call `0x009a5520`, real
+  non-ragdoll-finalize call `0x00952760`). **Hitscan gap NOT closed**: both next-steps
+  `spec-weapons-runtime.md` §2.2c named (`0x008ccb90`/`0x00920170`) were read in full and confirmed by
+  direct disassembly to not reach this chain — the far side is now fully mapped, narrowing the
+  search. Full detail: `scratchpad/character_damage_death_2026-10-09.md`. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-09 — §7.11's OPEN 55 extended: the class-registration mechanism confirmed for 43 real
+  classes; the kind-row bit writer searched for exhaustively and NOT found** (SPEC TEAM, agent
+  `a39496c2b1abfebed`, dispatched LOW PRIORITY by `purrsian-04` in response to Team B's
+  object-name-string classifier being labelled CHOSEN rather than the real mechanism). A whole-`.text`
+  byte-shape scan found 43 registered classes (not just the 2 `spec-zone-data-format.md` §11.9 item 4
+  previously named), including the real runtime `vehicle`(7)/`player`(0x21)/`npc`(0x22) classes, all
+  sharing one byte-identical registration-stub template that writes the `0x02cc9900[classIndex]`
+  table entry. Found the real `Create()`-vtable-slot writer of an object's own class-index byte
+  (`+0x34`) for all three. **The kind row itself (descriptor bytes `+6..+0x25`, what `0x00853b30`
+  reads) is unconditionally zeroed by every one of 9 fully-disassembled registration stubs, and a
+  4-strategy, whole-binary search for a later non-zero-bit writer found NONE** — a solid negative,
+  not an incomplete one. Surfaced a new open question: `player`/`npc`'s own class indices (`0x21`/
+  `0x22`) numerically match the bit numbers already confirmed meaningful for them, which could be the
+  real mechanism or could be coincidence (`vehicle`'s index is `7`, arguing against a simple
+  "bit = own class index" reading generally) — not settled, a live capture is the natural next step,
+  flagged for the orchestrator/user, not dispatched here. Full 43-class table and the complete
+  negative-search writeup: `scratchpad/player_vehicle_class_bit_writer_2026-10-08.md`. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-08 — §5.6.5 gains the full `0x0079d0b0` support-query internals (previously cited by name
+  only)** (SPEC TEAM, agent `ace158c4d83e1eec5`, dispatched by `purrsian-04` for Team B to drop a
+  flat-plane ground approximation). Full manifold/gather/filter/averaging chain traced: the support
+  query reads the proxy's own contact manifold (filled every frame by the already-documented
+  continuous shape-cast loop, §5.6.4) and averages qualifying contacts (dot-up < −0.08) into a
+  support state/normal/velocity triple — a textbook multi-contact algorithm already generic over
+  arbitrary geometry, confirming the controller never assumed a flat plane. Flagged, not resolved: an
+  unreconciled discrepancy between this pass's own "shared 0.7 constant" finding for the forward step
+  probe and this section's own prior "0.72/0.6" language; a correction candidate on the forward
+  probe's "length 90" field (written as a plain integer, not a float). Full detail:
+  `scratchpad/havok_character_proxy_ground_following_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+
+- **2026-10-08 — new §16 (U7 — in-vehicle driving controls): the input→Havok hand-off, closing a
+  gap this file's own scoping note left untraced** (SPEC TEAM, agent `a0d08cde9be318115`). Primary
+  splice is `spec-physics-runtime.md` §10.9; this section is a secondary cross-reference tying that
+  finding to this file's own already-published §10 (entry)/§11.4 (exit)/§12.4 ("Vehicle Steering")
+  material. No new disassembly in this file beyond the cross-reference. Full source:
+  `scratchpad/vehicle_entry_exit_control_handoff_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+
+- **2026-10-08 — §2.7 gains a structural note tying its own "late"/secondary row-2 action tree
+  (`0x005b69c0`→`0x005b6420`→`0x005ae3f0`) to `spec-weapons-runtime.md`'s own fire-path hunt** (SPEC
+  TEAM, agent `a4fe952ab41afa206`). `0x005ae3f0` is now CONFIRMED to be the player's actual fire-input
+  dispatch (indirect virtual call on the equipped item's own vtable `+0x8c`) — this file already
+  documented the entry point but had never cross-referenced it against weapon code. No new disassembly
+  in this file beyond the cross-reference; full detail lives in `spec-weapons-runtime.md` §2.2b. Full
+  source: `scratchpad/player_combat_aim_fire_reload_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+
+- **2026-10-08 — §15.4 gains a partial closure and a cross-reference.** `0x006D9310` (the "game-mode-
+  state enter handler" §15.4's own account of the death/respawn restart path rested on secondhand, via
+  `interp_fresh_start_checkpoint.md`) is now independently re-walked in full by
+  `spec-lua-api-behaviour.md` §21.27a/§21.27b — consistent with, not contradicting, this section's
+  existing account. New cross-reference to §21.27b, the structural counterpart to this section's own
+  organic FAILURE trigger: §21.27b found no equally clean organic SUCCESS trigger exists, only
+  fail-safes — the engine never itself detects "objectives complete." No new disassembly in this file.
+  Cleanroom self-check: 0 new hits. Synced to Team B.
+
+- **2026-10-08 — new §15: player combat (aim-assist, melee, death/respawn); OPEN items renumbered to
+  §16, clean-room check to §17.** The first combat material in this file (previously zero). Closes
+  `aim_assist.xtbl`'s runtime consumer (a per-frame profile selector, `0x009ec2f0`); closes melee's
+  resolution half (trigger was already specced) and confirms player melee is a separate code path from
+  NPC melee, not a shared mechanism; traces the full player death chain (`0x00702810`) and confirms it's
+  the identical in-memory checkpoint-restore mechanism `spec-save-format.md` §11.1/§11.2 already
+  document for a manual checkpoint restart, not a bespoke respawn implementation. The generic
+  weapon-fire/hit/damage chokepoint is explicitly out of scope (owned elsewhere); the player-specific
+  `+0x276C` damage-scale array's consumer inside that chokepoint is left as an honest OPEN handoff. Full
+  detail: `scratchpad/player_combat_aim_melee_damage_respawn_2026-10-08.md`. Cleanroom self-check: 0
+  hits. Synced to Team B.
+
+- **2026-10-08 — §7.8 phase-boundary-writes table extended: the constructor's own `+0x16d4` default
+  pinned** (SPEC TEAM, wave-3 agent `a65253bea947bc320`). `0x00954be8` (inside human constructor
+  `0x00954340`) zeroes `+0x16d4` unconditionally for every newly-constructed character (`edi`, set
+  once via `xor edi,edi` at `0x00954388`, never redefined before the write) — this is the pre-"any
+  occupancy transition" default, not a fifth occupancy-band writer, and does not contradict §7.8's
+  existing four-site table (that band sweep was scoped to the occupancy subsystem only). Closes the
+  open constructor-value question in
+  `scratchpad/char_state_enum_0x16d4_full_value_table_20261008.md` (line 174). Full detail:
+  `scratchpad/named_objects_sentinels_0x954be8_m05_2026-10-08.md` §3. Cleanroom self-check: **regex 0
+  hits, backstop 0 hits**, unchanged.
 
 - **2026-10-03 — created** (SPEC TEAM). Units U0 (§1) and U1 (§2) of `review/scoping-player.md` §5. Ghidra-free (capstone over `exe_va.py`, raw rel32/dword scans, push surveys). Corrections to the scoping note flagged inline and collected in §1.14 and §2.5/§2.6; cross-spec flags for `spec-tables-ui-controls.md` §2.2/§2.3 and `spec-lua-api-behaviour.md` §2.6/§7.22 raised in §1.14 and §2.9 (no other spec edited). Scoping OPEN item 2 resolved (§2.8). Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) run on the finished file: **regex 0 hits, backstop 0 hits**; a known-positive control string matched 5/5 on both in the same run, so the zeros are real. Re-run after this line was written, same result.
 - **2026-10-03 — U2 added** (SPEC TEAM). New §3 "U2 — Normal-condition movement and the intent fields" (classify `0x005ac620` and the six context words, action dispatch `0x005b73c0` and its targets, look slot `0x005ab6a0`, movement slot `0x005b3e80` → `0x005ad130` → `0x005b31f0` → writer `0x005aee30` with the closed-form move-vector math in §3.5.5, on-foot handler `0x005b2ca0` and children `0x005ab860`/`0x005ab930`/`0x005b29d0`/`0x005ad9a0`/`0x005abd70`, stance-byte semantics). Former §3 OPEN items and §4 clean-room check renumbered to §4 and §5 (strikethrough headings; the two in-text references to the OPEN section updated); OPEN items 11–22 appended and item 2 annotated as partly resolved. Ghidra-free (capstone recursive descent over `exe_va.py`, a full linear sweep of `.text` for displacement scans, raw rel32/dword scans of the whole image, push surveys, `.rdata` constant reads); no Ghidra project opened, no `.czn_pc` data touched. Corrections to `review/scoping-player.md` §1.3/§1.5/§1.7/§2 and cross-spec flags for `spec-anim-runtime.md` §4.2 and `spec-lua-api-behaviour.md` §18.26 collected in §3.9 (no other spec edited). Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run. Re-run after this line was written, same result.
@@ -2940,3 +4955,54 @@ Each of these keys falls through to −1 and the discarded diagnostic (§9.4.2).
   - all 23 call sites in 16 functions with the slot each passes, including four temporary-slot lookups and one hand-built key (§9.5);
   - validation against the shipped tables (§9.6): `vi_enter.xtbl` 657/657 `Element`s producible; `vi_exit.xtbl` 808/813 (5 dead, listed); `vi_ride.xtbl` 0/454 by construction, since the rule never reads `Ride_Animations` and ride uses `0x00b08aa0`'s exact six-token match, whose layout all 454 fit. First-match shadowing hides 4 distinct exit animations.
   Former §9 OPEN items and §10 clean-room check renumbered to §10 and §11 (strikethrough headings; the 14 in-text `§9, OPEN n`/`§9 OPEN n` references and the confidence-key pointer updated to §10). OPEN items 68–72 appended; OPEN 47, 48 and 58 annotated; a correction note added to §7.5 "Element-key cases for unheld states" (the `0x1e` case is live). Corrections to `review/scoping-player.md` §5a.1/§5a.3/§5a.4/§5a.6 and cross-spec flags for this file's §6/§7/§8 and `spec-tables-vehicle-world.md` §2.1/§2.2/§3.2 are collected in §9.8 (no other spec edited). Ghidra-free; no `.czn_pc` data touched. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run.
+- **2026-10-07 — U6.3 added** (SPEC TEAM). New §10 "U6.3 — The enter route: states 0–8, the routing hub and the instant route" (`review/scoping-player.md` §5a.3). Contents:
+  - the routing hub `0x00afd4c0` read in full: its decision table confirmed exactly — instant (2/4/8), the fast-entry bit (`0x13`), forced/override (`0x0f`), otherwise 5 — with state 1 never held across a frame (§10.3);
+  - the instant-route HYPOTHESIS refuted: an instant request never reaches `0x0f`; it runs 0 → (upkeep) 1 → 4 → 9, or 1 → 2 → 4 → 9 when the seat is occupied, committing inside the first phase tick after submission when the seat is free and the queue empty; `0x0f` is the forced/override in-place `enter` animation route, falling to 9 only when no `Element` can be found (§10.4);
+  - the cancel-and-resubmit helper `0x00afe980` (§10.4.3) and the cancel `0x00afb930` read in full as a one-shot that releases the slot inside its own on-entry handler, calls the `+0x34` "begun" callback with a success flag but never the completion callback `+0x3c` (§10.9);
+  - enter state 7 shown dead by the full local transition census and by the network applier's fixed value set, closing OPEN 60 for state 7 and extending it to exit `0x18`/`0x1c` (§10.8);
+  - the entry-point queue `0x00b0cb20` shown to order by squared distance from the bss vector `0x029cdb98`, which is zero in the image with 555 readers and no store in `.text` — a defect HYPOTHESIS that the entry point was meant (§10.1);
+  - request `+0x08` identified as a request kind (0 approach-only, 1 remove-the-occupant-then-stop, 2 normal), not a flag; the instant bit shown set at 7 sites and tested at 12 (§10.4.1, §10.10);
+  - the two stick aborts (state 0 and state 5), both local-player-only with an 800 ms grace, and the four approach tweaks `VI_pathfind_cancel_dist_multiplier`/`VI_pathfind_check_pause_distance`/`VI_pathfind_play_stop_dist`/`VI_on_vehicle_entry_max_y_diff` read at their shipped values, alongside the six ride tweaks of OPEN 63 (§10.2, §10.6, §10.13).
+  Former §10 OPEN items and §11 clean-room check renumbered to §11 and §12 (strikethrough headings; the 15 in-text `§10, OPEN n`/`§10 OPEN n` references and the confidence-key pointer updated to §11). OPEN items 73–79 appended. Corrections to `review/scoping-player.md` §5a.1 items 4 and 8, §5a.2 and §5a.5 (the instant/snap HYPOTHESIS for `0x0f` refuted; "instant is tested at three places" corrected to 7 set / 12 test sites) collected in §10.13 and folded into that file directly (no other spec edited). Ghidra-free (capstone listings over `exe_va.py` with an esp-depth tracker, census call edges, a band displacement sweep of `0x00af0000`–`0x00b12000`, raw rel32/dword scans, static table reads, the shipped `tweak_table.xtbl`); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run.
+- **2026-10-07 — OPEN 39 resolved and §5.0/§5.3/§5.4.5 corrected, from `spec-anim-runtime.md`'s U5** (SPEC TEAM). `review/scoping-animation.md`'s root-motion unit (U5, landed as that file's §9) read the post-sample module and the correction step in full and found: the orientation step `0x004b6530` applies no rotation in ordinary locomotion — outside an authored `start correction`/`dest correction` trigger window it returns the human's orientation unchanged, and inside one it is a motion-warp/heading-correction step that X (controller `+0x70`) feeds. §5.0 item 4, §5.3 and the §5.4.5 table's "orientation" row are annotated accordingly in place (strikethrough plus a bracketed correction each), and the open question of what turns a human outside a correction window is left pointing at `spec-anim-runtime.md` §5.1 item 35. OPEN 39's remaining "Still open" list (the orientation step, `0x004b49e0`, `0x009987d0`, controller `+0x1a4`, `0x004cad00`, `0x004c6ebb`) is struck through and marked resolved, citing `spec-anim-runtime.md` §9.7/§9.9/§9.10; `0x004c8a80` is identified (the bound-track rotation decoder) with its bit-for-bit read routed to `spec-anim-format.md`. No other section renumbered. Cleanroom self-check (the project's standard auto-name regex) on the entire file: **0 hits**, run after these edits.
+- **2026-10-07 — U6.7 added** (SPEC TEAM). New §11 "U6.7 — The animated exit states (`0x1a`–`0x21`)" (`review/scoping-player.md` §5a.3), after U6.3 (§10). Contents:
+  - the eight-state census completed from the handler side: `0x1a`/`0x1e`/`0x20` have no on-entry or per-frame handler and are dead; `0x1c`'s on-entry and per-frame are both confirmed empty, with no local producer; the four live states are `0x1b`, `0x1d`, `0x1f` and `0x21` (§11.1–§11.2);
+  - `0x1b` (change seat) and `0x1d` (extract) read in full, the latter adding a hijacker-resync scan of the record's other seven slots (matching on the hijacker's own target-seat field) that U6.1's existing citations of `0x1d`'s field copy and miss fallback did not need to assume (§11.3–§11.4); `0x1d`'s per-frame snaps the physics character proxy to the animated end position (confirming scoping §5a.1 item 5) and hands off to one of two deep human-runtime contracts by extract kind, with no explicit state transition found for the non-`kill` case (new OPEN item);
+  - `0x1f` (exit) read in full: on-entry, the 783-instruction exit-kind chooser `0x00b04ae0` (resolving most of OPEN 69 — it writes kinds `0x15`/`0x16`/`0x17`/`0x18`/`0x1b`/`0x1c` and the named sub-variants, not `0x14`/`0x19`/`0x1a`), the 696-instruction per-frame handler (confirming the inline `0x1f → 0x21` transition and the walk-axis read scoping flagged), and the 158-instruction eject handler `0x00b02cd0`, which writes the request's launch vector directly into the player's own desired-velocity field `+0x1cec`/`+0x1cf4` — the same field §5.4 (U3) specifies — instead of playing any clip (§11.5);
+  - `0x21` (traverse) read in full, including the surprising finding that its on-entry always calls `0x1f`'s entire on-entry as a subroutine first (§11.6);
+  - the three shared helpers scoping §5a.4 point 6 left unassigned (`0x00afe0d0`, `0x00b01460`, `0x00b0c170`) specified in full, with `0x00b01460` shown to run on the hijacker's own slot when called from `0x1d` (§11.7);
+  - a consolidated table of new and revised exit-request/slot/human fields, including the exit-request object handle `+0x08`/`+0x0c` (OPEN 47, now with three readers) and a newly found conflict between an exit-request `+0x31` bit 0 reading from this unit and U6.1's existing `convertible`-variant reading of the same bit, left OPEN (§11.8).
+  Former §11 OPEN items and §12 clean-room check renumbered to §12 and §13 (strikethrough headings; the one in-text `§11, OPEN n` reference and the confidence-key pointer updated to §12). OPEN items 80–86 appended; OPEN 45, 47, 58, 69 and 79 annotated. Corrections to `spec-player-runtime.md` §6.1/§6.2 (this file's own U6.6/U6.1 sections) and a forward cross-reference to §5.4 (U3) are collected in §11.10 (no other spec edited; `review/scoping-player.md` §5a.3/§5a.4 point 6 given a light-touch inline note, not a rewrite). Ghidra-free (capstone listings over `exe_va.py`, a census closure of all 53 in-band functions / 6,187 instructions, raw rel32/dword scans for jump-table and call-site confirmation); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run.
+
+- **2026-10-07 — U6.8 added** (SPEC TEAM). New §12 "U6.8 — Per-slot pose driver and rider parameters" (`review/scoping-player.md` §5a.3), after U6.7 (§11). Contents:
+  - the per-slot pose driver `0x00af6310`'s real dispatch corrected: phase is tested before state; ride (phase 3) never touches any jump table; the "three jump tables" scoping named are a 7-entry exit table, a 17-entry enter remap folded into a 6-entry pointer table, and a private 9-entry sub-dispatch inside exit state `0x1f` alone — not three parallel phase/state tables (§12.2–§12.3);
+  - the two walkers `0x00af8f70`/`0x00af9030` fully specified (§12.1);
+  - `0x00af4b80` specified down to the tweak: 11 named animation-controller parameters, written only while the slot's phase is ride, nine derived from the ride body-lag model's error fields (slot `+0xe4`/`+0xec`) and three newly-named `VI_*` tweaks, two from vehicle wheelie/endo predicates — closing the `0x00af4b80` half of OPEN 63 (§12.4);
+  - `0x00af4150` reclassified as the rider fall/eject detector, not a parameter writer (§12.5);
+  - `0x00af4760` reclassified as the ride-`Element` key builder, closing the `0x00af4760` half of OPEN 71 (§12.6).
+  Former §12 OPEN items and §13 clean-room check renumbered to §14 and §15 (strikethrough headings; all live in-text "§12, OPEN n"/"§12 OPEN n" cross-references elsewhere in the file updated to §14; historical Changelog "renumbered to §X/§Y" sentences left untouched). OPEN items 87–96 appended; OPEN items 63 and 71 annotated in place with bracketed resolution notes citing §12.4/§12.6. Corrections to `review/scoping-player.md` §5a.1 item 5, §1.7 and §5a.3's U6.8 row collected in §12.9 and folded into that file directly (no other spec edited by this unit; `spec-anim-runtime.md` §4.1's `0x00af4b80` citation is flagged for a follow-up edit, not made here since this session's integration step owns it). Ghidra-free (capstone listings over `exe_va.py` with a purpose-built `esp`-delta tracker; one tracker limitation disclosed in §12's method note — callee-side stack cleanup on a handful of small helpers inside `0x00af6310`'s preamble — does not affect any CONFIRMED finding); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file after this edit: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run.
+- **2026-10-07 — U6.2 added** (SPEC TEAM). New §13 "U6.2 — Entry trigger and vehicle/seat choice" (`review/scoping-player.md` §5a.3), after U6.8 (§12). Contents:
+  - the trigger resolved: a single shared button (`CBA_GAC_ACTION`) walking a 22-entry handler table at `0x0111f2d0` keyed on player context word `+0x2084`, not a per-prompt test/handler pair — answers scoping §4.2 OPEN item 9 (§13.1);
+  - `0x009e5e80`'s seated/not-seated split and `0x009e1e60`'s full `0x44`-byte request-construction defaults, including a new baseline `+0x08` = 2 and the co-op/solo and forced-seat special cases (§13.2);
+  - **major structural finding:** neither the auto-pick `0x00b105c0` nor the validator `0x00b0fdf0` (nor the seat-scoring helper `0x00b0eb90` inside it) ever writes a chosen seat or door back into the request or slot — every player-triggered submission goes through with vehicle = 0 and an unresolved seat, and the actual seat/door commit happens later, on the registry record's own 250 ms upkeep tick (already specified at §7.6) (§13.3–§13.4, §13.7);
+  - `0x00b0eb90` promoted from scoping's HYPOTHESIS to CONFIRMED as the seat-scoring/eligibility gate, full 8-argument signature and per-seat filter set recovered, including its `fast`-entry tie-in to the element-selection rule agreeing exactly with U6.1's own citation from the other call site (§13.5);
+  - the two SEH-wrapped obstruction gates `0x00b0da10`/`0x00b0dc20` specified, with their player-only vs. universal-but-instant-exempt asymmetry (§13.6);
+  - scoping §5a.4 point 3's AI-sharing claim confirmed by direct read, not merely caller-list inference: `0x0051d5b0`/`0x00521200` call `0x00b0fdf0` directly, below the submitter, not through the on-foot trigger path (§13.7).
+  Former §14 OPEN items and §15 clean-room check kept at §14/§15 (U6.2 lands after U6.8 in the same pass, so no further renumbering was needed). OPEN items 97–107 appended. Corrections to `review/scoping-player.md` §5a.3, §4.2 OPEN item 9 and §5a.4 point 3 collected in §13.9 and folded into that file directly (no other spec edited). Ghidra-free (capstone listings over `tools/harnesses/exe_va.py` via a local `listfn.py` harness, manual esp-depth tracking, a static read of the prompt-handler table); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file after this edit: **regex 0 hits, backstop 0 hits**; the known-positive control string matched 5/5 on both in the same run.
+- **2026-10-07 — U6.5 added** (SPEC TEAM). New §14 "U6.5 — Enter animated states (`0x0a`–`0x13`)" (`review/scoping-player.md` §5a.3), after U6.2 (§13). Contents:
+  - the eight live states in the range (prepare, traverse, open, extract/hijack, extract-fail pick, enter, change seat, fast) with all sixteen on-entry/per-frame roots read in full except one tail of `0x13`'s per-frame (new OPEN item); `0x10`/`0x12` confirmed dead a third way, independently of U6.0's setter-side and U6.1's key-builder-side surveys (§14.1, §14.8);
+  - the shared on-entry skeleton (resolve/store-state/reset-variants) and its four deliberate exceptions, three of them sub-timer seeds advanced by the state's own per-frame — the same pattern already found for exit state `0x1f`'s own `+0x18` (§14.0 item 2);
+  - `0x0d` (extract) shown to play no animation on its own slot at all: for a tank seat it independently re-implements the hub's own instant-hijack kill/redirect logic (§10.4.2 H1); otherwise it delegates to the hijack chooser already specified by U6.1 §9.5, with the hijacker's own clip driven entirely from the victim's `0x1d` side (§11.4.1) — confirmed by omission (§14.5);
+  - `0x0e` (extract-fail pick) extended past U6.1's existing citation: its per-frame never calls the chooser, always cancels, then re-runs the hub's vehicle-AI-reaction logic verbatim (§14.6);
+  - `0x13` (fast) read as the richest handler in the range, tying together U6.6 §6.2, U6.3 §10.7 step 5, U6.1 §9.5 and U6.7 §11.7.2 from a third independent context each, and shown to commit via an inline call to `0x00afbd90` rather than ever calling set-enter (§14.10);
+  - one correction raised against §7.5/§9.1's uniform citation of the chooser `0x00afb220(record, i, 0)`: state `0x0c`'s per-frame passes a non-literal third argument, so the signature should read `(record, i, flag)` (§14.0 item 8, §14.13 item 2).
+  Former §14 OPEN items and §15 clean-room check renumbered to §15 and §16 (strikethrough headings). OPEN items 108–113 appended. No correction raised against `review/scoping-player.md` §5a.3's U6.5 row (independently reproduced exactly: 16 roots, correct state-name mapping, size estimate holds up) — confirmed accurate, not amended. Ghidra-free (a purpose-built linear Capstone lister over `exe_va.py`, validated byte-for-byte against an already-published U6.7 function before being trusted on new code; manual esp-delta tracking); no Ghidra project was opened or copied, so none needed deleting; no `.czn_pc` data was touched. One self-caught-and-corrected drafting error disclosed inline (§14.5's note) rather than silently fixed. Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) on the entire finished file after this edit: **regex 0 hits, backstop 0 hits.**
+- **2026-10-07 — Havok W-U2 integrated (SPEC TEAM), closing OPEN 35 and OPEN 36 (the character-controller walking-slice behavioral contract, continuing Havok unit W-U1).** §5.6.5 deepened in place with `0x007a5b10`'s full internals: the per-human-kind capability gate (`0x02cc9900`), slope removal and the "too steep" downgrade, two independent unsupport overrides (departure-speed and the steep-slope timer `controller+0x160`), the full `controller+0x08` state-bit catalog, the step-up/step-down/ledge-assist raycast chain and its three-timer fall-danger gate, the explicit gravity formula (quadratic terminal-velocity falloff against the speed cap `+0x170`, not a flat `g·dt` or a hard clamp), the explicit jump-launch formula (`v=√(2|g|h)` off the function's own 3rd argument), and both other callers (confirmed to be internal continuation labels inside a shared caller, not independent functions). §5.6.4 deepened with the full 8-function lock-step pass cycle (seed → snapshot+submit → submit → advance → cast-and-solve → ask-time-remains → finish×2) and a new §5.6.4a pinning down `0x0079de40` (the "game-introduced virtual" `spec-physics-runtime.md` §2.1 row 22 flagged) as a slot on the proxy's own primary vtable, reached from inside the cast-and-solve step, not a separate Havok method — plus the thread-safety conclusion both listener mechanisms and the lock-step jobs run on the game's persistent class-3 worker pool, not guaranteed the main thread and not serialized across proxies in the same pass (resolving `spec-physics-runtime.md` §11 OPEN item 22 beyond its own hedge). OPEN 35/36 struck in the master list with pointers to the new text. Ghidra-free (capstone over `exe_va.py`, an RTTI complete-object-locator vtable-name reader reused from W-U1); no Ghidra project opened; no `.czn_pc` data touched; no leaked Havok/SR4/Volition source read. Cleanroom self-check on the entire finished file: 0 hits.
+- **2026-10-09 — §13.4: routed mission-script cross-check against the seat-pick validator**
+  (SPEC TEAM, agent `a18a24933af5b1e9b`). Real m05/m07/m09 Lua extracted and checked: m05/m09 never
+  check a vehicle-enter return value; m07's `m07_setup_pony_carts()` has an explicit
+  retry-on-refusal loop whose own mission-author comment anticipates exactly the occupant-conflict
+  refusal case already documented in §13.4 steps 6-7. Direct guidance for the port: do not resolve
+  eligible-and-untested straight to true. Full detail:
+  `scratchpad/mission_block_seatpick_vehiclegroup_2026-10-09.md`. Cleanroom self-check: strict
+  regex 0 hits.

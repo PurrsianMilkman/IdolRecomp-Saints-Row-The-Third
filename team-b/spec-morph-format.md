@@ -8,7 +8,7 @@
 
 **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
 
-**Review status summary (2026-09-30).** Adversarial desk review (no executable, no game data) of 43 units: **9 VALIDATED-BY-DATA** (§2, §3 intro, §3.1, §3.2, §3.4, §3.5, §3.6, §4, §5 — the container, backed by Team B's full-population run on the 1,541 unique files, `team-b/HANDOFF.md` l.1455-1466), **12 DESK-PASS** (3 of them with text fixes applied: §1, §13.4, §15.6–§15.7), **4 NEEDS-DATA**, **18 NEEDS-EXE**. A desk pass alone does not clear a unit: it means the text is internally consistent, not that it was re-derived; only the VALIDATED-BY-DATA units are already backed by Team B's full-population run. **Everything from §12 on (dequantisation, renormalisation / 1/512 bias, slider remap, Pcust stash map) has no Team B implementation** (`team-b/STATE.md` l.25, l.113) and no label in it was raised. Awaiting the executable: §6 (mode-0/2 descriptor, `FUN_00e71940`), §12.2, §12.3, §13.1, §13.2, §13.3, §14.1, §14.2, §14.3, §14.4, §14.5, §14.6, §16.1–§16.2, §16.3, §16.4, §16.5, §16.6, §16.7. Awaiting real data: §3.3 (`n` histogram), §12.1 (population label; 80% `max|q|` gap), §15.1–§15.3 (8 vs 30 trials), §15.4–§15.5 (95 vs 100 denominator; head-region conflict).
+**Review status summary (2026-09-30).** Adversarial desk review (no executable, no game data) of 43 units: **9 VALIDATED-BY-DATA** (§2, §3 intro, §3.1, §3.2, §3.4, §3.5, §3.6, §4, §5 — the container, backed by Team B's full-population run on the 1,541 unique files, `team-b/HANDOFF.md` l.1455-1466), **12 DESK-PASS** (3 of them with text fixes applied: §1, §13.4, §15.6–§15.7), **4 NEEDS-DATA**, **18 NEEDS-EXE**. A desk pass alone does not clear a unit: it means the text is internally consistent, not that it was re-derived; only the VALIDATED-BY-DATA units are already backed by Team B's full-population run. **Everything from §12 on (dequantisation, renormalisation / 1/512 bias, slider remap, Pcust stash map) has no Team B implementation** (`team-b/STATE.md` l.25, l.113) and no label in it was raised. Awaiting the executable: §6 (mode-0/2 descriptor, `0x00e71940`), §12.2, §12.3, §13.1, §13.2, §13.3, §14.1, §14.2, §14.3, §14.4, §14.5, §14.6, §16.1–§16.2, §16.3, §16.4, §16.5, §16.6, §16.7. Awaiting real data: §3.3 (`n` histogram), §12.1 (population label; 80% `max|q|` gap), §15.1–§15.3 (8 vs 30 trials), §15.4–§15.5 (95 vs 100 denominator; head-region conflict).
 
 ---
 
@@ -150,11 +150,11 @@ The "Morph" block parser takes **two** buffer/cursor pairs — the primary (`c`-
 | 0 | `0x18` | secondary buffer (`.gmorph_pc`) | 12 | `0x0BADBEEF` before *and* after each target's run on the secondary side |
 | 2 | `0x18` | secondary buffer (`.gmorph_pc`) | 8 | as mode 0 |
 
-**[CONFIRMED — disassembly, all three paths read in full.]** Mode 2's 8-byte element (vs. 12) reads as a more compact quantisation for the GPU-resident variant. **[HYPOTHESIS.]** **[OPEN — desk review 2026-09-30: the `0x18`-byte mode-0/2 descriptor is a stride only — the mode-1 descriptor spends `0x20` bytes on fields before its 8-byte runtime slot (zero dword, `N`/max-index pair, `A` triple, `B` triple, §3.4), so a `0x18`-byte record cannot hold both float triples plus `N` and the maximum index; which fields a mode-0/2 descriptor carries, where the dequantisation parameters of mode-0 (vehicle) morphs live, and whether the bookends sit per descriptor or per directory entry are not stated. NEEDS-EXE: the mode-0/2 branches of `FUN_00e71940`; to be settled against the executable / real data (the vehicle Morph blocks).]**
+**[CONFIRMED — disassembly, all three paths read in full.]** Mode 2's 8-byte element (vs. 12) reads as a more compact quantisation for the GPU-resident variant. **[HYPOTHESIS.]** **[OPEN — desk review 2026-09-30: the `0x18`-byte mode-0/2 descriptor is a stride only — the mode-1 descriptor spends `0x20` bytes on fields before its 8-byte runtime slot (zero dword, `N`/max-index pair, `A` triple, `B` triple, §3.4), so a `0x18`-byte record cannot hold both float triples plus `N` and the maximum index; which fields a mode-0/2 descriptor carries, where the dequantisation parameters of mode-0 (vehicle) morphs live, and whether the bookends sit per descriptor or per directory entry are not stated. NEEDS-EXE: the mode-0/2 branches of `0x00e71940`; to be settled against the executable / real data (the vehicle Morph blocks).]**
 
 Since **every one of the 1,541 shipped standalone files is mode 1**, the secondary buffer is never read for them, and no `.gmorph_pc` needs to exist. **Mode 0 is, however, exercised — by the Morph blocks embedded inside vehicle geometry** (`spec-vehicle-geometry.md` §7): there the `g`-file role is played by `.gcar_pc`, and the mode-0 per-target `0x0BADBEEF` bookend sits at exactly the `.gcar_pc` offset the vehicle header supplies, in **326 / 326** files against **0 / 2,400** random offsets. **[CONFIRMED — empirical.]** So the mode-0 layout in the table above is now observed, not merely read from the loader — which is exactly what the game ships: **2,946 `.cmorph_pc`, 0 `.gmorph_pc`**. The registration's secondary extension is real capability, not vestigial, just never exercised on PC. **[CONFIRMED — empirical + disassembly.]** This is also a useful data point for `spec-resource-dispatch.md`: the paired-file resolver must tolerate the secondary file being absent, since it is absent for every morph in the game.
 
-**Review status (2026-09-30): NEEDS-EXE: mode-0/2 descriptor field layout and bookend placement (`FUN_00e71940` mode-0/2 paths); mode 1 is validated by Team B, which deliberately rejects modes 0/2 (`team-b/HANDOFF.md` l.1448-1452) and checked only the vehicle morph offset (315 / 315, l.3377), not the descriptors — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: mode-0/2 descriptor field layout and bookend placement (`0x00e71940` mode-0/2 paths); mode 1 is validated by Team B, which deliberately rejects modes 0/2 (`team-b/HANDOFF.md` l.1448-1452) and checked only the vehicle morph offset (315 / 315, l.3377), not the descriptors — desk review (not re-derived from the executable).**
 
 ## 7. The dequantisation as it looked before resolution — refuted readings and the sanity check that mattered (SUPERSEDED by §13)
 
@@ -174,7 +174,7 @@ The bulk is provably not raw floats — read as `f32`, the three leading compone
 - Element `+8` is uncharacterized; `+10` is bounded below 4,096. Plausibly a quantised normal delta or a per-vertex weight. **[OPEN.]** — **RETIRED, resolved by §13.2: `+8`/`+9`/`+10` are three individual unsigned bytes, one per normal axis, decoded as `(u8/255.0)*2.0-1.0`; `+11` is unused padding, confirmed zero in 21,104,267 / 21,104,267 elements. The old "`+10` as u16 is always `< 4096`" reading was a side effect of `+11` being zero, not a property of the format — there was no separate 2-byte field there at all.**
 - The relationship between the vertex indices here and the vertex order in the paired `.ccmesh_pc` (`spec-geometry-format.md` §4.1.2) is untested. **[OPEN.]** *(Still open — not addressed by §12 or §13; see §11 item 6.)* — **RESOLVED, §15: index `i` addresses vertex `i` of the paired mesh directly.**
 
-Closing this needs the code that *applies* a morph to a mesh at runtime (the GPU-side object the outer validator hands the block to, §3.1), not the loader — a separate, scoped target. — **That code was found and read: §12.2 shows the GPU-side object named here is actually dead code for every shipped file (mode 1 only), and §13 recovers the real applier, `FUN_009f6d30`, reached from the customization assembler instead. The "separate, scoped target" this paragraph called for is exactly §12–§13's subject.**
+Closing this needs the code that *applies* a morph to a mesh at runtime (the GPU-side object the outer validator hands the block to, §3.1), not the loader — a separate, scoped target. — **That code was found and read: §12.2 shows the GPU-side object named here is actually dead code for every shipped file (mode 1 only), and §13 recovers the real applier, `0x009f6d30`, reached from the customization assembler instead. The "separate, scoped target" this paragraph called for is exactly §12–§13's subject.**
 
 **Review status (2026-09-30): DESK-PASS — historical record, kept in place by house style (the review's suggestion to move it to an appendix was not applied: no restructuring); the `+11`-zero figure quoted above carries the population caveat of §13.2 — desk review (not re-derived from the executable).**
 
@@ -299,49 +299,49 @@ pointing at the wrong object; that is corrected here rather than left to be redi
 
 | Thing | Address / offset |
 |---|---|
-| Outer `.cmorph_pc` validator (`0x1337BEEF` + v5) | `FUN_0074e500`, called from `FUN_0074e580` |
-| Shared "Morph" block parser (`0x0BADBEEF` + v3) | `FUN_00e71940` — sibling of the "Mesh" parser in the same module |
-| ~~Type 11 `Pcust morph` constructor | `0x009f0910`~~ **CORRECTED 2026-09-20 (§16.1): `0x009f0910` is type 10 `Pcust peg`; type 11 `Pcust morph` is `LAB_009f0970`** |
-| ~~Type 12 `Pcust creation morph` constructor | `FUN_009f0970`~~ **CORRECTED: `FUN_009f0970` is type 11; type 12 `Pcust creation morph` is `LAB_009f09d0`** |
-| **Customization singleton** | **`DAT_0263e0f4`**, ~~14 users~~ **17 users** (§16.7), all in `0x009e–0x009f` — really the *current job* of a 64-entry pool (§16.3) |
+| Outer `.cmorph_pc` validator (`0x1337BEEF` + v5) | `0x0074e500`, called from `0x0074e580` |
+| Shared "Morph" block parser (`0x0BADBEEF` + v3) | `0x00e71940` — sibling of the "Mesh" parser in the same module |
+| ~~Type 11 `Pcust morph` constructor | `0x009f0910`~~ **CORRECTED 2026-09-20 (§16.1): `0x009f0910` is type 10 `Pcust peg`; type 11 `Pcust morph` is `0x009f0970`** |
+| ~~Type 12 `Pcust creation morph` constructor | `0x009f0970`~~ **CORRECTED: `0x009f0970` is type 11; type 12 `Pcust creation morph` is `0x009f09d0`** |
+| **Customization singleton** | **`0x0263e0f4`**, ~~14 users~~ **17 users** (§16.7), all in `0x009e–0x009f` — really the *current job* of a 64-entry pool (§16.3) |
 | ~~Type 11 stash~~ **Type 10 (`Pcust peg`) stash** | name → job `+0x68`; buffers → `+0xac`, `+0xb0`, `+0xb4`, `+0xb8` *(mislabelled "Type 11" before 2026-09-20; §16.1)* |
 | ~~Type 12 stash~~ **Type 11 (`Pcust morph`) stash** | name → job `+0xbc`; buffers → `+0x100`, `+0x108`, `+0x104`, `+0x10c` *(mislabelled "Type 12" before)*. **The real Type 12 (`Pcust creation morph`) stash:** name → `+0x15c`; buffers → `+0x1a0`, `+0x1a4` |
-| **Customization asset assembler** | **`FUN_009f36d0`** — ~~the only function touching **all eight** stash slots~~ **the reader of every `Pcust` stash, IDs 9–13 (§16.6)** |
+| **Customization asset assembler** | **`0x009f36d0`** — ~~the only function touching **all eight** stash slots~~ **the reader of every `Pcust` stash, IDs 9–13 (§16.6)** |
 
-`FUN_009f36d0` is the assembler, not the deformer: it runs the material-block validator
-and the full mesh machinery, then loads the morph through `FUN_0074e580`, but performs
+`0x009f36d0` is the assembler, not the deformer: it runs the material-block validator
+and the full mesh machinery, then loads the morph through `0x0074e580`, but performs
 **14 float operations and no integer-to-float conversion at all** — so the arithmetic is
 not in it. **[CONFIRMED — disassembly.]**
  *[OPEN — desk review 2026-09-30: the scope of this negative is not stated — the struck text of §14.5 item 3 records that an earlier pass had decompiled only the first 90 of this function's ~600 decompiled lines (3,706-byte body); whether the float-operation count covers the whole body is to be settled against the executable.]*
 
-**Review status (2026-09-30): NEEDS-EXE: single-source disassembly (`FUN_0074e500`, `FUN_0074e580`, `FUN_00e71940`, `FUN_009f36d0`, `DAT_0263e0f4`); stale rows already struck and corrected by §16.1. Cross-spec (listed, not edited here): `spec-rig-format.md` l.2611 still says "14 users" in its main text, with the 17-user correction only bracketed — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: single-source disassembly (`0x0074e500`, `0x0074e580`, `0x00e71940`, `0x009f36d0`, `0x0263e0f4`); stale rows already struck and corrected by §16.1. Cross-spec (listed, not edited here): `spec-rig-format.md` l.2611 still says "14 users" in its main text, with the 17-user correction only bracketed — desk review (not re-derived from the executable).**
 
 ### 12.4 What the next pass should do — DONE, see §13; the specific leads named here did not pan out
 
 **This pass has since happened (§13), so the two items below are historical rather than
 a live plan.** Recorded as run, not silently dropped: the *general* strategy stated here —
-start from `FUN_009f36d0`'s own call list rather than a whole-binary scan — is exactly
+start from `0x009f36d0`'s own call list rather than a whole-binary scan — is exactly
 what worked, but the *specific* signature and callee guesses below were not how the
 kernel was actually found, and are marked wrong rather than quietly removed.
 
 **The deformation kernel is the remaining target, and it is a callee (direct or deeper)
-of `FUN_009f36d0`, not of the loader and not of the GPU class.** ~~The signature to look
+of `0x009f36d0`, not of the loader and not of the GPU class.** ~~The signature to look
 for is the one this pass established the data requires: **integer-to-float conversion**,
 a **stride of 12**, and a multiply against a descriptor float at record `+0x08` or
-`+0x14`. `FUN_004bcb30`, `FUN_004bcca0` and `FUN_004bca00` are among its callees and sit
+`+0x14`. `0x004bcb30`, `0x004bcca0` and `0x004bca00` are among its callees and sit
 in the same code region as the animation math, which makes them the cheapest first
 look.~~ **Wrong lead, kept visible rather than deleted: the real kernel is
-`FUN_009f6d30`, reached not through those three functions but through
-`FUN_009f36d0` → `FUN_009f9020` (a dispatcher that allocates a pool literally named
-`"temp_morph_mesh"` and loops `count × 0xC`) → `FUN_009f6d30` itself (§13.1). None of
-`FUN_004bcb30`/`FUN_004bcca0`/`FUN_004bca00` are on that path; the "same code region as
+`0x009f6d30`, reached not through those three functions but through
+`0x009f36d0` → `0x009f9020` (a dispatcher that allocates a pool literally named
+`"temp_morph_mesh"` and loops `count × 0xC`) → `0x009f6d30` itself (§13.1). None of
+`0x004bcb30`/`0x004bcca0`/`0x004bca00` are on that path; the "same code region as
 the animation math" guess was a coincidence of address proximity, not a real lead.**
 
 **Do not repeat:** a whole-binary scan for "stride `0xC` + int-to-float + float multiply"
 returns **272 functions** and ranks by size — no selectivity, the fourth time that shape
-of predicate failed on 2026-09-11 (`HANDOFF.md` §5). Start from `FUN_009f36d0`'s own call
+of predicate failed on 2026-09-11 (`HANDOFF.md` §5). Start from `0x009f36d0`'s own call
 list, which the compiler wrote. **This part held up: the pool-name string and the exact
-`× 0xC` loop stride, both read straight off `FUN_009f36d0`'s own call list, are what
+`× 0xC` loop stride, both read straight off `0x009f36d0`'s own call list, are what
 actually identified the dispatcher and then the kernel (§13.1) — the failure was in the
 guessed signature/callees above, not in this strategy.**
 
@@ -359,15 +359,15 @@ item §7 left open and §12 could not reach from the loader side.
 
 | Step | Function |
 |---|---|
-| Customization asset assembler | `FUN_009f36d0` |
-| Kernel dispatcher — allocates a pool named **`"temp_morph_mesh"`** (`0x200000`), loops over `count × 0xC` | `FUN_009f9020` |
-| **The deformation kernel** | **`FUN_009f6d30(target, srcPos, srcNrm, dst, float weight)`** |
+| Customization asset assembler | `0x009f36d0` |
+| Kernel dispatcher — allocates a pool named **`"temp_morph_mesh"`** (`0x200000`), loops over `count × 0xC` | `0x009f9020` |
+| **The deformation kernel** | **`0x009f6d30(target, srcPos, srcNrm, dst, float weight)`** |
 
 The dispatcher's pool name and its `× 0xC` loop stride identify the path beyond doubt, and
 the kernel's last parameter being a **float weight** is the slider value.
 **[CONFIRMED — disassembly.]**
 
-**Review status (2026-09-30): NEEDS-EXE: single-source disassembly; re-read the prologues of `FUN_009f9020` / `FUN_009f6d30` (argument order and types) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: single-source disassembly; re-read the prologues of `0x009f9020` / `0x009f6d30` (argument order and types) — desk review (not re-derived from the executable).**
 
 ### 13.2 The element layout — corrected
 
@@ -414,7 +414,7 @@ nrm[v].axis += ( (u8(elem + 8,9,10) / 255.0) * 2.0 - 1.0 )      * w * B[axis]
 All four constants were read from the image as **exactly** `32767.0`, `255.0`, `2.0`,
 `1.0`; the sign-flip mask is `0x80000000`. **[CONFIRMED — disassembly.]**
 
-**[OPEN — desk review 2026-09-30: for a bit-exact implementation the formula leaves unstated: the decode of `i16 = −32768` (gives −1.00003 under `/32767.0`); the operation order and precision (§14.3 says each contribution is computed in double precision and added to a float accumulator; this block does not); behaviour when `hi = lo` or `hi2 = lo` (division by zero) and NaN handling in `clamp01`; and whether the kernel loops over all `n` descriptor records of a directory entry when `n > 1`. To be settled against the executable (`FUN_009f6d30`).]**
+**[OPEN — desk review 2026-09-30: for a bit-exact implementation the formula leaves unstated: the decode of `i16 = −32768` (gives −1.00003 under `/32767.0`); the operation order and precision (§14.3 says each contribution is computed in double precision and added to a float accumulator; this block does not); behaviour when `hi = lo` or `hi2 = lo` (division by zero) and NaN handling in `clamp01`; and whether the kernel loops over all `n` descriptor records of a directory entry when `n > 1`. To be settled against the executable (`0x009f6d30`).]**
 
 **So §7's question about the two float triples is answered, and the answer is why it was
 hard: they are not two parameters of one quantity.** `A` scales **position**, `B` scales
@@ -472,54 +472,54 @@ position term been `i16 × A` without the `/32767`, the same data would yield de
 ## 14. Renormalisation order and the slider-to-weight remap, resolved from raw disassembly (2026-09-12)
 
 **Resuming a died session**: an earlier run on this exact task reached one specific,
-correctly-diagnosed blocker — "`FUN_00da05a0` is a square-root-based normalise... the
+correctly-diagnosed blocker — "`0x00da05a0` is a square-root-based normalise... the
 decompiler lost the pointer argument [at its call site]... get the raw assembly" — and
 died on an API rate limit before acting on its own next step. Everything below starts
 from that note rather than re-surveying. It also inherits, and now fully reads, decompiled
-output the died session had already produced but not yet interpreted (`FUN_009f6d30`'s
-and `FUN_009f9020`'s full bodies, and `FUN_009f7690`'s full body) in
+output the died session had already produced but not yet interpreted (`0x009f6d30`'s
+and `0x009f9020`'s full bodies, and `0x009f7690`'s full body) in
 `scratchpad\morph\slider_probe.txt` and `scratchpad\morph\consumer_clean.txt`.
 
 ### 14.1 The consumer chain, precisely
 
 ```
-FUN_009f36d0  (assembler)
-  -> FUN_009f9020  (dispatcher: zeroes float3 accumulation buffers, walks 14 slider
+0x009f36d0  (assembler)
+  -> 0x009f9020  (dispatcher: zeroes float3 accumulation buffers, walks 14 slider
                      BUCKETS, and within each bucket calls the kernel once per SLOT --
                      see §14.6 for why "bucket" and "slot" are two different structures)
-       -> FUN_009f6d30  (KERNEL: slider -> weight -> accumulate into the float buffers)
-       -> FUN_009f7690  (CONSUMER, called exactly once, after every bucket's every slot
+       -> 0x009f6d30  (KERNEL: slider -> weight -> accumulate into the float buffers)
+       -> 0x009f7690  (CONSUMER, called exactly once, after every bucket's every slot
                           has finished accumulating -- not once per target)
-            -> FUN_00da05a0  (normalise, per vertex, gated on the channel having a
+            -> 0x00da05a0  (normalise, per vertex, gated on the channel having a
                                normal at all)
-            -> FUN_0047fec0  (byte-biased pack: round((v*0.5+0.5)*255) per axis --
+            -> 0x0047fec0  (byte-biased pack: round((v*0.5+0.5)*255) per axis --
                                confirmed the exact algebraic inverse of the `.cmorph_pc`
                                normal-delta decode already in §13.3)
 ```
 
-`FUN_009f6d30` (the kernel) contains **zero** calls to `FUN_00da05a0` or `FUN_0047fec0` --
+`0x009f6d30` (the kernel) contains **zero** calls to `0x00da05a0` or `0x0047fec0` --
 checked directly by reading its full body and its callee list. Both live only in
-`FUN_009f7690`, and `FUN_009f7690` is called only once per `FUN_009f9020` invocation,
+`0x009f7690`, and `0x009f7690` is called only once per `0x009f9020` invocation,
 strictly after the bucket/slot loop that calls the kernel has completed. **[CONFIRMED —
 disassembly.]** That alone already rules out "renormalise per contribution": there is
 structurally only one call site, reached once, after every active slider for that mesh
 has already added its contribution.
 
 What raw assembly had to settle was *which vector* that one call normalises, since
-Ghidra's decompilation of `FUN_009f7690` prints the call to `FUN_00da05a0` with **zero**
-visible arguments, despite `FUN_00da05a0`'s own decompiled signature (correctly recovered
+Ghidra's decompilation of `0x009f7690` prints the call to `0x00da05a0` with **zero**
+visible arguments, despite `0x00da05a0`'s own decompiled signature (correctly recovered
 from *its own* body) declaring a single register-passed (`__fastcall`) float-pointer parameter. A call whose
 callee is known to take one pointer argument, printed with none, is not merely unclear —
 it is proof the call site's argument-loading instruction was not attributed to the call,
 which raw disassembly can recover directly.
 
-**Review status (2026-09-30): NEEDS-EXE: callee lists and call-site counts of `FUN_009f9020`, `FUN_009f7690`, `FUN_00da05a0`, `FUN_0047fec0` (disassembly only; no Team B implementation) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: callee lists and call-site counts of `0x009f9020`, `0x009f7690`, `0x00da05a0`, `0x0047fec0` (disassembly only; no Team B implementation) — desk review (not re-derived from the executable).**
 
 ### 14.2 The raw assembly at the call site — renormalisation settled, and the bias constant closed
 
 Ghidra script `MorphAsmProbe.java` (pre-existing, written but never run by the died
 session; run this session) dumped the complete, address-contiguous instruction window inside
-`FUN_009f7690` from the call to the normalise routine `0x00da05a0` through the call to the
+`0x009f7690` from the call to the normalise routine `0x00da05a0` through the call to the
 pack routine `0x0047fec0` — `0x009f7ebc`–`0x009f7f3c`, verified address-by-address against
 `scratchpad\morph\asm_probe.txt` with no gap. (An earlier draft quoted a hand-picked subset
 of that window as if contiguous; a reviewer caught it from the addresses, §14.7.)
@@ -547,14 +547,14 @@ citations.)* In order, the window shows:
   deltaNormal` are written to the stack buffer *before* the buffer's address is taken
   (`0x009f7ebc`) and the call to `0x00da05a0` is issued (`0x009f7ec6`); after the call,
   the same three addresses are reread. Since
-  `FUN_00da05a0` normalises its argument in place (already fully decompiled,
+  `0x00da05a0` normalises its argument in place (already fully decompiled,
   `scratchpad\morph\normal_clean.txt`), the values read back are the normalised
   vector, not the pre-call sum. This claim rests only on the store / take-address / call / reload
   pattern and does not depend on anything past the point the call returns.
 - **Bias — `[CONFIRMED — disassembly.]`** The double constant at `0x01176dd8` —
   **exactly `0.001953125` = 1/512** — is added, in double precision, to each of the
   three *post-normalise* components before they are narrowed back to single and passed
-  to `FUN_0047fec0`; the fourth packed argument is a literal `0.0`. This is now shown
+  to `0x0047fec0`; the fourth packed argument is a literal `0.0`. This is now shown
   completely (every input to the three double-precision additions is accounted for in the window above) rather
   than resting on an annotation next to a call whose full argument-build wasn't shown.
 
@@ -569,29 +569,29 @@ omits the `1/512` bias will differ from the game by that amount per component �
 but exact, and now demonstrated rather than merely asserted.
 
 **What a failing case (per-contribution renormalisation) would have looked like, and did
-not:** a call to `0x00da05a0` reachable from inside `FUN_009f6d30`'s per-element loop, or
-multiple calls to it per vertex inside `FUN_009f7690`. Neither exists — `FUN_009f6d30`
-calls it zero times (checked against its full callee list), and `FUN_009f7690`'s own
+not:** a call to `0x00da05a0` reachable from inside `0x009f6d30`'s per-element loop, or
+multiple calls to it per vertex inside `0x009f7690`. Neither exists — `0x009f6d30`
+calls it zero times (checked against its full callee list), and `0x009f7690`'s own
 per-vertex loop contains exactly one call to `0x00da05a0`, gated once per vertex on two
 conditions together: a per-channel byte flag confirming the channel carries a normal at
 all, and a non-null check on the destination normal-buffer pointer (`consumer_clean.txt`
 line ~633).
 
-**Review status (2026-09-30): NEEDS-EXE: rests on one trace (`0x009f7ebc`–`0x009f7f3c`); the double at `0x01176dd8` (1/512) and the rounding mode of the pack `FUN_0047fec0` (half-up vs half-even, which affects bit-exactness) need re-reading; clean-room fix applied (register-level narrative replaced by prose citing addresses) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: rests on one trace (`0x009f7ebc`–`0x009f7f3c`); the double at `0x01176dd8` (1/512) and the rounding mode of the pack `0x0047fec0` (half-up vs half-even, which affects bit-exactness) need re-reading; clean-room fix applied (register-level narrative replaced by prose citing addresses) — desk review (not re-derived from the executable).**
 
 ### 14.3 The accumulation buffer is float end-to-end; the buffer is re-quantised exactly once, on the way out
 
-`FUN_009f6d30`'s destination stores unconditionally read the destination's current float
+`0x009f6d30`'s destination stores unconditionally read the destination's current float
 value, add the freshly-computed double-precision contribution to it, and write the float
 sum straight back to that same destination, for every position and normal write
 (`slider_probe.txt` lines 261–301) — never an integer or byte store, never a rounding op
-between one target's contribution and the next. `FUN_009f7690` reads those same buffers
+between one target's contribution and the next. `0x009f7690` reads those same buffers
 (the dispatcher's own two accumulation-buffer stack locals, passed through unchanged)
 directly as float pointers, with **no intermediate re-encode** between the kernel's last
 write and the consumer's read.
 **[CONFIRMED — disassembly.]**
 
-The only re-quantisation in this entire chain is the single `FUN_0047fec0` call examined
+The only re-quantisation in this entire chain is the single `0x0047fec0` call examined
 above, which packs the **post-normalise, post-bias** float triple into the same
 255-biased unsigned-byte encoding already documented as the `.cmorph_pc` payload's own
 normal-delta decode inverse (§13.3: `(u8/255)*2-1`; the encoder computes
@@ -605,23 +605,23 @@ destination side.
 depth (it belongs to `spec-vertex-format.md`, not here):** position gets the identical
 treatment — a max-abs pass over `(basePos + deltaPos)` per axis (gated on layout code,
 `consumer_clean.txt` lines 241–500) computes a **per-mesh, per-axis adaptive scale**
-(floored at `DAT_012a2f84` ≈ 1.0e-5, and for layout code `0xf` further multiplied by
-`DAT_01176de0` = 1/32768), stores it at the mesh header's `+0x58`/`+0x60`, and every
+(floored at `0x012a2f84` ≈ 1.0e-5, and for layout code `0xf` further multiplied by
+`0x01176de0` = 1/32768), stores it at the mesh header's `+0x58`/`+0x60`, and every
 vertex's position is divided by that scale immediately before being packed (clamped to
-±32767 for layout `0xf` via `FUN_009f5e10`, or stored as a raw float for layout `2`).
+±32767 for layout `0xf` via `0x009f5e10`, or stored as a raw float for layout `2`).
 Same shape as normals: float accumulation throughout, one re-quantisation at the very
 end, using a scale computed from the accumulated data itself rather than a fixed
 constant. **[CONFIRMED — disassembly; flagged for `spec-vertex-format.md`, not developed
 further here since it is outside this component's scope.]**
 
-**[OPEN — desk review 2026-09-30: (a) orphan claim — `spec-vertex-format.md` has no mention of `DAT_012a2f84`, `DAT_01176de0`, the adaptive scale or morphs at all (grep, 2026-09-30), so this load-bearing claim has no home yet; (b) "≈ 1.0e-5" is not a value an implementer can code, and whether the floor applies before or after the `1/32768` factor is not stated; (c) the scale is per axis (three values) but only two storage offsets, `+0x58`/`+0x60`, are given. To be settled against the executable (`DAT_012a2f84`, `DAT_01176de0`, `FUN_009f5e10`, `FUN_009f7690`).]**
+**[OPEN — desk review 2026-09-30: (a) orphan claim — `spec-vertex-format.md` has no mention of `0x012a2f84`, `0x01176de0`, the adaptive scale or morphs at all (grep, 2026-09-30), so this load-bearing claim has no home yet; (b) "≈ 1.0e-5" is not a value an implementer can code, and whether the floor applies before or after the `1/32768` factor is not stated; (c) the scale is per axis (three values) but only two storage offsets, `+0x58`/`+0x60`, are given. To be settled against the executable (`0x012a2f84`, `0x01176de0`, `0x009f5e10`, `0x009f7690`).]**
 
 **Review status (2026-09-30): NEEDS-EXE: float accumulation is disassembly only; the position-scale constants, storage offsets and floor order are open (above) — desk review (not re-derived from the executable).**
 
 ### 14.4 The slider→weight remap — the full kernel, not a reconstruction
 
 §13.3 stated the remap formula as recovered from a (correctly identified but partially
-reconstructed) reading of the kernel. This session read `FUN_009f6d30` in full
+reconstructed) reading of the kernel. This session read `0x009f6d30` in full
 (`slider_probe.txt` lines 65–335) and it reproduces §13.3's formula exactly, term for
 term, with no discrepancy — and adds the one thing §13.3 did not carry: **the exact
 stride and intra-entry byte offsets of the per-slider target-entry array**, which §13.3
@@ -642,7 +642,7 @@ fields alone**, with those fields at exact fixed offsets inside it:
         or icon reference, not consumed by the deformation path at all)
 ```
 
-**[OPEN — desk review 2026-09-30: the entry does not tile — `+0x10`..`+0x13` (4 bytes, between `hi2` and `flags`) is neither described nor listed as unread; 0x15..0x3f = 43 bytes checks. To be settled against the executable (`FUN_009f6d30`).]**
+**[OPEN — desk review 2026-09-30: the entry does not tile — `+0x10`..`+0x13` (4 bytes, between `hi2` and `flags`) is neither described nor listed as unread; 0x15..0x3f = 43 bytes checks. To be settled against the executable (`0x009f6d30`).]**
 
 Argument 2's `+0x28` (a count) and `+0x2c` (a pointer to this array) belong to a
 *different*, enclosing 0x30-byte structure this document calls a **slider slot** (one
@@ -656,7 +656,7 @@ The weight computation itself, read directly rather than reconstructed:
 w  = clamp01( (slider - lo) / (hi  - lo) )
 if flags != 0:
     w2 = clamp01( (slider - lo) / (hi2 - lo) )
-    if w < w2:  w = -w2        // IEEE-754 sign-bit XOR, mask 0x80000000 (DAT_01243130)
+    if w < w2:  w = -w2        // IEEE-754 sign-bit XOR, mask 0x80000000 (0x01243130)
 ```
 
 identical to §13.3, now confirmed against the complete function body rather than a
@@ -678,23 +678,23 @@ inferred from the sign-flip alone.
 **Whether a curve precedes the linear interpolation, or `lo`/`hi`/`hi2` is the entire
 remap: CONFIRMED — disassembly that it is the entire remap.** Between reading argument 5
 (the slider float) and producing the final `w`, the kernel calls nothing but
-`FUN_0074e710` (an *id lookup*, not a value transform — see §14.6) and the two helper
+`0x0074e710` (an *id lookup*, not a value transform — see §14.6) and the two helper
 reads for the target's own directory entry. There is no call to any table-lookup,
 spline, or easing function on the weight's value path. The two divisions and two
 `clamp01`s are the complete transform.
 
 **[OPEN — desk review 2026-09-30: behaviour when `hi = lo` or `hi2 = lo` (division by zero) is not stated; to be settled against the executable.]**
 
-**Review status (2026-09-30): NEEDS-EXE: `FUN_009f6d30` read once, disassembly only; `+0x10`..`+0x13` untiled and the zero-divide case unstated; no data can exist (no shipped slider values) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: `0x009f6d30` read once, disassembly only; `+0x10`..`+0x13` untiled and the zero-divide case unstated; no data can exist (no shipped slider values) — desk review (not re-derived from the executable).**
 
 ### 14.5 Where the slider value lives, and what remains genuinely open
 
-`FUN_009f9020` takes two arguments. Argument 2 is the mesh/morph-block being processed (its
+`0x009f9020` takes two arguments. Argument 2 is the mesh/morph-block being processed (its
 `+0x78` byte carries the two gate bits already required for this whole path to run, and
 its `+0x58` field is a **small integer handle** (`< 0x100`) into the free-list *pool
 registry* — the same intrusive-pool idiom already documented at §8 for the type-7
-constructor. `FUN_0074e490`/`FUN_0074e710` (used inside the kernel) index that pool
-directly: `(&DAT_015bd398)[handle * 0x15]`. **[CONFIRMED — disassembly.]**
+constructor. `0x0074e490`/`0x0074e710` (used inside the kernel) index that pool
+directly: `(&0x015bd398)[handle * 0x15]`. **[CONFIRMED — disassembly.]**
 
 Argument 1 is a **separate** object, first visible only as a bare parameter. The
 dispatcher reads the live slider value from it as:
@@ -728,85 +728,85 @@ path.** **[CONFIRMED — disassembly, for the *mechanism*.]**
    `customization_items.xtbl` in `spec-customization-data.md` §1 — not attempted this
    pass; flagged as the concrete next step). **[OPEN / UNKNOWN.]**
 3. **Whether argument 1 is, or derives from, the documented customization singleton
-   `DAT_0263e0f4`** (spec §12.3): NOT settled to CONFIRMED. A targeted textual scan
+   `0x0263e0f4`** (spec §12.3): NOT settled to CONFIRMED. A targeted textual scan
    (`MorphSliderSingletonCheck.java`) found that, of the three candidate functions on the
-   call path (`FUN_009f36d0`, and its own two callers `FUN_009f46f0`/`FUN_009f4550`),
-   only the assembler `FUN_009f36d0` references `DAT_0263e0f4` at all, and it does so
+   call path (`0x009f36d0`, and its own two callers `0x009f46f0`/`0x009f4550`),
+   only the assembler `0x009f36d0` references `0x0263e0f4` at all, and it does so
    near the very end of its body via a pointer-identity compare of `EBP` against
-   `DAT_0263e0f4` (twice, at `0x009f443c` and `0x009f44a0`) followed by a store of
-   register `ESI` into `DAT_0263e0f4` at `0x009f44a8` — ~~a compare-then-store
+   `0x0263e0f4` (twice, at `0x009f443c` and `0x009f44a0`) followed by a store of
+   register `ESI` into `0x0263e0f4` at `0x009f44a8` — ~~a compare-then-store
    shape consistent with "keep the singleton pointed at the object currently being
    assembled." That is suggestive but not proof: the actual instruction that loads
-   `FUN_009f9020`'s first argument was not located (it lies elsewhere in
-   `FUN_009f36d0`'s ~600-line body, only the first 90 of which were decompiled this
-   pass). **[HIGH CONFIDENCE — inferred that `DAT_0263e0f4` is the same object or
+   `0x009f9020`'s first argument was not located (it lies elsewhere in
+   `0x009f36d0`'s ~600-line body, only the first 90 of which were decompiled this
+   pass). **[HIGH CONFIDENCE — inferred that `0x0263e0f4` is the same object or
    closely related to it; not CONFIRMED — disassembly, stated honestly rather than
-   rounded up.]** Concrete next step: decompile `FUN_009f36d0` past line 90 to its
+   rounded up.]** Concrete next step: decompile `0x009f36d0` past line 90 to its
    `CALL ...009f9020`, or grep its raw instruction stream directly for the argument-load
    immediately preceding that call.~~
 
-   **RESOLVED 2026-09-14 — `FUN_009f36d0` decompiled/disassembled past this point to
+   **RESOLVED 2026-09-14 — `0x009f36d0` decompiled/disassembled past this point to
    locate the argument-load instruction, per the concrete next step above. Two findings,
    both from raw disassembly (`MorphSliderArgTrace.java`/`MorphSliderEbpTrace.java`,
    `tools/gp_morph2`), correcting/completing the paragraph struck through above:**
 
-   **(a) The store of register `ESI` into `DAT_0263e0f4` at `0x009f44a8` stores zero,
+   **(a) The store of register `ESI` into `0x0263e0f4` at `0x009f44a8` stores zero,
    not the object pointer `EBP` — `ESI` was zeroed four instructions earlier at
    `0x009f4455`, and the store is gated on a compare of `EBP` against the current value
-   of `DAT_0263e0f4`, skipped when they differ (the branch sits at `0x009f44a0`/
+   of `0x0263e0f4`, skipped when they differ (the branch sits at `0x009f44a0`/
    `0x009f44a6`). This is a conditional **clear** ("if I am currently the
    registered singleton, un-register me"), not a "point the singleton at the object
    being assembled" store as the textual scan alone suggested — it immediately follows
    `EBP` linking itself into a *separate* sibling registry, a doubly-linked list rooted
-   at the neighbouring global `DAT_0263e0fc` (fields `+0x1b4`/`+0x1b8` of the object in
+   at the neighbouring global `0x0263e0fc` (fields `+0x1b4`/`+0x1b8` of the object in
    `EBP` serving as prev/next, `0x009f4444`-`0x009f449a`): an unregister-from-one-list/
    insert-into-another idiom, not a constructor pinning the active singleton.
    **[CONFIRMED — disassembly; corrects the prior pass's "consistent with
    keep-pointed-at" reading.]**
 
-   **(b) `FUN_009f9020`'s first argument — item 3's actual question — is
-   the 4-byte field at offset `+4` inside the object that is `FUN_009f36d0`'s
-   OWN incoming first parameter, not `DAT_0263e0f4` and not a fresh reload of it.** The
-   one and only call to `FUN_009f9020` inside `FUN_009f36d0` (confirmed by a full-body
+   **(b) `0x009f9020`'s first argument — item 3's actual question — is
+   the 4-byte field at offset `+4` inside the object that is `0x009f36d0`'s
+   OWN incoming first parameter, not `0x0263e0f4` and not a fresh reload of it.** The
+   one and only call to `0x009f9020` inside `0x009f36d0` (confirmed by a full-body
    raw-asm scan for calls resolving to `0x009f9020` — exactly one hit) is at `0x009f3e64`;
    the instruction immediately loading its first argument, at `0x009f3e5b`, reads register
    `EAX` from offset `+4` of the object in `EBP`, three instructions before a cdecl call
    sequence that pushes `EBX` then `EAX` and calls `0x009f9020` (cdecl: last-pushed `EAX`
-   is `FUN_009f9020`'s argument 1, first-pushed `EBX` is its argument 2 — confirmed as the
+   is `0x009f9020`'s argument 1, first-pushed `EBX` is its argument 2 — confirmed as the
    mesh/morph-block of this section's own description, since the two instructions
    immediately before the argument load store `EAX` into `EBX`'s own `+0x58` field and OR
-   bit `0x10` into `EBX`'s own `+0x78` byte). `EBP` itself is `FUN_009f36d0`'s own argument 1,
+   bit `0x10` into `EBX`'s own `+0x78` byte). `EBP` itself is `0x009f36d0`'s own argument 1,
    register-pinned for the function's entire 3706-byte body: loaded exactly once, at
    the prologue — an instruction at `0x009f370b` that loads `EBP` from the stack at offset
    `+0x28c`, immediately followed by a zero-check-and-branch on `EBP` matching the
-   decompiled null-check early exit on that argument (branch target `LAB_009f4528`) — and an exhaustive scan of every
+   decompiled null-check early exit on that argument (branch target `0x009f4528`) — and an exhaustive scan of every
    instruction in the function found no other write to `EBP` anywhere — so `EBP` at the
    call site is provably the same value as `EBP` at the later pointer-identity-compare
-   sites against `DAT_0263e0f4`, with no register-reuse ambiguity in between.
+   sites against `0x0263e0f4`, with no register-reuse ambiguity in between.
    **[CONFIRMED — disassembly: the argument-load instruction is located, and the
-   argument is a field of `FUN_009f36d0`'s own argument 1, not `DAT_0263e0f4` itself and
+   argument is a field of `0x009f36d0`'s own argument 1, not `0x0263e0f4` itself and
    not freshly read from it.]**
 
    **What this settles, and what it still doesn't.** Item 3's literal question —
-   whether `FUN_009f9020`'s first argument *is* `DAT_0263e0f4` — is now answered:
-   **no, it is not; it is one field (`+4`) inside `FUN_009f36d0`'s own argument 1
-   object**, per (b). But (b) sits right next to (a): that same `FUN_009f36d0`
+   whether `0x009f9020`'s first argument *is* `0x0263e0f4` — is now answered:
+   **no, it is not; it is one field (`+4`) inside `0x009f36d0`'s own argument 1
+   object**, per (b). But (b) sits right next to (a): that same `0x009f36d0`
    argument 1 (`EBP`) is, a few dozen instructions later in the identical function
-   invocation, checked by raw pointer identity against `DAT_0263e0f4` — a check only
+   invocation, checked by raw pointer identity against `0x0263e0f4` — a check only
    meaningful if argument 1 belongs to the same tracked-singleton class of object
-   `DAT_0263e0f4` addresses. Whether argument 1 (`EBP`) actually *equals* `DAT_0263e0f4` at
-   the moment of the `FUN_009f9020` call is a runtime fact no static disassembly read
+   `0x0263e0f4` addresses. Whether argument 1 (`EBP`) actually *equals* `0x0263e0f4` at
+   the moment of the `0x009f9020` call is a runtime fact no static disassembly read
    can settle, so that narrower claim stays **[HIGH CONFIDENCE, not CONFIRMED —
-   `FUN_009f36d0`'s argument 1 is of the same object-class/registry `DAT_0263e0f4` tracks,
+   `0x009f36d0`'s argument 1 is of the same object-class/registry `0x0263e0f4` tracks,
    evidenced by the direct identity compare against it inside the same function; this is
-   a different, weaker claim than "argument 1 IS DAT_0263e0f4 at the time of the
-   FUN_009f9020 call," which is runtime-state-dependent.]** No further static step is
+   a different, weaker claim than "argument 1 IS 0x0263e0f4 at the time of the
+   0x009f9020 call," which is runtime-state-dependent.]** No further static step is
    identified that would close this specific remaining gap — it would need dynamic/live
-   inspection (break at `0x009f3e64`, read `EBP` vs. `DAT_0263e0f4` directly), consistent
+   inspection (break at `0x009f3e64`, read `EBP` vs. `0x0263e0f4` directly), consistent
    with item 2's own note that some of this subsystem's state is only recoverable at
    runtime. **[OPEN, precisely bounded.]**
 
-**Review status (2026-09-30): NEEDS-EXE: runtime-only remainder (break at `0x009f3e64` and compare against `DAT_0263e0f4`); static sites `0x009f3e5b`/`0x009f3e64`, `0x009f4455`, `0x009f443c`, `0x009f44a0`/`0x009f44a8` single-source — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: runtime-only remainder (break at `0x009f3e64` and compare against `0x0263e0f4`); static sites `0x009f3e5b`/`0x009f3e64`, `0x009f4455`, `0x009f443c`, `0x009f44a0`/`0x009f44a8` single-source — desk review (not re-derived from the executable).**
 
 ### 14.6 What selects which part a morph block applies to, and the contributor bound
 
@@ -815,7 +815,7 @@ group" earlier in this section — corrected in place rather than left to cause 
 mismatch later, per this project's naming-collision lesson (`HANDOFF.md` §5, the
 anim-spec "sample bytes" vs "control record bytes" incident):**
 
-- **Slider bucket** — one of the **14 entries** in table `DAT_02652ec0`, stride `0x10`
+- **Slider bucket** — one of the **14 entries** in table `0x02652ec0`, stride `0x10`
   (`{ptr, i16 count, ...}`). Each bucket owns an array of slots.
 - **Slider slot** — a **48-byte (`0x30`)** record inside one bucket's array, one per UI
   slider. Carries the index into the runtime slider-value array (`+0x24`, §14.5) and,
@@ -829,10 +829,10 @@ consistently by these three names for the rest of this section (and retroactivel
 disambiguated in §14.1/§14.4/§14.5 above).
 
 **Selection mechanism: CONFIRMED — disassembly, and simpler than a routing table.**
-`FUN_009f9020`'s outer loop walks all 14 slider **buckets** and, within each, every
+`0x009f9020`'s outer loop walks all 14 slider **buckets** and, within each, every
 **slot** — **unconditionally** for every mesh/morph-block passed in — there is no
 part-type or category branch in the dispatcher at all. The only gate is the per-target
-**id lookup** inside the kernel: `FUN_0074e710(handle, id)` returns `-1` whenever the
+**id lookup** inside the kernel: `0x0074e710(handle, id)` returns `-1` whenever the
 current mesh's own directory (§3.3's `{id, n, ...}` entries) does not contain that id,
 and the kernel's entire accumulation block for that target entry is skipped on `-1`.
 **In other words: selection is purely data-driven by which target ids a given
@@ -854,7 +854,7 @@ mechanism claim, not an "N of M" figure — stated honestly rather than invented
 disassembly, and the answer is that it does not.** The kernel's per-element write is an
 unconditional `+=` into the shared position/normal buffers, indexed by the element's own
 vertex index, with **no contributor counter, no maximum-active-target check, and no
-per-vertex overflow guard anywhere in `FUN_009f6d30`, `FUN_009f9020`, or `FUN_009f7690`.**
+per-vertex overflow guard anywhere in `0x009f6d30`, `0x009f9020`, or `0x009f7690`.**
 Any number of active sliders whose sparse element lists happen to touch the same vertex
 index all land on the same float, summed in whatever order the dispatcher's bucket,
 slot and target loops visit them. **What a bound would have looked like, and does not
@@ -862,7 +862,7 @@ appear anywhere in the three functions read in full:** a comparison of a running
 per-vertex count against a limit, or a fixed-size per-vertex accumulator array with a
 rejection path on overflow.
 
-**Review status (2026-09-30): NEEDS-EXE: strides `0x10`/`0x30`/`0x40` are consistent, but the offset of the `i16 count` inside the `0x10` bucket and the source of the "14" (loop bound in `FUN_009f9020`; `DAT_02652ec0` is runtime-populated) are unstated; "no contributor bound" is a negative over three functions — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: strides `0x10`/`0x30`/`0x40` are consistent, but the offset of the `i16 count` inside the `0x10` bucket and the source of the "14" (loop bound in `0x009f9020`; `0x02652ec0` is runtime-populated) are unstated; "no contributor bound" is a negative over three functions — desk review (not re-derived from the executable).**
 
 ### 14.7 Methodology notes for §5
 
@@ -876,8 +876,8 @@ rejection path on overflow.
   a re-survey. When a died session leaves a specific, falsifiable next step, trust it and
   start there.
 - **A call printed with the wrong arity is stronger evidence than a call that "looks
-  unclear."** The call to `FUN_00da05a0` decompiled with zero visible arguments, while
-  `FUN_00da05a0`'s own body — decompiled correctly — declares one `float *` parameter.
+  unclear."** The call to `0x00da05a0` decompiled with zero visible arguments, while
+  `0x00da05a0`'s own body — decompiled correctly — declares one `float *` parameter.
   That mismatch is not merely uninformative; it is proof the call site's argument-loading
   instruction specifically was not attributed, which tells you exactly what raw
   disassembly needs to recover (not "reread everything," just the few instructions
@@ -886,7 +886,7 @@ rejection path on overflow.
   line cannot.** The three stack slots written just before `CALL 0x00da05a0` and reread
   just after it were both legible in the surrounding decompiled/disassembled code even
   though the call's own arguments were not; the technique that resolved this was not "get
-  `FUN_00da05a0`'s pointer argument" directly but "watch the memory addresses that must
+  `0x00da05a0`'s pointer argument" directly but "watch the memory addresses that must
   hold it, immediately before and after the opaque call."
 - **A cheap textual scan can usefully bound a question to "very likely, not proven" before
   committing to a full decompile.** Grepping three candidate functions' raw disassembly
@@ -935,7 +935,7 @@ rejection path on overflow.
   is only meaningful relative to it.
 - **The same name for two different structures at two different strides is a defect even
   when every individual sentence using it is locally correct.** §14 called both the
-  14-entry `DAT_02652ec0` table (stride `0x10`) and the 48-byte per-slider record inside
+  14-entry `0x02652ec0` table (stride `0x10`) and the 48-byte per-slider record inside
   it (stride `0x30`) a "slider group" in different places. Each sentence, read alone, was
   unambiguous from context; read together, "group" named two things one containment
   level apart, which is exactly the shape that broke a *different* team's replication of
@@ -1157,114 +1157,114 @@ it.
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied ("full stop" scoped to the tested sets) — desk review (not re-derived from the executable).**
 
-## 16. Registered types 9–14 traced: the customization current-job record `DAT_0263e0f4`, the logo-record pool `DAT_0263e0e8`, and a corrected field map (2026-09-20)
+## 16. Registered types 9–14 traced: the customization current-job record `0x0263e0f4`, the logo-record pool `0x0263e0e8`, and a corrected field map (2026-09-20)
 
-`spec-format-inventory.md` listed IDs 9 `Pcust mesh`, 10 `Pcust peg` and 14 `Pcust logo peg` as "format yes; this variant's constructor untraced". This pass decompiled each constructor in full and read raw x86 at every call boundary. **Verdict: IDs 9, 10 and 14 are all stash-only — none of them reads a byte of its file.** That puts them in the same class as IDs 11, 12 and 13 (§8, §12.3, `spec-rig-format.md` §12), so the six `Pcust`-family constructors are one uniform "stash now, assemble later" mechanism. Along the way the pass found (a) that §12.3's ID→constructor labels were **shifted by one slot**, (b) that the "customization singleton" `DAT_0263e0f4` is really a **current-job pointer into a 64-entry pool**, not a single object, and (c) that the consumer `spec-rig-format.md` §12 called unidentified for ID 13's stash **is** `FUN_009f36d0`. All three are corrected here. Scripts: `tools/scripts/DecompileTaskS.java` (raw + decompile), `DecompileTaskS2.java` (one-global reference scan), `DecompileTaskS3.java` (linear disassembly of never-boundaried code); outputs `tools/taskS*_out.txt`.
+`spec-format-inventory.md` listed IDs 9 `Pcust mesh`, 10 `Pcust peg` and 14 `Pcust logo peg` as "format yes; this variant's constructor untraced". This pass decompiled each constructor in full and read raw x86 at every call boundary. **Verdict: IDs 9, 10 and 14 are all stash-only — none of them reads a byte of its file.** That puts them in the same class as IDs 11, 12 and 13 (§8, §12.3, `spec-rig-format.md` §12), so the six `Pcust`-family constructors are one uniform "stash now, assemble later" mechanism. Along the way the pass found (a) that §12.3's ID→constructor labels were **shifted by one slot**, (b) that the "customization singleton" `0x0263e0f4` is really a **current-job pointer into a 64-entry pool**, not a single object, and (c) that the consumer `spec-rig-format.md` §12 called unidentified for ID 13's stash **is** `0x009f36d0`. All three are corrected here. Scripts: `tools/scripts/DecompileTaskS.java` (raw + decompile), `DecompileTaskS2.java` (one-global reference scan), `DecompileTaskS3.java` (linear disassembly of never-boundaried code); outputs `tools/taskS*_out.txt`.
 
 ### 16.1 Correction to §12.3: which constructor is which
 
-§12.3's table gave the Type 11 constructor as `0x009f0910` (stash: name `+0x68`, buffers `+0xac..+0xb8`) and Type 12's as `FUN_009f0970` (name `+0xbc`, buffers `+0x100..+0x10c`). **Both were one slot early.** The ID→constructor pairing is read straight off the registration function `FUN_00700780` (decompiled in `tools/reg_table_full.txt`): each record assigns its type ID and its constructor address in the same block, next to the record's type-name bytes. ID 9 ↔ `LAB_009f08c0`, 10 ↔ `LAB_009f0910`, 11 ↔ `LAB_009f0970`, 12 ↔ `LAB_009f09d0`, 13 ↔ `LAB_009f0a20`, 14 ↔ `LAB_009f0a60`. It is cross-checked structurally: the six functions sit back-to-back in that order and write strictly ascending, non-overlapping job-record offsets (table below); and it agrees with §8's own counts (four buffers for type 11, two for type 12), which §12.3's table contradicted. The mislabel came from an earlier helper listing (`tools/pcust_ctors.txt`) that titled `009f0910` "type 11" and `009f0970` "type 12". **[CONFIRMED — disassembly.]**
+§12.3's table gave the Type 11 constructor as `0x009f0910` (stash: name `+0x68`, buffers `+0xac..+0xb8`) and Type 12's as `0x009f0970` (name `+0xbc`, buffers `+0x100..+0x10c`). **Both were one slot early.** The ID→constructor pairing is read straight off the registration function `0x00700780` (decompiled in `tools/reg_table_full.txt`): each record assigns its type ID and its constructor address in the same block, next to the record's type-name bytes. ID 9 ↔ `0x009f08c0`, 10 ↔ `0x009f0910`, 11 ↔ `0x009f0970`, 12 ↔ `0x009f09d0`, 13 ↔ `0x009f0a20`, 14 ↔ `0x009f0a60`. It is cross-checked structurally: the six functions sit back-to-back in that order and write strictly ascending, non-overlapping job-record offsets (table below); and it agrees with §8's own counts (four buffers for type 11, two for type 12), which §12.3's table contradicted. The mislabel came from an earlier helper listing (`tools/pcust_ctors.txt`) that titled `009f0910` "type 11" and `009f0970` "type 12". **[CONFIRMED — disassembly.]**
 
-| ID | Type | Constructor (body bytes) | Gate | Name copy (`0x41` bytes, bounded `strncpy` + NUL, `FUN_00da7930`) | a3 | a4 | a5 | a6 |
+| ID | Type | Constructor (body bytes) | Gate | Name copy (`0x41` bytes, bounded `strncpy` + NUL, `0x00da7930`) | a3 | a4 | a5 | a6 |
 |---:|---|---|---|---|---|---|---|---|
 | 9 | Pcust mesh | `0x009f08c0` (72) | a2 == job`+0x10` | job`+0x16` | `+0x58` | `+0x60` | `+0x5c` | `+0x64` |
 | 10 | Pcust peg | `0x009f0910` (84) | same | `+0x68` | `+0xac` | `+0xb0` | `+0xb4` | `+0xb8` |
 | 11 | Pcust morph | `0x009f0970` (86) | same | `+0xbc` | `+0x100` | `+0x108` | `+0x104` | `+0x10c` |
 | 12 | Pcust creation morph | `0x009f09d0` (66) | same | `+0x15c` | `+0x1a0` | `+0x1a4` | — | — |
 | 13 | Customization Rig | `0x009f0a20` (40) | same | none | `+0x1a8` | `+0x1ac` | — | — |
-| 14 | Pcust logo peg | `0x009f0a60` (43) | `DAT_0263e0e8 != 0` only; a2 unused | none | rec`+0x4c` | rec`+0x50` | rec`+0x54` | rec`+0x58` |
+| 14 | Pcust logo peg | `0x009f0a60` (43) | `0x0263e0e8 != 0` only; a2 unused | none | rec`+0x4c` | rec`+0x50` | rec`+0x54` | rec`+0x58` |
 
-Each body is: load the current-record global; (IDs 9–13) compare the incoming 2nd argument against job`+0x10` and return false on mismatch; copy the name; store the raw incoming values verbatim; return true. **No callee other than the bounded string copy; no buffer is dereferenced.** IDs 9–13 use job pointer `DAT_0263e0f4`; ID 14 uses a different global, `DAT_0263e0e8` (§16.5). **[CONFIRMED — disassembly, complete bodies read raw.]**
+Each body is: load the current-record global; (IDs 9–13) compare the incoming 2nd argument against job`+0x10` and return false on mismatch; copy the name; store the raw incoming values verbatim; return true. **No callee other than the bounded string copy; no buffer is dereferenced.** IDs 9–13 use job pointer `0x0263e0f4`; ID 14 uses a different global, `0x0263e0e8` (§16.5). **[CONFIRMED — disassembly, complete bodies read raw.]**
 
 ### 16.2 The constructor argument convention, and the gate
 
-The generic dispatcher `FUN_00dd2e30` calls each constructor as `ctor(name, a2, a3, a4, a5, a6)`. `spec-resource-dispatch.md` §8.6 item 1 (agent T, same day) already established that a3/a4 are the primary buffer/size and a5/a6 the secondary buffer/size (the paired call; the unpaired call passes zeros for a5/a6). **This pass reproduces that independently from the consumer side**, which is a stronger check than reading the dispatcher again: (i) ID 23's constructor NUL-terminates `buf[a4-1]`, so a4 is a length; (ii) ID 3's constructor forwards `(a3, a4, a5, a6, name, flag)` to the shared PEG loader as `(c_buffer, c_size, g_buffer, g_size, …)`; (iii) the assembler's copy sites (§16.6) use each stash pair as `(src pointer, byte count)` with exactly these pairings; (iv) the code at `0x009f32f0` (§16.4) sums the `+0x60`/`+0xb0`/`+0x108` slots as the c-side total and the `+0x64`/`+0xb8`/`+0x10c` slots as the g-side total. **[CONFIRMED — disassembly.]**
+The generic dispatcher `0x00dd2e30` calls each constructor as `ctor(name, a2, a3, a4, a5, a6)`. `spec-resource-dispatch.md` §8.6 item 1 (agent T, same day) already established that a3/a4 are the primary buffer/size and a5/a6 the secondary buffer/size (the paired call; the unpaired call passes zeros for a5/a6). **This pass reproduces that independently from the consumer side**, which is a stronger check than reading the dispatcher again: (i) ID 23's constructor NUL-terminates `buf[a4-1]`, so a4 is a length; (ii) ID 3's constructor forwards `(a3, a4, a5, a6, name, flag)` to the shared PEG loader as `(c_buffer, c_size, g_buffer, g_size, …)`; (iii) the assembler's copy sites (§16.6) use each stash pair as `(src pointer, byte count)` with exactly these pairings; (iv) the code at `0x009f32f0` (§16.4) sums the `+0x60`/`+0xb0`/`+0x108` slots as the c-side total and the `+0x64`/`+0xb8`/`+0x10c` slots as the g-side total. **[CONFIRMED — disassembly.]**
 
-**a2, the argument the constructors gate on, is the streaming *container* being loaded.** The dispatcher's only stack argument is forwarded unchanged to the constructor; its sole caller, the container load step `FUN_00db2ce0`, pushes its own `this` — a push of register `EDI`, followed by loading `ECX` from `ESI` and calling `0x00dd2e30`, at `0x00db2d44`. `spec-resource-dispatch.md` §8.6 calls it the "caller arg"; it is the container object. **[CONFIRMED — disassembly.]**
+**a2, the argument the constructors gate on, is the streaming *container* being loaded.** The dispatcher's only stack argument is forwarded unchanged to the constructor; its sole caller, the container load step `0x00db2ce0`, pushes its own `this` — a push of register `EDI`, followed by loading `ECX` from `ESI` and calling `0x00dd2e30`, at `0x00db2d44`. `spec-resource-dispatch.md` §8.6 calls it the "caller arg"; it is the container object. **[CONFIRMED — disassembly.]**
 
-**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `FUN_009f1730` (the store immediately precedes the container-start call `FUN_00dafea0(job+0x10)`, or `FUN_00daff10` on one path; the same field is later passed to the poll `FUN_00dafb60` (a result of `5` sends the job down the retire path) and the release `FUN_00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `FUN_00db2ce0` reports as a load-function failure error naming the streaming file *(engine message paraphrased 2026-09-30, clean-room)*. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `FUN_00c9b840` (a 2-instruction identity function returning its argument), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
+**job`+0x10` is the container the current job asked for.** It is written once, by the job scheduler `0x009f1730` (the store immediately precedes the container-start call `0x00dafea0(job+0x10)`, or `0x00daff10` on one path; the same field is later passed to the poll `0x00dafb60` (a result of `5` sends the job down the retire path) and the release `0x00dafad0`), and cleared to 0 when the job retires. The gate is therefore *"only stash if this is the container my job is waiting on"*: a Pcust-typed entry arriving in any other container makes the constructor return false, which `0x00db2ce0` reports as a load-function failure error naming the streaming file *(engine message paraphrased 2026-09-30, clean-room)*. The container-complete code at `0x009f32f0` repeats the same compare (`0x009f32f9`) against the container handed through the identity thunk `0x00c9b840` (a 2-instruction identity function returning its argument), and on mismatch sets job`+0x15 = 1` (failed). **[CONFIRMED — disassembly for the writer, both compares and the identity thunk; HIGH CONFIDENCE — inferred for the reading "container pointer", since the scheduler's stored value was traced to a request-descriptor field (`+4` or `+8`) and handed to container start/poll/release, not to an allocator.]**
 
-**Review status (2026-09-30): NEEDS-EXE (§16.1–§16.2): address table consistent with `spec-format-inventory.md` and the back-to-back body sizes check; re-read the registration `FUN_00700780`, the six bodies `0x009f08c0`..`0x009f0a60` and `FUN_00dd2e30`/`FUN_00db2ce0` — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE (§16.1–§16.2): address table consistent with `spec-format-inventory.md` and the back-to-back body sizes check; re-read the registration `0x00700780`, the six bodies `0x009f08c0`..`0x009f0a60` and `0x00dd2e30`/`0x00db2ce0` — desk review (not re-derived from the executable).**
 
-### 16.3 What `DAT_0263e0f4` is: the current job of a 64-entry pool
+### 16.3 What `0x0263e0f4` is: the current job of a 64-entry pool
 
-`FUN_009f1370` (the subsystem initialiser) builds a pool of **64 job records of `0x224` bytes** at `0x02641720`–`0x0264a020` (`0x8900 / 0x224 = 64` exactly), labelled by the engine's own strings **"pcust comp %d"** and a **"component streaming"** memory pool of `0x450000` bytes. Jobs are chained by links at job`+0x1b4`/`+0x1b8`; `DAT_0263e0fc` is the free-list head, `DAT_0263e0f8` the pending-queue head, and **`DAT_0263e0f4` the *current* job — null while idle**. The scheduler pops the queue head into `DAT_0263e0f4` (when nothing is current), and every retire/cancel path (`FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0`, `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, and the assembler's own tail) releases the container handle (`FUN_00dafad0(job+0x10)`) and nulls `DAT_0263e0f4`; most of them also return the job to the free list. So the earlier "singleton" wording (§12.3, `spec-rig-format.md` §12) should be read as **"the current job record"**. The assembler `FUN_009f36d0` operates on a job passed as its argument 1 and un-registers it with a pointer-identity compare of that argument against `DAT_0263e0f4` followed by a clear at its end (§14.5 item 3); the ctors write through `DAT_0263e0f4`. That the two are the same object at run time remains a runtime fact (§14.5 item 3's bounded gap, unchanged), but the offsets line up field for field — every stash slot a constructor writes is read by the assembler at the identical offset, as a `(pointer, length)` pair. **[CONFIRMED — disassembly for the pool, lists and lifecycle; HIGH CONFIDENCE — inferred for identity of that argument and `DAT_0263e0f4`.]**
+`0x009f1370` (the subsystem initialiser) builds a pool of **64 job records of `0x224` bytes** at `0x02641720`–`0x0264a020` (`0x8900 / 0x224 = 64` exactly), labelled by the engine's own strings **"pcust comp %d"** and a **"component streaming"** memory pool of `0x450000` bytes. Jobs are chained by links at job`+0x1b4`/`+0x1b8`; `0x0263e0fc` is the free-list head, `0x0263e0f8` the pending-queue head, and **`0x0263e0f4` the *current* job — null while idle**. The scheduler pops the queue head into `0x0263e0f4` (when nothing is current), and every retire/cancel path (`0x009f2110`, `0x009f29f0`, `0x009f2fd0`, `0x009efc50`, `0x009eff50`, `0x009f0590`, and the assembler's own tail) releases the container handle (`0x00dafad0(job+0x10)`) and nulls `0x0263e0f4`; most of them also return the job to the free list. So the earlier "singleton" wording (§12.3, `spec-rig-format.md` §12) should be read as **"the current job record"**. The assembler `0x009f36d0` operates on a job passed as its argument 1 and un-registers it with a pointer-identity compare of that argument against `0x0263e0f4` followed by a clear at its end (§14.5 item 3); the ctors write through `0x0263e0f4`. That the two are the same object at run time remains a runtime fact (§14.5 item 3's bounded gap, unchanged), but the offsets line up field for field — every stash slot a constructor writes is read by the assembler at the identical offset, as a `(pointer, length)` pair. **[CONFIRMED — disassembly for the pool, lists and lifecycle; HIGH CONFIDENCE — inferred for identity of that argument and `0x0263e0f4`.]**
 
-**Review status (2026-09-30): NEEDS-EXE: pool arithmetic checks (64 × `0x224` = `0x8900`); `FUN_009f1370`, `FUN_009f1730` and the retire paths single-source — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: pool arithmetic checks (64 × `0x224` = `0x8900`); `0x009f1370`, `0x009f1730` and the retire paths single-source — desk review (not re-derived from the executable).**
 
 ### 16.4 Job-record field map (everything with an identified writer or reader)
 
 | job`+` | Meaning | Written by | Read by |
 |---|---|---|---|
-| `0x00` | request/asset descriptor pointer (dereferenced throughout) | queue insert (not traced); cleared by `FUN_009f2110`, `FUN_009efc50`, `FUN_009eff50` | assembler, scheduler, cancel paths |
-| `0x04` | owner/context pointer; its `+0x14` is a slot index used in the per-slot tables at `DAT_0263dde0` and in the peg name (§16.6) | queue insert (not traced) | assembler, `FUN_009f1730` |
-| `0x0c` | state (`1` set by the retire path `FUN_009eff50`; `== 3` tested by `FUN_009f1730`/`FUN_009f0590`) | `FUN_009eff50` | `FUN_009f1730`, `FUN_009f0590` |
-| `0x10` | **container the job is waiting on** (§16.2) | `FUN_009f1730`; cleared by `FUN_009eff50`, `FUN_009f1730`, the assembler's tail | ctors 9–13 (gate), `0x009f32f0` (gate), `FUN_00dafb60`/`FUN_00dafad0` callers |
-| `0x15` (byte) | failed flag | `0x009f32f0` (gate mismatch / budget overflow); assembler (`0x009f3a2a`, parse failure) | `FUN_009f1730` |
+| `0x00` | request/asset descriptor pointer (dereferenced throughout) | queue insert (not traced); cleared by `0x009f2110`, `0x009efc50`, `0x009eff50` | assembler, scheduler, cancel paths |
+| `0x04` | owner/context pointer; its `+0x14` is a slot index used in the per-slot tables at `0x0263dde0` and in the peg name (§16.6) | queue insert (not traced) | assembler, `0x009f1730` |
+| `0x0c` | state (`1` set by the retire path `0x009eff50`; `== 3` tested by `0x009f1730`/`0x009f0590`) | `0x009eff50` | `0x009f1730`, `0x009f0590` |
+| `0x10` | **container the job is waiting on** (§16.2) | `0x009f1730`; cleared by `0x009eff50`, `0x009f1730`, the assembler's tail | ctors 9–13 (gate), `0x009f32f0` (gate), `0x00dafb60`/`0x00dafad0` callers |
+| `0x15` (byte) | failed flag | `0x009f32f0` (gate mismatch / budget overflow); assembler (`0x009f3a2a`, parse failure) | `0x009f1730` |
 | `0x16`–`0x56` | name 1, `0x41` bytes — the base name everything is keyed by | **ID 9 ctor** | assembler (morph/rig/name keys) |
 | `0x58` / `0x5c` / `0x60` / `0x64` | mesh c-buffer / g-buffer / c-length / g-length | **ID 9 ctor** | assembler `memcpy` pairs; `0x009f32f0` (lengths) |
 | `0x68`–`0xa8` | name 2 (peg name) | **ID 10 ctor** | assembler (peg key) |
 | `0xac` / `0xb0` / `0xb4` / `0xb8` | peg c-buffer / c-length / g-buffer / g-length | **ID 10 ctor** | assembler; `0x009f32f0` (lengths) |
-| `0xbc`–`0xfc` | name 3 (morph name) | **ID 11 ctor** | assembler (morph key, `FUN_0074e580`) |
+| `0xbc`–`0xfc` | name 3 (morph name) | **ID 11 ctor** | assembler (morph key, `0x0074e580`) |
 | `0x100` / `0x108` / `0x104` / `0x10c` | morph c-buffer / c-length / g-buffer / g-length | **ID 11 ctor** | assembler; `0x009f32f0` (lengths) |
 | `0x15c`–`0x19c` | name 4 (creation-morph name) | **ID 12 ctor** | assembler |
-| `0x1a0` / `0x1a4` | creation-morph buffer / length | **ID 12 ctor** | assembler (buffer passed to `FUN_0074e580(name, buf, 0, 1)`; the length slot is not read there) |
-| `0x1a8` / `0x1ac` | rig buffer / length | **ID 13 ctor** | assembler (gated on request flag and `+0x1ac != 0`; copied, then `FUN_004bc810(name+suffix, slot, copy, length, 0)` — the rig cache-load wrapper, `spec-rig-format.md` §12) |
+| `0x1a0` / `0x1a4` | creation-morph buffer / length | **ID 12 ctor** | assembler (buffer passed to `0x0074e580(name, buf, 0, 1)`; the length slot is not read there) |
+| `0x1a8` / `0x1ac` | rig buffer / length | **ID 13 ctor** | assembler (gated on request flag and `+0x1ac != 0`; copied, then `0x004bc810(name+suffix, slot, copy, length, 0)` — the rig cache-load wrapper, `spec-rig-format.md` §12) |
 | `0x1b4` / `0x1b8` | pool list links | scheduler / retire paths | same |
 | `0x1bc` (byte) | ready flag | `0x009f32f0` (after the size-budget check passes) | not traced |
 
-Only the constructors write the stash slots among the direct users of `DAT_0263e0f4`; the other direct users' decompiles contain no access to those offsets (checked by pattern over all nine lifecycle functions). **[CONFIRMED — disassembly for every row's cited writer/reader; the two "not traced" cells are honest gaps.]**
+Only the constructors write the stash slots among the direct users of `0x0263e0f4`; the other direct users' decompiles contain no access to those offsets (checked by pattern over all nine lifecycle functions). **[CONFIRMED — disassembly for every row's cited writer/reader; the two "not traced" cells are honest gaps.]**
 
-**The undefined code at `0x009f32f0`–`0x009f34a0`.** Ghidra has no function here, which is why the previous "14 users" count missed five of the references. Its first instructions load `DAT_0263e0f4`, gate on the incoming container against job`+0x10`, then add the c-side lengths (`+0x108`, `+0xb0`, `+0x60`) and g-side lengths (`+0x10c`, `+0xb8`, `+0x64`) and compare them against per-type budgets in a table at `0x02668248` (20-byte rows) before setting the ready flag. **It is stored as a function-pointer immediate by `FUN_006ff730` (`0x006ff9a6`) — a *container-type* registration function, sibling of the resource-type registration `FUN_00700780`, which registers named container types through `FUN_00db1c90`.** The record it sits in is named **"Cust_Component"**; the sibling record **"Cust_Logo"** registers `FUN_009f0a50` (a 4-instruction function that stores `2` into the logo record's state field, §16.5), and "Cust_Composite"/"Cust_Shaderball" register other callbacks (`LAB_009f9b30`/`LAB_009f9c50`, `LAB_009f9c00`/`LAB_009f9c50`). `FUN_00db2ce0` invokes the container type's first function pointer with the container once every entry has loaded. So `0x009f32f0` is the **completion callback of container type "Cust_Component"** and `FUN_009f0a50` that of "Cust_Logo". **[CONFIRMED — disassembly for the stores and the strings; HIGH CONFIDENCE — inferred that the first function pointer of a container-type record is the completion callback `FUN_00db2ce0` calls (matching call shape, not read from the registration consumer).]**
+**The undefined code at `0x009f32f0`–`0x009f34a0`.** Ghidra has no function here, which is why the previous "14 users" count missed five of the references. Its first instructions load `0x0263e0f4`, gate on the incoming container against job`+0x10`, then add the c-side lengths (`+0x108`, `+0xb0`, `+0x60`) and g-side lengths (`+0x10c`, `+0xb8`, `+0x64`) and compare them against per-type budgets in a table at `0x02668248` (20-byte rows) before setting the ready flag. **It is stored as a function-pointer immediate by `0x006ff730` (`0x006ff9a6`) — a *container-type* registration function, sibling of the resource-type registration `0x00700780`, which registers named container types through `0x00db1c90`.** The record it sits in is named **"Cust_Component"**; the sibling record **"Cust_Logo"** registers `0x009f0a50` (a 4-instruction function that stores `2` into the logo record's state field, §16.5), and "Cust_Composite"/"Cust_Shaderball" register other callbacks (`0x009f9b30`/`0x009f9c50`, `0x009f9c00`/`0x009f9c50`). `0x00db2ce0` invokes the container type's first function pointer with the container once every entry has loaded. So `0x009f32f0` is the **completion callback of container type "Cust_Component"** and `0x009f0a50` that of "Cust_Logo". **[CONFIRMED — disassembly for the stores and the strings; HIGH CONFIDENCE — inferred that the first function pointer of a container-type record is the completion callback `0x00db2ce0` calls (matching call shape, not read from the registration consumer).]**
 
 **Review status (2026-09-30): NEEDS-EXE: offsets tile only over the listed fields (`0x110`..`0x15b`, `0x1b0`..`0x1b3`, `0x1bd`..`0x223` unaccounted, not claimed); the `0x009f32f0` code and the budget table `0x02668248` single-source — desk review (not re-derived from the executable).**
 
-### 16.5 The second pointer, `DAT_0263e0e8`: the logo-record pool (ID 14)
+### 16.5 The second pointer, `0x0263e0e8`: the logo-record pool (ID 14)
 
-`FUN_009f1370` also builds a second pool: **64 records of `0x5c` bytes** at `0x0264a020`–`0x0264b720` (`0x1700 / 0x5c = 64`), links at record`+0x44`/`+0x48`, pending-queue head `DAT_0263e0ec`, free-list head `DAT_0263e0f0`, and **`DAT_0263e0e8` = the current logo record**. Its users (reference manager and a full operand scan agree, 26/26): `FUN_009f07d0` (lookup by the record's first dword over the current record and the pending list), `FUN_009f0a50` (sets `+0x40 = 2`), `FUN_009f0a60` (the ID 14 constructor), `FUN_009f1370`, `FUN_009f1730` (the scheduler, which starts the record's container by name via `FUN_00db3530`), `FUN_009f46f0` (§16.6).
+`0x009f1370` also builds a second pool: **64 records of `0x5c` bytes** at `0x0264a020`–`0x0264b720` (`0x1700 / 0x5c = 64`), links at record`+0x44`/`+0x48`, pending-queue head `0x0263e0ec`, free-list head `0x0263e0f0`, and **`0x0263e0e8` = the current logo record**. Its users (reference manager and a full operand scan agree, 26/26): `0x009f07d0` (lookup by the record's first dword over the current record and the pending list), `0x009f0a50` (sets `+0x40 = 2`), `0x009f0a60` (the ID 14 constructor), `0x009f1370`, `0x009f1730` (the scheduler, which starts the record's container by name via `0x00db3530`), `0x009f46f0` (§16.6).
 
 | rec`+` | Meaning | Writer | Reader |
 |---|---|---|---|
-| `0x00`, `0x04` | request / owner pointers | queue insert (not traced) | `FUN_009f46f0` |
-| `0x08`–`0x17` (count at `0x18`) | array of ids, at most four | not traced | `FUN_009f46f0` |
-| `0x38` | container handle | `FUN_009f1730` (`FUN_00db3530(name)`) | `FUN_009f1730` (poll `FUN_00dafb60 == 5`) |
-| `0x3c` | pointer to the container name string | not traced | `FUN_009f1730`, `FUN_009f46f0` |
-| `0x40` | state: `0` idle, `2` loaded → apply, `3` fallback (`missing-black.tga` path) | `FUN_009f0a50` (`=2`), `FUN_009f46f0` (`=0`) | `FUN_009f46f0` |
-| `0x44`/`0x48` | pool links | scheduler / `FUN_009f46f0` | same |
-| `0x4c` / `0x50` / `0x54` / `0x58` | logo-peg c-buffer / c-length / g-buffer / g-length | **ID 14 ctor** | `FUN_009f46f0` |
+| `0x00`, `0x04` | request / owner pointers | queue insert (not traced) | `0x009f46f0` |
+| `0x08`–`0x17` (count at `0x18`) | array of ids, at most four | not traced | `0x009f46f0` |
+| `0x38` | container handle | `0x009f1730` (`0x00db3530(name)`) | `0x009f1730` (poll `0x00dafb60 == 5`) |
+| `0x3c` | pointer to the container name string | not traced | `0x009f1730`, `0x009f46f0` |
+| `0x40` | state: `0` idle, `2` loaded → apply, `3` fallback (`missing-black.tga` path) | `0x009f0a50` (`=2`), `0x009f46f0` (`=0`) | `0x009f46f0` |
+| `0x44`/`0x48` | pool links | scheduler / `0x009f46f0` | same |
+| `0x4c` / `0x50` / `0x54` / `0x58` | logo-peg c-buffer / c-length / g-buffer / g-length | **ID 14 ctor** | `0x009f46f0` |
 
-ID 14's constructor has **no container gate and no name copy** — only a null test of `DAT_0263e0e8` — so *any* entry of type 14 that arrives while a logo record is current is stashed. **[CONFIRMED — disassembly.]**
+ID 14's constructor has **no container gate and no name copy** — only a null test of `0x0263e0e8` — so *any* entry of type 14 that arrives while a logo record is current is stashed. **[CONFIRMED — disassembly.]**
 
 **Review status (2026-09-30): NEEDS-EXE: arithmetic checks (64 × `0x5c` = `0x1700`); the 26/26 reference count cannot be rechecked at desk — desk review (not re-derived from the executable).**
 
 ### 16.6 What consumes each stash — and that it is the *sibling type's own parser*
 
-The consumer of IDs 9–13 is the assembler `FUN_009f36d0` (two callers: `FUN_009f46f0` case 3 and the thin trampoline `FUN_009f4550`; the "PCC_CREATE/DELETE/SWAP/FINALIZE" debug labels in `FUN_009f46f0` name its event kinds). It copies the stashed blobs into two allocations it was handed (all c-side blobs into one, all g-side into the other, later blobs 16-byte-aligned after earlier ones) and then feeds each to the parser its sibling type uses:
+The consumer of IDs 9–13 is the assembler `0x009f36d0` (two callers: `0x009f46f0` case 3 and the thin trampoline `0x009f4550`; the "PCC_CREATE/DELETE/SWAP/FINALIZE" debug labels in `0x009f46f0` name its event kinds). It copies the stashed blobs into two allocations it was handed (all c-side blobs into one, all g-side into the other, later blobs 16-byte-aligned after earlier ones) and then feeds each to the parser its sibling type uses:
 
 | Stash | Fed to | Same parser as | Evidence |
 |---|---|---|---|
-| ID 9 mesh (`+0x58..+0x64`) | `FUN_00dd7d70(c, &cursor, 0)` → align cursor to 4 → `FUN_007527b0(c, &cursor, g, &out)` | **ID 5** (`FUN_00751f60`) — the same call sequence, the same argument shape, the same 12-instruction align-to-4 idiom (`0x00751f8c`–`0x00751faa` vs `0x009f3a67`–`0x009f3a85`) | raw x86, both sites. The one difference: ID 5 then registers the result by name (`FUN_005ce910(name, container, result)`); the assembler stores it in its output object and carries on (`FUN_00752fc0`). |
-| ID 10 peg (`+0xac..+0xb8`) | `FUN_00dcefa0(name, c, c_len, g, g_len, 1)` → `FUN_00dce9f0` (magic `0x564B4547`, version 13, 72-byte record walk with pointer fix-up) → `FUN_00dce800` | **ID 3** (`FUN_005d7840` → `FUN_00dcf020` → the same `FUN_00dce9f0` → the same `FUN_00dce800`) | raw push order at `0x009f3a00`–`0x009f3a1e`; decompiles of both. Skipped silently if the g-buffer or g-length is zero. |
-| ID 11 morph (`+0x100..+0x10c`) | `FUN_0074e580(name, c, g)` | **ID 7** — its constructor `FUN_0074e740` is literally `FUN_0074e580(name, c, g, 1)` followed by the by-name registration `FUN_005ce910` | decompile of both |
-| ID 12 creation morph (`+0x1a0`) | `FUN_0074e580(name, buf, 0, 1)` | ID 7 | decompile |
-| ID 13 rig (`+0x1a8/+0x1ac`) | `FUN_004bc810(name+suffix, slot, copy, length, 0)` | **ID 20** — `FUN_00748280` builds `name`+`DAT_0113a86c` (the same suffix constant the assembler uses), cache-checks, then calls `FUN_004bc810(name+suffix, a2, buf, len, 0)`: the same five-argument shape (the assembler passes the owner's slot index where ID 20 passes its a2) | decompile of both; supersedes the "consumer not identified" of `spec-rig-format.md` §12 |
-| ID 14 logo peg (rec`+0x4c..+0x58`) | copied into the slot's two staging buffers (capacity-checked against slot`+0x18`/`+0x1c`), then `FUN_00dcefa0(name, c, c_len, g, g_len, 1)` — from `FUN_009f46f0` | **ID 3** (same `FUN_00dcefa0` chain as ID 10) | raw push order at `0x009f481e`–`0x009f4843` |
+| ID 9 mesh (`+0x58..+0x64`) | `0x00dd7d70(c, &cursor, 0)` → align cursor to 4 → `0x007527b0(c, &cursor, g, &out)` | **ID 5** (`0x00751f60`) — the same call sequence, the same argument shape, the same 12-instruction align-to-4 idiom (`0x00751f8c`–`0x00751faa` vs `0x009f3a67`–`0x009f3a85`) | raw x86, both sites. The one difference: ID 5 then registers the result by name (`0x005ce910(name, container, result)`); the assembler stores it in its output object and carries on (`0x00752fc0`). |
+| ID 10 peg (`+0xac..+0xb8`) | `0x00dcefa0(name, c, c_len, g, g_len, 1)` → `0x00dce9f0` (magic `0x564B4547`, version 13, 72-byte record walk with pointer fix-up) → `0x00dce800` | **ID 3** (`0x005d7840` → `0x00dcf020` → the same `0x00dce9f0` → the same `0x00dce800`) | raw push order at `0x009f3a00`–`0x009f3a1e`; decompiles of both. Skipped silently if the g-buffer or g-length is zero. |
+| ID 11 morph (`+0x100..+0x10c`) | `0x0074e580(name, c, g)` | **ID 7** — its constructor `0x0074e740` is literally `0x0074e580(name, c, g, 1)` followed by the by-name registration `0x005ce910` | decompile of both |
+| ID 12 creation morph (`+0x1a0`) | `0x0074e580(name, buf, 0, 1)` | ID 7 | decompile |
+| ID 13 rig (`+0x1a8/+0x1ac`) | `0x004bc810(name+suffix, slot, copy, length, 0)` | **ID 20** — `0x00748280` builds `name`+`0x0113a86c` (the same suffix constant the assembler uses), cache-checks, then calls `0x004bc810(name+suffix, a2, buf, len, 0)`: the same five-argument shape (the assembler passes the owner's slot index where ID 20 passes its a2) | decompile of both; supersedes the "consumer not identified" of `spec-rig-format.md` §12 |
+| ID 14 logo peg (rec`+0x4c..+0x58`) | copied into the slot's two staging buffers (capacity-checked against slot`+0x18`/`+0x1c`), then `0x00dcefa0(name, c, c_len, g, g_len, 1)` — from `0x009f46f0` | **ID 3** (same `0x00dcefa0` chain as ID 10) | raw push order at `0x009f481e`–`0x009f4843` |
 
-So **none of IDs 9/10/14 is a distinct format**: each is the sibling format's parse, reached late. IDs 10 and 14 register the peg under a synthesised name (`FUN_00dcefa0` with its flag set first claims a named slot via `FUN_00dcee60`; ID 10's name is the job's `+0x68` string with the slot index appended and the platform `.cpeg_pc` extension; ID 14's is built by `FUN_009ef900` as a `"%s_%d_%d.%s"` composite — its inputs were not traced). The assembled c-side region for one component is `[mesh c][peg c]`, then the morph blob at the next 16-byte boundary; the g-side region holds the mesh g blob, then the morph g blob at a 16-byte boundary (the peg's g bytes are copied to their own place before registration). **[CONFIRMED — disassembly.]**
+So **none of IDs 9/10/14 is a distinct format**: each is the sibling format's parse, reached late. IDs 10 and 14 register the peg under a synthesised name (`0x00dcefa0` with its flag set first claims a named slot via `0x00dcee60`; ID 10's name is the job's `+0x68` string with the slot index appended and the platform `.cpeg_pc` extension; ID 14's is built by `0x009ef900` as a `"%s_%d_%d.%s"` composite — its inputs were not traced). The assembled c-side region for one component is `[mesh c][peg c]`, then the morph blob at the next 16-byte boundary; the g-side region holds the mesh g blob, then the morph g blob at a 16-byte boundary (the peg's g bytes are copied to their own place before registration). **[CONFIRMED — disassembly.]**
 
-**Review status (2026-09-30): NEEDS-EXE: stash→parser pairings consistent with `spec-format-inventory.md`, disassembly only (`FUN_009f36d0` and the cited parser chains) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: stash→parser pairings consistent with `spec-format-inventory.md`, disassembly only (`0x009f36d0` and the cited parser chains) — desk review (not re-derived from the executable).**
 
-### 16.7 The complete list of direct users of `DAT_0263e0f4`
+### 16.7 The complete list of direct users of `0x0263e0f4`
 
-**Seventeen functions, not fourteen** (55 references, reference manager and operand scan agreeing exactly): `FUN_009efc50`, `FUN_009eff50`, `FUN_009f0590`, `FUN_009f07c0` (returns whether a job is current), the five constructors `0x009f08c0`/`0x009f0910`/`0x009f0970`/`0x009f09d0`/`0x009f0a20`, `FUN_009f1370` (pool init), `FUN_009f1730` (scheduler), `FUN_009f2110`, `FUN_009f29f0`, `FUN_009f2fd0` (cancel/retire paths), the undefined `0x009f32f0` completion callback, `FUN_009f36d0` (assembler), `FUN_009f5220` (calls `FUN_009f46f0`, then `FUN_009ed530` when no job is current). The earlier 14 were the ones that were already Ghidra functions; `0x009f08c0` and `0x009f0a20` had no function and `0x009f32f0` still has none. **[CONFIRMED — disassembly.]**
+**Seventeen functions, not fourteen** (55 references, reference manager and operand scan agreeing exactly): `0x009efc50`, `0x009eff50`, `0x009f0590`, `0x009f07c0` (returns whether a job is current), the five constructors `0x009f08c0`/`0x009f0910`/`0x009f0970`/`0x009f09d0`/`0x009f0a20`, `0x009f1370` (pool init), `0x009f1730` (scheduler), `0x009f2110`, `0x009f29f0`, `0x009f2fd0` (cancel/retire paths), the undefined `0x009f32f0` completion callback, `0x009f36d0` (assembler), `0x009f5220` (calls `0x009f46f0`, then `0x009ed530` when no job is current). The earlier 14 were the ones that were already Ghidra functions; `0x009f08c0` and `0x009f0a20` had no function and `0x009f32f0` still has none. **[CONFIRMED — disassembly.]**
 
-**Review status (2026-09-30): NEEDS-EXE: reference list of `DAT_0263e0f4` (17 functions, 55 references) to be regenerated from the executable — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: reference list of `0x0263e0f4` (17 functions, 55 references) to be regenerated from the executable — desk review (not re-derived from the executable).**
 
 ### 16.8 What remains open
 
 1. **How an entry gets typed 9–14 instead of 5/3/7/20.** The extensions are identical, so the type must come from the container (its container type, e.g. "Cust_Component"/"Cust_Logo", or the entry's own type byte in the manifest trailer, `spec-resource-dispatch.md` §8.5); which one was not traced. **[HYPOTHESIS — container type; OPEN.]**
 2. Job`+0x00`/`+0x04`/`+0x0c` semantics beyond what §16.4 lists, and who enqueues jobs (the writer of the pending queue).
-3. Whether the assembler's argument 1 equals `DAT_0263e0f4` at the moment it runs — a runtime fact (§14.5 item 3, unchanged).
+3. Whether the assembler's argument 1 equals `0x0263e0f4` at the moment it runs — a runtime fact (§14.5 item 3, unchanged).
 4. The morph-slider value's home and range (§14.5 item 2) is unaffected by this section.
 
 **Review status (2026-09-30): DESK-PASS — open list accurate — desk review (not re-derived from the executable).**

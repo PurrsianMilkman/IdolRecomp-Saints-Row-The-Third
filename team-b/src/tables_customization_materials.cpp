@@ -125,8 +125,12 @@ CompositeLayer ParseCompositeLayer(const Node* row) {
     CompositeLayer c;
     c.name = OptText(row, "Name");
     c.displayName = OptText(row, "Display_Name");
-    c.diffuseTexture = OptText(row, "diffuse");
-    c.normalTexture = OptText(row, "normal");
+    // diffuse/normal are wrapper elements with a nested `Filename` child in
+    // real shipped data, not leaf text nodes - see materials.h's own comment
+    // on CompositeLayer::diffuseTexture/normalTexture for the real-data
+    // evidence (misc_tables.vpp_pc's own customization_compositing.xtbl).
+    c.diffuseTexture = OptText(FindChild(row, "diffuse"), "Filename");
+    c.normalTexture = OptText(FindChild(row, "normal"), "Filename");
     c.slot = OptText(row, "Slot");
     c.xCoord = ReadInt32Always(row, "x_coord");
     c.yCoord = ReadInt32Always(row, "y_coord");

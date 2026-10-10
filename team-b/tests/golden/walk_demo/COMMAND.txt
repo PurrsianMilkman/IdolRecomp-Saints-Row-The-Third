@@ -1,0 +1,98 @@
+Golden scene: walk_demo, the player<->animation bridge walking demo (sr3_viewer `walk`)
+========================================================================================
+
+RE-FROZEN 2026-10-08 (walk_demo_v2 consolidated-capture task) - a fresh v1 baseline
+regenerated against main's current tip (d6844a6, past the 45f9899 Batch 5 lua-natives
+merge), WARP-forced per this project's standing policy (checkWalkDemoScene() in
+tools/golden_scene_check.cpp forces SR3_FORCE_WARP=1). This is a straight re-run of the
+EXACT command the original 2026-10-07 walk_demo baseline already documents (see that
+baseline's own prior COMMAND.txt in git history for the full REAL/CHOSEN/CAMERA writeup,
+not repeated here) - freezing it fresh because tests/golden/ is gitignored and this task
+started from a brand-new worktree with no tests/golden/ directory at all.
+
+Real command (run with cwd = tests/golden/, same convention every other baseline in this
+directory tree uses):
+
+    <sr3_viewer.exe> walk \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\characters.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\misc_tables.vpp_pc" \
+        "D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc" \
+        --eye -957.66 15 -691.66 --yaw -20 --pitch -55 --no-input \
+        --frames 80 --capture _work/walk_demo.png --capture-frame 79
+
+(SR3_FORCE_WARP=1 set in the environment before this run, matching
+checkWalkDemoScene()'s own behaviour.)
+
+<sr3_viewer.exe> = tests/golden/_bin/sr3_viewer.exe, built fresh this session from
+tools/sr3_viewer.cpp via the normal top-level CMake build (sr3_viewer is now a real
+CMake target, CMakeLists.txt:1019 - the old build.bat-only mechanism this file's prior
+version described is no longer needed).
+
+WHAT CHANGED SINCE THE ORIGINAL 2026-10-07 FREEZE: this re-run is against main's tip
+AFTER all 4 of this session's walk_demo_v2 fixes landed (headless-brad texture fix,
+black-ground fix, character-proxy collision system, sr3animpose pose-compose library) -
+but NONE of those 4 fixes change v1's own behaviour: FIX 1/2/3 (textures, follow camera,
+streaming focus) are all gated behind --v2, which this command does not pass; the
+collision system is gated behind --collision, not passed either; the ground/terrain fix
+IS unconditional (applies to both v1 and v2) but, per runWalkDemo()'s own "FIX 4" doc
+comment, adds ONLY 3 new purely-informational stdout lines for this exact scene - no
+pixel change - because this scene's own 3 resident tiles (0916/1015/1016) genuinely carry
+zero real Mesh/vertex-layout-code-0 ground data (confirmed directly, this session's own
+stdout below: "no block carries a vertex-layout-code-0 channel" for all 3 tiles). The
+captured PNG is therefore visually identical to the original 2026-10-07 baseline (same
+checkered rigid-body character, same real city geometry, same solid-black background -
+no visible ground, a genuine real-data limitation at this scene's specific location, not
+a bug or an unapplied fix) - confirmed directly by visual inspection this session, not
+assumed.
+
+Real, measured end state (this re-capture's own stdout): player position (-957.66 0.00
+-686.66), heading 90.0 deg, locomotion state 0 (kLocoIdle), playback rate 1.280 - all
+identical to the original 2026-10-07 baseline's own documented values.
+
+Frozen here:
+  baseline_capture.png - the real captured frame (MD5 ec4db4d9fac5d87afec3b0b54456dfe9
+                         this session). Visually identical to the original 2026-10-07
+                         freeze (same checkered rigid-body character on real city_corner
+                         geometry, solid-black ground - see above for why).
+  baseline_stdout.txt  - sr3_viewer's own real stdout for this exact invocation, now
+                         carrying the 3 new "[ground] frame 0 tile NNNN: SKIPPED (no real
+                         ground rendered): ..." lines the ground-fix task added (see
+                         runWalkDemo()'s own "FIX 4" doc comment in tools/sr3_viewer.cpp
+                         for the full account) - nothing else changed, nothing removed or
+                         reordered. Re-run and check with compareTextMaskingTiming(), not
+                         a raw diff (per-cell "NNN ms"/"N.N s" wall-clock load-time text
+                         still varies run to run by design, same as every prior freeze of
+                         this scene).
+
+Re-run and check with: tools/golden_scene_check.cpp's checkWalkDemoScene().
+
+
+================================================================================
+UPDATED 2026-10-08 (spec-zone-data-format.md Sec13.2 spec-sync task, "pavement
+found" follow-up): baseline_stdout.txt's own 3 "[ground] ... SKIPPED" lines
+were re-worded from "no layout-code-0 channel" to "no layout-code-0/2
+channel" - loadCityGroundTile()'s own channel auto-select was a real bug (it
+only ever accepted layout code 0, when Sec13.2's real road-textured `0x2237`
+population lives on layout codes 2 and 4), now fixed to also accept code 2
+(code 4 is detected and reported honestly but deliberately still not
+rendered - see loadCityGroundTile()'s own top comment in tools/sr3_viewer.cpp
+for why: it is position-only, no normal, and this file's shared lit shader
+would compute normalize(0,0,0) on it otherwise).
+
+Re-verified directly, not assumed: this scene's own 3 resident tiles
+(0916/1015/1016) still resolve to "0 Mesh sub-block(s) located... there is
+no block here at all" even with the fix in place - a genuine, re-confirmed
+absence of ANY Mesh sub-block (of any layout code) in these 3 tiles' own
+BASE zones, not something the layout-code fix could change. baseline_
+capture.png is therefore BYTE-IDENTICAL (MD5 a0b303bf2561f17b06538e0b8af0c52e,
+re-captured and diffed directly) - only the stdout wording changed, same
+"wording/comment correction, not a rendering change" class of update this
+file's own 2026-10-08 CORRECTED section above already used. walk_demo's own
+black ground at this specific location remains real, measured, honest
+behaviour - not a bug and not fixed by this task, which only closes the
+layout-code-0-only false-negative for tiles elsewhere that DO carry real
+code-2 ground data. See this task's own report for the full account, incl.
+a worktree-wide scan of every reachable base tile in sr3_city_0.vpp_pc
+(28/28 tiles, all 0 Mesh sub-blocks) confirming this archive specifically
+carries no base-zone ground geometry anywhere, so no tile this scene could
+plausibly stream in exercises the new code-2 path by itself.

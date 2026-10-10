@@ -3,6 +3,7 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
+#include <cstdlib>
 #include <cstring>
 
 namespace sr3render {
@@ -61,15 +62,40 @@ bool RenderDevice::initialise(uint32_t width, uint32_t height, std::string& erro
     // Hardware first, WARP second. WARP is not a failure mode - it is a
     // legitimate, fully-conformant rasterizer, and is what makes this run
     // headless. Which one was obtained is reported, never assumed.
-    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted,
-                                   1, D3D11_SDK_VERSION, &device_, &got, &context_);
+    //
+    // SR3_FORCE_WARP (B3 build-infra task, 2026-10-07): an opt-in escape
+    // hatch, OFF by default - this does not change this function's own
+    // default behaviour for any normal caller (sr3_viewer run by hand, any
+    // existing test). It exists so the golden-scene harness specifically
+    // (tools/golden_scene_check.cpp, which sets this env var only for the
+    // subprocesses IT spawns - see that file's own main()) can force every
+    // golden render onto the SAME software rasterizer regardless of which
+    // machine/agent runs it, instead of whatever hardware GPU happens to be
+    // present - hardware rasterizers legitimately differ pixel-for-pixel
+    // between vendors/drivers, which is the wrong kind of non-determinism
+    // for a frozen byte-exact baseline to depend on. WARP itself ships
+    // inside the OS and is already what makes every render here possible
+    // with no GPU at all (see this function's own comment above), so this
+    // is "pick the deterministic path on purpose," not a new dependency.
+    bool forceWarp = false;
+    {
+        const char* v = std::getenv("SR3_FORCE_WARP");
+        forceWarp = (v != nullptr && v[0] != '\0' && v[0] != '0');
+    }
+
+    HRESULT hr = forceWarp
+        ? E_FAIL // skip the hardware attempt entirely - "force", not "prefer"
+        : D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, wanted,
+                           1, D3D11_SDK_VERSION, &device_, &got, &context_);
     if (SUCCEEDED(hr)) {
         kind_ = DeviceKind::Hardware;
     } else {
         hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, wanted, 1,
                                D3D11_SDK_VERSION, &device_, &got, &context_);
         if (FAILED(hr)) {
-            error = "D3D11CreateDevice failed for both hardware and WARP: " + hrToString(hr);
+            error = "D3D11CreateDevice failed for " +
+                    std::string(forceWarp ? "WARP (SR3_FORCE_WARP set)" : "both hardware and WARP") +
+                    ": " + hrToString(hr);
             return false;
         }
         kind_ = DeviceKind::Warp;

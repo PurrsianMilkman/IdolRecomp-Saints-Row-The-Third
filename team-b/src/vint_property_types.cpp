@@ -76,7 +76,16 @@ std::vector<VintElementTypeInfo> buildTypes() {
     t.push_back({"bitmap_circle", "element", {
         row("image", kVintCodeImageName, S), row("screen_size", kVintCodeVec2, F), open("source_nw"),
         open("source_se"), open("start_angle"), open("end_angle"), open("num_wedges")}});
-    t.push_back({"sr2_map", "element", {open("zoom"), row("map_mode", kVintCodeEnum, S)}});
+    // zoom/map_mode (2): spec-hud-runtime.md Sec6 (2026-10-08 pass) reads
+    // both real get/set bodies directly - zoom get=+0xc8 (0x00e34420, reads
+    // this+0xa0 as a float)/set=+0xcc (0x00e34460, validates and writes
+    // this+0xa0); map_mode get=+0xd0/set=+0xd4, a switch over the 0xd
+    // enumeration below. CORRECTED 2026-10-08 (minimap live-transform task):
+    // zoom was previously left Open (code not stated in spec-lua-bindings.md
+    // Sec9.2's own table, which lists property NAMES only); spec-hud-
+    // runtime.md Sec6 now states the code directly ("float"), so this is a
+    // Spec row like map_mode, not a FieldType deduction.
+    t.push_back({"sr2_map", "element", {row("zoom", kVintCodeFloat, S), row("map_mode", kVintCodeEnum, S)}});
     t.push_back({"video", "element", {
         open("vid_id_handle"), open("vid_name"), open("is_paused"), open("is_stopped"), open("is_looped"),
         open("frame"), open("end_event"), open("frame_event"), open("frame_event_num")}});

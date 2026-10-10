@@ -500,8 +500,11 @@ int main(int argc, char** argv) {
                 std::printf("  refA(head mesh refs).count=%zu\n", lm2.referenceArrayA().count);
 
                 std::vector<sr3mesh::MeshBlock> headBlocks = lm2.resolveReferencedMeshes(cv2, gv2);
-                size_t gCursor = 0;
-                for (auto& hb : headBlocks) if (hb.bulkInGFile()) gCursor += hb.gLength();
+                // gCursorAfterHeadChain() rounds the HEAD-chain sum up to 16 at
+                // this HEAD -> MIDDLE handoff (level_mesh.h note 9) - a bare sum
+                // of headBlocks' gLength() is wrong whenever that sum is not
+                // already 16-aligned.
+                size_t gCursor = sr3clmesh::LevelMesh::gCursorAfterHeadChain(headBlocks);
                 std::printf("  resolved %zu/%zu head mesh sub-blocks; gCursor after head = %zu\n",
                             headBlocks.size(), lm2.referenceArrayA().count, gCursor);
 

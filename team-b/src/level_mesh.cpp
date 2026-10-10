@@ -992,4 +992,15 @@ std::vector<sr3mesh::MeshBlock> LevelMesh::resolveReferencedMeshes(ByteView cont
     return out;
 }
 
+// See the declaration's own doc comment and note 9 at the top of
+// level_mesh.h for the measured evidence (602 real instances, 9 str2
+// containers in sr3_city_0.vpp_pc, 0 exceptions either direction).
+size_t LevelMesh::gCursorAfterHeadChain(const std::vector<sr3mesh::MeshBlock>& headBlocks) {
+    size_t gCursor = 0;
+    for (const auto& hb : headBlocks) {
+        if (hb.bulkInGFile()) gCursor += hb.gLength();
+    }
+    return roundUp16(gCursor);
+}
+
 } // namespace sr3clmesh

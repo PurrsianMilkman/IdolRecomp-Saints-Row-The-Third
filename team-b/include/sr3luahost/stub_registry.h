@@ -67,8 +67,10 @@ struct StubHit {
     // Real per-state breakdown (added for the orchestrator's runtime-ranking
     // deliverable, 2026-09-29 follow-up pass): which persistent lua_State a
     // call actually happened against, tagged by the caller of record() at
-    // the real call site (registerStubs()/registerThreadScheduler() below),
-    // never inferred from a name's registered-list cluster tag - a name's
+    // the real call site (registerStubs() below, or one of the spec-
+    // confirmed/bare-globals/thread_close trampolines - see spec_confirmed_
+    // stubs.h/bare_globals.h/thread_scheduler.h), never inferred from a
+    // name's registered-list cluster tag - a name's
     // real calls can land in a state its own cluster tag doesn't match
     // (confirmed for tutorial_advance, HANDOFF.md Sec9.117/Sec14), so this
     // is measured directly, per call, not looked up after the fact.
@@ -86,9 +88,11 @@ class HitLog {
 public:
     // `state` is a real, caller-supplied tag naming which persistent
     // lua_State this specific call happened against ("gameplay" or "ui" -
-    // see registerStubs()/registerThreadScheduler() below, the only real
-    // callers) - stored per-call, not derived from any registration-list
-    // lookup, so a name called from a state other than its own registered
+    // see registerStubs() below and every other real caller: spec_
+    // confirmed_stubs.h/bare_globals.h/thread_scheduler.h's own
+    // registration tracks) - stored per-call, not derived from any
+    // registration-list lookup, so a name called from a state other than
+    // its own registered
     // cluster is recorded honestly rather than mis-attributed.
     void record(const std::string& name, int argc, const std::string& argTypes, const std::string& state);
     const std::unordered_map<std::string, StubHit>& hits() const { return hits_; }

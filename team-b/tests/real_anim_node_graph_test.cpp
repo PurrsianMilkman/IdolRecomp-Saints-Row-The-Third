@@ -33,6 +33,7 @@
 #include "sr3tables_animation/tables.h"
 #include "sr3xtbl/xtbl.h"
 #include "vpp/container.h"
+#include "vppcache/archive_cache.h"
 
 using namespace sr3animruntime;
 namespace fs = std::filesystem;
@@ -64,14 +65,23 @@ std::string lower(std::string s) {
 }
 
 struct Archive {
-    std::vector<uint8_t> bytes;
+    // Through the persistent decoded-asset cache (2026-10-08 task):
+    // `opened` keeps the mapped original archive bytes alive (what `c`'s
+    // ByteView aliases); `c` is a COPY of opened->container (Container is
+    // cheaply copyable - a few vectors plus a non-owning cache_ pointer
+    // and a sourceKey_ string, see vpp/container.h), kept as its own
+    // unique_ptr<vpp::Container> purely so every existing `archive.c->...`
+    // call site elsewhere in this file (entries()/decompressEntry()/
+    // rawEntryBytes()) keeps compiling unchanged. The copy still shares
+    // the same cache_/sourceKey_, so decompressEntry() on it still hits
+    // the disk cache exactly like the original.
+    std::shared_ptr<vppcache::OpenedArchive> opened;
     std::unique_ptr<vpp::Container> c;
     std::map<std::string, size_t> byName;  // lower-cased
     bool load(const fs::path& p) {
         if (!fs::exists(p)) return false;
-        std::ifstream in(p, std::ios::binary);
-        bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-        c = std::make_unique<vpp::Container>(vpp::ByteView(bytes.data(), bytes.size()));
+        opened = vppcache::openArchive(p);
+        c = std::make_unique<vpp::Container>(opened->container);
         for (size_t i = 0; i < c->entries().size(); ++i) byName[lower(c->entries()[i].name)] = i;
         return true;
     }
@@ -890,6 +900,13 @@ int main() {
     //     flight. Stricter; it gives 31 for ride_left_sm / ride_right_sm (their
     //     `Ready` state nests ride_*_ready_sm at 30, plus one in-flight clip
     //     state) - still below the 33rd entry, but the margin is one, not two.
+    //   2026-10-07: Sec8.10 was corrected from "30, margin two" to exactly
+    //   this two-reading split (format worst case 31, as-shipped peak 30),
+    //   and Team A's own changelog entry says it was "re-derived from Team
+    //   B's own real-data test ... swept over all 249 shipped files under
+    //   both the steady-bound and recursive readings" - i.e. this very test.
+    //   Both CHECK_EQ(..., 31) below already matched before that correction
+    //   landed; nothing here changed as a result of it.
     {
         std::map<std::tuple<int32_t, int, bool>, int> memo;
         std::function<int(int32_t, int, bool)> boundGraph;

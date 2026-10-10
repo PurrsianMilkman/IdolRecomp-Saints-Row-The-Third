@@ -8,6 +8,9 @@
 
 #include "sr3tables_vehicle_world/tables.h"
 
+#include <cstring>  // _stricmp (ResolveDriverHideOccupant/FindSeatByResolverIndex - MSVC CRT,
+                    // matching the real engine's own FUN_00AC1BA0 seat-name comparison, spec
+                    // Sec3.1 - this project targets MSVC/Windows exclusively, see HANDOFF.md)
 #include <string>
 
 namespace sr3tables_vehicle_world {
@@ -147,6 +150,29 @@ std::vector<VehicleInteractionInfo> ParseVehicleInteractionInfoTable(const sr3xt
     for (const Node* row : sr3xtbl::Children(rootScope(doc), "Vehicle_Interaction_Info"))
         out.push_back(ParseVehicleInteractionInfo(row));
     return out;
+}
+
+const VehicleInteractionSeatInfo* FindSeatByResolverIndex(const VehicleInteractionInfo& row, size_t seatIndex) {
+    if (seatIndex >= kSeatResolverGenericNames.size()) return nullptr;  // both alias lists are the same 8-entry size
+    for (const auto& seat : row.seats) {
+        if (!seat.seatText) continue;
+        if (_stricmp(seat.seatText->c_str(), std::string(kSeatResolverGenericNames[seatIndex]).c_str()) == 0 ||
+            _stricmp(seat.seatText->c_str(), std::string(kSeatResolverVehicleSpecificNames[seatIndex]).c_str()) == 0) {
+            return &seat;
+        }
+    }
+    return nullptr;
+}
+
+bool ResolveDriverHideOccupant(const std::vector<VehicleInteractionInfo>& rows,
+                                std::string_view vehicleInteractionName) {
+    if (vehicleInteractionName.empty()) return false;
+    for (const auto& row : rows) {
+        if (!row.name || *row.name != vehicleInteractionName) continue;
+        const VehicleInteractionSeatInfo* driverSeat = FindSeatByResolverIndex(row, /*seatIndex=*/0);
+        return driverSeat ? driverSeat->hideOccupant : false;
+    }
+    return false;
 }
 
 // ===========================================================================

@@ -1,6 +1,14 @@
 === Lit-clmesh prototype: real G-buffer prepass -> real directional light -> real material pass ===
 (forked from prototype_lit_car.cpp - see this file's own top comment)
 
+[DEFAULT, 2026-10-08] Target_dimensions/IR_Pixel_Steps (PS c47/c48) are synthesized as CHOSEN
+  (800,600,0,0)/(1/800,1/600,0,0) screen-metadata values (this tool's own actual render resolution),
+  NOT the real-confirmed-zero placeholder - spec-render-pipeline.md Sec20.12.15's own recommendation,
+  since no engine-side producer for either constant exists anywhere in the executable (exhaustive
+  negative). PASS C also now binds IR_GBuffer_DSF_DataSampler@s9 to PASS A's real oC1 output
+  (Sec23.8/Sec23.13) instead of a placeholder - see fillPsCbufferTemplate()'s own comment and this
+  session's report for both halves of this fix.
+
 [shaderHash join] real .fxo_pc distinct stems: 310
 
 [archive] sr3_city_0.vpp_pc :: 1018h0.str2_pc opened, 44 entries
@@ -244,7 +252,7 @@
 
 [renderGroup 0] channels=4 indexCount=13138 ranges=16
 
-[device] kind=Hardware
+[device] kind=WARP (software rasterizer)
 
 [stem 'ir_window_reflectmask'] 3 real candidate file(s) to try, in order: ir_window_reflectmask_bs.fxo_pc ir_window_reflectmask_fd.fxo_pc ir_window_reflectmask_s.fxo_pc
   candidate 'ir_window_reflectmask_bs.fxo_pc': role4=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 TANGENT0 POSITION2 POSITION3 POSITION4 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit  role6=FAIL: real VS input signature (POSITION0 TEXCOORD0 NORMAL0 POSITION2 POSITION3 POSITION4 ?1 ?2 ) is neither the known subset nor the known {POSITION0,TEXCOORD0} light-quad signature - not forced to fit
@@ -388,12 +396,12 @@
   ir_at_bbsimple1_s.fxo_pc role6 VS projTM                 : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
   ir_at_bbsimple1_s.fxo_pc role6 PS Alpha_Threshold        : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_at_bbsimple1_s.fxo_pc role6 PS Fog_color              : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_at_bbsimple1_s.fxo_pc role6 PS IR_Pixel_Steps         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS IR_Pixel_Steps         : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (1/800,1/600,0,0), reciprocal of this tool's own actual render resolution [CTAB registerIndex=48 registerCount=1]
   ir_at_bbsimple1_s.fxo_pc role6 PS Self_Illumination      : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Alpha         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Color         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_at_bbsimple1_s.fxo_pc role6 PS Specular_Map_Amount    : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_at_bbsimple1_s.fxo_pc role6 PS Target_dimensions      : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_at_bbsimple1_s.fxo_pc role6 PS Target_dimensions      : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (800,600,0,0), this tool's own actual render resolution - matches this file's own ir_light_directional VS-fill precedent for the SAME constant name (PASS B below) [CTAB registerIndex=47 registerCount=1]
   ir_at_bbsimple1_s.fxo_pc role6 PS Tint_color             : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
   ir_bbsimple1_v.fxo_pc role6 VS Bone_weights              : PLACEHOLDER: identity per slot (.clmesh_pc has no parts()/bone-palette array - a static prop is already in one real object space)
   ir_bbsimple1_v.fxo_pc role6 VS Diffuse_Color             : PLACEHOLDER: zero (untraced per-instance parameter)
@@ -404,12 +412,12 @@
   ir_bbsimple1_v.fxo_pc role6 VS objTM                     : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
   ir_bbsimple1_v.fxo_pc role6 VS projTM                    : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
   ir_bbsimple1_v.fxo_pc role6 PS Fog_color                 : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_bbsimple1_v.fxo_pc role6 PS IR_Pixel_Steps            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS IR_Pixel_Steps            : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (1/800,1/600,0,0), reciprocal of this tool's own actual render resolution [CTAB registerIndex=48 registerCount=1]
   ir_bbsimple1_v.fxo_pc role6 PS Self_Illumination         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_bbsimple1_v.fxo_pc role6 PS Specular_Alpha            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_bbsimple1_v.fxo_pc role6 PS Specular_Color            : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_bbsimple1_v.fxo_pc role6 PS Specular_Map_Amount       : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_bbsimple1_v.fxo_pc role6 PS Target_dimensions         : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_bbsimple1_v.fxo_pc role6 PS Target_dimensions         : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (800,600,0,0), this tool's own actual render resolution - matches this file's own ir_light_directional VS-fill precedent for the SAME constant name (PASS B below) [CTAB registerIndex=47 registerCount=1]
   ir_bbsimple1_v.fxo_pc role6 PS Tint_color                : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS Fog_dist      : PLACEHOLDER: zero (untraced per-instance parameter)
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS Object_instance_params_2 : PLACEHOLDER: zero (untraced per-instance parameter)
@@ -418,12 +426,12 @@
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 VS projTM        : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Diffuse_Color : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Fog_color     : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS IR_Pixel_Steps : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS IR_Pixel_Steps : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (1/800,1/600,0,0), reciprocal of this tool's own actual render resolution [CTAB registerIndex=48 registerCount=1]
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Alpha : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Color : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Specular_Map_Amount : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Target_dimensions : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (800,600,0,0), this tool's own actual render resolution - matches this file's own ir_light_directional VS-fill precedent for the SAME constant name (PASS B below) [CTAB registerIndex=47 registerCount=1]
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Tint_color    : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
   ir_sr3diffspec_nospecmap_s.fxo_pc role6 PS Wet_mask_levels : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS Diffuse_Color : PLACEHOLDER: zero (untraced per-instance parameter)
@@ -435,9 +443,9 @@
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS objTM      : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 VS projTM     : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Fog_color  : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS IR_Pixel_Steps : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS IR_Pixel_Steps : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (1/800,1/600,0,0), reciprocal of this tool's own actual render resolution [CTAB registerIndex=48 registerCount=1]
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Target_dimensions : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (800,600,0,0), this tool's own actual render resolution - matches this file's own ir_light_directional VS-fill precedent for the SAME constant name (PASS B below) [CTAB registerIndex=47 registerCount=1]
   ir_srtwotonediffuse_no_spec_s.fxo_pc role6 PS Tint_color : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
   ir_window_reflectmask_s.fxo_pc role6 VS Diffuse_Color    : PLACEHOLDER: zero (untraced per-instance parameter)
   ir_window_reflectmask_s.fxo_pc role6 VS Fog_dist         : PLACEHOLDER: zero (untraced per-instance parameter)
@@ -448,11 +456,11 @@
   ir_window_reflectmask_s.fxo_pc role6 VS objTM            : PLACEHOLDER: identity world transform (no real per-instance placement - OPEN, see runClmeshTile()'s own doc comment in tools/sr3_viewer.cpp for why)
   ir_window_reflectmask_s.fxo_pc role6 VS projTM           : REAL: this tool's own view*projection (see top comment for the CHOSEN camera params)
   ir_window_reflectmask_s.fxo_pc role6 PS Fog_color        : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_window_reflectmask_s.fxo_pc role6 PS IR_Pixel_Steps   : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS IR_Pixel_Steps   : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (1/800,1/600,0,0), reciprocal of this tool's own actual render resolution [CTAB registerIndex=48 registerCount=1]
   ir_window_reflectmask_s.fxo_pc role6 PS Reflection_Map_Opacity : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_window_reflectmask_s.fxo_pc role6 PS Self_Illumination : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_window_reflectmask_s.fxo_pc role6 PS TOD_window_tint  : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
-  ir_window_reflectmask_s.fxo_pc role6 PS Target_dimensions : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
+  ir_window_reflectmask_s.fxo_pc role6 PS Target_dimensions : CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive negative, no engine-side producer exists for this constant anywhere in the executable): (800,600,0,0), this tool's own actual render resolution - matches this file's own ir_light_directional VS-fill precedent for the SAME constant name (PASS B below) [CTAB registerIndex=47 registerCount=1]
   ir_window_reflectmask_s.fxo_pc role6 PS Time             : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
   ir_window_reflectmask_s.fxo_pc role6 PS Tint_color       : PLACEHOLDER (carried over + independently re-confirmed this session): real Tint_color=0 would make this pass's own final instruction (oC0 = r2*Tint_color) exactly zero for every pixel - see top comment for this session's own direct HLSL re-trace
   ir_window_reflectmask_s.fxo_pc role6 PS V_ambient_render : REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero
@@ -569,21 +577,22 @@
   material[15] role6 VS Diffuse_Color_2                    : REAL per-material (materialShaderConstants B/C array, nameHash=0x55B343E2)
   material[15] C[6..7]                                     : OPEN: 2 trailing real vec4 value(s) beyond constantNameCount - genuinely unmatched to any name, not written anywhere (see level_mesh.h's own doc comment)
 
-[gbuffer] created 3 real off-screen colour targets (Normals/Depth/Lighting, CHOSEN format DXGI_FORMAT_R8G8B8A8_UNORM, 800x600) + 1 real depth-stencil surface + 1 real light-accumulation target.
+[gbuffer] created 3 real off-screen colour targets (Normals/DSF_DATA/Lighting, CHOSEN format DXGI_FORMAT_R8G8B8A8_UNORM, 800x600) + 1 real depth-stencil surface + 1 real light-accumulation target. [DSF_DATA, not Depth - spec-render-pipeline.md Sec23.8, corrects HANDOFF.md Sec9.109]
 [pass A: G-buffer prepass] 14 real DrawIndexed calls into the 3 real off-screen targets + real DSV
-  [gbuffer Normals (oC0)] R:min=0,max=243,mean=20.65  G:min=0,max=231,mean=21.80  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
+  [gbuffer Normals (oC0)] R:min=0,max=231,mean=20.63  G:min=0,max=220,mean=22.57  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
+  [gbuffer DSF_DATA (oC1) [renamed from 'Depth' - Sec23.8]] R:min=0,max=1,mean=0.00  G:min=0,max=255,mean=0.02  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
   [gbuffer Lighting-parameter (oC2, encodes real Specular_Power)] R:min=0,max=255,mean=34.09  G:min=0,max=0,mean=0.00  B:min=0,max=0,mean=0.00  A:min=0,max=255,mean=36.08
 [light shader] ir_light_directional real pass 0: VS inputs=POSITION0 TEXCOORD0   PS declares IR_GBuffer_NormalsSampler@s13 IR_GBuffer_LightingSampler@s12  real PS outputs=1
 [pass B: directional light] 1 real DrawIndexed(6) fullscreen quad, ir_light_directional pass 0, real IR_GBuffer_NormalsSampler/IR_GBuffer_LightingSampler bound to pass A's own real output -> real light buffer
-  [light-accumulation buffer (real noon/Overcast weather row x real G-buffer)] R:min=21,max=21,mean=21.00  G:min=46,max=46,mean=46.00  B:min=65,max=65,mean=65.00  A:min=91,max=91,mean=91.00
+  [light-accumulation buffer (real noon/Overcast weather row x real G-buffer)] R:min=20,max=255,mean=26.21  G:min=43,max=255,mean=50.23  B:min=56,max=254,mean=67.59  A:min=0,max=255,mean=92.26
 [pass C: material pass] 14 real DrawIndexed calls (4959 triangles), IR_LBufferSampler bound to pass B's own real light-buffer output, Diffuse_MapSampler/Specular_MapSampler bound to each material's own real uploaded texture, for every range whose shader declares them
 
 === Real RGBA8 pixel statistics (800x600, 480000 pixels) ===
-  R: min=0 max=255 mean=14.541
-  G: min=0 max=255 mean=15.296
-  B: min=0 max=255 mean=36.478
+  R: min=0 max=255 mean=20.300
+  G: min=0 max=255 mean=17.901
+  B: min=0 max=255 mean=49.230
   A: min=255 max=255 mean=255.000
-  geometry silhouette (differs from the (13,13,20) clear colour): 67922 pixels (14.15%)
+  geometry silhouette (differs from the (13,13,20) clear colour): 67921 pixels (14.15%)
 
 [png] wrote _work/clmesh_airport_controltower_lit.png
 

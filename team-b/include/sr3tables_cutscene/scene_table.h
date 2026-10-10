@@ -137,6 +137,21 @@ struct SceneFields {
     // (kind 2) and says it is empty for a zscene (kind 1); for kind 0
     // ("Designer") and an OPEN kind it does not say.
     std::optional<std::vector<SceneResource>> resources;
+
+    // The CameraScript element's raw text (added 2026-10-08, spec-lua-api-
+    // behaviour.md Sec57.2a / spec-cutscene-camera-format.md Sec10.6 item 7
+    // wiring task). REAL that the element exists and its role: "the
+    // authoring-path reference to the .csc_pc script" (spec-xtbl-format.md
+    // Sec6.4's empirical cross-check lists it present in the one real file
+    // checked there, "not read by the [cutscene-table] reader functions").
+    // OPEN: the exact text format (a bare name, a name with the .csc_pc
+    // extension already appended, or a path) - spec-xtbl-format.md never
+    // says, so this field is kept as the literal element text, unresolved,
+    // the same "surface the raw fact, let the consumer decide" choice this
+    // header already makes for cutsceneTypeText/lightsetText above. nullopt
+    // when the element is absent or has no text (ChildText's own "absent OR
+    // no text" convention, same as every other optional text field here).
+    std::optional<std::string> cameraScriptText;
 };
 
 // 0x0073ada0 over one parsed `<name>.cte_xtbl`. Never throws for a parsed

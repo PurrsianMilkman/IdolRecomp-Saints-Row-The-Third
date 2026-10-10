@@ -29,7 +29,9 @@
 
 #include "sr3font/vint_font.h"
 #include "sr3font/vint_text.h"
+#include "sr3locstr/le_strings.h"
 #include "vpp/container.h"
+#include "vppcache/archive_cache.h"
 
 using namespace sr3font;
 namespace fs = std::filesystem;
@@ -120,12 +122,8 @@ int main() {
         std::cout << "SKIP: " << misc.string() << " not present\n";
         return 77;
     }
-    std::vector<uint8_t> archive;
-    {
-        std::ifstream in(misc, std::ios::binary);
-        archive.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
-    }
-    vpp::Container c(vpp::ByteView(archive.data(), archive.size()));
+    auto opened = vppcache::openArchive(misc);
+    const vpp::Container& c = opened->container;
 
     // ---- spec-vint-font-format.md Sec1 + Sec2.1 -------------------------
     const size_t na = static_cast<size_t>(-1);
@@ -383,7 +381,24 @@ int main() {
     {
         LayoutParams p;
         p.textScaleX = p.textScaleY = 3;
-        auto rs = runs(lay(body, u"[scale:2]x", p));
+        // NOTE: must bind the LayoutResult to a named local before calling
+        // runs() on it, as every other check in this file does. runs()
+        // returns pointers INTO its argument's r.records; `runs(lay(...))`
+        // with no named local binds that LayoutResult only as a temporary
+        // for the call to runs() itself, so it is destroyed at the end of
+        // that statement - the next statement then reads through dangling
+        // pointers into an already-freed vector<StreamRecord> buffer. A
+        // Release build often reads the (stale but still-correct-looking)
+        // freed bytes before they're reused; MSVC's Debug heap scribbles
+        // 0xDD over freed blocks, which is what exposed this (confirmed by
+        // direct inspection: sx/sy read back as -1.45682e+144, the double
+        // bit-pattern of 0xDDDDDDDD repeated, and text.size() as
+        // -572662307 = 0xDDDDDDDD as a signed int). Test-harness lifetime
+        // bug, not a markup/layout bug - see this file's other ~20
+        // `LayoutResult r = lay(...); auto rs = runs(r);` call sites for
+        // the safe pattern this one now matches.
+        LayoutResult scaleResult = lay(body, u"[scale:2]x", p);
+        auto rs = runs(scaleResult);
         CHECK(rs.size() == 1 && rs[0]->sx == 2 && rs[0]->sy == 2);
     }
 
@@ -422,9 +437,10 @@ int main() {
     }
     // ---- Sec14.2 insertion vectors --------------------------------------
     {
-        FormatResult f = formatInsertions(u"{0} and {1}", false, {});
+        sr3locstr::LeStringsLookup emptyLoc; // no game tables in this host
+        FormatResult f = formatInsertions(u"{0} and {1}", false, {}, emptyLoc);
         CHECK(f.text == u" and " && f.open.empty());
-        CHECK(formatInsertions(u"p%dq", false, {}).text == u"pdq");
+        CHECK(formatInsertions(u"p%dq", false, {}, emptyLoc).text == u"pdq");
     }
 
     if (g_failures) {

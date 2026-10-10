@@ -295,6 +295,32 @@ VehicleInteractionInfo ParseVehicleInteractionInfo(const Node* row);
 std::vector<VehicleInteractionInfo> ParseVehicleInteractionInfoTable(const Document& doc);
 
 // ===========================================================================
+// Driver-seat `Hide Occupant` lookup (vehicle-occupant-hide-flag task,
+// 2026-10-09, spec-render-pipeline.md Sec23.14) - a small, pure, testable
+// wrapper around the already-parsed VehicleInteractionInfo rows above, so a
+// render-time consumer (tools/sr3_viewer.cpp's runPlaytest()) and its own
+// unit tests share ONE implementation of "which seat is the driver, and
+// does it hide its occupant" rather than each re-deriving it.
+// ===========================================================================
+
+// Finds the seat in `row.seats` whose own <Seat> text resolves, case-
+// insensitively (the same real `_stricmp` comparison FUN_00AC1BA0 uses, spec
+// Sec3.1), to `seatIndex` under EITHER the generic (kSeatResolverGenericNames)
+// or vehicle-specific (kSeatResolverVehicleSpecificNames) 8-name alias list -
+// both name the same 8 indices. Returns nullptr if no seat resolves to it.
+const VehicleInteractionSeatInfo* FindSeatByResolverIndex(const VehicleInteractionInfo& row, size_t seatIndex);
+
+// Finds `vehicleInteractionName`'s own row (exact match against `Name`) and
+// returns its driver seat's (resolver index 0 - "driver"/"front driver", the
+// same two aliases FindSeatByResolverIndex(row, 0) matches) `Hide Occupant`
+// flag. Returns false (shown) - the real, empirically-confirmed default for
+// the overwhelming majority of shipped vehicles (spec-render-pipeline.md
+// Sec23.14: 129 of 131 real rows) - when the row is not found, has no
+// resolvable driver seat, or `vehicleInteractionName` is empty.
+bool ResolveDriverHideOccupant(const std::vector<VehicleInteractionInfo>& rows,
+                                std::string_view vehicleInteractionName);
+
+// ===========================================================================
 // 4. vehicle_interaction_point_sets.xtbl - named entry/exit point geometry
 //    (spec-tables-vehicle-world.md 4)
 // ===========================================================================

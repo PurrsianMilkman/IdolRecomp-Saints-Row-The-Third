@@ -3,6 +3,11 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 
+#include <cstring>
+#include <vector>
+
+#include "vppcache/shader_cache.h"
+
 namespace sr3render {
 
 namespace {
@@ -41,7 +46,22 @@ float4 ps_main(VSOut i) : SV_Target {
 }
 )HLSL";
 
+// Persistent compiled-shader cache (this task, 2026-10-08) - see
+// mesh_renderer.cpp's own compile()/compileShader() for the full
+// rationale (same scheme, independent cache entries since the key
+// includes this file's own distinct kShaderSource text).
 bool compile(const char* entry, const char* target, ID3DBlob** blob, std::string& error) {
+    const std::string cacheKey =
+        vppcache::shaderCompileKey(kShaderSource, entry, target, D3DCOMPILE_OPTIMIZATION_LEVEL3);
+    std::vector<uint8_t> cachedBytecode;
+    if (vppcache::tryGetCompiledShader(cacheKey, cachedBytecode)) {
+        HRESULT hr = D3DCreateBlob(cachedBytecode.size(), blob);
+        if (SUCCEEDED(hr)) {
+            std::memcpy((*blob)->GetBufferPointer(), cachedBytecode.data(), cachedBytecode.size());
+            return true;
+        }
+    }
+
     ID3DBlob* errors = nullptr;
     HRESULT hr = D3DCompile(kShaderSource, sizeof(kShaderSource) - 1, "sr3render_quad", nullptr,
                             nullptr, entry, target, D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, blob,
@@ -57,6 +77,7 @@ bool compile(const char* entry, const char* target, ID3DBlob** blob, std::string
         return false;
     }
     if (errors != nullptr) errors->Release();
+    vppcache::putCompiledShader(cacheKey, (*blob)->GetBufferPointer(), (*blob)->GetBufferSize());
     return true;
 }
 

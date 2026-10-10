@@ -13,7 +13,7 @@
 - **[HYPOTHESIS — unconfirmed]**: a plausible reading that fit some samples but not others, or wasn't independently checked. Flagged explicitly; do not treat as fact.
 - **[OPEN / UNKNOWN]**: not determined in this pass.
 
-**Review status summary (2026-09-30)** — adversarial desk review (`review/adv_vpp.md`), 23 units: DESK-PASS 3 (§3.8, §7.2, §7.5); DESK-PASS, text fixes applied 7 (§3/§3.1, §3.2, §3.5, §4, §5, §5.1, §7.3); VALIDATED-BY-DATA 5 (§1.1, §2.2 algorithm, §5.9, §7.1 bit-`0x1`-set branch, §8 — backed by Team B's full-population run over 6,431 containers / 405,694 entries, `team-b/HANDOFF.md` §9.78, and the 22,274/22,274 rig-hash and 4,209/4,209 `.anim_pc` populations); NEEDS-EXE 5 (§1, §3.3, §3.6, §3.7, §7.4); NEEDS-DATA 3 (§2, §2.1, §6; §2 and §2.1 also had text fixes). A desk pass alone does not clear a unit — it was read for internal consistency, not re-derived from the executable; only the VALIDATED-BY-DATA units are already backed by Team B's full-population run. **Awaiting the executable:** §1 (addresses of the magic/version validator, registration loop and slot helper; the owner of `+0x164`/`+0x168` — on-disk header vs the 364-byte runtime state struct of §3.6/§3.7), §2.2 (byte ≥ `0x80` handling in `FUN_00da7890`), §3.3 (loader routines, block-count start value), §3.6 (eager mode-(b) decode routine and its two callers), §3.7 (the two breakpoint addresses; whether the 364-byte structs are container handles), §7.4 (`round_up(0xFFFFFFFF)` in the slot helper). **Awaiting real data:** §1 / §2.1 / §6 (census of `0x150`, `0x164`, `0x160` vs Σ(name length + 1), bytes `0x17C`–`0x7FF`), §2 (physical location of raw entries in the 68 mixed mode-(b) containers; `+0x04`/`+0x14` zero on all 405,694 entries), §5 (maximum nesting depth; 14 vs 15 nested headers), §7.1/§8 (list the ten mode-(a) containers with their compressed counts; 9 vs 10). Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+**Review status summary (2026-09-30)** — adversarial desk review (`review/adv_vpp.md`), 23 units: DESK-PASS 3 (§3.8, §7.2, §7.5); DESK-PASS, text fixes applied 7 (§3/§3.1, §3.2, §3.5, §4, §5, §5.1, §7.3); VALIDATED-BY-DATA 5 (§1.1, §2.2 algorithm, §5.9, §7.1 bit-`0x1`-set branch, §8 — backed by Team B's full-population run over 6,431 containers / 405,694 entries, `team-b/HANDOFF.md` §9.78, and the 22,274/22,274 rig-hash and 4,209/4,209 `.anim_pc` populations); NEEDS-EXE 5 (§1, §3.3, §3.6, §3.7, §7.4); NEEDS-DATA 3 (§2, §2.1, §6; §2 and §2.1 also had text fixes). A desk pass alone does not clear a unit — it was read for internal consistency, not re-derived from the executable; only the VALIDATED-BY-DATA units are already backed by Team B's full-population run. **Awaiting the executable:** §1 (addresses of the magic/version validator, registration loop and slot helper; the owner of `+0x164`/`+0x168` — on-disk header vs the 364-byte runtime state struct of §3.6/§3.7), §2.2 (byte ≥ `0x80` handling in `0x00da7890`), §3.3 (loader routines, block-count start value), §3.6 (eager mode-(b) decode routine and its two callers), §3.7 (the two breakpoint addresses; whether the 364-byte structs are container handles), §7.4 (`round_up(0xFFFFFFFF)` in the slot helper). **Awaiting real data:** §1 / §2.1 / §6 (census of `0x150`, `0x164`, `0x160` vs Σ(name length + 1), bytes `0x17C`–`0x7FF`), §2 (physical location of raw entries in the 68 mixed mode-(b) containers; `+0x04`/`+0x14` zero on all 405,694 entries), §5 (maximum nesting depth; 14 vs 15 nested headers), §7.1/§8 (list the ten mode-(a) containers with their compressed counts; 9 vs 10). Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
 
 ---
 
@@ -96,7 +96,7 @@ Full field layout, all offsets relative to the start of a given 24-byte entry:
 
 ### 2.2 Filename Hash (used for runtime lookup)
 
-**Reuse found later (2026-09-10):** this exact algorithm, applied to the **lowercased** input, is also how `.rig_pc` stores a per-bone name hash — it reproduces **22,274 / 22,274** shipped bone-hash entries (and **0 / 22,274** for uppercased input). It is a **widely-reused string hash**, not a container-specific one. **Correction (2026-09-10, `.ctdg_pc` pass): the "a reimplementation needs exactly one" that this sentence used to end with was wrong.** **Breadth correction (2026-09-10, `spec-extensionless-types.md` §4): calling this hash "engine-wide" was backwards.** A call-site census gives ≈18 for this rotate-6/XOR routine, ≈174 for the multiply-33 bucket hash, and **≈835 for the table-driven CRC-32** — which this project first met as one format's registry key and which is in fact the engine's general-purpose name hash. This routine's documented uses (archive filenames, rig bone names, the foliage registry, conversation speaker ids) are close to its *complete* set of uses. Prefer naming the uses over the word "engine-wide". With that said, the engine has at least **three** string hashes (a third — multiply-33/XOR taken modulo a bucket count — was found in 2026-09-10's type-18 pass, `spec-texture-format.md` §8.2; unlike the two below it produces a bucket index rather than a name key): this rotate-6/XOR one, and a **table-driven CRC-32 over the lowercased string** (`FUN_00d9e8b0`) used for the mission-conversation registry key. `.ctdg_pc` uses *both* — CRC-32 for its registry key, rotate-6/XOR for the speaker ids inside the file — so a 32-bit name hash in an unfamiliar structure must not be assumed to be this one. See `spec-conversation-format.md` §6. See `spec-rig-format.md` §5. **Confirmed by disassembly (2026-09-10, foliage pass):** the routine at `FUN_00da7890` — which the `.cfmesh_pc` constructor calls to key its mesh registry — is exactly this loop, including the explicit `A–Z` → lowercase fold before the rotate/XOR. The pseudo-code below is now **[CONFIRMED — disassembly]**, no longer inferred from behaviour alone.
+**Reuse found later (2026-09-10):** this exact algorithm, applied to the **lowercased** input, is also how `.rig_pc` stores a per-bone name hash — it reproduces **22,274 / 22,274** shipped bone-hash entries (and **0 / 22,274** for uppercased input). It is a **widely-reused string hash**, not a container-specific one. **Correction (2026-09-10, `.ctdg_pc` pass): the "a reimplementation needs exactly one" that this sentence used to end with was wrong.** **Breadth correction (2026-09-10, `spec-extensionless-types.md` §4): calling this hash "engine-wide" was backwards.** A call-site census gives ≈18 for this rotate-6/XOR routine, ≈174 for the multiply-33 bucket hash, and **≈835 for the table-driven CRC-32** — which this project first met as one format's registry key and which is in fact the engine's general-purpose name hash. This routine's documented uses (archive filenames, rig bone names, the foliage registry, conversation speaker ids) are close to its *complete* set of uses. Prefer naming the uses over the word "engine-wide". With that said, the engine has at least **three** string hashes (a third — multiply-33/XOR taken modulo a bucket count — was found in 2026-09-10's type-18 pass, `spec-texture-format.md` §8.2; unlike the two below it produces a bucket index rather than a name key): this rotate-6/XOR one, and a **table-driven CRC-32 over the lowercased string** (`0x00d9e8b0`) used for the mission-conversation registry key. `.ctdg_pc` uses *both* — CRC-32 for its registry key, rotate-6/XOR for the speaker ids inside the file — so a 32-bit name hash in an unfamiliar structure must not be assumed to be this one. See `spec-conversation-format.md` §6. See `spec-rig-format.md` §5. **Confirmed by disassembly (2026-09-10, foliage pass):** the routine at `0x00da7890` — which the `.cfmesh_pc` constructor calls to key its mesh registry — is exactly this loop, including the explicit `A–Z` → lowercase fold before the rotate/XOR. The pseudo-code below is now **[CONFIRMED — disassembly]**, no longer inferred from behaviour alone.
 
 The engine does not do straightforward linear string comparison to find files by name at runtime; it computes a hash of the filename and uses that for lookup in an in-memory table. **[CONFIRMED — disassembly.]** The exact algorithm (reconstructed from the code's logic, expressed here in our own words/pseudocode, not copied from the binary):
 
@@ -110,7 +110,7 @@ for each character c in the filename (until the null terminator):
 return hash
 ```
 
-This is a simple, case-insensitive, rotate-and-XOR string hash (not a standard named algorithm like CRC32 — it is small, custom, and cheap to compute). **Whether the on-disk directory entry also stores a precomputed copy of this hash (common in this class of format, to avoid needing the plaintext name table at all for fast lookups) was not confirmed** — the disassembly traced showed the hash being computed from the plaintext name at load time, not read directly from an entry field, but this doesn't rule out a stored hash existing elsewhere. Flagged as open (§6). **[OPEN — desk review 2026-09-30: handling of bytes ≥ `0x80` (signed vs unsigned character before the XOR) is not stated; to be settled against the executable (`FUN_00da7890`).]**
+This is a simple, case-insensitive, rotate-and-XOR string hash (not a standard named algorithm like CRC32 — it is small, custom, and cheap to compute). **Whether the on-disk directory entry also stores a precomputed copy of this hash (common in this class of format, to avoid needing the plaintext name table at all for fast lookups) was not confirmed** — the disassembly traced showed the hash being computed from the plaintext name at load time, not read directly from an entry field, but this doesn't rule out a stored hash existing elsewhere. Flagged as open (§6). **[OPEN — desk review 2026-09-30: handling of bytes ≥ `0x80` (signed vs unsigned character before the XOR) is not stated; to be settled against the executable (`0x00da7890`).]**
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: algorithm reproduces 22,274/22,274 rig bone hashes (0/22,274 uppercased); byte ≥ `0x80` handling NEEDS-EXE — desk review (not re-derived from the executable).**
 
@@ -352,9 +352,55 @@ Reading at `+0x08` (= Σ `round_up(+0x0C)` ≥ Σ `round_up(+0x10)` **[desk revi
 
 ### 7.5 What stays parked
 
-Only the rule was verified, at container level, read-only. The earlier `DAT_02a3c170` backend-vtable trace (`spec-resource-dispatch.md` §7 item 1) is now moot and was **not** pursued; `.czn_pc`'s object-placement/property-stream interior is a separate question and remains untouched. No bulk extraction of the newly readable content has been done.
+Only the rule was verified, at container level, read-only. The earlier `0x02a3c170` backend-vtable trace (`spec-resource-dispatch.md` §7 item 1) is now moot and was **not** pursued; `.czn_pc`'s object-placement/property-stream interior is a separate question and remains untouched. **No bulk extraction of the newly readable content had been done as of 2026-09-30 — superseded by §7.6 below, 2026-10-09: mission-script content specifically has now been bulk-extracted and read.**
 
 **Review status (2026-09-30): DESK-PASS (no format claims) — desk review (not re-derived from the executable).**
+
+### 7.6 Mission-script extraction — a standing Team A capability (2026-10-09)
+
+**This closes out the "no bulk extraction done" note in §7.5, for mission `.lua` scripts specifically.** Several passes earlier in this project's life (this file's own §7.5 above, `spec-lua-api-behaviour.md` §37.1, and at least two 2026-10-09 investigation reports) stated or assumed mission Lua content "stays parked" inside mode-(a) containers. **That was stale** — the container-level offset puzzle this whole §7 resolves was already fixed on 2026-09-20; nobody had gone back and actually tried reading real mission-script bytes through it until a direct verification on 2026-10-09 confirmed it works end to end, extracting the real, complete `m01.lua` (182,249 bytes).
+
+**Where mission scripts live (CONFIRMED, real data):**
+- `misc.vpp_pc` (mode-(a), flags `0x4801`) holds exactly 2 `.lua` files at its own top level: `game_lib.lua` (the shared script library every mission pulls helpers/globals from) and `sr3_city.lua`. Decode directly via `vpp_modea.get_entry_bytes_modea()`.
+- **Individual mission scripts are NOT in `misc.vpp_pc`.** Per `spec-format-inventory.md`'s type-32 "Mission LUA script" row and `spec-mission-packages.md` §5, each mission's own script ships inside a `<mission-code>_modal.str2_pc` container (e.g. `m01_modal.str2_pc`), itself a top-level child of a world/DLC archive — **`sr3_city_0.vpp_pc`** (flags `0x00000000`, NOT mode-a at this level) for all base-game story missions (`m01_modal.str2_pc` .. `m24_modal.str2_pc` confirmed present, plus ~100 `*_modal` side-activity/diversion scripts) and `dlc1.vpp_pc`/`dlc2.vpp_pc`/`dlc3.vpp_pc` for DLC mission scripts.
+- Each `_modal.str2_pc` blob is itself a **nested** VPP container (e.g. `m01_modal.str2_pc`'s own flags are `0x4803` — mode-(a) at this inner level) holding exactly one `.lua` file (`m01.lua`, etc.) plus a large number of per-mission `.ctdg_pc` conversation/dialogue assets. It needs its own, independent `vpp_modea` pass — its `payload_start`/entry positions are not the parent's.
+- **Do not confuse `m01.str2_pc` (no `_modal` suffix) with `m01_modal.str2_pc`** — they are sibling top-level entries in `sr3_city_0.vpp_pc` serving different purposes. `m01.str2_pc` holds the mission's zone/placement data (`sr3_city~fm01.czh_pc`/`.czn_pc`) and animation clips — no `.lua` inside it.
+
+**Working extraction recipe (reproduced verbatim from the real run that confirmed it):**
+
+```python
+import sys
+sys.path.insert(0, r"D:\Project Crreish\TEAM A\tools\harnesses")
+import scan_meshes as sm
+import vpp_modea as vm
+
+data = open(r"D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\sr3_city_0.vpp_pc", "rb").read()
+info = sm.parse_entries(data, 0)                                        # parent: flags=0, not mode-a
+idx = next(i for i, e in enumerate(info['entries']) if e['name'] == 'm01_modal.str2_pc')
+blob = sm.get_entry_bytes(data, 0, info, idx, {})                        # plain extraction (parent not mode-a)
+sub = sm.parse_entries(blob, 0)                                          # child container: flags=0x4803, IS mode-a
+lua_i = next(i for i, e in enumerate(sub['entries']) if e['name'] == 'm01.lua')
+content = vm.get_entry_bytes_modea(blob, sub, lua_i)                     # mode-a decode, child's own positions
+# content == the full, real m01.lua source, 182,249 bytes — verified readable, real Lua text.
+```
+
+For `misc.vpp_pc`'s own top-level `.lua` files (`game_lib.lua`/`sr3_city.lua`), skip the nesting step —
+`vpp_modea.get_entry_bytes_modea()` directly against `misc.vpp_pc`'s own `parse_entries()` result is
+sufficient, since there is no `_modal` wrapper for those two.
+
+**Standing instruction (per `purrsian-5b`, 2026-10-09): mission-script reading is now a standing Team A
+capability, not a one-off.** Use real mission script text for any mission-facing question — which
+natives a mission calls, in what order, with what arguments — rather than inferring call shape from the
+native-side registration roster alone. `tools/harnesses/scan_meshes.py` and `tools/harnesses/vpp_modea.py`
+are the two modules this recipe depends on; both already existed and were already validated (§7/§8)
+before this capability was recognized.
+
+**Scope note:** this section documents the extraction MECHANISM as a reusable capability. It does not
+itself catalogue mission-script contents — that is mission-specific work, tracked per mission in
+whichever spec a given investigation's findings belong to (e.g. `spec-lua-api-behaviour.md` for native
+call-shape findings). Full verification trail: `scratchpad/mission_lua_unblock_2026-10-09.md`.
+
+**Review status (2026-10-09): CONFIRMED — empirical, real extraction + real content read (`m01.lua`, byte count and header text verified).**
 
 ## 8. Independent confirmation by Team B's container reader (2026-09-20)
 
@@ -373,3 +419,12 @@ Team B fixed and re-verified their `vpp::Container` (their `HANDOFF.md` §9.78) 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked 6 unmarked pre-§7 statements superseded/retracted in place with pointers to §7 (§2 `+0x04`/`+0x0C`/`+0x10` rows, §3.3 "`+0x08` remains the only field", §4 zlib-sniffing advice, §5.1 padding rule qualified), marked §6 item 1 body and the §6 closing paragraph as historical, and flagged `spec-output.md` as unpublished.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 1 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).
 - 2026-09-30 (adversarial desk review, `review/adv_vpp.md`): added the review status summary and 23 per-unit status lines; added OPEN markers for the §1 `0x17C`–`0x17F` gap (new OPEN row), the `0x160` definition-vs-example conflict (§1, §2.1), the `+0x164`/`+0x168` owner conflict between §1 and §3.6/§3.7 (NEEDS-EXE), raw entries in the 68 mixed mode-(b) containers (§2, citing `team-b/HANDOFF.md` l.15049), the 9-vs-10 mode-(a) count with its 4,272 − 4,263 = 9 arithmetic (§8), 14-vs-15 nested headers (§5), and exe/data gaps in §2.2, §3.3, §3.7, §6, §7.1, §7.4; marked §3.2 pre-review l.134–142 and §3.5's shared-session claim (and its echoes in §3.6/§3.7) superseded by §7; struck §4's stale flags premise; corrected §5.1's 6.0 KB boundary; softened §7.3's inequality; cross-referenced §8 note (1) from §3.1. No renumbering (§3.4 and §5.2–§5.8 gaps listed only).
+- **2026-10-09 — new §7.6: mission-script extraction promoted to a standing Team A capability**, correcting
+  a stale "mission Lua stays parked" belief repeated in a few recent reports and in
+  `spec-lua-api-behaviour.md` §37.1 (SPEC TEAM, direct verification, per `purrsian-5b`'s standing
+  instruction). The §7 container-offset rule was already resolved 2026-09-20 — this section documents,
+  for the first time, that it was never actually exercised against real mission-script content until
+  now. Real extraction confirmed: `m01.lua` (182,249 bytes) read in full via `sr3_city_0.vpp_pc` →
+  `m01_modal.str2_pc` (nested mode-a) → `m01.lua`; the working recipe is reproduced verbatim. Full
+  verification trail: `scratchpad/mission_lua_unblock_2026-10-09.md`. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.

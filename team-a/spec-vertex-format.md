@@ -2,7 +2,7 @@
 
 *Created 2026-09-11. Resolves `spec-geometry-format.md` §6 open item 8's channel-array half, and the standing "we have topology but no vertices" gap.*
 
-**Review status summary (2026-09-30).** An adversarial desk review (no executable, no game data) gave each of 51 units a verdict: **8 DESK-PASS**, **27 DESK-PASS with text fixes applied**, **8 VALIDATED-BY-DATA**, **7 NEEDS-EXE**, **1 NEEDS-DATA**. A desk pass alone does not clear a unit — it means the text is internally consistent and its cited evidence supports it as worded; only the VALIDATED-BY-DATA units (§2 core fields, §3, §4.1, §6.1, §8.4.3, §12.8, §12.10.1, §12.13 item 4) are already backed by Team B's full-population runs. Provenance: the §6.6 CONFIRMED label that rested on an out-of-project runtime capture is downgraded to HYPOTHESIS per the project manager's ruling. **Awaiting the executable:** §7 (rewrite bases, `FUN_00e711c0`), §8.2 (group-array cursor), §8.4 (align8 gating), §12.9.1–§12.9.4, §12.9.13, §12.9.14, §12.10.3, §12.12 (consumer), §12.13 item 5. **Awaiting real data:** §6.6 (vehicle UV scale), §8.1 (34,000 residual triangles), §12.1–§12.3 and §12.13 item 3 (re-run on the corrected population, code 24 on 535 channels), §12.5 (vehicle tangent denominators), §12.9.6–§12.9.11 (`+0` versus `+16`), §12.10.5/§12.12 (half-float element type, shuffled-bbox control).
+**Review status summary (2026-09-30).** An adversarial desk review (no executable, no game data) gave each of 51 units a verdict: **8 DESK-PASS**, **27 DESK-PASS with text fixes applied**, **8 VALIDATED-BY-DATA**, **7 NEEDS-EXE**, **1 NEEDS-DATA**. A desk pass alone does not clear a unit — it means the text is internally consistent and its cited evidence supports it as worded; only the VALIDATED-BY-DATA units (§2 core fields, §3, §4.1, §6.1, §8.4.3, §12.8, §12.10.1, §12.13 item 4) are already backed by Team B's full-population runs. Provenance: the §6.6 CONFIRMED label that rested on an out-of-project runtime capture is downgraded to HYPOTHESIS per the project manager's ruling. **Awaiting the executable:** §7 (rewrite bases, `0x00e711c0`), §8.2 (group-array cursor), §8.4 (align8 gating), §12.9.1–§12.9.4, §12.9.13, §12.9.14, §12.10.3, §12.12 (consumer), §12.13 item 5. **Awaiting real data:** §6.6 (vehicle UV scale), §8.1 (34,000 residual triangles), §12.1–§12.3 and §12.13 item 3 (re-run on the corrected population, code 24 on 535 channels), §12.5 (vehicle tangent denominators), §12.9.6–§12.9.11 (`+0` versus `+16`), §12.10.5/§12.12 (half-float element type, shuffled-bbox control).
 
 ---
 
@@ -348,13 +348,13 @@ That `+0x06` is a texture-coordinate **count** rather than an arbitrary variant 
 
 ## 7. The load-time rewrite of the layout code
 
-The loader passes each channel record through a small routine that **rewrites the layout-code byte in place**, combining it with the texture-coordinate count. Codes are accepted from a fixed set — 0 through 4, 14 through 26, and 100 and 101 — and each accepted code owns a **4-wide** range in the rewritten numbering, into which the texture-coordinate count is added. **[OPEN — desk review 2026-09-30: this does not reconcile with §12.10.3's code-24 value `texcoord_count + 0x57` (contiguous 4-wide ranges from 0 for codes 0–4 and 14–26 would put code 24 at 60, not 87), so the per-code base constants are not uniform or not contiguous; to be settled against the executable (full case table of `FUN_00e711c0`).]** When the count is zero the routine returns without changing anything, so a layout with no texture coordinates keeps its original code. **[CONFIRMED — disassembly, the exact accepted set and the exact arithmetic.]**
+The loader passes each channel record through a small routine that **rewrites the layout-code byte in place**, combining it with the texture-coordinate count. Codes are accepted from a fixed set — 0 through 4, 14 through 26, and 100 and 101 — and each accepted code owns a **4-wide** range in the rewritten numbering, into which the texture-coordinate count is added. **[OPEN — desk review 2026-09-30: this does not reconcile with §12.10.3's code-24 value `texcoord_count + 0x57` (contiguous 4-wide ranges from 0 for codes 0–4 and 14–26 would put code 24 at 60, not 87), so the per-code base constants are not uniform or not contiguous; to be settled against the executable (full case table of `0x00e711c0`).]** When the count is zero the routine returns without changing anything, so a layout with no texture coordinates keeps its original code. **[CONFIRMED — disassembly, the exact accepted set and the exact arithmetic.]**
 
 The effect is to fold *(layout, texcoord count)* into a single flat identifier, which is the natural shape of an index into a table of prebuilt vertex declarations. **[HIGH CONFIDENCE — inferred.]**
 
 **Two consequences worth stating.** First, **the on-disk byte is the pre-rewrite value** — anything reading these files sees the raw layout code, and should not expect the flattened numbering. Second, the accepted set is **wider than what ships**: codes ~~5–10, 12, and~~ 14–23, 25, 26 are accepted by the loader but were not observed in any shipped asset examined here. *(Corrected: codes 5–10 are not in the accepted set stated above — the case list is `0x00`–`0x04`, `0x0E`–`0x1A`, `0x64`–`0x65`, §12.9.3/§12.10.3 — and code 12 does ship (trees, §10 item 2, §12.10.1) but is likewise not accepted (§12.10.3).)* Their layouts are consequently unknown. **[CONFIRMED — disassembly for the accepted set; OPEN / UNKNOWN for the unobserved codes' layouts.]**
 
-**Review status (2026-09-30): NEEDS-EXE: per-code base constants of the rewrite (`FUN_00e711c0`), the 4-wide claim versus code 24 → `tc + 0x57`, behaviour at texcoord count 0 — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: per-code base constants of the rewrite (`0x00e711c0`), the 4-wide claim versus code 24 → `tc + 0x57`, behaviour at texcoord count 0 — desk review (not re-derived from the executable).**
 
 ---
 
@@ -410,7 +410,7 @@ Four further observations all agree:
 
 **Where the ranges live — not where this document previously guessed.** §8.1 suggested the outer six-array structure (arrays 1–3) as the likely home of per-batch descriptors. **That was wrong.** Array 1 is *absent* on the very meshes exhibiting the artifact, and arrays 2–3 hold per-material float data. The ranges are inside the **"Mesh" sub-block itself**, in a record array the earlier passes walked past without decoding:
 
-- **Mesh header `+0x04`** holds a **group count**. The groups are `0x30`-byte records, laid down after the channel array (and after the flag-bit-1 arrays when present — the bone-palette bytes counted by header `+0x38` and the palette-set table counted by `+0x48`, §2 note, `spec-rig-format.md` §11.4), 16-byte aligned. **[OPEN — desk review 2026-09-30: the exact cursor arithmetic from the end of the channel records to the group array (sizes of the `+0x38`/`+0x48` arrays, alignment between them) is not stated here, and Team B locates the group array by search; to be settled against the executable (`FUN_00e71410` around the call to `FUN_00e71310` at `0x00e7156e`–`0x00e71590`) and real data (assert the searched offset equals `align16` of the computed end of the palette-set table).]**
+- **Mesh header `+0x04`** holds a **group count**. The groups are `0x30`-byte records, laid down after the channel array (and after the flag-bit-1 arrays when present — the bone-palette bytes counted by header `+0x38` and the palette-set table counted by `+0x48`, §2 note, `spec-rig-format.md` §11.4), 16-byte aligned. **[OPEN — desk review 2026-09-30: the exact cursor arithmetic from the end of the channel records to the group array (sizes of the `+0x38`/`+0x48` arrays, alignment between them) is not stated here, and Team B locates the group array by search; to be settled against the executable (`0x00e71410` around the call to `0x00e71310` at `0x00e7156e`–`0x00e71590`) and real data (assert the searched offset equals `align16` of the computed end of the palette-set table).]**
 - Each group's first `u32` is **how many draw ranges it owns**.
 - After all the group records come the ranges themselves, **20 bytes each**, grouped in record order.
 
@@ -451,7 +451,7 @@ Shrinking index counts alone cannot separate "LOD levels" from "progressively sm
 >
 > Both follow from the contiguity result above, but neither is obvious from the field names alone.
 
-> **The `0x30`-byte group record is now fully decoded from the loader, and the `+0x0C`/`+0x10` reading is confirmed from the CONSUMER side** (2026-09-13, `spec-vehicle-geometry.md` §11.9). `FUN_00e71310` is the group/draw-range array parser: Mesh header `+0x04` = group count, `+0x08` = group array base (an 8-byte pointer slot, `+0x0C` zeroed). Group record: `+0x00` draw-range count, `+0x04` vec3 bbox min, `+0x10` vec3 bbox max, `+0x1C` unknown, `+0x20` pointer to this group's `0x14`-byte draw-range array, `+0x28` pointer to an array of `rangeCount` 8-byte slots each pre-resolved to `meshHeader[+0x50] + storedValue * 2`. All groups' range arrays are contiguous first, then all groups' 8-byte slot arrays — not interleaved per group. And `FUN_00e72d00` is an engine function that takes a packed 16:16 draw-range handle, walks exactly this path, and returns the range's `+0x0C` and `+0x10` as its two output parameters — i.e. the renderer itself treats them as the minimum and maximum vertex index, independently of this document's validation statistics.
+> **The `0x30`-byte group record is now fully decoded from the loader, and the `+0x0C`/`+0x10` reading is confirmed from the CONSUMER side** (2026-09-13, `spec-vehicle-geometry.md` §11.9). `0x00e71310` is the group/draw-range array parser: Mesh header `+0x04` = group count, `+0x08` = group array base (an 8-byte pointer slot, `+0x0C` zeroed). Group record: `+0x00` draw-range count, `+0x04` vec3 bbox min, `+0x10` vec3 bbox max, `+0x1C` unknown, `+0x20` pointer to this group's `0x14`-byte draw-range array, `+0x28` pointer to an array of `rangeCount` 8-byte slots each pre-resolved to `meshHeader[+0x50] + storedValue * 2`. All groups' range arrays are contiguous first, then all groups' 8-byte slot arrays — not interleaved per group. And `0x00e72d00` is an engine function that takes a packed 16:16 draw-range handle, walks exactly this path, and returns the range's `+0x0C` and `+0x10` as its two output parameters — i.e. the renderer itself treats them as the minimum and maximum vertex index, independently of this document's validation statistics.
 
 **Locating the group array:** its offset is derived above, but it can also be *found* rather than computed — search for a position at which the invariants hold (ranges contiguous from 0, exact coverage of the index buffer, vertex bounds sane) and only one candidate survives. That is the same search-and-check technique that pinned the pre-header offsets in §2, and it is worth preferring to arithmetic wherever a structure exposes invariants this strong. *(Desk review 2026-09-30: "derived above" overstates it — the text above gives the order of the arrays but not their sizes; search with these invariants is the method that currently works, as Team B's reader does.)*
 
@@ -597,7 +597,7 @@ problem that does not exist; the counts give the boundaries directly. The
 **variable-length** part is the per-material loop that follows, which runs exactly
 `u16(+0x0C)` times, each iteration consuming as much as that material needs.
 
-**[CONFIRMED — disassembly.]** *(Origin corrected above. §12.8 aligns before array_C unconditionally where this listing gates it on `N > 0`; the two differ only when `N = 0`.)* **[OPEN — desk review 2026-09-30: whether the `align8` before array_C is gated on `N > 0`, whether alignment is on the absolute c-file offset, and what arrays A/B/C hold; to be settled against the executable (`FUN_00e40210`, `FUN_00e71090`, tail of `FUN_00e71410`).]**
+**[CONFIRMED — disassembly.]** *(Origin corrected above. §12.8 aligns before array_C unconditionally where this listing gates it on `N > 0`; the two differ only when `N = 0`.)* **[OPEN — desk review 2026-09-30: whether the `align8` before array_C is gated on `N > 0`, whether alignment is on the absolute c-file offset, and what arrays A/B/C hold; to be settled against the executable (`0x00e40210`, `0x00e71090`, tail of `0x00e71410`).]**
 
 **Review status (2026-09-30): DESK-PASS, text fixes applied (start cursor corrected to the Mesh sub-block end per §12.8); NEEDS-EXE for the align8 gating and array contents — desk review (not re-derived from the executable).**
 
@@ -813,7 +813,7 @@ for a reason that is not "a draw range points at me". Harness `car_runcount.py`.
 ## 10. Open items
 
 1. ~~**Layout codes 11, 13, 12 and 24** — validated and sized (32, 32, size unconfirmed, 20), but their element fields were not probed.~~ **Resolved, 2026-09-29 (§12.10):** normal/tangent now CONFIRMED for 11 (§12.9.5) and 12 (§12.10.2), both at `+8`/`+12`; position/normal CONFIRMED and the `+16` slot REFUTED-as-tangent for 24 (§12.3); 13 stays HYPOTHESIS-only (small sample). Code 12's size is now CONFIRMED at 36 bytes (32-byte base + one 4-byte texcoord set), three independent measurements agreeing (§12.10.1) — the one figure this item still listed as "unconfirmed." **Position remains OPEN for 11/12/13** *(superseded: position for 11/12/13 is now HIGH CONFIDENCE, FLOAT16×3 at `+0`, §12.12, pending a consumer trace)*, and the `+16` slot remains OPEN for 24 — see §12.10.5's summary table for the full, final per-code state rather than repeating it here.
-2. **Codes accepted by the loader but never shipped** (5–10, 14–23, 25, 26) *(corrected: 5–10 are not accepted either — the case list is `0x00`–`0x04`, `0x0E`–`0x1A`, `0x64`–`0x65`, §12.9.3/§12.10.3; the accepted-but-unshipped codes are 14–23, 25, 26)* — layouts unknown, and unknowable from shipped data alone. **Correction, 2026-09-29: code 12 was wrongly included in this list.** ~~5–10, 12, 14–23, 25, 26~~ A peer team's real population sweep of all 11 shipped trees' every present LOD slot found code 12 genuinely shipped, in 3 real LOD slots (`st_pine_tall` LOD 1, `st_shrub_med` LOD 1, `st_shrub_sml` LOD 1) — not one of the codes this item originally claimed never ships. Moved to item 1 above as a real, present, unprobed code, alongside 11/13/24. **[CONFIRMED — empirical, real shipped data, cross-team.]** The remaining list (5–10, 14–23, 25, 26) is unaffected by this correction and was not independently re-verified this pass. **Further correction, same day (§12.10.3):** code 12 is, like 11/13, structurally excluded from the §7 load-time rewrite table (no switch case for `0x0B`/`0x0C`/`0x0D` in `FUN_00e711c0`, confirmed directly from the real case list) — so the "master per-layout-code declaration table" this item's own framing gestures at cannot contain entries for 11/12/13 by construction, and for 24 (which is accepted, flattened id = `texcoord_count + 0x57`) the table's one identified consumer is the same confirmed-unreachable dead end §12.9.14 already found. This closes the "read the master table directly" angle for all four codes at once, as a disassembly-confirmed negative rather than an unexplored option.
+2. **Codes accepted by the loader but never shipped** (5–10, 14–23, 25, 26) *(corrected: 5–10 are not accepted either — the case list is `0x00`–`0x04`, `0x0E`–`0x1A`, `0x64`–`0x65`, §12.9.3/§12.10.3; the accepted-but-unshipped codes are 14–23, 25, 26)* — layouts unknown, and unknowable from shipped data alone. **Correction, 2026-09-29: code 12 was wrongly included in this list.** ~~5–10, 12, 14–23, 25, 26~~ A peer team's real population sweep of all 11 shipped trees' every present LOD slot found code 12 genuinely shipped, in 3 real LOD slots (`st_pine_tall` LOD 1, `st_shrub_med` LOD 1, `st_shrub_sml` LOD 1) — not one of the codes this item originally claimed never ships. Moved to item 1 above as a real, present, unprobed code, alongside 11/13/24. **[CONFIRMED — empirical, real shipped data, cross-team.]** The remaining list (5–10, 14–23, 25, 26) is unaffected by this correction and was not independently re-verified this pass. **Further correction, same day (§12.10.3):** code 12 is, like 11/13, structurally excluded from the §7 load-time rewrite table (no switch case for `0x0B`/`0x0C`/`0x0D` in `0x00e711c0`, confirmed directly from the real case list) — so the "master per-layout-code declaration table" this item's own framing gestures at cannot contain entries for 11/12/13 by construction, and for 24 (which is accepted, flattened id = `texcoord_count + 0x57`) the table's one identified consumer is the same confirmed-unreachable dead end §12.9.14 already found. This closes the "read the master table directly" angle for all four codes at once, as a disassembly-confirmed negative rather than an unexplored option.
 3. ~~**The 8 bytes at channel record `+0x08`** — not read by this parser, zero in every sample inspected. Something else may consume them.~~ **CLOSED — §12.1 (26,601/26,601 zero on disk); at runtime the GPU-upload routine stores the created vertex-buffer handle here (`spec-vehicle-geometry.md` §11.9.2).**
 4. ~~**The fourth byte of the normal and tangent.**~~ **Half closed** (§6.2): the tangent's fourth byte is the **handedness sign** (two values only, 0 and 255) *(on every carrier except vehicles, where it takes 256 values — §12.5)*. **The normal's fourth byte remains open, but narrowed further, 2026-09-29 (§12.4/§12.13 item 1):** REFUTED as literal draw-range material id (0.11% exact match, and the byte is constant over regions finer-grained than a material-bounded range, mean per-range purity 0.64 vs. ~99% per-triangle) and REFUTED as vertex color (byte caps at 127, never reaches 255) — reinforces, without confirming, the "smoothing-group-style" reading already flagged as best-supported.
 5. ~~**Texture-coordinate encoding.**~~ **CLOSED** (§6.5) — signed 16-bit fixed point, `int16 / 1024.0`. Half-float refuted.
@@ -880,7 +880,7 @@ strengthens the earlier claim ("zero in every sample inspected", §3) from an un
 ~~full shipped population~~ pre-fix scan population *(desk review 2026-09-30: the zone, level-mesh and tree rows are under-counts, §4.2 warning, so this is not the full shipped population)*.
 
 **Disassembly side.** `VtxChannelRecordRead.java` decompiled both functions that walk the 24-byte
-channel-record array — `FUN_00e71410` (inline/c-file path) and `FUN_00e71740` (g-file path), the
+channel-record array — `0x00e71410` (inline/c-file path) and `0x00e71740` (g-file path), the
 same pair `spec-vertex-format.md` §4 already identifies as performing "the identical arithmetic
 against different base buffers". Reading the loop bodies directly (own words, not reproduced
 verbatim):
@@ -933,7 +933,7 @@ the existing 2,029/2,029 (`.ccmesh_pc`/`.csmesh_pc` only) result to the full six
 **26,601 / 26,601.** The predicate is the same shape as §12.1's: a single nonzero `sizeB` byte on
 any record, in any of the six carriers, would have shown up. None did. This is not a dead field in
 the sense of §12.1 — the disassembly already on file (`spec-vertex-format.md` §3, and reconfirmed
-directly in this pass's read of `FUN_00e71410`/`FUN_00e71740`) shows the loader unconditionally
+directly in this pass's read of `0x00e71410`/`0x00e71740`) shows the loader unconditionally
 reads `sizeB`, sums it with `sizeA`, and multiplies by the element count to get the channel's byte
 size (`(sizeA + sizeB) * count`) — a live, exercised code path, not a dead one. The engine's
 "second interleaved component group per channel" mechanism is real and reachable; **no shipped
@@ -1018,7 +1018,7 @@ straightforward reading is that tree/foliage geometry uses a different position 
 entirely — plausibly quantized or reconstructed relative to a per-branch pivot, consistent with
 this carrier's known wind-animation and per-tree parameter table (`spec-tree-format.md` §4/§13.2) — but
 this pass did not identify what it is. **Concrete next step:** trace the disassembly consumer
-specific to trees (`FUN_00a71810`/`FUN_00e7a5a0`, `HANDOFF.md` §17's tree chain) rather than
+specific to trees (`0x00a71810`/`0x00e7a5a0`, `HANDOFF.md` §17's tree chain) rather than
 continuing to black-box-search offsets, per the standing rule that a confident negative from a
 shape-dependent search is the signal to switch methods, not to keep guessing shapes.
 
@@ -1201,17 +1201,17 @@ differently. *(Team B's 2,444 code-101 channels, `team-b/HANDOFF.md` §9.29, are
 
 ### 12.6 One adjacent, unlabelled field noticed in passing — flagged, not chased
 
-Reading `FUN_00e71410` for §12.1 surfaced two Mesh-header fields this document does not currently
+Reading `0x00e71410` for §12.1 surfaced two Mesh-header fields this document does not currently
 list (the header table only covers `+0x00`, `+0x10`, `+0x18`, `+0x20`, `+0x28`, `+0x30`): header
 `+0x04` gates whether the channel/primary-buffer walk proceeds at all (nonzero, or a called
 helper's return value nonzero), and header `+0x08` stores that helper's return value (a pointer;
 its high half at `+0x0C` is zeroed, the same pattern used for every other pointer-sized field in
-this header). The helper (`FUN_00e71310`) takes at least one implicit register-passed argument the
+this header). The helper (`0x00e71310`) takes at least one implicit register-passed argument the
 decompiler drops, and an earlier team's own comment on that function already flags it as needing
 raw-x86 argument tracing rather than decompiler output. **Scope-jump discipline applies:** this is
 a real, previously-unlisted pair of header fields, but chasing it fully is a separate investigation
 from the five assigned here and was not pursued past noticing it. **[OPEN / UNKNOWN — flagged for
-a future pass, not this one.]** **[Resolved 2026-09-13: `+0x04` = group count, `+0x08` = group-array pointer returned by `FUN_00e71310` — §8.2; `spec-vehicle-geometry.md` §11.9.1.]**
+a future pass, not this one.]** **[Resolved 2026-09-13: `+0x04` = group count, `+0x08` = group-array pointer returned by `0x00e71310` — §8.2; `spec-vehicle-geometry.md` §11.9.1.]**
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -1236,7 +1236,7 @@ a future pass, not this one.]** **[Resolved 2026-09-13: `+0x04` = group count, `
 A parallel session working the vehicle material question relayed a candidate simplification to
 §8.3 without editing it, per the same rule this document follows: that the texture-binding run's
 offset, measured from a per-material record's own internal `0x30`-byte header (identified there as
-`FUN_00e71090`, the shared inline-material-definition parser this project already documented for
+`0x00e71090`, the shared inline-material-definition parser this project already documented for
 trees and foliage, `spec-tree-format.md` §6 / `spec-foliage-format.md` §6), is fixed —
 `align4` immediately after the header — even though the record's own position in the file moves.
 The instruction was explicit: verify against this project's own population before changing
@@ -1323,17 +1323,17 @@ primary method there, with the search demoted to a cross-check.
 §12.3 refuted the plain-float3-position convention for codes 11/13 by black-box offset scanning
 (best offset 58.8% finite against a ~100% baseline) and named the tree-specific disassembly chain
 as the next step rather than further offset guessing. This subsection follows that chain —
-`FUN_00a71810` (the registered `.csrt_pc` constructor) → `FUN_00a6f780` (`'TREE'` block +
-geometry sub-structure entry, `spec-tree-format.md` §3–§5) → `FUN_00e7a5a0` (the geometry
-sub-structure parser) → the material-set block (`FUN_00e40210`) / index list (`FUN_00e401d0`) /
-Mesh sub-block wrapper (`FUN_00e718b0`) → the shared Mesh sub-block walkers `FUN_00e71410`
-(c-file) / `FUN_00e71740` (g-file) → the load-time layout-code rewrite `FUN_00e711c0` — and, per
+`0x00a71810` (the registered `.csrt_pc` constructor) → `0x00a6f780` (`'TREE'` block +
+geometry sub-structure entry, `spec-tree-format.md` §3–§5) → `0x00e7a5a0` (the geometry
+sub-structure parser) → the material-set block (`0x00e40210`) / index list (`0x00e401d0`) /
+Mesh sub-block wrapper (`0x00e718b0`) → the shared Mesh sub-block walkers `0x00e71410`
+(c-file) / `0x00e71740` (g-file) → the load-time layout-code rewrite `0x00e711c0` — and, per
 the task's framing that the real consumer "may be a sibling function to the material one," also
-`FUN_00a6f500` and `FUN_00a713e0`, the two functions the tree constructor calls immediately after
+`0x00a6f500` and `0x00a713e0`, the two functions the tree constructor calls immediately after
 the file parse completes.
 
 **12.9.1 No CPU-side field consumer exists anywhere in this chain — CONFIRMED — disassembly.**
-`FUN_00e71410`/`FUN_00e71740` (already the subject of `spec-vertex-format.md` §4's "two separate
+`0x00e71410`/`0x00e71740` (already the subject of `spec-vertex-format.md` §4's "two separate
 functions implement this walk... against different base buffers") were read in full for this
 pass. Neither one reads or branches on a vertex element's own field bytes (position, normal,
 texcoord, or anything else in the 0–31 range this section is about). They read only the channel
@@ -1346,10 +1346,10 @@ layout code, tree or generic. Whatever assigns semantic meaning to those bytes d
 via a vertex declaration built from the layout code — which is why the generic codes' fields were
 only ever established by statistical byte tests (§6), never by reading a consumer.
 
-**12.9.2 `FUN_00a713e0` is the collision-capsule → physics-primitive builder, not a vertex-buffer
+**12.9.2 `0x00a713e0` is the collision-capsule → physics-primitive builder, not a vertex-buffer
 build — CONFIRMED — disassembly, correcting an open inference in `spec-tree-format.md` §2.**
-That document's own text reads: "a large GPU-side build follows (`FUN_00a713e0`, not parsed
-here — it reads no further file bytes)." Read in full for this pass, `FUN_00a713e0` does not touch
+That document's own text reads: "a large GPU-side build follows (`0x00a713e0`, not parsed
+here — it reads no further file bytes)." Read in full for this pass, `0x00a713e0` does not touch
 the LOD Mesh sub-blocks or their channel arrays at all. It iterates exactly the tree's own
 collision-capsule count (`'TREE'` block `+0x18`) over the capsule array (`+0x20`/`+0x24`), stride
 `0x60` per record — precisely `spec-tree-format.md` §4/§8's own capsule table. For each capsule it
@@ -1368,8 +1368,8 @@ recorded here (the vertex-format spec, since it was surfaced while tracing the v
 should be folded into `spec-tree-format.md` §2 and §12 item 4 without deleting the superseded text.
 
 **12.9.3 Codes 11 and 13 are excluded from the layout-code rewrite table every other shipped code
-uses — CONFIRMED — disassembly.** `FUN_00e711c0` (§7's load-time rewrite routine, called once per
-channel record from inside `FUN_00e71410`) dispatches on the channel record's raw layout-code byte
+uses — CONFIRMED — disassembly.** `0x00e711c0` (§7's load-time rewrite routine, called once per
+channel record from inside `0x00e71410`) dispatches on the channel record's raw layout-code byte
 through a fixed set of cases: `0x00`–`0x04`, `0x0E`–`0x1A` (14–26, which includes zones' code 24),
 and `0x64`–`0x65` (100–101, the vehicle codes) — every code this format has shipped or reserved,
 **except** `0x0B` (11) and `0x0D` (13). Both fall through with the byte left unchanged, exactly like
@@ -1388,8 +1388,8 @@ via real runtime declarations rather than tracing this cache's builder caller: �
 RTX-remix effort. **[Provenance 2026-09-30: that answer rests on an out-of-project runtime capture and is HYPOTHESIS (§6.6); the texcoord declaration type is open again pending re-derivation from clean sources.]** The broader question below — which layout code maps to which cached declaration,
 11/13 included — remains open.** A single sentinel byte pattern
 resembling a Direct3D `D3DVERTEXELEMENT9` terminator, already located by an earlier pass at
-`0x01351c5c` (referenced from `FUN_00476ca0`), leads to a genuine, working, engine-wide
-vertex-declaration builder: `FUN_00476ca0` walks a caller-supplied list of element descriptors
+`0x01351c5c` (referenced from `0x00476ca0`), leads to a genuine, working, engine-wide
+vertex-declaration builder: `0x00476ca0` walks a caller-supplied list of element descriptors
 (each validated against small range checks — an internal type code `< 0x34`, an internal usage
 code `< 0x12`, a method byte `< 8`), translates the internal type/usage/method codes to Direct3D's
 `D3DDECLTYPE`/`D3DDECLUSAGE`/`D3DDECLMETHOD` byte values through three small lookup tables in
@@ -1404,7 +1404,7 @@ project's methodology notes warn against chasing once found by accident; it is r
 lead for whoever next has reason to resolve a layout code from first principles (not only 11/13),
 and deliberately not pursued further in this pass.
 
-**[OPEN — desk review 2026-09-30: §12.9.1–§12.9.4 are negatives read from the decompiler (no CPU-side field reader; 11/13 absent from the rewrite switch; the declaration cache's only reference a vtable slot), and `spec-render-pipeline.md` §8 describes the same builder's device source differently (the fixed global `DAT_03171ac4`, versus the thread-local-derived object of §12.9.14.2) and cites a third lookup table (`01351d10`) this document does not list; to be settled against the executable (`FUN_00e71410`, `FUN_00e71740`, `FUN_00e711c0`, `FUN_00476ca0`).]**
+**[OPEN — desk review 2026-09-30: §12.9.1–§12.9.4 are negatives read from the decompiler (no CPU-side field reader; 11/13 absent from the rewrite switch; the declaration cache's only reference a vtable slot), and `spec-render-pipeline.md` §8 describes the same builder's device source differently (the fixed global `0x03171ac4`, versus the thread-local-derived object of §12.9.14.2) and cites a third lookup table (`01351d10`) this document does not list; to be settled against the executable (`0x00e71410`, `0x00e71740`, `0x00e711c0`, `0x00476ca0`).]**
 
 **Review status (2026-09-30): NEEDS-EXE: decompiler-read negatives and the device-source conflict with `spec-render-pipeline.md` §8 — desk review (not re-derived from the executable).**
 
@@ -1632,20 +1632,20 @@ flight (see `HANDOFF.md` Sec 27.2). *(Desk review 2026-09-30: the table is the p
 
 Per Sec 12.9.7/12.9.11's own framing, the concrete next step was to find "whichever load-time or
 runtime function (if any) writes into this specific channel's data region after the file parse."
-The named entry point was `FUN_00a6f500` -- the tree constructor's second post-file-parse call, a
-sibling of the already-traced `FUN_00a713e0` (Sec 12.9.2, confirmed to be the collision-capsule
-builder, unrelated). `FUN_00a6f500` had not previously been examined for this specific question.
-It, everything it calls, and the two Mesh sub-block walkers (`FUN_00e71410`/`FUN_00e71740`,
+The named entry point was `0x00a6f500` -- the tree constructor's second post-file-parse call, a
+sibling of the already-traced `0x00a713e0` (Sec 12.9.2, confirmed to be the collision-capsule
+builder, unrelated). `0x00a6f500` had not previously been examined for this specific question.
+It, everything it calls, and the two Mesh sub-block walkers (`0x00e71410`/`0x00e71740`,
 already read for a different purpose in Sec 12.9.1) were all re-decompiled in full and their raw
 instruction streams scanned for store-class operations, specifically looking for any write whose
 target address is the vertex data pointer plus a small displacement of `0`, `4`, `16`, or `20`.
 
-**The tree constructor's last two calls, confirmed from raw disassembly (`FUN_00a71810`,
+**The tree constructor's last two calls, confirmed from raw disassembly (`0x00a71810`,
 `0x00a718a2`/`0x00a718a8`):** a call to `0x00a6f500` immediately followed by a call to `0x00a713e0`, both
 taking the tree object as their explicit stack argument -- exactly the order the task
 brief names, with nothing else interposed after the file parse completes.
 
-**`FUN_00a6f500` is a global doubly-linked-list insertion, not a vertex-buffer touch --
+**`0x00a6f500` is a global doubly-linked-list insertion, not a vertex-buffer touch --
 CONFIRMED, disassembly.** The instruction immediately preceding the call (`0x00a7189d`) loads the
 this-pointer register with the fixed global address `0x02706800` -- not anything derived from the tree object or its
 geometry sub-structure -- confirming the function's "this" argument is a
@@ -1655,24 +1655,24 @@ the **tree object's own** `+0x28`/`+0x2c`/`+0x30`/`+0x34` (prev/next list-link s
 `'TREE'` block, matching this function's pre-existing project annotation), then calls two more
 functions:
 
-- `FUN_00a6f920`, called with the address of the list head's `+0xC` field -- one conditional dword write of its second argument into the first
+- `0x00a6f920`, called with the address of the list head's `+0xC` field -- one conditional dword write of its second argument into the first
   argument's `+0xA8` slot (only when the two differ), into the **global list head's own** bookkeeping area (`head+0xc+0xa8`,
   i.e. a "last-registered" tracking slot on the manager singleton, not on the tree object).
-- `FUN_00a6f950`, called with the pointer stored in the list head's `+8` slot -- an exponential-smoothing/decay update (the difference between two
+- `0x00a6f950`, called with the pointer stored in the list head's `+8` slot -- an exponential-smoothing/decay update (the difference between two
   of the six values below, blended back in via an interpolation weight) across six `float` fields
   at byte offsets `+0x98`/`+0xac`/`+0xd0`/
   `+0xd4`/`+0xd8`/`+0xdc` of **whatever object the global head's own `+8` slot points to** -- a
   shape (six scattered floats past offset `0x98`) that matches neither a 32-byte vertex record nor
   anything addressed relative to a per-vertex base.
 
-Neither `FUN_00a6f500` nor either function it calls ever dereferences the tree's geometry
+Neither `0x00a6f500` nor either function it calls ever dereferences the tree's geometry
 sub-structure, its Mesh sub-block pointers, or a channel's data pointer at any point -- all three
 functions' writes land exclusively on the tree object's own list-link fields or on a *different*,
-unrelated global manager object's own bookkeeping fields. **This closes `FUN_00a6f500` as a
+unrelated global manager object's own bookkeeping fields. **This closes `0x00a6f500` as a
 vertex-buffer writer: it is a registration/bookkeeping routine operating entirely outside the
 geometry data, full stop.**
 
-**`FUN_00e71410`/`FUN_00e71740` write only their own header struct and the vertex data *pointer*,
+**`0x00e71410`/`0x00e71740` write only their own header struct and the vertex data *pointer*,
 never the bytes it points to -- CONFIRMED, disassembly, extending Sec 12.9.1's read-only finding
 to writes.** Both functions were re-decompiled in full for this pass (Sec 12.9.1 read them only
 for branches/reads). Every store either of them performs targets one of: (a) the channel record's
@@ -1687,20 +1687,20 @@ pointer, never through it.
 
 **Verdict: CONFIRMED -- disassembly, clean negative, in the same style as
 `spec-rig-format.md` Sec 11.14's closed "no per-frame writer of record+0x00."** Combined with the
-two pieces already established elsewhere in Sec 12.9 -- `FUN_00a713e0` is the collision-capsule
-builder and touches no Mesh sub-block data at all (Sec 12.9.2), and `FUN_00e711c0`, the one
+two pieces already established elsewhere in Sec 12.9 -- `0x00a713e0` is the collision-capsule
+builder and touches no Mesh sub-block data at all (Sec 12.9.2), and `0x00e711c0`, the one
 routine in this whole chain that *does* rewrite per-channel bytes for other layout codes, falls
 through unchanged for codes 11/13 specifically and so never executes its rewrite body for trees at
 all (Sec 12.9.3) -- this pass now covers every function named in the task's own call chain
-(`FUN_00a71810` -> `FUN_00a6f780` -> `FUN_00e7a5a0` -> material-set/index-list/Mesh-sub-block
-wrapper -> `FUN_00e71410`/`FUN_00e71740` -> the two post-parse calls) with **zero writers into the
+(`0x00a71810` -> `0x00a6f780` -> `0x00e7a5a0` -> material-set/index-list/Mesh-sub-block
+wrapper -> `0x00e71410`/`0x00e71740` -> the two post-parse calls) with **zero writers into the
 tree vertex buffer's own byte content found at any offset**, `+0`/`+4`/`+16`/`+20` included.
 
 **What this settles, and what it does not.** It directly refutes the specific mechanism Sec 12.9.7
 drew by analogy from `spec-tree-format.md` Sec 1/Sec 3 -- that a load-time fixup pass, of the same
 general kind already confirmed to re-write *other* fields (the LOD presence markers) from a stale
 memory-image state, might also be what populates `+0`/`+4`/`+16`/`+20`. The load-time pass that
-performs exactly that class of pointer-fixup rewrite for this data (`FUN_00e71410`/`FUN_00e71740`)
+performs exactly that class of pointer-fixup rewrite for this data (`0x00e71410`/`0x00e71740`)
 is now confirmed, from its actual instructions, to never touch those four offsets at all. **It does
 not** positively settle what `+0`/`+4`/`+16`/`+20` are: per Sec 12.9.1, this format's per-vertex
 field content is consumed GPU-side via a vertex declaration, never read back by the CPU, so a
@@ -1714,16 +1714,16 @@ happen to agree at low-displacement/anchor vertices) and a genuinely pre-existin
 authored-but-unidentified content explanation are left standing exactly as they were --
 `+0`/`+4`/`+16`/`+20` remain `OPEN / UNKNOWN`, narrower than before but not resolved.
 
-Ghidra addresses for reference: `FUN_00a6f500` (`0x00a6f500`), `FUN_00a6f920` (`0x00a6f920`,
-writes global-manager `+0xa8`), `FUN_00a6f950` (`0x00a6f950`, smoothing update on a second global
-object's `+0x98..+0xdc`), the global tree-registry list head (`DAT_02706800`), call site
+Ghidra addresses for reference: `0x00a6f500` (`0x00a6f500`), `0x00a6f920` (`0x00a6f920`,
+writes global-manager `+0xa8`), `0x00a6f950` (`0x00a6f950`, smoothing update on a second global
+object's `+0x98..+0xdc`), the global tree-registry list head (`0x02706800`), call site
 `0x00a718a2` (the load of the fixed address `0x02706800` at `0x00a7189d` immediately before). Ghidra script:
 `tools/scripts/Tree4WriterTrace.java` (full decompile + call-target list + raw-instruction store
-scan for `FUN_00a6f500`/`FUN_00e71410`/`FUN_00e71740`), `tools/scripts/Tree4WriterTrace2.java`
-(`FUN_00a6f920`/`FUN_00a6f950`/`FUN_00a71810` full decompile), `tools/scripts/Tree4CallSiteAsm.java`
-(raw disassembly of the `FUN_00a71810` call sequence).
+scan for `0x00a6f500`/`0x00e71410`/`0x00e71740`), `tools/scripts/Tree4WriterTrace2.java`
+(`0x00a6f920`/`0x00a6f950`/`0x00a71810` full decompile), `tools/scripts/Tree4CallSiteAsm.java`
+(raw disassembly of the `0x00a71810` call sequence).
 
-**[OPEN — desk review 2026-09-30: the negative is scoped to the traced CPU load chain; any writer into a locked tree vertex buffer (users of `FUN_00482f00`'s lock/copy path) or a GPU-side fixup is outside it; to be settled against the executable (`FUN_00a6f500`, `FUN_00a6f920`, `FUN_00a6f950`, `FUN_00a713e0`, `FUN_00482f00`).]**
+**[OPEN — desk review 2026-09-30: the negative is scoped to the traced CPU load chain; any writer into a locked tree vertex buffer (users of `0x00482f00`'s lock/copy path) or a GPU-side fixup is outside it; to be settled against the executable (`0x00a6f500`, `0x00a6f920`, `0x00a6f950`, `0x00a713e0`, `0x00482f00`).]**
 
 **Review status (2026-09-30): NEEDS-EXE: scope-limited negative; raw instruction quotes paraphrased to prose — desk review (not re-derived from the executable).**
 
@@ -1733,7 +1733,7 @@ scan for `FUN_00a6f500`/`FUN_00e71410`/`FUN_00e71740`), `tools/scripts/Tree4Writ
 
 This subsection follows up Sec 12.9.11's item 2 directly: find the function that builds the D3D
 vertex-element descriptor list for tree layout codes 11/13, using the two entry points named in
-the task brief (the vtable slot `0x0129fda4` referencing `FUN_00476ca0`, and the vehicle-geometry
+the task brief (the vtable slot `0x0129fda4` referencing `0x00476ca0`, and the vehicle-geometry
 GPU-upload chain). Both were pushed further than any prior pass; neither reached a caller that
 supplies a tree-specific element list.
 
@@ -1742,30 +1742,30 @@ supplies a tree-specific element list.
 | Search target | Hits | Context |
 |---|---|---|
 | `0x0129fd8c` (one slot before the first function pointer) | 0 | — |
-| `0x0129fd90` (the first function-pointer slot) | 2 | `00476bef` in `FUN_00476bd0` and `00476c48` in `FUN_00476c40`: each stores the constant `0x0129fd90` into the first dword of the object in hand |
+| `0x0129fd90` (the first function-pointer slot) | 2 | `00476bef` in `0x00476bd0` and `00476c48` in `0x00476c40`: each stores the constant `0x0129fd90` into the first dword of the object in hand |
 
-Both hits are the classic MSVC ctor/dtor "(re)set vptr to this class's own vtable" idiom — confirming `0x0129fd90` is the real vtable base (not `0x0129fd8c`, which fits the standard MSVC layout slot for an RTTI locator pointer at `vtbl-4`, consistent with, not independently proven as, RTTI). `FUN_00476bd0` is therefore this class's constructor and `FUN_00476c40` its destructor body. Decompiling the full 8-slot primary vtable (`0x0129fd90`-`0x0129fdac`) resolves every member:
+Both hits are the classic MSVC ctor/dtor "(re)set vptr to this class's own vtable" idiom — confirming `0x0129fd90` is the real vtable base (not `0x0129fd8c`, which fits the standard MSVC layout slot for an RTTI locator pointer at `vtbl-4`, consistent with, not independently proven as, RTTI). `0x00476bd0` is therefore this class's constructor and `0x00476c40` its destructor body. Decompiling the full 8-slot primary vtable (`0x0129fd90`-`0x0129fdac`) resolves every member:
 
 | Offset | Function | Role, read directly from the decompiled body |
 |---|---|---|
-| +0x00 | `FUN_00476c20` | deleting destructor (calls `FUN_00476c40`, then conditionally frees) |
-| +0x04 | `FUN_008a5bf0` | shared no-op stub (returns immediately) — 400+ unrelated vtables engine-wide reuse this same address; not format-specific |
-| +0x08 | `FUN_00476bb0` | calls the object's own destructor slot with flag 0, then passes the object to `FUN_00e49600` — a `Release()`-shaped method: invokes the destructor, then frees via the pool-free counterpart of the ctor's own `FUN_00e49580` allocator |
-| +0x0C | `FUN_00435660` | shared stub that returns `0xffffffff` — ~83 unrelated call sites engine-wide reuse this address as a default "unimplemented" virtual |
-| +0x10 | `FUN_00476c90` | zeroes the dword at `this+0x1C0`, fills `0x1B8` bytes from `this+0x08` with `0xFF`, then calls `FUN_00e79570` — resets a cache: `this+0x1c0` is exactly the live-count field `FUN_00476ca0` checks against the `0x87` cap Sec 12.9.4 already found, so this is that cache's own reset/init method |
-| +0x14 | **`FUN_00476ca0`** | **the `CreateVertexDeclaration` builder itself — Sec 12.9.4's original target** |
-| +0x18 | `FUN_00476ea0` | thin wrapper that calls slot `+0x14` on the **same object** via indirect dispatch, passes that call's result together with its own argument 2 to `FUN_00e7bfa0`, and returns the same result — i.e. this is the "public" entry point whose caller this task needs, and it internally re-enters the builder rather than being a separate implementation |
-| +0x1C | `FUN_00476ed0` | a flag/bitmask test against a per-cache-entry array at `this+0x3e0`/`this+0x3e4` — the same array `FUN_00476ca0` populates on a successful build |
+| +0x00 | `0x00476c20` | deleting destructor (calls `0x00476c40`, then conditionally frees) |
+| +0x04 | `0x008a5bf0` | shared no-op stub (returns immediately) — 400+ unrelated vtables engine-wide reuse this same address; not format-specific |
+| +0x08 | `0x00476bb0` | calls the object's own destructor slot with flag 0, then passes the object to `0x00e49600` — a `Release()`-shaped method: invokes the destructor, then frees via the pool-free counterpart of the ctor's own `0x00e49580` allocator |
+| +0x0C | `0x00435660` | shared stub that returns `0xffffffff` — ~83 unrelated call sites engine-wide reuse this address as a default "unimplemented" virtual |
+| +0x10 | `0x00476c90` | zeroes the dword at `this+0x1C0`, fills `0x1B8` bytes from `this+0x08` with `0xFF`, then calls `0x00e79570` — resets a cache: `this+0x1c0` is exactly the live-count field `0x00476ca0` checks against the `0x87` cap Sec 12.9.4 already found, so this is that cache's own reset/init method |
+| +0x14 | **`0x00476ca0`** | **the `CreateVertexDeclaration` builder itself — Sec 12.9.4's original target** |
+| +0x18 | `0x00476ea0` | thin wrapper that calls slot `+0x14` on the **same object** via indirect dispatch, passes that call's result together with its own argument 2 to `0x00e7bfa0`, and returns the same result — i.e. this is the "public" entry point whose caller this task needs, and it internally re-enters the builder rather than being a separate implementation |
+| +0x1C | `0x00476ed0` | a flag/bitmask test against a per-cache-entry array at `this+0x3e0`/`this+0x3e4` — the same array `0x00476ca0` populates on a successful build |
 
-A second, secondary-base vtable begins at `0x0129fdb4` (the constructed object's own `+0x4` field is set to `&PTR_FUN_0129fdb4` alongside `+0x0` = `&PTR_FUN_0129fd90`, i.e. multiple inheritance); its slot 0 (`FUN_00476f60`) just forwards to the same `FUN_00476c20` deleting destructor and was not pursued further, since the target method (`+0x14` on the primary vtable) is already resolved.
+A second, secondary-base vtable begins at `0x0129fdb4` (the constructed object's own `+0x4` field is set to `&0x0129fdb4` alongside `+0x0` = `&0x0129fd90`, i.e. multiple inheritance); its slot 0 (`0x00476f60`) just forwards to the same `0x00476c20` deleting destructor and was not pursued further, since the target method (`+0x14` on the primary vtable) is already resolved.
 
-**12.9.14.2 `FUN_00476ca0`'s parameter shape, confirmed directly by a fresh full decompile — refines, does not contradict, Sec 12.9.4.** It is a `thiscall` method taking one pointer argument (argument 2) to a `{elements pointer, count, ...}` header (first dword = element-record array base, second dword = count), record stride `0x10` bytes (type at `+0`, usage at `+4`, a method byte at `+8`, a further byte at `+9`, a field at `+12`). Each record is validated exactly as Sec 12.9.4 already reported (type ≠ -1 and < 0x34; usage ≠ -1 and < 0x12; method byte < 8; the `+12` field < 3), translated through the same three lookup tables (`DAT_01351d58`, `DAT_01351c98`, `PTR_DAT_01351c64`) into a `D3DVERTEXELEMENT9`-shaped record, terminated with the `DAT_01351c5c`/`DAT_01351c60` sentinel pair Sec 12.9.4 located, and committed via a **thread-local-storage-derived** device object's vtable `+0x158` (the thread-local-storage array pointer at FS offset `0x2c` → a pointer at `+0x674` → a second pointer at `+0x764` → dereferenced once more → `vtable[+0x158]`) — not a fixed global, which is new detail. On success, a 64-bit value returned by `FUN_00e7bfc0` is stored in the cache-entry array at `this+0x3e0` (8 bytes per cache index), the live count at `+0x1c0` is incremented, and the new cache index is returned. **No table indexed by anything layout-code-shaped exists anywhere in this function's body.** It is a pure "build exactly what you hand me" declaration factory; whichever element records (and therefore which offset carries `D3DDECLUSAGE_POSITION`) go into argument 2 is decided entirely by the caller, before this function is ever reached.
+**12.9.14.2 `0x00476ca0`'s parameter shape, confirmed directly by a fresh full decompile — refines, does not contradict, Sec 12.9.4.** It is a `thiscall` method taking one pointer argument (argument 2) to a `{elements pointer, count, ...}` header (first dword = element-record array base, second dword = count), record stride `0x10` bytes (type at `+0`, usage at `+4`, a method byte at `+8`, a further byte at `+9`, a field at `+12`). Each record is validated exactly as Sec 12.9.4 already reported (type ≠ -1 and < 0x34; usage ≠ -1 and < 0x12; method byte < 8; the `+12` field < 3), translated through the same three lookup tables (`0x01351d58`, `0x01351c98`, `0x01351c64`) into a `D3DVERTEXELEMENT9`-shaped record, terminated with the `0x01351c5c`/`0x01351c60` sentinel pair Sec 12.9.4 located, and committed via a **thread-local-storage-derived** device object's vtable `+0x158` (the thread-local-storage array pointer at FS offset `0x2c` → a pointer at `+0x674` → a second pointer at `+0x764` → dereferenced once more → `vtable[+0x158]`) — not a fixed global, which is new detail. On success, a 64-bit value returned by `0x00e7bfc0` is stored in the cache-entry array at `this+0x3e0` (8 bytes per cache index), the live count at `+0x1c0` is incremented, and the new cache index is returned. **No table indexed by anything layout-code-shaped exists anywhere in this function's body.** It is a pure "build exactly what you hand me" declaration factory; whichever element records (and therefore which offset carries `D3DDECLUSAGE_POSITION`) go into argument 2 is decided entirely by the caller, before this function is ever reached.
 
-**12.9.14.3 The class is constructed exactly once, engine-wide, and its pointer is provably discarded at the only call site — CONFIRMED, raw disassembly, a genuine dead end.** `FUN_00476bd0` (the constructor: allocates `0x818` bytes via `FUN_00e49580`, installs both vtable pointers, returns the new object) has exactly one caller in the entire binary: `FUN_00e49250`, at call site `0x00e492c1`. `FUN_00e49250` is the engine's top-level Render Layer bring-up routine, identified unambiguously by four debug strings it passes to a logging callback in sequence, naming its factory, shader-library, other-systems and GPU-visibility bring-up stages *(strings paraphrased 2026-09-30, clean-room)* — the vertex-declaration-class constructor call sits in the factory stage, called the same bare-statement way as several sibling one-shot subsystem initializers around it. **Checked in raw disassembly, not only the decompiler's C view** (which could plausibly elide an assignment to an as-yet-unnamed global): the instruction immediately after the call to `0x00476bd0` at `0x00e492c1` overwrites the return-value register with a load from the unrelated global `0x0132db98`, with no intervening store of the returned pointer. **The constructed object's pointer is not captured into any register, stack slot, or global reachable from this call site.** Combined with 12.9.14.1's finding that none of this class's 8 primary-vtable methods (destructor aside) has a single caller anywhere else in the binary besides their own vtable-slot self-reference (every one of `FUN_00476bb0`/`FUN_00435660`/`FUN_00476c90`/`FUN_00476ca0`/`FUN_00476ea0`/`FUN_00476ed0` shows exactly 1 total reference — the data slot that stores it into the vtable, nothing else), this is as far as static cross-reference analysis can go: **there is no statically-visible path from "an instance of this class exists" to "some caller supplies it a tree-shaped element list."** Two explanations are left open, neither confirmed: the instance is retained through a mechanism this pass did not locate (e.g. participation in a pool/registry maintained by the allocator itself, not chased further here), or this specific class — despite matching Sec 12.9.4's description of the `CreateVertexDeclaration`-calling infrastructure exactly — is not actually the path trees' declarations go through at all. **[OPEN — desk review 2026-09-30: "pointer discarded" does not exclude the constructor registering `this` itself (it allocates through the pool allocator `FUN_00e49580`), so the dead-end label is not proven; and `spec-render-pipeline.md` §8 gives a different device source for this builder (the fixed global `DAT_03171ac4`) than 12.9.14.2's thread-local chain; to be settled against the executable (`FUN_00476bd0` body, `FUN_00e49250` around `0x00e492c1`, indirect calls through slot `+0x14`).]**
+**12.9.14.3 The class is constructed exactly once, engine-wide, and its pointer is provably discarded at the only call site — CONFIRMED, raw disassembly, a genuine dead end.** `0x00476bd0` (the constructor: allocates `0x818` bytes via `0x00e49580`, installs both vtable pointers, returns the new object) has exactly one caller in the entire binary: `0x00e49250`, at call site `0x00e492c1`. `0x00e49250` is the engine's top-level Render Layer bring-up routine, identified unambiguously by four debug strings it passes to a logging callback in sequence, naming its factory, shader-library, other-systems and GPU-visibility bring-up stages *(strings paraphrased 2026-09-30, clean-room)* — the vertex-declaration-class constructor call sits in the factory stage, called the same bare-statement way as several sibling one-shot subsystem initializers around it. **Checked in raw disassembly, not only the decompiler's C view** (which could plausibly elide an assignment to an as-yet-unnamed global): the instruction immediately after the call to `0x00476bd0` at `0x00e492c1` overwrites the return-value register with a load from the unrelated global `0x0132db98`, with no intervening store of the returned pointer. **The constructed object's pointer is not captured into any register, stack slot, or global reachable from this call site.** Combined with 12.9.14.1's finding that none of this class's 8 primary-vtable methods (destructor aside) has a single caller anywhere else in the binary besides their own vtable-slot self-reference (every one of `0x00476bb0`/`0x00435660`/`0x00476c90`/`0x00476ca0`/`0x00476ea0`/`0x00476ed0` shows exactly 1 total reference — the data slot that stores it into the vtable, nothing else), this is as far as static cross-reference analysis can go: **there is no statically-visible path from "an instance of this class exists" to "some caller supplies it a tree-shaped element list."** Two explanations are left open, neither confirmed: the instance is retained through a mechanism this pass did not locate (e.g. participation in a pool/registry maintained by the allocator itself, not chased further here), or this specific class — despite matching Sec 12.9.4's description of the `CreateVertexDeclaration`-calling infrastructure exactly — is not actually the path trees' declarations go through at all. **[OPEN — desk review 2026-09-30: "pointer discarded" does not exclude the constructor registering `this` itself (it allocates through the pool allocator `0x00e49580`), so the dead-end label is not proven; and `spec-render-pipeline.md` §8 gives a different device source for this builder (the fixed global `0x03171ac4`) than 12.9.14.2's thread-local chain; to be settled against the executable (`0x00476bd0` body, `0x00e49250` around `0x00e492c1`, indirect calls through slot `+0x14`).]**
 
-**12.9.14.4 Entry point 2: the vehicle GPU-upload chain's one non-vehicle caller is the unrelated Effects format, not trees — CONFIRMED, cross-checked against `spec-effects-format.md`.** `FUN_00482e00` (~~the vehicle-class constructor~~ the pooled renderer-object constructor — corrected per `spec-vehicle-geometry.md` §11.9.2, which names the vehicle constructor as `FUN_00ab1080`; installs vtable `PTR_FUN_012a0418`, per `spec-vehicle-geometry.md` Sec 11.9) has exactly 3 callers engine-wide: `FUN_00489260`, `FUN_00482d20` (the class pool itself), and `FUN_0043e420` — the task brief's suggested lead, checked here. `FUN_0043e420` opens with a version gate that rejects the call unless the dword at its second argument's `+4` field falls in the range 42-44, and is reached — via its sole caller `FUN_0043e1c0` — only after its first argument's leading dword reads `0x57423137`. That is the exact `71BW` marker and 42-44 (43 or 44 observed) version range `spec-effects-format.md` already documents, independently, as its own format's fixed identifying marker. **`FUN_0043e420` is the Effects/particle geometry loader, not trees.** It does call the same shared helpers trees use (`FUN_00e71090`, the tree/foliage/vehicle/effects material parser; `FUN_00e718b0`, the Mesh sub-block wrapper) and the same vehicle-shaped renderer-object class (`FUN_00482e00`/`FUN_00482f00`) — useful corroboration that this renderer-object class is a genuinely generic "renderable sub-mesh" reused by at least three unrelated formats — but it settles nothing about trees specifically. `FUN_00482f00` (the GPU-upload committer this class uses) was re-decompiled in full this pass: it contains only vertex/index buffer creation (`DAT_03171ac4` vtable `+0x68`/`+0x6c`) and a raw `memcpy` of file bytes into the locked buffer — **no declaration-building call and no layout-code branch of any kind**, for either format that reaches it. This is consistent with, not new evidence against, Sec 12.9.1's finding that declaration binding never happens inline in any load-time GPU-upload path traced so far — tree, vehicle, or effects alike.
+**12.9.14.4 Entry point 2: the vehicle GPU-upload chain's one non-vehicle caller is the unrelated Effects format, not trees — CONFIRMED, cross-checked against `spec-effects-format.md`.** `0x00482e00` (~~the vehicle-class constructor~~ the pooled renderer-object constructor — corrected per `spec-vehicle-geometry.md` §11.9.2, which names the vehicle constructor as `0x00ab1080`; installs vtable `0x012a0418`, per `spec-vehicle-geometry.md` Sec 11.9) has exactly 3 callers engine-wide: `0x00489260`, `0x00482d20` (the class pool itself), and `0x0043e420` — the task brief's suggested lead, checked here. `0x0043e420` opens with a version gate that rejects the call unless the dword at its second argument's `+4` field falls in the range 42-44, and is reached — via its sole caller `0x0043e1c0` — only after its first argument's leading dword reads `0x57423137`. That is the exact `71BW` marker and 42-44 (43 or 44 observed) version range `spec-effects-format.md` already documents, independently, as its own format's fixed identifying marker. **`0x0043e420` is the Effects/particle geometry loader, not trees.** It does call the same shared helpers trees use (`0x00e71090`, the tree/foliage/vehicle/effects material parser; `0x00e718b0`, the Mesh sub-block wrapper) and the same vehicle-shaped renderer-object class (`0x00482e00`/`0x00482f00`) — useful corroboration that this renderer-object class is a genuinely generic "renderable sub-mesh" reused by at least three unrelated formats — but it settles nothing about trees specifically. `0x00482f00` (the GPU-upload committer this class uses) was re-decompiled in full this pass: it contains only vertex/index buffer creation (`0x03171ac4` vtable `+0x68`/`+0x6c`) and a raw `memcpy` of file bytes into the locked buffer — **no declaration-building call and no layout-code branch of any kind**, for either format that reaches it. This is consistent with, not new evidence against, Sec 12.9.1's finding that declaration binding never happens inline in any load-time GPU-upload path traced so far — tree, vehicle, or effects alike.
 
-**12.9.14.5 Verdict — position remains OPEN; this pass narrows the gap without closing it.** Stacked against Sec 12.9.13 (no CPU-side writer of `+0`/`+4`/`+16`/`+20` anywhere in the traced load chain) and Sec 12.9.1/12.9.3 (no CPU-side field reader anywhere; codes 11/13 excluded from the generic layout-code rewrite table), this pass adds a third independent negative result: the one concretely-identified, engine-wide vertex-declaration-cache/builder class (vtable `0x0129fd90`, `FUN_00476ca0` at `+0x14`) is real, internally consistent with Sec 12.9.4's original summary, and now read start-to-finish in full — but is **statically unreachable** from any caller that could be shown to supply a tree-specific element list, because its one instance's pointer is discarded at its one construction site and none of its methods have a literal caller anywhere in the ~6 MB binary. Per `HANDOFF.md` §36, archived item 27.8, this is recorded as the honest gap rather than a guess: **no disassembly-side answer for which of `+0`/`+4`/`+16`/`+20`/`+24`/`+28` carries `D3DDECLUSAGE_POSITION` was found in this pass.** Both of the task's named entry points were followed to a genuine, verified dead end (not merely to the same wall Sec 12.9.4 already hit — this pass went one level further on each: found the real vtable base and every one of its methods, confirmed the sole instance's pointer loss in raw disassembly, and positively identified entry point 2's one live lead as a different, already-documented format instead of trees). The natural next step, if this is picked up again, is a method class this project has not yet tried on this exact question: a **runtime/dynamic trace** (e.g. a breakpoint on `FUN_00476ca0` or on `CreateVertexDeclaration` itself while a tree is on screen, dumping the live element array passed as argument 2) — static cross-reference analysis has now been run against this specific target twice, by two independent passes, with the same negative result both times.
+**12.9.14.5 Verdict — position remains OPEN; this pass narrows the gap without closing it.** Stacked against Sec 12.9.13 (no CPU-side writer of `+0`/`+4`/`+16`/`+20` anywhere in the traced load chain) and Sec 12.9.1/12.9.3 (no CPU-side field reader anywhere; codes 11/13 excluded from the generic layout-code rewrite table), this pass adds a third independent negative result: the one concretely-identified, engine-wide vertex-declaration-cache/builder class (vtable `0x0129fd90`, `0x00476ca0` at `+0x14`) is real, internally consistent with Sec 12.9.4's original summary, and now read start-to-finish in full — but is **statically unreachable** from any caller that could be shown to supply a tree-specific element list, because its one instance's pointer is discarded at its one construction site and none of its methods have a literal caller anywhere in the ~6 MB binary. Per `HANDOFF.md` §36, archived item 27.8, this is recorded as the honest gap rather than a guess: **no disassembly-side answer for which of `+0`/`+4`/`+16`/`+20`/`+24`/`+28` carries `D3DDECLUSAGE_POSITION` was found in this pass.** Both of the task's named entry points were followed to a genuine, verified dead end (not merely to the same wall Sec 12.9.4 already hit — this pass went one level further on each: found the real vtable base and every one of its methods, confirmed the sole instance's pointer loss in raw disassembly, and positively identified entry point 2's one live lead as a different, already-documented format instead of trees). The natural next step, if this is picked up again, is a method class this project has not yet tried on this exact question: a **runtime/dynamic trace** (e.g. a breakpoint on `0x00476ca0` or on `CreateVertexDeclaration` itself while a tree is on screen, dumping the live element array passed as argument 2) — static cross-reference analysis has now been run against this specific target twice, by two independent passes, with the same negative result both times.
 
 Ghidra scripts, this pass (`tools/scripts/`): `Tree2VtxDeclSource.java`, `Tree2VtxDeclSource2.java`, `Tree2VtxDeclSource3.java`, `Tree2VtableByteSearch.java`, `Tree2VtableCtor.java`, `Tree2VtableOwner.java`, `Tree2FindStore.java`, `Tree2LastCheck.java`, `Tree2Decl476ca0.java`. Ghidra project copy: `tools/gp_treeA` (robocopied from `tools/ghidra_projects`; safe to delete once consolidated).
 
@@ -1873,12 +1873,12 @@ unchanged in kind from 11/13's own open position question.] *(Position supersede
 
 #### 12.10.3 Code 12 is excluded from the load-time rewrite table exactly like 11 and 13 — CONFIRMED, disassembly, directly (not inferred)
 
-`spec-vertex-format.md` §12.9.3 already established, by reading `FUN_00e711c0` (the §7
+`spec-vertex-format.md` §12.9.3 already established, by reading `0x00e711c0` (the §7
 rewrite routine), that codes 11 and 13 fall through unchanged because the routine's
 accepted case set is `0–4, 14–26, 100–101` — a range that has a gap exactly where 11
 (`0x0B`), 12 (`0x0C`) and 13 (`0x0D`) sit, but that section's own text only explicitly
 named 11 and 13 as the checked exclusions (12 had not shipped as far as anyone knew at
-the time). This pass re-decompiled `FUN_00e711c0` in full and confirms directly, from
+the time). This pass re-decompiled `0x00e711c0` in full and confirms directly, from
 the real case list rather than by arithmetic on the documented range: **the switch has
 cases for `0x00`–`0x04`, `0x0E`–`0x1A` and `0x64`–`0x65` only — there is no case for
 `0x0B`, `0x0C` or `0x0D`.** Code 12 falls through completely unchanged, on exactly the
@@ -1908,16 +1908,16 @@ possible either, for the same reason §12.9.14 already gives — not because the
 never located, but because no live caller supplying content to build one for zones was
 ever found.** This does not reopen or contradict §12.9.14; it confirms the same
 dead end applies to code 24 specifically, closing the task's item 2 for all four codes
-at once rather than leaving it untested for 24. **[OPEN — desk review 2026-09-30: the full case table of `FUN_00e711c0` (per-code bases, why code 24 maps to `texcoord_count + 0x57`, behaviour at count 0) is needed to reconcile this with §7's "4-wide range"; to be settled against the executable.]**
+at once rather than leaving it untested for 24. **[OPEN — desk review 2026-09-30: the full case table of `0x00e711c0` (per-code bases, why code 24 maps to `texcoord_count + 0x57`, behaviour at count 0) is needed to reconcile this with §7's "4-wide range"; to be settled against the executable.]**
 
-**Review status (2026-09-30): NEEDS-EXE: single-function switch (`FUN_00e711c0`) — desk review (not re-derived from the executable).**
+**Review status (2026-09-30): NEEDS-EXE: single-function switch (`0x00e711c0`) — desk review (not re-derived from the executable).**
 
 #### 12.10.4 A second `CreateVertexDeclaration`-shaped lead, REFUTED — the "0xf3xxxx module" is Wwise audio middleware, not a second vertex-declaration path
 
 `spec-render-pipeline.md` §8 records a whole-binary census of the exact
 load-a-method-pointer-from-vtable-offset-`0x158`-then-call-through-that-register idiom used at the one confirmed
-`CreateVertexDeclaration` call site (`FUN_00476ca0`) and found **two further real
-matches**, both in a previously-uninvestigated address region: `FUN_00f3a6d0`, and one
+`CreateVertexDeclaration` call site (`0x00476ca0`) and found **two further real
+matches**, both in a previously-uninvestigated address region: `0x00f3a6d0`, and one
 further, at the time unlabeled, call site. That document flagged both as "OPEN,
 plausible candidates for a second, DX11-adjacent or debug-tool vertex-declaration path,
 not confirmed" — a live lead this document's own §12.9.14 did not know about when it
@@ -1927,7 +1927,7 @@ went looking for a tree-specific declaration caller. This pass runs it down dire
 is Wwise audio middleware, and the vtable-offset match is coincidental.** Full decompile
 of both functions and their immediate siblings in the same address region:
 
-- The call inside `FUN_00f3a6d0` (the `+0x158`-offset call `spec-render-pipeline.md` §8
+- The call inside `0x00f3a6d0` (the `+0x158`-offset call `spec-render-pipeline.md` §8
   flagged) passes **zero explicit arguments** — the public `CreateVertexDeclaration`
   signature needs two (an element-array pointer and an out-pointer). This is exactly the
   argument-count tell `WALLS.md`'s own catalogued "coincidental vtable-slot offset"
@@ -1936,17 +1936,17 @@ of both functions and their immediate siblings in the same address region:
   function that just tail-calls through a register with no argument setup of its own —
   consistent with, not contradicting, the same conclusion.
 - The containing address region is unambiguously **Wwise audio SDK code, not a
-  renderer**: a directly adjacent sibling function (`FUN_00f387a0`, itself one of the
+  renderer**: a directly adjacent sibling function (`0x00f387a0`, itself one of the
   region's other coincidental vtable-offset hits — the `DrawIndexedPrimitive`-shaped
   `+0x148` slot per the same census) calls the Wwise SDK's memory-manager allocation routine, named by its own symbol
   *(symbol text paraphrased 2026-09-30)*, under a critical-section enter/leave
   pair, in a device/capability-enumeration loop shape. Three further near-identical
-  sibling functions in the same region (`FUN_00f398c0`, `FUN_00f3be50`, `FUN_00f3c3d0`)
+  sibling functions in the same region (`0x00f398c0`, `0x00f3be50`, `0x00f3c3d0`)
   share one body template — read a capability code off one object, a count off another,
   compare both against small fixed constants (6/7/8/9) — the classic shape of an audio
   device/output-format negotiation routine, not a mesh draw call. This is a fresh,
   independently-discovered instance of the exact failure mode `WALLS.md` already
-  catalogues for `DAT_0351f8f8`'s `0x98`/`0xAC` and the `0xd0c890`/`0xd0e6c0`
+  catalogues for `0x0351f8f8`'s `0x98`/`0xAC` and the `0xd0c890`/`0xd0e6c0`
   OpenSSL-bignum pair: a numeric vtable-offset match with no argument-count or
   base-object-identity check behind it.
 
@@ -1988,14 +1988,14 @@ half-float element type of tree position (histogram of the `u16` at `+6` and `+2
 data.]** What is **not** established for any of these four codes, and is a real gap
 shared with the rest of this format (§12.9.4 notes it generically): the literal numeric
 type/usage/method **byte values** a real in-memory element-descriptor record would
-carry into `FUN_00476ca0` (§12.9.14.2's `{type, usage, method, ...}` shape) were never
+carry into `0x00476ca0` (§12.9.14.2's `{type, usage, method, ...}` shape) were never
 read from an actual descriptor list for 11/12/13/24, because no live caller supplying
 one was ever found for any of the four (§12.10.3). This is the same "encoding confirmed,
 literal descriptor bytes not observed" gap this document already carries for codes
 0–4/100/101, not a new weakness specific to the tree/zone codes.
 
 **Net effect on the task's own three concrete asks:** (1) the tree/zone call site that
-builds the descriptor list feeding `FUN_00476ca0` was **not found** for any of the four
+builds the descriptor list feeding `0x00476ca0` was **not found** for any of the four
 codes — for 11/12/13 because they structurally never reach that function at all
 (§12.10.3, newly confirmed for 12), and for 24 because its one live consumer class is a
 confirmed static dead end (§12.9.14, re-confirmed applicable here in §12.10.3). (2) The

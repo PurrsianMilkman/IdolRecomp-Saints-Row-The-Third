@@ -259,6 +259,72 @@
 // CharacterState::worldPosition/VehicleState::worldPosition fields (OPEN
 // by default - no spec gives a CONFIRMED spawn position for any object).
 //
+// Native-implementation batch 2026-10-07 (fresh mission-drive stub-hit
+// ranking, from a clean rebuild of the then-current worktree tip, cross-
+// referenced against spec coverage per the task's own step-by-step
+// discipline): +16 - audio_object_post_event (Sec2.4), character_is_ready
+// (Sec7.27), character_playing_combat_move (Sec25.27), mesh_mover_hide/
+// _show/_reset/_set_invulnerable (Sec9.16/9.17/9.12/14.9), door_close/
+// door_lock (Sec9.14/9.15), object_spawn_pause/mip_streaming_pause
+// (Sec60.1), city_zone_swap (Sec1.9), traffic_disable_lanes (Sec12.19),
+// party_dismiss_all (Sec14.17), sidewalk_disable_nodes (Sec15.3),
+// group_create_check_done (Sec22.18, added after a companion Team-A-
+// facing blocker-ranking re-run found it the clearest next action_play_
+// do-shaped target - a single generic-stub poll loop with 18,810 real
+// calls under probe conditions). Sec1.9/Sec2.4 both sit inside this very
+// file's own "Sec1-5 NOT yet cleared for implementation" freeze below but
+// are individually executable-re-derived and cleared by spec-lua-api-
+// behaviour.md Sec60.3's own text; every other name in this batch sits
+// outside that freeze. See lua_spec_confirmed_stubs.cpp's own batch header
+// comment (above stub_audio_object_post_event) for the full per-function
+// citation, and the explicit list of high-volume names deliberately left
+// as generic stubs this pass (trigger_enable/on_trigger/on_trigger_exit/
+// door_open/character_is_dead/notoriety_force_no_spawn - Sec1-5-frozen and
+// not individually re-cleared; vint_object_next_sibling/vint_insert_
+// values_in_string - name-confirmed only, no individually-traced
+// behaviour; roadblock_create/effect_play/audio_persona_load_2d/on_mover_
+// destroyed - real spec text exists but needs either a genuinely-OPEN
+// success determination, a disproportionate new subsystem, or hook-array
+// registration semantics out of this batch's time budget;
+// character_is_in_vehicle/Sec3.10 - at the time of THIS batch, still being
+// closed by a Team A agent, not duplicated here; see the 2026-10-07 batch
+// note further down for its later, separate implementation). See
+// engine_state.h for the new state
+// (CharacterState::characterReadyBlocked_/characterPlayingCombatMove_ via
+// EngineState; the new PlacedObjectState struct and EngineState::
+// getOrCreatePlacedObject()/recordCityZoneSwap()/setTrafficLanesEnabled()/
+// recordPartyDismissAll()/setSidewalkNodesDisabled()/mipStreamingPaused()/
+// groupCreateCheckDone()/nextEffectPostHandle()).
+//
+// Batch 2026-10-07 (character_is_in_vehicle, Sec3.10): +1 - cleared for
+// implementation this date once Team A resolved the one remaining OPEN
+// item (the vtable +0x70 call's argument shape). This project's own
+// single highest measured real call count for any previously-
+// unimplemented name (41,176 calls under --probe-unresolved-names) and a
+// named blocker for missions m05/m07/m21. See lua_spec_confirmed_stubs.cpp's
+// own doc comment above stub_character_is_in_vehicle for the full
+// citation/reasoning (including the CONFIRMED two-return-value quirk on
+// an unresolved arg-2 vehicle name), and engine_state.h for the one
+// reused field (CharacterState::currentVehicleName, Sec30.5 - no new
+// engine-state field was added for this native).
+//
+// vehicle_chase batch (Sec9.4, dedicated pass, 2026-10-07): +1. This
+// document's own single highest real call-volume CONFIRMED-but-
+// unimplemented native (72 static call sites) - the Section 9 full-
+// document sweep batch above deliberately left it out as "MEDIUM
+// complexity, not a data gap" (a packed flag byte explicitly NOT bit-
+// decoded per WALLS.md, needing a small new multi-field "raw request"
+// record its own time budget did not reach). See lua_spec_confirmed_
+// stubs.cpp's own doc comment above stub_vehicle_chase for the full two-
+// path citation/reasoning (including the one explicit JUDGMENT CALL:
+// this native's own repeat-call drive-mode-predicate transition) and
+// engine_state.h for the new state (VehicleState::aiDriveModeIsChasing/
+// chaseTargetName/chaseFlagArg3..6). The per-occupant notify loop
+// (0x004e2350) is explicitly NOT modeled - no occupant/attached-part
+// registry exists anywhere in this project (the same boundary vehicle_
+// pathfind_check_done's own Sec9.10 implementation already states), and
+// the spec text itself leaves that call's real-world target OPEN.
+//
 // Deliberately NOT touched (still out of scope):
 // thread_check_done (this project's own scaffold mechanism, thread_scheduler.h).
 // The 8 vint_object_* lifecycle siblings Sec15 originally flagged as
@@ -322,9 +388,24 @@ namespace sr3luahost {
 void registerSpecConfirmedStubs(lua_State* L, EngineState& state, HitLog& log, const std::string& stateTag,
                                  const std::vector<std::string>& namesToRegister);
 
-// The literal set of 22 names this file registers - exposed so Host (or a
-// test) can filter them out of the generic tagged-registration-list split
-// without duplicating the literal list a second time.
+// THE single source of truth for "every native name this project's Lua
+// host actually registers through a real, non-generic-stub
+// implementation" - a true union of THREE tracks (corrected 2026-10-08,
+// results/lua_natives_backlog_recount_20261008.md): the 302 b01-b07 names
+// this file registers, the 24 bare globals (specBareGlobals() below,
+// bareGlobalRoster(), lua_bare_globals.cpp) and thread_close
+// (threadCloseNames(), lua_thread_scheduler.cpp) - 327 total, zero
+// duplicates. See lua_spec_confirmed_stubs_registry.cpp's own doc comment
+// on this function's definition for why thread_close is a separate 4th
+// union component rather than folded into the bare-globals roster. Exposed
+// so Host (or a test) can filter every one of these 327 names out of the
+// generic tagged-registration-list split without duplicating any of the
+// three tracks' own literal lists a second time, and so a test can check
+// this return value against a real Host's real Lua global tables
+// end-to-end (tests/synthetic_luahost_unified_registry_test.cpp) - the
+// structural guard against exactly the kind of blind spot that let
+// thread_close's own real registerThreadClose() call bypass this function
+// entirely until this task.
 const std::vector<std::string>& specConfirmedStubNames();
 
 // Bare globals registered outside the tagged registration list

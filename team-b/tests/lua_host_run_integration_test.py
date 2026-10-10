@@ -18,6 +18,14 @@ import tempfile
 
 failures = 0
 
+# Window-focus-stealing fix (2026-10-08): every subprocess this test spawns
+# gets CREATE_NO_WINDOW on Windows, so a console-flash can never happen here
+# regardless of whether this test process itself has a console (ctest
+# normally gives it one, but that isn't guaranteed for every caller/context -
+# see tools/golden_scene_check.cpp's runIn() for the same reasoning). No-op
+# (0) on non-Windows, where the attribute does not exist.
+_CREATIONFLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 
 def check(cond, what):
     global failures
@@ -42,7 +50,8 @@ def read_kv(path):
 
 
 def run_host(host, reglist, cache, out, *extra):
-    r = subprocess.run([host, cache, reglist, out, *extra], capture_output=True, text=True, timeout=600)
+    r = subprocess.run([host, cache, reglist, out, *extra], capture_output=True, text=True, timeout=600,
+                       creationflags=_CREATIONFLAGS)
     check(r.returncode == 0, f"lua_host_run exit status {r.returncode}: {r.stderr[-2000:]}")
 
 
@@ -51,7 +60,7 @@ def main(argv):
     with tempfile.TemporaryDirectory() as tmp:
         cache = os.path.join(tmp, "cache")
         os.makedirs(cache)
-        subprocess.run([fixture, cache], check=True)
+        subprocess.run([fixture, cache], check=True, creationflags=_CREATIONFLAGS)
         out1, out2 = os.path.join(tmp, "run1"), os.path.join(tmp, "run2")
         run_host(host, reglist, cache, out1)
         run_host(host, reglist, cache, out2)
@@ -120,7 +129,31 @@ def main(argv):
         check(len(scripts) == 8, f"8 scripts listed, got {len(scripts)}")
 
         summary = read_kv(os.path.join(out1, "verdict_summary.txt"))
-        check(summary.get("archives_scanned") == "3", f"archives_scanned={summary.get('archives_scanned')}")
+        # 5, not 3, since 2026-10-08: the fixture adds a misc_tables.vpp_pc /
+        # patch_compressed.vpp_pc pair for the spawn_info_ranks.xtbl
+        # archive-precedence fast-follow fix (see spawn_rank_hit_points= below).
+        check(summary.get("archives_scanned") == "5", f"archives_scanned={summary.get('archives_scanned')}")
+        # spawn_info_ranks.xtbl archive precedence (spec-tables-progression.md
+        # Sec14.12; tools/lua_host_run.cpp's installSpawnRankHitPointsFromCache):
+        # must prefer patch_compressed.vpp_pc over misc_tables.vpp_pc, exactly
+        # like installContinuousExplosionTableFromCache already does for
+        # continuous_explosions.xtbl. The fixture's two copies share Hit_Points
+        # 100/150 but only the patch copy's 3rd row carries 400 - a regression
+        # back to "misc_tables.vpp_pc only" would report rows=2,
+        # distinct_hit_points_values=2 and never install 400.
+        srhp = summary.get("spawn_rank_hit_points", "")
+        for part in ("installed source=patch_compressed.vpp_pc", "rows=3", "distinct_hit_points_values=3"):
+            check(part in srhp, f"spawn_rank_hit_points has {part}: {srhp}")
+        check("misc_tables.vpp_pc" not in srhp, f"spawn_rank_hit_points must not read misc_tables.vpp_pc: {srhp}")
+        # weapons.xtbl (spec-lua-api-behaviour.md Sec4.10/Sec4.11;
+        # installWeaponDefinitionTableFromCache): the fixture's misc_tables.vpp_pc
+        # carries one base-game-shaped <Weapon> row and nothing else - the two DLC
+        # files (dlc2_weapons.xtbl/dlc3_weapons.xtbl) are expected "missing" since
+        # this fixture has no dlc2.vpp_pc/dlc3.vpp_pc archive at all.
+        wdt = summary.get("weapon_definition_table", "")
+        for part in ("installed files=1/3", "rows=1", "names_resolved=1",
+                     "missing=dlc2.vpp_pc (for dlc2_weapons.xtbl), dlc3.vpp_pc (for dlc3_weapons.xtbl)"):
+            check(part in wdt, f"weapon_definition_table has {part}: {wdt}")
         # Sec26.25 item 5: the fixture's scene table - 4 names, "dlc_skipped"
         # skipped by the main filter, "no_file_c" has no scene file.
         zt = summary.get("zscene_table", "")
@@ -140,9 +173,11 @@ def main(argv):
         # own OPEN zscene load state 0x0153b51c blocks first every frame, but
         # promotion's attempt - now unconditional - is the one still pending
         # when the run ends, so it is the one whose OPEN read is recorded
-        # last). The cutscene state 0x0153b520 itself is never even read here
-        # (no cutscene_play call either), so it stays OPEN but is no longer
-        # what the per-frame driver reports stopping on.
+        # last). UPDATE 2026-10-07 (Sec60.4's own closure, mm_p_06 blocker
+        # fix): the cutscene state 0x0153b520 is now known (0/"idle") from
+        # construction, so the "rest of the cutscene machine" block also
+        # runs every frame here (a no-op for state 0) - it is still not what
+        # the per-frame driver reports stopping on.
         cf = summary.get("cutscene_frame", "")
         check(cf.startswith("frames:") and "last_blocker=[0x0153b538" in cf, f"cutscene_frame={cf}")
         m = re.match(r"^frames:(\d+) blocked_on_open:(\d+) ", cf)
@@ -174,14 +209,21 @@ def main(argv):
         check(slot("0x022cdf08").get("known") == "1", "vehicle-store flag known (0)")
         check(slot("0x012e6aa4").get("known") == "1", "fade state known (2)")
         check(slot("mode stack").get("known") == "0", "mode-stack top OPEN")
-        # zscene / cutscene: only the scene table (2 entries) and the skip byte
-        # (false, Sec26.25 Globals 2026-10-01) have a value; vint: everything
-        # but the safe-frame source object's +0x8 / +0xc.
+        # zscene / cutscene: the scene table (2 entries), the skip byte (false,
+        # Sec26.25 Globals 2026-10-01), the current entry (null, 2026-10-02)
+        # and - since 2026-10-09's zscene_prep/mm_p_06+mm_p_01 blocker fix -
+        # the re-queue-on-reset byte 0x0153b542 (CONFIRMED permanently false)
+        # and the nearest scene-bearing world object 0x03171a64 (CONFIRMED ""
+        # - no world-object manager in this host) also have a value now; vint:
+        # everything but the safe-frame source object's +0x8 / +0xc.
         check(slot("0x0153b556").get("known") == "1", "skip_all_cutscenes byte known (false)")
         check(slot("0x0153b530").get("known") == "1", "current scene entry known (null, 2026-10-02)")
+        check(slot("0x0153b542").get("known") == "1", "re-queue-on-reset byte known (false, 2026-10-09)")
+        check(slot("0x03171a64").get("known") == "1", "nearest scene-bearing world object known (\"\", 2026-10-09)")
         check(all(r["known"] == "0" and r["known_keys"] == "0" for r in slots
                   if r["area"] in ("zscene", "cutscene") and r["kind"] != "table" and "0x0153b556" not in r["global"]
-                  and "0x0153b530" not in r["global"]),
+                  and "0x0153b530" not in r["global"] and "0x0153b542" not in r["global"]
+                  and "0x03171a64" not in r["global"]),
               "other zscene and cutscene slots OPEN at start")
         # "scene table" alone is ambiguous: it's also a substring of the per-entry
         # "zscene table entry with kind 1 (...)" slot. 0x0153b294 is the table-level
@@ -224,7 +266,8 @@ def main(argv):
               f"own {m6.get('scheduler_resumes')} leftover {leftover}")
 
         # Determinism: a second run on the same cache diffs clean.
-        r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True, encoding="utf-8")
+        r = subprocess.run([sys.executable, bridge_diff, out1, out2], capture_output=True, text=True, encoding="utf-8",
+                          creationflags=_CREATIONFLAGS)
         report = r.stdout
         check(r.returncode == 0, "bridge_diff exit status")
         check("No per-mission changes." in report, "no per-mission changes between runs")
@@ -252,7 +295,8 @@ def main(argv):
         run_host(host, reglist, cache, out5, "--preload-states=spec16.4-highconf")
         check(read_kv(os.path.join(out5, "verdict_summary.txt")).get("preload_states_option", "").startswith("spec16.4 (default"),
               "old flag name accepted as an alias")
-        bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True)
+        bad = subprocess.run([host, cache, reglist, os.path.join(tmp, "run4"), "--bogus"], capture_output=True, text=True,
+                             creationflags=_CREATIONFLAGS)
         check(bad.returncode != 0, "unknown option rejected")
 
         # --host-rng (HYPOTHESIS / host substitute): off unless explicitly given.
@@ -263,7 +307,7 @@ def main(argv):
         rng5 = read_kv(os.path.join(out5, "verdict_summary.txt")).get("host_rng_option", "")
         check(rng5.startswith("on seed=7 (HYPOTHESIS"), f"host_rng_option with --host-rng=7: {rng5}")
         badseed = subprocess.run([host, cache, reglist, os.path.join(tmp, "run6"), "--host-rng=abc"],
-                                 capture_output=True, text=True)
+                                 capture_output=True, text=True, creationflags=_CREATIONFLAGS)
         check(badseed.returncode != 0, "bad --host-rng seed rejected")
 
         # --display (Sec26.26 host input): none keeps the record OPEN; a bad value is rejected.
@@ -278,7 +322,7 @@ def main(argv):
         check(read_kv(os.path.join(out8, "verdict_summary.txt")).get("display_option", "").startswith("1024x768 "),
               "display_option 1024x768")
         baddisp = subprocess.run([host, cache, reglist, os.path.join(tmp, "run9"), "--display=12x"],
-                                 capture_output=True, text=True)
+                                 capture_output=True, text=True, creationflags=_CREATIONFLAGS)
         check(baddisp.returncode != 0, "bad --display rejected")
 
     print("lua_host_run integration: " + ("FAILED" if failures else "all checks passed"))

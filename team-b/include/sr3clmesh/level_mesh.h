@@ -176,6 +176,32 @@
 //    `0x50`-byte record itself are still read by nothing at all anywhere
 //    (Sec4.4.6(d), stale authoring-tool addresses) and stay undecoded here.
 //
+// 9. THE G-SIDE HANDOFF FROM THE HEAD CHAIN TO THE MIDDLE'S OWN FIRST
+//    RENDER-GROUP MESH SUB-BLOCK ROUNDS THE CURSOR UP TO 16, UNLIKE EVERY
+//    STEP *WITHIN* EITHER CHAIN (note 6 above - those are exact, no
+//    rounding). Found via 5 named street/ramp props that a caller
+//    (tools/sr3_viewer.cpp) silently SKIPPED with "segment does not open
+//    with the block's check value": `resolveReferencedMeshes()` itself
+//    resolved every head reference correctly (3/3, 2/2, 2/2, 2/2, 5/5), but
+//    every existing caller then handed `renderGroups[0]`'s own
+//    `sr3mesh::MeshBlock::parse()` the RAW additive sum of the head
+//    blocks' `gLength()` as `gSegmentOffset`, unrounded - landing exactly
+//    12 bytes before the real check value in all 5 cases (each real
+//    g-cursor sum happened to be `4 (mod 16)` here; the real segment
+//    starts at the next 16-byte boundary, with 12 real zero PAD bytes in
+//    between, confirmed by reading the raw g-file bytes directly).
+//    MEASURED, not a 5-sample guess: replayed over every OTHER
+//    `.clmesh_pc` sharing a str2 container with one of the 5 (602 real
+//    instances across 9 containers in `sr3_city_0.vpp_pc`, every one
+//    where the head chain itself fully resolved) - whether
+//    `renderGroups[0]` parses today is explained EXACTLY by whether the
+//    raw head-chain sum already happens to be 16-aligned: 568/568 that
+//    are, parse correctly today (rounding up is then a no-op, which is
+//    why this was never noticed); every one of the other 34 fails today,
+//    and rounding the sum up to 16 fixes all 34, zero exceptions either
+//    way. gCursorAfterHeadChain() below applies this rounding; every
+//    caller should use it instead of re-summing gLength() directly.
+//
 // If a future sample contradicts any of the above, trust the sample.
 
 #pragma once
@@ -818,6 +844,23 @@ public:
     // than count(+0x48). Never throws.
     std::vector<sr3mesh::MeshBlock> resolveReferencedMeshes(ByteView content,
                                                             ByteView gContent) const;
+
+    // The g-cursor at which the MIDDLE region's first render group's own
+    // Mesh sub-block g-segment begins - the `gSegmentOffset` to hand
+    // `sr3mesh::MeshBlock::parse()` for `middle().renderGroups[0]`. See
+    // note 9 at the top of this file for the measured evidence (602 real
+    // instances, 9 str2 containers, 0 exceptions): this is the raw
+    // additive sum of `headBlocks`' own `gLength()` (for `bulkInGFile()`
+    // blocks only, same gate every pre-existing caller already used),
+    // rounded UP to the next 16-byte boundary - NOT the bare sum, which
+    // is what every caller computed before this method existed and is
+    // only correct when that sum happens to already be 16-aligned.
+    //
+    // Takes the already-resolved head chain rather than re-deriving it,
+    // so a caller that already called resolveReferencedMeshes() (every
+    // real caller does, to get gCursor in the first place) does not pay
+    // for it twice.
+    static size_t gCursorAfterHeadChain(const std::vector<sr3mesh::MeshBlock>& headBlocks);
 
 private:
     size_t headerOffset_ = 0;
