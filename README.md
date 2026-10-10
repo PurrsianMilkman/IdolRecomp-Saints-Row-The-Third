@@ -1,4 +1,4 @@
-# Project Crreish
+# IdolRecomp Saints Row The Third
 
 A clean-room reimplementation of **Saints Row: The Third** (PC, 2011), aiming at a full recompilation of
 the game from specifications and the player's own game files.
