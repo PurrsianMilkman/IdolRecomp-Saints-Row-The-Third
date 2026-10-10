@@ -364,6 +364,33 @@ pushed" helper trio (`0x007b3ba0`/`0x007b3c50`/`0x007e1f40`) showed up across se
 ruled-out subsystems and is itself unopened — tracing its own callers exhaustively might surface
 additional push-adjacent call sites that don't go through `0x007b4750` directly.
 
+**LANDED 2026-10-10, same rewrite — the pause-menu-open binding, via the input side.** The
+project's standing input-action vocabulary is a 166-entry `{value, name}` CBA table, read directly
+from the real image at `0x01122160` (not merely cited): entries `0x55`/`0x56`/`0x57` are
+`CBA_GAC_PAUSE_MENU`/`CBA_GAC_MAP_MENU`/`CBA_GAC_CELL_OPEN` respectively, sitting consecutively in
+the `CBA_GAC_*` cluster. A third input-query primitive was identified alongside the two already
+documented (`0x005bb530`, `0x005bdfe0`): `0x005bbdd0(actionId)`, single argument, at least some
+call sites discarding its return value — an edge "acknowledge/consume" idiom rather than a pure
+query. A per-frame update routine, `0x00673160` — reached only through a function-pointer table at
+`0x01131bb4`, not a direct call site, consistent with a per-object virtual/dispatch update method
+— checks a flag at its own object's `+0x21c`; when clear (menu not already open), it acknowledges
+`CBA_GAC_MAP_MENU` (`0x56`) via `0x005bbdd0` (return discarded), then queries `CBA_GAC_PAUSE_MENU`
+(`0x55`) via `0x005bdfe0(0x55, 0)`. When that query returns non-zero, it calls
+`0x007c1ef0(1, 0, 0, 0)`, which runs three negative guard checks (`0x007e1f40`, `0x007aaf00`,
+`0x007afb90` — each already known elsewhere as "already in a blocking UI/cutscene state" tests)
+and, when none fire and two further one-shot flag bytes are both clear, calls the project's own
+already-confirmed shared game-pause push primitive, `0x007074a0(4, 1)` (giving the previously
+only-hypothesized mode-4 sentinel its first concrete call site, §9 item 5), then builds and shows
+a UI dialog whose literal name string, read directly from `.rdata` at `0x01157184`, is
+`"dialog_pause_show"`. **HIGH CONFIDENCE** (full disassembly of the chain; the "this is the
+pause-open binding" reading rests on three independent corroborating facts — the action name, the
+dialog string, and reuse of the already-confirmed pause-push primitive with its
+previously-hypothesis-only mode-4 argument — but has not been confirmed by a live-game input test,
+so it is not bumped to CONFIRMED). The phone-menu's own open binding was NOT found by the same
+method: `CBA_GAC_CELL_OPEN` (`0x57`) exists in the table but not one of the 156 call sites across
+all three input-query primitives passes it anywhere in the binary — a clean, exhaustive negative,
+not an unexplored gap (§9 item 8, `spec-cellphone-menu-runtime.md` §2/§7).
+
 Mode 6 (`0x007e1d10`, resolved this pass) is the **control-scheme/key-bindings configuration UI**, not
 the pause menu as a whole — it loads `control_scheme_text.xtbl` and dispatches UI screen codes 9/10 (one
 controller) or `0x19` (25, two controllers, gated on flag `0x0229cd98`) via the shared dialog-open
@@ -423,15 +450,18 @@ primitive `0x007b4750`.
    actually get written when no save is loaded — not in `0x007ae950` itself (§2); must live in the "no
    file, build defaults" branch of `0x00B98C00`/`0x00B97310` or a player-object constructor, neither
    opened.
-2. The literal pause-menu-open input binding — which input handler pushes the pause-menu screen, and
-   which specific one of the ~60 pause-depth push sites it uses (§7). **Narrowed 2026-10-10, then
-   exhausted on the screen-push side the same day:** the push primitives themselves
-   (`0x007b4640`/`0x007b4750`) are now fully decompiled; EVERY known call site of either (~35 total)
-   has been individually characterized and none of them is the pause-menu or phone-menu open;
-   confirmed unreachable from Lua (exhaustive grep over the full UI Lua layer). **The search has
-   pivoted off screen-push call sites entirely — the next step is the input side**: either the
-   shared game-pause depth counter's ~60 push sites (§37.3) or the control-action/button-map
-   registration for the conventional pause/menu button (§7).
+2. ~~The literal pause-menu-open input binding~~ **RESOLVED (HIGH CONFIDENCE) 2026-10-10 — pivoted
+   to the input side after the screen-push side was exhausted (see the trail below), and landed
+   it.** The pause-menu-open binding is keyed off the CBA action table's `0x55` (85) entry
+   (confirmed in the real 166-entry table at `0x01122160`, immediately adjacent to `0x56`/`0x57` —
+   see §7 for the full chain and the table region). This resolves this item for the pause side; the
+   phone side's own binding is still OPEN (new item below).
+
+   **Narrowed 2026-10-10 (earlier the same day), then exhausted on the screen-push side:** the push
+   primitives themselves (`0x007b4640`/`0x007b4750`) are fully decompiled; EVERY known call site of
+   either (~35 total) was individually characterized and none of them is the pause-menu or
+   phone-menu open; confirmed unreachable from Lua (exhaustive grep over the full UI Lua layer).
+   This exhaustion is what forced the pivot to the input side that resolved the item above.
 3. The real identity of UI screen codes `5`/`0xb`/`0x11`/`9`/`10`/`0x19` the various dispatchers above
    branch on (§6/§7).
 4. `0x006fe180`'s own body — the consumer of new-game's 20-byte transition-request template (§2).
@@ -441,6 +471,16 @@ primitive `0x007b4750`.
    open item in the session/coop material, explicitly not chased further (§2).
 7. `0x007aebb0`'s real-world exposure as a machinima/developer tool (§5); `0x007aec20` (§6); `0x007b4750`'s
    own body (§7).
+8. **The phone/cellphone-menu-open input binding — OPEN, clean exhaustive negative (2026-10-10).**
+   The CBA table confirms a distinct action valued `0x57` (87), `CBA_GAC_CELL_OPEN`, immediately
+   after the pause/map-menu actions — but not one of the 156 call sites across all three known
+   input-query primitives (`0x005bb530`/`0x005bdfe0`/the newly-identified `0x005bbdd0`, §7) passes
+   `0x57` anywhere in the binary. This is a clean negative, not an unexplored gap: the phone's open
+   binding is NOT reachable through any currently-known CBA-table query primitive. Best-supported
+   remaining lead, not yet attempted: either a fourth, still-undiscovered query primitive reading
+   the same table by index, or a bypass of the semantic CBA layer entirely via a raw
+   physical-button/edge-bit path (as opposed to the remappable action layer) — see also
+   `spec-cellphone-menu-runtime.md` §2/§7.
 
 ---
 
@@ -481,6 +521,21 @@ executable's own data sections, not sourced externally.
 ---
 
 ## Changelog
+
+- **2026-10-10 — §7/§9: pause-menu-open input binding LANDED (HIGH CONFIDENCE), via the button-map
+  route; phone's own binding still OPEN, clean negative** (SPEC TEAM, agent `adacb57c01da892c6`).
+  Read the real 166-entry CBA action table directly from `0x01122160`: `CBA_GAC_PAUSE_MENU`
+  (`0x55`), `CBA_GAC_MAP_MENU` (`0x56`), `CBA_GAC_CELL_OPEN` (`0x57`) sit consecutively. Identified
+  a third input-query primitive (`0x005bbdd0`) alongside the two already documented. Traced the
+  full chain: per-frame dispatch `0x00673160` queries `CBA_GAC_PAUSE_MENU` via `0x005bdfe0`, calls
+  `0x007c1ef0` on a hit, which (after 3 guard checks) calls the already-confirmed shared pause-push
+  primitive `0x007074a0(4, 1)` — giving the previously-hypothesis-only mode-4 sentinel its first
+  concrete call site — and shows a dialog literally named `"dialog_pause_show"` in `.rdata`. Phone's
+  own binding (`CBA_GAC_CELL_OPEN`, `0x57`) was checked the same way and NOT found: none of 156
+  call sites across all 3 known query primitives passes it — a clean exhaustive negative, not an
+  unexplored gap; best remaining lead is a 4th undiscovered query primitive or a raw
+  physical-button bypass of the CBA layer entirely. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
 
 - **2026-10-10 — §7/§9: all ~35 push-screen call sites exhausted, none is the pause/phone open —
   search pivots to the input side** (SPEC TEAM, agent `a9f56b402bc4788b5`). Traced all 12

@@ -521,6 +521,17 @@ int main() {
     // a second entry, and this host never installs a session - Sec26.28 -
     // so that roster never grows past the local player), so bit 1 is a
     // CONFIRMED no-op by default rather than an OPEN read.
+    // NOTE (merge of fix/inv-slot-conversation-localplayer, 2026-10-10):
+    // that branch also added an `es.hasLocalPlayer().forget()` call here,
+    // on the premise that the Sec10.3 local-player-existence default
+    // (hasLocalPlayer()) gates bit 0's refusal. Checked against the actual
+    // stub (stub_customization_restore_player_rig,
+    // lua_spec_confirmed_stubs_b02_sec27_28.cpp): bit 0 only ever reads
+    // `rig.localPlayer1Gender` (its own independently-keyed OpenValue,
+    // see Sec28.21's own cross-reference note above) - hasLocalPlayer() is
+    // never consulted on this path, so that forget() call was inert
+    // (same pass/fail either way) and is intentionally dropped here rather
+    // than kept as a misleading no-op.
     fails(host, gp, "customization_restore_player_rig()", "0x009da4e0"); // default mask 3: bit 0 first
     CHECK(es.playerRig().restorePlayer1Count == 0); // threw before bit 0's own increment
     es.playerRig().localPlayer1Gender.set(1);
@@ -652,6 +663,7 @@ int main() {
     CHECK(es.evacuateFromVehiclesCount().at("char06") == 1);
 
     // Sec28.23 cellphone_animate_start_do.
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force OPEN to exercise this refusal
     fails(host, gp, "cellphone_animate_start_do()", "0x009da4e0");
     es.hasLocalPlayer().set(true);
     fails(host, gp, "cellphone_animate_start_do()", "0x00943a20");

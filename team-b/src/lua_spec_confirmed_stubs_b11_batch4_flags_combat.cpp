@@ -589,21 +589,56 @@ int stub_set_max_hit_points(lua_State* L) {
 // slot name). Return 1 string, always. Resolves character via
 // objectResolves(); an unresolved character ALWAYS answers "none"
 // regardless of the slot name (CONFIRMED structure: "if both resolves
-// succeed AND..."), so the slot-name table (0x008dc6b0, codes 0-0xb, OPEN
-// contents) is only even consulted once the character resolves. The 5
-// hardcoded case-insensitive literal slot names ARE fully given (CONFIRMED,
-// branchless arithmetic) and are handled directly; any OTHER slot-name
-// string cannot be distinguished from a real table entry (0-0xb) vs. a
-// genuine miss (0xff) without that OPEN table, so it is refused rather
-// than guessed. codes 0x10/0x11 ("best-non-lethal"/"best-non-explosive")
-// reproduce the function's own CONFIRMED DEAD-CODE GAP: its dispatch
-// switch never explicitly handles them, so they always fall to "none"
-// regardless of inventory (a faithfully-reproduced real defect, not
-// hardened away - it is a dispatch gap, not a memory-safety bug). codes
-// 0xd/0xe/0xf ("best"/"best-firearm"/"best-melee") route to dedicated
-// helpers this project has no real inventory data for - test-registrable
-// via CharacterState::inventoryBestSlotItemForTesting, honestly "none"
-// absent a registration (a real, CONFIRMED fallback, not a guess).
+// succeed AND..."), so the slot-name table (0x008dc6b0) is only even
+// consulted once the character resolves.
+//
+// CLOSED 2026-10-09 (spec-lua-api-behaviour.md Sec13.21, cross-confirmed by
+// spec-tables-weapons-combat.md Sec2.5/+0x10 and spec-tables-progression.md
+// Sec6.3/item 21, both independently citing the SAME 0x008dc6b0 table): the
+// table is a CLOSED, fully-recovered function - a case-insensitive linear
+// scan over 11 fixed literal strings, returning the matching index (0-0xa)
+// or the fixed sentinel 0xff on no match ("255 = unknown", per
+// spec-tables-progression.md's own text) - not an open guess. Full table:
+// 0=unarmed, 1=melee, 2=pistol, 3=smg, 4=shotgun, 5=rifle, 6=explosive,
+// 7=special, 8=vehicle, 9=grenade, 0xa=single_use. On a table miss (0xff),
+// the function falls back to the 5 hardcoded case-insensitive "best-*"
+// literal compares (CONFIRMED, branchless arithmetic, unchanged from
+// before). Because BOTH stages are now fully closed, every possible
+// slot-name string is deterministically classified here - there is no
+// longer a genuine "can't tell a real miss from an unmodeled name" gap, so
+// an unmatched string (0xff from both stages) answers "none" directly
+// (CONFIRMED: Sec13.21's own text - "otherwise, INCLUDING any unresolved
+// slot code, pushes 'none'") rather than being refused.
+//
+// Of the 11 table codes, codes 0-8 are LIVE: dispatch (`code < 0xb`) to
+// 0x005fec20's own default arm (an array-of-8-byte-entries lookup this
+// project has no real inventory data for) - test-registrable via
+// CharacterState::inventoryBestSlotItemForTesting, honestly "none" absent
+// a registration (same precedent as the pre-existing "best-*" codes
+// below). Codes 9 (grenade) and 0xa (single_use) are CONFIRMED DEAD, for
+// two structurally different reasons (Sec13.21, 2026-10-09): grenade (9)
+// is hard-coded inside 0x005fec20's OWN switch to the same arm as the
+// invalid sentinel 0xff, so it can never resolve a held item regardless of
+// inventory; single_use (0xa) has real, working handling inside
+// 0x005fec20 (a separate +0x60/+0x64 field pair), but this native's own
+// caller-side dispatch switch (0x00a50930) never forwards code 0xa to it
+// at all (only `<0xb` as a block would reach it, but the table's own
+// top-level dispatch here routes 0-8 there and stops short of 0xa - see
+// the dispatch logic below) - so it is unreachable via this native for a
+// different reason than grenade's. Both faithfully reproduce "none",
+// never real inventory simulation.
+//
+// The 5 hardcoded "best-*" literal names (0xd-0x11, unchanged from before
+// this pass): "best"/"best-firearm"/"best-melee" (0xd/0xe/0xf) route to
+// dedicated helpers this project has no real inventory data for -
+// test-registrable via the SAME inventoryBestSlotItemForTesting map,
+// honestly "none" absent a registration. codes 0x10/0x11 ("best-non-
+// lethal"/"best-non-explosive") reproduce the function's own CONFIRMED
+// DEAD-CODE GAP: its dispatch switch never explicitly handles them, so
+// they always fall to "none" regardless of inventory (a faithfully-
+// reproduced real defect, not hardened away - a dispatch gap, not a
+// memory-safety bug).
+//
 // Resolver 0x00a281a0 (character arg only - the slot-name resolver
 // 0x00a25f80 is unaffected) - RE-CORRECTED (2026-10-08, direct
 // disassembly of its own body): a two-stage #PLAYER#-then-#FOLLOWER#
@@ -621,27 +656,45 @@ int stub_inv_item_in_slot(lua_State* L) {
         return 1;
     }
     character = resolvedCharacter;
-    int code;
-    if (caseInsensitiveEquals(slotName, "best")) code = 0xd;
-    else if (caseInsensitiveEquals(slotName, "best-firearm")) code = 0xe;
-    else if (caseInsensitiveEquals(slotName, "best-melee")) code = 0xf;
-    else if (caseInsensitiveEquals(slotName, "best-non-lethal")) code = 0x10;
-    else if (caseInsensitiveEquals(slotName, "best-non-explosive")) code = 0x11;
-    else {
-        throw OpenStateError("inv_item_in_slot's own fixed slot-name enumeration table 0x008dc6b0 (codes 0-0xb)",
-                             "spec-lua-api-behaviour.md Sec13.21");
+
+    // Stage 1: the now-fully-recovered 11-name table (0x008dc6b0), codes 0-0xa.
+    static constexpr std::pair<const char*, int> kSlotNameTable[] = {
+        {"unarmed", 0x0}, {"melee", 0x1}, {"pistol", 0x2}, {"smg", 0x3},
+        {"shotgun", 0x4}, {"rifle", 0x5}, {"explosive", 0x6}, {"special", 0x7},
+        {"vehicle", 0x8}, {"grenade", 0x9}, {"single_use", 0xa},
+    };
+    int code = 0xff;
+    for (const auto& entry : kSlotNameTable) {
+        if (caseInsensitiveEquals(slotName, entry.first)) { code = entry.second; break; }
     }
-    if (code == 0x10 || code == 0x11) {
-        lua_pushstring(L, "none"); // CONFIRMED dead-code gap, Sec13.21
-        return 1;
+    // Stage 2 (only on a stage-1 miss): the 5 hardcoded "best-*" literals (CONFIRMED, branchless arithmetic).
+    if (code == 0xff) {
+        if (caseInsensitiveEquals(slotName, "best")) code = 0xd;
+        else if (caseInsensitiveEquals(slotName, "best-firearm")) code = 0xe;
+        else if (caseInsensitiveEquals(slotName, "best-melee")) code = 0xf;
+        else if (caseInsensitiveEquals(slotName, "best-non-lethal")) code = 0x10;
+        else if (caseInsensitiveEquals(slotName, "best-non-explosive")) code = 0x11;
     }
-    CharacterState& c = st->getOrCreateCharacter(character);
-    auto it = c.inventoryBestSlotItemForTesting.find(code);
-    if (it != c.inventoryBestSlotItemForTesting.end() && !it->second.empty()) {
-        lua_pushstring(L, it->second.c_str());
-    } else {
-        lua_pushstring(L, "none"); // CONFIRMED real fallback for no resolved item record
+
+    // Dead codes (CONFIRMED, Sec13.21): grenade(9)/single_use(0xa) inside
+    // the 0-0xa table, best-non-lethal(0x10)/best-non-explosive(0x11)
+    // outside it - all always "none" regardless of inventory.
+    bool dead = (code == 0x9 || code == 0xa || code == 0x10 || code == 0x11);
+    // Live codes: 0-8 (table) and 0xd/0xe/0xf (best-*) - test-registrable,
+    // honestly "none" absent a registration. Anything else (0xff genuine
+    // miss, or any code this native's own dispatch never reaches) is also
+    // "none" - CONFIRMED fallback, not a guess.
+    bool live = (code >= 0x0 && code <= 0x8) || code == 0xd || code == 0xe || code == 0xf;
+
+    if (live && !dead) {
+        CharacterState& c = st->getOrCreateCharacter(character);
+        auto it = c.inventoryBestSlotItemForTesting.find(code);
+        if (it != c.inventoryBestSlotItemForTesting.end() && !it->second.empty()) {
+            lua_pushstring(L, it->second.c_str());
+            return 1;
+        }
     }
+    lua_pushstring(L, "none"); // CONFIRMED real fallback: dead code, unresolved item record, or genuine miss
     return 1;
 }
 

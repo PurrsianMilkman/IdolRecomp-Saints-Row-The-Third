@@ -10,7 +10,119 @@
 ## unit or resolve carefully in a worktree then merge). I do the actual `git merge --no-ff` into main
 ## myself from the main checkout; agents never merge to main themselves, only report a commit SHA.
 
-**Git main tip**: `0749908` (just merged named-object-resolution fix below). Re-check `git log -1 main`.
+**Git main tip**: `d3290b1` (post-crash recovery, inv-slot+vorbis both merged+verified clean). Re-check
+`git log -1 main`.
+
+### POST-CRASH RECOVERY 2026-10-10 (orchestrator purrsian-a5 resumed after a crash, usage-pacer: 1 agent max)
+**DONE, merged+ctest-verified clean this tail** (all direct merges by me, no agent spawned, per usage-pacer):
+`faa96b7` respect-progression, `e45b754` continuous-spawn-arg4, `a620180` vehicle-handling-wired,
+`3e0934d` mission-fail-success, `c032a25` near-field-ped-spawner, `03ce96b` vorbis packet+codebook fix,
+`d3290b1` inv-slot/conversation/local-player (merge of the crashed agent's already-resolved-but-uncommitted
+work, `4161106` in worktree `wt-merge-invslot` - committed it, built, ctest 163/167 clean, then merged).
+Full main ctest after ALL of the above: **164/168 passed, 0 failed, 4 pre-existing Bink skips.**
+- **Vorbis independent oracle check (purrsian-a5's top priority)**: downloaded vgmstream-cli r2117
+  (official GitHub release asset `vgmstream-win64.zip`, SHA-256 verified EXACT match against
+  `6c4a8a38...22dc6c`) into its own scratch dir, extracted separately, ran the full 493-record oracle
+  sweep on main's build (internal: 493/493 OK, unchanged from the branch's own claim). **Full 493-record
+  independent comparison DONE**: all 493 processed, 0 missing/failed, correlation 1.000000 on EVERY record,
+  max RMS diff 0.000002, max abs diff <0.0001 - genuine independent confirmation (not our own code
+  agreeing with itself) that main's Vorbis decode is correct. Relayed to purrsian-a5. **Vorbis item is
+  fully closed, no further action needed.**
+- **`agent-pausemenu` worktree** (`D:/Project Crreish/TEAM B/.claude/worktrees/agent-pausemenu`, branch
+  `feature/pause-menu-open-binding`): found with 3 files modified (`window.h`/`window.cpp`/`sr3_viewer.cpp`)
+  but UNCOMMITTED and unverified - crashed agent `a82af8ee0688cbe1e` never finished. Not yet resumed -
+  next priority per purrsian-a5's order after the vorbis independent check finishes.
+- Still queued from the branch audit below: `fix/unified-registry-test-missing-b10-sum` (conflict,
+  queued), `feature/objective-text-localization` (conflict in `tools/sr3_viewer.cpp`, queued),
+  `diag/tower-constant-consumption-control` (merge code only, archive `.rdc` binaries to
+  `G:\AI\Claude Projects\recomp\TEAM-B-diag\` + gitignore, per purrsian-4a), `feature/m09-inworld-trigger-
+  test` (side-by-side check needed, not a blind merge), `fix/hex-address-rename` (last, heavy conflicts
+  expected). Bink-pixel-accuracy-oracle: explicitly deferred/skip per purrsian-4a ("redo fresh later if
+  still needed").
+
+### BRANCH AUDIT (purrsian-4a's ask - `git branch --no-merged main`, 25 branches, classified below)
+Method: for each, compared its unique content (merge-base..tip diff) against main's CURRENT state (existence/
+content of the same functions/files), not just raw diff-vs-main (which is dominated by main's own later
+growth and is noise). Merging the DONE ones one at a time now, dispatching only where a real conflict
+appears (per standing rule), resolving clean ones directly myself.
+
+**DONE - should merge (real, unmerged, not superseded):**
+1. `fix/inv-slot-conversation-localplayer-blockers` (`69058b4`) - ALREADY being merge-resolved by in-flight
+   agent `a56c3ff76dba826b8` (conflicts in 4 files), not re-queued here.
+2. `feature/objective-text-localization` (`cc22000`) - confirmed via `merge-base --is-ancestor` that
+   `feature/mission-hud-objectives` (`2d9ac67`) IS an ancestor of this branch - it's the superset, merge
+   THIS one and treat `mission-hud-objectives` as subsumed (do not merge separately).
+3. `feature/mission-fail-success-presentation` (`97aae3f`) - real spec-confirmed feature (lua-api 21.27c),
+   5 files/310 lines, not found elsewhere on main.
+4. `feature/near-field-ped-spawner` (`9169966`) - confirmed via direct content diff: fixes a real
+   disconnected-map bug in `spawn_override_clear_override_for_hood` (erased from the wrong map) and a real
+   missing-square bug in `spawn_region_min_spawn_dist` - neither fix is on main yet (spec sync `3ecbf84`).
+   Distinct from the already-merged `near-field-peds-playtest`/`ped-spawn-distance-spec-tuning` branches
+   (different base, different bugs - no overlap).
+5. `feature/respect-progression-runtime` (`a852f61`) - **discrepancy found**: an earlier HANDOFF entry
+   implied this was already merged ("`a852f61`+merge: respect lifetime cap... on feature/respect-
+   progression-runtime") but `git merge-base --is-ancestor a852f61 main` says NO - genuinely orphaned
+   despite the old note's wording. Real fix (lifetime cap, Sec5.4), should merge.
+6. `feature/vehicle-handling-wired` (`c1d24e7`) - real xtbl wiring (5 transmission/brake fields,
+   spec-physics-runtime.md Sec10.10/Sec10.7), not found on main.
+7. `fix/continuous-spawn-start-arg4-default` (`4c126bb`) - real confirmed spec fix (Sec4.8, OPEN->"").
+8. `fix/unified-registry-test-missing-b10-sum` (`8662f74`) - trivial test fix, 1 file/18 lines.
+9. `fix/hex-address-rename` (`b5d8df2`) - real, per direct USER ruling (every Ghidra auto-name -> hex
+   address), 61 files mechanical rename - **expect HEAVY conflicts** (main has changed almost everywhere
+   since), do this one LAST, likely needs a dedicated conflict-resolve unit or a from-scratch re-rename
+   rather than merging the old branch - judge when reached.
+10. `diag/tower-constant-consumption-control` (`c312c70`) - adds a REUSABLE, opt-in-only diagnostic
+    (RenderDoc capture loader + raw-cbuffer-dump tool, `SR3_DUMP_CBUFFER_RAW`/`SR3_RENDERDOC_CAPTURE` env
+    gates, zero behavior change otherwise) - low-risk, real tooling value per its own doc comment. Also
+    carries large binary `.rdc` capture files + verbose result dumps - merge the code, use judgment on
+    whether the binaries are worth keeping in the repo (flag, don't decide unilaterally if large).
+
+**NEEDS DEDICATED REVIEW - do NOT merge blind (real unique content exists, but subsystem has moved on
+since divergence and a naive merge risks silently reintroducing an already-fixed bug or missing a since-
+discovered better fix):**
+11. `diag/vorbis-488-codebook-investigation` (`028b6ae`) - real Kraft-inequality codebook fix, NOT present
+    on current main's `wwise_setup_rebuild.cpp` (confirmed via grep) - but the whole Wwise/Vorbis path has
+    had major rework since (`be602fb`/`ffce7ee`, "493/493 byte-identical" claim) - needs a dedicated unit
+    to confirm the bug still applies post-rework before merging, not a blind merge.
+12. `fix/vorbis-codebook-library-index` (`eeebd91`) - same subsystem, same caution.
+13. `integration/vorbis-packet-plus-codebook-fix` (`08b4265`) - same subsystem, same caution.
+14. `feature/bink-pixel-accuracy-oracle` (`7218883`) - TwoLiteralPattern grammar work, not on main - but
+    this is the SAME Bink-codec area a prior session already found 3 other branches "badly stale, not safe
+    to continue from" in (see #15). The ACTUAL current Bink fix landed via a completely fresh branch off
+    main instead (`fix/bink-merge-group-bit-consumption`, already merged). Recommend NOT merging this old
+    branch - if TwoLiteralPattern is still a real gap, redo it fresh off current main like that fix was,
+    don't trust this branch's base.
+15. `feature/m09-inworld-trigger-test` (`6122714`) - extends `zone_object_resolver_probe`; `lua_menu_
+    runtime.cpp` already exists on main (not obviously missing this branch's content, not fully verified
+    line-by-line) - possible duplicate of already-merged `inworld-mission-host-triggers-v2` work. Needs a
+    real side-by-side check before deciding merge vs. discard.
+
+**STALE/SUPERSEDED - do not merge (confirmed via direct check, not just age):**
+16. `fix/bink-d10plus-audio-chunk-skip` (`3f1d1e7`), `fix/bink-descriptor-b-case1-selector` (`137e70d`),
+    `fix/bink-prestage-len-correction` (`57ea5d4`) - these are (3 of) the "4 old pre-pause Bink branches" a
+    prior session explicitly checked and found "badly stale... not safe to continue from" (already
+    documented earlier in this file's own history) - confirmed finding stands.
+17. `worktree-agent-ae8d4fdb38c19c597` (tip `5927dce`, Oct 7), `worktree-agent-af66ee0cdda9dafdd` (tip
+    `a6ea0d6`, Oct 8) - unnamed/generic worktree branches, 2-3 days old in a project this fast-moving;
+    `SR3_FORCE_WARP` (the fix `ae8d4fdb...` targets) already appears in 4 current main files, and
+    `af66ee0cdda9dafdd`'s tip is literally just a planning-note commit, not code. Both superseded.
+18. `wip/cutscene-pipeline-bleed-recovery` (`a3da915`) - confirmed: the test file it recovers
+    (`synthetic_luahost_cutscene_camera_script_test.cpp`) ALREADY exists on main (recovered via the actual
+    real incident-recovery path) - this branch was an abandoned parallel recovery attempt.
+19. `design/mission-host-in-engine-loop` (`775cd61`) - pure design doc; confirmed via `git log --grep` that
+    ALL 3 phases it designs are already implemented AND merged (`feature/mission-host-phase1/2/3`) - doc is
+    now historical record only, not actionable.
+20. `verify-onto-main` (`ca97f84`, "Fix findTileZoneEntryName() to see ~al/variant zone candidates") -
+    confirmed: main's current `findTileZoneEntryName()` already has its own "~al"/"~s FAMILY" doc-comment
+    handling - this is covered by the already-merged `fix/tile-lookup-tilde-s-variant` (`508da45`) via a
+    different implementation path.
+21. `feature/mission-hud-objectives` (`2d9ac67`) - subsumed as an ancestor of #2 above, merge that one
+    instead.
+
+**REJECTED (self-labeled, confirmed):**
+22. `fix/ground-tile-origin-translation` (`07ba09f`) - commit message itself says "WIP: REJECTED
+    hypothesis - per-tile origin translation, do not merge." Leave as-is, candidate for eventual deletion
+    (per-case yes needed, not done here).
 
 ### DONE - fresh verify (`verify/main-e239651-fresh`, no commit needed, nothing to fix)
 Fresh configure+build+full ctest on main `90f5afd`: **163/167 passed, 0 failed, 4 skipped - 100% of run
@@ -75,6 +187,47 @@ Dispatched a FRESH agent (`ab5f9f50819b1f5f9`) in a new worktree off current mai
   that copy step tolerant of a pre-existing read-only target. Queued, not yet fixed.
 - Worktree `build/` is 2.1GB, flagged not deleted (disk-space-discipline).
 - **Relayed to purrsian-4a** with the folder name as explicitly requested.
+- **purrsian-4a confirmed**: md5 verified clean on D:/G:/live; GitHub pushed (`922ac15`); fixed
+  `mirror_build_history.sh` themselves (clears read-only before copying README/BUILD-LOG, now completes
+  - "8 versions on G:"); marked the old stalled `v0.5_...` folder's NOTES.txt "incomplete, superseded by
+  v0.5b" and synced its G: copy. That folder's mystery concurrent-write is explained/resolved now.
+
+### DONE AND MERGED: zone-data fallback for character/navpoint world positions (m07 unblock,
+### merge commit pending - check `git log -1 main`, merge of `fix/get-dist-character-position` @ `af98b6e`)
+purrsian-4a's hypothesis was HALF right: the gap was real, but the actual blocking m07 call was
+`npc_leash_to_nav("Nav Kinzie Leash", ...)`, NOT `get_dist` itself - the shared `worldPosition` OpenValue
+field's error message doesn't distinguish call sites, so the agent instrumented to confirm the real site
+before fixing (don't trust that error message alone next time either). Root cause: the live per-frame
+position bridge (`bridgeLiveCharacterPosition()`) only ever writes `"#PLAYER1#"` by design (no producer for
+any other name in a minimal SP playtest) - correct as far as it goes, just incomplete coverage. Added
+`EngineState::tryResolveWorldPositionFromZoneData()` - falls back to the existing real zone-data object
+position lookup (`sr3zone::ObjectRecord`/`ObjectPosition()`, Sec1.14, already used by in-world-trigger
+auto-registration, independently confirmed to cover navpoints too via `tests/real_zone_objects_test.cpp`)
+before throwing OPEN. Wired into `get_dist`, `npc_leash_to_nav`, `teleport_vehicle`, `get_object_pos`,
+`turn_to_do`, `vehicle_rc_get_signal_strength` (all share the same field/reasoning). **Live-verified**: m07
+now advances PAST this point (0.3s->2.4s) to a new, separate, genuinely-OPEN gap: `audio_conversation_play`'s
+"current conversation" lookup (Sec2.10) - already documented OPEN in `stub_audio_conversation_play`'s own
+doc comment, not touched, worth queuing as m07's next blocker (likely needs a Team A question on real
+semantics). Full ctest 167/167, 4 pre-existing Bink skips, no regressions.
+**NOT yet relayed to purrsian-4a - DO THIS NEXT, and correct the v0.5b NOTES.txt framing** (it said m07
+"asks for a specific piece of character-position data" - accurate on symptom, wrong on which native).
+
+### 2 agents in flight
+- `a56c3ff76dba826b8` - fresh worktree off current main - resolve + merge-prep the never-merged
+  `69058b4` branch (inv_item_in_slot 11-slot table Sec13.21, audio_conversation_play "current
+  conversation" 3-slot table Sec2.10 - purrsian-4a confirmed this is spec-COMPLETE not open, it's m07's
+  current blocker, local-player default Sec10.3). I attempted `git merge --no-ff 69058b4` directly in
+  main, hit conflicts in 4 files (`lua_spec_initial_state.cpp`,
+  `synthetic_luahost_batch2728_test.cpp`/`sec13_14_batch4_test.cpp`/`_test.cpp`), ABORTED per standing
+  "never resolve blind in main checkout" rule, dispatched this unit to resolve carefully in an isolated
+  worktree instead. Told it to preserve both sides (don't drop the stack-overflow-fix test restructuring
+  OR this branch's 3 real fixes), build+ctest+re-verify m07 live, report commit SHA for me to merge.
+- `a82af8ee0688cbe1e` - fresh worktree off current main - pause-menu open binding (spec-frontend-menu.md
+  Sec7/Sec9, HIGH confidence per Team A spec sync): action `CBA_GAC_PAUSE_MENU` (`0x55`) each frame, gate
+  of 3 "already in blocking UI/cutscene" checks, shared pause-push `(4,1)`, shows `dialog_pause_show`. Told
+  it to wire Esc (preserving quit on another key if Esc currently quits), use existing real dialog-loading
+  mechanism (not a fake menu), verify live pause actually stops sim/shows resume+quit. Phone's open binding
+  explicitly skipped (unknown per Team A).
 
 ### BIG WIN just landed: `34bc55d`+merge `e239651` - real trigger shape/extent AND the zscene_is_loaded
 ### root cause, BOTH fixed, m05 AND m09 BOTH genuinely advance further live

@@ -59,6 +59,7 @@ std::vector<RegisteredName> fixtureNames() {
         {"parking_spot_set_max", "gameplay"},
         {"trigger_allow_dead_guys", "gameplay"},
         {"spawn_global_override_set_category", "gameplay"},
+        {"spawn_override_set_override_category_for_hood", "gameplay"},
         {"spawn_region_min_spawn_dist", "gameplay"},
         {"get_stag_active", "gameplay"},
         {"flashlights_disable", "gameplay"},
@@ -212,16 +213,76 @@ int main() {
     ok(host, gp, "spawn_global_override_clear_category()");
     CHECK(es.spawnGlobalOverride().category.empty());
 
-    // --- §49/T16 spawn_region_min_spawn_dist/_reset (AGG) -------------------
+    // --- Sec32.1 spawn_region_min_spawn_dist/_reset (updated 2026-10-09,
+    // spec sync 3ecbf84: CONFIRMED to square the argument, default 2500.0 =
+    // 50.0f^2, not the old AGG placeholder's raw-value/0.0 shape) -----------
     ok(host, gp, "spawn_region_min_spawn_dist(12.5)");
-    CHECK(es.spawnRegionMinSpawnDist() == 12.5f);
+    CHECK(es.spawnRegionMinSpawnDistSquared() == 12.5f * 12.5f);
     ok(host, gp, "spawn_region_min_spawn_dist_reset()");
-    CHECK(es.spawnRegionMinSpawnDist() == 0.0f);
+    CHECK(es.spawnRegionMinSpawnDistSquared() == 2500.0f);
 
-    // --- §49/T16 spawn_override_clear_override_for_hood (AGG) ---------------
-    es.spawnOverrideCategoryForHood()["Saints Row"] = "gang"; // simulating the out-of-scope SET sibling
+    // --- Sec49.2 spawn_override_clear_override_for_hood (updated 2026-10-09,
+    // spec sync 3ecbf84: now clears the SAME real per-hood state the SET
+    // sibling writes - SpawnOverride::perHoodCategory/::perHoodCategoryNull
+    // Stored - not a disconnected placeholder map; this also regression-locks
+    // the pre-existing set-then-clear bug the sync caught) -------------------
+    ok(host, gp, "spawn_global_override_set_category('gang')"); // unrelated global override - clear-for-hood must not touch it
+    es.spawnOverride().categoryNameResolves.set("gang", true); // take the resolved-happy-path branch, same as tranche16_test's own usage
+    ok(host, gp, "spawn_override_set_override_category_for_hood('Saints Row', 'gang')");
+    CHECK(es.spawnOverride().perHoodCategory.at("Saints Row") == "gang");
     ok(host, gp, "spawn_override_clear_override_for_hood('Saints Row')");
-    CHECK(es.spawnOverrideCategoryForHood().count("Saints Row") == 0);
+    CHECK(es.spawnOverride().perHoodCategory.count("Saints Row") == 0);
+    CHECK(es.spawnOverride().perHoodCategoryNullStored.count("Saints Row") == 0);
+    CHECK(es.spawnGlobalOverride().category == "gang"); // untouched - per-hood clear is not the global clear
+
+    // --- Sec32.1/Sec49.2 SpawnRegionAnnulusEligible(ForPlayer) - the real
+    // min/max annulus filter behind spawn_region_min_spawn_dist/
+    // spawn_region_max_spawn_dist (spec sync 3ecbf84). Min = 50 (2500
+    // squared, the CONFIRMED default), max = 200 (40000 squared) for this
+    // block's own fixture distances - a candidate at distance 30 is inside
+    // the min floor, 100 is in the annulus, 300 is outside the max cap. ---
+    {
+        const float minSq = 2500.0f;   // 50^2, CONFIRMED default
+        const float maxSq = 40000.0f;  // 200^2, arbitrary fixture value for this test block only
+        constexpr uint8_t kNoFlags = 0x00;
+        constexpr uint8_t kEscapeFlags = kSpawnRegionMinDistEscapeBit;  // 0x08 set, 0x10 clear - escape holds
+        constexpr uint8_t kEscapeSuppressed =
+            kSpawnRegionMinDistEscapeBit | kSpawnRegionMinDistEscapeSuppressBit;  // 0x08 set AND 0x10 set - escape does NOT hold
+
+        // Inside the min radius (30 < 50), no escape flag -> rejected.
+        CHECK(!SpawnRegionAnnulusEligibleForPlayer(30.0 * 30.0, minSq, maxSq, kNoFlags));
+        // Same candidate, WITH the escape flag (0x08 set, 0x10 clear) -> the
+        // secondary override check runs, CHOSEN-default-admits -> accepted.
+        CHECK(SpawnRegionAnnulusEligibleForPlayer(30.0 * 30.0, minSq, maxSq, kEscapeFlags));
+        // The escape bit alone is not enough if the suppress bit (0x10) is
+        // also set - CONFIRMED "bit 0x08 set AND bit 0x10 clear" - rejected.
+        CHECK(!SpawnRegionAnnulusEligibleForPlayer(30.0 * 30.0, minSq, maxSq, kEscapeSuppressed));
+        // The escape's own secondary check can also decide NOT to admit -
+        // the escape bit alone does not unconditionally bypass the floor.
+        CHECK(!SpawnRegionAnnulusEligibleForPlayer(30.0 * 30.0, minSq, maxSq, kEscapeFlags, [] { return false; }));
+
+        // Outside the max radius (300 > 200) -> rejected UNCONDITIONALLY,
+        // even with every escape bit this candidate could carry (CONFIRMED:
+        // "the cap does not" have an override).
+        CHECK(!SpawnRegionAnnulusEligibleForPlayer(300.0 * 300.0, minSq, maxSq, kNoFlags));
+        CHECK(!SpawnRegionAnnulusEligibleForPlayer(300.0 * 300.0, minSq, maxSq, kEscapeFlags));
+
+        // Inside the actual annulus (50 < 100 < 200) -> accepted regardless
+        // of the escape bits (neither gate fires).
+        CHECK(SpawnRegionAnnulusEligibleForPlayer(100.0 * 100.0, minSq, maxSq, kNoFlags));
+        CHECK(SpawnRegionAnnulusEligibleForPlayer(100.0 * 100.0, minSq, maxSq, kEscapeFlags));
+
+        // Multi-player AND semantics (Sec32.1: "candidates passing both
+        // tests, against both players, when both exist") - eligible for
+        // player A's distance (annulus) but inside player B's own min floor
+        // with no escape -> overall rejected; the same case WITH the escape
+        // -> overall accepted.
+        CHECK(!SpawnRegionAnnulusEligible({100.0 * 100.0, 30.0 * 30.0}, minSq, maxSq, kNoFlags));
+        CHECK(SpawnRegionAnnulusEligible({100.0 * 100.0, 30.0 * 30.0}, minSq, maxSq, kEscapeFlags));
+        // Either player's distance beyond the max cap fails the whole test,
+        // escape or not.
+        CHECK(!SpawnRegionAnnulusEligible({100.0 * 100.0, 300.0 * 300.0}, minSq, maxSq, kEscapeFlags));
+    }
 
     // --- §53/T20 get_stag_active ---------------------------------------------
     ok(host, gp, "assert(get_stag_active() == false)");

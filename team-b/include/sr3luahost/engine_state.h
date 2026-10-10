@@ -92,6 +92,21 @@
 #include "sr3luahost/misc_state.h"                // ObjectiveTextSlot, TeleportRequest, ConversationPlay
 #include "sr3luahost/save_game_state.h"           // CollectedCollectible, SaveGameState (spec-save-format.md Sec15 wiring, 2026-10-08)
 
+// sr3tables_progression::RespectLevel: the real respect_levels.xtbl per-level
+// record type (spec-tables-progression.md Sec5.2), reused directly below as
+// the live runtime's level-up cost/unlock lookup (Sec5.4: "0x0060eb60 is not
+// a separate algorithm ... it is the exact same accessor" as the save-shaped
+// path's own cost table) - NOT a second, parallel cost struct. Only the
+// struct's DEFINITION is used here (a plain data record: Always<int32_t>,
+// optional<string>, vector<string> - all header-only, sr3xtbl/xtbl.h pulls
+// in no out-of-line symbol this header calls), so this remains header-only:
+// sr3luahost does not gain a new link dependency on sr3tables_progression,
+// and this subsystem never reads a real respect_levels.xtbl file (reading
+// real xtbl content is a separate concern, same footing as this task's own
+// collectibles.xtbl Respect_Award fields being out of scope) - tests supply
+// the per-level records directly via respectLevelTable().
+#include "sr3tables_progression/tables_world.h"   // sr3tables_progression::RespectLevel
+
 namespace sr3vintdoc {
 struct Document; // include/sr3vintdoc/vint_doc.h - EngineState::loadVintDocument
 }
@@ -1059,10 +1074,49 @@ public:
     // accessor and, if a local player object exists, triggers a refresh
     // of that player's own HUD inventory display (OPEN: whether the real
     // refresh is a full rebuild vs. a dirty-flag set - not modeled, per
-    // this task's own brief). This project has no real player-existence
-    // tracking, so `hasLocalPlayer_` is this project's own minimal,
-    // explicit stand-in, defaulting true ("a running game always has a
-    // local player" - this project's own chosen single-instance default).
+    // this task's own brief).
+    //
+    // CLOSED 2026-10-09 (mission-census item, missions m17/m01; routed as
+    // "local_player_exists" but Sec10.3's own text confirms no Lua native
+    // by that name, or any close variant, exists in the full 1,490-entry
+    // registered list - `game_hud_update_inventory` is simply one of 20+
+    // natives sharing this SAME accessor, 0x009da4e0, and is this
+    // project's own chosen home for the finding): `0x009da4e0`'s real
+    // body is trivial - it returns the dword at the fixed global address
+    // `0x0262edfc` directly, the local player's own live game-object
+    // instance, not a resolver chain. Traced all 3 real writers: SET
+    // (non-null) by `0x009e1fc0` (the boot-time player-creation/spawn
+    // routine) and, independently, by `0x009e3bf0` (a character-preset-
+    // swap/rebuild routine, same class id); CLEARED to null by
+    // `0x009da150`, a generic per-instance teardown routine, but ONLY when
+    // the object being destroyed is the one the global currently points
+    // at (a plain pointer-identity check - any other instance's teardown
+    // takes an unrelated branch). So "a local player exists" is really
+    // "has either constructor path run since the last matching teardown" -
+    // populated once per player-object lifetime, nulled exactly when that
+    // SAME object is torn down.
+    //
+    // `hasLocalPlayer_` therefore now carries a CONFIRMED default of true,
+    // pre-seeded by applySpecInitialState (lua_spec_initial_state.cpp,
+    // item 16 - renumbered when merged alongside the pre-existing items
+    // 13-15 added independently on main) - same "pre-seed a newly-CONFIRMED
+    // default instead of leaving an OpenValue OPEN" convention the
+    // notoriety spawn-group name-table fix used (Sec6.2/Sec13.2,
+    // 2026-10-09): a running
+    // single-player game has already run one of the 2 real constructor
+    // paths before any script's own first tick, and the live playtest
+    // viewer (tools/sr3_viewer.cpp) independently reaches the identical
+    // conclusion by explicitly calling `.set(true)` for its own HUD/
+    // mission sessions. OPEN, honestly flagged, NOT papered over: the "1
+    // conditional clearer" is real and identifiable (ordinary player-
+    // object teardown, e.g. a respawn/session-end rebuild cycle that
+    // tears down the old instance before `0x009e1fc0`/`0x009e3bf0` builds
+    // the new one) - this project does not model that teardown window, so
+    // a script tick that genuinely runs DURING it would see this field
+    // still (wrongly) true. Remains a plain OpenValue, not a bare bool:
+    // `.set(false)`/`.forget()` stay available, and every existing test
+    // that deliberately exercises the "no local player" path keeps doing
+    // so by calling them explicitly, exactly as before this pre-seed.
     // Test-only setter. `recordHudInventoryRefresh()`/
     // `hudInventoryRefreshCount()` are this project's own no-op stand-in
     // for "a real HUD refresh happened" (no real HUD to refresh) - a
@@ -1523,6 +1577,46 @@ public:
         }
         return v.get(); // throws OpenStateError: real OPEN gap, diagnostic not enabled
     }
+
+    // REAL fallback (2026-10-10, m07 get_dist/npc_leash_to_nav live-
+    // playtest follow-up - NOT the diagnostic probe above): `worldPosition`
+    // is written live for exactly one name, "#PLAYER1#"
+    // (bridgeLiveCharacterPosition()'s own doc comment - deliberately the
+    // ONLY one). Any OTHER resolved name (an NPC, a navpoint, a trigger
+    // anchor, ...) that a get_dist/npc_leash_to_nav/teleport_vehicle/
+    // get_object_pos/turn_to_do/vehicle_rc_get_signal_strength call reaches
+    // has never had anything write its worldPosition this way, so it reads
+    // as OPEN even though the name itself resolved correctly - a real gap
+    // in COVERAGE, not evidence the field's own reasoning (character-
+    // shaped, Sec4.2) is wrong. But the real engine's own zone data
+    // (.czn_pc) already gives a REAL, on-disk position for exactly this
+    // class of name - the SAME sr3zone::ObjectRecord/ObjectPosition()
+    // source this project's own in-world-trigger auto-registration
+    // already uses live (runPlaytest()'s tryAutoRegister lambda, spec-
+    // lua-api-behaviour.md Sec1.14) - confirmed (not assumed) to cover
+    // navpoints too: tests/real_zone_objects_test.cpp's own
+    // navpointWithPosition counter. So before surfacing OpenStateError,
+    // try that same real source: if `name` resolves to a zone-object
+    // record with a position property, that IS a real, confirmed position
+    // for it (not a fabricated 0,0,0 stand-in) - cache it into `v` via one
+    // real .set() so repeat reads are O(1) and consistent, and report a
+    // genuine hit. Returns false (never throws itself) when `name` either
+    // isn't a real zone object or has no position property on its own
+    // record - the caller's existing `v.get()`/`worldPositionOr()` call
+    // is the correct, honest fallback for that genuinely-unresolved case
+    // (e.g. the one demo playtest vehicle, which Sec11.10's own closed
+    // 4-producer list confirms the real engine's name map never gets a
+    // live entry for either).
+    bool tryResolveWorldPositionFromZoneData(const std::string& name, OpenValue<WorldPosition>& v) {
+        if (v.known()) return true;
+        const sr3zone::ObjectRecord* rec = resolveZoneObject(name);
+        std::optional<sr3zone::Position3f> pos = rec ? sr3zone::ObjectPosition(*rec) : std::nullopt;
+        if (!pos) return false;
+        v.set(WorldPosition{static_cast<double>(pos->x), static_cast<double>(pos->y), static_cast<double>(pos->z)});
+        ++zoneDataWorldPositionHitCount_;
+        return true;
+    }
+    uint64_t zoneDataWorldPositionHitCount() const { return zoneDataWorldPositionHitCount_; }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
     // batch 2026-10-01, lifecycle driver + scene table 2026-10-01 nnlt text;
@@ -4507,18 +4601,30 @@ public:
         // it; timer 1 starts false for the same "nothing has happened yet"
         // reason, becoming true only via armMissionEndTransitionTimer()
         // below, this project's own single in-scope writer.
-        bool missionEndTimer1Armed = false; // 0x012f2630
-        bool missionEndTimer2Armed = false; // 0x012f2634 - OPEN who arms this; CHOSEN false, nothing in scope sets it
+        bool missionEndTimer1Armed = false; // 0x012f2630 - failure's own timer, armed by armMissionEndTransitionTimer() below
+        // FIX (Sec21.27c, 2026-10-09): no longer "OPEN who arms this" - full
+        // disassembly of the shared presentation dispatch 0x006da400 shows
+        // mission_end_success arms THIS timer (armMissionEndSuccessTimer()
+        // below) - a SEPARATE timer from failure's own timer 1, correcting
+        // this file's prior (batch b29) assumption that success shared
+        // timer 1 purely because both callers call the same dispatch
+        // function. See dispatchMissionEndPresentation() below.
+        bool missionEndTimer2Armed = false; // 0x012f2634 - success's own timer
         // Test-observable count of successful mission_end_failure dispatches
-        // (gate passed, 0x006da400 called) - not a spec fact, just a plain
-        // call counter for test convenience, same convention as
-        // partyDismissAllCount above.
+        // (gate passed, 0x006da400's FAILURE branch actually taken - i.e.
+        // NOT a type-2-coerced call, see
+        // missionEndFailureCoercedToSuccessCount below) - not a spec fact,
+        // just a plain call counter for test convenience, same convention
+        // as partyDismissAllCount above.
         uint64_t missionEndFailureDispatchCount = 0;
         // mission_end_success (Sec6.12, batch b29, 2026-10-08): CONFIRMED
-        // to share mission_end_failure's own gate (above) AND its own final
-        // dispatch (0x006da400, arming the SAME timer 1) - kept as a
-        // SEPARATE counter so a test can tell the two callers apart even
-        // though they touch the identical real timer bool.
+        // to share mission_end_failure's own gate (above); its own final
+        // dispatch (0x006da400) is the SAME shared function failure calls,
+        // but FIX (Sec21.27c, 2026-10-09, full disassembly of that shared
+        // function): it arms its OWN separate timer (missionEndTimer2Armed
+        // above), not failure's timer 1 as previously assumed - kept as a
+        // SEPARATE counter so a test can tell the two callers apart
+        // regardless.
         uint64_t missionEndSuccessDispatchCount = 0;
         // mission_end_success's own arg 3 (polymorphic: a table's first two
         // indexed elements, or a plain string's one slot, or absent):
@@ -4539,6 +4645,71 @@ public:
         // its own internal behaviour is OPEN (Sec6.20).
         uint64_t missionEndToActivityPositionCaptureCount = 0;
         uint64_t missionEndToActivityDispatchCount = 0;
+
+        // --- Sec21.27c upgrade (new task, 2026-10-09): "0x006da400 opened
+        // in full" - see dispatchMissionEndPresentation() further below for
+        // the one real model of that shared function, and each field's own
+        // doc comment just below for citations. ----------------------------
+        std::string lastFailReasonText;          // 0x014c7a08 - CONFIRMED write; renderer OPEN (see below)
+        std::string lastSuccessAnnouncementText;  // 0x014c846c - CONFIRMED write; renderer OPEN (see below)
+        // Sec21.27c's own text flags two items as explicitly OPEN (not
+        // guessed): who creates a NEW fail-dialog instance (0x006da400 only
+        // ever closes a STALE one, via the existing 4-slot modal-dialog
+        // pool 0x02282d40/0x007c1dd0/0x007c31b0 already tied to the
+        // "dialog_build" Lua hook - no creation call found inside this
+        // function itself); and what, on a later frame, actually RENDERS
+        // either text global above (most plausibly the separately-
+        // documented cmp_mission_success native UI entry, Sec14.3, not
+        // itself Lua-dispatched - not traced end-to-end). This project has
+        // no in-scope dialog-pool/renderer simulation to hook either OPEN
+        // item into, so neither gets an invented field - only the two
+        // writes Sec21.27c itself confirms happen are modelled, above.
+
+        // CONFIRMED mechanism (Sec21.27c): failure's HUD-screen-teardown/
+        // fade effect is gated on a flags-byte bit (0x014c848c & 0x8) - no
+        // spec-given start-up value for that byte, so this is OPEN until a
+        // test sets it (same "CONFIRMED mechanism, OPEN value" discipline
+        // as every other not-given flags byte in this file, e.g.
+        // MissionCheckpoint::usePlayerVehicleTransform above), NOT guessed
+        // true or false by default.
+        OpenValue<bool> hudTeardownGateBit{"mission-end flags byte 0x014c848c bit 0x8 (HUD-teardown gate)",
+                                           "spec-lua-api-behaviour.md Sec21.27c"};
+        // CHOSEN representation (this task, explicitly invited by its own
+        // brief): stands in for the real 0x007b4990(-1) "tear down EVERY
+        // currently active HUD screen" call on the generic HUD-screen
+        // registry 0x012fced8 - this project has no real HUD-screen
+        // registry to simulate (explicitly out of scope per the brief), so
+        // only whether/how-often the teardown-ALL primitive fired is
+        // tracked - same "count the call, not the subsystem" convention as
+        // waypointRemoveCount/notorietyUiMeterResetCount above.
+        uint64_t hudTeardownCount = 0;
+        // Test-observable summary of the MOST RECENT
+        // dispatchMissionEndPresentation() call: true only when that call
+        // fired the teardown-all primitive. CONFIRMED asymmetry (Sec21.27c):
+        // success NEVER sets this true, regardless of the gate bit above -
+        // only the (non-coerced) failure path can.
+        bool lastDispatchTornDownHud = false;
+
+        // NEW finding, CONFIRMED by raw push-order/branch structure
+        // (Sec21.27c, 2026-10-09): for mission TYPE 2 specifically, a call
+        // to mission_end_failure is silently coerced into
+        // 0x006d9f70(mission, 1) - hardcoded SUCCESS via the SAME
+        // end-of-mission super-dispatcher missionEndDispatch() below
+        // already models - skipping ALL of dispatchMissionEndPresentation()'s
+        // own fail-text/debounce/HUD-clear logic entirely (that function is
+        // never even entered on this path). Test-observable count of how
+        // many times this coercion actually fired.
+        uint64_t missionEndFailureCoercedToSuccessCount = 0;
+
+        // CONFIRMED (Sec21.27c): timer 1 (0x12f2630) arms for 2000ms
+        // normally, or 4000ms "if a second mission-end fires while the
+        // first is cooling down" - modelled as "while timer 1 is already
+        // armed from an earlier, not-yet-cleared dispatch." This project
+        // drives no real countdown clock (same "armed/idle bool stand-in"
+        // limitation this struct's own top note already states) - this
+        // field records which of the two durations the most recent arm
+        // actually used, for test observability only.
+        int32_t missionEndTimer1LastArmedDurationMs = 0; // 0 = never armed; else 2000 or 4000
 
         // --- Sec21.27a/21.27b upgrade (this task, 2026-10-08): the REAL
         // 0x014c7a14 phase counter (int, 0-8) and the data the REAL end-of-
@@ -4745,9 +4916,66 @@ public:
 
     // mission_end_failure's own dispatch (0x006da400) arming effect (Sec1.5,
     // cross-cited by Sec3.5) - the only in-scope writer of timer 1.
+    // UPGRADED (Sec21.27c, 2026-10-09): also models the real 2000ms/4000ms
+    // doubling - 4000ms when this call arms timer 1 again while it is
+    // already armed from an earlier, not-yet-cleared dispatch; 2000ms
+    // otherwise. Called only from dispatchMissionEndPresentation()'s own
+    // non-coerced failure branch now (see below), not directly by the
+    // mission_end_failure stub.
     void armMissionEndTransitionTimer() {
+        missionContext_.missionEndTimer1LastArmedDurationMs =
+            missionContext_.missionEndTimer1Armed ? 4000 : 2000;
         missionContext_.missionEndTimer1Armed = true;
         ++missionContext_.missionEndFailureDispatchCount;
+    }
+
+    // mission_end_success's own dispatch (0x006da400, the SAME shared
+    // function failure uses) arming effect - the REAL separate timer this
+    // branch arms, 0x12f2634 (Sec21.27c) - the only in-scope writer of
+    // timer 2. CORRECTS this file's own prior (batch b29, 2026-10-08)
+    // assumption that success armed the SAME timer 1 as failure, purely
+    // because both callers share one dispatch function - see
+    // MissionContext::missionEndTimer2Armed's own doc comment above for the
+    // full citation. No duration is given for this timer anywhere in
+    // Sec21.27c's own text (unlike timer 1's confirmed 2000/4000ms pair) -
+    // armed/idle only, not guessed.
+    void armMissionEndSuccessTimer() { missionContext_.missionEndTimer2Armed = true; }
+
+    // `0x006da400` opened in full (Sec21.27c, 2026-10-09) - the ONE shared
+    // presentation dispatch both mission_end_failure's non-coerced path and
+    // mission_end_success reach after their own identical shared gate
+    // (0x006d7240: MissionContext::activeAndRunning/currentMissionName/
+    // currentMissionEnding) passes. `isSuccess` selects which of the two
+    // CONFIRMED branches runs: false = failure (stores `presentationText`
+    // into the fail-text stand-in, arms timer 1 for 2000/4000ms, and - only
+    // when hudTeardownGateBit reads true - fires the HUD-screen-teardown-all
+    // primitive); true = success (stores `presentationText` into the
+    // SEPARATE success-text stand-in, arms the SEPARATE timer 2, and -
+    // CONFIRMED asymmetry - NEVER fires the HUD-teardown primitive,
+    // regardless of the gate bit).
+    //
+    // Callers are expected to have already run the shared gate themselves
+    // (both existing stub functions already do, unchanged) - this method
+    // does not re-check it. mission_end_failure's own type-2 branch must
+    // skip this method ENTIRELY (routing to missionEndDispatch()/
+    // 0x006d9f70 instead, per Sec21.27c's own coercion finding, modeled in
+    // that stub, not here) rather than entering it and taking some branch
+    // inside - so this method has no coercion logic of its own.
+    void dispatchMissionEndPresentation(bool isSuccess, const std::string& presentationText) {
+        auto& mc = missionContext_;
+        if (!isSuccess) {
+            mc.lastFailReasonText = presentationText; // 0x014c7a08
+            armMissionEndTransitionTimer();            // 0x12f2630, 2000/4000ms
+            bool tearDown = mc.hudTeardownGateBit.known() && mc.hudTeardownGateBit.get();
+            mc.lastDispatchTornDownHud = tearDown;
+            if (tearDown) ++mc.hudTeardownCount; // 0x007b4990(-1) on registry 0x012fced8
+        } else {
+            mc.lastSuccessAnnouncementText = presentationText; // 0x014c846c
+            armMissionEndSuccessTimer();                        // 0x12f2634
+            // CONFIRMED asymmetry (Sec21.27c): success never tears down HUD.
+            mc.lastDispatchTornDownHud = false;
+            ++mc.missionEndSuccessDispatchCount;
+        }
     }
 
     // FIX 2026-10-08 (mission-blockers investigation, root cause of
@@ -5369,13 +5597,14 @@ public:
     // here as its own plain field anyway, per this task's own "OPEN means
     // meaning unknown, not value unknown" distinction (CONFIRMED: a real
     // default value (1) and a real storage location exist for it; OPEN:
-    // which exact byte, and all three numbers' real-world purpose). This
-    // is the OPPOSITE case from arg 4's own default just below, where the
-    // VALUE itself (not just the meaning) is unconfirmed.
+    // which exact byte, and all three numbers' real-world purpose). Arg 4's
+    // own default just below was formerly this same kind of case (value
+    // unconfirmed), but Team A has since confirmed the literal itself (see
+    // continuousSpawnDefaultTypeFilter()'s own doc comment below).
     struct ContinuousSpawnRegionRecord {
         int64_t count = 0;                 // arg 2, truncateEa2596, default 0 (CONFIRMED)
         int64_t respawnIntervalMs = 0;      // arg 3 * 1000.0, truncateEa2596, default 0 (CONFIRMED)
-        std::string typeNameFilter;         // arg 4, via setter 0x005ec4d0; default from continuousSpawnDefaultTypeFilter() below when arg 4 is absent
+        std::string typeNameFilter;         // arg 4, via setter 0x005ec4d0; default from continuousSpawnDefaultTypeFilter() below when arg 4 is absent (CONFIRMED "", see that accessor's doc comment)
         int64_t numericArg5 = 1;            // arg 5, truncateEa2596, default 1 (CONFIRMED value; OPEN meaning + exact offset, see doc comment above)
         int64_t numericArg6 = 14;           // arg 6, truncateEa2596, default 14, raw dword store at +0x38 (CONFIRMED location; OPEN meaning)
         int64_t numericArg7 = 19;           // arg 7, truncateEa2596, default 19, raw dword store at +0x3c (CONFIRMED location; OPEN meaning)
@@ -5390,12 +5619,14 @@ public:
     };
     std::unordered_map<std::string, ContinuousSpawnRegionRecord>& continuousSpawnRegions() { return continuousSpawnRegions_; }
     // Arg 4's own default ("a fixed literal constant" - Sec4.8's own text,
-    // a spawned-object/type-name filter): genuinely OPEN - no spec text
-    // anywhere names the literal string, unlike args 5-7 above whose
-    // defaults ARE confirmed numbers. True OpenValue/OpenStateError
-    // discipline: a no-arg-4 continuous_spawn_start call throws until a
-    // test set()s this first.
-    OpenValue<std::string>& continuousSpawnDefaultTypeFilter() { return continuousSpawnDefaultTypeFilter_; }
+    // a spawned-object/type-name filter): CONFIRMED by Team A
+    // (spec-lua-api-behaviour.md Sec4.8) to be the literal empty string
+    // "" - not just that a literal constant exists, but the literal value
+    // itself. Formerly modelled as OpenValue<std::string> (value
+    // genuinely unknown, unlike args 5-7's already-confirmed numeric
+    // defaults); now a plain defaulted member, same pattern as
+    // numericArg5/6/7 above.
+    std::string& continuousSpawnDefaultTypeFilter() { return continuousSpawnDefaultTypeFilter_; }
 
     // on_vehicle_enter (Sec4.12): mirrors release_to_world's own
     // releaseToWorldKind() (Sec4.4) exactly, per this task's explicit
@@ -5946,9 +6177,256 @@ public:
         EngineState::replicateStateChange("game_award_respect", ""); // CONFIRMED unconditional (opcode 0xa1 or targeted), not host-gated
         ++respectGrantCount_;
         if (targeted) ++respectGrantTargetedCount_; else ++respectGrantBroadcastCount_;
-        if (notifyRequested) ++respectGrantNotifyCount_; // no in-scope observable effect beyond this count (0x006ced90's own terminal call not decompiled, Sec16.2)
+        // CORRECTED 2026-10-09 (spec-tables-progression.md Sec5.4, cross-
+        // referenced into spec-lua-api-behaviour.md Sec16.2/Sec16.16's own
+        // Changelog): this terminal call, `0x006ced90`, is NOT an
+        // undecompiled "optional UI notification" as the old comment here
+        // (and the two sections above it) characterized it - full
+        // disassembly shows it is a SECOND invocation of the award routine
+        // (0x00b97340/0x00b98d50) against up to two other save-shaped
+        // progress blocks reached via globals 0x014c8574/0x014d8d1c, gated
+        // by a co-op/session-state check - i.e. a co-op progression-mirror
+        // ("mirror this respect award onto a split-screen partner's own
+        // snapshot"), never a toast/popup of any kind. `0x014c8574` is
+        // independently already named in spec-save-format.md Sec10.4 as a
+        // retained snapshot-shaped buffer for a second player's state,
+        // consistent with this reading. This project has no live
+        // second-player save-shaped snapshot object to actually mirror
+        // onto (SaveGameState, save_game_state.h, models only the LOCAL
+        // player), so the mirror's own body is not implemented - only the
+        // fact that a resolved call reached it is counted, honestly, same
+        // "count only, real gate/body not modeled" convention as
+        // tutorialUnlockCount/recordTutorialUnlock above.
+        if (notifyRequested) ++respectGrantNotifyCount_;
     }
     uint64_t respectGrantCount() const { return respectGrantCount_; }
+    // Test/diagnostic accessor for the corrected co-op-mirror-attempt count
+    // documented above (same counter recordRespectGrant increments).
+    uint64_t respectGrantCoopMirrorAttemptCount() const { return respectGrantNotifyCount_; }
+
+    // --- Sec5.4 respect/progression live runtime (spec-tables-progression.md,
+    // 2026-10-09, CONFIRMED by disassembly) -------------------------------
+    //
+    // Real live player-object fields (global pointer 0x0262edfc, getter
+    // 0x009da4e0), independently re-derived via a different accessor chain
+    // than spec-save-format.md Sec10.3's own SaveGameState fields (closing a
+    // cross-check that was open between the two specs - the two mirror each
+    // other exactly, but are two genuinely separate live objects in the
+    // real engine, so this project keeps them as two separate structs too,
+    // same "don't silently alias an unconfirmed cross-reference" convention
+    // as Sec4.13's own door_open/teleport precedent): `+0x1ed0` total
+    // respect, `+0x1ed4` respect banked inside the current level, `+0x1ed8`
+    // current level (0..50). `0x009db8b0` is a one-line accessor returning
+    // `*(playerObj+0x1ed8)`.
+    uint32_t respectTotal() const { return respectTotal_; }
+    uint32_t respectBanked() const { return respectBanked_; }
+    uint32_t respectLevel() const { return respectLevel_; }
+
+    // The loaded level count 0x0060eba0() == 50 - CONFIRMED (Sec5.2/Sec5.4),
+    // never a table-size-derived value (the real loader "stops storing at
+    // 50" even if a row beyond it existed).
+    static constexpr uint32_t kRespectLevelCap = 50;
+    // stats.xtbl stat id this project has CONFIRMED drives on every respect
+    // award (Sec5.4's own new finding), Sec1.1.
+    static constexpr int32_t kRespectAwardStatId = 0x44;
+    // hint id 0xa9's own 0-based index into the 210-entry tutorial/hint
+    // table (Sec10.4/Sec16.3's own 0x0151d600 table; Sec5.4: "the SAME
+    // 210-message HUD hint/tutorial dispatcher").
+    static constexpr int kRespectLevelUpHintId = 0xA9;
+
+    // `respect_levels.xtbl`'s per-level cost/unlock table (sr3tables_
+    // progression::RespectLevel, included above) - the SAME table Sec5.2
+    // names for the save-shaped path and Sec5.4 confirms the live runtime
+    // path reuses verbatim via 0x0060eb60 (not a second algorithm). This
+    // project has no real xtbl-reading wired to this subsystem (same "out
+    // of scope" footing as collectibles.xtbl's own Respect_Award fields,
+    // Sec5.4's own "Open items"), so a test populates it directly.
+    std::vector<sr3tables_progression::RespectLevel>& respectLevelTable() { return respectLevelTable_; }
+
+    // 0x0060eb40(n): record n's Respect cost, or 22000 (0x55F0) for n past
+    // the loaded table (CONFIRMED, Sec5.2) - the exact accessor 0x0060eb60
+    // wraps for the live path (Sec5.4). `n` is the 0-based record index
+    // equal to the number of levels already gained (Sec5.2's own
+    // "L = levels gained, and record L... is the cost of the next level").
+    uint32_t respectLevelCost(uint32_t level) const {
+        if (level < respectLevelTable_.size()) {
+            return static_cast<uint32_t>(respectLevelTable_[level].respect.value);
+        }
+        return 22000;
+    }
+
+    // Per-name live unlock flag (CONFIRMED: the global unlockables table
+    // `0x01522750`, record offset `+0xe1`) - CHOSEN per-name map, same "no
+    // generic hash table modelled" convention as triggerHoldToRepeat_
+    // above, since this project never populates the real unlockables.xtbl
+    // id space this flag is really keyed by (Sec4). Missing = not yet
+    // unlocked, matching the real all-zero-at-start bit state.
+    bool respectUnlockApplied(const std::string& name) const {
+        auto it = respectUnlockablesFlag_.find(name);
+        return it != respectUnlockablesFlag_.end() && it->second;
+    }
+    // The literal name `"HomieSlot1"` (CONFIRMED, Sec5.4) gets its own
+    // distinct notification at the moment it is unlocked, separate from
+    // the generic per-name flag above so a test can tell the two apart -
+    // this counter increments ONLY for that literal name, never for an
+    // ordinary unlock.
+    uint64_t respectHomieSlot1UnlockCount() const { return respectHomieSlot1UnlockCount_; }
+
+    // stat-system record-open count, per stat id (CONFIRMED: every respect
+    // award also opens a record for stat id 0x44, stats.xtbl, Sec1.1/
+    // Sec5.4) - this project has no pre-existing stats.xtbl/stat-id live
+    // tracking anywhere else to reuse (checked: no hit for "stat id" / achievement
+    // counters elsewhere in this header set beyond the unrelated DLC
+    // achievement-counter slots, Sec15.27), so this is this subsystem's own
+    // new per-id counter map, same "count only, real body not modeled"
+    // convention as tutorialAdvanceCounts_/tutorialUnlockCounts_ above -
+    // generalized per-id (not hardcoded to 0x44 alone) in case a later task
+    // finds another native driving the same pipeline.
+    uint64_t statRecordOpenCount(int32_t statId) const {
+        auto it = statRecordOpenCounts_.find(statId);
+        return it != statRecordOpenCounts_.end() ? it->second : 0;
+    }
+    void recordStatRecordOpen(int32_t statId) { ++statRecordOpenCounts_[statId]; }
+
+    // The decade-level (10/20/30/40/50) milestone hook, `0x00bd3150`
+    // (Sec5.4, new finding this pass): fires on every level crossing, but
+    // only WRITES when the newly reached level is a decade level AND the
+    // player is inside the `sr3_city` open-world zone - stashing a distinct
+    // event-state id (0x22, or 0x23 specifically for level 50) plus the
+    // player's own world position into a pair of globals. Write-side only,
+    // per this task's own brief: the actual consumer (a cutscene, a radio
+    // line, a scripted encounter) was never traced in the spec pass and is
+    // deliberately NOT invented here.
+    struct RespectDecadeMilestone {
+        // CHOSEN: no live "current zone" tracker exists anywhere else in
+        // this project to read instead (checked: no hit for "current
+        // zone"/"open world" state in this header set) - a minimal,
+        // test-settable stand-in, default true (this project's own
+        // MainMenuNewGame::worldName already hardcodes "sr3_city" as the
+        // CONFIRMED default world, Sec41.2, so "in the open world" is the
+        // natural default here too, not a guess at the real initial
+        // value).
+        bool inOpenWorldZone = true;
+        int32_t lastEventId = 0;      // 0 = never fired; else 0x22 or 0x23 (level 50)
+        WorldPosition lastPosition;   // player's own world position at the moment of the write
+        uint64_t fireCount = 0;       // how many times the write actually happened (not every level crossing)
+    };
+    RespectDecadeMilestone& respectDecadeMilestone() { return respectDecadeMilestone_; }
+    // CHOSEN: the player's own live position this hook would stash is not
+    // otherwise tracked for the local player anywhere in this project
+    // (CharacterState::worldPosition is keyed per-name and per-call, not a
+    // standing "local player position," Sec4.2) - a test sets this directly
+    // to whatever position the award happens at, same "write-only, no
+    // in-scope reader to resolve a real value from" convention as
+    // playerSkydiveFallSpeed_ above (Sec15.18).
+    WorldPosition& respectMilestonePlayerPosition() { return respectMilestonePlayerPosition_; }
+
+    // Award path, CONFIRMED (Sec5.4): the Lua native `game_award_respect`
+    // (0x00843bf0) -> 0x009da4e0 (resolve local player) -> 0x009db8e0's own
+    // caller 0x009e2440 (full body opened): cap-checks `amount`, updates
+    // the running total via 0x009db8c0, calls the level-up routine below,
+    // and opens a stat-system record for stat id 0x44 on every award (not
+    // only a successful level-up).
+    uint64_t respectAwardNonPositiveGuardCount() const { return respectAwardNonPositiveGuardCount_; }
+
+    // The real per-award cap, CONFIRMED (Sec5.4, 2026-10-09 WAVE 10
+    // follow-up): a lifetime-total ceiling populated once at load by the
+    // respect_levels.xtbl loader as Sigma(row.Respect for all loaded rows)
+    // minus the LAST row's own Respect (238,875 with the real 50-row
+    // shipped table, L50's own Respect being 0). Computed from the loaded
+    // table directly rather than hardcoded, so a test-supplied table still
+    // produces the correct cap for its own data.
+    uint32_t respectLifetimeCap() const {
+        if (respectLevelTable_.empty()) return 0;
+        uint32_t sum = 0;
+        for (const auto& row : respectLevelTable_) sum += static_cast<uint32_t>(row.respect.value);
+        return sum - static_cast<uint32_t>(respectLevelTable_.back().respect.value);
+    }
+    void awardRespect(int32_t amount) {
+        if (amount <= 0) { ++respectAwardNonPositiveGuardCount_; return; }
+        // CONFIRMED (Sec5.4): strictly after the amount>0 guard. If total >=
+        // cap or level >= levelCount-1, the award grants nothing at all - a
+        // full skip (no running-total update, no stat record, no level-up),
+        // not a 0-clamp.
+        const uint32_t cap = respectLifetimeCap();
+        const size_t levelCount = respectLevelTable_.size();
+        if (respectTotal_ >= cap || (levelCount > 0 && respectLevel_ >= levelCount - 1)) return;
+        // Otherwise the actual grant is min(amount, cap - total), and it is
+        // this CLAMPED grant - not the raw amount argument - that feeds both
+        // the running total and the level-up routine.
+        const uint32_t grant = std::min(static_cast<uint32_t>(amount), cap - respectTotal_);
+        respectTotal_ += grant;
+        recordStatRecordOpen(kRespectAwardStatId);
+        applyRespectLevelUp(grant);
+    }
+
+    // Level-up mechanism, CONFIRMED (Sec5.4): 0x009db8e0(playerObj, amount)
+    // loops: compares `+0x1ed4 + amount` against 0x0060eb60(playerObj) (the
+    // cost of the next level) - 0x0060eb60 is NOT a separate algorithm from
+    // Sec5.2's own 0x0060eb40/0x0060ebb0 pair, it is the exact same
+    // accessor wrapped to pull the level index from the player-object
+    // pointer first, so this reuses respectLevelCost() above directly,
+    // never a second cost table; while over threshold: increments
+    // `+0x1ed8`, calls the unlock-consumer and the decade-milestone hook
+    // below, and carries the remainder; caps at kRespectLevelCap.
+    void applyRespectLevelUp(uint32_t amount) {
+        uint32_t remaining = respectBanked_ + amount;
+        while (respectLevel_ < kRespectLevelCap) {
+            const uint32_t cost = respectLevelCost(respectLevel_);
+            if (remaining < cost) break;
+            remaining -= cost;
+            // CHOSEN indexing: Sec5.2's own CONFIRMED finding is specifically
+            // about 0x0060eb40/0x0060ebb0's own "record L (0-based) is the
+            // cost of the next level" mapping, not independently
+            // re-confirmed for 0x0060ebf0's own call-site argument timing
+            // (before vs. after this increment). This project reads the
+            // record whose COST was just paid (0-based index == the level
+            // count BEFORE this increment) as the same row that carries the
+            // level just reached's own Unlockables, since Sec5.2 already
+            // ties cost and unlockables to the same <respect_level> row -
+            // the natural, non-fabricated reading, not independently
+            // re-derived from 0x0060ebf0's own disassembly.
+            const uint32_t reachedLevelRow = respectLevel_;
+            ++respectLevel_;
+            consumeRespectLevelUnlocks(reachedLevelRow);
+            runRespectDecadeMilestone(respectLevel_);
+            postRespectLevelUpHint();
+        }
+        respectBanked_ = remaining;
+    }
+
+    // 0x0060ebf0(level) (Sec5.2/Sec5.4): for each of that row's Unlockable
+    // ids NOT YET APPLIED (CONFIRMED gate), calls the real shared "unlock
+    // this named thing" primitive 0x0071ccf0 (also used elsewhere for
+    // stronghold-completion unlocks, not reproduced here - only its own
+    // observable live-flag effect is modeled, same convention as every
+    // other "shared primitive, effect modeled not the primitive itself"
+    // field in this header) and flips the live per-name flag above -
+    // special-casing the literal name "HomieSlot1" with its own distinct
+    // notification (CONFIRMED).
+    void consumeRespectLevelUnlocks(uint32_t row) {
+        if (row >= respectLevelTable_.size()) return;
+        for (const std::string& name : respectLevelTable_[row].unlockables) {
+            if (respectUnlockApplied(name)) continue;
+            respectUnlockablesFlag_[name] = true;
+            if (name == "HomieSlot1") ++respectHomieSlot1UnlockCount_;
+        }
+    }
+
+    // Level-up notification (Sec5.4): hint id 0xa9 posted through
+    // 0x007169e0 - the SAME 210-message HUD hint/tutorial dispatcher this
+    // project already counts via recordTutorialAdvance/tutorialAdvanceCount
+    // above (Sec10.4) for ordinary first-use tutorial tips - reused
+    // directly, not a second, bespoke "level up!" popup widget.
+    void postRespectLevelUpHint() { recordTutorialAdvance(kRespectLevelUpHintId); }
+
+    void runRespectDecadeMilestone(uint32_t newLevel) {
+        if (newLevel == 0 || newLevel % 10 != 0) return;
+        if (!respectDecadeMilestone_.inOpenWorldZone) return;
+        respectDecadeMilestone_.lastEventId = (newLevel == 50) ? 0x23 : 0x22;
+        respectDecadeMilestone_.lastPosition = respectMilestonePlayerPosition_;
+        ++respectDecadeMilestone_.fireCount;
+    }
 
     // tutorial_set_hud_help_closing (Sec16.3): global 0x0151d5a4, direct
     // unconditional write, no gate.
@@ -7857,33 +8335,56 @@ public:
     struct SpawnGlobalOverride { std::string category; };
     SpawnGlobalOverride& spawnGlobalOverride() { return spawnGlobalOverride_; }
 
-    // --- spawn_override_clear_override_for_hood (Sec49/T16, AGG) ----------
-    // AGG: no individual spec text names this entry point; it is the
-    // natural per-hood counterpart to the already-documented (but
-    // out-of-this-batch's-scope) spawn_override_set_override_category_
-    // for_hood (Sec49.2). CHOSEN minimal: clears the named hood's stored
-    // category override (erase from the map a future/sibling setter would
-    // populate) - implements only what this much text supports, nothing
-    // about replication or the null-category crash shape its OWN sibling
-    // setter has (that crash belongs to the SET entry point, out of this
-    // batch's scope).
-    std::unordered_map<std::string, std::string>& spawnOverrideCategoryForHood() { return spawnOverrideCategoryForHood_; }
+    // --- spawn_override_clear_override_for_hood (Sec49.2, `0x00a5fb40`) ---
+    // UPDATED 2026-10-09 (spec sync 3ecbf84, closing this entry's own
+    // previously-AGG placeholder): CONFIRMED real body - resolves the hood
+    // through the SAME chain as the SET sibling above, then
+    // `AND [hood+0x64], 0xfb` (clears override-enabled bit 0x04) and
+    // `MOV [hood+0x70], 0` (zeroes the stored category pointer) - "not a
+    // 'remove from a list' or 'reset to a default category' - there is no
+    // fallback category value involved; it simply resets both override
+    // fields to unset." Modeled here by erasing the hood from BOTH of the
+    // SET sibling's own real fields (SpawnOverride::perHoodCategory and
+    // ::perHoodCategoryNullStored above) - the SAME struct the SET entry
+    // point actually writes, NOT the disconnected placeholder map this
+    // accessor used to expose (a real pre-existing bug this sync caught:
+    // the old clear-for-hood erased from a map SET never wrote to, so
+    // calling set-then-clear never actually cleared anything). On a host,
+    // the real function also broadcasts the identical opcode `0x45`/
+    // sub-type `0x29` record shape the SET native sends, with a "none"
+    // sentinel hash in place of a resolved category hash, replicated to
+    // remote machines the same way SET is - NOT modeled here, matching
+    // this project's own existing scope line for this whole family (the
+    // SET sibling immediately above does not model replication either;
+    // adding it to CLEAR alone, when its own sibling lacks it, would be a
+    // net-new, unasked-for mechanism, not a sibling-parity fix).
+    void spawnOverrideClearOverrideForHood(const std::string& hood) {
+        auto& so = spawnOverride();
+        so.perHoodCategory.erase(hood);
+        so.perHoodCategoryNullStored.erase(hood);
+    }
 
-    // --- spawn_region_min_spawn_dist / _reset (Sec49/T16, AGG) -------------
-    // AGG: no individual spec text exists for this pair anywhere in
-    // spec-lua-api-behaviour.md (confirmed by direct search) - CHOSEN to
-    // mirror the STRUCTURALLY parallel, fully-CONFIRMED sibling
-    // spawn_region_max_spawn_dist/_reset (Sec32.1, spawnRegionMaxSpawnDist
-    // Squared_ above: "a squared max-spawn-distance cap... no range check
-    // on the setter") ONLY in shape (a plain float read/write/reset
-    // triple) - NOT in its specific numeric default/arithmetic, which
-    // Sec32.1 gives for the MAX sibling alone. CHOSEN 0.0 ("no minimum
-    // enforced") as both the initial value and the reset target - the
-    // only numerically-neutral choice this thin a spec supports; clearly
-    // NOT a CONFIRMED fact like its sibling's FLT_MAX.
-    float spawnRegionMinSpawnDist() const { return spawnRegionMinSpawnDist_; }
-    void setSpawnRegionMinSpawnDist(float v) { spawnRegionMinSpawnDist_ = v; }
-    void resetSpawnRegionMinSpawnDist() { spawnRegionMinSpawnDist_ = 0.0f; }
+    // --- spawn_region_min_spawn_dist / _reset (Sec32.1, `0x00a5dc40`/
+    // `0x00a5dc70`) --------------------------------------------------------
+    // UPDATED 2026-10-09 (spec sync 3ecbf84, closing this pair's own
+    // previously-AGG "shape only, CHOSEN 0.0" placeholder): CONFIRMED real
+    // body, the exact sibling pair of spawnRegionMaxSpawnDistSquared_
+    // above, same mechanism, different global. Set: narrows the argument
+    // to float and stores `d * d` (squared, exactly like the MAX
+    // sibling's own setter - the stub was previously storing the RAW
+    // value, a real bug this sync also fixes). Reset: copies back a
+    // file-backed read-only constant `0x451c4000` (= 50.0f² = 2500.0f) -
+    // the CONFIRMED compile-time default, replacing the old placeholder's
+    // CHOSEN 0.0. Edges (CONFIRMED): a negative input squares to the same
+    // positive value as its magnitude (no sign rejection); NaN makes the
+    // later `<` comparison always false, silently disabling the floor (see
+    // SpawnRegionAnnulusEligibleForPlayer below, which reproduces that
+    // same "NaN never triggers the too-close rejection" behaviour by using
+    // a plain `<` against the stored squared value, not a NaN-safe
+    // comparison).
+    float spawnRegionMinSpawnDistSquared() const { return spawnRegionMinSpawnDistSquared_; }
+    void setSpawnRegionMinSpawnDistSquared(float v) { spawnRegionMinSpawnDistSquared_ = v; }
+    void resetSpawnRegionMinSpawnDist() { spawnRegionMinSpawnDistSquared_ = 2500.0f; } // CONFIRMED 50.0f^2
 
     // --- trigger_allow_dead_guys (Sec52/T15) -------------------------------
     // No individual spec text beyond "resolved in full, no further crash
@@ -10084,6 +10585,9 @@ private:
     // normal code path or test.
     bool worldPositionProbeEnabled_ = false;
     uint64_t worldPositionProbeReadCount_ = 0;
+    // REAL (not diagnostic) - see tryResolveWorldPositionFromZoneData()'s
+    // own doc comment above. Always active, no opt-in flag.
+    uint64_t zoneDataWorldPositionHitCount_ = 0;
 
     // --- action_play_do (Sec22.29), see the public accessor doc comments
     // above for citation/reasoning. Test-observable only, not real engine
@@ -10492,9 +10996,9 @@ private:
     std::unordered_map<std::string, uint64_t> continuousSpawnStopCount_;
     std::unordered_map<std::string, bool> continuousSpawnLastStopBoolean_;
     std::unordered_map<std::string, ContinuousSpawnRegionRecord> continuousSpawnRegions_; // Sec4.8, batch 2026-10-08
-    OpenValue<std::string> continuousSpawnDefaultTypeFilter_{
-        "continuous_spawn_start arg 4 default (\"a fixed literal constant\", type-name filter)",
-        "spec-lua-api-behaviour.md Sec4.8"};
+    // continuous_spawn_start arg 4 default (type-name filter): CONFIRMED
+    // "" per spec-lua-api-behaviour.md Sec4.8.
+    std::string continuousSpawnDefaultTypeFilter_ = "";
     OpenValueMap<int32_t> onVehicleEnterResolverKind_{
         "on_vehicle_enter resolved-object kind (1=character bit 0x4@+0xb/2=vehicle bit 0x8@+0xb)",
         "spec-lua-api-behaviour.md Sec4.12"};
@@ -10572,6 +11076,20 @@ private:
     uint64_t respectGrantTargetedCount_ = 0;
     uint64_t respectGrantBroadcastCount_ = 0;
     uint64_t respectGrantNotifyCount_ = 0;
+
+    // Sec5.4 respect/progression live runtime (see the public API block
+    // above, near recordRespectGrant, for every field's own doc comment).
+    uint32_t respectTotal_ = 0;   // +0x1ed0
+    uint32_t respectBanked_ = 0;  // +0x1ed4
+    uint32_t respectLevel_ = 0;   // +0x1ed8, 0..kRespectLevelCap
+    std::vector<sr3tables_progression::RespectLevel> respectLevelTable_;
+    std::unordered_map<std::string, bool> respectUnlockablesFlag_;
+    uint64_t respectHomieSlot1UnlockCount_ = 0;
+    std::unordered_map<int32_t, uint64_t> statRecordOpenCounts_;
+    RespectDecadeMilestone respectDecadeMilestone_;
+    WorldPosition respectMilestonePlayerPosition_;
+    uint64_t respectAwardNonPositiveGuardCount_ = 0;
+
     bool tutorialHudHelpClosing_ = false;                 // Sec16.3
     std::array<ColorGradingLutSlot, 4> colorGradingLutSlots_{}; // Sec16.4
     int64_t nextLutId_ = 1;
@@ -10810,8 +11328,12 @@ private:
     uint64_t airplaneFlyToNullTargetGuardCount_ = 0;
     CameraLookThrough cameraLookThrough_;
     SpawnGlobalOverride spawnGlobalOverride_;
-    std::unordered_map<std::string, std::string> spawnOverrideCategoryForHood_;
-    float spawnRegionMinSpawnDist_ = 0.0f;
+    // spawnOverrideCategoryForHood_ (the old disconnected per-hood-clear-only
+    // placeholder map) removed 2026-10-09 (spec sync 3ecbf84): SET and CLEAR
+    // now both read/write the SAME real state, SpawnOverride::perHoodCategory/
+    // ::perHoodCategoryNullStored above - see spawnOverrideClearOverrideForHood()'s
+    // own doc comment for the bug this fixes.
+    float spawnRegionMinSpawnDistSquared_ = 2500.0f; // CONFIRMED file-backed default, 50.0f^2 (spec sync 3ecbf84)
     std::unordered_map<std::string, bool> triggerAllowDeadGuys_;
     bool stagActive_ = false;
     bool waypointPlaced_ = false;
@@ -11064,5 +11586,76 @@ private:
 // Sets the initial values Team A's specs confirm (src/lua_spec_initial_state.cpp).
 // Host's constructor calls it once; slots it does not set stay OPEN.
 void applySpecInitialState(EngineState& es);
+
+// ===========================================================================
+// Sec32.1/Sec49.2 (spec sync 3ecbf84, 2026-10-09): the shared reader
+// `0x00931980(local_player_role, flag_mask)` - the ambient spawn-region
+// candidate chooser's own min/max ANNULUS filter, ported directly. NOT the
+// near-field (fully-simulated) ambient ped/vehicle population spawners
+// (spec-ai-runtime.md Sec17.4c/Sec20, sr3airruntime/near_field_*_
+// population.h) - a deliberate scope call, not an oversight: a whole-project
+// address/global cross-check (both directions) found ZERO overlap between
+// this reader's own addresses/globals (0x00931980, 0x005ed7d0,
+// 0x013092ec/0x013092f0) and either near-field spawner's own addresses
+// (0x0090b0a0 ped creation; 0x0090f2c0/0x0090ee10 vehicle maintenance) -
+// spec-ai-runtime.md never once mentions this reader or its globals, and
+// spec-lua-api-behaviour.md's own text names this reader's caller
+// (`0x005ed7d0`) an "ambient spawn-region candidate chooser" walking the
+// active WORLD-OBJECT table, the SAME "spawn-region" terminology
+// `continuous_spawn_start`/`continuous_spawn_stop` (Sec4.7/Sec4.8) already
+// use for their own mission-script-registered region table - structurally
+// the Lua-scriptable spawn-region family this project's own near-field-
+// spawner task explicitly places OUT of scope ("mission-script-driven
+// continuous_spawn_start... roadblocks, etc."), not the always-on near-field
+// ambient population. This filter is therefore implemented here, in the Lua
+// native/engine-state layer where its own sibling max-dist field already
+// lives (spawnRegionMaxSpawnDistSquared_ above), not bolted onto either
+// near-field spawner file. See scratchpad note left for this task's own
+// report for the full cross-check.
+// ===========================================================================
+
+// Per-candidate flag-byte bits the min-dist floor's own escape hatch tests
+// (Sec32.1: "unless the candidate's flag byte has bit 0x08 set and bit 0x10
+// clear"). The MAX cap has no such escape - CONFIRMED, no bit tests it.
+inline constexpr uint8_t kSpawnRegionMinDistEscapeBit = 0x08;
+inline constexpr uint8_t kSpawnRegionMinDistEscapeSuppressBit = 0x10;
+
+// CONFIRMED per-player test (Sec32.1): `dist² < minSq` -> too close,
+// REJECTED, *unless* the escape bits above hold, in which case a secondary
+// override check (`0x00da38e0`/`0x00a11e10`, "record-copy + predicate call,
+// field-level semantics OPEN" per spec) decides instead; `maxSq < dist²` ->
+// too far, REJECTED unconditionally, no escape of any kind.
+// `secondaryOverrideAdmits`: the escape's own OPEN downstream predicate -
+// CHOSEN default true (same "an OPEN gate defaults to passing" idiom this
+// project uses throughout, e.g. sr3airruntime::NearFieldPedSpawnGates::
+// difficultyGatePasses) - a caller that independently traces the real
+// predicate's field-level meaning supplies it here instead.
+inline bool SpawnRegionAnnulusEligibleForPlayer(
+    double distSq, float minSpawnDistSquared, float maxSpawnDistSquared, uint8_t candidateFlags,
+    const std::function<bool()>& secondaryOverrideAdmits = [] { return true; }) {
+    if (distSq > static_cast<double>(maxSpawnDistSquared)) return false;  // too far - unconditional, no escape
+    if (distSq < static_cast<double>(minSpawnDistSquared)) {
+        const bool escapeHolds = (candidateFlags & kSpawnRegionMinDistEscapeBit) != 0 &&
+                                  (candidateFlags & kSpawnRegionMinDistEscapeSuppressBit) == 0;
+        if (!escapeHolds) return false;  // too close, no escape
+        return secondaryOverrideAdmits();  // too close, but escape holds - secondary check decides
+    }
+    return true;  // inside the annulus (or NaN distSq - CONFIRMED edge: NaN fails both comparisons above, so it reaches here, matching the setter's own "NaN silently disables the floor" note)
+}
+
+// CONFIRMED (Sec32.1): "applying both tests against each" local AND remote
+// co-op player, and "candidates passing both tests (against both players,
+// when both exist) are collected" - a candidate must be eligible against
+// EVERY resolved player position, not merely one.
+inline bool SpawnRegionAnnulusEligible(
+    const std::vector<double>& distSqToEachPlayer, float minSpawnDistSquared, float maxSpawnDistSquared,
+    uint8_t candidateFlags, const std::function<bool()>& secondaryOverrideAdmits = [] { return true; }) {
+    for (double distSq : distSqToEachPlayer) {
+        if (!SpawnRegionAnnulusEligibleForPlayer(distSq, minSpawnDistSquared, maxSpawnDistSquared, candidateFlags,
+                                                  secondaryOverrideAdmits))
+            return false;
+    }
+    return true;
+}
 
 } // namespace sr3luahost

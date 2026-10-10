@@ -203,15 +203,20 @@ int stub_notoriety_set_min(lua_State* L) {
 // mission_end_success (Sec6.12, 0x00a536b0). CONFIRMED: up to 3 args -
 // arg1 mandatory string (passed straight into the SAME gate function
 // mission_end_failure/Sec1.5 uses, 0x006d7240), arg2 optional string
-// (success-announcement text, consumed for call shape only, same as
-// mission_end_failure's own arg2), arg3 optional polymorphic - a table
-// (first 2 indexed elements, each read as a string) or a plain string
-// (first slot only) or absent (both slots empty). Gate: IDENTICAL 3-
-// condition gate mission_end_failure uses (MissionContext::
-// activeAndRunning/currentMissionName/currentMissionEnding). On a pass:
-// calls the SAME final dispatch (0x006da400) mission_end_failure uses,
-// arming the SAME shared timer - tracked under mission_end_success's own
-// counter so a test can tell the two callers apart. Each resolved arg3
+// (success-announcement text - UPGRADED (Sec21.27c, 2026-10-09): now
+// modelled as the real text written into 0x014c846c on a gate pass, not
+// merely consumed for call shape, same upgrade mission_end_failure's own
+// arg2 got), arg3 optional polymorphic - a table (first 2 indexed
+// elements, each read as a string) or a plain string (first slot only) or
+// absent (both slots empty). Gate: IDENTICAL 3-condition gate
+// mission_end_failure uses (MissionContext::activeAndRunning/
+// currentMissionName/currentMissionEnding). On a pass: calls the SAME
+// shared final dispatch (0x006da400/dispatchMissionEndPresentation())
+// mission_end_failure uses, but - FIX (Sec21.27c, 2026-10-09, full
+// disassembly of that shared function) - arms its OWN separate timer
+// (0x12f2634), NOT failure's timer 1 as this stub previously (incorrectly)
+// modelled; and per Sec21.27c's own confirmed asymmetry, NEVER reaches the
+// HUD-teardown/fade primitive failure's branch can. Each resolved arg3
 // name's position-pair would anchor the UI; this project has no real
 // transform data (same convention mission_set_checkpoint/Sec1.6 already
 // established), so only whether each slot resolved is recorded. Return:
@@ -220,7 +225,7 @@ int stub_notoriety_set_min(lua_State* L) {
 int stub_mission_end_success(lua_State* L) {
     logCall(L, upLog(L), "mission_end_success", upStateTag(L));
     std::string missionName = argString(L, 1); // CONFIRMED: passed straight to the shared gate, Sec6.12/Sec1.5
-    (void)optionalStringDefault(L, 2, ""); // success-announcement text - call-shape only, same as mission_end_failure's arg2
+    std::string successText = optionalStringDefault(L, 2, ""); // success-announcement text -> 0x014c846c on a gate pass, Sec21.27c
     EngineState* st = upState(L);
     auto& mc = st->missionContext();
     // FIX 2026-10-08 (mission-context-name task): all three reads below are
@@ -247,8 +252,17 @@ int stub_mission_end_success(lua_State* L) {
         if (!n1.empty()) slot1Resolved = st->objectResolves().get(n1); // OPEN until set
     }
     if (gatePasses) {
-        mc.missionEndTimer1Armed = true; // SAME shared dispatch/timer mission_end_failure arms, 0x006da400 (Sec6.12 cross-ref)
-        ++mc.missionEndSuccessDispatchCount;
+        // FIX (Sec21.27c, 2026-10-09): routes through the real shared
+        // dispatch (0x006da400/dispatchMissionEndPresentation()) now, which
+        // itself arms the correct SEPARATE success timer (0x12f2634),
+        // writes the real success-announcement global, bumps
+        // missionEndSuccessDispatchCount, and - per the confirmed asymmetry
+        // - never fires the HUD-teardown primitive. Previously this stub
+        // set missionEndTimer1Armed directly (failure's timer) based on the
+        // batch-b29 assumption that both callers shared one timer; that
+        // assumption is now known wrong (see MissionContext::
+        // missionEndTimer1Armed/missionEndTimer2Armed's own doc comments).
+        st->dispatchMissionEndPresentation(/*isSuccess=*/true, successText);
         mc.lastMissionEndSuccessSlot1Resolved = slot1Resolved;
         mc.lastMissionEndSuccessSlot2Resolved = slot2Resolved;
     }

@@ -128,8 +128,12 @@ int stub_teleport_vehicle(lua_State* L) {
     std::string dest = argString(L, 2);
     EngineState* st = upState(L);
     if (st->objectResolves().get(source) && st->objectResolves().get(dest)) { // OPEN until set
+        // REAL fallback (2026-10-10, m07 live-playtest follow-up) - see
+        // EngineState::tryResolveWorldPositionFromZoneData()'s own doc comment.
+        CharacterState& destChar = st->getOrCreateCharacter(dest);
+        st->tryResolveWorldPositionFromZoneData(dest, destChar.worldPosition);
         st->getOrCreateCharacter(source).worldPosition.set(
-            st->getOrCreateCharacter(dest).worldPosition.get()); // OPEN until set
+            destChar.worldPosition.get()); // OPEN until set
     }
     return 0;
 }
@@ -555,27 +559,32 @@ int stub_objective_text_clear(lua_State* L) {
 // mission_end_failure (Sec1.5, 0x00a523e0) - 160 calls/36 scripts.
 // CONFIRMED: 2 mandatory strings - arg 1 a mission name (never
 // handle-resolved itself, passed straight into the gate function
-// 0x006d7240), arg 2 a failure-reason/localization key (consumed for real
-// call shape; its own text-resolution chain has no in-scope reader, so is
-// not modeled further). Gate (0x006d7240, fully decompiled 2026-10-07):
-// passes only when arg 1 names the CURRENTLY ACTIVE mission (EngineState::
-// MissionContext::currentMissionName, this project's name-string stand-in
-// for the real pointer-identity compare) AND the context is active with
-// phase != 8 (MissionContext::activeAndRunning) AND that active mission's
-// own liveness check comes back DEAD/"already ending"
-// (MissionContext::currentMissionEnding) - "a mission 'found and still
-// fully alive' does NOT pass." On a pass, the whole gated body always
-// reaches the final dispatch (0x006da400) regardless of which localized/
-// fallback string was resolved for display - this is independently
-// identified elsewhere in this project (cross-cited by Sec3.5) as "the
-// mission-end routine" that arms the shared mission-end-transition timer
-// (EngineState::armMissionEndTransitionTimer(), 0x012f2630) - reproduced
-// here as the one real, testable side effect (the display text itself has
-// no in-scope reader). Return: none (both the gated-out and normal paths).
+// 0x006d7240), arg 2 a failure-reason/localization key. Gate (0x006d7240,
+// fully decompiled 2026-10-07): passes only when arg 1 names the CURRENTLY
+// ACTIVE mission (EngineState::MissionContext::currentMissionName, this
+// project's name-string stand-in for the real pointer-identity compare)
+// AND the context is active with phase != 8 (MissionContext::
+// activeAndRunning) AND that active mission's own liveness check comes
+// back DEAD/"already ending" (MissionContext::currentMissionEnding) - "a
+// mission 'found and still fully alive' does NOT pass." On a pass: UPGRADED
+// (Sec21.27c, 2026-10-09, full disassembly of 0x006da400) - mission TYPE 2
+// silently coerces this call into hardcoded success (0x006d9f70, see the
+// gated body below), skipping the final presentation dispatch entirely;
+// every OTHER type reaches it (0x006da400/
+// EngineState::dispatchMissionEndPresentation()), which stores arg 2's
+// resolved text into the real fail-text global, arms the shared mission-
+// end-transition timer (EngineState::armMissionEndTransitionTimer(),
+// 0x012f2630, 2000ms/4000ms-on-overlap) and, gated on a flags-byte bit,
+// tears down every active HUD screen before a fade. Return: none (both the
+// gated-out and normal paths).
 int stub_mission_end_failure(lua_State* L) {
     logCall(L, upLog(L), "mission_end_failure", upStateTag(L));
     std::string missionName = argString(L, 1);
-    (void)argString(L, 2); // failure-reason/localization key - consumed for real call shape only, see doc comment above
+    // failure-reason/localization key - UPGRADED (Sec21.27c, 2026-10-09):
+    // now modelled as the real text written into 0x014c7a08 on the
+    // non-coerced path (see dispatchMissionEndPresentation()), not merely
+    // consumed for call shape.
+    std::string failureText = argString(L, 2);
     EngineState* st = upState(L);
     auto& mc = st->missionContext();
     // FIX 2026-10-08 (mission-context-name task): all three reads below are
@@ -588,7 +597,18 @@ int stub_mission_end_failure(lua_State* L) {
                       mc.currentMissionName.get() == missionName &&
                       mc.currentMissionEnding.get();
     if (gatePasses) {
-        st->armMissionEndTransitionTimer();
+        // NEW finding, CONFIRMED (Sec21.27c, 2026-10-09): for mission TYPE 2
+        // specifically, this call is silently coerced into
+        // 0x006d9f70(mission, 1) - hardcoded success via the SAME
+        // end-of-mission super-dispatcher Sec21.27b's own missionEndDispatch()
+        // already models - skipping the fail-text/debounce/HUD-clear
+        // dispatch (0x006da400/dispatchMissionEndPresentation()) entirely.
+        if (mc.boundMissionType == 2) {
+            ++mc.missionEndFailureCoercedToSuccessCount;
+            st->missionEndDispatch(missionName, /*successFlag=*/true);
+        } else {
+            st->dispatchMissionEndPresentation(/*isSuccess=*/false, failureText);
+        }
     }
     return 0;
 }

@@ -151,6 +151,7 @@ int main() {
     // written unconditionally per flag; worker gates each individually
     // OPEN; CONFIRMED false after a successful restore (not a plain
     // success flag).
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force OPEN to exercise this refusal
     fails(host, gp, "boss_battle_matt_set_player_as_avatar(true)", "0x009da4e0"); // hasLocalPlayer() OPEN
     CHECK(es.bossBattleMatt().avatarModeBit == true); // written unconditionally even on the throwing path
 

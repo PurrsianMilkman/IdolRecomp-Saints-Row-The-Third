@@ -5038,6 +5038,58 @@ cutscene dispatcher. No `CBA_*` input-query or per-frame-tick call was found fee
 input side: either the shared pause-depth counter's ~60 push sites (§37.3) or the control-action/
 button-map registration for the conventional pause/menu button, neither chased yet.** Spliced into
 both `spec-frontend-menu-runtime.md` §7/§9 and `spec-cellphone-menu-runtime.md` §2/§7, cleanroom
-0 hits both, synced (68 files, exit 0), independently re-verified. Reported to orchestrator. One
-agent at a time; mission blockers still jump the queue.
+0 hits both, synced (68 files, exit 0), independently re-verified. Reported to orchestrator.
+
+**Follow-up — DONE 2026-10-10, same rewrite**, agent `adacb57c01da892c6`. Orchestrator: "take the
+button-map route... find the control-action registration and what native consumes each action per
+frame — that consumer should be the opener." **Result: LANDED the pause-menu-open binding
+(HIGH CONFIDENCE).** Read the real 166-entry CBA action table directly from `0x01122160`:
+`CBA_GAC_PAUSE_MENU` (`0x55`), `CBA_GAC_MAP_MENU` (`0x56`), `CBA_GAC_CELL_OPEN` (`0x57`) sit
+consecutively. Found a third, previously-undocumented input-query primitive (`0x005bbdd0`). Full
+chain traced: per-frame dispatch `0x00673160` queries the pause action via `0x005bdfe0`, calls
+`0x007c1ef0` on a hit, which (after 3 guard checks) calls the already-confirmed shared pause-push
+primitive `0x007074a0(4, 1)` — giving the previously-hypothesis-only mode-4 sentinel its first
+concrete call site — and shows a dialog literally named `"dialog_pause_show"` in `.rdata`. **The
+phone's own CBA action (`CBA_GAC_CELL_OPEN`, `0x57`) exists in the table but is checked by the
+SAME method and comes up with a second clean exhaustive negative** — none of 156 call sites
+across all 3 known query primitives reads it. Phone's open binding remains OPEN; best leads are a
+4th undiscovered query primitive or a raw physical-button bypass of the CBA layer. Spliced into
+both files, cleanroom 0 hits both, synced (68 files, exit 0), independently re-verified. Reported
+to orchestrator.
+
+**PIVOT 2026-10-10, same rewrite, per orchestrator.** Phone-open binding added to the live-capture
+list (alongside ground draw, hitscan/melee/fuse, `dlc2_m01` vtable `+0x68`, diversion rewards).
+Next: "trace the other phone sub-documents to the same depth as `cell_phone`, in priority order:
+missions, then map, then stats." Dispatched agent `ac7179f177e9122d7` for `cell_missions`→
+`pause_map`→`cell_stats`, one at a time, same depth/style as `spec-cellphone-menu-runtime.md`
+§5/§6 (`cell_phone`/`cell_cheats`). One agent at a time; mission blockers still jump the queue.
+
+**SESSION CRASH, resumed as orchestrator `purrsian-a5` (was `purrsian-4a`).** `ac7179f177e9122d7`
+never reported before the crash — genuinely lost in-process work, not resumable (new session,
+not in `ListAgents`). Re-dispatched identical brief as agent `a38d75135a77afe04` — **DONE,
+reported, spliced, synced.** `cell_missions`/`pause_map`/`cell_stats` now traced to full depth,
+new §7/§8/§9 in `spec-cellphone-menu-runtime.md`. `cell_missions`/`cell_stats` go entirely
+through the generic `vint_dataresponder_request`/`_post` framework with no new native lead;
+`pause_map` uses a structurally different continuous-push data pattern (4 dataitem/datagroup
+subscriptions) and all its natives were already specced. `cell_stats` exits at 4-deep (one layer
+deeper than the 3-deep baseline, expected given its extra nesting under Extras). Cleanroom 0 hits,
+synced (68 files, exit 0), independently re-verified. Reported to orchestrator.
+
+**Orchestrator (2026-10-10, same rewrite): "Continue down the list: `cell_saintsbook`,
+`store_crib_cash`, `cell_rewards`, then the rest."** Dispatched agent `a365e7ed46821da60` —
+**DONE, reported, spliced, synced.** New §10/§11/§12 in `spec-cellphone-menu-runtime.md`.
+`cell_saintsbook` is a 3-page horizontal filmstrip, produced a new native-lead pair
+(`sb_select_hitman_target`/`sb_select_chop_shop_vehicle`). `store_crib_cash` confirms the "cash
+transfer" hypothesis exactly and is the first document whose exit convention doesn't fit the
+1-deep/3-deep(/4-deep) pattern at all (always 1-deep). `cell_rewards` REFUTES the "passive viewer"
+hypothesis — it's a real cash-purchase store for permanent unlocks, with a new OPEN lead on an
+alternate non-icon-grid entry path. Cleanroom 0 hits, synced (68 files, exit 0), independently
+re-verified. Reported to orchestrator. Remaining untraced siblings:
+`cell_music_menu`/`_sub`/`_playlist`, `cell_camera`, `cell_extras`'s own top-level page.
+
+**Orchestrator (2026-10-10, same rewrite): "Finish the list (music trio, cell_camera,
+cell_extras), one agent. After that, pick up the new native leads
+(`cell_cheats_activate_cheat`/`sb_select_hitman_target`/`sb_select_chop_shop_vehicle`) as one
+batch."** Dispatched agent `a8de47913e44dd0d9` for the final 3 phone-menu documents. Native-lead
+batch is next, after this lands. Still 1 agent at a time; mission blockers jump the queue.
 <!-- CONTEXT-GUARD:RESUME-END -->

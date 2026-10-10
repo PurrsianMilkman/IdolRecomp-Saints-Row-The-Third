@@ -364,6 +364,30 @@ void applySpecInitialState(EngineState& es) {
     //     OPEN, stopped every call): 0 is never 1, 2 or 3, so step 2 never
     //     stops the dispatcher in a normal game.
     es.tutorialStart().globalMode029443bc.set(0);
+
+    // 16. local-player existence global 0x0262edfc (spec-lua-api-behaviour.md
+    //     Sec10.3, mission-census item closed 2026-10-09, missions m17/m01,
+    //     routed as "local_player_exists" though Sec10.3's own text confirms
+    //     no Lua native by that name exists - see EngineState::hasLocalPlayer()'s
+    //     own doc comment for the full citation): CONFIRMED mechanism is a
+    //     plain non-null global player-object pointer, set by either of 2
+    //     real constructor paths (boot-time spawn 0x009e1fc0, character-
+    //     preset rebuild 0x009e3bf0) and cleared only by a generic teardown
+    //     routine's own pointer-identity check against this SAME object
+    //     (0x009da150). A running single-player game has already run one of
+    //     the 2 constructors before any script's own first tick, so this
+    //     pre-seeds the CONFIRMED default of true - same "pre-seed a newly-
+    //     CONFIRMED default instead of leaving an OpenValue OPEN" convention
+    //     item 12 (notoriety alias tracks) and the separate notoriety spawn-
+    //     group name-table fix (Sec6.2/Sec13.2) both already use. Honestly
+    //     OPEN, not papered over: the real teardown window (an ordinary
+    //     respawn/session-end rebuild cycle, between the old object's
+    //     destruction and the new one's construction) is not modeled here -
+    //     a script tick that genuinely runs during it would see this field
+    //     wrongly stay true. Every existing test that deliberately exercises
+    //     the "no local player" path still does so via an explicit
+    //     `.set(false)`/`.forget()` call, exactly as before this pre-seed.
+    es.hasLocalPlayer().set(true);
 }
 
 } // namespace sr3luahost

@@ -514,6 +514,7 @@ int main() {
     ok(host, gp, "action_sequence_setup('Car1')");
     CHECK(es.actionSequenceScript().active == true);
     CHECK(es.actionSequenceScript().controlLockLeakCount == 1);
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force "not known" to exercise this guard
     ok(host, gp, "assert(action_sequence_is_playing() == true)");
     CHECK(es.actionSequenceIsPlayingNullPlayerGuardCount() == 1); // hasLocalPlayer() not known true
     es.hasLocalPlayer().set(true);

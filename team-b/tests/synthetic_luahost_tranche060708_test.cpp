@@ -224,6 +224,7 @@ int main() {
     ok(host, ui, "store_gallery_download_hide_list(true)"); // CHOSEN default: gallery object unresolved -> guarded
     CHECK(es.storePreviewGuards().galleryHideListNullGuardCount == 1);
     es.storePreviewGuards().galleryListObjectResolved = true;
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force OPEN to exercise this refusal
     fails(host, ui, "store_gallery_download_hide_list(true)", "0x009da4e0"); // gallery OK, local player still OPEN
     es.hasLocalPlayer().set(false);
     ok(host, ui, "store_gallery_download_hide_list(true)"); // gallery OK, local player explicitly absent -> guarded

@@ -321,6 +321,7 @@ int main() {
     CHECK(es.syslinkJoinCount() == 2);
 
     // Sec44.3 game_lobby_get_local_player_name: no local player -> nil.
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force OPEN to exercise this refusal
     fails(host, ui, "game_lobby_get_local_player_name()", "local player exists");
     es.hasLocalPlayer().set(false);
     ok(host, ui, "local n = game_lobby_get_local_player_name(); assert(n == nil)");

@@ -1241,11 +1241,15 @@ static void test_block_11() {
             ok("assert(Completion_is_client() == false and game_get_is_host() == false)");
         }
 
-        // 16. game_hud_update_inventory (Sec10.3): default hasLocalPlayer
-        // true -> triggers a refresh (counter increments); false ->
-        // no-op. No Lua return value.
+        // 16. game_hud_update_inventory (Sec10.3): CLOSED 2026-10-09 -
+        // hasLocalPlayer now has a CONFIRMED default of true (pre-seeded
+        // by applySpecInitialState), not OPEN; force it OPEN here to
+        // still exercise the refusal path, then true -> triggers a
+        // refresh (counter increments); false -> no-op. No Lua return
+        // value.
         {
             CHECK(es.hudInventoryRefreshCount() == 0);
+            es.hasLocalPlayer().forget();
             refusesOpen(ui, "game_hud_update_inventory()", "local player");
             CHECK(es.hudInventoryRefreshCount() == 0);
             es.hasLocalPlayer().set(true);
@@ -2172,8 +2176,15 @@ static void test_block_16() {
         // fade: 13, not 12, since 2026-10-07 (Sec60.4's closure) -
         // applySpecInitialState now also sets the cutscene state 0x0153b520
         // to 0 ("idle"); only modeStackTop stays OPEN in this area now.
+        // other: 2, not 1, since 2026-10-09 (Sec10.3's closure, mission-
+        // census item) - applySpecInitialState's own item 16 (renumbered on
+        // merge - see lua_spec_initial_state.cpp) now pre-seeds
+        // hasLocalPlayer_ to a CONFIRMED default of true; only
+        // currentDefaultDocHandle_ and missionFlagsWord_ stay OPEN in this
+        // area now (objectResolves_ was already known). zscene stays 4
+        // (unrelated, already-merged zscene_prep/mm_p_06+mm_p_01 fix above).
         CHECK(knownPerArea["zscene"] == 4 && knownPerArea["cutscene"] == 0 && knownPerArea["fade"] == 13 &&
-              knownPerArea["vint"] == 2 && knownPerArea["other"] == 1);
+              knownPerArea["vint"] == 2 && knownPerArea["other"] == 2);
         for (const auto& r : inv) {
             if (r.global.find("0x024d8534") != std::string::npos) CHECK(r.known);
             if (r.global.find("0x0151d600") != std::string::npos) CHECK(r.knownKeys == 210);

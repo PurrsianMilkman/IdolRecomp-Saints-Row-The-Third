@@ -71,6 +71,32 @@ int main(int argc, char** argv) {
         argc > 1 ? argv[1] : "D:/Project Crreish/Saints Row 3 CRREISH/packfiles/pc/cache/cutscene_sounds.vpp_pc";
     const std::string outDir = argc > 2 ? argv[2] : ".";
 
+    // Optional 4th argument (2026-10-09, broad-oracle-sweep integration task):
+    // restrict processing to a single record, by name (substring match
+    // against the output tag this tool already derives, e.g.
+    // "ct_kinzie_03_media" or "ct_kinzie_03_media_rec1") or by its 0-based
+    // index among records carrying a real "vorb" chunk (the exact same
+    // population tests/real_vorbis_decode_test.cpp counts as
+    // recordsWithVorb==493) - whichever the string parses as. Extends this
+    // tool rather than adding a second one, per that task's own instruction;
+    // default (argument omitted) keeps the prior all-qualifying-records
+    // behavior unchanged.
+    const std::string recordFilter = argc > 3 ? argv[3] : "";
+    bool filterIsIndex = false;
+    long long filterIndex = -1;
+    if (!recordFilter.empty()) {
+        try {
+            size_t consumed = 0;
+            long long parsed = std::stoll(recordFilter, &consumed);
+            if (consumed == recordFilter.size()) {
+                filterIsIndex = true;
+                filterIndex = parsed;
+            }
+        } catch (const std::exception&) {
+            // Not a plain integer - treat as a name substring instead.
+        }
+    }
+
     std::error_code mkec;
     std::filesystem::create_directories(outDir, mkec);
 
@@ -125,20 +151,31 @@ int main(int argc, char** argv) {
             sr3audioruntime::WwiseVorbChunk vorb =
                 sr3audioruntime::parseVorbChunk(recBytes, rec.size, vorbLoc->first);
             if (!vorb.present) continue;
+            const long long vorbIndex = recordsWithVorb;  // 0-based index of THIS record among recordsWithVorb
             ++recordsWithVorb;
-
-            sr3audioruntime::DecodeAttemptResult res = sr3audioruntime::attemptWwiseVorbisDecode(recBytes, rec.size);
-            if (!res.ok) continue;
-            ++okCount;
 
             // Strip the trailing ".bnk_pc" for a clean base name; disambiguate
             // with the in-bank record index only if a bank ever holds more
-            // than one successful record (not expected on this population,
-            // but handled rather than silently overwritten).
+            // than one record with a "vorb" chunk (not expected on this
+            // population, but handled rather than silently overwritten).
             std::string base = n;
             const std::string suffix = ".bnk_pc";
             if (endsWith(base, suffix)) base = base.substr(0, base.size() - suffix.size());
             std::string tag = recIdxInBank == 0 ? base : base + "_rec" + std::to_string(recIdxInBank);
+
+            if (!recordFilter.empty()) {
+                const bool matches =
+                    filterIsIndex ? (vorbIndex == filterIndex) : (tag.find(recordFilter) != std::string::npos);
+                if (!matches) continue;
+            }
+
+            sr3audioruntime::DecodeAttemptResult res = sr3audioruntime::attemptWwiseVorbisDecode(recBytes, rec.size);
+            if (!res.ok) {
+                std::cout << "FAIL " << n << " (bank record #" << recIdxInBank << ", vorbIndex=" << vorbIndex
+                           << ", tag='" << tag << "'): diagnostic: " << res.diagnostic << "\n";
+                continue;
+            }
+            ++okCount;
 
             const std::string rawPath = outDir + "/raw_" + tag + ".wem";
             const std::string oursPath = outDir + "/ours_" + tag + ".wav";
@@ -148,7 +185,8 @@ int main(int argc, char** argv) {
             bool wavOk = sr3audioruntime::writeWavPcm16(oursPath, res.pcm, static_cast<uint32_t>(res.sampleRate),
                                                          static_cast<uint16_t>(res.channels), wavErr);
 
-            std::cout << "OK  " << n << " (bank record #" << recIdxInBank << "): frames=" << res.totalSampleFrames
+            std::cout << "OK  " << n << " (bank record #" << recIdxInBank << ", vorbIndex=" << vorbIndex
+                      << ", tag='" << tag << "'): frames=" << res.totalSampleFrames
                       << " channels=" << res.channels << " sampleRate=" << res.sampleRate
                       << " rawBytes=" << rec.size
                       << " audioPacketsAttempted=" << res.audioPacketsTotal

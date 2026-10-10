@@ -25,8 +25,10 @@
 //      and the turn direction matches the steering input's sign.
 
 #include <cmath>
+#include <cstdio>
 #include <iostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "sr3physics/vehicle_substeps.h"
@@ -505,6 +507,246 @@ void testBrakingDeceleratesVehicle() {
     CHECK(speedAfterBrake >= -1e-6);  // never reverses under straight-line braking alone (no reverse gear/throttle modelled)
 }
 
+// ---------------------------------------------------------------------------
+// NEW (2026-10-09, vehicle-handling wave-6 task, authority spec-physics-
+// runtime.md Sec10.10 / spec-vehicle-data.md Sec7.3 changelog, synced commit
+// 4c146a9): the 5 real transmission fields that section's own "Gear ratios"
+// paragraph newly confirms land in the live Havok component (Upshift_RPM,
+// Downshift_RPMs [HIGH], Reverse_Gear_Ratio, Clutch_Delay, Maximum_RPM_Rate),
+// plus its "Bonus" brakes finding (Min_Time_To_Block/AI_Min_Time_To_Block) -
+// see vehicle_substeps.h's own file banner and each field's individual doc
+// comment for the full CONFIRMED/HIGH/OPEN citation. NOT re-testing
+// Diff_Gear_Ratio/Gear_Ratios[] (already wired before this task, already
+// covered by testGearShiftingUnderSustainedThrottle() above) or the engine
+// curve/steering/grip (wave 6's other 3 "target parameters", also already
+// wired, untouched by this task).
+// ---------------------------------------------------------------------------
+
+// Same representative sedan as BuildTestVehicleTuning(), with the 5+2 newly-
+// wired fields also set to CHOSEN, deliberately-distinctive values (so a
+// silent fallback to any OLD CHOSEN default - gearUpshiftRpmThreshold=5500,
+// clutchDelaySec=0.3, maxRpmChangePerSec=1.0e6 - cannot coincide with the
+// values this fixture's own callers check for). `upshiftRpm`/`clutchDelaySec`/
+// `maxRpmRate` are left as caller-supplied parameters so the behavioural
+// tests below can vary exactly one field at a time against an otherwise
+// identical vehicle.
+// `%f`, NOT `%g`, in the snprintf below (found during this task's own
+// build/test verification pass, not a spec claim): sr3xtbl's own hand-written
+// ParseFloat() (src/xtbl.cpp) handles a `-` exponent sign explicitly but has
+// no case for a `+` one, so a `%g`-formatted large value like 1.0e6 (printed
+// as "1e+06") silently parses as 1.0 (the exponent digit loop never starts,
+// since the next character after `e` is `+`, not a digit or `-`) - a parser
+// quirk, not a bug in this test's own production code under test; `%f` never
+// emits scientific notation, sidestepping it entirely.
+VehicleTuning BuildWave6TransmissionBrakeVehicleTuning(double upshiftRpm, double clutchDelaySec, double maxRpmRate) {
+    char xml[2048];
+    std::snprintf(xml, sizeof(xml),
+        "<root><Table><Vehicle>"
+        "<Name>test_sedan01_wave6</Name>"
+        "<Mass>1400</Mass>"
+        "<Engine>"
+        "<Torque>280</Torque><Min_RPM>800</Min_RPM><Opt_RPM>4500</Opt_RPM><Max_RPM>6500</Max_RPM>"
+        "<Min_RPM_Torque_Factor>1.0</Min_RPM_Torque_Factor><Max_RPM_Torque_Factor>1.0</Max_RPM_Torque_Factor>"
+        "<Min_RPM_Resistance>0.02</Min_RPM_Resistance><Opt_RPM_Resistance>0.0</Opt_RPM_Resistance>"
+        "<Max_RPM_Resistance>0.001</Max_RPM_Resistance>"
+        "</Engine>"
+        "<Axles>"
+        "<Axle><Wheel_Does_Steer>yes</Wheel_Does_Steer><Wheel_Friction>1.0</Wheel_Friction>"
+        "<Wheel_Max_Friction>1.0</Wheel_Max_Friction><Wheel_Braking_Torque>800</Wheel_Braking_Torque>"
+        "<Wheel_Engine_Torque>0.0</Wheel_Engine_Torque></Axle>"
+        "<Axle><Wheel_Does_Steer>no</Wheel_Does_Steer><Wheel_Friction>1.0</Wheel_Friction>"
+        "<Wheel_Max_Friction>1.0</Wheel_Max_Friction><Wheel_Braking_Torque>600</Wheel_Braking_Torque>"
+        "<Wheel_Engine_Torque>1.0</Wheel_Engine_Torque></Axle>"
+        "</Axles>"
+        "<Transmission>"
+        "<Gear_Ratios><Element>3.4</Element><Element>2.1</Element><Element>1.4</Element><Element>1.0</Element><Element>0.8</Element></Gear_Ratios>"
+        "<Downshift_RPMs><Element>1111</Element><Element>2222</Element><Element>3333</Element><Element>4444</Element></Downshift_RPMs>"
+        "<Upshift_RPM>%f</Upshift_RPM>"
+        "<Diff_Gear_Ratio>3.7</Diff_Gear_Ratio>"
+        "<Reverse_Gear_Ratio>-3.9</Reverse_Gear_Ratio>"
+        "<Clutch_Delay>%f</Clutch_Delay>"
+        "<Maximum_RPM_Rate>%f</Maximum_RPM_Rate>"
+        "</Transmission>"
+        "<Steering><Max_Steering_Angle>35</Max_Steering_Angle></Steering>"
+        "<Min_Time_To_Block>0.25</Min_Time_To_Block><AI_Min_Time_To_Block>0.4</AI_Min_Time_To_Block>"
+        "<Aerodynamics><Drag_Coefficient>0.32</Drag_Coefficient><Frontal_Area>2.2</Frontal_Area><Air_Density>1.2</Air_Density></Aerodynamics>"
+        "<Vehicle_Type><Automobile></Automobile></Vehicle_Type>"
+        "</Vehicle></Table></root>",
+        upshiftRpm, clutchDelaySec, maxRpmRate);
+    Document doc = ParseDocument(xml);
+    const Node* row = FindChild(doc.table(), "Vehicle");
+    VehicleEntry entry = ParseVehicleEntry(row);
+    return VehicleTuning::FromVehicleEntry(entry);
+}
+
+// Data-level check: every one of the 7 new fields actually round-trips
+// VehicleEntry -> VehicleTuning (catches a fixture/reader/FromVehicleEntry
+// mismatch before it silently falls back to a CHOSEN default and
+// masquerades as a passing test - same discipline BuildTestVehicleTuning()'s
+// own "Sanity" block above already uses).
+void testWave6FieldsRoundTripIntoVehicleTuning() {
+    VehicleTuning t = BuildWave6TransmissionBrakeVehicleTuning(/*upshiftRpm=*/6000.0, /*clutchDelaySec=*/0.75,
+                                                                /*maxRpmRate=*/1500.0);
+
+    CHECK(std::abs(t.gearUpshiftRpmThreshold - 6000.0) < 1e-3);
+    CHECK(t.downshiftRpms.size() == 4);
+    if (t.downshiftRpms.size() == 4) {
+        CHECK(std::abs(t.downshiftRpms[0] - 1111.0) < 1.0);
+        CHECK(std::abs(t.downshiftRpms[1] - 2222.0) < 1.0);
+        CHECK(std::abs(t.downshiftRpms[2] - 3333.0) < 1.0);
+        CHECK(std::abs(t.downshiftRpms[3] - 4444.0) < 1.0);
+    }
+    CHECK(std::abs(t.reverseGearRatio - (-3.9)) < 1e-3);
+    CHECK(std::abs(t.clutchDelaySec - 0.75) < 1e-3);
+    CHECK(std::abs(t.maxRpmChangePerSec - 1500.0) < 1e-3);
+    CHECK(std::abs(t.minTimeToBlockSec - 0.25) < 1e-3);
+    CHECK(std::abs(t.aiMinTimeToBlockSec - 0.4) < 1e-3);
+}
+
+// Behavioural check: Upshift_RPM actually changes WHEN the gear-shift state
+// machine upshifts, not just an inert stored field. Same engine/mass/gearing
+// as BuildTestVehicleTuning() (whose own gearUpshiftRpmThreshold stays at the
+// CHOSEN 5500 default, already proven to upshift within kSteps by
+// testGearShiftingUnderSustainedThrottle() above) but with a real, much
+// LOWER per-vehicle Upshift_RPM (3000, below this engine's own Opt_RPM=4500) -
+// if BuildGearShiftTuning() still silently used the old hardcoded 5500, both
+// runs would upshift at the identical step.
+void testUpshiftRpmSourcedFromVehicleEntry() {
+    VehicleTuning defaultTuning = BuildTestVehicleTuning();
+    VehicleTuning lowUpshiftTuning =
+        BuildWave6TransmissionBrakeVehicleTuning(/*upshiftRpm=*/3000.0, /*clutchDelaySec=*/0.3, /*maxRpmRate=*/1.0e6);
+
+    const DriverInput fullThrottle{1.0, 0.0, 0.0};
+    auto firstUpshiftStep = [&](const VehicleTuning& tuning) -> std::pair<int, double> {
+        VehicleSubstepSimulator sim(tuning);
+        int startGear = -1;
+        for (int i = 0; i < kSteps; ++i) {
+            sim.Step(kDt, fullThrottle);
+            if (i == 0) startGear = sim.state_.currentGear;
+            if (sim.state_.currentGear > startGear) return {i, sim.state_.engineRpm};
+        }
+        return {-1, 0.0};
+    };
+
+    const auto [defaultStep, defaultRpmAtShift] = firstUpshiftStep(defaultTuning);
+    const auto [lowStep, lowRpmAtShift] = firstUpshiftStep(lowUpshiftTuning);
+    (void)defaultRpmAtShift;
+
+    CHECK(defaultStep >= 0);   // matches testGearShiftingUnderSustainedThrottle's own "sawUpshift" result
+    CHECK(lowStep >= 0);
+    // The real per-vehicle Upshift_RPM (3000) fires measurably SOONER (fewer
+    // steps) than the CHOSEN 5500 default - direct numeric proof
+    // BuildGearShiftTuning() now reads this field.
+    CHECK(lowStep < defaultStep);
+    // ...and fires near the CONFIGURED threshold, not near the OLD 5500
+    // default (generous margin: EngineRampRpm's own confirmed up-only ramp,
+    // Sec10.2, can overshoot the exact threshold by a step's worth of rpm -
+    // roughly 10000 rpm/s * (1/60)s - before the state machine notices).
+    CHECK(lowRpmAtShift < 3500.0);
+}
+
+// Behavioural check: Clutch_Delay actually changes how many steps
+// GearShiftStateMachine::midShift() stays true after a shift, not just an
+// inert stored field (mapped to GearShiftTuning::shiftDurationSec, see
+// BuildGearShiftTuning()'s own doc comment, physics_vehicle_substeps.cpp).
+// Uses upshiftRpm=5500 (NOT the lower 3000 the other two tests above use) -
+// hand-verified while writing this test: this harness's own "locked
+// drivetrain, no slip state" model (PLANAR SCOPE banner, vehicle_substeps.h)
+// means a gear1->gear2 shift drops the WHEEL-SPEED-IMPLIED target engine rpm
+// by the same proportion as the gear-ratio change (~38% smaller here)
+// regardless of the rpm the shift fired at - at a LOW upshift threshold
+// (3000) that drop undershoots this fixture's own custom Downshift_RPMs[0]
+// (1111), triggering an immediate real downshift back to gear 1 that chains
+// seamlessly into the SAME midShift()==true streak (confirmed directly: a
+// full per-step gear/rpm trace showed genuine repeated gear1<->gear2
+// hunting, not a bug in the production code under test); at 5500 (this
+// fixture's own Upshift_RPM default, already proven stable by
+// testGearShiftingUnderSustainedThrottle() above) the same proportional drop
+// lands comfortably above 1111, so no downshift follows and this test
+// cleanly isolates ONE upshift's own single mid-shift window.
+void testClutchDelaySetsShiftDurationSec() {
+    auto midShiftStepCount = [&](double clutchDelaySec) {
+        VehicleTuning tuning =
+            BuildWave6TransmissionBrakeVehicleTuning(/*upshiftRpm=*/5500.0, clutchDelaySec, /*maxRpmRate=*/1.0e6);
+        VehicleSubstepSimulator sim(tuning);
+        const DriverInput fullThrottle{1.0, 0.0, 0.0};
+        int startGear = -1;
+        bool sawUpshift = false;
+        int midShiftSteps = 0;
+        for (int i = 0; i < kSteps; ++i) {
+            sim.Step(kDt, fullThrottle);
+            if (i == 0) startGear = sim.state_.currentGear;
+            if (!sawUpshift && sim.state_.currentGear > startGear) sawUpshift = true;
+            if (sawUpshift) {
+                if (sim.gearShift_.midShift()) {
+                    ++midShiftSteps;
+                } else {
+                    break;
+                }
+            }
+        }
+        return midShiftSteps;
+    };
+
+    const int shortSteps = midShiftStepCount(0.1);  // 0.1s / (1/60)s = 6 steps
+    const int longSteps = midShiftStepCount(0.3);   // 0.3s / (1/60)s = 18 steps (also GearShiftTuning's own OLD flat CHOSEN default)
+
+    CHECK(shortSteps > 0);
+    CHECK(longSteps > shortSteps);
+    CHECK(std::abs(shortSteps - 6) <= 2);
+    CHECK(std::abs(longSteps - 18) <= 2);
+}
+
+// Behavioural check: Maximum_RPM_Rate actually bounds how fast
+// ComputeTargetEngineRpm()'s own output (state_.targetEngineRpm) can change,
+// not just an inert stored field (replacing Step08_ForceTorqueAccumulate()'s
+// own old hardcoded 1.0e6 literal). Deliberately does NOT drive this through
+// a real gear change: Step08's own gear-1 free-rev bridge (doc comment,
+// physics_vehicle_substeps.cpp) feeds back into WHETHER/WHEN it keeps
+// overriding targetRpm depending on how fast ComputeTargetEngineRpm's own
+// raw+clamped value climbs - i.e. maxRpmChangePerSec can shift the bridge's
+// own unlock timing, which then changes the whole subsequent trajectory
+// (hand-verified while writing this test: comparing the delta AT a real
+// upshift step between two maxRpmChangePerSec values measured that coupling,
+// not the clamp in isolation). Isolated instead with throttle pinned at 0.0
+// for the whole run - the override's own gate (`lastInput.throttle > 0.0`)
+// is then permanently false, so `state_.targetEngineRpm` is governed PURELY
+// by ComputeTargetEngineRpm's own clamp - then a large, direct, test-only
+// `state_.velForwardBody` injection (state_ is a plain public struct, same
+// direct-inspection/manipulation convention every other test in this file
+// already uses) stands in for whatever real upstream event (e.g. a gear
+// change) hands this function a big new raw wheel-speed-implied target, in
+// complete isolation from the free-rev bridge.
+void testMaximumRpmRateSourcedFromVehicleEntry() {
+    auto singleStepTargetRpmDelta = [&](double maxRpmRate) {
+        VehicleTuning tuning =
+            BuildWave6TransmissionBrakeVehicleTuning(/*upshiftRpm=*/3000.0, /*clutchDelaySec=*/0.3, maxRpmRate);
+        VehicleSubstepSimulator sim(tuning);
+        const DriverInput zeroThrottle{0.0, 0.0, 0.0};
+        sim.Step(kDt, zeroThrottle);  // one settling step from construction-time defaults
+        const double before = sim.state_.targetEngineRpm;
+        sim.state_.velForwardBody = 30.0;  // ~108 km/h - a big, sudden wheel-speed-implied rpm jump for this fixture's own gear[0]/diff/wheelRadius
+        sim.Step(kDt, zeroThrottle);
+        return sim.state_.targetEngineRpm - before;
+    };
+
+    const double fastDelta = singleStepTargetRpmDelta(1.0e6);
+    const double slowDelta = singleStepTargetRpmDelta(50.0);
+
+    CHECK(fastDelta != 0.0);  // a genuine rpm swing exists to measure
+    // The slow-rate tuning's own per-step change must respect its own
+    // CONFIRMED-destination clamp (ComputeTargetEngineRpm's own
+    // maxRpmChangePerSec parameter, Sec10.3's "rate-limits... CHOSEN
+    // concrete cap") - a small headroom epsilon above the exact bound for
+    // floating-point slack.
+    CHECK(std::abs(slowDelta) <= 50.0 * kDt + 1.0);
+    // ...and the two tunings genuinely differ (the clamp is not a silent
+    // no-op): the fast/unbounded tuning's own jump is the raw wheel-speed-
+    // implied swing (clamped only by the engine's own idle/redline range),
+    // many times larger than the slow tuning's own rate-limited step.
+    CHECK(std::abs(slowDelta) < std::abs(fastDelta));
+}
+
 }  // namespace
 
 int main() {
@@ -515,6 +757,10 @@ int main() {
     testTurning();
     testGearShiftingUnderSustainedThrottle();
     testBrakingDeceleratesVehicle();
+    testWave6FieldsRoundTripIntoVehicleTuning();
+    testUpshiftRpmSourcedFromVehicleEntry();
+    testClutchDelaySetsShiftDurationSec();
+    testMaximumRpmRateSourcedFromVehicleEntry();
 
     std::cout << g_passed << " tests passed, " << g_failed << " failed.\n";
     return g_failed == 0 ? 0 : 1;

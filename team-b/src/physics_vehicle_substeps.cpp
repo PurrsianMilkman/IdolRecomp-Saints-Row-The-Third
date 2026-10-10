@@ -24,16 +24,30 @@ std::array<Offset, 4> WheelOffsets(const VehicleTuning& t) {
 }
 
 // Builds vehicle_driving_slice.h's GearShiftTuning from this harness's own
-// VehicleTuning fields (wired 2026-10-08 - see VehicleTuning::gearRatios'
-// own doc comment for why the per-gear downshift table is UNIFORM rather
-// than a real per-gear table: this schema has no such table at all).
+// VehicleTuning fields. UPDATED 2026-10-09 (vehicle-handling wave-6 task,
+// spec-physics-runtime.md Sec10.10): the per-gear downshift table is now the
+// REAL per-vehicle Downshift_RPMs table (t.downshiftRpms) when the source
+// VehicleEntry supplied one - this file's own prior comment here ("this
+// schema has no such table at all") was wrong, corrected in VehicleTuning's
+// own doc comment (vehicle_substeps.h); any gear this vehicle's own data
+// does not cover (including every gear, for an unsourced VehicleTuning)
+// falls back element-by-element to the pre-existing CHOSEN uniform-margin
+// table, unchanged. shiftDurationSec is now sourced from Clutch_Delay
+// (t.clutchDelaySec) instead of GearShiftTuning's own old flat CHOSEN
+// constant - see t.clutchDelaySec's own doc comment for the HIGH-confidence
+// field-to-role mapping.
 GearShiftTuning BuildGearShiftTuning(const VehicleTuning& t) {
     GearShiftTuning gst;
     const size_t gearCount = std::max<size_t>(1, t.gearRatios.size());
-    gst.downshiftRpmByGear.assign(gearCount > 1 ? gearCount - 1 : 0,
-                                  t.gearUpshiftRpmThreshold - t.gearDownshiftMarginRpm);
+    const size_t downshiftCount = gearCount > 1 ? gearCount - 1 : 0;
+    const double uniformDownshiftRpm = t.gearUpshiftRpmThreshold - t.gearDownshiftMarginRpm;
+    gst.downshiftRpmByGear.resize(downshiftCount);
+    for (size_t i = 0; i < downshiftCount; ++i) {
+        gst.downshiftRpmByGear[i] = (i < t.downshiftRpms.size()) ? t.downshiftRpms[i] : uniformDownshiftRpm;
+    }
     gst.upshiftRpmThreshold = t.gearUpshiftRpmThreshold;
     gst.maxGear = static_cast<int>(gearCount);
+    gst.shiftDurationSec = t.clutchDelaySec;
     return gst;
 }
 
@@ -183,7 +197,23 @@ VehicleTuning VehicleTuning::FromVehicleEntry(const sr3vehicleinfo::VehicleEntry
         t.gearRatio = entry.gearRatios[0];
         t.gearRatios.assign(entry.gearRatios.begin(), entry.gearRatios.end());
     }
+    if (!entry.downshiftRpms.empty()) t.downshiftRpms.assign(entry.downshiftRpms.begin(), entry.downshiftRpms.end());
     if (entry.diffGearRatio.present) t.diffGearRatio = entry.diffGearRatio.value;
+    // WIRED 2026-10-09 (vehicle-handling wave-6 task, spec-physics-runtime.md
+    // Sec10.10): the 5 real transmission fields that section's own "Gear
+    // ratios" paragraph confirms land in the live Havok component - see each
+    // VehicleTuning field's own doc comment (vehicle_substeps.h) for the
+    // CONFIRMED/HIGH citation per field.
+    if (entry.upshiftRpm.present) t.gearUpshiftRpmThreshold = entry.upshiftRpm.value;
+    if (entry.reverseGearRatio.present) t.reverseGearRatio = entry.reverseGearRatio.value;
+    if (entry.clutchDelay.present) t.clutchDelaySec = entry.clutchDelay.value;
+    if (entry.maximumRpmRate.present) t.maxRpmChangePerSec = entry.maximumRpmRate.value;
+
+    // WIRED 2026-10-09 (same task): Sec10.10's own "Bonus" brakes finding -
+    // see minTimeToBlockSec/aiMinTimeToBlockSec's own doc comment
+    // (vehicle_substeps.h) for why these are parsed but left OPEN.
+    if (entry.minTimeToBlock.present) t.minTimeToBlockSec = entry.minTimeToBlock.value;
+    if (entry.aiMinTimeToBlock.present) t.aiMinTimeToBlockSec = entry.aiMinTimeToBlock.value;
 
     if (entry.dragCoefficient.present) t.dragCoefficient = entry.dragCoefficient.value;
     if (entry.frontalArea.present) t.frontalArea = entry.frontalArea.value;
@@ -434,9 +464,15 @@ void VehicleSubstepSimulator::Step08_ForceTorqueAccumulate(double dt) {
     // (Sec10.3's own "+0x158" mirrored field is not modelled) - zeroing both
     // makes the subtraction a documented no-op rather than inventing a
     // reaction-torque source that does not exist in this model.
+    // `maxRpmChangePerSec` WIRED 2026-10-09 (vehicle-handling wave-6 task,
+    // spec-physics-runtime.md Sec10.10): now tuning_.maxRpmChangePerSec
+    // (Maximum_RPM_Rate when sourced, else the same 1.0e6 "effectively
+    // unbounded" CHOSEN default this call site hardcoded before - see that
+    // field's own doc comment, vehicle_substeps.h, for the HIGH-confidence
+    // field-to-parameter mapping).
     double targetRpm = ComputeTargetEngineRpm(wheelAngularSpeeds, torqueSplitWeights, state_.drivetrainRatio,
                                                /*reactionTorqueNm=*/0.0, /*reactionTorqueToRpmGain=*/0.0,
-                                               state_.targetEngineRpm, /*maxRpmChangePerSec=*/1.0e6, dt,
+                                               state_.targetEngineRpm, tuning_.maxRpmChangePerSec, dt,
                                                tuning_.minRpm, tuning_.maxRpm);
 
     // CHOSEN harness-level bridging accommodation (2026-10-08, engine-curve

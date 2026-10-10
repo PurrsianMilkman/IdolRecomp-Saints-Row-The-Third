@@ -191,8 +191,13 @@ int main() {
 
     // ----------------------------------------------------------------
     // mission_end_success (Sec6.12): SAME gate as mission_end_failure;
-    // shares the SAME timer but its own dispatch counter; arg3 table
-    // resolves up to 2 slots.
+    // calls the SAME shared dispatch (0x006da400) but - FIX (Sec21.27c,
+    // 2026-10-09, full disassembly of that shared function) - arms its OWN
+    // separate timer (0x12f2634/missionEndTimer2Armed), NOT failure's own
+    // timer 1 as this block previously (incorrectly) assumed from the mere
+    // fact both callers share one dispatch function; its own dispatch
+    // counter is unaffected by this correction. arg3 table resolves up to
+    // 2 slots.
     // ----------------------------------------------------------------
     {
         Host host(batchFixtureNames());
@@ -211,8 +216,14 @@ int main() {
         es.objectResolves().set("obj_a", true);
         es.objectResolves().set("obj_b", false);
         ok(host, gp, "mission_end_success('m1', 'text', {'obj_a', 'obj_b'})");
-        CHECK(es.missionContext().missionEndTimer1Armed == true); // SAME shared timer mission_end_failure arms
+        // FIX (Sec21.27c, 2026-10-09): success arms its OWN timer 2, never
+        // failure's timer 1 - corrects this block's own prior (batch b29)
+        // assumption.
+        CHECK(es.missionContext().missionEndTimer1Armed == false);
+        CHECK(es.missionContext().missionEndTimer2Armed == true);
         CHECK(es.missionContext().missionEndSuccessDispatchCount == 1);
+        CHECK(es.missionContext().lastSuccessAnnouncementText == "text"); // 0x014c846c, Sec21.27c
+        CHECK(es.missionContext().lastDispatchTornDownHud == false); // confirmed asymmetry: success never tears down HUD
         CHECK(es.missionContext().lastMissionEndSuccessSlot1Resolved == true);
         CHECK(es.missionContext().lastMissionEndSuccessSlot2Resolved == false);
         ok(host, gp, "mission_end_success('m1')"); // arg3 absent - both slots false, no throw

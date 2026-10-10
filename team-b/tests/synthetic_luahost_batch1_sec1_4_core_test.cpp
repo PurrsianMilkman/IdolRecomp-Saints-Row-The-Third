@@ -195,27 +195,38 @@ int main() {
     }
 
     // --- audio_conversation_play (§2.10) --------------------------------
-    // currentResolves is an OpenValue - calling .get() while OPEN throws,
-    // so a test must configure it (true or false) before the stub's own
-    // unconditional read of it succeeds.
+    // CLOSED 2026-10-09: activeConversationIdForTesting is a plain map,
+    // CONFIRMED-absent by default (not an OpenValue) - a fresh engine's
+    // real 3-slot table is zero/sentinel-initialized, so id 5 below needs
+    // no setup at all to exercise the "not active" path.
     {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
-        es.conversationPlay().currentResolves.set(false);
-        ok(host, gp, "audio_conversation_play(5)");
+        ok(host, gp, "audio_conversation_play(5)"); // id 5 never registered -> not found
         CHECK(es.conversationPlay().directDispatchCount == 0);
         CHECK(es.conversationPlay().interruptCount == 0);
 
-        es.conversationPlay().currentResolves.set(true);
+        // id 7 occupies a slot (test-asserted precondition), flag not yet marked.
+        es.conversationPlay().activeConversationIdForTesting[7] = false;
         ok(host, gp, "audio_conversation_play(7)");
         CHECK(es.conversationPlay().directDispatchCount == 1);
-        CHECK(es.conversationPlay().alreadyActiveFlag == true);
+        CHECK(es.conversationPlay().activeConversationIdForTesting[7] == true); // now marked
         CHECK(es.conversationPlay().interruptCount == 0); // first mark, wasn't already active
 
-        ok(host, gp, "audio_conversation_play(9)");
+        // Replaying the SAME id (7) again -> its own slot's flag was
+        // already marked -> self-interrupt (CONFIRMED, Sec2.10's own
+        // stack-slot trace: the lookup key is THIS call's own id).
+        ok(host, gp, "audio_conversation_play(7)");
         CHECK(es.conversationPlay().directDispatchCount == 2);
         CHECK(es.conversationPlay().interruptCount == 1); // already active this time -> interrupt fires
+
+        // A DIFFERENT, never-registered id (9) is genuinely unaffected by
+        // id 7's own state - proves the fix is per-id, not a shared global
+        // (the real defect the prior single `alreadyActiveFlag` bool had).
+        ok(host, gp, "audio_conversation_play(9)");
+        CHECK(es.conversationPlay().directDispatchCount == 2); // unchanged: id 9 not found
+        CHECK(es.conversationPlay().interruptCount == 1);      // unchanged
     }
 
     // --- game_peg_unload (§2.7) ------------------------------------------

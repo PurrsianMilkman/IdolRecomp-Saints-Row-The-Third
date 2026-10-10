@@ -1189,12 +1189,22 @@ int stub_get_dist(lua_State* L) {
         lua_pushnumber(L, static_cast<lua_Number>((std::numeric_limits<float>::max)()));
         return 1;
     }
+    // REAL fallback (2026-10-10, m07 live-playtest follow-up): try the
+    // real on-disk zone-object position for each name before falling back
+    // to the diagnostic-only probe path below - see
+    // EngineState::tryResolveWorldPositionFromZoneData()'s own doc comment.
+    CharacterState& ca = st->getOrCreateCharacter(a);
+    CharacterState& cb = st->getOrCreateCharacter(b);
+    st->tryResolveWorldPositionFromZoneData(a, ca.worldPosition);
+    st->tryResolveWorldPositionFromZoneData(b, cb.worldPosition);
     // DIAGNOSTIC ONLY (--probe-unresolved-names' own worldPositionOr()
     // extension, 2026-10-03): off by default, throws exactly as .get()
     // would until explicitly enabled; see that method's own doc comment.
+    // Only still reached for a name with NEITHER a live-bridged position
+    // NOR a real zone-object position (e.g. the one demo playtest vehicle).
     const WorldPosition kProbeOrigin{}; // CHOSEN (0,0,0), logged as probe - never a real baseline value
-    WorldPosition pa = st->worldPositionOr(st->getOrCreateCharacter(a).worldPosition, kProbeOrigin);
-    WorldPosition pb = st->worldPositionOr(st->getOrCreateCharacter(b).worldPosition, kProbeOrigin);
+    WorldPosition pa = st->worldPositionOr(ca.worldPosition, kProbeOrigin);
+    WorldPosition pb = st->worldPositionOr(cb.worldPosition, kProbeOrigin);
     double dx = pa.x - pb.x;
     double dy = pa.y - pb.y; // Y = vertical (spec-physics-runtime.md: gravity (0,-9.8,0), Y-up)
     double dz = pa.z - pb.z;

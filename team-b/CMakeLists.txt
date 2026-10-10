@@ -2249,6 +2249,19 @@ add_executable(sr3luahost_wave2_w22_tests tests/synthetic_luahost_wave2_w22_test
 target_link_libraries(sr3luahost_wave2_w22_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_wave2_w22_test COMMAND sr3luahost_wave2_w22_tests)
 
+# Respect/progression live runtime (spec-tables-progression.md Sec5.4,
+# 2026-10-09): award path, level-up loop reusing respectLevelCost() (the
+# SAME cost accessor Sec5.2 already names for the save-shaped path), unlock
+# consumption (HomieSlot1 special case), the 50-level cap, the decade-level
+# milestone hook (write-side only), and the Sec16.2/Sec16.16 co-op-mirror
+# doc-comment correction. Only needs sr3luahost's own header (EngineState
+# constructed directly, no Lua/Host involved - this task adds no new Lua-
+# visible native, only the live state behind the existing game_award_respect
+# routing).
+add_executable(sr3luahost_respect_progression_tests tests/synthetic_respect_progression_test.cpp)
+target_link_libraries(sr3luahost_respect_progression_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_respect_progression_test COMMAND sr3luahost_respect_progression_tests)
+
 # Player runtime U2/U3 (spec-player-runtime.md Sec3/Sec5). Links sr3luahost
 # only for the CharacterState +0x1d99 binding check, and
 # sr3tables_progression for the header-only tweak_table.xtbl seeding

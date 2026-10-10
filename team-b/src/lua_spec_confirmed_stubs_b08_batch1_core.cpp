@@ -227,11 +227,13 @@ int stub_door_open(lua_State* L) {
 // audio_conversation_play (§2.10, 0x00a3c9d0) - 129 calls / 41 scripts.
 // CONFIRMED: 1 mandatory number, read unconditionally, truncated to a
 // byte. Return: none. See ConversationPlay's own doc comment
-// (engine_state.h) for the full host-gate/shared-lookup reasoning: the
+// (misc_state.h) for the full host-gate/3-slot-table reasoning: the
 // opcode-0x51 queue path shares audio_conversation_end's own CONFIRMED-
 // false-in-single-player host check and is not modelled further; the
 // mark/interrupt step and the independent 0x008788e0 direct dispatch both
-// key off the SAME "current conversation" lookup, genuinely OPEN.
+// key off whether THIS call's own id byte already occupies one of the
+// real 3 active-conversation-id slots (CLOSED 2026-10-09, mission-census
+// item) - test-registrable, honestly "not active" absent a registration.
 int stub_audio_conversation_play(lua_State* L) {
     logCall(L, upLog(L), "audio_conversation_play", upStateTag(L));
     uint8_t idByte = static_cast<uint8_t>(truncateEa2596(lua_tonumber(L, 1)) & 0xFF); // 1 mandatory number, truncated to a byte (CONFIRMED)
@@ -245,10 +247,11 @@ int stub_audio_conversation_play(lua_State* L) {
     // visibly exercised/not silently skipped, matching that function's
     // own "reduces to argument parsing" boundary for the same gate.
     (void)st->coopLocalIsHost();
-    if (cp.currentResolves.get()) { // OPEN until set
-        bool wasAlreadyActive = cp.alreadyActiveFlag;
-        cp.alreadyActiveFlag = true;
-        if (wasAlreadyActive) {
+    auto it = cp.activeConversationIdForTesting.find(idByte); // THIS id's own slot, CONFIRMED key (Sec2.10)
+    if (it != cp.activeConversationIdForTesting.end()) {      // CONFIRMED-absent default, not OPEN
+        bool wasAlreadyMarked = it->second;
+        it->second = true; // CONFIRMED: this slot's own second byte flag is marked on every lookup hit
+        if (wasAlreadyMarked) {
             ++cp.interruptCount; // CONFIRMED mark-while-already-set -> interrupt/stop pair
         }
         ++cp.directDispatchCount; // CONFIRMED: mode bit 0x2 always set (literal mode 3), no host check

@@ -311,22 +311,63 @@ static void test_block_8() {
 }
 
 
-    // inv_item_in_slot (Sec13.21): the CONFIRMED dead-code gap (0x10/0x11
-    // always "none") and the "best"/"best-firearm"/"best-melee" test-hook
-    // fallback.
+    // inv_item_in_slot (Sec13.21): the now-fully-recovered 11-name table
+    // (0x008dc6b0), its 2 newly-confirmed dead codes (grenade/single_use),
+    // the pre-existing 0x10/0x11 dead-code gap, the "best"/"best-firearm"/
+    // "best-melee" test-hook fallback, and a genuine slot-name miss now
+    // answering "none" directly instead of refusing (CLOSED 2026-10-09 -
+    // see this native's own stub doc comment for the full citation).
 static void test_block_9() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
         es.objectResolves().set("Hero", true);
         CharacterState& c = es.getOrCreateCharacter("Hero");
-        c.inventoryBestSlotItemForTesting[0xe] = "pistol"; // "best-firearm"
+        c.inventoryBestSlotItemForTesting[0xe] = "pistol";   // "best-firearm"
+        c.inventoryBestSlotItemForTesting[0x2] = "sawed_off"; // "pistol" slot (table code 2), LIVE
 
         lua_getglobal(gp, "inv_item_in_slot");
         lua_pushstring(gp, "Hero");
         lua_pushstring(gp, "best-firearm");
         lua_call(gp, 2, 1);
         CHECK(std::string(lua_tostring(gp, -1)) == "pistol");
+        lua_pop(gp, 1);
+
+        // "pistol" is a table-recovered LIVE slot name (code 0x2), wired
+        // into the SAME inventoryBestSlotItemForTesting map.
+        lua_getglobal(gp, "inv_item_in_slot");
+        lua_pushstring(gp, "Hero");
+        lua_pushstring(gp, "pistol");
+        lua_call(gp, 2, 1);
+        CHECK(std::string(lua_tostring(gp, -1)) == "sawed_off");
+        lua_pop(gp, 1);
+
+        // "unarmed" (table code 0) is LIVE but never registered -> honest "none".
+        lua_getglobal(gp, "inv_item_in_slot");
+        lua_pushstring(gp, "Hero");
+        lua_pushstring(gp, "unarmed");
+        lua_call(gp, 2, 1);
+        CHECK(std::string(lua_tostring(gp, -1)) == "none");
+        lua_pop(gp, 1);
+
+        // "grenade" (table code 9) is CONFIRMED DEAD even with a registration present.
+        c.inventoryBestSlotItemForTesting[0x9] = "frag"; // must still be ignored
+        lua_getglobal(gp, "inv_item_in_slot");
+        lua_pushstring(gp, "Hero");
+        lua_pushstring(gp, "grenade");
+        lua_call(gp, 2, 1);
+        CHECK(std::string(lua_tostring(gp, -1)) == "none");
+        lua_pop(gp, 1);
+
+        // "single_use" (table code 0xa) is CONFIRMED DEAD for a different
+        // reason (never forwarded by this native's own caller-side switch),
+        // also ignoring any registration.
+        c.inventoryBestSlotItemForTesting[0xa] = "cardboard_tube"; // must still be ignored
+        lua_getglobal(gp, "inv_item_in_slot");
+        lua_pushstring(gp, "Hero");
+        lua_pushstring(gp, "single_use");
+        lua_call(gp, 2, 1);
+        CHECK(std::string(lua_tostring(gp, -1)) == "none");
         lua_pop(gp, 1);
 
         lua_getglobal(gp, "inv_item_in_slot");
@@ -337,10 +378,6 @@ static void test_block_9() {
         lua_pop(gp, 1);
 
         // a character known NOT to resolve -> "none" regardless of slot name
-        // (a totally unregistered name is OPEN, a different, correctly-
-        // refused case - not exercised here via raw lua_call, which is
-        // unprotected; see the refuses() helper's own pcall wrapper for that
-        // case elsewhere in this file).
         es.objectResolves().set("Nobody", false);
         lua_getglobal(gp, "inv_item_in_slot");
         lua_pushstring(gp, "Nobody");
@@ -349,8 +386,16 @@ static void test_block_9() {
         CHECK(std::string(lua_tostring(gp, -1)) == "none");
         lua_pop(gp, 1);
 
-        // an unrecognized slot name on a RESOLVED character refuses (OPEN table 0x008dc6b0)
-        refuses(host, gp, "inv_item_in_slot('Hero', '3')", "0x008dc6b0");
+        // an unrecognized slot name on a RESOLVED character is now a
+        // genuine, CONFIRMED miss (both the 11-name table and the 5
+        // "best-*" literals are closed) -> answers "none" directly, no
+        // longer refuses (CLOSED 2026-10-09, was OPEN table 0x008dc6b0).
+        lua_getglobal(gp, "inv_item_in_slot");
+        lua_pushstring(gp, "Hero");
+        lua_pushstring(gp, "3");
+        lua_call(gp, 2, 1);
+        CHECK(std::string(lua_tostring(gp, -1)) == "none");
+        lua_pop(gp, 1);
 }
 
 

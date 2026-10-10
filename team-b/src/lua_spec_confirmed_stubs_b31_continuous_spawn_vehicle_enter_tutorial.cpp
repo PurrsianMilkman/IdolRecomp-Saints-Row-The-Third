@@ -32,8 +32,9 @@ namespace {
 // name, SAME resolver continuous_spawn_stop uses, §4.7). Args 2-10 each
 // individually nil-gated: arg 2 (number, truncateEa2596, default 0 - spawn
 // count), arg 3 (raw number, default 0.0, * 1000.0 then truncateEa2596 -
-// respawn interval seconds -> ms), arg 4 (string, default a genuinely OPEN
-// literal - see continuousSpawnDefaultTypeFilter()), arg 5 (number,
+// respawn interval seconds -> ms), arg 4 (string, default CONFIRMED ""
+// per spec-lua-api-behaviour.md Sec4.8 - see continuousSpawnDefaultTypeFilter()),
+// arg 5 (number,
 // truncateEa2596, default 1), arg 6 (number, truncateEa2596, default 14,
 // raw dword store at +0x38), arg 7 (number, truncateEa2596, default 19,
 // raw dword store at +0x3c), arg 8/9 (strings, default absent, via
@@ -60,7 +61,7 @@ int stub_continuous_spawn_start(lua_State* L) {
     double respawnSeconds = optionalNumberDefault(L, 3, 0.0); // CONFIRMED raw (no rounding) read, converted below
     rec.respawnIntervalMs = truncateEa2596(respawnSeconds * 1000.0);
     bool hasArg4 = lua_gettop(L) >= 4 && lua_type(L, 4) != LUA_TNIL;
-    rec.typeNameFilter = hasArg4 ? argString(L, 4) : st->continuousSpawnDefaultTypeFilter().get(); // OPEN until set when arg 4 absent
+    rec.typeNameFilter = hasArg4 ? argString(L, 4) : st->continuousSpawnDefaultTypeFilter(); // CONFIRMED "" when arg 4 absent (spec-lua-api-behaviour.md Sec4.8)
     rec.numericArg5 = truncateEa2596(optionalNumberDefault(L, 5, 1.0));
     rec.numericArg6 = truncateEa2596(optionalNumberDefault(L, 6, 14.0));
     rec.numericArg7 = truncateEa2596(optionalNumberDefault(L, 7, 19.0));

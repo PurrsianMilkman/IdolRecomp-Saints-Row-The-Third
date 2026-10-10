@@ -617,6 +617,98 @@ int main() {
         CHECK(es.playerClassChainResolves("Pierce") == true);
     }
 
+    // Sec21.27c upgrade (this task, 2026-10-09): "0x006da400 opened in
+    // full" - the real fail/success presentation split. Three things this
+    // task's own brief calls out as THE deliverable: (a) an ordinary
+    // mission's failure call produces failure-shaped state (fail-text
+    // global write, debounce timer 1 at 2000ms/4000ms-on-overlap, HUD
+    // teardown-all when the gate bit reads true); (b) a type-2 mission's
+    // failure call is silently coerced into hardcoded success instead,
+    // never entering dispatchMissionEndPresentation() at all; (c) an
+    // ordinary success call does NOT trigger HUD teardown even when the
+    // SAME gate bit a failure call would read is true - the confirmed
+    // asymmetry - while arming its own separate timer 2 and writing the
+    // separate success-announcement global.
+    {
+        // mission_end_success is not in fixtureNames() above (that list is
+        // this file's own pre-existing 12-name cluster, unchanged) - a
+        // separate local list adds it for this block's own Host only, same
+        // "gameplay" tag the real tagged-registration file gives it
+        // (src/lua_spec_confirmed_stubs_b29_sec6_notoriety_mission.cpp).
+        std::vector<RegisteredName> names = fixtureNames();
+        names.push_back({"mission_end_success", "gameplay"});
+        Host host(names);
+        lua_State* gp = host.gameplayState();
+        EngineState& es = host.engineState();
+
+        // (a) Ordinary (type 0) mission, failure call, gate bit true.
+        es.beginMissionPhaseTracking("mFailOrdinary", /*type=*/0);
+        es.missionContext().currentMissionEnding.set(true); // real liveness-transition bit, no in-scope auto-writer (same as the block near the top of this file)
+        es.missionContext().hudTeardownGateBit.set(true);    // CONFIRMED mechanism/OPEN value flags byte 0x014c848c bit 0x8 - a test sets it
+        ok(host, gp, "mission_end_failure('mFailOrdinary', 'you died')");
+        CHECK(es.missionContext().missionEndFailureDispatchCount == 1);
+        CHECK(es.missionContext().missionEndFailureCoercedToSuccessCount == 0); // NOT type 2: no coercion
+        CHECK(es.missionContext().lastFailReasonText == "you died");            // 0x014c7a08
+        CHECK(es.missionContext().missionEndTimer1Armed == true);
+        CHECK(es.missionContext().missionEndTimer1LastArmedDurationMs == 2000); // first arm: 2000ms
+        CHECK(es.missionContext().lastDispatchTornDownHud == true);            // gate bit true -> teardown-all fired
+        CHECK(es.missionContext().hudTeardownCount == 1);
+        CHECK(es.missionContext().missionEndTimer2Armed == false); // failure never touches success's own timer
+
+        // A second mission-end while timer 1 is still armed from the call
+        // above doubles to 4000ms (Sec21.27c's own "4000ms if a second
+        // mission-end fires while the first is cooling down").
+        ok(host, gp, "mission_end_failure('mFailOrdinary', 'again')");
+        CHECK(es.missionContext().missionEndFailureDispatchCount == 2);
+        CHECK(es.missionContext().missionEndTimer1LastArmedDurationMs == 4000);
+        CHECK(es.missionContext().lastFailReasonText == "again");
+        CHECK(es.missionContext().hudTeardownCount == 2); // gate bit still true: tears down again
+
+        // (b) Type-2 mission: mission_end_failure is silently coerced into
+        // hardcoded success - dispatchMissionEndPresentation() is never
+        // entered, so NONE of its effects (fail-text write, timer 1/2 arm,
+        // HUD teardown) fire, even though the gate bit is still true.
+        es.beginMissionPhaseTracking("mFailType2", /*type=*/2);
+        CHECK(es.missionContext().phase == 3); // type-2 self-loop target, Sec21.27a
+        es.missionContext().currentMissionEnding.set(true); // same real liveness-transition bit the gate requires, even on the coercion path
+        ok(host, gp, "mission_end_failure('mFailType2', 'should be swallowed')");
+        CHECK(es.missionContext().missionEndFailureCoercedToSuccessCount == 1);
+        CHECK(es.missionContext().missionEndFailureDispatchCount == 2); // unchanged - non-coerced branch never entered
+        CHECK(es.missionContext().lastFailReasonText == "again");       // unchanged - no new write
+        CHECK(es.missionContext().hudTeardownCount == 2);               // unchanged - no new teardown
+        // Coercion routes through the SAME missionEndDispatch()/0x006d9f70
+        // super-dispatcher Sec21.27b already models, with successFlag=true.
+        CHECK(es.missionContext().missionEndDispatchCount == 1);
+        CHECK(es.missionContext().lastMissionEndDispatchSuccessFlag == true);
+        CHECK(es.missionContext().phase == 6); // shared "ending" tail every missionEndDispatch() type falls through to
+        CHECK(es.missionCompletionFlagBitSet("mFailType2") == true); // type-2 success branch's own completion write (Sec21.27b, m04 case above)
+        CHECK(es.missionContext().missionEndType2CompleteAndOpenStubCount == 1);
+
+        // (c) Ordinary (type 0) mission, SUCCESS call, SAME gate bit still
+        // true. Confirmed asymmetry: success never reaches the HUD-teardown
+        // primitive regardless of that bit, unlike failure's (a) above.
+        es.beginMissionPhaseTracking("mSuccessOrdinary", /*type=*/0);
+        es.missionContext().currentMissionEnding.set(true);
+        CHECK(es.missionContext().hudTeardownGateBit.get() == true); // still true from above - not reset by the rebind
+        ok(host, gp, "mission_end_success('mSuccessOrdinary', 'You win')");
+        CHECK(es.missionContext().missionEndSuccessDispatchCount == 1);
+        CHECK(es.missionContext().lastSuccessAnnouncementText == "You win"); // 0x014c846c
+        CHECK(es.missionContext().missionEndTimer2Armed == true);           // success's own separate timer
+        CHECK(es.missionContext().missionEndTimer1Armed == true);           // unchanged leftover from (a) - success never touches timer 1
+        CHECK(es.missionContext().lastDispatchTornDownHud == false);        // THE asymmetry: never true for success
+        CHECK(es.missionContext().hudTeardownCount == 2);                   // unchanged - no new teardown despite the gate bit
+
+        // Direct contrast within the same gate-bit-true state: a fresh
+        // ordinary failure call right after the success call above DOES
+        // tear down, proving the asymmetry is about which branch ran, not
+        // about the gate bit's value.
+        es.beginMissionPhaseTracking("mFailAfterSuccess", /*type=*/0);
+        es.missionContext().currentMissionEnding.set(true);
+        ok(host, gp, "mission_end_failure('mFailAfterSuccess', 'reason')");
+        CHECK(es.missionContext().lastDispatchTornDownHud == true);
+        CHECK(es.missionContext().hudTeardownCount == 3);
+    }
+
     if (g_failures) {
         std::cerr << g_failures << " check(s) failed\n";
         return 1;

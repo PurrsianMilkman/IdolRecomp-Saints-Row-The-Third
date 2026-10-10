@@ -435,9 +435,16 @@ int stub_vehicle_rc_get_signal_strength(lua_State* L) {
     EngineState* st = upState(L);
     double result = 0.0; // CONFIRMED: 0.0 on resolve failure
     if (st->objectResolves().get(vehicleName) && st->objectResolves().get(characterName)) { // OPEN until set, each
+        // REAL fallback (2026-10-10, m07 live-playtest follow-up) - see
+        // EngineState::tryResolveWorldPositionFromZoneData()'s own doc
+        // comment, same shared worldPosition field stub_get_dist uses.
+        VehicleState& v = st->getOrCreateVehicle(vehicleName);
+        CharacterState& c = st->getOrCreateCharacter(characterName);
+        st->tryResolveWorldPositionFromZoneData(vehicleName, v.worldPosition);
+        st->tryResolveWorldPositionFromZoneData(characterName, c.worldPosition);
         const WorldPosition kProbeOrigin{}; // same diagnostic-only convention as stub_get_dist
-        WorldPosition pv = st->worldPositionOr(st->getOrCreateVehicle(vehicleName).worldPosition, kProbeOrigin);
-        WorldPosition pc = st->worldPositionOr(st->getOrCreateCharacter(characterName).worldPosition, kProbeOrigin);
+        WorldPosition pv = st->worldPositionOr(v.worldPosition, kProbeOrigin);
+        WorldPosition pc = st->worldPositionOr(c.worldPosition, kProbeOrigin);
         double dx = pv.x - pc.x;
         double dz = pv.z - pc.z; // horizontal only, Y dropped (CONFIRMED)
         double d = std::sqrt(dx * dx + dz * dz);
@@ -668,6 +675,10 @@ int stub_turn_to_do(lua_State* L) {
     CharacterState& t = st->getOrCreateCharacter(target); // SAME established position resolver as get_dist, Sec4.2/Sec30.6
 
     if (!arg3) {
+        // REAL fallback (2026-10-10, m07 live-playtest follow-up) - see
+        // EngineState::tryResolveWorldPositionFromZoneData()'s own doc comment.
+        st->tryResolveWorldPositionFromZoneData(character, c.worldPosition);
+        st->tryResolveWorldPositionFromZoneData(target, t.worldPosition);
         WorldPosition pc = c.worldPosition.get(); // OPEN until set
         WorldPosition pt = t.worldPosition.get();
         if (pc.x == pt.x && pc.y == pt.y && pc.z == pt.z) {

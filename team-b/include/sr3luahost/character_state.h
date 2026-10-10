@@ -1876,18 +1876,29 @@ struct CharacterState {
     // real spawn-time default for this byte.
     int32_t currentTeamCode = -1;
 
-    // inv_item_in_slot (Sec13.21): the dedicated "best-firearm"/"best-melee"/
-    // "best-non-lethal" helpers' (0x005ff7a0/0x005ff220/0x005ff680) own
-    // internal item-selection logic is OPEN (not independently decompiled) -
-    // this project has no real inventory/item-catalog data anywhere
-    // (stated, project-wide gap), so a resolved "best-*" slot's held item
-    // name is test-registrable only, by (character, slot code) - absent a
-    // registration, the function's own CONFIRMED "none" fallback applies
-    // honestly (not a guess: an unresolved item record really does fall
-    // back to "none" per Sec13.21's own text), keyed by the 3 real codes
-    // this function's own dispatch switch actually reaches (0xd/0xe/0xf -
-    // codes 0xc/0x10/0x11 always "none", the function's own CONFIRMED dead-
-    // code gap, Sec13.21).
+    // inv_item_in_slot (Sec13.21): keyed by slot CODE, test-registrable
+    // only - this project has no real inventory/item-catalog data anywhere
+    // (stated, project-wide gap), so any resolved, LIVE slot's held item
+    // name is test-registrable only; absent a registration, the function's
+    // own CONFIRMED "none" fallback applies honestly (not a guess: an
+    // unresolved item record really does fall back to "none" per Sec13.21's
+    // own text). CLOSED 2026-10-09: the slot-NAME table 0x008dc6b0 is now
+    // fully recovered (11 names, codes 0-0xa: unarmed/melee/pistol/smg/
+    // shotgun/rifle/explosive/special/vehicle/grenade/single_use) - of
+    // those, codes 0-8 are LIVE (dispatch to the array-of-8-byte-entries
+    // lookup, `0x005fec20`'s default arm) and keyed here by their own code;
+    // codes 9 (grenade, hard-coded dead inside `0x005fec20`'s own switch)
+    // and 0xa (single_use, real inside `0x005fec20` but never reached by
+    // this native's own caller-side switch) are CONFIRMED dead, always
+    // "none", and never looked up here. The pre-existing 5 "best-*" literal
+    // names (outside the table) add codes 0xd/0xe/0xf (LIVE - the dedicated
+    // helpers 0x005ff7a0/0x005ff220/0x005ff680, whose own internal item-
+    // selection logic is OPEN/not independently decompiled, same "test-
+    // registrable, honest none" treatment) and 0x10/0x11 (CONFIRMED dead).
+    // Code 0xc ("currently selected slot") is handled inside `0x005fec20`
+    // for OTHER callers but is never produced by any of the 11+5 resolvable
+    // Lua slot-name strings, so it is unreachable via this native and not
+    // modeled here either.
     std::unordered_map<int, std::string> inventoryBestSlotItemForTesting;
 
     // ai_set_personality (Sec13.27): the profile-name hash/table-scan

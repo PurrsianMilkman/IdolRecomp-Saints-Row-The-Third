@@ -221,6 +221,7 @@ int main() {
     es.strongholdPurchaseUpgrade().strongholdResolves = true;
     es.strongholdPurchaseUpgrade().price = 15.0;
     CHECK(es.strongholdPurchaseUpgrade().localPlayerNullGuardCount == 0);
+    es.hasLocalPlayer().forget(); // CLOSED 2026-10-09: now CONFIRMED-true by default (Sec10.3) - force OPEN to exercise this refusal
     fails(host, ui, "store_stronghold_game_purchase_upgrade()", "0x009da4e0"); // local player still OPEN
     es.hasLocalPlayer().set(false);
     ok(host, ui, "store_stronghold_game_purchase_upgrade()"); // local player explicitly absent -> guarded

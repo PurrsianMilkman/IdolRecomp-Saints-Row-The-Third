@@ -64,6 +64,31 @@
 // internal field schema with no established correspondence to this file's
 // own xtbl-sourced fields (see Step08's doc comment for that specific case).
 //
+// WIRED-IN UPDATE (2026-10-09, vehicle-handling wave-6 task, authority
+// spec-physics-runtime.md Sec10.10/spec-vehicle-data.md Sec7.3 changelog,
+// synced commit 4c146a9): wave 6 item 5's own vehicle-info-table-to-Havok
+// construction-site trace newly confirms 5 real xtbl transmission fields
+// this file previously left as CHOSEN placeholders or did not model at all -
+// `gearUpshiftRpmThreshold` (Upshift_RPM, was CHOSEN-magnitude-only),
+// `downshiftRpms` (Downshift_RPMs, the per-gear downshift table this file's
+// own prior banner incorrectly said "has NO xtbl counterpart at all"),
+// `reverseGearRatio` (Reverse_Gear_Ratio, not modelled before at all),
+// `clutchDelaySec` (Clutch_Delay, mapped to GearShiftTuning::shiftDurationSec,
+// was a flat CHOSEN constant), `maxRpmChangePerSec` (Maximum_RPM_Rate, mapped
+// to ComputeTargetEngineRpm's own rate-limit parameter, was a flat CHOSEN
+// 1.0e6 "effectively unbounded" literal) - plus the "Bonus" brakes finding,
+// `minTimeToBlockSec`/`aiMinTimeToBlockSec` (Min_Time_To_Block/
+// AI_Min_Time_To_Block), parsed for completeness but left OPEN (no stall-
+// timer/lock-flag model exists in this harness to feed them into - see each
+// field's own doc comment below for the individual CONFIRMED/HIGH/OPEN
+// citation). Diff_Gear_Ratio/Gear_Ratios[] were ALREADY wired before this
+// task (Sec10.10 only re-confirms the same field/destination, no change
+// needed); the engine torque curve, steering and tire/wheel grip (the other
+// 3 of wave 6's "5 target parameters") were likewise already wired and are
+// untouched by this pass. See BuildGearShiftTuning() and
+// Step08_ForceTorqueAccumulate() (physics_vehicle_substeps.cpp) for the
+// consuming side.
+//
 // The 7-slot-offset -> named-component mapping this file assumes (CHOSEN,
 // Sec6.8 item 1 is explicit that no spec determines this):
 //   +0x20 driver input (sub-step 1: lightest, single status byte - matches a
@@ -184,18 +209,26 @@ struct VehicleTuning {
 
     double gearRatio = 3.4;                               // Gear_Ratios[0] (confirmed field) - kept for any existing caller still reading a single ratio; Step06 itself now reads `gearRatios` (plural) below, see that method's own doc comment
     std::vector<double> gearRatios = {3.4};                // Gear_Ratios (confirmed field LIST, spec-vehicle-data.md Sec7.3) - every element FromVehicleEntry() was given; drives GearShiftTuning::maxGear = gearRatios.size() below
-    double diffGearRatio = 3.7;                            // Diff_Gear_Ratio (confirmed field)
+    std::vector<double> downshiftRpms;                      // Downshift_RPMs (confirmed field LIST, spec-vehicle-data.md Sec7.3, entry+0x594) - runtime destination WIRED 2026-10-09 (spec-physics-runtime.md Sec10.10, wave 6 item 5): "Not independently re-verified: whether Downshift_RPMs is copied into component +0x34 ... structurally very likely, HIGH not CONFIRMED" - HIGH, not instruction-level CONFIRMED like the other 5 fields in this block, but consumed anyway (see BuildGearShiftTuning(), physics_vehicle_substeps.cpp): every element FromVehicleEntry() was given becomes the REAL per-gear downshift-RPM table GearShiftTuning::downshiftRpmByGear uses; any gear this specific vehicle's own data does not cover (including every gear, when this vector is left empty, CHOSEN default) falls back element-by-element to the pre-existing CHOSEN uniform-margin table (gearUpshiftRpmThreshold - gearDownshiftMarginRpm, unchanged below) - an unsourced vehicle's behaviour is therefore identical to before this wiring.
+    double diffGearRatio = 3.7;                            // Diff_Gear_Ratio (confirmed field; re-confirmed 2026-10-09, spec-physics-runtime.md Sec10.10 - transmission constructor 0x00abd400 copies entry+0x5AC -> component +0x10, same field/destination this file already wired, no change needed)
+    double reverseGearRatio = 0.0;                          // Reverse_Gear_Ratio (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B0 -> transmission component +0x18) - parsed by FromVehicleEntry() below for completeness, same OPEN treatment as clutchSlipRpm above: Sec10.3 itself states "Manual-shift input handling is gated out entirely at the mode byte and was not located (OPEN)", and no spec traces HOW/WHEN the real game selects reverse gear at all - inventing a reverse-gear-engagement trigger (e.g. "brake held at a stop") would be fabricating an unconfirmed mechanism, against this project's own "no invented fixes" rule, not wiring a confirmed one. CHOSEN default 0.0 (OPEN - this harness has no reverse-drive mode to feed it into); a caller inspecting this field directly still gets the REAL per-vehicle ratio when sourced.
+    double clutchDelaySec = 0.3;                            // Clutch_Delay (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B4 -> transmission component +0x14, "all consumed by the already-documented gear-shift state machine 0x00aece20") - this file's own HIGH-confidence (not instruction-level CONFIRMED) reading of WHICH of that state machine's own fields +0x14 is: Sec10.3's own independent read of 0x00aece20 names exactly one timer-shaped field it owns ("a shift-duration timer") and no other, so this is mapped to GearShiftTuning::shiftDurationSec (see BuildGearShiftTuning(), physics_vehicle_substeps.cpp). CHOSEN default 0.3s matches GearShiftTuning's own prior CHOSEN default, so an unsourced vehicle's behaviour is unchanged.
+    double maxRpmChangePerSec = 1.0e6;                      // Maximum_RPM_Rate (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B8 -> transmission component +0x40) - this file's own HIGH-confidence reading of its destination: vehicle_driving_slice.h's ComputeTargetEngineRpm() (Sec10.3's own 0x00aecef0, "the transmission's half of the engine/transmission RPM-matching loop") is the one function in this model with an otherwise-CHOSEN "maxRpmChangePerSec" parameter ("the spec confirms 'rate-limits' happen, not their coefficients") - the xtbl field's own name matches that role closely enough not to leave it unused. CHOSEN default 1.0e6 (effectively unbounded) matches Step08_ForceTorqueAccumulate()'s own prior hardcoded literal, so an unsourced vehicle's behaviour is unchanged.
 
-    // GearShiftStateMachine tuning (vehicle_driving_slice.h Sec10.3) - the
-    // per-gear downshift table has NO xtbl counterpart at all (this schema
-    // gives one Gear_Ratios list, not a separate shift-RPM table), so this
-    // harness builds a UNIFORM table (every gear downshifts at the same
-    // margin below the single shared upshift threshold) - CHOSEN
-    // simplification, not a per-gear claim; see
-    // VehicleSubstepSimulator's constructor (physics_vehicle_substeps.cpp)
-    // for where these two feed GearShiftTuning::downshiftRpmByGear/
-    // upshiftRpmThreshold.
-    double gearUpshiftRpmThreshold = 5500.0;               // CHOSEN (Sec10.3 CONFIRMS a single shared threshold exists, +0xc, not its magnitude)
+    // GearShiftStateMachine tuning (vehicle_driving_slice.h Sec10.3).
+    // CORRECTED 2026-10-09 (spec-physics-runtime.md Sec10.10, wave 6 item 5):
+    // this block's own prior framing - "the per-gear downshift table has NO
+    // xtbl counterpart at all" - no longer holds: Downshift_RPMs (above) IS a
+    // real per-gear xtbl table (spec-vehicle-data.md Sec7.3, entry+0x594),
+    // and Sec10.10 now gives HIGH (not CONFIRMED) confidence it round-trips
+    // into the live transmission component too (+0x34). This harness still
+    // falls back to the pre-existing CHOSEN UNIFORM table (every gear
+    // downshifts at the same margin below the single shared upshift
+    // threshold) for any gear downshiftRpms did not cover - see
+    // BuildGearShiftTuning() (physics_vehicle_substeps.cpp) for where these
+    // feed GearShiftTuning::downshiftRpmByGear/upshiftRpmThreshold/
+    // shiftDurationSec.
+    double gearUpshiftRpmThreshold = 5500.0;               // Upshift_RPM (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5A8 -> transmission component +0xc, consumed by the gear-shift state machine 0x00aece20) when FromVehicleEntry() was given one; CHOSEN concrete default 5500.0 for an unsourced vehicle unchanged (Sec10.3 only ever confirmed this threshold's EXISTENCE/role, not a magnitude - Sec10.10 is what newly confirms the real per-vehicle SOURCE)
                                                               // NOTE (added 2026-10-08, substeps-regression follow-up task):
                                                               // Step08_ForceTorqueAccumulate()'s own free-rev bridging accommodation
                                                               // (physics_vehicle_substeps.cpp) revs the engine toward optRpm while
@@ -221,6 +254,25 @@ struct VehicleTuning {
 
     AxleAccelTuning front;                                   // axles[0] (positional - "Front" by shipped-data convention, spec Sec7.3; CHOSEN assumption, not engine-enforced)
     AxleAccelTuning rear;                                     // axles[1]
+
+    // Brakes - WIRED 2026-10-09, spec-physics-runtime.md Sec10.10's own
+    // "Bonus, not one of the 5 target parameters" finding: `0x00ab9ea0`
+    // (the same per-vehicle constructor that writes steering/grip, Sec10.10)
+    // also writes brakes component slot `+0x30`'s own `+0x14` from these two
+    // xtbl fields - HIGH, "not independently confirmed by a vtable/
+    // construction-site read the way other slots were" (same confidence tier
+    // §10.7's own brakes-slot mapping already carries). Parsed for
+    // completeness, same OPEN treatment as reverseGearRatio above: this
+    // harness's own Scope discipline already declines to model Havok's BASE
+    // brakes stall-timer/lock-flag computation at all
+    // (vehicle_driving_slice.h's ComputeBrakeTorque()/ApplyHandbrakeLock()
+    // own doc comments - "this harness has no Havok base brakes computation
+    // at all"), so there is no stall-timer state machine here for a dwell-
+    // time threshold to gate; inventing one now would be fabricating an
+    // unmodeled mechanism, not wiring a confirmed one. CHOSEN default 0.0
+    // (OPEN) for both.
+    double minTimeToBlockSec = 0.0;      // Min_Time_To_Block (confirmed field, entry+0x5E0)
+    double aiMinTimeToBlockSec = 0.0;     // AI_Min_Time_To_Block (confirmed field, entry+0x5E4)
 
     double corneringStiffness = 9000.0;                        // CHOSEN (N/rad) - linear-tire-model constant; Havok's own tire-friction law is not given by any spec (Sec6.4 items 10/11/13 are HIGH/HYPOTHESIS *shape* only)
 

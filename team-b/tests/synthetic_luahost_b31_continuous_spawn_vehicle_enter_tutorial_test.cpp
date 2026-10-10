@@ -75,17 +75,15 @@ int main() {
         CHECK(es.continuousSpawnRegions().count("GhostRegion") == 0);
 
         es.objectResolves().set("Zone1", true);
-        // arg4 omitted and the default literal never set -> OPEN refusal.
-        fails(host, gp, "continuous_spawn_start('Zone1')", "continuous_spawn_start arg 4 default");
-        CHECK(es.continuousSpawnRegions().count("Zone1") == 0); // nothing claimed by the failed attempt
-
-        es.continuousSpawnDefaultTypeFilter().set("__default_filter__");
+        // arg4 omitted -> CONFIRMED default "" (spec-lua-api-behaviour.md
+        // Sec4.8); no OpenValue refusal anymore.
+        CHECK(es.continuousSpawnDefaultTypeFilter() == "");
         ok(host, gp, "continuous_spawn_start('Zone1')"); // every optional arg omitted
         {
             auto& rec = es.continuousSpawnRegions().at("Zone1");
             CHECK(rec.count == 0);
             CHECK(rec.respawnIntervalMs == 0);
-            CHECK(rec.typeNameFilter == "__default_filter__");
+            CHECK(rec.typeNameFilter == "");
             CHECK(rec.numericArg5 == 1);
             CHECK(rec.numericArg6 == 14);
             CHECK(rec.numericArg7 == 19);
@@ -105,7 +103,7 @@ int main() {
         {
             auto& rec = es.continuousSpawnRegions().at("Zone1");
             CHECK(rec.count == 0);                          // UNCHANGED - fast re-start path never rewrites
-            CHECK(rec.typeNameFilter == "__default_filter__"); // UNCHANGED
+            CHECK(rec.typeNameFilter == ""); // UNCHANGED
             CHECK(rec.activationCount == 1);                  // UNCHANGED - no second activation
         }
         CHECK(es.continuousSpawnActive().at("Zone1") == true); // flipped back to true by the fast re-start path

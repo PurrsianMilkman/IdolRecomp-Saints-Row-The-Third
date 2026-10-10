@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 
 #include "sr3luahost/open_state.h"
 
@@ -72,32 +73,51 @@ struct TeleportRequest {
 };
 
 // audio_conversation_play (spec-lua-api-behaviour.md Sec2.10), batch
-// 2026-10-08 (wave 1 batch 1, §1-4): one global record (the real engine
-// has exactly one "current conversation" concept per Sec2.10's own text,
-// not one per id). CONFIRMED the opcode-0x51 host-gated queue path shares
-// the identical host check (0x0087ba20, EngineState::coopLocalIsHost())
-// audio_conversation_end (Sec8.2) already establishes as CONFIRMED FALSE
-// in single player - that path therefore never fires in this project's
-// scope, same "reduces to argument parsing" boundary that function
-// already documents for the identical gate, and is not separately
-// tracked here. The mark/interrupt step and the independent 0x008788e0
-// direct dispatch both key off the SAME "is there a currently-active
-// conversation" lookup (0x006de8a0, CONFIRMED shared gate per Sec2.10's
-// own text) - genuinely OPEN, since no in-scope writer anywhere
-// identifies what the real engine's "current" conversation object is at
-// any given moment.
+// 2026-10-08 (wave 1 batch 1, §1-4). CONFIRMED the opcode-0x51 host-gated
+// queue path shares the identical host check (0x0087ba20,
+// EngineState::coopLocalIsHost()) audio_conversation_end (Sec8.2) already
+// establishes as CONFIRMED FALSE in single player - that path therefore
+// never fires in this project's scope, same "reduces to argument parsing"
+// boundary that function already documents for the identical gate, and is
+// not separately tracked here.
+//
+// CLOSED 2026-10-09 (mission-census item, missions m10/mm_m16_5): the
+// mark/interrupt step and the independent 0x008788e0 direct dispatch key
+// off the LOOKUP side of a real, fully-understood 3-slot active-
+// conversation-id table (`0x014eb4a0`, 20 bytes/slot) - NOT one unrelated
+// "is there a current conversation" global as the prior text had it. All 3
+// slots are zero/sentinel-initialized once at module init (CONFIRMED,
+// `0x006de8e0`), so a fresh engine always, CONFIRMED-ly, resolves "no
+// match" for every id - never an unknown. The LOOKUP side (`0x006de8a0`)
+// takes a 1-byte key; a stack-slot trace proves that AT THIS CALL SITE the
+// key is reloaded from this SAME function's own first Lua argument - i.e.
+// "is there a current conversation" really means "does THIS call's own
+// numeric id already occupy one of the 3 slots," explaining why playing
+// the same id again self-interrupts. The REGISTER side (`0x006de820`,
+// which claims a free slot for an id) has exactly 2 real callers
+// (`0x006df0b0`'s local "start a new conversation" path and `0x006df4f0`'s
+// network-consumer path) - NEITHER of which is this native (`0x00a3c9d0`/
+// `0x006df210`) - so this native's own body never populates a slot itself;
+// absent a Lua-native model of either real caller, this native can only
+// ever observe an id as "active" if a test puts it there first (same
+// "test-registrable, honestly false/none absent a registration"
+// convention as CharacterState::inventoryBestSlotItemForTesting).
 struct ConversationPlay {
     uint64_t playCount = 0;
     uint8_t lastIdByte = 0; // arg 1, truncated to a byte (CONFIRMED)
-    OpenValue<bool> currentResolves{"audio 'current conversation' lookup resolves (0x006de8a0)",
-                                     "spec-lua-api-behaviour.md Sec2.10"};
-    // CHOSEN false initial state (no stated construction value, and no
-    // in-scope reader ever queries this flag back - write-only effect
-    // tracking only, same leniency this header already grants fields
-    // like VehicleState::kneecappersEnabled/kneecappersDeferred).
-    bool alreadyActiveFlag = false;
-    uint64_t interruptCount = 0;      // mark-while-already-active -> interrupt/stop pair fired (CONFIRMED)
-    uint64_t directDispatchCount = 0; // 0x008788e0 fired (gated on currentResolves + mode bit 0x2, always true here, CONFIRMED)
+    // Keyed by the id byte. Presence = this id occupies one of the 3 real
+    // slots (test-asserted precondition, standing in for the real
+    // pointer-!=-sentinel test); value = whether THIS slot's own second
+    // byte flag has already been marked by a prior lookup that found it -
+    // the real engine's own "mark, then interrupt if already marked" step,
+    // now correctly scoped per-id instead of globally (the prior single
+    // `alreadyActiveFlag` bool below was a real modeling bug once two
+    // DIFFERENT ids were in play - fixed by this same 2026-10-09 pass).
+    // Absent = CONFIRMED not-active (the table's real zero-init state at
+    // module load), never an OPEN unknown.
+    std::unordered_map<uint8_t, bool> activeConversationIdForTesting;
+    uint64_t interruptCount = 0;      // this id's own slot was already marked -> interrupt/stop pair fired (CONFIRMED)
+    uint64_t directDispatchCount = 0; // 0x008788e0 fired (gated on this id's slot being found + mode bit 0x2, always true here, CONFIRMED)
 };
 
 // inv_weapon_add_temporary (spec-lua-api-behaviour.md Sec4.10) /

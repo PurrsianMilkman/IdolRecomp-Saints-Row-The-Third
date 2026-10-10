@@ -142,7 +142,14 @@ int stub_npc_leash_to_nav(lua_State* L) {
     // (0x005982e0, Sec7.5's own text) that does not accept the #FOLLOWER#
     // family - unchanged, plain objectResolves().
     if (!st->objectResolves().get(destName)) return 0; // OPEN until set - destination resolve
-    WorldPosition destPos = st->getOrCreateCharacter(destName).worldPosition.get(); // OPEN until set
+    // REAL fallback (2026-10-10, m07 live-playtest follow-up: this exact
+    // call - npc_leash_to_nav(Kinzie, "Nav Kinzie Leash", 0) - is what m07
+    // actually hits on resume, NOT get_dist; same shared field, same real
+    // zone-data source already used for in-world triggers). See
+    // EngineState::tryResolveWorldPositionFromZoneData()'s own doc comment.
+    CharacterState& destChar = st->getOrCreateCharacter(destName);
+    st->tryResolveWorldPositionFromZoneData(destName, destChar.worldPosition);
+    WorldPosition destPos = destChar.worldPosition.get(); // OPEN until set (no live bridge AND no real zone-data position)
     if (std::isnan(destPos.x) || std::isnan(destPos.y) || std::isnan(destPos.z)) return 0; // CONFIRMED NaN guard
     if (c.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
         c.leashPosition.set(destPos);

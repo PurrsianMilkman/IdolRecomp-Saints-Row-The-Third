@@ -168,24 +168,53 @@ bool transcodeOneCodebook(oggpack_buffer& in, oggpack_buffer& out, std::string& 
 
     const long entries = readChecked(in, 14);
     const long ordered = readChecked(in, 1);
-    const long widthRaw = readChecked(in, 3);
-    if (failIf(entries < 0 || ordered < 0 || widthRaw < 0,
-               "EOF reading codebook entries/ordered/length-field-width", err))
+    if (failIf(entries < 0 || ordered < 0,
+               "EOF reading codebook entries/ordered", err))
         return false;
-    const int width = static_cast<int>(widthRaw) + 1;
     if (info) {
         info->dim = dim;
         info->entries = entries;
         info->ordered = ordered;
     }
 
-    // 0 means "entry unused" (no codeword at all) - the standard Vorbis I
-    // sparse-codebook convention (third_party/libvorbis/lib/codebook.c's
-    // own lengthlist[i]=0 for an untagged entry), preserved through to the
-    // re-emit below rather than forced dense.
+    // UPDATE 2026-10-09 (488/493 Kraft-inequality investigation, slot-160
+    // divergence pass): the 3-bit "length-field-width" field is NOT read
+    // unconditionally here before the ordered/unordered branch split - that
+    // was this function's own prior bug. Cross-checked against the PUBLIC
+    // vgmstream `src/coding/vorbis_custom_utils_wwise.c`'s own
+    // `ww2ogg_codebook_library_rebuild()` (itself a public, independent
+    // reimplementation of hcs's ww2ogg, read via WebFetch for conceptual
+    // comparison only, per this project's own agrees-with-public-format
+    // convention - not copied verbatim, re-derived from understanding): that
+    // function reads `codeword_length_length` (3 bits) ONLY inside its own
+    // unordered (`else`) branch, immediately before the 1-bit sparse
+    // selector - never in the ordered branch, which instead reads its seed
+    // length as a FIXED 5 bits (`bl_get(iw, 5, &initial_length)`), no width
+    // field at all. This project's own prior code read a 3-bit `widthRaw`
+    // unconditionally right after `ordered`, then used `widthRaw+1` as the
+    // ordered branch's own seed-length field WIDTH - silently stealing 3
+    // bits that belong to the ordered branch's run-length-code stream and
+    // substituting a WRONG, too-narrow seed-length field in their place.
+    // Confirmed independently (not just "matches public source"): re-parsing
+    // library slot 160 (lengths=[1,1,1,1], Kraft sum 2.0, the slot this
+    // whole investigation is root-caused to) under the corrected grammar
+    // below gives lengths=[2,2,2,2], Kraft sum EXACTLY 1.0 (full double
+    // precision) - a perfectly saturated, complete Huffman tree, not just
+    // "closer to legal." Slot 16 (one of the other 6 originally-failing
+    // slots, entries=49, hand-traced the same way) also lands on Kraft sum
+    // EXACTLY 1.0 under this corrected grammar. Both are exact-saturation
+    // results, not approximate improvements - strong, convergent,
+    // mechanistically-explained evidence this is a pure field-width/
+    // placement bug in this function's OWN bitstream grammar, independent of
+    // what the library bytes actually contain (the raw bytes are untouched;
+    // only how this function carves them into fields changed). Full
+    // comparison: results/verify_vorbis_488_codebook_divergence_
+    // 20261009.md.
     std::vector<long> lengths(static_cast<size_t>(entries), 0);
     if (ordered) {
-        long curLen = readChecked(in, width);
+        // Fixed 5-bit seed length - no length-field-width field exists in
+        // this branch at all (see UPDATE note above).
+        long curLen = readChecked(in, 5);
         if (failIf(curLen < 0, "EOF reading ordered codebook's seed length", err)) return false;
         curLen += 1;
         long i = 0;
@@ -197,25 +226,30 @@ bool transcodeOneCodebook(oggpack_buffer& in, oggpack_buffer& out, std::string& 
             ++curLen;
         }
     } else {
-        // Sec11.11.3a 2026-10-08 UPDATE: immediately after `width`, for
+        // Sec11.11.3a 2026-10-08 UPDATE: immediately after `ordered`, for
         // EVERY ordered==0 codebook, regardless of whether it turns out
-        // sparse or dense, there is a mandatory 1-bit sparse/dense selector
-        // (real address `0x00fa7dfa`) - read unconditionally here, before
-        // the per-entry loop. A prior implementation attempt skipped this
-        // bit entirely and went straight into the per-entry loop, which
-        // shifted every subsequent bit read in the codebook left by one and
-        // corrupted the length list, the has-lookup flag, and (if set) the
-        // lookup-table fields for the rest of that codebook - exactly this
-        // project's own previously-reported "doesn't close its own bit
-        // budget" symptom. Verified character-by-character against 3 real
-        // codebooks (library slots 7/61/5), each closing its exact on-disk
-        // byte length with zero slack.
+        // sparse or dense, there is a mandatory 3-bit length-field-width
+        // field (`widthRaw`, moved here from the unconditional read above -
+        // see this function's own 2026-10-09 UPDATE note), then a mandatory
+        // 1-bit sparse/dense selector (real address `0x00fa7dfa`) - both
+        // read unconditionally here, before the per-entry loop. A prior
+        // implementation attempt skipped the sparse bit entirely and went
+        // straight into the per-entry loop, which shifted every subsequent
+        // bit read in the codebook left by one and corrupted the length
+        // list, the has-lookup flag, and (if set) the lookup-table fields
+        // for the rest of that codebook - exactly this project's own
+        // previously-reported "doesn't close its own bit budget" symptom.
+        // Verified character-by-character against 3 real codebooks (library
+        // slots 7/61/5), each closing its exact on-disk byte length with
+        // zero slack.
+        const long widthRaw = readChecked(in, 3);
+        if (failIf(widthRaw < 0, "EOF reading codebook length-field-width", err)) return false;
         const long sparse = readChecked(in, 1);
         if (failIf(sparse < 0, "EOF reading codebook sparse/dense selector", err)) return false;
         // Per-entry length reads in the ordered==0 branch use `widthRaw`
-        // DIRECTLY as the bit count (0-7), NOT `width` (widthRaw+1) - the
-        // ordered branch's own seed-length read above is the one place
-        // that +1-biased value applies; this is a SEPARATE field usage.
+        // DIRECTLY as the bit count (0-7), NOT `widthRaw+1` - that +1 bias
+        // belongs only to the ORDERED branch's own (now fixed-5-bit) seed
+        // field, never to this one.
         // Bit-exact-verified directly against spec-audio-codebook-
         // library.md's own raw blob for library slots 5 (dense, sparse=0:
         // widthRaw=3 used as exactly 3 bits/entry, not 4 - the has-lookup

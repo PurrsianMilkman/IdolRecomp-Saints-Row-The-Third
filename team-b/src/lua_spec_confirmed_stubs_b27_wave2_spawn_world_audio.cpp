@@ -476,22 +476,29 @@ int stub_spawn_global_override_clear_category(lua_State* L) {
     return 0;
 }
 
-// spawn_override_clear_override_for_hood (§49/T16, AGG). See engine_
-// state.h's own doc comment for the full "no individual text, mirrors the
-// out-of-scope per-hood setter" reasoning.
+// spawn_override_clear_override_for_hood (Sec49.2, `0x00a5fb40`). UPDATED
+// 2026-10-09 (spec sync 3ecbf84): now delegates to
+// EngineState::spawnOverrideClearOverrideForHood(), which clears the SAME
+// real per-hood state the SET sibling above actually writes (see that
+// method's own doc comment in engine_state.h for the disconnected-map bug
+// this fixes - previously this stub erased from a map SET never touched).
 int stub_spawn_override_clear_override_for_hood(lua_State* L) {
     logCall(L, upLog(L), "spawn_override_clear_override_for_hood", upStateTag(L));
     std::string hood = argString(L, 1);
-    upState(L)->spawnOverrideCategoryForHood().erase(hood);
+    upState(L)->spawnOverrideClearOverrideForHood(hood);
     return 0;
 }
 
-// spawn_region_min_spawn_dist / _reset (§49/T16, AGG). See engine_state.h's
-// own doc comment for the full "mirrors the CONFIRMED max sibling's SHAPE
-// only" reasoning.
+// spawn_region_min_spawn_dist / _reset (Sec32.1, `0x00a5dc40`/`0x00a5dc70`).
+// UPDATED 2026-10-09 (spec sync 3ecbf84): CONFIRMED to square the argument
+// before storing, the exact sibling shape of spawn_region_max_spawn_dist
+// above (previously this stub stored the raw value, a real bug this sync
+// fixes) - see EngineState::spawnRegionMinSpawnDistSquared()'s own doc
+// comment.
 int stub_spawn_region_min_spawn_dist(lua_State* L) {
     logCall(L, upLog(L), "spawn_region_min_spawn_dist", upStateTag(L));
-    upState(L)->setSpawnRegionMinSpawnDist(static_cast<float>(lua_tonumber(L, 1)));
+    float f = static_cast<float>(lua_tonumber(L, 1));
+    upState(L)->setSpawnRegionMinSpawnDistSquared(f * f);
     return 0;
 }
 

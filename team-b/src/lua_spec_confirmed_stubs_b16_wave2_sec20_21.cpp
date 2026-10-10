@@ -618,7 +618,13 @@ int stub_get_object_pos(lua_State* L) {
     EngineState* st = upState(L);
     double trailing = st->objectPosTrailingConstant.get(); // OPEN until set - needed on BOTH paths
     if (st->objectResolves().get(name)) { // OPEN until set
-        WorldPosition pos = st->getOrCreateCharacter(name).worldPosition.get(); // OPEN until set
+        // REAL fallback (2026-10-10, m07 live-playtest follow-up) - see
+        // EngineState::tryResolveWorldPositionFromZoneData()'s own doc
+        // comment: try the real zone-data position before requiring a
+        // live per-frame bridge write (only ever done for "#PLAYER1#").
+        CharacterState& c = st->getOrCreateCharacter(name);
+        st->tryResolveWorldPositionFromZoneData(name, c.worldPosition);
+        WorldPosition pos = c.worldPosition.get(); // OPEN until set
         lua_pushnumber(L, pos.x);
         lua_pushnumber(L, pos.y);
         lua_pushnumber(L, pos.z);
