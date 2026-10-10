@@ -243,8 +243,14 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both of tutorial_start's own dispatcher-step globals are now
+        // construction-time pre-seeded defaults, not OPEN values a test must
+        // supply: step 2's 0x029443bc (the machinima recorder's recording-
+        // state machine, "idle"=0) via applySpecInitialState() - corrected
+        // 2026-10-10, Team A spec sync - and step 5's 0x00706ab0 (mode-stack-
+        // top, empty-stack default=0) via EngineState::EngineState()'s own
+        // seed, same correction pass. No .set() needed here any more for
+        // either (both were previously supplied per-test while still OPEN).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(0), 0u); // no rich-widget/mission-active/host-only bits
@@ -287,8 +293,7 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both dispatcher-step globals pre-seeded (see first test block above).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(1), 0u);
@@ -307,8 +312,7 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both dispatcher-step globals pre-seeded (see first test block above).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(2), 0x04u); // rich-widget bit
@@ -328,8 +332,7 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both dispatcher-step globals pre-seeded (see first test block above).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(189), 0u);
@@ -348,8 +351,7 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both dispatcher-step globals pre-seeded (see first test block above).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(3), 0x10u); // host-only bit
@@ -369,8 +371,7 @@ int main() {
         EngineState& es = host.engineState();
         EngineState::TutorialStart& ts = es.tutorialStart();
         ts.suppressionByte0151d5a6.set(false);
-        ts.globalMode029443bc.set(0);
-        ts.gate5Value00706ab0.set(0);
+        // Both dispatcher-step globals pre-seeded (see first test block above).
         ts.mode014f3d34.set(false);
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(4), 0u);
@@ -379,6 +380,38 @@ int main() {
 
         ok(host, gp, "tutorial_start('notoriety_forgive', 0, true, false, true)");
         CHECK(ts.replicateCallCount == 1);
+    }
+    {
+        // Step 5 (Sec6.19, 2026-10-10 Team A spec sync): 0x00706ab0 is a
+        // top-of-mode-stack accessor with a CONFIRMED spawn default of 0
+        // (mode stack empty on a fresh game) - EngineState::EngineState()
+        // now pre-seeds gate5Value00706ab0 to 0, so a fresh host reaches
+        // past step 5 with NO explicit .set() call here, unlike every
+        // other still-OPEN dispatcher global this file sets by hand above.
+        Host host(batchFixtureNames());
+        lua_State* gp = host.gameplayState();
+        EngineState& es = host.engineState();
+        EngineState::TutorialStart& ts = es.tutorialStart();
+        ts.suppressionByte0151d5a6.set(false);
+        ts.globalMode029443bc.set(0);
+        ts.mode014f3d34.set(false);
+        ts.noMissionLive006d2910.set(true);
+        ts.flagsByte24.set(EngineState::tutorialStateKey(5), 0u);
+
+        CHECK(ts.gate5Value00706ab0.known()); // pre-seeded, not OPEN
+        CHECK(ts.gate5Value00706ab0.get() == 0);
+        ok(host, gp, "tutorial_start('crib_receive', 0, true, false, true)"); // reaches past step 5 with no explicit set()
+        CHECK(es.tutorialState().get("5") == 2); // queued - step 5 did not stop it
+
+        // The override path (mode 6 = key-bindings config screen active)
+        // still stops step 5 exactly as before this pre-seed, and
+        // .forget() reopens the OPEN path.
+        ts.gate5Value00706ab0.set(6);
+        ok(host, gp, "tutorial_start('crib_customize', 0, true, false, true)");
+        CHECK(es.tutorialState().get("6") == 0); // unchanged - stopped at step 5
+
+        ts.gate5Value00706ab0.forget();
+        fails(host, gp, "tutorial_start('crib_garage', 0, true, false, true)", "0x00706ab0");
     }
 
     if (g_failures == 0) {

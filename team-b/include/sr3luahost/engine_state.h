@@ -229,6 +229,47 @@ public:
     void installSpawnRankHitPoints(std::vector<int32_t> values) { spawnRankHitPoints_ = std::move(values); }
     size_t spawnRankHitPointsCount() const { return spawnRankHitPoints_.size(); }
 
+    // NEW 2026-10-10 (vehicle-class xtbl wiring task): the REAL class-by-
+    // type-name table sr3vehicleinfo::ParseAllVehicles already computes
+    // correctly (include/sr3vehicleinfo/vehicle_entry.h,
+    // VehicleTypeUnion::vehicleClass - 0 Automobile/1 Motorcycle/
+    // 2 Airplane/3 Helicopter/4 Vtol/5 Watercraft, the SAME numeric space
+    // VehicleState::flyingType's own CONFIRMED values use, Sec30.5/Sec33.1),
+    // keyed by sr3luahost::AsciiLowerFold(VehicleEntry::name) - the exact
+    // fold convention zone_object_resolver.h already established for this
+    // project's one shared case-insensitive-name lookup. Installed by a
+    // caller (tools/lua_host_run.cpp's real-cache install step,
+    // installVehicleTypeClassTableFromCache) from every real
+    // `<name>_veh.xtbl` found in misc_tables.vpp_pc + dlc1/2/3.vpp_pc
+    // (spec-vehicle-data.md Sec7.9: "123 total"). Stored as a plain
+    // unordered_map<string,int32_t> rather than sr3vehicleinfo's own
+    // VehicleClass enum so this header does not need to include
+    // sr3vehicleinfo/vehicle_type.h just for a one-field install function -
+    // the caller casts VehicleClass to int32_t when building the map it
+    // passes in.
+    //
+    // loadZoneObjectsSection() below is the ONE consumer: a zone-placed
+    // `Script_Vehicle` record's own `script_vehicle_type_name` property
+    // (sr3zone::ScriptVehicleTypeName(), include/sr3zone/zone_objects.h) is
+    // looked up here (case-folded) to populate that instance's
+    // VehicleState::flyingType and, when the resolved class is 3 (heli) or
+    // 4 (Vtol), HelicopterFlyTo::qualifies - replacing the single hardcoded
+    // "m05_heli_pierce" name special case getOrCreateVehicle() used to
+    // carry (removed this same task; see that method's own history in
+    // src/lua_engine_state.cpp's git log) with the real, general,
+    // data-driven mechanism that special case's own doc comment said this
+    // project was missing. Empty (the default - every synthetic unit test,
+    // and any run that never installs it) means loadZoneObjectsSection()
+    // can still resolve a script_vehicle record's own NAME (objectResolves())
+    // but never its type's class - flyingType/qualifies stay OPEN exactly as
+    // before this task, matching this project's standing "empty install = no
+    // behavior change" convention (installSpawnRankHitPoints/
+    // installZsceneTable's own doc comments).
+    void installVehicleTypeClassTable(std::unordered_map<std::string, int32_t> classByLowerTypeName) {
+        vehicleTypeClassByLowerName_ = std::move(classByLowerTypeName);
+    }
+    size_t vehicleTypeClassTableSize() const { return vehicleTypeClassByLowerName_.size(); }
+
     // get_max_hit_points (Sec7.12) / set_current_hit_points (Sec7.31): see
     // CharacterState::maxHitPoints's own "UPDATE 2026-10-07" doc comment for
     // the full rationale. For an ORDINARY character (not scriptNpcBound)
@@ -288,6 +329,109 @@ public:
     bool hasVehicle(const std::string& name) const;
     size_t vehicleCount() const { return vehicles_.size(); }
     std::unordered_map<std::string, VehicleState>& vehicles() { return vehicles_; }
+
+    // --- Mission-host Phase 2: live position bridge + name->live-object
+    // resolver (results/design_mission_host_in_engine_loop_20261009.md
+    // §3(c), "a bridge it does not have today... a new, currently-
+    // nonexistent name-to-live-object resolver") ----------------------------
+    //
+    // UPDATED 2026-10-09, post-merge of Team A's spec-zone-data-format.md
+    // §11.10 ("Named-object resolution, end to end") + spec-lua-api-
+    // behaviour.md §4.13's corrected resolver-family paragraph: the REAL
+    // engine has exactly ONE global name->handle map (registry singleton
+    // `0x02442750`, `+0x2660`), and - unlike this project's own objectResolves()
+    // below - that map is itself inherently LIVE: an entry exists in it if
+    // and only if some real producer (zone placement, vehicle cover-node
+    // batches, an in-memory engine record including a group member, or
+    // co-op-replication replay - §11.10 item 2's own closed 4-producer
+    // list) has actually registered a live handle for that name via
+    // `0x00457650`, called from registry base-vtable `+0x2c`. Resolving a
+    // name in the real engine and finding it LIVE are therefore the SAME
+    // event, not two separate facts the way this project's headless-testing
+    // objectResolves() treats them (a flat, hand-seeded boolean that answers
+    // the SAME way whether this host is running headless or hosting a real
+    // runPlaytest() session, because nothing ever populated it FROM a live
+    // session in the first place). This resolver is this project's first
+    // attempt at modelling that real "resolves because it's live" fact
+    // directly, rather than the pre-existing hand-seeded stand-in.
+    //
+    // §11.10 item 3 / §4.13's own corrected resolver-family paragraph also
+    // confirms a SECOND, separate step this resolver deliberately does NOT
+    // model: once a name resolves to a handle, a per-native "kind" bit-test
+    // against that handle's own row in the real class-descriptor table
+    // `0x02cc9900` (5 confirmed resolver-family members, each testing one
+    // bit/offset) decides whether THIS PARTICULAR native accepts that kind
+    // of object. §4.13's own text is explicit that even Team A does not yet
+    // know the plain-English meaning of any of those bits, and 2 of the
+    // family's own bit/offsets are still unpinned - so there is no real
+    // mechanism here for Team B to faithfully reproduce yet. This resolver's
+    // own kCharacter/kVehicle split below is NOT an attempt at that - it
+    // simply mirrors which of this project's two PRE-EXISTING, Phase-2-
+    // independent storage maps (characters_/vehicles_ above) a caller wrote
+    // a live position into, the same character-vs-vehicle split
+    // get_dist's own doc comment already admits this project has no real
+    // way to distinguish from a bare name alone. Treat kCharacter/kVehicle
+    // as "which existing map this was written through," never as a claim
+    // about a resolved handle's real `0x02cc9900` class row.
+    //
+    // §11.10 item 4 independently strengthens, rather than changes, this
+    // resolver's one real production use (the bridge call for "#PLAYER1#"
+    // in tools/sr3_viewer.cpp's own runPlaytest()): `"#PLAYER1#"` is one of
+    // exactly 8 closed, special-cased sentinels that the REAL generic
+    // resolver (`0x00a280c0`) short-circuits via a literal-string compare,
+    // resolving straight to "the current player object" - it never touches
+    // the name map at all. So in the real engine "#PLAYER1#" is ALWAYS
+    // resolvable whenever a local player exists, by construction - exactly
+    // the one case this project's own minimal playtest can actually offer a
+    // live value for, and exactly why it is the one name bridged today (see
+    // that call site's own doc comment for the full "no other name is
+    // bridged" reasoning, unchanged by this spec update).
+    //
+    // CHOSEN shape (unchanged by the above - this just grounds it): a plain
+    // name->kind map, written ONLY by the two bridge*Position() setters
+    // below (never by a mission script, and never defaulted true for any
+    // name) - so "is X live" can only become anything but kNone because a
+    // real per-frame caller (runPlaytest()) actually wrote a real position
+    // for it THIS session. A name this map has never seen is kNone ("not
+    // live") - a normal, honest, reportable result, not an error and not
+    // the same fact as objectResolves() being false (a name can be a real
+    // resolved mission-fiction object per THIS project's own hand-seeded
+    // stand-in and still not be live in a minimal playtest that only ever
+    // tracks the local player - concrete proof: applySpecInitialState()
+    // pre-seeds BOTH "#PLAYER1#" and "#PLAYER2#" true in objectResolves(),
+    // Sec29.4, but this project's single-player-only scope means
+    // "#PLAYER2#" is NEVER live in any session this project can construct).
+    enum class LiveObjectKind { kNone, kCharacter, kVehicle };
+    LiveObjectKind liveObjectKind(const std::string& name) const {
+        auto it = liveObjectKinds_.find(name);
+        return it == liveObjectKinds_.end() ? LiveObjectKind::kNone : it->second;
+    }
+    bool isLiveObject(const std::string& name) const { return liveObjectKind(name) != LiveObjectKind::kNone; }
+
+    // Writes a REAL, currently-simulated position into the SAME
+    // CharacterState::worldPosition / VehicleState::worldPosition field
+    // get_dist and the other position-shaped natives already read
+    // (character_state.h/vehicle_state.h's own doc comments on
+    // `worldPosition`) - this bridges into existing storage, it does not
+    // create a second one. Marks `name` live (kCharacter/kVehicle) for the
+    // resolver above. Call once per rendered frame, before the mission's
+    // own per-frame scheduler pass runs, so a coroutine resumed this frame
+    // observes THIS frame's position, never a stale one.
+    void bridgeLiveCharacterPosition(const std::string& name, const WorldPosition& pos) {
+        getOrCreateCharacter(name).worldPosition.set(pos);
+        liveObjectKinds_[name] = LiveObjectKind::kCharacter;
+    }
+    void bridgeLiveVehiclePosition(const std::string& name, const WorldPosition& pos) {
+        getOrCreateVehicle(name).worldPosition.set(pos);
+        liveObjectKinds_[name] = LiveObjectKind::kVehicle;
+    }
+    // Test-only: resets the resolver's own "is it live" answer for every
+    // name (e.g. to model "before the live loop's first frame ever ran")
+    // WITHOUT touching any worldPosition already written - matches this
+    // project's existing OpenValue "sticky until a new .set()/.forget()"
+    // convention elsewhere; this map is a separate liveness fact layered on
+    // top of that storage, not a replacement for it.
+    void clearLiveObjectsForTesting() { liveObjectKinds_.clear(); }
 
     // --- co-op session (spec-lua-api-behaviour.md Sec26.28, Sec3.1, Sec8.27,
     // Sec10.2; batch 2026-10-01) -------------------------------------------
@@ -992,20 +1136,59 @@ public:
         OpenValue<bool> suppressionByte0151d5a6{
             "tutorial dispatcher global byte 0x0151d5a6 (meaning OPEN; non-zero suppresses base-game [index<189] prompts)",
             "spec-lua-api-behaviour.md Sec6.19"};
-        // Step 2: "The global 0x029443bc is 1, 2 or 3 -> stop. [OPEN -
-        // what that global is.]"
+        // Step 2: "The global 0x029443bc is 1, 2 or 3 -> stop." **CORRECTED,
+        // 2026-10-10, Team A spec sync (dlc2_m03 mission-blocking routing,
+        // scratchpad/dlc2_mission_blockers_0x029443bc_vtable68_2026-10-10.md):
+        // retract the "tutorial dispatcher global" framing entirely -
+        // 0x029443bc is NOT tutorial-owned. It is the machinima recorder's
+        // OWN recording-state machine, written exclusively by the
+        // 0x00bc4f60-0x00bce150 module (same global cell_machinima_is_
+        // recording/game_machinima_is_recording test via MachinimaState::
+        // recording above, Sec44.4/Sec59.1 - kept as its own separate
+        // OpenValue, not aliased to that bool field, per this struct's own
+        // top "no silent cross-link" convention). Full writer map: `0` =
+        // idle/not recording (CONFIRMED the zero-fill default - a fresh
+        // single-player game reads 0 - this is what applySpecInitialState()
+        // now seeds); `1` = actively recording (written by the start-request
+        // handler 0x00bce0d0 after 5 other engine-state gates pass); `2`/`3`
+        // = stopping/finalizing (an 8-step async drain/flush sub-state
+        // machine in companion global 0x029443e0, driven by 0x00bc6d80);
+        // `4` = teardown in progress (set by 0x00bc6160, cleared back to 0
+        // once 0x00706ab0 reports 2). This dispatcher step is a *consumer*
+        // refusing to run during/after a machinima capture, not a
+        // tutorial-owned sentinel - tutorial_start itself has no stake in
+        // this global's meaning. Field/key name kept as globalMode029443bc
+        // (not renamed) since it is this struct's own local step-2 gate
+        // value, referenced by address elsewhere in this project; the
+        // meaning correction lives in this comment and in the seed below.
         OpenValue<int32_t> globalMode029443bc{
-            "tutorial dispatcher global 0x029443bc (meaning OPEN; 1, 2 or 3 -> stop)",
-            "spec-lua-api-behaviour.md Sec6.19"};
-        // Step 5: "0x00706ab0 returns 6 -> stop. [OPEN - meaning.]" NOTE:
-        // the exact same address is already modelled as
+            "machinima-recorder recording-state global 0x029443bc (0 idle [default]/1 recording/2,3 finalizing/4 teardown; step 2 stops the tutorial dispatcher while 1, 2 or 3) - NOT a tutorial-owned concept, corrected 2026-10-10",
+            "spec-lua-api-behaviour.md Sec6.19 (correction)"};
+        // Step 5: "0x00706ab0 returns 6 -> stop." CONFIRMED (2026-10-10 Team
+        // A spec sync, routed mission-blocking dlc2_m03, agent
+        // a53c6769fd437715d): 0x00706ab0 is a top-of-mode-stack accessor -
+        // `if (0x012f4a80 >= 0) return mode_stack_array[0x012f4a80]; else
+        // return 0;` - and the stack-top index 0x012f4a80 is file-backed,
+        // initialized to -1, i.e. the mode stack starts EMPTY on a fresh
+        // game, so this accessor's CONFIRMED spawn default is 0, not 6.
+        // Mode 6 (the only value that stops this step) is the control-
+        // scheme/key-bindings configuration sub-screen (spec-frontend-menu-
+        // runtime.md Sec1) - step 5 only stops tutorial_start while that
+        // options sub-screen is the active mode-stack entry, a state a
+        // fresh/default game is never in. See EngineState::EngineState()'s
+        // own seed for this field (the same construction-time "pre-seed a
+        // newly-CONFIRMED default instead of leaving an OpenValue OPEN"
+        // convention as CharacterState::ragdollStateEnumCd2/stateCodeByte501
+        // above). NOTE: the exact same address is already modelled as
         // ScreenFade::modeStackTop ("mode stack top... read by the
         // per-frame routine", Sec26.24) - plausibly the same shared
         // per-frame engine-mode query, but not cross-referenced by any
         // spec text, so kept as its own separate field (see struct's own
-        // top comment).
+        // top comment). Remains a plain OpenValue, not a bare int:
+        // .set()/.forget() stay available, so a test exercising the
+        // key-bindings-screen-open case can still override this explicitly.
         OpenValue<int32_t> gate5Value00706ab0{
-            "tutorial dispatcher 0x00706ab0 result (meaning OPEN; ==6 -> stop; NOTE: same address as ScreenFade::modeStackTop, Sec26.24 - not confirmed to be the same field)",
+            "tutorial dispatcher 0x00706ab0 result (CONFIRMED default 0, mode stack empty on a fresh game; ==6 -> stop, only while the key-bindings config screen is active; NOTE: same address as ScreenFade::modeStackTop, Sec26.24 - not confirmed to be the same field)",
             "spec-lua-api-behaviour.md Sec6.19"};
         // Step 6, first half: "If the byte 0x014f3d34 is non-zero,
         // continue only for A=188 or 196<=A<=201. [OPEN - what the
@@ -1207,6 +1390,22 @@ public:
     //     "most script NPCs never set this" population finding
     //     (spec-zone-data-format.md Sec11.7: 1,028 of 6,788 script_npc
     //     objects) is reported honestly, not papered over.
+    //  3. NEW 2026-10-10 (vehicle-class xtbl wiring task): if the record's
+    //     own class instead resolves to the literal string "Script_Vehicle"
+    //     (also a real, named class, spec-zone-data-format.md's own
+    //     "Resolved classes include" list) AND it carries a decodable
+    //     `script_vehicle_type_name` property (sr3zone::ScriptVehicleTypeName())
+    //     that matches (case-folded) an entry of installVehicleTypeClassTable()
+    //     above, populates that vehicle instance's VehicleState::flyingType
+    //     with the REAL xtbl-sourced class value, and - when that class is 3
+    //     (Helicopter) or 4 (Vtol), HelicopterFlyTo::qualifies' own CONFIRMED
+    //     gate (Sec28.2: "class in {3,4}") - also marks it true. This is the
+    //     real, general, data-driven replacement for the single hardcoded
+    //     "m05_heli_pierce" name special case getOrCreateVehicle() used to
+    //     carry (removed this same task). A script_vehicle record with no
+    //     script_vehicle_type_name property, or one whose type is not in the
+    //     installed table (e.g. installVehicleTypeClassTable() was never
+    //     called), is left exactly as OPEN as before - never guessed at.
     //
     // Never opens a file itself - `section` must already be parsed (via
     // sr3zone::ZoneObjects::locate()/parseAt()) by the caller; see
@@ -1923,8 +2122,14 @@ public:
     // VehicleState::flyingType above already models under its own,
     // already-corrected doc comment. Label text kept verbatim (it is also
     // this field's own OpenStateError diagnostic string, matched by
-    // existing tests - see lua_engine_state.cpp's getOrCreateVehicle() for
-    // the one literal-name seed ("m05_heli_pierce") this update adds.
+    // existing tests). UPDATE 2026-10-10 (vehicle-class xtbl wiring task):
+    // EngineState::loadZoneObjectsSection() (src/lua_engine_state.cpp) now
+    // populates this map for real, for any zone-placed vehicle instance
+    // whose own `script_vehicle_type_name` property resolves - via
+    // installVehicleTypeClassTable()'s real xtbl-sourced class data - to
+    // class 3 (Helicopter) or 4 (Vtol), replacing the single hardcoded
+    // "m05_heli_pierce" name seed this project used to carry here (see
+    // getOrCreateVehicle()'s own history for the full removal note).
     struct HelicopterFlyTo {
         OpenValueMap<bool> qualifies{"0x00ad31a0: heli AI record +0x2c in {3,4}", "spec-lua-api-behaviour.md Sec28.2"};
         OpenValueMap<bool> applyGate{"heli AI record (0x00a79470) +0x4b0 == 1", "spec-lua-api-behaviour.md Sec28.2"};
@@ -4599,6 +4804,22 @@ public:
     // false, matching this project's own kMissionStartIsRestart convention
     // (tools/lua_host_run.cpp - every mission this host drives is a fresh
     // start, never a restart).
+    //
+    // MISSION-HOST PHASE 3 (2026-10-09): this method (and bindMissionPhase-
+    // Machine() below it) are deliberately KEPT, not removed, even though
+    // tools/sr3_viewer.cpp's own production `--mission=<stem>` playtest bind
+    // now goes through the REAL sr3luahost::MissionPhaseMachine class
+    // (include/sr3luahost/menu_runtime.h) instead of calling this method
+    // directly - MissionPhaseMachine::launchStartFunction() itself calls
+    // THIS method, at the same real bind call site, once a mission's own
+    // `_start` is actually about to run (see that method's own doc comment,
+    // menu_runtime.h), so every legacy facade below still gets set through
+    // the real path. This method also has its own SEPARATE, still-legitimate
+    // direct caller: tools/lua_host_run.cpp's own standalone headless
+    // mission-drive loop (`host.engineState().beginMissionPhaseTracking(...)`,
+    // immediately before that file's own callMissionStart()) - a different
+    // tool with no MissionPhaseMachine instance of its own, not a dead
+    // parallel path left over from before this switch.
     void beginMissionPhaseTracking(const std::string& name = std::string(), int32_t type = 0,
                                     bool isRestart = false) {
         missionContext_.activeAndRunning.set(true);
@@ -4748,6 +4969,10 @@ public:
         auto it = onTriggerCallbacks_.find(triggerName);
         return it != onTriggerCallbacks_.end() ? it->second : kEmpty;
     }
+    // For runPlaytest()'s own per-frame trigger-geometry auto-register (see
+    // EngineState::TriggerVolumeGeometry's own doc comment): every trigger
+    // name an on_trigger() call has registered a callback for so far.
+    const std::unordered_map<std::string, std::string>& onTriggerCallbacksMap() const { return onTriggerCallbacks_; }
 
     // objective_text_clear (Sec1.4). CONFIRMED: no resolve/handle-lookup
     // step at all (unlike every other function in the §1 cluster) - just a
@@ -4853,6 +5078,126 @@ public:
         static const std::string kEmpty;
         auto it = onTriggerExitCallbacks_.find(triggerName);
         return it != onTriggerExitCallbacks_.end() ? it->second : kEmpty;
+    }
+    const std::unordered_map<std::string, std::string>& onTriggerExitCallbacksMap() const { return onTriggerExitCallbacks_; }
+
+    // --- Trigger-volume geometry + the real per-frame overlap test
+    // (spec-lua-api-behaviour.md Sec1.14, 2026-10-09 batch) -------------
+    //
+    // Sec1.14 CONFIRMS the RUNTIME trigger handle's own field layout (shape
+    // code `+0x8c`: 0=oriented box, 1=sphere, 2=capped cylinder; position
+    // `+0x40`; box half-extents/cylinder axis endpoint `+0x58`/`+0x5c`/
+    // `+0x60`; radius `+0x90`; length `+0x94`) and the real per-frame poll
+    // mechanism's own SHAPE (a tracked "currently inside" set - enter/exit
+    // is a set-membership TRANSITION, never a steady per-frame refire).
+    // This struct/test models exactly that CONFIRMED shape.
+    //
+    // RESOLVED 2026-10-10 (spec-lua-api-behaviour.md Sec1.14's own "On-disk
+    // gaps - RESOLVED 2026-10-10" paragraph, cross-referenced from spec-zone-
+    // data-format.md Sec11.7's own "A third class resolved" paragraph):
+    // `Trigger_Volume`'s class-specific tail-property parser (vtable `+0x04`,
+    // `0x0093e520`) is now read in full. The on-disk encoding: `trigger_shape_
+    // type` is an authored STRING resolved through a name-to-enum lookup into
+    // the same runtime shape code `+0x8c` (0/1/2); `trigger_shape_param1`/
+    // `trigger_shape_param2` are then read depending on that code - box
+    // (0): BOTH as 3-component float vectors, the box's own local-space
+    // min/max corner (`+0x90`-`+0x98`/`+0x9c`-`+0xa4`), independently
+    // cross-confirmed against the object's own bounding-box virtual method;
+    // sphere (1): param1 only, a scalar f32 radius (`+0x90`), param2 not
+    // read; cylinder (2): both scalars, param1=radius (`+0x90`), param2=
+    // length (`+0x94`). This project reads this real data via sr3zone's own
+    // TriggerShapeType()/TriggerShapeParam1()/TriggerShapeParam2()/
+    // DecodePropertyAsFloat()/DecodePropertyAsVec3() (include/sr3zone/
+    // zone_objects.h) plus TriggerShapeCodeForTypeString()'s own empirical
+    // (real-population-scan-grounded, NOT guessed - see that function's own
+    // doc comment) string-to-enum mapping - Sec1.14 itself does not give the
+    // on-disk string's exact spellings ("literal shape-name strings not
+    // traced to full depth"), so this project determined them the only
+    // clean-room-safe way available to it: by reading real `.czn_pc` data
+    // (tools/zone_object_resolver_probe.cpp), never by disassembling the
+    // name-to-enum lookup itself. **Still genuinely OPEN, per Sec1.14's own
+    // text, and therefore NOT modelled here either:** the cylinder's second
+    // axis-endpoint field (`+0x58`-`+0x60`, used by the precise cylinder
+    // containment test but written by neither the tail parser nor the
+    // constructor) - `ex`/`ey`/`ez` below stay a CHOSEN caller-supplied value
+    // for a cylinder trigger specifically, exactly as before this task;
+    // only the box/sphere/cylinder radius+length fields moved from CHOSEN to
+    // REAL. registerTriggerGeometry() still takes a caller-supplied
+    // geometry - the REAL loader (tools/sr3_viewer.cpp's own runPlaytest())
+    // now populates it from real `.czn_pc` tail properties instead of a
+    // flat CHOSEN sphere stand-in, but a geometry is still constructed and
+    // handed in by a caller, not read directly by this struct.
+    struct TriggerVolumeGeometry {
+        double px = 0, py = 0, pz = 0;     // +0x40 - real, from sr3zone::ObjectPosition() when known
+        int shapeCode = 1;                 // +0x8c - CONFIRMED values 0/1/2 only; CHOSEN default 1 (sphere)
+        // Box only (shapeCode==0): REAL on-disk local-space min/max corner
+        // (trigger_shape_param1/param2), relative to (px,py,pz) - NOT a
+        // symmetric half-extent around the position (an authored box's own
+        // min/max corner need not be centred on its placed-object origin).
+        double boxMinX = 0, boxMinY = 0, boxMinZ = 0;
+        double boxMaxX = 0, boxMaxY = 0, boxMaxZ = 0;
+        double ex = 0, ey = 0, ez = 0;      // +0x58/+0x5c/+0x60 - cylinder's second axis endpoint
+                                            // ONLY (box no longer uses this - see boxMin/boxMax
+                                            // above); still CHOSEN/caller-supplied - Sec1.14's own
+                                            // "true source not identified" OPEN item, unresolved by
+                                            // this task.
+        double radius = 0;                 // +0x90 - REAL for sphere/cylinder (trigger_shape_param1)
+        double length = 0;                 // +0x94 - REAL for cylinder (trigger_shape_param2), not
+                                            // separately consumed by the containment test below
+                                            // (which uses the two axis endpoints directly) - Sec1.14
+                                            // does not spell out its exact relationship to the
+                                            // endpoint pair, so nothing here guesses at one.
+        bool positionKnown = false;        // true once a real zone-data position was applied
+        bool shapeKnown = false;           // true once real on-disk trigger_shape_type/param1/param2
+                                            // were decoded for this trigger (vs. a CHOSEN fallback)
+    };
+
+    void registerTriggerGeometry(const std::string& triggerName, const TriggerVolumeGeometry& geometry) {
+        triggerGeometry_[triggerName] = geometry;
+    }
+    const TriggerVolumeGeometry* triggerGeometry(const std::string& triggerName) const {
+        auto it = triggerGeometry_.find(triggerName);
+        return it != triggerGeometry_.end() ? &it->second : nullptr;
+    }
+    // For runPlaytest()'s own per-frame walk: every trigger this session has
+    // loaded geometry for, by name.
+    const std::unordered_map<std::string, TriggerVolumeGeometry>& triggerGeometryMap() const { return triggerGeometry_; }
+
+    // The real per-frame poll's own CONFIRMED edge-detector shape (Sec1.14:
+    // "a trigger is only re-tested/fired while tracked in this set, and
+    // set-membership transitions are the enter/exit events") - one bool per
+    // trigger name, defaulting to "not inside" (a session always starts
+    // with the player outside every trigger, never mid-volume).
+    bool& triggerCurrentlyInside(const std::string& triggerName) { return triggerInsideState_[triggerName]; }
+
+    // The real containment test, CONFIRMED shape (Sec1.14, `0x0093bfc0`):
+    // three shape codes, no others. Box is tested axis-aligned (this
+    // project does not decode a placed object's own orientation quaternion
+    // for a generic Trigger_Volume - same boundary sr3zone::
+    // DecodePropertyAsPosition's own doc comment already states for
+    // Navpoint/cover_node). Never throws; an unknown shapeCode (anything
+    // but 0/1/2) reports not-contained, matching Sec1.14's own "any other
+    // value fails the containment test" text.
+    static bool TriggerVolumeContainsPoint(const TriggerVolumeGeometry& g, double x, double y, double z) {
+        const double dx = x - g.px, dy = y - g.py, dz = z - g.pz;
+        switch (g.shapeCode) {
+            case 1: // sphere
+                return (dx * dx + dy * dy + dz * dz) <= (g.radius * g.radius);
+            case 0: // oriented box - axis-aligned here, see this struct's own doc comment.
+                     // REAL on-disk min/max corner (boxMin/boxMax), not a symmetric half-extent.
+                return dx >= g.boxMinX && dx <= g.boxMaxX && dy >= g.boxMinY && dy <= g.boxMaxY &&
+                       dz >= g.boxMinZ && dz <= g.boxMaxZ;
+            case 2: { // capped cylinder: axis from (px,py,pz) to (px+ex,py+ey,pz+ez)
+                const double segLen2 = g.ex * g.ex + g.ey * g.ey + g.ez * g.ez;
+                const double t = segLen2 > 1e-12 ? (dx * g.ex + dy * g.ey + dz * g.ez) / segLen2 : 0.0;
+                if (t < 0.0 || t > 1.0) return false;
+                const double cx = g.px + g.ex * t, cy = g.py + g.ey * t, cz = g.pz + g.ez * t;
+                const double rdx = x - cx, rdy = y - cy, rdz = z - cz;
+                return (rdx * rdx + rdy * rdy + rdz * rdz) <= (g.radius * g.radius);
+            }
+            default:
+                return false;
+        }
     }
 
     // spawn_region_enable (Sec1.8): per-spawn-region byte +0x94 bit 0x1,
@@ -9645,6 +9990,12 @@ private:
 
     std::unordered_map<std::string, CharacterState> characters_;
     std::unordered_map<std::string, VehicleState> vehicles_;
+    // Mission-host Phase 2's own name->live-object resolver (see
+    // liveObjectKind()/bridgeLive*Position() above) - deliberately separate
+    // from characters_/vehicles_ above (which hold EVERY name any stub has
+    // ever touched, test or real) and from objectResolves_ below (which
+    // answers resolution, not liveness).
+    std::unordered_map<std::string, LiveObjectKind> liveObjectKinds_;
     CoopSession coopSession_;
     sr3player::InputSystem inputSystem_;
     sr3player::ControlStateMachine controlStateMachine_;
@@ -9714,6 +10065,9 @@ private:
     // loadZoneObjectsSection()/resolveZoneObject()'s own backing store, see
     // those methods' own doc comments above.
     ZoneObjectResolver zoneObjects_;
+    // installVehicleTypeClassTable()'s own backing store, see that method's
+    // own doc comment above.
+    std::unordered_map<std::string, int32_t> vehicleTypeClassByLowerName_;
     // inv_weapon_add_temporary/inv_weapon_remove_temporary (Sec4.10/
     // Sec4.11) - weaponDefinitionResolves()/weaponTemporaryInventory()'s
     // own backing store, see those methods' own doc comments above.
@@ -10115,6 +10469,10 @@ private:
     // --- Batch 2026-10-08, wave 1 batch 1: spec-lua-api-behaviour.md §1-4
     // - see each public accessor's own doc comment above for citation. ---
     std::unordered_map<std::string, std::string> onTriggerExitCallbacks_;
+    // Sec1.14 trigger-volume geometry/overlap state - see registerTriggerGeometry()/
+    // triggerCurrentlyInside()'s own doc comments above.
+    std::unordered_map<std::string, TriggerVolumeGeometry> triggerGeometry_;
+    std::unordered_map<std::string, bool> triggerInsideState_;
     std::unordered_map<std::string, bool> spawnRegionEnabled_;
     std::unordered_map<int64_t, ObjectiveTextSlot> objectiveTextSlots_;
     ConversationPlay conversationPlay_;

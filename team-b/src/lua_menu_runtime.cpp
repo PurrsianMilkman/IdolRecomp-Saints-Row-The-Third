@@ -78,6 +78,11 @@ LuaCoroutineLaunchResult LaunchLuaCoroutine(lua_State* L, BareThreadTable& threa
         return r;
     }
     lua_State* co = rec->co;
+    // MISSION-HOST PHASE 3 (this task): captured before run() can release
+    // `rec` - the same "read the id before the record may become dangling"
+    // convention tools/lua_host_run.cpp's own callMissionStart() already
+    // uses, so a caller still has this coroutine's real id if it suspends.
+    const uint16_t recordId = rec->id;
     // Pin `co` in L's registry for the duration of this call: `rec` (and
     // its own anchoring ref) is dangling once run() releases it below, but
     // this function still needs to read `co`'s status/error afterward -
@@ -95,6 +100,7 @@ LuaCoroutineLaunchResult LaunchLuaCoroutine(lua_State* L, BareThreadTable& threa
     } else if (alive) {
         r.callOk = true;
         r.suspended = true;
+        r.recordId = recordId;
     } else {
         const int st = lua_status(co);
         if (st != 0 && st != LUA_YIELD) {

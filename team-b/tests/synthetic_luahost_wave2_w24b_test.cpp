@@ -375,6 +375,18 @@ int main() {
 
     // Sec25.14/Sec25.15 helicopter_go_to_set_target / helicopter_fly_to_stop:
     // extend the SAME HelicopterFlyTo struct wave 1 Batch 3 already uses.
+    //
+    // CONFIRMED CASE-BY-CASE (vehicle-class xtbl wiring task, 2026-10-10):
+    // "Heli25" here is a pure Lua-host-only test fixture with no real
+    // zone-spawn backing. helicopter_go_to_set_target itself never checks
+    // qualifies at all (only objectResolves()), so this fixture's manual
+    // objectResolves().set()/qualifies.set() calls exercise two genuinely
+    // different natives' own independent gating, not solely the
+    // data-driven class lookup - left manual rather than coupling this
+    // unrelated native's test to a synthetic zone/vehicle-type-table
+    // fixture (see tests/synthetic_luahost_batch2728_test.cpp's own
+    // m05_heli_pierce fixture for the real, general, data-driven path this
+    // project now has, proven there instead).
     es.objectResolves().set("Heli25", true);
     es.objectResolves().set("GoTarget1", true);
     ok(host, gp, "helicopter_go_to_set_target('Heli25', 'GoTarget1')");

@@ -3,724 +3,251 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## LIVE STATE 2026-10-09 (47th rewrite). Orchestrator: purrsian-c6. Session restarts keep killing in-
-## flight agents mid-work but NEVER lose the work (uncommitted diffs survive in the worktree) - always
-## re-dispatch as a RESUME agent told to inspect the existing diff first, never restart blind. Re-check
-## `ListAgents`/git state fresh every resume, don't trust pre-restart names/IDs.
+## LIVE STATE 2026-10-10 (49th rewrite, compacted - prior block ~41KB, over budget). Orchestrator:
+## purrsian-4a. User directive standing: "keep going, never stop, usage-aware" - no fixed agent cap unless
+## usage-pacer fires (then: write HANDOFF, wait); no speculative units; prefer small high-value; merges go
+## through on standing permission, STOP on conflict (don't resolve blind in the main checkout - dispatch a
+## unit or resolve carefully in a worktree then merge). I do the actual `git merge --no-ff` into main
+## myself from the main checkout; agents never merge to main themselves, only report a commit SHA.
 
-**Git main tip**: re-check `git log -1 main` (was `3f46b8f` as of this rewrite - the verified seated-pose/
-v0.4-basis merge just landed clean; `09f3ef6`'s own earlier unbuilt-merge status unchanged/separate).
-**User directive (via purrsian-4a)**: keep going, never stop, but usage-aware - max 2 Sonnet agents at a
-time, no speculative units, prefer small high-value ones, write HANDOFF+wait if the usage-pacer says stop.
-Queued in order: (1) merge seated-pose+shadow-map to main [DONE - see below], (2) in-world mission host
-(trigger load+overlap+dispatch+coop_is_active fix), (3) scripted M05_JUMP hud_prompt test, (4) wire
-near-field peds into the playtest. Move each finished unit's `build/` to G: via purrsian-4a's batch script
-- just tell them when each lands.
-**Merge queue item 1 DONE**: `verify/main-4ab74e8-plus-seatedpose`@`9efbf67` merged clean (`3f46b8f`), no
-conflicts. `feature/sun-shadow-map` merge hit a CONFLICT in `tools/sr3_viewer.cpp` - aborted cleanly per
-"stop on conflict" instruction, main unaffected, NOT retried blind.
+**Git main tip**: `0749908` (just merged named-object-resolution fix below). Re-check `git log -1 main`.
 
-### IN FLIGHT - 2 agents (at the user's 2-agent cap), items 1(remainder)+2 of the queue
-### DONE + MERGED - shadow-map conflict resolve (`merge/sun-shadow-map-conflict-resolve`@`759a6bc`, merged
-### to main as `cd84cf6`)
-Conflict: both sides touch the final vehicle-draw block's `vehWorld` computation - HEAD (seated-pose)
-recomputes it locally from the real per-frame `vehicleGroundY`; the shadow-map branch hoisted a
-same-named outer-scope `vehWorld` from `finalGroundY` for its earlier depth-only shadow-caster pass. Real
-risk caught: the shadow branch's own diff had DELETED the final-pass recompute, which would have silently
-regressed vehicle placement accuracy. **Resolved by keeping BOTH** - outer hoisted copy feeds only the
-shadow pass, the final visible-draw block keeps its own local recompute (shadows the outer var in nested
-scope, legal C++, zero effect on the already-captured-by-value shadow pass) - commented clearly so a
-future reader doesn't "simplify" this into a regression. 160/164 passed (4 pre-existing gitignored-
-fixture failures under the stricter verify preset, not new). Visual sanity check: captured+viewed a real
-frame, renders cleanly, shadow path active (not a pixel-for-pixel re-confirmation vs. the original
-shadow-map evidence since this capture landed at dusk not noon, but confirmed no corruption/crash/
-regression). **Merged to main (`cd84cf6`) - clean, no conflicts** (this was the FIRST of the two
-parallel sr3_viewer.cpp-conflicting merges to land, per the serial-merge requirement above).
-2. **STOPPED, correctly, by the agent itself - a real premise error on MY part, not the agent's fault.**
-   `a52c134a398ba0f33` checked the dispatch's own claim that main already includes the mission-host
-   Phase1-3 + trigger-callback stack - **it does NOT** (confirmed via `merge-base --is-ancestor`, both
-   ways, false). That stack still sits in separate unmerged branches (`feature/mission-host-phase1-debug-
-   flag`@`6168757`, `...phase2-live-bridge`@`b1ef0bc`, `...phase3-m05-vehicles`@`20028b3`, `feature/
-   trigger-callback-coroutine-dispatch`@`0b6c934`), and `agent-m09inworld`'s own branch (`6122714`)
-   already merged all of them together once, for its own earlier honest-negative investigation (same two
-   findings, same boat-trigger target). Correctly recognized re-doing that merge solo would risk wasted/
-   divergent effort and STOPPED rather than reproduce it blind - exactly right per standing discipline. I
-   confirmed this myself: tried merging `feature/mission-host-phase1-debug-flag` into main directly -
-   CONFLICT in `sr3_viewer.cpp` (same render-loop insertion-point pattern as shadow-map/seated-pose),
-   aborted cleanly, main unaffected. **The whole mission-host+trigger-callback stack needs a proper,
-   careful sequential merge into main (4 branches, each likely conflicting the same way) BEFORE the
-   in-world trigger-dispatch work can be re-attempted for real** - dispatched now (free slot, since the
-   in-world unit stopped without using one): `a8180a42bbebb63b6`, worktree `agent-missionhoststackmerge`,
-   branch `merge/mission-host-stack-to-main` (off main `5273863`) - merge all 4 stack branches in order,
-   resolve `sr3_viewer.cpp` conflicts carefully each step (same combine-don't-pick pattern), sanity-build
-   after each, full ctest + confirm `--mission=` still works at the end. NOT the in-world trigger work
-   itself - that's re-dispatched only after this lands cleanly on main.
+### DONE - fresh verify (`verify/main-e239651-fresh`, no commit needed, nothing to fix)
+Fresh configure+build+full ctest on main `90f5afd`: **163/167 passed, 0 failed, 4 skipped - 100% of run
+tests passed.** The 4 skips are the documented, intentional `CRREISH_VERIFY_BUILD`-gated real-Bink-data
+fixture tests (exit 77, not failures). **The 161-vs-163 "mystery failures" are CONFIRMED fully resolved**
+by `e239651`'s own stack-overflow fix (already merged, an ancestor of this tip) - no regression found, no
+action needed.
 
-Items 3 (scripted M05_JUMP hud_prompt test) and 4 (wire near-field peds into the playtest) remain queued,
-not dispatched - waiting for a slot (both current slots full with the 2 merge-resolution agents above).
-**Fold into item 3's dispatch**: Sec6.19 answer landed - `0x00706ab0` is the top-of-mode-stack accessor,
-empty by default on a fresh game (returns 0); step 5 only stops `tutorial_start` when mode 6 (key-bindings
-options sub-screen) is on top. Model the mode stack as empty by default so step 5 passes - small change,
-report the real dlc2_m03 delta alongside item 3's own M05_JUMP result.
-**Usage back on plan - 4 agents dispatched in parallel** (purrsian-4a: normal pace, no cap beyond file
-races/disk):
-### DONE - verify-main + v0.4 SHIPPED (`verify/main-4ab74e8-plus-seatedpose`@`9efbf67`, merge `acaeee4`)
-**Part A**: seated-pose merge resolved by reading+combining both sides, not picking one - CMakeLists.txt
-kept both new test entries, `sr3_viewer.cpp` combined the vehicle-occupant-hide-flag gating with the real
-composed seated-pose pipeline (runs INSIDE the `!vehicleHideOccupant` gate), also updated seat-height math
-to read the real per-frame `vehicleGroundY` (landed after the seated-pose branch's own offset was tuned
-against a since-superseded flat ground value) instead of a stale fallback.
-**Part B, GREEN with one real defect found+fixed**: full from-scratch build clean. First ctest run showed
-1 MORE skip than expected (165 total, 5 skip) - dug in rather than accepting it: a genuine CMakeLists.txt
-ordering bug in the seated-pose branch's own addition (`CRREISH_GAME_CACHE_DIR` referenced before its own
-`set(...)` declaration, only surfaced on a truly fresh configure with no stale cache to mask it). Fixed,
-rebuilt, re-ran: **164/0/4 skip**, confirmed the previously-broken test now genuinely resolves real
-`vi_ride.xtbl`/clip/rig data and confirms a real non-bind-pose result. Full mission-drive census:
-**byte-for-byte identical** to the `integration/mission-blocker-batch2` baseline, all 6 cited missions
-match exactly, zero regressions (expected - this merge only touches rendering).
-**Part C SHIPPED**: `v0.4_2026-10-10_seated-driving-pose` on G: AND `D:\Project Crreish\playtest-builds\`.
-Screenshots personally viewed and confirmed: plain launch (standing next to car), **seated pose while
-driving clearly visible** (bent/reclined posture, the key v0.4 feature, confirmed NOT an empty seat or
-standing figure), post-exit walk with 2 ambient traffic vehicles + enter-vehicle prompt. Found + worked
-around a pre-existing, already-documented default-spawn/scripted-entry quirk (used the same validated
-spawn/vehicle-position combo an existing real-playtest test already uses). **Honestly did NOT fabricate**
-a HUD-objective-text or shadow screenshot - confirmed neither renders in this playtest tool at all (HUD
-overlay only draws health/ammo/money/notoriety/vehicle-prompt/minimap; shadow mapping separately not yet
-dispatched) - NOTES.txt states both gaps plainly. `mirror_build_history.sh`: "history: 6 versions on G:
-(0 new)" (v0,v0.1,v0.1a,v0.2,v0.3,v0.4). Read-only confirmed, live swap into `TEAM B\playtest\` done per
-established convention. **One judgment call to review**: proceeded from Part B's single CMake-ordering
-fix straight to Part C without stopping for confirmation - flagged prominently by the agent itself per the
-task's own instruction, in case purrsian-4a/the user wants to review that call after the fact.
-### DONE - m09 in-world trigger test (`feature/m09-inworld-trigger-test`@`6122714`, merged `0b6c934` in) -
-### HONEST NEGATIVE, 2 real findings, and a significant correction to this document's own prior framing
-**Correction (important)**: mission-host Phases 1-3 + trigger-callback-coroutine-dispatch were NEVER
-actually merged to main despite earlier HANDOFF entries implying they'd "landed" - confirmed: 4 branches
-still queued, unmerged, 137 commits behind main at the time this agent started. The agent had to merge
-`0b6c934` into its OWN branch (not main) just to get `--mission=` to test against at all (1 real conflict
-in `sr3_viewer.cpp`, two independent feature insertions at the same point, resolved by keeping both).
-**Finding 1 (the real blocker, bigger than assumed)**: there is NO trigger-volume-to-callback dispatch
-mechanism anywhere in the live playtest loop AT ALL - confirmed by reading the actual code, not assumed.
-`on_trigger`/`trigger_enable` only ever WRITE a callback-name string into a map; nothing anywhere reads it
-back or invokes it. `runPlaytest()` never loads zone-object trigger data at all (zero `ZoneObjectResolver`
-hits). The earlier "trigger-callback coroutine dispatch" work only changed a SEPARATE, explicitly-labelled
-"DIAGNOSTIC ONLY, never changes real behavior" headless tool flag (`lua_host_run.cpp --probe-autopilot`) -
-unrelated to `sr3_viewer.exe`'s real playtest path. Also: this project's zone-object reader only decodes a
-trigger's POSITION (a point), no size/radius/extent for any object class - the shape needed for "is the
-player inside" doesn't exist in the data model either. **This is a real, project-wide, substantial gap,
-not a quick fix** - correctly stopped and reported rather than invented. Real Team A question: does the
-real game's trigger subsystem have a per-frame overlap test against live positions, and what's
-`Trigger_Volume`'s own size/shape encoding? (Geometry ACCESS itself is not the blocker - the agent DID
-successfully resolve the real trigger's world position: `on_boat_trigger`, `Trigger_Volume`,
-`x=2488.54 y=6.82348 z=-4.15918`, in `sr3_city_0.vpp_pc`.)
-**Finding 2 (separate, discovered independently)**: `--mission=m09` doesn't even reach the trigger wait
-live - `m09_start()`'s own synchronous first call throws `engine state session member count (+0x60) is
-OPEN (Sec3.1)` before any frame ever runs, reproducible regardless of spawn position. Traced as far as
-responsibly possible without disassembly: `coop_is_active()` SHOULD short-circuit on `present==false`
-before touching `memberCount`, but doesn't in the live `--mission=` bind path (the project's own passing
-`real_playtest_mission_test`, via `mm_p_03`, doesn't hit this - something differs in how the live path vs.
-that test's own harness sets up coop-session state). A genuine separate pre-existing gap, not patched
-(no-invented-fixes). 164 tests, 160/0/4 skip (the merge itself introduced zero regressions). Not merged to
-main, joins queue (as does the whole mission-host Phase 1-3 + trigger-callback stack, still unmerged).
-### DONE - vehicle class from real xtbl data (`feature/vehicle-class-xtbl-wiring`@`84805c0`, on `20b9929`)
-Real join key found exactly where predicted: `spec-zone-data-format.md` Sec11.7's `script_vehicle_type_name`
-property on a zone-placed `Script_Vehicle` object (never previously implemented in `zone_objects.h/.cpp` -
-only `_hp`/`_flags`/`_mp_team` existed) names which `<name>_veh.xtbl` row a zone-placed vehicle instance
-is. Wired: new zone-objects accessors for the property, `EngineState::installVehicleTypeClassTable()`
-(keyed by lowercased xtbl vehicle name -> class), `loadZoneObjectsSection()` now resolves
-`flyingType`/`qualifies` through this real join at ingest time, `lua_host_run.cpp` builds the real table by
-walking EVERY `*_veh.xtbl` in the real cache via the already-correct `sr3vehicleinfo::ParseAllVehicles`.
-`m05_heli_pierce` special case removed entirely. **Real measured proof, against real shipped data, not a
-synthetic guess**: `m05_heli_pierce`'s real `script_vehicle_type_name` is `heli_fighter_03_MS05`, resolves
-to class 3 (heli) through the GENERAL mechanism alone - `types_resolved=122/123` real vehicle types loaded
-from the real cache. Full 49-mission census: 0 errors, matching the prior baseline exactly, no
-regressions; m05 itself now survives the full budget (never throws on the heli-class gate at all, stuck
-only at the separate `vehicle_exit_teleport` blocker). **4 previously-OPEN-pinned tests checked case-by-
-case, all 4 confirmed legitimately stay manual** (none ever referenced `m05_heli_pierce`; each needs its
-own field to visit MULTIPLE states in one test body, which a single real xtbl value can't produce - pure
-Lua-host fixtures with no real zone backing, documented inline). A 5th test that DID exercise the removed
-special case was rewritten to build a synthetic zone record + class table instead, proving the join with
-zero manual `.set()` calls. 159/162 tests (3 pre-existing/unrelated GPU-playtest/golden-baseline failures,
-confirmed zero dependency on anything touched here). Not merged, joins queue.
-### DONE - vehicle_exit_do mirror-bug fix (`fix/vehicle-exit-teleport-stateenum`@`e821841`, on `20b9929`)
-Mirror-bug hypothesis CONFIRMED by real spec text (spec-player-runtime.md Sec6.11/6.13/7.8, read directly):
-"on foot" = `stateEnum=0` (not just "not 2/3") + vehicle-association link nulled, both written at the real
-release finaliser. One real nuance found: the exit state machine's own "skip the wait" instant-shortcut
-bit is never set by `vehicle_exit_do`, so even a real instant exit genuinely needs one tick to leave the
-first state - but Sec6.13 point 5 explicitly sanctions modeling the whole no-contention instant path as
-reaching the real end state synchronously (same reasoning the enter-side fix already established, verified
-by reading those commits directly). Fixed: `stub_vehicle_exit_do`'s instant branch now also clears
-`stateEnum=0`+`currentVehicleName=""` (previously only set `stateEnum=2`, mid-exit, forever).
-`vehicle_exit_guardian_angel` correctly left untouched (never instant). **Real measured m05 delta**: before
-stuck 721/721 at `vehicle_exit_teleport` -> after still 721/721 (budget exhaustion, not completion) but at
-a NEW, later blocker (`m05.lua:1141`, `m05_parachute_in`) - real forward progress, not yet complete.
-m07/m09/dlc2_m01/dlc2_m03 byte-identical; m13 harmless internal line-number shift only (same established
-shared-state precedent). 162/162 tests. Not merged, joins queue.
+### DONE AND MERGED: named-object-resolution persona/empty-name fixes (`0749908`, merge of
+### `fix/named-object-resolution-persona-empty` @ `4b72d87`)
+Both m05/m09 blockers were REAL STUB BUGS, not genuine open spec gaps - no Team A question needed:
+- **m09 `'Paparazzi_WM'`**: `audio_persona_load_2d` had a wrong `objectResolves()` gate - persona names
+  are resolved via the Wwise-ID hash resolver chain (Sec8.5/Sec2.5, "always succeeds for any non-null
+  input"), never a zone-object registry lookup. Gate removed, always returns a fresh handle.
+- **m05 `''`**: `helicopter_fly_to`/`helicopter_fly_to_direct` hard-code `local follow = ""` in the REAL
+  shipped `game_lib.lua` (re-extracted via `tools/validation/lua_source_dump.cpp`) - `helicopter_fly_to_do`
+  was missing the empty-string short-circuit on that arg that this project's other natives already use
+  (e.g. `effect_play_finisher`'s `target.empty()` guard convention). Added.
+- **Live-verified after fix**: both missions now run their full 30-frame headless window with ZERO
+  named-object-resolution errors. m05 advances to REAL in-world trigger registration (`m05_trigger_kill`/
+  `m05_trigger_lt_kill`, real position+shape). m09 cleanly suspends at `fade_out_block`. Full ctest
+  167/167, 4 pre-existing Bink skips, no regressions. Results archived under
+  `results/verify_namedobjectfix_*`.
+- **NOT yet relayed to purrsian-4a - DO THIS NEXT.**
 
-**Answered for purrsian-4a this tick**: exact `first_error` text for dlc2_m01 ("character vtable +0x68
-predicate (unidentified) is OPEN, Sec7.10") and dlc2_m03 ("tutorial dispatcher global 0x029443bc (meaning
-OPEN; 1,2,3->stop) is OPEN, Sec6.19") pulled verbatim from the committed integration census and relayed for
-Team A routing. m05 has no `first_error` (runs full budget), `waiting_at=game_lib.lua:3182
-(vehicle_exit_teleport)` - now being chased by agent 4 above.
+### v0.5 release: SHIPPED as `v0.5b_2026-10-10_named-object-resolution-fix` (not the original v0.5 - see below)
+The original `af6c2c45a52c4ac0f` release-cut agent (worktree `agent-v05release`, branch `release/v0.5-cut`,
+off stale `0d4764d`) stalled mid-procedure - purrsian-4a caught it: only exe/bat/lua txt copied into
+`D:\Project Crreish\playtest-builds\v0.5_2026-10-10_shadows-and-nearfield-peds\`, no screenshots/NOTES/
+mirror/read-only/swap. I stopped that agent (`TaskStop`, after ~124 tool uses with no progress) and left
+its worktree + half-made folder UNTOUCHED (per purrsian-4a's own instruction) for a later cleanup pass -
+**NOTE**: a follow-up report from the replacement agent below observed that folder gained
+`screenshot.png/2/3/4` + an updated `.bat` with timestamps AFTER my stop call - something (another session?
+a lingering child process?) kept writing to it. Treat that folder's current contents as unverified/
+unknown provenance until someone checks - don't assume it's still just "stale exe/bat/lua."
 
-### DONE - recorder-state seed/relabel fix (`fix/tutorial-dispatcher-recorder-state`@`5d6e539`, on
-### `3a38398`) - real incremental dlc2_m03 progress
-Confirmed verbatim: `0x029443bc` is the machinima recorder's own state machine (0=idle/CONFIRMED zero-fill
-default,1=recording,2/3=finalizing,4=teardown) - "tutorial dispatcher global" label retracted. Seeded 0
-(`src/lua_spec_initial_state.cpp`), relabeled the field/doc comments, kept the existing field name (local
-struct's own step-2 gate, referenced by address elsewhere - renaming would be riskier than it's worth).
-**`0x00bc5610` mislabeling checked honestly**: zero hits in this project's own C++ (only in spec
-markdown) - `turn_invulnerable`/`teleport` never modeled that address at all (hardcode the spec's own
-independently-derived single-player conclusion instead), and `MachinimaState::recording` already
-correctly models the SAME real address as a plain bool. **Verdict: spec-prose-only mislabeling, never
-produced wrong C++ modeling - no fix needed, none invented.** 6 now-redundant manual `.set()` test calls
-removed. **Real measured delta**: dlc2_m03 `ticks_survived` unchanged (17->17) but `first_error` moves
-exactly one dispatcher step further (the targeted OPEN item cleared, hits the NEXT already-known gap,
-step 5/`0x00706ab0`) - genuine incremental progress, not a full unblock. dlc2_m01/m05/m07/m09 confirmed
-unaffected. 162/162 tests (honest caveat: no separate pre-fix rebuild was done since the change is
-additive/seed-only - reported plainly rather than fabricating a before-count). Not merged, joins queue.
-**integration/mission-blocker-batch2@`7af6b58` merged to main** (`4ab74e8`), per purrsian-4a's explicit
-go-ahead after the full census - clean auto-merge (CMakeLists.txt + HANDOFF.md both auto-resolved), no
-conflicts, no denial. NOT built/tested on main per instruction (this branch was already fully verified
-standalone in its own worktree - 158/0/4 skip, 0 errors across the full 49-mission population). **Holding
-at 0 agents now** - usage is high, no new units until the user or purrsian-4a says so.
-**Public-build merges landed, per the user's request via purrsian-4a**: `feature/public-build-optional-
-data`@`be602fb` merged clean (`2673cd1`, no conflicts), `feature/runtime-data-loader-sha256`@`ffce7ee`
-merged clean (`bc0b0a2`, no conflicts) - both plain `git merge` commands went through with NO denial this
-time (unlike the earlier `09f3ef6` merge, this one wasn't followed by any build attempt, so the earlier
-"build/inspect blocked post-merge" gate was never tested here). Per explicit instruction, did NOT attempt
-to build/test main afterward (both branches were already fully verified standalone in their own
-worktrees) - confirmed file presence via read-only `git ls-files` instead:
-`include/sr3binkcodec/entropy_prestage_tables.h` and `src/wwise_codebook_library_blob_stub.cpp` both
-present on main.
-**Merge-to-main, status CHANGED this tick**: at purrsian-c6's request, tried the planned merge
-(`diag/mission-blocker-recensus-current` -> main) again - **it SUCCEEDED this time, no denial** (merge
-commit `09f3ef6`, 123 files). But the REQUIRED next step, `cmake --build`/`ctest` on the merge result, is
-now BLOCKED by the same "Modify Shared Resources" classifier (tried twice, same exact denial both times -
-reproducible, not transient). So the gate moved: `git merge` itself is no longer gated, but
-building/testing a merge's result on main now is. **`09f3ef6` is sitting on main RIGHT NOW, unbuilt and
-untested** - do not assume it's safe, do not build/test it without a fresh check first (the user may add a
-Bash permission rule for this). Reported the exact denial text to purrsian-c6, did not route around it.
-Plain `git commit` (non-merge) is still unaffected, used throughout and for this very update.
+Dispatched a FRESH agent (`ab5f9f50819b1f5f9`) in a new worktree off current main (post named-object-fix,
+`ce321fb`) to cut a clean `v0.5b_...` release instead. **DONE, SHIPPED**:
+- **Folder**: `D:\Project Crreish\playtest-builds\v0.5b_2026-10-10_named-object-resolution-fix\` (+ mirrored
+  to `G:\AI\Claude Projects\recomp\playtest-builds\`, same name). Worktree `agent-v05brelease`, branch
+  `release/v0.5b-cut`, built from `ce321fb`. No code changes, nothing committed (pure packaging).
+- Fresh build clean, full ctest **167/167 passed**, 4 pre-existing Bink skips only.
+- **Live mission re-check with full real archives (incl. `cutscene_tables.vpp_pc` + `dlc2.vpp_pc`)**:
+  m05/m09/dlc2_m03 all suspend cleanly at a scripted fade-out point, zero errors. m07 and dlc2_m01 now get
+  PAST the fade-out (further than v0.4) before hitting new, later, separate blockers: m07 hits an unmodeled
+  `get_dist`/character-world-position lookup (Sec4.2); dlc2_m01 hits an unidentified character-vtable
+  predicate (Sec7.10). Both are genuinely NEW/next blockers to queue, not yet dispatched. m13 not re-checked
+  (NOTES.txt says so honestly, points to v0.4 notes).
+- Screenshots (plain launch, seated driving pose, peds+traffic together) all personally viewed by the
+  agent. Deliberately NO dedicated shadow screenshot - agent tried several spots, couldn't get a clear
+  visible cast shadow in frame, and said so honestly in NOTES.txt rather than faking it (shadows ARE
+  covered by the passing `golden_scene_check` test, just not visually obvious in this cut's shots).
+- Read-only applied (D: and G:, since the mirror script didn't reach its own attrib step - see bug below).
+  Swapped into `TEAM B\playtest\` (3 live files replaced, pre-existing `sr3_viewer_old_backup.exe` left
+  alone - untouched, unclear rotation convention, not worth guessing).
+- **Mirror script bug found, NOT fixed (flagging only)**: `~/crreish-orchestration/mirror_build_history.sh`
+  hit `set -e` on `cp -p` "Permission denied" re-copying `README.txt` to G: (already read-only there from
+  an earlier run) - exits BEFORE printing its own "history: N versions on G:" line and before its own
+  `attrib +R` step. Agent worked around it by hand (manually verified 8 folders present on G: - v0, v0.1,
+  v0.1a, v0.2, v0.3, v0.4, v0.5, v0.5b - and manually set read-only) rather than editing the script itself.
+  **Will recur every future release cut** until someone either un-read-only's G:'s `README.txt` or makes
+  that copy step tolerant of a pre-existing read-only target. Queued, not yet fixed.
+- Worktree `build/` is 2.1GB, flagged not deleted (disk-space-discipline).
+- **Relayed to purrsian-4a** with the folder name as explicitly requested.
 
-### DONE - integration/mission-blocker-batch2 built and verified (worktree
-### `.claude/worktrees/agent-integrationbatch2`, NOT merged to main - orchestrator's own gate)
-All 6 queued branches merged in, one at a time, off current `main` tip: `feature/vehicle-enter-
-eligibility-gate`@`98be1ab` (clean), `fix/ragdoll-state-default`@`fdcabd5` (clean),
-`feature/vehicle-enter-submit-accepted-real-gate`@`8b82232` (clean - no CONFLICT reported, but see fix
-below), `feature/vehicle-group-check-done-occupant-conflict`@`1645584` (1 real conflict, resolved - see
-below), `feature/attacker-threat-ref-and-reviver-handle`@`66323ee` (clean),
-`feature/group-head-name-from-member-list`@`11ef9a5` (clean). Builds green after each step.
+### BIG WIN just landed: `34bc55d`+merge `e239651` - real trigger shape/extent AND the zscene_is_loaded
+### root cause, BOTH fixed, m05 AND m09 BOTH genuinely advance further live
+Real on-disk `Trigger_Volume` shape encoding (Sec1.14, re-derived from REAL data not disassembly - the
+spec text doesn't give the literal strings): exactly 3 real strings in the cache -
+`"sphere"`/`"cylinder"`/`"bounding box"` (NOT bare "box"), case-insensitive substring match. Box reads
+BOTH params as real min/max corner vec3s; sphere reads param1 as radius only; cylinder reads both as
+scalars (radius, length) - cylinder's 2nd axis endpoint stays genuinely OPEN (spec's own admission).
+`on_boat_trigger` (m09's own trigger) is actually a `"bounding box"` (enum 0), NOT a sphere - the old
+CHOSEN stand-in had the wrong SHAPE, not just the wrong size: real box extent `min(-87.8,0,-22.3)` to
+`max(87.8,30.8,22.3)` at position `(2488.54,6.82348,-4.15918)`.
+**zscene_is_loaded's real root cause, found**: `EngineState::zsceneIsLoaded()`'s own kind-gate logic was
+ALREADY correct all along - the bug was that `tools/sr3_viewer.cpp`'s live `--mission` path never
+installed the real cutscene table at all (unlike `lua_host_run.cpp`'s separate batch loop, which always
+did via `installSceneTableFromCache()`) - so every call fell through to the OPEN per-name map and threw.
+Fixed: new `missionzoneobj::installZsceneTableFromArchives()`, wired into `runPlaytest()`. **Real verified
+result**: `--mission=m09` no longer hits `zscene_is_loaded` AT ALL - advances to a later, SEPARATE,
+already-known OPEN gap (`named-object resolution['Paparazzi_WM']` - a 2D Wwise audio-persona name, not a
+zone object, zone-data Sec11.7's own already-identified item). `--mission=m05` same pattern, different
+later gap (`named-object resolution['']`, empty name). **Neither mission reaches the trigger-overlap loop
+THIS session either** (both error in their own `_start` before ever registering an `on_trigger` callback)
+- so the new real trigger-shape data isn't exercised live yet, matching the task's own original scoping.
+**Bonus**: found+fixed a real, unrelated, pre-existing `STATUS_STACK_OVERFLOW` crash in
+`synthetic_luahost_sec13_14_batch4_test.cpp` (same "EngineState growing every batch, 18 blocks one stack
+frame" class of bug HANDOFF already documented fixing once elsewhere) using the identical already-proven
+fix pattern (split into per-block functions). **Full ctest: 167/167 (100%), 4 pre-existing Bink skips** -
+this may well explain/subsume the 161-vs-163 discrepancy queued below (the stack-overflow crash this unit
+fixed could easily have been one of the "mystery" failures) - worth checking before dispatching that unit
+blind, it may already be resolved.
 
-**Real conflict** (merge 4, `tests/synthetic_luahost_vehicle_enter_eligibility_gate_test.cpp`, eg10_forced_ok
-block): combined merge-3's "fails then set then ok" two-step proof structure with merge-4's
-stateCodeByte501-pre-seed comment + stateEnum==3 correction - resolved by keeping the two-step structure
-with the corrected stateEnum value. **This resolution was itself wrong** (caught after the full build, by
-ctest, not before) - see below.
+### DONE AND MERGED TO MAIN this tail (commit SHAs on main, chronological) - do not re-derive/redo:
+- `2bba81e` vehicle_set_obey_traffic_lights/use_short_cuts -> real vai_force_flags bits (Sec4.5a)
+- `a852f61`+merge: respect lifetime cap (Sec5.4, 238,875) on feature/respect-progression-runtime
+- `0b6c934` trigger-callback coroutine dispatch (real, via BareThreadTable) - prereq, later actually merged
+  as part of the mission-host stack (see below)
+- `8b82232`/`a10a9ba`/`265f729`/`1645584`/etc. vehicle-enter-submit chain, group-check-done, heli-class,
+  stateCodeByte501/Hijack - all landed via the 6-branch `integration/mission-blocker-batch2` merge
+  (`4ab74e8`) - real combined mission-drive wins on m05/m07/dlc2_m01/dlc2_m03, 0 regressions (158/0/4skip)
+- `be602fb`+`ffce7ee` (merged `2673cd1`,`bc0b0a2`): public-build data exclusion PART 1+2 - Wwise codebook +
+  Bink tables made optional/loadable-from-install w/ SHA-256 gate (spec-runtime-data-sources.md). Vorbis
+  493/493 byte-identical loader-vs-compiled-in. Denylist names: `include/sr3binkcodec/
+  entropy_prestage_tables.h` (exclude), `src/wwise_codebook_library_blob_stub.cpp` (do NOT exclude, it's
+  the algorithm-side fallback).
+- `9efbf67`+merge `3f46b8f`: seated/driving pose (real Sec7.4b pose) + full main verify (caught+fixed a
+  real CMake ordering bug: `CRREISH_GAME_CACHE_DIR` referenced before its own `set()`)
+- **v0.4 SHIPPED**: `v0.4_2026-10-10_seated-driving-pose` on G: and `D:\Project Crreish\playtest-builds\`
+  + live-swapped into `TEAM B\playtest\`. Screenshots personally viewed (seated pose confirmed real, not
+  empty-seat/standing). No HUD-objective-text/shadow screenshots - confirmed absent from this playtest
+  tool, stated honestly in NOTES.txt (shadows landed SEPARATELY after, see below - may want a v0.5 shot).
+  `mirror_build_history.sh`: "history: 6 versions on G:".
+- `759a6bc`+merge `cd84cf6`: shadow-map merged (conflict resolved carefully: kept BOTH `vehWorld`
+  computations - one for shadow-caster pass, one for visible draw - don't let anyone "simplify" this later)
+- `3023552`+merge `30a161c`: mission-host Phase1-3 + trigger-callback-coroutine-dispatch stack, FOR REAL
+  this time (confirm via `git merge-base --is-ancestor 0b6c934 main` before ever assuming it's in). Real
+  `--mission=<stem>` flag confirmed alive end-to-end against `mm_p_03`.
+- `5d6e539`+merge (my own catch-up, commit on main directly): recorder-state (dlc2_m03 Sec6.19 step2 global
+  0x029443bc, machinima recorder not tutorial dispatcher, seeded 0/idle)
+- `84805c0`+merge (catch-up): vehicle-class-xtbl-wiring - REAL per-type class from zone-spawn
+  `script_vehicle_type_name` join to `*_veh.xtbl`, m05_heli_pierce special case REMOVED (real: resolves to
+  `heli_fighter_03_MS05`, class 3). **Still queued, NOT yet redispatched**: generalize further if any other
+  mission needs it (currently works for all real data, no known gap left).
+- `e821841`+merge (catch-up): vehicle_exit_do mirror-bug fix (real spec: "on foot" = stateEnum=0 + vehicle
+  link nulled, Sec6.11/6.13/7.8) - m05 moved from exit-teleport deadlock to `m05_parachute_in` wait.
+- `917ce08`+merge `99d616c`: RECONCILED 2 colliding coop_is_active fixes (triggers-v2 branch kept
+  present=true+memberCount=1; m05jump branch removed present-force entirely) - **removed the force-set
+  entirely is correct** (spec: present=false default in SP, coopIsActive short-circuits before
+  memberCount which stays OPEN/unreachable, fine). **IMPORTANT, already resolved**: purrsian-4a's own
+  relayed "re-point notoriety's host-gate to local-authority" instruction was WRONG for this specific
+  gate - verified against spec directly and refused to apply it: notoriety_set uses a DIFFERENT accessor
+  (`0x0087ba20`, same as game_get_is_host, CLOSED false-in-SP, Sec6.22/8.27/26.28) already correctly read
+  by `EngineState::coopLocalIsHost()` - don't touch it again, this is settled, purrsian-4a confirmed the
+  relay was their own error (conflated the corrected 0x00bc5610 machinima-recorder relabel with a real but
+  separate "local authority" finding that belongs to `CharacterState::humanShieldReleaseIsLocalAuthority`
+  instead, untouched/correct). Also merged: real trigger-volume dispatch (position loads for real,
+  13,447 objects from sr3_city_0.vpp_pc; shape/extent was CHOSEN stand-in at this point, see below) +
+  M05_JUMP hud_prompt scripting mechanism (built, but never fires live - m05/m09 both hit `zscene_is_loaded`
+  OPEN before ever reaching their respective waits, see next item).
+- `029d174`+merge `20f2a56`: near-field AMBIENT PEDS wired into live playtest (mirrors vehicle-traffic
+  wiring exactly, ALWAYS ON no flag). Verified live: grows 1->48/48 cap by frame 390, stays filled to 600.
+- `a337292`+merge `538483d` (JUST LANDED, not yet relayed to purrsian-4a - DO THIS NEXT): ped spawn-distance
+  fix - settled "distance vs frustum" question as BOTH (3 separate reject conditions in the real gate:
+  unconditional ~90-unit floor regardless of visibility, an unspecified far threshold, PLUS a separate
+  visibility/frustum test). Added `ApproxVisibleToCamera()` (CHOSEN 50° horizontal-FOV cone, no vertical
+  FOV given by spec, honest about this being approximate not recovered). Candidate gen changed from
+  heading-biased to full-circle 90.5-160m annulus so off-screen-behind-player candidates can spawn near
+  the real ~90-unit floor. Verified live: ped visibly closer in frame 599 capture. **Caveat, not
+  independently re-verified by me**: this agent reported 161/167 pass, 6 failures it called pre-existing/
+  unrelated (5 are contradictory CMake-registration-vs-LastTest.log quirks in UNRELATED subsystems -
+  env tables, d3d9bc CTAB, material binding, tree, luahost tranche03 batch7; 1 is
+  `lua_host_run_integration_py` missing a prebuilt fixture exe) - I have NOT independently confirmed these
+  6 are truly pre-existing/harmless, just relaying the agent's own claim. Worth a sanity check on a fresh
+  main build before fully trusting this.
 
-**3 latent cross-branch test regressions**, none flagged as git conflicts (different files/lines, but
-behaviorally coupled), all caught by running the FULL ctest suite after all 6 merges, none by a build
-failure:
-1. `synthetic_luahost_vehicle_enter_eligibility_gate_test` (eg10_forced_ok): branch 3 (8b82232) had
-   already intentionally replaced computeVehicleEnterSubmitAccepted()'s OPEN-throw with a CHOSEN-default
-   fallback, and its OWN test revision already dropped the "fails then..." step for that reason - my
-   merge-4 conflict resolution (above) didn't realize this and kept the stale two-step structure. Fixed:
-   reverted to 8b82232's own direct set-then-ok form, keeping merge-4's stateEnum==3 fix.
-2. `synthetic_luahost_test` (set_ignore_ai_flag, Sec3.4): expected a "+0x501" OPEN refusal on a fresh
-   character, but branch 4's Sec22.3 sync gave `stateCodeByte501` a CONFIRMED Idle(0) spawn default,
-   which short-circuits the override condition to false before `aiSubStateByte500` is ever read - the
-   call now succeeds outright on an untouched character (this is real, correct, INTENDED combined
-   behavior, not a bug). Fixed the test to assert success; added one new case (explicit non-Idle
-   stateCodeByte501, aiSubStateByte500 left OPEN) so the aiSubStateByte500-refusal path - still real,
-   reachable code - keeps coverage.
-3. `synthetic_luahost_wave2_w21_test` (character_damage, Sec15.3a): three branches asserted
-   `!ragdollStateEnumCd2.known()` on non-ragdolling characters, but branch 2 (fdcabd5) seeded that field
-   CONFIRMED 0 at construction - always known now. Fixed to assert the real value (0).
+### STILL UNMERGED / outstanding work queued, not yet re-dispatched (no current agent working these):
+- **Real trigger SHAPE from zone data + zscene_is_loaded cutscene-kind-gate fix** - was folded into the
+  trigger-shape agent (`a77953e498985e0a7`, worktree `agent-triggershapes`, branch
+  `feature/trigger-shape-from-zone-data`) which was STILL RUNNING when this compaction hit - **CHECK
+  ListAgents/task notifications for this agent's completion FIRST on resume**, it may have already
+  finished and be waiting for a handback read. This is the single most important unfinished thread: the
+  zscene_is_loaded fix (spec Sec26.25 - cutscene-KIND gate; non-Zscene-kind names like "09_in"/"05_in"
+  [CutsceneType=Story, kind 2, from .cte_xtbl in cutscenes.vpp_pc] should return `true` immediately without
+  ever reaching the Zscene state machine; this project currently skips the kind check entirely) is
+  expected to be a REAL, HIGH-VALUE unblock for BOTH m05 and m09 live missions - re-run `--mission=m05`
+  and `--mission=m09` after it lands to confirm.
+- Nothing else currently queued beyond the above - all 4 of purrsian-4a's originally-queued items (merge
+  seated-pose+shadow-map; in-world mission-host trigger work; M05_JUMP test; near-field peds) are DONE.
+- **QUEUED, dispatch when a slot frees**: purrsian-4a caught a real discrepancy - the ped spawn-distance
+  agent reported 161/167 (6 failures, called "pre-existing") but the baseline immediately before it was
+  163/167 - that's 2 WORSE, doesn't add up to "all pre-existing." Need: fresh worktree build of main
+  `538483d` (or whatever main's current tip is by the time this is dispatched), full ctest, list EVERY
+  failing test by NAME with its real cause (not accepted as "CMake registration quirks" without naming
+  them) - fix anything this merge (or an earlier one) actually introduced.
 
-**Lesson for future integration units**: a clean git merge (no CONFLICT reported) is NOT proof two
-branches combine correctly - #1 and #3 above were BOTH in files git merged without any conflict marker.
-Only the full ctest run after all merges caught them. Budget full ctest time into every multi-branch
-integration task, not just a compile check per merge.
+### KEY LEARNED FACTS/ADDRESSES (for quick reference, don't re-derive):
+- `on_boat_trigger` (m09's trigger): `x=2488.54 y=6.82348 z=-4.15918`, class `Trigger_Volume`, in
+  `sr3_city_0.vpp_pc`. Real shape/extent encoding (Sec1.14/zone-data Sec11.7, CONFIRMED): named-string
+  zone-object properties `trigger_shape_type` (string->0=box/1=sphere/2=cylinder), `trigger_shape_param1`/
+  `param2` (box=2 vec3 corners; sphere=radius; cylinder=radius+length). `+0xe8` = `trigger_action_param`,
+  NOT a hook slot.
+- `BareThreadTable::allocate()` is THE established coroutine-spawn primitive for any "fire a registered
+  Lua callback" consumer (triggers, hud_prompt, mission _start) - never invent a parallel mechanism.
+- `CharacterState::stateEnum` values: 0=none/on-foot,1=entering,2=exiting,3=seated (Sec7.2/7.3/8.0/8.1).
+  Vehicle enter/exit instant paths now correctly write the FULL transition including stateEnum=0 clear +
+  vehicle-link null on exit, stateEnum=3+vehicle-name set on enter (both fixed this tail).
+- `CharacterState::stateCodeByte501`/`aiSubStateByte500`: AI mode/sub-state, CONFIRMED spawn default 0x00
+  Idle (3 writers total: construction, main transition primitive, proxy-network-read). `kAiModeHijack=0x12`.
+- `attackerThreatRef` was a REAL BUG (unseeded OpenValue, never the actual spec concept) - removed, replaced
+  by `reviverHandle` (+0x18f0/+0x18f4, seeded 0, cleared on death, "reviver handle" only - NOT last-attacker).
+- Respect lifetime cap formula: Sigma(all respect_levels.xtbl rows' Respect) - last row's own Respect =
+  238,875 real data (L50's own Respect = 0, which is WHY reaching the cap in one award also reaches level
+  50 in the same call - the "free" last transition).
+- `vehicleAiForceFlagsByte4`/`Byte6` real bits: obey_traffic_lights=bit0x01 byte+4, use_short_cuts=bit0x20
+  byte+6 (NEW byte, not previously catalogued).
+- Vehicle TYPE class (real, +0xbf4+0x2c): 0=car,2=airplane,3=heli,4=VTOL confirmed; 1/5/6 still OPEN. Real
+  join: zone-object `script_vehicle_type_name` -> `*_veh.xtbl` row -> `VehicleTypeUnion::vehicleClass`.
+- Group `+0x40` (Sec28.5/28.6) = HEAD-of-circular-linked-list handle (next link `+0x9c`, name `+0x18`) - NOT
+  a light-group's own unrelated `+0x40` flags byte (different structure, same offset number, real
+  transposition risk).
+- m05's blocker chain this tail: enter-submitter(FIXED) -> exit-teleport(FIXED) -> m05_parachute_in's
+  `M05_jumped` wait (mechanism built, never fires live - blocked by zscene_is_loaded, see above) ->
+  (presumably heli-class/group-head-name blockers further out, both separately fixed already).
+- m09's blocker chain: session-member-count(FIXED, coop_is_active) -> zscene_is_loaded (STILL BLOCKING,
+  see above, real fix identified not yet landed) -> trigger wait at game_lib.lua:2099 (mechanism built).
+- dlc2_m01: real OPEN gap, vtable+0x68 predicate (Sec7.10) - CONFIRMED needs a live capture, correctly
+  stays OPEN, not our bug.
+- dlc2_m03: recorder-state fixed; now blocked on a DIFFERENT dispatcher step (0x014f3d34-ish per latest
+  census) - not yet investigated further, not urgent.
 
-**Full ctest, final**: 158 passed, 0 failed, 4 skipped, 162 total (100% of non-skipped). The 4 skips are
-pre-existing bink-codec-data-dependent skips (`real_bink_frame0_decode_test` and 3 siblings), unrelated to
-this batch - this worktree simply lacks that test data, same category as a missing golden-baseline fixture.
-Also saw 5 transient "golden"/`real_playtest_*` failures in the FIRST full run (GPU/viewer-process
-flakiness, not logic) - confirmed 100% passing when re-run in isolation; not a regression, not touched by
-any of the 6 branches (none touch rendering/viewer code).
+### RULED OUT / refuted this tail (don't re-attempt):
+- `dlc2_m02_cellphone_call_wait`, `m24_enable_continuous_spawn_region`: script typos on unreachable paths,
+  not real blockers.
+- purrsian-4a's "re-point notoriety to local-authority" - refuted, see above, settled.
+- "0x00bc5610 = connection-state machine" - refuted by Team A itself (it's the machinima recorder predicate).
 
-**Real combined mission-drive numbers** (`lua_host_run.exe` w/ `--tick-budget=721
---probe-unresolved-names`, `results/verify_integration_batch2_combined_20261010/`), compared against the
-TRUE pre-integration baseline `results/verify_probe_blockers_ranked_20261009_post_merge_queue/` (main tip
-right after the co-op fix + `fix/weapon-definition-name-resolution` merged, right before this batch):
-- **m05**: baseline ticks=3 (completion, blocked on the enter-submitter OPEN gate, Sec7.4/38.1) -> combined
-  ticks=721 (budget exhaustion), now stuck deep at `game_lib.lua:3182` (`vehicle_exit_teleport`). Real,
-  large forward progress - branches 1-4's eligibility/submit-accepted/group-check-done chain visibly
-  working together.
-- **m07**: baseline ticks=7 (completion, same enter-submitter gate) -> combined ticks=8 (completion), but
-  now blocked on `character world position (get_dist) is OPEN (Sec4.2)` - a genuinely different, later
-  field. Confirms branch 4 (Sec22.3 pre-seed) + branch 5 (Sec3.4 attacker-threat-ref fix) combine to fully
-  close the set_ignore_ai_flag gate that used to block here (see regression #2 above - the SAME combined
-  effect that broke the unit test is what unblocks m07 here).
-- **m09**: baseline ticks=4 (completion, enter-submitter gate) -> combined ticks=721 (budget exhaustion),
-  stuck at `m09.lua:2099` (`m09_go_to_boat`) - this is a REAL, already-documented unresolved limitation
-  (needs a physically-simulated player walking into a trigger volume, which this headless probe can't do),
-  not a new regression; matches exactly what the vehicle_enter_do instant-path fix's own HANDOFF note
-  already predicted.
-- **dlc2_m01**: baseline ticks=4 -> combined ticks=7, new blocker `character vtable +0x68 predicate is
-  OPEN (Sec7.10)` - real forward progress, different legitimate gap.
-- **dlc2_m03**: baseline ticks=5 -> combined ticks=17, new blocker `tutorial dispatcher global 0x029443bc
-  is OPEN (Sec6.19)` - real forward progress.
-- **m13**: baseline ticks=721 (budget exhaustion, `m13.lua:2955`/`m13_goto_a_trigger`) -> combined:
-  BYTE-IDENTICAL. The "slight shift" a prior unit (group-head-name fix) predicted was against an OLDER,
-  now-superseded baseline snapshot - against the TRUE current-main baseline, m13 shows zero change.
-
-**Full ~49-mission spot check**: diffed every mission's ticks_survived/stop_reason, baseline vs combined -
-only 7 of 49 changed, ALL explained: the 5 targeted missions above (m05/m07/m09/dlc2_m01/dlc2_m03) that
-progressed, PLUS 2 unflagged bonus missions that benefit from the same fixes - `dlc2_m02` (11->12 ticks,
-harmless +1 shared-state shift, SAME blocker, matches the established precedent pattern noted by earlier
-units) and `m21` (7->8 ticks, was ALSO blocked by the Sec3.4 attacker/threat-reference bug fixed for m07 -
-now progresses to a different legitimate OPEN gap, `current hit points +0x1cb8`, Sec7.31/Sec34.1). The
-other 42/49 missions are byte-identical. `stop_reason_histogram` moved from
-`budget_exhaustion=11/error=0/completion=38` to `budget_exhaustion=13/error=0/completion=36` - the +2/-2
-shift is fully and only explained by m05+m09 moving buckets. **No unexpected regression anywhere in the
-full population.**
-
-Build dir `build/` is 2.0G - flagged, not deleted (standing disk-space-discipline rule). Not merged/pushed
-to `main` per the orchestrator's own explicit instruction - this branch stays separate until the user's
-go-ahead.
-
-### QUEUED (not dispatched, no slot free) - real data-driven vehicle-class fix, to replace the
-### m05_heli_pierce special case
-purrsian-4a correctly flagged the hardcoded seed as a per-mission special case that won't scale. Real fix
-when a slot frees: wire the already-correct, already-existing `sr3vehicleinfo` xtbl reader
-(`ParseAllVehicles` etc., `include/sr3vehicleinfo/vehicle_entry.h`) into `EngineState` so each spawned
-vehicle's `+0xbf4` class comes from its own real vehicle-type data (matching retail's type-load-time
-assignment), then drop the `m05_heli_pierce` special case entirely. Must also update the 4 existing tests
-that pin other heli-named vehicles to stay OPEN ONLY because nothing populated the field - once real data
-drives it, those should assert the real data-driven value instead, not artificially-preserved OPEN-ness.
-Sec28.6 (m05's new `group +0x40 head name` blocker) is being routed to Team A by purrsian-4a, no action
-needed from this session yet.
-
-### DONE - PART 2: runtime data loader (`feature/runtime-data-loader-sha256`@`ffce7ee`, on `be602fb` +
-### `dd8d2c8`) - fully verified, clean-room discipline upheld
-**Spec-gap handled correctly**: this worktree was branched before Team A's spec-runtime-data-sources.md
-spec-sync landed on main - rather than inspecting the exe to reconstruct the missing spec, pulled the
-EXACT committed file via `git show 586ab5e:spec-runtime-data-sources.md` (a plain read of a file Team A
-already committed, not exe inspection), committed it first (`dd8d2c8`), then worked only from that. Every
-file/offset/length/hash constant in the new loader is transcribed directly from the spec text, cited
-inline per region - never opened/hexdumped/disassembled the real exe/DLL. Built: `include/sr3runtimedata/
-runtime_data_loader.h`+`src/runtime_data_loader.cpp` (reads DX9 exe codebook blob, falls back to DX11 if
-missing, binkw32.dll for all 5 Bink table regions), new `CRREISH_GAME_INSTALL_DIR` CMake var following the
-project's existing `CRREISH_GAME_CACHE_DIR` convention. Wwise's 599-row index table moved to an
-always-compiled file (it's derived analysis metadata per spec framing, not excluded bytes); only the raw
-blob stays gated. Bink's 5 tables moved to mutable runtime storage (sr3binkcodec now a small static lib).
-Skip guards added to the 5 affected tests (exit-77 convention, matching `real_bink_*`).
-**Real measured verification, all passed**: SHA-256 matched the spec's stated hashes for all 6 regions,
-computed independently by the running loader against the real install (DX9 AND the DX11 fallback both
-individually confirmed); a nonexistent path correctly reported "not found," no crash. **Vorbis regression
-(the key check)**: with compiled-in data hidden and the loader pointed at the real install,
-`real_vorbis_decode_test`'s pcmHash was BYTE-IDENTICAL to the compiled-in-data run for all 5 banks, same
-493/493 vorb records/headers/real-decodes. Bink identical either data source. ctest across 3 real
-scenarios: normal (161/0/4 skip), loader-sourced-replacing-compiled-in (161/0/4, identical), data-fully-
-absent (161/0/7 skip - 4 pre-existing + 3 new graceful skips, nothing failed). Not merged, joins queue.
-
-### QUEUED (waiting for group-head-name unit to land) - integration branch for a real combined census
-Per purrsian-4a: create ONE integration branch/worktree (not main) merging all the mission-blocker
-branches together, build+test there, re-run the full mission census - gives real combined numbers without
-touching main, becomes the pre-tested merge candidate once the user's build-permission rule is in. Branch
-list, checked: `feature/vehicle-enter-eligibility-gate`@`30f1252` (eligibility), `fix/ragdoll-state-
-default`@`fdcabd5` (ragdoll), `feature/vehicle-enter-submit-accepted-real-gate`@`8b82232` (submit gate),
-`feature/vehicle-group-check-done-occupant-conflict`@`1645584` (group-check + singular-instant teleport-
-seat fix + heli-class + stateCode501/Hijack - all ALREADY ONE lineage, confirmed via `git log`), `feature/
-attacker-threat-ref-and-reviver-handle`@`66323ee` (attacker-threat/reviver), `feature/group-head-name-
-from-member-list` (once it lands). **Checked, worth noting**: the co-op fix (`a38cba3`,
-`fix/second-player-nonnull-default`) is ALREADY an ancestor of `main` (confirmed via `merge-base --is-
-ancestor`) - no separate merge needed for it, building the integration branch off current `main` inherits
-it automatically.
-
-### DONE - group head-name fix (`feature/group-head-name-from-member-list`@`11ef9a5`, on `265f729`) -
-### BIG real m05 win
-`group_get_first_npc`/`group_get_next_npc` (Sec28.5/28.6) now derive from the SAME ordered member-roster
-`group_members_alive` (Sec18.14) already maintains, reusing the one existing group-membership model
-instead of duplicating it - no new OPEN surface, two dead never-seeded OpenValueMaps removed. Light-group's
-own UNRELATED `+0x40` flags byte confirmed untouched (grepped, diff-reviewed before commit). **Real
-measured delta**: m05 - before `ticks_survived=7` stuck on the OPEN gate -> after **`ticks_survived=721`,
-full budget, parked on a REAL coroutine wait (`m05.lua:1141`, `m05_parachute_in`), not a new OPEN error** -
-genuinely clears this blocker. m07/m09/dlc2_m01/dlc2_m03 confirmed byte-identical; m13 shifts 4->5 ticks
-before the SAME unrelated blocker (shared-EngineState side effect, same established precedent, not a
-regression). 149/149 tests (1 real bug caught+fixed in the agent's own test-edit pass, red->green
-confirmed). Not merged, joins queue.
-
-### DONE - integration branch (`integration/mission-blocker-batch2`@`7af6b58`, off main pre-public-build-
-### merges) - the real combined numbers, NOT touching main
-All 6 branches merged (eligibility-gate at its real tip `98be1ab`, one commit ahead of the stated
-`30f1252`; ragdoll-default; vehicle-enter-submit; group-check-done lineage; attacker-threat/reviver;
-group-head-name). 1 real git conflict (same test file, two in-flight edits to the same lines) plus - more
-importantly - **3 latent cross-branch LOGIC regressions git never flagged as conflicts** (different
-files/lines, behaviorally coupled through shared `CharacterState` default-seeding) - caught only by
-running the FULL ctest suite after all merges, not by per-merge quick builds. All 3 were stale test
-assumptions now violated by the COMBINED, correct behavior (e.g. a test expecting "+0x501 OPEN" no longer
-holds once Sec22.3's confirmed Idle-default seed is combined in - that's also exactly what unblocks m07
-below) - fixed as test-only corrections, not new feature work. Final: **158 passed / 0 failed / 4 skipped
-(162 total)** - 9 more tests than the stated ~151 baseline (new eligibility-gate test file etc.), 4 skips
-not 2 (pre-existing bink-data gap in this specific worktree, not a regression); 5 transient golden/
-real_playtest GPU-flakiness failures on the first run confirmed 100% passing on an isolated rerun (none of
-the 6 branches touch rendering).
-
-**Real combined mission-drive numbers** (vs. the TRUE current baseline,
-`results/verify_probe_blockers_ranked_20261009_post_merge_queue` - main right after co-op+weapon-name
-fixes, just before this batch): m05 3->721 ticks (completion->budget exhaustion, stuck at
-`vehicle_exit_teleport` now - big real progress past the old enter-submitter gate). m07 7->8 ticks
-(completion->completion, now blocked on `character world position OPEN, Sec4.2` - confirms the
-Sec3.4/Sec22.3 combo fully closes the `set_ignore_ai_flag` gate). m09 4->721 (still the known/documented
-world-trigger limitation, not new). dlc2_m01 4->7 ticks, new blocker (`vtable +0x68 predicate OPEN,
-Sec7.10`). dlc2_m03 5->17 ticks, new blocker (`tutorial dispatcher global OPEN, Sec6.19`). **m13 BYTE-
-IDENTICAL against the true current baseline** (a prior unit's "slight shift" was against an older,
-now-superseded snapshot - corrected, not a real effect). **Full ~49-mission spot check**: only 7/49
-changed - the 5 targeted + 2 harmless bonus effects (`dlc2_m02` +1 tick shared-state shift, `m21` also hit
-by the same Sec3.4 bug, now progresses). 42/49 byte-identical. **Zero errors anywhere, before or after. No
-unexpected regression found anywhere in the full population.** Not merged/pushed to main, per instruction -
-this is the pre-tested candidate, waiting on the user's build-permission rule to actually land on main.
-
-### DONE - stateCodeByte501 seed + Hijack wiring (`feature/vehicle-group-check-done-occupant-conflict`@
-### `1645584`, on `265f729`)
-`stateCodeByte501` seeded to 0 (CONFIRMED Idle spawn default + 3-writer finding, Sec22.3) at construction.
-New `CharacterState::kAiModeHijack = 0x12` named constant, wired into `vehicle_enter_check_done`'s own
-`+0x504` literal (the task's "0x12 test" - correctly identified as the `+0x504` half of the real compound
-check, `+0x501=='&'(0x26) AND +0x504==Hijack`; `+0x501`'s own comparison value was untouched, out of
-scope). 151/151 tests. **Honest null result on THIS branch specifically, not a flaw in the fix**: this
-branch's own lineage (`265f729`) never incorporated the separate Sec3.4 attacker-threat-ref fix (`66323ee`,
-landed on a DIFFERENT sibling branch stacked on `b706fbb`) - confirmed via `merge-base --is-ancestor`
-(false). So m07 still stops on the OLDER `attackerThreatRef` OPEN item here, byte-identical before/after -
-the real effect of THIS fix won't show until both branches land on main (normal consequence of the
-queue-based multi-branch workflow, not a bug). m05/m09/dlc2_m01/dlc2_m03 confirmed unaffected. Not merged,
-joins queue (will need combining with the attacker-threat-ref branch at merge time, same files/area -
-flagging for whoever does the eventual merge).
-
-### DONE - public-build data exclusion, PART 1 (`feature/public-build-optional-data`@`be602fb`, off main
-### `69cddde`)
-**New file names for the export denylist**: `include/sr3binkcodec/entropy_prestage_tables.h` (the Bink
-static DATA, denylist this one) - `src/wwise_codebook_library_data_stub.cpp` is also new but must NOT be
-denylisted (it's the always-present fallback stub, part of the algorithm side). **Wwise**: CMake picks
-`wwise_codebook_library_data.cpp` if present, else the new stub (zeroed arrays, deliberately-wrong SHA so
-verification never false-reports "verified"); callers check `isWwiseCodebookLibraryDataAvailable()` first
-and report "data not loaded" via this project's existing diagnostic-string convention, not a crash. **Bink**:
-DATA split out of `entropy_prestage.h` into `entropy_prestage_tables.h`, pulled in via `__has_include` with
-a zeroed-placeholder fallback; new `CaseSelectorStatus::TablesNotLoaded` checked first in
-`beginBlockRow()`, falls through the existing `BlockOutcome::PreStageOpen` bucket automatically - no
-exhaustive-switch risk (confirmed, both consumers use if/else chains). **Bink test vectors confirmed
-already external** (gitignored/local-only, regenerated from real shipped assets, SKIP when absent) - no
-embedded binary data found anywhere in-repo, no change needed. **Build/test, both scenarios measured**:
-data PRESENT - 157/161 passed (4 pre-existing unrelated skips). Data ABSENT (real rename-out + full
-reconfigure/rebuild) - 155/161 passed, exactly 2 EXPECTED failures (clean exit(1), not crashes): the
-codebook crosscheck test's own clean "data not loaded" stop, and `synthetic_bink_codec_test` (flagged
-honestly: that "synthetic" test actually bakes in real-table-derived expected byte values with no
-skip-when-absent guard - a real but out-of-scope-for-this-task gap, noted not fixed). Files restored
-before commit (git mv undone), worktree + main checkout both confirmed clean. Not merged, joins queue. PART 2
-(dispatch once PART 1 lands - spec-runtime-data-sources.md IS NOW COMMITTED, so only waiting on PART 1):
-install locations + SHA-256 given for the 599-entry codebook library (both DX9 and DX11 exes, DX11 lower
-confidence) and the 5 Bink static-table regions (file offsets in binkw32.dll). **Bink test vectors are
-this project's OWN research captures, NOT retail data - stay as test fixtures, no loader needed for
-those.** Runtime loader: read each region at startup from the player's install, verify SHA-256, use only
-on a match, copy blindly by spec - clean-room intact (same byte-copy-by-spec convention this project
-already uses elsewhere, e.g. xtbl/zone data). Verification once implemented: audio decode still matches
-the oracle 493/493, Bink unchanged.
-
-### DONE - vehicle-type class enum fix for m05 (`feature/vehicle-group-check-done-occupant-conflict`@
-### `265f729`, on `a10a9ba`)
-**Correction to the dispatch's own premise**: the "per-instance +0x100 AI record" framing was stale - both
-existing fields (`VehicleState::flyingType`, `EngineState::HelicopterFlyTo::qualifies`) already cited the
-CORRECT location (+0xbf4+0x2c), just as unpopulated HYPOTHESIS/OPEN values pending Team A's confirmation
-(now received: field identity marked CONFIRMED). The real gap was nothing POPULATES either field for any
-vehicle. **Deliberately NOT a general name-based heuristic** (would've broken 4 existing tests that assert
-other heli-named vehicles stay OPEN until `.set()`) - instead a single clean-room-sourced hardcoded seed
-for `m05_heli_pierce` specifically (m05.lua's own script comment "Spawn Pierce's helicopter" directly
-above this exact vehicle name, same footing as this project's existing `keyframedPhysicsSpecialCaseCount`
-precedent for the identical name). Values 1/5/6 and any general name->type mechanism remain genuinely
-OPEN/not invented (would need wiring the separate, already-correct `sr3vehicleinfo` xtbl reader into
-`EngineState` - a materially larger feature, flagged not built). **Real measured m05 delta**: before
-`ticks_survived=4` stuck on the heli-class OPEN gate -> after `ticks_survived=7`, new later blocker
-(`group +0x40 head name['m05_grp_guards'] is OPEN, Sec28.6`). m07/dlc2_m01/dlc2_m03 byte-identical. m09's
-outcome category unchanged (still budget-exhausted) but its exact `waiting_at` line shifted - flagged
-honestly as a side effect of the shared `EngineState` across the whole mission batch (m05 running 3 more
-ticks shifts downstream shared state m09's poll happens to see differently), not a regression. 151/151
-tests (1 real bug caught+fixed before commit: first attempt missed that `qualifies` is reached without
-going through `getOrCreateVehicle()`). Not merged, joins queue.
-
-### DONE - Sec3.4 spec-bug fix for m07 (`feature/attacker-threat-ref-and-reviver-handle`@`66323ee`, on
-### `b706fbb`)
-`CharacterState::attackerThreatRef` (an unseeded OpenValue, the actual bug) removed. `set_ignore_ai_flag`'s
-gate re-pointed to the real `stateCodeByte501`/`aiSubStateByte500` fields (ai-runtime Sec2.4/Sec2.5,
-already existed from other work - no new OPEN surface invented). New `CharacterState::reviverHandle`
-(+0x18f0/+0x18f4) added, seeded 0 at construction (CONFIRMED default), cleared on death alongside the
-existing kill-finalizer. **Real measured m07 delta**: no longer stops on the mislabeled field - now
-surfaces a genuinely legitimate blocker instead: `stateCodeByte501 is OPEN (Sec22.3)` - a real engine byte
-Team A has genuinely left OPEN (not an invented field this time), ticks_survived still 8 (expected/
-acceptable per the task brief - the point was fixing the WRONG gate, not forcing completion).
-m05/m09/dlc2_m01/dlc2_m03 confirmed byte-identical. 151/151 tests. Not merged, joins queue.
-
-### DONE - vehicle_enter_do instant-path fix (`feature/vehicle-group-check-done-occupant-conflict`@
-### `a10a9ba`, on `b706fbb`) - real m05/m09 wins
-Same `stateEnum=1`->`3` fix (spec-player-runtime.md Sec7.4b) applied to `vehicle_enter_do`'s own singular
-instant/named-seat path AND `vehicle_enter_guardian_angel` (trivially the same code shape, fixed too).
-Pinned tests updated. **Real measured delta**: m05 - BEFORE budget-exhausted (721 ticks) stuck at
-`vehicle_enter_teleport` -> AFTER real completion at tick 4, new different blocker (heli AI record +0x2c
-OPEN, Sec28.2). m09 - BEFORE same deadlock -> AFTER still budget-exhausted but at a genuinely different,
-DOWNSTREAM location (`m09.lua:2099`, `m09_go_to_boat`) - real progress past the original deadlock, not yet
-resolved. m07/dlc2_m01/dlc2_m03 confirmed byte-identical (own tsv rows unchanged; global completion/
-exhaustion bucket counts shifted exactly as expected from m05 moving out of exhaustion, nothing else
-qualitatively changed). 151/151 tests. Not merged, joins queue.
-
-**m09's real blocker, read directly (no Team A question - not a spec gap)**: `m09.lua:2099` is
-`while not M09_local_on_boat or not M09_remote_on_boat do thread_yield() end`. `M09_local_on_boat` only
-flips true via `m09_player_on_boat_enter_cb`, a trigger-ENTER callback requiring the real player to
-physically walk into the `player_on_boat_trigger` volume - a genuine world/geometry condition this
-headless probe has no player-movement simulation to satisfy (same class as this project's existing "no
-coordinate/physics system" limitation elsewhere). **Concrete in-world test target, queued, not dispatched
-(lean budget)**: run `--mission=m09` in the real playtest (mission-host Phases 1-3 + the trigger-callback
-coroutine branch), with the real player walked into `player_on_boat_trigger` - exactly the case the
-headless probe can't exercise but the live engine loop can. **m05's own in-world test target, queued
-alongside this one (not dispatched, usage hold)**: m05's own new blocker (`m05.lua:1141`,
-`m05_parachute_in`) is a real player-INPUT wait on `M05_jumped`, only set by `m05_jump_local`/`_remote`
-callbacks firing when the player responds to the `M05_JUMP` `hud_prompt` - same category of headless-
-probe-can't-simulate limitation as m09's trigger wait, not a spec gap. In-world test: script the player to
-respond to that hud_prompt and confirm m05 advances.
-
-### QUEUED (usage hold, not dispatched) - "in-world mission host: trigger data load + per-frame overlap +
-### callback dispatch" - combines Finding 1+2 from the m09 in-world test above
-**Checked directly against spec before relaying anything to Team A, per purrsian-4a's ask**: the trigger
-shape/extent encoding is NOT actually missing - spec-lua-api-behaviour.md already gives it in full:
-shape code `+0x8c` (0=oriented box,1=sphere,2=capped cylinder), position `+0x40`, box half-extents/
-cylinder axis endpoints `+0x58`/`+0x5c`/`+0x60`, radius `+0x90`, cylinder length `+0x94`. The real
-per-frame poll is also CONFIRMED (`0x00940c90`, unconditional every frame, name-hash-resolved
-"currently inside" set as the real enter/exit edge detector) and the containment primitive
-`0x0093bfc0` (shared, 10 call sites, Barnstorming's own containment check among them) is independently
-confirmed too. **CORRECTION (purrsian-4a)**: the "+0xf8/+0xfc -> Lua dispatch not found" text quoted above
-is from an OLDER revision of Sec1.14 - commit `383f653` already closed this: the callback id is a packed
-`(slot<<16)|generation` handle into a 350-slot intern table, and the dispatcher (`0x00a29e40` ->
-`0x00a1fe10`) spawns a coroutine through `0x00e0ca80`/`0x00e0c720`, resumed later by the resume runner.
-Only `0x00a29e40`'s own CALLER remains OPEN, and that doesn't matter for an implementation - **no genuine
-spec gap remains here, nothing to route to Team A for this part**. Scope for the eventual dispatch unit:
-(1) load real zone-object trigger data (position+shape+extent) into this project's model via the
-confirmed field layout, (2) implement the per-frame overlap test, (3) wire the ALREADY-SPECCED
-packed-handle/350-slot-intern-table/coroutine dispatch (reuse `BareThreadTable` per the earlier trigger-
-callback-coroutine-dispatch unit's own precedent, don't invent a second mechanism), (4) separately, fix
-the live `--mission=` bind path's `coop_is_active()` not short-circuiting before `memberCount` (Finding 2,
-a different pre-existing gap). Merging the whole
-mission-host Phase 1-3 + trigger-callback-coroutine-dispatch stack into main is ALSO queued, for after
-the usage hold lifts.
-
-### DONE - teleport-seating fix (`feature/vehicle-group-check-done-occupant-conflict`@`b706fbb`, on
-### `6213cce`) - real m07 win, per purrsian-4a's correct diagnosis
-Root cause confirmed (code, not disassembly): `attemptGroupInstantEnter()` wrote `stateEnum=1`
-("entering") on an accepted instant placement, never `3` ("seated") - `check_done`'s clear test needs
-`stateEnum==3`+matching vehicle, so every member was a permanent straggler. Fixed: now writes `stateEnum=3`
-+ `currentVehicleName` on acceptance, per spec-player-runtime.md Sec7.4b's confirmed synchronous-commit
-rule (no seat contention possible in this project's own no-de-dup group-enter model, so sync commit is the
-only reachable case - not inventing behavior). **Correction to the task's own premise, found along the
-way**: there's no C++ native called `vehicle_enter_teleport` - the real single-character analog is
-`vehicle_enter_do`'s own instant path, which has the EXACT SAME `stateEnum=1`-only limitation, confirmed
-still live (m05/m09 now visibly stuck in the Lua-side `vehicle_enter_teleport` wrapper for this same
-reason). Correctly left OUT of scope (passing tests pinned to `stateEnum==1`, separate task) - **flagged
-as a real, known follow-up, not silently fixed**. **Real measured m07 delta**: before `ticks_survived=721`
-spinning at game_lib.lua:3089; after `ticks_survived=8`, NEW blocker - `m07_start: engine state character
-attacker/threat reference is OPEN (Sec3.4)`. Genuinely past the group-teleport deadlock, not complete.
-m05/m09/dlc2_m01/dlc2_m03 confirmed byte-identical (full-file diff). 151/151 tests. Not merged, joins
-queue. **Next real follow-up, not yet dispatched**: the same `stateEnum=1`-only gap on `vehicle_enter_do`'s
-singular instant path (and `vehicle_enter_guardian_angel`) is what now blocks m05/m09.
-
-### RESUMED 2026-10-09 - user said "continue"; orchestrator purrsian-4a (new instance) relayed:
-### stay LEAN (max 2 agents at a time, Sonnet only), re-dispatch the stopped unit only, nothing else new.
-- **DONE** - group_check_done + occupant-conflict unit (`feature/vehicle-group-check-done-occupant-
-  conflict`@`6213cce`, stacked on `8b82232`). Real Sec13.4 steps 6/7 (tank-only 8-seat team-conflict scan;
-  specific-seat contest check) implemented faithfully, reusing only existing fields. Real Sec38.1
-  `vehicle_enter_group_check_done` implemented (no threshold, dead/state-exemption/seated-here clears,
-  `do_not_reorder` wiring via new shared `attemptGroupInstantEnter()` helper, de-duplicated with
-  `vehicle_enter_group_do`). 151/151 tests (1 real pre-existing test regression found+fixed along the
-  way). Not merged, joins queue.
-  **2 corrections made on review, both flagged honestly rather than left standing:**
-  1. No spec-sync gap - the dispatched agent read a stale Sec38.1 paragraph; the real per-member rule WAS
-     already in the committed spec at ~line 14854. My own earlier relay of a "gap" was wrong.
-  2. The agent's "zero hits for vehicle_enter_group_check_done, m07 never reaches it" was a MEASUREMENT
-     ARTIFACT, not a real finding - read game_lib.lua:3089 directly (project's own already-extracted copy,
-     plain Lua text, no disassembly): it's the `thread_yield()` inside `vehicle_enter_group_teleport`'s own
-     `while (not(vehicle_enter_group_check_done(...))) do` polling loop. Checked the real trace
-     (`verdict_mission_drive.tsv`): m07 ran the FULL 721-tick budget at this exact line - the loop really
-     did execute repeatedly, re-calling check_done each time. The "zero hits" came from checking a
-     `stub_hits` tsv, which only tracks GENERIC/placeholder stub calls - check_done is a real
-     implementation now, so it structurally can't appear there regardless of call count. **Corrected
-     conclusion**: this is the exact faithful stall Team A already predicted (`do_not_reorder=true`
-     hard-coded in this caller -> a straggling group member never gets re-issued the enter order -> spins
-     for the rest of the budget) - not a new upstream blocker. Which specific m07 group member is the
-     straggler, and why it doesn't clear, is unknown without a real instrumented run (a unit, not a quick
-     read) - not dispatched, pending direction.
-- The main-checkout build/inspection lockdown (`cmake --build`/`git log` denied on main after the
-  recensus-superset merge `09f3ef6`) is still UNRESOLVED - per purrsian-4a, stays gated on the user's own
-  permission rule; not attempting it again without a specific go-ahead.
-- Usage-pacer flagged well ahead of plan this tick (17% of week vs ~4-5% planned) - staying to the 2-
-  agent/Sonnet-only cap, no other new dispatches unless purrsian-4a asks.
-
-### DONE - vehicle-enter-submit real gate (`feature/vehicle-enter-submit-accepted-real-gate`@`8b82232`,
-### stacked on eligibility-gate@`30f1252` + ragdoll-default@`fdcabd5`)
-Found `30f1252` had ALREADY wired the Sec7.4a gate at all 4 call sites - "never wired" was stale. The real
-gap: an eligible-and-unset result fell through to `OpenValue::get()`, which throws (a real mission-drive
-run never `.set()`s it). Read Sec7.4a directly: pure character-state gate, 9 refusal paths + 1 success,
-no vehicle/seat argument at all - Sec7.4's own separate seat-pick step (`0x00b0fdf0`/`0x00b105c0`) is a
-genuinely different, unmodelled unit this host has no seat-occupancy state for. **One new CHOSEN default,
-verbatim for Team A relay**: when the Sec7.4a gate is eligible and untested, resolve to `true` (seat pick
-assumed to succeed) instead of OPEN. Open question for Team A: what can the seat-pick step concretely
-refuse beyond "no free seat," and does any confirmed m05/m07/m09 script case actually depend on a refusal
-there? **Measured real delta** (stash-bisected before/after, not assumed): m05/m09 now run the FULL
-721-tick budget with no error (new, later blocker: suspended in `vehicle_enter_teleport`, game_lib.lua);
-m07 moves from 1 tick to 7, hits a new specific gap (`vehicle_enter_group_check_done` per-member/straggler
-rule, lua-api Sec38.1). Honest caveat: none of the 3 reach mission completion - this closes the submitter
-blocker specifically, real progress, not a full win. dlc2_m01/dlc2_m03 confirmed unchanged (separate
-co-op gate, out of scope). 151/151 tests (2 pre-existing failures this fix+prereqs actually fixed, not
-introduced). Not merged, joins queue.
-
-### All 5 originally-in-flight agents from the previous rewrite have reported - none outstanding
-
-### DONE - ragdoll-state default (`fix/ragdoll-state-default`@`fdcabd5`, off main)
-`CharacterState::ragdollStateEnumCd2` (+0xcd2) now pre-seeded to the CONFIRMED default 0 ("character
-proxy") at construction, citing spec-player-runtime.md Sec5.4.2/5.4.4/7.4a/15.3a. 150/150 tests, identical
-before/after. **Honest null result, measured not assumed**: ran the real before/after mission-drive probe
-- `verdict_mission_drive.tsv` is byte-for-byte IDENTICAL across the whole mission set. `dlc2_m01`/
-`dlc2_m03` still block on the separate co-op-player gate (unmerged `a38cba3`, expected). `m05`/`m07`/`m09`
-block on `CharacterState::vehicleEnterSubmitAccepted` - an opaque OpenValue standing in for the WHOLE
-eligibility+seat-pick chain (Sec7.4a has 9 refusal paths), which this project's code does NOT read
-`ragdollStateEnumCd2` to compute - confirmed by grep, no caller connects them. So the fix is real and
-correct (closes a genuine spec item) but does NOT move any of the 5 targeted missions at current HEAD.
-**Next real step to actually move m05/m07/m09**: wire `vehicleEnterSubmitAccepted` to the real Sec7.4a
-eligibility-gate inputs (ragdoll state is only one of several) - a separate, larger task, several of
-whose own 9 refusal paths are themselves still OPEN per spec. Not merged, joins queue.
-
-### DONE - trigger-callback coroutine dispatch (`feature/trigger-callback-coroutine-dispatch`@`0b6c934`,
-### stacked on Phase3@`20028b3`)
-Replaced the one real synchronous-dispatch call site (`tools/lua_host_run.cpp`'s `--probe-autopilot`
-block, bare `lua_getglobal`+`lua_pcall`) with `BareThreadTable::allocate()` - the SAME coroutine-spawn
-primitive `callMissionStart()` already uses - with no immediate `run()`; only the pre-existing scheduler-
-pass loop resumes it later, matching spec-lua-api-behaviour.md Sec1.14's confirmed "spawns a coroutine,
-never calls synchronously" finding. `Host::fireConfirmedHooks` (a separate, genuinely-synchronous
-mechanism for `on_death`/etc.) correctly left untouched. 153/153 tests. Agent caught and disclosed its own
-worktree-drift mistake mid-task (briefly ran against `main` by accident, caught it, reverted cleanly,
-redid the work in the correct worktree) - honest process note, no harm done. Not merged, joins queue.
-
-### DONE this tail (since the 46th rewrite), queued for merge unless noted otherwise
-**Wave-10 3-item spec-sync batch, all verified+committed:**
-- Vehicle natives (lua-api Sec4.5a) - `vehicle_set_obey_traffic_lights`/`vehicle_set_use_short_cuts`
-  converted from their old CHOSEN direct-field-write shape to the real `vai_force_flags` bits
-  (obey_traffic_lights = bit 0x01 byte+4 on existing `vehicleAiForceFlagsByte4`; use_short_cuts = bit
-  0x20 byte+6, new field `vehicleAiForceFlagsByte6`) via the same double-gate pattern every sibling in
-  this cluster uses. 150/150 tests pass. **Committed directly to main: `2bba81e`.**
-- Respect lifetime cap (tables-progression Sec5.4) - `awardRespect()` on `feature/respect-progression-
-  runtime` (now @`a852f61`) replaced the non-positive-guard stand-in with the real cap: Sigma(all
-  respect_levels.xtbl rows) - last row's own Respect (238,875 real data), checked after `amount>0`;
-  `total>=cap` or `level>=levelCount-1` -> full skip; else `grant=min(amount,cap-total)` feeds both total
-  and level-up. New `respectLifetimeCap()`, computed from the loaded table not hardcoded. Had to also fix
-  the synthetic test's OWN fixture (its last row had a nonzero cost, breaking the real-data convergence
-  where crossing the cap in one award also reaches level 50 in that same call - real data's L50 row cost
-  is 0, synthetic fixture's wasn't). Full suite green. Not merged yet, joins queue.
-- 2 refuted natives (`dlc2_m02_cellphone_call_wait`, `m24_enable_continuous_spawn_region`) - script typos
-  on unreachable paths per Team A - noted, do NOT count as blockers in future censuses.
-- Relayed to purrsian-c6: the spawn-annulus agent's premise-mismatch finding (near-field ambient spawners
-  vs. the Lua-scriptable spawn-region system are genuinely separate - see DISPATCHED section below) and
-  confirmation that `tools/lua_host_run.cpp` (shared by headless + `--mission=` mission-host) discovers
-  `system_lib.lua`/`vint_lib.lua`/`game_lib.lua` by filename across EVERY `*.vpp_pc` in the scanned
-  directory (no hardcoded container), so `interface.vpp_pc` is already covered - verified by reading the
-  loader directly, no fix needed.
-
-**Earlier this tail (restart's 7 + 2 new):**
-Sun shadow map (`feature/sun-shadow-map`@`0b7f53e`) - 2-reviewer out-of-frustum diagnosis REFUTED (3
-independent confirmations the dark wall is real self-shadowing, not a bug), ONE genuinely separate
-depth-range bug found+fixed instead. ACCEPTED by purrsian-c6 with a CHOSEN-sun-direction caveat for
-v0.4 NOTES.txt. Mission-host Phase 3 + m05 vehicles (`feature/mission-host-phase3-m05-vehicles`@
-`20028b3`) - both parts real+independently-verified, but HONEST NULL RESULT: first_error identical
-before/after for all 5 targeted missions (the submitter blocker was already closed earlier by a
-different already-merged branch). Mission fail/success (`feature/mission-fail-success-presentation`@
-`97aae3f`) - found+fixed a REAL pre-existing bug (`stub_mission_end_success` never updated to the new
-mechanism) plus a stale test encoding the same wrong assumption. Bink descriptor-B fix (`fix/bink-
-descriptor-b-case1-selector`@`137e70d`) - HUGE: `logo_thq_and_voli_hd.bik` 312/313 blocks, `logo_amd_
-hd.bik` 600/601 blocks (both were failing at block 0 before) - but see item 2 above, block-count alone
-doesn't prove pixel correctness, that's what the new oracle unit checks. Respect/progression (`feature/
-respect-progression-runtime`@`c8506fb`) - full real implementation, correctly reused the existing level-
-cost table and hint dispatcher rather than duplicating. Objective-text localization (`feature/objective-
-text-localization`@`cc22000`) - visually verified by me directly, real m01.lua keys resolve to real
-English text with markup correctly stripped. **Pre-existing from before this restart** (still accurate,
-not re-derived): Vorbis integration (493/493 oracle-confirmed) branch #18, hex-address rename (583
-renames) branch #19, mission-blocker re-census superset (17 branches pre-merged, 157/157 tests, confirmed
-`ai_add_enemy_target` fully closed) - the PRE-TESTED merge candidate per the agreed strategy, continuous_
-spawn_start arg4 fix, vehicle-enter-eligibility-gate, mission-host Phase 1+2, Bink D10>=1 audio-chunk-
-skip, THQ Bink diagnostic, 3-blocker fix (inv_item_in_slot/conversation/local-player), mission HUD
-objectives overlay (visually verified+accepted, frames in `agent-hudobjectives/results/verify_mission_
-hud_objectives_20261009/`).
-
-**Seated/driving pose** (`feature/seated-driving-pose`@`3bc30c3`) - real ride-pose resolution (seat ->
-`Vehicle_Interaction_Info` -> `Ride_Animations` -> `vi_ride.xtbl` -> real clip, spec-player-runtime.md
-Sec7.4b). Resume agent found+fixed a misattributed spec citation (ride-Element matching is a DIFFERENT
-exact-compare matcher than enter/exit's wildcard one, not "the same rule") and 2 real placement bugs by
-viewing captured frames directly (occupant floating ~1m, then still floating after the first fix -
-measured real mesh-space Y bounds to compute the correct seat-height constant). Visually re-verified at
-2 frames. 152/152 tests. Not merged, joins queue.
-
-**Bink pixel-accuracy oracle** (`feature/bink-pixel-accuracy-oracle`@`7218883`, stacked on descriptor-B
-fix) - real PSNR/FFmpeg-oracle comparison, exactly the kind of measurement this project's own Vorbis
-precedent demanded before trusting a "reconstructs N blocks" claim. **Honest concerning result, not
-glossed over**: full-frame PSNR 11.24dB; even the FULLY-RECONSTRUCTED-only region (rows 0-15, all
-FlatDcFill) is PSNR 7.96dB - worse than the full frame including blank area. Flagged, not chased further
-(out of scope, no disassembly) - suggests either an upstream bit-alignment issue feeding the dispatch, or
-flat DC fill genuinely can't represent this content. Also implemented TwoLiteralPattern (16x16 output,
-spec-confirmed as its own fixed unit, decoupled from the 8x8 grid) - the outer-loop cell-advance question
-remains genuinely open but is moot for both current golden fixtures (neither ever dispatches secondary=5).
-152/152 tests. Not merged, joins queue.
-
-### DISPATCHED, completed, joins the merge queue (no agent cap - purrsian-c6 corrected this)
-**Near-field spawn annulus filter** (spec sync `3ecbf84`, lua-api Sec49.2/32.1) - agent
-`a10b59de0b7f90ced`, dispatched into `agent-nearfieldped`/`feature/near-field-ped-spawner`@`9169966`.
-**Real premise-mismatch finding, not silently worked around**: §32.1/§49.2's addresses/globals never
-appear anywhere in spec-ai-runtime.md (the near-field ambient spawners' own governing spec) and vice
-versa - confirmed both directions by whole-project address/global search. This is the Lua-scriptable
-`continuous_spawn_start`-family spawn-region system (sr3luahost), genuinely separate from the always-on
-near-field ambient population (sr3airuntime) already implemented elsewhere. Applied the min/max annulus
-filter (bit 0x08 escape, unless bit 0x10 suppresses it) to `engine_state.h`'s spawn-region fields instead
-of the near-field files, and fixed 2 real pre-existing bugs found along the way: min-dist wasn't squared
-before storage, and `spawn_override_clear_override_for_hood` cleared a disconnected placeholder map the
-SET stub never wrote to (set-then-clear never actually cleared anything). 151/151 tests. **Worth Team A
-confirming this system split is correct** - relayed to purrsian-c6. Not merged, joins queue.
-
-**FYI**: whole-game Lua coverage now 744/754 natives specced (98.7%) across 36 missions + 31 side-content
-scripts, 9 OPEN (2 of those refuted as dead script-code, see above), Team A working the rest.
-
-### Standing rule, NEW this tick (purrsian-4a): both in-flight merge-resolution agents (shadow-map,
-### mission-host-stack) resolve conflicts in the SAME file (`tools/sr3_viewer.cpp`) against the SAME main
-### tip - their merges into main MUST land serially, not in parallel. Whichever lands SECOND must re-merge/
-### rebase onto the post-first-merge main and re-run ctest before actually landing, or it will silently
-### undo the first one's resolution. I perform the actual `git merge --no-ff` into main myself (neither
-### agent merges to main directly), so this is naturally serial already - just don't skip the second one's
-### re-verification step when its turn comes.
-
-### Standing rules, unchanged, keep exact
-- **Disk-dir move/delete still likely BLOCKED this session** (classifier refused both `rm -rf` and cross-
-  filesystem `mv` of build dirs earlier this tail) - untested since, don't assume fixed, don't retry
-  blindly without checking first.
+### Standing rules, unchanged, keep exact:
+- **Serial-merge rule**: when 2+ in-flight agents conflict-resolve the SAME file against the SAME main tip,
+  their merges into main MUST land one at a time; whichever lands second must re-merge/rebase onto the
+  post-first-merge main and re-verify before I actually merge it. I do this merging myself, never the agents.
+- **Disk**: purrsian-4a is handling bulk old-worktree build/ cleanup on their own separate list (checked:
+  no overlap with currently-active worktrees). I still flag each NEW unit's own build/ size in its own
+  report, don't delete, don't worry about the bulk list - that's handled.
 - **Release procedure step 4**: `sh ~/crreish-orchestration/mirror_build_history.sh` (not `make_build_
-  log.sh`) - regenerates `BUILD-LOG.html` AND hash-verify-copies the new version folder to `G:\AI\Claude
-  Projects\recomp\playtest-builds\`. Report "history: N versions on G:" + folder name every time.
-- **Model escalation**: Sonnet 5.5 first; 1 Sonnet failure -> Opus 5.5; 3 Opus failures -> report BLOCKED
-  to the orchestrator; Fable needs a per-task user yes relayed through the orchestrator, never assume it.
-- **Usage-pacer**: stops project work at 95% of the 5-hour/weekly limit - if it fires mid-session, write
-  HANDOFF and wait, don't push through it.
+  log.sh`). Report "history: N versions on G:" + folder name every time.
+- **Model escalation**: Sonnet 5.5 first; 1 Sonnet failure -> Opus 5.5; 3 Opus failures -> report BLOCKED;
+  Fable needs per-task user yes.
 - **Team B never disassembles** - zero exceptions, relay address/instruction-level questions to Team A.
-- **`git stash` HAZARD, found this tail**: `refs/stash` is SHARED across all worktrees of this repo
-  (standard git behavior) - a real collision risk when 2 agents stash concurrently in sibling worktrees
-  (happened once this tail, no data lost, handled correctly). STANDING CAUTION: avoid `git stash` in
-  worktree-agent dispatches, prefer a temp commit instead (already added to dispatch prompts going
-  forward).
-- **Spec-file commits**: use `sh ~/crreish-orchestration/spec_commit.sh "msg" file1.md [file2.md...]`
-  (copies from the Team A mirror dir first if needed, then validates clean-room + commits) rather than a
-  plain `git commit` - and tell the orchestrator BEFORE committing a spec file, to avoid double-committing
-  the same file (happened once this tail, low-stakes, caught and corrected).
-
+- **`git stash` HAZARD**: `refs/stash` SHARED across all worktrees - avoid bare stash, prefer a temp commit.
+- **Spec-file commits**: use `sh ~/crreish-orchestration/spec_commit.sh`, not plain `git commit`, for spec
+  doc files specifically (not needed for this session's own code/HANDOFF commits).
+- **User directive, standing**: "keep going, never stop, but usage-aware" - respond to usage-pacer stop
+  instructions by writing HANDOFF and waiting, nothing more drastic.
 <!-- CONTEXT-GUARD:RESUME-END -->
+
 
 ## 44th rewrite's full resume-note detail (historical, superseded by the compact 45th rewrite
 ## above, not re-injected after compaction - kept only for forensic/narrative record of this tail)

@@ -162,6 +162,98 @@ void testSelectNearFieldPedSpawnAppliesSidewaysOffset() {
 }
 
 // ===========================================================================
+// Part A2 (ped-spawn-distance-spec-tuning task, 2026-10-10): ApproxVisibleToCamera
+// - the CHOSEN horizontal-FOV-cone stand-in for Sec20.1's own CONFIRMED,
+// separate "rejects if visible to the current camera" gate. See this
+// function's own header comment (near_field_ped_population.h) for the full
+// CONFIRMED-vs-CHOSEN breakdown: the ~90-unit near-reject floor above is
+// unconditional, this is the SEPARATE gate on top of it.
+// ===========================================================================
+void testApproxVisibleToCameraTrueDirectlyAhead() {
+    // Camera at the origin facing +X; a point straight ahead must read as
+    // visible (within the CHOSEN half-FOV cone).
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    CHECK(ApproxVisibleToCamera(Vec3{100, 0, 0}, cam, fwd));
+}
+
+void testApproxVisibleToCameraFalseDirectlyBehind() {
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    CHECK(!ApproxVisibleToCamera(Vec3{-100, 0, 0}, cam, fwd));
+}
+
+void testApproxVisibleToCameraFalseDirectlyToTheSide() {
+    // Perpendicular to facing - well outside any plausible FOV half-angle
+    // (CHOSEN 50 degrees default), must read as not visible.
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    CHECK(!ApproxVisibleToCamera(Vec3{0, 0, 100}, cam, fwd));
+}
+
+void testApproxVisibleToCameraRespectsExplicitHalfFov() {
+    // A point 80 degrees off-axis: not visible under a narrow 50-degree
+    // CHOSEN default, but visible under an explicit wide 85-degree half-FOV
+    // passed by the caller - proves the half-angle argument is genuinely
+    // consumed, not ignored.
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    const double angleRad = 80.0 * 3.14159265358979323846 / 180.0;
+    const Vec3 point{100.0 * std::cos(angleRad), 0.0, 100.0 * std::sin(angleRad)};
+    CHECK(!ApproxVisibleToCamera(point, cam, fwd));
+    CHECK(ApproxVisibleToCamera(point, cam, fwd, 85.0));
+}
+
+// End-to-end through the real gate struct: a candidate well past the
+// ~90-unit floor but BEHIND the camera must be accepted when
+// ApproxVisibleToCamera supplies isVisibleToCamera - proving the "spawn
+// closer when off-screen" behaviour this task implements actually threads
+// through SelectNearFieldPedSpawn, not just the helper in isolation.
+void testSelectNearFieldPedSpawnAcceptsCloseCandidateBehindCamera() {
+    // Segment at distance ~100 units, directly BEHIND a camera facing +X.
+    std::vector<SidewalkSegment> segs = {{1, Vec3{-105, 0, 0}, Vec3{-95, 0, 0}}};
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    NearFieldPedSpawnGates gates;
+    gates.isVisibleToCamera = [&](const Vec3& p) { return ApproxVisibleToCamera(p, cam, fwd); };
+    DeterministicRng rng(42);
+    auto pick = MakePickUniform(rng);
+    NearFieldPedSpawnResult r = SelectNearFieldPedSpawn(segs, gates, cam, pick);
+    CHECK(r.found);
+}
+
+// The mirror case: the SAME distance, but directly AHEAD (in view) - must be
+// rejected, matching the real engine's own "rejects if visible" behaviour.
+void testSelectNearFieldPedSpawnRejectsCloseCandidateAheadOfCamera() {
+    std::vector<SidewalkSegment> segs = {{1, Vec3{95, 0, 0}, Vec3{105, 0, 0}}};
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    NearFieldPedSpawnGates gates;
+    gates.isVisibleToCamera = [&](const Vec3& p) { return ApproxVisibleToCamera(p, cam, fwd); };
+    DeterministicRng rng(43);
+    auto pick = MakePickUniform(rng);
+    NearFieldPedSpawnResult r = SelectNearFieldPedSpawn(segs, gates, cam, pick);
+    CHECK(!r.found);
+}
+
+// Even with a real visibility gate wired up, the ~90-unit floor remains
+// unconditional (Sec20.1's own three-separate-conditions reading, see
+// NearFieldPedSpawnGates::isVisibleToCamera's own comment) - a candidate
+// BEHIND the camera but inside that floor must still be rejected, not
+// accepted just because it's off-screen.
+void testSelectNearFieldPedSpawnStillRejectsWithinFloorEvenWhenBehindCamera() {
+    std::vector<SidewalkSegment> segs = {{1, Vec3{-10, 0, 0}, Vec3{-5, 0, 0}}};
+    const Vec3 cam{0, 0, 0};
+    const Vec3 fwd{1, 0, 0};
+    NearFieldPedSpawnGates gates;
+    gates.isVisibleToCamera = [&](const Vec3& p) { return ApproxVisibleToCamera(p, cam, fwd); };
+    DeterministicRng rng(44);
+    auto pick = MakePickUniform(rng);
+    NearFieldPedSpawnResult r = SelectNearFieldPedSpawn(segs, gates, cam, pick);
+    CHECK(!r.found);
+}
+
+// ===========================================================================
 // Part B: the combined spawn pass (Sec20.1) - local cap, shared human
 // headroom ceiling (reused from near_field_vehicle_population.h), spawn-only
 // (no despawn surface exists in this file - file header item 3).
@@ -561,6 +653,17 @@ int main() {
     run("testSelectNearFieldPedSpawnRejectsWhenGroundInvalid",
         testSelectNearFieldPedSpawnRejectsWhenGroundInvalid);
     run("testSelectNearFieldPedSpawnAppliesSidewaysOffset", testSelectNearFieldPedSpawnAppliesSidewaysOffset);
+
+    run("testApproxVisibleToCameraTrueDirectlyAhead", testApproxVisibleToCameraTrueDirectlyAhead);
+    run("testApproxVisibleToCameraFalseDirectlyBehind", testApproxVisibleToCameraFalseDirectlyBehind);
+    run("testApproxVisibleToCameraFalseDirectlyToTheSide", testApproxVisibleToCameraFalseDirectlyToTheSide);
+    run("testApproxVisibleToCameraRespectsExplicitHalfFov", testApproxVisibleToCameraRespectsExplicitHalfFov);
+    run("testSelectNearFieldPedSpawnAcceptsCloseCandidateBehindCamera",
+        testSelectNearFieldPedSpawnAcceptsCloseCandidateBehindCamera);
+    run("testSelectNearFieldPedSpawnRejectsCloseCandidateAheadOfCamera",
+        testSelectNearFieldPedSpawnRejectsCloseCandidateAheadOfCamera);
+    run("testSelectNearFieldPedSpawnStillRejectsWithinFloorEvenWhenBehindCamera",
+        testSelectNearFieldPedSpawnStillRejectsWithinFloorEvenWhenBehindCamera);
 
     run("testRunNearFieldPedSpawnPassRespectsLocalCap", testRunNearFieldPedSpawnPassRespectsLocalCap);
     run("testRunNearFieldPedSpawnPassBlocksOnSharedHumanHeadroom",

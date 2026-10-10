@@ -310,6 +310,60 @@ dialog auto-raises the shared pause depth, independent of whether the dialog is 
 specifically.** The literal "pause button → open pause menu" input binding itself was not located —
 **OPEN** (see §9).
 
+**Advanced 2026-10-10 — the push-screen primitive itself is now fully decompiled, narrowing but
+not closing the search.** The two primitives everything in this architecture ultimately routes
+through are: `0x007b4640` (push by resolved screen-definition pointer — de-dupes against the
+active screen array, gates on a depth/flag check, and, if the newly-pushed entry's own flag bit
+`0x2` is set, raises visibility-change notification `0x007b4300`) and `0x007b4750` (a thin wrapper
+that resolves a numeric screen code against its own registry before tail-calling `0x007b4640` —
+this is the exact "shared open UI screen code N primitive" mode 6's own enter handler already
+uses, above). An exhaustive pass over all ~35 call sites of these two functions ruled out every
+candidate that could be independently characterized: the world-map GPS ping overlay (`0x0083ba10`,
+screen code `0x1a`), a world-interact-trigger popup (`0x00a02dc0`, code `0x33`), a horde-mode-only
+screen (`0x006e8a10`, code `0x3e`), the co-op network-replication receive side of
+`hud_push_screen` (`0x008b8b90`), and the co-op host-migration "return to main menu" path
+(`0x007adce0`, codes `3`/`4`, reaching the already-documented `"Pause_menu_save_for_server_drop"`
+hook). Two further call sites (`0x005ee2c0`, `0x00614530`) share a distinct shape — a generic
+per-object bitfield test followed by either pushing a pre-cached screen pointer or deferring via a
+pending byte, each reached only through a bare data/function-pointer reference rather than a
+resolvable direct call — plausibly backing a sub-dialog confirm/cancel flow (e.g.
+`pause_options_display_cal`) rather than the top-level opener, not confirmed. **Separately,
+exhaustive grep over the complete extracted `interface.vpp_pc` Lua layer (~400 files) found no
+`push_screen("pause_menu_common")` or `push_screen("pause_menu_top")` call anywhere, and `hud.lua`'s
+own input tracker never subscribes to the `"pause"` event** — a clean confirmation, not merely an
+absence, that the open transition is unreachable from Lua and must be native-only. The literal
+binding remains OPEN. The phone/cellphone menu (a structurally parallel, separately pushed
+screen-stack subtree — see `spec-cellphone-menu-runtime.md`) shows the exact same "unreachable
+from Lua" shape for its own top-level open, suggesting one shared native dispatcher mechanism
+opens both pause and phone, gated on different conditions — plausible, not proven.
+
+**Exhausted 2026-10-10 — every known `0x007b4750` call site is now individually characterized,
+and NONE of them is the pause-menu or phone-menu open; the search pivots to the input side.** The
+dozen previously-untraced sites all resolve cleanly to other subsystems: `0x007bd890`/
+`0x007bd910`/`0x007bd980` are three sibling setup stubs (one dispatcher, `0x006d8fb0`) for a
+single parameterized confirm/message-box screen (code `0x38`, three button-layout subtypes);
+`0x007c0130`/`0x007c01c0`/`0x007c0240`/`0x007c02d0` are four more siblings in the same message-box
+family (codes `0x35`/`0x37`/`0x36`/`0x39`), each reached from multiple unrelated gameplay/mission
+call sites rather than one dedicated opener; `0x007c0d50` (code `0x43`) is an isolated UI-flag
+screen; `0x005f0770` (code `0x33`) is a third member of a "bare data-ref, per-object class-flag
+test" shape already seen in `0x005ee2c0`/`0x00614530` above — plausibly more sub-dialog confirm
+flows, still not a top-level opener; `0x006c9400` (code `0x40`) is an object-condition/percentage
+warning popup; `0x006ee130` (code `0x3f`) is an activity/diversion-completion results screen
+reached only through a per-entity state-dispatch table; `0x0080cc90` (code `0x28`) is a
+world-interactable (shop-type) open/close toggle; `0x007af660`/`0x007af6c0` both push codes `9`
+then `10` — the SAME two screen codes mode 6's control-scheme registrar already uses, above — a
+controller-connect/disconnect reconfiguration-prompt pair, not pause/phone. The previously-uncertain
+`0x0072d660` is now CONFIRMED to genuinely call `0x007b4750` (code `0x44`): it is exactly the
+already-documented 20-entry cutscene-lifecycle dispatcher on `0x0153b520`
+(`spec-lua-api-behaviour.md` §26.25), gated on cutscene-only flags — a real call site, just an
+unrelated subsystem. **The next step is no longer more `0x007b4750` call-site enumeration (that
+list is exhausted) but tracing backward from the input side instead** — either the shared
+game-pause depth counter's ~60 push sites (§37.3) or the control-action/button-map registration
+for the conventional pause/menu button, neither chased yet. A recurring "is screen N already
+pushed" helper trio (`0x007b3ba0`/`0x007b3c50`/`0x007e1f40`) showed up across several of the
+ruled-out subsystems and is itself unopened — tracing its own callers exhaustively might surface
+additional push-adjacent call sites that don't go through `0x007b4750` directly.
+
 Mode 6 (`0x007e1d10`, resolved this pass) is the **control-scheme/key-bindings configuration UI**, not
 the pause menu as a whole — it loads `control_scheme_text.xtbl` and dispatches UI screen codes 9/10 (one
 controller) or `0x19` (25, two controllers, gated on flag `0x0229cd98`) via the shared dialog-open
@@ -370,7 +424,14 @@ primitive `0x007b4750`.
    file, build defaults" branch of `0x00B98C00`/`0x00B97310` or a player-object constructor, neither
    opened.
 2. The literal pause-menu-open input binding — which input handler pushes the pause-menu screen, and
-   which specific one of the ~60 pause-depth push sites it uses (§7).
+   which specific one of the ~60 pause-depth push sites it uses (§7). **Narrowed 2026-10-10, then
+   exhausted on the screen-push side the same day:** the push primitives themselves
+   (`0x007b4640`/`0x007b4750`) are now fully decompiled; EVERY known call site of either (~35 total)
+   has been individually characterized and none of them is the pause-menu or phone-menu open;
+   confirmed unreachable from Lua (exhaustive grep over the full UI Lua layer). **The search has
+   pivoted off screen-push call sites entirely — the next step is the input side**: either the
+   shared game-pause depth counter's ~60 push sites (§37.3) or the control-action/button-map
+   registration for the conventional pause/menu button (§7).
 3. The real identity of UI screen codes `5`/`0xb`/`0x11`/`9`/`10`/`0x19` the various dispatchers above
    branch on (§6/§7).
 4. `0x006fe180`'s own body — the consumer of new-game's 20-byte transition-request template (§2).
@@ -420,6 +481,31 @@ executable's own data sections, not sourced externally.
 ---
 
 ## Changelog
+
+- **2026-10-10 — §7/§9: all ~35 push-screen call sites exhausted, none is the pause/phone open —
+  search pivots to the input side** (SPEC TEAM, agent `a9f56b402bc4788b5`). Traced all 12
+  remaining `0x007b4750` call sites plus re-checked one uncertain lead (`0x0072d660`, confirmed to
+  genuinely call it, for the unrelated cutscene-lifecycle dispatcher). Every one resolves cleanly
+  to a different subsystem: a generic parameterized message-box family (6 sites), object-condition/
+  activity-result popups (2 sites), a single-purpose UI flag toggle, a world-interactable
+  shop-type toggle, the already-documented controller-reconfiguration prompt pair (same codes
+  `9`/`10` as mode 6), and the cutscene dispatcher. **No input-query or per-frame-tick call was
+  found feeding any of them** — the literal pause/phone-open binding is NOT reachable via further
+  screen-push enumeration; the concrete next step is now the shared pause-depth counter's ~60 push
+  sites (§37.3) or the control-action/button-map registration directly, not more `0x007b4750`
+  callers. Full raw research: `scratchpad/phone_pause_research_2026-10-10/` (shared with the prior
+  pass). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §7/§9: pause-menu push-primitive decompiled, search narrowed but not closed; new
+  phone-menu cross-reference** (SPEC TEAM, agent `a9f302a03e2e9c69c`). Fully decompiled both
+  push-screen primitives (`0x007b4640`/`0x007b4750`) and ruled out 6 of their ~35 call sites as
+  unrelated subsystems (map ping, world trigger, horde, co-op replication, host migration).
+  Confirmed by exhaustive grep over the complete `interface.vpp_pc` Lua layer that the pause-open
+  transition is unreachable from Lua — native-only, as suspected. A dozen untraced call sites
+  remain as the concrete next step. New companion file `spec-cellphone-menu-runtime.md` documents
+  the phone menu's full screen/document structure, which shares the same "unreachable from Lua"
+  open-transition shape. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
 
 - **2026-10-08 — §2's closing paragraph narrowed: the exact mission-1 zone and marker are now
   identified** (SPEC TEAM, agent `a30695cf2a54f0459`). `sr3_city~fm01.czn_pc` carries a

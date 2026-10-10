@@ -692,8 +692,10 @@ void testScriptVehicleFamilyPresentAndAbsent() {
         buildSingleRecordWithProperty(sr3zone::ScriptVehicleHpPropertyId(), /*kind=*/1, dataU32, buf);
     CHECK(sec.records.size() == 1);
     CHECK(sr3zone::ScriptVehicleHp(sec.records[0]).value_or(0) == 10000u);
-    CHECK(!sr3zone::ScriptVehicleFlags(sec.records[0]).has_value());  // absent on this record
-    CHECK(!sr3zone::ScriptVehicleMpTeam(sec.records[0]).has_value()); // absent on this record
+    CHECK(!sr3zone::ScriptVehicleFlags(sec.records[0]).has_value());      // absent on this record
+    CHECK(!sr3zone::ScriptVehicleMpTeam(sec.records[0]).has_value());     // absent on this record
+    CHECK(!sr3zone::ScriptVehicleTypeName(sec.records[0]).has_value());   // absent on this record
+    CHECK(!sr3zone::ScriptVehicleVariantName(sec.records[0]).has_value()); // absent on this record
 
     std::string teamStr = "Luchadores"; // Sec11.7's own real gang-name example (script_npc_team)
     std::vector<uint8_t> dataTeam(teamStr.begin(), teamStr.end());
@@ -702,6 +704,167 @@ void testScriptVehicleFamilyPresentAndAbsent() {
     sr3zone::ObjectsSection sec2 =
         buildSingleRecordWithProperty(sr3zone::ScriptNpcTeamPropertyId(), /*kind=*/7, dataTeam, buf2);
     CHECK(sr3zone::ScriptNpcTeam(sec2.records[0]).value_or("") == teamStr);
+}
+
+// NEW 2026-10-10 (vehicle-class xtbl wiring task): `script_vehicle_type_name`/
+// `script_vehicle_variant_name` were spec-cited (Sec11.7's own "_type_name"/
+// "_variant_name" naming of the rest of the script_vehicle_* family) but had
+// no property-id/accessor pair implemented at all until this task - this is
+// the real zone-spawn-to-vehicle-type join key EngineState::
+// loadZoneObjectsSection() now uses (src/lua_engine_state.cpp) to populate
+// VehicleState::flyingType from sr3vehicleinfo::ParseAllVehicles' own
+// already-correct class data instead of leaving it OPEN.
+void testScriptVehicleTypeNameAndVariantName() {
+    std::string typeNameStr = "heli_variant_pierce"; // a plausible <name>_veh.xtbl key, not a cited real value
+    std::vector<uint8_t> data(typeNameStr.begin(), typeNameStr.end());
+    data.push_back(0x00);
+    std::vector<uint8_t> buf;
+    sr3zone::ObjectsSection sec =
+        buildSingleRecordWithProperty(sr3zone::ScriptVehicleTypeNamePropertyId(), /*kind=*/7, data, buf);
+    CHECK(sec.records.size() == 1);
+    CHECK(sr3zone::ScriptVehicleTypeName(sec.records[0]).value_or("") == typeNameStr);
+    CHECK(!sr3zone::ScriptVehicleVariantName(sec.records[0]).has_value()); // absent on this record
+
+    std::string variantStr = "red";
+    std::vector<uint8_t> dataVariant(variantStr.begin(), variantStr.end());
+    dataVariant.push_back(0x00);
+    std::vector<uint8_t> buf2;
+    sr3zone::ObjectsSection sec2 =
+        buildSingleRecordWithProperty(sr3zone::ScriptVehicleVariantNamePropertyId(), /*kind=*/7, dataVariant, buf2);
+    CHECK(sr3zone::ScriptVehicleVariantName(sec2.records[0]).value_or("") == variantStr);
+    CHECK(!sr3zone::ScriptVehicleTypeName(sec2.records[0]).has_value()); // absent on this record
+
+    // The two ids are distinct (computed from distinct literal strings) -
+    // never collapse to the same property by accident.
+    CHECK(sr3zone::ScriptVehicleTypeNamePropertyId() != sr3zone::ScriptVehicleVariantNamePropertyId());
+}
+
+// NEW 2026-10-10 (Trigger_Volume on-disk shape/extent/radius wiring task):
+// spec-lua-api-behaviour.md Sec1.14's own "On-disk gaps - RESOLVED
+// 2026-10-10" paragraph / spec-zone-data-format.md Sec11.7's own "A third
+// class resolved" paragraph. Values below for the box/cylinder cases mirror
+// the REAL `on_boat_trigger` record tools/zone_object_resolver_probe.cpp
+// read directly off the real shipped `sr3_city_0.vpp_pc` (box) and a
+// plausible-but-not-cited cylinder example (Sec1.14 gives the field
+// layout/widths, not a real cylinder trigger's own numbers).
+void testTriggerShapeBoxBothParamsPresent() {
+    RecordSpec r;
+    r.classHash = 7;
+    // trigger_shape_type = "bounding box" (the REAL on-disk string this
+    // task's own population scan found, 905/1277 real Trigger_Volume
+    // records - not the bare word "box").
+    std::string shapeType = "bounding box";
+    std::vector<uint8_t> shapeTypeData(shapeType.begin(), shapeType.end());
+    shapeTypeData.push_back(0x00);
+    appendPropertyEntry(r.extraTailBytes, /*kind=*/7, sr3zone::TriggerShapeTypePropertyId(), shapeTypeData);
+    // REAL on_boat_trigger min/max corner (12 bytes each, 3 float32s).
+    std::vector<uint8_t> minData(12), maxData(12);
+    float minXyz[3] = {-87.8214f, 0.0f, -22.2829f};
+    float maxXyz[3] = {87.8214f, 30.7825f, 22.2829f};
+    std::memcpy(minData.data(), minXyz, 12);
+    std::memcpy(maxData.data(), maxXyz, 12);
+    appendPropertyEntry(r.extraTailBytes, /*kind=*/2, sr3zone::TriggerShapeParam1PropertyId(), minData);
+    appendPropertyEntry(r.extraTailBytes, /*kind=*/2, sr3zone::TriggerShapeParam2PropertyId(), maxData);
+    ObjectsSpec spec;
+    spec.records.push_back(r);
+    std::vector<uint8_t> buf;
+    appendObjectsPayload(buf, spec);
+    sr3zone::ObjectsSection sec = sr3zone::ZoneObjects::parseAt(sr3zone::ByteView(buf.data(), buf.size()), 0);
+    CHECK(sec.records.size() == 1);
+
+    auto shapeTypeText = sr3zone::TriggerShapeType(sec.records[0]);
+    CHECK(shapeTypeText.value_or("") == "bounding box");
+    CHECK(sr3zone::TriggerShapeCodeForTypeString(shapeTypeText.value_or("")).value_or(-1) == 0);
+
+    const sr3zone::ObjectPropertyEntry* p1 = sr3zone::TriggerShapeParam1(sec.records[0]);
+    const sr3zone::ObjectPropertyEntry* p2 = sr3zone::TriggerShapeParam2(sec.records[0]);
+    CHECK(p1 != nullptr && p2 != nullptr);
+    auto vmin = p1 ? sr3zone::DecodePropertyAsVec3(*p1) : std::nullopt;
+    auto vmax = p2 ? sr3zone::DecodePropertyAsVec3(*p2) : std::nullopt;
+    CHECK(vmin.has_value() && vmax.has_value());
+    CHECK(vmin->x == -87.8214f && vmin->y == 0.0f && vmin->z == -22.2829f);
+    CHECK(vmax->x == 87.8214f && vmax->y == 30.7825f && vmax->z == 22.2829f);
+
+    // Absence case: a plain record with no trigger_shape_* properties at all.
+    RecordSpec plain;
+    plain.classHash = 7;
+    ObjectsSpec spec2;
+    spec2.records.push_back(plain);
+    std::vector<uint8_t> buf2;
+    appendObjectsPayload(buf2, spec2);
+    sr3zone::ObjectsSection sec2 = sr3zone::ZoneObjects::parseAt(sr3zone::ByteView(buf2.data(), buf2.size()), 0);
+    CHECK(!sr3zone::TriggerShapeType(sec2.records[0]).has_value());
+    CHECK(sr3zone::TriggerShapeParam1(sec2.records[0]) == nullptr);
+    CHECK(sr3zone::TriggerShapeParam2(sec2.records[0]) == nullptr);
+}
+
+void testTriggerShapeSphereAndCylinderScalars() {
+    std::vector<uint8_t> radiusData(4);
+    float radius = 5.5f;
+    std::memcpy(radiusData.data(), &radius, 4);
+    std::vector<uint8_t> buf;
+    sr3zone::ObjectsSection sec =
+        buildSingleRecordWithProperty(sr3zone::TriggerShapeParam1PropertyId(), /*kind=*/1, radiusData, buf);
+    CHECK(sec.records.size() == 1);
+    const sr3zone::ObjectPropertyEntry* p1 = sr3zone::TriggerShapeParam1(sec.records[0]);
+    CHECK(p1 != nullptr);
+    auto decoded = p1 ? sr3zone::DecodePropertyAsFloat(*p1) : std::nullopt;
+    CHECK(decoded.has_value() && decoded.value() == 5.5f);
+    CHECK(sr3zone::TriggerShapeParam2(sec.records[0]) == nullptr); // absent, sphere never reads param2
+
+    // Cylinder length (param2), same scalar decode.
+    std::vector<uint8_t> lengthData(4);
+    float length = 12.0f;
+    std::memcpy(lengthData.data(), &length, 4);
+    std::vector<uint8_t> buf2;
+    sr3zone::ObjectsSection sec2 =
+        buildSingleRecordWithProperty(sr3zone::TriggerShapeParam2PropertyId(), /*kind=*/1, lengthData, buf2);
+    const sr3zone::ObjectPropertyEntry* p2 = sr3zone::TriggerShapeParam2(sec2.records[0]);
+    CHECK(p2 != nullptr);
+    auto decodedLen = p2 ? sr3zone::DecodePropertyAsFloat(*p2) : std::nullopt;
+    CHECK(decodedLen.has_value() && decodedLen.value() == 12.0f);
+}
+
+void testTriggerShapeCodeForTypeStringRealMapping() {
+    // Real on-disk strings this task's own population scan found (1,277 real
+    // Trigger_Volume records, 0 missing, 0 unmapped): "sphere" (118),
+    // "cylinder" (254), "bounding box" (905) - see zone_objects.cpp's own
+    // citation for the full scan result.
+    CHECK(sr3zone::TriggerShapeCodeForTypeString("sphere").value_or(-1) == 1);
+    CHECK(sr3zone::TriggerShapeCodeForTypeString("cylinder").value_or(-1) == 2);
+    CHECK(sr3zone::TriggerShapeCodeForTypeString("bounding box").value_or(-1) == 0);
+    // Case-insensitive (defensive, Sec1.14 does not state the real lookup's
+    // own case sensitivity).
+    CHECK(sr3zone::TriggerShapeCodeForTypeString("SPHERE").value_or(-1) == 1);
+    CHECK(sr3zone::TriggerShapeCodeForTypeString("Bounding Box").value_or(-1) == 0);
+    // An unobserved string must never guess.
+    CHECK(!sr3zone::TriggerShapeCodeForTypeString("tetrahedron").has_value());
+}
+
+void testDecodePropertyAsFloatAndVec3RejectOtherWidths() {
+    sr3zone::ObjectPropertyEntry e;
+    e.data = {0x01, 0x02, 0x03}; // 3 bytes - not a plain float32 width
+    CHECK(!sr3zone::DecodePropertyAsFloat(e).has_value());
+    sr3zone::ObjectPropertyEntry e2;
+    e2.data = {0x01, 0x02, 0x03, 0x04, 0x05}; // 5 bytes - not 12
+    CHECK(!sr3zone::DecodePropertyAsVec3(e2).has_value());
+}
+
+void testTriggerPropertyIdsAreDistinct() {
+    // Every id in this family must be distinct - never collapse two
+    // different property names to the same hash by accident.
+    const std::vector<uint32_t> ids = {
+        sr3zone::TriggerShapeTypePropertyId(),   sr3zone::TriggerShapeParam1PropertyId(),
+        sr3zone::TriggerShapeParam2PropertyId(), sr3zone::TriggerFlagsPropertyId(),
+        sr3zone::TriggerActionPropertyId(),      sr3zone::TriggerActionParamPropertyId(),
+        sr3zone::TriggerActionParam2PropertyId(),sr3zone::TriggerUseMessagePropertyId(),
+        sr3zone::TriggerMaxFiresPropertyId(),    sr3zone::TriggerDelayPropertyId(),
+        sr3zone::TriggerSyncPropertyId()};
+    for (size_t i = 0; i < ids.size(); ++i) {
+        for (size_t j = i + 1; j < ids.size(); ++j) {
+            CHECK(ids[i] != ids[j]);
+        }
+    }
 }
 
 void testDecodePropertyAsUnsignedIntRejectsOddWidths() {
@@ -873,6 +1036,7 @@ int main() {
     run("testScriptNpcHpPresentAndAbsent", testScriptNpcHpPresentAndAbsent);
     run("testScriptNpcFlagsContainsIgnoreAi", testScriptNpcFlagsContainsIgnoreAi);
     run("testScriptVehicleFamilyPresentAndAbsent", testScriptVehicleFamilyPresentAndAbsent);
+    run("testScriptVehicleTypeNameAndVariantName", testScriptVehicleTypeNameAndVariantName);
     run("testDecodePropertyAsUnsignedIntRejectsOddWidths", testDecodePropertyAsUnsignedIntRejectsOddWidths);
 
     run("testPositionPropertyIdPinnedValue", testPositionPropertyIdPinnedValue);
@@ -883,6 +1047,12 @@ int main() {
     run("testObjectPositionPresentAndAbsent", testObjectPositionPresentAndAbsent);
     run("testNavpointFlagsPropertyIdMatchesNameHash", testNavpointFlagsPropertyIdMatchesNameHash);
     run("testNavpointFlagsPresentAndAbsent", testNavpointFlagsPresentAndAbsent);
+
+    run("testTriggerShapeBoxBothParamsPresent", testTriggerShapeBoxBothParamsPresent);
+    run("testTriggerShapeSphereAndCylinderScalars", testTriggerShapeSphereAndCylinderScalars);
+    run("testTriggerShapeCodeForTypeStringRealMapping", testTriggerShapeCodeForTypeStringRealMapping);
+    run("testDecodePropertyAsFloatAndVec3RejectOtherWidths", testDecodePropertyAsFloatAndVec3RejectOtherWidths);
+    run("testTriggerPropertyIdsAreDistinct", testTriggerPropertyIdsAreDistinct);
 
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed.\n";

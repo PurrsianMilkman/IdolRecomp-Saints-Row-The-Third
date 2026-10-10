@@ -13,12 +13,14 @@
 // splits the tagged list.
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "sr3luahost/engine_state.h"
 #include "sr3luahost/host.h"
 #include "sr3luahost/stub_registry.h"
 #include "sr3save/save_crc.h"
+#include "sr3zone/zone_objects.h"
 
 using namespace sr3luahost;
 
@@ -377,19 +379,57 @@ int main() {
     CHECK(es.helicopterFlyTo().lastRequest.at("heli01").useOrientationMode == true);
     CHECK(es.helicopterFlyTo().lastRequest.at("heli01").applied == true);
 
-    // 2026-10-10 regression test: EngineState::getOrCreateVehicle()'s one
-    // literal-name seed for "m05_heli_pierce" (Team A spec sync, HANDOFF.md
-    // commit 849a88e - the real field at (vehicle+0xbf4)+0x2c is the
-    // vehicle-TYPE class enum, CONFIRMED 3 = heli, static per-type data).
-    // Unlike "heli01" just above (which still needed an explicit
-    // qualifies.set()), this ONE hardcoded name must already qualify with
-    // NO test setup at all, and its VehicleState::flyingType must already
-    // read 3 - while a vehicle with "heli" in its name that is NOT this
-    // exact literal string must still behave exactly like "heli01" (OPEN
-    // until set), proving this is a single hardcoded exception, not a
-    // general name-substring heuristic.
-    es.objectResolves().set("m05_heli_pierce", true);
-    ok(host, gp, "helicopter_fly_to_set_goal_direction('m05_heli_pierce', '')"); // no qualifies.set() needed
+    // UPDATED 2026-10-10 (vehicle-class xtbl wiring task): this used to be a
+    // regression test for EngineState::getOrCreateVehicle()'s one hardcoded
+    // "m05_heli_pierce" literal-name seed (Team A spec sync, HANDOFF.md
+    // commit 849a88e). That seed is REMOVED - the real, general, data-driven
+    // mechanism it was a stopgap for now exists:
+    // EngineState::loadZoneObjectsSection() resolves a zone-placed
+    // "Script_Vehicle" record's own `script_vehicle_type_name` property
+    // against installVehicleTypeClassTable()'s real xtbl-sourced class data
+    // (see that method's own doc comment, engine_state.h). This test is
+    // rewritten to prove the SAME real-world fact (m05's own pierce
+    // helicopter resolves to class 3/heli) through that real mechanism
+    // instead: a synthetic zone record (the exact shape
+    // tests/synthetic_zone_object_resolver_test.cpp already establishes for
+    // this project's "build a sr3zone::ObjectRecord by hand, no raw byte
+    // buffer needed" fixture convention) carrying `ctg_object_name` =
+    // "m05_heli_pierce" and `script_vehicle_type_name` = a vehicle-type key,
+    // joined against a synthetic installVehicleTypeClassTable() entry for
+    // that exact key -> class 3 (the same real class value
+    // sr3vehicleinfo::ParseAllVehicles would compute from the real
+    // `<name>_veh.xtbl` row, not re-derived here - this test only proves the
+    // JOIN mechanism, not the xtbl reader itself, which synthetic_
+    // vehicleinfo_test.cpp already covers separately). No manual
+    // flyingType.set()/qualifies.set() call anywhere in this block - every
+    // value below comes from the data-driven path.
+    //
+    // A vehicle with "heli" in its name but no matching zone-spawn record at
+    // all (e.g. "another_heli_gunship" below) still behaves exactly like
+    // "heli01" above (OPEN until a test .set()s it), proving this is real
+    // zone-data-driven resolution, not a name-substring heuristic.
+    {
+        sr3zone::ObjectRecord rec;
+        rec.hasName = true;
+        rec.nameText = "m05_heli_pierce";
+        rec.classHash = sr3save::nameHash("Script_Vehicle");
+        std::string typeName = "heli_variant_pierce"; // a plausible <name>_veh.xtbl key, not a cited real value
+        sr3zone::ObjectPropertyEntry typeNameProp;
+        typeNameProp.id = sr3zone::ScriptVehicleTypeNamePropertyId();
+        typeNameProp.kind = 7; // matches this project's own text-property convention (synthetic_zone_objects_test.cpp)
+        typeNameProp.size = static_cast<uint16_t>(typeName.size());
+        typeNameProp.data.assign(typeName.begin(), typeName.end());
+        rec.tailEntries.push_back(typeNameProp);
+
+        std::unordered_map<std::string, int32_t> classTable;
+        classTable[AsciiLowerFold(typeName)] = 3; // 3 = heli (CONFIRMED value, Sec28.2/Sec30.5/Sec33.1)
+        es.installVehicleTypeClassTable(classTable);
+
+        sr3zone::ObjectsSection section;
+        section.records.push_back(rec);
+        es.loadZoneObjectsSection(section);
+    }
+    ok(host, gp, "helicopter_fly_to_set_goal_direction('m05_heli_pierce', '')"); // no qualifies.set() needed - real zone data drove this
     CHECK(es.getOrCreateVehicle("m05_heli_pierce").flyingType.get() == 3);
     es.objectResolves().set("another_heli_gunship", true);
     fails(host, gp, "helicopter_fly_to_set_goal_direction('another_heli_gunship', 'target01')", "0x00ad31a0");

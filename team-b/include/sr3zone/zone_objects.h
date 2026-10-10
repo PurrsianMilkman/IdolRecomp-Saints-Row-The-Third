@@ -372,9 +372,24 @@ std::string DecodePropertyAsText(const ObjectPropertyEntry& entry);
 // to real gang-name strings. Sec11.7 names the REST of the
 // `script_vehicle_*` family (`_flags`/`_mp_team`/`_peer`/`_resource_uid`/
 // `_type_name`/`_variant_name`) by literal string but gives a population
-// count only for `_hp` - `script_vehicle_flags`/`script_vehicle_mp_team`
-// below are real, spec-cited names, just without an independent count
-// citation of their own.
+// count only for `_hp` - `script_vehicle_flags`/`script_vehicle_mp_team`/
+// `script_vehicle_type_name`/`script_vehicle_variant_name` below are real,
+// spec-cited names, just without an independent count citation of their
+// own.
+//
+// NEW 2026-10-10 (vehicle-class xtbl wiring task): `script_vehicle_type_name`
+// is the real zone-spawn-to-vehicle-type connection this project's own
+// EngineState (src/lua_engine_state.cpp, loadZoneObjectsSection) was
+// missing - a placed `Script_Vehicle` object's own property naming which
+// real `<name>_veh.xtbl` row (sr3vehicleinfo::VehicleEntry::name) it is an
+// instance of, exactly the join key a caller needs to look up that type's
+// REAL class (sr3vehicleinfo::VehicleTypeUnion::vehicleClass) and populate
+// VehicleState::flyingType for a zone-placed vehicle instance instead of
+// leaving it OPEN. `script_vehicle_variant_name` is spec-cited alongside it
+// (a vehicle may ship authored colour/customisation variants per
+// spec-vehicle-data.md) but nothing in this project's current scope
+// consumes it - exposed here on the same footing as every other named
+// property this header already decodes, not because a caller needs it yet.
 //
 // NOTE: the task brief that requested this family paraphrased the vehicle
 // member as "script_vehicle_team" - Sec11.7's own literal text gives
@@ -392,6 +407,8 @@ uint32_t ScriptNpcTeamPropertyId();
 uint32_t ScriptVehicleHpPropertyId();
 uint32_t ScriptVehicleFlagsPropertyId();
 uint32_t ScriptVehicleMpTeamPropertyId();
+uint32_t ScriptVehicleTypeNamePropertyId();
+uint32_t ScriptVehicleVariantNamePropertyId();
 
 // Named, typed convenience accessors built on FindTailEntryById() +
 // DecodePropertyAsUnsignedInt()/DecodePropertyAsText() above. Each returns
@@ -406,6 +423,8 @@ std::optional<std::string> ScriptNpcTeam(const struct ObjectRecord& rec);
 std::optional<uint64_t> ScriptVehicleHp(const struct ObjectRecord& rec);
 std::optional<std::string> ScriptVehicleFlags(const struct ObjectRecord& rec);
 std::optional<std::string> ScriptVehicleMpTeam(const struct ObjectRecord& rec);
+std::optional<std::string> ScriptVehicleTypeName(const struct ObjectRecord& rec);
+std::optional<std::string> ScriptVehicleVariantName(const struct ObjectRecord& rec);
 
 // NEW 2026-10-08 (spec-ai-runtime.md Sec15.1/Sec15.3, the Navpoint/
 // `cover_node` movement-target-selection unit): the generic position/
@@ -484,6 +503,90 @@ std::optional<Position3f> ObjectPosition(const struct ObjectRecord& rec);
 // kPositionPropertyId above, where the spec itself states the numeric id).
 uint32_t NavpointFlagsPropertyId();
 std::optional<uint64_t> NavpointFlags(const struct ObjectRecord& rec);
+
+// NEW 2026-10-10 (`Trigger_Volume` on-disk shape/extent/radius wiring task):
+// spec-lua-api-behaviour.md Sec1.14's own "On-disk gaps - RESOLVED 2026-10-10"
+// paragraph (cross-referenced from spec-zone-data-format.md Sec11.7's own
+// "A third class resolved" paragraph) gives the real named tail properties a
+// `Trigger_Volume` object's class-specific vtable-`+0x04` parser reads:
+// `trigger_shape_type` (a STRING, resolved through a name-to-enum lookup
+// at load time into the runtime shape code 0/1/2: 0=oriented box, 1=sphere,
+// 2=capped cylinder - the exact on-disk STRING SPELLINGS that lookup accepts
+// are not given; Sec1.14 itself says "literal shape-name strings not traced
+// to full depth"), `trigger_shape_param1`/`trigger_shape_param2` (box: BOTH
+// read as 3-component float vectors, the box's own local-space min/max
+// corner; sphere: param1 only, a scalar f32 radius, param2 not read at all;
+// cylinder: both scalars, param1=radius, param2=length), plus
+// `trigger_flags`/`trigger_action`/`trigger_action_param`/
+// `trigger_action_param_2`/`trigger_use_message`/`trigger_max_fires`/
+// `trigger_delay`/`trigger_sync` (exposed here on the same footing as the
+// shape fields - not all are consumed by this project's own
+// TriggerVolumeGeometry yet, same "expose everything the spec names, let a
+// future caller decide what it needs" convention as script_vehicle_variant_
+// name above). Every id computed via sr3save::nameHash(), per this header's
+// own house convention (Sec1.14 gives NAME strings for these properties, not
+// numeric ids - same situation as the script_npc_*/script_vehicle_*/
+// navpoint_flags family above, contrast kCtgObjectNamePropertyId/
+// kPositionPropertyId which the spec DOES give numeric ids for directly).
+uint32_t TriggerShapeTypePropertyId();
+uint32_t TriggerShapeParam1PropertyId();
+uint32_t TriggerShapeParam2PropertyId();
+uint32_t TriggerFlagsPropertyId();
+uint32_t TriggerActionPropertyId();
+uint32_t TriggerActionParamPropertyId();
+uint32_t TriggerActionParam2PropertyId();
+uint32_t TriggerUseMessagePropertyId();
+uint32_t TriggerMaxFiresPropertyId();
+uint32_t TriggerDelayPropertyId();
+uint32_t TriggerSyncPropertyId();
+
+// Generic decoders this family needs beyond DecodePropertyAsUnsignedInt()/
+// DecodePropertyAsText()/DecodePropertyAsPosition() above: a plain scalar
+// float32 (trigger_shape_param1 for sphere/cylinder) and a plain 3-float
+// vector with NO position-property semantics implied (trigger_shape_param1/2
+// for a box - the box's own local-space min/max CORNER, not an object
+// position; reusing Position3f's own field names (x/y/z) only because the
+// shape is identical, not because this is a position). Both return
+// std::nullopt for any other byte width - never guessed at, same convention
+// as every other DecodePropertyAs*() in this header.
+std::optional<float> DecodePropertyAsFloat(const ObjectPropertyEntry& entry);
+std::optional<Position3f> DecodePropertyAsVec3(const ObjectPropertyEntry& entry);
+
+// Named, typed convenience accessors, same FindTailEntryById() mechanism as
+// every other family in this header. ScriptNpcFlags()-style raw-string
+// accessor for the shape-type name (the enum resolution itself - matching
+// the on-disk string against whatever literal spellings the real
+// name-to-enum lookup accepts - is NOT done here: Sec1.14 does not give
+// those spellings, so this reader surfaces the raw authored string and lets
+// a caller apply its own empirically-grounded mapping, exactly this
+// project's "never guess, read real data instead" convention; see
+// TriggerShapeCodeForTypeString() below for that empirical mapping, built
+// from real `.czn_pc` population data rather than from the unreached literal
+// strings). TriggerShapeParam1/2 return the RAW property entry (not a
+// decoded value) because which decoder applies (DecodePropertyAsFloat vs
+// DecodePropertyAsVec3) depends on the shape code, which the caller must
+// already have resolved.
+std::optional<std::string> TriggerShapeType(const struct ObjectRecord& rec);
+const ObjectPropertyEntry* TriggerShapeParam1(const struct ObjectRecord& rec);
+const ObjectPropertyEntry* TriggerShapeParam2(const struct ObjectRecord& rec);
+std::optional<std::string> TriggerActionParam(const struct ObjectRecord& rec);
+std::optional<uint64_t> TriggerMaxFires(const struct ObjectRecord& rec);
+std::optional<uint64_t> TriggerDelay(const struct ObjectRecord& rec);
+
+// Empirically-grounded shape-type string -> runtime enum mapping (2026-10-10):
+// built from a real `.czn_pc` population scan (tools/zone_object_resolver_
+// probe.cpp's own trigger-shape extension, run against the real shipped
+// `sr3_city_0.vpp_pc`; this project reads real game files for this, never
+// disassembles - see this project's own standing clean-room boundary), NOT
+// from Sec1.14's own unreached literal strings. RESULT (1,277 real
+// Trigger_Volume records, classHash 0xf300989f, 0 missing the property, 0
+// unmapped): exactly three distinct on-disk strings, "sphere" (118), "cylinder"
+// (254), and "bounding box" (905, NOT the bare word "box") - matched here by a
+// case-insensitive SUBSTRING test ("box"/"sphere"/"cylinder") so "bounding
+// box" still matches the first. Returns std::nullopt for any text the scan
+// did not observe - never guessed, matching Sec1.14's own "any other value
+// fails the containment test" framing for the runtime shape code.
+std::optional<int> TriggerShapeCodeForTypeString(const std::string& shapeTypeText);
 
 // One 0x2234-record: the 28-byte fixed head (Sec11.4) plus its variable
 // property tail (Sec11.7).

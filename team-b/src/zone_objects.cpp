@@ -1,5 +1,7 @@
 #include "sr3zone/zone_objects.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 
 namespace sr3zone {
@@ -200,6 +202,14 @@ uint32_t ScriptVehicleMpTeamPropertyId() {
     static const uint32_t id = sr3save::nameHash("script_vehicle_mp_team");
     return id;
 }
+uint32_t ScriptVehicleTypeNamePropertyId() {
+    static const uint32_t id = sr3save::nameHash("script_vehicle_type_name");
+    return id;
+}
+uint32_t ScriptVehicleVariantNamePropertyId() {
+    static const uint32_t id = sr3save::nameHash("script_vehicle_variant_name");
+    return id;
+}
 
 std::optional<uint64_t> ScriptNpcHp(const ObjectRecord& rec) {
     const ObjectPropertyEntry* e = FindTailEntryById(rec, ScriptNpcHpPropertyId());
@@ -228,6 +238,16 @@ std::optional<std::string> ScriptVehicleFlags(const ObjectRecord& rec) {
 }
 std::optional<std::string> ScriptVehicleMpTeam(const ObjectRecord& rec) {
     const ObjectPropertyEntry* e = FindTailEntryById(rec, ScriptVehicleMpTeamPropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsText(*e);
+}
+std::optional<std::string> ScriptVehicleTypeName(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, ScriptVehicleTypeNamePropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsText(*e);
+}
+std::optional<std::string> ScriptVehicleVariantName(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, ScriptVehicleVariantNamePropertyId());
     if (!e) return std::nullopt;
     return DecodePropertyAsText(*e);
 }
@@ -262,6 +282,117 @@ std::optional<uint64_t> NavpointFlags(const ObjectRecord& rec) {
     const ObjectPropertyEntry* e = FindTailEntryById(rec, NavpointFlagsPropertyId());
     if (!e) return std::nullopt;
     return DecodePropertyAsUnsignedInt(*e);
+}
+
+// --- Trigger_Volume on-disk shape/extent/radius (spec-lua-api-behaviour.md
+// Sec1.14 "On-disk gaps - RESOLVED 2026-10-10" / spec-zone-data-format.md
+// Sec11.7 "A third class resolved, 2026-10-10"), added 2026-10-10. ---
+
+uint32_t TriggerShapeTypePropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_shape_type");
+    return id;
+}
+uint32_t TriggerShapeParam1PropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_shape_param1");
+    return id;
+}
+uint32_t TriggerShapeParam2PropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_shape_param2");
+    return id;
+}
+uint32_t TriggerFlagsPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_flags");
+    return id;
+}
+uint32_t TriggerActionPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_action");
+    return id;
+}
+uint32_t TriggerActionParamPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_action_param");
+    return id;
+}
+uint32_t TriggerActionParam2PropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_action_param_2");
+    return id;
+}
+uint32_t TriggerUseMessagePropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_use_message");
+    return id;
+}
+uint32_t TriggerMaxFiresPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_max_fires");
+    return id;
+}
+uint32_t TriggerDelayPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_delay");
+    return id;
+}
+uint32_t TriggerSyncPropertyId() {
+    static const uint32_t id = sr3save::nameHash("trigger_sync");
+    return id;
+}
+
+std::optional<float> DecodePropertyAsFloat(const ObjectPropertyEntry& entry) {
+    if (entry.data.size() != 4) return std::nullopt; // not a plain float32 width
+    float v;
+    std::memcpy(&v, entry.data.data(), 4);
+    return v;
+}
+
+std::optional<Position3f> DecodePropertyAsVec3(const ObjectPropertyEntry& entry) {
+    if (entry.data.size() != 12) return std::nullopt; // plain X/Y/Z float32 triple only
+    Position3f p;
+    std::memcpy(&p.x, entry.data.data() + 0, 4);
+    std::memcpy(&p.y, entry.data.data() + 4, 4);
+    std::memcpy(&p.z, entry.data.data() + 8, 4);
+    return p;
+}
+
+std::optional<std::string> TriggerShapeType(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, TriggerShapeTypePropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsText(*e);
+}
+const ObjectPropertyEntry* TriggerShapeParam1(const ObjectRecord& rec) {
+    return FindTailEntryById(rec, TriggerShapeParam1PropertyId());
+}
+const ObjectPropertyEntry* TriggerShapeParam2(const ObjectRecord& rec) {
+    return FindTailEntryById(rec, TriggerShapeParam2PropertyId());
+}
+std::optional<std::string> TriggerActionParam(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, TriggerActionParamPropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsText(*e);
+}
+std::optional<uint64_t> TriggerMaxFires(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, TriggerMaxFiresPropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsUnsignedInt(*e);
+}
+std::optional<uint64_t> TriggerDelay(const ObjectRecord& rec) {
+    const ObjectPropertyEntry* e = FindTailEntryById(rec, TriggerDelayPropertyId());
+    if (!e) return std::nullopt;
+    return DecodePropertyAsUnsignedInt(*e);
+}
+
+// Empirical mapping (2026-10-10, tools/zone_object_resolver_probe.cpp's own
+// trigger-shape population scan against real sr3_city_0.vpp_pc data: 1,277
+// real Trigger_Volume records, 0 missing trigger_shape_type, 0 unmapped).
+// Exactly three distinct on-disk strings were observed: "sphere" (118),
+// "cylinder" (254), and "bounding box" (905 - not the bare word "box", which
+// is why this is a SUBSTRING test rather than an exact match). A
+// case-insensitive compare is used defensively - Sec1.14 does not state the
+// real lookup's own case sensitivity, so this reader is deliberately lenient
+// rather than silently rejecting a same-spelling-different-case real value.
+std::optional<int> TriggerShapeCodeForTypeString(const std::string& shapeTypeText) {
+    std::string lower = shapeTypeText;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (lower.find("box") != std::string::npos) return 0;
+    if (lower.find("sphere") != std::string::npos) return 1;
+    if (lower.find("cylinder") != std::string::npos) return 2;
+    return std::nullopt;
 }
 
 ObjectsSection ZoneObjects::parseAt(ByteView cznContent, size_t payloadOffset) {

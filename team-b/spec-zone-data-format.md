@@ -1709,6 +1709,22 @@ meeting at the same vtable bytes. **[CONFIRMED — disassembly, both classes' re
 both resolved vtables read in full; CONFIRMED — empirical (exact byte match of 5 consecutive
 vtable slots between §9.3's and this section's independently-reached addresses).]**
 
+**A third class resolved, 2026-10-10: `Trigger_Volume`.** Its real, live vtable is `0x01170934`
+(written by both its constructor `0x0093b860` and destructor `0x0093ba90`) — this class deviates
+from the general_mover/script_npc pattern observed above: its constructor performs only a SINGLE
+vtable write, with no earlier transient "base" vtable observed, so the "two writes, take the
+second" heuristic does not hold universally and should be explicitly verified per class rather
+than assumed. Slot `+0x04` (`0x0093e520`) is itself the complete tail-property parser (after one
+pool-bounds guard call) — no further indirection needed, unlike the other two classes' thin
+wrapper-then-call-out shape. Full property-by-property mapping (shape type as an authored string
+resolved to an enum, box/sphere/cylinder-specific vec3/scalar property reads, flags/action/delay
+fields): `spec-lua-api-behaviour.md` §1.14 (primary splice, keeps the gameplay-semantics framing
+alongside the already-landed runtime layout there) — not repeated here to avoid duplicate
+maintenance. One genuinely open residual: the one-time class-registration stub (literal
+class-index byte + `0x02cc9900[classIndex]=descriptor` write) was not located for this class, only
+the per-instance constructor/destructor vtable-write site — the vtable identification itself does
+not depend on finding it, since it was confirmed by a different, equally direct route.
+
 **Bonus finding, population-wide: the `0x2239` top-level id ("Trailer") is not dead content — it
 is a universal end-of-chain terminator.** All 2,971/2,971 real shipped `.czn_pc` files carry
 exactly one `0x2239` record, always zero-length, always either the literal last top-level record
@@ -2314,6 +2330,15 @@ This directly confirms, from the real consumer's own arithmetic rather than file
 ---
 
 ## Changelog
+
+- **2026-10-10 — §11.7: `Trigger_Volume` added as a third resolved class-specific tail-property
+  parser, mission-blocking (routed by orchestrator)** (SPEC TEAM, agent `a94b114a2ccb78105`). Real
+  vtable `0x01170934`, slot `+0x04` (`0x0093e520`) is itself the complete parser, no further
+  indirection. Notably this class's constructor writes only ONE vtable, not two — the
+  general_mover/script_npc "two writes, take the second" heuristic does not hold universally and
+  must be checked per class. Full property-by-property mapping kept at
+  `spec-lua-api-behaviour.md` §1.14 (gameplay-semantics framing) to avoid duplicate maintenance.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-09 — new §11.10: named-object resolution end-to-end, a consolidated cross-reference for
   Team B's mission-host Phase 2** (SPEC TEAM, agent `a6a74141c0fa8dbe5`, WAVE 8 item 1). A

@@ -143,13 +143,18 @@ int main() {
     es.objectResolves().set("xd_open", true);
     ok(host, gp, "assert(vehicle_exit_do('xd_open') == false)"); // state 0 (default): neither seated nor cancel-eligible
 
-    // Seated: the exit request + 3 back-offs, pushes true.
+    // Seated, NON-instant (arg 2 false): the exit request + 3 back-offs,
+    // pushes true. Deliberately non-instant here so this character's own
+    // phase stays at 2 afterward, for the cancel-path/re-seat narrative
+    // right below - the dedicated instant-completion case (arg 2 true) has
+    // its own block further down, since it now ends at a DIFFERENT terminal
+    // phase (0, not 2 - see that block's own comment).
     es.registerAnimationStateIdForTesting("exit_dive", 77);
     CharacterState& xd = seatChar(es, "xd_seat", 3);
-    ok(host, gp, "assert(vehicle_exit_do('xd_seat', true, true, true, 'exit_dive') == true)");
+    ok(host, gp, "assert(vehicle_exit_do('xd_seat', false, true, true, 'exit_dive') == true)");
     CHECK(xd.vehicleExitRequestCount == 1);
     CHECK(xd.lastVehicleExitRequest.has_value());
-    CHECK(xd.lastVehicleExitRequest->instant == true);   // +0x30 bit 0 = arg 2
+    CHECK(xd.lastVehicleExitRequest->instant == false);   // +0x30 bit 0 = arg 2
     CHECK(xd.lastVehicleExitRequest->flag30Bit4 == true); // +0x30 bit 4 = arg 4
     CHECK(xd.lastVehicleExitRequest->animationOverrideId == 77);
     CHECK(xd.lastVehicleExitRequest->flag31Bit4 == false);
@@ -163,7 +168,9 @@ int main() {
     // Sec6.6.1 step 1 - Set-exit's own dispatch reaches state 0x14's
     // on-entry handler inside 0x00af3cd0's own call, zero world-tick
     // dependency) - the occupancy machine IS now advanced from here, unlike
-    // this comment's own pre-fix text.
+    // this comment's own pre-fix text. The NON-instant path stops here (2026-
+    // 10-10's own instant-completion fix does not touch this branch - see
+    // stub_vehicle_exit_do's own doc comment).
     CHECK(xd.stateEnum.get() == 2);
     CHECK(xd.vehicleExitCancelCount == 0);
     // CAE table sanity: ids 37-39 are the three "follow ... car" actions.
@@ -201,6 +208,24 @@ int main() {
     ok(host, gp, "vehicle_exit_do('xd_seat', false, nil, nil, 'unregistered_anim')");
     CHECK(xd.lastVehicleExitRequest->animationOverrideId == -1);
     CHECK(xd.vehicleExitRequestCount == 4);
+
+    // FIXED (2026-10-10, mission-drive m05 deadlock at vehicle_exit_teleport
+    // / game_lib.lua:3182 - the structural mirror of a10a9ba/b706fbb's own
+    // enter-side fix): arg 2 (instant) true completes all the way to the
+    // real release values instead of stopping at +0x16d4 = 2 - see
+    // stub_vehicle_exit_do's own doc comment, right after its
+    // `c.stateEnum.set(2);` line, for the full spec-player-runtime.md Sec6
+    // citation of why only the INSTANT path can be completed synchronously
+    // here. Fresh character: a real exit call left this one mid-exit (2),
+    // not seated (3), so it cannot be reused for this branch.
+    CharacterState& xi = seatChar(es, "xd_instant", 3);
+    xi.currentVehicleName.set("xd_instant_car"); // set exactly as the enter side would have
+    ok(host, gp, "assert(vehicle_exit_do('xd_instant', true) == true)");
+    CHECK(xi.lastVehicleExitRequest.has_value());
+    CHECK(xi.lastVehicleExitRequest->instant == true);
+    CHECK(xi.stateEnum.known() && xi.stateEnum.get() == 0); // was: left at 2, so check_done spun forever
+    CHECK(xi.currentVehicleName.known() && xi.currentVehicleName.get().empty()); // +0x16c0/+0x16c4 = null (Sec7.8)
+    ok(host, gp, "assert(vehicle_exit_check_done('xd_instant') == true)"); // was: stuck at false forever (phase == 2)
 
     // Back-off gate false: the timers are not armed locally.
     CharacterState& xdg = seatChar(es, "xd_gate", 3);

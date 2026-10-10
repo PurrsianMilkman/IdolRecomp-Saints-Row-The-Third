@@ -12,6 +12,17 @@
 // the player-flags-trio polarity (negated vs. not); the richest function
 // (set_max_hit_points); the dead-code gap (inv_item_in_slot); hook-slot
 // registration; the ring buffer; and a representative OPEN-state refusal.
+//
+// FIXED 2026-10-10 (found while verifying an UNRELATED trigger-shape task,
+// same "EngineState keeps growing every batch" regression HANDOFF.md's own
+// W2-6 entry already documents and fixes for tests/synthetic_luahost_test.cpp):
+// this file's own 18 `{ ... }` blocks all declared `Host`/`EngineState` by
+// value inside ONE shared stack frame (main()'s own), and crossed the
+// default 1 MiB thread stack (STATUS_STACK_OVERFLOW, confirmed via a
+// standalone run - PowerShell's own exit code decodes to 0xC00000FD). Fixed
+// the same way as that prior entry: each block is now its own
+// `static void test_block_N()`, called in sequence from a thin `main()` -
+// only the single largest block's own locals are live on the stack at once.
 #include <cmath>
 #include <iostream>
 #include <string>
@@ -125,19 +136,19 @@ std::vector<RegisteredName> fixtureNames() {
 
 } // namespace
 
-int main() {
     // Registration: all 55, gameplay only.
-    {
+static void test_block_1() {
         Host host(fixtureNames());
         CHECK(kNames.size() == 55);
         for (const auto& n : kNames) {
             CHECK(hasGlobal(host.gameplayState(), n.c_str()));
             CHECK(!hasGlobal(host.uiState(), n.c_str()));
         }
-    }
+}
+
 
     // object_indicator_add_objective_text (Sec13.1): record on resolve, OPEN refusal otherwise.
-    {
+static void test_block_2() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -147,7 +158,8 @@ int main() {
         auto& recs = es.getOrCreateCharacter("Obj1").objectiveTextIndicators;
         CHECK(recs.size() == 1);
         CHECK(recs[0].iconKey == "iconA" && recs[0].textKey == "textA");
-    }
+}
+
 
     // notoriety_spawn_group_set_delay (Sec13.2): the 24-entry group-name
     // table (0x008ed350) is pre-seeded for its exact 24 CONFIRMED names by
@@ -157,7 +169,7 @@ int main() {
     // real mission-drive blocker both dlc2_m01 ('police_tank') and m17
     // ('stag_attack_heli') hit). Both resolve with NO manual set() call;
     // a name outside the 24 stays genuinely OPEN.
-    {
+static void test_block_3() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -188,13 +200,14 @@ int main() {
         // guard, synthetic_luahost_test.cpp test_block_17): exactly 24 names are
         // pre-seeded - never silently widen this set.
         CHECK(es.notorietySpawnGroupResolves().knownCount() == 24);
-    }
+}
+
 
     // character_set_no_explosive_panic (Sec13.5) / vehicle_ignore_repulsors
     // (Sec13.8) / vehicle_suppress_flipping (Sec13.28): double-gate bit
     // setters, direct-apply (forceFlagGatePasses CONFIRMED true in single
     // player).
-    {
+static void test_block_4() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -213,11 +226,12 @@ int main() {
         CHECK((v.forceFlags.get(VehicleState::kSuppressFlippingBit1d7d) != 0));
         ok(host, gp, "vehicle_suppress_flipping('Veh1', false)");
         CHECK((v.forceFlags.get(VehicleState::kSuppressFlippingBit1d7d) == 0));
-    }
+}
+
 
     // Player-flags trio (Sec14.3-Sec14.5): negated/negated/not-negated
     // polarity, cross-checked against literal debug-tag census (Sec14.31).
-    {
+static void test_block_5() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -238,12 +252,13 @@ int main() {
         CHECK((c.statusByte28ad.get(CharacterState::kHumanShieldLockedBit28ad) != 0));
         ok(host, gp, "player_human_shield_lock('#PLAYER#', false)");
         CHECK((c.statusByte28ad.get(CharacterState::kHumanShieldLockedBit28ad) == 0));
-    }
+}
+
 
     // player_script_controlled_clear (Sec14.29): reuses controlLockGatePasses
     // (CONFIRMED true in single player) and clears bit 0x2 of the SAME
     // +0x28ac byte set_player_can_take_human_shields targets bit 0x80 of.
-    {
+static void test_block_6() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -254,11 +269,12 @@ int main() {
         ok(host, gp, "player_script_controlled_clear('#PLAYER#')");
         CHECK(c.scriptControlledMode == 0);
         CHECK((c.statusByte28ac.get(CharacterState::kScriptControlledBit28ac) == 0));
-    }
+}
+
 
     // set_min_hit_points / set_max_hit_points (Sec13.19/Sec13.20): vehicle
     // path, ratio preservation and the min<=max cross-field guarantee.
-    {
+static void test_block_7() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -277,10 +293,11 @@ int main() {
         ok(host, gp, "set_min_hit_points('Car1', 500)"); // exceeds current max -> raises max to match
         CHECK(v.minHitPointsV == 500);
         CHECK(v.maxHitPointsV == 500);
-    }
+}
+
 
     // set_max_hit_points (Sec13.20): character path, ratio preservation.
-    {
+static void test_block_8() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -291,12 +308,13 @@ int main() {
         ok(host, gp, "set_max_hit_points('Npc1', 400)"); // preserve ratio
         CHECK(c.maxHitPoints.get() == 400);
         CHECK(c.currentHitPoints.get() == 100); // 25% of 400
-    }
+}
+
 
     // inv_item_in_slot (Sec13.21): the CONFIRMED dead-code gap (0x10/0x11
     // always "none") and the "best"/"best-firearm"/"best-melee" test-hook
     // fallback.
-    {
+static void test_block_9() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -333,12 +351,13 @@ int main() {
 
         // an unrecognized slot name on a RESOLVED character refuses (OPEN table 0x008dc6b0)
         refuses(host, gp, "inv_item_in_slot('Hero', '3')", "0x008dc6b0");
-    }
+}
+
 
     // character_ragdoll_set_last_valid_position (Sec13.25): ring-buffer
     // append vs. full-reset, and character_ragdoll_clear_last_resort_position
     // (Sec13.6) stays a pure global counter with no per-character field.
-    {
+static void test_block_10() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -356,11 +375,12 @@ int main() {
         ok(host, gp, "character_ragdoll_clear_last_resort_position()");
         CHECK(es.ragdollLastResortPositionClearCount() == before + 1);
         CHECK(c.ragdollValidPositionHistory[0] == "Dest2"); // unaffected by the (different) clear native
-    }
+}
+
 
     // on_mover_enter_water (Sec14.6) / on_vehicle_enter_water (Sec14.30):
     // hook-slot registration, empty clears.
-    {
+static void test_block_11() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -373,11 +393,12 @@ int main() {
         es.objectResolves().set("Boat1", true);
         ok(host, gp, "on_vehicle_enter_water('cb_veh', 'Boat1')");
         CHECK(es.getOrCreateVehicle("Boat1").onVehicleEnterWaterCallback == "cb_veh");
-    }
+}
+
 
     // on_ai_do_action_complete (Sec14.7): generic/#PLAYER# match -> do
     // nothing; plain-character fallback -> registers slot.
-    {
+static void test_block_12() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -389,12 +410,13 @@ int main() {
         es.objectResolves().set("Npc2", true);
         ok(host, gp, "on_ai_do_action_complete('cb2', 'Npc2')");
         CHECK(es.getOrCreateCharacter("Npc2").onAiDoActionCompleteCallback == "cb2");
-    }
+}
+
 
     // ai_scripted_action_is_processing (Sec13.7): unresolved -> false;
     // gate-false reuses the SAME +0x4aa lookup ai_scripted_action_is_complete
     // models; gate-true refuses (OPEN table).
-    {
+static void test_block_13() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -418,11 +440,12 @@ int main() {
 
         c.scriptedActionDispatchGatePasses.set(true);
         refuses(host, gp, "ai_scripted_action_is_processing('Npc3')", "0x012e1c64");
-    }
+}
+
 
     // hud_achievement_show_progress (Sec13.22): test-registered roster
     // match, completion counter on current==total.
-    {
+static void test_block_14() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -433,12 +456,13 @@ int main() {
         CHECK(es.achievementReplicateCount() == 1);
         ok(host, gp, "hud_achievement_show_progress('unknown_ach', 1, 3)"); // no match -> no effect
         CHECK(es.achievementCompletionCount() == 1);
-    }
+}
+
 
     // customization_outfit_wear (Sec13.4) / customization_item_wear
     // (Sec14.12): dual local-player representation, reusing
     // hasLocalPlayer()/playerRig().coopPlayerPresent directly.
-    {
+static void test_block_15() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -453,11 +477,12 @@ int main() {
         CHECK(es.customizationItemWearRequests().size() == 1);
         CHECK(es.customizationItemWearRequests()[0].appliedPrimary == true);
         CHECK(es.customizationItemWearRequests()[0].appliedSecondRepresentation == true);
-    }
+}
+
 
     // helicopter_shoot_navpoint (Sec14.11) / helicopter_shoot_human
     // (Sec14.18): shared dispatcher outcome, drive-mode-gate asymmetry.
-    {
+static void test_block_16() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -491,11 +516,12 @@ int main() {
         lua_call(gp, 2, 1);
         CHECK(lua_toboolean(gp, -1) == 1); // same dispatcher outcome, gate not checked
         lua_pop(gp, 1);
-    }
+}
+
 
     // mesh_mover_kill (Sec14.10): the +0xdc path's "amount=0 only finalizes
     // an already-<=0 health value" finding.
-    {
+static void test_block_17() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -511,11 +537,12 @@ int main() {
         mover.killSubObjectHealth = 0; // already at/below zero -> finalizes
         ok(host, gp, "mesh_mover_kill('Mover2')");
         CHECK(mover.plainKillFinalizeCount == 1);
-    }
+}
+
 
     // set_behavior_set (Sec14.27) / ai_set_personality (Sec13.27): test-
     // registration hooks with the CONFIRMED real fallback sentinels.
-    {
+static void test_block_18() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
@@ -528,7 +555,27 @@ int main() {
 
         ok(host, gp, "ai_set_personality('Npc4', 'unregistered_profile')");
         CHECK(es.getOrCreateCharacter("Npc4").aiPersonalityProfileCode == EngineState::kAiPersonalityProfileFallback);
-    }
+}
+
+int main() {
+    test_block_1();
+    test_block_2();
+    test_block_3();
+    test_block_4();
+    test_block_5();
+    test_block_6();
+    test_block_7();
+    test_block_8();
+    test_block_9();
+    test_block_10();
+    test_block_11();
+    test_block_12();
+    test_block_13();
+    test_block_14();
+    test_block_15();
+    test_block_16();
+    test_block_17();
+    test_block_18();
 
     if (g_failures == 0) {
         std::cout << "All sec13_14_batch4 checks passed.\n";

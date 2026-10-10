@@ -864,13 +864,47 @@ mission-bootstrap case — not proven identical, not proven separate. The visibl
 of a "marker" (the map blip) is confirmed to be a fully independent system
 (`triggers.xtbl`'s own `Icon`/`IconType` fields) from any of the firing mechanisms above.
 
-**On-disk gaps, honestly still open, not closed by this pass:** the `Trigger_Volume` class's own
-"read my properties from the tail" vtable slot (`spec-zone-data-format.md` §11.7's method) was not
-opened for this class specifically, so the on-disk property-id encoding of shape/extents/radius is
-unknown; the separate `0x2243` "Interior triggers" `0x90`-byte record format
+**On-disk gaps — RESOLVED 2026-10-10 for the shape/extent/radius encoding.** `Trigger_Volume`'s
+real, live vtable is `0x01170934` (written by both its constructor `0x0093b860` and destructor
+`0x0093ba90` — this class's constructor performs only a single vtable write, no earlier transient
+vtable as seen on other classes). Vtable slot `+0x04` (`0x0093e520`) is the complete tail-property
+parser (one pool-bounds guard call, `0x008cc740`, then fully class-specific code, no further
+indirection needed). It reads named tail properties `trigger_shape_type`, `trigger_shape_param1`,
+`trigger_shape_param2`, `trigger_flags`, `trigger_action`, `trigger_action_param`,
+`trigger_action_param_2`, `trigger_use_message`, `trigger_max_fires`, `trigger_delay` and
+`trigger_sync` (each identified by a descriptor holding a plain-ASCII name string, found directly
+in `.rdata` at `0x0130951c`-`0x0130956c` — not CRC-guessed). `trigger_shape_type` is authored as a
+STRING, resolved at load time through a name-to-enum lookup (`0x0084bc50`, callees
+`0x00456800`/`0x00dab330`/`0x005961a0`, literal shape-name strings not traced to full depth) into
+the 0/1/2 shape code written to `+0x8c`. Depending on that code: shape 0 (oriented box) reads BOTH
+`trigger_shape_param1`/`trigger_shape_param2` as 3-component float vectors (generic vec3 fetch
+`0x00589c10`, size-`0xc` check) to `+0x90`-`+0x98` and `+0x9c`-`+0xa4` respectively — independently
+cross-confirmed as the box's own local-space min/max corner by its bounding-box virtual method at
+vtable `+0x60` (`0x0093b030`); shape 1 (sphere) reads only `trigger_shape_param1` as a scalar f32
+(generic scalar fetch `0x0058ccd0`, size-`0x4` check) to `+0x90` (radius), `trigger_shape_param2`
+is not read at all; shape 2 (capped cylinder) reads both as scalars, `trigger_shape_param1`→`+0x90`
+(radius), `trigger_shape_param2`→`+0x94` (length) — exact match to the already-established runtime
+layout. `trigger_flags`→`+0x7a` (word, confirms it's authored, not purely runtime-computed);
+`trigger_action`→`+0xa8` (the `triggers.xtbl` row-index slot, matching the existing "not a plain
+boolean" finding); `trigger_action_param`→`+0xe8` — this resolves the open question raised
+earlier in this section: `+0xe8` is the authored `trigger_action_param` STRING, not a Lua hook
+slot (the real Lua enter/exit hooks remain `+0xf8`/`+0xfc`, untouched by this parser);
+`trigger_use_message`→`+0xdc` (falls back to the `triggers.xtbl` row's own `UseMessage` column
+when absent); `trigger_max_fires`→`+0x7c` (byte); `trigger_delay`→`+0x80` (dword, the re-fire
+delay amount — `+0x88` separately holds the computed absolute deadline via the shared
+`0x00d9e140` helper). Position (`+0x40`) and orientation (`+0x4c`) are never touched by this
+class-specific parser at all — confirmed populated from the generic placed-object record head
+shared by every class, not a `Trigger_Volume`-specific tail property. **Still genuinely OPEN:**
+the cylinder's second axis-endpoint field (`+0x58`-`+0x60`, confirmed used by the precise cylinder
+containment test but written by neither this parser nor the constructor — true source not
+identified); the one-time class-registration stub (literal class-index byte +
+`0x02cc9900[classIndex]=descriptor`) for `Trigger_Volume` specifically, not located (the vtable
+identification itself does not depend on it — confirmed independently via the constructor/
+destructor write site). The separate `0x2243` "Interior triggers" `0x90`-byte record format
 (`spec-zone-data-format.md` §13.3) remains undecoded, and it is not established whether it shares
-`Trigger_Volume`'s shape convention. Full detail, every address, and a concrete next-steps list:
-`scratchpad/trigger_regions_mission_markers_2026-10-09.md`.
+`Trigger_Volume`'s shape convention. Full detail on the trigger mechanism generally: `scratchpad/trigger_regions_mission_markers_2026-10-09.md`
+(prior pass); this pass's own raw Ghidra reads were not saved to a separate scratchpad file — the
+splice above is the full record of what was found.
 
 ## 2. Platform/audio/input/UI-utility cluster — 10 functions, ranked by real script-call count (peer census)
 
@@ -12566,6 +12600,34 @@ disassembly.**
    cutscene end state requests a 500 ms fade-in.
 4. `zscene_is_loaded(name)` turns true once the entry is current and the state is 2 (full truth table
    in §14.23).
+
+   **Mission-script confirmation for `"09_in"`, resolving a routed mission blocker (2026-10-10, real
+   mission-Lua + real `.cte_xtbl` read).** The real, complete `m09.lua` (recovered via the §7.6
+   extraction recipe, one level deeper for mission scripts under `sr3_city_0.vpp_pc`'s
+   `m09_modal.str2_pc`) shows `m09_start` calling the shared library function
+   `cutscene_play("09_in", nil, {nav1, nav2}, false)` as its first substantive action on a fresh
+   mission start, with **no preceding `zscene_prep` call anywhere in the mission script** —
+   confirmed universal across every mission script sampled (`m01`, `m02`, `m05`, `m08`, `m09`): each
+   mission preps its own mid-mission `"_zNN"`-named scenes ahead of time but never its own
+   `"_in"`/`"_out"` scenes. The shared `cutscene_play` (`misc.vpp_pc`'s `game_lib.lua`) itself opens
+   with `while not zscene_is_loaded(name) do thread_yield() end` before ever calling the engine
+   native `cutscene_play_do`/`0x00725df0` — this resolves §57.2a's own open item on the wrapper's
+   real call shape (CONFIRMED, not HYPOTHESIS). For `"09_in"` this loop never actually iterates: a
+   direct read of the real `09_in.cte_xtbl` (`cutscenes.vpp_pc` → `09_in.str2_pc` → `09_in.cte_xtbl`)
+   shows `CutsceneType = Story` (kind 2, not Zscene/kind 1), so `zscene_is_loaded`'s own
+   already-documented kind-gate (§14.23) returns `true` on the very first call, before the
+   current-scene/load-state tests are ever reached — the entire `zscene_prep`/pending/promote/
+   complete pipeline this section documents is for Zscene-kind (1) entries only and never applies
+   to `"09_in"` at all. A whole-binary cross-reference of the prep gate `0x007232e0` finds exactly 3
+   callers in the entire executable — the engine's own cutscene-start native `0x00725df0`, the idle
+   auto-selector `0x00737780` (suppressed during an active mission, `0x006cecb0`), and the
+   Lua-exposed `zscene_prep` (`0x00a68ee0`, reachable only from Lua) — confirming no native
+   mission-dispatch path preps `"09_in"` either; none is needed. **CONFIRMED.** A host that returns
+   a blocking `false` for `zscene_is_loaded("09_in")` synchronously at mission start is diverging
+   from retail not on frame timing but on cutscene kind: retail's query short-circuits to `true`
+   immediately for any non-Zscene-kind name, and `"09_in"` is such a name — a host implementation
+   must read `CutsceneType` from the cutscene table and short-circuit identically, not always fall
+   through to the Zscene current/load-state check.
 5. ~~Who fills the scene table is **OPEN**. The only writers of its base and count are 0x007231e0,
    0x00723d60 and 0x00723e40, none of them dumped. Which data file feeds it cannot be answered from
    this job.~~
@@ -16756,4 +16818,41 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   config UI (already confirmed, `spec-frontend-menu-runtime.md` §1) — effectively dead in normal
   single-player mission flow, not the blocker's cause. Bonus: resolved the other 9 mode-registrar
   call-site indices for free. Full detail: `scratchpad/dlc2_m03_0x00706ab0_2026-10-10.md`.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §1.14 `Trigger_Volume` on-disk shape/extent/radius encoding RESOLVED, routed
+  mission blocker (playtest trigger sizing)** (SPEC TEAM, agent `a94b114a2ccb78105`). Found the
+  real vtable (`0x01170934`) and tail-property parser (vtable slot `+0x04`, `0x0093e520`, no
+  further indirection needed — this class deviates from the general_mover/script_npc "two vtable
+  writes" pattern, writing only one). Named tail properties (`trigger_shape_type`,
+  `trigger_shape_param1`/`_param2`, `trigger_flags`, `trigger_action`, `trigger_action_param`,
+  `trigger_action_param_2`, `trigger_use_message`, `trigger_max_fires`, `trigger_delay`,
+  `trigger_sync`), each identified by a descriptor holding a real name string (not CRC-guessed).
+  Shape type is authored as a STRING resolved to the 0/1/2 enum at load time; the two shape-param
+  properties then read as either two vec3s (box: min/max corner, cross-confirmed against the
+  object's own bounding-box virtual method) or one/two scalars (sphere: radius only; cylinder:
+  radius + length) depending on that code. Resolves this section's own prior open question about
+  `+0xe8`: it's the authored `trigger_action_param` string, not a Lua hook slot (`+0xf8`/`+0xfc`
+  remain the real hooks). Position/orientation confirmed NOT read by this parser — they come from
+  the generic placed-object record head, not a class-specific property. Still OPEN: the cylinder's
+  second axis-endpoint field's true source; the one-time class-registration stub (not needed for
+  the vtable id, which was confirmed independently via the constructor/destructor write site); the
+  `0x2243` "Interior triggers" format, still undecoded. Cross-referenced into
+  `spec-zone-data-format.md` §11.7 as a third resolved class. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §26.25: `zscene_is_loaded("09_in")` mission-start blocker RESOLVED, routed mission
+  blocker (Team B live playtest, m09_start)** (SPEC TEAM, agent `a92b4ddd045ff7f8b`). Recovered the
+  real `m09.lua` mission script directly: `m09_start` calls `cutscene_play("09_in", ...)` with no
+  preceding `zscene_prep` — confirmed universal across every mission sampled (missions prep their
+  own mid-mission "_zNN" scenes ahead of time but never their own "_in"/"_out" scenes). Recovered
+  the real shared `cutscene_play` library wrapper too: it polls `zscene_is_loaded` in a yield loop
+  before calling the engine native, resolving §57.2a's own open item on the wrapper's call shape.
+  The loop never actually iterates for `"09_in"`: its real `.cte_xtbl` (freshly extracted) shows
+  `CutsceneType = Story` (kind 2), so the already-documented kind-gate in `zscene_is_loaded` (§14.23)
+  returns true immediately, before ever reaching the Zscene-only current/load-state pipeline this
+  section documents. A whole-binary cross-reference of the prep gate confirms exactly 3 callers
+  total, none of which preps `"09_in"` — none is needed. **Conclusion for Team B: a host returning
+  blocking `false` here is diverging on cutscene KIND, not frame timing — `zscene_is_loaded` must
+  read `CutsceneType` and short-circuit to true for any non-Zscene name, exactly like retail.**
   Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

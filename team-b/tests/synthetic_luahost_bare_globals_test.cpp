@@ -704,6 +704,90 @@ int main() {
     }
 
     // ------------------------------------------------------------------
+    // Trigger/hook callback dispatch: a fired callback is SPAWNED as a new
+    // coroutine, never run synchronously - spec-lua-api-behaviour.md
+    // Sec1.14's own "GAP CLOSED" finding (2026-10-09, commit 383f653): the
+    // real dispatcher 0x00a29e40 hands off to reader 0x00a1fe10, which
+    // spawns a coroutine via the SAME mechanism this table already models
+    // (0x00e0ca80->0x00e0c720, i.e. BareThreadTable::allocate()) rather than
+    // calling lua_call/lua_pcall directly; the body only actually runs LATER
+    // when the scheduler 0x00e0cba0 (schedulerPass()) resumes it. This
+    // mirrors the production fix in tools/lua_host_run.cpp's own
+    // --probe-autopilot dispatch block (which used to be a bare
+    // lua_getglobal + lua_pcall, this project's own CHOSEN stand-in made
+    // before Sec1.14 was known) - proven here directly against
+    // BareThreadTable, the reusable mechanism both now share, rather than
+    // against that diagnostic CLI tool.
+    {
+        Host h({});
+        lua_State* L = h.gameplayState();
+        BareThreadTable& threads = h.bareGlobals().threads();
+
+        // A trigger fires (on_trigger/on_trigger_exit's own registered
+        // callback name, Sec1.2/Sec1.7): allocate() SPAWNS the coroutine but
+        // never resumes it - the callback body must NOT have run yet, on
+        // this same tick, no matter how many times the host checks.
+        ok(h, L, "CALLBACK_RAN = false\nfunction on_enter_cb() CALLBACK_RAN = true end\n");
+        BareThreadTable::Record* rec = threads.allocate(L, "on_enter_cb", /*nargs=*/0, /*hasParent=*/false);
+        CHECK(rec != nullptr);
+        const uint16_t spawnedId = rec ? rec->id : BareThreadTable::kNoThread;
+        CHECK(threads.liveCount() == 1);       // the coroutine exists...
+        CHECK(threads.currentDepth() == 0);    // ...but nothing is "current" - it was never resumed
+        ok(h, L, "assert(CALLBACK_RAN == false)");
+        ok(h, L, "assert(CALLBACK_RAN == false)"); // repeat: still true with no scheduler pass in between
+
+        // Only a LATER scheduler pass (the host's model of 0x00e0cf50,
+        // called once per real/rendered frame) actually resumes it - this is
+        // the decoupling-in-time Sec1.14 identifies as the real mechanism.
+        BareThreadTable::PassResult pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.visited == 1 && pass.resumed == 1 && pass.released == 1);
+        ok(h, L, "assert(CALLBACK_RAN == true)");
+        CHECK(threads.liveCount() == 0);              // ran to completion, released
+        CHECK(threads.findAlive(spawnedId) == nullptr);
+
+        // A callback that itself yields (e.g. it starts a wait, same shape as
+        // a mission's own _start) is not finished by the one pass that first
+        // resumes it either - it takes a SECOND later pass to actually
+        // finish, reinforcing that resumption is genuinely spread across
+        // separate, later ticks, not folded back into the spawn call.
+        ok(h, L,
+           "ON_EXIT_PHASE = 0\n"
+           "function on_exit_cb() ON_EXIT_PHASE = 1; thread_yield(); ON_EXIT_PHASE = 2 end\n");
+        BareThreadTable::Record* rec2 = threads.allocate(L, "on_exit_cb", /*nargs=*/0, /*hasParent=*/false);
+        CHECK(rec2 != nullptr);
+        const uint16_t spawnedId2 = rec2 ? rec2->id : BareThreadTable::kNoThread;
+        ok(h, L, "assert(ON_EXIT_PHASE == 0)"); // not run yet
+        pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.resumed == 1 && pass.released == 0); // first resume: runs to its own thread_yield, still alive
+        ok(h, L, "assert(ON_EXIT_PHASE == 1)");
+        CHECK(threads.findAlive(spawnedId2) != nullptr); // still pending - the spawn truly spans multiple ticks
+        pass = h.runScriptThreadSchedulerPass();
+        CHECK(pass.resumed == 1 && pass.released == 1); // second, later pass: resumes past the yield to completion
+        ok(h, L, "assert(ON_EXIT_PHASE == 2)");
+        CHECK(threads.findAlive(spawnedId2) == nullptr);
+
+        // Name resolution happens at RESUME time, not at spawn time (the
+        // real reader resolves the packed callback-id to a name only when
+        // the scheduler actually runs it) - matches BareThreadTable::run()'s
+        // own step 4 (fetchGlobalProtected, a plain metamethod-honouring
+        // table read that does not itself error on a missing key): spawning
+        // for an undefined name is NOT an error at spawn, only discovered on
+        // the later resume, where resuming with nil "as the function" raises
+        // the ordinary Lua error (surfaced as the record's own `error`, the
+        // same errors()/PassEvent.error path any other thread's runtime
+        // error takes - NOT `fetchError`, which is reserved for the fetch
+        // helper call itself raising, e.g. a raising __index metamethod).
+        BareThreadTable::Record* rec3 = threads.allocate(L, "no_such_callback_global", 0, false);
+        CHECK(rec3 != nullptr);
+        CHECK(threads.liveCount() == 1); // spawn always succeeds regardless of whether the name resolves
+        std::vector<BareThreadTable::PassEvent> events3;
+        h.runScriptThreadSchedulerPass({}, [&](const BareThreadTable::PassEvent& ev) { events3.push_back(ev); });
+        CHECK(events3.size() == 1 && events3[0].fetchError.empty());
+        CHECK(events3.size() == 1 && events3[0].error.find("no_such_callback_global") != std::string::npos);
+        CHECK(threads.liveCount() == 0); // released after the failed call, same as any other runtime error
+    }
+
+    // ------------------------------------------------------------------
     // HitLog: bare globals fold into the same ranking, per state.
     {
         Host h({});

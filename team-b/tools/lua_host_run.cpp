@@ -136,6 +136,7 @@
 #include <cstdint>
 #include <deque>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -154,6 +155,7 @@
 #include "sr3tables_cutscene/scene_table.h"
 #include "sr3tables_progression/tables.h"
 #include "sr3tables_weapons/combat.h"
+#include "sr3vehicleinfo/vehicle_entry.h"
 #include "sr3vintdoc/vint_doc.h"
 #include "sr3zone/zone_objects.h"
 #include "vpp/container.h"
@@ -607,6 +609,109 @@ std::string installSpawnRankHitPointsFromCache(const fs::path& cacheDir, sr3luah
     }
     return "not installed (spawn_info_ranks.xtbl not found in " + notFoundArchives +
            "; the draw falls back to the CHOSEN 100)";
+}
+
+// --- Vehicle-type class table real-cache install (2026-10-10, vehicle-class
+// xtbl wiring task): wires the existing, already-correct sr3vehicleinfo xtbl
+// reader (include/sr3vehicleinfo/vehicle_entry.h, spec-vehicle-data.md
+// section 7) into this host for the first time. Previously
+// sr3vehicleinfo::ParseAllVehicles was a fully-built, standalone parser with
+// nothing in this project's scope ever feeding its output into the Lua
+// host's own EngineState - this closes that gap.
+//
+// Archive list: the 4 archives spec-vehicle-data.md Sec7.9 confirms carry
+// real, readable per-vehicle-type tables once the mode-(a) container fix
+// landed ("all real <name>_veh.xtbl files are now readable: 106 in
+// misc_tables.vpp_pc + 17 in dlc1/2/3.vpp_pc = 123 total").
+//
+// MUST run before installZoneObjectsFromCache() below (see call order in
+// main()) - EngineState::loadZoneObjectsSection() looks up a zone-placed
+// vehicle's own `script_vehicle_type_name` property against this table at
+// ingest time; installing the table after ingestion would silently miss
+// every real vehicle instance ingested before it (installZoneObjectsFromCache's
+// own re-ingestion is NOT performed by this tool, so the table must already
+// be in place the first and only time each file is ingested).
+//
+// Recursive walk (same small-per-tool, duplicated-with-attribution
+// convention as walkCzn() below, and validate_vehicleinfo_population.cpp's
+// own walk()) rather than a flat per-archive scan - matches that tool's own
+// finding that a real `<name>_veh.xtbl` entry can sit inside a nested
+// container, not only at an archive's own top level.
+std::string installVehicleTypeClassTableFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    static const char* const kArchives[] = {"misc_tables.vpp_pc", "dlc1.vpp_pc", "dlc2.vpp_pc", "dlc3.vpp_pc"};
+    std::unordered_map<std::string, int32_t> classByLowerName;
+    size_t filesParsed = 0;
+    std::string notFoundArchives;
+
+    std::function<void(vpp::Container&)> walk = [&](vpp::Container& c) {
+        const auto& entries = c.entries();
+        for (size_t i = 0; i < entries.size(); ++i) {
+            const std::string& name = entries[i].name;
+            const bool isVeh = name.size() > 9 && toLower(name.substr(name.size() - 9)) == "_veh.xtbl";
+            if (isVeh) {
+                try {
+                    std::string fileBytes;
+                    if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                        vpp::ByteView raw = c.rawEntryBytes(i);
+                        fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                    } else {
+                        vpp::DecompressResult r = c.decompressEntry(i);
+                        if (r.status != vpp::DecodeStatus::Ok) continue;
+                        fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                    }
+                    sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                    std::vector<sr3vehicleinfo::VehicleEntry> rows = sr3vehicleinfo::ParseAllVehicles(doc);
+                    for (const auto& row : rows) {
+                        if (!row.name.has_value() || row.name->empty()) continue;
+                        if (row.vehicleType.vehicleClass == sr3vehicleinfo::VehicleClass::Unknown) continue;
+                        classByLowerName[sr3luahost::AsciiLowerFold(*row.name)] =
+                            static_cast<int32_t>(row.vehicleType.vehicleClass);
+                    }
+                    ++filesParsed;
+                } catch (const std::exception&) {
+                    // malformed/unreadable entry - skip, never fabricated
+                }
+                continue;
+            }
+            if (entries[i].payload.kind != vpp::PayloadKind::Raw) continue;
+            if (toLower(name).size() >= 4 && toLower(name).compare(toLower(name).size() - 4, 4, "xtbl") == 0) continue;
+            try {
+                vpp::Container nested(c.rawEntryBytes(i));
+                walk(nested);
+            } catch (const std::exception&) {
+                // not a nested container - not every raw entry is one
+            }
+        }
+    };
+
+    for (const char* archiveName : kArchives) {
+        fs::path archivePath;
+        for (auto& ent : fs::directory_iterator(cacheDir)) {
+            if (ent.is_regular_file() && toLower(ent.path().filename().string()) == archiveName) {
+                archivePath = ent.path();
+                break;
+            }
+        }
+        if (archivePath.empty()) {
+            if (!notFoundArchives.empty()) notFoundArchives += ", ";
+            notFoundArchives += archiveName;
+            continue;
+        }
+        try {
+            std::vector<uint8_t> bytes = readFile(archivePath);
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            walk(c);
+        } catch (const std::exception& ex) {
+            if (!notFoundArchives.empty()) notFoundArchives += ", ";
+            notFoundArchives += std::string(archiveName) + " (" + ex.what() + ")";
+        }
+    }
+
+    es.installVehicleTypeClassTable(classByLowerName);
+    std::string summary = "installed files=" + std::to_string(filesParsed) +
+                           " types_resolved=" + std::to_string(es.vehicleTypeClassTableSize());
+    if (!notFoundArchives.empty()) summary += " missing=" + notFoundArchives;
+    return summary;
 }
 
 // --- Zone Objects (0x2234) real-cache install (2026-10-08, zone-data
@@ -1432,11 +1537,16 @@ bool g_probeAutopilotEnabled = false; // set only by --probe-autopilot (main(), 
 // of spec-lua-api-behaviour.md (not inferred from this project's own
 // earlier summaries) to take a callback-name string as one argument,
 // registering it for a LATER dispatch this project's own engine state
-// never independently models (every citation below documents only the
-// REGISTRATION side; the consuming/firing side is explicitly OPEN in each
-// one - see this function's callers for how --probe-autopilot handles
-// that gap, by firing the named Lua global with zero arguments rather
-// than inventing an unconfirmed invocation shape):
+// models via the real coroutine-spawn mechanism (UPDATE 2026-10-09,
+// spec-lua-api-behaviour.md Sec1.14's own "GAP CLOSED" finding, commit
+// 383f653: the real dispatcher 0x00a29e40 hands off to reader 0x00a1fe10,
+// which spawns a NEW Lua coroutine for the resolved name rather than
+// calling Lua synchronously - the body only runs later, when the scheduler
+// 0x00e0cba0 resumes it; the consuming/firing side used to be OPEN when
+// this comment was first written, hence the earlier "firing the named Lua
+// global with zero arguments" synchronous stand-in below this function's
+// own callers used - that stand-in is superseded, see the dispatch block's
+// own 2026-10-09 doc comment for the replacement):
 //   on_trigger (Sec1.2), on_trigger_exit (Sec1.7), on_death (Sec3.2),
 //   on_vehicle_destroyed (Sec3.3), on_attack_performed (Sec3.12),
 //   on_take_damage (Sec3.13), on_revived (Sec10.8), on_vehicle_enter
@@ -1824,10 +1934,14 @@ int main(int argc, char** argv) {
                      "      on_qte_animation_trigger - see isCallbackRegistrationNative's own doc comment for the\n"
                      "      full citation list, and which of this flag's own candidate natives were checked and\n"
                      "      EXCLUDED, e.g. trigger_enable has no callback argument at all) with its callback-name\n"
-                     "      argument recovered, this flag calls that one Lua global once, zero arguments (no spec\n"
-                     "      section establishes what arguments a FIRED, as opposed to registered, callback\n"
-                     "      receives - a CHOSEN, flagged judgment call, not invented state), tagged SYNTHETIC in\n"
-                     "      [probe-autopilot] stderr output and in verdict_mission_drive.tsv/summary, then runs a\n"
+                     "      argument recovered, this flag spawns a new coroutine for that one Lua global, zero\n"
+                     "      arguments (no spec section establishes what arguments a FIRED, as opposed to\n"
+                     "      registered, callback receives - a CHOSEN, flagged judgment call, not invented state),\n"
+                     "      matching the real dispatcher's own confirmed mechanism (spec-lua-api-behaviour.md\n"
+                     "      Sec1.14, 2026-10-09: spawn via BareThreadTable::allocate(), never a synchronous\n"
+                     "      lua_call/lua_pcall) - it is NOT resumed here; only the follow-up window's scheduler\n"
+                     "      pass(es), below, resume it. Tagged SYNTHETIC in [probe-autopilot] stderr output and in\n"
+                     "      verdict_mission_drive.tsv/summary, then runs a\n"
                      "      bounded follow-up window to see what breaks NEXT. If no such native is recoverable,\n"
                      "      records \"nothing to synthesize\" explicitly rather than a silent empty result - itself\n"
                      "      a real finding (the wait is most likely satisfied by polled world state, not a\n"
@@ -1996,6 +2110,12 @@ int main(int argc, char** argv) {
     const std::string spawnRankHitPointsSummary = installSpawnRankHitPointsFromCache(cacheDir, host.engineState());
     // The weapon-definition name table (Sec4.10/Sec4.11): real data from the cache.
     const std::string weaponDefinitionTableSummary = installWeaponDefinitionTableFromCache(cacheDir, host.engineState());
+    // The vehicle-type class table (spec-vehicle-data.md Sec7, vehicle-class
+    // xtbl wiring task): real data from the cache. MUST run before
+    // installZoneObjectsFromCache() below - see that function's own top
+    // comment for why.
+    const std::string vehicleTypeClassTableSummary =
+        installVehicleTypeClassTableFromCache(cacheDir, host.engineState());
     // Real `.czn_pc` Objects (0x2234) data (spec-zone-data-format.md Sec11):
     // the real name<->ObjectRecord resolver (2026-10-08 zone-data
     // fast-follow) - see installZoneObjectsFromCache's own top comment.
@@ -2004,7 +2124,37 @@ int main(int argc, char** argv) {
     std::cout << "continuous_explosion_table=" << continuousExplosionTableSummary << "\n";
     std::cout << "spawn_rank_hit_points=" << spawnRankHitPointsSummary << "\n";
     std::cout << "weapon_definition_table=" << weaponDefinitionTableSummary << "\n";
+    std::cout << "vehicle_type_class_table=" << vehicleTypeClassTableSummary << "\n";
     std::cout << "zone_objects=" << zoneObjectsSummary << "\n";
+    // NEW 2026-10-10 (vehicle-class xtbl wiring task): a direct, named
+    // real-data check for the one vehicle instance the removed
+    // "m05_heli_pierce" hardcoded special case used to cover unconditionally
+    // - reports whether it now resolves its real class via the general,
+    // data-driven path (real ingested zone data joined against the real
+    // xtbl-sourced vehicle-type table) rather than assuming it still does
+    // just because the old special case is gone from the source. Printed
+    // unconditionally (cheap, one lookup) so every real-cache run's own
+    // stdout/verdict_summary.txt makes this fact plain either way.
+    {
+        const sr3zone::ObjectRecord* m05Heli = host.engineState().resolveZoneObject("m05_heli_pierce");
+        std::string m05HeliStatus;
+        if (!m05Heli) {
+            m05HeliStatus = "not found in any ingested real zone data";
+        } else {
+            std::optional<std::string> typeName = sr3zone::ScriptVehicleTypeName(*m05Heli);
+            std::optional<std::string> className = sr3zone::ClassNameForHash(m05Heli->classHash);
+            bool flyingTypeKnown = host.engineState().hasVehicle("m05_heli_pierce") &&
+                                   host.engineState().getOrCreateVehicle("m05_heli_pierce").flyingType.known();
+            m05HeliStatus = "found class=" + (className.has_value() ? *className : std::string("(unresolved)")) +
+                            " script_vehicle_type_name=" + (typeName.has_value() ? *typeName : std::string("(none)")) +
+                            " flyingType_known=" + (flyingTypeKnown ? "true" : "false");
+            if (flyingTypeKnown) {
+                m05HeliStatus += " flyingType_value=" +
+                                  std::to_string(host.engineState().getOrCreateVehicle("m05_heli_pierce").flyingType.get());
+            }
+        }
+        std::cout << "m05_heli_pierce_check=" << m05HeliStatus << "\n";
+    }
     std::cout << "Host built: gameplay state has " << host.gameplayStubCount()
               << " stubs, UI state has " << host.uiStubCount() << " stubs ("
               << (host.gameplayStubCount() + host.uiStubCount()) << " total, matching the "
@@ -2801,6 +2951,7 @@ int main(int argc, char** argv) {
     line("continuous_explosion_table=" + continuousExplosionTableSummary);
     line("spawn_rank_hit_points=" + spawnRankHitPointsSummary);
     line("weapon_definition_table=" + weaponDefinitionTableSummary);
+    line("vehicle_type_class_table=" + vehicleTypeClassTableSummary);
     line("vint_docs=" + std::string(vintDocs ? "on" : "off (--no-vint-docs)") + " found=" +
          std::to_string(st.docs.size()) + " parsed=" + std::to_string(parsedDocs.size()) +
          " parse_failed=" + std::to_string(docsParseFailed) + " scripts_indexed=" + std::to_string(docByScript.size()) +
@@ -3397,6 +3548,68 @@ int main(int argc, char** argv) {
         // comment); `isRestart` is the SAME kMissionStartIsRestart=false
         // this loop already passes to callMissionStart() just below -
         // every mission this harness drives is a fresh start.
+        // MISSION-HOST PHASE 3, part (b) (this task, 2026-10-09): m05's own
+        // real script-named vehicles, registered as live objects BEFORE this
+        // mission's own `_start` runs - closing the real-world-state gap
+        // behind the vehicle enter-submitter blocker (`0x00af22a0`, spec-
+        // player-runtime.md Sec7.4/Sec38.1) for this one mission. Names are
+        // real, read verbatim off the real shipped m05.lua (tools/validation/
+        // lua_source_dump.cpp against the real cache, this task's own
+        // extraction) - its `M05_groups` table's own `.heli` fields:
+        // `m05_heli_host`, `m05_heli_client`, `m05_heli_pierce`,
+        // `m05_heli_chase_host` (lines 15/20/25/135 of the real script). NOT
+        // fabricated - every one of these 4 is a name m05's own real Lua
+        // text passes into a vehicle-enter native (`on_vehicle_enter`,
+        // `vehicle_enter_teleport` - a game_lib.lua wrapper over
+        // `vehicle_enter_do` - see this task's own commit for the full call-
+        // site citation).
+        //
+        // Two separate writes, because this project's vehicle-enter chain
+        // (resolveEnterVehicle(), src/lua_spec_confirmed_stubs_b15_wave2_
+        // core_dispatchers.cpp) reads the PRE-EXISTING, hand-seeded
+        // objectResolves() map, NOT this task's own Phase 2 liveObjectKind()/
+        // isLiveObject() resolver - that resolver has no production
+        // consumer anywhere in this codebase yet (verified: grepped every
+        // src/ caller). Per spec-zone-data-format.md §11.10 ("resolving a
+        // name and finding it live are the SAME event" in the real engine),
+        // being live SHOULD be sufficient to resolve - but reproducing that
+        // unification is a bigger mechanism change than this task's own
+        // scope (closing one mission's blocker), so both facts are written
+        // explicitly here instead: objectResolves().set(name, true) (the
+        // mechanism vehicle_enter_do's own resolver actually reads today)
+        // AND bridgeLiveVehiclePosition() (Phase 2's own mechanism, so a
+        // later native that DOES start consuming liveObjectKind() also sees
+        // these 4 names as live, and so this is honestly reusing, not
+        // duplicating, that Phase 2 mechanism per this task's own ask).
+        //
+        // Positions are CHOSEN placeholders, NOT spec-confirmed real zone-
+        // placement coordinates: this project's own existing `.czn_pc`
+        // readers (tools/zone_object_resolver_probe.cpp, hardcoded to look
+        // up only "Killbane"; tools/zone_objects_population.cpp, capped at a
+        // 12-name population sample) do not support searching for an
+        // arbitrary real placed-object name, so the real penthouse-rooftop
+        // coordinates these 4 helicopters are actually placed at could not
+        // be read without a code change this task did not make (a genuine,
+        // reported tooling-coverage gap, not a data-access blocker - see
+        // this task's own report). A small fixed offset per vehicle keeps
+        // the 4 names distinguishable rather than literally co-located.
+        // seat0Occupied=false (CHOSEN): an empty driver seat is the one
+        // honestly-reachable state for a vehicle nothing in this minimal
+        // host has ever "seated" anything into (same convention this
+        // project already uses for every other freshly-created vehicle).
+        if (row.missionLuaStem == "m05") {
+            static const struct { const char* name; double x, y, z; } kM05RealVehicles[] = {
+                {"m05_heli_host", 0.0, 0.0, 0.0},
+                {"m05_heli_client", 10.0, 0.0, 0.0},
+                {"m05_heli_pierce", 20.0, 0.0, 0.0},
+                {"m05_heli_chase_host", 30.0, 0.0, 0.0},
+            };
+            for (const auto& v : kM05RealVehicles) {
+                host.engineState().objectResolves().set(v.name, true);
+                host.engineState().bridgeLiveVehiclePosition(v.name, sr3luahost::WorldPosition{v.x, v.y, v.z});
+                host.engineState().getOrCreateVehicle(v.name).seat0Occupied.set(false);
+            }
+        }
         host.engineState().beginMissionPhaseTracking(row.missionLuaStem, /*type=*/0, kMissionStartIsRestart);
         MissionStartResult startResult = callMissionStart(host.gameplayState(), host.bareGlobals().threads(), funcName,
                                                             kMissionStartCheckpoint, kMissionStartIsRestart);
@@ -3604,45 +3817,70 @@ int main(int argc, char** argv) {
                             mr.probeAutopilotCallbackName = chosenReg->callbackName;
                             mr.probeAutopilotTargetName = chosenReg->targetName;
 
-                            // Dispatch: the SAME "lua_getglobal, check
-                            // isfunction, protected call" shape
-                            // Host::fireConfirmedHooks already uses for every
-                            // other confirmed-name call this harness makes
-                            // (src/lua_host.cpp) - zero arguments (see
-                            // isCallbackRegistrationNative's own doc comment
-                            // for why: no spec section this project has read
-                            // establishes the FIRED callback's own argument
-                            // shape, only the registration call's). Runs on
-                            // host.gameplayState(), the same L the mission
-                            // script itself loaded into and _start ran
-                            // against - callback names are plain globals,
-                            // never per-coroutine state.
+                            // Dispatch, CORRECTED 2026-10-09 (spec-lua-api-
+                            // behaviour.md Sec1.14's own "GAP CLOSED" finding,
+                            // 2026-10-09 changelog entry, commit 383f653):
+                            // the real dispatcher 0x00a29e40 does NOT call
+                            // lua_call/lua_pcall synchronously. It hands off
+                            // to the reader 0x00a1fe10, which SPAWNS A NEW
+                            // LUA COROUTINE for the resolved callback name
+                            // (0x00e0ca80->0x00e0c720, the same mechanism
+                            // Sec26.27 already documents for thread_new) -
+                            // the body only actually runs LATER, when the
+                            // scheduler 0x00e0cba0 resumes it. The previous
+                            // version of this block (a bare lua_getglobal +
+                            // lua_pcall, matching Host::fireConfirmedHooks'
+                            // shape) was this project's own CHOSEN stand-in,
+                            // made before Sec1.14's dispatch mechanism was
+                            // known - superseded now that it is. This reuses
+                            // the EXACT same coroutine mechanism
+                            // callMissionStart() above already goes through
+                            // (BareThreadTable::allocate()/run(), the host's
+                            // model of runner 0x00e0cba0) - no second
+                            // coroutine mechanism invented for this. Spawn
+                            // only: allocate() never resumes the coroutine by
+                            // itself, so the callback body provably has NOT
+                            // run yet at this point in the code - only the
+                            // follow-up window's own schedulerPass() calls,
+                            // below, can resume it (see
+                            // BareThreadTable::schedulerPass's own doc
+                            // comment, bare_globals.h, for why one call per
+                            // tick already matches the real engine's own
+                            // steady-state cadence). hasParent=false: nothing
+                            // is "current" when an engine-side trigger/hook
+                            // fires from outside any running script thread -
+                            // the same root-level situation
+                            // BareThreadTable::startThread() models for a
+                            // mission's own top-level entry. Zero arguments:
+                            // unchanged from before (isCallbackRegistrationNative's
+                            // own doc comment - no spec section establishes the
+                            // FIRED callback's own argument shape, only the
+                            // registration call's).
                             lua_State* L = host.gameplayState();
                             std::string targetNote =
                                 chosenReg->targetName.empty() ? std::string() : (", \"" + chosenReg->targetName + "\"");
                             std::cerr << "[probe-autopilot] " << funcName << " SYNTHETIC dispatch: first-resume "
                                       << "trace shows " << chosenReg->nativeName << "(\"" << chosenReg->callbackName
-                                      << "\"" << targetNote << ") registered before the wait loop - calling "
-                                      << "global '" << chosenReg->callbackName << "()' once, zero args\n";
-                            lua_getglobal(L, chosenReg->callbackName.c_str());
-                            if (lua_type(L, -1) != LUA_TFUNCTION) {
-                                lua_pop(L, 1);
+                                      << "\"" << targetNote << ") registered before the wait loop - spawning a "
+                                      << "coroutine for global '" << chosenReg->callbackName << "', zero args "
+                                      << "(Sec1.14: real dispatch spawns a coroutine, never a synchronous call - "
+                                      << "it only runs on a later scheduler pass)\n";
+                            BareThreadTable::Record* spawnedRec = host.bareGlobals().threads().allocate(
+                                L, chosenReg->callbackName, /*nargs=*/0, /*hasParent=*/false);
+                            uint16_t spawnedId = BareThreadTable::kNoThread;
+                            if (!spawnedRec) {
                                 mr.probeAutopilotDispatchResult =
-                                    "SYNTHETIC: callback name '" + chosenReg->callbackName + "' registered by " +
-                                    chosenReg->nativeName + " is not defined as a global function - nothing to call";
+                                    "SYNTHETIC: script-thread table full (" +
+                                    std::to_string(BareThreadTable::kCapacity) +
+                                    " records, HIGH CONFIDENCE capacity) - coroutine for '" +
+                                    chosenReg->callbackName + "' not spawned";
                             } else {
-                                lua_sethook(L, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
-                                int rc = lua_pcall(L, 0, 0, 0);
-                                lua_sethook(L, nullptr, 0, 0);
-                                if (rc != 0) {
-                                    std::string err = (lua_gettop(L) >= 1 && lua_tostring(L, -1))
-                                                           ? lua_tostring(L, -1)
-                                                           : "?";
-                                    lua_pop(L, 1);
-                                    mr.probeAutopilotDispatchResult = "SYNTHETIC dispatch error: " + err;
-                                } else {
-                                    mr.probeAutopilotDispatchResult = "SYNTHETIC dispatch ok (no Lua error)";
-                                }
+                                spawnedId = spawnedRec->id;
+                                mr.probeAutopilotDispatchResult =
+                                    "SYNTHETIC: coroutine spawned for '" + chosenReg->callbackName +
+                                    "' (record id " + std::to_string(spawnedId) +
+                                    ") - not run synchronously; the follow-up window's scheduler pass(es) below "
+                                    "resume it";
                             }
 
                             // Follow-up window: bounded, CHOSEN
@@ -3654,6 +3892,16 @@ int main(int argc, char** argv) {
                             // separately into probeErrors below.
                             std::vector<std::string> probeErrors;
                             bool ownRecordResumedInFollowup = false;
+                            // Tracking for the SPAWNED callback coroutine itself (spawnedId,
+                            // above) - separate from ownRecordResumedInFollowup, which is
+                            // about whether the MISSION's own wait unblocked. These three
+                            // answer "did the real scheduler mechanism actually carry the
+                            // spawn through to a real resume", the thing this whole change
+                            // is about proving.
+                            bool spawnedResumedInFollowup = false;
+                            bool spawnedBodyRan = false;
+                            std::string spawnedFetchError;
+                            std::string spawnedOwnError;
                             for (int ftick = 0; ftick < kProbeAutopilotFollowUpTicks; ++ftick) {
                                 host.engineState().screenFadeHostFrame(kFadeHostMsPerTick);
                                 host.engineState().cutsceneHostFrame();
@@ -3667,6 +3915,12 @@ int main(int argc, char** argv) {
                                                         kMissionWatchdogInstructionBudget);
                                         },
                                         [&](const BareThreadTable::PassEvent& ev) {
+                                            if (ev.id == spawnedId && spawnedId != BareThreadTable::kNoThread) {
+                                                if (ev.resumed) spawnedResumedInFollowup = true;
+                                                if (ev.bodyRan) spawnedBodyRan = true;
+                                                if (!ev.fetchError.empty()) spawnedFetchError = ev.fetchError;
+                                                if (!ev.error.empty()) spawnedOwnError = ev.error;
+                                            }
                                             if (foreignIds.count(ev.id)) return; // not this mission's own concern
                                             if (ev.id == startResult.recordId && ev.resumed)
                                                 ownRecordResumedInFollowup = true;
@@ -3675,6 +3929,32 @@ int main(int argc, char** argv) {
                                                 probeErrors.push_back("lua_host_run: runner could not fetch " +
                                                                        ev.name + ": " + ev.fetchError);
                                         });
+                                }
+                            }
+                            // Finalize the spawned coroutine's own outcome now that the
+                            // follow-up window's scheduler passes have had a chance to
+                            // resume it - this is the part that genuinely only becomes
+                            // knowable LATER, matching the real decoupled-in-time mechanism
+                            // (Sec1.14): at the point of the spawn itself, above, nothing
+                            // could yet be said about whether the callback ran or what it did.
+                            if (spawnedId != BareThreadTable::kNoThread) {
+                                if (!spawnedResumedInFollowup) {
+                                    mr.probeAutopilotDispatchResult +=
+                                        " / still not resumed after " + std::to_string(kProbeAutopilotFollowUpTicks) +
+                                        " follow-up ticks";
+                                } else if (!spawnedFetchError.empty()) {
+                                    mr.probeAutopilotDispatchResult =
+                                        "SYNTHETIC: callback name '" + chosenReg->callbackName +
+                                        "' registered by " + chosenReg->nativeName +
+                                        " could not be resolved to a global function when its spawned coroutine "
+                                        "was resumed (" +
+                                        spawnedFetchError + ") - nothing ran";
+                                } else if (!spawnedOwnError.empty()) {
+                                    mr.probeAutopilotDispatchResult =
+                                        "SYNTHETIC dispatch error (on later resume): " + spawnedOwnError;
+                                } else if (spawnedBodyRan) {
+                                    mr.probeAutopilotDispatchResult =
+                                        "SYNTHETIC dispatch ok (ran on a later scheduler pass, no Lua error)";
                                 }
                             }
                             if (!probeErrors.empty()) {

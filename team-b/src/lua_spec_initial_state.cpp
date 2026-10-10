@@ -348,6 +348,22 @@ void applySpecInitialState(EngineState& es) {
     for (const char* name : kNotorietySpawnGroupNames) {
         es.notorietySpawnGroupResolves().set(name, true);
     }
+
+    // 15. tutorial_start dispatcher step 2, EngineState::TutorialStart::
+    //     globalMode029443bc (spec-lua-api-behaviour.md Sec6.19 correction,
+    //     2026-10-10, Team A spec sync routed via the dlc2_m03 mission-
+    //     blocking probe): 0x029443bc is the machinima recorder's OWN
+    //     recording-state machine (0 idle/1 recording/2,3 finalizing/4
+    //     teardown), NOT a "tutorial dispatcher global" - that framing is
+    //     retracted. CONFIRMED zero-fill default: a fresh single-player
+    //     game with no machinima capture in progress reads 0 (idle), the
+    //     same CONFIRMED default MachinimaState::recording already assumes
+    //     for the same underlying global (Sec44.4/Sec59.1's game_machinima_
+    //     is_recording/cell_machinima_is_recording, 0x029443bc==1). This
+    //     closes the dlc2_m03 blocker at tutorial_start's own step 2 (was
+    //     OPEN, stopped every call): 0 is never 1, 2 or 3, so step 2 never
+    //     stops the dispatcher in a normal game.
+    es.tutorialStart().globalMode029443bc.set(0);
 }
 
 } // namespace sr3luahost

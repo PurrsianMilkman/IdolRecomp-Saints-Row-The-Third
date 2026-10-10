@@ -302,6 +302,16 @@ int main() {
     // Sec12.11 helicopter_fly_to_do: unresolved vehicle -> false; resolved
     // but un-set qualifying gate -> OPEN; gate false -> false; gate true +
     // resolved destination -> true, request recorded.
+    //
+    // CONFIRMED CASE-BY-CASE (vehicle-class xtbl wiring task, 2026-10-10):
+    // "Heli1" here is a pure Lua-host-only test fixture with no real
+    // zone-spawn backing - and this one test body needs qualifies to visit
+    // OPEN, then false, then true within a single test, which the real,
+    // general, data-driven path (EngineState::loadZoneObjectsSection(),
+    // proven end-to-end by tests/synthetic_luahost_batch2728_test.cpp's own
+    // m05_heli_pierce fixture) can only ever assign ONE fixed value for.
+    // Manual .set() stays, legitimately, per this task's own "confirm
+    // case-by-case" instruction.
     es.objectResolves().set("Heli1", false);
     ok(host, gp, "assert(helicopter_fly_to_do('Heli1', 1, true, 'Dest1', true) == false)");
     es.objectResolves().set("Heli1", true);

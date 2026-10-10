@@ -414,7 +414,19 @@ Notes for a port:
   rotation, applied through the orientation step `0x004b6530` before this writer runs (§5.4.1 step 3,
   §5.4.5); and rows 20/7 above (`current speed`/`Vertical Speed`, `+0xd1c`/`+0xd08`) are the proxy's
   velocity, written back by `0x0099e2a0` (§5.6.6) — also one frame old, same as row 24. **The movement
-  flags `+0xd40` were not traced there either and stay OPEN** (that file's own OPEN 38).]** Row 21a's
+  flags `+0xd40` were not traced there either and stay OPEN** (that file's own OPEN 38).]**
+  **[RESOLVED 2026-10-10, `spec-player-runtime.md` OPEN 38: the per-frame writer is `0x0095a020`,
+  called from `0x0095cbc0` (run every update from `0x00994a80`/`0x008a2660`), which saves the prior
+  `+0xd40` value to `+0xd44` before storing the new one. The bit assignments above hold up, but each
+  is a derived condition, not a raw pad-bit copy — the move-direction bits (rows 9-11) come from a
+  heading-angle quadrant test with ±0.2-rad hysteresis against the previous frame's own bucket;
+  alternate-strafe/backpedal (rows 12-13) are animation-state-gated refinements of the
+  move-left/move-right bits; walk/run (rows 14-15) come from byte `+0xccc` taking values 1/2 (value
+  3 sets an undocumented bit `0x100`); crouch (row17) comes from `+0xe8` bit `0x20`, not a raw input;
+  aim (row18) comes from the controller's animation-state id matching a combat/weapon-state list;
+  fine aim (row19) can be driven by the AIM TARGET's own `+0x1d98` flag bit rather than purely local
+  input. A second pass, `0x009aab30`, can further adjust `+0xd40` via a 6-way switch on byte
+  `+0x18d4`, not individually opened.]** Row 21a's
   `+0xa50` specifically, for the player, is `unit(r)` — the smoothed move vector's own direction
   (`spec-player-runtime.md` §5.4.4), not a generic "velocity heading" as this row's own phrasing might
   suggest for other object classes.
@@ -3781,3 +3793,12 @@ Having now read all four of these in full, independently:
   differs (per-group multiplicative ratio here vs. per-layer subtractive mask there); the one piece that is a
   genuine, confirmed shared primitive is the additive-rotation conjugate constant `0x011942a0`. New field-map rows
   added (§11.8); 5 new OPEN items appended (§11.10 item 14). Cleanroom: 0 hits, standard regex. Synced to Team B.
+
+- **2026-10-10 — §4.2 cross-reference: movement flags `+0xd40` writer found** (SPEC TEAM, agent
+  `a9337200c21571e67`, via `spec-player-runtime.md` OPEN 38). The per-frame writer `0x0095a020`
+  (called from `0x0095cbc0`) confirms rows 9-19's bit assignments hold up, but each is a derived
+  condition rather than a raw pad-bit copy — move-direction bits use a heading-angle quadrant test
+  with hysteresis, walk/run comes from a byte value not a bitmask, crouch/aim/fine-aim are each
+  gated by other state (including, for fine aim, a flag on the AIM TARGET rather than local input).
+  Full detail kept in `spec-player-runtime.md` OPEN 38 to avoid duplicate maintenance. Cleanroom:
+  0 hits, standard regex.

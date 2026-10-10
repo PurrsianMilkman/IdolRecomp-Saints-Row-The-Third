@@ -693,9 +693,19 @@ struct CharacterState {
     // stub_vehicle_enter_group_do's instant per-member path now write the
     // resolved vehicle name here, gated the same way as stateEnum above (see
     // its own UPDATE note) - see lua_spec_confirmed_stubs_b15_wave2_core_
-    // dispatchers.cpp's top comment for the full account. Exit does NOT
-    // clear this field (Sec7.8's only clearing site is release, +0x16d4 =
-    // 0, which stays out of scope).
+    // dispatchers.cpp's top comment for the full account.
+    //
+    // UPDATE 2026-10-10 (m05 mission-drive deadlock at vehicle_exit_teleport,
+    // the exit-side mirror of the enter-side fix just above): "Exit does NOT
+    // clear this field" was true only for the NON-instant exit path, which
+    // stays out of scope exactly as stated. stub_vehicle_exit_do's own
+    // INSTANT (arg 2 true) seated branch now clears this field to "" (this
+    // project's own established "empty = no current vehicle" convention,
+    // already read by resolveEnterVehicle() above) alongside completing
+    // stateEnum to 0 - see that stub's own FIXED note for the full
+    // spec-player-runtime.md Sec6 citation of why the instant path's real
+    // release (Sec7.8's +0x16c0/+0x16c4 = null, 0x00b0881c) is now considered
+    // in scope the same way its +0x16d4 = 0 sibling write is.
     OpenValue<std::string> currentVehicleName{"character's current vehicle (+0x16c0/+0x16c4 link)",
                                                "spec-lua-api-behaviour.md Sec30.5"};
 
@@ -729,8 +739,13 @@ struct CharacterState {
     // CONFIRMED reset value. This project does not drive the occupancy state
     // machine (spec-player-runtime.md Sec7, sr3player's VehicleOccupancy) from
     // the Lua host, so the record is the call's observable output here, not
-    // an input to a simulated exit - see stub_vehicle_exit_do's own doc
-    // comment for why +0x16d4 (stateEnum) is deliberately NOT advanced.
+    // an input to a simulated exit. This comment originally continued "...
+    // so +0x16d4 (stateEnum) is deliberately NOT advanced" - stale even
+    // before 2026-10-10's own instant-release fix: stub_vehicle_exit_do's and
+    // stub_vehicle_exit_guardian_angel's seated branches have written +0x16d4
+    // = 2 synchronously since 2026-10-08, and the instant path now completes
+    // to 0 (released) too - see stub_vehicle_exit_do's own doc comment, right
+    // after its `c.stateEnum.set(2);` line, for the current, full account.
     struct VehicleExitRequestRecord {
         bool instant = false;             // +0x30 bit 0 - vehicle_exit_do arg 2 (Sec6.2/Sec6.3.3)
         bool flag30Bit4 = false;          // +0x30 bit 4 - vehicle_exit_do arg 4; reader U6.7, role OPEN

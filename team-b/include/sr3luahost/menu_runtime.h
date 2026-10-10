@@ -121,6 +121,18 @@ struct LuaCoroutineLaunchResult {
     bool callOk = false;
     bool suspended = false;
     std::string callError;
+    // MISSION-HOST PHASE 3 (this task): the BareThreadTable::Record id the
+    // suspended coroutine was allocated under (set only when `suspended` is
+    // true; otherwise left at this sentinel) - additive, so a caller that
+    // needs to keep driving this SAME coroutine from its own per-frame
+    // scheduler pass (tools/sr3_viewer.cpp's own runPlaytest(), the real
+    // production replacement for its prior direct BareThreadTable::allocate/
+    // run call) can tell this record apart from every other one that pass
+    // visits. 65535 duplicates BareThreadTable::kNoThread's own sentinel
+    // value (bare_globals.h) rather than importing it, since this header
+    // only forward-declares BareThreadTable (see its own forward-decl
+    // comment, above) and deliberately does not pull in bare_globals.h.
+    uint16_t recordId = 65535;
 };
 LuaCoroutineLaunchResult LaunchLuaCoroutine(lua_State* L, BareThreadTable& threads, const std::string& funcName,
                                              int nargs, const std::function<void(lua_State*)>& pushArgs);

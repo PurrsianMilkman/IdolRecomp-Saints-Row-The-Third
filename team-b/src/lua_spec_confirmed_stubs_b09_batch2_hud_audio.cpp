@@ -344,26 +344,41 @@ int stub_human_gravity_enable(lua_State* L) {
 // host-gated queue (opcode 0x51, subtype 0) - this project's game_get_is_
 // host is CONFIRMED false in single player (Sec8.27), so the queue branch
 // is dead in this project's scope (same reasoning class as audio_
-// conversation_end, Sec8.2). JUDGMENT CALL (narrowing the prior pass's
-// HARD classification - b07's own Section 8 batch header - flagged for
-// reviewer attention): the pushed number is read here as the resolved
-// Wwise-id value itself, independent of the host gate (only the
-// ADDITIONAL queued record is host-gated, per Sec8.5's own separately-
-// stated "Body"/"Return" split) - this project's own flat
-// objectResolves() stands in for the always-succeeds Wwise-ID resolver
-// (same convention audio_play_persona_line/Sec2.5 already establishes),
-// and nextAudioVoiceHandle() stands in for the real id (no real Wwise
-// voice table, same project-wide convention). Resolve failure has no
-// CONFIRMED sentinel for this specific name, so this project reads it as
-// the natural "resolver returned id 0" case.
+// conversation_end, Sec8.2). The resolver this native's own argument goes
+// through is the Wwise-ID chain (0x00462960 -> 0x0046fd00 ->
+// AK::SoundEngine::GetIDFromString), a DETERMINISTIC HASH of the string,
+// never a registry/membership lookup - it cannot "fail to resolve" the way
+// the zone-object name map (EngineState::objectResolves()) can, and
+// Sec8.5's own "Name source" paragraph confirms this resolver's real
+// on-disk name source is `audio_personas.xtbl`, a namespace confirmed
+// disjoint from the zone-object registry (0 occurrences of any persona
+// name in any .czn_pc/.czh_pc, base game or all 3 DLCs). **FIX (2026-10-10,
+// named-object-resolution-persona-empty task)**: this previously routed
+// the persona-name argument through objectResolves() (the zone-object
+// registry) as a stand-in for "always succeeds" - that was only ever
+// harmless while objectResolves() was an empty test-only map (a miss
+// silently fell through to the 0.0 "unresolved" return); now that
+// objectResolves() is wired to the REAL zone-object registry
+// (EngineState::zoneObjects_, spec-zone-data-format.md Sec11.10), a
+// persona name it was never going to contain (a disjoint namespace, see
+// above) makes OpenValueMap::get() throw OpenStateError instead of
+// quietly returning false - a real bug, not a remaining OPEN gap: a real
+// zone-object miss and "this name was never a zone object in the first
+// place" are different engine facts the shared map conflates. This
+// native must not touch the zone-object registry at all; it already
+// models the Wwise-ID hash itself as always-succeeds-for-any-non-null-
+// input (the SAME convention `audio_play_persona_line`/Sec2.5's own doc
+// comment already establishes verbatim: "The downstream Wwise-ID
+// resolver (0x00462960) itself is modeled as always succeeding for any
+// non-null input"), so this native now just always returns a fresh
+// handle via nextAudioVoiceHandle() (same "no real Wwise voice table, a
+// plain incrementing counter stands in" choice game_UI_audio_play/Sec2.2
+// already established) - matching the already-documented behaviour for
+// every other native in this file family, not inventing a new one.
 int stub_audio_persona_load_2d(lua_State* L) {
     logCall(L, upLog(L), "audio_persona_load_2d", upStateTag(L));
-    std::string name = argString(L, 1);
+    (void)argString(L, 1); // consumed for real call shape only (Wwise-ID hash input, never a registry key)
     EngineState* st = upState(L);
-    if (!st->objectResolves().get(name)) { // OPEN until set
-        lua_pushnumber(L, 0.0);
-        return 1;
-    }
     lua_pushnumber(L, static_cast<lua_Number>(st->nextAudioVoiceHandle()));
     return 1;
 }

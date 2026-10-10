@@ -120,6 +120,7 @@
 // rather than re-deriving the full list here.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -194,11 +195,22 @@ struct NearFieldPedSpawnGates {
     // that wants it enforced must supply a real value; this file does not
     // invent one.
     double cameraFarRejectDist = 0.0;
-    // OPEN: camera visibility/frustum/occlusion testing is a rendering-side
-    // concern, out of this module's scope (Sec20.1: "rejects if visible to
-    // the current (or splitscreen) camera"). CHOSEN default: never visible
-    // (never rejects) - a caller owning the real camera/frustum state
-    // supplies the real test.
+    // CONFIRMED a real, separate gate exists (Sec20.1: "rejects if visible to
+    // the current (or splitscreen) camera" - distinct from, and in ADDITION
+    // to, the ~90-unit near-distance reject above: the spec's own text lists
+    // "rejects within ~90 units... and beyond a second distance threshold;
+    // rejects if visible to the current camera" as three SEPARATE reject
+    // conditions, not alternatives - the ~90-unit floor is unconditional
+    // regardless of visibility, and the visibility test applies ON TOP OF it
+    // for any candidate that clears the distance gates). The real
+    // FOV/clip-plane/occlusion parameters the engine's own frustum test uses
+    // are OPEN (not given by Sec20.1 beyond naming the check) - camera/
+    // rendering state is out of this module's scope either way. CHOSEN
+    // default here: never visible (never rejects) - a caller owning the real
+    // camera/frustum state supplies the real test; ApproxVisibleToCamera
+    // below is this project's own CHOSEN, honestly-approximate stand-in for
+    // callers that want the real "can spawn closer when off-screen" behaviour
+    // without a real renderer-owned frustum to query.
     std::function<bool(const Vec3&)> isVisibleToCamera = [](const Vec3&) { return false; };
     // OPEN: "a ground-validity check" - the real probe is a physics-side
     // concern, out of scope. CHOSEN default: always valid.
@@ -215,6 +227,44 @@ struct NearFieldPedSpawnGates {
     // own file header documents for every "external, unresolved here" xtbl
     // field) and this task's own brief says not to overbuild.
 };
+
+// ApproxVisibleToCamera - a CHOSEN, deliberately simple stand-in for
+// Sec20.1's own CONFIRMED-to-exist-but-not-fully-specified "rejects if
+// visible to the current (or splitscreen) camera" test. Sec20.1 confirms the
+// CHECK exists and that it is separate from the distance gates (see
+// NearFieldPedSpawnGates::isVisibleToCamera's own comment above) but gives
+// neither the real FOV/clip-plane shape nor an aspect ratio/vertical-FOV
+// term - this project's own standing discipline (don't invent precise
+// frustum math wholesale, e.g. don't guess at FOV angles the spec doesn't
+// give) means this is explicitly NOT a claim about the real engine's own
+// clip planes. It is a planar (XZ, horizontal-only; no pitch/vertical FOV
+// term - on-foot ambient peds are ground-level, so the missing vertical term
+// is not expected to matter in practice), single-cone "is this point roughly
+// in front of the camera within a CHOSEN half-angle" test: a dot-product
+// test against the camera's own forward direction, exactly the shape every
+// other "roughly facing" test in this project already uses (e.g.
+// ResolveDirectionAlongHeading's own forward-dot idiom). kApproxHalfFovDeg
+// is a CHOSEN placeholder (a plausible third-person-camera horizontal half-
+// FOV), not a recovered engine constant - callers that have a real FOV
+// figure should pass it explicitly rather than relying on the default.
+inline constexpr double kApproxHalfFovDegChosen = 50.0;  // CHOSEN, not CONFIRMED - see this function's own comment
+
+inline bool ApproxVisibleToCamera(const Vec3& point, const Vec3& cameraPos, const Vec3& cameraForwardXZ,
+                                   double halfFovDeg = kApproxHalfFovDegChosen) {
+    Vec3 toPoint{point.x - cameraPos.x, 0.0, point.z - cameraPos.z};
+    const double dist = Length(toPoint);
+    if (dist < 1e-6) return true;  // degenerate (camera and candidate coincide) - treat as visible, the conservative (reject-the-spawn) direction
+    toPoint = toPoint * (1.0 / dist);
+
+    Vec3 fwd{cameraForwardXZ.x, 0.0, cameraForwardXZ.z};
+    const double fwdLen = Length(fwd);
+    if (fwdLen < 1e-6) return true;  // no real facing supplied - conservative (reject), same reasoning as above
+    fwd = fwd * (1.0 / fwdLen);
+
+    const double cosAngle = toPoint.x * fwd.x + toPoint.z * fwd.z;
+    const double cosHalfFov = std::cos(halfFovDeg * 3.14159265358979323846 / 180.0);
+    return cosAngle >= cosHalfFov;  // within the cone -> "visible" -> caller's gate rejects it
+}
 
 struct NearFieldPedSpawnResult {
     bool found = false;

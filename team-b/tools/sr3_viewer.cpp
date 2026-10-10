@@ -37,7 +37,10 @@
 #include <cctype>
 #include <cmath>
 #include <cstring>
+#include <deque>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -114,6 +117,14 @@
 #include "sr3vehicle/vehicle.h"
 #include "sr3zone/zone_geometry.h"
 #include "sr3zone/zone_header.h"
+// sr3zone/zone_objects.h (2026-10-10, in-world trigger task): the real
+// `.czn_pc` Objects (0x2234) reader, already proven against real data by
+// tools/zone_object_resolver_probe.cpp and already wired into
+// tools/lua_host_run.cpp's own installZoneObjectsFromCache() - reused here
+// (not reinvented) to load real trigger POSITION data into runPlaytest()'s
+// own EngineState. See the in-world-trigger block further down this file
+// for the honest shape/extent gap this does NOT close.
+#include "sr3zone/zone_objects.h"
 // sr3zone/traffic_graph.h + sr3airuntime/traffic_lane_follower.h added for
 // the new `traffic_lane_demo` command (2026-10-08, traffic-AI
 // lane-following task) - see runTrafficLaneDemo()'s own doc comment,
@@ -139,6 +150,14 @@
 #include "sr3airuntime/ambient_population.h"
 #include "sr3airuntime/near_field_vehicle_population.h"
 #include "sr3airuntime/police_roadblock_spawn.h"
+// sr3airuntime/near_field_ped_population.h (THIS TASK, 2026-10-10,
+// near-field-peds-playtest) - wires the previously-standalone near-field
+// (fully-simulated) ambient PEDESTRIAN spawner (spec-ai-runtime.md Sec20)
+// into runPlaytest()'s own live loop, following the near-field VEHICLE
+// traffic wiring above as its precedent - see runPlaytest()'s own
+// "NEAR-FIELD AMBIENT PEDESTRIAN POPULATION" doc comment, just above its
+// main loop, for the full account.
+#include "sr3airuntime/near_field_ped_population.h"
 #include "vpp/container.h"
 // Compiled-shader cache only (this task, 2026-10-08) - see this file's
 // own "vehicle real-shader viewer integration" D3DCompile call sites
@@ -169,6 +188,7 @@
 // vehicle-occupant-hide-flag task (2026-10-09, spec-render-pipeline.md
 // Sec23.14): the already-parsed per-seat `Hide Occupant` flag consumed by
 // runPlaytest()'s "VEHICLE OCCUPANT VISIBILITY" block, below.
+#include "sr3tables_cutscene/scene_table.h"
 #include "sr3tables_vehicle_world/tables.h"
 #include "sr3vintdoc/vint_doc.h"
 #include "sr3xtbl/xtbl.h"
@@ -178,6 +198,10 @@
 // poking EngineState fields directly - see runHudLiveDemo()'s own doc
 // comment.
 #include "sr3luahost/host.h"
+// MISSION-HOST PHASE 3 (this task): the real sr3luahost::MissionPhaseMachine
+// class - see runPlaytest()'s own --mission=<stem> bind-time block, below,
+// for why this is now the production call site's own bind mechanism.
+#include "sr3luahost/menu_runtime.h"
 #include "sr3luahost/stub_registry.h"
 // vint-doc real text (UI render unit U5, 2026-10-03).
 #include "sr3font/vint_font.h"
@@ -16711,6 +16735,15 @@ int runHudLiveDemo(int argc, char** argv) {
     es.hasLocalPlayer().set(true);
     es.coopSession().present.set(true);
     es.coopSession().localIsHost.set(true);
+    // CHOSEN, same precedent as present/localIsHost just above: a single-
+    // player session has exactly 1 member (itself), well under coop_is_
+    // active()'s own CONFIRMED ">= 2" gate (Sec3.1) - so any script that
+    // calls coop_is_active() gets a real "false" answer instead of hitting
+    // memberCount's OPEN-state throw (that OPEN state is for a REAL multi-
+    // member co-op session, which this CHOSEN single-player setup never
+    // claims to model). otherMembersPassSlotCheck stays OPEN: condition 3
+    // (memberCount < 2) always short-circuits before condition 4 is read.
+    es.coopSession().memberCount.set(1);
     es.registerNotorietyAliasTrackCodeForTesting("Police", 3); // CHOSEN track-name binding - see notoriety block below
 
     // ---- the overlay's own VdoObjects (CHOSEN document, REAL property store) ----
@@ -17512,20 +17545,73 @@ int runMinimapDemo(int argc, char** argv) {
 //     visual one tick stale - a cosmetic rendering-glue limitation, not a
 //     population-logic bug; harmless given the 45s occupant lifetime).
 //
-// Ambient PEDESTRIAN population (the distant/LOD human tier,
-// ambient_population.h's own ped side) remains OUT of v0 - unrelated to
-// this task, still no spec-confirmed pass wiring it into playtest; the
-// roadblock's OWN ped category (case 2) above is a separate, debug-gated
-// mechanism, not that system.
+// UPDATED 2026-10-10 (near-field-peds-playtest task) - the STALE note
+// directly above this one (said here once, since the ambient-population
+// distinction is genuinely easy to conflate) no longer describes current
+// status for the NEAR-FIELD ped tier. Two entirely separate pedestrian
+// systems exist in this codebase (ambient_population.h's own file header
+// draws the same line near_field_ped_population.h's file header draws):
+//   * The DISTANT/LOD human tier (ambient_population.h's own ped side,
+//     spec-ai-runtime.md Sec17.3/17.6) - STILL out of v0, unrelated to this
+//     task, still no spec-confirmed pass wiring it into playtest; the
+//     roadblock's OWN ped category (case 2, above) is a separate,
+//     debug-gated mechanism, not that system either.
+//   * The NEAR-FIELD (fully-simulated) ambient PEDESTRIAN tier
+//     (include/sr3airuntime/near_field_ped_population.h, spec-ai-runtime.md
+//     Sec20) - NOW WIRED IN by this task, following the near-field
+//     VEHICLE traffic wiring above as its exact precedent: ALWAYS ON (not
+//     behind a flag, same "ordinary background pedestrians, matching how a
+//     real player experiences the city" reasoning the vehicle side's own
+//     doc comment states), ticked every frame from the SAME nowMsAccum
+//     clock via NearFieldPedDriver::ShouldRunTick(), fed the SAME live
+//     focusX/finalGroundY/focusZ reference position and heading. CHOSEN
+//     (same honest-gap discipline as the vehicle side):
+//       - candidate sidewalk segments: GatherNearFieldPedSpawnCandidate
+//         SegmentsAroundPlayer() (near GatherNearFieldSpawnCandidates
+//         AroundPlayer(), just above this function) synthesizes a small
+//         set of short segments scattered in a heading-biased annulus
+//         around the player (same reasoning the vehicle side's annulus
+//         uses, a DIFFERENT, farther-out radius band - see that function's
+//         own comment for why: the ped spawn algorithm's own ~90m
+//         camera-near-reject gate would otherwise discard almost every
+//         candidate the vehicle band's own 25-90m range produces), rather
+//         than a real sidewalk-graph walk - this project's playtest city
+//         loader still has no Sidewalks `.czn_pc` content-kind reader wired
+//         in (the identical gap the vehicle side's own doc comment already
+//         states, now restated for the ped side rather than left stale);
+//       - sidewalksLoaded is passed a constant `true` (no real Sidewalks
+//         zone-data singleton exists in this build to query, mirroring
+//         zoneDataLoaded=true on the vehicle side);
+//       - eligibleHumanCount is passed the SAME constant 0 the vehicle
+//         side already passes (shared 150-human headroom gate, reused by
+//         #include - no live ambient-human census exists in this build);
+//       - localCap: near_field_ped_population.h's own file header states
+//         this "local headroom" has no CONFIRMED numeric literal (unlike
+//         the vehicle tier's CONFIRMED 48) and is CALLER-SUPPLIED. CHOSEN
+//         here: reuse the one known near-field-population cap precedent,
+//         kNearFieldVehicleCap (48) - an honestly-labelled CHOSEN stand-in,
+//         not a second confirmed literal;
+//       - DRAWING reuses the SAME already-loaded/posed brad character mesh
+//         (characterRenderer/characterHeadRenderer) the police-roadblock
+//         ped category already draws with, at each live near-field ped's
+//         own population position - every ambient pedestrian currently
+//         looks like the same character model, the identical honest,
+//         stated simplification the vehicle side's own "every ambient
+//         vehicle currently looks like the same car model" note applies.
+//     This module's own SPAWN-ONLY scope (no despawn predicate exists in
+//     spec-ai-runtime.md Sec20 for near-field peds - see that header's own
+//     file note) means nearFieldPedsLive only ever grows up to localCap
+//     within a single playtest run; not a bug, an honestly-scoped gap this
+//     wiring does not paper over.
 //
 // HONEST SCOPE (said here once, not scattered): keyboard+mouse only. This
 // project's own spec-tables-ui-controls.md Sec3-Sec5 DOES document a real
 // gamepad/XInput binding layer (control_schemes.xtbl, the 19-entry
 // gamepad-button table) - it is not wired here. No jump, no crouch toggle
-// (PlaytestMoveSource::held() only ever answers Sprint). Ambient background
-// PEDESTRIAN population remains out of scope (see above); near-field
-// ambient VEHICLE traffic and the debug-gated police roadblock ARE now
-// wired (see above).
+// (PlaytestMoveSource::held() only ever answers Sprint). The DISTANT/LOD
+// ambient PEDESTRIAN population remains out of scope (see above); near-field
+// ambient VEHICLE traffic, near-field ambient PEDESTRIAN population, and the
+// debug-gated police roadblock ARE now wired (see above).
 //
 // UPDATED 2026-10-08 (sky/lighting/TOD task): the fixed CHOSEN skyblue clear
 // colour and mesh_renderer.cpp's fixed CHOSEN "headlight" term (both from an
@@ -17601,6 +17687,661 @@ std::vector<sr3airuntime::Vec3> GatherNearFieldSpawnCandidatesAroundPlayer(const
     return out;
 }
 
+// GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer (THIS TASK,
+// near-field-peds-playtest, 2026-10-10) - the CHOSEN candidate-segment
+// SOURCE runPlaytest() feeds SelectNearFieldPedSpawn() (via
+// RunNearFieldPedSpawnPass's own candidateSegments parameter,
+// near_field_ped_population.h), following
+// GatherNearFieldSpawnCandidatesAroundPlayer() just above as its exact
+// precedent. near_field_ped_population.h's own file header states this
+// file does not own a real Sidewalks graph reader ("callers supply
+// pre-resolved candidate geometry") - the SAME honest gap the vehicle
+// function above already states for the Traffic graph, restated here for
+// Sidewalks. CHOSEN stand-in: synthesize kNearFieldSpawnCandidateSlots (3,
+// the SAME slot-count precedent reused, not a second literal) short
+// SidewalkSegment records, each centered within a heading-biased annulus
+// around the player, oriented along a second independent random angle (a
+// segment, unlike a vehicle candidate point, needs a direction - purely
+// cosmetic, consumed only by SelectNearFieldPedSpawn's own sideways-offset
+// normal and PickWeightedIndex's own length-weighting, not a traced fact).
+// UPDATED 2026-10-10 (ped-spawn-distance-spec-tuning task, spec-ai-runtime.md
+// Sec20.1 re-read in full): the prior unit's own "DELIBERATELY NOT [25,90)"
+// reasoning directly above was right about the ~90-unit floor being real and
+// unconditional, but wrong about why candidates needed to sit at 95m+ in
+// EVERY direction. Sec20.1's own text on the creation routine (0x0090b0a0)
+// lists three SEPARATE reject conditions, not a single distance band:
+// "rejects within ~90 units of the camera (no pop-in next to the player) and
+// beyond a second distance threshold; rejects if visible to the current (or
+// splitscreen) camera" - the ~90-unit floor applies regardless of
+// visibility (so peds genuinely cannot spawn closer than that, on- or
+// off-screen), but the VISIBILITY test is a SEPARATE gate on top of it: nothing
+// in the spec says a candidate beyond 90 units must also be ahead of the
+// player. The prior unit's own heading-biased cone (kNearFieldSpawnHeadingSpreadRad,
+// above) always placed every candidate roughly in front of the camera, which
+// is exactly the retail-inaccurate case this task was asked to fix (peds
+// popping in directly in view). Candidates are now scattered across a FULL
+// circle (no heading bias) so a visibility gate actually has something to
+// differentiate - near_field_ped_population.h's own ApproxVisibleToCamera
+// (a CHOSEN, honestly-approximate horizontal-FOV cone test, not a recovered
+// engine frustum) is wired at RunNearFieldPedSpawnPass's own call site below,
+// so a candidate behind/beside the player can now be accepted much closer to
+// the real ~90-unit floor instead of needing the prior unit's own 95m+ CHOSEN
+// margin in every direction, while one ahead of the player in view is
+// rejected the same way the real engine's own check would reject it.
+constexpr double kNearFieldPedSpawnInnerM = 90.5;   // just past kNearFieldPedCameraNearRejectDistApprox (90, CONFIRMED-approximate) - CHOSEN margin so the near-reject gate does not defeat every candidate at the exact boundary
+constexpr double kNearFieldPedSpawnOuterM = 160.0;  // CHOSEN, cosmetic only - Sec20.1's own "second distance threshold" (the real far reject) has no CONFIRMED literal; this remains an arbitrary-but-reasonable generation-side cap, unrelated to NearFieldPedSpawnGates::cameraFarRejectDist (left disabled, see that field's own comment)
+constexpr double kNearFieldPedSpawnSegmentHalfLengthM = 6.0;  // CHOSEN, cosmetic only - a short sidewalk stand-in segment, not a real graph edge length
+
+std::vector<sr3airuntime::SidewalkSegment> GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer(
+    const sr3airuntime::Vec3& referencePos, double /*referenceHeadingRad*/, sr3airuntime::DeterministicRng& rng) {
+    std::vector<sr3airuntime::SidewalkSegment> out;
+    for (size_t i = 0; i < sr3airuntime::kNearFieldSpawnCandidateSlots; ++i) {
+        // Full circle, NOT heading-biased (see this function's own 2026-10-10
+        // doc-comment update above) - the visibility gate at the call site is
+        // what now decides whether an in-view candidate is actually accepted,
+        // not the generation-side angle.
+        const double angle = sr3airuntime::RandomUnitFloat01(rng) * 2.0 * 3.14159265358979323846;
+        const double radius =
+            kNearFieldPedSpawnInnerM +
+            sr3airuntime::RandomUnitFloat01(rng) * (kNearFieldPedSpawnOuterM - kNearFieldPedSpawnInnerM);
+        sr3airuntime::Vec3 center = referencePos;
+        center.x += radius * std::cos(angle);
+        center.z += radius * std::sin(angle);
+        // Second independent random angle for the segment's own direction
+        // (CHOSEN, cosmetic - no relation to the player's heading; a real
+        // sidewalk segment's own direction is a graph-topology fact this
+        // file does not have access to).
+        const double segAngle = sr3airuntime::RandomUnitFloat01(rng) * 2.0 * 3.14159265358979323846;
+        sr3airuntime::SidewalkSegment seg;
+        seg.id = static_cast<uint64_t>(i) + 1;
+        seg.start = center;
+        seg.start.x -= kNearFieldPedSpawnSegmentHalfLengthM * std::cos(segAngle);
+        seg.start.z -= kNearFieldPedSpawnSegmentHalfLengthM * std::sin(segAngle);
+        seg.end = center;
+        seg.end.x += kNearFieldPedSpawnSegmentHalfLengthM * std::cos(segAngle);
+        seg.end.z += kNearFieldPedSpawnSegmentHalfLengthM * std::sin(segAngle);
+        out.push_back(seg);
+    }
+    return out;
+}
+
+// --mission=<stem> (Phase 1, this task): the stem-resolution/mission-start/
+// watchdog helpers runPlaytest() below uses. See that function's own doc
+// comment (right below this namespace) for the full rationale/citation -
+// not repeated here. Anonymous namespace, same convention every other
+// small helper block in this file uses (e.g. readLuaGlobalNumber/
+// drawHudLabel above) - internal linkage, usable by any later function in
+// this one translation unit.
+namespace {
+
+// One real row of tools/mission_package_per_container.tsv this pass needs -
+// a trimmed copy of tools/lua_host_run.cpp's own MissionPackageRow (that
+// file's columns 4/6/7/8; container_name is kept too, for a readable error
+// message when a stem resolves to an entry name this command's own given
+// archives don't contain).
+struct MissionPackageRow {
+    std::string containerName;
+    std::string missionLuaEntryName;
+    std::string missionLuaStem;
+    bool coversStartScript = false;
+};
+
+// Manual tab-split - the SAME tolerant-of-a-missing-trailing-empty-field
+// convention tools/lua_host_run.cpp's own loadMissionPackageRows() uses
+// (std::getline does not emit a trailing empty token the way some TSV
+// readers do).
+std::vector<MissionPackageRow> loadMissionPackageRows(const std::string& path) {
+    std::vector<MissionPackageRow> out;
+    std::ifstream f(path);
+    if (!f) return out; // real, checked negative if missing - reported by the caller
+    std::string line;
+    bool first = true;
+    while (std::getline(f, line)) {
+        if (first) { first = false; continue; } // header row
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::vector<std::string> cols;
+        std::istringstream ss(line);
+        std::string cell;
+        while (std::getline(ss, cell, '\t')) cols.push_back(cell);
+        if (cols.size() < 8) continue; // malformed-row skip, not expected against this file's own real output
+        MissionPackageRow r;
+        r.containerName = cols[3];
+        r.missionLuaEntryName = cols[5];
+        r.missionLuaStem = cols[6];
+        r.coversStartScript = (cols[7] == "1");
+        out.push_back(std::move(r));
+    }
+    return out;
+}
+
+// One `.lua` leaf found by the walk below - trimmed to what stem resolution
+// needs (tools/lua_host_run.cpp's own ScriptInstance also keeps archive/
+// pathChain, for its own population-summary reporting this single-stem
+// lookup has no use for).
+struct MissionScriptInstance {
+    std::string entryName;
+    std::string content;
+};
+struct MissionWalkState {
+    std::deque<std::vector<uint8_t>> bufferPool; // keeps decompressed nested-container bytes alive (same reason
+                                                  // tools/lua_host_run.cpp's own WalkState::bufferPool does - a
+                                                  // vpp::Container built over one of these views it)
+    std::vector<MissionScriptInstance> found;
+};
+void missionWalkInspectLeaf(MissionWalkState& st, const std::string& name, const uint8_t* data, size_t len) {
+    if (endsWithNoCase(name, ".lua")) {
+        MissionScriptInstance si;
+        si.entryName = name;
+        si.content.assign(reinterpret_cast<const char*>(data), len);
+        st.found.push_back(std::move(si));
+    }
+}
+// Copied and adapted, deliberately, from tools/lua_host_run.cpp's own
+// WalkState/walk() (same recursion into nested `.str2_pc` containers via
+// vpp::Container::openNested()/decompressEntry(), same ".lua name suffix" +
+// "Lua bytecode magic" leaf test) - this project's own established
+// convention (that file's own top comment: "duplicated with attribution
+// instead, matching how vpp_dump.cpp/vpp_extract.cpp already each carry
+// their own walk rather than sharing one"), not refactored into a shared
+// header.
+void missionWalk(MissionWalkState& st, const vpp::Container& c) {
+    const auto& entries = c.entries();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto& e = entries[i];
+        if (e.name.empty()) continue; // unnamed entries (hash-only) are never a ".lua" leaf match
+        const std::string& name = e.name;
+        if (e.payload.kind == vpp::PayloadKind::Raw) {
+            bool nested = false;
+            try {
+                vpp::Container child = c.openNested(i);
+                nested = true;
+                missionWalk(st, child);
+            } catch (const std::exception&) {
+                nested = false;
+            }
+            if (!nested) {
+                vpp::ByteView raw = c.rawEntryBytes(i);
+                missionWalkInspectLeaf(st, name, raw.data(), raw.size());
+            }
+        } else {
+            vpp::DecompressResult result = c.decompressEntry(i);
+            if (result.status == vpp::DecodeStatus::Ok || result.status == vpp::DecodeStatus::SizeMismatch) {
+                bool nested = false;
+                if (result.data.size() >= 4) {
+                    uint32_t magic = (uint32_t)result.data[0] | ((uint32_t)result.data[1] << 8) |
+                                      ((uint32_t)result.data[2] << 16) | ((uint32_t)result.data[3] << 24);
+                    if (magic == 0x51890ACEu) {
+                        st.bufferPool.push_back(std::move(result.data));
+                        try {
+                            vpp::Container child(vpp::ByteView(st.bufferPool.back().data(), st.bufferPool.back().size()));
+                            nested = true;
+                            missionWalk(st, child);
+                        } catch (const std::exception&) {
+                            nested = false;
+                        }
+                        if (!nested) {
+                            const auto& buf = st.bufferPool.back();
+                            missionWalkInspectLeaf(st, name, buf.data(), buf.size());
+                        }
+                        continue;
+                    }
+                }
+                missionWalkInspectLeaf(st, name, result.data.data(), result.data.size());
+            }
+            // decompress failure: silently skipped, same as lua_host_run.cpp's own walk()
+            // (that file's own st.stats.decompressFailed counter has no equivalent need here -
+            // this is a single-stem lookup, not a population census).
+        }
+    }
+}
+
+// Walks `archivePaths` ONCE, collecting the first-found-by-entry-name real
+// `.lua` content for every name in `wantedLower` (case-insensitive exact
+// match, first archive in the given order wins, same convention tools/
+// lua_host_run.cpp's own st.found/first-found-instance game_lib.lua block
+// uses) - a single combined pass rather than one walk per name, since this
+// task's own mission bind needs several names at once (see
+// missionPreloadNamed() below).
+std::map<std::string, MissionScriptInstance> findScriptsByName(const std::vector<std::string>& archivePaths,
+                                                                 const std::set<std::string>& wantedLower) {
+    std::map<std::string, MissionScriptInstance> out;
+    for (const auto& archivePath : archivePaths) {
+        if (out.size() >= wantedLower.size()) break; // every wanted name already found
+        std::vector<uint8_t> bytes = readFileLargeC(archivePath);
+        if (bytes.empty()) continue; // unreadable archive - try the next one, not fatal to the search itself
+        try {
+            vpp::Container root(vpp::ByteView(bytes.data(), bytes.size()));
+            MissionWalkState st;
+            missionWalk(st, root);
+            for (auto& f : st.found) {
+                const std::string lower = toLowerLocal(f.entryName);
+                if (wantedLower.count(lower) && !out.count(lower)) out[lower] = std::move(f);
+            }
+        } catch (const std::exception&) {
+            // unreadable/unparseable archive - try the next one, same best-effort convention
+        }
+    }
+    return out;
+}
+
+// --- Real zone-object (trigger position) load for --mission (2026-10-10,
+// in-world-trigger task) -----------------------------------------------
+//
+// Copied and adapted, deliberately, from tools/lua_host_run.cpp's own
+// zoneobj::walkCzn()/installZoneObjectsFromCache() (same recursion shape as
+// missionWalk() just above - this project's own established "duplicated
+// with attribution, not factored into a shared header" convention, per
+// that file's own top comment). Walks the SAME `cityArchivePaths` this
+// command already opens for mission-script resolution (findScriptsByName
+// above), looking for `.czn_pc` leaves, and ingests every complete Objects
+// (0x2234) section found via sr3zone::ZoneObjects::locate() + hudEs->
+// loadZoneObjectsSection() - the exact same real reader/ingest pair
+// tools/zone_object_resolver_probe.cpp already proved against real data
+// (the `Killbane` boss-character example). This gives runPlaytest() a real
+// name -> sr3zone::ObjectRecord resolver it can read a real trigger's
+// position from via sr3zone::ObjectPosition() - see this function's own
+// caller for the honest shape/extent gap this does NOT close (Sec1.14's
+// own "on-disk property-id encoding of shape/extents/radius is unknown"
+// finding).
+namespace missionzoneobj {
+
+bool endsWithCznExtLocal(const std::string& lowerName) {
+    static const std::string ext = ".czn_pc";
+    if (lowerName.size() < ext.size()) return false;
+    return lowerName.compare(lowerName.size() - ext.size(), ext.size(), ext) == 0;
+}
+
+struct Counters {
+    uint64_t cznFilesFound = 0;
+    uint64_t cznWithSection = 0;
+};
+
+void ingestCznBuffer(sr3luahost::EngineState& es, Counters& ctr, const uint8_t* data, size_t len) {
+    ++ctr.cznFilesFound;
+    std::vector<sr3zone::ObjectsSection> sections;
+    try {
+        sections = sr3zone::ZoneObjects::locate(vpp::ByteView(data, len));
+    } catch (const std::exception&) {
+        return;
+    }
+    for (const sr3zone::ObjectsSection& section : sections) {
+        if (!section.complete) continue;
+        ++ctr.cznWithSection;
+        es.loadZoneObjectsSection(section);
+    }
+}
+
+void walkCzn(sr3luahost::EngineState& es, Counters& ctr, const vpp::Container& c) {
+    const auto& entries = c.entries();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        const auto& e = entries[i];
+        std::string name = e.name.empty() ? std::string() : e.name;
+        bool isCzn = endsWithCznExtLocal(toLowerLocal(name));
+
+        if (e.payload.kind == vpp::PayloadKind::Raw) {
+            bool nested = false;
+            try {
+                vpp::Container child = c.openNested(i);
+                nested = true;
+                walkCzn(es, ctr, child);
+            } catch (const std::exception&) {
+                nested = false;
+            }
+            if (!nested && isCzn) {
+                vpp::ByteView raw = c.rawEntryBytes(i);
+                ingestCznBuffer(es, ctr, raw.data(), raw.size());
+            }
+        } else {
+            vpp::DecompressResult result = c.decompressEntry(i);
+            bool ok = result.status == vpp::DecodeStatus::Ok || result.status == vpp::DecodeStatus::SizeMismatch ||
+                      result.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                      result.status == vpp::DecodeStatus::ContentValidated ||
+                      result.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                      result.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain;
+            if (!ok) continue;
+            bool nested = false;
+            if (result.data.size() >= 4) {
+                uint32_t magic = (uint32_t)result.data[0] | ((uint32_t)result.data[1] << 8) |
+                                  ((uint32_t)result.data[2] << 16) | ((uint32_t)result.data[3] << 24);
+                if (magic == 0x51890ACEu) {
+                    try {
+                        vpp::Container child(vpp::ByteView(result.data.data(), result.data.size()));
+                        nested = true;
+                        walkCzn(es, ctr, child);
+                    } catch (const std::exception&) {
+                        nested = false;
+                    }
+                }
+            }
+            if (!nested && isCzn) ingestCznBuffer(es, ctr, result.data.data(), result.data.size());
+        }
+    }
+}
+
+// Walks every archive in `archivePaths` (the SAME list --mission already
+// resolves scripts against) and ingests every real `.czn_pc` Objects
+// section found into `es`. Returns a short human-readable summary, same
+// "never fatal, always report what happened" convention as every other
+// --mission bind-time diagnostic line in this function.
+std::string installZoneObjectsFromArchives(const std::vector<std::string>& archivePaths, sr3luahost::EngineState& es) {
+    Counters ctr;
+    size_t archivesRead = 0;
+    for (const auto& archivePath : archivePaths) {
+        std::vector<uint8_t> bytes = readFileLargeC(archivePath);
+        if (bytes.empty()) continue;
+        ++archivesRead;
+        try {
+            vpp::Container root(vpp::ByteView(bytes.data(), bytes.size()));
+            walkCzn(es, ctr, root);
+        } catch (const std::exception&) {
+            // unreadable/unparseable archive - try the next one, same best-effort convention
+        }
+    }
+    return "archives_read=" + std::to_string(archivesRead) + "/" + std::to_string(archivePaths.size()) +
+           " czn_files_found=" + std::to_string(ctr.cznFilesFound) +
+           " objects_sections=" + std::to_string(ctr.cznWithSection) +
+           " named_objects_resolved=" + std::to_string(es.zoneObjectsLoadedCount());
+}
+
+// --- Real zscene/cutscene scene table for --mission (2026-10-10, coordinator-
+// routed fix): `tools/lua_host_run.cpp`'s own installSceneTableFromCache()
+// (its top comment, "The zscene / cutscene scene table") already builds this
+// from REAL `cutscene.xtbl` + per-scene `<name>.cte_xtbl` data
+// (sr3tables_cutscene::BuildMainSceneTable()) and installs it via
+// EngineState::installZsceneTable() - but that wiring only runs in that
+// OTHER tool's own mission-drive loop, never in this command's own
+// runPlaytest() --mission=<stem> live path. Without it, zsceneResolve()
+// (src/lua_cutscene.cpp) falls back to the OPEN per-name map
+// (zsceneLoadable_), which has never been told anything about "09_in"/
+// "05_in" - so EngineState::zsceneIsLoaded() throws OpenStateError on its
+// very first call instead of ever reaching Sec14.23's own kind-gate (a name
+// not resolving to a kind-1 entry returns `true` AT ONCE, Sec26.25 Scene
+// entry: `CutsceneType` "Story" -> kind 2, not 1 - m09/m05's own `_in`/`_out`
+// scenes are story cutscenes, not Zscenes, so the real engine never actually
+// preps them as Zscenes and the check passes immediately). This is the SAME
+// kind-gate code path lua_host_run.cpp's own mission-drive runs already
+// exercise correctly - the gap was this command never installing the real
+// table, not a missing kind check in EngineState::zsceneIsLoaded() itself
+// (re-read directly, src/lua_cutscene.cpp: the `if (!r.loadable) return
+// true;` line already implements Sec14.23's fast-path exactly).
+//
+// Copied and adapted from lua_host_run.cpp's own installSceneTableFromCache
+// (same duplicated-with-attribution convention as walkCzn()/
+// installZoneObjectsFromArchives() just above) - the one real difference is
+// that this command has no cache DIRECTORY to iterate, only the specific
+// `cityArchivePaths` its own argv already named (same adaptation
+// installZoneObjectsFromArchives() already makes for zone data): this scans
+// those paths for one whose filename matches "cutscene_tables.vpp_pc"
+// (case-insensitive), same as lua_host_run's own directory_iterator search.
+// A mission whose scene table lives in a DLC-only container needs that
+// DLC's own cutscene_tables archive passed the same way a DLC mission's own
+// city archive is (this command's own "[<more city archives>...]" usage
+// text) - not attempted here beyond the "main" container, matching
+// lua_host_run's own "only the 'main' call runs" scope limit.
+std::string installZsceneTableFromArchives(const std::vector<std::string>& archivePaths, sr3luahost::EngineState& es) {
+    std::string archivePath;
+    for (const auto& p : archivePaths) {
+        const std::string lower = toLowerLocal(p);
+        static const std::string want = "cutscene_tables.vpp_pc";
+        if (lower.size() >= want.size() &&
+            lower.compare(lower.size() - want.size(), want.size(), want) == 0) {
+            archivePath = p;
+            break;
+        }
+    }
+    if (archivePath.empty()) {
+        return "not installed (no cutscene_tables.vpp_pc among the given archives; the table stays OPEN - "
+               "pass it as one of this command's own [<more city archives>...] tokens)";
+    }
+    std::vector<uint8_t> bytes = readFileLargeC(archivePath);
+    if (bytes.empty()) return "not installed (could not read " + archivePath + ")";
+    try {
+        vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+        auto entryBytes = [&c](const std::string& wanted, std::string* foundName) -> std::optional<std::string> {
+            const std::string w = toLowerLocal(wanted);
+            const auto& entries = c.entries();
+            for (size_t i = 0; i < entries.size(); ++i) {
+                if (toLowerLocal(entries[i].name) != w) continue;
+                if (foundName) *foundName = entries[i].name;
+                if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                    vpp::ByteView raw = c.rawEntryBytes(i);
+                    return std::string(reinterpret_cast<const char*>(raw.data()), raw.size());
+                }
+                vpp::DecompressResult r = c.decompressEntry(i);
+                if (r.status != vpp::DecodeStatus::Ok) return std::nullopt;
+                return std::string(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+            }
+            return std::nullopt;
+        };
+        std::optional<std::string> names = entryBytes("cutscene.xtbl", nullptr);
+        if (!names) {
+            return "not installed (cutscene.xtbl not readable in " + archivePath + ")";
+        }
+        sr3tables_cutscene::SceneTable table = sr3tables_cutscene::BuildMainSceneTable(
+            *names, [&entryBytes](const std::string& fileName) -> std::optional<sr3tables_cutscene::OpenedFile> {
+                sr3tables_cutscene::OpenedFile f;
+                std::optional<std::string> b = entryBytes(fileName, &f.fileName);
+                if (!b) return std::nullopt;
+                f.bytes = std::move(*b);
+                return f;
+            });
+        std::vector<sr3luahost::EngineState::ZsceneTableRow> rows;
+        size_t kind0 = 0, kind1 = 0, kind2 = 0, kindOpen = 0;
+        for (const auto& e : table.entries) {
+            sr3luahost::EngineState::ZsceneTableRow row;
+            row.name = e.name;
+            row.crc = e.crc;
+            row.kind = e.fields.kind;
+            row.cameraScriptName = e.fields.cameraScriptText;
+            if (e.fields.resources) {
+                std::vector<std::string> res;
+                for (const auto& r : *e.fields.resources) {
+                    res.push_back(r.source == sr3tables_cutscene::SceneResource::Source::AngelFixedNames
+                                      ? std::string("(IsAngel: three fixed names, OPEN)")
+                                      : (r.textPresent ? r.text : std::string("(Variant absent, OPEN)")));
+                }
+                row.resources = std::move(res);
+            }
+            rows.push_back(std::move(row));
+            if (!e.fields.kind) ++kindOpen;
+            else if (*e.fields.kind == 0) ++kind0;
+            else if (*e.fields.kind == 1) ++kind1;
+            else ++kind2;
+        }
+        const size_t installed = rows.size();
+        es.installZsceneTable(std::move(rows));
+        return "installed from " + archivePath + " entries=" + std::to_string(installed) +
+               " kind0(Designer)=" + std::to_string(kind0) + " kind1(Zscene)=" + std::to_string(kind1) +
+               " kind2(Story)=" + std::to_string(kind2) + " kindOpen=" + std::to_string(kindOpen);
+    } catch (const std::exception& ex) {
+        return std::string("not installed (exception: ") + ex.what() + ")";
+    }
+}
+
+} // namespace missionzoneobj
+
+// Real outcome of resolving `stem` against missionPackageTsvPath's rows,
+// then finding (findScriptsByName above) a `.lua` leaf whose name case-
+// insensitively equals that row's own mission_lua_entry_name.
+struct MissionResolution {
+    bool ok = false;
+    std::string entryName;
+    std::string containerName;
+    std::string content;
+    std::string error; // set iff !ok
+};
+MissionResolution resolveMissionStemScript(const std::vector<std::string>& archivePaths,
+                                            const std::string& missionPackageTsvPath, const std::string& stem) {
+    MissionResolution out;
+    std::vector<MissionPackageRow> rows = loadMissionPackageRows(missionPackageTsvPath);
+    if (rows.empty()) {
+        out.error = "could not read/parse '" + missionPackageTsvPath + "' (0 rows) - pass its real path via "
+                    "--mission-package-tsv if it is not next to the registration list";
+        return out;
+    }
+    const MissionPackageRow* match = nullptr;
+    for (auto& r : rows) {
+        // SAME filter tools/lua_host_run.cpp's own mission-drive loop dedup applies
+        // (coversStartScript==1, first match in file order - this project's own
+        // 49-distinct-stem population is already deduped this way in that file).
+        if (r.coversStartScript && r.missionLuaStem == stem) { match = &r; break; }
+    }
+    if (!match) {
+        out.error = "stem '" + stem + "' not found in '" + missionPackageTsvPath + "' (no row with "
+                    "mission_lua_stem==this AND stem_covers_a_start_script==1)";
+        return out;
+    }
+    out.containerName = match->containerName;
+    const std::string wantLower = toLowerLocal(match->missionLuaEntryName);
+    auto found = findScriptsByName(archivePaths, {wantLower});
+    auto it = found.find(wantLower);
+    if (it == found.end()) {
+        out.error = "stem '" + stem + "' resolves to entry '" + match->missionLuaEntryName + "' (container '" +
+                    match->containerName + "') but that entry was not found in any of the " +
+                    std::to_string(archivePaths.size()) + " given archive(s) - pass its containing .vpp_pc as one "
+                    "of this command's own city-archive arguments";
+        return out;
+    }
+    out.ok = true;
+    out.entryName = it->second.entryName;
+    out.content = std::move(it->second.content);
+    return out;
+}
+
+// The instruction-count watchdog - EXACT same mechanism/threshold as tools/
+// lua_host_run.cpp's own missionWatchdogHook/kMissionWatchdogInstructionBudget
+// (lua_sethook + LUA_MASKCOUNT, a real, unmodified public Lua 5.1 debug-API
+// feature) - reused, not reinvented, per this task's own "don't invent new
+// thresholds" instruction. Simplified relative to that file's own version:
+// no trace-ring/probe-autopilot diagnostics (lua_host_run.cpp's own
+// --trace-host-calls-before-error=/--probe-autopilot are that tool's
+// separate, opt-in diagnostic tooling, out of this task's scope).
+constexpr int kMissionWatchdogInstructionBudget = 5'000'000;
+void missionWatchdogHook(lua_State* L, lua_Debug* /*ar*/) {
+    luaL_error(L,
+               "sr3_viewer --mission: call exceeded the %d-instruction budget (likely an infinite loop in "
+               "never-before-executed mission code) - aborted by this tool's own safety hook, not hung",
+               kMissionWatchdogInstructionBudget);
+}
+// Watchdog-wrapped host.runChunk() - same convention as tools/lua_host_run.cpp's
+// own runChunkWithWatchdog().
+sr3luahost::Host::RunResult missionRunChunkWithWatchdog(sr3luahost::Host& host, lua_State* L,
+                                                         const std::string& source, const std::string& chunkName) {
+    lua_sethook(L, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+    sr3luahost::Host::RunResult r = host.runChunk(L, source, chunkName);
+    lua_sethook(L, nullptr, 0, 0); // always clear - never leaves the watchdog armed for a later, unrelated call
+    return r;
+}
+
+// MISSION-HOST PHASE 3 (this task): the hand-rolled watchdog-wrapped
+// BareThreadTable::allocate/run pair that used to live here (MissionStartResult/
+// missionCallStart(), Phase 1) is gone - the production bind-time block
+// (runPlaytest(), below) now goes through the real sr3luahost::
+// MissionPhaseMachine::triggerMarker() (include/sr3luahost/menu_runtime.h),
+// which runs the identical mechanism (lua_getglobal -> BareThreadTable::
+// allocate -> BareThreadTable::run, its own LaunchLuaCoroutine()) with its
+// own matching 5,000,000-instruction watchdog budget
+// (kCoroutineLaunchInstructionBudget, src/lua_menu_runtime.cpp) - not a
+// second, divergent implementation kept in parallel.
+
+} // namespace
+//
+// MISSION-HOST PHASE 1 (this task, 2026-10-09, branch feature/mission-host-
+// phase1-debug-flag): per the approved-in-direction design doc (commit
+// 775cd61 on branch design/mission-host-in-engine-loop,
+// results/design_mission_host_in_engine_loop_20261009.md), this adds a NEW,
+// opt-in `--mission=<stem>` debug flag that drives a real shipped mission
+// Lua script, once per REAL rendered frame, through the SAME ONE
+// sr3luahost::Host/EngineState this function already builds for --hud
+// (hudHost/hudEs/hudGp below, now shared rather than --hud-only - see the
+// "if (hudEnabled || missionEnabled)" block). Without --mission, nothing
+// about this function changes (missionEnabled stays false, every new block
+// below is skipped, byte-for-byte the same code path as before this task -
+// verified explicitly, see this task's own HANDOFF/commit for the before/
+// after ctest run).
+//
+// Resolution method (stem -> real script source) is copied and adapted,
+// deliberately, from tools/lua_host_run.cpp's own WalkState/inspectLeaf/
+// walk() (the ".lua"-suffix leaf test, the str2_pc nested-container-or-
+// compressed-0x51890ACE-magic recursion) and its own MissionPackageRow/
+// loadMissionPackageRows()/first-found-by-entry-name matching rule (that
+// file's own mission-drive loop, lines ~1096-1130/~3204-3222 as of this
+// extraction) - NOT refactored into a shared header: this project's own
+// established convention (tools/lua_host_run.cpp's own top comment) is to
+// duplicate a small recursive walk per tool, with attribution, rather than
+// share one (same precedent as vpp_dump.cpp/vpp_extract.cpp each carrying
+// their own copy) - followed here rather than inventing a different shape.
+// The one real difference: lua_host_run.cpp walks every .vpp_pc in a whole
+// cache DIRECTORY; this command has no such directory, only the specific
+// archives its own argv already named (<characters.vpp_pc>/<misc_tables.
+// vpp_pc>/<city archives>...) - so resolveMissionStemScript() below walks
+// `cityArchivePaths` only (where every one of the 49 real mission_lua_stem
+// entries tools/mission_package_per_container.tsv lists actually lives -
+// confirmed directly: m01's own row names manifest_archive=sr3_city_0.vpp_pc,
+// which this command's own first required positional argument already is;
+// a DLC stem needs its own dlc1/dlc2/dlc3.vpp_pc passed as one of this
+// command's own "[<more city archives>...]" tokens, same convention as
+// every other archive this function already takes).
+//
+// Per-frame tick shape (screenFadeHostFrame -> cutsceneHostFrame ->
+// gameClockAdvanceFrame -> ONE BareThreadTable scheduler pass ->
+// fireConfirmedHooks) is the SAME CHOSEN order tools/lua_host_run.cpp's own
+// mission-drive loop uses (that file's own kFadeHostMsPerTick/
+// kSchedulerPassesPerTick=1 comment, re-confirmed against spec-render-
+// pipeline.md §6.6 before this task started: Lua coroutine resume runs on
+// the main thread once per rendered frame, matching this function's own
+// real per-frame loop exactly) - the one real change is that this loop
+// already has a REAL per-frame `dt` (QueryPerformanceCounter-measured, or
+// the deterministic 1/30s --no-input substitute), so it is used directly in
+// place of lua_host_run.cpp's own fixed 333ms/tick simulated-time
+// substitute (design doc §3b: "the simulated-seconds tick budget... is
+// dropped once real dt drives it" - this IS that real-dt caller). The
+// instruction-count watchdog (lua_sethook+LUA_MASKCOUNT,
+// kMissionWatchdogInstructionBudget=5,000,000) is kept EXACTLY as tools/
+// lua_host_run.cpp's own missionWatchdogHook uses it (same threshold, same
+// mechanism, reused not reinvented) - see that file's own doc comment for
+// why it exists (an always-nil-returning stub's busy-poll loop must not
+// hang the host). NEW for this task (design doc §6's own flagged risk,
+// genuinely new design, not a reuse of anything that already existed): a
+// SEPARATE wall-clock timeout, `--mission-timeout=<seconds>` (CHOSEN
+// default 30.0, see kMissionDefaultTimeoutSeconds below), guards the
+// INTERACTIVE loop itself - unlike lua_host_run.cpp's batch tool, a hung
+// real-time session would otherwise stall actual frame delivery forever. No
+// existing timeout convention was found anywhere else in this project to
+// reuse (grepped tools/include/src for "imeout"/"TIMEOUT" before choosing
+// this - the only hits are real per-field xtbl/game-timer values and one
+// unrelated soundtrack-handshake constant in src/lua_cutscene.cpp, none of
+// them a host/tool-level process timeout). Accumulated against the SAME
+// per-frame `dt` this function's own loop already computes (real wall-clock
+// time in normal operation; the SAME deterministic 1/30s substitute under
+// --no-input that every other per-frame value in this loop already uses) -
+// not a second, independent clock - so the timeout is both a faithful
+// wall-clock bound live and exactly reproducible under ctest.
+//
+// Phase 2 (a live position bridge / name-to-live-object resolver so a
+// mission script's `get_dist`/vehicle-seat-scoring natives see this loop's
+// REAL player/vehicle positions) and Phase 3 (below) have both since landed
+// on top of this Phase 1 scaffold - see EngineState::bridgeLiveCharacterPosition()/
+// bridgeLiveVehiclePosition()/liveObjectKind() for Phase 2.
+//
+// MISSION-HOST PHASE 3 (this task, branch feature/mission-host-phase3-m05-
+// vehicles): the bind-time block below now goes through the REAL
+// sr3luahost::MissionPhaseMachine class (include/sr3luahost/menu_runtime.h)
+// instead of EngineState::bindMissionPhaseMachine()'s one-shot collapse -
+// bind()+triggerMarker() (Sec21.27a's own phase 8 -> 2 -> marker-trigger
+// sequence), not a hand-rolled BareThreadTable::allocate/run pair any more.
+// triggerMarker() itself still reaches EngineState::beginMissionPhaseTracking()
+// (MissionPhaseMachine::launchStartFunction()'s own doc comment, menu_
+// runtime.h) - the SAME legacy-facade write every native gated on
+// MissionContext::activeAndRunning/etc. needs - so this switch is additive
+// to the real marker/phase model, not a behaviour change for anything
+// downstream of that call. EngineState::bindMissionPhaseMachine()/
+// beginMissionPhaseTracking() are kept (NOT removed) because tools/
+// lua_host_run.cpp's own standalone headless mission-drive loop is a
+// legitimate SEPARATE caller of them (that file's own mission-drive loop,
+// "host.engineState().beginMissionPhaseTracking(row.missionLuaStem, ...)")
+// - this task only switches sr3_viewer.cpp's production playtest path, per
+// this task's own dispatch.
 int runPlaytest(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -17617,7 +18358,9 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--vehicle-name <name.ccar_pc>] [--wheels-archive <path>]\n"
                      "                           [--vehicle-spawn X Z] [--script-vehicle]\n"
                      "                           [--script-vehicle-drive-frames N] [--no-collision]\n"
-                     "                           [--script-roadblock]\n"
+                     "                           [--script-roadblock] [--script-hud-prompt-response]\n"
+                     "                           [--mission=<stem>] [--mission-registration-list <path>]\n"
+                     "                           [--mission-package-tsv <path>] [--mission-timeout=<seconds>]\n"
                      "       Playtest v0 - the first genuinely interactive build. See this\n"
                      "       command's own doc comment (above runPlaytest() in this file) for the\n"
                      "       full REAL/CHOSEN/SCOPE breakdown. --headless forces the window hidden\n"
@@ -17653,7 +18396,29 @@ int runPlaytest(int argc, char** argv) {
                      "       NOTORIETY GATE - see this command's own doc comment: not tied to\n"
                      "       notoriety, a plain debug gate). --script-roadblock scripts a deterministic\n"
                      "       arm-then-disarm 'R' press pair under --no-input (ctest use, see\n"
-                     "       real_playtest_traffic_roadblock_smoke_test.cpp).\n");
+                     "       real_playtest_traffic_roadblock_smoke_test.cpp).\n"
+                     "       --mission=<stem> (Phase 1 mission-host debug flag, OFF unless given): drives\n"
+                     "       the real shipped mission Lua script for <stem> (e.g. m01) once per rendered\n"
+                     "       frame, through the SAME Host/EngineState --hud already builds (constructed if\n"
+                     "       not already, from --mission-registration-list, or from --hud's own list when\n"
+                     "       --hud is also given) - see this function's own doc comment for the full\n"
+                     "       CONFIRMED/CHOSEN/OPEN breakdown. --mission-registration-list <path> is\n"
+                     "       required unless --hud is also given (then --hud's own list is reused).\n"
+                     "       --mission-package-tsv <path> overrides where tools/mission_package_per_\n"
+                     "       container.tsv is read from (CHOSEN default: next to the registration list,\n"
+                     "       same directory convention tools/lua_host_run.cpp's own toolsDir uses).\n"
+                     "       --mission-timeout=<seconds> overrides the CHOSEN default 30s real-time safety\n"
+                     "       cutoff (0 disables it - not recommended for an interactive session). A stem\n"
+                     "       whose script lives outside the given city archives (a DLC mission) needs its\n"
+                     "       own dlc1/dlc2/dlc3.vpp_pc passed as one of this command's own [<more city\n"
+                     "       archives>...] tokens. --script-hud-prompt-response (only meaningful with\n"
+                     "       --mission=<stem>): each tick, any NEWLY recorded live hud_prompt(target,\n"
+                     "       promptId, callbackName) request (spec-lua-api-behaviour.md Sec13.3) is answered\n"
+                     "       by spawning a coroutine for its own callbackName (the SAME BareThreadTable\n"
+                     "       allocate()-then-let-the-scheduler-resume-it mechanism Sec1.14's confirmed\n"
+                     "       on_trigger/on_death/etc dispatch already uses, reused here rather than\n"
+                     "       invented separately) - the scripted stand-in for a real player pressing the\n"
+                     "       prompted button, e.g. m05's M05_JUMP prompt / m05_jump_local.\n");
         return 1;
     }
     const std::string charactersPath = argv[2];
@@ -17725,6 +18490,15 @@ int runPlaytest(int argc, char** argv) {
     // comment above for the full honest-caveat citation).
     bool hudEnabled = false;
     std::string hudRegistrationListPath, hudFontArchivePath;
+    // --mission=<stem> (Phase 1 mission-host debug flag, THIS TASK, 2026-10-09):
+    // OFF unless given - see this function's own doc comment (above) for the
+    // full rationale. kMissionDefaultTimeoutSeconds is this task's own CHOSEN
+    // wall-clock safety default (no existing timeout convention found
+    // elsewhere in this project to reuse instead - see that doc comment).
+    constexpr double kMissionDefaultTimeoutSeconds = 30.0;
+    bool missionEnabled = false;
+    std::string missionStem, missionRegistrationListPath, missionPackageTsvPathOverride;
+    double missionTimeoutSeconds = kMissionDefaultTimeoutSeconds;
     // ---- vehicle entry/driving (THIS TASK, 2026-10-08) - ON by default,
     // --no-vehicle opts out. Archive/name defaults mirror this function's
     // own --anim-archive convention just below: derived from
@@ -17786,6 +18560,26 @@ int runPlaytest(int argc, char** argv) {
     // see kScriptRoadblockArmFrame/kScriptRoadblockDisarmFrame below (near
     // the main loop) for the exact frame schedule.
     bool scriptRoadblock = false;
+    // --script-hud-prompt-response (THIS TASK, m05-jump-hud-prompt-test):
+    // a genuine player-INPUT wait (e.g. m05.lua:1141's `while not M05_jumped
+    // do thread_yield() end`, unblocked only by the registered callback a
+    // live `hud_prompt(target, promptId, callbackName)` call names, Sec13.3)
+    // has no existing scripted-key idiom to reuse - --script-vehicle/
+    // --script-roadblock both script a KEY PRESS, not a response to a
+    // specific prompt's own registered callback. Reuses, instead, the ONE
+    // real "fire a registered callback" mechanism this project already has
+    // confirmed end-to-end (spec-lua-api-behaviour.md Sec1.14's "GAP
+    // CLOSED" finding: the real dispatcher spawns a new Lua coroutine for
+    // the resolved callback name via BareThreadTable, never a synchronous
+    // call) - the EXACT SAME allocate()-then-let-the-next-scheduler-pass-
+    // resume-it idiom tools/lua_host_run.cpp's own --probe-autopilot
+    // dispatch block (see that file's 2026-10-09 doc comment) already
+    // established for the on_trigger/on_death/on_vehicle_enter callback-
+    // registration family - applied here to a DIFFERENT real native
+    // (hud_prompt) that stores a callback name the identical way, not a
+    // second/parallel mechanism. See the main loop's own
+    // "SCRIPT-HUD-PROMPT-RESPONSE" block for the exact per-tick trigger.
+    bool scriptHudPromptResponse = false;
     for (; argi < argc; ++argi) {
         const std::string arg = argv[argi];
         if (arg == "--headless") headless = true;
@@ -17849,10 +18643,40 @@ int runPlaytest(int argc, char** argv) {
             noCollision = true;
         } else if (arg == "--script-roadblock") {
             scriptRoadblock = true;
+        } else if (arg == "--script-hud-prompt-response") {
+            scriptHudPromptResponse = true;
+        } else if (arg.rfind("--mission=", 0) == 0) {
+            missionEnabled = true;
+            missionStem = arg.substr(10);
+        } else if (arg == "--mission-registration-list" && argi + 1 < argc) {
+            missionRegistrationListPath = argv[++argi];
+        } else if (arg == "--mission-package-tsv" && argi + 1 < argc) {
+            missionPackageTsvPathOverride = argv[++argi];
+        } else if (arg.rfind("--mission-timeout=", 0) == 0) {
+            const std::string v = arg.substr(18);
+            char* end = nullptr;
+            const double parsed = std::strtod(v.c_str(), &end);
+            if (v.empty() || end == v.c_str() || *end != '\0' || parsed < 0.0) {
+                std::fprintf(stderr, "bad --mission-timeout value (want a non-negative number of seconds): %s\n",
+                             v.c_str());
+                return 2;
+            }
+            missionTimeoutSeconds = parsed;
         } else {
             std::fprintf(stderr, "unrecognised argument '%s'\n", arg.c_str());
             return 2;
         }
+    }
+    if (missionEnabled && missionStem.empty()) {
+        std::fprintf(stderr, "--mission=<stem>: <stem> must not be empty\n");
+        return 2;
+    }
+    if (missionEnabled && !hudEnabled && missionRegistrationListPath.empty()) {
+        std::fprintf(stderr,
+                     "--mission=<stem> needs a registration list: pass --mission-registration-list <path>, "
+                     "or also pass --hud <registration_list.txt> <misc.vpp_pc> to share its list (ONE shared "
+                     "Host/EngineState either way - see this function's own doc comment).\n");
+        return 2;
     }
     if (noInput && !framesExplicit) maxFrames = 300;  // the smoke test's own documented frame count
     // CHOSEN default vehicle parking spot: 6m along +Z from --spawn (the
@@ -18601,22 +19425,124 @@ int runPlaytest(int argc, char** argv) {
     uint32_t hudHealthH = 0, hudAmmoH = 0, hudMoneyH = 0, hudNotorietyH = 0, hudVehiclePromptH = 0;
     double hudMaxHp = 0.0;
     std::vector<std::unique_ptr<CityArchive>> hudFontArchivesOwned;
-    if (hudEnabled) {
-        std::vector<sr3luahost::RegisteredName> hudNames = sr3luahost::loadTaggedRegistrationList(hudRegistrationListPath);
+    // MISSION-HOST PHASE 1 (this task): ONE shared Host/EngineState for
+    // --hud AND --mission - the outer condition below now covers either
+    // flag (previously --hud only), and --mission's own registration list
+    // is used when --hud was not also given (validated above: one of the
+    // two is always available here whenever missionEnabled is true).
+    bool missionDriveActive = false;       // true once bound and not yet finished/errored/timed out
+    uint16_t missionStartRecordId = sr3luahost::BareThreadTable::kNoThread;
+    bool missionStartTracked = false;      // true while _start's own record is still being followed
+    std::string missionScriptEntryName;
+    double missionElapsedSeconds = 0.0;    // accumulated against this loop's own per-frame dt - see this
+                                            // function's own doc comment for why that IS a real wall clock
+    // --script-hud-prompt-response (THIS TASK): how many of EngineState::
+    // hudPromptRequests()'s own entries have already been answered (that
+    // vector only ever grows - see HudPromptRequest's own doc comment) -
+    // see the main loop's "SCRIPT-HUD-PROMPT-RESPONSE" block.
+    size_t hudPromptRequestsRespondedCount = 0;
+    if (hudEnabled || missionEnabled) {
+        std::vector<sr3luahost::RegisteredName> hudNames =
+            sr3luahost::loadTaggedRegistrationList(hudEnabled ? hudRegistrationListPath : missionRegistrationListPath);
         hudHost = std::make_unique<sr3luahost::Host>(hudNames);
         hudEs = &hudHost->engineState();
         hudGp = hudHost->gameplayState();
         // CHOSEN test setup, same precedent as runHudLiveDemo()'s own
         // identical block (see its doc comment) - a single resolved
-        // "player"/"pistol" and a single-player host session, needed only
-        // so notoriety_set's host-gate takes its local-apply branch.
+        // "player"/"pistol". Applied the same way whether this Host exists
+        // for --hud, --mission, or both - a mission script run against this
+        // same minimal state is this task's own CHOSEN starting point
+        // (Phase 2's still-OPEN live position bridge/name-resolver would
+        // widen it; not attempted here).
         hudEs->objectResolves().set("player", true);
         hudEs->weaponDefinitionResolves().set("pistol", true);
         hudEs->hasLocalPlayer().set(true);
-        hudEs->coopSession().present.set(true);
-        hudEs->coopSession().localIsHost.set(true);
+        // RECONCILED (this task, merging feature/inworld-mission-host-
+        // triggers-v2 + feature/m05-jump-hud-prompt-test): this block used
+        // to force coopSession().present/localIsHost true here, "needed only
+        // so notoriety_set's host-gate takes its local-apply branch" - a
+        // CHOSEN workaround from BEFORE spec-lua-api-behaviour.md Sec8.27's
+        // own `game_get_is_host` single-player resolution was closed
+        // ("`game_get_is_host` implements false in single player, closed" -
+        // Sec8.27's own 2026-10-01 review-status entry, re-confirmed by the
+        // independent `isHost` single-player trace at the `skip_all_
+        // cutscenes` registration call, tranche-18 notes). Host's own
+        // constructor already seeds present=false via applySpecInitialState
+        // (the CONFIRMED real default, lua_spec_initial_state.cpp) - this
+        // override was both unnecessary and ACTIVELY HARMFUL for --mission:
+        // forcing present=true made EngineState::coopIsActive() (Sec3.1)
+        // fall through past its own "no session" short-circuit and into
+        // reading coopSession().memberCount, an OpenValue no test here ever
+        // seeds - any real mission script calling a coop_is_active()-
+        // consuming native (m05's own m05_start does, early) threw "session
+        // member count (+0x60) is OPEN" before ever reaching its own real
+        // first blocker. The sibling branch's own fix instead seeded
+        // memberCount to 1 to dodge that same throw while KEEPING present/
+        // localIsHost force-true; removed here instead, in favour of simply
+        // never forcing present/localIsHost away from their CONFIRMED false
+        // single-player default - memberCount now correctly stays a
+        // genuinely OPEN value, unreached, since coopIsActive()'s own first
+        // condition (!present -> false) short-circuits before memberCount is
+        // ever read (confirmed by inspection of EngineState::coopIsActive(),
+        // src/lua_engine_state.cpp).
+        //
+        // On re-pointing notoriety_set's own host-gate to a separate
+        // "local authority unconditionally true in single player" concept
+        // (the reconciliation this merge was asked to apply): VERIFIED
+        // AGAINST SPEC TEXT, and found NOT to apply to this family.
+        // spec-lua-api-behaviour.md Sec6.22 is explicit and re-confirmed in
+        // multiple independent passes: the five notoriety track-setters
+        // (notoriety_set/_max/_min/_min_and_max, Sec6.3/6.5/6.7/6.11) gate
+        // their host/local-apply branch on the EXACT SAME accessor
+        // `0x0087ba20`/`+0x5c`==`+0x58` that `game_get_is_host` (Sec8.27)
+        // and `coop_is_active` (Sec3.1) use - NOT the separate per-object
+        // network-record-ownership "local authority" gate
+        // (`0x008ae480`/`0x008837a0`, Sec3.7/Sec4.13/Sec6.22's own cross-
+        // reference) that genuinely IS unconditionally true in single
+        // player and that this project already models elsewhere by that
+        // exact name (CharacterState::humanShieldReleaseIsLocalAuthority,
+        // Sec17/18 stubs). Those are two different, independently-confirmed
+        // real gates in two different subsystems, not the same boolean
+        // under two names - Sec6.22's own text flags this explicitly as "a
+        // genuine, checked difference between subsystems in how the same
+        // underlying 'am I authoritative' decision is reached". And
+        // `game_get_is_host`'s single-player answer is not merely assumed:
+        // it is CLOSED at Sec8.27/Sec26.28 (exhaustive reference check: the
+        // session installer is never invoked in the static binary, single-
+        // player or otherwise - "implement false... with the same
+        // confidence as any other statically-unreachable code path"),
+        // independently re-confirmed by the `skip_all_cutscenes`
+        // registration-call trace ("isHost ... evaluated as 0 whenever
+        // there is no session, i.e. always in single player"). The ONLY
+        // citation offered for "local authority unconditionally true in
+        // single player" that would contradict this, address `0x00bc5610`,
+        // was ITSELF corrected on 2026-10-10 (same day as this task) at
+        // Sec3.7/Sec6.19/Sec35.3-35.5/Sec16730-16740: `0x00bc5610` is not a
+        // connection/session/authority test at all - it is the machinima
+        // recorder's own stopping/finalizing predicate
+        // (`0x029443bc==2||3`), mislabeled at 6+ citation sites before this
+        // correction, now fixed everywhere in spec-lua-api-behaviour.md.
+        // tests/synthetic_luahost_b29_sec6_notoriety_mission_test.cpp
+        // already encodes the correct, spec-matching design independently
+        // of this task: it toggles coopSession().present/localIsHost
+        // per-test to exercise BOTH notoriety_set's host branch (direct
+        // write) and its non-host/replicate branch, treating that accessor
+        // as the real, intentional gate for this family - re-pointing it to
+        // an always-true "local authority" field would silently defeat that
+        // test's own non-host coverage and contradict the spec text above.
+        // CONCLUSION: no new field introduced, and notoriety_set's host-
+        // gate (EngineState::coopLocalIsHost(), reading coopSession().
+        // present/localIsHost) is left exactly as-is - it already reads the
+        // CORRECT, spec-confirmed real gate for this family. The actual,
+        // narrower bug this reconciliation fixes is simply this test
+        // harness forcing present/localIsHost away from their real default
+        // for a DIFFERENT reason (dodging coopIsActive()'s OPEN-memberCount
+        // throw) - removing that force-set is sufficient; no gate re-point
+        // is warranted. Flagged back to the orchestrator/Team A as a relay
+        // discrepancy, not silently overridden.
         hudEs->registerNotorietyAliasTrackCodeForTesting("Police", 3);
 
+      if (hudEnabled) {
         auto fa = std::make_unique<CityArchive>();
         fa->path = hudFontArchivePath;
         const size_t hudSlash = hudFontArchivePath.find_last_of("/\\");
@@ -18697,6 +19623,190 @@ int runPlaytest(int argc, char** argv) {
                     "           values will not actually change during play (see this function's own\n"
                     "           doc comment)\n",
                     hudMaxHp);
+      } // if (hudEnabled) - font/pipeline/HUD-vdo setup, unchanged from before this task
+
+      // MISSION-HOST PHASE 1 (this task): resolve <stem> against the real
+      // archives this command already has open, load its chunk, call its
+      // own `<stem>_start(checkpoint, is_restart)` - EXACTLY once, here, at
+      // bind time (not per-frame) - and start tracking its suspended record
+      // (if any) for the per-frame drive below. A resolution/load/call
+      // failure is a hard error (return 1) - the SAME convention every
+      // --hud resource-load failure above already uses, not a new one.
+      if (missionEnabled) {
+        const std::string missionPackageTsvPath =
+            !missionPackageTsvPathOverride.empty()
+                ? missionPackageTsvPathOverride
+                // CHOSEN default: next to the registration list actually used to build this
+                // Host - the SAME directory convention tools/lua_host_run.cpp's own toolsDir
+                // uses (fs::path(registrationListPath).parent_path()), not a new one.
+                : [&]() {
+                      const std::string& regList = hudEnabled ? hudRegistrationListPath : missionRegistrationListPath;
+                      const size_t slash = regList.find_last_of("/\\");
+                      const std::string dir = slash == std::string::npos ? std::string() : regList.substr(0, slash);
+                      return (dir.empty() ? std::string() : dir + "/") + "mission_package_per_container.tsv";
+                  }();
+        MissionResolution resolved = resolveMissionStemScript(cityArchivePaths, missionPackageTsvPath, missionStem);
+        if (!resolved.ok) {
+            std::fprintf(stderr, "--mission=%s: %s\n", missionStem.c_str(), resolved.error.c_str());
+            return 1;
+        }
+        missionScriptEntryName = resolved.entryName;
+        std::printf("mission  : resolved --mission=%s -> entry '%s' (container '%s', mission_package_tsv=%s)\n",
+                    missionStem.c_str(), resolved.entryName.c_str(), resolved.containerName.c_str(),
+                    missionPackageTsvPath.c_str());
+
+        // IN-WORLD TRIGGERS (this task, 2026-10-10): load real zone-object
+        // data (position only - see missionzoneobj::installZoneObjectsFromArchives's
+        // own doc comment for the honest shape/extent gap, Sec1.14) over the
+        // SAME `cityArchivePaths` the mission script itself was just resolved
+        // against, so the per-frame overlap test below can look up a real
+        // trigger's real position by name.
+        {
+            std::string zoneSummary = missionzoneobj::installZoneObjectsFromArchives(cityArchivePaths, *hudEs);
+            std::printf("mission  : real zone-object load for in-world triggers: %s\n", zoneSummary.c_str());
+        }
+
+        // ZSCENE TABLE FIX (coordinator-routed, 2026-10-10): install the REAL
+        // cutscene.xtbl/<name>.cte_xtbl-derived scene table (spec-lua-api-
+        // behaviour.md Sec26.25) over the same `cityArchivePaths`, so
+        // EngineState::zsceneIsLoaded()'s own already-correct Sec14.23
+        // kind-gate (src/lua_cutscene.cpp: `if (!r.loadable) return true;`)
+        // has real data to answer from instead of refusing OPEN on this
+        // command's very first `zscene_is_loaded("<stem>_in")` call - see
+        // missionzoneobj::installZsceneTableFromArchives()'s own doc comment
+        // for the full root-cause citation.
+        {
+            std::string zsceneSummary = missionzoneobj::installZsceneTableFromArchives(cityArchivePaths, *hudEs);
+            std::printf("mission  : real zscene/cutscene table load: %s\n", zsceneSummary.c_str());
+        }
+
+        // Real gameplay-state preload chain (CONFIRMED, spec-lua-bindings.md
+        // Sec13.2 Item 2/Sec16.2: "the game play state registers its
+        // roster, loads system_lib.lua, THEN game_lib.lua, before any
+        // mission script runs against it") - the SAME two names tools/
+        // lua_host_run.cpp's own main() preloads into gameplayState() before
+        // its own mission-drive loop, in the SAME order, via the SAME
+        // first-found-by-entry-name rule (that file's own preloadNamed()/
+        // game_lib.lua block) - without this, a real mission script's first
+        // call into a game_lib.lua helper (e.g. mission_start_fade_out,
+        // observed directly: m01_start's own first real call) fails with
+        // "attempt to call global '<name>' (a nil value)", a wrong-
+        // initialization artifact, not a real engine blocker. Found over
+        // the SAME `cityArchivePaths` the mission script itself resolves
+        // against (one combined walk, findScriptsByName above) - missing
+        // either is reported (same "BLOCKING FINDING" framing tools/
+        // lua_host_run.cpp's own preloadNamed() uses) but NOT fatal here:
+        // a mission that does not need them may still run.
+        {
+            auto preloads = findScriptsByName(cityArchivePaths, {"system_lib.lua", "game_lib.lua"});
+            for (const char* name : {"system_lib.lua", "game_lib.lua"}) {
+                auto pit = preloads.find(name);
+                if (pit == preloads.end()) {
+                    std::printf("mission  : BLOCKING FINDING - no entry named %s found in the given city "
+                                "archives (spec-lua-bindings.md Sec16.2's own gameplay-state preload, not "
+                                "loaded for this session - a mission needing its helpers will fail on its "
+                                "first call into one)\n",
+                                name);
+                    continue;
+                }
+                sr3luahost::Host::RunResult pr = hudHost->runChunk(hudGp, pit->second.content, pit->second.entryName);
+                std::string loadPart = pr.loadOk ? "OK" : ("FAILED: " + pr.loadError);
+                std::string pcallPart = !pr.loadOk ? "" : (pr.pcallOk ? ", lua_pcall=OK" : (", lua_pcall=FAILED: " + pr.pcallError));
+                std::printf("mission  : preloaded %s -> gameplay state: luaL_loadbuffer=%s%s\n", name,
+                            loadPart.c_str(), pcallPart.c_str());
+            }
+        }
+
+        sr3luahost::Host::RunResult loadResult =
+            missionRunChunkWithWatchdog(*hudHost, hudGp, resolved.content, resolved.entryName);
+        if (!loadResult.loadOk) {
+            std::fprintf(stderr, "--mission=%s: script failed to load: %s\n", missionStem.c_str(),
+                         loadResult.loadError.c_str());
+            return 1;
+        }
+        if (loadResult.ranPcall && !loadResult.pcallOk) {
+            std::fprintf(stderr, "--mission=%s: script's own top-level code errored: %s\n", missionStem.c_str(),
+                         loadResult.pcallError.c_str());
+            return 1;
+        }
+        // MISSION-HOST PHASE 3 (this task): the REAL bind/marker-trigger
+        // sequence (spec-lua-api-behaviour.md Sec21.27a + Sec36.2/36.4,
+        // sr3luahost::MissionPhaseMachine, include/sr3luahost/menu_runtime.h)
+        // - NOT EngineState::beginMissionPhaseTracking()'s one-shot collapse
+        // any more (that method is still real and still used, but now only
+        // by tools/lua_host_run.cpp's own standalone headless mission-drive
+        // loop - a legitimate separate caller, not touched by this task).
+        // bind(isRestart=false, hasName=true) is this call site's own fresh-
+        // start convention, unchanged from Phase 1 - it is CONFIRMED (bind()'s
+        // own doc comment) to always arm the marker on those exact arguments,
+        // so triggerMarker() below is always the reachable next call here,
+        // never relaunchDirect(). Constructed fresh per bind (not kept across
+        // frames): nothing downstream of this block ever calls back into it -
+        // the per-frame drive below resumes the suspended coroutine directly
+        // through the SAME generic BareThreadTable scheduler pass Phase 1
+        // already established, keyed by missionStartRecordId, exactly as
+        // before this switch.
+        sr3luahost::MissionPhaseMachine missionPhases(*hudEs, hudGp, hudHost->bareGlobals().threads());
+        missionPhases.bind(missionStem, /*isRestart=*/false, /*hasName=*/true);
+        const std::string funcName = missionStem + "_start";
+        if (!missionPhases.marker().armed) {
+            // Unreachable on this call site's own fixed (isRestart=false,
+            // hasName=true) arguments per bind()'s own CONFIRMED body - kept
+            // only as a defensive, honestly-reported guard, not a modelled
+            // real branch this call site ever takes today.
+            std::fprintf(stderr,
+                         "--mission=%s: internal: MissionPhaseMachine::bind() did not arm the marker "
+                         "(unexpected for a fresh, named start)\n",
+                         missionStem.c_str());
+            return 1;
+        }
+        sr3luahost::LuaCoroutineLaunchResult startResult = missionPhases.triggerMarker();
+        if (!startResult.existedAsFunction) {
+            std::fprintf(stderr,
+                         "--mission=%s: %s not defined in the loaded script (real check, spec-lua-bindings.md "
+                         "Sec14.10's own confirmed call shape not reachable here) - nothing to drive\n",
+                         missionStem.c_str(), funcName.c_str());
+            return 1;
+        }
+        if (!startResult.callOk) {
+            std::fprintf(stderr, "--mission=%s: %s errored on its own first call: %s\n", missionStem.c_str(),
+                         funcName.c_str(), startResult.callError.c_str());
+            return 1;
+        }
+        if (startResult.suspended) {
+            missionStartRecordId = startResult.recordId;
+            missionStartTracked = true;
+            missionDriveActive = true;
+            // suspendedAt (file:line) is a diagnostic-only nice-to-have Phase 1's
+            // own missionCallStart() used to compute inline - recomputed here off
+            // the SAME real record id instead, now that LaunchLuaCoroutine's own
+            // result shape (menu_runtime.h) doesn't carry it.
+            std::string suspendedAt = "?";
+            if (const sr3luahost::BareThreadTable::Record* rec =
+                    hudHost->bareGlobals().threads().findAlive(startResult.recordId)) {
+                lua_Debug ar{};
+                if (lua_getstack(rec->co, 1, &ar) && lua_getinfo(rec->co, "Sln", &ar)) {
+                    suspendedAt = (ar.short_src[0] ? ar.short_src : "?") + std::string(":") +
+                                  std::to_string(ar.currentline) +
+                                  (ar.name ? (std::string(" (in ") + ar.name + ")") : "");
+                }
+            }
+            std::printf("mission  : %s() called, suspended (waiting at %s) - driving one scheduler pass per "
+                        "rendered frame from here (real --mission-timeout=%.1fs wall-clock safety cutoff, "
+                        "%d-instruction watchdog per resume)\n",
+                        funcName.c_str(), suspendedAt.c_str(), missionTimeoutSeconds,
+                        kMissionWatchdogInstructionBudget);
+        } else {
+            // Finished on its very first call, no error - a real, honest outcome for a
+            // short script (same "low stub-hit count is not a bug" framing tools/
+            // lua_host_run.cpp's own top comment gives for a hook-only script) - nothing
+            // further to drive.
+            missionDriveActive = false;
+            std::printf("mission  : %s() called and finished immediately (no error, nothing suspended) - "
+                        "nothing further to drive this session\n",
+                        funcName.c_str());
+        }
+      }
     }
 
     std::map<size_t, std::unique_ptr<CityLoadedCell>> loaded;
@@ -19128,6 +20238,52 @@ int runPlaytest(int argc, char** argv) {
                 "Sec17.4c)\n",
                 sr3airuntime::kNearFieldVehicleCap);
 
+    // ===================== NEAR-FIELD AMBIENT PEDESTRIAN POPULATION (THIS TASK) =====================
+    // Wires include/sr3airuntime/near_field_ped_population.h's own
+    // NearFieldPedDriver/RunNearFieldPedSpawnPass (spec-ai-runtime.md
+    // Sec20), reused completely unmodified, into the LIVE per-frame loop
+    // below - following the near-field vehicle traffic wiring just above as
+    // its exact precedent (same per-frame cadence source, same reference
+    // position/heading, same ALWAYS-ON convention, same "cap reused, not
+    // re-literalled" discipline) - see this function's own 2026-10-10
+    // doc-comment update (above) for the full CHOSEN breakdown. ALWAYS ON.
+    std::vector<sr3airuntime::NearFieldPed> nearFieldPedsLive;
+    uint64_t nearFieldPedNextId = 1;
+    sr3airuntime::NearFieldPedDriver nearFieldPedDriver;
+    sr3airuntime::DeterministicRng nearFieldPedRng(20261010u);  // own seed, distinct from nearFieldRng above - independent RNG stream, same "one driver, one rng" convention every other sr3airuntime driver in this file uses
+    auto nearFieldPedPickUniform = sr3airuntime::MakePickUniform(nearFieldPedRng);
+    // UPDATED 2026-10-10 (ped-spawn-distance-spec-tuning task): isVisibleToCamera
+    // is now wired to near_field_ped_population.h's own ApproxVisibleToCamera
+    // helper (reassigned fresh each tick, just below its own call site, from
+    // the SAME live trafficReferencePos/trafficReferenceForward the vehicle
+    // side already uses - no separate camera/frustum state owned here,
+    // consistent with every other "no real X in this build" gap this file's
+    // own doc comment already lists). difficultyGatePasses/isGroundValid/
+    // sidewaysOffsetDistance remain at their own CHOSEN defaults (still no
+    // difficulty/physics state this harness owns to inject) -
+    // cameraFarRejectDist remains disabled (0.0): Sec20.1's own "a second
+    // distance threshold" has no CONFIRMED literal to enforce, see
+    // near_field_ped_population.h's own field comment.
+    sr3airuntime::NearFieldPedSpawnGates nearFieldPedGates;
+    // near_field_ped_population.h's own file header (item 4): no CONFIRMED
+    // numeric cadence exists for the ped tick's own throttle gate (unlike
+    // the vehicle sibling's CONFIRMED 200-300ms/400-600ms literals) - this
+    // driver models ONE randomized gate with CALLER-SUPPLIED bounds. CHOSEN
+    // here: reuse the vehicle sibling's own 200-300ms range (the only
+    // known near-field-population cadence precedent in this codebase), an
+    // honestly-labelled stand-in, not a second confirmed literal.
+    constexpr int64_t kNearFieldPedTickMinMs = 200, kNearFieldPedTickMaxMs = 300;
+    // near_field_ped_population.h's own file note: "local headroom" has no
+    // CONFIRMED numeric literal for peds (unlike the vehicle tier's
+    // CONFIRMED 48) and is CALLER-SUPPLIED. CHOSEN here: reuse
+    // kNearFieldVehicleCap (48), the one known near-field-population cap
+    // precedent - see this function's own doc-comment update (above) for
+    // the full citation.
+    const size_t kNearFieldPedLocalCap = static_cast<size_t>(sr3airuntime::kNearFieldVehicleCap);
+    std::printf("peds     : near-field ambient pedestrian population ALWAYS ON (cap %zu, spec-ai-runtime.md "
+                "Sec20)\n",
+                kNearFieldPedLocalCap);
+
     // ===================== POLICE ROADBLOCK SPAWN (THIS TASK) =====================
     // Wires include/sr3airuntime/police_roadblock_spawn.h's own
     // RoadblockPopulationDriver/RoadblockSpawnManager (spec-ai-runtime.md
@@ -19509,6 +20665,46 @@ int runPlaytest(int argc, char** argv) {
             }
         }
 
+        // ---- Near-field (fully-simulated) ambient-pedestrian population -
+        // ALWAYS ON (THIS TASK). Follows the vehicle traffic block just
+        // above as its exact precedent: ShouldRunTick() combines
+        // near_field_ped_population.h's own dual gate (sidewalksLoaded=true,
+        // same stand-in reasoning as zoneDataLoaded=true above; AnyEnabled
+        // (ToggleCategory::kPed) against the SAME nearFieldToggles instance
+        // the vehicle side already enables every category on by default)
+        // with its single randomized tick timer (kNearFieldPedTickMinMs/
+        // MaxMs, see this function's own doc-comment update above for why
+        // these reuse the vehicle sibling's own 200-300ms range). Spawn-only
+        // (no despawn predicate exists for this tier - see
+        // near_field_ped_population.h's own file header item 3). ----
+        {
+            const bool pedRunTick = nearFieldPedDriver.ShouldRunTick(nowMsAccum, nearFieldToggles,
+                                                                     /*sidewalksLoaded=*/true, kNearFieldPedTickMinMs,
+                                                                     kNearFieldPedTickMaxMs);
+            if (pedRunTick) {
+                const std::vector<sr3airuntime::SidewalkSegment> pedCandidateSegments =
+                    GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer(trafficReferencePos,
+                                                                         trafficReferenceHeadingRad, nearFieldPedRng);
+                // THIS TASK (2026-10-10, spec-ai-runtime.md Sec20.1 re-read):
+                // real per-tick visibility gate, replacing the prior unit's
+                // own always-false CHOSEN default. Captures THIS frame's
+                // trafficReferencePos/trafficReferenceForward by value (both
+                // are per-iteration locals, re-declared each frame - capturing
+                // by reference here would dangle past this statement) and
+                // defers to near_field_ped_population.h's own
+                // ApproxVisibleToCamera (CHOSEN horizontal-FOV cone, not a
+                // recovered engine frustum - see that function's own comment).
+                nearFieldPedGates.isVisibleToCamera = [pos = trafficReferencePos,
+                                                        fwd = trafficReferenceForward](const sr3airuntime::Vec3& p) {
+                    return sr3airuntime::ApproxVisibleToCamera(p, pos, fwd);
+                };
+                sr3airuntime::RunNearFieldPedSpawnPass(nearFieldPedsLive, kNearFieldPedLocalCap,
+                                                       /*eligibleHumanCount=*/0, pedCandidateSegments,
+                                                       nearFieldPedGates, trafficReferencePos,
+                                                       nearFieldPedPickUniform, nearFieldPedNextId);
+            }
+        }
+
         // ---- Police roadblock spawn - only while armed+cvar-enabled. ----
         if (roadblockDriver.ShouldRunTick()) {
             // Snapshot BEFORE the tick so newly-filled slots can be
@@ -19547,6 +20743,8 @@ int runPlaytest(int argc, char** argv) {
             std::printf("[traffic] frame %d near-field live=%zu/%d; roadblock armed=%d filled=%zu/%zu\n", frames,
                         nearFieldLive.size(), sr3airuntime::kNearFieldVehicleCap, roadblockDriver.armed ? 1 : 0,
                         roadblockFilledNow, roadblockSlots.size());
+            std::printf("[peds] frame %d near-field ambient peds live=%zu/%zu\n", frames, nearFieldPedsLive.size(),
+                        kNearFieldPedLocalCap);
         }
 
         // viewProjection/headingNow/charWorld/poseResult/diagEye* are filled by
@@ -19801,6 +20999,322 @@ int runPlaytest(int argc, char** argv) {
         diagEyeX = eye[0]; diagEyeY = eye[1]; diagEyeZ = eye[2];
         }
 
+        // MISSION-HOST PHASE 2 (this task) - live position bridge
+        // (results/design_mission_host_in_engine_loop_20261009.md §3(c)):
+        // writes THIS frame's REAL simulated player position - on foot,
+        // pm.st.position; driving the one demo vehicle,
+        // vehicleRig.sim->state_'s own position via the SAME focusX/focusZ
+        // the camera/streaming-reconcile code just above already computed,
+        // at the SAME vehicle pivot height (finalGroundY + kVehPivotHeight)
+        // used for rendering/the chase cam - into EngineState's existing
+        // "#PLAYER1#" CharacterState::worldPosition, the SAME field
+        // get_dist and the other position-shaped natives already read
+        // (character_state.h's own doc comment on `worldPosition`) - every
+        // frame mission mode is enabled, strictly BEFORE the per-frame
+        // scheduler pass below, so a coroutine resumed this frame observes
+        // this frame's position, never last frame's.
+        //
+        // "#PLAYER1#", never the HUD-only lowercase "player" literal the
+        // --hud block above hand-seeds for its own two-native probe:
+        // Sec29.4's own CONFIRMED pre-resolved local-player name, already
+        // true in objectResolves() via applySpecInitialState() (Host's own
+        // constructor, before this loop ever runs) - this bridge writes
+        // real per-frame data into an ALREADY-real name, it does not invent
+        // one. UPDATED 2026-10-09 (spec-zone-data-format.md §11.10 item 4 /
+        // spec-lua-api-behaviour.md §4.13, Team A's named-object-resolution
+        // synthesis, landed on main after this task started and merged in):
+        // "#PLAYER1#" is one of exactly 8 CLOSED, special-cased sentinels
+        // the REAL generic resolver (`0x00a280c0`) short-circuits via a
+        // literal `.rdata` string compare, resolving straight to "the
+        // current player object" WITHOUT ever touching the real engine's
+        // own name map - i.e. in the real engine "#PLAYER1#" is always
+        // resolvable whenever a local player exists, by construction. That
+        // independently confirms this is the right - and in this minimal
+        // playtest, the ONLY available - name to bridge live data onto.
+        //
+        // Deliberately the ONLY live object bridged here. The one demo
+        // PlaytestVehicleRig car (vehicleRig, further up this function) has
+        // no established Lua-visible identity anywhere in this project -
+        // its cmesh filename (vehicleCmeshName) is a CHOSEN display
+        // argument for manual on-screen testing, not a mission-script name
+        // any real .lua ever references. §11.10 item 2's own closed
+        // 4-producer list for how the real engine's name map gets a live
+        // entry (zone placement, vehicle cover-node batches, in-memory
+        // engine records including group members, co-op-replication
+        // replay) does not include "a manually-spawned debug/demo
+        // vehicle" either - independently confirming that registering this
+        // demo car under any invented name would not just be unconfirmed,
+        // it would be modelling a producer the real engine does not have.
+        // liveObjectKind()/isLiveObject() on any OTHER name (including any
+        // vehicle name a mission script might reference) therefore
+        // correctly, honestly returns kNone in this minimal playtest - a
+        // real "not live" answer, not a crash and not a fabricated one.
+        // See this task's own report for this stated plainly as a current
+        // OPEN boundary, not an oversight.
+        if (missionEnabled) {
+            const double liveY = inVehicle
+                                      ? static_cast<double>(finalGroundY) + static_cast<double>(kVehPivotHeight)
+                                      : pm.st.position.y;
+            hudEs->bridgeLiveCharacterPosition(
+                "#PLAYER1#",
+                sr3luahost::WorldPosition{static_cast<double>(focusX), liveY, static_cast<double>(focusZ)});
+            // Printed once (frame 0 only) - a real, checkable stdout proof that this
+            // bridge is actually wired into the live --mission path, for
+            // tests/real_playtest_mission_test.cpp's own real-cache coverage (the real
+            // mission scripts tried so far all hit an UNRELATED, earlier OPEN gap
+            // before ever calling a position-shaped native, per this task's own
+            // report - this line is this frame-loop's own direct proof instead of an
+            // inferred one).
+            if (frames == 0) {
+                std::printf("mission  : live position bridge active for '#PLAYER1#' (isLiveObject=%d, pos=%.2f "
+                            "%.2f %.2f) - written every frame before the scheduler pass\n",
+                            hudEs->isLiveObject("#PLAYER1#") ? 1 : 0, static_cast<double>(focusX), liveY,
+                            static_cast<double>(focusZ));
+            }
+
+            // IN-WORLD TRIGGERS (this task, 2026-10-10): the real per-frame
+            // overlap test (spec-lua-api-behaviour.md Sec1.14) against the
+            // live player's own just-updated position, firing registered
+            // on_trigger/on_trigger_exit callbacks via BareThreadTable::
+            // allocate() - the SAME coroutine-spawn primitive commit
+            // 0b6c934 already wired for tools/lua_host_run.cpp's own
+            // --probe-autopilot path (spawn-only, no immediate run(); the
+            // scheduler pass just below this block is what actually resumes
+            // it, matching the real spawn-now/run-later dispatch timing).
+            //
+            // Auto-register geometry, lazily, for every trigger name this
+            // session has seen an on_trigger()/on_trigger_exit() call for so
+            // far but has no geometry for yet: resolve its real position
+            // from the zone data just loaded above (sr3zone::ObjectPosition())
+            // AND, as of this task (2026-10-10), its REAL on-disk shape/
+            // extent/radius too (spec-lua-api-behaviour.md Sec1.14's own
+            // "On-disk gaps - RESOLVED 2026-10-10" paragraph) via sr3zone's
+            // TriggerShapeType()/TriggerShapeParam1()/TriggerShapeParam2()/
+            // TriggerShapeCodeForTypeString() - see those functions' own doc
+            // comments (include/sr3zone/zone_objects.h) for the exact
+            // on-disk encoding and the real population-scan-grounded string
+            // mapping this uses. The CHOSEN sphere/radius=3.0 stand-in this
+            // block used before this task is now only a FALLBACK, for a
+            // trigger whose record has no decodable shape (no
+            // trigger_shape_type property, an unmapped shape string, or a
+            // missing/wrong-width param - never silently invented beyond
+            // that same narrow fallback this project already used). A
+            // trigger whose name does not resolve against real zone data at
+            // all still gets no geometry and is simply never tested -
+            // reported once, not silently.
+            {
+                auto tryAutoRegister = [&](const std::string& triggerName) {
+                    if (hudEs->triggerGeometry(triggerName)) return; // already registered
+                    const sr3zone::ObjectRecord* rec = hudEs->resolveZoneObject(triggerName);
+                    std::optional<sr3zone::Position3f> pos = rec ? sr3zone::ObjectPosition(*rec) : std::nullopt;
+                    if (!pos) {
+                        std::printf("mission  : in-world trigger '%s' has a registered callback but no real "
+                                    "zone-data position was found (%s) - not tested for overlap this session\n",
+                                    triggerName.c_str(), rec ? "no position property on its record" : "name not resolved");
+                        // Negative result recorded by registering a known-absent geometry entry is NOT
+                        // done here (that would need a tri-state, not this struct's own plain bool) -
+                        // instead this lambda is simply called again next frame; cheap (one map lookup)
+                        // and never wrong, since a miss here can never silently become a hit later.
+                        return;
+                    }
+                    sr3luahost::EngineState::TriggerVolumeGeometry g;
+                    g.px = pos->x; g.py = pos->y; g.pz = pos->z;
+                    g.positionKnown = true;
+
+                    std::optional<std::string> shapeTypeText = sr3zone::TriggerShapeType(*rec);
+                    std::optional<int> shapeCode = shapeTypeText ? sr3zone::TriggerShapeCodeForTypeString(*shapeTypeText)
+                                                                  : std::nullopt;
+                    const sr3zone::ObjectPropertyEntry* param1 = sr3zone::TriggerShapeParam1(*rec);
+                    const sr3zone::ObjectPropertyEntry* param2 = sr3zone::TriggerShapeParam2(*rec);
+                    bool decoded = false;
+                    if (shapeCode && *shapeCode == 0 && param1 && param2) {
+                        // Box: both params are 3-float vectors, the real local-space min/max corner.
+                        std::optional<sr3zone::Position3f> vmin = sr3zone::DecodePropertyAsVec3(*param1);
+                        std::optional<sr3zone::Position3f> vmax = sr3zone::DecodePropertyAsVec3(*param2);
+                        if (vmin && vmax) {
+                            g.shapeCode = 0;
+                            g.boxMinX = vmin->x; g.boxMinY = vmin->y; g.boxMinZ = vmin->z;
+                            g.boxMaxX = vmax->x; g.boxMaxY = vmax->y; g.boxMaxZ = vmax->z;
+                            decoded = true;
+                        }
+                    } else if (shapeCode && *shapeCode == 1 && param1) {
+                        // Sphere: param1 only, a scalar radius.
+                        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param1);
+                        if (radius) {
+                            g.shapeCode = 1;
+                            g.radius = *radius;
+                            decoded = true;
+                        }
+                    } else if (shapeCode && *shapeCode == 2 && param1 && param2) {
+                        // Capped cylinder: param1=radius, param2=length (both scalars). The second
+                        // axis endpoint (ex/ey/ez) stays this project's own pre-existing CHOSEN
+                        // stand-in - Sec1.14 itself flags its true source as still genuinely OPEN.
+                        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param1);
+                        std::optional<float> length = sr3zone::DecodePropertyAsFloat(*param2);
+                        if (radius && length) {
+                            g.shapeCode = 2;
+                            g.radius = *radius;
+                            g.length = *length;
+                            g.ex = 0; g.ey = *length; g.ez = 0; // CHOSEN axis (straight up) - OPEN source, see above
+                            decoded = true;
+                        }
+                    }
+                    g.shapeKnown = decoded;
+                    if (!decoded) {
+                        // CHOSEN fallback (unchanged from before this task): sphere, radius 3.0 -
+                        // only reached when the real shape genuinely could not be decoded.
+                        g.shapeCode = 1;
+                        g.radius = 3.0;
+                    }
+                    hudEs->registerTriggerGeometry(triggerName, g);
+                    if (decoded) {
+                        std::printf("mission  : in-world trigger '%s' geometry registered - REAL position (%.2f "
+                                    "%.2f %.2f) and REAL shape '%s' (enum %d) from zone data\n",
+                                    triggerName.c_str(), g.px, g.py, g.pz, shapeTypeText->c_str(), *shapeCode);
+                    } else {
+                        const std::string reason = shapeTypeText ? ("unmapped string \"" + *shapeTypeText + "\"")
+                                                                  : std::string("no trigger_shape_type property");
+                        std::printf("mission  : in-world trigger '%s' geometry registered - real position (%.2f %.2f "
+                                    "%.2f) from zone data, CHOSEN sphere radius=%.1f fallback (shape not decodable: "
+                                    "%s)\n",
+                                    triggerName.c_str(), g.px, g.py, g.pz, g.radius, reason.c_str());
+                    }
+                };
+                for (const auto& kv : hudEs->onTriggerCallbacksMap()) tryAutoRegister(kv.first);
+                for (const auto& kv : hudEs->onTriggerExitCallbacksMap()) tryAutoRegister(kv.first);
+
+                for (const auto& kv : hudEs->triggerGeometryMap()) {
+                    const std::string& triggerName = kv.first;
+                    const sr3luahost::EngineState::TriggerVolumeGeometry& g = kv.second;
+                    const bool nowInside = sr3luahost::EngineState::TriggerVolumeContainsPoint(
+                        g, static_cast<double>(focusX), liveY, static_cast<double>(focusZ));
+                    bool& wasInside = hudEs->triggerCurrentlyInside(triggerName);
+                    if (nowInside == wasInside) continue; // no transition - the real poll's own "only on a transition" rule
+                    wasInside = nowInside;
+                    const std::string& cbName = nowInside ? hudEs->onTriggerCallbackValue(triggerName)
+                                                           : hudEs->onTriggerExitCallbackValue(triggerName);
+                    const char* edge = nowInside ? "ENTER" : "EXIT";
+                    if (cbName.empty()) {
+                        std::printf("mission  : in-world trigger '%s' %s transition, but no %s callback is "
+                                    "registered - nothing to dispatch\n",
+                                    triggerName.c_str(), edge, nowInside ? "on_trigger" : "on_trigger_exit");
+                        continue;
+                    }
+                    sr3luahost::BareThreadTable::Record* spawned =
+                        hudHost->bareGlobals().threads().allocate(hudGp, cbName, /*nargs=*/0, /*hasParent=*/false);
+                    if (!spawned) {
+                        std::printf("mission  : in-world trigger '%s' %s transition - coroutine for '%s' NOT "
+                                    "spawned (script-thread table full)\n",
+                                    triggerName.c_str(), edge, cbName.c_str());
+                    } else {
+                        std::printf("mission  : in-world trigger '%s' %s transition - spawned coroutine for '%s' "
+                                    "(record id %u), resumed by this frame's own scheduler pass below\n",
+                                    triggerName.c_str(), edge, cbName.c_str(), static_cast<unsigned>(spawned->id));
+                    }
+                }
+            }
+        }
+
+        // MISSION-HOST PHASE 1 (this task) - per-frame mission drive, AFTER
+        // this frame's own player/vehicle position update (mirroring spec-
+        // render-pipeline.md §6.6's own real order: Lua coroutine resume
+        // runs as part of "each active game state's own per-frame update",
+        // i.e. after the step that produces that frame's positions) and
+        // BEFORE rendering begins. See this function's own doc comment
+        // (above runPlaytest()) for the full rationale/citation.
+        if (missionDriveActive) {
+            // Wall-clock timeout (NEW this task, design-doc §6's own flagged
+            // risk): accumulated against this loop's own real per-frame
+            // `dt` (real wall-clock time in normal operation; the SAME
+            // deterministic 1/30s --no-input substitute every other
+            // per-frame value here already uses - see this function's own
+            // doc comment for why that is a faithful, reproducible choice,
+            // not a second clock). Checked BEFORE driving another tick, so
+            // a mission that is already over budget never gets one more
+            // resume.
+            missionElapsedSeconds += dt;
+            if (missionTimeoutSeconds > 0.0 && missionElapsedSeconds > missionTimeoutSeconds) {
+                missionDriveActive = false;
+                std::printf("mission  : --mission=%s stopped - wall-clock timeout (%.1fs) exceeded while still "
+                            "suspended; this frame's own rendering/input loop is UNAFFECTED (see this "
+                            "function's own doc comment)\n",
+                            missionStem.c_str(), missionTimeoutSeconds);
+            } else {
+                // Tick cadence - EXACT same CHOSEN order tools/lua_host_run.cpp's
+                // own mission-drive loop uses (screenFadeHostFrame ->
+                // cutsceneHostFrame -> gameClockAdvanceFrame -> ONE
+                // BareThreadTable scheduler pass -> fireConfirmedHooks), now
+                // driven by this loop's own REAL per-frame dt instead of that
+                // file's own fixed 333ms/tick substitute.
+                const int64_t dtMs = static_cast<int64_t>(dt * 1000.0 + 0.5);
+                hudEs->screenFadeHostFrame(dtMs);
+                hudEs->cutsceneHostFrame();
+                hudEs->gameClockAdvanceFrame(dt);
+                hudHost->bareGlobals().setFrameTime(static_cast<float>(dt));
+                lua_State* currentResumeCo = nullptr;
+                hudHost->runScriptThreadSchedulerPass(
+                    [&](const sr3luahost::BareThreadTable::Record& rec) {
+                        currentResumeCo = rec.co;
+                        lua_sethook(rec.co, missionWatchdogHook, LUA_MASKCOUNT, kMissionWatchdogInstructionBudget);
+                    },
+                    [&](const sr3luahost::BareThreadTable::PassEvent& ev) {
+                        if (currentResumeCo) lua_sethook(currentResumeCo, nullptr, 0, 0);
+                        if (!ev.error.empty()) {
+                            std::printf("mission  : --mission=%s thread '%s' errored on resume: %s\n",
+                                        missionStem.c_str(), ev.name.c_str(), ev.error.c_str());
+                        }
+                        if (missionStartTracked && ev.id == missionStartRecordId && !ev.aliveAfter) {
+                            missionStartTracked = false;
+                            missionDriveActive = false;
+                            std::printf("mission  : --mission=%s's own %s_start record finished %s after "
+                                        "%.1fs - nothing further to drive this session\n",
+                                        missionStem.c_str(), missionStem.c_str(),
+                                        ev.error.empty() ? "cleanly" : "with an error", missionElapsedSeconds);
+                        }
+                    });
+                auto tickHooks =
+                    hudHost->fireConfirmedHooks(hudGp, sr3luahost::confirmedHooks(), missionScriptEntryName);
+                for (auto& hr : tickHooks) {
+                    if (hr.attemptedCall && !hr.callOk) {
+                        std::printf("mission  : --mission=%s hook '%s' errored: %s\n", missionStem.c_str(),
+                                    hr.hookName.c_str(), hr.callError.c_str());
+                    }
+                }
+
+                // ===================== SCRIPT-HUD-PROMPT-RESPONSE (THIS TASK) =====================
+                // See --script-hud-prompt-response's own doc comment (flag
+                // declaration, above) for the full citation. Any hud_prompt
+                // request recorded THIS tick (or any prior tick not yet
+                // answered - hudPromptRequestsRespondedCount tracks the
+                // boundary) is answered immediately: spawn a coroutine for
+                // its own registered callback name via the SAME BareThreadTable
+                // mechanism the mission-start call above and lua_host_run's own
+                // --probe-autopilot already use. Spawn only, exactly like that
+                // precedent - the callback body does NOT run synchronously
+                // here; it runs on the NEXT tick's runScriptThreadSchedulerPass
+                // above, same decoupled-in-time shape Sec1.14 confirms for the
+                // real dispatcher.
+                if (scriptHudPromptResponse) {
+                    auto& hudPromptReqs = hudEs->hudPromptRequests();
+                    while (hudPromptRequestsRespondedCount < hudPromptReqs.size()) {
+                        const auto& req = hudPromptReqs[hudPromptRequestsRespondedCount];
+                        ++hudPromptRequestsRespondedCount;
+                        if (req.arg3.empty()) continue; // no callback name to respond with
+                        std::printf("mission  : --script-hud-prompt-response: hud_prompt(\"%s\", \"%s\", \"%s\") "
+                                    "seen - spawning a coroutine for callback '%s'\n",
+                                    req.target.c_str(), req.arg2.c_str(), req.arg3.c_str(), req.arg3.c_str());
+                        auto* spawnedRec = hudHost->bareGlobals().threads().allocate(hudGp, req.arg3, /*nargs=*/0,
+                                                                                      /*hasParent=*/false);
+                        if (!spawnedRec) {
+                            std::printf("mission  : --script-hud-prompt-response: script-thread table full - "
+                                        "callback '%s' not spawned\n",
+                                        req.arg3.c_str());
+                        }
+                    }
+                }
+            }
+        }
+
         // vehWorld (THIS TASK, sun-shadow-map): hoisted out of the final
         // vehicle-draw block further below so BOTH the new shadow depth-only
         // pass immediately below AND that later lit draw use the identical
@@ -20023,6 +21537,38 @@ int runPlaytest(int argc, char** argv) {
                 vehicleRig.Draw(device.context(), viewProjection, nfWorld, todLighting.sunDirection,
                                 todLighting.ambientColor, todLighting.sunColor);
             }
+        }
+
+        // Near-field ambient pedestrian population (THIS TASK) - drawn via
+        // the SAME already-loaded/posed brad character mesh (characterRenderer/
+        // characterHeadRenderer) the police-roadblock ped category already
+        // draws with (just below), once per live near-field ped, at that
+        // ped's own live population position - following the near-field
+        // vehicle traffic draw loop just above as its exact precedent: every
+        // ambient pedestrian currently looks like the same character model,
+        // the identical honest, stated simplification. Always drawn (no
+        // --no-vehicle-style opt-out exists for the character mesh anywhere
+        // else in this file either).
+        for (const auto& nfp : nearFieldPedsLive) {
+            float nfPedWorld[16];
+            sr3render::buildWorldMatrix(static_cast<float>(nfp.pos.x), finalGroundY, static_cast<float>(nfp.pos.z),
+                                        0.0f, 1.0f, nfPedWorld);
+            if (characterTextured)
+                characterRenderer.drawTextured(device.context(), viewProjection, characterPerMaterialSrv, nfPedWorld,
+                                               todLighting.sunDirection, todLighting.ambientColor,
+                                               todLighting.sunColor);
+            else
+                characterRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker, nullptr,
+                                       nfPedWorld, nullptr, todLighting.sunDirection, todLighting.ambientColor,
+                                       todLighting.sunColor);
+            if (characterHeadTextured)
+                characterHeadRenderer.drawTextured(device.context(), viewProjection, characterHeadPerMaterialSrv,
+                                                   nfPedWorld, todLighting.sunDirection, todLighting.ambientColor,
+                                                   todLighting.sunColor);
+            else
+                characterHeadRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker,
+                                           nullptr, nfPedWorld, nullptr, todLighting.sunDirection,
+                                           todLighting.ambientColor, todLighting.sunColor);
         }
 
         // Police roadblock spawn visuals (THIS TASK) - one draw per

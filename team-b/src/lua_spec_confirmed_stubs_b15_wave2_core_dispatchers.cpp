@@ -143,10 +143,17 @@
 //     bool result is NOT consulted... pushes true regardless"); the only
 //     gate that exists, or ever existed, here is each native's own seated
 //     test (+0x16d4 == 3), already present before this fix.
-// Release (+0x16d4 = 0) is still correctly left unwritten: nothing in this
-// host's scope reaches it, since it is a world-tick-only release path
-// (Sec7.8's own 0x00b0880b) with no in-scope synchronous Lua-visible
-// trigger - the one part of the original CHOSEN justification that holds.
+// Release (+0x16d4 = 0) was, at this point in the file's history, still
+// correctly left unwritten for every path: nothing in scope yet reached it.
+// SUPERSEDED 2026-10-10 for stub_vehicle_exit_do's own instant (arg 2 true)
+// case only - see that function's own FIXED note, right after its
+// `c.stateEnum.set(2);` line, for the full citation (Sec6.6.1/Sec6.7.2/
+// Sec6.9/Sec6.11/Sec6.13 point 5) of why the instant path's own release is
+// now completed synchronously too, the same way the 2026-10-09 enter-side
+// fix below completed ITS OWN instant path past its first synchronous write.
+// stub_vehicle_exit_guardian_angel's own request is never instant (no Lua
+// argument sets exit-request +0x30 bit 0 for it), so its animated-only path
+// is unaffected and still correctly stops at +0x16d4 = 2.
 //
 // FIXED (2026-10-09, mission-drive m05/m09 deadlock, forward-traced from
 // b706fbb's own identical fix to vehicle_enter_group_do's instant path):
@@ -402,6 +409,54 @@ int stub_vehicle_exit_do(lua_State* L) {
         // pushes true regardless" - so the only gate is this branch's own
         // seated test above.
         c.stateEnum.set(2);
+        // FIXED (2026-10-10, mission-drive m05 deadlock, forward-traced from
+        // a10a9ba/b706fbb's own identical completion of the ENTER side's
+        // synchronous-commit cascade): the above +0x16d4 = 2 write alone
+        // only reaches state 0x14 ("requested") - the structural mirror of
+        // the pre-fix enter bug, where stopping at the FIRST synchronous
+        // write left vehicle_enter_check_done's own seated test unable to
+        // ever observe completion. Read directly against spec-player-
+        // runtime.md Sec6 (U6.6) for THIS side, arg 2 ("instant") true:
+        //   - Sec6.6.1 step 5's "skip the wait" condition needs exit-request
+        //     +0x32 bit 2 set, which nothing in this native's own argument
+        //     list (or Sec6.2's field table) ever sets - so even an instant
+        //     request genuinely needs the owning tick's per-frame handler
+        //     (0x00b05b00, Sec6.6.2: "a local request normally moves to
+        //     0x15 on the next tick") to leave state 0x14 in the real game.
+        //   - Once state 0x15 IS reached, though, the instant route cascades
+        //     synchronously within that SAME tick's call chain with no
+        //     further tick dependency: 0x15's own on-entry handler dispatches
+        //     straight to 0x17 or 0x19 (Sec6.7.2 "Route... instant path"),
+        //     and 0x17's on-entry calls set-exit(...,0x19,1,0) "at once"
+        //     (Sec6.9 step 6) - the finaliser 0x19 then releases the slot,
+        //     writing +0x16d4 = 0 (Sec6.11 step 15/Sec7.8).
+        //   - Sec6.13 point 5 names exactly this as a port's own sanctioned
+        //     simplification: "A port that stubs U6.7 can send every exit
+        //     through the instant path... and still reproduce the observable
+        //     end state" - this host has no per-tick occupancy dispatcher at
+        //     all (this file's own top comment), so - precisely as the
+        //     enter-side fix already established for ITS own no-contention
+        //     instant case ("the no-contention case is the only case it can
+        //     ever represent" per b706fbb) - the one-tick wait at 0x14 is not
+        //     separately representable here either, and completing straight
+        //     to the real terminal/observable state on an instant request is
+        //     the faithful choice, not a weaker one.
+        // So: only for arg 2 (instant) true, complete past the 0x14 write
+        // above directly to the real release values - +0x16d4 = 0 (Sec6.11
+        // step 15/Sec7.8's own `0x00b0880b`) and the vehicle link +0x16c0/
+        // +0x16c4 = null (Sec7.8's `0x00b0881c`; this host's own stand-in,
+        // CharacterState::currentVehicleName, already treats an EMPTY string
+        // as "no current vehicle" - see resolveEnterVehicle()'s own check).
+        // The non-instant (animated) path is explicitly NOT completed here:
+        // Sec6.7.2's animated route goes to 0x1d/0x1f and plays a real clip
+        // over many real frames before ever reaching the finaliser, the same
+        // "cannot be synchronously represented" shape as the enter side's own
+        // AI-order path (never completed either) - leaving +0x16d4 = 2 is the
+        // honest, not-invented result for that branch.
+        if (arg2) {
+            c.stateEnum.set(0);
+            c.currentVehicleName.set(std::string());
+        }
         applyVehicleExitFollowBackoff(c, name);
         lua_pushboolean(L, 1);
         return 1;

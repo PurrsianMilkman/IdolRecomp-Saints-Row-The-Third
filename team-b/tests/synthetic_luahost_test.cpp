@@ -2622,6 +2622,18 @@ static void test_block_21() {
         }
 
         // vehicle_is_helicopter (Sec33.1): class 3 -> true, 4 (VTOL) -> false, unresolved -> false.
+        //
+        // CONFIRMED CASE-BY-CASE (vehicle-class xtbl wiring task, 2026-10-10):
+        // "heli1" here is a pure Lua-host-only test fixture with NO real
+        // zone-spawn backing (no sr3zone::ObjectsSection is ever ingested in
+        // this fixture) - and this one test body needs flyingType to visit
+        // THREE distinct states in sequence (OPEN, class 3, class 4), which a
+        // single real xtbl-sourced class value could never produce (the real,
+        // general, data-driven path - EngineState::loadZoneObjectsSection(),
+        // proven end-to-end by tests/synthetic_luahost_batch2728_test.cpp's
+        // own m05_heli_pierce fixture - only ever assigns ONE fixed class per
+        // vehicle instance). Manual .set() stays, legitimately, per this
+        // task's own "confirm case-by-case" instruction.
         {
             refusesOpen(gp, "vehicle_is_helicopter('heli1')", "named-object resolution");
             es.objectResolves().set("heli1", true);

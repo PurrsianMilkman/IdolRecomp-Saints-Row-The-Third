@@ -577,6 +577,30 @@ int stub_effect_play_on_script_object(lua_State* L) {
 // independently confirmed which one "really" succeeds, so this project does
 // not invent a finer-grained answer. Args 2/3/5/6/7/9/10/11 are consumed per
 // the confirmed shape, not modeled further.
+//
+// **FIX (2026-10-10, named-object-resolution-persona-empty task)**: arg 4
+// is called "mandatory" above only in the sense that the real binary
+// (0x00a4ff20) always reads/forwards it unconditionally with no nil-gate -
+// NOT in the sense that every real call site supplies a non-empty name.
+// The real, shipped game_lib.lua (misc.vpp_pc, this project's own
+// mission-script carrier, re-extracted directly for this task) documents
+// this exact parameter at its own Lua-wrapper layer: `helicopter_fly_to_
+// internal`'s own doc comment names it "follow: if non-empty, target
+// vehicle to follow" - i.e. the empty string is itself the documented
+// "no follow target" value, not an absent/placeholder argument. Both of
+// that wrapper's own "direct" callers (`helicopter_fly_to`/
+// `helicopter_fly_to_direct`) hard-code `local follow = ""` and forward it
+// positionally into this exact argument - confirmed the real, live call
+// path for `m05.lua`'s own `helicopter_fly_to_direct(M05_groups.pierce.heli,
+// -1, M05_nav.pierce)` (m05_initialize), which previously made this stub
+// call `objectResolves().get("")` unconditionally and throw
+// OpenStateError("named-object resolution['']...") - a real bug in this
+// stub, not a genuine remaining OPEN gap: "no follow target given" and "a
+// real name failed to resolve" are different engine facts the shared
+// zone-object map must not conflate, same reasoning as this project's own
+// pre-existing `target.empty() || !st->objectResolves().get(target)`
+// guard convention (e.g. `effect_play_finisher`, Sec28.9). Fixed by adding
+// the same empty-string short-circuit here.
 int stub_helicopter_fly_to_do(lua_State* L) {
     logCall(L, upLog(L), "helicopter_fly_to_do", upStateTag(L));
     std::string name = argString(L, 1);
@@ -606,7 +630,11 @@ int stub_helicopter_fly_to_do(lua_State* L) {
     req.useOrientationMode = useOrientationMode;
     req.applied = true;
     st->helicopterFlyTo().lastRequest[name] = req;
-    (void)st->objectResolves().get(destName); // resolved per spec, deeper position math OPEN (see doc comment)
+    // destName empty ("no follow target", the real game_lib.lua-documented
+    // meaning - see this function's own top doc comment) is a legitimate
+    // no-op, never a registry lookup; only a genuinely-named destination
+    // touches objectResolves() (deeper position math OPEN, unchanged).
+    if (!destName.empty()) (void)st->objectResolves().get(destName);
     lua_pushboolean(L, 1); // CHOSEN success signal - see doc comment above
     return 1;
 }

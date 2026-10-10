@@ -103,6 +103,19 @@ EngineState::EngineState() {
     // "-- Spawn Pierce's helicopter" comment) - kept in exact sync with
     // that seed, same single literal name, nothing generalized.
     helicopterFlyTo_.qualifies.set("m05_heli_pierce", true);
+
+    // CONFIRMED (spec-lua-api-behaviour.md Sec6.19, 2026-10-10 Team A spec
+    // sync, routed mission-blocking dlc2_m03): tutorial_start's own
+    // dispatcher step 5 reads 0x00706ab0, a top-of-mode-stack accessor whose
+    // backing index (0x012f4a80) is file-backed, initialized to -1 - the
+    // mode stack starts EMPTY on a fresh game, so this accessor's spawn
+    // default is 0, not 6 (6 = the key-bindings config sub-screen, the only
+    // value that stops this step). See TutorialStart::gate5Value00706ab0's
+    // own doc comment for the full citation. A test exercising the
+    // key-bindings-screen-open case still overrides this via .set()/
+    // .forget(), exactly as before this pre-seed (same convention as
+    // CharacterState::ragdollStateEnumCd2 above).
+    tutorialStart_.gate5Value00706ab0.set(0);
 }
 
 CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
@@ -199,57 +212,24 @@ VehicleState& EngineState::getOrCreateVehicle(const std::string& name) {
     // comment.
     v.forceFlagGatePasses.set(true);
 
-    // Single hardcoded-name seed (2026-10-10), NOT a general "infer class
-    // from name" rule - see the long note below for why a generic rule
-    // would be wrong here.
-    //
-    // Team A spec sync (HANDOFF.md, commit 849a88e) corrected this
-    // project's own prior (wrong) reading of the real field VehicleState::
-    // flyingType / EngineState::HelicopterFlyTo::qualifies already both
-    // cite as "(vehicle+0xbf4)+0x2c": it is NOT a per-vehicle-instance AI
-    // record field, it is the vehicle-TYPE DEFINITION record's own class
-    // enum (static per-type data, set once when the type loads, no runtime
-    // writer anywhere) - CONFIRMED values 0 = car, 2 = airplane, 3 = heli,
-    // 4 = VTOL (1/5/6 remain genuinely OPEN - no spec text gives them, so
-    // they are NOT guessed here or anywhere else in this project).
-    //
-    // This project has no loader that joins a zone-placed vehicle
-    // instance's name back to its real `<name>_veh.xtbl` Vehicle_Type row
-    // (sr3vehicleinfo::ParseAllVehicles exists but is not wired into this
-    // lua host's EngineState at all - see include/sr3vehicleinfo/
-    // vehicle_entry.h), so there is no general mechanism to populate this
-    // field for an arbitrary vehicle name, and inventing a name-substring
-    // heuristic ("contains 'heli' => class 3") would be fabricating data:
-    // confirmed by this project's OWN existing test suite, which
-    // deliberately uses vehicle names like "Heli1"/"heli01"/"Heli25" and
-    // asserts the field is STILL OPEN until a test explicitly .set()s it
-    // (tests/synthetic_luahost_test.cpp ~line 2573, synthetic_luahost_
-    // b10_batch3_test.cpp ~line 308, synthetic_luahost_wave2_w22_test.cpp
-    // ~line 403, synthetic_luahost_wave2_w24b_test.cpp ~line 383) - a
-    // generic heuristic would silently break all four.
-    //
-    // What IS real, clean-room data (not disassembly, not invented): m05's
-    // own shipped mission script (clean dump, D:/Project Crreish/TEAM A/
-    // scratchpad/lua_dumps/m05.lua) hardcodes this EXACT vehicle instance
-    // name and its own comment at line 649 literally reads "-- Spawn
-    // Pierce's helicopter" immediately above the vehicle_enter_teleport/
-    // vehicle_set_keyframed_physics calls against M05_groups.pierce.heli
-    // (== "m05_heli_pierce", declared at line 25). That is a real,
-    // dev-authored primary source identifying this ONE specific named
-    // vehicle instance as a helicopter - the same footing as this header's
-    // other literal-name special cases (e.g. VehicleState::
-    // keyframedPhysicsSpecialCaseCount's own "m05_heli_pierce" case,
-    // Sec14.14, also hardcoded by the real game on this exact name).
-    //
-    // So: seed ONLY this one literal name, honestly labeled CHOSEN (not a
-    // spec-cited numeric fact - the spec gives the field's real values and
-    // location, not which specific instances hold which value), leaving
-    // every other vehicle (including every "Heli*"-named test fixture
-    // above) exactly as OPEN as before.
-    if (name == "m05_heli_pierce") {
-        v.flyingType.set(3);                         // class 3 = heli (CONFIRMED value, Sec28.2/Sec30.5/Sec33.1)
-        helicopterFlyTo_.qualifies.set(name, true);   // same physical field, Sec28.2's own separate per-name map
-    }
+    // REMOVED 2026-10-10 (vehicle-class xtbl wiring task): this method used
+    // to carry a single hardcoded "m05_heli_pierce" name special case here
+    // (seeding flyingType=3/qualifies=true for that one literal string only)
+    // because this project had no general mechanism joining a zone-placed
+    // vehicle instance's name back to its real `<name>_veh.xtbl` Vehicle_Type
+    // row - sr3vehicleinfo::ParseAllVehicles existed but was not wired into
+    // this lua host's EngineState at all. That general mechanism now exists:
+    // EngineState::loadZoneObjectsSection() (this file, below) resolves a
+    // zone-placed `Script_Vehicle` record's own `script_vehicle_type_name`
+    // property (sr3zone::ScriptVehicleTypeName(), include/sr3zone/
+    // zone_objects.h) against installVehicleTypeClassTable()'s real
+    // xtbl-sourced class data and populates flyingType/qualifies from THAT,
+    // for every real zone-placed vehicle instance including m05's own pierce
+    // helicopter - not just one hardcoded literal name. A bare
+    // getOrCreateVehicle() call with no backing zone data (e.g. a synthetic
+    // unit-test fixture) leaves flyingType/qualifies exactly as OPEN as
+    // before this removal - nothing here fabricates a value for a name this
+    // project has no real data for.
     return v;
 }
 
@@ -388,6 +368,47 @@ void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section)
         // navpoint, a trigger volume, etc.) has no script_npc_hp precedence
         // rule to apply and is left alone beyond step 1 above.
         std::optional<std::string> className = sr3zone::ClassNameForHash(rec.classHash);
+
+        // Step 2a: NEW 2026-10-10 (vehicle-class xtbl wiring task) - the
+        // vehicle-equivalent of step 2's script_npc precedence. A real
+        // zone-placed vehicle instance's own class resolves to the literal
+        // string "Script_Vehicle" (spec-zone-data-format.md's own "Resolved
+        // classes include" list). If it also carries a decodable
+        // `script_vehicle_type_name` property (sr3zone::ScriptVehicleTypeName(),
+        // Sec11.7's own spec-cited name for the rest of the script_vehicle_*
+        // family) that matches - case-folded, the SAME AsciiLowerFold()
+        // convention this file's own ZoneObjectResolver already established -
+        // an entry of installVehicleTypeClassTable() (the real xtbl-sourced
+        // class data sr3vehicleinfo::ParseAllVehicles already computes
+        // correctly, wired in by tools/lua_host_run.cpp's real-cache install
+        // step), populates that vehicle instance's REAL class: flyingType
+        // directly, and - only for class 3 (Helicopter) or 4 (Vtol),
+        // HelicopterFlyTo::qualifies' own CONFIRMED gate (Sec28.2: "class in
+        // {3,4}") - qualifies too. This is the real, general, data-driven
+        // replacement for the single hardcoded "m05_heli_pierce" name
+        // special case getOrCreateVehicle() used to carry (removed this same
+        // task - see that method's own doc comment). A script_vehicle record
+        // with no script_vehicle_type_name property, or one whose type is
+        // not in the installed table (e.g. the table was never installed -
+        // every synthetic unit test), is left exactly as OPEN as before -
+        // never guessed at. Never touches getOrCreateCharacter() - a vehicle
+        // is not a character, matching step 2's own "non-script_npc named
+        // object... left alone beyond step 1" precedent for the reverse case.
+        if (className.has_value() && *className == "Script_Vehicle") {
+            std::optional<std::string> typeName = sr3zone::ScriptVehicleTypeName(rec);
+            if (typeName.has_value()) {
+                auto it = vehicleTypeClassByLowerName_.find(AsciiLowerFold(*typeName));
+                if (it != vehicleTypeClassByLowerName_.end()) {
+                    VehicleState& v = getOrCreateVehicle(name);
+                    v.flyingType.set(it->second);
+                    if (it->second == 3 || it->second == 4) {
+                        helicopterFlyTo_.qualifies.set(name, true);
+                    }
+                }
+            }
+            continue; // no script_npc precedence rule applies to a vehicle
+        }
+
         if (!className.has_value() || *className != "script_npc") continue;
 
         CharacterState& c = getOrCreateCharacter(name);

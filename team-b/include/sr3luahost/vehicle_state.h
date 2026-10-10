@@ -87,10 +87,19 @@ struct VehicleState {
     // 2 = airplane, 3 = heli, 4 = VTOL all CONFIRMED; 1/5/6 remain
     // genuinely OPEN (no spec text gives them). No in-scope setter writes
     // it (a test sets it directly, same convention as CharacterState::
-    // stateEnum in character_state.h) - EngineState::getOrCreateVehicle()
-    // now pre-seeds exactly one literal-name exception for this (lua_
-    // engine_state.cpp, "m05_heli_pierce") - see that seed's own doc
-    // comment for why a general name-inference rule would be wrong.
+    // stateEnum in character_state.h). UPDATE 2026-10-10 (vehicle-class
+    // xtbl wiring task): a REAL, general, data-driven producer now exists -
+    // EngineState::loadZoneObjectsSection() (src/lua_engine_state.cpp)
+    // populates this field for any zone-placed vehicle instance whose own
+    // `script_vehicle_type_name` property (sr3zone::ScriptVehicleTypeName())
+    // resolves against installVehicleTypeClassTable()'s real xtbl-sourced
+    // class data (sr3vehicleinfo::ParseAllVehicles) - replacing the single
+    // hardcoded "m05_heli_pierce" name special case getOrCreateVehicle()
+    // used to carry (removed this same task; see that method's own doc
+    // comment for the full history). A vehicle with no real zone-spawn
+    // backing (every synthetic unit-test fixture, or a real name this
+    // project's installed table has no matching type for) still has this
+    // field set directly by a test, exactly as before.
     OpenValue<int32_t> flyingType{"vehicle flying-type enum ((+0xbf4)+0x2c)", "spec-lua-api-behaviour.md Sec30.5/Sec33.1"};
 
     // vehicle_is_vtol_hover / vehicle_is_vtol_jet (Sec33.1): vehicle +0x5e8.

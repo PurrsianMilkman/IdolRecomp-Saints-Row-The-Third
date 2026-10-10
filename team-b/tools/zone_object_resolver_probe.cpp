@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "sr3luahost/engine_state.h"
@@ -53,6 +55,15 @@ bool endsWithCznExt(const std::string& lowerName) {
 uint64_t g_cznFilesFound = 0;
 uint64_t g_cznWithSection = 0;
 
+// Trigger-shape population scan (2026-10-10, Trigger_Volume on-disk shape/
+// extent/radius wiring task): collected independently of EngineState's own
+// named-only ZoneObjectResolver (include/sr3luahost/zone_object_resolver.h
+// only ingests records with a decoded `ctg_object_name` - most Trigger_Volume
+// instances in the real population may not carry one), so every
+// Trigger_Volume record this walk sees (named or not) is kept here directly.
+std::vector<sr3zone::ObjectRecord> g_triggerRecords;
+uint32_t g_triggerVolumeClassHash = 0; // computed once below, lazily
+
 void ingestCznBuffer(sr3luahost::EngineState& es, const uint8_t* data, size_t len) {
     ++g_cznFilesFound;
     std::vector<sr3zone::ObjectsSection> sections;
@@ -65,6 +76,9 @@ void ingestCznBuffer(sr3luahost::EngineState& es, const uint8_t* data, size_t le
         if (!section.complete) continue;
         ++g_cznWithSection;
         es.loadZoneObjectsSection(section);
+        for (const sr3zone::ObjectRecord& rec : section.records) {
+            if (rec.classHash == g_triggerVolumeClassHash) g_triggerRecords.push_back(rec);
+        }
     }
 }
 
@@ -125,6 +139,13 @@ int main(int argc, char** argv) {
     std::string cacheDir = argv[1];
     std::string archivePath = cacheDir + "/sr3_city_0.vpp_pc";
 
+    // Trigger-shape population scan setup (2026-10-10): the class hash this
+    // walk filters g_triggerRecords by, computed via the SAME sr3save::
+    // nameHash() this project's own ClassNameForHash()/KnownClassHashes()
+    // (sr3zone/zone_objects.h) uses for every other class name - not a
+    // hand-transcribed constant.
+    g_triggerVolumeClassHash = sr3save::nameHash("Trigger_Volume");
+
     sr3luahost::EngineState es;
 
     // BEFORE: this project's documented gap, demonstrated directly -
@@ -177,6 +198,68 @@ int main(int argc, char** argv) {
         std::cout << "drawOrGetMaxHitPoints(\"Killbane\") = " << hp << " (no throw)\n";
     } catch (const sr3luahost::OpenStateError& ex) {
         std::cout << "drawOrGetMaxHitPoints(\"Killbane\") STILL throws: " << ex.what() << "\n";
+    }
+
+    // --- Trigger_Volume shape/extent/radius population scan (2026-10-10
+    // on-disk wiring task) -------------------------------------------------
+    std::cout << "\n=== Trigger_Volume shape/extent/radius (real " << archivePath << " population) ===\n";
+    std::cout << "trigger_volume_records_found=" << g_triggerRecords.size()
+               << " (classHash=0x" << std::hex << g_triggerVolumeClassHash << std::dec << ")\n";
+    std::unordered_map<std::string, uint64_t> shapeTypeTextCounts;
+    uint64_t noShapeTypeCount = 0, unmappedShapeTypeCount = 0;
+    for (const sr3zone::ObjectRecord& trigRec : g_triggerRecords) {
+        std::optional<std::string> shapeType = sr3zone::TriggerShapeType(trigRec);
+        if (!shapeType) {
+            ++noShapeTypeCount;
+            continue;
+        }
+        ++shapeTypeTextCounts[*shapeType];
+        if (!sr3zone::TriggerShapeCodeForTypeString(*shapeType)) ++unmappedShapeTypeCount;
+    }
+    std::cout << "distinct trigger_shape_type strings observed (count):\n";
+    for (const auto& kv : shapeTypeTextCounts) {
+        std::cout << "  \"" << kv.first << "\" x" << kv.second
+                   << " -> enum " << (sr3zone::TriggerShapeCodeForTypeString(kv.first)
+                                           ? std::to_string(*sr3zone::TriggerShapeCodeForTypeString(kv.first))
+                                           : std::string("UNMAPPED"))
+                   << "\n";
+    }
+    std::cout << "no_trigger_shape_type_property=" << noShapeTypeCount
+               << " unmapped_shape_type_strings=" << unmappedShapeTypeCount << "\n";
+
+    // The real on_boat_trigger: position was already confirmed in a prior
+    // pass (x=2488.54 y=6.82348 z=-4.15918) - this prints its REAL
+    // trigger_shape_type/param1/param2 from this same real cache for the
+    // first time.
+    std::cout << "\n=== on_boat_trigger (real shape/extent) ===\n";
+    const sr3zone::ObjectRecord* boat = es.resolveZoneObject("on_boat_trigger");
+    std::cout << "resolveZoneObject(\"on_boat_trigger\") = " << (boat ? "FOUND" : "nullptr") << "\n";
+    if (boat) {
+        auto pos = sr3zone::ObjectPosition(*boat);
+        if (pos) std::cout << "  position = (" << pos->x << ", " << pos->y << ", " << pos->z << ")\n";
+        auto shapeType = sr3zone::TriggerShapeType(*boat);
+        std::cout << "  trigger_shape_type = " << (shapeType ? ("\"" + *shapeType + "\"") : std::string("<none>"));
+        std::optional<int> shapeCode = shapeType ? sr3zone::TriggerShapeCodeForTypeString(*shapeType) : std::nullopt;
+        std::cout << " -> enum " << (shapeCode ? std::to_string(*shapeCode) : std::string("UNMAPPED")) << "\n";
+        const sr3zone::ObjectPropertyEntry* p1 = sr3zone::TriggerShapeParam1(*boat);
+        const sr3zone::ObjectPropertyEntry* p2 = sr3zone::TriggerShapeParam2(*boat);
+        if (shapeCode && *shapeCode == 0) {
+            auto v1 = p1 ? sr3zone::DecodePropertyAsVec3(*p1) : std::nullopt;
+            auto v2 = p2 ? sr3zone::DecodePropertyAsVec3(*p2) : std::nullopt;
+            if (v1) std::cout << "  trigger_shape_param1 (box min) = (" << v1->x << ", " << v1->y << ", " << v1->z << ")\n";
+            if (v2) std::cout << "  trigger_shape_param2 (box max) = (" << v2->x << ", " << v2->y << ", " << v2->z << ")\n";
+        } else if (shapeCode && (*shapeCode == 1 || *shapeCode == 2)) {
+            auto f1 = p1 ? sr3zone::DecodePropertyAsFloat(*p1) : std::nullopt;
+            std::cout << "  trigger_shape_param1 (radius) = " << (f1 ? std::to_string(*f1) : std::string("<none>")) << "\n";
+            if (*shapeCode == 2) {
+                auto f2 = p2 ? sr3zone::DecodePropertyAsFloat(*p2) : std::nullopt;
+                std::cout << "  trigger_shape_param2 (length) = " << (f2 ? std::to_string(*f2) : std::string("<none>")) << "\n";
+            }
+        } else {
+            std::cout << "  (shape code unmapped/absent - raw param1 size="
+                       << (p1 ? std::to_string(p1->data.size()) : std::string("<absent>"))
+                       << " raw param2 size=" << (p2 ? std::to_string(p2->data.size()) : std::string("<absent>")) << ")\n";
+        }
     }
     return 0;
 }

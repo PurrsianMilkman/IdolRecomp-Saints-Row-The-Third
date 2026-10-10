@@ -1828,6 +1828,19 @@ add_executable(sr3luahost_minimap_live_transform_tests tests/synthetic_minimap_l
 target_link_libraries(sr3luahost_minimap_live_transform_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_minimap_live_transform_test COMMAND sr3luahost_minimap_live_transform_tests)
 
+# Mission-host Phase 2 (2026-10-09, branch feature/mission-host-phase2-
+# live-bridge) - EngineState's new live position bridge + name->live-object
+# resolver (liveObjectKind()/isLiveObject()/bridgeLiveCharacterPosition()/
+# bridgeLiveVehiclePosition()/clearLiveObjectsForTesting(), engine_state.h,
+# right after getOrCreateVehicle()/vehicles()) - the mechanism
+# tools/sr3_viewer.cpp's own runPlaytest() now calls once per rendered
+# frame for "#PLAYER1#" (see that function's own "MISSION-HOST PHASE 2" doc
+# comment). Covers the resolver's own independence from objectResolves()
+# and an end-to-end Lua pass through the REAL, unmodified get_dist native.
+add_executable(sr3luahost_mission_host_live_bridge_tests tests/synthetic_mission_host_live_bridge_test.cpp)
+target_link_libraries(sr3luahost_mission_host_live_bridge_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_mission_host_live_bridge_test COMMAND sr3luahost_mission_host_live_bridge_tests)
+
 # Roster test on the real tools/lua_all_registered_1490_tagged.txt (names
 # only): vint_* UI-only (Sec13.7), 8 dual registrations (Sec13.5), the 24
 # bare globals still unregistered pending their roster (Sec13.2/Sec16.3).
@@ -1836,6 +1849,14 @@ add_test(NAME synthetic_minimap_live_transform_test COMMAND sr3luahost_minimap_l
 add_executable(sr3luahost_bare_globals_tests tests/synthetic_luahost_bare_globals_test.cpp)
 target_link_libraries(sr3luahost_bare_globals_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_bare_globals_test COMMAND sr3luahost_bare_globals_tests)
+
+# In-world trigger-volume overlap test + callback dispatch (2026-10-10,
+# spec-lua-api-behaviour.md Sec1.14): EngineState::TriggerVolumeContainsPoint
+# plus the enter/exit-transition -> BareThreadTable::allocate() dispatch
+# pattern tools/sr3_viewer.cpp's own runPlaytest() now uses.
+add_executable(sr3luahost_trigger_volume_overlap_tests tests/synthetic_trigger_volume_overlap_test.cpp)
+target_link_libraries(sr3luahost_trigger_volume_overlap_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_trigger_volume_overlap_test COMMAND sr3luahost_trigger_volume_overlap_tests)
 
 add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
 target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
@@ -2316,6 +2337,15 @@ add_executable(sr3tables_cutscene_tests tests/synthetic_tables_cutscene_test.cpp
 target_link_libraries(sr3tables_cutscene_tests PRIVATE sr3tables_cutscene)
 add_test(NAME synthetic_tables_cutscene_test COMMAND sr3tables_cutscene_tests)
 
+# sr3_viewer's own --mission zscene-table fix (coordinator-routed, 2026-10-10):
+# needs sr3tables_cutscene, added here (AFTER it exists, same "CMake requires a
+# target to already exist when it is linked against" reasoning as the
+# sr3player_vehicle block above) rather than in sr3_viewer's own original
+# target_link_libraries call.
+if(TARGET sr3_viewer)
+    target_link_libraries(sr3_viewer PRIVATE sr3tables_cutscene)
+endif()
+
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
 # real, stated subset of the 804 shipped mission/UI scripts against the
 # stub environment above, reporting real luaL_loadbuffer/lua_pcall
@@ -2590,6 +2620,38 @@ if(WIN32)
     add_dependencies(real_playtest_streaming_longwalk_tests sr3_viewer)
     if(NOT CRREISH_VERIFY_BUILD)
         set_tests_properties(real_playtest_streaming_longwalk_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
+# Real-data integration test for playtest's new MISSION-HOST PHASE 1
+# `--mission=<stem>` debug flag (2026-10-09, branch feature/mission-host-
+# phase1-debug-flag) - a SIBLING of real_playtest_smoke_test above (tests/
+# real_playtest_mission_test.cpp's own header comment has the full account):
+# drives the real shipped `mm_p_03` mission script once per rendered frame
+# through the SAME Host/EngineState this command already builds for --hud,
+# checking (A) the real resolve/preload(system_lib.lua+game_lib.lua)/bind/
+# per-frame-scheduler-pass-drive path actually runs and a real later mission
+# error does not crash the rest of the live loop, and (B) the NEW wall-clock
+# --mission-timeout safety cutoff fires cleanly and deterministically.
+# CRREISH_TOOLS_DIR (same compile-definition convention tests/synthetic_
+# luahost_roster_test.cpp already uses) locates this repo's own tools/
+# lua_all_registered_1490_tagged.txt - a real file this project's own
+# source tree ships, not copied game content. SKIPPED (exit 77) when
+# CRREISH_GAME_CACHE_DIR is absent, same convention as every other real_*
+# test. WIN32-only, same reason as real_playtest_smoke_test above.
+if(WIN32)
+    add_executable(real_playtest_mission_tests tests/real_playtest_mission_test.cpp)
+    target_compile_definitions(real_playtest_mission_tests PRIVATE
+        CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}"
+        CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+    add_test(NAME real_playtest_mission_test
+             COMMAND real_playtest_mission_tests --bin-dir $<TARGET_FILE_DIR:sr3_viewer>)
+    set_tests_properties(real_playtest_mission_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device")
+    add_dependencies(real_playtest_mission_tests sr3_viewer)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_playtest_mission_test PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 
@@ -3285,6 +3347,7 @@ set_tests_properties(
     synthetic_vintdoc_document_test
     synthetic_vint_property_test
     synthetic_vint_font_test
+    synthetic_mission_host_live_bridge_test
     synthetic_le_strings_test
     synthetic_wwise_vorbis_setup_test
     synthetic_bink_codec_test

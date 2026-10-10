@@ -4816,8 +4816,20 @@ and wait. **Standing queue, work through in order:**
    (did not trust the agent's self-report blindly): both cleanroom regex patterns on the new file
    = 0 hits; re-ran `tools/sync_to_teamb.sh` myself, confirmed "67 file(s) synced, byte-identical
    confirmed, HANDOFF.md and spec-output.md never touched", exit 0. Reported to orchestrator.
-4. Nothing in flight. Next: hold per standing "1 agent at a time... if usage-pacer says stop,
-   write HANDOFF and wait" instruction unless orchestrator routes new work.
+4. ~~Nothing in flight~~ **Superseded 2026-10-10, orchestrator routed new work.** purrsian-4a:
+   "chip at the weakest systems, highest gameplay value first: spec-player-runtime's OPEN backlog.
+   Pick the ~10 OPEN items that most affect moment-to-moment play (movement, combat, vehicle use)
+   and close them in batches of 3–4 per agent" — explicitly keep fan-out modest (orchestrator's
+   feedback on the coverage-summary agent's 11 nested children: "a lot under the usage-aware
+   rule"). Picked 10 OPEN items from `spec-player-runtime.md`'s numbered list + U7 section, highest
+   movement/combat/vehicle impact: #22 (walk-axis-invert defaults), #13 (facing-override/aim
+   predicate), #30 (camera submode chooser), U7 (vehicle steering/braking fields) — **batch 1,
+   DONE**, spliced/cleanroom-checked(0 hits)/synced(67 files, exit 0), agent `a9227feb164895d5d`.
+   #15 (stance bits), #37 (turn-angle target), #44 (speed multiplier), #45 (sprint/jump upgrade
+   bits) — **batch 2, DONE**, same verification, agent `a0c88ca0b79350e79`. Each agent ran
+   single-threaded (no nested sub-agents), per the explicit fan-out-modest instruction. Remaining
+   to round out ~10: OPEN #43 (ungated sprint reads, co-op relevance) and OPEN #40 (`+0xccd` values
+   2/3, movement-state names) — **batch 3, not yet dispatched**, next action.
 
 ### 44.4 LEARNED — key facts/addresses a fresh session needs without re-deriving
 - `0x00bc5610` = `return 0x029443bc==2 || 0x029443bc==3` (machinima recorder stopping/finalizing
@@ -4868,11 +4880,164 @@ and wait. **Standing queue, work through in order:**
   silently re-answering a non-question.
 
 ### 44.6 Pending on the user / orchestrator specifically
-- Nothing currently blocked on the user. The `0x00bc5610` relabel unit (§44.3) is the only in-flight
-  work; orchestrator said hold after it lands, no new units until told. Usage-pacer has flagged
-  "ahead of plan" twice this session — lean toward answering small routed asks directly (grep/read)
-  over spawning an agent when feasible, and stay at one agent at a time unless told usage is back on
-  plan.
+- Nothing currently blocked on the user. Usage-pacer has flagged "ahead of plan" twice this
+  session — lean toward answering small routed asks directly (grep/read) over spawning an agent
+  when feasible, and stay at one agent at a time unless told usage is back on plan.
 - `dlc2_m01`'s vtable `+0x68` value needs a live capture — orchestrator said they'd add it to an
   optional capture list; not blocking, just flagged.
+- **Two in-world mission blockers from purrsian-4a, AHEAD of the §44.3 player-runtime OPEN-backlog
+  work (which is itself now fully DONE — all 3 batches, ~10 items, see §44.3), one at a time:**
+  1. ~~`Trigger_Volume` on-disk encoding.~~ **DONE 2026-10-10**, agent `a94b114a2ccb78105`. Real
+     vtable `0x01170934`, tail-property parser at vtable slot `+0x04` (`0x0093e520`, no further
+     indirection — this class's constructor writes only ONE vtable, breaking the
+     general_mover/script_npc "two writes" heuristic, now flagged as per-class-verify-don't-assume).
+     Named properties resolved with real strings (not CRC-guessed): `trigger_shape_type` (authored
+     as a string, resolved to the 0/1/2 shape enum), `trigger_shape_param1`/`_param2` (box: two
+     vec3 min/max corners; sphere: radius only; cylinder: radius+length), plus
+     flags/action/action_param/use_message/max_fires/delay/sync. Resolved a prior open question:
+     `+0xe8` is the authored `trigger_action_param` string, not a Lua hook slot. Position/orientation
+     confirmed to come from the generic record head, not this class's tail. Spliced into
+     `spec-lua-api-behaviour.md` §1.14 (primary) and `spec-zone-data-format.md` §11.7
+     (cross-reference, third resolved class). Cleanroom 0 hits both files, synced (67 files, exit
+     0), re-verified independently. Still OPEN: cylinder's second axis-endpoint field's true
+     source; the one-time class-registration stub (not needed for the vtable id itself); the
+     `0x2243` "Interior triggers" format.
+  2. ~~`zscene_is_loaded("09_in")` fails synchronously, blocking `m09_start`.~~ **DONE 2026-10-10**,
+     agent `a92b4ddd045ff7f8b`. Recovered the real `m09.lua` directly: `m09_start` calls
+     `cutscene_play("09_in", ...)` with no preceding `zscene_prep` (universal pattern — missions
+     prep their own mid-mission "_zNN" scenes ahead but never their own "_in"/"_out" scenes). Also
+     recovered the real shared `cutscene_play` library wrapper: it polls `zscene_is_loaded` in a
+     yield loop before the engine native (resolves §57.2a's open item). The loop never iterates for
+     `"09_in"` specifically: its real `.cte_xtbl` (freshly extracted) shows `CutsceneType = Story`
+     (kind 2), so the already-documented kind-gate in `zscene_is_loaded` returns true immediately —
+     the whole Zscene prep/promote/complete pipeline this section documents never applies to this
+     name. **Root cause for Team B, not a timing issue: a host blocking on this is diverging on
+     cutscene KIND — `zscene_is_loaded` must read `CutsceneType` and short-circuit to true for any
+     non-Zscene name, exactly like retail.** Spliced into `spec-lua-api-behaviour.md` §26.25,
+     cleanroom 0 hits, synced (67 files, exit 0), independently re-verified.
+  Both mission blockers now DONE. Orchestrator wanted each spliced and synced individually, then
+  reported — done for both; report sent. Orchestrator (2026-10-10, same rewrite): "Continue the
+  player-runtime backlog... prioritising moment-to-moment play. Mission blockers from Team B jump
+  the queue as before."
+
+**Player-runtime backlog, batch 4 — DONE 2026-10-10**, agent `a408dcb9ae85f24bc`. OPEN 29
+RESOLVED (lateral-offset camera re-add is NOT a drift bug — position fully recomputed every
+frame, bias bounded to one frame, inert outside the vehicle-fallback-distance-ramp case). OPEN 28
+RESOLVED (vehicle camera presets fully mapped; `+0x864`=`Max_FOV` upgraded to CONFIRMED,
+`+0x868`=follow-distance scale factor CONFIRMED). OPEN 27 PARTIALLY RESOLVED (FOV multiplier and
+secondary ×3.0 multiplier both resolved, both REFUTE the "look-sensitivity option" hypothesis —
+FOV is the drunk/weed wobble, ×3.0 is a sleepy/fatigue-driving minigame wake-up boost; the base
+look-speed curve's owning object stays unidentified). OPEN 15 residual: `+0x1d95` bit `0x20`
+RESOLVED (fine-aim + scope-capable weapon flag); bit `0x08` → HIGH CONFIDENCE
+(position-snap/teleport latch); `+0x1d97`'s 4 bits genuinely OPEN, no candidate addresses exist,
+needs the Ghidra-free displacement-sweep method next. Spliced, cleanroom 0 hits, synced (67 files,
+exit 0), independently re-verified. Reported to orchestrator.
+
+**Next action:** report batch 4, then continue the backlog one agent at a time — remaining
+camera-mode items (23: camera mode 11 re-aim behavior, 24: bodies of other camera modes — mostly
+menu/cosmetic, lower priority, 25: camera mode 12 stub, 26: HUD screen names) and any stance/
+movement items not yet touched. Mission blockers from Team B still jump the queue if routed.
+
+**Batch 5 — DONE 2026-10-10**, agent `a9337200c21571e67`. OPEN 23 RESOLVED (camera mode 11's
+re-aim/freeze/fallback logic fully traced — confirmed object-relative hold camera for
+turnaround/cutscene use, not a turret/scope). OPEN 31 HYPOTHESIS REFUTED (sway amplitude is NOT
+impact/explosion-driven — tied to QTE execution and vehicle-entry state via the same unidentified
+ramp system OPEN 27 flagged). OPEN 33 PARTIALLY RESOLVED (collision-filter object-exclusion logic
+fully tabulated; the "kinds 1, 4, 8" label doesn't match anything in this function, flagged for
+re-pointing to `spec-physics-runtime.md` §8.8). OPEN 38 RESOLVED (found the real `+0xd40` writer;
+documented bit meanings hold up but each is a derived condition, not raw pad bits;
+cross-referenced into `spec-anim-runtime.md` §4.2). Spliced both files, cleanroom 0 hits each,
+synced (67 files, exit 0), independently re-verified. This closes the player-runtime backlog push
+for now — remaining items (modes 24-26, menu/HUD-adjacent) are genuinely low gameplay value,
+matching the orchestrator's own read.
+
+**PIVOT 2026-10-10, same rewrite, per orchestrator** — **DONE, major finding, overturns the
+leading hypothesis**, agent `afd08ed5c390d9156`. An xref scan of the respect-apply routine
+`0x009e2440` found `streaking`'s own score/notify function (`0x006b91a0`) calling it directly for
+respect, and the shared cash-apply primitive `0x0094d920` directly for cash — both are the exact
+routines the Lua-callable `game_award_respect`/`game_award_cash` natives themselves bottom out in,
+inline per level completion, no batching, no Lua round-trip. **This means the "batch/session-end
+grant" hypothesis (b) was WRONG as a universal answer — Barnstorming and `stunt_jumping_diversion`
+are the exceptions (reward-less), not the norm.** Also traced `streaking`'s tick function
+(`0x006b9390`) end to end as a second full worked example alongside Barnstorming (Thread 2, done
+as a side effect). Independently confirmed hypothesis (c) — a Lua-side grant — is dead for this
+whole family (57/59 activity markers carry zero Lua). Spliced into `spec-activity-runtime.md`
+§4/§5, cleanroom 0 hits, synced (67 files, exit 0), independently re-verified. Reported to
+orchestrator.
+
+**Follow-up — DONE 2026-10-10, same rewrite**, agent `ad1456a8e67d130bb`. Classified the
+remaining diversion types per orchestrator's request (cheap xref pass on `0x009e2440`/`0x0094d920`
+callers vs. each type's own address cluster, deep-dive only ambiguous hits). Found a SECOND
+direct-grant type, `cat_and_mouse` (cash branch, `0x006c9400`), and a significant new structural
+finding: a shared base-class DEFAULT completion/reward handler (`0x006a4220`, keyed on a
+framework-wide singleton `0x014c2d10`, installed via vtable slot `0x012f465c`) — a possible THIRD
+reward path for types that don't override completion handling at all. The remaining 11 diversion
+types have no per-type caller of either primitive near their clusters, but weren't independently
+confirmed reward-less (their own tick/score functions weren't opened), so all 11 are reported
+honestly as **ambiguous, not classified**, in a new table spliced into §4/§5 — not forced into
+either bucket. Spliced, cleanroom 0 hits, synced (67 files, exit 0), independently re-verified.
+Reported to orchestrator.
+
+**Follow-up — DONE 2026-10-10, same rewrite**, agent `a49f8a06539d406bb`. Orchestrator asked to
+open `0x006a4220` fully and check 3 types (mugging/base_jumping/photo_op) for a vtable override,
+expecting to then label the remaining 8 types "most likely also default." **Result: that
+inference is explicitly NOT supported and was not applied.** `0x006a4220`'s dual-grant is real but
+conditional (1 of 3 completion-status branches); its reward amount comes from two flat globals
+that have exactly one writer each, which only RESETS them to zero — the real amount source is
+unlocated. More importantly, `0x006a4220` itself has ZERO call-xrefs anywhere in the binary and
+its own data table's base address also has zero references — raising a genuine possibility it's
+unreachable in the shipped build. The override check on the 3 requested types (plus Barnstorming
+as calibration) found none of them write an explicit vtable pointer at construction at all,
+consistent with every diversion type being a pre-existing static singleton — the override
+question needs each type's own singleton's raw data bytes, not attempted. All 14 ambiguous
+diversion types remain ambiguous in the table — not reclassified on weak evidence. Spliced,
+cleanroom 0 hits, synced (67 files, exit 0), independently re-verified. Reported to orchestrator.
+One agent at a time; mission blockers still jump the queue.
+
+**PIVOT 2026-10-10, same rewrite, per orchestrator.** Activity rewards PARKED — "static analysis
+is hitting diminishing returns there, and it's a live-capture candidate." Next: "the in-game UI
+runtime Team B will need. Specifically the pause menu and the phone (cellphone menu: contacts,
+map, missions, cheats) — how their VINT documents are opened, driven by input, and closed, plus
+the Lua/native calls between them. Use the `interface.vpp_pc` scripts you already extracted."
+Dispatched agent `a9f302a03e2e9c69c`: Part 1 closes `spec-frontend-menu-runtime.md`'s own OPEN
+items (pause-button→open-pause-menu input binding, which pause-depth push site it uses, and the
+close path). Part 2 is new ground: the phone menu's VINT doc open/drive/close chain via
+`system_lib.lua`/`vint_lib.lua` (already-established extraction recipe, `spec-vpp-container.md`
+§7.6), connecting to the many already-documented individual cellphone natives in
+`spec-lua-api-behaviour.md` (search "cellphone") that currently have no unit on the surrounding
+UI structure.
+
+**DONE 2026-10-10, same rewrite**, agent `a9f302a03e2e9c69c`. **Part 1 (pause menu):** fully
+decompiled both push-screen primitives (`0x007b4640`/`0x007b4750`), ruled out 6 of their ~35 call
+sites as unrelated subsystems (map ping, world trigger, horde, co-op replication, host
+migration), and CONFIRMED (exhaustive grep over the complete `interface.vpp_pc` Lua layer, ~400
+files) that the pause-open transition is unreachable from Lua — native-only. A dozen untraced call
+sites remain as the concrete next step; the literal binding itself is still OPEN, just much
+narrower. **Part 2 (phone menu):** complete, new area — created `spec-cellphone-menu-runtime.md`.
+Full screen-code/document map (9+ separate pushed VINT documents, not tabs of one doc — corrects
+the task's own "contacts/map/missions/cheats as tabs" framing), the icon-grid dispatcher, the
+uniform 3-deep exit/pop convention, and the `cell_phone` document's complete internal
+dial/garage/hang-up chain traced all the way to the already-documented natives `cellphone_dial`/
+`cellphone_choose_vehicle`. New native lead surfaced: `cell_cheats_activate_cheat`, not yet in
+`spec-lua-api-behaviour.md`'s cellphone section. The phone's own top-level open shares the exact
+same "unreachable from Lua" shape as the pause menu — same unresolved native binding, plausibly
+one shared dispatcher for both. Spliced into `spec-frontend-menu-runtime.md` §7/§9 (Part 1) and the
+new file (Part 2), cleanroom 0 hits both, synced (68 files, exit 0), independently re-verified.
+Reported to orchestrator.
+
+**Follow-up — DONE 2026-10-10, same rewrite**, agent `a9f56b402bc4788b5`. Orchestrator: "chase
+the ~dozen remaining push-screen call sites to land the actual pause- and phone-open binding."
+**Result: exhausted the full ~35-call-site list — none of them is the pause/phone open.** All 14
+untraced sites plus the one re-checked uncertain lead (`0x0072d660`, confirmed to genuinely call
+the push primitive, for the unrelated cutscene-lifecycle dispatcher) resolve cleanly to other
+subsystems: a generic parameterized message-box family (6 sites), object-condition/activity-result
+popups, a single-purpose UI flag toggle, a world-interactable shop-type toggle, the
+already-documented controller-reconfiguration prompt pair (same codes as mode 6), and the
+cutscene dispatcher. No `CBA_*` input-query or per-frame-tick call was found feeding any of them.
+**The search has pivoted off screen-push call-site enumeration entirely — the next step is the
+input side: either the shared pause-depth counter's ~60 push sites (§37.3) or the control-action/
+button-map registration for the conventional pause/menu button, neither chased yet.** Spliced into
+both `spec-frontend-menu-runtime.md` §7/§9 and `spec-cellphone-menu-runtime.md` §2/§7, cleanroom
+0 hits both, synced (68 files, exit 0), independently re-verified. Reported to orchestrator. One
+agent at a time; mission blockers still jump the queue.
 <!-- CONTEXT-GUARD:RESUME-END -->

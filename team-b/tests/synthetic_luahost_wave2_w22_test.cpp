@@ -399,6 +399,14 @@ int main() {
     // Sec17.27 helicopter_enter_retreat: mode-gate false -> pushes false,
     // no state change; mode-gate true + mode != 6 -> transitions and
     // (when the height check trips) schedules a deadline.
+    //
+    // CONFIRMED CASE-BY-CASE (vehicle-class xtbl wiring task, 2026-10-10):
+    // "heli1" here is a pure Lua-host-only test fixture with no real
+    // zone-spawn backing, and needs qualifies to visit both false and true
+    // within one test body - legitimately staying manual per this task's own
+    // "confirm case-by-case" instruction (see
+    // tests/synthetic_luahost_batch2728_test.cpp's own m05_heli_pierce
+    // fixture for the real, general, data-driven path this project now has).
     es.objectResolves().set("heli1", true);
     es.helicopterFlyTo().qualifies.set("heli1", false);
     ok(host, gp, "assert(helicopter_enter_retreat('heli1') == false)");
