@@ -1384,6 +1384,18 @@ In order: (a) an NPC with \|`+0x1cec`\|² < 1e‑5 has it zeroed. (b) **NPC LOD:
 
 Full detail, including the forward-probe's `−2.2` offset constant (axis/meaning unresolved) and what the open "which file supplies the ground collision shape" question bounds (separate from and not blocking any of the above): `scratchpad/havok_character_proxy_ground_following_2026-10-08.md`.
 
+**Follow-up pass, 2026-10-10: the open-world ground-collision-source question is narrowed, not closed.**
+
+**CONFIRMED, cited from `spec-physics-format.md` §4.4.6(g) (closed 2026-10-08, re-read not re-derived this pass):** `.clmesh_pc`'s parsed collision-hull data does reach a real Havok shape — RTTI-resolved `hkpExtendedMeshShape` (vtables `0x01246834`/`0x01246814`) wrapped via `hkpSingleShapeContainer` (`0x01154174`) into a real `hkpMoppBvTreeShape` (`0x0124484c`), built from the file's own vertex/`u16`-index arrays plus a pre-baked, on-disk-validated ("MOPP" magic) Havok MOPP tree — a direct triangle-mesh-to-MOPP wrap, no primitive decomposition.
+
+**This path IS wired into ordinary open-world zone streaming, not just bundled interiors/missions** — cited from `spec-world-streaming.md` §10.5/§10.6: every ordinary city tile's sub-box registration pass registers each overlapping placed object's own `.clmesh_pc` into a `"%sh%d"` container; population-wide, 41,689 `Level Mesh` entries sit in ordinary-tile containers alone. So `.clmesh_pc`/Level-Mesh collision is a routine part of ordinary street-tile streaming, not an interior-only mechanism.
+
+**However — checked directly against real open-world street tiles, already documented `spec-zone-data-format.md` §13.2 (2026-10-08): `.clmesh_pc`'s real content on ordinary tiles is street furniture (curbs, barriers, posts), not the paved street surface itself** (142 distinct props across 7 tiles' fine cells, zero road-named, none tile-scale). **The visible street pavement is a different, already-identified source: `.czn_pc`'s own `0x2237` ("WE geom") section** — the same spec section (2026-10-08) decoded real vertex positions from 374 real road/sidewalk-textured tiles and found 359/374 (96%) genuinely flat, tile-scale slabs (e.g. a real 31m×140m×0.55m slab). This supersedes the older "decal/path-deform overlay, not base ground" framing of `0x2237` in `spec-terrain-format.md` (dated 2026-10-07, now stale — flagged there).
+
+**So the real open item is narrower than before: what Havok shape, if any, backs `0x2237`/`.gzn_pc`'s own pavement geometry for collision — not traced this pass.** Two bounds on the search space, both new this pass: (1) precedent exists in the same file format for a `.czn_pc` content kind embedding a raw Havok shape directly with no `.clmesh_pc` involved at all — `0x2250` ("Parking") is a thin wrapper around a real embedded Havok packfile (`hkpListShape` of `hkpBoxShape`s), `spec-zone-data-format.md` §13.4, CONFIRMED by RTTI — so the pattern is established, just not yet shown for `0x2237`. (2) The other live candidate, `0x2244` (Heightmap)'s already-documented runtime query chain, was traced this pass by direct xref/decompile to its real callers: the public "get height at world position" wrapper is `0x00b41670` (`if !0x00b412c0(&cell, pos) return -5.0; else return 0x00b41000(&cell)` — the `-5.0` failure sentinel exactly matches the already-documented population floor of real decoded height values, strong confirmation this is the live public entry point). **Independently re-verified this pass via the Ghidra query server: `0x00b41670` has 18 callers across 17 functions, and `0x00b412c0` has 9 callers across 6 functions — none fall inside the Havok character-proxy/controller address range (`0x0079xxxx`-`0x007axxxx`: the support query `0x0079d0b0`, controller motion `0x007a5b10`, the shape-cast wrappers).** Two opened by decompile this pass look like gameplay/effect consumers, not Havok narrowphase code: `0x00669bb0` (a nearby-offset height sampler keyed off the current player's own position, footstep/decal/effect-placement-shaped) and `0x005ebac0` (gates on the same per-character-kind capability table/bit `spec-player-runtime.md` §5.6.5 already ties to the controller's own slope-removal gate — a real link to the character-kind system, but not inside Havok cast code). **Net: no vertex/index-buffer construction and no Havok shape registration was found downstream of `0x2244`'s height data in this pass's budget — the remaining ~15 of 17 `0x00b41670` callers were not individually opened, so this is not an exhaustive negative, but it leans toward "`0x2244` is a scalar query API for gameplay/camera/effects," not a Havok collision feed.**
+
+**Bottom line:** the character proxy's support query itself needs no further work — it genuinely contacts whatever real Havok shape is registered in the broadphase. Which file registers that shape for bare open-world street pavement specifically remains OPEN, now narrower: `.clmesh_pc`/`.glmesh_pc` is ruled out (confirmed furniture/props only), `0x2244`'s own confirmed callers are ruled out (gameplay consumers, not Havok code, on the two opened), and the one remaining structurally-plausible path — `0x2237`'s own pavement content being wrapped into a Havok shape the same way `0x2250`/Parking's boxes are — was not traced this pass (its documented handler `0x00864c60` shows only material/texture-pool resolution in its own body, a clean negative for Havok content *inside that specific handler*, but its callers/siblings in the zone-dispatch chain were not individually checked for a separate collision-registration step). **Recommended next step: an xref census on the Havok broadphase-add call implicit in `0x00d54300`'s MOPP composite construction, checked against whether the zone-instantiate dispatcher (`0x00866580`/`0x008652d0`, `spec-zone-data-format.md` §11.1) or `0x2237`'s own handler chain ever reaches it directly, independent of the `.clmesh_pc`/Level-Mesh path.** Full detail: this pass's own hand-off, folded in here; no separate scratch file.
+
 **Gravity integration (the actual formula):**
 ```
 if bit 0x01 clear AND state==0 (unsupported) AND (b2==0 OR b3!=0) AND bit 0x02 clear:
@@ -4788,6 +4800,21 @@ consumer of `instance+0x13c`.
 ---
 
 ## Changelog
+
+- **2026-10-10 — ground-collision-shape source narrowed, not closed; corrects a stale cross-ref in
+  `spec-terrain-format.md`** (SPEC TEAM, agent `ab81ded1165afbe66`). Confirmed `.clmesh_pc`'s Havok
+  MOPP-tree handoff (cited from `spec-physics-format.md` §4.4.6(g)) is wired into ordinary
+  open-world zone streaming, not just interiors — but ruled out as the pavement-surface source
+  itself (confirmed furniture/props only on real tiles). Confirmed the real visible street pavement
+  is `.czn_pc`'s own `0x2237` section instead (cited from `spec-zone-data-format.md` §13.2,
+  superseding a stale "decal overlay, not base ground" framing in `spec-terrain-format.md`, flagged
+  there). Traced `0x2244` (Heightmap)'s own confirmed callers by direct xref/decompile — independently
+  re-verified via the Ghidra query server — and ruled them out as a Havok collision feed (gameplay/
+  camera consumers, not inside the character-proxy's own code range), though not exhaustively (15
+  of 17 callers unopened). Net: the Havok shape backing `0x2237`'s own pavement geometry, if any,
+  remains genuinely OPEN — narrower than before, with a concrete next step (an xref census on the
+  MOPP broadphase-add call against the zone-instantiate dispatcher). Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-10 — OPEN item #97, 5th and FINAL static pass: `+0x2084` setter PARKED on live-capture
   list** (SPEC TEAM, agent `a47b49a25aa1aa505`). Checked all 26 remaining uncharacterized callees of

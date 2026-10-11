@@ -55,7 +55,44 @@ and GitHub pushed (`e3f7f57`).
   `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 10 versions on G: (1
   new)"). Screenshots (plain launch, post-fire HUD/objective state - the shot ped wasn't in camera frame
   this take, said honestly, hit/death/flee all confirmed via console log instead) personally viewed.
-  Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 - DO THIS NEXT.**
+  Read-only + swapped into `TEAM B\playtest\`. **Relayed to purrsian-52.** purrsian-52 confirmed v0.7
+  md5-verified clean (D:/G:/live) and GitHub pushed.
+
+### 2 agents in flight (next: ped flee movement + real footstep audio question, v0.8 once flee lands)
+- `afb3defb7c1f860ae` - make peds actually move when `PedReactionMode==Flee` (currently computed and
+  observable but unconsumed, see weapons merge above). Told it to reuse the EXISTING sidewalk/ped-pathing
+  mechanism ambient peds already use for idle wander (NOT invent a new movement system), pick a CHOSEN
+  flee-destination rule if the real one isn't spec-confirmed (labelled honestly, not hidden), wire
+  `tools/sr3_viewer.cpp`'s already-computed-but-discarded `PedReactionMode` to drive it, verify real
+  before/after position change live via `--script-fire`.
+- **DONE: footstep-audio investigation, NO code change (correctly)** - `aab08c973330acd49` confirmed the
+  real material->footstep-event mapping is genuinely NOT specced anywhere accessible (checked
+  spec-audio-runtime.md Sec11a.4/Sec11a.7/Sec12 item4, spec-player-runtime.md, spec-anim-runtime.md,
+  ground/surface-material specs - nothing). Neither half exists: no confirmed Wwise HIRC footstep event
+  name, no animation foot-plant hook, no ground-surface-material classification anywhere in this
+  project. Left the already-honestly-labelled placeholder as-is. **Exact Team A question written, needs
+  relay** (see this unit's own report for the full 3-part question - real HIRC event name/trigger site,
+  whether it varies by surface material, and the real material->event table if so - points Team A at the
+  SAME Sec11a.7 call-site-tracing method that already found 3 unrelated real event names, just not yet
+  aimed at the on-foot movement state machine).
+- **DONE: ped flee movement merged (`7a10ba4`)** - shot peds in Flee mode now move continuously via the real
+  sidewalk/wander graph, verified live (real position change every traced frame). Found+flagged a wider
+  pre-existing gap: ambient peds were NEVER ticked at all before this (idle wander included) - only the
+  Flee case is wired now. Full ctest 165/169 clean.
+- **DONE: v0.8 shipped.** Folder: `v0.8_2026-10-10_peds-flee-when-shot` on
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 11 versions on G: (1
+  new)"). Screenshot (plain launch) personally viewed; honestly noted the flee behavior itself isn't
+  shown on screen (camera follows Brad, fled ped ends up out of frame) but was directly confirmed via
+  live position tracking. Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 -
+  DO THIS NEXT.**
+- `a4ab5e5905a46e13f` - Team A specced footsteps (spec-audio-runtime.md Sec11a.8, just landed): real event
+  name `FOOTSTEP`, sourced from `anim_files.xtbl` Sounds rows, `MATERIAL_TYPE`
+  (CONCRETE/METAL_SOLID/FLESH) + `SHOE_TYPE`/`MOVEMENT_TYPE` switches, 144 fixed-context rows (vehicle
+  entry/exit clips, not general locomotion). Open-world walking has no author-baked material context -
+  purrsian-52 directed `MATERIAL_TYPE:CONCRETE`+`SHOE_TYPE:SNEAKER` as a labelled CHOSEN default. The real
+  engine's foot-plant TRIGGER mechanism is still OPEN (not found by Team A's trace either) - told the unit
+  to keep the existing cadence-based trigger timing and just swap which real clip plays, extending the
+  existing HIRC event->media lookup to resolve by name+switches if it doesn't already support that.
 
 ### Previously (pre-move), now historical: v0.6 planning note
 All of this session's queued work (vorbis merge+independent oracle verify, inv-slot/conversation merge,

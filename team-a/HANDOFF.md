@@ -5433,15 +5433,72 @@ explicitly check for a real shipped `.clmesh_pc`+`.glmesh_pc` sibling pair used 
 (not a building/prop); (4) report honestly if the trail goes elsewhere or dead-ends. Awaiting its
 report.
 
-**Next action once it reports:** read in full, spot-check its two biggest claims (the Havok
-shape-construction call chain, and whichever way the Level-Mesh-vs-zone-streaming fork resolves)
-against the Ghidra query server myself before trusting either — this is exactly the kind of
-surprising, high-leverage claim that needs independent verification, not a quick skim. Splice into
-whichever file(s) it recommends (most likely `spec-player-runtime.md` near line 1385 and/or
-`spec-physics-format.md`'s own open item; a cross-reference note to `spec-world-streaming.md`/
-`spec-terrain-format.md` if the rendering connection pans out). Cleanroom-check (0/0), sync, update
-this note, report to orchestrator (flag the ground-draw connection prominently either way — they
-are specifically waiting on this).
+**DONE — the ground-draw-closing hope did NOT pan out, but real narrowing landed.** The row-31/
+row-40 (`.clmesh_pc` Level-Mesh/Level-Mesh-Collision) sibling-pair hypothesis came back negative,
+on real evidence: `.clmesh_pc` content on ordinary open-world tiles is confirmed street
+furniture/props (142 distinct, zero road-named, none tile-scale), not the paved surface, though
+the MOPP-tree Havok handoff IS confirmed real and IS wired into ordinary zone streaming (not
+interior-only). The real visible street pavement turns out to be `.czn_pc`'s own `0x2237` section
+— but that was **already resolved in-repo on 2026-10-08** (`spec-zone-data-format.md` §13.2); the
+agent correctly cited it rather than re-deriving it, and flagged that this supersedes a stale
+"decal overlay" framing still sitting in `spec-terrain-format.md` (now corrected). The agent's one
+genuinely new contribution: traced `0x2244` (Heightmap)'s own confirmed callers by direct
+xref/decompile and ruled them out as a Havok collision feed (gameplay/camera consumers, not inside
+the character-proxy's code range) — I independently re-verified this via the Ghidra query server
+myself (`0x00b41670`'s 18 callers, `0x00b412c0`'s 9, confirmed none fall in `0x0079xxxx`-`0x007axxxx`)
+before trusting it. **Net: the Havok shape backing `0x2237`'s own pavement for collision remains
+genuinely OPEN** — narrower than before (ruled out: `.clmesh_pc`, `0x2244`'s confirmed callers),
+with a concrete next step (xref census on the MOPP broadphase-add call against the zone-instantiate
+dispatcher). Spliced into `spec-player-runtime.md` (the open item itself), with correction flags in
+`spec-terrain-format.md` and `spec-format-inventory.md` (rows 31/40). Cleanroom-checked (0/0) on
+all 3 files, synced (70 files, exit 0). Reported to orchestrator, flagging plainly that the
+ground-draw connection did not close.
+
+**A Team B question arrived mid-task, queued explicitly by the orchestrator** ("queue it after
+your current ground-collision unit, which overlaps on surface material"): the real Wwise HIRC
+event name/ID posted for player/NPC footsteps — (1) fired from a foot-plant anim event or a
+cadence timer, which function; (2) does it vary by ground material, and if so where does the
+material classification come from; (3) if so, the material→event/switch table. Team B's own
+suggested method: hash literal event-name strings through `0x00462960`→`0x0046fd00`→
+`GetIDFromString` and find callers in the on-foot movement state machine — they've already found 3
+real event names this way. Answer belongs in `spec-audio-runtime.md` (and `spec-anim-runtime.md`
+if anim-event-driven).
+
+**Dispatched agent `a1921856e97195898`** with the full context already gathered: `spec-audio-runtime.md`
+§11a.1-§11a.7 already documents the general name-hash→`GetIDFromString`→`0x00a2acb0`
+object-sound-core mechanism and several OTHER real call sites of it (mission-script cues, impacts,
+a minigame event) as a structural template; its own §11a.4 scope note already says footsteps go
+through the same "LUA 2D"/"LUA 3D" one-shot pool — the job is finding the SPECIFIC footstep call
+site, not re-deriving the pool. Pointed it at two concrete leads: (1) `spec-anim-runtime.md`'s
+currently-unwired `"Left Foot Bool"`/`"Right Foot Bool"` animation parameters (status not fully
+pinned down — check for an actual writer that wasn't found before, and whether it also triggers
+audio); (2) whether any Havok shape class this project has already RTTI-identified carries a
+standard `hkpMaterial`-shaped friction/surface-type id, as the likely source of a material
+classification (simpler than the still-open Havok-collision-shape question from the just-finished
+ground-collision unit — that question's own current state, for cross-reference only, not to
+re-solve). Awaiting its report.
+
+**DONE.** Real answer: the Wwise event is the literal string `FOOTSTEP`, sourced from DATA
+(`anim_files.xtbl`'s `Sounds` element), not any `.text` literal — this is why Team B's own
+suggested method (hashing a string literal through `0x00462960`) never found it; `FOOTSTEP` is
+resolved via `0x0046fd00` directly from the xtbl loader, never through that forwarder. Two tiers:
+144 fixed-context clips (vehicle floor entry/exit, Brute NPC kit) bake a `MATERIAL_TYPE`
+(`CONCRETE`/`METAL_SOLID`/`FLESH`, exactly 3 values)/`SHOE_TYPE`/`MOVEMENT_TYPE` switch pair into
+the event at content-authoring time — NOT a runtime ground query; ordinary player/NPC locomotion
+clips carry no embedded event at all, only the universal `left-foot`/`right-foot` anim triggers
+(1,170/1,149 occurrences). I independently re-verified every load-bearing number myself before
+trusting the dispatched agent's report: the exact `anim_files.xtbl` FOOTSTEP/trigger counts and
+MATERIAL_TYPE value set (grepped the real decoded table directly — all matched exactly), and the
+xref census of both pool globals via the Ghidra query server (confirmed: `0x02e99688` has 3 uses/
+1 function, `0x030e2200` has 2 uses/1 function, both loader-only — matches the agent's claimed
+negative exactly). **Honest, real gap left for Team B: the runtime consumer that turns a fired
+trigger into a live `PostEvent` was not found anywhere in `.text`** — confirmed-negative by direct
+xref (caveat: an indirect, pointer-chasing consumer reading through a record's own field pointer
+would be invisible to that method, so not exhaustive). Spliced as `spec-audio-runtime.md` §11a.8
+(full material→switch table included) plus an update to `spec-anim-runtime.md`'s `Left Foot
+Bool`/`Right Foot Bool` entries. Cleanroom-checked (0/0) on both files, synced (70 files, exit 0).
+**Reporting the full, actionable answer to the orchestrator for relay to Team B next** — not just
+"done," the actual event name/mechanism/table, since they're waiting to act on this directly.
 
 ### 45.4 LEARNED — key facts/addresses future-me needs without re-deriving
 - **CBA action table**: 166-entry `{int32 value; char* namePtr}` array at `0x01122160`, read

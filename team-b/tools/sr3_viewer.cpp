@@ -20454,6 +20454,19 @@ int runPlaytest(int argc, char** argv) {
     // this function's own "WEAPON FIRE" doc comment above runPlaytest() for
     // the honest statement of this exact gap).
     std::unordered_map<uint64_t, sr3airuntime::PedReactionMode> nearFieldPedReaction;
+    // THIS TASK (2026-10-10): the one new piece of per-ped state Flee
+    // actually needs - the real near_field_ped_population.h NearFieldPed
+    // struct itself has no flee-destination field (same scope-split every
+    // other sr3airuntime struct in this file uses: caller-owned facts, not
+    // a new engine field) - a ped's presence as a key here means "currently
+    // fleeing toward this point," reusing the real WanderMove/
+    // WanderToSidewalk sub-state machine (near_field_ped_population.h's own
+    // TickWander/TickIdleSubBehaviour, Sec20.2) to drive it, not a parallel
+    // movement system. See the per-frame mover block below (after the
+    // near-field ped spawn/draw section) for the actual step, and that
+    // header's own ChooseFleeDestination/kFleeSpeedMsChosen for the CHOSEN
+    // destination rule and speed stand-in this reuses.
+    std::unordered_map<uint64_t, sr3airuntime::Vec3> nearFieldPedFleeDestination;
     bool prevFireDown = false;
 
     std::map<size_t, std::unique_ptr<CityLoadedCell>> loaded;
@@ -21535,6 +21548,53 @@ int runPlaytest(int argc, char** argv) {
             }
         }
 
+        // ---- Near-field ambient-ped FLEE movement (THIS TASK, 2026-10-10):
+        // the actual per-frame mover for any ped currently in
+        // nearFieldPedFleeDestination (set only by the WEAPON FIRE block
+        // below, on a genuine Flee reaction). Runs every frame regardless of
+        // the walking/driving branch split further down, the same way the
+        // spawn pass just above also runs unconditionally - a fleeing ped
+        // keeps fleeing while Brad is driving, not just while on foot. This
+        // is the ONLY per-frame Idle/sidewalk/wander ticking wired for ANY
+        // near-field ped in this codebase (confirmed: no other call site
+        // calls TickIdleSubBehaviour/TickWander/TickSidewalk at all) - a
+        // pre-existing, wider gap (ordinary idle peds never actually
+        // sidewalk-walk or wander either) this task does not take on, since
+        // the brief is specifically "close the gap for the Flee case." Reuses
+        // the real header machinery (TickWander/TickOneFrameTransition,
+        // Sec20.2) rather than a parallel mover. ----
+        for (auto& nfp : nearFieldPedsLive) {
+            auto destIt = nearFieldPedFleeDestination.find(nfp.id);
+            if (destIt == nearFieldPedFleeDestination.end()) continue;
+            if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderMove) {
+                nfp.pos = sr3airuntime::StepTowardDestination(nfp.pos, destIt->second,
+                                                               sr3airuntime::kFleeSpeedMsChosen * static_cast<double>(dt));
+                // CHOSEN arrival radius (1.0m) - Sec20.2's own "wander-move
+                // completion criteria... was identified by call shape only,
+                // not independently confirmed"; this file's own
+                // WanderTickParams::hasReachedDestination already documents
+                // that same OPEN item, so this is this task's own CHOSEN
+                // value for it, not a new gap.
+                const double kArriveEpsM = 1.0;
+                sr3airuntime::WanderTickParams wtp;
+                const sr3airuntime::Vec3 destCopy = destIt->second;
+                wtp.hasReachedDestination = [destCopy, kArriveEpsM](const sr3airuntime::Vec3& p) {
+                    const double dx = p.x - destCopy.x, dz = p.z - destCopy.z;
+                    return (dx * dx + dz * dz) <= kArriveEpsM * kArriveEpsM;
+                };
+                sr3airuntime::Vec3 destInOut = destIt->second;
+                sr3airuntime::TickWander(nfp, wtp, destInOut);
+            } else if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderToSidewalk) {
+                // Real one-frame transition (Sec20.2) back onto the sidewalk
+                // graph - the ped has arrived and is done fleeing; hand it
+                // back to the (currently unticked, see this block's own
+                // doc-comment) sidewalk/idle state rather than leaving it
+                // permanently parked in a wander sub-state.
+                sr3airuntime::TickOneFrameTransition(nfp);
+                nearFieldPedFleeDestination.erase(destIt);
+            }
+        }
+
         // ---- Police roadblock spawn - only while armed+cvar-enabled. ----
         if (roadblockDriver.ShouldRunTick()) {
             // Snapshot BEFORE the tick so newly-filled slots can be
@@ -21575,6 +21635,18 @@ int runPlaytest(int argc, char** argv) {
                         roadblockFilledNow, roadblockSlots.size());
             std::printf("[peds] frame %d near-field ambient peds live=%zu/%zu\n", frames, nearFieldPedsLive.size(),
                         kNearFieldPedLocalCap);
+            // THIS TASK (2026-10-10): per-fleeing-ped position trace, for
+            // live verification that a Flee reaction actually moves the
+            // ped's own NearFieldPed::pos over subsequent frames, not just
+            // that the reaction mode computed correctly (which already
+            // worked before this task - see this block's own HANDOFF
+            // context).
+            for (const auto& nfp : nearFieldPedsLive) {
+                if (!nearFieldPedFleeDestination.count(nfp.id)) continue;
+                std::printf("[flee-trace] frame %d ped id=%llu pos=(%.2f,%.2f,%.2f) idleSubState=%d\n", frames,
+                            static_cast<unsigned long long>(nfp.id), nfp.pos.x, nfp.pos.y, nfp.pos.z,
+                            static_cast<int>(nfp.idleSubState));
+            }
         }
 
         // viewProjection/headingNow/charWorld/poseResult/diagEye* are filled by
@@ -21839,10 +21911,63 @@ int runPlaytest(int argc, char** argv) {
                         sr3airuntime::EvaluateGunfireReaction(facts, /*isLethalOrAttacked=*/true);
                     nearFieldPedReaction[nfp.id] = reaction.mode;
                     std::printf("[fire] ped id=%llu reaction mode=%d (0=None,1=GunfireWary,2=Cower,3=Flee,4=Panic) "
-                                "spokeLineOnly=%d - NOTE: this codebase has no existing movement/AI consumer for "
-                                "this mode yet (observability only, see this block's own doc comment)\n",
+                                "spokeLineOnly=%d pos=(%.2f,%.2f,%.2f)\n",
                                 static_cast<unsigned long long>(nfp.id), static_cast<int>(reaction.mode),
-                                reaction.spokeLineOnly);
+                                reaction.spokeLineOnly, nfp.pos.x, nfp.pos.y, nfp.pos.z);
+
+                    // THIS TASK (2026-10-10): close the "no movement/AI
+                    // consumer" gap the weapon-fire-wiring task's own
+                    // HANDOFF entry left open - when the reaction is
+                    // genuinely Flee, actually set the ped moving, reusing
+                    // the real sidewalk/wander segment-graph machinery
+                    // (near_field_ped_population.h's own TickWander/
+                    // WanderMove sub-state, Sec20.2) rather than inventing a
+                    // new movement system. fireOrigin (the shooter/camera
+                    // position for this shot) is the CHOSEN "threat
+                    // position" input - Sec20.4 confirms the reaction chain
+                    // resolves "the shooter" as a real entity but never
+                    // gives a formula for what point a flee destination
+                    // should be computed away FROM; the camera/shooter
+                    // origin is the most direct available stand-in (not the
+                    // hit point on the ped's own body, which would not
+                    // meaningfully differ in direction for a single shot).
+                    // See near_field_ped_population.h's own
+                    // ChooseFleeDestination/kFleeSpeedMsChosen comments for
+                    // the full CHOSEN-vs-OPEN accounting.
+                    if (reaction.mode == sr3airuntime::PedReactionMode::Flee &&
+                        !nearFieldPedFleeDestination.count(nfp.id)) {
+                        const std::vector<sr3airuntime::SidewalkSegment> fleeCandidateSegments =
+                            GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer(nfp.pos, 0.0, nearFieldPedRng);
+                        // fireOrigin is sr3player::Vec3 (the shooter/camera
+                        // position) - a distinct type from
+                        // sr3airuntime::Vec3 (near_field_ped_population.h's
+                        // own field header: a deliberately separate module,
+                        // no cross-namespace Vec3 reuse) - converted here at
+                        // this task's own call site, not by changing either
+                        // library's own type.
+                        const sr3airuntime::Vec3 threatPosAirRuntime{fireOrigin.x, fireOrigin.y, fireOrigin.z};
+                        const std::optional<sr3airuntime::Vec3> fleeDest =
+                            sr3airuntime::ChooseFleeDestination(nfp.pos, threatPosAirRuntime, fleeCandidateSegments);
+                        if (fleeDest.has_value()) {
+                            nearFieldPedFleeDestination[nfp.id] = *fleeDest;
+                            for (auto& mutablePed : nearFieldPedsLive) {
+                                if (mutablePed.id != nfp.id) continue;
+                                // Enter the real WanderMove sub-state
+                                // directly (Sec20.2's own "wander choose
+                                // dest... transitioning to sub-state 34") -
+                                // the destination is already chosen above,
+                                // so this skips straight past WanderChooseDest
+                                // the same way a caller that already has a
+                                // destination would.
+                                mutablePed.idleSubState = sr3airuntime::PedIdleSubState::WanderMove;
+                                mutablePed.onSegment = false;
+                                break;
+                            }
+                            std::printf("[flee] ped id=%llu entering Flee movement -> dest=(%.2f,%.2f,%.2f)\n",
+                                        static_cast<unsigned long long>(nfp.id), fleeDest->x, fleeDest->y,
+                                        fleeDest->z);
+                        }
+                    }
                     break;
                 }
             }

@@ -4353,6 +4353,130 @@ new vehicle call site found this pass, `"Tank_Mayhem_Repair"`, is a one-shot cue
 engine loop, so it doesn't settle this). Full detail, complete address index:
 `scratchpad/audio_mixer_3d_sfx_positioning_2026-10-08.md`.
 
+### 11a.8 Footstep audio — CONFIRMED event name/switches (data), runtime dispatch OPEN (2026-10-10)
+
+**Routed from Team B.** Question: the real Wwise HIRC event/id for player/NPC footsteps, whether it's
+anim-event-driven or a movement-code cadence timer, and whether/how it varies by ground material.
+
+**The event name is the literal string `FOOTSTEP`** — not a `.text` literal (a `str`-mode scan of the
+whole `.exe` for `footstep`/`Footstep`/`FOOTSTEP`/`foot_plant`/`FootPlant` finds **zero** occurrences;
+this project's name-hash path is `0x00462960`→`0x0046fd00`→Wwise `GetIDFromString`, as already
+documented in §1.3/§11a.7, but `FOOTSTEP` is never passed to it from `.text`). It comes from **game
+data**: `misc_tables.vpp_pc`'s `anim_files.xtbl`, specifically the `Sounds/Sound` child element this
+project's own `spec-tables-animation.md` §3.2 already reverse-engineered the loader for (`0x004ae7a0`
+→ `0x004ae1e0`, pool at `0x02e99688`, stride `0x1C`, each record's `Audio_Event` text resolved to a
+Wwise id via `0x0046fd00` **directly** — not through the `0x00462960` forwarder, which is exactly why a
+scan for `0x00462960` callers never surfaces this path). **CONFIRMED (data)** — independently re-verified
+against the real decoded `anim_files.xtbl` (`tools/an_xtbl/anim_xtbl/anim_files.xtbl`, 5,968 `<Anim_file>`
+rows): 144 rows carry at least one `Sound` whose `Audio_Event` is the literal text `FOOTSTEP` (matches
+exactly). `MATERIAL_TYPE` has exactly 3 shipped values (`CONCRETE`, `METAL_SOLID`, `FLESH`, independently
+re-grepped, matches exactly).
+
+**The mechanism splits into two tiers, and this matters for where material variation lives:**
+
+1. **Fixed-context clips (baked per-clip switch values) — CONFIRMED (data).** A `Sound` element carries
+   `Frame`, `Audio_Switch_0`, `Audio_Switch_1` (each `"GROUP:VALUE"`, split on `:`, both halves resolved
+   via `0x0046fd00`) and `Audio_Event`. All 144 `FOOTSTEP`-bearing rows in the base game are **vehicle
+   entry/exit clips** (`apc_entrl_trvs.animx`, `auto_entrl_bigtrck_ridr.animx`, …, stepping on a vehicle's
+   metal floor/running-board) and the **Brute NPC's own locomotion/kit** (`brute_hvy_wlk.animx`,
+   `brute_mc_run.animx`, `brute_hs_run_a.animx`, …). Real shipped switch values (exhaustive for the base
+   game, independently re-grepped):
+   - `MATERIAL_TYPE` group: `CONCRETE`, `METAL_SOLID`, `FLESH` — only 3 values shipped, and `MATERIAL_TYPE`
+     is used **only** on `FOOTSTEP`-event `Sound` rows (never on any other `Audio_Event`).
+   - `SHOE_TYPE` group: `BAREFOOT`, `COMBAT_BOOTS`, `SNEAKER`.
+   - `MOVEMENT_TYPE` group (paired with `MATERIAL_TYPE` on some rows instead of `SHOE_TYPE`): `WALK`,
+     `LAND`, `LAND_HARD`.
+   Each `FOOTSTEP` `Sound` row sets **both** a material switch and a shoe/movement switch, then posts the
+   one event — i.e. **one event, two orthogonal Wwise switch groups**, with the actual per-combination
+   media choice made inside the Wwise bank (data-side, same scoping boundary already established for all
+   SFX in §11a.5/§11a.7 — not re-opened here). **This is the material→event/switch table Team B asked
+   for**, to the extent the base game's authored data goes:
+
+   | Audio_Event | Audio_Switch_0 or _1 (material) | paired switch | example clip |
+   |---|---|---|---|
+   | `FOOTSTEP` | `MATERIAL_TYPE:CONCRETE` | `SHOE_TYPE:{BAREFOOT,COMBAT_BOOTS,SNEAKER}` or `MOVEMENT_TYPE:{WALK,LAND,LAND_HARD}` | sidewalk/ground-context clips |
+   | `FOOTSTEP` | `MATERIAL_TYPE:METAL_SOLID` | `SHOE_TYPE:COMBAT_BOOTS` or `MOVEMENT_TYPE:LAND` | vehicle floor entry/exit (`apc_*`, `auto_*entr*`) |
+   | `FOOTSTEP` | `MATERIAL_TYPE:FLESH` | (shipped value, exact pairing not captured in this pass's sample) | — |
+
+   These values are **author-baked per clip at content-creation time**, not computed from a runtime
+   ground query — there is no code path in this chain that samples a collision material and selects which
+   `MATERIAL_TYPE` string to use; the animator/sound-designer picked the right constant for the context
+   the clip was built for (e.g. "this is a metal vehicle floor, always"). **CONFIRMED (data + loader
+   disassembly already on record)**; the inference that it's author time, not runtime, is **HIGH
+   CONFIDENCE** (no contrary mechanism found, see next point).
+
+2. **Ordinary player/NPC locomotion clips — no embedded audio event at all; CONFIRMED (data), and this
+   closes an open item in `spec-anim-runtime.md`.** The actual walk/run/sprint cycles driven by the
+   on-foot movement state machine (`spec-player-runtime.md` §3.6, `0x005b2ca0`/`0x005ab930`) —
+   `plym_*_wlk.animx`/`plym_*_sprint.animx` (player male), `plyf_*_wlk.animx` (player female),
+   `ped_*_run.animx`/`gang_*_wlk*.animx` (NPCs) — have an **empty `<Sounds></Sounds>` element**. Instead
+   every one of them carries the **generic** `<Trigger><Name>left-foot</Name><Frame>N</Frame></Trigger>`
+   / `right-foot` markers (from the `anim_triggers.xtbl` registry, §9 of `spec-tables-animation.md`,
+   hashed with the narrow rotate/XOR hash `0x00da7890`, not this group's usual CRC-32) at the actual
+   foot-plant frame. Independently re-verified count over the whole base-game table: **1,170 `left-foot`
+   and 1,149 `right-foot` trigger occurrences**, essentially universal across every locomotion clip in
+   the game (player and NPC alike), vs. only 144 rows with a baked `FOOTSTEP` `Sound`. **This is almost
+   certainly the real foot-plant anim event** `spec-anim-runtime.md`'s own `Left Foot Bool`/`Right Foot
+   Bool` graph parameters are meant to be driven by — see that file's own update.
+
+**Runtime dispatch — genuinely OPEN, confirmed-negative by two independent checks:**
+- The `Sound` pool (`0x02e99688`) has **no reader anywhere in `.text` outside its own loader**
+  (`0x004ae1e0`) — independently re-verified by xref census against the Ghidra query server:
+  exactly 3 uses, all inside that one function. Nothing else in the binary names this address.
+- The per-clip trigger-occurrence table the loader builds from each `Trigger`'s `Frame`
+  (`0x004ca2d0`→`0x004cad90`, storing `(trigger-index, frame·0x12c0/0x1e)` pairs into a global, capped
+  array at `0x030e2200`/`0x030e2204`) has the same result: independently re-verified, exactly 2 uses,
+  both inside `0x004cad90` (the loader itself) — zero other references to either global.
+- No caller of the hash/`GetIDFromString` path (`0x00462960`, 281 sites/137 functions, full census this
+  pass) sits inside the on-foot movement band or inside the animation-controller band
+  (`0x004b0000`–`0x004ca000`, already fully read by this project's U1 pass for other purposes) either.
+
+**Caveat on that negative, stated plainly so it isn't overclaimed:** a direct-xref scan only catches
+code that names a global's absolute address. A consumer that reaches either pool exclusively through a
+per-record pointer (the `Anim_file` record's own `+0x3C` `Sounds`-array field, or the secondary-cache
+record's `+0x18` trigger-list field that `0x004cad90` fills) would **not** show up in this scan at all,
+because it would never mention `0x02e99688`/`0x030e2200` literally. So this is a confirmed negative for
+"no code hard-codes these pool addresses outside the loader," **not** a proof that no runtime consumer
+exists. Finding (or ruling out) an indirect, pointer-chasing consumer is the natural next step — would
+need a scan for code that reads an `Anim_file`/secondary-cache record's own `+0x14`/`+0x18`/`+0x3C`
+fields by the record's own pointer, across every function that holds one — large search space, not
+attempted under this pass's budget.
+
+**Answering Team B's three questions directly:**
+1. **Fired from an anim event, not a cadence timer.** No cadence-timer-style poll was found in any
+   on-foot movement function (`0x005ab860`, `0x005ab930`, `0x005b2ca0`, `0x005b3e80`, `0x005aee30` — all
+   already fully read by `spec-player-runtime.md` §3; none call the audio hash/post path). The
+   data-authored mechanism is unambiguously anim-event-shaped (per-frame `Trigger`/`Sound` records
+   embedded in the `.animx`-backing `anim_files.xtbl` rows). **Which function actually consumes the
+   trigger at runtime and turns it into a live `PostEvent`/`SetSwitch` call was not located — OPEN**, per
+   the confirmed-negative above.
+2. **Yes, it varies by ground material — on data, for the fixed-context clip tier.** The classification
+   is the Wwise switch group `MATERIAL_TYPE` (3 shipped values: `CONCRETE`, `METAL_SOLID`, `FLESH`),
+   paired with `SHOE_TYPE`/`MOVEMENT_TYPE`. **Where it comes from, for that tier: nowhere at runtime** —
+   it's a static constant baked into the animation clip at content-authoring time, selected by the
+   person building that specific clip for that specific context (a vehicle floor, a particular NPC kit),
+   not read off a collision-material id, a per-zone tag, or any other runtime source. For the *generic*
+   open-world locomotion tier (ordinary walking/running/sprinting on arbitrary street/terrain), **no
+   baked material value exists at all** — those clips carry only the content-free `left-foot`/
+   `right-foot` marker, so if generic footsteps vary by real-time ground material in the shipped game,
+   that variation has to happen in a runtime consumer this pass could not find (see dispatch OPEN above)
+   — most plausibly by setting `MATERIAL_TYPE` from a ground raycast at the moment the trigger fires and
+   then posting `FOOTSTEP`, but no such code was located.
+3. **Partial material→switch table given above** (the 144-row fixed-context tier); **no table exists for
+   the generic tier** because no runtime material source was found for it.
+
+**Cross-reference, not re-opened:** `spec-physics-runtime.md`'s already-confirmed finding that
+per-wheel vehicle-ground friction comes from **a custom Havok body property tagged on the struck body**
+(key 5, fallback key 7) **rather than a materials-table lookup** is a plausible structural analogy for
+how a runtime surface-audio-material tag could work for characters too (a property on the ground shape,
+not a mesh-vertex or per-zone table) — but this pass found no character/footstep-side code reading any
+such property, so this is offered as a lead for a future pass, not a finding.
+
+**Honest scope note.** This pass read the base game's `anim_files.xtbl` only; DLC archives were not
+checked and could add more `MATERIAL_TYPE`/`SHOE_TYPE` values. Full detail: this pass's own hand-off,
+folded in here; no separate scratch file. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+check 0 hits.
+
 ---
 
 ## 12. OPEN items
@@ -5104,3 +5228,17 @@ logic lives in an unreached per-station "song manager" update. Full detail:
   edited there this pass — apply that correction too). Track selection within a station remains
   OPEN. Full detail: `scratchpad/vehicle_radio_music_2026-10-09.md`. Cleanroom self-check: strict
   regex 0 hits, C-cast-dereference check 0 hits.
+- **2026-10-10 — new §11a.8: footstep audio event/switches resolved (data), runtime dispatch left
+  OPEN — Team-B-routed question** (SPEC TEAM, agent `a1921856e97195898`). The real event is the
+  literal Wwise event `FOOTSTEP`, sourced from `anim_files.xtbl`'s `Sounds` element, not any
+  `.text` literal. Two tiers: 144 fixed-context clips (vehicle floor entry/exit, the Brute NPC kit)
+  carry a baked `Sound` record posting `FOOTSTEP` with `MATERIAL_TYPE`/`SHOE_TYPE`/`MOVEMENT_TYPE`
+  switch values (3/3/3 shipped values respectively) — author-time constants, not a runtime ground
+  query; ordinary player/NPC locomotion clips carry no embedded audio event at all, only the
+  generic `left-foot`/`right-foot` anim triggers (1,170/1,149 occurrences, essentially universal).
+  **Runtime dispatch confirmed-negative by independent xref re-verification:** neither the `Sound`
+  pool (`0x02e99688`) nor the trigger-occurrence table (`0x030e2200`/`0x030e2204`) has any reader
+  outside its own loader anywhere in `.text` — the function that turns a fired foot-plant trigger
+  into a live `PostEvent` was not found (caveat: an indirect, pointer-chasing consumer would be
+  invisible to this xref method, so this is not an exhaustive negative). Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.

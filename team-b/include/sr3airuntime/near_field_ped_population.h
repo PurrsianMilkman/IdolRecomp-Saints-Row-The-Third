@@ -713,6 +713,96 @@ inline GunfireReactionResult EvaluateGunfireReaction(const NearFieldPed& ped, bo
 }
 
 // ===========================================================================
+// THIS TASK (2026-10-10): consuming PedReactionMode::Flee into actual
+// movement, closing the gap the weapon-fire-wiring task's own HANDOFF entry
+// left honestly open ("PedReactionMode has NO movement/AI consumer anywhere
+// yet"). Sec20.4's own real downstream machinery for mode 13 "Flee" is a
+// "multi-candidate escape-point search" (Sec13.1.2/Sec11.3.2) built on a
+// navmesh query (0x00a12180) that Sec14's own cross-reference confirms
+// "always fails in the shipped game" - not a working mechanism to port, and
+// explicitly OUT of this file's own scope per Sec20.4's text ("downstream
+// machinery this investigation did not need to re-read"). The one pathing
+// mechanism THIS project actually has working end to end for an ambient ped
+// is the sidewalk/wander segment graph above (Sec20.1/20.2) - this section
+// reuses THAT exactly (TickWander/TickIdleSubBehaviour, the same
+// WanderMove/WanderToSidewalk sub-states every idle ped already uses), not a
+// new movement system, per this task's own brief.
+// ===========================================================================
+
+// CHOSEN flee-destination-selection rule - Sec20.4 confirms Flee happens but
+// (because the real search is confirmed nonfunctional, see above) gives no
+// real destination FORMULA to port for this project's own working stand-in
+// graph. This picks, among the supplied candidate sidewalk-segment
+// endpoints, the one furthest in the direction directly away from the
+// threat position - "toward the nearest sidewalk node away from the
+// threat," one of the two literal interpretations this task's own brief
+// names, chosen over a raw "straight-line away from threat" point because
+// it keeps the destination ON the graph this file's own TickWander already
+// understands (matching the task's instruction to reuse real pathing rather
+// than invent new movement). OPEN for Team A: whether the real (never-
+// succeeding) escape search would have preferred a different metric -
+// unanswerable from spec text that documents the search as nonfunctional
+// rather than describing its own target-selection formula.
+inline std::optional<Vec3> ChooseFleeDestination(const Vec3& pedPos, const Vec3& threatPos,
+                                                  const std::vector<SidewalkSegment>& candidateSegments) {
+    if (candidateSegments.empty()) return std::nullopt;
+
+    Vec3 away{pedPos.x - threatPos.x, 0.0, pedPos.z - threatPos.z};
+    const double awayLen = Length(away);
+    // Degenerate (threat exactly at the ped's own position): no defined
+    // away-direction - CHOSEN fallback axis (+X) rather than a NaN/zero
+    // direction, same defensive discipline this file's own
+    // ApproxVisibleToCamera applies to its degenerate cases.
+    away = (awayLen > 1e-6) ? away * (1.0 / awayLen) : Vec3{1.0, 0.0, 0.0};
+
+    bool found = false;
+    Vec3 best{};
+    double bestDot = -1e18;
+    for (const auto& seg : candidateSegments) {
+        for (const Vec3& endpoint : {seg.start, seg.end}) {
+            const double dot = (endpoint.x - pedPos.x) * away.x + (endpoint.z - pedPos.z) * away.z;
+            if (dot > bestDot) {
+                bestDot = dot;
+                best = endpoint;
+                found = true;
+            }
+        }
+    }
+    return found ? std::optional<Vec3>(best) : std::nullopt;
+}
+
+// OPEN (Team A): no ped/NPC-specific walk/run/flee speed constant exists
+// anywhere in this project (checked project-wide before adding this: the
+// only named speed constants are player-only OpenValues -
+// Player_max_run_speed/Player_max_sprint_speed, spec-player-runtime.md
+// Sec3.5.4/line 724 - or vehicle-only; the one ped-ADJACENT figure,
+// action_node_npcs.xtbl-family EscortRage::desiredSpeedMps, is a
+// traffic/escort-vehicle-context default, not a general ambient-pedestrian
+// figure). CHOSEN stand-in, not a reused real constant: a plausible human
+// running speed, deliberately below the player's own CONFIRMED 30.0
+// sprint-speed figure (spec-player-runtime.md line 724) since an ambient
+// ped reacting to gunfire is not the player sprinting. Flag for Team A: the
+// real flee movement rate - if the real (confirmed-nonfunctional) search
+// had ever actually succeeded - is unconfirmed anywhere in this spec.
+inline constexpr double kFleeSpeedMsChosen = 5.0;
+
+// Move `pos` toward `dest` by at most `maxStepDist` this tick (planar XZ
+// only - y is left to the caller's own ground-snap, the SAME split
+// SelectNearFieldPedSpawn's own y-handling already uses elsewhere in this
+// file). CHOSEN, reusable linear stepper - the same kind of caller-
+// supplied-rate seam TickSidewalk's own advancePerTick already documents
+// (Sec20.2's own "OPEN: real per-frame advance math not independently
+// disassembled"), generalized to a 2D point target for the wander/flee case
+// instead of a 1D segment-progress scalar.
+inline Vec3 StepTowardDestination(const Vec3& pos, const Vec3& dest, double maxStepDist) {
+    Vec3 delta{dest.x - pos.x, 0.0, dest.z - pos.z};
+    const double dist = Length(delta);
+    if (dist <= maxStepDist || dist < 1e-9) return Vec3{dest.x, pos.y, dest.z};
+    delta = delta * (maxStepDist / dist);
+    return Vec3{pos.x + delta.x, pos.y, pos.z + delta.z};
+}
+
+// ===========================================================================
 // Sec20.1: the dual-timer throttle gate structure (0x009149a0: "not blocked,
 // 'os_ped' toggle on, both registries non-empty, two independent per-
 // registry elapsed-time checks both pass"). See file header item 4: unlike

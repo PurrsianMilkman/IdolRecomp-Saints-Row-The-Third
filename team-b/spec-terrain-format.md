@@ -78,6 +78,8 @@ The paired GPU-side file (806 KB in this sample), with **its own distinct 4-byte
 
    **New cross-reference (2026-10-08):** whether `0x2237`'s own "roads, path deform meshes" description corresponds to any actually-rendered street/sidewalk pavement is now tracked as its own open question in `spec-zone-data-format.md` §13.2, which also REFUTES the separate `0x2238` "Sidewalks" content kind as a render-geometry candidate (it's a pedestrian AI path-graph) and answers a paired `~al`-zone-entry question. Not resolved here; see that section for the current state and the concrete next step (render a real `0x2237` record whose `.tga` pool names a road/sidewalk texture).
 
+   **RESOLVED 2026-10-08, same-day follow-up inside `spec-zone-data-format.md` §13.2 (flagged here 2026-10-10 — this item's own "decal/path-deform OVERLAY, not base ground" framing above predates and is superseded by it):** a population-wide decode (374 real road/sidewalk-textured `.czn_pc` tiles, their `0x2237` record's own Mesh sub-block channels) found real vertex positions for all 374/374, and 359/374 (96%) are genuinely flat, horizontal, tile-scale slabs (e.g. a real 31m×140m×0.55m slab). **`0x2237` is now confirmed to carry genuine base street-pavement geometry in a large real population subset, not merely a decal/path-deform overlay.** The corresponding Havok *collision* source for this same pavement (as opposed to its visible geometry) is still OPEN — see `spec-player-runtime.md`'s own "which file supplies the ground collision shape" item for the current state of that separate question.
+
    **The `meshRefCount`-sized reference-record array, closed 2026-10-08 (dispatched by a live-playtest
    ground-mesh-origin bug report, Team B via `purrsian-04`).** `0x00864c60`'s per-mesh-reference loop
    (`0x00864f10`-`0x008651a7`, one iteration per `0x70`-byte reference record) was read in full. Each
@@ -262,3 +264,9 @@ None of these gaps prevent locating and extracting a tile's terrain-related file
   `{tag,length,extra}` with no rounding step, not 8 — population-validated 1,333/1,333 exact-EOF
   landings. Full detail: `spec-zone-data-format.md` §13.5; `scratchpad/heightmap_0x2244_decode_2026-10-08.md`.
   Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-10 (SPEC TEAM, agent `ab81ded1165afbe66`, dispatched for a separate Havok-collision
+  investigation): flagged §5 item 2's "roads, path deform meshes"/decal-overlay framing of `0x2237`
+  as stale, superseded by `spec-zone-data-format.md` §13.2's own 2026-10-08 population decode (374
+  real road-textured tiles, 359/374 measured flat/tile-scale slabs) — `0x2237` is now confirmed to
+  carry genuine base street-pavement geometry, not merely an overlay. Corrected in place. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

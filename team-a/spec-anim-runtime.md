@@ -1902,6 +1902,24 @@ A graph plays in one of two ways:
 | `is statue broken` | `statue_sm` |
 
 **So no graph that reads any of the ten is instanced through any route searched** (HIGH).
+
+**Update (2026-10-10, Team-B-routed footstep-audio question — see `spec-audio-runtime.md` §11a.8 for
+the full trace).** `Left Foot Bool`/`Right Foot Bool` are very likely meant to be driven by the generic
+`left-foot`/`right-foot` anim-clip `Trigger` markers from `anim_triggers.xtbl` (not re-derived here as a
+parameter-write — this pass did not find a compiled-in writer for either bool either, same standing
+result as before): essentially every locomotion clip in the shipped game (1,170 `left-foot` / 1,149
+`right-foot` occurrences across `anim_files.xtbl`'s 5,968 rows, player and NPC alike, independently
+re-verified by direct read of the decoded table) carries exactly these two trigger names at its real
+foot-plant frames, and 144 separate, fixed-context clips (vehicle floor entry/exit, the Brute NPC kit)
+carry a sibling mechanism — an embedded `Sound` record posting the real Wwise event `FOOTSTEP` with
+baked `MATERIAL_TYPE`/`SHOE_TYPE`/`MOVEMENT_TYPE` switch values at the same kind of frame. **Neither
+mechanism's runtime consumer was found in `.text`** (confirmed-negative xref census of both the `Sound`
+pool `0x02e99688` and the trigger-occurrence table `0x030e2200`/`0x030e2204`, outside their shared
+loader, independently re-verified against the Ghidra query server) — so this update corroborates,
+rather than resolves, the existing "no compiled-in writer found" status for `Left Foot Bool`/`Right Foot
+Bool`: the trigger that should drive them is real and universally authored, but nothing in the
+executable was found reading it back, for the bool parameters or for audio. Full detail and the caveat
+on indirect/pointer-chasing consumers escaping an xref scan: `spec-audio-runtime.md` §11a.8.
 - Zone data (`.czn_pc`, not opened) could still name a few of them. `statue_sm`, `searchlight_sm` and `tank_turret_bt` look like graphs of placed objects.
 - A placed object's graph can be written by name through U0 §4.3 (§5.1).
 
@@ -3802,3 +3820,8 @@ Having now read all four of these in full, independently:
   gated by other state (including, for fine aim, a flag on the AIM TARGET rather than local input).
   Full detail kept in `spec-player-runtime.md` OPEN 38 to avoid duplicate maintenance. Cleanroom:
   0 hits, standard regex.
+- **2026-10-10 — `Left Foot Bool`/`Right Foot Bool` update: likely driver identified (generic
+  `left-foot`/`right-foot` anim triggers), runtime consumer still not found — Team-B-routed
+  footstep-audio question** (SPEC TEAM, agent `a1921856e97195898`). Full trace:
+  `spec-audio-runtime.md` §11a.8. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
