@@ -4724,11 +4724,8 @@ Standing instruction from the user, received directly in this session: continue 
 - **When confirmed facts run out, defer rather than invent** (§27.8 in §36): stop and document the honest gap rather than propose an untraced mechanism; when a peer offers a reconciliation for something you published, reproduce their check yourself before writing anything.
 - **Never let the agent count sit at zero; report back regularly** (§27.9 in §36, received directly from the user): document as each task closes, keep the multi-agent-parallel pattern as the steady state. Does NOT mean dispatching a weak/under-scoped brief just to keep a counter non-zero — properly deriving a missing anchor is itself "something happening."
 
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## 44. ▶ RESUME HERE — 2026-10-10 (current, replaces §43 above). SPEC TEAM role: read mission Lua
-natives, disassemble the engine, splice CONFIRMED findings into `spec-*.md`, sync to Team B, report
-to the live orchestrator peer by name. Orchestrator is `purrsian-4a` as of this rewrite — **verify
-via `ListAgents` before trusting any peer name, names rotate across session restarts.**
+### 44. Archived resume note (superseded 2026-10-10, context-guard rewrite at 75% — body kept for
+standing context, see §45 below for the live note)
 
 ### 44.1 Standing pipeline (apply to every item below and every future routed question)
 1. Read the agent's full hand-back report (and its scratchpad file if cited) before splicing —
@@ -5201,6 +5198,314 @@ path. New finding: `store_weapon.lua` never calls `game_award_respect` — a rea
 camera/rotate/zoom — deliberately cut per a dead code comment). No new native leads. Cleanroom
 0 hits, synced (69 files, exit 0), independently re-verified. Reported to orchestrator.
 
-**Next: clothing store deep dive (`store_clothing.lua`/`store_character.lua`), per orchestrator's
+Clothing store deep dive — **DONE, reported, spliced, synced.** New §7 in
+`spec-store-runtime.md`: confirmed `store_character.lua` is a genuinely separate system (PCR
+character-creator, not a clothing sibling); clothing has no crib/cache split like weapons,
+instead a live in-document store↔wardrobe toggle; data-driven area→category→item(→detail) tree
+plus a separate outfit-management sub-tree; purchase-native dispatch confirmed automatic (row
+kind, not player choice). **Two new native leads**: `pcu_wear_current_clothing`,
+`pcu_discard_slot`. Confirmed clothing uses the FULL 3D-turntable preview framework — direct
+contrast to weapons' confirmed opt-out. One real exit-convention deviation found (wardrobe "back"
+doesn't pop the document, just switches mode). Cleanroom 0 hits, synced (69 files, exit 0),
+independently re-verified. Reported to orchestrator.
+
+**Next: vehicle customisation deep dive (`store_vehicle.lua`/`vcust_*`), per orchestrator's
 stated order.** Still 1 agent at a time; mission blockers jump the queue.
+
+<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## 45. ▶ RESUME HERE — 2026-10-10 (context-guard rewrite at 75%, replaces §44 above as the live
+note). SPEC TEAM role: research via dispatched Sonnet agents (1 at a time, usage-pacer permitting),
+splice CONFIRMED findings into `spec-*.md` myself (never delegate the splice), cleanroom-check
+(both regex patterns below, 0 hits required), sync via `bash tools/sync_to_teamb.sh`, report to the
+live orchestrator peer by name (verify via `ListAgents` first — names rotate on session
+restart/crash; currently `purrsian-52`, was `purrsian-a5`/`purrsian-4a` earlier this session).
+
+**Project renamed mid-session:** folder is now `D:\IdolRecomp Saints Row The Third\TEAM A`;
+`D:\Project Crreish` is a junction to it, old paths still resolve. Memory files live under
+`C:\Users\Purrsian\.claude\projects\D--IdolRecomp-Saints-Row-The-Third-TEAM-A\memory\`.
+
+### 45.1 Cleanroom self-check (run on every touched file before every sync, 0 hits both required)
+CI: `grep -ciE '\b(FUN_[0-9a-f]{6,8}|DAT_[0-9a-f]{6,8}|LAB_[0-9a-f]{6,8}|PTR_FUN_[0-9a-f]{6,8}|PTR_DAT_[0-9a-f]{6,8}|PTR_s_[0-9a-f]{4,8}|thunk_FUN_[0-9a-f]{6,8}|unaff_[A-Za-z0-9]+|param_[0-9]+|in_[A-Z]{2,4}|Stack[0-9a-f]{4,8}|Var[0-9a-f]{6,8})\b' <file>`
+CS: `grep -cE '\bin_(stack|rN|EAX|EBX|ECX|EDX|ESI|EDI|AL|AH)\b' <file>`
+Real Lua identifiers (names read directly from extracted shipped script source,
+`scratchpad/ui_lua_dumps/*.lua`, ~400 files) are NOT cleanroom violations — only decompiler
+auto-names and raw disassembly mnemonics are banned from spec prose.
+
+### 45.2 DONE this session, in chronological-ish order — do not re-derive
+- **Coverage summary** (`spec-coverage-summary.md`, 18 systems, synced).
+- **Player-runtime OPEN backlog**, 5 batches, ~18 items closed/narrowed across
+  `spec-player-runtime.md`/`spec-anim-runtime.md` (camera modes, stance bits, look-speed/FOV,
+  lateral-offset bug ruled out as non-issue, vehicle camera presets, movement flags `+0xd40`,
+  sway amplitude, ungated-sprint co-op bug confirmed real-but-unconfirmed-writer, etc.) — fully
+  closed out, remaining items are low-value menu/HUD cosmetics per orchestrator's own read.
+- **Mission blockers (Team B, both resolved):** `Trigger_Volume` on-disk shape/extent/radius
+  encoding fully decoded (`spec-lua-api-behaviour.md` §1.14, `spec-zone-data-format.md` §11.7);
+  `zscene_is_loaded("09_in")` root-caused as a cutscene-KIND check missing in Team B's host, not a
+  frame-timing bug (`spec-lua-api-behaviour.md` §26.25).
+- **Activities/diversions reward-grant investigation** (`spec-activity-runtime.md` §4/§5):
+  overturned the "batch/session-end grant" hypothesis — `streaking`/`cat_and_mouse` grant inline
+  per-completion via the same primitives Lua reward natives use; a 3rd path (shared base-class
+  default handler `0x006a4220`) found but its own reachability is in doubt (zero call-xrefs
+  anywhere); 11 of 14 diversion types stay honestly ambiguous, NOT reclassified on weak evidence.
+  **PARKED by orchestrator** — "static analysis at diminishing returns, live-capture candidate."
+- **Pause/phone-menu UI runtime arc, fully closed:**
+  - `spec-frontend-menu-runtime.md` §7/§9: pause-menu-open binding LANDED (HIGH CONFIDENCE) via
+    the CBA action table (`CBA_GAC_PAUSE_MENU`=`0x55`) → `0x00673160`→`0x007c1ef0`→
+    `0x007074a0(4,1)` (pause push) + `"dialog_pause_show"` dialog. All ~35 push-screen call sites
+    of `0x007b4640`/`0x007b4750` individually characterized (none was it, confirmed by exhaustion
+    first, then the CBA-table route succeeded).
+  - `spec-cellphone-menu-runtime.md` — NEW FILE, full phone-menu document survey CLOSED (all 9
+    sub-documents beyond `cell_phone`/`cell_cheats` traced: `cell_missions`, `pause_map`,
+    `cell_stats`, `cell_saintsbook`, `store_crib_cash`, `cell_rewards`, `cell_extras`, the music
+    chain, `cell_camera`). Phone-open binding (`CBA_GAC_CELL_OPEN`=`0x57`) is a confirmed clean
+    negative — exists in the table but read by none of 156 input-query call sites — **PARKED on
+    live-capture list alongside store-open.** 5 new native leads found and resolved to
+    full-bounds-checked/no-crash-shape (`cell_cheats_activate_cheat`,
+    `sb_select_hitman_target`/`sb_select_chop_shop_vehicle`, both in
+    `spec-lua-api-behaviour.md` §45.8).
+- **Shops/purchasing arc, IN PROGRESS (chosen by me as "weakest system that matters most for
+  free-roam," per orchestrator's open-ended ask — reasoning: most moment-to-moment relevant of
+  suggested examples; police/notoriety already well-covered in `spec-ai-runtime.md` §19; garage
+  already decently covered scattered across native tranches):**
+  - `spec-store-runtime.md` — NEW FILE. §1-§5: shared `store_common` framework fully traced
+    (init/push lifecycle is native-only-OPEN same shape as phone; item-list population; purchase
+    flow — **CENTRAL FINDING: cash deduction is a directly Lua-visible native call per
+    item-type-family, NOT a dataresponder-post like `cell_rewards`**; exit convention — 1 explicit
+    pop + 1 automatic cascade via `store_common_gained_focus()`).
+  - `store_weapon_purchase_weapon`'s cash-charge question (flagged as a real gap in §4's first
+    pass) RESOLVED: it does charge, via callee `0x00816f00`'s mode-0 branch → `0x0094d920`
+    (reason `0xb`) — was just one call-graph level deeper than the first read went.
+  - Store-open trigger investigation (3 angles, ALL exhausted, PARKED alongside phone-open):
+    (1) screen-push enumeration — none of ~35 `push_screen` call sites opens a store; (2) native
+    `Trigger_Volume.trigger_action` dispatch — real `Entries:Stores` triggers.xtbl category found,
+    but no handler reads `trigger_action_param` as a document name (HIGH CONFIDENCE it's a
+    UI-prompt/gating layer at most); (3) Lua-coroutine-handoff lead — fully exhausted, the one
+    reachable coroutine-spawn call is generic UI-document plumbing on a different field, fires on
+    ~100+ unrelated call sites, not a confirm-handoff.
+  - **§6 `store_weapon.lua` full deep dive, DONE.** Dual entry context (walk-in vs. in-crib
+    cache); 4-tier menu; "new weapon" and "weapon upgrade" are literally the same purchase
+    native/path; **weapon purchases grant ZERO respect** (real exception to §4's "every" framing,
+    corrected); preview confirmed simpler than generic framework (no camera/rotate/zoom, deliberately
+    cut per a dead code comment, no test-fire). 0 new native leads.
+  - **§7 `store_clothing.lua` full deep dive, DONE.** Confirmed `store_character.lua` is a
+    genuinely separate system (PCR character-creator, not a sibling). No crib/cache split like
+    weapons — instead a LIVE in-document store↔wardrobe toggle. Data-driven area→category→item
+    (→detail) tree + separate outfit-management sub-tree. Purchase dispatch
+    (`pcu_purchase_slot`/`pcu_purchase_outfit`) confirmed automatic by row-kind, not player
+    choice. **2 new native leads: `pcu_wear_current_clothing`, `pcu_discard_slot`** (neither yet
+    traced to C body). Confirmed FULL 3D-turntable preview (camera+rotate+zoom) — direct contrast
+    to weapons' opt-out. Real exit deviation: wardrobe "back" doesn't pop the document at all,
+    just switches mode — needs a 2nd back-press.
+  - **§8 `store_vehicle.lua` full deep dive, DONE.** Richest entry context of the 4 (3
+    overlapping axes: crib × walk-in × garage-vs-customize mode). Richest purchase surface (5
+    `vcust_*` natives + 1 `garage_*`). Confirmed full generic camera/rotate framework plus 3 kinds
+    of per-feature camera repositioning no sibling has. Real exit deviation: `pop_screen()` is
+    NEVER called anywhere in the file (confirmed by full-file grep) — every exit path hands off to
+    a native that pops internally, or to `vint_document_unload()` instead. **1 new native lead:
+    `vcust_revert_wheels`** (HIGH CONFIDENCE mirrors `vcust_revert_color`'s shape, not
+    independently traced to C body).
+  - **§9 `store_tattoo.lua` full deep dive, DONE.** Simplest entry context of the 4 (no
+    crib/cache split, no mode toggle, no sub-brand skin selection). **New structural finding:**
+    never calls `vint_dataresponder_request` (zero hits) — item/color tiers use the bare
+    `pcr_report_composite_items`/`pcr_report_composite_colors` callback-string convention
+    instead, a genuinely different list-population mechanism from the other 3 stores' shared
+    dataresponder-channel norm. Exactly ONE purchase native (`pcr_purchase_tattoo`, already
+    documented) — simplest purchase surface of the 4. **New defect-shaped finding:** the
+    purchase-confirm handler's hardcoded two-level `store_common_back_menu()` pop (`:206-207`)
+    silently under-pops by one level whenever the opacity-slider sub-step was used (that sub-step
+    adds a third real stack push the fixed pop-count doesn't account for) — leaves the player on
+    the zone list instead of the main menu after certain purchases. Confirmed live try-before-buy
+    preview via debounced per-nav `pcr_change_composite` calls, revert via a
+    `pcr_get_composite_info` snapshot. 0 new native leads (only pre-existing ones cross-referenced;
+    `pcr_change_hair`/`pcr_get_hair_info` appear but are dead code in this file).
+  - **§10 `store_crib.lua` full deep dive, DONE — 5th and last of the per-type store arc, list
+    now PARKED per orchestrator instruction.** Categorically different from the other 4: this is
+    the crib's top-level navigation hub, NOT a purchase surface — zero cash-charging natives,
+    zero preview/camera natives, zero `vint_dataresponder_request`/`pcr_report_*` calls anywhere
+    in the file (all confirmed by grep). Single flat menu tier, a static table rebuilt by direct
+    native boolean gates, routing to `store_weapon`/`store_clothing`/`store_vehicle`/`store_gang`/
+    `store_stronghold`. **New cross-confirmation:** `store_crib_open_screen`/`store_crib_open_garage`
+    push the chosen sub-store WITHOUT popping `store_crib` first — this is the concrete mechanism
+    (confirmed from the crib side for the first time) that keeps `store_crib` resident beneath a
+    sub-store, matching what §6.1/§7.1/§8.1 could only infer via `store_common_crib_is_loaded()`.
+    **New open-item lead: `building_purchase.lua`** — an untraced adjacent file holding the actual
+    crib-ownership-purchase native (`crib_purchase_purchase_crib`, already documented §57.3) and
+    4 related `crib_*` natives, none ever called from `store_crib.lua` itself — flagged for
+    whoever picks up gang/stronghold/DLC next.
+
+### 45.3 IN FLIGHT right now — exact next step
+**Per-type store arc fully closed 2026-10-10** (weapon §6 → clothing §7 → vehicle §8 → tattoo §9
+→ crib §10, all spliced/cleanroom-checked/synced/reported). List PARKED per orchestrator
+instruction — DLC/gallery/demo/gang/stronghold remain explicitly deferred (plus the newly-flagged
+`building_purchase.lua`, untraced, adjacent to crib). Reported completion to `purrsian-52`.
+
+**Checked Team B status per the orchestrator's own instruction** ("after that, check whether Team
+B has routed anything"): `ListAgents` showed `team-b-d0` as a live peer, status `busy`, but **no
+message has arrived from Team B in this session** — no evidence to act on, so proceeded straight
+to "pick the next weakest gameplay system" as the orchestrator's own fallback instructed.
+
+**Picked Player Runtime (`spec-player-runtime.md`) as the next target**, reasoning: per
+`spec-coverage-summary.md` (§6), it's specced at only ~60-65% by volume with >100 numbered OPEN
+items — the lowest number among systems NOT already parked this session (Activities/Diversions
+is weaker at ~30-35% for its runtime-class file, but that system is already PARKED, §45.2 above;
+Player Runtime is also the most moment-to-moment free-roam-relevant of the remaining candidates —
+movement/camera/combat/vehicle-entry — matching the same selection reasoning used to pick
+shops/purchasing originally).
+
+Within Player Runtime, picked **OPEN item #97** (`spec-player-runtime.md` line ~4691): what sets
+the 22 bits of the per-frame context word `+0x2084` gating the vehicle-enter/UI-interaction-prompt
+handler table at `0x0111f2d0`. **Orchestrator (`purrsian-52`) authorized exactly one more pass:**
+"#97 is fine as ONE final bounded pass over those ~20 callees. If it's negative again, park it on
+the live-capture list; no 6th pass. Next after that: `building_purchase.lua` and its
+crib-ownership purchase native."
+
+**OPEN item #97 — DONE, 5th and final pass, PARKED.** Agent `a47b49a25aa1aa505` checked all 26
+remaining uncharacterized callees of the presumed setter `0x005b6af0` (plus one level deeper for
+thin dispatchers) for a direct write to `+0x2084` via full-disassembly text search. I independently
+spot-checked 2 of the 26 (`0x005bd7b0`, `0x006a3550`) myself via the Ghidra query server before
+trusting the result — both clean, matching the agent's claim. **Result: all 26 clean, confirmed
+negative.** Spliced into `spec-player-runtime.md` OPEN item #97's existing narrative (now reads as
+a 5-pass history) and the Changelog; item explicitly marked **PARKED on the live-capture list**
+(alongside store-open/phone-open/ground-draw/hitscan-damage/`dlc2_m01`+0x68/diversion-rewards) per
+the orchestrator's "no 6th pass" instruction. One loose thread left unpursued and noted in the
+spec: `0x00950b70`'s own 10 callees were never individually traced. Cleanroom-checked (0/0),
+synced (69 files, exit 0), reported to orchestrator.
+
+**`building_purchase.lua` — DONE.** Agent `a6b4f2310e085a60a` traced the file plus 2 new native
+leads (`crib_purchase_get_crib_info`/`shop_purchase_get_shop_info`); I spot-checked its headline
+null-crash claims directly against the Ghidra query server before trusting them (both confirmed:
+the crib handler's resolved pointer and the shop handler's resolved pointer are each dereferenced
+unconditionally with no null check on the very next instruction) and verified its line-number
+citations against the actual Lua source. Accepted its recommendation of a new standalone file —
+`spec-building-purchase-runtime.md` (6 sections + open items + changelog) — over appending to
+`spec-store-runtime.md`, since this is acquisition (a linear confirm-then-charge flow), not the
+interior-customization-store system §1-§10 document. Spliced the 2 new natives as
+`spec-lua-api-behaviour.md` §62 (caught and fixed one cleanroom violation in the agent's own draft
+— a `DAT_` decompiler auto-name — before splicing).
+
+**Also caught and fixed a real inaccuracy from the earlier crib-store (§10) splice while cross-
+checking this file's own call list:** §10.3/§11-item-4 had wrongly claimed `crib_unlock_strongold`/
+`crib_purchasing_unlock`/`crib_disable_interface`/`crib_weapon_add_enable`/
+`crib_weapon_add_disable` were called from `building_purchase.lua` alongside
+`crib_purchase_purchase_crib` — re-grepped `building_purchase.lua` directly: those 5 are **not**
+there; they're called from mission/city scripts (`scratchpad/lua_dumps/m01.lua`,
+`...sr3_city.lua`), unrelated to this UI flow. Corrected in place in `spec-store-runtime.md`
+§10.3/§11/Changelog. (Lesson: a prior subagent's "confirmed by grep" claim was not actually
+re-verified by me at the time it was first spliced — caught only because this file's own trace
+needed the same grep. Re-verify "confirmed by grep" claims that name call-site files, not just
+claims about native behavior.)
+
+Cleanroom-checked (0/0) on all 3 touched/new files, synced (70 files — new file picked up — exit
+0). Reported to orchestrator.
+
+**Orchestrator (`purrsian-52`): "self-pick the next target from your coverage summary: the most
+free-roam-relevant gap that isn't on the live-capture list (police/notoriety escalation and gang
+response is a good candidate). 1 agent at a time, tell me the pick in one line."**
+
+**Checked the suggested candidate first — it's a stale read, not a real gap.** Police/notoriety
+(`spec-ai-runtime.md` §19.1-§19.7) is already mature: full level-tracking/decay/roadblock-spawn
+chain traced in depth 2026-10-08, only narrow OPEN items left (a few record-field roles, a ×3
+bonus-trigger condition). Told the orchestrator and picked instead: **which file/source supplies
+the static ground collision shape the player's Havok character-proxy contacts during ordinary
+free-roam walking** (`spec-player-runtime.md` line ~1385, explicitly flagged OPEN and NOT
+live-capture-blocked — every frame, every surface the player stands on).
+
+**Found a strong lead before dispatching, worth remembering even if the agent doesn't close it:**
+`spec-format-inventory.md` row 31 ("Level Mesh", `.clmesh_pc`/`.glmesh_pc`) vs. row 40 ("Level
+Mesh Collision", `.clmesh_pc` only, same constructors, no GPU-side companion) — **if the
+open-world street ground's collision comes from a "Level Mesh Collision" registration, and that
+same base file has a sibling "Level Mesh" registration, that sibling's `.glmesh_pc` could be the
+street's own visible ground mesh.** That would mean World Streaming's own flagship open question
+(does `.czn_pc`/`.gzn_pc`'s `0x2244` heightmap ever render as visible ground — coverage-summary
+§2's single most consequential item, confirmed dead end needing live capture) is a red herring for
+*base* street ground specifically — the real geometry would live in a completely different format
+nobody's been looking in. **Orchestrator flagged this exact connection independently before I'd
+finished writing the brief** ("if the collision ground source is a real mesh... note whether the
+same file or record also carries the VISIBLE ground geometry — could close the ground-draw
+question without a live capture") — told them I'd already built that into the dispatch.
+
+Dispatched agent `ab81ded1165afbe66` with: (1) trace `.clmesh_pc`'s parsed data to an actual Havok
+shape-construction call (closing `spec-physics-format.md`'s own open "MOPP-tree handoff,
+HIGH CONFIDENCE not symbol-confirmed" question, lines ~159/407-446), (2) the key fork — does
+"Level Mesh" ship as part of ordinary open-world zone streaming, or only bundled interior/mission
+levels — spend real effort here, nobody's checked it; (3) if street ground is Level-Mesh-backed,
+explicitly check for a real shipped `.clmesh_pc`+`.glmesh_pc` sibling pair used for outdoor ground
+(not a building/prop); (4) report honestly if the trail goes elsewhere or dead-ends. Awaiting its
+report.
+
+**Next action once it reports:** read in full, spot-check its two biggest claims (the Havok
+shape-construction call chain, and whichever way the Level-Mesh-vs-zone-streaming fork resolves)
+against the Ghidra query server myself before trusting either — this is exactly the kind of
+surprising, high-leverage claim that needs independent verification, not a quick skim. Splice into
+whichever file(s) it recommends (most likely `spec-player-runtime.md` near line 1385 and/or
+`spec-physics-format.md`'s own open item; a cross-reference note to `spec-world-streaming.md`/
+`spec-terrain-format.md` if the rendering connection pans out). Cleanroom-check (0/0), sync, update
+this note, report to orchestrator (flag the ground-draw connection prominently either way — they
+are specifically waiting on this).
+
+### 45.4 LEARNED — key facts/addresses future-me needs without re-deriving
+- **CBA action table**: 166-entry `{int32 value; char* namePtr}` array at `0x01122160`, read
+  directly via Ghidra `ptrs` mode. `CBA_GAC_PAUSE_MENU`=`0x55`, `CBA_GAC_MAP_MENU`=`0x56`,
+  `CBA_GAC_CELL_OPEN`=`0x57`, `CBA_GAC_CELL_OPEN` confirmed read by zero of 156 input-query call
+  sites. A 3rd input-query primitive exists: `0x005bbdd0(actionId)` — single-arg
+  "acknowledge/consume" idiom, add to the project's input-query vocabulary alongside
+  `0x005bb530`/`0x005bdfe0`.
+- **Pause-open chain**: `0x00673160`(per-frame, reached only via fn-ptr table `0x01131bb4`) →
+  queries `0x005bdfe0(0x55,0)` → `0x007c1ef0(1,0,0,0)` → 3 guard checks
+  (`0x007e1f40`/`0x007aaf00`/`0x007afb90`) → `0x007074a0(4,1)` (pause-push, mode-4 sentinel now
+  has its first real call site) + dialog `"dialog_pause_show"` (string at `0x01157184`).
+  HIGH CONFIDENCE not CONFIRMED (no live-input test done).
+- **`Trigger_Volume` class** fully decoded: real vtable `0x01170934` (constructor `0x0093b860`
+  writes only ONE vtable — breaks the general_mover/script_npc "two vtable writes, take the
+  second" heuristic, verify per-class don't assume). Tail-parser vtable slot `+0x04` =
+  `0x0093e520`. Named tail properties with real strings (not CRC-guessed):
+  `trigger_shape_type`/`trigger_shape_param1`/`_param2`/`trigger_flags`/`trigger_action`/
+  `trigger_action_param`/`_param_2`/`trigger_use_message`/`trigger_max_fires`/`trigger_delay`/
+  `trigger_sync`. `+0xe8` field is type-overloaded per native handler slot (string for some,
+  64-bit name-hash pair for others, array ptr+count for slot 18) — do NOT assume it's always the
+  authored string at the native-dispatch level, only at the class tail-parser level.
+  `trigger_action`-array native-handler registrar: `0x0093afe0(slotIndex, handlerStruct*)`, 14
+  real call sites covering slots `0,3,4,5,6,8,9,10,11,12,13,14,18,19` (slot `0xf`/15 explicitly
+  skipped by the registrar; slots `1,2,7,16,17` never registered). Real `triggers.xtbl` content
+  at `tools/as_base_xtbl/triggers.xtbl` (20 rows, includes `Entries:Stores` category: `store
+  ownership`/`player creation`/`garage mechanic`).
+- **Store-open and phone-open bindings are BOTH confirmed-exhausted negatives, both PARKED on
+  live-capture list** alongside: ground draw, hitscan/melee/fuse detonation, `dlc2_m01` vtable
+  `+0x68`, diversion rewards (narrower piece only).
+- **`store_common` shared framework**: real VINT doc `"store_common"`, 3 config hooks
+  (`Store_common_populate_list_cb`/`Store_common_exit_cb`/implicit `Menu_data`) set by each
+  per-type store's own `_init()`, never called by Lua `push_screen` for any store type (native-only
+  open, same shape as phone). Cash charge is per-native, not centralized — `pcr_purchase_tattoo`
+  (§43.3)/`store_weapon_purchase_ammo` (§38.3)/`vcust_purchase_wheels` (§38.5) confirmed to have
+  NO server-side affordability check, client-side gate is cosmetic only.
+- **`store_weapon_purchase_weapon`** (`0x008172d0`) DOES charge cash via callee `0x00816f00`
+  (dual-mode: mode 0=real purchase, mode 1=preview) → `0x0094d920` reason `0xb` (same mechanism
+  `pcr_purchase_tattoo` uses). Satchel/thrown-weapon special case routes through `0x00816430`
+  instead (same primitive `store_weapon_purchase_ammo` uses).
+- **Per-store crib-detection idiom**: `store_common_crib_is_loaded()` =
+  `vint_document_find("store_crib") ~= 0` — trivial Lua one-liner, reused identically by weapon/
+  clothing/vehicle's own `_init()` to detect in-crib entry. NOT a native, not a new lead.
+
+### 45.5 RULED OUT this session, and why
+- Activities reward "shared base-class default handler" (`0x006a4220`) as a universal mechanism —
+  zero call-xrefs anywhere in the binary to the function itself or its own data table's base
+  address; genuinely may be dead/unreachable code, not a working fallback.
+- Store-open via `trigger_action_param` as a document-name string read by any native handler —
+  exhaustively checked across all ~19 registered handlers, none does this; `+0xe8` is
+  type-overloaded, read as other things (hash pairs, array ptr+count) by the handlers that do
+  exist.
+- Store-open via Lua-coroutine-handoff from the "press-to-use" prompt's confirm step — the one
+  coroutine-spawn call reachable from that prompt's own readers is generic UI-document commit
+  plumbing (~100+ unrelated call sites), not a confirm-gated handoff; no button-press check
+  exists anywhere in that cluster at all.
+- `store_weapon_purchase_weapon` "missing" cash charge — was never missing, first pass just didn't
+  read inside its callee `0x00816f00`.
+
+### 45.6 Pending on the user/orchestrator specifically
+- Nothing blocked on the user right now. Orchestrator's own stated order (weapon→clothing→vehicle)
+  is the only standing instruction; next per-type store after vehicle is NOT yet specified —
+  ask or pick (gang/tattoo/stronghold are the most "free-roam moment-to-moment" of the remaining
+  untraced stores: crib/DLC/gallery/demo are lower-traffic).
+- `dlc2_m01`'s vtable `+0x68` value still needs a live capture — orchestrator said they'd add it
+  to an optional capture list; not blocking.
 <!-- CONTEXT-GUARD:RESUME-END -->

@@ -4688,7 +4688,14 @@ predicate names, the melee-target handle fields, the generic mission-retry chain
     3-or-4-float vector tweak, but the registrar search in this pass only covered the three scalar
     addresses it was specifically looking for). *Next step:* the same registrar-stub search
     (`0x0100a840`–`0x0100ab00` and beyond) for `0x02845b60`.
-97. **What sets bit 15 of the player's per-frame context word `+0x2084`** — the condition that makes the vehicle-enter/exit prompt (table `0x0111f2d0` slot 15, `0x009e5e80`) available at all. This is decided somewhere else inside the interaction-prompt routine `0x005b6af0` (603 insns), outside U6.2's root list. (§13.1)
+97. **What sets bit 15 (and the other 21 bits) of the player's per-frame context word `+0x2084`** — the condition that makes the vehicle-enter/exit prompt (table `0x0111f2d0` slot 15, `0x009e5e80`) and its 21 sibling prompts available at all. (§13.1)
+
+    **PARKED 2026-10-10, on the project's live-capture list, after 5 independent static-analysis passes.** Chronological summary (full detail in each pass's own scratch report, cited below):
+    - **Pass 1-2:** confirmed the "trigger button" family's reader functions (`0x005b6540`/`0x005b6870`/`0x005b68e0`/`0x005b6950`) and two sibling 22-slot prompt tables (`0x0111f488`, `0x0111f4e0`) only ever `TEST` `+0x2084`, never write it.
+    - **Pass 3-4:** the long-presumed setter location, the 603-instruction interaction-prompt routine `0x005b6af0` itself (called from `0x005b73c0` at `0x005b7412`), was confirmed via full-disassembly text search to contain **zero direct references to `+0x2084` in its own body** — contradicting this item's own original framing. Its ~40 callees were enumerated but not traced.
+    - **Pass 5 (2026-10-10, FINAL per orchestrator instruction):** checked all 26 of those not-yet-characterized callees (`0x005bc5d0`, `0x005bd7b0`, `0x005bde80`, `0x006040a0`, `0x006041a0`, `0x006043b0`, `0x006a3550`, `0x006a3590`, `0x006a35d0`, `0x006cf0a0`, `0x007044f0`, `0x0075d7e0`, `0x007ff1f0`, `0x007ff3e0`, `0x007ff430`, `0x00941f40`, `0x00950b70`, `0x00953580`, `0x00957c80`, `0x009bb3d0`, `0x009e2bc0`, `0x009e7810`, `0x00d9e140`, `0x00d9e1e0`, `0x00d9e4c0`, `0x00e22a30`) for a direct write to `+0x2084`, via full-disassembly text search for the literal offset, plus one level deeper for every thin (1-4 callee) dispatcher among them (spot-checked independently on 2 of the 26, `0x005bd7b0`/`0x006a3550`, both clean). **CONFIRMED (negative result): none of the 26 write `+0x2084`.** They resolve to trivial global getters, generic game-clock-tick wraparound math, a "currently active slot" vtable-dispatch cluster, fixed-size handle-indexed slot-table lookups, a UTF-16 string encoder, and several large stack-cookie-guarded state-machine functions — none touching the offset. The one loose thread: `0x00950b70`'s own 10 callees (`0x008addb0`, `0x00d9e180`, `0x009561f0`, `0x004b41b0`, `0x00853b30`, `0x004f13a0`, `0x00986920`, `0x004e57c0`, `0x008bb1e0`, `0x008c4d10`) were not individually traced — left open below, not pursued further per the orchestrator's "no 6th pass" instruction.
+    - **Conclusion:** `0x005b6af0`'s call graph is now exhausted to a depth of 2 with uniformly negative results. The setter is most likely reached via a call path this function's own graph never touches — e.g. the player-object construction/allocation site, or a different per-frame driver entirely. **PARKED on the live-capture list** (alongside store-open/phone-open/ground-draw/hitscan-damage/`dlc2_m01`+0x68/diversion-rewards) rather than pursuing a 6th static pass. If a live capture becomes available, a targeted write-breakpoint on `+0x2084` (relative to the resolved player-object pointer) would resolve this in one session.
+    - Full detail: `scratchpad/watercraft_prompt_table_open97_2026-10-09.md`, `scratchpad/fourth_prompt_table_0x0111f4e0_2026-10-09.md`, pass 5's own report folded into this entry (no separate scratch file).
 98. **Player fields `+0x16d8`/`+0x16dc`**, tested at the very top of `0x009e5e80`: non-zero on either makes the function refuse immediately, before even the seated/not-seated check. Not the human's own vehicle handle (`+0x16c0`/`+0x16c4`) and not named by `spec-player-runtime.md` §1.5. HYPOTHESIS: some other in-progress-interaction/busy flag. (§13.1)
 99. **Exit-request field `+0x30` bit `0x80`**, set by `0x009e5e80`'s seated branch before calling `0x00af3cd0`. Not in `spec-player-runtime.md` §6.2's `0x33`-byte exit-request field table. (§13.1)
 100. **Player fields `+0x1e30`/`+0x1e34`** — a handle pair read only by `0x00b105c0`, used as a "sticky"/previously-tagged preferred-vehicle override in the nearest-vehicle scan. Not in `spec-player-runtime.md` §1.5's player-only field list (nor the original scoping note's). (§13.3)
@@ -4781,6 +4788,16 @@ consumer of `instance+0x13c`.
 ---
 
 ## Changelog
+
+- **2026-10-10 — OPEN item #97, 5th and FINAL static pass: `+0x2084` setter PARKED on live-capture
+  list** (SPEC TEAM, agent `a47b49a25aa1aa505`). Checked all 26 remaining uncharacterized callees of
+  the presumed setter `0x005b6af0` (plus one level deeper for thin dispatchers) for a direct write
+  to `+0x2084` — all clean, confirmed negative by full-disassembly text search (spot-checked
+  independently on 2 of 26). Combined with 4 prior passes, this exhausts `0x005b6af0`'s call graph
+  to depth 2 with a uniformly negative result; the setter is not reachable via this call path.
+  Per orchestrator instruction, item #97 is now PARKED rather than pursuing a 6th pass — a
+  write-breakpoint live capture on `+0x2084` is the recommended next step if one becomes available.
+  One loose thread left unpursued: `0x00950b70`'s own 10 callees were not individually traced.
 
 - **2026-10-10 — OPEN-backlog batch 5: camera mode 11, sway amplitudes, camera collision filter,
   movement flags `+0xd40`** (SPEC TEAM, agent `a9337200c21571e67`). OPEN 23 RESOLVED (camera mode

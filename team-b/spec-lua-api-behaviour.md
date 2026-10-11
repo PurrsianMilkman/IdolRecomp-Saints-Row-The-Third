@@ -16468,6 +16468,121 @@ Full detail, one subsection per native: `scratchpad/wave12_ui_open_natives_2026-
 `scratchpad/wave_ui_natives_remaining5_2026-10-10.md`.
 Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
+## 62. `crib_purchase_get_crib_info`/`shop_purchase_get_shop_info` — the two `building_purchase.lua` dataresponder-reply natives, both sharing crash shapes with already-documented siblings (2026-10-10)
+
+**Source.** Native leads surfaced tracing `scratchpad/ui_lua_dumps/building_purchase.lua` (the
+crib/property *acquisition* flow — buying a building/crib/store not yet owned, distinct from
+`store_crib.lua`'s interior-customization hub; full file trace in
+`spec-building-purchase-runtime.md`). Both names traced via the Ghidra query server's `lua`-mode
+string/use search on their registered name strings, confirming each is a `vint_dataresponder_request`
+reply target, not a directly-Lua-bound native in the usual sense — each is registered by a C-side
+module-init function that pairs the name string with a reply-handler function pointer at a request
+record's `+0x2a0`. Addresses CONFIRMED — disassembly, this pass (independently re-verified by the
+orchestrating session against the Ghidra query server for both handler entry points and the
+`0x014a0f90`/`0x014a0f94` handle-pair read before splicing).
+
+### 62.1 `crib_purchase_get_crib_info` — handler `0x005f0130`, registered twice (once with a mismatched descriptor count), same crib-resolve null-crash shape as `crib_purchase_purchase_crib`
+
+Registered under its own name at two sites: `0x005f09a0` (a crib-purchase-subsystem module-init
+function, which also stands up the `"building_purchase"` VINT document) supplies a **4-value,
+count-5 reply-type-descriptor array** — the 5th descriptor slot reads one dword of uninitialized
+stack past the array's own 4 initialized entries, a real (if likely low-impact)
+argument-count/array-size mismatch; `0x00a03e40` (the shared crib+shop building-purchase
+module-init, which also registers `shop_purchase_get_shop_info`, §62.2) re-registers the same name
+with a correctly-sized 10-value descriptor array. Both registrations point to the identical
+handler, `0x005f0130`; which registration's descriptor array the engine actually consults when a
+value doesn't come from the handler's own field-push calls was not resolved this pass (both are
+referenced only as data — entries in a static module-init table — so their relative load order is
+OPEN).
+
+**`0x005f0130` resolves the crib exactly the way `crib_purchase_purchase_crib` already does
+(§57.3) — same 64-bit handle-pair global (`0x014a0f90`/`0x014a0f94`, the same pair
+`building_purchase_is_crib_being_purchased` tests, §16419, CONFIRMED by disassembly: `0x005f0130`
+reads the identical pair at `0x005f018d`/`0x005f0192`) — the same crib-kind/liveness gate
+(`0x00458230` against kind tag `0x031d152c`, the locked bit `+0x33`&`0x10`, the disabled-kind-table
+bit via `0x02cc9900`, and the liveness/pending-destroy check `0x00853b10`) — and shares its
+sibling's exact null-crash shape.** On any resolve failure (no crib handle, a stale handle, or one
+failing the kind/liveness gate) the resolved crib pointer is left at zero, and the code does
+**not** skip the rest of the function — it falls straight into unconditional reads through that
+null pointer at `+0x7c` (name id, via `0x00849ff0`), `+0x120` (description tag), and `+0xe0`
+(price, `/100`) to build reply fields 0-2. **Real null-pointer crash — HIGH CONFIDENCE reachable:**
+`building_purchase_init()`'s own gate (`building_purchase_is_crib_being_purchased()`) only tests
+the handle pair is non-zero before requesting this native; it does not re-run the deeper per-object
+kind/liveness gate this handler applies on its own resolve, so a stale handle (one that still
+satisfies the pair's own non-zero test but no longer resolves live) reaches this null-pointer
+read — the same reachability gap already flagged for `crib_purchase_purchase_crib`.
+
+Reply fields (10 total, 0-indexed, matching 10 of `update_building_purchase_text`'s 11 Lua
+parameters — the 11th, `is_store`, is simply never sent for crib replies, consistent with the Lua
+callback never reading it on the crib branch): 0 = building name (`+0x7c` id → `0x00849ff0` name
+lookup); 1 = description tag (`+0x120`); 2 = cost (`+0xe0 / 100`); 3 = player cash (**separate**
+local-player pointer via `0x009da4e0`, `+0x1ca0 / 100` — a second, independent null-pointer hazard
+if the local player ever fails to resolve, unguarded, same no-local-player-null-check pattern
+documented project-wide); 4 = profit, **hardcoded 0** regardless of the resolved crib (harmless:
+`update_building_purchase_text` never applies the `profit` parameter on the crib branch,
+`building_purchase.lua:94-96`); 5-7 = control-%/new-%/increase-% — all 0 if the crib has no
+associated district record (tested via `0x005e8ac0` then a `+0x44` null check), else computed from
+two district float getters (`0x0084ce70`/`0x0084cec0`) as percentage ratios each floored to a 1.0
+minimum via `0x00dad880`; 8 = district display name, copied via `0x00e22a30` from the district
+record's own name id, or the project's existing "null"→empty-string sentinel `0x0129a0e3` (already
+catalogued in this document's own changelog) when there is no district; 9 = discount, **hardcoded
+0** (cribs have no discount concept — consistent with shop's own real, non-zero discount field
+below).
+
+### 62.2 `shop_purchase_get_shop_info` — handler `0x00a02e00`, same null-dereference crash shape as `shop_purchase_purchase_shop`, fixed description text, a real discount-tier read
+
+Registered once, at `0x00a03e40`, with a correctly-sized 11-value descriptor array, handler
+`0x00a02e00`. The handler resolves the shop via `0x00a02ce0`, called with the dword loaded from
+global `0x0268d2d4` — **the exact same
+unchecked shape already documented for `shop_purchase_purchase_shop` (line ~15761): no null
+check on the resolver's result before the very next read goes through it (`*(shop + 0x88) + 4`,
+field 0's name lookup) — CONFIRMED by disassembly: `0x00a02e6a` dereferences the resolver's own
+return register (EDI) unconditionally; the function's one null guard (`CMP ESI,EBX`/`JZ
+0x00a03465` at `0x00a02e62`) tests a different, unrelated object entirely (the result of a prior
+`0x00e1e8c0` call), not the shop pointer.** HIGH CONFIDENCE this is the same trigger-handle
+resolver family (or a direct sibling of it) that already-documented native uses, given the
+identical "stale/absent trigger → null → immediate unchecked dereference" shape; not independently
+re-traced to `0x00a02ce0`'s own body this pass (OPEN).
+
+Reply fields (11 total, matching all 11 of `update_building_purchase_text`'s parameters exactly):
+0 = shop name (store-def `+0x88+4` → `0x00849ff0`); 1 = description, **always the single fixed
+localization tag `"OVL_SHOP_PURCHASED_TEXT"`** via `0x00849fa0` — not shop-specific text, unlike
+the crib handler's per-crib description tag (§62.1 field 1); 2 = cost (`+0x88+0x10`); 3 = player
+cash (same `+0x1ca0/100` pattern and same independent null-player hazard as §62.1); 4 = profit, a
+**real** per-shop field (`+0x88+0x14`, unlike crib's hardcoded 0); 5-7 = control-%/new-%/increase-%,
+computed identically to §62.1 (0 if no district via the shop's own `+0x8c`→`+0x44` district
+pointer, else the same two-float-getter ratio/clamp computation); 8 = district name (same
+copy-or-sentinel-empty-string shape as §62.1); 9 = discount, a **real computed value** — reads one
+of two tiered discount floats off the store-def record (`+0x18` or `+0x1c`, chosen by comparing a
+current/cap pair at `+0xc`/`+0x8`) and scales by 100, the mechanism `update_building_purchase_text`'s
+`BUILDING_PURCHASE_DISCOUNT` text consumes; 10 = `is_store` boolean, bit 7 of the store-def's own
+byte at `+0x92`.
+
+### 62.3 Cross-function observations
+
+Both handlers are a matched pair — same per-field reply-push primitive (`0x00e1e990`, index +
+type-tag + value, followed by `0x00e24930` per field) and an identical district-percentage
+computation (same two float getters, same clamp-to-1.0-via-`0x00dad880` pattern) — confirming
+`building_purchased`'s shared control-meter animation logic (Lua `:163-184`) is fed genuinely
+parallel data from both native paths, not just parallel-looking Lua. Both resolve a target object
+through an unchecked/under-checked pointer and read through it unconditionally on the very next
+instruction — the same "resolution failure used as a live pointer" family already named for
+`crib_purchase_purchase_crib` (§57.6/§57.3), now shown to extend to that native's own info-query
+sibling (and, via `0x00a02ce0`, likely to `shop_purchase_purchase_shop`'s sibling too). Neither
+handler reads or writes any cash/ownership state itself — both are pure read-only report-builders,
+consistent with being requested before the player has confirmed the purchase (Lua
+`building_purchase_init` → `update_building_purchase_text` → confirm dialog, *then* the actual
+charge in `building_purchased`).
+
+**Review status (2026-10-10):** both natives resolved to their handler bodies and characterized
+field-by-field. CONFIRMED unless marked OPEN/HIGH CONFIDENCE above. Residual OPEN items: which of
+`crib_purchase_get_crib_info`'s two registrations (and descriptor arrays) actually governs at
+runtime, and the relative module-init order of `0x005f09a0` vs. `0x00a03e40`; `0x00a02ce0`'s own
+body (shop resolver); the field-`0x88`/`0x8c`/`0x92` store-def and crib-record layouts beyond the
+offsets read here (no independent struct trace attempted).
+Full detail: `spec-building-purchase-runtime.md`.
+Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 49 cross-references (e.g. §1.9→§1.7 in the §1 resolver lists, §33→§7.33, §14.3–11.5→§14.3–§14.5, §16.8→§16.11, §8.31/§16.30 in §22.3, placeholder "item N"/"D.N" refs in §11/§20, §23.7→§23.1); marked 47 stale OPEN/"unidentified"/"not traced" items resolved in place with pointers (extractor pair §4.1, `0x006434a0` §9.21/§14.6, `0x00a017c0` §15.10, 0x00e0xxxx family §26.23, `0x00d9e8b0` CRC-32, §2.9/§6.1/§12.20/§15.27/§16.7/§18.9 and others); annotated 127 stale or contradicted statements (spurious "new/first/not previously catalogued" claims for opcodes, bits, resolvers, primitives and hook bases; opcode-list errors such as `door_lock` in `0x43` and `inv_weapon_add_temporary` in `0x46`; commit-sibling inversion in §15.29; `"null"`→empty string at `0x0129a0e3`; `0x00d9e140`/`0x00d9e8b0` role misdescriptions; count slips) using strike-through plus pointer; reworded 13 clean-room problems (one `thunk_` Ghidra label, code-shaped expressions, a decompiler signature with an auto-type, inline raw x86 instructions); added 13 review markers for items needing a binary re-read (rounding semantics of `0x00ea2596` flagged OPEN in §4.1 with 3 pointers, the `0x00a525a0` address conflict at §20.14/§27.2, the `0x00a7a830` bit conflict at §3.7/§20.1/§21.30, setter-address-as-global OPEN notes at §18.2/§18.15), plus an in-spec §5.2 bullet for the §4.7/§4.8 header-address correction and one reworded draft self-correction in §20.29.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).
 - 2026-09-30 (cloud, desk adversarial review of §27/§28): added a review-status line to every §27.N/§28.N entry (§27: 11 DESK-PASS, 10 with text fixes, 5 NEEDS-EXE; §28: 9, 11, 6) and a review-status summary under each heading (desk pass does not clear an entry; executable re-derivation queued); recorded the §27.2/§20.14 0x00a525a0 conflict's most likely reading as HYPOTHESIS in its marker; applied text fixes in place with strike-through/annotation (wrong §/WALLS.md citations, e.g. §19.6 in §27.5, §25.12/§25.25→§16.2/§25.13, WALLS.md→§26.2/§26.23; resolved the false 0x00853b10 polarity worry in §27.5; count slips in §27.20/§27.26/§28.17/§28.26; "new/second" claims annotated as already recorded, e.g. 0x00e0cef0 §8.13, 0x00e0ceb0 §1.9/§8.24, 0x007c9f50 §6.1/§24.2, bit 0x40@+9 §15.28, 0x005c50b0, 0x00d9e8b0 out-buffer; stub-reading qualifications on the 0x0101bxxx/0xd34xxx notes); added OPEN markers at 11 NEEDS-EXE claims plus 4 unstated details (§27.8 wrapper, §27.16 default, §28.3 conversion, §28.6 gate bit).
@@ -16987,3 +17102,8 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   category exists in the data even though no traced native handler consumes it as a document
   name. Full detail: `spec-store-runtime.md` §6 item 1. Cleanroom self-check: strict regex
   0 hits, C-cast-dereference check 0 hits.
+- 2026-10-10 — new §62: `crib_purchase_get_crib_info`/`shop_purchase_get_shop_info` resolved, both
+  sharing crash shapes with already-documented purchase-native siblings (SPEC TEAM, agent
+  `a6b4f2310e085a60a`). Traced via the Ghidra query server from `building_purchase.lua`'s two
+  dataresponder requests; full file-level trace in new file `spec-building-purchase-runtime.md`.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

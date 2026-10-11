@@ -81,6 +81,21 @@
 #include <string>
 
 #include "sr3luahost/engine_state.h"
+// UPDATE 2026-10-10 (playtest-weapon-fire-wiring task): feature/hitscan-
+// fire-dispatch (commit 1e58667) IS present in THIS worktree/branch now -
+// `include/sr3weapons/weapon_fire.h` exists for real, not just in git
+// history - so the "entire remaining wiring step" this header's own top
+// doc comment already named ("changing `class EngineStateLethalDamageSink`
+// to `class EngineStateLethalDamageSink : public sr3weapons::
+// IWeaponDamageSink` and adding `#include "sr3weapons/weapon_fire.h"`")
+// is exactly what this include + the base-class/override below now do.
+// Layering: sr3weapons depends only on sr3tables_weapons/sr3player
+// (weapon_fire.h's own "LAYERING NOTE") - sr3luahost depending on
+// sr3weapons is a new, but one-directional (no cycle), dependency; no
+// sr3luahost .cpp includes this header today (only test/tool consumers,
+// grep-confirmed), so the sr3luahost library target itself gains no new
+// link requirement from this change.
+#include "sr3weapons/weapon_fire.h"
 
 namespace sr3luahost {
 
@@ -94,15 +109,15 @@ namespace sr3luahost {
 // own doc comment), carried here so a future pass that DOES attribute a
 // guaranteed kill to an instigator (e.g. for on_death callbacks/kill
 // credit) has it ready without a second interface change.
-class EngineStateLethalDamageSink {
+class EngineStateLethalDamageSink : public sr3weapons::IWeaponDamageSink {
 public:
     explicit EngineStateLethalDamageSink(EngineState& state, std::string source = {})
         : state_(state), source_(std::move(source)) {}
 
     // Matches sr3weapons::IWeaponDamageSink::applyLethalHit's exact name
-    // and signature (see this header's own top doc comment) - NOT marked
-    // `override` since the base class is not visible to this branch.
-    void applyLethalHit(const std::string& targetName) {
+    // and signature (see this header's own top doc comment) - now a REAL
+    // override (the base class is visible to this branch as of this task).
+    void applyLethalHit(const std::string& targetName) override {
         state_.applyGuaranteedLethalHit(targetName, source_);
         ++callCount;
         lastTarget = targetName;

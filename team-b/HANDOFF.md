@@ -23,7 +23,39 @@ personally viewed before inclusion - honestly noted that no shot this cut clearl
 during driving (close follow-cam), though the pose itself is still real/test-covered. Read-only + swapped
 into `TEAM B\playtest\` (left `sr3_viewer_old_backup.exe` alone, matching the existing pattern). Also
 moved the untracked `check_keys.obj` to `G:\AI\Claude Projects\recomp\TEAM-B-misc\` per purrsian-52.
-**Relay the folder name to purrsian-52 (explicitly requested) - DO THIS NEXT if not already done.**
+**Relayed to purrsian-52, folder name sent.** purrsian-52 confirmed v0.6 md5-verified clean (D:/G:/live)
+and GitHub pushed (`e3f7f57`).
+
+### DONE AND MERGED: weapon fire + audio playback, both landed (v0.7 next)
+- **Weapons** (merge `13441d8` of `feature/playtest-weapon-fire-wiring`): LMB fires Brad's real equipped weapon
+  (weapons.xtbl row, 82 rows parsed) via the already-merged hitscan dispatch
+  (`weapon_fire.h`/`weapon_fire.cpp`) into a real `IWeaponDamageSink` (closed the ONE genuine missing
+  link: `EngineStateLethalDamageSink` in `character_damage_sink.h` wasn't actually deriving from
+  `IWeaponDamageSink` before this) -> `EngineState::applyGuaranteedLethalHit()` ->
+  `EvaluateGunfireReaction()`/`ChooseFleeOrCower()` (already spec-confirmed, just never called before).
+  Live-verified: `isDeadHighConfidence` false->true through the real sink on a real hit against the
+  near-field ped population. **Honest gap, not invented around**: `PedReactionMode` has NO movement/AI
+  consumer anywhere yet - the decision computes and is observable (printed + asserted in the new
+  `real_playtest_weapon_fire_smoke_test`) but nothing turns "Flee" into actual ped movement - that's the
+  next natural follow-up if queued.
+- **Audio playback** (merge `ad159c4` of `feature/audio-output-device`): minimal XAudio2 output device
+  (8-voice pool, one-shot), wired to the real SFX lookup (Sec9.8, `walkHircItems`/`resolveSoundIdToMedia`
+  against `sounds.vpp_pc` - `cutscene_sounds.vpp_pc` empirically resolves ZERO kind-2 items, it's pure
+  dialogue, corrected from the initial CHOSEN default), playing on a footstep-shaped cadence while
+  walking. Emitter/listener wired per Sec11a.1/11a.2. **Volume is deliberately flat** - Sec11a.5 confirms
+  the real Wwise attenuation curve is architecturally unreachable (inside statically-linked Wwise code),
+  not a time-boxed cut. `--no-audio` plus `--headless`/`--no-input` each independently veto opening a
+  device - verified silent under the existing ctest smoke-test flags. Verified without literally
+  listening: exact submitted-byte-count match to the real decoded clip's frame count, 0 leaked voices,
+  opt-in `SR3_AUDIO_DUMP_WAV` capture hex-inspected to confirm real non-silent waveform data.
+- One CMakeLists.txt conflict between the two (both appended to the same `target_link_libraries(sr3_viewer
+  ...)` line) - resolved by keeping both as separate calls (CMake accumulates), not picking one.
+- Full combined ctest on main: **165/169 passed, 0 failed, 4 pre-existing Bink skips.**
+- **DONE: v0.7 shipped.** Folder: `v0.7_2026-10-10_weapons-and-audio` on
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 10 versions on G: (1
+  new)"). Screenshots (plain launch, post-fire HUD/objective state - the shot ped wasn't in camera frame
+  this take, said honestly, hit/death/flee all confirmed via console log instead) personally viewed.
+  Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 - DO THIS NEXT.**
 
 ### Previously (pre-move), now historical: v0.6 planning note
 All of this session's queued work (vorbis merge+independent oracle verify, inv-slot/conversation merge,

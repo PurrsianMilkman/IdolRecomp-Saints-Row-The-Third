@@ -1157,6 +1157,22 @@ target_include_directories(sr3audioruntime PUBLIC include)
 # headers just to call attemptWwiseVorbisDecode().
 target_link_libraries(sr3audioruntime PRIVATE vorbisstatic)
 
+# AudioOutputDevice (audio-playback task, 2026-10-10): the first real
+# speaker-output device, see include/sr3audioruntime/audio_output_device.h's
+# own top comment. XAudio2 is CLSID-activated (CoCreateInstance under
+# XAudio2Create's own inline helper in <xaudio2.h>, part of the Windows SDK,
+# no separate xaudio2.lib import library needed) - only `ole32` is a new
+# link requirement beyond what this library already needed. Windows-only,
+# guarded the SAME way sr3render's own D3D11 dependency is guarded just
+# below (this file's own #error on non-Windows is the enforcement; this
+# guard just keeps a non-Windows configure from trying to compile it at
+# all, consistent with "the readers alone" fallback sr3render's own comment
+# describes).
+if(WIN32)
+    target_sources(sr3audioruntime PRIVATE src/audio_output_device.cpp)
+    target_link_libraries(sr3audioruntime PRIVATE ole32)
+endif()
+
 # 2026-10-10 (runtime data loader task): sr3binkcodec is no longer purely
 # header-only - the 5 static lookup-table regions (kRunLength/kClassByte/
 # kLutOffset/kLutBlob/kIntraQuant/kInterQuant, include/sr3binkcodec/
@@ -1443,7 +1459,21 @@ if(WIN32)
     # render-pipeline.md Sec23.14) runPlaytest()'s "VEHICLE OCCUPANT
     # VISIBILITY" block now consumes - not previously reachable from this
     # target (sr3physics only PUBLIC-links the separate sr3vehicleinfo lib).
-    target_link_libraries(sr3_viewer PRIVATE sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3physics sr3fxo sr3d3d9bc sr3zone sr3airuntime sr3clmesh sr3luahost sr3vintdoc sr3xtbl sr3tables_environment sr3tables_vehicle_world sr3font sr3locstr sr3playeranim sr3animpose sr3tables_animation vppcache d3d11 dxgi d3dcompiler user32 gdi32)
+    # sr3weapons/sr3tables_weapons (playtest-weapon-fire-wiring task,
+    # 2026-10-10): the real hitscan fire dispatch chain (sr3weapons::
+    # WeaponInstance::fire(), already-merged feature/hitscan-fire-dispatch)
+    # and the real weapons.xtbl row type runPlaytest()'s own "weapons.xtbl:
+    # Brad's REAL weapon" block parses - both targets already exist above
+    # (sr3weapons line ~477, sr3tables_weapons line ~375), well before this
+    # target, so no deferred if(TARGET sr3_viewer) block is needed.
+    target_link_libraries(sr3_viewer PRIVATE sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3physics sr3fxo sr3d3d9bc sr3zone sr3airuntime sr3clmesh sr3luahost sr3vintdoc sr3xtbl sr3tables_environment sr3tables_vehicle_world sr3font sr3locstr sr3playeranim sr3animpose sr3tables_animation sr3weapons sr3tables_weapons vppcache d3d11 dxgi d3dcompiler user32 gdi32)
+    # audio-playback task (2026-10-10): sr3audio (HIRC/media-bank SFX lookup,
+    # include/sr3audio/{hirc.h,media_bank.h}) + sr3audioruntime (Vorbis
+    # decode + the new AudioOutputDevice, include/sr3audioruntime/
+    # audio_output_device.h) - both already-existing/newly-added libraries
+    # reused here, not reinvented, for runPlaytest()'s own first real SFX
+    # playback wiring.
+    target_link_libraries(sr3_viewer PRIVATE sr3audio sr3audioruntime)
 
     # --- Fold tests/golden/build.bat's remaining standalone tools into real
     # CMake targets (B1 task, 2026-10-07). tests/golden/ (including
@@ -2615,6 +2645,40 @@ if(WIN32)
     add_dependencies(real_playtest_traffic_roadblock_smoke_tests sr3_viewer)
     if(NOT CRREISH_VERIFY_BUILD)
         set_tests_properties(real_playtest_traffic_roadblock_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
+# Real-data smoke test for playtest's new weapon fire -> hitscan -> damage ->
+# ped reaction WIRING (2026-10-10, playtest-weapon-fire-wiring task) - a
+# SIBLING of real_playtest_vehicle_smoke_test/
+# real_playtest_traffic_roadblock_smoke_test above (tests/
+# real_playtest_weapon_fire_smoke_test.cpp's own header comment has the full
+# account): --headless --no-input --script-fire, checks a clean exit, Brad
+# actually equipped with a real weapons.xtbl row, the scripted shot reaching
+# the real dispatch body and registering a hit against the always-on near-
+# field ambient-ped population, that hit ped's own isDeadHighConfidence flag
+# actually flipping false->true through the real EngineState::
+# applyGuaranteedLethalHit() sink, the real gunfire-to-flee reaction chain
+# producing a mode for that ped, a real non-trivial capture PNG, and the
+# expected final stdout line. Tests ONLY the new per-frame call-site wiring
+# (the underlying hitscan dispatch/damage sink/flee-reaction chain each
+# already have their own full synthetic coverage - tests/
+# synthetic_weapon_fire_test.cpp, the character-damage-death branch's own
+# tests, near_field_ped_population.h's own tests - not re-tested here).
+# SKIPPED (exit 77) when CRREISH_GAME_CACHE_DIR is absent, same convention
+# as every other real_* test. WIN32-only, same reason as
+# real_playtest_smoke_test above.
+if(WIN32)
+    add_executable(real_playtest_weapon_fire_smoke_tests tests/real_playtest_weapon_fire_smoke_test.cpp)
+    target_compile_definitions(real_playtest_weapon_fire_smoke_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_playtest_weapon_fire_smoke_test
+             COMMAND real_playtest_weapon_fire_smoke_tests --bin-dir $<TARGET_FILE_DIR:sr3_viewer>)
+    set_tests_properties(real_playtest_weapon_fire_smoke_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device")
+    add_dependencies(real_playtest_weapon_fire_smoke_tests sr3_viewer)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_playtest_weapon_fire_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 

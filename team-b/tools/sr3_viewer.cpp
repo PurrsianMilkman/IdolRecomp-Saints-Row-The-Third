@@ -83,6 +83,7 @@
 #include <cstddef>
 #include <map>
 #include <set>
+#include <unordered_map>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
 
@@ -158,7 +159,34 @@
 // "NEAR-FIELD AMBIENT PEDESTRIAN POPULATION" doc comment, just above its
 // main loop, for the full account.
 #include "sr3airuntime/near_field_ped_population.h"
+// Weapon fire wiring (THIS TASK, 2026-10-10): the real hitscan dispatch chain
+// (sr3weapons::WeaponInstance::fire(), already-merged feature/hitscan-fire-
+// dispatch), the real weapons.xtbl row type (so Brad's weapon is a REAL
+// authored row, not a fabricated placeholder - same misc_tables.vpp_pc
+// docOf() this function already uses for weather_time_of_day.xtbl/
+// control_parameters.xtbl etc., see the "weapons.xtbl: Brad's REAL weapon"
+// block below), and the CHOSEN IWeaponDamageSink adapter that routes a
+// hitscan hit into this project's own real damage/death mechanism
+// (EngineState::applyGuaranteedLethalHit(), spec-player-runtime.md Sec15.3a).
+// See this function's own "WEAPON FIRE" doc comment, just above the main
+// loop's own fire-key block, for the full call-chain citation.
+#include "sr3luahost/character_damage_sink.h"
+#include "sr3tables_weapons/weapons.h"
+#include "sr3weapons/weapon_fire.h"
 #include "vpp/container.h"
+// audio-playback task (2026-10-10): real SFX media lookup (sr3audio/hirc.h's
+// HIRC walk + Sound-object source-descriptor parse, spec-audio-runtime.md
+// Sec9.8), the real Vorbis decode (already independently oracle-verified,
+// 493/493 against cutscene_sounds.vpp_pc - see HANDOFF.md), and the new
+// speaker-output device (sr3audioruntime/audio_output_device.h) - see
+// runPlaytest()'s own "FOOTSTEP-CADENCE SFX" block further down this file
+// for exactly what is wired and what is honestly NOT (no confirmed
+// footstep-specific SFX identity exists in the spec yet).
+#include "sr3audio/hirc.h"
+#include "sr3audio/media_bank.h"
+#include "sr3audioruntime/audio_output_device.h"
+#include "sr3audioruntime/wav_writer.h"
+#include "sr3audioruntime/wwise_vorbis_setup.h"
 // Compiled-shader cache only (this task, 2026-10-08) - see this file's
 // own "vehicle real-shader viewer integration" D3DCompile call sites
 // below. sr3_viewer.cpp's ~17 pre-existing readFile()+vpp::Container
@@ -18360,6 +18388,152 @@ sr3luahost::Host::RunResult missionRunChunkWithWatchdog(sr3luahost::Host& host, 
 // "host.engineState().beginMissionPhaseTracking(row.missionLuaStem, ...)")
 // - this task only switches sr3_viewer.cpp's production playtest path, per
 // this task's own dispatch.
+// ---------------------------------------------------------------------
+// FOOTSTEP-CADENCE SFX LOOKUP (audio-playback task, 2026-10-10)
+// ---------------------------------------------------------------------
+// Finds the first real, playable SFX clip this project's own CONFIRMED
+// lookup mechanism can resolve out of a real `<archive>.vpp_pc`:
+//   1. walk the archive's own entries for a plain `<stem>.bnk_pc` /
+//      `<stem>_media.bnk_pc` sibling pair (spec-audio-format.md Sec3/Sec4;
+//      sr3audio/hirc.h + media_bank.h - NOT reinvented here);
+//   2. walk the plain bank's HIRC chunk (sr3audio::walkHircItems) for a
+//      kind-2 Sound item whose source descriptor classifies kPlainCodec
+//      (spec-audio-runtime.md Sec9.8's "ordinary one-shot SFX" shape);
+//   3. resolve it to a real media record via
+//      sr3audio::resolveSoundIdToMedia() (the HIRC id -> R3 -> `_media.bnk_pc`
+//      tag match Sec9.8's own worked example establishes);
+//   4. attempt the real Vorbis decode (sr3audioruntime::attemptWwiseVorbisDecode,
+//      the same, already independently oracle-verified pipeline - see
+//      HANDOFF.md's 493/493 cutscene_sounds.vpp_pc citation).
+// Returns on the FIRST Sound item that resolves AND decodes successfully;
+// does not try to pick a semantically meaningful one (e.g. a literal
+// "footstep" event) because NO confirmed footstep-specific SFX identity
+// exists anywhere in spec-audio-runtime.md as of this task (Sec11a.7 names
+// real event strings for crowd/boss/vehicle-minigame cues, never foley/
+// footsteps) - inventing a plausible-looking id/name here would be exactly
+// the kind of fabrication the project's no-invented-fixes rule forbids.
+// This is therefore an HONEST SUBSTITUTE for "the real footstep sound":
+// the nearest thing this project can point to that is (a) reached through
+// the real, spec-confirmed lookup mechanism and (b) independently proven to
+// decode correctly - not a claim that the specific clip played IS a
+// footstep sample. The result is played on a footstep-shaped CADENCE
+// (while the player is moving, see runPlaytest()'s own call site) as the
+// first concrete end-to-end proof that decoded PCM reaches a real speaker,
+// not as a claim about which game sound is now correctly audible.
+struct FootstepCadenceSfxClip {
+    bool valid = false;
+    uint32_t soundObjectId = 0;
+    std::string bankStem;
+    sr3audioruntime::DecodeAttemptResult decoded;
+};
+
+FootstepCadenceSfxClip findFirstPlayableSfxClip(const std::string& archivePath, std::string& diagnosticLog) {
+    FootstepCadenceSfxClip result;
+    std::vector<uint8_t> archiveBytes = readFileLargeC(archivePath);
+    if (archiveBytes.empty()) {
+        diagnosticLog += "sfx-lookup: could not read archive " + archivePath + "\n";
+        return result;
+    }
+    vpp::Container container(vpp::ByteView(archiveBytes.data(), archiveBytes.size()));
+
+    auto endsWithLocal = [](const std::string& s, const std::string& suffix) {
+        return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
+    };
+
+    for (size_t i = 0; i < container.entries().size(); ++i) {
+        const std::string& plainName = container.entries()[i].name;
+        if (!endsWithLocal(plainName, ".bnk_pc") || endsWithLocal(plainName, "_media.bnk_pc")) continue;
+        const std::string stem = plainName.substr(0, plainName.size() - std::string(".bnk_pc").size());
+        const std::string mediaName = stem + "_media.bnk_pc";
+        size_t mediaIndex = static_cast<size_t>(-1);
+        for (size_t j = 0; j < container.entries().size(); ++j) {
+            if (container.entries()[j].name == mediaName) { mediaIndex = j; break; }
+        }
+        if (mediaIndex == static_cast<size_t>(-1)) continue;
+
+        auto readEntry = [&](size_t idx, std::vector<uint8_t>& storage) -> vpp::ByteView {
+            if (container.entries()[idx].payload.kind == vpp::PayloadKind::Raw) return container.rawEntryBytes(idx);
+            auto r = container.decompressEntry(idx);
+            storage = std::move(r.data);
+            return vpp::ByteView(storage.data(), storage.size());
+        };
+
+        std::vector<uint8_t> plainStorage, mediaStorage;
+        vpp::ByteView plainBytes, mediaBytes;
+        try {
+            plainBytes = readEntry(i, plainStorage);
+            mediaBytes = readEntry(mediaIndex, mediaStorage);
+        } catch (const std::exception& ex) {
+            diagnosticLog += "sfx-lookup: " + stem + " read failed: " + ex.what() + "\n";
+            continue;
+        }
+        if (plainBytes.size() == 0 || mediaBytes.size() == 0) continue;
+
+        std::vector<sr3audio::HircItem> hircItems;
+        try {
+            auto hircChunk = sr3audio::findHircChunk(plainBytes);
+            if (!hircChunk) continue;
+            hircItems = sr3audio::walkHircItems(*hircChunk);
+        } catch (const std::exception& ex) {
+            diagnosticLog += "sfx-lookup: " + stem + " HIRC walk failed: " + ex.what() + "\n";
+            continue;
+        }
+
+        sr3audio::MediaBank mb;
+        std::vector<sr3audio::MediaBankRecord> mediaRecords;
+        try {
+            mb = sr3audio::MediaBank::parse(mediaBytes);
+            mediaRecords = mb.walk(container.entries()[mediaIndex].payload.decompressedLength);
+        } catch (const std::exception& ex) {
+            diagnosticLog += "sfx-lookup: " + stem + " media-bank parse failed: " + ex.what() + "\n";
+            continue;
+        }
+
+        size_t kind2Count = 0, resolvedCount = 0, vorbCount = 0, decodeOkCount = 0;
+        for (const auto& item : hircItems) {
+            if (item.kind != sr3audio::kHircKindSound) continue;
+            ++kind2Count;
+            sr3audio::ResolvedMedia resolved;
+            try {
+                resolved = sr3audio::resolveSoundIdToMedia(hircItems, item.id, mediaRecords);
+            } catch (const std::exception&) {
+                continue;  // not every Sound item is the plain kPlainCodec shape this resolves - expected, not an error
+            }
+            ++resolvedCount;
+            if (resolved.size < 128) continue;
+            const uint8_t* recBytes = mediaBytes.data() + resolved.offset;
+            auto vorbLoc = sr3audioruntime::findRiffSubChunk(recBytes, resolved.size, sr3audioruntime::kFourCcVorb);
+            if (!vorbLoc) continue;  // not every record is Vorbis-wrapped the way this pipeline targets
+            ++vorbCount;
+            sr3audioruntime::DecodeAttemptResult decoded =
+                sr3audioruntime::attemptWwiseVorbisDecode(recBytes, resolved.size);
+            if (!decoded.ok) continue;
+            ++decodeOkCount;
+
+            result.valid = true;
+            result.soundObjectId = item.id;
+            result.bankStem = stem;
+            result.decoded = std::move(decoded);
+            char idHex[16];
+            std::snprintf(idHex, sizeof(idHex), "%08x", item.id);
+            diagnosticLog += "sfx-lookup: resolved+decoded real SFX media, bank='" + stem +
+                              "' soundObjectId=0x" + std::string(idHex) +
+                              " mediaRecordIndex=" + std::to_string(resolved.mediaRecordIndex) +
+                              " channels=" + std::to_string(result.decoded.channels) +
+                              " sampleRate=" + std::to_string(result.decoded.sampleRate) +
+                              " frames=" + std::to_string(result.decoded.totalSampleFrames) + "\n";
+            return result;
+        }
+        diagnosticLog += "sfx-lookup-debug: bank='" + stem + "' hircItems=" + std::to_string(hircItems.size()) +
+                          " mediaRecords=" + std::to_string(mediaRecords.size()) +
+                          " kind2=" + std::to_string(kind2Count) + " resolved=" + std::to_string(resolvedCount) +
+                          " vorb=" + std::to_string(vorbCount) + " decodeOk=" + std::to_string(decodeOkCount) + "\n";
+    }
+    diagnosticLog += "sfx-lookup: no kind-2 Sound item in " + archivePath +
+                      " both resolved to a media record AND decoded successfully this run\n";
+    return result;
+}
+
 int runPlaytest(int argc, char** argv) {
     if (argc < 5) {
         std::fprintf(stderr,
@@ -18377,9 +18551,11 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--interface-archive <path>]\n"
                      "                           [--vehicle-spawn X Z] [--script-vehicle]\n"
                      "                           [--script-vehicle-drive-frames N] [--no-collision]\n"
-                     "                           [--script-roadblock] [--script-hud-prompt-response]\n"
+                     "                           [--script-roadblock] [--script-fire]\n"
+                     "                           [--script-hud-prompt-response]\n"
                      "                           [--mission=<stem>] [--mission-registration-list <path>]\n"
                      "                           [--mission-package-tsv <path>] [--mission-timeout=<seconds>]\n"
+                     "                           [--no-audio] [--sfx-archive <path>]\n"
                      "       Playtest v0 - the first genuinely interactive build. See this\n"
                      "       command's own doc comment (above runPlaytest() in this file) for the\n"
                      "       full REAL/CHOSEN/SCOPE breakdown. --headless forces the window hidden\n"
@@ -18416,6 +18592,19 @@ int runPlaytest(int argc, char** argv) {
                      "       notoriety, a plain debug gate). --script-roadblock scripts a deterministic\n"
                      "       arm-then-disarm 'R' press pair under --no-input (ctest use, see\n"
                      "       real_playtest_traffic_roadblock_smoke_test.cpp).\n"
+                     "       WEAPON FIRE (THIS TASK, spec-weapons-runtime.md Sec2.2c/Sec4.4): Brad is\n"
+                     "       equipped with the first real pistol-class (else first non-vehicle-class) row\n"
+                     "       parsed from the real weapons.xtbl in <misc_tables.vpp_pc> - left mouse button\n"
+                     "       (on foot only) fires it from the live follow-camera's own eye/forward ray\n"
+                     "       through the real hitscan dispatch chain (sr3weapons::WeaponInstance::fire(),\n"
+                     "       already-merged feature/hitscan-fire-dispatch) against the always-on near-field\n"
+                     "       ambient pedestrian population; a hit routes through\n"
+                     "       sr3luahost::EngineStateLethalDamageSink into the real\n"
+                     "       EngineState::applyGuaranteedLethalHit() death/ragdoll mechanism (spec-player-\n"
+                     "       runtime.md Sec15.3a) and the real gunfire-to-flee reaction chain\n"
+                     "       (sr3airuntime::EvaluateGunfireReaction/ChooseFleeOrCower, spec-ai-runtime.md\n"
+                     "       Sec20.4). --script-fire scripts a single deterministic left-click under\n"
+                     "       --no-input (ctest use, see real_playtest_weapon_fire_smoke_test.cpp).\n"
                      "       --mission=<stem> (Phase 1 mission-host debug flag, OFF unless given): drives\n"
                      "       the real shipped mission Lua script for <stem> (e.g. m01) once per rendered\n"
                      "       frame, through the SAME Host/EngineState --hud already builds (constructed if\n"
@@ -18445,7 +18634,29 @@ int runPlaytest(int argc, char** argv) {
                      "       still works regardless). --interface-archive overrides where the real\n"
                      "       pause_menu_common.vint_doc is read from for the overlay's own best-effort\n"
                      "       real-document load (CHOSEN default: derived from <characters.vpp_pc>'s own\n"
-                     "       directory, same convention --vehicle-archive's own default uses).\n");
+                     "       directory, same convention --vehicle-archive's own default uses).\n"
+                     "       AUDIO (THIS TASK, audio-playback): a real XAudio2 output device opens by\n"
+                     "       default (interactive runs only - see below) and a real SFX clip, resolved\n"
+                     "       through this project's own CONFIRMED HIRC/media-bank lookup mechanism\n"
+                     "       (spec-audio-runtime.md Sec9.8, findFirstPlayableSfxClip()'s own doc comment\n"
+                     "       above this function), plays on a footstep-shaped cadence while the player is\n"
+                     "       moving on foot - HONESTLY NOT the confirmed real footstep sound (no such\n"
+                     "       identity exists yet in spec-audio-runtime.md), the nearest real, independently\n"
+                     "       decode-verified SFX media this project can point to without inventing an event\n"
+                     "       name. Flat (non-attenuated) volume - distance is computed and logged from the\n"
+                     "       real emitter/listener positions (Sec11a.1/Sec11a.2) but the actual Wwise\n"
+                     "       distance-attenuation curve is confirmed to live entirely inside Wwise's own\n"
+                     "       statically-linked code (Sec11a.5) - not reachable, not guessed. --no-audio\n"
+                     "       disables the device entirely (still an interactive run, just silent).\n"
+                     "       --headless and --no-input NEVER open the device regardless of --no-audio (CI\n"
+                     "       smoke tests must stay genuinely silent). --sfx-archive overrides which real\n"
+                     "       `.vpp_pc` the demo clip is resolved from (CHOSEN default: sounds.vpp_pc next to\n"
+                     "       <characters.vpp_pc> - empirically the smallest real archive this task found\n"
+                     "       with a kind-2 Sound item that actually resolves+decodes through this\n"
+                     "       mechanism; cutscene_sounds.vpp_pc, this project's own independently oracle-\n"
+                     "       verified 493/493 Vorbis corpus, was tried first but is pure cutscene DIALOGUE -\n"
+                     "       spec-audio-runtime.md Sec9.8 confirms voice lines never touch the embedded\n"
+                     "       Sound descriptor this mechanism reads, so nothing there ever resolves).\n");
         return 1;
     }
     const std::string charactersPath = argv[2];
@@ -18595,6 +18806,12 @@ int runPlaytest(int argc, char** argv) {
     // see kScriptRoadblockArmFrame/kScriptRoadblockDisarmFrame below (near
     // the main loop) for the exact frame schedule.
     bool scriptRoadblock = false;
+    // --script-fire (THIS TASK, playtest-weapon-fire-wiring): a single
+    // deterministic fire-key press under --no-input, same scripted-fallback
+    // idiom --script-vehicle/--script-roadblock already establish for 'E'/
+    // 'R' - see kScriptFireFrame below (near the main loop) for the exact
+    // frame.
+    bool scriptFire = false;
     // --script-hud-prompt-response (THIS TASK, m05-jump-hud-prompt-test):
     // a genuine player-INPUT wait (e.g. m05.lua:1141's `while not M05_jumped
     // do thread_yield() end`, unblocked only by the registered callback a
@@ -18615,9 +18832,29 @@ int runPlaytest(int argc, char** argv) {
     // second/parallel mechanism. See the main loop's own
     // "SCRIPT-HUD-PROMPT-RESPONSE" block for the exact per-tick trigger.
     bool scriptHudPromptResponse = false;
+    // --no-audio (THIS TASK, audio-playback): opts OUT of opening a real
+    // speaker device even in an otherwise-interactive run. Independent of
+    // this flag, --headless and --no-input NEVER open a device regardless -
+    // see the "AUDIO OUTPUT DEVICE" init block below, right before the main
+    // loop, for the exact gating and why (ctest's own smoke-test runs use
+    // both flags and must stay genuinely silent in CI, never just quiet by
+    // convention).
+    bool noAudio = false;
+    // --sfx-archive <path>: overrides which real Wwise-bank-bearing
+    // `.vpp_pc` the footstep-cadence demo clip is resolved from (CHOSEN
+    // default: sounds.vpp_pc, same "resolved relative to <characters.vpp_pc>'s
+    // own directory" convention --vehicle-archive's own default uses - see
+    // the "AUDIO OUTPUT DEVICE" init block below, right before the main
+    // loop, for exactly why sounds.vpp_pc and not cutscene_sounds.vpp_pc,
+    // the first CHOSEN default this task tried: that archive is pure
+    // cutscene dialogue, and dialogue is CONFIRMED (spec-audio-runtime.md
+    // Sec9.8) to never resolve through this embedded-descriptor mechanism).
+    std::string sfxArchiveOverride;
     for (; argi < argc; ++argi) {
         const std::string arg = argv[argi];
         if (arg == "--headless") headless = true;
+        else if (arg == "--no-audio") noAudio = true;
+        else if (arg == "--sfx-archive" && argi + 1 < argc) sfxArchiveOverride = argv[++argi];
         else if (arg == "--hud" && argi + 2 < argc) {
             hudEnabled = true;
             hudRegistrationListPath = argv[++argi];
@@ -18680,6 +18917,8 @@ int runPlaytest(int argc, char** argv) {
             noCollision = true;
         } else if (arg == "--script-roadblock") {
             scriptRoadblock = true;
+        } else if (arg == "--script-fire") {
+            scriptFire = true;
         } else if (arg == "--script-hud-prompt-response") {
             scriptHudPromptResponse = true;
         } else if (arg.rfind("--mission=", 0) == 0) {
@@ -18981,6 +19220,64 @@ int runPlaytest(int argc, char** argv) {
                     "CHOSEN defaults\n", ex.what());
     }
 
+    // ---- weapons.xtbl: Brad's REAL weapon (THIS TASK, playtest-weapon-fire-
+    // wiring) ---------------------------------------------------------------
+    // spec-tables-weapons-combat.md's own confirmed location ("the 82 base
+    // rows live in misc_tables.vpp_pc and ONLY there") - the SAME archive
+    // already open via docOf() above, same optional/non-aborting convention
+    // as weather_time_of_day.xtbl just above (a stripped/synthetic
+    // misc_tables.vpp_pc without this table still runs the rest of the
+    // playtest; the fire key below simply has nothing to dispatch). Picks
+    // the first real parsed row whose Weapon_Class is "pistol" (0, spec
+    // Sec2.5's 23-name enum) - falling back to the first row that is not
+    // "vehicle"-class (sr3weapons::kVehicleWeaponClass, CONFIRMED never to
+    // fire through this dispatch at all, weapon_fire.h) if no pistol-class
+    // row is present - rather than hardcoding a specific weapon NAME this
+    // task never independently verified exists in every build of this
+    // table (spec-tables-weapons-combat.md's own "82 real weapon names"
+    // were not individually enumerated by name in this task's own spec
+    // reading). bradWeaponDef is a real authored sr3tables_weapons::Weapon
+    // row, not a fabricated placeholder.
+    sr3tables_weapons::Weapon bradWeaponDef;
+    bool bradWeaponDefFound = false;
+    try {
+        const sr3xtbl::Document weaponsDoc = docOf("weapons.xtbl");
+        std::vector<sr3tables_weapons::Weapon> allWeapons = sr3tables_weapons::ParseAllWeapons(weaponsDoc);
+        for (const sr3tables_weapons::Weapon& w : allWeapons) {
+            if (w.weaponClass == 0 /* pistol, spec Sec2.5 */) {
+                bradWeaponDef = w;
+                bradWeaponDefFound = true;
+                break;
+            }
+        }
+        if (!bradWeaponDefFound) {
+            for (const sr3tables_weapons::Weapon& w : allWeapons) {
+                if (w.weaponClass != sr3weapons::kVehicleWeaponClass) {
+                    bradWeaponDef = w;
+                    bradWeaponDefFound = true;
+                    break;
+                }
+            }
+        }
+        if (bradWeaponDefFound) {
+            std::printf("weapon   : Brad equipped with real weapons.xtbl row '%s' (Weapon_Class=%d, %zu total rows "
+                        "parsed) - LMB fires it on foot\n",
+                        bradWeaponDef.name.c_str(), bradWeaponDef.weaponClass, allWeapons.size());
+        } else {
+            std::printf("weapon   : weapons.xtbl parsed (%zu rows) but every row is vehicle-class - Brad has no "
+                        "weapon this run\n", allWeapons.size());
+        }
+    } catch (const std::exception& ex) {
+        std::printf("weapon   : weapons.xtbl not available (%s) - Brad has no weapon this run (LMB is a no-op)\n",
+                    ex.what());
+    }
+    std::unique_ptr<sr3weapons::WeaponInstance> bradWeapon;
+    if (bradWeaponDefFound) bradWeapon = std::make_unique<sr3weapons::WeaponInstance>(bradWeaponDef);
+    // The damage sink itself (EngineStateLethalDamageSink, needs hudEs/
+    // standaloneCombatEs - declared further below, once hudEs is finalized)
+    // is constructed later in this function - see the "WEAPON FIRE: damage
+    // sink" block, just after the `if (hudEnabled || missionEnabled)` block.
+
     const sr3xtbl::Document paramsDoc = docOf("control_parameters.xtbl");
     const sr3animruntime::ControlParameterRegistry registry = sr3animruntime::ControlParameterRegistry::load(paramsDoc);
     const sr3xtbl::Document filtersDoc = docOf("control_filters.xtbl");
@@ -19265,6 +19562,94 @@ int runPlaytest(int argc, char** argv) {
     std::printf("device   : %s (%s)\n",
                 device.kind() == sr3render::DeviceKind::Hardware ? "HARDWARE" : "WARP (software)",
                 device.adapterName().c_str());
+
+    // ---- AUDIO OUTPUT DEVICE (THIS TASK, audio-playback, 2026-10-10) -------------------
+    // Opens a real XAudio2 device ONLY for a genuinely interactive run: `headless` and
+    // `noInput` are the two existing ctest-smoke-test gates (see this function's own
+    // --headless/--no-input doc comment above) and BOTH independently veto audio,
+    // regardless of --no-audio - the critical requirement this task's own brief states
+    // ("the existing --headless/--no-input ctest smoke-test paths never open an audio
+    // device at all, regardless of this flag"). --no-audio is the third, explicit opt-out
+    // for an otherwise-interactive run. sr3_viewer's OTHER commands (runCity/runWalkDemo/
+    // etc.) never call AudioOutputDevice at all - this is the one, deliberately narrow,
+    // first wiring point this task's brief asks for.
+    const bool audioWanted = !headless && !noInput && !noAudio;
+    sr3audioruntime::AudioOutputDevice audioDevice;
+    bool audioReady = false;
+    if (audioWanted) {
+        std::string audioError;
+        audioReady = audioDevice.initialise(audioError);
+        std::printf("audio    : %s%s\n", audioReady ? "XAudio2 device opened" : "NOT opened",
+                    audioReady ? "" : (" (" + audioError + ")").c_str());
+    } else {
+        std::printf("audio    : disabled (%s)\n",
+                    headless ? "--headless" : noInput ? "--no-input" : "--no-audio");
+    }
+    // The footstep-cadence demo clip (see findFirstPlayableSfxClip()'s own doc comment,
+    // above runPlaytest() in this file, for exactly what this is and is NOT) - resolved
+    // once, up front, only when a device is actually open (no point walking a real archive
+    // and decoding Vorbis for a run that will never submit a buffer).
+    FootstepCadenceSfxClip footstepClip;
+    if (audioReady) {
+        std::string sfxArchivePath = sfxArchiveOverride;
+        if (sfxArchivePath.empty()) {
+            const size_t slash = charactersPath.find_last_of("/\\");
+            const std::string dir = slash == std::string::npos ? std::string() : charactersPath.substr(0, slash + 1);
+            // CORRECTED default (this task, empirically, 2026-10-10): cutscene_sounds.vpp_pc
+            // (this project's own independently oracle-verified 493-record Vorbis-decode
+            // corpus, HANDOFF.md) was the first CHOSEN default, but every one of its own
+            // kind-2 Sound HIRC items is genuinely UNRESOLVABLE through this lookup -
+            // empirically confirmed, not a bug: that archive is entirely cutscene DIALOGUE
+            // (`ct_*`/`story_*`/`zscene_*` bank stems), and spec-audio-runtime.md Sec9.8's
+            // own "Convergence with the voice-line external-source mechanism" paragraph
+            // explicitly says voice lines "never touch a Sound HIRC item's own embedded
+            // descriptor" - so resolveSoundIdToMedia() correctly finds nothing there, every
+            // time, for every one of its ~90 bank pairs (measured this task). sounds.vpp_pc's
+            // own "animation.bnk_pc" bank DOES resolve+decode a real clip (soundObjectId
+            // 0x1f6e26c3, mono/44100Hz/8154 frames, measured this task against the real
+            // shipped archive) - an animation-notify-driven SFX bank is a plausible real
+            // home for foley/footstep-shaped one-shots, though NOT confirmed to be
+            // specifically a footstep sample (see findFirstPlayableSfxClip()'s own doc
+            // comment for why no such confirmed identity is claimed).
+            sfxArchivePath = dir + "sounds.vpp_pc";
+        }
+        std::string sfxDiag;
+        footstepClip = findFirstPlayableSfxClip(sfxArchivePath, sfxDiag);
+        std::fputs(sfxDiag.c_str(), stdout);
+        std::printf("audio sfx: %s (%s)\n",
+                    footstepClip.valid ? "real SFX clip resolved+decoded, footstep cadence armed"
+                                       : "NONE resolved this run - device stays open, nothing to play",
+                    sfxArchivePath.c_str());
+        // SR3_AUDIO_DUMP_WAV=<path> (THIS TASK, opt-in debug escape hatch, same convention as
+        // CRREISH_DISABLE_SUN_SHADOW/SR3_GROUND_TEX_DEBUG elsewhere in this file): writes the
+        // resolved clip's own decoded PCM to a real .wav file ONCE, via this project's
+        // existing wav_writer.h (not a new writer) - the "capture the submitted PCM to a WAV
+        // file as a sanity check it's not silence/garbage" verification this task's own brief
+        // asks for, since nobody reviewing a build log can literally hear the speaker output.
+        if (footstepClip.valid) {
+            const char* dumpWavPath = std::getenv("SR3_AUDIO_DUMP_WAV");
+            if (dumpWavPath != nullptr && dumpWavPath[0] != '\0') {
+                std::string wavError;
+                const bool wrote = sr3audioruntime::writeWavPcm16(
+                    dumpWavPath, footstepClip.decoded.pcm, static_cast<uint32_t>(footstepClip.decoded.sampleRate),
+                    static_cast<uint16_t>(footstepClip.decoded.channels), wavError);
+                std::printf("audio sfx: SR3_AUDIO_DUMP_WAV %s -> %s%s\n", wrote ? "wrote" : "FAILED to write",
+                            dumpWavPath, wrote ? "" : (" (" + wavError + ")").c_str());
+            }
+        }
+    }
+    // Footstep-cadence bookkeeping: triggers roughly once per "step" while the player is
+    // actually moving (either live WASD input or the --no-input scripted walk both already
+    // drive moveSrc.A/moveSrc.B - see that struct's own declaration above). kFootstepCadenceFrames
+    // is a CHOSEN (not spec-derived - no authored footstep-interval table was found/opened)
+    // walk-cycle-shaped interval at this run's fixed 30Hz tick rate (dt==1/30, this function's
+    // own --no-input substitution convention) - a plain, stated guess at a PRESENTATION
+    // interval, not a fabricated GAMEPLAY value, and clearly distinct from the no-invented-
+    // fixes rule's concern (inventing missing spec data) since no spec claims to cover this at all.
+    constexpr int kFootstepCadenceFrames = 18;  // ~0.6s/step at 30Hz - CHOSEN, not spec-derived
+    int framesSinceLastFootstep = 0;
+    uint64_t footstepsTriggered = 0;
+
     sr3render::SwapChain swapChain;
     if (!swapChain.create(device.device(), window.nativeHandle(), winWidth, winHeight, error)) {
         std::fprintf(stderr, "swap chain creation failed: %s\n", error.c_str());
@@ -20040,6 +20425,37 @@ int runPlaytest(int argc, char** argv) {
       }
     }
 
+    // ---- WEAPON FIRE: damage sink (THIS TASK) --------------------------------
+    // A dedicated EngineState for the real damage/death sink
+    // (sr3luahost::EngineStateLethalDamageSink -> EngineState::
+    // applyGuaranteedLethalHit(), spec-player-runtime.md Sec15.3a) -
+    // ALWAYS constructed (not gated behind --hud/--mission) so the fire key
+    // works in every invocation, the same "the feature is live
+    // unconditionally" precedent the always-on near-field traffic/ped
+    // population already sets elsewhere in this function. When --hud/
+    // --mission ALSO built a Host (hudEs non-null just above), that SAME
+    // EngineState is reused instead of a second, disconnected one - one
+    // world state, not two.
+    sr3luahost::EngineState standaloneCombatEs;
+    sr3luahost::EngineState& combatEs = hudEs ? *hudEs : standaloneCombatEs;
+    sr3luahost::EngineStateLethalDamageSink bradDamageSink(combatEs, "player");
+    // Per-ped last-known gunfire reaction (THIS TASK) - sr3airuntime::
+    // PedReactionMode has no existing storage field on NearFieldPed itself
+    // (near_field_ped_population.h's own struct carries only the CALLER-
+    // supplied facts EvaluateGunfireReaction() reads, not an output slot -
+    // see that header's own Sec20.4 block) and nothing in this codebase
+    // currently consumes a computed PedReactionMode into movement/AI state
+    // either (confirmed: no other call site references PedReactionMode
+    // outside near_field_ped_population.h's own tests) - this map is this
+    // task's OWN observability-only side table, not a new modelled engine
+    // field, so the real decision (ChooseFleeOrCower/EvaluateGunfireReaction,
+    // both already spec-confirmed and unit-tested) is exercised for real
+    // without this task inventing a flee-movement system to consume it (see
+    // this function's own "WEAPON FIRE" doc comment above runPlaytest() for
+    // the honest statement of this exact gap).
+    std::unordered_map<uint64_t, sr3airuntime::PedReactionMode> nearFieldPedReaction;
+    bool prevFireDown = false;
+
     std::map<size_t, std::unique_ptr<CityLoadedCell>> loaded;
     std::map<std::pair<int, int>, std::unique_ptr<CityGroundTile>> groundTiles;
     size_t totalLoads = 0, totalEvicts = 0;
@@ -20569,6 +20985,12 @@ int runPlaytest(int argc, char** argv) {
     // to actually populate its own slot table before the scripted disarm.
     const int kScriptRoadblockArmFrame = 20;
     const int kScriptRoadblockDisarmFrame = 280;
+    // --script-fire (THIS TASK, playtest-weapon-fire-wiring): a single
+    // deterministic left-click, scheduled late enough that the always-on
+    // near-field ambient-pedestrian spawner (kNearFieldPedTickMinMs/MaxMs,
+    // 200-300ms real-time ticks) has had many ticks to populate at least
+    // one live ped before the shot fires.
+    const int kScriptFireFrame = 60;
 
     // ===================== VEHICLE OCCUPANT VISIBILITY (THIS TASK, 2026-10-09) =====================
     // Replaces the prior task's own blanket "character pauses/hides while in a vehicle"
@@ -20813,6 +21235,12 @@ int runPlaytest(int argc, char** argv) {
         // just above - see the "POLICE ROADBLOCK ARM/DISARM" block right
         // after the vehicle entry/exit block below.
         bool roadblockKeyDownNow = false;
+        // fireKeyDownNow (THIS TASK): same "populated by both branches,
+        // edge-triggered after the if/else" shape as vehEDownNow/
+        // roadblockKeyDownNow above - see the "WEAPON FIRE" block, further
+        // below, right after the follow-camera's real eye/forward is
+        // computed for this frame.
+        bool fireKeyDownNow = false;
         if (!noInput) {
             // SUBSTITUTION 1 (live): real WASD + Shift, same GetAsyncKeyState polling shape
             // as runScene()'s own fly camera, applied to the move-input seam instead.
@@ -20829,6 +21257,11 @@ int runPlaytest(int argc, char** argv) {
             vehEDownNow = vehicleEnabled && (GetAsyncKeyState('E') & 0x8000) != 0;
             tDownNow = (GetAsyncKeyState('T') & 0x8000) != 0;
             roadblockKeyDownNow = (GetAsyncKeyState('R') & 0x8000) != 0;
+            // Left mouse button fires Brad's weapon (THIS TASK) - unused by
+            // anything else in this file's playtest command (mouse motion
+            // already drives look via the recentre block just below; no
+            // other code here reads VK_LBUTTON).
+            fireKeyDownNow = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
             // Real mouse deltas, poll-and-recentre - only while the window actually has
             // focus (never yanks the user's cursor around if they alt-tab away).
@@ -20878,6 +21311,10 @@ int runPlaytest(int argc, char** argv) {
             // kScriptRoadblockDisarmFrame declarations above the main loop.
             roadblockKeyDownNow =
                 scriptRoadblock && (frames == kScriptRoadblockArmFrame || frames == kScriptRoadblockDisarmFrame);
+            // --script-fire (THIS TASK): a single deterministic left-click -
+            // see kScriptFireFrame's own declaration (near kScriptRoadblock*
+            // above the main loop) for the exact frame.
+            fireKeyDownNow = scriptFire && frames == kScriptFireFrame;
         }
 
         // ===================== VEHICLE ENTRY/EXIT (THIS TASK) =====================
@@ -21235,12 +21672,181 @@ int runPlaytest(int argc, char** argv) {
                                 static_cast<float>(cam.up.z)};
         const float camForward[3] = {static_cast<float>(cam.forward.x), static_cast<float>(cam.forward.y),
                                      static_cast<float>(cam.forward.z)};
+
+        // ---- FOOTSTEP-CADENCE SFX TRIGGER (THIS TASK, audio-playback) ------------------
+        // "Moving on foot" is read straight off moveSrc's own two walk axes - the SAME
+        // live-WASD/--no-input-scripted values PlayerMovement itself already consumes
+        // every frame (no separate "isWalking" flag exists anywhere in this project to
+        // reuse instead, so this reads the one real input signal that IS already here).
+        // Emitter = pm.st.position (spec-audio-runtime.md Sec11a.1's own emitter-position
+        // producer, the real player-character position); listener = cam.position (the
+        // follow camera's committed position - Sec11a.2's own listener producer is fed
+        // from an unlocated camera/view source upstream in the real game, OPEN per that
+        // section; this demo's own follow camera is the closest real stand-in this tool
+        // has). See audio_output_device.h's own playOneShot3D() doc comment for exactly
+        // why the computed distance is logged but NOT used to attenuate volume.
+        if (audioReady && footstepClip.valid) {
+            audioDevice.pump();  // reap finished one-shot voices before this frame's own submit attempt
+            const bool movingOnFoot = (std::fabs(moveSrc.A) > 0.05f || std::fabs(moveSrc.B) > 0.05f);
+            if (movingOnFoot) {
+                ++framesSinceLastFootstep;
+                if (framesSinceLastFootstep >= kFootstepCadenceFrames) {
+                    framesSinceLastFootstep = 0;
+                    const float emitterPos[3] = {static_cast<float>(pm.st.position.x),
+                                                  static_cast<float>(pm.st.position.y),
+                                                  static_cast<float>(pm.st.position.z)};
+                    double distance = 0.0;
+                    std::string playError;
+                    if (audioDevice.playOneShot3D(footstepClip.decoded, /*volume=*/0.6f, emitterPos, camEye,
+                                                   playError, &distance)) {
+                        ++footstepsTriggered;
+                        if (footstepsTriggered <= 5 || footstepsTriggered % 20 == 0) {
+                            std::printf(
+                                "footstep-sfx: #%llu frame=%d emitter-listener distance=%.2fm "
+                                "(logged only, see playOneShot3D doc comment - NOT attenuating volume)\n",
+                                static_cast<unsigned long long>(footstepsTriggered), frames, distance);
+                        }
+                    }  // a transient failure (e.g. voice pool momentarily full) is silently
+                       // skipped for this one cadence tick, same as a real missed footstep cue -
+                       // not fatal, not worth spamming stderr every tick for.
+                }
+            } else {
+                framesSinceLastFootstep = 0;  // reset cadence on stop, same as a real walk-cycle would
+            }
+        }
+
         const float fovY = static_cast<float>(cam.fov * 3.14159265 / 180.0);
         const float aspect = static_cast<float>(swapChain.width()) / static_cast<float>(swapChain.height());
         buildViewProjectionFromCamera(camEye, camRight, camUp, camForward, fovY, aspect, 0.5f, farZ, viewProjection);
         diagEyeX = static_cast<float>(cam.position.x);
         diagEyeY = static_cast<float>(cam.position.y);
         diagEyeZ = static_cast<float>(cam.position.z);
+
+        // ===================== WEAPON FIRE (THIS TASK) =====================
+        // Edge-triggered (fireEdge && !prevFireDown), same debounce shape as
+        // vehEEdge/tEdge/roadblockEdge above - a held button fires exactly
+        // once, not every frame. On-foot only (inVehicle's own branch, this
+        // `if`): vehicle-mounted weapons never fire through this dispatch at
+        // all anyway (sr3weapons::kVehicleWeaponClass's own CONFIRMED short-
+        // circuit, weapon_fire.h), and the chase-cam ELSE branch below has no
+        // equivalent eye/forward ray to aim from.
+        //
+        // THE REAL CALL CHAIN this fires (see this command's own top
+        // "WEAPON FIRE" doc comment for the full citation): the live follow-
+        // camera's own just-computed eye (camEye)/forward (camForward) -
+        // ALREADY the real mouse-look/movement-row basis this frame's
+        // animation/physics were just driven from above, not a separately
+        // invented aim model - feeds sr3weapons::WeaponInstance::fire()
+        // (already-merged feature/hitscan-fire-dispatch), which runs the
+        // real CONFIRMED dispatch body (refire-delay/vehicle-class/refuse
+        // gates, ammo decrement) and then the CHOSEN hitscan wiring
+        // (CastHitscanRay() against the always-on near-field ambient-
+        // pedestrian population, built fresh below from their own live
+        // positions) - a hit calls bradDamageSink.applyLethalHit(), which
+        // routes into the real EngineState::applyGuaranteedLethalHit()
+        // (spec-player-runtime.md Sec15.3a: force-snaps health to 0 when
+        // known, sets isDeadHighConfidence, then the real death-transition/
+        // ragdoll-or-finalize tail, finalizeLethalCharacter()).
+        const bool fireEdge = fireKeyDownNow && !prevFireDown;
+        prevFireDown = fireKeyDownNow;
+        if (fireEdge && bradWeapon) {
+            sr3player::Vec3 fireOrigin{static_cast<double>(camEye[0]), static_cast<double>(camEye[1]),
+                                        static_cast<double>(camEye[2])};
+            sr3player::Vec3 fireDir{static_cast<double>(camForward[0]), static_cast<double>(camForward[1]),
+                                     static_cast<double>(camForward[2])};
+            // --script-fire TEST-ONLY convenience: a scripted camera's own
+            // forward ray has no guarantee of actually intersecting any
+            // near-field ped's randomized live position, so under --no-input
+            // the deterministic shot is aimed directly at the nearest live
+            // ped instead - a test-harness aiming convenience, NOT part of
+            // the real fire path (live LMB play above ALWAYS uses the real,
+            // unmodified camera-forward ray).
+            if (noInput && scriptFire && !nearFieldPedsLive.empty()) {
+                const sr3airuntime::NearFieldPed* nearest = nullptr;
+                double bestDistSq = 0.0;
+                for (const auto& nfp : nearFieldPedsLive) {
+                    const double dx = nfp.pos.x - fireOrigin.x, dz = nfp.pos.z - fireOrigin.z;
+                    const double d2 = dx * dx + dz * dz;
+                    if (!nearest || d2 < bestDistSq) { nearest = &nfp; bestDistSq = d2; }
+                }
+                fireDir = sr3player::Vec3{nearest->pos.x - fireOrigin.x, nearest->pos.y + 0.9 - fireOrigin.y,
+                                           nearest->pos.z - fireOrigin.z};
+            }
+
+            // Build a fresh HitscanTarget per currently-live near-field ped
+            // (THIS TASK's own CHOSEN per-ped box, weapon_fire.h's own
+            // documented stand-in geometry - see HitscanTarget's own doc
+            // comment for why: no `.clmesh_pc`/ragdoll-capsule shape is
+            // ported here). +0.9m: CHOSEN rough torso height above
+            // NearFieldPed::pos (the SAME ground-anchored position the near-
+            // field ped DRAW loop just above this function's main loop
+            // already passes to buildWorldMatrix() at y=finalGroundY,
+            // unmodified) - not a measured real capsule offset.
+            std::vector<sr3weapons::HitscanTarget> targets;
+            std::unordered_map<std::string, bool> beforeDeadMap;
+            targets.reserve(nearFieldPedsLive.size());
+            for (const auto& nfp : nearFieldPedsLive) {
+                sr3weapons::HitscanTarget t;
+                t.name = "nearfieldped_" + std::to_string(nfp.id);
+                t.center = sr3player::Vec3{nfp.pos.x, nfp.pos.y + 0.9, nfp.pos.z};
+                targets.push_back(t);
+                // "Before" snapshot (diagnostic only) - hasCharacter() does
+                // NOT auto-create (unlike getOrCreateCharacter()), so a ped
+                // never hit before stays correctly absent from combatEs.
+                beforeDeadMap[t.name] =
+                    combatEs.hasCharacter(t.name) && combatEs.characters().at(t.name).isDeadHighConfidence;
+            }
+            const double maxRange = bradWeaponDef.rangeMax.present ? static_cast<double>(bradWeaponDef.rangeMax.value)
+                                                                    : 1000.0;  // CHOSEN fallback - see
+                                                                               // WeaponInstance::fire()'s own doc
+                                                                               // comment (ordinarily def.rangeMax)
+            sr3weapons::WeaponInstance::FireOutcome outcome = bradWeapon->fire(
+                static_cast<double>(nowMsAccum), fireOrigin, fireDir, maxRange, targets, &bradDamageSink);
+            std::printf("[fire] frame %d: reachedItemUse=%d soundSelected=%d roundsAfter=%d refireGateBlocked=%d "
+                        "hit=%d target='%s' damageApplied=%d\n",
+                        frames, outcome.reachedItemUse, static_cast<int>(outcome.soundSelected),
+                        outcome.roundsInClipAfter, outcome.refireGateBlocked, outcome.hitDetected,
+                        outcome.hitTargetName.c_str(), outcome.damageApplied);
+            if (outcome.hitDetected) {
+                const bool beforeDead =
+                    beforeDeadMap.count(outcome.hitTargetName) ? beforeDeadMap[outcome.hitTargetName] : false;
+                const bool afterDead = combatEs.hasCharacter(outcome.hitTargetName) &&
+                                       combatEs.characters().at(outcome.hitTargetName).isDeadHighConfidence;
+                std::printf("[fire] hit '%s' - isDeadHighConfidence before=%d after=%d\n",
+                            outcome.hitTargetName.c_str(), beforeDead, afterDead);
+
+                // The real gunfire-to-flee reaction chain (spec-ai-runtime.md
+                // Sec20.4, sr3airuntime::EvaluateGunfireReaction/
+                // ChooseFleeOrCower - already spec-confirmed/unit-tested,
+                // reused as-is here, not reimplemented). team=
+                // kCivilianTeamByte is a CHOSEN input FACT, not new flee
+                // logic: NearFieldPed::team stays at its own documented -1
+                // "never set" sentinel everywhere else in this codebase
+                // (near_field_ped_population.h's own file header) - every
+                // near-field ambient ped is already modelled, project-wide,
+                // as a plain civilian (the draw loop's own comment: "every
+                // ambient pedestrian currently looks like the same character
+                // model"), so this is this task's own honest completion of
+                // that one caller-supplied fact, not a fabricated team
+                // assignment. isLethalOrAttacked=true: a hitscan hit is the
+                // "attacked" case (Sec20.4 kind 12), not merely "heard
+                // gunfire" (kind 76).
+                for (const auto& nfp : nearFieldPedsLive) {
+                    if ("nearfieldped_" + std::to_string(nfp.id) != outcome.hitTargetName) continue;
+                    sr3airuntime::NearFieldPed facts = nfp;
+                    facts.team = sr3airuntime::kCivilianTeamByte;
+                    const sr3airuntime::GunfireReactionResult reaction =
+                        sr3airuntime::EvaluateGunfireReaction(facts, /*isLethalOrAttacked=*/true);
+                    nearFieldPedReaction[nfp.id] = reaction.mode;
+                    std::printf("[fire] ped id=%llu reaction mode=%d (0=None,1=GunfireWary,2=Cower,3=Flee,4=Panic) "
+                                "spokeLineOnly=%d - NOTE: this codebase has no existing movement/AI consumer for "
+                                "this mode yet (observability only, see this block's own doc comment)\n",
+                                static_cast<unsigned long long>(nfp.id), static_cast<int>(reaction.mode),
+                                reaction.spokeLineOnly);
+                    break;
+                }
+            }
+        }
         } else {
         // ---- DRIVING: simple chase-cam (CHOSEN, same formula as
         // runDriveDemo()'s own simplified trailing camera) around the
@@ -22271,6 +22877,18 @@ int runPlaytest(int argc, char** argv) {
                     pm.st.position.y, pm.st.position.z, pm.st.locomotionState, nearFieldLive.size(),
                     sr3airuntime::kNearFieldVehicleCap, roadblockDriver.armed ? 1 : 0, roadblockFilledFinal,
                     roadblockSlots.size());
+    }
+    // AUDIO verification summary (THIS TASK) - the "you can't literally hear it, verify
+    // what you can" ask: real buffers actually submitted, bytes, and how many footstep-
+    // cadence triggers fired vs. how many frames the player spent moving. audioDevice's
+    // own destructor (end of this function's scope) does the real device/voice teardown -
+    // nothing further to do here.
+    if (audioReady) {
+        std::printf("audio    : %llu buffers submitted (%llu bytes), %llu footstep-cadence triggers, "
+                    "%zu voice(s) still active at exit\n",
+                    static_cast<unsigned long long>(audioDevice.buffersSubmittedTotal()),
+                    static_cast<unsigned long long>(audioDevice.bytesSubmittedTotal()),
+                    static_cast<unsigned long long>(footstepsTriggered), audioDevice.activeVoiceCount());
     }
     return 0;
 }
