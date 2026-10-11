@@ -340,7 +340,7 @@ MainMenuFlow::NewGameResult MainMenuFlow::newGame(bool networkModuleUp, int32_t 
 }
 
 MainMenuFlow::NewGameResult MainMenuFlow::hordeStart(bool networkModuleUp, int32_t currentUiScreenCode) {
-    // `0x006e6630`: DAT_014f3d34 := 1, DAT_014f3d2c := 0, then tail-calls the
+    // `0x006e6630`: 0x014f3d34 := 1, 0x014f3d2c := 0, then tail-calls the
     // IDENTICAL routine new game uses.
     hordeFlag_ = true;
     return runSharedNewGameRoutine(networkModuleUp, currentUiScreenCode, "sr3_city");
@@ -381,7 +381,7 @@ MainMenuFlow::ContinueResult MainMenuFlow::continueGame(const std::vector<SaveSl
     }
     out.slotAvailable = true;
     out.selectedPath = best->path;
-    // Sec3 steps 5+7: FUN_00b95210 ("step 1. request") / FUN_00b947a0
+    // Sec3 steps 5+7: 0x00b95210 ("step 1. request") / 0x00b947a0
     // ("step 3a. apply") - save_game_bridge.h's own already-real
     // loadSaveSnapshotFile() performs both synchronously, so there is no
     // separate per-frame-pending phase to model here (step 7's own "per-

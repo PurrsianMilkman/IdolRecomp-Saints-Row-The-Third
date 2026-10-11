@@ -326,7 +326,7 @@ void testAudioPersona() {
     CHECK(rows[0].DeriveGenderFromName() == 1 && rows[0].DeriveEthnicityFromName() == 1 && rows[0].DeriveAgeFromName() == 1);
 
     // Regression test for the §6 2026-10-01 correction: the demographic suffix search must use the FULL Name
-    // text (FUN_00EA48B0 given the full Name, CONFIRMED - disassembly), not the 0x20-byte-bounded record copy -
+    // text (0x00ea48b0 given the full Name, CONFIRMED - disassembly), not the 0x20-byte-bounded record copy -
     // a Name longer than 31 bytes whose suffix falls beyond that bound must still resolve correctly.
     {
         const std::string longName = std::string(35, 'x') + "_WM";  // 38 chars; "_WM" starts at index 35, past
@@ -394,7 +394,7 @@ void testFoleyTouch() {
     // spec 9, CORRECTED 2026-10-01: Frequency is the "always" reader, not "if-present".
     CHECK(rows[0].frequency.present && rows[0].frequency.value == 7u);
     CHECK(rows[0].wwiseSwitch.has_value() && *rows[0].wwiseSwitch == "door_switch");
-    // spec 1.3 item 2 / 9: the ONE table whose Name hash is CASE-SENSITIVE (FUN_00D9E7E0), unlike every sibling.
+    // spec 1.3 item 2 / 9: the ONE table whose Name hash is CASE-SENSITIVE (0x00d9e7e0), unlike every sibling.
     CHECK(rows[0].NameHash() == sr3xtbl::NameHashCaseSensitive("Door"));
     CHECK(rows[0].NameHash() != sr3xtbl::NameHash("Door"));  // the lower-casing engine hash disagrees on mixed case
 }

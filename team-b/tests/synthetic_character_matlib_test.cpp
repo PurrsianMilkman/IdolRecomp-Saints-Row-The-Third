@@ -1,8 +1,8 @@
 // Synthetic tests for sr3geometry::ResolveCharacterMatlibAttachment() /
 // CharacterMatlibAttachment (spec-tables-customization.md §12.1b - the real
 // per-identity matlib RESOLUTION/ATTACHMENT mechanism, traced end to end
-// from the executable: FUN_00da8790 filename-compose -> FUN_00da90d0
-// exists-check -> FUN_006f6c20/FUN_006f7330 attach-as-a-typed-(0x16)-slot
+// from the executable: 0x00da8790 filename-compose -> 0x00da90d0
+// exists-check -> 0x006f6c20/0x006f7330 attach-as-a-typed-(0x16)-slot
 // keyed by the identity's own Name).
 //
 // These fixtures build synthetic MaterialBlock-shaped buffers from scratch
@@ -63,7 +63,7 @@ std::vector<uint8_t> buildMatlib(const std::vector<std::string>& names) {
     return b;
 }
 
-// FUN_00da8790: "strip extension, append the platform-selected one."
+// 0x00da8790: "strip extension, append the platform-selected one."
 void testComposeMatlibFileName() {
     CHECK(sr3geometry::ComposeMatlibFileName("brad_head") == "brad_head.matlib_pc");
     CHECK(sr3geometry::ComposeMatlibFileName("brad_head.ccmesh_pc") == "brad_head.matlib_pc");
@@ -98,10 +98,10 @@ void testBradMatlibResolvesNamedTypeTaggedKeyedByIdentity() {
     // real call sites.
     CHECK(static_cast<uint32_t>(a.type) == 0x16u);
     CHECK(a.type == sr3geometry::CharacterResourceType::kMatlib);
-    // Filename-composed (FUN_00da8790) from the base resource name, not the
+    // Filename-composed (0x00da8790) from the base resource name, not the
     // identity string itself and not the LOD mesh name.
     CHECK(a.composedFileName == "brad_head.matlib_pc");
-    // Existence-checked (FUN_00da90d0) and attached as its own typed slot -
+    // Existence-checked (0x00da90d0) and attached as its own typed slot -
     // not spliced into any mesh's material table (this function never even
     // receives one).
     CHECK(a.locatedInArchive);
@@ -141,7 +141,7 @@ void testDifferentIdentityKeyedSeparately() {
     CHECK(a.resource.textureNames[0] == "shaundi_sm_head_d.tga");
 }
 
-// FUN_00da90d0's negative case: the composed file genuinely does not exist
+// 0x00da90d0's negative case: the composed file genuinely does not exist
 // in the archive. Resolution still runs (compose always produces a
 // definite name); attachment does not.
 void testNotFoundIsNotAttached() {

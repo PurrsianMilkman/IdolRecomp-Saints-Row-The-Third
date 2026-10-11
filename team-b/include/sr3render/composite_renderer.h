@@ -29,13 +29,13 @@
 // Sec12.1e left open, as of its 2026-10-08 continuation pass - nothing
 // below is still being narrowed; all three points (Q1/Q2/Q3) are settled:
 //   a. Q2 (the mesh-bind instruction) - CLOSED: THERE ISN'T ONE, AND NEVER
-//      WAS ONE TO FIND. `DAT_026530F0` (the scratch global 0x009FC110's
+//      WAS ONE TO FIND. `0x026530f0` (the scratch global 0x009FC110's
 //      constructor caches the composite material handle into) has exactly
-//      one reader, inside `FUN_009FAD60`: a `PUSH <handle> -> CALL
-//      FUN_00E3EBB0 (set per-thread "current material override") -> one
+//      one reader, inside `0x009fad60`: a `PUSH <handle> -> CALL
+//      0x00e3ebb0 (set per-thread "current material override") -> one
 //      virtual call (the compositing quad's OWN draw) -> PUSH 0xFFFF ->
-//      CALL FUN_00E3EBB0 (restore the sentinel)` sequence. `FUN_00E3EBB0`/
-//      its getter `FUN_00E3EBE0` are generic, engine-wide save/override/
+//      CALL 0x00e3ebb0 (restore the sentinel)` sequence. `0x00e3ebb0`/
+//      its getter `0x00e3ebe0` are generic, engine-wide save/override/
 //      draw-one-thing/restore infrastructure (18 callers, several unrelated
 //      effects) - NOT character- or mesh-specific in any way. The composite
 //      material is bound ONLY for the duration of this one internal draw
@@ -46,7 +46,7 @@
 //      unwired, now-CONFIRMED-unreachable stub (not a placeholder awaiting
 //      a future finding).
 //   b. Q1 (singleton vs. per-instance) - CONFIRMED: the three owning
-//      globals (DAT_02653340/DAT_026532C0/DAT_02653300) ARE genuine C++
+//      globals (0x02653340/0x026532c0/0x02653300) ARE genuine C++
 //      static-duration singletons (full MSVC static-init idiom traced),
 //      fed each frame by a 2-entry "PCR" (player-character-record) slot
 //      pool (stride 0x270, exactly 2 slots - the engine's 2-player split-
@@ -268,7 +268,7 @@ bool BuildCharacterSkinComposite(ID3D11Device* device, ID3D11DeviceContext* cont
 // Sec12.1e point 4/5 found a real, content-hash-deduplicated material pool
 // registration for the composited result ("a concrete, structurally
 // plausible candidate for what a render entity would bind to"). Sec12.1f
-// Q2 traced that registration's own scratch-global cache (`DAT_026530F0`)
+// Q2 traced that registration's own scratch-global cache (`0x026530f0`)
 // to its sole reader and confirmed the composite material is pushed as a
 // generic per-thread "current material override", used for exactly ONE
 // internal draw call (the compositing quad's own draw), then popped back

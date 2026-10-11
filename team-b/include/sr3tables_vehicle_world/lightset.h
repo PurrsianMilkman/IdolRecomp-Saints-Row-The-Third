@@ -6,12 +6,12 @@
 // tables.h; see that file's banner for the shared conventions and the
 // cleanroom sourcing statement (spec-tables-vehicle-world.md ONLY).
 //
-// spec 11.1 is explicit that the disassembly-confirmed record (FUN_00598160)
+// spec 11.1 is explicit that the disassembly-confirmed record (0x00598160)
 // is the RUNTIME ACTIVATION pass, not the XML-sourced row - it is not
 // modelled here at all. What IS modelled is spec 11.2's element vocabulary,
 // which is CONFIRMED - EMPIRICAL (one of this spec's own top-tier confidence
 // ratings, spec's Confidence key) even though no byte offset was ever
-// recovered for it (the real per-field reader, inside FUN_005984c0, was not
+// recovered for it (the real per-field reader, inside 0x005984c0, was not
 // decompiled - spec 23 item 2). A confirmed element vocabulary is enough to
 // write a correct XML->struct reader without needing a byte offset for
 // anything, so this table is implemented essentially in full despite being

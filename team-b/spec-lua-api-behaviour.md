@@ -906,6 +906,32 @@ destructor write site). The separate `0x2243` "Interior triggers" `0x90`-byte re
 (prior pass); this pass's own raw Ghidra reads were not saved to a separate scratchpad file — the
 splice above is the full record of what was found.
 
+**Follow-up, 2026-10-10** (part of the walk-in-store-open investigation, `spec-store-runtime.md`
+§6 item 1): the registrar for the `0x026232a8` array's `+0x14`/`+0x18` native function-pointer
+fields, left unidentified by the prior pass, is `0x0093afe0(slotIndex, handlerStruct*)` — 14 real
+call sites covering slots `0,3,4,5,6,8,9,10,11,12,13,14,18,19` (slot `0xf`/15 is explicitly,
+unconditionally skipped by the registrar itself; slots `1,2,7,16,17` are never registered, both
+fields null). Decompiling the resulting handlers confirms the section's own "most plausibly a
+default/shared row 0" working hypothesis: slot 0's handlers (`0x00a1feb0`/`0x00a1ff10`) are
+exactly the generic Lua enter/exit-hook trampoline, both calling the already-documented
+`0x00a1fe10` hook-name resolver. Three other handlers (`0x005f0770`, `0x00a02dc0`, `0x006d47b0`)
+share a distinct shape: they read the trigger handle's own `+0xe8`/`+0xec` as a combined 64-bit
+value, resolve it via the same generic name-hash object lookup already confirmed for mission-
+marker self-identity resolution (`0x00458230`, kind-tag `0x031d152c`, singleton `0x024433a8`),
+gate on a disabled-bit and a class-capability-table check, and on success call the shared
+screen-push dispatcher with a fixed code (`0x33`) rather than a variable document name —
+independently corroborated by `spec-frontend-menu-runtime.md`'s own characterization of that code
+as "a world-interact-trigger popup." This demonstrates `+0xe8`/`+0xec` is read as a type-
+overloaded raw 8-byte payload by at least four distinct native handlers (a fourth, slot 18's
+light-group handler, treats the same two fields as an array pointer+count) — not uniformly as the
+authored `trigger_action_param` string the class-level tail-property parser (`0x0093e520`) writes
+there for every `Trigger_Volume`. The real `triggers.xtbl` content was also recovered this pass
+(`tools/as_base_xtbl/triggers.xtbl`, 20 real rows): a dedicated `Entries:Stores` category exists
+(`store ownership`, `player creation`, `garage mechanic`), confirming the data-side shape of a
+walk-in-store action type, but no native handler traced reads `+0xe8` as a document-name string —
+whether that string is consumed as-authored by some handler not covered this pass, or is instead
+rehashed/reinterpreted per action-type before any native handler sees it, is OPEN.
+
 ## 2. Platform/audio/input/UI-utility cluster — 10 functions, ranked by real script-call count (peer census)
 
 **Review status summary (2026-09-30):** adversarial desk review of the 13 units of §2 (scope note, primitive note, 2.1-2.11): 3 DESK-PASS (primitive note, 2.1, 2.6), 4 DESK-PASS with text fixes applied (scope note, 2.8, 2.9, 2.11), 6 NEEDS-EXE (2.2, 2.3, 2.4, 2.5, 2.7, 2.10; text fixes also applied in 2.3, 2.5 and 2.7). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-bindings-lua1-2.json`) is read.
@@ -11991,6 +12017,22 @@ Third part of the fresh four-part "ranks 451-550" tranche's own UI side (Part C)
 
 **Side effects/subsystem:** in-game weapon store — purchases (grants) a specific weapon identified by (category, index), with a preview-only fast path and a floating cost/scale value forwarded to the preview primitive; drives an achievement-completion check when the weapon was already owned. **[CONFIRMED — disassembly for the category table, the ownership-branch structure, the 1-argument grant call, and the literal achievement opcode; HIGH CONFIDENCE for 0x00816f00's exact role; OPEN — 0x005ee650/0x00816f00's own full internals.]**
 
+**Correction, cash-charge step located (re-derived from the executable 2026-10-10, full raw
+disassembly of both this function and its own callee `0x00816f00`):** the real-purchase branch's
+two calls into `0x00816f00` are not a pure "preview/toggle" helper — that function is dual-mode on
+its own second argument (0 = real purchase, 1 = preview-only), and this native's real-purchase
+call site passes mode 0 together with the 4th (price) argument. Inside `0x00816f00`'s mode-0,
+non-"satchel" path, the price is negated, scaled to a fixed-point cents-style unit, clamped, and
+handed to the shared cash-adjust delegate `0x0094d920` with the literal reason code `0xb` — the
+identical call shape `pcr_purchase_tattoo` (§43.3) already uses to charge cash, and the same
+family `cash_add` (§18.1) uses with reason `13`. For a resolved item whose name is literally
+`"satchel"`, `0x00816f00` instead routes the charge through `0x00816430`, the same tail-callee
+`store_weapon_purchase_ammo` (§38.3) calls with its own price argument. The "grant weapon" call
+(`0x005ee630`) remains confirmed price-free — a 19-byte function that only sets an ownership bit
+on the weapon record, gated by an unrelated global flag. **CONFIRMED — disassembly of both
+`0x008172d0` and `0x00816f00` in full: this native does charge the player's cash on a real
+purchase, via `0x00816f00`'s own internal mode-0 branch, not via the grant call.**
+
 ### 26.8 `store_dlc_make_purchase` (0x007c5b30) — 311-entry UI-wrapper table, wrapper 0x007c5ba0
 
 **Arguments:** 1 mandatory number (a DLC id) — **read but never actually used.** **Return:** 1 number (always 0.0).
@@ -15547,6 +15589,58 @@ This tranche's crash pattern continues tranche 09/11's theme but adds two new in
 
 **Review status (2026-10-02):** all 25 names in tranche 13 resolved and written up (§45.1-§45.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the flee-order flag bits and byte constants (§45.1); who reads `+0x1c9c` bit 9, dialog `+0x11c`, and `0x013c9382`; the cellphone activity-record state-machine details and the second callback name's purpose (§45.4); whether any shipped mission actually triggers the Killbane logic defect (§45.5); whether `autil_hud_mayhem_init`'s repeated-call subscriptions are de-duplicated.
 
+### 45.8 Cellphone/saintsbook follow-ups (2026-10-10) — `cell_cheats_activate_cheat`,
+`sb_select_hitman_target`, `sb_select_chop_shop_vehicle`: all three bounds-checked, no crash
+shapes found
+
+Three names surfaced as unresolved native leads during the cellphone/phone-menu UI research
+(`spec-cellphone-menu-runtime.md` §6/§10), confirmed absent from Lua-side definitions (grepped
+all ~400 files of the extracted `interface.vpp_pc` Lua layer) and resolved as directly Lua-bound
+natives.
+
+**`cell_cheats_activate_cheat`** (`0x0083b600`, sub-registrar `0x0083b6e0`, alongside
+`cell_cheats_unlock_cheat` `0x0083b6ee`). Reads its cheat-index argument with an **unsigned
+bound check** against count global `0x014f71d0` into a pointer table at `0x014f6eb0` — negative
+values are safely rejected, unlike `cellphone_dial`'s own unbounded phone-book index (§45.4). It
+gates on a coop-disabled check (`0x00867830`/`0x008b6c60`, showing a
+`"CHEAT_DISABLED_IN_COOP"` dialog and aborting if either fires) and a confirmation-dialog flow
+(`"CELL_CHEAT_ACTIVIATE_DIALOG_HEADER"`/`_BODY"`, skipped if a global "already confirmed" flag is
+set or the cheat's own flag byte `+4` is clear), then hands the real toggle/apply logic to
+`0x0083af50`. That function flips the per-cheat state (`0x006f82a0`/`0x006f8280`/`0x006f91e0`/
+`0x006f9180`) and dispatches a `"cell_cheats_cheat_activated"` event through the same
+coroutine-call mechanism (`0x00e0ca80`) `cellphone_dial` uses — **but here the result IS
+null-checked before use**, a direct safety contrast with that native's own unchecked write
+(§45.4/§45.7). On success it also sends an unconditional network message (same
+no-host-gate pattern as §45.7's other entries; exact opcode not extracted). **No crash shape
+found** — a clean negative result. **OPEN:** whether the pointer table at `0x014f6eb0` is the
+same structure as `spec-tables-progression.md` §8's inline `0x84`-byte cheats.xtbl record array
+at `0x014F7228`, or a separate runtime index built from it — the flag-byte offsets read here
+(`+3`/`+4`) don't obviously line up 1:1 with that spec's documented `+0x02`/`+0x03` bytes.
+
+**`sb_select_hitman_target`** (`0x008403d0`, worker `0x006b0010` via trampoline `0x006b2010`,
+singleton `0x014c3390`) and **`sb_select_chop_shop_vehicle`** (`0x00840380`, worker `0x006a0190`
+via trampoline `0x006a1090`, singleton `0x014c1cf0`) — both in sub-registrar `0x00840420`
+alongside `sb_saintsbook_is_available` (`0x0084044e`). Both are real state-mutators (toggling a
+per-manager-singleton "active target" group/target-index pair), not queries, and both
+**fully bounds-check both indices with an unsigned compare against a live count before any
+address arithmetic** (group count/stride `this+0x35e8`/`0x7b0` for hitman, `this+0x798`/`0x180`
+for chop-shop; target count/stride at group`+0x7a8`/`0x118` vs. group`+0x1c`/`0x38`) — no
+unbounded-index or unchecked-dereference shape in either, unlike several other recently
+documented cellphone natives. Both correctly no-op on an uninitialized manager or an
+already-completed/taken entry (status-byte checks at target`+0x111` bit `0x20` for hitman,
+target`+0x36` for chop-shop), and both toggle off (deselect) when re-clicking the already-selected
+target. **The chop-shop worker adds a genuine gameplay rule the hitman worker lacks**: if an AI
+partner has already claimed a target (checked via `0x0069c4f0` against the manager's own recorded
+slot), selecting it pops a `"DIVERSION_CHOP_SHOP_PARTNER_TOOK_CONTRACT"` warning dialog and
+refuses, rather than silently failing. The hitman worker has its own side effect absent from
+chop-shop: when the selected target's own type tag equals `0x19` (25), it resolves an object and
+runs a HIGH-CONFIDENCE waypoint/blip-style effect (`0x009da4e0`→`0x009dac20`), consistent with the
+saintsbook sub-page's own GPS-target UI block (§10). **No crash shape found in either** — a clean
+negative result, both fully bounds-checked.
+
+**[CONFIRMED — disassembly for all three native bodies and both sub-registrars; no unbounded-index
+or unchecked-dereference crash shape found in any of the three.]**
+
 ## 46. Ranking tranche 14 — 25 previously-unspecced Lua-bound names (2026-10-02)
 
 **Source.** Job `D:\Project Crreish\TEAM A\ghidra\jobs\ranking\tranche-14.json` (names 276-300 of 554, Team B call-count order; full write-up in `review/exe-notes-2026-10-01/interp_ranking_tranche_14.md`). 23 names in the gameplay registrar `0x00a20840`; 2 under the UI registrar `0x008430f0` through two further new one-name sub-registrars (`whored_countdown_finished` via `0x006147c0`, `vint_options_remap_reset_bindings` via `0x007cdc00`) — both push the function pointer **before** the name, the same quirk tranche 13 first found, so the dumper's own "next slot" guess misses them and a `range` dump is required. Addresses below are CONFIRMED — disassembly unless marked otherwise.
@@ -16856,3 +16950,40 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   blocking `false` here is diverging on cutscene KIND, not frame timing — `zscene_is_loaded` must
   read `CutsceneType` and short-circuit to true for any non-Zscene name, exactly like retail.**
   Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — new §45.8: `cell_cheats_activate_cheat`/`sb_select_hitman_target`/
+  `sb_select_chop_shop_vehicle` resolved, all three bounds-checked, no crash shapes** (SPEC TEAM,
+  agent `a6d64fe32294cd9e6`). Three native leads surfaced during the cellphone/saintsbook UI
+  research (`spec-cellphone-menu-runtime.md` §6/§10). `cell_cheats_activate_cheat` (`0x0083b600`)
+  unsigned-bound-checks its cheat index and, unlike `cellphone_dial` (§45.4), null-checks its
+  coroutine-call result before use. `sb_select_hitman_target`/`sb_select_chop_shop_vehicle`
+  (`0x008403d0`/`0x00840380`) both toggle a per-manager-singleton target-selection pair with full
+  bounds-checking on both indices; the chop-shop variant adds a genuine gameplay rule (AI-partner-
+  claim rejection via a warning dialog) the hitman variant lacks. All three: a clean negative on
+  the crash-shape front. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
+
+- **2026-10-10 — §26.7 correction: `store_weapon_purchase_weapon` DOES charge cash, resolved one
+  call-graph level deeper** (SPEC TEAM, agent `a612799c38f12d7b8`). Re-derived `0x008172d0` and
+  its callee `0x00816f00` in full. The real-purchase branch calls `0x00816f00(weaponRecord,
+  mode=0, price)` unconditionally; that dual-mode helper's mode-0 branch charges the price through
+  the shared cash-adjust primitive `0x0094d920` (reason `0xb`), the same mechanism
+  `pcr_purchase_tattoo` (§43.3) uses and the same family as `cash_add`'s reason `13` (§18.1). A
+  "satchel"/thrown-weapon special case charges through `0x00816430` instead, the same primitive
+  `store_weapon_purchase_ammo` (§38.3) tail-calls into. The "grant weapon" call (`0x005ee630`)
+  remains confirmed price-free — the earlier write-up's gap was never reading inside
+  `0x00816f00`, which it had characterized as an opaque preview/toggle helper. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-10 — §1.14 follow-up: `0x026232a8`'s native-handler registrar found, every
+  registered handler decompiled — none opens a store, honest negative on that specific
+  hypothesis** (SPEC TEAM, agent `a22eefdc9e0e38dbf`). Registrar is `0x0093afe0`, 14 real call
+  sites covering 14 of 20 slots. Slot 0's handlers are the generic Lua on_trigger/on_trigger_exit
+  trampoline (confirms the section's own "default/shared row 0" hypothesis). Three other handlers
+  surface a generic "press-to-use" UI prompt (screen code `0x33`) from a hash-pair read of
+  `+0xe8`/`+0xec`, not the authored `trigger_action_param` string — demonstrating that field is
+  type-overloaded per handler, not a universal document-name string. Real `triggers.xtbl`
+  content recovered (`tools/as_base_xtbl/triggers.xtbl`), confirming a dedicated `Entries:Stores`
+  category exists in the data even though no traced native handler consumes it as a document
+  name. Full detail: `spec-store-runtime.md` §6 item 1. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.

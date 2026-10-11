@@ -410,7 +410,7 @@ int main(int argc, char** argv) {
             }
         }
         // LABEL: spec-tables-audio-radio.md §6, [OPEN - desk review 2026-09-30]: case sensitivity of the
-        // suffix-match helper FUN_00EA48B0 is OPEN (never decompiled); our matcher is case-sensitive by assumption.
+        // suffix-match helper 0x00ea48b0 is OPEN (never decompiled); our matcher is case-sensitive by assumption.
         std::printf("  %zu rows; demographic-suffix matches: %lld (spec 6.1: 233/265, 88%%); age-token matches: %lld (spec 6.1: 84/265, 32%%)\n",
                     personas.size(), suffixMatch, ageMatch);
         for (auto& kv : suffixCounts) std::printf("    suffix %-4s x%lld\n", kv.first.c_str(), kv.second);
@@ -535,7 +535,7 @@ int main(int argc, char** argv) {
         std::printf("  %zu rows; Level values: %s(spec 13.1: exactly 8 rows, Levels 1..8)\n", activities.size(), levelsStr.c_str());
         GATE(activities.size() == 8, "REPRODUCES spec 13.1: exactly 8 rows against the loader's unchecked 8-slot bound: %zu", activities.size());
 
-        // spec 13, CORRECTED 2026-10-01: the denominator global DAT_012A2DD8 is now CONFIRMED as the constant
+        // spec 13, CORRECTED 2026-10-01: the denominator global 0x012a2dd8 is now CONFIRMED as the constant
         // 100.0 (was OPEN) - a reimplementation must store Percentage/100 (a fraction), placed by ROW ORDER, not
         // by Level. Reproduce spec 13.1's own raw values (1,2,3,5,10,15,20,25) -> fractions (0.01..0.25, sum
         // 0.81) against the REAL shipped row order.

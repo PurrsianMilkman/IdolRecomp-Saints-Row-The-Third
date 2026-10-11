@@ -15,14 +15,14 @@
 // ==========================================================================
 //
 // This reader's FIRST version (HANDOFF Sec9.59) could not size the region
-// `FUN_007499d0` resolves into header `+0xb8`, so it walked the file in three
+// `0x007499d0` resolves into header `+0xb8`, so it walked the file in three
 // disconnected parts and LOCATED the tail by trying every 8-aligned start and
 // keeping the ones whose walk happened to finish exactly at end-of-file.
 // That searched model reached 100,255 / 100,384 exact landings, at the cost
 // of a 4.3% multi-candidate ambiguity rate and 129 entries it could not
 // place at all.
 //
-// spec-physics-format.md Sec4.4.6 closed the gap: `thunk_FUN_00e3e590` is not
+// spec-physics-format.md Sec4.4.6 closed the gap: `0x00e3e590` is not
 // a reference resolver, it is a PARSER that lays a `0x50`-byte record down
 // inline at the 16-aligned cursor and then walks a material-set block and two
 // render-mesh groups after it. Every term of that region's byte length is
@@ -32,18 +32,18 @@
 // that. There is no search loop left, no candidate-layout count to report,
 // and the 129 unplaceable entries were search artifacts: they land.
 //
-//   HEAD    bodyStart() .. headEnd()      `FUN_007499d0`'s two 8-byte-stride
+//   HEAD    bodyStart() .. headEnd()      `0x007499d0`'s two 8-byte-stride
 //                                         slot arrays (`+0x48` -> `+0x40`,
 //                                         `+0x58` -> `+0x50`), then the
 //                                         count(+0x48) embedded Mesh
 //                                         sub-blocks, THEN the count(+0x58)
-//                                         index-list blocks (`FUN_00e401d0`).
-//   MIDDLE  middleOffset() .. middleEnd() `thunk_FUN_00e3e590`: the `0x50`-byte
+//                                         index-list blocks (`0x00e401d0`).
+//   MIDDLE  middleOffset() .. middleEnd() `0x00e3e590`: the `0x50`-byte
 //                                         record, the material-set block, the
 //                                         `materialCount x 8` lookup table,
 //                                         and two render-mesh groups.
-//   TAIL    tailStart() .. EOF            `FUN_00749b40` through
-//                                         `FUN_00749e80`'s trailing nested
+//   TAIL    tailStart() .. EOF            `0x00749b40` through
+//                                         `0x00749e80`'s trailing nested
 //                                         group, which ends EXACTLY at EOF.
 //
 // ==========================================================================
@@ -51,13 +51,13 @@
 // ==========================================================================
 //
 // 0. AN EMPTY ARRAY CONSUMES NOTHING *AND ALIGNS NOTHING* - for
-//    `FUN_00749c40`, `FUN_00749cf0`, `FUN_00749d40` and `FUN_00749e80`, which
-//    test their count before aligning. `FUN_00749b40` is the exception: it
+//    `0x00749c40`, `0x00749cf0`, `0x00749d40` and `0x00749e80`, which
+//    test their count before aligning. `0x00749b40` is the exception: it
 //    16-aligns UNCONDITIONALLY and only its array advance is conditional
 //    (Sec4.4.2(a) as amended by Sec4.4.6). Both halves are load-bearing and
 //    both are covered by the synthetic suite.
 //
-// 1. `FUN_00749e80`'S TRAILING NESTED GROUP IS `+0x108` FIRST, THEN `+0x100`.
+// 1. `0x00749e80`'S TRAILING NESTED GROUP IS `+0x108` FIRST, THEN `+0x100`.
 //    Sec4.2's prose introduces the parallel count array (`+0x100`) before the
 //    primary pointer array (`+0x108`); its own "Output slot(s)" column lists
 //    them the other way round, and the file agrees with the column:
@@ -76,11 +76,11 @@
 // 3. THE GATED `+0x78`/`+0x7c` PAIR HAS *THREE* OUTCOMES, NOT TWO, AND BOTH
 //    OF THE TWO THAT CONSUME BYTES ARE REAL FILE-RESIDENT DATA. Sec4.4.6(f)
 //    replaced this reader's original `kGatedPairBytes = 0` placeholder:
-//      * `+0x78 != -1`  -> `FUN_00748c70`: 16-align, then a block whose own
+//      * `+0x78 != -1`  -> `0x00748c70`: 16-align, then a block whose own
 //        `+0x08` u32 is its TOTAL BYTE SIZE; the cursor advances by that.
 //        Per-file, not a constant.
 //      * `+0x78 == -1` AND the flags byte at header `+0x08` has bit 2 set ->
-//        `FUN_00749ba0`: a real collision hull - vertex list, u16 index list,
+//        `0x00749ba0`: a real collision hull - vertex list, u16 index list,
 //        opaque blob, two vec3s. NOT the "builds a default, consumes nothing"
 //        reading Sec4.2 originally posed, which Sec4.4.6(f) REFUTES.
 //      * otherwise -> nothing at all, not even an alignment.
@@ -102,7 +102,7 @@
 //
 //    RELATED, AND NOT IN EITHER SPEC: `count(+0x48)`, `count(+0x58)` and
 //    `count(+0x70)` are the SAME NUMBER in 100,379 of 100,379 entries. Three
-//    sub-parsers sized by one quantity means FUN_00749b40's 56-byte records
+//    sub-parsers sized by one quantity means 0x00749b40's 56-byte records
 //    are one per resolved reference. What is IN a record stays OPEN.
 //
 // 5. THE HEADER'S FIRST `0x40` BYTES ARE REAL DATA, NOT JUST MAGIC+VERSION.
@@ -114,11 +114,11 @@
 // 6. BOTH SIDES OF A MESH SUB-BLOCK STEP BY ITS DECLARED c-LENGTH EXACTLY,
 //    WITH NO ROUNDING. Measured here first (HANDOFF Sec9.59: a roundUp16 step
 //    cost every reference after the first), then read out of
-//    `FUN_00e71410`'s own closing self-check by Sec4.4.6. The same step is
+//    `0x00e71410`'s own closing self-check by Sec4.4.6. The same step is
 //    used at the two MIDDLE call sites, where a roundUp16 costs 85.8% of the
 //    population.
 //
-// 7. `FUN_00749c40`'S 12-BYTE INNER ELEMENT IS A LOCAL-SPACE (x,y,z) FLOAT32
+// 7. `0x00749c40`'S 12-BYTE INNER ELEMENT IS A LOCAL-SPACE (x,y,z) FLOAT32
 //    POSITION - CONFIRMED, not merely a plausible reading. Both open readings
 //    Sec4.2 offered ("3 vertex/point indices" or "a small plane/face
 //    descriptor") were tested against the COMPLETE 258-file / 388-outer /
@@ -157,7 +157,7 @@
 //      - materialRecords() - the material record's `+0x00`/`+0x04` hashes,
 //        `+0x08` flags byte, and `+0x0C`/`+0x0E`/`+0x0F` array-length triple
 //        (transfers directly from spec-foliage-format.md Sec6's CONFIRMED
-//        layout - the same parser function, `FUN_00e71090`, reads it here).
+//        layout - the same parser function, `0x00e71090`, reads it here).
 //      - groupAFeatureIndices() - a `0x20`-byte sub-record's `+0x18` (u16),
 //        an index into the group's OWN resolved-mesh reference, not into
 //        anything inline here - read outside the three walkers, in the real
@@ -233,26 +233,26 @@ constexpr size_t kLevelMeshHeaderSize = 0x140;
 // read zero, which is why this reader reports offsets of its own rather than
 // trusting them.
 constexpr size_t kFlagsByte      = 0x08; // byte; bit 2 gates the collision hull
-constexpr size_t kCountRefA      = 0x48; // FUN_007499d0, array 1
+constexpr size_t kCountRefA      = 0x48; // 0x007499d0, array 1
 constexpr size_t kOutRefA        = 0x40;
-constexpr size_t kCountRefB      = 0x58; // FUN_007499d0, array 2
+constexpr size_t kCountRefB      = 0x58; // 0x007499d0, array 2
 constexpr size_t kOutRefB        = 0x50;
-constexpr size_t kOutSingleRefB8 = 0xb8; // FUN_007499d0's tail - the MIDDLE's `0x50`-byte record
-constexpr size_t kCount70        = 0x70; // FUN_00749b40
+constexpr size_t kOutSingleRefB8 = 0xb8; // 0x007499d0's tail - the MIDDLE's `0x50`-byte record
+constexpr size_t kCount70        = 0x70; // 0x00749b40
 constexpr size_t kOut68          = 0x68;
-constexpr size_t kPairFirst      = 0x78; // FUN_00748c70 / FUN_00749ba0 gate
+constexpr size_t kPairFirst      = 0x78; // 0x00748c70 / 0x00749ba0 gate
 constexpr size_t kPairSecond     = 0x7c;
-constexpr size_t kCount88        = 0x88; // FUN_00749c40, outer
+constexpr size_t kCount88        = 0x88; // 0x00749c40, outer
 constexpr size_t kOut90          = 0x90;
-constexpr size_t kCount98        = 0x98; // FUN_00749cf0
+constexpr size_t kCount98        = 0x98; // 0x00749cf0
 constexpr size_t kOutA0          = 0xa0;
-constexpr size_t kCountA8        = 0xa8; // FUN_00749d40
+constexpr size_t kCountA8        = 0xa8; // 0x00749d40
 constexpr size_t kOutB0          = 0xb0;
-constexpr size_t kCountD8        = 0xd8; // FUN_00749e80, flat array 1
+constexpr size_t kCountD8        = 0xd8; // 0x00749e80, flat array 1
 constexpr size_t kOutE0          = 0xe0;
-constexpr size_t kCountE8        = 0xe8; // FUN_00749e80, flat array 2
+constexpr size_t kCountE8        = 0xe8; // 0x00749e80, flat array 2
 constexpr size_t kOutF0          = 0xf0;
-constexpr size_t kCountFc        = 0xfc; // FUN_00749e80, trailing nested group
+constexpr size_t kCountFc        = 0xfc; // 0x00749e80, trailing nested group
 constexpr size_t kOutFcParallel  = 0x100;
 constexpr size_t kOutFcPrimary   = 0x108;
 
@@ -269,7 +269,7 @@ constexpr size_t kStrideFcPrimary  = 8;
 constexpr size_t kStrideFcParallel = 4;
 constexpr size_t kStrideFcInner    = 4;
 
-// ---- the MIDDLE: `thunk_FUN_00e3e590` (spec-physics-format.md Sec4.4.6) ----
+// ---- the MIDDLE: `0x00e3e590` (spec-physics-format.md Sec4.4.6) ----
 // The `0x50`-byte record the parser lays down at the 16-aligned cursor, and
 // which header `+0xb8` receives the address of. Every offset below is
 // CONFIRMED - disassembly (Sec4.4.6(b)/(d)). `+0x24` and `+0x34` are
@@ -301,7 +301,7 @@ constexpr size_t kStrideMidTrailer  = 0x34;
 constexpr size_t kGroupASubFeatureIndex = 0x18;
 constexpr size_t kGroupBInnerFeatureIndex = 0x02;
 
-// Sec4.4.6(h), CONFIRMED - disassembly (`FUN_00e3c6e0`, `glmesh_ctor_FUN_0074c530`).
+// Sec4.4.6(h), CONFIRMED - disassembly (`0x00e3c6e0`, `glmesh_ctor_FUN_0074c530`).
 // `+0x2C` is the RAW on-disk index, before the runtime remap through a
 // temporary per-parse table this reader has no on-disk equivalent for - see
 // note 8 at the top of this file. `+0x30` bit `0x04` is confirmed via a real
@@ -310,9 +310,9 @@ constexpr size_t kTrailerMaterialSlotRaw = 0x2C;
 constexpr size_t kTrailerLodByte         = 0x30;
 constexpr uint32_t kTrailerLodActiveMask = 0x04;
 
-// The material-set block, `FUN_00e40210`.
+// The material-set block, `0x00e40210`.
 constexpr size_t kMatSetHeaderSize  = 0x20;
-constexpr size_t kMatSetCount       = 0x00; // material record count - also FUN_0074a110's bound
+constexpr size_t kMatSetCount       = 0x00; // material record count - also 0x0074a110's bound
 constexpr size_t kMatSetNameTable   = 0x10; // name-table length in bytes
 constexpr size_t kStrideMatSetSlot  = 8;
 constexpr size_t kStrideLookupEntry = 8;
@@ -331,20 +331,20 @@ constexpr size_t kMatRecordTexCount   = 0x0C;
 constexpr size_t kMatRecordConstCount = 0x0E;
 constexpr size_t kMatRecordVec4Count  = 0x0F;
 
-// One render-mesh group, `FUN_00e3c4e0`.
+// One render-mesh group, `0x00e3c4e0`.
 constexpr size_t kRenderGroupHeaderSize = 0x60;
 
-// The generic index-list block, `FUN_00e401d0`: a `0x10`-byte header whose
+// The generic index-list block, `0x00e401d0`: a `0x10`-byte header whose
 // `+0x08` is the element count, then count x 4 bytes.
 constexpr size_t kIndexListHeaderSize = 0x10;
 constexpr size_t kIndexListCountAt    = 0x08;
 constexpr size_t kIndexListStride     = 4;
 
-// The sentinel at `+0x78` that selects FUN_00749ba0 instead of FUN_00748c70
+// The sentinel at `+0x78` that selects 0x00749ba0 instead of 0x00748c70
 // (spec-physics-format.md Sec4.2). CONFIRMED - disassembly.
 constexpr int32_t kPairSentinel = -1;
 
-// Which bit of the flags byte at header `+0x08` gates FUN_00749ba0's
+// Which bit of the flags byte at header `+0x08` gates 0x00749ba0's
 // collision-hull parse. Sec4.4.6(f) says "bit 2"; read as a bit INDEX
 // (mask 0x04), not as the literal mask 0x02 that Sec4.2 writes for a
 // different gate on the same byte. MEASURED, see note 3 at the top of this
@@ -373,8 +373,8 @@ struct RawArray {
     bool empty() const { return count == 0; }
 };
 
-// One outer entry of either two-level nested group: FUN_00749c40's `+0x88`
-// 16-byte records with 12-byte inner elements, and FUN_00749e80's `+0xfc`
+// One outer entry of either two-level nested group: 0x00749c40's `+0x88`
+// 16-byte records with 12-byte inner elements, and 0x00749e80's `+0xfc`
 // group with its parallel count array and 4-byte inner elements.
 // `innerCount` is read from the file - from the outer record's own `+0x0`
 // for the first group, from the parallel array for the second - and nothing
@@ -400,7 +400,7 @@ struct Vec3 {
 
 // ---- the pieces the MIDDLE walk locates ----------------------------------
 
-// One `FUN_00e401d0` index-list block. LOCATED, not decoded: `count` is the
+// One `0x00e401d0` index-list block. LOCATED, not decoded: `count` is the
 // block's own `+0x08` and the payload is `count x 4` bytes of something
 // Sec4.4.6 calls "a generic index list" without pinning the element.
 struct IndexListBlock {
@@ -410,7 +410,7 @@ struct IndexListBlock {
     size_t end = 0;
 };
 
-// One step over the shared "Mesh" sub-block on its c-side, `FUN_00e71410`.
+// One step over the shared "Mesh" sub-block on its c-side, `0x00e71410`.
 // Self-validating: version word 9, and the check value repeated in the last
 // 4 bytes of the declared c-length. The step is `cLength` EXACTLY.
 struct MeshStep {
@@ -420,7 +420,7 @@ struct MeshStep {
     size_t end = 0;
 };
 
-// One render-mesh group, `FUN_00e3c4e0`: a `0x60`-byte header, an index-list
+// One render-mesh group, `0x00e3c4e0`: a `0x60`-byte header, an index-list
 // block, an embedded Mesh sub-block, then a u16 array and a u8 array (both
 // `indexList.count` long, with no alignment between them).
 struct RenderGroup {
@@ -434,7 +434,7 @@ struct RenderGroup {
 
 // One material record's decoded header fields, Sec4.4.6(h) part 1. Transfers
 // directly from spec-foliage-format.md Sec6 (CONFIRMED there, 33/33 records)
-// via the shared parser `FUN_00e71090` - the byte layout is not re-derived
+// via the shared parser `0x00e71090` - the byte layout is not re-derived
 // here. The three runtime output-pointer slots (`+0x10`/`+0x18`/`+0x20`,
 // zero on disk) are deliberately NOT included: there is nothing to decode.
 struct MaterialRecord {
@@ -468,12 +468,12 @@ struct MiddleLayout {
     bool aborted = false;      // R[+0x00] == -1: the never-shipped abort path
 
     size_t materialSetOffset = 0; // H
-    uint32_t materialCount = 0;   // H[+0x00] - FUN_0074a110's lookup-table bound
+    uint32_t materialCount = 0;   // H[+0x00] - 0x0074a110's lookup-table bound
     size_t nameTableOffset = 0;
     size_t nameTableLength = 0;
     RawArray materialSlots{};  // H[+0x00] x 8, inside the material-set block
     std::vector<size_t> materialRecordOffsets; // each record declares its own size at +0x00
-    RawArray lookupTable{};    // R[+0x08]'s materialCount x 8 - the table FUN_0074a110 indexes
+    RawArray lookupTable{};    // R[+0x08]'s materialCount x 8 - the table 0x0074a110 indexes
 
     size_t renderGroupCount = 0;
     RenderGroup renderGroups[2]{};
@@ -496,11 +496,11 @@ struct MiddleLayout {
 
 enum class GatedPairBranch {
     None,          // sentinel at `+0x78` and the flags bit clear: nothing happens at all
-    ListBlock,     // `+0x78 != -1`: FUN_00748c70, a block that declares its own total size
-    CollisionHull, // sentinel + flags bit 2: FUN_00749ba0, a real file-resident hull
+    ListBlock,     // `+0x78 != -1`: 0x00748c70, a block that declares its own total size
+    CollisionHull, // sentinel + flags bit 2: 0x00749ba0, a real file-resident hull
 };
 
-// FUN_00749ba0's hull, as Sec4.4.6(f) lays it out. LOCATED and, for the two
+// 0x00749ba0's hull, as Sec4.4.6(f) lays it out. LOCATED and, for the two
 // lists whose element size the spec states outright, decodable.
 struct CollisionHull {
     size_t offset = 0;
@@ -549,7 +549,7 @@ struct WalkOptions {
     bool trailingGroupProseOrder = false;
 };
 
-// FUN_0074a110's finalization pass, in full. CONFIRMED - disassembly
+// 0x0074a110's finalization pass, in full. CONFIRMED - disassembly
 // (spec-physics-format.md Sec4.2, last row): given a min/max corner pair it
 // computes half-extents, a centre, and a circumscribed-sphere radius, and
 // writes them at the referenced sub-object's `+0x20..+0x28`,
@@ -620,24 +620,24 @@ public:
     // The whole computed walk ran to completion inside the buffer.
     bool walkComplete() const { return walkComplete_; }
     // ... and finished EXACTLY at end-of-file, which is this format's one
-    // structural landmark: `FUN_00749e80`'s trailing nested group is the last
+    // structural landmark: `0x00749e80`'s trailing nested group is the last
     // structure in the file.
     bool landsOnEof() const { return walkComplete_ && tailEnd_ == contentSize_; }
 
-    // ---- HEAD: FUN_007499d0 ---------------------------------------------
+    // ---- HEAD: 0x007499d0 ---------------------------------------------
     const RawArray& referenceArrayA() const { return refA_; } // count `+0x48`, out `+0x40`
     const RawArray& referenceArrayB() const { return refB_; } // count `+0x58`, out `+0x50`
     // Where the count(+0x48) embedded Mesh sub-blocks begin (right after both
     // slot arrays), and each one's located extent.
     size_t meshBlockStart() const { return meshBlockStart_; }
     const std::vector<MeshStep>& headMeshBlocks() const { return headMeshes_; }
-    // Array 2's `FUN_00e401d0` index-list blocks, which follow every Mesh
+    // Array 2's `0x00e401d0` index-list blocks, which follow every Mesh
     // sub-block (Sec4.4.6's correction to Sec4.4.1's head formula).
     const std::vector<IndexListBlock>& headIndexLists() const { return headIndexLists_; }
     // First byte after the whole HEAD.
     size_t headEnd() const { return headEnd_; }
 
-    // ---- MIDDLE: thunk_FUN_00e3e590's `0x50`-byte record and its payload --
+    // ---- MIDDLE: 0x00e3e590's `0x50`-byte record and its payload --
     const MiddleLayout& middle() const { return middle_; }
     size_t middleOffset() const { return middle_.offset; }
     size_t middleEnd() const { return middle_.end; }
@@ -655,7 +655,7 @@ public:
     // (spec-vertex-format.md Sec8.3/Sec12.8: `+0x00` name-blob byte offset,
     // `+0x04` sampler/parameter hash, `+0x08` sequential slot index) and the
     // shared per-material-record parser producing it is the SAME one
-    // (`FUN_00e71090`) spec-foliage-format.md Sec6/Sec6.1 and
+    // (`0x00e71090`) spec-foliage-format.md Sec6/Sec6.1 and
     // spec-vertex-format.md Sec12.8 already document for foliage/trees/
     // vehicles/characters - materialRecords() above already decodes this
     // format's own use of that record's HEADER on that basis.
@@ -727,7 +727,7 @@ public:
     // (constantNameCount/vec4ConstantCount, header +0x0E/+0x0F) but never
     // decoded the CONTENTS of, until now. Layout transfers directly from
     // spec-foliage-format.md Sec6/Sec6.2 via the shared parser
-    // (`FUN_00e71090`) materialRecords()/materialTextureBinding() already
+    // (`0x00e71090`) materialRecords()/materialTextureBinding() already
     // rely on, CONFIRMED to run unconditionally on every real .clmesh_pc
     // material record by spec-physics-format.md Sec4.4.6(h) part 1's own
     // disassembly chain-trace: array order A (12-byte texture bindings,
@@ -799,18 +799,18 @@ public:
     int32_t pairFirst() const { return pairFirst_; }
     int32_t pairSecond() const { return pairSecond_; }
     const GatedPair& gatedPair() const { return gatedPair_; }
-    // The two lists inside FUN_00749ba0's hull, decoded at the element sizes
+    // The two lists inside 0x00749ba0's hull, decoded at the element sizes
     // Sec4.4.6(f) states outright (3 x float32, u16). Empty when this file
     // does not take that branch.
     std::vector<Vec3> hullVertices(ByteView content) const;
     std::vector<uint16_t> hullIndices(ByteView content) const;
 
-    // ---- TAIL: FUN_00749b40 .. FUN_00749e80 -----------------------------
+    // ---- TAIL: 0x00749b40 .. 0x00749e80 -----------------------------
     size_t tailStart() const { return tailStart_; }
     size_t tailEnd() const { return tailEnd_; } // == contentSize() when the walk lands
 
-    const RawArray& array70() const { return array70_; }                 // FUN_00749b40
-    const RawArray& group88Outer() const { return group88Outer_; }       // FUN_00749c40 outer
+    const RawArray& array70() const { return array70_; }                 // 0x00749b40
+    const RawArray& group88Outer() const { return group88Outer_; }       // 0x00749c40 outer
     const std::vector<NestedEntry>& group88() const { return group88_; } // ... and its inner lists
 
     // Decodes one group88() entry's inner list as (x,y,z) float32 positions
@@ -822,10 +822,10 @@ public:
     // but have different strides, and swapping them would silently
     // misdecode rather than throw without this check).
     std::vector<Vec3> group88Positions(const NestedEntry& entry, ByteView content) const;
-    const RawArray& array98() const { return array98_; }                 // FUN_00749cf0
-    const RawArray& arrayA8() const { return arrayA8_; }                 // FUN_00749d40
-    const RawArray& arrayD8() const { return arrayD8_; }                 // FUN_00749e80 flat 1
-    const RawArray& arrayE8() const { return arrayE8_; }                 // FUN_00749e80 flat 2
+    const RawArray& array98() const { return array98_; }                 // 0x00749cf0
+    const RawArray& arrayA8() const { return arrayA8_; }                 // 0x00749d40
+    const RawArray& arrayD8() const { return arrayD8_; }                 // 0x00749e80 flat 1
+    const RawArray& arrayE8() const { return arrayE8_; }                 // 0x00749e80 flat 2
     const RawArray& groupFcPrimary() const { return fcPrimary_; }        // out `+0x108`
     const RawArray& groupFcParallel() const { return fcParallel_; }      // out `+0x100`
     const std::vector<NestedEntry>& groupFc() const { return groupFc_; }
@@ -909,7 +909,7 @@ HeadWalk walkHead(ByteView content, size_t bodyStart, const uint32_t* headerWord
                   const WalkOptions& opt = WalkOptions());
 
 // Walks the MIDDLE from `start` (which it 16-aligns itself), i.e.
-// thunk_FUN_00e3e590 -> FUN_00e3e590 in full.
+// 0x00e3e590 -> 0x00e3e590 in full.
 MiddleLayout walkMiddle(ByteView content, size_t start, size_t limit,
                         const WalkOptions& opt = WalkOptions());
 

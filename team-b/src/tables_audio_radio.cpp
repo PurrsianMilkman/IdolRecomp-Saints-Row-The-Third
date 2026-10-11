@@ -150,7 +150,7 @@ std::vector<AudioLineTag> ParseAudioLineTagsTable(const Document& doc) {
 namespace {
 // spec 6: fixed priority order, first substring match wins; case-SENSITIVE and over the FULL (untruncated) Name
 // text, not the 0x20-byte bounded record copy - CONFIRMED - disassembly, 2026-10-01 (job
-// 20261001T123123-team-a-ytgi): FUN_00EA48B0 is the C runtime's `strstr`, byte-exact, given the full Name text.
+// 20261001T123123-team-a-ytgi): 0x00ea48b0 is the C runtime's `strstr`, byte-exact, given the full Name text.
 // Callers below pass `fullName`, not `name` (see tables.h's AudioPersona struct for why both fields exist).
 int findSuffixIndex(const std::string& name) {
     if (name.find('_') == std::string::npos) return -1;  // "searched only after first confirming an underscore"

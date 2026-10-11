@@ -23,7 +23,7 @@ using sr3xtbl::Node;
 
 // ===========================================================================
 // 12.1 character_definitions.xtbl. [CONFIRMED - disassembly for the loader
-// chain; per-Character FIELD reader (FUN_00be0630) located but NOT
+// chain; per-Character FIELD reader (0x00be0630) located but NOT
 // decompiled this pass - an honest partial, §12.1, open item §22.1]
 // ===========================================================================
 // Rows are `Character` elements filtered by `Framework` (matching "main" or
@@ -50,7 +50,7 @@ struct HeightClass {
     Always<float> height;              // Height
     std::optional<std::string> name;    // Name (hashed) - "a small named enum of body-height presets that
                                           // character_definitions.xtbl rows presumably reference by name (the
-                                          // cross-reference itself lives inside the undecompiled FUN_00be0630,
+                                          // cross-reference itself lives inside the undecompiled 0x00be0630,
                                           // so this is inferred from load order and naming, not directly
                                           // confirmed field-by-field)" (§12.2)
 };
@@ -59,7 +59,7 @@ std::vector<HeightClass> ParseCharacterHeightTable(const Document& doc);
 
 // ===========================================================================
 // 13.1 character_customization_categories.xtbl. [CONFIRMED - disassembly +
-// empirical, re-derived 2026-10-02: `FUN_00be4120` read in full and
+// empirical, re-derived 2026-10-02: `0x00be4120` read in full and
 // confirmed to be this table's OWN dedicated reader (it hardcodes the
 // child-element name "category"), not a generic shared stash function as
 // the 2026-09-30 text assumed - see spec-tables-customization.md §13.1's
@@ -112,7 +112,7 @@ std::vector<const Node*> FindCharacterCustomizationCategoryRows(const Document& 
 // spec-tables-animation.md's anim_states.xtbl/anim_actions.xtbl pattern.
 // ===========================================================================
 struct CharacterType {
-    std::optional<std::string> name;  // Name (hashed via FUN_00db1510, the loop index used as a salt/context
+    std::optional<std::string> name;  // Name (hashed via 0x00db1510, the loop index used as a salt/context
                                         // argument - a derived hashing detail, not modelled; raw Name text is
                                         // what's kept). No other field is read (§13.2).
 };

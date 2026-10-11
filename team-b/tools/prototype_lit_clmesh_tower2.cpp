@@ -298,6 +298,9 @@
 #include <d3d11.h>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
+#include <windows.h> // LoadLibraryA/GetModuleHandleA/GetProcAddress - RenderDoc in-process API loader below
+
+#include "renderdoc_app.h" // third_party/renderdoc/renderdoc_app.h - vendored, MIT-licensed, single public header; see loadRenderDocApi()'s own comment
 
 #include "sr3clmesh/level_mesh.h"
 #include "sr3d3d9bc/ctab.h"
@@ -629,6 +632,112 @@ void fillFloat4Registers(std::vector<uint8_t>& cpuBuffer, uint16_t registerIndex
         if (byteOff + 16 > cpuBuffer.size()) continue;
         std::memcpy(cpuBuffer.data() + byteOff, regs[r].data(), 16);
     }
+}
+
+// NEW DIAGNOSTIC (orchestrator task, 2026-10-08, diag/tower-constant-
+// consumption-control): dumps the REAL raw bytes of a live GPU constant
+// buffer at a given float4 register, by making a D3D11_USAGE_STAGING copy
+// and Map()-ing it back to the CPU - i.e. reads the GPU's own actual
+// uploaded bytes immediately before a draw call, not just the CPU-side
+// source buffer that was used to create it (which could in principle have
+// been silently stale/mismatched by a caching bug this dump exists to rule
+// out). Opt-in only via SR3_DUMP_CBUFFER_RAW=1 - zero cost/behaviour change
+// otherwise. Kept as a permanent diagnostic capability (not reverted with
+// this branch's control-test values) since this class of "was the value I
+// computed actually what got uploaded" check has reusable value beyond
+// this one investigation.
+void dumpCbufferRegisterRaw(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Buffer* cb,
+                             uint16_t registerIndex, const char* label) {
+    if (!cb) { printf("    [cbuffer raw dump] %s: NULL buffer\n", label); return; }
+    D3D11_BUFFER_DESC srcDesc{}; cb->GetDesc(&srcDesc);
+    D3D11_BUFFER_DESC stagingDesc = srcDesc;
+    stagingDesc.Usage = D3D11_USAGE_STAGING; stagingDesc.BindFlags = 0;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ; stagingDesc.MiscFlags = 0;
+    ID3D11Buffer* staging = nullptr;
+    if (FAILED(device->CreateBuffer(&stagingDesc, nullptr, &staging)) || !staging) {
+        printf("    [cbuffer raw dump] %s: staging CreateBuffer FAILED\n", label); return;
+    }
+    context->CopyResource(staging, cb);
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0, &mapped))) {
+        size_t byteOff = static_cast<size_t>(registerIndex) * 16;
+        if (byteOff + 16 <= srcDesc.ByteWidth) {
+            const float* f = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(mapped.pData) + byteOff);
+            printf("    [cbuffer raw dump] %s register[%u] (GPU staging-readback, byteOff=%zu, bufferBytes=%u): "
+                   "(%g, %g, %g, %g)\n", label, registerIndex, byteOff, srcDesc.ByteWidth, f[0], f[1], f[2], f[3]);
+        } else {
+            printf("    [cbuffer raw dump] %s register[%u]: byteOff %zu out of range (bufferBytes=%u)\n",
+                   label, registerIndex, byteOff, srcDesc.ByteWidth);
+        }
+        context->Unmap(staging, 0);
+    } else {
+        printf("    [cbuffer raw dump] %s: Map FAILED\n", label);
+    }
+    staging->Release();
+}
+
+// NEW DIAGNOSTIC (orchestrator task, 2026-10-08, SAME diag/tower-constant-
+// consumption-control branch - "one more piece of independent evidence"
+// requested after dumpCbufferRegisterRaw above): optional RenderDoc
+// in-process API integration, so a human can open a real .rdc capture in
+// qrenderdoc.exe and inspect the GPU's own pixel history / shader debug
+// trace at the draw call that reads cb0[47]/cb0[48] and the DSF sampler -
+// ground-truth capture-tool evidence for the "why doesn't it matter"
+// question, on top of (not instead of) this file's own code-reading
+// inference and the direct GPU cbuffer readback above. Diagnostic only -
+// does not change, and cannot change, any pixel this tool actually draws.
+//
+// Opt-in only via SR3_RENDERDOC_CAPTURE=1 (checked in main() below) - when
+// unset, loadRenderDocApi() is never even called, so this is zero cost/
+// behaviour change for every existing caller (golden_scene_check, ctest,
+// a plain by-hand run) exactly like SR3_DUMP_CBUFFER_RAW above.
+//
+// Follows RenderDoc's own documented "in-application API" standalone-load
+// pattern (summarized in third_party/renderdoc/renderdoc_app.h's own doc
+// comments, vendored unmodified from this machine's C:\Program Files\
+// RenderDoc\ install, MIT-licensed): try GetModuleHandleA first (in case
+// RenderDoc already injected renderdoc.dll into this process via an
+// external launcher/qrenderdoc), else LoadLibraryA the real install path
+// this machine has RenderDoc at, else log and return false - NEVER throws,
+// NEVER aborts the run. This must be called before ANY D3D11 device is
+// created (RenderDoc hooks D3D11CreateDevice/DXGI at DLL-load time) - see
+// main()'s own call site, which happens before dev.initialise() below.
+static RENDERDOC_API_1_6_0* g_rdocApi = nullptr;
+
+bool loadRenderDocApi() {
+    HMODULE mod = GetModuleHandleA("renderdoc.dll");
+    if (mod != nullptr) {
+        printf("[renderdoc] renderdoc.dll already present in this process (externally injected) - reusing it\n");
+    } else {
+        // Not already injected - load the real install this machine has,
+        // the same path this task's own orchestrator instructions named
+        // (C:\Program Files\RenderDoc\renderdoc.dll + renderdoc_app.h).
+        mod = LoadLibraryA("C:\\Program Files\\RenderDoc\\renderdoc.dll");
+        if (mod != nullptr) {
+            printf("[renderdoc] loaded renderdoc.dll from C:\\Program Files\\RenderDoc\\ (standalone-load pattern)\n");
+        }
+    }
+    if (mod == nullptr) {
+        printf("[renderdoc] renderdoc.dll not found/loadable on this machine - SR3_RENDERDOC_CAPTURE=1 was set but\n"
+               "  RenderDoc integration will be a no-op for this run (every other step below runs exactly as it\n"
+               "  would without this env var at all - this is a graceful skip, not a failure of this tool)\n");
+        return false;
+    }
+    auto getApi = reinterpret_cast<pRENDERDOC_GetAPI>(GetProcAddress(mod, "RENDERDOC_GetAPI"));
+    if (getApi == nullptr) {
+        printf("[renderdoc] GetProcAddress(\"RENDERDOC_GetAPI\") failed - no-op\n");
+        return false;
+    }
+    int ok = getApi(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&g_rdocApi));
+    if (ok != 1 || g_rdocApi == nullptr) {
+        printf("[renderdoc] RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_6_0) failed (ret=%d) - no-op\n", ok);
+        g_rdocApi = nullptr;
+        return false;
+    }
+    int major = 0, minor = 0, patch = 0;
+    g_rdocApi->GetAPIVersion(&major, &minor, &patch);
+    printf("[renderdoc] in-process API acquired: RenderDoc v%d.%d.%d\n", major, minor, patch);
+    return true;
 }
 
 // GPU vertex layout - identical to prototype_lit_car.cpp's own (a static
@@ -1102,6 +1211,57 @@ int main(int argc, char** argv) {
     // own "positional out-path" convention for a golden-wired tool.
     std::string outPath = "D:/Project Crreish/TEAM B/tools/prototype_lit_clmesh_tower2_output.png";
     if (argc >= 2) outPath = argv[1];
+
+    // NEW DIAGNOSTIC SWITCHES (orchestrator task, 2026-10-08, SAME diag/
+    // tower-constant-consumption-control branch, requested as "one more
+    // piece of independent evidence" after dumpCbufferRegisterRaw's GPU-
+    // readback control above): OPT-IN ONLY, both unset by default (zero
+    // behaviour/output change - loadRenderDocApi() above is never even
+    // called unless SR3_RENDERDOC_CAPTURE=1).
+    //
+    // SR3_RENDERDOC_CAPTURE=1: loads RenderDoc's in-process API (if
+    // installed on this machine - see loadRenderDocApi()'s own comment)
+    // and wraps PASS A/B/C's real draw calls below in a single
+    // StartFrameCapture/EndFrameCapture, saving a real .rdc file a human
+    // can later open in qrenderdoc.exe to inspect the GPU's own pixel
+    // history / shader debug trace - ground truth on top of this file's
+    // own code-reading inference, not a replacement for the GPU-readback
+    // control already on record in this branch's own commit.
+    //
+    // SR3_RENDERDOC_ABSURD_VALUES=1: independent of the capture switch
+    // above (meaningful combined with it, for the "control" capture), re-
+    // uses this EXACT branch's own already-tested CONTROL 1 first extreme
+    // substitution - fillPsCbufferTemplate()'s own "target_dimensions"/
+    // "ir_pixel_steps" branches below synthesize (1e6,1e6,0,0)/(1e-6,1e-6,
+    // 0,0) instead of the real default (800,600,0,0)/(1/800,1/600,0,0) -
+    // "per the task's own example" exactly as this branch's prior commit
+    // already described and tested (byte-identical result, MD5
+    // df05d007b471049ab7812944765e9a5c - see that commit, 108d7fc, for the
+    // full reading). Lets the SAME binary produce both the "normal run" and
+    // "absurd test values" RenderDoc capture the orchestrator asked for,
+    // without a second temporary source edit.
+    const char* rdocCaptureRaw = std::getenv("SR3_RENDERDOC_CAPTURE");
+    const bool kRenderDocCapture = (rdocCaptureRaw != nullptr) && (std::string(rdocCaptureRaw) == "1");
+    const char* rdocAbsurdRaw = std::getenv("SR3_RENDERDOC_ABSURD_VALUES");
+    const bool kRenderDocAbsurdValues = (rdocAbsurdRaw != nullptr) && (std::string(rdocAbsurdRaw) == "1");
+    if (kRenderDocCapture) {
+        if (loadRenderDocApi() && g_rdocApi) {
+            // Distinct template per value-set so the two runs this task
+            // asks for ("a normal run and a run with the absurd test
+            // values") never collide on the same filename. Relative to
+            // this process's own CWD (this tool otherwise never depends on
+            // CWD - every other path in this file is a hardcoded absolute
+            // path - so whoever sets SR3_RENDERDOC_CAPTURE=1 controls
+            // where renderdoc_captures/ lands by choosing CWD; this
+            // session runs it from this worktree's own root, per the
+            // orchestrator's "under this worktree" instruction).
+            std::string tmpl = kRenderDocAbsurdValues
+                ? "renderdoc_captures/tower_absurd_target_dims_pixel_steps"
+                : "renderdoc_captures/tower_default";
+            g_rdocApi->SetCaptureFilePathTemplate(tmpl.c_str());
+            printf("[renderdoc] capture file path template: \"%s\" (RenderDoc appends _frame<N>.rdc)\n", tmpl.c_str());
+        }
+    }
 
     // HYPOTHESIS TEST SWITCH (2026-10-08, orchestrator task, relayed from Team
     // A via spec-render-pipeline.md Sec20.12.14 point 5): OPT-IN ONLY, via
@@ -2010,13 +2170,29 @@ int main(int argc, char** argv) {
                 // ir_light_directional's own VS cbuffer fill (PASS B below)
                 // already special-cases "target_dimensions" as REAL
                 // {kW, kH, 0, 0} for that shader's own unrelated VS use of it.
-                regs.push_back({static_cast<float>(kW), static_cast<float>(kH), 0.0f, 0.0f});
-                decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
-                           "negative, no engine-side producer exists for this constant anywhere in the executable): "
-                           "(800,600,0,0), this tool's own actual render resolution - matches this file's own "
-                           "ir_light_directional VS-fill precedent for the SAME constant name (PASS B below)"
-                           " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
-                           " registerCount=" + std::to_string(c.registerCount) + "]";
+                // SR3_RENDERDOC_ABSURD_VALUES=1 (new, this session): reuses
+                // this branch's OWN already-tested CONTROL 1 first extreme
+                // substitution (commit 108d7fc) instead of the CHOSEN
+                // default, so a RenderDoc capture can show, in the actual
+                // GPU shader-debug trace, that even an ~1e6x value swing
+                // here never changes a drawn pixel - NOT a new value, NOT
+                // the default; purely for this diagnostic's own "control"
+                // capture.
+                if (kRenderDocAbsurdValues) {
+                    regs.push_back({1.0e6f, 1.0e6f, 0.0f, 0.0f});
+                    decision = "SR3_RENDERDOC_ABSURD_VALUES=1 TEST VALUE (reuses this branch's own commit 108d7fc "
+                               "CONTROL 1 first substitution, NOT the default): (1e6,1e6,0,0)"
+                               " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                               " registerCount=" + std::to_string(c.registerCount) + "]";
+                } else {
+                    regs.push_back({static_cast<float>(kW), static_cast<float>(kH), 0.0f, 0.0f});
+                    decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
+                               "negative, no engine-side producer exists for this constant anywhere in the executable): "
+                               "(800,600,0,0), this tool's own actual render resolution - matches this file's own "
+                               "ir_light_directional VS-fill precedent for the SAME constant name (PASS B below)"
+                               " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                               " registerCount=" + std::to_string(c.registerCount) + "]";
+                }
             } else if (containsCI(c.name, "ir_pixel_steps") || containsCI(c.name, "pixel_steps")) {
                 // Same REAL DEFAULT promotion as target_dimensions immediately
                 // above (both constants are read together by the real role6
@@ -2025,12 +2201,25 @@ int main(int argc, char** argv) {
                 // tool's own actual render resolution (1/800, 1/600), the
                 // natural "one pixel step in UV space" reading of this
                 // constant's own name for an 800x600 render target.
-                regs.push_back({1.0f / static_cast<float>(kW), 1.0f / static_cast<float>(kH), 0.0f, 0.0f});
-                decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
-                           "negative, no engine-side producer exists for this constant anywhere in the executable): "
-                           "(1/800,1/600,0,0), reciprocal of this tool's own actual render resolution"
-                           " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
-                           " registerCount=" + std::to_string(c.registerCount) + "]";
+                // SR3_RENDERDOC_ABSURD_VALUES=1: same reasoning as
+                // target_dimensions immediately above - reuses CONTROL 1's
+                // own already-tested first substitution for this constant
+                // (1e-6,1e-6,0,0, a full scale-inversion from the CHOSEN
+                // 1/800,1/600 reciprocal, not just a magnitude change).
+                if (kRenderDocAbsurdValues) {
+                    regs.push_back({1.0e-6f, 1.0e-6f, 0.0f, 0.0f});
+                    decision = "SR3_RENDERDOC_ABSURD_VALUES=1 TEST VALUE (reuses this branch's own commit 108d7fc "
+                               "CONTROL 1 first substitution, NOT the default): (1e-6,1e-6,0,0)"
+                               " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                               " registerCount=" + std::to_string(c.registerCount) + "]";
+                } else {
+                    regs.push_back({1.0f / static_cast<float>(kW), 1.0f / static_cast<float>(kH), 0.0f, 0.0f});
+                    decision = "CHOSEN VALUE, now the real default (spec-render-pipeline.md Sec20.12.15 - exhaustive "
+                               "negative, no engine-side producer exists for this constant anywhere in the executable): "
+                               "(1/800,1/600,0,0), reciprocal of this tool's own actual render resolution"
+                               " [CTAB registerIndex=" + std::to_string(c.registerIndex) +
+                               " registerCount=" + std::to_string(c.registerCount) + "]";
+                }
             } else {
                 for (uint16_t r = 0; r < c.registerCount; ++r) regs.push_back({0,0,0,0});
                 decision = "REAL confirmed zero (spec-render-pipeline.md Sec20.12.11): unauthored -> memset-zero";
@@ -2176,6 +2365,19 @@ int main(int argc, char** argv) {
     // -----------------------------------------------------------------
     const char* dumpMaterialsRaw = std::getenv("SR3_DUMP_MATERIALS");
     const bool kDumpMaterials = (dumpMaterialsRaw != nullptr) && (std::string(dumpMaterialsRaw) == "1");
+    // NEW DIAGNOSTIC SWITCH (orchestrator task, 2026-10-08, diag/tower-
+    // constant-consumption-control): OPT-IN ONLY, via SR3_DUMP_CBUFFER_RAW=1
+    // (unset = default = zero behaviour/output change). When set, PASS C's
+    // own draw loop below calls dumpCbufferRegisterRaw() immediately before
+    // each of this scene's 14 real DrawIndexed calls, reading back cbLitPs's
+    // OWN live GPU bytes (via a staging-buffer Map, not the CPU-side source)
+    // at float4 registers 47/48 (Target_dimensions/IR_Pixel_Steps) - rules
+    // out a silently-stale-or-skipped per-material upload as a distinct
+    // question from "was the CPU-side value computed correctly" (the
+    // existing SR3_DUMP_ROLE6_HLSL/SR3_DUMP_MATERIALS fill-log already
+    // answers the latter).
+    const char* dumpCbufRawRaw = std::getenv("SR3_DUMP_CBUFFER_RAW");
+    const bool kDumpCbufferRaw = (dumpCbufRawRaw != nullptr) && (std::string(dumpCbufRawRaw) == "1");
     if (kDumpMaterials) {
         auto samplerNameForSlot = [](const sr3d3d9bc::ConstantTable& ctab, UINT slot) -> std::string {
             for (const auto& c : ctab.constants)
@@ -2322,6 +2524,29 @@ int main(int argc, char** argv) {
     D3D11_VIEWPORT vp{}; vp.Width = static_cast<float>(kW); vp.Height = static_cast<float>(kH); vp.MinDepth=0; vp.MaxDepth=1;
     dev.context->RSSetViewports(1, &vp);
 
+    // NEW DIAGNOSTIC (orchestrator task, 2026-10-08, SR3_RENDERDOC_CAPTURE=1
+    // only - see loadRenderDocApi()'s own comment and main()'s own env-var
+    // read above): one capture spans PASS A + PASS B + PASS C below, so a
+    // human opening the .rdc in qrenderdoc.exe can run pixel history on
+    // dev.rtv's final output AND see how normalsRT/dsfDataRT/lightBufferRT
+    // were themselves produced in the SAME capture, not just their already-
+    // final contents - rather than capturing PASS C alone, which would hide
+    // PASS A/B's own draw events from RenderDoc's resource-history view.
+    // rdocEndCapture (used at every FATAL early-return between here and
+    // PASS C's own real end, below) exists so a mid-pipeline FATAL never
+    // leaves RenderDoc's capture state open across this process's exit.
+    if (kRenderDocCapture && g_rdocApi) {
+        g_rdocApi->StartFrameCapture(static_cast<RENDERDOC_DevicePointer>(dev.device), nullptr);
+        printf("[renderdoc] StartFrameCapture (device=%p) - capturing this run's real PASS A/B/C draw calls\n",
+               static_cast<void*>(dev.device));
+    }
+    auto rdocEndCapture = [&]() {
+        if (kRenderDocCapture && g_rdocApi) {
+            uint32_t ok = g_rdocApi->EndFrameCapture(static_cast<RENDERDOC_DevicePointer>(dev.device), nullptr);
+            printf("[renderdoc] EndFrameCapture (ok=%u)\n", ok);
+        }
+    };
+
     // -----------------------------------------------------------------
     // PASS A: real G-buffer prepass. Every drawable range, its own real
     // role-4 shader, into the 3 real off-screen targets + real DSV. The
@@ -2397,15 +2622,16 @@ int main(int argc, char** argv) {
     // -----------------------------------------------------------------
     std::vector<uint8_t> lightFxo;
     if (!findEntry(shadersContainer, "ir_light_directional.fxo_pc", lightFxo)) {
+        rdocEndCapture();
         printf("FATAL: ir_light_directional.fxo_pc not found\n"); return 1;
     }
     CompiledShader lightCs = compileOnePass(dev.device, lightFxo, "ir_light_directional.fxo_pc", "ir_light_directional", /*role=*/0);
-    if (!lightCs.ok) { printf("FATAL: ir_light_directional pass 0 failed to compile: %s\n", lightCs.failReason.c_str()); return 1; }
+    if (!lightCs.ok) { rdocEndCapture(); printf("FATAL: ir_light_directional pass 0 failed to compile: %s\n", lightCs.failReason.c_str()); return 1; }
     {
         HRESULT hr = dev.device->CreateVertexShader(lightCs.vsCode->GetBufferPointer(), lightCs.vsCode->GetBufferSize(), nullptr, &lightCs.vs);
         if (SUCCEEDED(hr)) hr = dev.device->CreatePixelShader(lightCs.psCode->GetBufferPointer(), lightCs.psCode->GetBufferSize(), nullptr, &lightCs.ps);
         if (SUCCEEDED(hr)) hr = dev.device->CreateInputLayout(kQuadLayout, 2, lightCs.vsCode->GetBufferPointer(), lightCs.vsCode->GetBufferSize(), &lightCs.inputLayout);
-        if (FAILED(hr)) { printf("FATAL: ir_light_directional GPU object creation failed: %s\n", hrToString(hr).c_str()); return 1; }
+        if (FAILED(hr)) { rdocEndCapture(); printf("FATAL: ir_light_directional GPU object creation failed: %s\n", hrToString(hr).c_str()); return 1; }
     }
     printf("[light shader] ir_light_directional real pass %d: VS inputs=%s  PS declares IR_GBuffer_NormalsSampler@s%d "
            "IR_GBuffer_LightingSampler@s%d  real PS outputs=%u\n", lightCs.passIndexUsed,
@@ -2542,7 +2768,7 @@ int main(int argc, char** argv) {
     // -----------------------------------------------------------------
     OffscreenDepth finalDepth;
     std::string fdErr;
-    if (!finalDepth.create(dev.device, kW, kH, fdErr)) { printf("FATAL: final depth creation failed: %s\n", fdErr.c_str()); return 1; }
+    if (!finalDepth.create(dev.device, kW, kH, fdErr)) { rdocEndCapture(); printf("FATAL: final depth creation failed: %s\n", fdErr.c_str()); return 1; }
     dev.context->OMSetRenderTargets(1, &dev.rtv, finalDepth.dsv);
     { const float clr[4] = {0.05f,0.05f,0.08f,1.0f}; dev.context->ClearRenderTargetView(dev.rtv, clr); }
     dev.context->ClearDepthStencilView(finalDepth.dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
@@ -2593,6 +2819,13 @@ int main(int argc, char** argv) {
             dev.context->PSSetShaderResources(slot, 1, &srv);
         }
         for (UINT slot : cs.allSamplerBindPoints) dev.context->PSSetSamplers(slot, 1, &sampler);
+        if (kDumpCbufferRaw) {
+            char lbl[160];
+            snprintf(lbl, sizeof(lbl), "material[%u] cbLitPs Target_dimensions", rr.materialId);
+            dumpCbufferRegisterRaw(dev.device, dev.context, mcIt->second.cbLitPs, 47, lbl);
+            snprintf(lbl, sizeof(lbl), "material[%u] cbLitPs IR_Pixel_Steps", rr.materialId);
+            dumpCbufferRegisterRaw(dev.device, dev.context, mcIt->second.cbLitPs, 48, lbl);
+        }
         UINT startIndex = static_cast<UINT>(spanIt->second.first), count = static_cast<UINT>(spanIt->second.second);
         dev.context->DrawIndexed(count, startIndex, 0);
         ++finalDrawCalls; finalTriangles += count/3;
@@ -2600,6 +2833,33 @@ int main(int argc, char** argv) {
     printf("[pass C: material pass] %zu real DrawIndexed calls (%zu triangles), IR_LBufferSampler bound to pass "
            "B's own real light-buffer output, Diffuse_MapSampler/Specular_MapSampler bound to each material's own "
            "real uploaded texture, for every range whose shader declares them\n", finalDrawCalls, finalTriangles);
+
+    // NEW DIAGNOSTIC (orchestrator task, 2026-10-08): real end of the
+    // capture started before PASS A above - every draw call this scene
+    // makes (PASS A/B/C) is now inside the saved .rdc, so pixel history on
+    // dev.rtv's own final output can walk all the way back through
+    // dsfDataRT/lightBufferRT's own producing draws. GetNumCaptures()/
+    // GetCapture() confirm something real was actually written to disk
+    // (not just that EndFrameCapture's return code was nonzero) - printed
+    // plainly so this run's own stdout is the first piece of evidence, the
+    // .rdc file on disk (opened in qrenderdoc.exe, or sanity-checked via
+    // renderdoccmd.exe thumb) the second.
+    if (kRenderDocCapture && g_rdocApi) {
+        rdocEndCapture();
+        uint32_t numCaps = g_rdocApi->GetNumCaptures();
+        printf("[renderdoc] GetNumCaptures() = %u (captures made by this process so far)\n", numCaps);
+        if (numCaps > 0) {
+            char pathBuf[1024] = {0};
+            uint32_t pathLen = sizeof(pathBuf);
+            uint64_t timestamp = 0;
+            if (g_rdocApi->GetCapture(numCaps - 1, pathBuf, &pathLen, &timestamp)) {
+                printf("[renderdoc] most recent capture file: %s (timestamp=%llu)\n", pathBuf,
+                       static_cast<unsigned long long>(timestamp));
+            } else {
+                printf("[renderdoc] GetCapture(%u) reported an invalid index - unexpected\n", numCaps - 1);
+            }
+        }
+    }
 
     // -----------------------------------------------------------------
     // 13. Read back + PNG + real pixel statistics - identical mechanism

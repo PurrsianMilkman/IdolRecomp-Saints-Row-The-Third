@@ -105,7 +105,7 @@ terse, an index of failure modes, not the story.
   constantly; a match needs an independent corroborator (argument count against the public API,
   calling-convention check, or a value/byte-offset convergence with real DATA this project can
   measure) before treating it as confirmed. Bit Team A's own render-pipeline work more than once
-  (the `FUN_004a2e30`/`FUN_004a8900` false lead; `rl_renderer`'s own 28-slot shared-vtable-target
+  (the `0x004a2e30`/`0x004a8900` false lead; `rl_renderer`'s own 28-slot shared-vtable-target
   puzzle, later resolved as a `_purecall` idiom rather than 28 distinct methods). Team B's own
   contribution when reviewing such a claim is exactly what closed `high16` (§9.89): an independent
   real-data population check the disassembly claim would have to survive. — `HANDOFF.md` §9.89,

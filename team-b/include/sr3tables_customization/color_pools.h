@@ -31,7 +31,7 @@ using sr3xtbl::Node;
 // which this mirrors): sr3xtbl exposes only the engine float grammar
 // (ParseFloat), not C sscanf/atof, so the parser here tokenises on
 // whitespace and applies ParseFloat to each token - the closest available
-// approximation to the spec's stated "parsed by FUN_00dad0a0" (2.2).
+// approximation to the spec's stated "parsed by 0x00dad0a0" (2.2).
 // Unspecified trailing components stay at their default (1.0 for alpha,
 // matching the same established convention).
 // ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ struct ColorText {
 // ===========================================================================
 struct ColorPoolEntry {
     std::optional<std::string> name;         // Color_Entry > Name (hashed at load into the pool's lookup key; raw text kept)
-    std::optional<ColorText> color;           // Color_Entry > Color - "parsed by FUN_00dad0a0" (2.2); see ColorText banner
+    std::optional<ColorText> color;           // Color_Entry > Color - "parsed by 0x00dad0a0" (2.2); see ColorText banner
                                                // above for the judgement call this project makes for a text-blob colour
     std::optional<std::string> displayName;   // Color_Entry > DisplayName; spec: "or 0.0 if absent" (a null localization id,
                                                // not modelled here as a literal value - see 2.2)
@@ -92,7 +92,7 @@ std::optional<ColorBalance> ParseColorBalance(const Document& doc);
 // function, not pinned to the exact call/consumer (3.1, open item §22.3).
 // The row SHAPE is confirmed from real data: "flat records, three children
 // each - Name, Color, _Editor" (3.1). The spec gives no parsing routine for
-// this table's Color field (unlike §2's FUN_00dad0a0), so `color` is kept
+// this table's Color field (unlike §2's 0x00dad0a0), so `color` is kept
 // as raw text here rather than guessing the same text-colour grammar.
 // ===========================================================================
 struct ItemColorEntry {
@@ -117,7 +117,7 @@ std::vector<ItemColorEntry> ParseItemsColorPoolTable(const Document& doc);
 // its own nested wrapper, not a flat per-Palette list (3.2's ASCII tree).
 // Each level's R/G/B is read raw here (Always<float>, as authored); the
 // spec states the engine additionally bakes this into a 4-byte {R,G,B,0xff}
-// cell scaled by a `255.0` constant (`DAT_012a2d88`) and forces alpha to
+// cell scaled by a `255.0` constant (`0x012a2d88`) and forces alpha to
 // 0xff (3.2) - that bake (and which direction the scale is applied, since
 // the spec gives only "the 255.0 scale constant", not a worked example) is
 // a load-time transform over the raw authored value, not modelled here; the

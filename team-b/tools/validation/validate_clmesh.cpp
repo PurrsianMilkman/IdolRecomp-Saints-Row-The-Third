@@ -3,7 +3,7 @@
 // Sec4.2 / Sec4.4.6 characterise.
 //
 // WHAT THE GO/NO-GO TEST IS, AND WHY THIS ONE. This format has exactly one
-// structural landmark a walk can be graded against: `FUN_00749e80`'s
+// structural landmark a walk can be graded against: `0x00749e80`'s
 // trailing nested group is the LAST thing in the file, so a correct walk
 // ends EXACTLY at end-of-file, to the byte. Everything here is built on
 // that. "Parses without throwing" would prove nothing - the tail counts are
@@ -367,7 +367,7 @@ void check(const std::string& name, const std::vector<uint8_t>& cb, const std::v
     }
     {
         // The spec-literal reading of Sec4.1: one cursor threaded straight
-        // from the head into FUN_00749b40, i.e. no MIDDLE at all.
+        // from the head into 0x00749b40, i.e. no MIDDLE at all.
         auto t = sr3clmesh::walkTail(content, lm.headEnd(), hw, cb.size());
         if (t.ok && t.end == cb.size()) ++g_specLiteralExact;
     }
@@ -508,7 +508,7 @@ int main(int argc, char** argv) {
            g_prevUnplaceableStems.size());
     printf("  of those, land exactly       : %lld\n", g_prevUnplaceableLand);
 
-    printf("\n=== the MIDDLE (thunk_FUN_00e3e590) ===\n");
+    printf("\n=== the MIDDLE (0x00e3e590) ===\n");
     if (!g_middleLengths.empty()) {
         std::sort(g_middleLengths.begin(), g_middleLengths.end());
         const size_t n = g_middleLengths.size();
@@ -556,7 +556,7 @@ int main(int argc, char** argv) {
     printf("  header says sentinel -1      : %lld\n", g_sentinelFiles);
     printf("  header says real values      : %lld  (one value %lld, two values %lld)\n",
            g_realPairFiles, g_pairOneValue, g_pairTwoValues);
-    printf("  branch taken: none %lld | FUN_00748c70 list block %lld | FUN_00749ba0 hull %lld\n",
+    printf("  branch taken: none %lld | 0x00748c70 list block %lld | 0x00749ba0 hull %lld\n",
            g_branchNone, g_branchList, g_branchHull);
     printf("  hull totals: %lld vertices, %lld u16 indices, %lld opaque blob bytes\n",
            g_hullVertices, g_hullIndices, g_hullBlobBytes);
@@ -581,7 +581,7 @@ int main(int argc, char** argv) {
     printf("  HEAD index-list blocks (array 2) : %lld blocks, %lld 4-byte elements\n",
            g_headIndexListBlocks, g_headIndexListElements);
 
-    printf("\n=== FUN_0074a110 finalization (AABB -> centre/half-extent/radius) ===\n");
+    printf("\n=== 0x0074a110 finalization (AABB -> centre/half-extent/radius) ===\n");
     printf("  bounding volumes computed    : %lld\n", g_boundsComputed);
     printf("  finite, positive radius      : %lld\n", g_boundsFinite);
     if (g_boundsFinite > 0) printf("  radius range                 : %.6f .. %.6f\n", g_radiusMin, g_radiusMax);

@@ -113,7 +113,7 @@
 // confirmed pause-map siblings - `pause_map_is_stag_mode`,
 // `pause_map_is_tutorial_mode`, `pause_map_set_gps`,
 // `pause_map_stag_takeover_do_reward` - all 5 members of the SAME 9-entry
-// UI pause-map registrar, FUN_007dfae0, Sec31.1's own table; the other 4
+// UI pause-map registrar, 0x007dfae0, Sec31.1's own table; the other 4
 // table entries - get_world_income_dollars, pause_map_add_bookmark,
 // pause_map_drag_map, pause_map_zoom - have no CONFIRMED body anywhere in
 // Sec31 and are NOT implemented, still ordinary generic stubs) and Sec32

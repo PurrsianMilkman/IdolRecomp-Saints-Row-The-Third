@@ -12,6 +12,7 @@ struct WindowState {
     uint32_t width = 0;
     uint32_t height = 0;
     bool shouldClose = false;
+    bool escQuits = true;
 };
 
 LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -25,8 +26,10 @@ LRESULT CALLBACK windowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
             if (msg == WM_DESTROY) PostQuitMessage(0);
             return 0;
         case WM_KEYDOWN:
-            // Escape quits. The only input this window handles on purpose.
-            if (wparam == VK_ESCAPE && state != nullptr) state->shouldClose = true;
+            // Escape quits - unless this window's own caller asked to
+            // repurpose Escape itself (Window::create's `escQuits`, default
+            // true so every other caller is unaffected).
+            if (wparam == VK_ESCAPE && state != nullptr && state->escQuits) state->shouldClose = true;
             return 0;
         case WM_SIZE:
             if (state != nullptr) {
@@ -63,7 +66,7 @@ Window::~Window() {
 }
 
 bool Window::create(const std::string& title, uint32_t width, uint32_t height,
-                    std::string& error, bool visible) {
+                    std::string& error, bool visible, bool escQuits) {
     if (width == 0 || height == 0) {
         error = "window dimensions must be non-zero";
         return false;
@@ -116,7 +119,7 @@ bool Window::create(const std::string& title, uint32_t width, uint32_t height,
         return false;
     }
 
-    WindowState* state = new WindowState{width, height, false};
+    WindowState* state = new WindowState{width, height, false, escQuits};
     SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(state));
 
     // Only actually show/activate the window for an explicit `--visible`

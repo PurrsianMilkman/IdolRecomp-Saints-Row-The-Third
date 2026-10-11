@@ -31,13 +31,13 @@ struct GangVehicleGroup {
                                           // identical destination bytes (+8/+9) for this one bit; modelled as
                                           // one boolean here (a storage-duplication detail, not a schema fact)
     std::vector<std::string> vehicles;   // Vehicles > Vehicle[] (own text -> the global vehicle-info table,
-                                          // FUN_00ac2400, the same lookup spec-vehicle-data.md §7.1 documents -
+                                          // 0x00ac2400, the same lookup spec-vehicle-data.md §7.1 documents -
                                           // cross-referenced only per this spec's own text, not resolved here)
 };
 struct GangSignPose {
     std::optional<std::string> displayName;  // display_name. CORRECTED 2026-10-02 (§10, re-derived from the
                                                // executable, `func_0x00839290.txt` read in full): this is a RAW
-                                               // TEXT HASH (via FUN_00daba10 then FUN_00db12c0 - the same
+                                               // TEXT HASH (via 0x00daba10 then 0x00db12c0 - the same
                                                // raw-hash helper customization_materials.xtbl's Name and
                                                // customization_compositing.xtbl's Name/diffuse/normal go
                                                // through, §9.1/§9.3), NOT one of the FUN_0084xxxx-family
@@ -47,7 +47,7 @@ struct GangSignPose {
                                                // ever captured the raw element text either way (no hash is
                                                // computed in this project's readers), so the correction is
                                                // comment-only.
-    StateAnimation animation;                  // animation (State/Animation pair via FUN_004bf810)
+    StateAnimation animation;                  // animation (State/Animation pair via 0x004bf810)
 };
 struct GangCustomization {
     std::optional<std::string> name;  // Name - the real loader only READS a row whose Name equals the
@@ -57,7 +57,7 @@ struct GangCustomization {
                                         // ParseGangCustomizationTable below for the filtered convenience.
     std::vector<GangVehicleGroup> gangVehicles;  // gang_vehicles > gang_vehicles[]
     std::optional<std::string> defaultVehicleSlot1;  // PlayerDefaults > DefaultVehicles > Slot1 (resolved to a
-    std::optional<std::string> defaultVehicleSlot2;  // vehicle-group id via FUN_00ac1ae0 - not modelled, raw
+    std::optional<std::string> defaultVehicleSlot2;  // vehicle-group id via 0x00ac1ae0 - not modelled, raw
     std::optional<std::string> defaultVehicleSlot3;  // vehicle name text kept)
     std::vector<GangSignPose> gangSigns;               // Gang_Signs > Pose[] (the player's gang-sign gesture list)
 };
@@ -79,11 +79,11 @@ std::optional<GangCustomization> ParseGangCustomizationTable(const Document& doc
 // ===========================================================================
 struct CustomizableAction {
     std::optional<std::string> actionType;   // ActionType - the 2-entry split key ("Insult"/"Compliment",
-                                               // matched via FUN_dac830 against a 2-entry array, §11)
-    StateAnimation action;                     // Action (State/Animation pair via FUN_004bf810)
-    std::optional<std::string> situation;       // Situation (optional, via FUN_0070a2f0 - resolution target
+                                               // matched via 0xdac830 against a 2-entry array, §11)
+    StateAnimation action;                     // Action (State/Animation pair via 0x004bf810)
+    std::optional<std::string> situation;       // Situation (optional, via 0x0070a2f0 - resolution target
                                                   // not independently confirmed here, raw text kept)
-    std::optional<std::string> team;             // Team (optional enum via FUN_0094cc60 - "same field name/
+    std::optional<std::string> team;             // Team (optional enum via 0x0094cc60 - "same field name/
                                                   // helper family as spec-tables-weapons-combat.md's team
                                                   // enums", §11 - not re-derived here, raw text kept)
     std::optional<std::string> localizedTag;      // LocalizedTag. NOTE (§11): a hardcoded override exists in the

@@ -1383,7 +1383,7 @@ std::vector<NpcGroup> ParseRankReactionsTable(const Document& doc) {
 DefaultGlobal ParseDefaultGlobal(const Document& doc) {
     DefaultGlobal g;
     const Node* root = doc.root();
-    // --- S10.9 (FUN_00BB70B0) ---
+    // --- S10.9 (0x00bb70b0) ---
     if (const std::string* t = ChildText(root, "skybox_mesh_filename")) g.skyboxMeshFilename = *t;
     if (const std::string* t = ChildText(root, "cloud_mesh_filename")) g.cloudMeshFilename = *t;
     if (const Node* orbitals = FindChild(root, "orbitals")) {

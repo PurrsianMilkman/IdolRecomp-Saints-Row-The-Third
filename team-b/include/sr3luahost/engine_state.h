@@ -54,10 +54,10 @@
 #include <vector>
 
 // sr3save::nameHash(): the engine's general lower-cased, seed-0, no-final-
-// XOR reflected CRC-32 name hash (FUN_00D9E740 - spec-save-format.md
+// XOR reflected CRC-32 name hash (0x00d9e740 - spec-save-format.md
 // Sec9.8/Sec6.1, table 0x01320DA0, CONFIRMED - empirical via spec-lua-api-
 // behaviour.md Sec5.1's 7/7 real I/O vectors for the sibling raw-byte entry
-// point FUN_00D9E790 sharing the same table/algorithm). Reused by citation,
+// point 0x00d9e790 sharing the same table/algorithm). Reused by citation,
 // not reimplemented - see spec-lua-bindings.md Sec15's own text on
 // vint_object_find, which hashes its `name` argument via this exact
 // routine before the parent/document-scoped lookup below. Header-only, no
@@ -560,7 +560,7 @@ public:
     void registerSyncedActionForTesting(const std::string& name, int32_t index);
     int32_t lookupSyncedActionIndex(const std::string& name) const;
 
-    // FUN_00DAB330 (spec-texture-format.md Sec8.2's "multiply-33/XOR"
+    // 0x00dab330 (spec-texture-format.md Sec8.2's "multiply-33/XOR"
     // hash: fold each character to lowercase, `hash = (hash*0x21) XOR c`,
     // then `hash % bucketCount`) - CONFIRMED, empirically vector-validated
     // (spec-lua-api-behaviour.md Sec5.3, 5/5 real I/O vectors matched
@@ -608,14 +608,14 @@ public:
     // next-sibling links and reads type names). nullptr = no such handle.
     const VdoObject* vdoObject(uint32_t handle) const { return vdoObjectForTesting(handle); }
 
-    // FUN_00e0ceb0's own stand-in ("a 'current default document' global
+    // 0x00e0ceb0's own stand-in ("a 'current default document' global
     // lookup") - default 0 (this project's own "no default document yet"
     // sentinel, VdoObject's own doc comment). Test-only setter; no Lua
     // function among this task's 13 in-scope names ever changes it.
     OpenValue<uint32_t>& currentDefaultDocHandle() { return currentDefaultDocHandle_; }
 
     // Implements vint_object_find's own CONFIRMED mechanism (Sec15): hash
-    // `name` (FUN_00D9E740 - this project's own default seed 0, since the
+    // `name` (0x00d9e740 - this project's own default seed 0, since the
     // spec's own Sec15 text does not state a seed for this specific call
     // site, unlike several OTHER cited call sites elsewhere in this
     // project that explicitly pass 0 - HIGH CONFIDENCE by convention, not
@@ -695,7 +695,7 @@ public:
     // setters) does:
     //  * a fresh document handle (this project's own counter, starting at 1
     //    and separate from object handles - the real engine resolves
-    //    documents through a different resolver, FUN_00e1f330, Sec18.2/
+    //    documents through a different resolver, 0x00e1f330, Sec18.2/
     //    Sec19.1; its numbering is not specified, same "plain incrementing
     //    counter" convention as registerVdoObjectForTesting);
     //  * one VdoObject per element AND per animation record (Sec4: the same
@@ -785,11 +785,11 @@ public:
 
     // --- vint_get_time_index (Sec19.1) --------------------------------------
 
-    // FUN_00e0ceb0's own stand-in reused a third time (Sec19.1's own text:
+    // 0x00e0ceb0's own stand-in reused a third time (Sec19.1's own text:
     // "the third sighting in this document of the identical +0x14-field read
     // feeding a 'current document' resolution") - this project's host has no
     // document registry distinct from the resolved handle number itself, so
-    // a genuine "FUN_00e1f330 failed to resolve" cannot be told apart from
+    // a genuine "0x00e1f330 failed to resolve" cannot be told apart from
     // "no test has supplied a time index for this handle yet"; both become
     // an OpenStateError refusal (never a fabricated number). The real
     // "zero Lua values pushed" failure path is therefore not separately
@@ -872,7 +872,7 @@ public:
     // get, for a typed object: screen_nw/screen_se/screen_size are computed
     // on every call (spec-vint-render.md Sec7, vintQueryBox below);
     // mouse_depth reads back depth while it holds the 0x7fffffff sentinel
-    // (Sec1); codes 8 and 0xd refuse (OpenStateError: what FUN_00e1a420
+    // (Sec1); codes 8 and 0xd refuse (OpenStateError: what 0x00e1a420
     // pushes for a callback slot or an enum is not specified, and no shipped
     // script reads one - measured); a row with no stored value refuses
     // (OpenStateError: no spec'd default - element-family objects are seeded
@@ -976,10 +976,10 @@ public:
     // itself (Sec21.2's own text: "this native never creates the named
     // record"). When a record exists and both types validate, increments
     // this project's own dispatchAttempts counter (test-observable proof the
-    // gate runs) - the real further dispatch (FUN_00e1e660, the trailing-
+    // gate runs) - the real further dispatch (0x00e1e660, the trailing-
     // argument array, and the +0x25c context stamp) has no Lua-visible
     // consequence among this pass's two in-scope functions and is not
-    // modeled (FUN_00e1e660's own body was not independently decompiled this
+    // modeled (0x00e1e660's own body was not independently decompiled this
     // pass either, per Sec21.2's own explicit "not traced" note).
     void dataResponderRequest(const std::string& name, bool validCallback, bool validMax);
     int dataResponderDispatchAttempts(const std::string& name) const;
@@ -5207,11 +5207,29 @@ public:
     // slot index, a zero-argument housekeeping call (0x00d1e0c0, no
     // observable effect in this project's scope) and a dispatch
     // (0x007eda00 -> 0x007ed7d0, opcode 9) clearing the global objective-
-    // text/HUD slot. No in-scope setter (objective_text, Sec1.3, is NOT one
-    // of this batch's 12 names) populates a slot first, so only the raw
-    // call itself - which slot index, how many times - is test-observable,
-    // never a claimed "was this slot actually showing text" fact.
-    void recordObjectiveTextClear(int64_t slotIndex) { ++objectiveTextClearCounts_[slotIndex]; }
+    // text/HUD slot (spec-lua-api-behaviour.md Sec1.4's own text: "clears
+    // the named objective-text/HUD slot", independently strengthened by
+    // direct disassembly of 0x007eda00 itself - not merely inferred from
+    // address proximity to Sec1.3's setter).
+    //
+    // UPDATED (spec-hud-runtime.md §6.5 HUD-objective-overlay task,
+    // 2026-10-09): when this doc comment was first written, objective_text
+    // (Sec1.3) was NOT yet one of this batch's implemented names, so only
+    // the raw call itself (which slot index, how many times) was test-
+    // observable - there was no slot state to actually clear yet. Sec1.3 is
+    // now implemented (lua_spec_confirmed_stubs_b08_batch1_core.cpp,
+    // objectiveTextSlots()), so this call now ALSO erases the slot from
+    // that map, completing the CONFIRMED "clears the slot" behaviour rather
+    // than leaving it a counter-only stub forever. Sec1.4's own text
+    // documents no bounds check on the slot index at all (unlike Sec1.3's
+    // setter's CONFIRMED "< 4"), so no range check is added here either -
+    // std::unordered_map::erase() on any int64_t key, in or out of [0,4),
+    // is always safe-by-construction (a no-op if the key is absent), with
+    // no hardening divergence to label or count.
+    void recordObjectiveTextClear(int64_t slotIndex) {
+        ++objectiveTextClearCounts_[slotIndex];
+        objectiveTextSlots_.erase(slotIndex);
+    }
     uint64_t objectiveTextClearCount(int64_t slotIndex) const {
         auto it = objectiveTextClearCounts_.find(slotIndex);
         return it != objectiveTextClearCounts_.end() ? it->second : 0;
@@ -5438,7 +5456,12 @@ public:
     // objective_text (Sec1.3): see ObjectiveTextSlot's own doc comment
     // above for the full reasoning (map-keyed-by-slot, not a fixed array;
     // localization is OPEN and not modelled; the arg3/arg4 combining rule
-    // is reproduced).
+    // is reproduced). A slot's PRESENCE in this map (count() != 0) is this
+    // project's own "is this slot currently showing text" signal - the HUD
+    // objective-text overlay (tools/sr3_viewer.cpp, spec-hud-runtime.md
+    // §6.5) iterates slots 0..3 and only draws a slot present here.
+    // objective_text_clear (Sec1.4, recordObjectiveTextClear() above) erases
+    // the entry on clear, so a cleared slot is never left stale in this map.
     std::unordered_map<int64_t, ObjectiveTextSlot>& objectiveTextSlots() { return objectiveTextSlots_; }
 
     // door_open (Sec1.10): resolved through the SAME named-placed-object

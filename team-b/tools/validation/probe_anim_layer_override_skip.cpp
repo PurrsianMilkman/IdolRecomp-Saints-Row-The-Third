@@ -175,7 +175,7 @@ void doClip(const std::string&, const std::vector<uint8_t>& raw) {
         if (walkN(raw, p0, f, tc) == target) ++g_clearLanded;
 
         // Control C: wrongly apply the table-skip formula to a bit-clear
-        // clip anyway (FUN_004c1190 never builds this table for them).
+        // clip anyway (0x004c1190 never builds this table for them).
         long long sumC = 0;
         const size_t p1C = computeP1(raw, p0, f, tc, &sumC);
         if (p1C != 0) {

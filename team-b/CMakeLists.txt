@@ -1232,7 +1232,7 @@ endif()
 # material block to sr3geometry, so neither is reimplemented here.
 #
 # The `+0xb8` region is NO LONGER OPAQUE and the tail is NO LONGER SEARCHED
-# FOR (HANDOFF Sec9.64, spec-physics-format.md Sec4.4.6): `thunk_FUN_00e3e590`
+# FOR (HANDOFF Sec9.64, spec-physics-format.md Sec4.4.6): `0x00e3e590`
 # is a parser, not a resolver, and the whole file walks on ONE computed cursor
 # from bodyStart to EOF - 100,384/100,384 (100.0000%) of the shipped
 # population, all five archives that carry the format.
@@ -1477,6 +1477,13 @@ if(WIN32)
     # actually invokes for the clmesh_airport_controltower_lit golden.
     add_executable(prototype_lit_clmesh_tower2 tools/prototype_lit_clmesh_tower2.cpp)
     target_link_libraries(prototype_lit_clmesh_tower2 PRIVATE sr3render sr3clmesh sr3d3d9bc sr3fxo sr3geometry sr3mesh sr3tables_environment sr3texture sr3xtbl vpp_container d3d11 dxgi d3dcompiler user32 gdi32)
+    # third_party/renderdoc/renderdoc_app.h (orchestrator task, 2026-10-08,
+    # diag/tower-constant-consumption-control branch): a single vendored
+    # MIT-licensed public header, no .lib to link - this tool loads
+    # renderdoc.dll itself at runtime (LoadLibraryA/GetProcAddress) only
+    # when SR3_RENDERDOC_CAPTURE=1 is set, so this include dir costs
+    # nothing when the header isn't used.
+    target_include_directories(prototype_lit_clmesh_tower2 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/renderdoc)
 
     add_executable(prototype_real_shader_draw tools/prototype_real_shader_draw.cpp)
     target_link_libraries(prototype_real_shader_draw PRIVATE sr3render sr3d3d9bc sr3fxo sr3geometry sr3mesh sr3texture sr3vehicle vpp_container d3d11 dxgi d3dcompiler user32 gdi32)

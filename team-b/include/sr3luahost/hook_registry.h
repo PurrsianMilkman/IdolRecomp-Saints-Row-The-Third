@@ -24,7 +24,7 @@
 //
 // - Group 1 (73 names, spec Sec12.3, #1-73): CONFIRMED by disassembly -
 //   every one is a literal string argument observed at a real call site to
-//   the confirmed dispatcher (FUN_00e0cef0). The real, confirmed mechanism
+//   the confirmed dispatcher (0x00e0cef0). The real, confirmed mechanism
 //   (spec Sec8.3): the engine checks the global exists AND
 //   type(x)=="function" first (a SILENT existence check - no error if
 //   absent) and only calls it if that check passes. Implemented here as
@@ -33,7 +33,7 @@
 // - Group 2 (2 names, spec Sec12.4, #74-75): CONFIRMED by disassembly, but
 //   with a documented ASYMMETRY versus Group 1 - the real engine calls
 //   these two UNCONDITIONALLY, with NO existence check first
-//   (FUN_00e0de80's own decompiled body has no _GetAnyGlobalSilent guard,
+//   (0x00e0de80's own decompiled body has no _GetAnyGlobalSilent guard,
 //   unlike every Group-1 caller) - meaning the real engine assumes the Lua
 //   side always defines them. This project still runs the existence check
 //   first, but ONLY for honest measurement ("defined vs not") - it does
@@ -62,7 +62,7 @@
 //   live, named UI widget instance, and no static list of instance names
 //   exists to fire.
 // - Group 5 (spec Sec8.5, 2 data-driven runtime-populated tables,
-//   DAT_026e83f0/DAT_02319570) - both read as entirely null in the static
+//   0x026e83f0/0x02319570) - both read as entirely null in the static
 //   executable image (spec's own checked-negative population figures,
 //   0/80 and 0/4 non-null); their real per-mission contents are
 //   OPEN/UNKNOWN from static analysis, so there is nothing to fire.

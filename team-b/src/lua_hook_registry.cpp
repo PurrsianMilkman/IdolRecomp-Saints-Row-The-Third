@@ -19,7 +19,7 @@ const char* hookGroupNote(HookGroup g) {
         case HookGroup::Group2_LifecycleUnconditional:
             return "Group 2: system/lifecycle hook, spec-lua-bindings.md Sec12.4, CONFIRMED but called "
                    "UNCONDITIONALLY by the real engine (no existence check first, per the decompiled "
-                   "FUN_00e0de80). This project still checks existence first for honest measurement, but "
+                   "0x00e0de80). This project still checks existence first for honest measurement, but "
                    "does NOT gate the call on it - a script that doesn't define this hook gets a real Lua "
                    "'attempt to call a nil value' error recorded, matching the spec's own 'presumably "
                    "errors at the real call site' statement.";
@@ -135,7 +135,7 @@ std::vector<HookSpec> buildConfirmedHooks() {
     // right below (cmp_common_screen_start/completion_coop_disconnected)
     // were, precisely because Sec14.3's own finding is that these three
     // (plus garage_populate/garage_performance_stats further below) are a
-    // DIFFERENT, non-Lua mechanism (FUN_00e1e7e0/FUN_00e25040 registries,
+    // DIFFERENT, non-Lua mechanism (0x00e1e7e0/0x00e25040 registries,
     // not the confirmed Lua dispatcher) - still fired here exactly as
     // every other Group 1 name, per this project's own prior instruction
     // not to special-case them pending Team A's re-check.
@@ -149,7 +149,7 @@ std::vector<HookSpec> buildConfirmedHooks() {
     add("cat_mouse_results_populate", HookGroup::Group1_GeneralNamed);
     add("coop_diversion_success_responder", HookGroup::Group1_GeneralNamed);
     // cmp_common_screen_start: spec Sec14.3 CONFIRMED 1 arg, a DOUBLE
-    // (value = global DAT_02282958, real-world meaning OPEN/untraced). No
+    // (value = global 0x02282958, real-world meaning OPEN/untraced). No
     // specific real magnitude is confirmed by the spec - only the
     // arity/type - so 0.0 is used: a stated, honest placeholder (the
     // LEAST-invented choice), never a claim about the real engine's own
@@ -175,7 +175,7 @@ std::vector<HookSpec> buildConfirmedHooks() {
     // 22-35: HUD / inventory.
     // hud_running_man_event_update: spec Sec14.4 CONFIRMED call-site-
     // dependent arity - 1 float at most real sites, a 2nd float pushed
-    // ONLY at one specific site (FUN_0063c300) when a caller-supplied
+    // ONLY at one specific site (0x0063c300) when a caller-supplied
     // event-type code == 0x16. This project's own firing loop calls each
     // hook exactly once per script per state, with no real "event type"
     // context to branch on - so, per this task's own explicit instruction,
@@ -260,7 +260,7 @@ std::vector<HookSpec> buildConfirmedHooks() {
 
     // ---- Group 2 - 2 entries, spec-lua-bindings.md Sec12.4, #74-75 -------
     // _PrepareForDynamicGlobals: spec Sec14.1 CONFIRMED 1 arg, a STRING -
-    // "the canonicalized script filename" (FUN_00e0cff0 force-appends a
+    // "the canonicalized script filename" (0x00e0cff0 force-appends a
     // .lua suffix if missing). Real value used: the actual script's own
     // entryName this project already has on hand while firing (every real
     // found script's name already ends in ".lua" - see
@@ -383,7 +383,7 @@ std::vector<HookSpec> buildConfirmedHooks() {
     add("screen_capture_open_preview_dialog", HookGroup::Group1_GeneralNamed);
     // 138: fired from the modal-dialog/popup pool's own cleanup path
     // (Sec14.6: a small pooled, 4-slot modal-dialog/popup manager,
-    // DAT_02282d40) - generic UI-dialog plumbing, NOT mission/activity
+    // 0x02282d40) - generic UI-dialog plumbing, NOT mission/activity
     // lifecycle related (an initial hypothesis tying it there was
     // checked and refuted per Sec14.6's own text).
     add("dialog_build", HookGroup::Group1_GeneralNamed);

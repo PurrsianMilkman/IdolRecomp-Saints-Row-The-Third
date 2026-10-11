@@ -198,7 +198,7 @@ Tree Tree::parse(ByteView content, ByteView gContent) {
     }
     cursor = roundUp8(cursor + kGeometrySize);
 
-    // --- Material-set block, FUN_00e40210 (spec Sec6). ---
+    // --- Material-set block, 0x00e40210 (spec Sec6). ---
     const size_t H = cursor;
     if (H + kMatSetHeaderSize > content.size()) {
         throw FormatError("content too small to contain the material-set block's 0x20-byte header "
@@ -321,7 +321,7 @@ Tree Tree::parse(ByteView content, ByteView gContent) {
         cursor = recordEnd;
     }
 
-    // --- Index list, FUN_00e401d0 (spec Sec7). ---
+    // --- Index list, 0x00e401d0 (spec Sec7). ---
     cursor = roundUp8(cursor);
     if (cursor + kIndexListHeaderSize > content.size()) {
         throw FormatError("content too small to contain the index list's 0x10-byte header at " +

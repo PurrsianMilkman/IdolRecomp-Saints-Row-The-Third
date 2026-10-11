@@ -43,7 +43,7 @@
 // family - NOT a spec-stated fact for these specific fields, called out
 // here and again in the report. (`Animation/Preload`, formerly in this
 // list, was RE-DERIVED 2026-10-01: it is read by a DIFFERENT reader - func
-// `0x008C7F80`, not this struct's primary reader `FUN_004AE7A0` - "as a bool
+// `0x008C7F80`, not this struct's primary reader `0x004ae7a0` - "as a bool
 // defaulting to false"; moved to `AnimFile::preload` as `std::optional<bool>`
 // + `PreloadOrDefault()`, see 3.2. `Control_input_low`/`Control_input_high`/
 // `Ramp_speed`/`Blend_time`/`Control_point`'s `Range`/`Value`, formerly cited
@@ -82,15 +82,15 @@
 //     rotate/XOR, `anim_triggers.xtbl`) hash, the `anim_blend_trees.xtbl`/
 //     `anim_correction_offsets.xtbl`/`anim_synced.xtbl` cross-table index
 //     resolution, `anim_correction_offsets.xtbl`'s second derived 4-float
-//     block (spec 12.2, RE-DERIVED 2026-10-02: `FUN_00DA38E0` widens the
+//     block (spec 12.2, RE-DERIVED 2026-10-02: `0x00da38e0` widens the
 //     authored vec3 to `(X, Y, Z, Z)`, CONFIRMED NOT a quaternion and reads
 //     no further element - still not computed here, only the raw `Offset`
 //     vec3 is kept), the IK `Blend` divisor (spec 3.2, RE-DERIVED
 //     2026-10-01: `30.0 / Blend`, `0.0` if `Blend` == 0, the constant at
-//     `DAT_012A2D58` now CONFIRMED 30.0 - still not computed here, only the
+//     `0x012a2d58` now CONFIRMED 30.0 - still not computed here, only the
 //     raw int is kept), and `character_visemes.xtbl`'s `Target_Value` scale
 //     constant (spec 14.1, RE-DERIVED 2026-10-02: CONFIRMED a `x 0.01`
-//     double-precision multiply by `DAT_01117DC8` - still not computed
+//     double-precision multiply by `0x01117dc8` - still not computed
 //     here, only the raw authored percentage is kept).
 //   * Purely decorative, never-visited-by-any-code-path fields are omitted
 //     entirely, matching sr3tables_environment's own `_Editor` precedent:
@@ -105,8 +105,8 @@
 //     explicitly hypothesised to feed "a customization/creation-mode
 //     default-appearance lookup" elsewhere), `anim_files.xtbl`'s
 //     `Animation/Preload` (spec 3.2, RE-DERIVED 2026-10-01: read by a
-//     second reader, func `0x008C7F80`/`FUN_008C9FD0`, not this struct's
-//     primary reader `FUN_004AE7A0` - "as a bool defaulting to false"; the
+//     second reader, func `0x008C7F80`/`0x008c9fd0`, not this struct's
+//     primary reader `0x004ae7a0` - "as a bool defaulting to false"; the
 //     installing/consuming subsystem for that second reader is still OPEN)
 //     and `Voice_Lines`/`misc`
 //     presence (spec 3.2/3.5: `Voice_Lines` is confirmed always-empty and
@@ -149,7 +149,7 @@ using sr3xtbl::Vec3Result;
 // ===========================================================================
 struct AnimSetFilename {
     std::optional<std::string> name;  // Name - bounded <=0x100 byte copy; the ONLY field the traced
-                                        // reader (FUN_004AEA30) consumes (2.2) - the value is itself
+                                        // reader (0x004aea30) consumes (2.2) - the value is itself
                                         // another .xtbl filename (e.g. "anim_auto.xtbl"), concatenated
                                         // after a "tables\" prefix and opened as a second-layer file;
                                         // that satellite file's own schema was not traced (2.2, OPEN)
@@ -173,7 +173,7 @@ inline constexpr std::array<std::string_view, 4> kAnimFileIkLocationNames = {
 // The 30-entry Flags table (spec 3.2, literal pointer table at 0x013507B0),
 // in bit order (index == bit position, matching sr3xtbl::FlagMask's "first
 // match wins, index selects the bit" semantics exactly - the same shared
-// accessor the spec cites, FUN_00DAC740).
+// accessor the spec cites, 0x00dac740).
 inline constexpr std::array<std::string_view, 30> kAnimFileFlagNames = {
     "Additive", "Block_Rotation", "Block_Translation", "Transition_Action", "Zero_Input",
     "Female_Root_Offset", "No_Interpolation", "No_Spinebending", "Anim_Movement",
@@ -191,13 +191,13 @@ struct AnimFileIk {
     std::optional<std::string> location;         // Location -> kAnimFileIkLocationNames via EnumIndex
     std::optional<std::string> situation;         // Situation -> anim_ik_situation.xtbl Name (cross-table,
                                                    // raw text kept; RE-DERIVED 2026-10-01: CRC-32 hash
-                                                   // compare against DAT_034248C8, stored value is the
+                                                   // compare against 0x034248c8, stored value is the
                                                    // matching 16-byte record's ADDRESS, 0 if absent/unmatched
                                                    // - lookup/storage not performed here)
     Always<int32_t> frame;                        // Frame
     Always<int32_t> blend;                        // Blend - RAW int; the engine converts this to a float
                                                    // divisor 30.0/Blend (0.0 if Blend==0) - RE-DERIVED
-                                                   // 2026-10-01: the constant at DAT_012A2D58 is CONFIRMED
+                                                   // 2026-10-01: the constant at 0x012a2d58 is CONFIRMED
                                                    // 30.0 (previously OPEN); the divisor is still
                                                    // deliberately NOT computed here, matching this file's
                                                    // "raw field in, derived value out is the caller's job"
@@ -207,20 +207,20 @@ struct AnimFileIk {
 struct AnimFileSound {
     Always<int32_t> frame;                         // Frame
     std::optional<std::string> audioSwitch0;       // Audio_Switch_0 - "bank:event" text, split+resolved at
-    std::optional<std::string> audioSwitch1;       // Audio_Switch_1 - load time (FUN_0046FD00); raw text kept
+    std::optional<std::string> audioSwitch1;       // Audio_Switch_1 - load time (0x0046fd00); raw text kept
     Always<bool> replayOnCycleRestart;              // Replay_On_Cycle_Restart
     Always<bool> stopWhenAnimStops;                 // Stop_When_Anim_Stops
     std::optional<std::string> audioEvent;          // Audio_Event - resolved the same way; raw text kept
 };
 
 struct AnimFile {
-    std::optional<std::string> filename;    // Animation/Filename -> the DAT_02EF2178 record key (3.2);
+    std::optional<std::string> filename;    // Animation/Filename -> the 0x02ef2178 record key (3.2);
                                              // this is the ACTUAL name->.animx binding this group runs on
     std::optional<bool> preload;              // Animation/Preload - present in real data (True/False on
                                                // every sampled row, 3.2). RE-DERIVED 2026-10-01: NOT read by
-                                               // this struct's own primary reader (FUN_004AE7A0) at all -
+                                               // this struct's own primary reader (0x004ae7a0) at all -
                                                // it is read by a SEPARATE second reader of this same file
-                                               // (func 0x008C7F80/FUN_008C9FD0, Sec1.1), "as a bool
+                                               // (func 0x008C7F80/0x008c9fd0, Sec1.1), "as a bool
                                                // defaulting to false" (if-present semantics, NOT the
                                                // Always<T>/indeterminate-when-absent family - this was
                                                // previously modelled as Always<bool>, now corrected). Which
@@ -238,7 +238,7 @@ struct AnimFile {
     // Sec3.1's `<Trigger>` with direct text was WRONG; Sec3.2's `<Trigger><Name>...</Name>` is the
     // real shape, matching the Name-child reading below. Every real Trigger also carries a `Frame`
     // child (7,060/7,060) this struct does not yet model (RE-DERIVED 2026-10-01: read by
-    // FUN_004ADED0 and forwarded to FUN_004CAD90 with the trigger index - not added here, a residual
+    // 0x004aded0 and forwarded to 0x004cad90 with the trigger index - not added here, a residual
     // gap flagged for a future pass, see the report). Every Trigger element without a Name child
     // is COUNTED here instead of being dropped silently.
     size_t triggerElements = 0;              // all Triggers/Trigger elements in this row
@@ -279,7 +279,7 @@ std::vector<AnimGroup> ParseAnimGroupsTable(const Document& doc);
 // base game is {Name} (anim_states.xtbl) / {Name, _Editor} (anim_actions.xtbl,
 // _Editor omitted per this project's standing convention - never visited by
 // any row reader). Nothing beyond Name is read by the one function
-// (FUN_004BF8D0) that opens either file.
+// (0x004bf8d0) that opens either file.
 struct AnimState {
     std::optional<std::string> name;  // Name
 };
@@ -461,7 +461,7 @@ inline constexpr std::array<std::string_view, 3> kAnimIkSituationFlagNames = {
 struct AnimIkSituation {
     std::optional<std::string> name;      // Name -> hashed (CRC-32) into the record (8.2)
     std::optional<std::string> propName;  // Prop_Name (optional) -> hashed with a DIFFERENT, unidentified
-                                            // hash function (FUN_00DB1510, 8.2) - raw text kept, no hash
+                                            // hash function (0x00db1510, 8.2) - raw text kept, no hash
                                             // computed (algorithm itself is OPEN)
     Always<float> morphedSurfaceMaxAdjustment;  // Morphed_Surface_Max_Adjustment ("always" reader, 8.2)
     uint32_t flags = 0;                          // Flags/Flag bitmask via kAnimIkSituationFlagNames (8.2).
@@ -560,7 +560,7 @@ std::vector<AnimFlinch> ParseAnimFlinchesTable(const Document& doc);
 // RE-DERIVED 2026-10-02 (CONFIRMED - disassembly), CORRECTING this file's
 // former claim: the real compare is an INLINED, CASE-SENSITIVE string
 // compare ("no _stricmp") - genuinely the one exception in this whole group,
-// which otherwise uses the shared case-INsensitive FlagMask (FUN_00DAC740)
+// which otherwise uses the shared case-INsensitive FlagMask (0x00dac740)
 // everywhere else. sr3xtbl::FlagMask is always case-insensitive (see
 // xtbl.h), so it CANNOT be reused here; AnimSyncedMove's Flags uses a
 // dedicated case-sensitive mask function instead (caseSensitiveFlagMask, in
@@ -574,8 +574,8 @@ inline constexpr std::array<std::string_view, 10> kAnimSyncedFlagNames = {
 struct AnimSyncedMove {
     std::optional<std::string> name;          // Name - the table's own key (hashed into the row record's
                                                // +0x10, Sec11.1/11.3); read by the OUTER loader
-                                               // (FUN_0095DE40), not the detailed per-row reader
-                                               // (FUN_0095DAA0) the rest of this struct otherwise models -
+                                               // (0x0095de40), not the detailed per-row reader
+                                               // (0x0095daa0) the rest of this struct otherwise models -
                                                // surfaced here anyway since it is a real part of this row's
                                                // data (same reasoning as AnimFile::preload, 3.2)
     std::optional<std::string> attackerAnim;  // AttackerAnim/Filename -> loaded-animation lookup (11.2);
@@ -607,9 +607,9 @@ struct AnimCorrectionOffset {
     std::optional<std::string> fileFilename;  // File/Filename -> loaded-animation lookup (12.2); a row
                                                 // whose File doesn't resolve is skipped entirely by the
                                                 // real engine - not enforced here (raw text kept)
-    Vec3Result offset;                          // Offset/{X,Y,Z} ("always" reader FUN_00DACF60, 12.2) - NOTE
+    Vec3Result offset;                          // Offset/{X,Y,Z} ("always" reader 0x00dacf60, 12.2) - NOTE
                                                  // the Always-hazard: the spec states the engine PRE-SEEDS
-                                                 // the destination from DAT_029CDB98/9C/A0 rather than zero
+                                                 // the destination from 0x029cdb98/9C/A0 rather than zero
                                                  // before reading. RE-DERIVED 2026-10-01: that global is a
                                                  // zero-filled, never-written global shared by 352 other
                                                  // functions - i.e. the seed is (0, 0, 0) itself (HIGH
@@ -620,7 +620,7 @@ struct AnimCorrectionOffset {
                                                  // warning.
                                                  //
                                                  // RE-DERIVED 2026-10-02 (CONFIRMED - disassembly): the real
-                                                 // engine does not store this vec3 directly - FUN_00DA38E0
+                                                 // engine does not store this vec3 directly - 0x00da38e0
                                                  // (a generic, 40+-caller vec3->vec4 widening helper) turns
                                                  // it into an aligned 4-float `(X, Y, Z, Z)` block before
                                                  // storage. CONFIRMED NOT a rotation quaternion and reads no
@@ -657,8 +657,8 @@ std::vector<AnimCorrectionOffset> ParseAnimCorrectionOffsetsTable(const Document
 // not advanced" (13.1) - every Chance element present in the XML is kept
 // here regardless.
 struct LipsyncChance {
-    std::optional<std::string> trigger;    // Trigger -> Wwise audio-event id (FUN_00462960 via
-                                             // FUN_0070A2F0, 13.1); raw text kept, id not resolved
+    std::optional<std::string> trigger;    // Trigger -> Wwise audio-event id (0x00462960 via
+                                             // 0x0070a2f0, 13.1); raw text kept, id not resolved
     std::optional<uint16_t> variant;        // Variant ("if present", 13.1)
     std::optional<std::string> animation;   // Animation -> merged State/Action registry (13.1, NOT the
                                              // loaded-animation-file lookup despite the element's name)
@@ -679,7 +679,7 @@ struct VisemeTarget {
                                               // (spec-morph-format.md's territory), consumer not traced
                                               // (14.1, OPEN); raw text kept, hash not computed
     Always<float> targetValue;                // Target_Value ("always", 14.1) - RAW value; the engine
-                                               // scales this by a fixed global multiplier (DAT_01117DC8)
+                                               // scales this by a fixed global multiplier (0x01117dc8)
                                                // before storage. RE-DERIVED 2026-10-02 (CONFIRMED -
                                                // disassembly for the multiply; the constant's exact
                                                // encoding is HIGH CONFIDENCE): the multiplier is 0.01,

@@ -74,7 +74,7 @@
 //   * items_3d.xtbl (§16): array/resolver/row-tag CONFIRMED, and several
 //     element names are CONFIRMED (empirically, from real base rows read by
 //     OTHER fully-decompiled passes over the same document) but the real
-//     per-row byte-offset builder (FUN_00904d10) was not decompiled by the
+//     per-row byte-offset builder (0x00904d10) was not decompiled by the
 //     spec's own author, so no offset table exists. Confirmed-to-exist
 //     elements are still surfaced as raw text/counts (Mesh, character_mesh,
 //     Props/Prop/Flags/Flag, LargeProp, streaming_category, and the
@@ -92,7 +92,7 @@
 //     modelled at all (it is not read from this table's XML - see §11.1's
 //     own text). The XML element VOCABULARY (§11.2) is CONFIRMED - empirical
 //     and is modelled in full; no byte offset exists to cite because none was
-//     recovered (the real per-field reader, inside FUN_005984c0, was not
+//     recovered (the real per-field reader, inside 0x005984c0, was not
 //     decompiled by the spec's author).
 //
 // THE §1.3 / §22 NAMING CORRECTIONS, applied consistently (never left as the
@@ -168,7 +168,7 @@ struct VehicleInteractionAnimationElement {
     // fixed-size destination exists in this library to overrun).
     std::vector<std::string> parameters;
     // Animation (+0x18) - text resolved through the animation-state table
-    // (FUN_004BF810); raw name kept, "-1" no-match sentinel not modelled
+    // (0x004bf810); raw name kept, "-1" no-match sentinel not modelled
     // (that is a load-time resolution result, not XML content).
     std::optional<std::string> animation;
     // Animated_Camera_Tests/Camera_Pos (+0x1C/+0x20) - rare (21 total in
@@ -200,7 +200,7 @@ inline std::vector<VehicleInteractionAnimationSet> ParseViRideTable(const Docume
 
 // ===========================================================================
 // The shared 8-seat resolver (spec 3.2/3.3, 21.1 "the shared 8-seat
-// resolver ... FUN_00AC1BA0") - two parallel 8-name alias lists for the same
+// resolver ... 0x00ac1ba0") - two parallel 8-name alias lists for the same
 // 8 indices, positionally corresponding as the spec lists them. Used by
 // vehicle_interaction_info.xtbl's Seat/Primary_Access_Seat/Secondary_Access_Seat.
 // NOTE: this is a DIFFERENT, larger convention than vehicle_animation_modifiers.xtbl's
@@ -370,8 +370,8 @@ struct WheelGroupRimElement {
     std::optional<std::string> displayName;  // Display_Name (localized handle)
     // Front_Rim/Rear_Rim: CORRECTED 2026-10-02 (Team A exe re-derivation,
     // spec 5.1/7 - the OPEN "Slot Name vs Component Name" question the desk
-    // review raised is now settled). CONFIRMED - disassembly (FUN_00a973e0/
-    // FUN_00A96040, read in full): these resolve to a `Component`-record
+    // review raised is now settled). CONFIRMED - disassembly (0x00a973e0/
+    // 0x00a96040, read in full): these resolve to a `Component`-record
     // POINTER, not a `Slot` reference - a parallel u32[] of pointers is
     // resolved from each field's own text via a `Component` +0x00 NAME-HASH
     // lookup (ExternalizedComponentSlot::componentNames is the match target
@@ -395,7 +395,7 @@ struct WheelGroupSpinnerElement {
     // 5.1) - modelled as: frontSpinner absent -> rearSpinner not read at all
     // (matches "read only if Front_Spinner was present").
     // Front_Spinner/Rear_Spinner: same CORRECTED Component-pointer mechanism
-    // as Front_Rim/Rear_Rim above (spec 5.1/7, FUN_00a973e0/FUN_00A96040) -
+    // as Front_Rim/Rear_Rim above (spec 5.1/7, 0x00a973e0/0x00a96040) -
     // RAW TEXT kept, same reasoning. 0 real S_Element rows exist in base data
     // (spec 5.2), so this path is currently untestable against real data.
     std::optional<std::string> frontSpinner;
@@ -437,7 +437,7 @@ struct WeaponAnimationGroupEntry {
     // distinguishes them (nullopt == the group-level sub-entry itself, "0xFFFFFFFF
     // / default state for this weapon category" per spec).
     std::optional<std::string> weaponCategory;   // Weapon_Animation_Group's own Name -> the 7-entry weapon-class
-                                                  // table (FUN_00B81900/FUN_00DAC830); HIGH CONFIDENCE, not itself
+                                                  // table (0x00b81900/0x00dac830); HIGH CONFIDENCE, not itself
                                                   // dumped this pass (spec 23 item 5) - raw text kept regardless
     std::optional<std::string> animationState;   // Animation_State's own Name (nullopt for the group-level entry)
     Vec3Result humanSeatOffset;                   // Human_Seat_Offset (zeroed if absent, per spec 6.1)
@@ -450,7 +450,7 @@ struct VehicleAnimModifierSeat {
 };
 
 struct VehicleAnimModifierVehicle {
-    std::optional<std::string> name;  // Name -> vehicle-info entry lookup (FUN_00AC2400); unmatched names silently
+    std::optional<std::string> name;  // Name -> vehicle-info entry lookup (0x00ac2400); unmatched names silently
                                        // skipped by the real loader (spec 6.1) - kept here regardless (this reader
                                        // does not perform the lookup)
     std::optional<float> humanScale;   // Human_Scale (if-present, +0x484)
@@ -471,7 +471,7 @@ VehicleAnimModifiers ParseVehicleAnimModifiers(const Document& doc);
 //    component catalogue (spec-tables-vehicle-world.md 7)
 // ===========================================================================
 struct ExternalizedComponentSlot {
-    // Name: the Slot's OWN Name (hashed; matched by FUN_00A96040 when SOME
+    // Name: the Slot's OWN Name (hashed; matched by 0x00a96040 when SOME
     // OTHER table resolves a Slot by name - e.g. vehicle_cust_interface.xtbl's
     // slots/slots/name, spec 8.2). CORRECTED 2026-10-02 (Team A exe re-
     // derivation): this is NOT what vehicle_wheel_groups.xtbl's Front_Rim/
@@ -481,7 +481,7 @@ struct ExternalizedComponentSlot {
     // `Slot`.
     std::optional<std::string> name;
     std::optional<std::string> cameraInfo;    // Camera_Info (hashed); absent -> a shared runtime "no override"
-                                              // global (DAT_029C9964) - a runtime default, not modelled here
+                                              // global (0x029c9964) - a runtime default, not modelled here
     // Components/Component (+0x0C/+0x10): only the COUNT and each Component's
     // own Name text are modelled. Byte layout still genuinely unfound (only
     // one non-data-driven flag byte, spec 7.1/23 item 4) - but 4 real field
@@ -491,7 +491,7 @@ struct ExternalizedComponentSlot {
     // project's own standing rule. `Name` is the one exception: it is now
     // the CONFIRMED match target of vehicle_wheel_groups.xtbl's Front_Rim/
     // Rear_Rim/Front_Spinner/Rear_Spinner (spec 5.1/7, CORRECTED 2026-10-02,
-    // FUN_00a973e0/FUN_00A96040 - a `Component` +0x00 NAME-HASH lookup), so
+    // 0x00a973e0/0x00a96040 - a `Component` +0x00 NAME-HASH lookup), so
     // reading its raw XML text (not a byte offset - this is an XML-level
     // read, no runtime layout needed) is in scope to let a caller/validator
     // actually check the corrected mechanism against real data. Kept as raw
@@ -535,7 +535,7 @@ struct VehicleCustInterfaceEntry {
     std::optional<std::string> parentCategory;  // parent_category (hashed; "0 if absent", +0x84)
     // slots/slots/name (+0x98/+0x9C): per the §1.3/§22 naming correction,
     // this is the lowercase `name` CHILD of each inner `slots` wrapper item,
-    // NOT that item's own text - resolved via FUN_00A96130 against
+    // NOT that item's own text - resolved via 0x00a96130 against
     // vehicle_cust_slots.xtbl's own loaded array (a confirmed cross-
     // reference, spec 8.2). Raw text kept, one per `slots/slots` item.
     std::vector<std::string> slotNames;
@@ -558,7 +558,7 @@ std::vector<VehicleCustInterfaceEntry> ParseVehicleCustInterfaceTable(const Docu
 // confirmed. Modelled minimally and honestly - see the file banner.
 struct ColorPoolEntry {
     std::optional<std::string> name;  // Name (+0x04 hash key; the SAME text also resolves a "material" handle
-                                       // at +0x00 via FUN_00A74910 - HYPOTHESIS on the exact semantic, spec
+                                       // at +0x00 via 0x00a74910 - HYPOTHESIS on the exact semantic, spec
                                        // 9.1/23 item 7 - not a second XML element, so nothing further to store)
     bool shaderValuesPresent = false;   // Shader_Values wrapper present
     size_t vectorElementCount = 0;      // Shader_Values/Vector_Element children (3-float values)

@@ -15,9 +15,9 @@
 // spec, so it is implemented here alongside every other section.
 //
 // A recurring gap across this whole subsystem: the "shared player-creation
-// morph namespace" (§14.1's Morph_Info entries, resolved via FUN_009f5c30
+// morph namespace" (§14.1's Morph_Info entries, resolved via 0x009f5c30
 // wherever a MorphList/Morph_Name/Morph/Preset_Element references it) has
-// its OWN per-entry field reader (FUN_009f6570) undecompiled this pass -
+// its OWN per-entry field reader (0x009f6570) undecompiled this pass -
 // nothing about what a single Morph_Info actually stores is confirmed
 // beyond its existence and its owning category. Every table below that
 // references "a morph name" (morph_groups, master_sliders, presets,
@@ -65,7 +65,7 @@ struct MorphSet {
     int categoryIndex = -1;
     std::optional<std::string> displayName;   // DisplayName (localized)
 
-    // Morph_Infos > Morph_Info[]: per-entry reader (FUN_009f6570) NOT
+    // Morph_Infos > Morph_Info[]: per-entry reader (0x009f6570) NOT
     // decompiled this pass - nothing about a Morph_Info's OWN fields is
     // confirmed (see the file banner). Only the raw rows are located here,
     // matching this project's treatment of characters.h §13.1/§13.3.
@@ -84,7 +84,7 @@ std::vector<MorphSet> ParsePlayerCreationTable(const Document& doc);
 // record; each morph_item is 8 bytes.
 // ===========================================================================
 struct MorphGroupItem {
-    std::optional<std::string> morphName;  // morph_name -> §14.1's morph namespace (FUN_009f5c30) - see the file
+    std::optional<std::string> morphName;  // morph_name -> §14.1's morph namespace (0x009f5c30) - see the file
                                              // banner: the real loader silently drops an entry whose name doesn't
                                              // resolve; this reader cannot reproduce that filter and keeps every
                                              // authored morph_item
@@ -119,7 +119,7 @@ struct MorphSlider {
     std::optional<std::string> sliderName;  // Slider_Name (hashed)
     // Slider_Keys > Slider_Key[]: capped at 8 keys per slider in the real
     // loader (§15.1), not enforced here. The post-load sort/curve-normalise
-    // step (FUN_008f4700) is derived, not modelled - raw doc-order keys kept.
+    // step (0x008f4700) is derived, not modelled - raw doc-order keys kept.
     std::vector<SliderKey> sliderKeys;
 };
 struct NormalMapSettings {
@@ -134,14 +134,14 @@ std::vector<NormalMapSettings> ParsePlayerCreationNormalMapsTable(const Document
 
 // A raw R/G/B colour element read from child elements literally named `R`,
 // `G`, `B` (§15.2, 2026-10-03 correction: CONFIRMED - disassembly,
-// FUN_00dad130 -> FUN_00dad0a0 - vec3, NOT the previously-unresolved
+// 0x00dad130 -> 0x00dad0a0 - vec3, NOT the previously-unresolved
 // vec2-or-vec3 "multi-component parser"). Kept as the RAW authored value
 // here, matching this project's established convention for this exact
 // accessor family (sr3tables_environment::ColorRGBAlways,
 // sr3tables_customization::TertiaryColor/SecondaryColor/PrimaryColor,
 // color_pools.h): the engine additionally divides each component by 255.0
 // at load time (same "RGB / 255" convention spec-tables-environment.md
-// §3.3 already names at this same FUN_00dad0a0), but that bake is a
+// §3.3 already names at this same 0x00dad0a0), but that bake is a
 // load-time transform over the raw authored value and is NOT applied here.
 struct SpecularColorRGB {
     Always<float> r, g, b;  // R, G, B child elements
@@ -154,7 +154,7 @@ struct SpecularColorRGB {
 struct HairColor {
     std::optional<std::string> name;          // Name (+ a string-form copy of the same text, §15.2 - one field kept)
     std::optional<std::string> displayName;    // Display_Name
-    std::optional<std::string> shaderball;      // Shaderball (texture ref via FUN_009f9f20 - the SAME helper
+    std::optional<std::string> shaderball;      // Shaderball (texture ref via 0x009f9f20 - the SAME helper
                                                   // player_presets.xtbl's Composites>Layer field uses, §16.2,
                                                   // "strongly suggesting a shared 'shaderball preview' concept")
     std::optional<std::string> swatchImage;      // swatch_image (hashed texture name)
@@ -164,7 +164,7 @@ struct HairColor {
                                                    // convention for a spec-STATED concrete default) - nullopt here
                                                    // just means "absent, real default text unknown"
     std::optional<float> hue;                      // Hue - RAW authored value; "scaled by a fixed constant
-                                                    // DAT_01154b78" at load time (§15.2) - the constant's value
+                                                    // 0x01154b78" at load time (§15.2) - the constant's value
                                                     // isn't given, so the scale is NOT applied here
     Always<float> saturationLight, saturationDark;   // Saturation_light, Saturation_dark
     Always<float> specularAlpha;                       // Specular_alpha
@@ -195,7 +195,7 @@ struct SkinColorEntry {
                                                 // lookup misses" (§15.3), a load-time fallback not modelled here;
                                                 // nullopt means the element itself was absent
     std::optional<std::string> swatch;         // swatch (hashed texture name)
-    std::optional<std::string> shaderball;      // Shaderball (same FUN_009f9f20 helper as §15.2)
+    std::optional<std::string> shaderball;      // Shaderball (same 0x009f9f20 helper as §15.2)
     Always<float> unmaskedHue, unmaskedSaturation, unmaskedBrightness;  // Unmasked_Hue/Saturation/Brightness -
                                                                           // "a distinct triple from the masked/
                                                                           // final ones" (§15.3)
@@ -221,7 +221,7 @@ struct MasterSlider {
     std::optional<std::string> name;          // Slider > Name
     std::optional<std::string> displayName;    // Slider > DisplayName
     std::optional<float> initialValue;          // Slider > InitialValue
-    std::optional<std::string> morphListRaw;     // Slider > MorphList - "a text blob parsed via FUN_00dac5b0 into
+    std::optional<std::string> morphListRaw;     // Slider > MorphList - "a text blob parsed via 0x00dac5b0 into
                                                   // a name list" (§16.1); the delimiter/grammar is not given, so
                                                   // this is kept as raw, unsplit text. Each resolved name would map
                                                   // through §14's morph namespace into an {id, weight=0} pair - the
@@ -243,7 +243,7 @@ std::vector<MasterSliderCategory> ParsePlayerMasterSlidersTable(const Document& 
 // [CONFIRMED - disassembly + empirical] Each Preset is a 100-byte fixed record.
 // ===========================================================================
 struct PresetComposite {
-    std::optional<std::string> layer;   // Layer -> customization_compositing.xtbl Composite_Layer.Name (§9.3, FUN_009f9f20)
+    std::optional<std::string> layer;   // Layer -> customization_compositing.xtbl Composite_Layer.Name (§9.3, 0x009f9f20)
     std::optional<ColorText> color;      // Color; "defaulting to opaque white if absent" (§16.2) - a spec-STATED
                                            // CONCRETE DEFAULT (distinct from the general Always-hazard)
     ColorText ColorOrDefault() const { return color.value_or(ColorText{1.0f, 1.0f, 1.0f, 1.0f}); }
@@ -253,18 +253,18 @@ struct PresetElement {
     Always<float> value;                     // Value
 };
 struct PresetRegionalPresetRef {
-    std::optional<std::string> category;  // Category (via FUN_00838cc0) -> §16.3's registry
-    std::optional<std::string> preset;     // Preset (via FUN_00838d10) -> §16.3's registry
+    std::optional<std::string> category;  // Category (via 0x00838cc0) -> §16.3's registry
+    std::optional<std::string> preset;     // Preset (via 0x00838d10) -> §16.3's registry
 };
 struct Preset {
     std::optional<std::string> name;   // Name (hashed)
-    std::optional<std::string> race;    // Race (via FUN_00832000; "presumably the same 4-name race vocabulary as
+    std::optional<std::string> race;    // Race (via 0x00832000; "presumably the same 4-name race vocabulary as
                                           // elsewhere in this group - not independently confirmed to be the
                                           // identical array", §16.2) - raw text only, no enum index modelled
-    std::optional<std::string> gender;   // Gender (via FUN_00831fc0) - raw text only
+    std::optional<std::string> gender;   // Gender (via 0x00831fc0) - raw text only
     Always<bool> isDefault;               // Default - "marks the character creator's initial preset"
     std::optional<std::string> displayName;  // DisplayName
-    std::optional<std::string> hair;          // Hair -> customization_items.xtbl item (FUN_008282c0, the SAME
+    std::optional<std::string> hair;          // Hair -> customization_items.xtbl item (0x008282c0, the SAME
                                                // helper customization_default_items.xtbl's Item field uses, §8 -
                                                // "confirming a preset's hair selection is a real
                                                // customization_items.xtbl row, not a separate hairstyle list")
@@ -293,7 +293,7 @@ struct RegionalPresetMorphTarget {
 struct RegionalPresetEntry {
     std::optional<std::string> name;          // Presets > Preset > Name
     std::optional<std::string> displayName;    // DisplayName
-    std::optional<std::string> figure;          // figure (via FUN_00831f80 - raw text)
+    std::optional<std::string> figure;          // figure (via 0x00831f80 - raw text)
     std::vector<RegionalPresetMorphTarget> morphTargets;  // MorphTargets > MorphTarget[]
 };
 struct RegionalPresetsGroup {
@@ -321,8 +321,8 @@ struct NewEntity {
                                             // exactly 6 slots (not "~12" as previously estimated). The resolved
                                             // slot id and a second output dword are pushed into a bounded
                                             // output array (capacity/count/array-pointer identity also fully
-                                            // resolved this pass: DAT_022cbf4c=capacity 46, DAT_022cbf50=count,
-                                            // DAT_022cbf48=array base). The spec's earlier claim that the
+                                            // resolved this pass: 0x022cbf4c=capacity 46, 0x022cbf50=count,
+                                            // 0x022cbf48=array base). The spec's earlier claim that the
                                             // second dword is "a copy of the entity's own local position (a
                                             // float triple)" is NOT supported by the full decompile - no
                                             // vector/position assembly appears anywhere in this function; that

@@ -579,7 +579,7 @@ uint32_t EngineState::registerVdoObjectForTesting(const std::string& name, uint3
     uint32_t handle = nextVdoObjectHandle_++;
     VdoObject obj;
     obj.name = name;
-    obj.nameHash = sr3save::nameHash(name); // FUN_00D9E740 stand-in - see engine_state.h's own doc comment
+    obj.nameHash = sr3save::nameHash(name); // 0x00d9e740 stand-in - see engine_state.h's own doc comment
     obj.parentHandle = parentHandle;
     obj.docHandle = docHandle;
     vdoObjects_[handle] = obj;
@@ -595,7 +595,7 @@ uint32_t EngineState::findVdoObject(const std::string& name, bool hasParent, uin
                                      bool hasDoc, uint32_t docHandle) const {
     uint32_t targetHash = sr3save::nameHash(name);
     // CONFIRMED (Sec15): "parent_handle, if given, resolves through
-    // FUN_00e28850 ... then the hashed name is looked up among that
+    // 0x00e28850 ... then the hashed name is looked up among that
     // resolved parent's children, OR document-wide if no parent was
     // resolved" - "no parent was resolved" covers BOTH an absent/wrong-
     // type argument AND a given-but-unresolvable (stale/bad) handle

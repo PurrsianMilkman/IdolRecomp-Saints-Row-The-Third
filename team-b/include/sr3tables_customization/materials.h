@@ -41,18 +41,18 @@ inline constexpr std::array<std::string_view, 4> kDefaultItemRaceNames = {"asian
 
 // Color_Pool > Character_Color_Grid|Makeup_Color_Grid > Color_Element: each
 // Color_Element's own "Color" child holds a colour NAME, resolved through
-// the shared §2 pool helper (FUN_00746d60) - the same name-lookup
+// the shared §2 pool helper (0x00746d60) - the same name-lookup
 // convention as customization_items.xtbl's Default_Color entries (items.h).
 struct ColorPoolOverrideEntry {
     std::optional<std::string> color;  // Color_Element > Color (a colour-pool entry NAME, not an RGBA literal)
 };
 
 struct DefaultEntry {
-    std::optional<std::string> item;        // Item -> customization_items.xtbl array (FUN_008282c0 - the SAME
+    std::optional<std::string> item;        // Item -> customization_items.xtbl array (0x008282c0 - the SAME
                                               // helper player_presets.xtbl's Hair field uses, §16.2)
     std::optional<std::string> wearOption;   // Wear_Option -> that item's own Wear_Option array
     std::optional<std::string> variant;      // Variant -> that item's own Variant array
-    // The combined Item+Wear_Option+Variant lookup id (FUN_009fd5b0) is
+    // The combined Item+Wear_Option+Variant lookup id (0x009fd5b0) is
     // derived at load time, not a separate XML element - not modelled.
 
     std::optional<std::string> gender;  // Gender: "male"/"female"/absent - absent is an explicit "either"
@@ -115,7 +115,7 @@ struct Normals {
     Always<bool> female;                 // Female
 
     // Five body-composite normal-map bindings, each resolved via
-    // FUN_00db1160 then baked into a runtime texture-load request tagged
+    // 0x00db1160 then baked into a runtime texture-load request tagged
     // "pcust" (§9.2) - the tag/bake is derived, not modelled; raw texture
     // reference text is kept.
     std::optional<std::string> ideal;
@@ -139,7 +139,7 @@ std::vector<Normals> ParseCustomizationNormalsTable(const Document& doc);
 // Composite_Layer is a 68-byte (0x44) record.
 // ===========================================================================
 struct CompositeLayer {
-    std::optional<std::string> name;           // Name (hashed, FUN_00db12c0)
+    std::optional<std::string> name;           // Name (hashed, 0x00db12c0)
     std::optional<std::string> displayName;     // Display_Name (optional)
     // diffuse/normal are NOT leaf text nodes in real shipped data (confirmed
     // directly against misc_tables.vpp_pc's own customization_compositing.xtbl,

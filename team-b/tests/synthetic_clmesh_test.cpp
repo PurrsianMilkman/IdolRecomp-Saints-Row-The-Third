@@ -16,7 +16,7 @@
 // here are
 //   * the two head slot arrays are contiguous (no realign between them),
 //   * an empty array consumes AND aligns nothing,
-//   * `FUN_00749e80` DOES realign between its `+0xd8` and `+0xe8` arrays,
+//   * `0x00749e80` DOES realign between its `+0xd8` and `+0xe8` arrays,
 //   * the trailing group is primary-then-parallel, not the reverse,
 //   * the trailing group's inner lists are 4-byte elements at 8-byte
 //     alignment,
@@ -119,12 +119,12 @@ struct ClmeshOptions {
     std::vector<uint32_t> innerFc = {1, 1, 1};   // one per trailing-group entry
 
     // The flags byte at header `+0x08`. Bit 2 (mask 0x04) is what selects
-    // FUN_00749ba0's collision-hull parse when `+0x78` is the sentinel.
+    // 0x00749ba0's collision-hull parse when `+0x78` is the sentinel.
     uint32_t headerFlags = 0;
 
     // --- the HEAD's own payloads ------------------------------------------
     // Each count(+0x48) entry is an embedded Mesh sub-block; each
-    // count(+0x58) entry is a FUN_00e401d0 index-list block laid down AFTER
+    // count(+0x58) entry is a 0x00e401d0 index-list block laid down AFTER
     // all of them (spec-physics-format.md Sec4.4.6's correction to Sec4.4.1).
     uint32_t headIndexCount = 1;    // elements in each array-2 index list
     // When non-empty, the HEAD's Mesh sub-blocks are built as REAL g-backed
@@ -132,7 +132,7 @@ struct ClmeshOptions {
     // c-side-only ones.
     std::vector<std::vector<std::array<float, 3>>> headRealMeshes;
 
-    // --- the MIDDLE (thunk_FUN_00e3e590), built for real ------------------
+    // --- the MIDDLE (0x00e3e590), built for real ------------------
     // Sec4.4.6(b): a 0x50-byte record, a material-set block, the
     // materialCount x 8 lookup table, then two render-mesh groups.
     // The name table's TOTAL byte length decides whether the leading-NUL
@@ -149,10 +149,10 @@ struct ClmeshOptions {
     std::vector<uint32_t> midGroupBSub;  // R[+0x30] records, each count x 4
     uint32_t midTrailer34 = 0;           // R[+0x48] x 0x34
 
-    // FUN_00748c70's list block (non-sentinel `+0x78` only): its own declared
+    // 0x00748c70's list block (non-sentinel `+0x78` only): its own declared
     // total byte size at `+0x08`.
     uint32_t gatedListBlockSize = 32;
-    // FUN_00749ba0's collision hull (sentinel `+0x78` + flags bit 2 only).
+    // 0x00749ba0's collision hull (sentinel `+0x78` + flags bit 2 only).
     uint32_t hullVertexCount = 3;
     uint32_t hullIndexCount = 3;
     uint32_t hullBlobLength = 20;
@@ -200,7 +200,7 @@ void appendMeshSubBlock(std::vector<uint8_t>& c, std::vector<uint8_t>& g, uint32
                         const std::vector<std::array<float, 3>>& positions);
 
 // The c-side-only form of the same block, which is all the walk itself ever
-// looks at: FUN_00e71410 checks the version word 9, reads the check value and
+// looks at: 0x00e71410 checks the version word 9, reads the check value and
 // the c-length, and requires the check value repeated in the block's LAST 4
 // bytes (spec-physics-format.md Sec4.4.6(b)). `payloadBytes` must be a
 // multiple of 4 so consecutive blocks stay 4-aligned.
@@ -211,12 +211,12 @@ size_t appendMeshCBlock(std::vector<uint8_t>& b, uint32_t checkValue, size_t pay
     appendU32(b, 0);          // c-length, patched below
     appendU32(b, 0);          // g-length
     b.insert(b.end(), payloadBytes, 0x9E);
-    appendU32(b, checkValue); // the bookend FUN_00e71410 checks
+    appendU32(b, checkValue); // the bookend 0x00e71410 checks
     putU32At(b, at + 0x08, static_cast<uint32_t>(b.size() - at));
     return at;
 }
 
-// One FUN_00e401d0 index-list block: 8-align, a 0x10-byte header whose
+// One 0x00e401d0 index-list block: 8-align, a 0x10-byte header whose
 // `+0x08` is the count, then count x 4 bytes.
 size_t appendIndexList(std::vector<uint8_t>& b, uint32_t count) {
     b.resize(alignUp(b.size(), 8), 0x00);
@@ -297,7 +297,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
     }
     out.headEnd = b.size();
 
-    // --- MIDDLE: thunk_FUN_00e3e590, built for real (Sec4.4.6(b)). ---------
+    // --- MIDDLE: 0x00e3e590, built for real (Sec4.4.6(b)). ---------
     b.resize(alignUp(b.size(), 16), 0x00);
     out.middleAt = b.size();
     const size_t R = b.size();
@@ -318,7 +318,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
     putU32At(b, R + 0x24, 0x01234567u);
     putU32At(b, R + 0x34, 0x89abcdefu);
 
-    // FUN_00e40210, the material-set block.
+    // 0x00e40210, the material-set block.
     b.resize(alignUp(b.size(), 8), 0x00);
     const size_t H = b.size();
     out.matSetAt = H;
@@ -334,7 +334,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
     for (const std::string& n : opt.midMaterialNames) appendCString(b, n);
     putU32At(b, H + sr3clmesh::kMatSetNameTable, static_cast<uint32_t>(b.size() - midNameStart));
     // One 8-byte slot per record, then the records, each declaring its own
-    // byte size at its `+0x00` (FUN_00e71090).
+    // byte size at its `+0x00` (0x00e71090).
     b.resize(alignUp(b.size(), 8), 0x00);
     b.resize(b.size() + materialCount * sr3clmesh::kStrideMatSetSlot, 0x00);
     for (uint32_t size : opt.midRecordSizes) {
@@ -342,13 +342,13 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
         b.resize(at + size, 0xA5);
         putU32At(b, at, size);
     }
-    // R[+0x08]'s materialCount x 8 array - the table FUN_0074a110 indexes.
+    // R[+0x08]'s materialCount x 8 array - the table 0x0074a110 indexes.
     if (!opt.mutateMiddleNoLookupArray) {
         b.resize(alignUp(b.size(), 8), 0x00);
         b.resize(b.size() + materialCount * sr3clmesh::kStrideLookupEntry, 0x00);
     }
 
-    // FUN_00e3c6e0: two render-mesh groups, each a 0x60-byte header, an
+    // 0x00e3c6e0: two render-mesh groups, each a 0x60-byte header, an
     // index-list block, an embedded Mesh sub-block, then a u16 array and a u8
     // array of the index list's own length with no alignment between them.
     auto appendRenderGroup = [&](uint32_t indexCount, uint32_t checkValue) {
@@ -393,7 +393,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
     }
     out.middleEnd = b.size();
 
-    // --- TAIL. FUN_00749b40 16-aligns UNCONDITIONALLY on entry. ------------
+    // --- TAIL. 0x00749b40 16-aligns UNCONDITIONALLY on entry. ------------
     b.resize(alignUp(b.size(), 16), 0x00);
     out.tailAt = b.size();
 
@@ -413,7 +413,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
 
     // Sec4.4.6(f): THREE outcomes, two of which consume real bytes.
     if (opt.pairFirst != sr3clmesh::kPairSentinel) {
-        // FUN_00748c70 -> FUN_007616c0: 16-align, then a block that declares
+        // 0x00748c70 -> 0x007616c0: 16-align, then a block that declares
         // its OWN total byte size at `+0x08` and its entry count (< 3) at
         // `+0x0c`. Per-file, not the constant this reader used to assume.
         b.resize(alignUp(b.size(), 16), 0x00);
@@ -424,7 +424,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
         putU32At(b, out.atGatedBlock + 0x0c,
                  opt.pairSecond == sr3clmesh::kPairSentinel ? 1u : 2u);
     } else if ((opt.headerFlags & sr3clmesh::kHullGateMask) != 0) {
-        // FUN_00749ba0 -> FUN_007a79f0 -> FUN_0077a3e0: a real collision
+        // 0x00749ba0 -> 0x007a79f0 -> 0x0077a3e0: a real collision
         // hull, NOT the "builds a default, consumes nothing" reading Sec4.2
         // originally posed.
         b.resize(alignUp(b.size(), 16), 0x00);
@@ -502,7 +502,7 @@ std::vector<uint8_t> buildClmesh(const ClmeshOptions& opt, ClmeshLayout& out,
         maybeAlign16IfEmptyArraysAlign();
     }
 
-    // --- FUN_00749e80's trailing nested group, which ends exactly at EOF. --
+    // --- 0x00749e80's trailing nested group, which ends exactly at EOF. --
     b.resize(alignUp(b.size(), 8), 0x00);
     const size_t innerStride =
         opt.mutateTwelveByteTrailingInner ? sr3clmesh::kStride88Inner : sr3clmesh::kStrideFcInner;
@@ -594,7 +594,7 @@ void appendMeshSubBlock(std::vector<uint8_t>& c, std::vector<uint8_t>& g, uint32
     seg.resize(alignUp(seg.size(), 4), 0x00);
     appendU32(seg, checkValue);
 
-    // The c-side bookend FUN_00e71410 checks: the block's own check value
+    // The c-side bookend 0x00e71410 checks: the block's own check value
     // repeated in its LAST 4 bytes (spec-physics-format.md Sec4.4.6(b)).
     block.resize(block.size() + 4, 0x00);
     putU32At(block, block.size() - 4, checkValue);
@@ -672,7 +672,7 @@ void testHeaderRejections() {
 }
 
 // ==========================================================================
-// Part B: HEAD - FUN_007499d0's two slot arrays
+// Part B: HEAD - 0x007499d0's two slot arrays
 // ==========================================================================
 
 void testHeadTwoSlotArraysAreContiguous() {
@@ -707,7 +707,7 @@ void testHeadTwoSlotArraysAreContiguous() {
 
 // Sec4.4.6's correction to Sec4.4.1: the published head formula
 // (`8*count(+0x48) + 8*count(+0x58) + sum of Mesh sub-block sizes`) is
-// INCOMPLETE - array 2's own FUN_00e401d0 index-list payloads follow every
+// INCOMPLETE - array 2's own 0x00e401d0 index-list payloads follow every
 // Mesh sub-block and this reader shipped without them. Building the file the
 // way the published formula describes must cost the exact landing.
 void testHeadMutationNoIndexListPayloads() {
@@ -1161,7 +1161,7 @@ void testGatedPairMutationListBlockCostsZero() {
     CHECK(!m.landsOnEof());
 }
 
-// Sec4.4.6(f)'s REFUTATION of Sec4.2's `FUN_00749ba0` row: the sentinel
+// Sec4.4.6(f)'s REFUTATION of Sec4.2's `0x00749ba0` row: the sentinel
 // branch does not build a default out of two hard-coded constants, it parses
 // a real file-resident collision hull - a vertex list, a u16 index list, an
 // opaque blob and two vec3s - in 18,706 of the 100,384 shipped entries.
@@ -1244,7 +1244,7 @@ void testGatedPairMutationSentinelBranchConsumesBytes() {
 }
 
 // ==========================================================================
-// Part E: the MeshBlock reuse and FUN_0074a110's finalization
+// Part E: the MeshBlock reuse and 0x0074a110's finalization
 // ==========================================================================
 
 void testResolvedReferenceIsAMeshSubBlock() {
@@ -1344,7 +1344,7 @@ void testResolvedReferencesEmptyWhenCountIsZero() {
 }
 
 void testFinalizationArithmetic() {
-    // FUN_0074a110's three outputs, hand-computed, with no Mesh sub-block in
+    // 0x0074a110's three outputs, hand-computed, with no Mesh sub-block in
     // the way. Half-extent (max-min)/2, centre min+half-extent, radius the
     // length of the half-extent vector.
     sr3clmesh::BoundingVolume bv =
@@ -1566,7 +1566,7 @@ void testMiddleMutationOneRenderGroup() {
 
 void testMiddleMutationNoLookupArray() {
     // MUTATION: the materialCount x 8 array at R[+0x08] left out of the file.
-    // This is FUN_0074a110's lookup table, and it is a real cursor cost.
+    // This is 0x0074a110's lookup table, and it is a real cursor cost.
     ClmeshOptions opt;
     opt.mutateMiddleNoLookupArray = true;
     ClmeshLayout lay;

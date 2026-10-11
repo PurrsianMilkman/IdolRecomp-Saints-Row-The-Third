@@ -114,7 +114,7 @@ std::vector<CharacterType> ParseCharacterTypesTable(const Document& doc) {
     std::vector<CharacterType> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Type"); row; row = NextSibling(wrap, row, "Type")) {
-        // CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_00be1d80` read in full): a do/while that
+        // CONFIRMED 2026-10-02 (re-derived from the executable, `0x00be1d80` read in full): a do/while that
         // stores a row, increments the row index, THEN tests `(short)index < 0x78` to continue - a post-
         // increment strict `<` that keeps a true maximum of exactly 120 (not 119), matching the `>= 120`
         // already coded here. Real data has 96 rows, so it cannot change a result on real data.

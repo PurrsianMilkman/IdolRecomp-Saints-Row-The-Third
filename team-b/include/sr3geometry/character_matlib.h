@@ -1,18 +1,18 @@
 // Per-identity matlib RESOLUTION/ATTACHMENT model - spec-tables-
-// customization.md §12.1b ("FUN_00be0630's real job: per-identity asset
+// customization.md §12.1b ("0x00be0630's real job: per-identity asset
 // precache, and how the matlib is actually consumed").
 //
 // §12.1b traces the real matlib-consumption mechanism end to end, from the
 // executable:
 //
-//   FUN_00da8790 (pure filename compose: strip extension, append the
+//   0x00da8790 (pure filename compose: strip extension, append the
 //                 platform-selected one)
-//     -> FUN_00da90d0 (file-exists check)
-//     -> FUN_006f6c20 / FUN_006f7330 (open/attach a typed slot to a shared
+//     -> 0x00da90d0 (file-exists check)
+//     -> 0x006f6c20 / 0x006f7330 (open/attach a typed slot to a shared
 //                 composite, keyed by the identity's own Name)
-//     -> FUN_00db48a0 (the real cache: a name-lookup short-circuits on a
+//     -> 0x00db48a0 (the real cache: a name-lookup short-circuits on a
 //                 hit; only a miss issues a load via the deeper streaming
-//                 primitive FUN_00dd35e0, not expanded)
+//                 primitive 0x00dd35e0, not expanded)
 //
 // The matlib is registered under resource TYPE TAG 0x16, CONFIRMED at all 4
 // of its real call sites - the SAME per-resource-TYPE attachment pattern the
@@ -28,7 +28,7 @@
 // EXPLICITLY OPEN, NOT MODELLED HERE (§12.1b, do not invent): the true
 // render-time consumer that turns a cached 0x16-tagged matlib handle into
 // actual D3D texture-stage bindings lies PAST this chain (named as living
-// somewhere past FUN_00dd35e0 / FUN_00db3c80 -> FUN_00db3b40) and was not
+// somewhere past 0x00dd35e0 / 0x00db3c80 -> 0x00db3b40) and was not
 // traced. This file models the RESOLUTION/ATTACHMENT step only - i.e. it
 // answers "does this identity have a matlib, and what does it contain as
 // its own independent resource" - not "which material slot(s) does it bind
@@ -60,14 +60,14 @@ enum class CharacterResourceType : uint32_t {
 };
 
 // One identity-keyed, type-tagged resource attachment record - what
-// FUN_006f6c20/FUN_006f7330 build in the real engine for a Character's
+// 0x006f6c20/0x006f7330 build in the real engine for a Character's
 // matlib. `identityName` is the cache key (the Character's own Name, per
 // §12.1b: "keyed by the identity's own Name"), NOT a texture or mesh name.
 struct CharacterMatlibAttachment {
     std::string identityName;                               // the cache key
     CharacterResourceType type = CharacterResourceType::kMatlib; // 0x16, confirmed
-    std::string composedFileName;   // FUN_00da8790's result, e.g. "brad_head.matlib_pc"
-    bool locatedInArchive = false;  // FUN_00da90d0's file-exists-check outcome
+    std::string composedFileName;   // 0x00da8790's result, e.g. "brad_head.matlib_pc"
+    bool locatedInArchive = false;  // 0x00da90d0's file-exists-check outcome
 
     // The attached resource's OWN parsed content - its own independent
     // typed slot, never spliced into any mesh's embedded material table.
@@ -86,7 +86,7 @@ struct CharacterMatlibAttachment {
     bool attached() const { return locatedInArchive; }
 };
 
-// FUN_00da8790's job, per §12.1b: "pure filename compose: strip extension,
+// 0x00da8790's job, per §12.1b: "pure filename compose: strip extension,
 // append the platform-selected one." `.matlib_pc` is this project's own
 // confirmed PC-platform extension for this resource type (the same "_pc"
 // suffix convention every other resource extension in this codebase uses -
@@ -96,7 +96,7 @@ std::string ComposeMatlibFileName(const std::string& baseName);
 // Resolves + attaches `identityName`'s matlib, reproducing the real
 // engine's traced 3-step chain (compose -> exists-check -> attach-as-its-
 // own-typed-slot) without this file depending on vpp::Container directly:
-// `loadByName` is a caller-supplied existence+load predicate (FUN_00da90d0's
+// `loadByName` is a caller-supplied existence+load predicate (0x00da90d0's
 // exists-check plus the byte-read a caller like findEntry() against a real
 // vpp::Container already does in one step) - returns true and fills `out`
 // iff the composed name exists, false otherwise. This keeps the resolution
@@ -122,7 +122,7 @@ CharacterMatlibAttachment ResolveCharacterMatlibAttachment(
 //
 // IMPORTANT - what §12.1c/§12.1f do NOT confirm: a stated rule for WHICH
 // matlib entry replaces WHICH mesh material slot. §12.1c traces the
-// matlib's own file-format constructor (`FUN_0074d9a0`) in full and finds
+// matlib's own file-format constructor (`0x0074d9a0`) in full and finds
 // its texture-name table (the thing MaterialBlock below parses) is
 // "explicitly skipped and never retained" by the real engine at runtime -
 // i.e. the shipped binary itself has no traced instruction that reads this

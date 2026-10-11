@@ -40,7 +40,7 @@ std::vector<WearOptionFlagRef> ReadFlagRefList(const Node* wrap, std::string_vie
 MaterialElementEntry ParseMaterialElement(const Node* row) {
     MaterialElementEntry m;
     m.material = OptText(row, "Material");
-    // CONFIRMED 2026-10-02 (spec-tables-customization.md §4.3, re-derived from the executable, `FUN_00829650`
+    // CONFIRMED 2026-10-02 (spec-tables-customization.md §4.3, re-derived from the executable, `0x00829650`
     // read in full): Shader_Type IS a Material_Element child, not a Variant child - this reading was correct.
     // src/customization.cpp's ParseVariant used to read it at the Variant level instead (the actual bug); it
     // has been corrected to match this function (see include/sr3customization/customization.h's MaterialElement).
@@ -68,8 +68,8 @@ WearOptionEntry ParseWearOptionAccepted(const Node* row) {
     const Node* meshInformation = FindChild(row, "Mesh_Information");
     // RESOLVED 2026-10-02 (spec-tables-customization.md §4.2, re-derived from the executable,
     // `func_0x00829650.txt`/`func_0x009fd8c0.txt` read in full): Female_Mesh_Filename is CONFIRMED absent from
-    // FUN_00829650's own decompile (the function WearOptionEntry models) - not a decompile gap, a genuine
-    // absence from THIS function. It IS read, but by a separate composer (`FUN_009FD8C0`, called once per item
+    // 0x00829650's own decompile (the function WearOptionEntry models) - not a decompile gap, a genuine
+    // absence from THIS function. It IS read, but by a separate composer (`0x009fd8c0`, called once per item
     // right after the Wear_Option loop, building the custmesh_<N>/custmesh_<N>f bundle names) - both specs were
     // right about different functions, no real conflict. Only the male name belongs in this typed reader;
     // sr3customization::MeshInformation (a different layer, built from spec-customization-data.md) already
@@ -155,7 +155,7 @@ std::vector<CustomizationItemEntry> ParseCustomizationItemsTable(const Document&
         // "not ready (bit 0 - row is entirely skipped ... without allocating
         // a slot)" (§4.1).
         if (HasFlag(FindChild(row, "Flags"), "not ready")) continue;
-        // Hard cap 858 rows (0x35a, §4.1). CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_00829650`
+        // Hard cap 858 rows (0x35a, §4.1). CONFIRMED 2026-10-02 (re-derived from the executable, `0x00829650`
         // read in full): the compare runs at the TOP of the loop against the not-yet-incremented count, keeping
         // a maximum of exactly 858 (indices 0-857) - matching the `>=` coding already used here. Real data has
         // 574 rows (§21), so this operator cannot change a result on real data either way.

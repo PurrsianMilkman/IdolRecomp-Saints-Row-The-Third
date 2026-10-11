@@ -15,7 +15,7 @@
 // Content_Element (Item, Default_Wear_Option, Primary/Secondary/Tertiary_
 // Color), Styles_Grid > Style_Element > Variant_Grid > Variant_Element. The
 // one thing §5.1 states that the older reader doesn't model, "a CRC field
-// (&DAT_0115f594)", reads as a DERIVED value (a CRC-32 of the outfit Name,
+// (&0x0115f594)", reads as a DERIVED value (a CRC-32 of the outfit Name,
 // the same kind of load-time-computed key this project's convention already
 // leaves unmodelled elsewhere - e.g. sr3tables_environment's SkyboxEffect.name
 // "-> CRC-32 key (derived; not stored here)") - not a new authored XML
@@ -42,11 +42,11 @@
 //  1. Mesh_Information / Female_Mesh_Filename: RESOLVED 2026-10-02 (spec-
 //     tables-customization.md §4.2, re-derived from the executable,
 //     `func_0x00829650.txt`/`func_0x009fd8c0.txt` read in full). `Female_
-//     Mesh_Filename` is CONFIRMED absent from `FUN_00829650`'s own
+//     Mesh_Filename` is CONFIRMED absent from `0x00829650`'s own
 //     decompile (the function this header's WearOptionEntry models) - it
 //     genuinely is NOT one of this reader's fields, not a gap in an earlier
 //     pass's decompile. It IS read, but by a separate composer function
-//     (`FUN_009FD8C0`, called once per item right after the Wear_Option
+//     (`0x009fd8c0`, called once per item right after the Wear_Option
 //     loop, building the `custmesh_<N>`/`custmesh_<N>f` bundle names) -
 //     i.e. the two specs were both right about different functions, no
 //     real conflict. sr3customization::MeshInformation (built from
@@ -55,9 +55,9 @@
 //     correctly; THIS header correctly omits it. No code change needed on
 //     either side - this discrepancy is now a confirmed non-bug.
 //  2. Shader_Type: RESOLVED 2026-10-02 (spec-tables-customization.md §4.3,
-//     re-derived from the executable, `FUN_00829650` read in full):
+//     re-derived from the executable, `0x00829650` read in full):
 //     Shader_Type's parent is CONFIRMED to be Material_Element ("the
-//     `FUN_00daba40(elementHandle, "Shader_Type")` call sits inside the
+//     `0x00daba40(elementHandle, "Shader_Type")` call sits inside the
 //     per-Material_Element loop, using that loop's own element handle") -
 //     settling the conflict IN FAVOUR of this header's own reading
 //     (MaterialElementEntry::shaderType, below). sr3customization::
@@ -90,7 +90,7 @@ using sr3xtbl::Always;
 using sr3xtbl::Document;
 using sr3xtbl::Node;
 
-// The 24 canonical slot names (§6.1, `PTR_DAT_0130b780`) are declared as
+// The 24 canonical slot names (§6.1, `0x0130b780`) are declared as
 // kCanonicalSlotNames in slots_categories.h, included BEFORE this file from
 // the umbrella tables.h (see that file's #include order) since §4, §6.1,
 // §6.2 and §7.1 all resolve a `Slot` reference against the same array.
@@ -118,15 +118,15 @@ struct WearOptionEntry {
                                                     // custmesh_<N>.str2_pc bundle recipe, spec-customization-
                                                     // data.md §5 / this spec §4.2). CORRECTED 2026-10-02 (§4.2,
                                                     // re-derived from the executable, `func_0x00da7930.txt`
-                                                    // read in full): `FUN_00da7930` is NOT a hash - it is
+                                                    // read in full): `0x00da7930` is NOT a hash - it is
                                                     // exactly `_strncpy(dest, src, n); dest[n-1] = '\0';`, a
                                                     // plain bounded string copy, used only to make a private
                                                     // NUL-terminated copy of this element's text. Inside
-                                                    // `FUN_00829650`'s own Wear_Option loop, Male_Mesh_Filename
-                                                    // is fetched via `FUN_00daba10` (plain text fetch) and
-                                                    // bounded-copied via `FUN_00da7930` with NO hash call
+                                                    // `0x00829650`'s own Wear_Option loop, Male_Mesh_Filename
+                                                    // is fetched via `0x00daba10` (plain text fetch) and
+                                                    // bounded-copied via `0x00da7930` with NO hash call
                                                     // applied to it at all - whatever consumes it as a hash
-                                                    // (the composer `FUN_009FD8C0`, via `FUN_00d9e8b0`) does so
+                                                    // (the composer `0x009fd8c0`, via `0x00d9e8b0`) does so
                                                     // downstream, not here. This reader already matched that
                                                     // behaviour (OptText, no hash computed) - comment only, no
                                                     // behaviour change.
@@ -149,7 +149,7 @@ struct MaterialElementEntry {
                                                // DISCREPANCY 2 above); modelled per-element here, matching the
                                                // real loader
     // The hardcoded __stricmp(name,"cm_suit_deckersuit") special case (4.3)
-    // is load-time control flow (feeds FUN_00828de0), not an XML field - not modelled.
+    // is load-time control flow (feeds 0x00828de0), not an XML field - not modelled.
 };
 
 struct VariantEntry {
@@ -181,7 +181,7 @@ struct VariantEntry {
 // enforced mutually-exclusive, since the spec does not state the parser
 // itself rejects more than one being present.
 //
-// CONFIRMED 2026-10-02 (§4.4, re-derived from the executable, `FUN_00829650`
+// CONFIRMED 2026-10-02 (§4.4, re-derived from the executable, `0x00829650`
 // read in full) - the clamp/back-fill quirk this section's header comment
 // references is now fully pinned down, still NOT computed here: the
 // "target" count is specifically Variant[0]'s own `cm_suit_deckersuit`-match
@@ -223,19 +223,19 @@ struct CustomizationItemEntry {
     bool bigHat = false;               // bit 1
     bool variantsAreSameItem = false;  // bit 2
     bool npcOnly = false;              // "npc only" - not one of the 3 recovered bit positions. CORRECTED
-                                        // 2026-10-02 (§4.1, re-derived from the executable, `FUN_00829650` read
+                                        // 2026-10-02 (§4.1, re-derived from the executable, `0x00829650` read
                                         // in full): the "unmatched Slot still accepted iff npcOnly" exception
                                         // this field used to be justified by is WRONG for THIS table - an
-                                        // unmatched Slot causes an unconditional `goto` skip in FUN_00829650
+                                        // unmatched Slot causes an unconditional `goto` skip in 0x00829650
                                         // with no Flags/npc-only check anywhere near that code. That exception
                                         // is real, but belongs to customization_slots.xtbl's OWN reader
-                                        // (FUN_009fca30, §6.1), not to this item reader. `npcOnly` is kept as a
+                                        // (0x009fca30, §6.1), not to this item reader. `npcOnly` is kept as a
                                         // raw flag (real, confirmed bit) but no longer described as gating Slot
                                         // acceptance here.
                                         //
                                         // Also newly found (same dump, not modelled): a SECOND, previously-
                                         // undocumented skip gate immediately after Slot resolution -
-                                        // `FUN_009fd5f0` is called on the resolved slot index and the row is
+                                        // `0x009fd5f0` is called on the resolved slot index and the row is
                                         // skipped (same goto) if bit 2 of its returned byte is set. Its exact
                                         // meaning was not traced past that; flagged, not guessed, not modelled.
 

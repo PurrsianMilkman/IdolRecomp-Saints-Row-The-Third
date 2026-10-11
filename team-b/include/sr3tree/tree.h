@@ -109,7 +109,7 @@ constexpr size_t kLodSlotCount = 4;
 constexpr size_t kPresenceEntrySize = 8;
 constexpr uint32_t kMeshSubBlockVersion = 9;
 
-// The material-set block, FUN_00e40210 - same shared block sr3clmesh's
+// The material-set block, 0x00e40210 - same shared block sr3clmesh's
 // MIDDLE parses (spec-physics-format.md Sec4.4.6(b)/(h)), independently
 // re-implemented here per this project's convention of not cross-linking
 // format readers for a block each already knows how to parse on its own.
@@ -118,7 +118,7 @@ constexpr size_t kMatSetCountOffset = 0x00;
 constexpr size_t kMatSetNameTableLengthOffset = 0x10;
 constexpr size_t kMatSetSlotStride = 8;
 
-// One inline material definition, FUN_00e71090 - same routine as
+// One inline material definition, 0x00e71090 - same routine as
 // spec-foliage-format.md Sec6.
 constexpr size_t kMatRecordHeaderSize = 0x30;
 constexpr size_t kMatRecordHashOffset = 0x00;
@@ -129,7 +129,7 @@ constexpr size_t kMatRecordConstCountOffset = 0x0E;
 constexpr size_t kMatRecordVec4CountOffset = 0x0F;
 constexpr size_t kTextureBindingSize = 12;
 
-// The generic index list, FUN_00e401d0 (spec Sec7): align 8, a 0x10-byte
+// The generic index list, 0x00e401d0 (spec Sec7): align 8, a 0x10-byte
 // header whose +0x08 is the element count, then count x u32. In trees these
 // u32s are PLACEHOLDERS (identity 0..n-1 on disk, 11/11) that the engine
 // overwrites at load with material-cache handles - NOT a material-index

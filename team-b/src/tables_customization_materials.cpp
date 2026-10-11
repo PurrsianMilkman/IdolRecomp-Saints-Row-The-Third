@@ -106,7 +106,7 @@ std::vector<Normals> ParseCustomizationNormalsTable(const Document& doc) {
     std::vector<Normals> out;
     const Node* wrap = doc.table();
     for (const Node* row = FindChild(wrap, "Normals"); row; row = NextSibling(wrap, row, "Normals")) {
-        // CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_009fcc00` read in full): the check
+        // CONFIRMED 2026-10-02 (re-derived from the executable, `0x009fcc00` read in full): the check
         // `if (7 < count) stop` runs at the TOP of the loop against the not-yet-incremented count - keeps a
         // true maximum of exactly 8, matching the `>= 8` already coded here. THIS IS THE ONE CAP THAT CAN CHANGE
         // A RESULT ON REAL DATA: the shipped file has exactly 8 Normals rows, i.e. it sits exactly at the cap -

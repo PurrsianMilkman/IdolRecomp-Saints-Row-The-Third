@@ -18,7 +18,7 @@ namespace {
 // Batch 2026-10-02: spec-lua-api-behaviour.md Sec31 ("pause_map_stag_
 // current_district_control" - location and "stag mode") and Sec32
 // ("ranking tranche 04", 25 previously-unspecced names). 5 names from
-// Sec31's own UI pause-map registrar (FUN_007dfae0, see Sec31.1's own
+// Sec31's own UI pause-map registrar (0x007dfae0, see Sec31.1's own
 // 9-entry table) plus the 25 gameplay-registrar names of Sec32 - 30 total.
 // See engine_state.h's own per-field/per-method doc comments for exactly
 // which real global/mechanism each one stands for.

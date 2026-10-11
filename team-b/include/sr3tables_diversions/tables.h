@@ -145,8 +145,8 @@ struct StuntHijacking {
                                          // the engine stores it combined as Hud_Time_ms +
                                          // Cooldown_Time_ms (ADDITION, a "cooldown ends at"
                                          // timestamp) - NOT subtraction as earlier text here said.
-                                         // The distinct constant DAT_01115368 (used instead of the
-                                         // general DAT_012a2d90) is itself -1000.0, i.e.
+                                         // The distinct constant 0x01115368 (used instead of the
+                                         // general 0x012a2d90) is itself -1000.0, i.e.
                                          // round(Cooldown_Time_s * -1000.0) = -Cooldown_Time_ms, and
                                          // Hud_Time_ms - (-Cooldown_Time_ms) = Hud_Time_ms +
                                          // Cooldown_Time_ms. No clamp exists or is needed (both
@@ -238,7 +238,7 @@ struct StuntPeelOut {
     // Record_Threshold: spec 1.5's documented ENGINE QUIRK. Unlike every
     // sibling stunt_* table (which treats this field as a percent 0-100
     // value that gets ->fraction at load), THIS table's loader
-    // (FUN_006C0CF0) runs it through the exact same seconds->ms
+    // (0x006c0cf0) runs it through the exact same seconds->ms
     // ROUND(x*k) idiom used for Instance_Delay immediately above it in the
     // same function - almost certainly a copy-paste slip in the original
     // source (the shipped TableDescription documents this field identically
@@ -278,7 +278,7 @@ struct StuntWheelsSubStunt {
 // NAMING 3 top-level fields (the record triad, at fixed offsets
 // +0x68/+0x6C/+0x70) - a self-reported spec-internal inconsistency this
 // reader deliberately did not try to resolve by guessing. **CORRECTED
-// 2026-10-02** (spec 2.8, re-derived from the executable, FUN_006C16A0):
+// 2026-10-02** (spec 2.8, re-derived from the executable, 0x006c16a0):
 // this is now settled, not just sidestepped - no instruction in the loader
 // touches any offset below +0x14 (where the sub-stunt loop begins), so there
 // is no disassembly support for "~4 more top-level fields" at all. The
@@ -303,8 +303,8 @@ inline constexpr std::array<std::string_view, 3> kStuntJumpingVehicleTypeNames =
 };
 // One of the six identically-shaped per-axis sub-blocks inside a Vehicle_Type
 // entry (Land_Distance, Air_Height, Fall_Dist, Pitch_Rotation, Roll_Rotation,
-// Spin_Rotation - spec 2.9, confirmed by the literal-pointer table
-// PTR_s_Land_Distance_...).
+// Spin_Rotation - spec 2.9, confirmed by the literal-pointer table for the
+// string "Land_Distance" (address not recorded in this comment).
 struct StuntJumpingAxis {
     Always<float> maxValue, minValue;  // Max_Value/Min_Value (reset pair, not modelled)
     std::optional<float> maxPercent;    // Max_Percent (percent 0-100; ->fraction + an additional
@@ -336,7 +336,7 @@ struct StuntJumpingVehicleType {
 };
 struct StuntJumpingDiversion {
     Always<float> endTimeSeconds;  // End_Time - NOT part of the record (CORRECTED 2026-10-02,
-                                    // spec 2.9): it is a separate flat global (DAT_014c74c0),
+                                    // spec 2.9): it is a separate flat global (0x014c74c0),
                                     // same as the reward triad below; only kept here as a
                                     // struct field for convenience, grouped with its sibling
                                     // table fields the way every other table in this reader is.
@@ -345,7 +345,7 @@ struct StuntJumpingDiversion {
                                       // +0x20ish"; this is the ONLY part of the schema actually
                                       // carried through the record pointer)
     RewardTriad reward;  // Also NOT part of the record - 3 more separate flat globals
-                          // (DAT_014c74c4/_c8/_cc), same correction as End_Time above
+                          // (0x014c74c4/_c8/_cc), same correction as End_Time above
     // Vehicle_Types - capped at EXACTLY 3 (matches TableDescription's
     // Max_Children=3, Min_Children=3; real base row has all 3: Car,
     // Motorcycle, Boat, each with all 6 sub-blocks present, spec 2.9/14).
@@ -374,10 +374,10 @@ struct StuntLowFlying {
                                                // floors it at a shared constant then SUBTRACTS 1.0,
                                                // stored as "bonus over 1" (spec 2.10) - not applied
     std::optional<float> maxHeight;            // Max_Height - write-if-present; absent/<=0 falls
-                                               // back to the shared floor constant DAT_01117A4C, a
+                                               // back to the shared floor constant 0x01117a4c, a
                                                // non-zero non-schema default (spec 2.10) - kept as
                                                // std::optional (no OrDefault helper: the constant's
-                                               // exact value is OPEN, spec 1.4 row DAT_01117a4c)
+                                               // exact value is OPEN, spec 1.4 row 0x01117a4c)
     std::optional<float> activationHeight;     // Activation_Height - same absent-fallback behaviour
     Always<float> minSpeedMph;                 // Min_Speed (mph; ->(m/s)^2)
     Always<float> maxTimeNotLowFlyingSeconds;  // Max_Time_Not_Low_Flying (seconds; ->ms)
@@ -479,7 +479,7 @@ struct BaseJumpingVehInfo {
 struct BaseJumpingRewardTier {
     Always<float> maxDistance;   // Max_Distance
     Always<int32_t> respect;     // Respect
-    Always<float> cash;          // Cash (the same &DAT_01126FA4="Cash" literal streaking.xtbl uses,
+    Always<float> cash;          // Cash (the same &0x01126fa4="Cash" literal streaking.xtbl uses,
                                   // spec 1.4)
 };
 struct BaseJumpingRewardInfo {
@@ -586,13 +586,13 @@ std::optional<MuggingDiversion> ParseMuggingDiversionTable(const Document& doc);
 // 6.3 streaking.xtbl - row Streaking (spec 6.3)
 // ===========================================================================
 // Gated by the same existence check as escort_name_generator.xtbl (spec 1.3:
-// FUN_00DA90D0/FUN_00DA8D90 - "this specific file may legitimately be
+// 0x00da90d0/0x00da8d90 - "this specific file may legitimately be
 // absent"), not a data-shape concern for this reader.
 struct StreakingLevel {
     Always<int32_t> shockQuota;    // Shock_Quota
     Always<float> timeLimitSeconds; // Time_Limit (seconds; ->ms)
     Always<int32_t> respect;        // Respect
-    Always<float> cash;             // Cash (same &DAT_01126FA4="Cash" literal as base_jumping)
+    Always<float> cash;             // Cash (same &0x01126fa4="Cash" literal as base_jumping)
 };
 struct Streaking {
     Always<int32_t> maxLifetimeRespect;  // Max_Lifetime_Respect (floor 0)
@@ -610,7 +610,7 @@ std::optional<Streaking> ParseStreakingTable(const Document& doc);
 // 7. photo_op.xtbl - row Photo_Op (spec 7)
 // ===========================================================================
 // Saints_Loved and Saints_Hated share this exact shape (spec 7: both read by
-// one shared sub-function FUN_0091D520 called twice on two destinations).
+// one shared sub-function 0x0091d520 called twice on two destinations).
 struct PhotoOpAudience {
     std::vector<std::string> charPresetNames;      // Char_Presets/Char_Preset.Preset_Name
                                                     // (Reference into character.xtbl)
@@ -660,11 +660,11 @@ inline constexpr std::array<std::string_view, 8> kShopTypeNames = {
 struct ShopName {
     std::optional<std::string> name;            // Name (+0x00) - the row key, hashed with the
                                                  // shared CRC-32 name-hash, seed 0
-    // A second Name-derived value at +0x30 via FUN_00821EE0. CORRECTED
+    // A second Name-derived value at +0x30 via 0x00821ee0. CORRECTED
     // 2026-10-02 (spec 12, re-derived from the executable): this is now
     // fully traced and is NOT a hash of any kind and NOT an id derivation -
     // it is a case-insensitive linear name search (stricmp) into an
-    // unrelated external array (base DAT_022db998), returning a pointer into
+    // unrelated external array (base 0x022db998), returning a pointer into
     // that array on a match or null otherwise. What that array is and what
     // consumes the +0x30 pointer both remain OPEN (spec 12/15 item 4). Still
     // a purely derived/computed value, not a distinct XML element, so it is
@@ -673,7 +673,7 @@ struct ShopName {
                                                  // spec-stated concrete default "{localize}franchise"
     std::string LocalizedNameOrDefault() const { return localizedName.value_or("{localize}franchise"); }
     // Cost/Income/Discount/Total_Owner_Discount: CORRECTED 2026-10-02 (spec
-    // 12, re-derived from the executable, FUN_00A00B90). The TableDescription
+    // 12, re-derived from the executable, 0x00a00b90). The TableDescription
     // documents defaults of 10000/500/15/20 for these four, but - UNLIKE
     // Localized_Name's default above, which IS loader-enforced (passed as an
     // explicit fallback argument to its own text-getter accessor) - the
@@ -691,11 +691,11 @@ struct ShopName {
                                            // applied here
     Always<float> totalOwnerDiscount;     // Ownership.Total_Owner_Discount (+0x1C) - RAW percent
     std::optional<std::string> reward;           // Ownership.Reward (+0x20, optional Reference into
-                                                 // unlockables.xtbl, resolved via FUN_0071CC90)
+                                                 // unlockables.xtbl, resolved via 0x0071cc90)
     std::optional<std::string> useMessage;       // Use_Message (+0x28, optional, heap-duplicated
                                                  // string, Reference into Stores_text.xtbl)
     std::optional<std::string> minimapIcon;      // Minimap_Icon (+0x24, optional, resolved via
-                                                 // FUN_00802F60, Reference into
+                                                 // 0x00802f60, Reference into
                                                  // bitmap_sheets\ui_bms_01.xtbl)
     std::optional<std::string> shopType;         // Shop_Type (+0x2C) - an 8-entry enum, matched via
                                                  // the shared enum reader against kShopTypeNames

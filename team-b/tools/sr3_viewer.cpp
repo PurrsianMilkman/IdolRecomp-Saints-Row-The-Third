@@ -11338,12 +11338,12 @@ int runWalkDemo(int argc, char** argv) {
         // explicitly before writing this, per the orchestrator's own review
         // note on this task - neither Sec12.1c nor Sec12.1f states a
         // CONFIRMED rule for which matlib entry replaces which mesh slot.
-        // Sec12.1c traces the matlib's own constructor (FUN_0074d9a0) in
+        // Sec12.1c traces the matlib's own constructor (0x0074d9a0) in
         // full and finds its texture-name table (what MaterialBlock below
         // parses) is "explicitly skipped and never retained" by the real
         // engine at runtime - no traced instruction matches an entry to a
         // mesh slot by name, hash, or position; the render-time consumer
-        // past FUN_00dd35e0/FUN_00db3c80->FUN_00db3b40 was searched for and
+        // past 0x00dd35e0/0x00db3c80->0x00db3b40 was searched for and
         // not found (Sec12.1c), and Sec12.1f's own Q2 closes "is there a
         // bind instruction" as a confirmed NEGATIVE (the composite material
         // is scoped to one internal draw call, never attached to any
@@ -16536,6 +16536,24 @@ struct HudDemoFont {
     VintImageEntry tex;
 };
 
+// Narrows a resolved localisation string (sr3locstr::LeStringsLookup's own
+// u16string text) back into the narrow std::string shape drawHudLabel's
+// text_tag path expects - the exact inverse of decodeRawTextTag's own
+// byte-for-byte widen (above: "static_cast<char16_t>(static_cast<unsigned
+// char>(c))"), so a resolved English string round-trips through
+// hudSetLabel -> drawHudLabel -> decodeRawTextTag unchanged (every shipped
+// US text is ASCII/Latin-1 range, spec-localization-format.md's own "the
+// longest US text is 369 code units" census never cites anything past that
+// range). Same byte-truncation shape as vint_text.cpp's own anonymous-
+// namespace narrowLow() (not reachable from here - this is a local, not a
+// shared, helper).
+std::string narrowLocText(const std::u16string& s) {
+    std::string out;
+    out.reserve(s.size());
+    for (char16_t c : s) out.push_back(static_cast<char>(static_cast<uint8_t>(c & 0xff)));
+    return out;
+}
+
 // Minimal re-implementation of runVintDoc()'s drawText() for ONE hardcoded
 // font and NO markup/wrap/shadow/[image:] support (this overlay's own
 // literal strings need none of that) - same real calls
@@ -18356,6 +18374,7 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--hud <registration_list.txt> <misc.vpp_pc>]\n"
                      "                           [--no-vehicle] [--vehicle-archive <path>]\n"
                      "                           [--vehicle-name <name.ccar_pc>] [--wheels-archive <path>]\n"
+                     "                           [--interface-archive <path>]\n"
                      "                           [--vehicle-spawn X Z] [--script-vehicle]\n"
                      "                           [--script-vehicle-drive-frames N] [--no-collision]\n"
                      "                           [--script-roadblock] [--script-hud-prompt-response]\n"
@@ -18418,7 +18437,15 @@ int runPlaytest(int argc, char** argv) {
                      "       allocate()-then-let-the-scheduler-resume-it mechanism Sec1.14's confirmed\n"
                      "       on_trigger/on_death/etc dispatch already uses, reused here rather than\n"
                      "       invented separately) - the scripted stand-in for a real player pressing the\n"
-                     "       prompted button, e.g. m05's M05_JUMP prompt / m05_jump_local.\n");
+                     "       prompted button, e.g. m05's M05_JUMP prompt / m05_jump_local.\n"
+                     "       PAUSE MENU (THIS TASK, spec-frontend-menu-runtime.md Sec7/Sec9 item 2): Esc\n"
+                     "       opens/closes the real pause-menu-open binding (CBA_GAC_PAUSE_MENU/0x55 ->\n"
+                     "       gate -> shared game-pause push (4,1) -> \"dialog_pause_show\") instead of\n"
+                     "       quitting - press F10 to quit instead (the window's title-bar/X button also\n"
+                     "       still works regardless). --interface-archive overrides where the real\n"
+                     "       pause_menu_common.vint_doc is read from for the overlay's own best-effort\n"
+                     "       real-document load (CHOSEN default: derived from <characters.vpp_pc>'s own\n"
+                     "       directory, same convention --vehicle-archive's own default uses).\n");
         return 1;
     }
     const std::string charactersPath = argv[2];
@@ -18509,6 +18536,14 @@ int runPlaytest(int argc, char** argv) {
     // the real game cache this project already uses elsewhere). ----
     bool vehicleEnabled = true;
     std::string vehicleArchiveOverride, vehicleWheelsArchiveOverride;
+    // --interface-archive (THIS TASK, pause-menu-open binding): where the real
+    // pause_menu_common.vint_doc (interface.vpp_pc::pause_menu_common.str2_pc, confirmed present
+    // via vpp_dump against the real packfiles\pc\cache - exact byte-for-byte names this spec's
+    // own "push_screen('pause_menu_common')" grep-for-call-sites text already cites) is read from
+    // for the pause overlay's own best-effort real-document load - see the main loop's own
+    // "PAUSE MENU" block. CHOSEN default: derived from <characters.vpp_pc>'s own directory, same
+    // convention --vehicle-archive's own default already uses, below.
+    std::string interfaceArchiveOverride;
     std::string vehicleCmeshName = "car_4dr_genki_0.ccar_pc"; // same CHOSEN representative vehicle as runDriveDemo()
     // --vehicle-interaction-name (THIS TASK, 2026-10-09, spec-render-pipeline.md Sec23.14):
     // selects which real vehicle_interaction_info.xtbl row's DRIVER seat "Hide Occupant"
@@ -18631,6 +18666,8 @@ int runPlaytest(int argc, char** argv) {
             vehicleInteractionNameOverride = argv[++argi];
         } else if (arg == "--wheels-archive" && argi + 1 < argc) {
             vehicleWheelsArchiveOverride = argv[++argi];
+        } else if (arg == "--interface-archive" && argi + 1 < argc) {
+            interfaceArchiveOverride = argv[++argi];
         } else if (arg == "--vehicle-spawn" && argi + 2 < argc) {
             vehicleSpawnX = static_cast<float>(std::atof(argv[++argi]));
             vehicleSpawnZ = static_cast<float>(std::atof(argv[++argi]));
@@ -19210,7 +19247,13 @@ int runPlaytest(int argc, char** argv) {
     // the automated ctest smoke test, which must not steal focus or flash on screen.
     std::string error;
     sr3render::Window window;
-    if (!window.create("SR3 Viewer - playtest v0 (interactive)", winWidth, winHeight, error, visible)) {
+    // escQuits=false (THIS TASK): Escape is repurposed as the real pause-menu-open binding
+    // (spec-frontend-menu-runtime.md Sec7/Sec9 item 2, CBA_GAC_PAUSE_MENU/0x55) - see the main
+    // loop's own "PAUSE MENU" block below for the gate/push/dialog chain and F10's own doc
+    // comment for the replacement quit key (Window::create's own doc comment: the window can
+    // still be closed via its title-bar/X button regardless of this flag).
+    if (!window.create("SR3 Viewer - playtest v0 (interactive)", winWidth, winHeight, error, visible,
+                        /*escQuits=*/false)) {
         std::fprintf(stderr, "window creation failed: %s\n", error.c_str());
         return 1;
     }
@@ -19416,13 +19459,81 @@ int runPlaytest(int argc, char** argv) {
     // frame via VintQuadPipeline - that class never touches
     // OMSetRenderTargets itself (confirmed by reading it), so its quad()/
     // rect() calls draw straight on top of whatever this function's own 3D
-    // pass already bound, with no separate offscreen target needed. -------
+    // pass already bound, with no separate offscreen target needed.
+    //
+    // EXTENDED (mission-hud-objectives task, spec-hud-runtime.md §6.5,
+    // 2026-10-09): a 4-slot objective-text overlay, same drawHudLabel()
+    // mechanism, added alongside the 4 stats above. Reads
+    // EngineState::objectiveTextSlots() each frame (a slot's presence in
+    // that map is "active" - see that accessor's own updated doc comment)
+    // - the real objective_text/objective_text_clear natives already
+    // existed (lua_spec_confirmed_stubs_b08_batch1_core.cpp/
+    // b07_sec8_9_teamA.cpp); this task only adds the render-side consumer,
+    // which spec-hud-runtime.md §6.5 itself flags as never having been
+    // traced in the original game ("the render-side consumer... remains
+    // unidentified") - this overlay is this project's OWN clean-room HUD
+    // rendering, not a reimplementation of a found original routine.
+    // objective_text_clear's own dispatch previously only incremented a
+    // counter (written before objective_text itself was implemented, so
+    // there was no slot state yet to clear) - completed as part of THIS
+    // task to actually erase the slot (engine_state.h's own
+    // recordObjectiveTextClear(), matching Sec1.4's own CONFIRMED "clears
+    // the slot" text), so the overlay has a correct notion of "cleared".
+    // GPS route-line/minimap waypoint-marker rendering stays explicitly
+    // OPEN per spec-hud-runtime.md §6.5's own text - not touched here. -------
+    //
+    // --hud objective-text overlay demo frames (THIS TASK) - declared here,
+    // ahead of the vehicle-script constants further below (which this
+    // function declares textually later, right before `if (vehicleEnabled)`),
+    // since this block's own printf (just below) and the main loop's
+    // scripted-trigger block (near the vehicle entry/exit code) both need
+    // them. Same "scripted stand-in exercising the real native path" shape
+    // as the vehicle entry/exit frames, since v0 has no real mission content
+    // wired into this command (same honest caveat the health/money/
+    // notoriety overlay already documents). Frame 2: the real
+    // `objective_text` native (Sec1.3) fires for slots 0 AND 1, proving the
+    // overlay's own multi-slot (up to 4) rendering, not just a single line -
+    // using the REAL keys m01.lua's own script passes to this native
+    // (objective-text-localization task; extracted per spec-vpp-container.md
+    // §7.6's recipe from `sr3_city_0.vpp_pc` -> `m01_modal.str2_pc` ->
+    // `m01.lua`, 182,249 bytes, byte count matches §7.6's own verified
+    // figure): slot 0 "m01_kill_lobby_guards" (m01.lua line 1068, inside
+    // `m01_run()`; also line 1516 inside `m01_go_to_vault()`) and slot 1
+    // "m01_go_to_vault" (m01.lua line 1074, also inside `m01_run()`; also
+    // line 1541 inside `m01_go_to_vault()` itself) - not this file's own
+    // former placeholder
+    // "MAIN_OBJECTIVE_KEY"/"SIDE_OBJECTIVE_KEY" strings, which never were a
+    // real key any mission script passes. Both resolve through
+    // `mission_us.le_strings` (loaded above) to real English text; see this
+    // block's own runChunk() call just below for the literal script text.
+    // Frame 150 (well inside the 300-frame --no-input default, clear of the
+    // vehicle script's own 10/130 frames): the real `objective_text_clear`
+    // native (Sec1.4) fires for slot 1 ONLY, proving both that a cleared
+    // slot actually stops drawing (engine_state.h's own recordObjective
+    // TextClear() now erases the slot - see that method's own doc comment)
+    // and that clearing one slot leaves the others (slot 0) untouched.
+    const int kScriptObjectiveSetFrame = 2;
+    const int kScriptObjectiveClearFrame = 150;
     std::unique_ptr<sr3luahost::Host> hudHost;
     sr3luahost::EngineState* hudEs = nullptr;
     lua_State* hudGp = nullptr;
     HudDemoFont hudFont;
+    // Objective-text key resolution (objective-text-localization task,
+    // spec-localization-format.md) - same sr3locstr::LeStringsLookup class
+    // runVintDoc()'s own drawText() already uses for `.vint_doc` text_tag
+    // keys (declared/loaded there at this file's "localisation strings"
+    // comment); populated below, inside `if (hudEnabled)`, from the SAME
+    // --hud archive already opened for the glyph font/texture (misc.vpp_pc
+    // in every real invocation - it ships both the fonts and 10 of the 11
+    // US tables, spec-localization-format.md §1's own table). Declared out
+    // here (not inside the `if`) so it is in scope for the per-frame
+    // objective-text update further below.
+    sr3locstr::LeStringsLookup locLookup;
     VintQuadPipeline hudPipe;
     uint32_t hudHealthH = 0, hudAmmoH = 0, hudMoneyH = 0, hudNotorietyH = 0, hudVehiclePromptH = 0;
+    // Objective-text overlay (THIS TASK, spec-hud-runtime.md §6.5) - one
+    // label handle per real engine slot (0..3), slot order == array order.
+    std::array<uint32_t, 4> hudObjectiveH{0, 0, 0, 0};
     double hudMaxHp = 0.0;
     std::vector<std::unique_ptr<CityArchive>> hudFontArchivesOwned;
     // MISSION-HOST PHASE 1 (this task): ONE shared Host/EngineState for
@@ -19441,6 +19552,58 @@ int runPlaytest(int argc, char** argv) {
     // vector only ever grows - see HudPromptRequest's own doc comment) -
     // see the main loop's "SCRIPT-HUD-PROMPT-RESPONSE" block.
     size_t hudPromptRequestsRespondedCount = 0;
+
+    // ===================== PAUSE MENU (THIS TASK) ==============================
+    // spec-frontend-menu-runtime.md Sec7/Sec9 item 2 (HIGH CONFIDENCE, landed
+    // 2026-10-10): the real engine's pause-menu-open binding is a per-frame
+    // query of action CBA_GAC_PAUSE_MENU (0x55), gated by three "already in a
+    // blocking UI/cutscene state" checks (0x007e1f40/0x007aaf00/0x007afb90)
+    // plus two further one-shot flag bytes both clear, then the shared
+    // game-pause push `0x007074a0(4, 1)` (reason 4 - the previously
+    // hypothesis-only game_mode::kNewGameTransitionRequestedWeakHypothesis
+    // sentinel, menu_runtime.h, getting its first concrete call site here -
+    // modelled via the ALREADY-REAL EngineState::pushGamePauseReason(), the
+    // same primitive the fade-completion teardown's reason-0xd push already
+    // exercises, Sec4/Sec37.3) and a UI dialog literally named
+    // "dialog_pause_show" in .rdata - fired via LaunchLuaCoroutine(), the
+    // SAME already-real Lua-hook-dispatch primitive this project's own
+    // InputLockDispatcher uses for "main_menu_new_game_block_input"/
+    // "save_load_lock_input" (Sec6) and spec-lua-api-behaviour.md Sec26
+    // documents for the sibling "dialog_pause_hide" hook - no fake menu
+    // runtime invented, the exact mechanism already on file elsewhere in
+    // this project is reused as-is.
+    //
+    // The native's own 3 gate checks have no modelled equivalent in this
+    // simplified playtest harness (no other blocking-UI/cutscene state is
+    // tracked here besides this very menu) - OPEN, not reproduced
+    // individually; the one gate condition that both applies and IS modelled
+    // is "the pause menu is not already open" (prevents a double-push of the
+    // shared depth counter), which is also the one substantive guard a
+    // single-dialog harness like this actually needs. The real primitive's
+    // second argument (the literal `1` in `(4, 1)`) is likewise uncharacterized
+    // in the spec text (the only other known call site passes a literal `0`
+    // instead, for a different reason code) - EngineState::pushGamePauseReason()
+    // only ever modelled the reason code, matching its one prior real call
+    // site, so this task does not invent a meaning for it either.
+    //
+    // Esc is repurposed for this (Window::create's own `escQuits=false` for
+    // this command, above) - F10 quits instead (edge-triggered, breaks the
+    // main loop below). dt is forced to 0 for the duration of a frame the
+    // menu is open (right after the existing dt clamps, below) - the single
+    // choke point nearly every per-frame system in this loop already reads
+    // from (TOD clock, vehicle physics, ground-follow, roadblock AI, the
+    // follow camera, animation playback, the mission host's own elapsed-time/
+    // frame-time/game-clock advances) - so "sim/frame time stops advancing"
+    // falls out of one edit rather than threading a pause check through every
+    // individual subsystem.
+    bool pauseMenuOpen = false;
+    bool prevEscDown = false;
+    bool prevF10Down = false;
+    bool pauseDocLoadAttempted = false;  // real pause_menu_common.vint_doc - tried at most once
+    bool pauseDocLoaded = false;
+    uint32_t pauseDocHandle = 0;
+    uint32_t pauseTitleH = 0, pauseResumeH = 0, pauseQuitH = 0;  // synthetic overlay labels (see below)
+
     if (hudEnabled || missionEnabled) {
         std::vector<sr3luahost::RegisteredName> hudNames =
             sr3luahost::loadTaggedRegistrationList(hudEnabled ? hudRegistrationListPath : missionRegistrationListPath);
@@ -19581,6 +19744,47 @@ int runPlaytest(int argc, char** argv) {
         hudFont.tex.texW = hudFontTex.width;
         hudFont.tex.texH = hudFontTex.height;
 
+        // ---- localisation strings (objective-text-localization task,
+        // spec-localization-format.md) - EXACT same table list, load order
+        // and per-table "first archive that has it, else skip, not fatal"
+        // search runVintDoc()'s own "localisation strings" block already
+        // uses (this file's earlier comment there: Sec5.2 step 4's load
+        // order static/hud/activity/diversion/mission/menu/multiplayer/
+        // customize/subtitle/platform_PC/patch0). Only one archive is ever
+        // searched here (--hud only ever takes one path, unlike --textures'
+        // list) - every real invocation points --hud at misc.vpp_pc, which
+        // alone carries 10 of these 11 US tables (patch0 needs
+        // patch_compressed.vpp_pc too, §1's own table; a missing table is
+        // not fatal, Sec5.1 step 2's "a missing file... returns false").
+        // `mission_us.le_strings` specifically is what resolves a real
+        // mission script's own objective_text key.
+        {
+            static const char* const kHudTableFiles[] = {
+                "static_us.le_strings",      "hud_us.le_strings",       "activity_us.le_strings",
+                "diversion_us.le_strings",   "mission_us.le_strings",   "menu_us.le_strings",
+                "multiplayer_us.le_strings", "customize_us.le_strings", "subtitle_us.le_strings",
+                "platform_pc_us.le_strings", "patch0_us.le_strings",
+            };
+            size_t hudTablesFound = 0, hudRecordsTotal = 0;
+            for (const char* file : kHudTableFiles) {
+                std::vector<uint8_t> bytes, sib;
+                if (!findEntry(*hudArchive.top, file, bytes, sib, std::string()) || bytes.empty()) continue;
+                try {
+                    sr3locstr::LeStringsTable t = sr3locstr::parseLeStrings(bytes);
+                    hudRecordsTotal += t.recordCount;
+                    locLookup.addTable(std::move(t));
+                    ++hudTablesFound;
+                } catch (const sr3locstr::LeStringsFormatError& ex) {
+                    std::printf("  [loc] %-26s PARSE ERROR (%s) -> table not loaded\n", file, ex.what());
+                }
+            }
+            std::printf("  [loc] %zu/%zu US .le_strings tables loaded from %s (%zu records total) -> objective-text "
+                        "keys resolved through them, raw key string on a miss (spec-localization-format.md "
+                        "Sec6.1/Sec7 item 2)\n",
+                        hudTablesFound, sizeof(kHudTableFiles) / sizeof(kHudTableFiles[0]), hudFontArchivePath.c_str(),
+                        hudRecordsTotal);
+        }
+
         if (!hudPipe.initialise(device.device(), winWidth, winHeight, error)) {
             std::fprintf(stderr, "--hud: VintQuadPipeline init failed: %s\n", error.c_str());
             return 1;
@@ -19604,11 +19808,36 @@ int runPlaytest(int argc, char** argv) {
         // on vehiclePromptShown/inVehicle, same as every other HUD label's
         // own per-frame text update just below in the main loop.
         hudVehiclePromptH = hudEs->registerTypedVdoObjectForTesting("hud_vehicle_prompt_text", "text", 0, 0);
+        // Objective-text overlay (THIS TASK, spec-hud-runtime.md §6.5) - 4
+        // slots, same fixed-array shape as the real engine's own CONFIRMED
+        // 4-slot objective-text record array (Sec1.3), one label handle per
+        // slot in slot order. Reuses the SAME registerTypedVdoObjectForTesting/
+        // hudSetOffset/drawHudLabel mechanism every other HUD line above
+        // already uses - no new rendering convention invented. Slot 0 is the
+        // main objective (so it sits visually first); slots 1-3 stack below
+        // it, each only ever drawn when EngineState::objectiveTextSlots()
+        // actually has that slot's entry (see the per-frame update below).
+        for (uint32_t& h : hudObjectiveH) h = hudEs->registerTypedVdoObjectForTesting("hud_objective_text", "text", 0, 0);
         hudSetOffset(hudHealthH, 40, 24);
         hudSetOffset(hudAmmoH, 40, 108);
         hudSetOffset(hudMoneyH, 40, 148);
         hudSetOffset(hudNotorietyH, 40, 188);
         hudSetOffset(hudVehiclePromptH, 40, 228);
+        // 40px vertical steps, continuing the SAME spacing every label above
+        // the vehicle prompt already uses, starting right after it.
+        for (size_t i = 0; i < hudObjectiveH.size(); ++i)
+            hudSetOffset(hudObjectiveH[i], 40, 268 + 40 * static_cast<double>(i));
+
+        // Pause-menu overlay labels (THIS TASK) - same registerTypedVdoObjectForTesting/
+        // drawHudLabel convention as every other label above, just the text/offsets differ;
+        // see this function's own "PAUSE MENU" doc comment (above the main loop) for the full
+        // real mechanism this overlay is a visible stand-in for.
+        pauseTitleH = hudEs->registerTypedVdoObjectForTesting("pause_overlay_title_text", "text", 0, 0);
+        pauseResumeH = hudEs->registerTypedVdoObjectForTesting("pause_overlay_resume_text", "text", 0, 0);
+        pauseQuitH = hudEs->registerTypedVdoObjectForTesting("pause_overlay_quit_text", "text", 0, 0);
+        hudSetOffset(pauseTitleH, 40, 320);
+        hudSetOffset(pauseResumeH, 40, 360);
+        hudSetOffset(pauseQuitH, 40, 392);
 
         // Health (Sec2): get_max_hit_points draws this project's own
         // random-once spawn max; set_current_hit_points then applies the
@@ -19617,12 +19846,14 @@ int runPlaytest(int argc, char** argv) {
         hudHost->runChunk(hudGp, "g_maxhp = get_max_hit_points('player')", "playtest_hud.lua");
         hudMaxHp = readLuaGlobalNumber(hudGp, "g_maxhp");
         hudHost->runChunk(hudGp, "set_current_hit_points('player', g_maxhp)", "playtest_hud.lua");
-        std::printf("hud      : enabled (--hud) - real health/ammo/money/notoriety overlay via "
-                    "sr3luahost::Host (spec-hud-runtime.md); max hp=%.0f. HONEST CAVEAT: v0 has no\n"
-                    "           combat/economy/notoriety gameplay wired, so these real, Lua-backed\n"
-                    "           values will not actually change during play (see this function's own\n"
-                    "           doc comment)\n",
-                    hudMaxHp);
+        std::printf("hud      : enabled (--hud) - real health/ammo/money/notoriety + objective-text "
+                    "overlay via sr3luahost::Host (spec-hud-runtime.md §2-6.5); max hp=%.0f. "
+                    "Objective slots 0/1 are set via the real objective_text native at frame %d, "
+                    "slot 1 cleared via objective_text_clear at frame %d (scripted stand-in, no real "
+                    "mission content wired into this command). HONEST CAVEAT: v0 has no\n"
+                    "           combat/economy/notoriety gameplay wired, so those 4 values will not\n"
+                    "           actually change during play (see this function's own doc comment)\n",
+                    hudMaxHp, kScriptObjectiveSetFrame, kScriptObjectiveClearFrame);
       } // if (hudEnabled) - font/pipeline/HUD-vdo setup, unchanged from before this task
 
       // MISSION-HOST PHASE 1 (this task): resolve <stem> against the real
@@ -20423,6 +20654,61 @@ int runPlaytest(int argc, char** argv) {
     // The new `T` key below (same task) gives a human playtester a way to
     // see a lighting change on demand without waiting out the slower cycle.
     double todFraction = 0.5;
+
+    // Real pause_menu_common.vint_doc best-effort load (THIS TASK, see this function's own
+    // "PAUSE MENU" doc comment above) - parses the REAL on-disk document through the exact
+    // same sr3vintdoc::parseDocument/EngineState::loadVintDocument path `sr3_viewer vint-doc`
+    // already uses (tests/real_vintdoc_document_test.cpp exercises the identical pair), purely
+    // to exercise the project's existing real-interface/dialog-loading mechanism against this
+    // specific real document - its own element/animation counts are logged, but this overlay's
+    // own VISIBLE resume/quit text is still the synthetic HudDemoFont/drawHudLabel labels set up
+    // above (full bitmap/text-tree rendering of the loaded tree is NOT wired this pass - flagged
+    // honestly rather than invented). Tried at most once (pauseDocLoadAttempted), lazily, the
+    // first time the menu is actually opened - never on a run where Esc is never pressed.
+    auto tryLoadRealPauseDoc = [&]() {
+        pauseDocLoadAttempted = true;
+        std::string ifaceDir;
+        {
+            const size_t slash = charactersPath.find_last_of("/\\");
+            ifaceDir = (slash == std::string::npos) ? std::string() : charactersPath.substr(0, slash + 1);
+        }
+        std::string ifacePath = interfaceArchiveOverride.empty() ? ifaceDir + "interface.vpp_pc" : interfaceArchiveOverride;
+        for (auto& ch : ifacePath) if (ch == '\\') ch = '/';
+        std::vector<uint8_t> ifaceBytes = readFile(ifacePath);
+        if (ifaceBytes.empty()) {
+            std::printf("pause    : real pause_menu_common.vint_doc NOT loaded (could not read %s) - "
+                        "overlay text is the synthetic label fallback only\n", ifacePath.c_str());
+            return;
+        }
+        try {
+            vpp::Container top(vpp::ByteView(ifaceBytes.data(), ifaceBytes.size()));
+            for (size_t i = 0; i < top.entries().size(); ++i) {
+                if (top.entries()[i].name != "pause_menu_common.str2_pc") continue;
+                vpp::Container inner = top.openNested(i);
+                for (size_t j = 0; j < inner.entries().size(); ++j) {
+                    if (inner.entries()[j].name != "pause_menu_common.vint_doc") continue;
+                    vpp::DecompressResult r = inner.decompressEntry(j);
+                    if (r.status != vpp::DecodeStatus::Ok) break;
+                    sr3vintdoc::Document doc = sr3vintdoc::parseDocument(vpp::ByteView(r.data.data(), r.data.size()));
+                    if (hudEs) pauseDocHandle = hudEs->loadVintDocument("pause_menu_common.vint_doc", doc);
+                    pauseDocLoaded = true;
+                    std::printf("pause    : loaded REAL pause_menu_common.vint_doc from %s (%zu top-level "
+                                "elements, %zu animations, %zu metadata entries) via sr3vintdoc::parseDocument"
+                                "%s\n",
+                                ifacePath.c_str(), doc.elements.size(), doc.animations.size(), doc.metadata.size(),
+                                hudEs ? " + EngineState::loadVintDocument()" : " (no --hud/--mission EngineState "
+                                "to load into - parsed only)");
+                    return;
+                }
+            }
+            std::printf("pause    : pause_menu_common.{str2_pc,vint_doc} not found inside %s - overlay text is "
+                        "the synthetic label fallback only\n", ifacePath.c_str());
+        } catch (const std::exception& ex) {
+            std::printf("pause    : real pause_menu_common.vint_doc load error: %s - overlay text is the "
+                        "synthetic label fallback only\n", ex.what());
+        }
+    };
+
     while (window.pumpMessages()) {
         if (!swapChain.resize(window.width(), window.height(), error)) break;
         if (swapChain.width() != depthWidth || swapChain.height() != depthHeight) {
@@ -20437,6 +20723,73 @@ int runPlaytest(int argc, char** argv) {
         prevTime = now;
         if (dt > 0.25 || dt < 0.0) dt = 0.0;
         if (noInput) dt = 1.0 / 30.0;  // deterministic fixed step, same convention runWalkDemo() uses under --no-input
+
+        // ===================== PAUSE MENU (THIS TASK) ==========================
+        // Live-only (same convention as the T/R keys below) - under --no-input there is no
+        // real OS keyboard to poll, so this never fires in the ctest smoke test. See this
+        // function's own top "PAUSE MENU" doc comment for the full real mechanism and the
+        // honest caveats on what is/isn't reproduced.
+        if (!noInput) {
+            const bool escDownNow = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+            const bool escEdge = escDownNow && !prevEscDown;
+            prevEscDown = escDownNow;
+            if (escEdge) {
+                if (!pauseMenuOpen) {
+                    // GATE: the real engine's 3 "already in blocking UI/cutscene" checks
+                    // (0x007e1f40/0x007aaf00/0x007afb90) have no modelled equivalent here (see
+                    // this function's own top doc comment) - the one condition both modelled
+                    // and genuinely applicable to a single-dialog harness is "not already open",
+                    // which this very `if` already is.
+                    pauseMenuOpen = true;
+                    if (!pauseDocLoadAttempted) tryLoadRealPauseDoc();
+                    if (hudEs) {
+                        hudEs->pushGamePauseReason(4);  // 0x007074a0(4, 1) - reason 4 only, see top doc comment
+                    }
+                    if (hudGp && hudHost) {
+                        sr3luahost::LuaCoroutineLaunchResult dr =
+                            sr3luahost::LaunchLuaCoroutine(hudGp, hudHost->bareGlobals().threads(),
+                                                           "dialog_pause_show", 0, nullptr);
+                        std::printf("pause    : OPENED (Esc) - pushGamePauseReason(4) -> depth=%d; "
+                                    "\"dialog_pause_show\" hook %s\n",
+                                    hudEs->gamePauseDepth().depth,
+                                    dr.existedAsFunction ? "fired" : "not found in loaded Lua (no-op, same "
+                                    "bookkeeping-only behaviour this project's other menu-runtime hooks already have)");
+                    } else {
+                        std::printf("pause    : OPENED (Esc) - no --hud/--mission EngineState this run, so the "
+                                    "real pushGamePauseReason()/\"dialog_pause_show\" hook are not exercised; "
+                                    "sim time is still frozen (dt forced to 0 below) and the window stays open\n");
+                    }
+                } else {
+                    pauseMenuOpen = false;
+                    if (hudEs) {
+                        hudEs->popGamePauseReason(4);
+                    }
+                    if (hudGp && hudHost) {
+                        sr3luahost::LaunchLuaCoroutine(hudGp, hudHost->bareGlobals().threads(), "dialog_pause_hide",
+                                                       0, nullptr);
+                    }
+                    std::printf("pause    : CLOSED (Esc) - resuming%s\n",
+                                hudEs ? "" : " (no EngineState this run)");
+                }
+            }
+            // F10: the replacement quit key (Esc is repurposed above - Window::create's own
+            // escQuits=false for this command). Edge-triggered so holding it doesn't matter;
+            // breaks the main loop immediately, same as the window's own title-bar/X button.
+            const bool f10DownNow = (GetAsyncKeyState(VK_F10) & 0x8000) != 0;
+            const bool f10Edge = f10DownNow && !prevF10Down;
+            prevF10Down = f10DownNow;
+            if (f10Edge) {
+                std::printf("quit     : F10 pressed - exiting\n");
+                break;
+            }
+        }
+        // Freeze sim/frame time while the pause menu is open: this is the one choke point
+        // nearly every per-frame system below reads dt (or nowMsAccum/todFraction, both derived
+        // from it) from - see this function's own top "PAUSE MENU" doc comment for the full
+        // list. Deliberately AFTER the escEdge handling above, so the SAME frame the menu opens
+        // on already freezes (matching the real engine: the gate and the push happen in the
+        // same per-frame query, not one frame later).
+        if (pauseMenuOpen) dt = 0.0;
         nowMsAccum += static_cast<int64_t>(dt * 1000.0 + 0.5);
         // Advance the CHOSEN TOD clock (see its own declaration above) by one frame -
         // sr3render::AdvanceTodFraction() (tod_clock.h), not inlined here, so
@@ -20598,6 +20951,46 @@ int runPlaytest(int argc, char** argv) {
         if (roadblockEdge) {
             roadblockDriver.armed = !roadblockDriver.armed;
             std::printf("[roadblock] %s\n", roadblockDriver.armed ? "armed" : "disarmed");
+        }
+
+        // ================= OBJECTIVE-TEXT OVERLAY DEMO (THIS TASK) =================
+        // Scripted stand-in for real mission content (v0 has none wired into
+        // this command - see kScriptObjectiveSetFrame/kScriptObjectiveClearFrame's
+        // own doc comment above): fires the REAL objective_text/
+        // objective_text_clear Lua natives through hudHost, exactly as a real
+        // mission script would, so the per-frame overlay update just below
+        // reads genuine engine state, not a value poked in directly.
+        //
+        // UPDATED (objective-text-localization task): the two calls below are
+        // copied VERBATIM (arg 1/2/3/4 - slot, key, arg3, arg4) from real
+        // `m01.lua` text, extracted per spec-vpp-container.md §7.6's recipe
+        // (see this file's own comment above kScriptObjectiveSetFrame) - line
+        // 1068 (`objective_text( 0, "m01_kill_lobby_guards", "", "", ... )`)
+        // and line 1074 (`objective_text( 0, "m01_go_to_vault", "", "", ... )`
+        // - moved to slot 1 here only so both slots render at once, exactly
+        // as the former placeholder demo already did). `SYNC_ALL`/
+        // `OI_ASSET_KILL`/`OI_ASSET_LOCATION` (arg 5/6 in the real call) are
+        // not registered Lua globals in this host, so they read as `nil`
+        // here and fall through to stub_objective_text's own optional
+        // defaults (3/0) - arg 5/6 are consumed but never read back by this
+        // overlay (see stub_objective_text's own doc comment,
+        // lua_spec_confirmed_stubs_b08_batch1_core.cpp), so this has no
+        // effect on what renders. Both keys resolve through
+        // `mission_us.le_strings` (loaded above) to real English text -
+        // replacing this file's former "MAIN_OBJECTIVE_KEY"/
+        // "SIDE_OBJECTIVE_KEY" invented placeholders, which were never a key
+        // any real mission script passes.
+        if (hudEnabled) {
+            if (frames == kScriptObjectiveSetFrame) {
+                hudHost->runChunk(hudGp,
+                                   "objective_text(0, 'm01_kill_lobby_guards', '', '', SYNC_ALL, OI_ASSET_KILL)\n"
+                                   "objective_text(1, 'm01_go_to_vault', '', '', SYNC_ALL, OI_ASSET_LOCATION)",
+                                   "playtest_hud_objective.lua");
+                std::printf("[objective] slot 0/1 set via objective_text (frame %d)\n", frames);
+            } else if (frames == kScriptObjectiveClearFrame) {
+                hudHost->runChunk(hudGp, "objective_text_clear(1)", "playtest_hud_objective.lua");
+                std::printf("[objective] slot 1 cleared via objective_text_clear (frame %d)\n", frames);
+            }
         }
 
         // THIS TASK (2026-10-08, spec-physics-runtime.md §10a): the vehicle now
@@ -21648,6 +22041,48 @@ int runPlaytest(int argc, char** argv) {
             hudSetLabel(hudVehiclePromptH,
                        (!inVehicle && vehiclePromptShown) ? "PRESS E TO ENTER VEHICLE" : std::string());
 
+            // Objective-text overlay (THIS TASK, spec-hud-runtime.md §6.5) -
+            // reads EngineState::objectiveTextSlots() directly (no new
+            // native/dispatch logic - objective_text/objective_text_clear
+            // already exist, see lua_spec_confirmed_stubs_b08_batch1_core.cpp/
+            // b07_sec8_9_teamA.cpp). A slot is "active" exactly when it is
+            // PRESENT in that map - objective_text_clear now erases the entry
+            // on clear (engine_state.h's own recordObjectiveTextClear(), fixed
+            // as part of THIS task so the overlay has a correct, live notion
+            // of "cleared" to read, not a stale forever-shown line). Empty
+            // string for an inactive slot draws nothing (drawHudLabel's own
+            // existing empty-text_tag behaviour), so up to 4 lines, in slot
+            // order, only the active ones ever appear. rawTextKey (UPDATED,
+            // objective-text-localization task) is now resolved through the
+            // SAME sr3locstr::LeStringsLookup mechanism runVintDoc()'s own
+            // drawText() uses for a STRING text_tag (spec-localization-
+            // format.md Sec6.1/Sec7 item 2: "tried as a localisation key
+            // first"), falling back to the raw key string itself on a
+            // lookup miss - the EXACT same miss behaviour drawText() already
+            // has (its own decodeRawTextTag(rawTag, ...) fallback, which for
+            // a plain ASCII key just redraws the key text verbatim - see
+            // this file's narrowLocText() comment above drawHudLabel()).
+            // combinedAuxText (arg3/arg4's own CONFIRMED combine rule) is
+            // shown alongside it, not instead of it, since which of the two
+            // a real player would actually see is OPEN (neither is
+            // independently traced to a render-side consumer, spec-hud-
+            // runtime.md §6.5's own "HUD-side readers OPEN" heading).
+            for (size_t i = 0; i < hudObjectiveH.size(); ++i) {
+                auto it = hudEs->objectiveTextSlots().find(static_cast<int64_t>(i));
+                if (it == hudEs->objectiveTextSlots().end()) {
+                    hudSetLabel(hudObjectiveH[i], std::string());
+                    continue;
+                }
+                const sr3luahost::ObjectiveTextSlot& s = it->second;
+                std::string label = (i == 0) ? "OBJECTIVE: " : ("OBJECTIVE " + std::to_string(i + 1) + ": ");
+                if (std::optional<std::u16string> resolved = locLookup.lookupByKey(s.rawTextKey))
+                    label += narrowLocText(*resolved);
+                else
+                    label += s.rawTextKey; // miss -> raw key string, same fallback drawText() already has
+                if (!s.combinedAuxText.empty()) label += " (" + s.combinedAuxText + ")";
+                hudSetLabel(hudObjectiveH[i], label);
+            }
+
             hudPipe.begin(device.context(), swapChain.width(), swapChain.height(), false);
             const double barX0 = 40, barX1 = 340, barY0 = 56, barY1 = 84;
             const uint8_t barBg[4] = {60, 20, 20, 255};
@@ -21664,6 +22099,27 @@ int runPlaytest(int argc, char** argv) {
             drawHudLabel(*hudEs, hudMoneyH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, hudNotorietyH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, hudVehiclePromptH, hudFont, hudPipe, device.context(), hudWhite);
+            for (uint32_t h : hudObjectiveH) drawHudLabel(*hudEs, h, hudFont, hudPipe, device.context(), hudWhite);
+
+            // Pause overlay (THIS TASK) - drawn only while pauseMenuOpen (set by the Esc
+            // edge-trigger in the main loop's own "PAUSE MENU" block below); a dim full-
+            // screen rect behind the SAME real text-label mechanism every other HUD line
+            // above already uses. Resume/quit TEXT is CHOSEN (labelled honestly in this
+            // function's own top "PAUSE MENU" doc comment: full rendering of the real,
+            // separately-loaded pause_menu_common.vint_doc element tree is not wired this
+            // pass) - empty strings when closed draw nothing, same convention
+            // hudVehiclePromptH already relies on.
+            if (pauseMenuOpen) {
+                const uint8_t dim[4] = {0, 0, 0, 160};
+                hudPipe.rect(device.context(), 0, 0, static_cast<double>(swapChain.width()),
+                            static_cast<double>(swapChain.height()), dim);
+            }
+            hudSetLabel(pauseTitleH, pauseMenuOpen ? "PAUSED" : std::string());
+            hudSetLabel(pauseResumeH, pauseMenuOpen ? "Resume: Esc" : std::string());
+            hudSetLabel(pauseQuitH, pauseMenuOpen ? "Quit: F10" : std::string());
+            drawHudLabel(*hudEs, pauseTitleH, hudFont, hudPipe, device.context(), hudWhite);
+            drawHudLabel(*hudEs, pauseResumeH, hudFont, hudPipe, device.context(), hudWhite);
+            drawHudLabel(*hudEs, pauseQuitH, hudFont, hudPipe, device.context(), hudWhite);
 
             // ===================== MINIMAP OVERLAY (v0.3 polish task, 2026-10-09:
             // "wire the minimap onto the live playtest HUD") ====================
@@ -21944,9 +22400,9 @@ int main(int argc, char** argv) {
                      "       (playtest v0 - the first genuinely INTERACTIVE build: a real visible\n"
                      "        window, real WASD+mouse-look input driving the real player<->animation\n"
                      "        <->camera<->collision pipeline live, instead of a scripted/deterministic\n"
-                     "        capture. --hud wires the real health/ammo/money/notoriety overlay, PLUS a\n"
-                     "        live top-right corner minimap (v0.3 polish task), in, OFF by default\n"
-                     "        (spec-hud-runtime.md). One real vehicle is parked near\n"
+                     "        capture. --hud wires the real health/ammo/money/notoriety + objective-\n"
+                     "        text overlay, PLUS a live top-right corner minimap (v0.3 polish task), in,\n"
+                     "        OFF by default (spec-hud-runtime.md). One real vehicle is parked near\n"
                      "        spawn and driveable - walk up, press E to enter/exit (ON by default,\n"
                      "        --no-vehicle opts out). See runPlaytest()'s own doc comment for the full\n"
                      "        REAL/CHOSEN/SCOPE breakdown - keyboard+mouse only, no ambient-population\n"

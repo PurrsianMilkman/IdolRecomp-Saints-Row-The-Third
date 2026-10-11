@@ -316,7 +316,7 @@ std::vector<SpawnCategory> ParseSpawnInfoCategoriesTable(const Document& doc);
 // resolution, same convention as every other raw-text cross-reference field in this file).
 // spec 10.6 <Group> (spawn_info_groups.xtbl). `splineType` raw text: one of
 // "Highway Only"|"Boat"|"Offroad"|"Indoor"|"Baggage"|"Taxi" (-1 if none, including "All Roads"/"Surface Roads").
-struct SpawnGroupVehicle { std::optional<std::string> name, variant; }; // FUN_00ACB350(node, "Name", "Variant")
+struct SpawnGroupVehicle { std::optional<std::string> name, variant; }; // 0x00acb350(node, "Name", "Variant")
 
 struct SpawnGroup {
     std::optional<std::string> name;   // CRC-32
@@ -409,12 +409,12 @@ std::vector<NpcGroup> ParseRankReactionsTable(const Document& doc);
 // <Table> row.
 //
 // TWO loader functions over (believed to be) the SAME file:
-//  - S10.9's own FUN_00BB70B0 reads skyboxMeshFilename/cloudMeshFilename/
+//  - S10.9's own 0x00bb70b0 reads skyboxMeshFilename/cloudMeshFilename/
 //    orbitalMapNames (CONFIRMED - disassembly; this part of the file name
 //    itself, 0x0118CF40, is also CONFIRMED to have exactly one user).
 //  - spec-tables-environment.md S15.5's 0x00BB6400 reads five more
 //    top-level elements, three children of cloud_mesh_filename, and a
-//    tod_segments/segment list - a DIFFERENT function from FUN_00BB70B0,
+//    tod_segments/segment list - a DIFFERENT function from 0x00bb70b0,
 //    found and fully tabulated (element set, types, defaults, destinations)
 //    only after S10.9 was written. S15.5 CONFIRMS (disassembly) every
 //    element it reads, but is explicit that WHICH FILE 0x00BB6400 opens is

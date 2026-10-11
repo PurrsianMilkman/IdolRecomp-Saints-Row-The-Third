@@ -25,7 +25,7 @@ using sr3xtbl::Always;
 using sr3xtbl::Document;
 using sr3xtbl::Node;
 
-// A `State`/`Animation` pair resolved via `FUN_004bf810` to an anim-state
+// A `State`/`Animation` pair resolved via `0x004bf810` to an anim-state
 // handle - shared across customization_categories.xtbl (§7.1's
 // Male_Animations/Female_Animations), gang_customization.xtbl (§10's
 // Gang_Signs > Pose animation) and customizable_action.xtbl (§11's Action).
@@ -40,7 +40,7 @@ struct StateAnimation {
 // 6.1 customization_slots.xtbl - per-slot memory budgets/flags for the 24
 // canonical slot names. [CONFIRMED - disassembly + empirical]
 // ===========================================================================
-// The 24 canonical slot names (`PTR_DAT_0130b780`, §6.1) - the fixed,
+// The 24 canonical slot names (`0x0130b780`, §6.1) - the fixed,
 // data-segment name array every `Slot` reference in this whole table group
 // resolves against (§4's Customization_Item.Slot, §6.2's Slot_Default.Slot,
 // §7.1's Slots_Grid/Obscure_Grid). Index = the id used everywhere else.
@@ -123,7 +123,7 @@ struct ObscureElement {
                                          // flags resolve against
 };
 struct Category {
-    std::optional<std::string> name;          // Name (category-specific hash helper FUN_00a74910)
+    std::optional<std::string> name;          // Name (category-specific hash helper 0x00a74910)
     std::optional<std::string> displayName;    // DisplayName
     std::vector<std::string> slotsGrid;          // Slots_Grid > Slot_Element[] (own text -> kCanonicalSlotNames)
     std::vector<ObscureElement> obscureGrid;      // Obscure_Grid > Obscure_Element[]
@@ -160,10 +160,10 @@ std::vector<FlagEntry> ParseCustomizationFlagsTable(const Document& doc);
 // 7.3 customization_icons.xtbl. [CONFIRMED - disassembly + empirical]
 // ===========================================================================
 struct Icon {
-    std::optional<std::string> name;          // Name (same FUN_00a74910 helper as §7.1's categories)
+    std::optional<std::string> name;          // Name (same 0x00a74910 helper as §7.1's categories)
     std::optional<std::string> displayName;    // DisplayName
     std::vector<std::string> categoryElements;  // Categories > Category_Element[] (own text; resolved via
-                                                  // FUN_00828340, PRESUMED against §7.1's category array by
+                                                  // 0x00828340, PRESUMED against §7.1's category array by
                                                   // naming-convention proximity only - not independently
                                                   // confirmed, §7.3/§22.5 OPEN item)
     Always<bool> outfitsOnly;                    // Outfits_Only

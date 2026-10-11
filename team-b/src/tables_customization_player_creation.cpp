@@ -105,7 +105,7 @@ NormalMapSettings ParseNormalMapSettings(const Node* row) {
     n.bodyTypeIndex = MatchName(n.name, kBodyTypeNames.data(), kBodyTypeNames.size());
     const Node* slidersWrap = FindChild(row, "Morph_Sliders");
     for (const Node* s = FindChild(slidersWrap, "Morph_Slider"); s; s = NextSibling(slidersWrap, s, "Morph_Slider")) {
-        // CONFIRMED 2026-10-02 (re-derived from the executable, `FUN_009fbf10` read in full): both caps are
+        // CONFIRMED 2026-10-02 (re-derived from the executable, `0x009fbf10` read in full): both caps are
         // pre-checked while-loop conditions (tested BEFORE processing each entry) - the slider loop runs
         // `while (nextElement != 0 && count < 4)`, keeping a true maximum of exactly 4, matching the `>= 4`
         // already coded here. Only the normals cap (materials.cpp, §9.2) can change a real result.

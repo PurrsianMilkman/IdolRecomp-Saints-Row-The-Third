@@ -39,7 +39,7 @@ using sr3xtbl::Node;
 enum class OperationMode : int32_t { Replace = -1, Additive = 0, Multiplicative = 1, Removal = 2 };
 
 // [CONFIRMED/CORRECTED - disassembly, 2026-10-02 (spec section 4.2): the
-// patch-application dispatcher (`FUN_00B76B20`, not modelled in this reader -
+// patch-application dispatcher (`0x00b76b20`, not modelled in this reader -
 // see weapons.h's "Record-management concerns... out of scope" note, same
 // bucket as the rest of section 4's runtime patch-apply machinery) only
 // distinguishes Additive (0) and Multiplicative (1); EVERY other stored mode
@@ -48,7 +48,7 @@ enum class OperationMode : int32_t { Replace = -1, Additive = 0, Multiplicative 
 // distinguished by the engine's dispatcher, contrary to what their separate
 // enum names might suggest; whatever behavioural difference exists between
 // "replace" and "remove" is decided earlier, by what bytes the (un-read,
-// 22 KB) row reader `FUN_00B76BC0` captures as the patch payload, not by
+// 22 KB) row reader `0x00b76bc0` captures as the patch payload, not by
 // this dispatch. Flagged here for any future consumer of `OperationMode`,
 // since this reader itself only exposes the parsed mode and does not apply it.]
 
@@ -285,7 +285,7 @@ std::vector<MeleeTransitionState> ParseAllMeleeTransitionStates(const Document& 
 // a well-formed profile carries all four (spec section 8) - not enforced here.
 //
 // [CONFIRMED - disassembly, 2026-10-02 (spec-tables-weapons-combat.md section
-// 8): `FUN_00B6C370`'s entire body was read; its complete literal vocabulary
+// 8): `0x00b6c370`'s entire body was read; its complete literal vocabulary
 // is exactly the elements this struct models, and `Penalties`, `Bonuses`,
 // `lag_amount`, `lag_time`, `vertical_offset` (the five elements Team B found
 // in 20/20 real rows) appear nowhere in it, under any parent - this is now
@@ -371,7 +371,7 @@ struct ExplosionRecord {
     std::string name;                              // bounded copy, 0x20 bytes
     // Panic_Reaction: id lookup table not decoded here (stored as text; see
     // weapons.h convention 2 - cross-table resolution is out of scope).
-    // [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `FUN_004EEE40`
+    // [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `0x004eee40`
     // computes a CRC(name) but then never reads that result (dead code on
     // that computation) - it actually resolves by a linear scan comparing
     // each of 6 table entries' first dword against the raw NAME-TEXT POINTER
@@ -400,7 +400,7 @@ struct ExplosionRecord {
     std::vector<StickySmallEffect> stickyFireSmallEffects;                                // Sticky_Fire/Small_Sticky_Effects/Effect, capacity 4
     bool stickyFireAlwaysProduce = false;                                                    // Sticky_Fire/Always_Produce: text == "yes" case-insensitively ONLY (NOT "true")
     // Groundfire: id lookup table not decoded here (stored as text). Unlike
-    // Panic_Reaction above, `FUN_005FD830` genuinely DOES use the CRC(name)
+    // Panic_Reaction above, `0x005fd830` genuinely DOES use the CRC(name)
     // it computes - a real hash-table lookup, CONFIRMED 2026-10-02 (spec
     // 10.1) - the table's own string contents just were not dumped this pass.
     std::optional<std::string> groundfire;                                                    // Groundfire; 0 if absent
@@ -411,8 +411,8 @@ struct ExplosionRecord {
     Always<float> screenEffectsDecayTime;                                                                // .../Decay_Time (a)
     Always<float> screenEffectsAttenStart;                                                                  // .../Atten_Start (a)
     Always<float> screenEffectsAttenEnd;                                                                       // .../Atten_End (a)
-    // Tone/Tint. [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `FUN_00DAD160`
-    // delegates to `FUN_00DAD0A0`, the actual component reader - it reads the
+    // Tone/Tint. [CORRECTED - disassembly, 2026-10-02 (spec 10.1): `0x00dad160`
+    // delegates to `0x00dad0a0`, the actual component reader - it reads the
     // three children (name literals starting `R`/`G`/`B`, in that order) with
     // the "always" f32 reader, DIVIDES EACH BY 255.0, and stores the result as
     // three consecutive normalised [0.0, 1.0] floats (a 12-byte vec3) - NOT
@@ -586,12 +586,12 @@ std::vector<WeaponTracerRecord> ParseAllWeaponTracers(const Document& doc);
 // ===========================================================================
 // 12.2 weapon_tracer_materials.xtbl (spec section 12.2)
 // ===========================================================================
-// [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+// [NOTE - spec-tables-weapons-combat.md 1.6 (`0x006f76f0` row) now lists the 33 names by cross-reference
 // to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
 // `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
 // as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
 struct TracerMaterialRow {
-    std::string materialName;    // Name: a physical-material name; the 33-name resolution table (FUN_006F76F0) is
+    std::string materialName;    // Name: a physical-material name; the 33-name resolution table (0x006f76f0) is
                                     // never enumerated in this spec (only referenced, section 1.6) - kept as raw text;
                                     // real engine behaviour: an unmatched name silently overwrites slot 31
     Always<float> tracerDampener;  // Tracer_Dampener (a); spec notes the always-reader quirk overwrites the engine's 1.0 preset when absent
@@ -604,7 +604,7 @@ std::vector<TracerMaterialRow> ParseAllTracerMaterials(const Document& doc);
 // 13.1 crib_weapons.xtbl (spec section 13.1)
 // ===========================================================================
 struct CribWeaponEntry {
-    std::optional<std::string> weapon;  // Weapons_List/Entry/Weapon (name text; resolved via FUN_00B81220 WITHOUT a null
+    std::optional<std::string> weapon;  // Weapons_List/Entry/Weapon (name text; resolved via 0x00b81220 WITHOUT a null
                                            // check by the real loader - an unknown name would fault there; out of scope here)
     Always<bool> unlocked;                 // Entry/Unlocked (a)
 };
@@ -620,7 +620,7 @@ struct StoreWeaponEntry {
     std::optional<std::string> weapon;      // Entry/Weapon (name text)
     Always<bool> unlocked;                    // Entry/Unlocked (a)
     // Num_Hoods/Angle/Distance/Offset are declared elements this row can
-    // carry but the real loader (FUN_00817F90) does NOT read them (spec
+    // carry but the real loader (0x00817f90) does NOT read them (spec
     // section 13.2, OPEN: consumer not found) - exposed here as dead data.
     std::optional<int32_t> numHoods;   // Entry/Num_Hoods
     std::optional<float> angle;          // Entry/Angle

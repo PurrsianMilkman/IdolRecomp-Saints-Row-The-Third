@@ -320,7 +320,7 @@ ProjectileInfo ParseProjectileInfo(const Node* row) {
     return r;
 }
 
-// [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+// [NOTE - spec-tables-weapons-combat.md 1.6 (`0x006f76f0` row) now lists the 33 names by cross-reference
 // to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
 // `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
 // as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
@@ -589,7 +589,7 @@ Weapon ParseWeapon(const Node* row) {
 
     {
         // [CONFIRMED - disassembly, 2026-10-02 (spec-tables-weapons-combat.md 2.2, `+0x1A4`
-        // Fire_Cone_Angle): reader flavour settled as "if present" (FUN_00DACD40, default
+        // Fire_Cone_Angle): reader flavour settled as "if present" (0x00dacd40, default
         // 1.0 pre-set then overwritten only if found) - functionally equivalent to the
         // ReadFloatAlways-then-guard-on-present pattern kept here (both only commit a value
         // when the element is found). Write order vs Fire_Cone_Metrics (section 2.3) is also
@@ -1043,7 +1043,7 @@ AimDriftProfile ParseAimDriftProfile(const Node* row) {
     r.bulletMissAimingBouncesPerSec = ReadFloatAlways(aiming, "Bounces_per_sec");
     r.bulletMissAimingSpeedMultipler = ReadFloatAlways(aiming, "Speed_multipler");
     // [CONFIRMED - disassembly, 2026-10-02, spec-tables-weapons-combat.md
-    // section 8: `FUN_00B6C370`'s full body was read - the `Bullet_miss ->
+    // section 8: `0x00b6c370`'s full body was read - the `Bullet_miss ->
     // Recovery` path is exactly where the real reader looks (not a
     // mis-association), and the three recovery* defaults are pre-set
     // unconditionally before the presence check (same pattern as

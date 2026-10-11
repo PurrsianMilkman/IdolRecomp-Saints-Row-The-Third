@@ -47,7 +47,7 @@ namespace sr3luahost {
 // (every existing test) see exactly the old behaviour.
 struct VdoObject {
     std::string name;
-    // Real, CONFIRMED-mechanism hash of `name` (FUN_00D9E740, lower-cased,
+    // Real, CONFIRMED-mechanism hash of `name` (0x00d9e740, lower-cased,
     // this project's own default seed 0 - see EngineState::findVdoObject's
     // own doc comment for why 0, specifically).
     uint32_t nameHash = 0;
@@ -57,7 +57,7 @@ struct VdoObject {
     uint32_t parentHandle = 0;
     // Which "document" this object belongs to - 0 is this project's own
     // chosen sentinel for "the current default document" (real
-    // FUN_00e0ceb0's own stand-in, EngineState::currentDefaultDocHandle()).
+    // 0x00e0ceb0's own stand-in, EngineState::currentDefaultDocHandle()).
     uint32_t docHandle = 0;
     // vint_object_first_child (spec-lua-bindings.md Sec18.1): the real
     // record's own offset +0x1c, "the record's first-child pointer." 0 = "no
@@ -195,7 +195,7 @@ struct VintDataResponderRecord {
     // vint_internal_dataresponder_request reached its own real "type-validated,
     // record exists" gate (Sec21.2) for this name - test-observable proof the
     // gate logic runs, without claiming any further engine effect (the actual
-    // dispatch, FUN_00e1e660, was not independently decompiled this pass and
+    // dispatch, 0x00e1e660, was not independently decompiled this pass and
     // is not modeled - see EngineState::dataResponderRequest's own doc comment).
     int dispatchAttempts = 0;
 };

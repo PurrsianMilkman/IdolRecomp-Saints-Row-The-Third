@@ -3,6 +3,39 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## RESUMED 2026-10-10 in the renamed/moved folder ("IdolRecomp Saints Row The Third",
+## `D:\IdolRecomp Saints Row The Third`; `D:\Project Crreish` is now a junction to it, old archived .bat
+## paths and scripts still resolve). Orchestrator: purrsian-52 (continuity of purrsian-a5/4a naming across
+## restarts). Usage-pacer: ahead of plan, 1-2 Sonnet agents max, conserve.
+
+### DONE: v0.6 release cut, shipped
+Folder: `v0.6_2026-10-10_vorbis-fix-pause-menu-objective-text` on
+`D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: (`mirror_build_history.sh` ran
+clean this time, "history: 9 versions on G: (1 new)" - purrsian-a5's earlier script fix held). Cut from
+main `030c108` (post-pause tip at the time). Full ctest 164/168 clean, 4 pre-existing Bink skips. Live
+mission re-check (full real archives incl. dlc2+cutscene_tables): m05/m09 clean as before; **m07 now
+ALSO runs fully clean** (real improvement from this session's inv-slot/conversation + get_dist merges -
+was previously the "character-position data" blocker in v0.5b's notes); dlc2_m01 same known-open
+vtable-predicate gap (Sec7.10, Team A's domain per earlier instruction); dlc2_m03 now gets FURTHER than
+v0.5b reported before hitting a different, later open gap (tutorial-dispatcher byte 0x014f3d34, Sec6.19).
+Screenshots (plain launch, new objective-text HUD overlay with minimap, traffic-visible walk) all
+personally viewed before inclusion - honestly noted that no shot this cut clearly shows the car body
+during driving (close follow-cam), though the pose itself is still real/test-covered. Read-only + swapped
+into `TEAM B\playtest\` (left `sr3_viewer_old_backup.exe` alone, matching the existing pattern). Also
+moved the untracked `check_keys.obj` to `G:\AI\Claude Projects\recomp\TEAM-B-misc\` per purrsian-52.
+**Relay the folder name to purrsian-52 (explicitly requested) - DO THIS NEXT if not already done.**
+
+### Previously (pre-move), now historical: v0.6 planning note
+All of this session's queued work (vorbis merge+independent oracle verify, inv-slot/conversation merge,
+pause-menu binding, the full 25-branch audit and every DONE item in it) is complete and merged. The next
+concrete, not-yet-started task is cutting a new playtest release (v0.6) per the established procedure
+(see the "EXTENDED, USER INSTRUCTION" release-procedure block further down this file) - main has moved
+substantially since v0.5b (`ce321fb`): named-object-resolution fix, vorbis decode fix, inv-slot/
+conversation fix, pause-menu binding, several orphaned-branch merges (respect-progression, vehicle-
+handling, mission-fail-success, near-field-ped-spawner, objective-text HUD overlay, tower-diag tooling,
+hex-address rename). Fresh build+ctest+screenshots+NOTES.txt+mirror+read-only+swap, same discipline as
+v0.1-v0.5b. Re-check `git log -1 main` first - purrsian-a5 may land more spec syncs before this resumes.
+
 ## LIVE STATE 2026-10-10 (49th rewrite, compacted - prior block ~41KB, over budget). Orchestrator:
 ## purrsian-4a. User directive standing: "keep going, never stop, usage-aware" - no fixed agent cap unless
 ## usage-pacer fires (then: write HANDOFF, wait); no speculative units; prefer small high-value; merges go
@@ -28,17 +61,44 @@ Full main ctest after ALL of the above: **164/168 passed, 0 failed, 4 pre-existi
   max RMS diff 0.000002, max abs diff <0.0001 - genuine independent confirmation (not our own code
   agreeing with itself) that main's Vorbis decode is correct. Relayed to purrsian-a5. **Vorbis item is
   fully closed, no further action needed.**
-- **`agent-pausemenu` worktree** (`D:/Project Crreish/TEAM B/.claude/worktrees/agent-pausemenu`, branch
-  `feature/pause-menu-open-binding`): found with 3 files modified (`window.h`/`window.cpp`/`sr3_viewer.cpp`)
-  but UNCOMMITTED and unverified - crashed agent `a82af8ee0688cbe1e` never finished. Not yet resumed -
-  next priority per purrsian-a5's order after the vorbis independent check finishes.
-- Still queued from the branch audit below: `fix/unified-registry-test-missing-b10-sum` (conflict,
-  queued), `feature/objective-text-localization` (conflict in `tools/sr3_viewer.cpp`, queued),
-  `diag/tower-constant-consumption-control` (merge code only, archive `.rdc` binaries to
-  `G:\AI\Claude Projects\recomp\TEAM-B-diag\` + gitignore, per purrsian-4a), `feature/m09-inworld-trigger-
-  test` (side-by-side check needed, not a blind merge), `fix/hex-address-rename` (last, heavy conflicts
-  expected). Bink-pixel-accuracy-oracle: explicitly deferred/skip per purrsian-4a ("redo fresh later if
-  still needed").
+- **DONE AND MERGED: pause-menu open binding** (worktree `agent-pausemenu`, branch `feature/pause-menu-
+  open-binding`). Found the crashed agent's work (`a82af8ee0688cbe1e`) uncommitted but complete/coherent
+  (reviewed in full: `Window::create` gets a new `escQuits` flag default-true so no existing caller is
+  affected; Esc repurposed to open/close the real CBA_GAC_PAUSE_MENU binding via the ALREADY-REAL
+  `EngineState::pushGamePauseReason()`/`LaunchLuaCoroutine("dialog_pause_show"/"dialog_pause_hide")`
+  primitives, F10 is the replacement quit key, dt forced to 0 while open). Committed it, caught the branch
+  up to current main (clean, no conflicts), rebuilt, ctest 164/168 clean, merged to main. Honest gaps
+  stated in-code: the native's own 3 blocking-UI gate checks aren't modelled (only "not already open" is);
+  the visible resume/quit overlay text is a synthetic label, not the full real `pause_menu_common.vint_doc`
+  element-tree render (best-effort load of the real doc happens for element/animation counts only).
+  Phone's open binding not attempted (unknown per Team A, as instructed).
+- **DONE: `fix/unified-registry-test-missing-b10-sum`** - confirmed a genuine no-op: main's current
+  `expectedTotal` sum already includes `namesB10()` plus everything through B31 (landed independently
+  via later batches) - this branch's fix was already subsumed. Zero net diff vs main, merged as a
+  formality so it stops showing as orphaned.
+- **DONE: `feature/objective-text-localization`** (supersedes `mission-hud-objectives`) - 4 real conflicts
+  in `tools/sr3_viewer.cpp` against mission-host/roadblock/pause-menu/minimap, all additive-not-
+  overlapping, resolved by keeping both sides as siblings. **Caught a real bug**: only this branch's own
+  `for (h : hudObjectiveH) drawHudLabel(...)` loop actually RENDERS the objective-text labels - the
+  shared per-frame loop that resolves/sets their text only calls `hudSetLabel`, never `drawHudLabel` -
+  dropping this branch's content would have silently left objective text set but invisible. ctest 164/168
+  clean, merged.
+- **DONE: `diag/tower-constant-consumption-control`** - clean merge, no conflicts. Per purrsian-4a:
+  archived the 2 `.rdc` capture binaries (~2.4MB each) to `G:\AI\Claude Projects\recomp\TEAM-B-diag\
+  renderdoc_captures\`, removed from git, added `renderdoc_captures/`/`*.rdc` to `.gitignore`. Kept the
+  small PNG/txt results (consistent with this repo's existing results/ convention). ctest 164/168 clean.
+- **DONE (no merge needed): `feature/m09-inworld-trigger-test`** - side-by-side check done per
+  purrsian-a5's instruction. Its 2 test files (`real_playtest_mission_test.cpp`,
+  `synthetic_mission_host_live_bridge_test.cpp`) are BYTE-IDENTICAL to main's current versions (already
+  landed via the mission-host merges) - zero diff. Its one real content change
+  (`tools/zone_object_resolver_probe.cpp`'s CLI generalization, object_name/archive_filename overrides) is
+  actually a REGRESSION risk if merged: main's current version of that same file is strictly MORE advanced
+  (carries the later Trigger_Volume shape/extent/radius population scan this branch predates and doesn't
+  have) - merging would silently remove that scan. Correctly classified SUPERSEDED, not merged.
+- Still queued: `fix/hex-address-rename` (last, heavy conflicts expected). Bink-pixel-accuracy-oracle:
+  explicitly deferred/skip per purrsian-4a ("redo fresh later if still needed"). Stray leftover worktree
+  `wt-unifiedregistry` could not be removed (permission denied, likely a lingering file handle) - harmless,
+  flag for later cleanup.
 
 ### BRANCH AUDIT (purrsian-4a's ask - `git branch --no-merged main`, 25 branches, classified below)
 Method: for each, compared its unique content (merge-base..tip diff) against main's CURRENT state (existence/
@@ -2615,7 +2675,7 @@ tier as a fresh dispatch** (explicit orchestrator instruction, applies symmetric
    hand-derived texture-NAME-swap heuristic for `brad_sm_head_d.tga`/`brad_head.matlib_pc` - search that
    string in `tools/sr3_viewer.cpp` for the exact current code to replace). **Caveat already flagged in the
    spec itself**: the final render-time step that turns a cached matlib handle into actual D3D texture-stage
-   bindings is still OPEN (lies past `FUN_00dd35e0`/`FUN_00db3c80`→`FUN_00db3b40`, not yet traced) - so this
+   bindings is still OPEN (lies past `0x00dd35e0`/`0x00db3c80`→`0x00db3b40`, not yet traced) - so this
    agent's job is to make the resolution/attachment model match the real engine (named-composite, per-type,
    keyed-by-identity) and honestly flag the remaining open step, not to invent a D3D-binding mechanism that
    isn't yet confirmed.
@@ -3437,14 +3497,14 @@ both `CMakeLists.txt` and the manual build script (§6).
   container format is where this project first needed it. It is confirmed
   across unrelated formats: archive filenames, 22,274/22,274 `.rig_pc`
   bone names (`spec-rig-format.md` §5), the `.cfmesh_pc` mesh-registry key
-  (`FUN_00da7890`, now CONFIRMED by disassembly rather than inferred), and
+  (`0x00da7890`, now CONFIRMED by disassembly rather than inferred), and
   `.ctdg_pc`'s in-file speaker ids.
   *Scope correction (2026-09-10, from Team A's `.ctdg_pc` pass):* an
   earlier version of this bullet — and of `hash.h`'s comment — said any
   name-keyed lookup "should call it rather than reimplement it," which
   overclaimed. The engine has **at least two** string hashes: this
   rotate-6/XOR one and a table-driven CRC-32 over the lowercased string
-  (`FUN_00d9e8b0`) keying the mission-conversation registry. `.ctdg_pc`
+  (`0x00d9e8b0`) keying the mission-conversation registry. `.ctdg_pc`
   uses **both at once**. Don't assume an unidentified 32-bit name hash is
   this one; `spec-vpp-container.md` §2.2, `spec-rig-format.md` §5, and
   `spec-conversation-format.md` §6 all carry the correction.
@@ -9027,9 +9087,9 @@ Team A) ran all session started at `p0` (this project's own long-confirmed
 one of the 518 bit-set clips.
 
 **Source: Team A traced two independent disassembly sites** —
-`FUN_004c21a0` (the runtime layer-blend sampler, already known from the
+`0x004c21a0` (the runtime layer-blend sampler, already known from the
 prior pass) tests bit `0x40` to decide whether to *consult* a per-track
-override array; a second function, `FUN_004c1190` (raw instruction `TEST
+override array; a second function, `0x004c1190` (raw instruction `TEST
 AL,0x40` at `0x004c11a0`), tests the *same* bit to decide whether to
 *build* that array in the first place — parsing it directly out of the
 clip's own resident file bytes, at exactly `clip + payload_start(clip)`,
@@ -10303,7 +10363,7 @@ deferred, not further chased this session.
 
 ⚠ **SUPERSEDED ON THE WALK BY §9.64 (same day).** Everything below about
 the format's *shape* stands — the three-part division, the six spec
-refinements, the header census, the `MeshBlock` reuse, `FUN_0074a110`.
+refinements, the header census, the `MeshBlock` reuse, `0x0074a110`.
 But this section's **searched** tail-start is gone: §9.64 implements Team
 A's computed MIDDLE and reaches **100,384 / 100,384 (100.0000%)** with no
 search, against this section's 100,255/100,384 and 129 unplaceable
@@ -10336,7 +10396,7 @@ surviving output lands. Check it too next time.
 
 | File | What it is |
 |---|---|
-| `include/sr3clmesh/level_mesh.h` (428 lines **at the time of this section; 653 and substantially rewritten as of §9.64**) | `sr3clmesh::LevelMesh` — the `0x4fe66afa` header, the two head slot arrays, the gated `+0x78`/`+0x7c` pair, the whole trailing sub-parser chain, the `FUN_0074a110` finalization arithmetic, and a file-level comment itemising the **six** places real bytes and `spec-physics-format.md` §4.1/§4.2 diverge |
+| `include/sr3clmesh/level_mesh.h` (428 lines **at the time of this section; 653 and substantially rewritten as of §9.64**) | `sr3clmesh::LevelMesh` — the `0x4fe66afa` header, the two head slot arrays, the gated `+0x78`/`+0x7c` pair, the whole trailing sub-parser chain, the `0x0074a110` finalization arithmetic, and a file-level comment itemising the **six** places real bytes and `spec-physics-format.md` §4.1/§4.2 diverge |
 | `include/sr3clmesh/errors.h` | `sr3clmesh::FormatError`, thrown only for CONFIRMED hard rules (magic, exact version 20, header truncation) |
 | `src/level_mesh.cpp` (462 lines **at the time of this section; 766 as of §9.64**) | the walk, plus `walkTail`/`findTail` exposed so a harness can re-run the whole search under deliberately wrong assumptions. **`findTail` no longer exists — §9.64 replaced the search with a computed `tailStart`** |
 | `tests/synthetic_clmesh_test.cpp` (1,516 lines) | **39 tests as of §9.64 (was 26), the 20th synthetic suite, `sr3clmesh_tests`** — six of them mutation cases, one per load-bearing structural rule |
@@ -10354,20 +10414,20 @@ of the header. **That implementation reproduces zero real files.** It is
 scored explicitly, beside the real walk, in the harness output:
 `SPEC-LITERAL one-cursor walk : 0 / N land exactly`.
 
-The reason is a step §4.2 names but does not size: `FUN_007499d0`'s tail
-resolves one further reference through `thunk_FUN_00e3e590` into `+0xb8`.
+The reason is a step §4.2 names but does not size: `0x007499d0`'s tail
+resolves one further reference through `0x00e3e590` into `+0xb8`.
 In every real file, that single reference's payload is the whole material-
 definition + render-Mesh-sub-block region — hundreds to thousands of bytes
 — and it sits **between the chain's first two arrays and all of its
 remaining ones**. So:
 
 ```
-  HEAD    bodyStart .. headEnd     FUN_007499d0's two 8-byte-stride slot
+  HEAD    bodyStart .. headEnd     0x007499d0's two 8-byte-stride slot
                                    arrays, back to back, then the
                                    count(+0x48) embedded Mesh sub-blocks
   MIDDLE  headEnd  .. tailStart    the +0xb8 reference's payload — OPAQUE,
                                    no header field sizes it
-  TAIL    tailStart .. EOF         FUN_00749b40 .. FUN_00749e80, ending
+  TAIL    tailStart .. EOF         0x00749b40 .. 0x00749e80, ending
                                    EXACTLY at end-of-file
 ```
 
@@ -10377,7 +10437,7 @@ opaque range rather than something it pretends to walk.
 #### The go/no-go test, and the numbers
 
 This format has exactly one structural landmark a walk can be graded
-against: **`FUN_00749e80`'s trailing nested group is the last structure in
+against: **`0x00749e80`'s trailing nested group is the last structure in
 the file**, so a correct walk of the tail ends exactly at EOF, to the byte.
 "Parses without throwing" would have proved nothing here — the counts are
 zero in the overwhelming majority of files, so a do-nothing walk sails
@@ -10532,7 +10592,7 @@ Three of those are findings in their own right, none of them in
 * **`count(+0x48)`, `count(+0x58)` and `count(+0x70)` are always the same
   number** — 100,379 out of 100,379, across three archives that were
   authored years apart. Three different sub-parsers sized by one quantity
-  means `FUN_00749b40`'s 56-byte records are **one per resolved reference**.
+  means `0x00749b40`'s 56-byte records are **one per resolved reference**.
   That does not decode the record, which stays OPEN — but it gives the
   array a *scope*, which is more than "56 bytes of something" and is the
   kind of thing a future pass can actually use.
@@ -10598,7 +10658,7 @@ is the one archive not yet re-run post-fix**; expect ~99.5% like the other
 two, and read its 326/833 as a record of the bug, not a property of the
 format.
 
-**`FUN_0074a110` finalization:** **2,061 / 2,061** bounding volumes
+**`0x0074a110` finalization:** **2,061 / 2,061** bounding volumes
 computed post-fix (33 DLC + 2,028 `sr3_city_1`), every one finite and
 positive; plus 326/326 on pre-fix `sr3_city_0`. Radius spans
 **0.161362 … 139.103058** across the population — small props at the
@@ -10610,16 +10670,16 @@ constant computation could not produce.
 
 | Sub-parser | Status |
 |---|---|
-| `FUN_007499d0` arrays 1/2 (`+0x48`/`+0x58`, 8-byte) | **Placement fully decoded.** Contiguous, no realign between them, at `bodyStart`. Array 1's entries **resolve to real Mesh sub-blocks** (below) |
-| `FUN_007499d0` tail (`+0xb8` single reference) | **OPAQUE, and the biggest single gap in this format.** A real cursor-consuming step, not a no-op — it is what the whole MIDDLE region is — but nothing in either spec sizes it |
-| `FUN_00749b40` (`+0x70`, 56-byte) | **Placement decoded** (16-aligned, `count × 56`). Contents **raw bytes** — §5 OPEN |
-| `FUN_00748c70` / `FUN_00749ba0` (`+0x78`/`+0x7c`) | **Branch decoded and confirmed:** the sentinel selects the default-building branch, which reads NO cursor bytes. The non-sentinel branch's cursor cost is **not measurable from shipped data** — see below. Semantic meaning of the 1–2 values: OPEN, untouched |
-| `FUN_00749c40` (`+0x88`, 16-byte outer / 12-byte inner) | **Placement decoded and confirmed against real bytes.** Zero of the 4,232 DLC entries populate it; **258 city entries do — 388 outer 16-byte records carrying 2,368 inner 12-byte elements — and every single one of those 258 lands exactly on EOF** (all 129 non-landing entries have `count(+0x88) == 0`). §4.2's literal "the inner region immediately following in the file" therefore holds on real data, not just synthetically. The 12-byte element's own field layout stays OPEN |
-| `FUN_00749cf0` (`+0x98`, 52-byte) | **Placement decoded.** Contents raw bytes — §5 OPEN |
-| `FUN_00749d40` (`+0xa8`, 96-byte) | **Placement decoded.** Zero of the 45,783 entries measured (all DLC + all of `sr3_city_0`) populate it. Contents raw bytes — §5 OPEN |
-| `FUN_00749e80` (`+0xd8`/`+0xe8`/`+0xfc`) | **Fully decoded, including the alignment-discipline switch and the trailing group's real array order.** Contents of the 8-/16-byte arrays and the 4-byte inner elements: raw bytes — §5 OPEN |
-| `FUN_0074a110` | **Implemented for real** — see below |
-| `FUN_00749da0`, `FUN_00e401d0`, `FUN_00e3fcb0`, `FUN_00e3ffd0` | **Not touched.** §5 lists them as untraced; nothing here guesses at them |
+| `0x007499d0` arrays 1/2 (`+0x48`/`+0x58`, 8-byte) | **Placement fully decoded.** Contiguous, no realign between them, at `bodyStart`. Array 1's entries **resolve to real Mesh sub-blocks** (below) |
+| `0x007499d0` tail (`+0xb8` single reference) | **OPAQUE, and the biggest single gap in this format.** A real cursor-consuming step, not a no-op — it is what the whole MIDDLE region is — but nothing in either spec sizes it |
+| `0x00749b40` (`+0x70`, 56-byte) | **Placement decoded** (16-aligned, `count × 56`). Contents **raw bytes** — §5 OPEN |
+| `0x00748c70` / `0x00749ba0` (`+0x78`/`+0x7c`) | **Branch decoded and confirmed:** the sentinel selects the default-building branch, which reads NO cursor bytes. The non-sentinel branch's cursor cost is **not measurable from shipped data** — see below. Semantic meaning of the 1–2 values: OPEN, untouched |
+| `0x00749c40` (`+0x88`, 16-byte outer / 12-byte inner) | **Placement decoded and confirmed against real bytes.** Zero of the 4,232 DLC entries populate it; **258 city entries do — 388 outer 16-byte records carrying 2,368 inner 12-byte elements — and every single one of those 258 lands exactly on EOF** (all 129 non-landing entries have `count(+0x88) == 0`). §4.2's literal "the inner region immediately following in the file" therefore holds on real data, not just synthetically. The 12-byte element's own field layout stays OPEN |
+| `0x00749cf0` (`+0x98`, 52-byte) | **Placement decoded.** Contents raw bytes — §5 OPEN |
+| `0x00749d40` (`+0xa8`, 96-byte) | **Placement decoded.** Zero of the 45,783 entries measured (all DLC + all of `sr3_city_0`) populate it. Contents raw bytes — §5 OPEN |
+| `0x00749e80` (`+0xd8`/`+0xe8`/`+0xfc`) | **Fully decoded, including the alignment-discipline switch and the trailing group's real array order.** Contents of the 8-/16-byte arrays and the 4-byte inner elements: raw bytes — §5 OPEN |
+| `0x0074a110` | **Implemented for real** — see below |
+| `0x00749da0`, `0x00e401d0`, `0x00e3fcb0`, `0x00e3ffd0` | **Not touched.** §5 lists them as untraced; nothing here guesses at them |
 
 Nothing in the 56/52/96-byte arrays or the 12-/4-byte nested elements is
 given a field layout. They come back as `RawArray{offset, count, stride}`
@@ -10630,7 +10690,7 @@ plus `arrayBytes()`, exactly the discipline
 #### The `MeshBlock` reuse: it works, and here is the byte evidence
 
 The brief asked whether `spec-physics-format.md` §4.2's "entries in the
-`+0x48` array are resolved via `FUN_00e718b0`" really means "each is a
+`+0x48` array are resolved via `0x00e718b0`" really means "each is a
 nested embedded Mesh sub-block", and to fall back to an opaque blob if it
 did not check out. **It checks out, and the evidence is exact, not
 statistical.**
@@ -10662,7 +10722,7 @@ Population figures are in the numbers block above: 33 of 33 references
 resolve, in 30 of 30 files, once the c-side step between consecutive
 embedded blocks is the measured one rather than the guessed one.
 
-#### `FUN_0074a110` is implemented for real, not stubbed
+#### `0x0074a110` is implemented for real, not stubbed
 
 `boundingVolumeFromExtents()` is §4.2's last row exactly: half-extent
 `(max−min)/2` per axis, centre `min + halfExtent` (the operation the
@@ -10699,10 +10759,10 @@ a detail the decompiler output would legitimately not make visible.
    evidence it is a house convention of this engine's array walkers rather
    than a per-format quirk.)*
 2. **The 16-align is per sub-parser, not per array — except it *is* per
-   array inside `FUN_00749e80`.** §4.1 states one function = one array =
+   array inside `0x00749e80`.** §4.1 states one function = one array =
    one align, but three of the eight lay down more than one.
-   `FUN_007499d0`'s `+0x48`/`+0x58` pair goes back to back with **no**
-   realign (`vent_metala`, above). `FUN_00749e80`'s `+0xd8`/`+0xe8` pair
+   `0x007499d0`'s `+0x48`/`+0x58` pair goes back to back with **no**
+   realign (`vent_metala`, above). `0x00749e80`'s `+0xd8`/`+0xe8` pair
    **does** realign: dropping that realign costs 37 of 846 files in dlc1
    alone, all of them files whose `count(+0xd8)` leaves the cursor 8 mod
    16. Two different functions, two different behaviours; neither is a
@@ -10746,7 +10806,7 @@ a detail the decompiler output would legitimately not make visible.
   the chain cannot be walked as one cursor. It is the whole MIDDLE region.
   Nothing here attempts it, and a future pass that wants "walk a
   `.clmesh_pc` end to end in one pass" needs that one number (or a trace
-  of `thunk_FUN_00e3e590`) and nothing else.
+  of `0x00e3e590`) and nothing else.
 * **The non-sentinel `+0x78` branch's cursor cost is NOT MEASURABLE from
   shipped data by this test, and the harness says so rather than printing
   a confident number.** The first version of that measurement was vacuous
@@ -10845,7 +10905,7 @@ three archives separately. **Every figure reproduced exactly, including
 one that at first looked like it might not:**
 
 * `dlc1`-`dlc3`: header-field census, gated-pair counts, MeshBlock
-  resolution (30/30 files, 33/33 references), `FUN_0074a110` radius range
+  resolution (30/30 files, 33/33 references), `0x0074a110` radius range
   — exact match, digit for digit.
 * `sr3_city_0`: header-field census exact match. MeshBlock resolution came
   back **725/833 references, 308/343 files** — which at first read as a
@@ -10874,7 +10934,7 @@ else's false lead.
 
 ### 9.60 `.clmesh_pc`'s `+0x88` nested group's 12-byte inner element — CONFIRMED as a local-space (x,y,z) float32 position, not either literal reading `spec-physics-format.md` §4.2 posed
 
-§9.59 left one thing open on its own recommendation: `FUN_00749c40`'s
+§9.59 left one thing open on its own recommendation: `0x00749c40`'s
 `+0x88` two-level nested group — "the strongest single piece of evidence
 in this whole structure for a collision-primitive hierarchy" — has a
 12-byte inner element whose field layout `spec-physics-format.md` §4.2
@@ -11042,7 +11102,7 @@ produces a perfect closed circle by chance, and it is implausible that six
 unrelated, differently-shaped, differently-sized assets would each
 independently produce a false-positive shape that happens to match their
 own filenames. This is `CONFIRMED — empirical`, on the same internal-
-consistency bar this project already uses elsewhere (`FUN_0074a110`'s
+consistency bar this project already uses elsewhere (`0x0074a110`'s
 radius range, the group-search ambiguity counts): **the 12-byte inner
 element is 3 little-endian float32 values, `(x, y, z)`, in local/object
 space.** Whether every such group is specifically a *collision* boundary
@@ -12517,12 +12577,12 @@ and nothing left to disambiguate.
 
 | | Before (§9.59) | After |
 |---|---|---|
-| `headEnd` | `bodyStart + 8·count(+0x48) + 8·count(+0x58) + Σ(Mesh sub-block sizes)` | **plus `Σ(count(+0x58) index-list blocks)`** — §4.4.6's correction to §4.4.1's published formula, which omitted array 2's own `FUN_00e401d0` payloads. This reader shipped the incomplete version |
-| MIDDLE | OPAQUE. Reported as a byte range and nothing else | **Walked in full**: the `0x50`-byte record `thunk_FUN_00e3e590` lays down at the 16-aligned cursor, the material-set block (`FUN_00e40210`), the `materialCount × 8` lookup table at `R[+0x08]`, and two render-mesh groups (`FUN_00e3c4e0`), each a `0x60` header + index list + embedded Mesh sub-block + a u16 and a u8 array |
+| `headEnd` | `bodyStart + 8·count(+0x48) + 8·count(+0x58) + Σ(Mesh sub-block sizes)` | **plus `Σ(count(+0x58) index-list blocks)`** — §4.4.6's correction to §4.4.1's published formula, which omitted array 2's own `0x00e401d0` payloads. This reader shipped the incomplete version |
+| MIDDLE | OPAQUE. Reported as a byte range and nothing else | **Walked in full**: the `0x50`-byte record `0x00e3e590` lays down at the 16-aligned cursor, the material-set block (`0x00e40210`), the `materialCount × 8` lookup table at `R[+0x08]`, and two render-mesh groups (`0x00e3c4e0`), each a `0x60` header + index list + embedded Mesh sub-block + a u16 and a u8 array |
 | `tailStart` | **SEARCHED** — every 8-aligned position from `headEnd` on, keep the ones landing on EOF, keep the earliest, report the ambiguity | **COMPUTED** — `= middleEnd()`. `findTail`, `TailSearch`, `probeTail` and `tailCandidateCount()` are deleted |
-| gated `+0x78` pair | `kGatedPairBytes = 0`, explicitly labelled a parameter, not a finding | **Three real branches** (§4.4.6(f)): non-sentinel → `FUN_00748c70`'s block, cost = its OWN `+0x08` size field, per file; sentinel + flags bit → `FUN_00749ba0`'s **real collision hull**; otherwise nothing, not even an alignment |
-| `FUN_00749ba0` | "builds a default from two hard-coded constants, consumes no cursor bytes" | **REFUTED by §4.4.6(f) and confirmed here on real bytes**: a vertex list, a u16 index list, an opaque blob and two vec3s, in **18,706 / 100,384** files. `hullVertices()` / `hullIndices()` decode the two lists at the element sizes §4.4.6(f) states outright |
-| `FUN_00749b40` | 16-aligned only when its array is non-empty | **Aligns UNCONDITIONALLY**; only the array advance is conditional (§4.4.2(a) as amended by §4.4.6). The "empty array aligns nothing" rule still holds for `FUN_00749c40`/`cf0`/`d40`/`e80` |
+| gated `+0x78` pair | `kGatedPairBytes = 0`, explicitly labelled a parameter, not a finding | **Three real branches** (§4.4.6(f)): non-sentinel → `0x00748c70`'s block, cost = its OWN `+0x08` size field, per file; sentinel + flags bit → `0x00749ba0`'s **real collision hull**; otherwise nothing, not even an alignment |
+| `0x00749ba0` | "builds a default from two hard-coded constants, consumes no cursor bytes" | **REFUTED by §4.4.6(f) and confirmed here on real bytes**: a vertex list, a u16 index list, an opaque blob and two vec3s, in **18,706 / 100,384** files. `hullVertices()` / `hullIndices()` decode the two lists at the element sizes §4.4.6(f) states outright |
+| `0x00749b40` | 16-aligned only when its array is non-empty | **Aligns UNCONDITIONALLY**; only the array advance is conditional (§4.4.2(a) as amended by §4.4.6). The "empty array aligns nothing" rule still holds for `0x00749c40`/`cf0`/`d40`/`e80` |
 
 `opaqueMiddleOffset()`/`opaqueMiddleLength()` become `middleOffset()`/
 `middleEnd()`/`middleLength()` plus a `middle()` accessor returning the
@@ -12597,7 +12657,7 @@ structural reason, not a measurement artifact: the MIDDLE 16-aligns its
 own start, so a +4 shift is a no-op precisely on the files whose
 `headEnd` is NOT already 16-aligned — essentially the 1,454 files with a
 non-empty HEAD. That is why the honest control for this term is `+16`,
-which is 0. Same shape for `TAIL ± 16` against `FUN_00749b40`'s
+which is 0. Same shape for `TAIL ± 16` against `0x00749b40`'s
 unconditional align.
 
 #### The finding that was NOT in the brief: the search was landing on the wrong layout
@@ -12655,7 +12715,7 @@ scoreable controls rather than assumptions:
    `0x02` → 3,436/4,232**. `kHullGateMask = 0x04`, and the losing reading
    is scored as a permanent control.
 2. **Whether the do-nothing third outcome still aligns.** §4.4.2(a) as
-   amended says `FUN_00749ba0` "aligns first, then does its gated work",
+   amended says `0x00749ba0` "aligns first, then does its gated work",
    which would imply a 16-align even when the flags bit is clear.
    Measured: asserting that alignment **costs 24 of 4,232 DLC entries**
    their exact landing, and **214 of 100,384** population-wide. The reader
@@ -12765,7 +12825,7 @@ reproduce §9.59's 2,061/2,066 and 1,106/1,111 exactly, and the
 re-verification figure (725/833, 308/343) exactly. **The 113 references
 that do not parse are a pre-existing `MeshBlock`/g-side OPEN item, not a
 walk problem** — every one of those 1,454 files still lands on EOF to the
-byte. `FUN_0074a110` computed 2,786 bounding volumes, all finite and
+byte. `0x0074a110` computed 2,786 bounding volumes, all finite and
 positive, radius **0.161362 … 139.103058** — §9.59's exact population
 range.
 
@@ -12804,7 +12864,7 @@ could not have, as originally written.
   say what it is. 24.4 MB of it ships. The vertex and index lists are
   decoded only because §4.4.6(f) states their element sizes outright.
 * **§4.4.6(f)'s Havok question stays unjoined.** Team A reached
-  `FUN_00d56010` with a (vertices, count, …, count, indices) argument
+  `0x00d56010` with a (vertices, count, …, count, indices) argument
   shape and no `hk`-prefixed symbol. Nothing here advances it, and nothing
   here should be cited as if it did.
 * **113 of 2,899 `+0x48` references still do not parse through
@@ -12897,7 +12957,7 @@ collision-simulation feature (see the RESUME note's top for that
 decision). Two concrete disassembly-shaped leads were handed to Team A —
 §4.4.6(f)'s unjoined Havok question, and the MIDDLE's record CONTENTS
 (located since §9.64 but never decoded). **Team A closed both the same
-day.** §4.4.6(g): `FUN_00d56010` followed in full — a content-confirmed
+day.** §4.4.6(g): `0x00d56010` followed in full — a content-confirmed
 Havok MOPP-tree handoff (a literal on-disk `"MOPP"` magic, `0x50504f4d`,
 plus a composite constructor shaped exactly like Havok's public
 `hkpMoppBvTreeShape(shape, moppCode)`), reported at HIGH CONFIDENCE, not
@@ -12916,13 +12976,13 @@ not from the relay alone, per this project's own standing discipline.
 
 | Record | Field | Meaning |
 |---|---|---|
-| Material record | `+0x00`/`+0x04` (u32) | Material/shader hash; a second per-variant hash. Population meaning OPEN for both — mechanism/presence CONFIRMED, transfers directly from `spec-foliage-format.md` §6 (same parser, `FUN_00e71090`) |
+| Material record | `+0x00`/`+0x04` (u32) | Material/shader hash; a second per-variant hash. Population meaning OPEN for both — mechanism/presence CONFIRMED, transfers directly from `spec-foliage-format.md` §6 (same parser, `0x00e71090`) |
 | Material record | `+0x08` (u8) | Flags byte; bit `0x08` CONFIRMED as a fallback-texture-path selector, rest OPEN |
-| Material record | `+0x0C`/`+0x0E`/`+0x0F` | `u16` texture-binding count / `u8` constant-name count / `u8` vec4-constant count — CONFIRMED, read unconditionally by `FUN_00e71090` |
+| Material record | `+0x0C`/`+0x0E`/`+0x0F` | `u16` texture-binding count / `u8` constant-name count / `u8` vec4-constant count — CONFIRMED, read unconditionally by `0x00e71090` |
 | Group-1 `0x20`-byte sub-record | `+0x18` (u16) | An index into the group's OWN resolved-mesh reference (not inline `.clmesh_pc` bytes) — read only outside the three walkers, in the real runtime constructor `glmesh_ctor_FUN_0074c530` |
 | Group-2 `4`-byte inner element | `+0x02` (u16) | Same index namespace as the group-1 field above — cross-referenced by the same consumer (a vertex-welding/degenerate-feature-removal pass) |
-| Trailer `0x34`-byte record | `+0x2C` (u32) | A **raw, pre-remap** material-slot index. The runtime remaps it through a temporary per-parse table (`materialHandleTable`, built via a stack `alloca` inside `FUN_00e3e590` itself) that has no on-disk form — this reader decodes the raw index only, not the remapped handle |
-| Trailer `0x34`-byte record | `+0x30` bit `0x04` | An "active at this LOD tier" flag — CONFIRMED via a real introsort (`FUN_0074c2b0`) + comparator (`FUN_00748d50`) that partitions the trailer array on exactly this bit before truncating it |
+| Trailer `0x34`-byte record | `+0x2C` (u32) | A **raw, pre-remap** material-slot index. The runtime remaps it through a temporary per-parse table (`materialHandleTable`, built via a stack `alloca` inside `0x00e3e590` itself) that has no on-disk form — this reader decodes the raw index only, not the remapped handle |
+| Trailer `0x34`-byte record | `+0x30` bit `0x04` | An "active at this LOD tier" flag — CONFIRMED via a real introsort (`0x0074c2b0`) + comparator (`0x00748d50`) that partitions the trailer array on exactly this bit before truncating it |
 
 Everything else in these three record types stays genuinely OPEN — §4.4.6(h)
 says so explicitly per field, and this reader decodes nothing beyond the
@@ -13300,7 +13360,7 @@ spec's own headline: **"Trees are an assembly of blocks this project
 already knows, plus one new fixed header."** True on inspection — the
 shared material-reference block (`sr3geometry::MaterialBlock`), the same
 inline-material-definition routine `spec-foliage-format.md` §6 uses
-(`FUN_00e71090`), and the shared "Mesh" sub-block (`sr3mesh::MeshBlock`)
+(`0x00e71090`), and the shared "Mesh" sub-block (`sr3mesh::MeshBlock`)
 account for most of the file; only the fixed `0x208`-byte `'TREE'` block,
 the `0x170`-byte geometry sub-structure, and the `0x60`-byte collision
 capsules are new.
@@ -13313,7 +13373,7 @@ uses) → `'TREE'` block (magic `0x54524545`, version `> 0xCB`) → geometry
 sub-structure → material-set block (own name table, `count × 8` pointer
 slots, then length-prefixed inline material records — independently
 re-implemented rather than cross-depending on `sr3foliage`'s copy, per
-this project's own convention) → the generic index list (`FUN_00e401d0`,
+this project's own convention) → the generic index list (`0x00e401d0`,
 resolved here to `u32` elements per spec §7) → 4 LOD presence entries,
 each gating a g-backed `sr3mesh::MeshBlock` → three opaque runtime arrays
 (located, not decoded — spec §3's own table marks them so) → collision
@@ -13550,7 +13610,7 @@ associations between a vehicle draw range's material id and its texture-
 binding run had all been refuted (`spec-vehicle-geometry.md` §7.1 item 1,
 all at or below chance). Separately, an unconnected 2026-09-12 pass
 (§11.2) had already fully disassembled and validated the shared per-
-material record parser (`FUN_00e71090` — the same inline material-
+material record parser (`0x00e71090` — the same inline material-
 definition helper this project already knew from trees/foliage) for an
 unrelated reason, and found the record's own **array A** — a 12-byte
 `{blob offset, sampler hash, slot index}` triple — sitting at a **fixed
@@ -14297,7 +14357,7 @@ population gate over all 7,276 real blobs built in from the start (not bolted on
 numeric-correctness sample on a handful of arithmetic-heavy shaders (agent's own choice of GPU
 execution vs. a software reference interpreter, told to be explicit about which). **Team A's parallel trace CLOSED as a confirmed negative, verified by them via two exhaustive
 whole-binary scans (not something I could check myself - outside my cleanroom boundary):**
-`FUN_004A9420`'s six parameter-struct register offsets are written ONLY by its containing object's own
+`0x004a9420`'s six parameter-struct register offsets are written ONLY by its containing object's own
 constructor, which sets all six to the sentinel `-1` and nothing else ever touches them in the shipped
 binary - not a name-resolution mechanism reaching CTAB or anywhere else, just permanently-invalid dead
 data in every live instance. So there is no real register number to join against my CTAB reader for
@@ -14482,7 +14542,7 @@ positive one.
 ### 9.101-ORIGINAL (WRONG — see correction above) Data-side mesh→shader hash-join investigation CLOSED — decisive negative, independently converged with Team A's disassembly trace (2026-09-29)
 
 **Task.** Orchestrator-suggested parallel probe alongside Team A's vehicle-body `.fxo_pc` trace: can a
-mesh material's `shaderHash` field (`spec-vehicle-geometry.md` line ~384, the shared `FUN_00e71090`
+mesh material's `shaderHash` field (`spec-vehicle-geometry.md` line ~384, the shared `0x00e71090`
 inline material-record format also used by trees/foliage) be resolved to a real `.fxo_pc` filename via
 `sr3xtbl::NameHash` (the confirmed table-driven CRC-32-lowercase scheme), `NameHashCaseSensitive`, or
 `vpp::hashFilename`? Explicitly authorized in advance to come back negative ("if the material spec
@@ -14520,10 +14580,10 @@ doesn't support that join, say so and wait").
 §22, read in full by me, not taken on relay alone) reached the SAME conclusion from the opposite
 direction — the engine side, not the data side — and explains WHY this hash-join could never have
 worked: the real vehicle-body material→shader bind is a **fixed positional table lookup**,
-`materialCategory * 0x1b + tierB(0..3) + tierA(0..5)*4` (`FUN_00e4a180`), landing on a genuine `.fxo_pc`
+`materialCategory * 0x1b + tierB(0..3) + tierA(0..5)*4` (`0x00e4a180`), landing on a genuine `.fxo_pc`
 shader-object instance (RTTI/vtable-address-confirmed, §22.4) — **no name-hash lookup exists anywhere in
 that chain.** §22.2 goes further and identifies what the field I was calling `shaderHash` actually IS:
-a **content/de-dup hash of the material record's own numeric fields** (`FUN_00d9e6c0`, computed once at
+a **content/de-dup hash of the material record's own numeric fields** (`0x00d9e6c0`, computed once at
 load time to de-duplicate identical material instances), not a shader-identity hash at all — the exact
 reason it can never match a filename hash under any hash function. This also matches
 `spec-vehicle-geometry.md` §11.2's own independently-reached finding that vehicle material records carry
@@ -14533,7 +14593,7 @@ reason it can never match a filename hash under any hash function. This also mat
 hash-join methodology is NOT supported by the data — CLOSED, negative, doubly confirmed** (this session's
 own full-population sweep both ways, AND Team A's independent disassembly trace from the opposite
 direction). The real join for Stage 3 is Team A's still-open thread: identifying the populate-time loader
-for `FUN_00e4a180`'s `[materialCategory][tierA][tierB]` table (§22.6/§22.8), which is what would name an
+for `0x00e4a180`'s `[materialCategory][tierA][tierB]` table (§22.6/§22.8), which is what would name an
 actual `.fxo_pc` file for a real vehicle-body material. **[CONFIRMED — real-data population sweep both
 steps, reproduced by me; independently corroborated by Team A's disassembly, verified directly by me
 against their spec text, not taken on relay.]** Recorded as a new entry in `WALLS.md` so this specific
@@ -14544,7 +14604,7 @@ filed.**
 ### 9.102 Vertex-input-signature candidate ranking — narrows 3,731 real VS blobs to 49 vehicle-body candidates, independently verified exactly (2026-09-29)
 
 **Task.** Orchestrator's suggested filename-independent narrowing step (parallel to Team A's still-open
-`FUN_00e4a180` populate-time-loader trace, §9.101): rank every real vertex shader by exact vertex-input-
+`0x00e4a180` populate-time-loader trace, §9.101): rank every real vertex shader by exact vertex-input-
 signature compatibility against a real vehicle-body mesh's channel layout, using DCL usage/usageIndex
 data already in the disassembler's own output (`sr3d3d9bc`) — no new disassembler capability needed,
 pure analysis. Built by a Sonnet 5 agent; **independently rebuilt from fresh objects and rerun by me**
@@ -14607,7 +14667,7 @@ record because they complicate the story**:
 **Bottom line, matching the agent's own honest framing and independently confirmed exact**: this is real,
 data-backed narrowing (3,731 real VS blobs → 49 distinct real files under the better-supported reading),
 NOT a confirmed identification of "the" vehicle-body `.fxo_pc`. It stands as an independent cross-check
-ready to compare against whatever filename Team A's `FUN_00e4a180` loader trace eventually produces — if
+ready to compare against whatever filename Team A's `0x00e4a180` loader trace eventually produces — if
 the real filename lands inside this 49-name set, that is real convergent evidence; if not, that is
 itself informative (points at reading (B), or a target-signature assumption still wrong). **[CONFIRMED —
 full real population, reproduced exactly by me from fresh objects and a freshly-written cross-check probe,
@@ -16792,8 +16852,8 @@ required (`& 0x80000003` not `0x80000000`, a branching round-up not an `AND`, `&
 `0xFFFFFFF8`/`0xFFFF0000`) — same family as `WALLS.md`'s own standing "an instruction-form census
 undercounts without a control on every compiler-emitted form" lesson, a new instance not a new category.
 
-**Two real top-level `.czn_pc` record handlers found**: `FUN_00864c60` (id `0x2237`, the exact "Region" id
-already seen preceding real `"Region<003>"` strings) and `FUN_007512f0` (id `0x2251`), reached via a master
+**Two real top-level `.czn_pc` record handlers found**: `0x00864c60` (id `0x2237`, the exact "Region" id
+already seen preceding real `"Region<003>"` strings) and `0x007512f0` (id `0x2251`), reached via a master
 dispatcher with (at least) 6 further sibling tag-handlers, only these 2 opened so far. **`0x2237`'s real
 structure, decoded**: `{meshRefCount, materialCount, indexListCount}` header, then inline materials, shared
 index-lists, then a `meshRefCount`-array of Mesh-block references + AABB + material back-link — **the same
@@ -16804,7 +16864,7 @@ read as per-instance placed props, not confirmed.
 
 **Real, decisive corroboration for the zone/code-24 render-role question**: both handlers create/register
 their materials through the IDENTICAL allocator/registry functions vehicle-body-paint materials use
-(`FUN_00e5e240`/`rl_static_material`, `FUN_00e3fcb0` registry — not a similarly-shaped independent
+(`0x00e5e240`/`rl_static_material`, `0x00e3fcb0` registry — not a similarly-shaped independent
 implementation, the literal same code). Since that class's own technique-select dispatch is completely
 format-agnostic, this upgrades the code-24/render-role link (§9.130's own "role OPEN" framing) from
 "vertex shapes happen to match" to "same code path" — real, structural evidence, not analogy.
@@ -17087,7 +17147,7 @@ shape as §9.80's `effects.xtbl`/`refraction_situations.xtbl`/`vfx.xtbl` finding
 
 **A real spec-text inconsistency, flagged honestly by the agent rather than silently resolved either
 way:** §3 (`audio_constants.xtbl`)'s PlayTimers sentence calls its accessor family "if present" while
-citing addresses (`FUN_00DABDF0`/`FUN_00DACCB0`) that the spec's own §1.2 catalogue assigns to the
+citing addresses (`0x00dabdf0`/`0x00daccb0`) that the spec's own §1.2 catalogue assigns to the
 ALWAYS-write family - two lines later the same section correctly calls a different address "the
 shared 'always' integer reader." The agent trusted the address citations (the spec's own stated
 evidence anchor) over the prose label and modelled the group as `Always<T>`, documenting the
@@ -17123,8 +17183,8 @@ row-level decoration the loader trace had no reason to mention.
 
 **Team A pushed a 3rd render-pipeline pass** (`spec-render-pipeline.md`, now 598 lines/100,589 bytes —
 verified directly via `wc`, not taken on trust). Headline new content: §18 closes a complete, real
-`DrawIndexedPrimitive` producer chain (`FUN_00b17000`→`FUN_00b16d50`→`FUN_00b13bf0`→`FUN_00477400`→
-`FUN_004764d0`→opcode `0x2a`), and §18.6 states `FUN_00b13bf0` — the function that resolves a mesh
+`DrawIndexedPrimitive` producer chain (`0x00b17000`→`0x00b16d50`→`0x00b13bf0`→`0x00477400`→
+`0x004764d0`→opcode `0x2a`), and §18.6 states `0x00b13bf0` — the function that resolves a mesh
 draw-range record — reads the record's `+0x2` "high16" sub-field (this project's own long-standing
 OPEN item, `spec-vehicle-geometry.md` §11) and uses it as an index into "a second, `0x18`-byte-stride
 array read from the holder's own mesh header at `+0x18`," obtaining a vertex count from the array's
@@ -17169,11 +17229,11 @@ several earlier sessions (`spec-vehicle-geometry.md` §11's own refutation histo
 **Sent to Team A** (2026-09-28) with the exact numbers above, clear about what this does and does not
 establish: it is real-data corroboration that `high16` COULD be a channel index without contradiction
 anywhere in the full shipped population — it is not itself a disassembly proof that the engine
-actually uses it that way at `FUN_00b13bf0` (that's their claim, from their own disassembly, §18.6).
+actually uses it that way at `0x00b13bf0` (that's their claim, from their own disassembly, §18.6).
 Diagnostic is throwaway (`channel_count_check.cpp`, session scratchpad, not a project deliverable) —
 reusable if this needs re-running, but not something to wire into `tools/validation/`.
 
-**CLOSED same day.** Team A checked the disassembly text directly for the causal half: `FUN_00b13bf0`
+**CLOSED same day.** Team A checked the disassembly text directly for the causal half: `0x00b13bf0`
 reads the `+0x2` sub-field as-is, "no additional scaling, masking, or offset," straight into the
 ordinary compiler `index*stride+base` pattern for the `0x18` channel array — added as an explicit
 sentence at the end of `spec-render-pipeline.md` §18.6, directly citing this project's question.
@@ -17195,7 +17255,7 @@ architecture: the game/logic thread never calls D3D9 directly, it records opcode
 into a buffer a dedicated `rl_command_thread` replays through a 74-entry dispatch table at VA
 `0x013509F8` (`DrawIndexedPrimitive` = opcode 42, `0x0049D650`, 6 args; `BeginScene`/`EndScene`/
 `SetRenderTarget`/`Clear`/`SetRenderState`/`SetSamplerState`/`DrawPrimitive` also confirmed). §16.4
-found `FUN_00e58480` reading the draw-range record's `+0x2` sub-field (a u16 "high16" selector) and
+found `0x00e58480` reading the draw-range record's `+0x2` sub-field (a u16 "high16" selector) and
 forwarding it alone onward — too narrow to be the draw producer itself, but the first identified
 runtime consumer of `high16`, this project's own long-standing OPEN item (`spec-vehicle-geometry.md`
 §11: refuted across several prior sessions as material/part-list/group-index, factored as

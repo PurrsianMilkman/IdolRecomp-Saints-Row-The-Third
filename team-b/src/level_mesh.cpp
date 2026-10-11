@@ -15,8 +15,8 @@ namespace {
 
 // Places one array at the cursor with NO alignment of its own. The align
 // belongs to the sub-parser's entry, not to each array: the functions that
-// lay down two arrays (FUN_007499d0's `+0x48`/`+0x58` pair, FUN_00749e80's
-// `+0xd8`/`+0xe8` pair) put them back to back, and FUN_00749e80 is the one
+// lay down two arrays (0x007499d0's `+0x48`/`+0x58` pair, 0x00749e80's
+// `+0xd8`/`+0xe8` pair) put them back to back, and 0x00749e80 is the one
 // that realigns between its own two. See notes 0 and 1 in level_mesh.h.
 RawArray placeArray(size_t& cursor, size_t count, size_t stride) {
     RawArray a;
@@ -66,7 +66,7 @@ struct Reader {
     }
 };
 
-// FUN_00e401d0, the generic index-list block: 8-align, a `0x10`-byte header
+// 0x00e401d0, the generic index-list block: 8-align, a `0x10`-byte header
 // whose `+0x08` is the element count, then count x 4 bytes.
 // spec-physics-format.md Sec4.4.6(b), CONFIRMED - disassembly.
 bool indexListStep(const Reader& r, size_t cursor, IndexListBlock& out) {
@@ -83,7 +83,7 @@ bool indexListStep(const Reader& r, size_t cursor, IndexListBlock& out) {
     return true;
 }
 
-// FUN_00e71410's c-side, the shared "Mesh" sub-block step. Self-validating:
+// 0x00e71410's c-side, the shared "Mesh" sub-block step. Self-validating:
 // the version word is 9, and the block's own check value is repeated in the
 // last 4 bytes of its declared c-length. The advance is `cLength` EXACTLY -
 // no rounding on either side (note 6 in level_mesh.h). `roundUp` is the
@@ -107,7 +107,7 @@ bool meshStep(const Reader& r, size_t cursor, bool roundUp, MeshStep& out) {
     return out.end <= r.limit;
 }
 
-// FUN_00e3c4e0, one render-mesh group: a `0x60`-byte header at a 16-aligned
+// 0x00e3c4e0, one render-mesh group: a `0x60`-byte header at a 16-aligned
 // cursor, an index-list block, an embedded Mesh sub-block, then a u16 array
 // and a u8 array, both `indexList.count` long with no alignment between them.
 bool renderGroupStep(const Reader& r, size_t cursor, const WalkOptions& opt, RenderGroup& out) {
@@ -128,7 +128,7 @@ bool renderGroupStep(const Reader& r, size_t cursor, const WalkOptions& opt, Ren
     return true;
 }
 
-// FUN_00e40210, the material-set block.
+// 0x00e40210, the material-set block.
 bool materialSetStep(const Reader& r, size_t cursor, const WalkOptions& opt, MiddleLayout& m,
                      size_t& outEnd) {
     if (!r.alignTo(cursor, 8)) return false;
@@ -152,7 +152,7 @@ bool materialSetStep(const Reader& r, size_t cursor, const WalkOptions& opt, Mid
     }
 
     // One 8-byte slot per material record, then the records themselves, each
-    // one declaring its own byte size at its `+0x00` (FUN_00e71090).
+    // one declaring its own byte size at its `+0x00` (0x00e71090).
     if (!r.alignTo(cursor, 8)) return false;
     m.materialSlots = placeArray(cursor, materialCount, kStrideMatSetSlot);
     if (cursor > r.limit) return false;
@@ -178,7 +178,7 @@ BoundingVolume boundingVolumeFromExtents(const std::array<float, 3>& min,
     bv.max = max;
     float sumSquares = 0.0f;
     for (size_t i = 0; i < 3; ++i) {
-        // FUN_0074a110, exactly: half-extent per axis, centre as
+        // 0x0074a110, exactly: half-extent per axis, centre as
         // min + half-extent (NOT (min+max)/2 - the same value, but this is
         // the operation the disassembly shows), radius as the Euclidean
         // length of the half-extent vector.
@@ -226,7 +226,7 @@ BoundingVolume computeBoundingVolume(const sr3mesh::MeshBlock& mesh) {
 }
 
 // ==========================================================================
-// HEAD - FUN_007499d0's two slot arrays, the embedded Mesh sub-blocks, and
+// HEAD - 0x007499d0's two slot arrays, the embedded Mesh sub-blocks, and
 // array 2's index-list blocks (spec-physics-format.md Sec4.4.1 as corrected
 // by Sec4.4.6).
 // ==========================================================================
@@ -240,7 +240,7 @@ HeadWalk walkHead(ByteView content, size_t bodyStart, const uint32_t* headerWord
     const size_t countA = headerWords[kCountRefA / 4];
     const size_t countB = headerWords[kCountRefB / 4];
 
-    // FUN_007499d0 aligns ONCE on entry and then lays both slot arrays back
+    // 0x007499d0 aligns ONCE on entry and then lays both slot arrays back
     // to back - not once per array (note 4 in level_mesh.h).
     if (countA != 0 || countB != 0) {
         if (!r.alignTo(cursor, 16)) return h;
@@ -260,7 +260,7 @@ HeadWalk walkHead(ByteView content, size_t bodyStart, const uint32_t* headerWord
         cursor = step.end;
         h.meshes.push_back(step);
     }
-    // Array 2's entries resolve through FUN_00e401d0, and those blocks come
+    // Array 2's entries resolve through 0x00e401d0, and those blocks come
     // AFTER every Mesh sub-block - the term Sec4.4.1's published head formula
     // omitted, and which this reader shipped without.
     if (opt.headIndexLists) {
@@ -278,7 +278,7 @@ HeadWalk walkHead(ByteView content, size_t bodyStart, const uint32_t* headerWord
 }
 
 // ==========================================================================
-// MIDDLE - thunk_FUN_00e3e590 -> FUN_00e3e590, in full
+// MIDDLE - 0x00e3e590 -> 0x00e3e590, in full
 // (spec-physics-format.md Sec4.4.6(b)). This is the region the first version
 // of this reader could not size and had to search past.
 // ==========================================================================
@@ -314,7 +314,7 @@ MiddleLayout walkMiddle(ByteView content, size_t start, size_t limit, const Walk
     cursor = afterMaterials;
 
     // R[+0x08]'s array: one 8-byte entry per material. This is the table
-    // FUN_0074a110 indexes, bounded by the material count (Sec4.4.6(c)).
+    // 0x0074a110 indexes, bounded by the material count (Sec4.4.6(c)).
     if (opt.lookupTableArray) {
         if (!r.alignTo(cursor, 8)) return m;
         m.lookupTable = placeArray(cursor, m.materialCount, kStrideLookupEntry);
@@ -324,7 +324,7 @@ MiddleLayout walkMiddle(ByteView content, size_t start, size_t limit, const Walk
         m.lookupTable.stride = kStrideLookupEntry;
     }
 
-    // FUN_00e3c6e0: render group 1 always, render group 2 unless R[+0x18] is
+    // 0x00e3c6e0: render group 1 always, render group 2 unless R[+0x18] is
     // -1 (which no shipped file is, so every `.clmesh_pc` has exactly two).
     if (!renderGroupStep(r, cursor, opt, m.renderGroups[0])) return m;
     cursor = m.renderGroups[0].end;
@@ -395,7 +395,7 @@ MiddleLayout walkMiddle(ByteView content, size_t start, size_t limit, const Walk
 }
 
 // ==========================================================================
-// TAIL - FUN_00749b40 .. FUN_00749e80
+// TAIL - 0x00749b40 .. 0x00749e80
 // ==========================================================================
 TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, size_t limit,
                   const WalkOptions& opt) {
@@ -406,13 +406,13 @@ TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, s
 
     auto field = [&](size_t off) -> size_t { return headerWords[off / 4]; };
 
-    // --- FUN_00749b40: one flat array, 56-byte stride. It 16-aligns
+    // --- 0x00749b40: one flat array, 56-byte stride. It 16-aligns
     // UNCONDITIONALLY - only the array advance is conditional (note 0).
     if (!r.alignTo(cursor, 16)) return w;
     w.array70 = placeArray(cursor, field(kCount70), kStride70);
     if (cursor > r.limit) return w;
 
-    // --- FUN_00748c70 / FUN_00749ba0: the gated `+0x78`/`+0x7c` pair. ----
+    // --- 0x00748c70 / 0x00749ba0: the gated `+0x78`/`+0x7c` pair. ----
     // Three outcomes, two of which consume real file-resident bytes
     // (Sec4.4.6(f)); note 3 in level_mesh.h has the whole story, including
     // which bit of the flags byte gates the hull and how that was settled.
@@ -482,7 +482,7 @@ TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, s
         gp.offset = cursor;
     }
 
-    // --- FUN_00749c40: nested group, 16-byte outer, 12-byte inner. -------
+    // --- 0x00749c40: nested group, 16-byte outer, 12-byte inner. -------
     if (field(kCount88) != 0) {
         if (!r.alignTo(cursor, 16)) return w;
     }
@@ -503,7 +503,7 @@ TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, s
         w.group88.push_back(e);
     }
 
-    // --- FUN_00749cf0 / FUN_00749d40: two more flat arrays, one each. ----
+    // --- 0x00749cf0 / 0x00749d40: two more flat arrays, one each. ----
     if (field(kCount98) != 0) {
         if (!r.alignTo(cursor, 16)) return w;
     }
@@ -515,7 +515,7 @@ TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, s
     w.arrayA8 = placeArray(cursor, field(kCountA8), kStrideA8);
     if (cursor > r.limit) return w;
 
-    // --- FUN_00749e80. ---------------------------------------------------
+    // --- 0x00749e80. ---------------------------------------------------
     // Sec4.2: if count(+0xd8) == 0 the four downstream slots are zeroed and
     // the function skips STRAIGHT to its final section - so the `+0xe8`
     // array is gated on `+0xd8`, not on its own count.
@@ -523,8 +523,8 @@ TailWalk walkTail(ByteView content, size_t start, const uint32_t* headerWords, s
         if (!r.alignTo(cursor, 16)) return w;
         w.arrayD8 = placeArray(cursor, field(kCountD8), kStrideD8);
         if (cursor > r.limit) return w;
-        // FUN_00749e80 DOES realign between its two arrays, where
-        // FUN_007499d0 does not between its two - note 0 in level_mesh.h.
+        // 0x00749e80 DOES realign between its two arrays, where
+        // 0x007499d0 does not between its two - note 0 in level_mesh.h.
         // Measured: dropping this realign costs 37 of 846 files in dlc1.
         if (field(kCountE8) != 0) {
             if (!r.alignTo(cursor, 16)) return w;
@@ -713,7 +713,7 @@ std::vector<Vec3> LevelMesh::group88Positions(const NestedEntry& entry, ByteView
 }
 
 // Sec4.4.6(h) part 1 - CONFIRMED, transfers directly from
-// spec-foliage-format.md Sec6 via the shared parser `FUN_00e71090`.
+// spec-foliage-format.md Sec6 via the shared parser `0x00e71090`.
 // `materialRecordOffsets[i]` points at the record's own leading `u32 size`
 // (the whole record's byte length, size field included - `materialSetStep`
 // above already relies on this to advance past it); the decoded header
@@ -910,7 +910,7 @@ std::vector<uint16_t> LevelMesh::groupBFeatureIndices(const NestedEntry& entry,
     return out;
 }
 
-// FUN_00749ba0's hull, at the two element sizes spec-physics-format.md
+// 0x00749ba0's hull, at the two element sizes spec-physics-format.md
 // Sec4.4.6(f) states outright ("12 = 3 x float32", "2 = u16"). The opaque
 // precomputed blob and the two trailing vec3s are located but NOT decoded -
 // Sec4.4.6 does not say what the blob is, and guessing would be inventing.
@@ -977,7 +977,7 @@ std::vector<sr3mesh::MeshBlock> LevelMesh::resolveReferencedMeshes(ByteView cont
             // `.gzn_pc` uses (spec-zone-data-format.md Sec10.4, and
             // src/zone_geometry.cpp). The c-side was MEASURED here first (an
             // earlier revision 16-aligned it, which is the natural guess and
-            // is wrong) and is now also read straight out of FUN_00e71410's
+            // is wrong) and is now also read straight out of 0x00e71410's
             // own closing self-check, spec-physics-format.md Sec4.4.6(b).
             // NOTE: `cLength()`/`gLength()` are read at fixed offsets from
             // `cursor` itself (before `headerDisplacement` is even applied),

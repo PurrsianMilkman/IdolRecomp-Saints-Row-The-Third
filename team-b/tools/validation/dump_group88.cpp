@@ -3,7 +3,7 @@
 // (`sr3_city_0.vpp_pc`, `sr3_city_1.vpp_pc` - HANDOFF Sec9.59 measured this
 // as 258 of 100,379 entries, zero in the three DLC archives).
 //
-// spec-physics-format.md Sec4.2's `FUN_00749c40` row leaves the 12-byte
+// spec-physics-format.md Sec4.2's `0x00749c40` row leaves the 12-byte
 // inner element's field layout OPEN, reading it as "consistent with (not
 // proven to be) a triangle record (3 vertex/point indices) or a small
 // plane/face descriptor". This tool tests both hypotheses against the

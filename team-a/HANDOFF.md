@@ -5090,6 +5090,117 @@ re-verified. Reported to orchestrator. Remaining untraced siblings:
 **Orchestrator (2026-10-10, same rewrite): "Finish the list (music trio, cell_camera,
 cell_extras), one agent. After that, pick up the new native leads
 (`cell_cheats_activate_cheat`/`sb_select_hitman_target`/`sb_select_chop_shop_vehicle`) as one
-batch."** Dispatched agent `a8de47913e44dd0d9` for the final 3 phone-menu documents. Native-lead
-batch is next, after this lands. Still 1 agent at a time; mission blockers jump the queue.
+batch."** Dispatched agent `a8de47913e44dd0d9` for the final 3 phone-menu documents — **DONE, reported,
+spliced, synced. CLOSES THE FULL PHONE-MENU DOCUMENT SURVEY** — all 9 sub-documents beyond
+`cell_phone`/`cell_cheats` are now traced (new §13/§14/§15 in
+`spec-cellphone-menu-runtime.md`). `cell_extras` is a minimal ungated 2-entry icon grid. The
+music chain revealed two exit-convention wrinkles (4-deep exit under the chooser screen; "back"
+never pops the chooser itself). `cell_camera` REFUTES a "zoom/filters/pose" hypothesis — it's a
+single enable/disable toggle. No new native leads from any of the three. Cleanroom 0 hits, synced
+(68 files, exit 0), independently re-verified. Reported to orchestrator.
+
+**Native-lead batch — DONE 2026-10-10, same rewrite**, agent `a6d64fe32294cd9e6`. All 3 resolved
+as directly Lua-bound natives, fully characterized, no crash shapes found in any — a clean
+negative, direct contrast to `cellphone_dial`'s own unbounded index/unchecked dereference (§45.4).
+`sb_select_chop_shop_vehicle` encodes a genuine new gameplay rule (AI-partner-claim rejection) the
+hitman variant lacks. New §45.8 in `spec-lua-api-behaviour.md`, cross-referenced at
+`spec-cellphone-menu-runtime.md` §6/§10/§16. Cleanroom 0 hits both files, synced (68 files, exit
+0), independently re-verified. Reported to orchestrator. **This closes out the entire
+pause/phone-menu UI runtime research arc for now** — the full phone-menu document survey is done
+(9/9 sub-documents), the pause-open binding is landed, the phone-open binding is a confirmed
+double-negative parked for live capture, and all accumulated native leads are resolved.
+
+**NEW ARC 2026-10-10, same rewrite, per orchestrator.** "Use your own spec-coverage-summary: pick
+the weakest system that matters most for moment-to-moment free-roam play and isn't a confirmed
+live-capture item... tell me which one and why." **Picked: shops/purchasing.** Rationale: most
+moment-to-moment relevant of the suggested examples (every walk-in weapon/clothing/vehicle/
+tattoo/crib/gang store in free roam goes through it); has a whole unified `store_common.lua`
+framework plus ~10 per-type stores already extracted in `scratchpad/ui_lua_dumps/` but ZERO
+unified runtime documentation (same gap the phone menu had before this session); police/
+notoriety already has a substantial dedicated §19 unit in `spec-ai-runtime.md` (well covered,
+ruled out); garage/crib storage already has decent scattered native-level coverage across several
+tranches (ruled out). Dispatched agent `acc4396ba9bc94f95` to trace `store_common.lua`'s shared
+purchase framework end-to-end (the foundation every store type builds on) as a new file,
+`spec-store-runtime.md`, same house style as `spec-cellphone-menu-runtime.md`. Reported choice to
+orchestrator.
+
+**DONE 2026-10-10, same rewrite**, agent `acc4396ba9bc94f95`. Created `spec-store-runtime.md`
+(new file). Central finding: unlike `cell_rewards`'s dataresponder-post handoff, store purchases
+go through a **directly Lua-bound native per item-type family** (weapon/ammo/vehicle-component/
+tattoo/clothing), each already individually documented in `spec-lua-api-behaviour.md` — this file
+connects them to the real UI call chain. Confirmed the client-side insufficient-funds check is
+cosmetic-only for several natives (ammo/vehicle/tattoo have NO server-side affordability check).
+**New genuine gap flagged**: `store_weapon_purchase_weapon`'s existing write-up never describes a
+cash-charge step at all, unlike every sibling purchase native — concrete follow-up identified.
+Exit convention is structurally distinct from the phone menu (1 explicit pop + 1 automatic
+cascade via a document-focus-gained handler, not a fixed pop-depth). Top-level store-open binding
+is the same unresolved native-only shape as the phone menu's, but for a world-trigger not a
+button press — flagged as a different search space, not re-attempted. Cleanroom 0 hits, synced
+(69 files, exit 0), independently re-verified. Reported to orchestrator. Still 1 agent at a time;
+mission blockers jump the queue.
+
+**Orchestrator (2026-10-10, same rewrite): "Next, in order, 1 agent: (1) the
+`store_weapon_purchase_weapon` cash-charge question... (2) the store-open trigger — check whether
+a `Trigger_Volume` store trigger's `trigger_action`/`trigger_action_param` properties (§1.14 of
+`spec-lua-api-behaviour.md`) name the store document."** Item (1) — **DONE 2026-10-10, same
+rewrite**, agent `a612799c38f12d7b8`. `store_weapon_purchase_weapon` DOES charge cash — resolved
+one call-graph level deeper than the first pass checked: the real-purchase branch calls
+`0x00816f00(weaponRecord, mode=0, price)` unconditionally, whose mode-0 branch charges the price
+through the shared cash-adjust primitive `0x0094d920` (reason `0xb`), the same mechanism
+`pcr_purchase_tattoo` uses; a satchel/thrown-weapon special case charges through `0x00816430`
+instead, same primitive `store_weapon_purchase_ammo` uses. Spliced into
+`spec-lua-api-behaviour.md` §26.7 and `spec-store-runtime.md` §4/§6, cleanroom 0 hits both,
+synced (69 files, exit 0), independently re-verified. Reported to orchestrator.
+
+Item (2) — **DONE 2026-10-10, same rewrite**, agent `a22eefdc9e0e38dbf`. **Honest negative:**
+found real `triggers.xtbl` content confirming a dedicated `Entries:Stores` category exists in
+the data, and found the previously-unidentified native-handler registrar (`0x0093afe0`, 14 real
+call sites) for the `trigger_action` dispatch — but decompiling essentially all ~19 resulting
+handlers found NONE that reads `trigger_action_param` as a document-name string and calls
+`push_screen`. The dispatch is HIGH CONFIDENCE a UI-prompt/gating layer at most (several slots
+surface a generic "press-to-use" prompt, screen code `0x33`), not the final store-opener. Item
+stays genuinely OPEN with a narrower next step (expand the prompt's confirm-step callees, or
+check for a Lua-coroutine hand-off supplying a hook name instead of a screen name). Spliced into
+`spec-store-runtime.md` §6 and `spec-lua-api-behaviour.md` §1.14, cleanroom 0 hits both, synced
+(69 files, exit 0), independently re-verified. Reported to orchestrator.
+
+**PAUSED 2026-10-10, per user, relayed via orchestrator `purrsian-a5`.** The project is being
+renamed to "IdolRecomp Saints Row The Third" and `D:\Project Crreish` is being moved. No agent
+was running at pause time (verified via `ListAgents` — nothing in flight to stop). Everything
+through item (2) above is already spliced, cleanroom-checked, and synced (69 files, exit 0) —
+nothing uncommitted to local files, no sync owed. **Next action on resume, in the new folder:**
+the store-open Lua-coroutine-handoff lead — `spec-store-runtime.md` §6 item 1's own residual:
+check whether the generic "press-to-use" UI prompt's (screen code `0x33`) player-confirm step
+hands off to the same Lua-coroutine-spawn mechanism `spec-lua-api-behaviour.md` §1.14 already
+confirmed for ordinary trigger hooks, with `trigger_action_param` supplying a Lua hook/function
+name rather than a screen name directly — needs the callees of `0x005f0130`/`0x005f0a60`/
+`0x005f1e50` expanded past the depth already read. Per-type store deep dives (weapon/clothing/
+vehicle/etc. to the same depth as `cell_phone`) are also queued behind that, per the orchestrator.
+
+**RESUMED 2026-10-10, post-rename.** Project renamed to "IdolRecomp Saints Row The Third",
+folder now `D:\IdolRecomp Saints Row The Third`; `D:\Project Crreish` is a junction, old paths
+still work. Orchestrator now `purrsian-52`. Dispatched agent `acdc7f7db3671dc77` — **DONE, reported, spliced, synced. Clean negative,
+lead exhausted.** Fully re-derived all 3 cache-revalidation readers
+(`0x005f0130`/`0x005f0a60`/`0x005f1e50`). None reads `trigger_action_param`, none checks a button
+press, none calls the trigger-specific Lua hook dispatcher. The one coroutine-spawn call
+reachable from this cluster is generic UI-document commit plumbing (fires on ~100+ unrelated call
+sites, keyed off a different field), not a player-confirm handoff. Spliced into
+`spec-store-runtime.md` §6, cleanroom 0 hits, synced (69 files, exit 0), independently
+re-verified. Reported to orchestrator. **Store-open trigger chain remains genuinely OPEN** — both
+the screen-push side and the two input-layer leads (CBA table analogue was never applicable here;
+the coroutine-handoff lead is now exhausted) have come up empty. **PARKED on the live-capture
+list alongside the phone-open binding, per orchestrator agreement.**
+
+**Next (orchestrator, same rewrite): per-type store deep dives, 1 agent at a time — weapon store
+first, then clothing, then vehicle customisation.** Dispatched agent `aeece5f4cd128bd7d` for
+`store_weapon.lua` to full document-level depth — **DONE, reported, spliced, synced.** New §6 in
+`spec-store-runtime.md`: dual entry context (walk-in shop vs. in-crib "weapon cache"), full
+4-tier menu mapped, resolved "weapon vs. upgrade purchase" as literally the same native/code
+path. New finding: `store_weapon.lua` never calls `game_award_respect` — a real exception to §4's
+"every" framing, corrected there. Preview confirmed simpler than generic framework (no
+camera/rotate/zoom — deliberately cut per a dead code comment). No new native leads. Cleanroom
+0 hits, synced (69 files, exit 0), independently re-verified. Reported to orchestrator.
+
+**Next: clothing store deep dive (`store_clothing.lua`/`store_character.lua`), per orchestrator's
+stated order.** Still 1 agent at a time; mission blockers jump the queue.
 <!-- CONTEXT-GUARD:RESUME-END -->

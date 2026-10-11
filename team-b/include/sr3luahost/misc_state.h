@@ -44,6 +44,14 @@ namespace sr3luahost {
 // bounds). Slots outside [0,4) are still rejected by the stub before
 // ever reaching this map, matching the one real, CONFIRMED bound check
 // ("must be < 4") exactly.
+//
+// UPDATED (spec-hud-runtime.md Sec6.5 HUD-objective-overlay task,
+// 2026-10-09): objective_text_clear (Sec1.4) now erases a slot's entry
+// from this map on clear (EngineState::recordObjectiveTextClear()), so a
+// slot's mere presence in the map is a correct, test-observable "is this
+// slot currently active" signal, not just "was this slot EVER written"
+// with no way to tell a later clear happened. This is what the new HUD
+// objective-text overlay (tools/sr3_viewer.cpp) reads each frame.
 struct ObjectiveTextSlot {
     std::string rawTextKey;      // arg 2, mandatory
     std::string combinedAuxText; // CONFIRMED "%s/%s" (arg3,arg4) when arg4 present AND non-empty, else arg3 verbatim

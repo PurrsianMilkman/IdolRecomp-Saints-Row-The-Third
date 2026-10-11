@@ -665,7 +665,7 @@ void testPlayerCreationNormalMaps() {
 // ===========================================================================
 void testPlayerCreationHairColor() {
     // Specular_bright/Specular_dark as real R/G/B child elements - CORRECTED
-    // 2026-10-03 (spec §15.2: CONFIRMED vec3 via FUN_00dad130->FUN_00dad0a0,
+    // 2026-10-03 (spec §15.2: CONFIRMED vec3 via 0x00dad130->0x00dad0a0,
     // the same "R/G/B children" shape as every other confirmed colour in
     // this project, not a single text blob).
     Document d = P(R"(<root><Table>

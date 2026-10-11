@@ -21,7 +21,7 @@ bool endsWithCi(const std::string& s, const std::string& suffix) {
 
 std::string ComposeMatlibFileName(const std::string& baseName) {
     // "strip extension, append the platform-selected one" (§12.1b,
-    // FUN_00da8790). `baseName` may or may not already carry an extension -
+    // 0x00da8790). `baseName` may or may not already carry an extension -
     // both are handled identically, since the real compose step always
     // produces a definite result regardless of what the input happened to
     // carry.
@@ -42,7 +42,7 @@ CharacterMatlibAttachment ResolveCharacterMatlibAttachment(
     if (!loadByName) return out;  // no exists-check available - unresolved, not a guess
 
     std::vector<uint8_t> bytes;
-    if (!loadByName(out.composedFileName, bytes)) return out;  // FUN_00da90d0: does not exist
+    if (!loadByName(out.composedFileName, bytes)) return out;  // 0x00da90d0: does not exist
 
     // Attach: register the located bytes as this identity's own typed
     // (0x16) slot, parsed via the already-CONFIRMED general-purpose

@@ -252,9 +252,9 @@ struct CustomizationVariant {
     // "each Material_Element node's own Material child holds the text").
     //
     // CORRECTED 2026-10-02 (spec-tables-customization.md §4.3, re-derived
-    // from the executable, `FUN_00829650` read in full): Shader_Type's
+    // from the executable, `0x00829650` read in full): Shader_Type's
     // parent is CONFIRMED to be Material_Element, NOT Variant - "the
-    // FUN_00daba40(elementHandle, "Shader_Type") call sits inside the
+    // 0x00daba40(elementHandle, "Shader_Type") call sits inside the
     // per-Material_Element loop, using that loop's own element handle".
     // This settles the previously-OPEN parent ambiguity (this struct used
     // to carry a Variant-level `shaderType` field, inconsistent with
@@ -329,7 +329,7 @@ struct ContentElement {
     // Default_Wear_Option: "references the item's
     // Wear_Option.Mesh_Information...Filename" (spec 2.2) - again plain
     // text, not resolved here. CONFIRMED 2026-10-03 (spec 2.2, disassembly
-    // of FUN_008290c0/FUN_00828390): the match key really is that wear
+    // of 0x008290c0/0x00828390): the match key really is that wear
     // option's own MALE mesh filename (Mesh_Information > Male_Mesh_Filename
     // > Filename), compared case-insensitively - NOT the wear option's
     // `Name` (spec-tables-customization.md §5.1's own reading was wrong on

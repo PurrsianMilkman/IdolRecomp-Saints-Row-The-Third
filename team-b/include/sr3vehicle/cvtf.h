@@ -17,7 +17,7 @@
 // heuristic against Region 1 quad field `b`, because at the time §5.1 only
 // documented `b` as "real and close but not reliably byte-exact" (a small-
 // sample overclaim later retracted in the same section). Team A separately
-// decompiled the real parser (`FUN_00aaf9a0`, spec §5.1, same day) and
+// decompiled the real parser (`0x00aaf9a0`, spec §5.1, same day) and
 // found the REAL, disassembly-confirmed, population-verified (2,757/2,757
 // real Region-1 entries across 120 distinct real files) formula, which
 // THIS version implements instead — the heuristic version was wrong for
@@ -31,7 +31,7 @@
 // header-like quads" §5.1 itself flags as not necessarily name-bearing) —
 // a materially better result than the retracted heuristic ever produced.
 //
-// THE REAL FORMULA (spec §5.1, `FUN_00aaf9a0`): every Region-1 quad field
+// THE REAL FORMULA (spec §5.1, `0x00aaf9a0`): every Region-1 quad field
 // resolves against ONE SHARED BASE, file offset 0x08 (the address of
 // `entry_count_1` itself) — the same "-1 sentinel -> null, else += base"
 // idiom this project has already documented for other formats. For a raw
@@ -159,7 +159,7 @@ constexpr uint32_t kCvtfSectionCount = 2u;     // spec §5.1: confirmed constant
 constexpr size_t kCvtfHeaderSize = 0x30;
 constexpr size_t kCvtfRegion1QuadSize = 0x10;  // 16 bytes: {u32 a, u32 b, u32 c, u32 tag}
 constexpr uint32_t kCvtfSentinel = 0xFFFFFFFFu; // spec §5.1: raw field value meaning "absent", not resolved via +8
-constexpr size_t kCvtfFixupBase = 0x08;         // spec §5.1, FUN_00aaf9a0: every field (header offsets AND quad
+constexpr size_t kCvtfFixupBase = 0x08;         // spec §5.1, 0x00aaf9a0: every field (header offsets AND quad
                                                  // fields alike - this reader's own real-byte check confirms the
                                                  // SAME +8 idiom applies to the header's own offset fields, not
                                                  // just Region-1's a/b/c) resolves as v+8 (v != sentinel)

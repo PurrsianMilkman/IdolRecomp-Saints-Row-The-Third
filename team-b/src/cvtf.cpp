@@ -51,7 +51,7 @@ bool isPrintableAscii(const std::string& s) {
     return true;
 }
 
-// The real, disassembly-confirmed idiom (spec §5.1, FUN_00aaf9a0): a raw
+// The real, disassembly-confirmed idiom (spec §5.1, 0x00aaf9a0): a raw
 // field value resolves to an absolute file offset `v + kCvtfFixupBase`
 // unless it is the sentinel, which the caller checks separately.
 size_t resolveFixup(uint32_t v) { return static_cast<size_t>(v) + kCvtfFixupBase; }

@@ -7,7 +7,7 @@
 // archive read here - that is exercised for real by tools/lua_host_run.cpp).
 // Real cluster tags grepped directly from
 // tools/lua_all_registered_1490_tagged.txt: Sec31's 5 pause-map names (all
-// members of the same UI pause-map registrar, FUN_007dfae0) are `ui`;
+// members of the same UI pause-map registrar, 0x007dfae0) are `ui`;
 // pause_map_tutorial_mode (Sec32.1's setter half of the same flag) plus
 // Sec32's other 24 gameplay-registrar names are `gameplay`.
 //

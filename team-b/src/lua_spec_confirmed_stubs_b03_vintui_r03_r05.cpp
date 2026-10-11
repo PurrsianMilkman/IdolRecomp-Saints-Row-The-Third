@@ -22,7 +22,7 @@ namespace {
 // vint_get_time_index 1,206, vint_dataresponder_finished/
 // vint_internal_dataresponder_request 1,102 each, vint_dataitem_get 711,
 // vint_object_first_child 708, vint_object_clone 509). All eight are
-// members of the same 55-name registrar (FUN_00e1dfb0) vint_object_find
+// members of the same 55-name registrar (0x00e1dfb0) vint_object_find
 // (Sec13.7/Sec15, function 13 above) already belongs to - genuinely
 // native for all eight (Sec18's own grep check against the six real
 // preload files), never a missing Lua-library load. Each function below
@@ -30,7 +30,7 @@ namespace {
 // return-arity contract. Not simulated: the Sec9.2 per-type
 // property-descriptor tables (now specified for all 13 types by Team A's U1
 // pass; using them is a separate follow-up task), the callback-claim
-// mechanism, and the data-responder's own final dispatch FUN_00e1e660 -
+// mechanism, and the data-responder's own final dispatch 0x00e1e660 -
 // same "record the real, checkable gate/branch, not the full engine"
 // convention the Sec27/Sec28 batch above already established. Tweens: per
 // the corrected Sec20.1 (2026-10-03), setting start_value/end_value writes
@@ -71,7 +71,7 @@ VintTaggedValue readVintTaggedValue(lua_State* L, int idx) {
 }
 
 // The matching push side - the generic "push one typed variant" helper
-// Sec19.2/Sec20.2 both cite (FUN_00e1a420). Returns how many Lua values it
+// Sec19.2/Sec20.2 both cite (0x00e1a420). Returns how many Lua values it
 // pushed (0 for a None slot - defensive; a populated field/property this
 // project itself stored is never None, since readVintTaggedValue only
 // produces one from a real Lua value already on the stack at write time).

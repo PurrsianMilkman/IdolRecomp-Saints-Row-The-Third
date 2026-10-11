@@ -18,7 +18,7 @@ namespace vpp {
 //   return hash
 //
 // The loop above is CONFIRMED by disassembly: spec-vpp-container.md
-// Sec2.2 records that FUN_00da7890 - the routine the .cfmesh_pc
+// Sec2.2 records that 0x00da7890 - the routine the .cfmesh_pc
 // constructor calls to key its mesh registry - is exactly this loop,
 // including the explicit 'A'-'Z' lowercase fold before the rotate/XOR.
 // Whether an on-disk directory entry ALSO stores a precomputed copy of
@@ -39,7 +39,7 @@ namespace vpp {
 // Sec2.2 and spec-rig-format.md Sec5 both carry an explicit scope
 // correction (2026-09-10): the engine has at least TWO string hashes -
 // this rotate-6/XOR one, and a table-driven CRC-32 over the lowercased
-// string (FUN_00d9e8b0) that keys the mission-conversation registry.
+// string (0x00d9e8b0) that keys the mission-conversation registry.
 // .ctdg_pc uses BOTH AT ONCE: CRC-32 for its registry key, rotate-6/XOR
 // for the speaker ids inside the file (spec-conversation-format.md Sec6).
 // So do NOT assume an unidentified 32-bit name hash in an unfamiliar

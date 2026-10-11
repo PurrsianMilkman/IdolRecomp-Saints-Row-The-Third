@@ -184,7 +184,7 @@ StuntWheelsSubStunt ParseStuntWheelsSubStunt(const Node* block) {
 StuntWheels ParseStuntWheels(const Node* row) {
     StuntWheels w;
     // See tables.h's NOTE on StuntWheels: spec 2.8 CORRECTED 2026-10-02 -
-    // +0x00-0x13 is never touched by FUN_006C16A0, so only the record triad
+    // +0x00-0x13 is never touched by 0x006c16a0, so only the record triad
     // is a real top-level field; the old "7/7 top-level" framing does not
     // hold. The record triad (the only real top-level field) is modelled
     // here.

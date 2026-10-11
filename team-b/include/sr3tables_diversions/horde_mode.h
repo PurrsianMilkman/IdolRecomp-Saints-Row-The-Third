@@ -7,12 +7,12 @@
 // file's banner for the general conventions this header follows.
 //
 // SCOPE OF WHAT IS MODELLED, and why (spec 8.1/15 item 1): horde_mode.xtbl
-// is read by TWO loader functions. The FIRST (FUN_006EA230) is fully
+// is read by TWO loader functions. The FIRST (0x006ea230) is fully
 // offset-mapped by the spec: UI_Settings/Floating_Points,
 // Wave_Failsafe_Completion_Delay_ms/_Min_Enemy_Kills_Pct/_No_Enemies_Radius,
 // and Player_Characters (a Grid, CONFIRMED capacity exactly 5, 0x184-byte
 // stride) with a fairly deep nested Customization sub-schema. The SECOND
-// (FUN_006F54E9 - Cooperative_Multiplayer_Constants, Special_Spawn_Conditions,
+// (0x006f54e9 - Cooperative_Multiplayer_Constants, Special_Spawn_Conditions,
 // Powerups, Enemy_Data, Point_Multipliers, Audio) was NOT offset-mapped
 // (Ghidra's parameter recovery degraded on its 16-parameter __thiscall
 // signature under -noanalysis, spec 8.1) - but its ELEMENT SCHEMA is still

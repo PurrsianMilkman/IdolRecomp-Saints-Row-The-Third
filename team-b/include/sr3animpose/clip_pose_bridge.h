@@ -56,7 +56,7 @@ struct ResolvedClip {
 // an unresolved record is "skip this layer", matching OutputEntry's own
 // "no output" handling, spec-anim-runtime.md Sec8.9) rather than an error:
 // this project has no persistent clip-record/clip-cache registry anywhere
-// (spec-anim-runtime.md's own `DAT_030f0c68` clip-cache entries stay OPEN
+// (spec-anim-runtime.md's own `0x030f0c68` clip-cache entries stay OPEN
 // throughout that spec), so a caller that wants real animation supplies
 // its own mapping - see tools/sr3_viewer.cpp's RealClipRegistry for the
 // walk-demo's own concrete instantiation against real preload_anim.vpp_pc

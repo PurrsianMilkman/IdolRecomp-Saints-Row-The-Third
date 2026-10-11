@@ -10,7 +10,7 @@
 // items_3d.xtbl (section 16) is intentionally the least complete struct in
 // this file: the spec's own coverage table (section 1.1) lists it as
 // "Array/resolver/row-tag CONFIRMED - disassembly and empirical; full
-// per-item byte offsets OPEN" - the real per-row builder (FUN_00904d10) was
+// per-item byte offsets OPEN" - the real per-row builder (0x00904d10) was
 // never decompiled. Only element names the spec states are either consumed
 // by SOME other fully-read pass over the same document, or empirically
 // observed in real base rows, are modelled - all as raw text/counts, no byte
@@ -63,7 +63,7 @@ struct LevelObjectAnchored {
     bool dislodgeNotoriety = false;                 // Dislodge_Notoriety (+0xC0 bit30)
     // Anchored/Dislodged_By/Element (spec 12.3, a confirmed dead-element
     // finding, e.g. `<Dislodged_By><Element>none</Element></Dislodged_By>`):
-    // real authored data that FUN_008e7490's full body never reads - not
+    // real authored data that 0x008e7490's full body never reads - not
     // modelled, matching this project's convention of not inventing a
     // destination for content the spec explicitly documents as unconsumed.
 };
@@ -84,7 +84,7 @@ struct LevelObjectDeathMoney {
     // only confirmed the real XML SHAPE of one sample row (which happened to
     // carry <X>/<Y>/<Z> directly under <Death_Money>, all-zero), it did not
     // confirm what the READER actually consumes. CONFIRMED - disassembly
-    // (FUN_008e7490's vec3-with-presence helper, read in full): the
+    // (0x008e7490's vec3-with-presence helper, read in full): the
     // "Cash_Out_Point"-labelled vec3 is read from a `Cash_Out_Point` CHILD
     // ELEMENT of Death_Money, not from Death_Money's own X/Y/Z fields
     // directly. OPEN, not guessed (spec 12.1 dispatch note): whether the
@@ -103,32 +103,32 @@ struct LevelObject {
     std::optional<std::string> name;  // Name (char[0x30] bounded copy)
     Always<uint32_t> hitpoints;        // Hitpoints
     std::optional<std::string> material;  // Material -> the 33 physical-material names (spec-tables-weapons-combat.md
-                                          // 1.6's FUN_006F76F0 - cited but NOT enumerated by THIS spec, so no name
+                                          // 1.6's 0x006f76f0 - cited but NOT enumerated by THIS spec, so no name
                                           // list is reproduced here per the cleanroom single-source rule; raw text
                                           // kept, no index/default computed)
     Always<float> lifetimeSeconds;      // Lifetime_seconds (RAW seconds, pre ->ticks conversion)
     Always<float> weight;                // Weight (RAW, pre unsigned-wraparound-correction/scale)
     // Friction/Restitution/Angular_Damping/Linear_Damping/Buoyancy_Modifier/Vehicle_Repulsor_Scale: spec 12.1 states
     // each has a concrete if-present default, but names the default only as an unresolved constant address
-    // (DAT_0126d2cc / DAT_01115d6c / DAT_012a2dd0 / DAT_01117a4c) with no numeric value given anywhere in this
+    // (0x0126d2cc / 0x01115d6c / 0x012a2dd0 / 0x01117a4c) with no numeric value given anywhere in this
     // spec - so no `...OrDefault()` helper is offered for these (would require guessing a number the spec does
     // not state), unlike Surface_Velocity whose default (0) the spec DOES give as a literal.
-    std::optional<float> friction;          // Friction (if-present; default DAT_0126d2cc, not numerically given)
-    std::optional<float> restitution;        // Restitution (if-present; default DAT_01115d6c, not numerically given)
-    std::optional<float> angularDamping;     // Angular_Damping (if-present; default DAT_01115d6c, not numerically given)
-    std::optional<float> linearDamping;      // Linear_Damping (if-present; default DAT_012a2dd0, not numerically given)
+    std::optional<float> friction;          // Friction (if-present; default 0x0126d2cc, not numerically given)
+    std::optional<float> restitution;        // Restitution (if-present; default 0x01115d6c, not numerically given)
+    std::optional<float> angularDamping;     // Angular_Damping (if-present; default 0x01115d6c, not numerically given)
+    std::optional<float> linearDamping;      // Linear_Damping (if-present; default 0x012a2dd0, not numerically given)
     std::optional<float> surfaceVelocity;    // Surface_Velocity (if-present; spec-stated default 0)
     float SurfaceVelocityOrDefault() const { return surfaceVelocity.value_or(0.0f); }
-    std::optional<float> buoyancyModifier;   // Buoyancy_Modifier (if-present; default DAT_01117a4c, not numerically given)
+    std::optional<float> buoyancyModifier;   // Buoyancy_Modifier (if-present; default 0x01117a4c, not numerically given)
 
     LevelObjectAnchored anchored;             // Anchored (whole block optional; see ::present)
-    std::optional<std::string> emittingSound;  // Emitting_Sound -> audio id (FUN_00462960)
+    std::optional<std::string> emittingSound;  // Emitting_Sound -> audio id (0x00462960)
     LevelObjectCollisionSound collisionSound;   // Collision_Sound
     std::optional<std::string> deathEffect;      // Death_Effect -> effects CRC (default -1)
     std::optional<std::string> deathExplosion;   // Death_Explosion -> explosions CRC (default 0)
     LevelObjectDeathMoney deathMoney;             // Death_Money
 
-    std::optional<float> vehicleRepulsorScale;    // Vehicle_Repulsor_Scale (if-present; default DAT_01117a4c, not
+    std::optional<float> vehicleRepulsorScale;    // Vehicle_Repulsor_Scale (if-present; default 0x01117a4c, not
                                                    // numerically given)
     Vec3Result comOffset;           // center_of_mass/com_offset
     Vec3Result comOffsetCorpse;     // center_of_mass/com_offset_corpse
@@ -207,16 +207,16 @@ inline constexpr std::array<std::string_view, 5> kTriggerFlagNames = {
 inline constexpr std::array<std::string_view, 2> kTriggerIconTypeNames = {"Save", "Store"};
 
 struct Trigger {
-    // Name is matched via a multiply-by-33 bucket hash (FUN_00DAB330,
+    // Name is matched via a multiply-by-33 bucket hash (0x00dab330,
     // modulus 20) against an ALREADY-POPULATED runtime trigger-instance
     // table (spec 14); a row with no match is silently discarded by the real
     // loader. Not modelled (this reader has no runtime instance table to
     // consult) - the row's own XML content is surfaced regardless.
     std::optional<std::string> name;
-    std::optional<std::string> effect;    // Effect -> effects CRC (FUN_005C50B0)
-    std::optional<std::string> icon;       // Icon -> resolved via FUN_00802f60 (raw text kept; the spec does not
+    std::optional<std::string> effect;    // Effect -> effects CRC (0x005c50b0)
+    std::optional<std::string> icon;       // Icon -> resolved via 0x00802f60 (raw text kept; the spec does not
                                            // state the resolved value's own type beyond "a value resolved through")
-    std::optional<std::string> foley;      // Foley -> audio id (FUN_00462960)
+    std::optional<std::string> foley;      // Foley -> audio id (0x00462960)
     std::optional<std::string> iconType;   // IconType -> kTriggerIconTypeNames (2 literals); "does not appear in any
                                            // real row" per spec 14.2 (only in the table's own TableDescription block)
     std::optional<std::string> useMessage;  // UseMessage -> localized-string handle
@@ -237,7 +237,7 @@ std::vector<Trigger> ParseTriggersTable(const Document& doc);
 //     (spec-tables-vehicle-world.md 15)
 // ===========================================================================
 struct InventoryItem {
-    std::optional<std::string> name;   // Name (+0x00, row key; interned via FUN_00A74910)
+    std::optional<std::string> name;   // Name (+0x00, row key; interned via 0x00a74910)
     // Framework - filter only; UNLIKE this group's usual Framework-filter
     // idiom, items_inventory's BASE load accepts every row regardless of
     // Framework text (only a DLC-framework load filters by exact match,
@@ -291,7 +291,7 @@ struct Item3D {
     std::vector<ItemProp> props;                       // Props/Prop (spec 16.2: all 391 real rows have a Props
                                                         // wrapper, usually empty)
     Always<bool> largeProp;                             // LargeProp
-    std::optional<std::string> streamingCategory;        // streaming_category -> resolved via FUN_00904770
+    std::optional<std::string> streamingCategory;        // streaming_category -> resolved via 0x00904770
 
     // Empirically observed in real base rows but NOT traced to any confirmed
     // reader this pass (spec 16.1: "these are HYPOTHESIS/OPEN, not confirmed
@@ -319,7 +319,7 @@ std::vector<Item3D> ParseItems3DTable(const Document& doc);
 struct Contact {
     std::optional<std::string> name;    // Name (+0x00-0x3F, raw NUL-terminated unbounded copy)
     std::optional<std::string> image;    // Image (+0x40-0x7F, same)
-    std::optional<std::string> persona;   // Persona -> audio persona id (+0x80, FUN_00462960)
+    std::optional<std::string> persona;   // Persona -> audio persona id (+0x80, 0x00462960)
 };
 
 Contact ParseContact(const Node* row);
@@ -331,12 +331,12 @@ std::vector<Contact> ParseContactsTable(const Document& doc);
 //     substitution (spec-tables-vehicle-world.md 18)
 // ===========================================================================
 struct PersonaReplacement {
-    std::optional<std::string> original;     // Original -> persona resolver (FUN_0070a2f0)
+    std::optional<std::string> original;     // Original -> persona resolver (0x0070a2f0)
     std::optional<std::string> replacement;   // Replacement -> same resolver (if-present; "none" if absent)
 };
 
 struct ActivityPersonaReplacement {
-    // Name -> the activity-name resolver (FUN_00614d70); unmatched names are
+    // Name -> the activity-name resolver (0x00614d70); unmatched names are
     // silently skipped by the real loader (spec 18.1) - raw text kept
     // regardless.
     std::optional<std::string> name;

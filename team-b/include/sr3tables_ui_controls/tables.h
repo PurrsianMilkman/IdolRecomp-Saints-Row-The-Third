@@ -57,7 +57,7 @@
 //     authored text/number is kept instead, with the transform noted in a
 //     comment (matches sr3tables_environment's convention exactly, e.g. its
 //     decal_info.xtbl Slope_Fade_Start/End).
-//   * `FUN_00AC5CF0`'s "three camera-angle sets" internal field layout (8.1)
+//   * `0x00ac5cf0`'s "three camera-angle sets" internal field layout (8.1)
 //     is OPEN in the spec (not decompiled past the dispatch call) - only
 //     element PRESENCE is modelled for Primary_Camera_Angle/
 //     Secondary_Camera_Angle/RC_Camera_Angle.
@@ -67,7 +67,7 @@
 //     modelled; this header only parses the `.xtbl` FILE content itself
 //     (CONFIRMED - empirical schema, identical to vehicle_cust_cameras_new.xtbl).
 //   * control_filters.xtbl/control_parameters.xtbl's shared loader
-//     `FUN_005D25F0` (14) was not decompiled to field level in the spec - the
+//     `0x005d25f0` (14) was not decompiled to field level in the spec - the
 //     row schema below is the spec's own EMPIRICAL description of real file
 //     content, not a byte-offset-verified struct.
 //   * control_schemes.xtbl's per-row Scheme_Type classification (3) - the
@@ -219,7 +219,7 @@ int32_t LookupNamedValue(const Node* node, const NamedValue (&table)[N]) {
 }
 
 // Index-of-match tables (index == stored value; via sr3xtbl::EnumIndex, the
-// generic reader FUN_00DAC830 - spec 1.3/9.2).
+// generic reader 0x00dac830 - spec 1.3/9.2).
 // Button_Animation_Type - the engine's real table at 0x012FFF1C has 9 slots
 // (CORRECTED 2026-10-01, 9.2); only these 3 names are known, so this is NOT
 // used as a closed EnumIndex lookup (see HudQteInterface::buttonAnimationType,
@@ -393,7 +393,7 @@ std::optional<QteGlobalParams> ParseQteTable(const Document& doc);
 // spelled out by the spec for THIS specific sub-element.
 struct QteNodeNpcAnimation {
     std::optional<std::string> npcName;           // matched-slot selector, inferred as NPC_Name (cf. Animated_NPC/NPC_Name, 7.1)
-    std::optional<std::string> personaLine;        // Persona_Line (line id, resolved via FUN_0070A2F0 - raw text kept)
+    std::optional<std::string> personaLine;        // Persona_Line (line id, resolved via 0x0070a2f0 - raw text kept)
     std::optional<int32_t> lineDelay;              // Line_Delay
     std::optional<std::string> enterActionAnim;    // Enter_Action (per-NPC override; distinct from the node's own Enter_Action wrapper block)
     std::optional<std::string> loopingStateAnim;   // Looping_State (per-NPC override)
@@ -410,40 +410,40 @@ struct QteNode {
     std::optional<std::string> hudInterface; // HUD_Interface (join key into hud_qte_interface.xtbl's Name, same seed, 7.2/9.2)
     std::optional<int32_t> failTime;         // Fail_Time (if-present)
 
-    std::optional<std::string> personaLine;         // Persona/Persona_Line (line id via FUN_0070A2F0; raw text)
+    std::optional<std::string> personaLine;         // Persona/Persona_Line (line id via 0x0070a2f0; raw text)
     Always<int32_t> personaLineDelay;                 // Persona/Line_Delay
     std::optional<std::string> partnerPersonaLine;      // Partner_Persona/Persona_Line
     Always<int32_t> partnerPersonaLineDelay;              // Partner_Persona/Line_Delay
 
-    std::optional<std::string> cameraShake;  // Camera_Shake -> FUN_0057BEE0 resolver (raw text; cross-refs spec-tables-weapons-combat.md 1.6)
+    std::optional<std::string> cameraShake;  // Camera_Shake -> 0x0057bee0 resolver (raw text; cross-refs spec-tables-weapons-combat.md 1.6)
 
     std::optional<float> healthChange;       // Health_Change (if-present)
     std::optional<int32_t> playerImpactDmg;  // Player_Impact_Dmg (if-present)
 
-    std::optional<std::string> enterMeleeMove;         // Enter_Action/Synced_Melee_Move/Melee_Move (id via FUN_009828F0; raw text)
+    std::optional<std::string> enterMeleeMove;         // Enter_Action/Synced_Melee_Move/Melee_Move (id via 0x009828f0; raw text)
     Always<bool> enterMeleeMovePlayerIsAttacker;          // Enter_Action/Synced_Melee_Move/Player_Is_Attacker
-    std::optional<std::string> enterPlayerAnimation;       // Enter_Action/Player_Animation (id via FUN_004BF810; raw text)
+    std::optional<std::string> enterPlayerAnimation;       // Enter_Action/Player_Animation (id via 0x004bf810; raw text)
 
-    std::optional<std::string> loopingSyncedAnimation;      // Looping_State/Synced_State/Synced_Animation (via FUN_004BF810)
+    std::optional<std::string> loopingSyncedAnimation;      // Looping_State/Synced_State/Synced_Animation (via 0x004bf810)
     Always<bool> loopingSyncedPlayerIsAttacker;                // Looping_State/Synced_State/Player_Is_Attacker
-    std::optional<std::string> loopingPlayerAnimationState;     // Looping_State/Player_Animation_State (via FUN_004BF810)
+    std::optional<std::string> loopingPlayerAnimationState;     // Looping_State/Player_Animation_State (via 0x004bf810)
 
-    std::optional<std::string> additiveMeleeMove;         // Additive_Action/Synced_Melee_Move/Melee_Move (via FUN_009828F0)
+    std::optional<std::string> additiveMeleeMove;         // Additive_Action/Synced_Melee_Move/Melee_Move (via 0x009828f0)
     Always<bool> additiveMeleeMovePlayerIsAttacker;          // Additive_Action/Synced_Melee_Move/Player_Is_Attacker
-    std::optional<std::string> additivePlayerAnimation;       // Additive_Action/Player_Animation (via FUN_004BF810)
+    std::optional<std::string> additivePlayerAnimation;       // Additive_Action/Player_Animation (via 0x004bf810)
     std::optional<uint32_t> additiveNewFailTime;                // Additive_Action/New_Fail_Time (if-present)
     std::optional<int32_t> additiveActionCount;                   // Additive_Action/Action_Count (if-present, spec-stated default 0)
     int32_t AdditiveActionCountOrDefault() const { return additiveActionCount.value_or(0); }
 
     bool shootingModePresent = false;  // Additive_Action/Shooting_Mode - presence flag (1 if the child exists)
     Always<float> shootingModeRecoil;    // Additive_Action/Shooting_Mode/Recoil (f32, always)
-    std::optional<std::string> shootingModeSyncedPartnerFlinch;  // .../Shooting_Mode/Synced_Partner_Flinch (via FUN_004BF810)
+    std::optional<std::string> shootingModeSyncedPartnerFlinch;  // .../Shooting_Mode/Synced_Partner_Flinch (via 0x004bf810)
     // .../Shooting_Mode/Restrict_Camera_Angle/{Min,Max}_{Heading,Pitch} - f32 x4, always, radians AS AUTHORED.
     Always<float> restrictCameraMinHeading, restrictCameraMaxHeading;
     Always<float> restrictCameraMinPitch, restrictCameraMaxPitch;
     // .../Shooting_Mode/Target_Camera_Angle/{Min,Max}_{Heading,Pitch} - f32 x4,
     // always, RAW DEGREES as authored; the engine's deg->rad multiply
-    // (x DAT_012A30D8) is a load-time transform, not applied here.
+    // (x 0x012a30d8) is a load-time transform, not applied here.
     Always<float> targetCameraMinHeadingDeg, targetCameraMaxHeadingDeg;
     Always<float> targetCameraMinPitchDeg, targetCameraMaxPitchDeg;
 
@@ -459,14 +459,14 @@ struct QteNode {
     std::optional<bool> onFailForceSuccess;           // On_Fail/Force_Success (if-present)
     Always<bool> onFailKeepHud;                         // On_Fail/Keep_HUD
 
-    std::optional<std::string> triggeredExplosion;  // Triggered_Explosion -> FUN_00590D20 resolver (raw text; cross-refs weapons-combat 1.6)
+    std::optional<std::string> triggeredExplosion;  // Triggered_Explosion -> 0x00590d20 resolver (raw text; cross-refs weapons-combat 1.6)
 };
 
 struct QteSequence {  // <QTE> row, 128 (0x80) bytes
     std::optional<std::string> name;  // Name (row key; CRC-32 0x00D9E8B0, seed 0, CORRECTED 2026-10-01, 1.4)
     Always<bool> disablePlayer;         // Disable_Player
     Always<bool> viewRemotely;            // View_Remotely
-    std::optional<std::string> playerWeapon;  // Player_Weapon -> FUN_00B81220 weapons-array resolver (raw text)
+    std::optional<std::string> playerWeapon;  // Player_Weapon -> 0x00b81220 weapons-array resolver (raw text)
     // CORRECTED 2026-10-01 (7.1/7.2): the former "numeric u16 vs name" OPEN
     // question is now settled - 0x0095DA50 is a hash-indexed NAME->u16
     // resolver into the 0x30-stride table at 0x02624B50 (0xFFFF when
@@ -497,7 +497,7 @@ std::vector<QteSequence> ParseQteSequencesTable(const Document& doc);
 struct VehicleCameraFields {
     std::optional<float> cameraProximityLockY;  // Camera_Proximity_Lock_Y (+0x624, if-present)
 
-    // The "three camera-angle sets" (dispatched to FUN_00AC5CF0, selectors
+    // The "three camera-angle sets" (dispatched to 0x00ac5cf0, selectors
     // 0/1/2) - internal field layout is OPEN in the spec (8.1/17.2); only
     // element PRESENCE is modelled.
     bool primaryCameraAnglePresent = false;    // Primary_Camera_Angle
@@ -872,7 +872,7 @@ std::vector<CreditsSection> ParseCreditsTable(const Document& doc);
 // modelled further here. Both files use the non-<root><Table>-wrapped shape
 // (spec-xtbl-format.md 8's "10 others" family) - rows are read from
 // doc.root(), NOT doc.table() (which would return nullptr for these two).
-// The shared loader FUN_005D25F0 was located but NOT decompiled to field
+// The shared loader 0x005d25f0 was located but NOT decompiled to field
 // level (spec Open Item 5) - the schema below is the spec's own EMPIRICAL
 // description of real file content, not a byte-offset-verified struct.
 // ===========================================================================

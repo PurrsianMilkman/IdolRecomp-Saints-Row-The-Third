@@ -163,7 +163,7 @@ public:
     bool conversationSlotBusy(uint8_t slot) const;
 
     // Posts a scripted-conversation voice line - the real consumer's
-    // terminal effect (spec-conversation-format.md Sec5's `FUN_0046ac60`
+    // terminal effect (spec-conversation-format.md Sec5's `0x0046ac60`
     // cluster; spec-audio-runtime.md Sec1.2a's allocate/populate/release
     // cluster and the Lua call chain ending at `0x0046a510`): acquires a
     // pool slot, tags the resulting play record with it

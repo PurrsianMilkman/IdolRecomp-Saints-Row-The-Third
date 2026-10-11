@@ -148,11 +148,12 @@ Reached via `cell_extras_handle_state(ID_CHEATS)` → `push_screen("cell_cheats"
 (`cell_extras.lua:151`). Internally a 2-level menu (category list → cheat list within category)
 driven by the same dataresponder pattern (`vint_dataresponder_request("cell_cheats_populate", ...)`).
 Toggling a cheat: `cell_cheats_button_a` → `cell_cheats_activate_cheat(Sub_menu[selection].cheat_index)`
-(line 366). **`cell_cheats_activate_cheat`'s own definition was not found in `cell_cheats.lua`** —
-either a shared cheats-support Lua module not yet read, or (given the naming convention matches
-`cellphone_dial`/`cellphone_choose_vehicle`'s own style) itself a directly Lua-bound native not
-currently listed in `spec-lua-api-behaviour.md`'s cellphone-native section. **OPEN** — a concrete
-lead for whoever extends that section next.
+(line 366). **RESOLVED 2026-10-10: `cell_cheats_activate_cheat` is a directly Lua-bound native**
+(`0x0083b600`, sub-registrar `0x0083b6e0`). It applies a coop-disabled gate and a
+confirmation-dialog flow itself, then hands off to `0x0083af50` for the actual on/off toggle and a
+`"cell_cheats_cheat_activated"` event dispatch — bounds-checked, no crash shape found. Full
+detail: `spec-lua-api-behaviour.md` §45.8. Cross-check with the cheats.xtbl record layout (§8 of
+that file's progression-table sibling) is OPEN — not confirmed to be the same structure.
 
 ## 7. The `cell_missions` document's internal structure — CONFIRMED
 
@@ -326,15 +327,17 @@ mission-completion-gated at data-population time. Full read of `cell_saintsbook.
   (`cell_saintsbook_sub_open_stage_1`, `:1081`/`:1225`): full target name/image, contact
   name/image, cash+respect reward preview, blurb text; a GPS-target/location block for
   assassination/chopshop entries, a progress meter for challenges.
-- **Selecting an entry on the sub page is a target-marking toggle, not a launch or purchase — and
-  it reaches two native names not documented anywhere in `spec-lua-api-behaviour.md`.**
+- **Selecting an entry on the sub page is a target-marking toggle, not a launch or purchase.**
   `cell_saintsbook_sub_select` (`:1660`): no-ops if the entry is already completed; for
   assassinations calls `sb_select_hitman_target(item.group_index, item.target_index)` (`:1677`);
   for chopshop calls `sb_select_chop_shop_vehicle(item.group_index, item.target_index)` (`:1691`).
-  **Neither name appears in the already-documented cellphone sub-registrar (`0x0083db20`,
-  `spec-lua-api-behaviour.md` §45.4) or anywhere else in that spec** — flag both as new native
-  leads, same category as `cell_cheats_activate_cheat` (§6). No `select` action exists for
-  challenge-type entries (they fall through with no effect).
+  **RESOLVED 2026-10-10: both are directly Lua-bound natives** (sub-registrar `0x00840420`,
+  alongside `sb_saintsbook_is_available`) — real state-mutators toggling a per-manager-singleton
+  "active target" selection, fully bounds-checked on both indices, no crash shape found. The
+  chop-shop variant additionally encodes an AI-partner-claim rule the hitman variant lacks:
+  selecting a target the partner has already taken pops a warning dialog instead of selecting it.
+  Full detail: `spec-lua-api-behaviour.md` §45.8. No `select` action exists for challenge-type
+  entries (they fall through with no effect).
 - **Back-navigation depth differs per page, unlike the other siblings' uniform "back=1-up."**
   `"back"` from TOP exits the whole sub-document directly to the icon grid (there is no level
   above TOP to back into); `"back"` from MAIN returns to TOP; `"back"` from SUB returns to MAIN.
@@ -555,9 +558,12 @@ completely standard §4-shaped exit.
    AND the input side (the dedicated `CBA_GAC_CELL_OPEN` action exists, `0x57`, but none of 156
    input-query call sites reads it, 2026-10-10) were exhausted — see §2.** Next step: a 4th
    undiscovered query primitive, or a raw physical-button bypass of the CBA layer.
-2. `cell_cheats_activate_cheat`'s own identity — likely a directly Lua-bound native, not yet in
-   `spec-lua-api-behaviour.md`'s cellphone-native section (§6). **New siblings, 2026-10-10:**
-   `sb_select_hitman_target`/`sb_select_chop_shop_vehicle` (§10) — same unresolved category.
+2. ~~`cell_cheats_activate_cheat`/`sb_select_hitman_target`/`sb_select_chop_shop_vehicle`'s own
+   identities~~ **RESOLVED 2026-10-10 — all three are directly Lua-bound natives, fully
+   characterized, no crash shape found in any of them.** Full detail:
+   `spec-lua-api-behaviour.md` §45.8 (cross-referenced at §6/§10). One residual: whether
+   `cell_cheats_activate_cheat`'s own flag-byte table is the same structure as the cheats.xtbl
+   record array documented in the progression-tables spec — not confirmed.
 3. ~~The 8 sibling documents beyond `cell_phone` and `cell_cheats`~~ **RESOLVED 2026-10-10 — the
    full phone-menu document survey is now closed.** All remaining siblings are traced to this
    depth: `cell_missions` (§7), `pause_map` (§8), `cell_stats` (§9), `cell_saintsbook` (§10),
@@ -576,6 +582,15 @@ shipped, extracted script source) throughout. No Ghidra decompiler auto-names
 material.
 
 ## Changelog
+
+- **2026-10-10 — §6/§10/§16: all 3 accumulated native leads resolved, no crash shapes** (SPEC
+  TEAM, agent `a6d64fe32294cd9e6`). `cell_cheats_activate_cheat`, `sb_select_hitman_target`, and
+  `sb_select_chop_shop_vehicle` are all directly Lua-bound natives, now fully documented in
+  `spec-lua-api-behaviour.md` §45.8. All three are fully bounds-checked — a clean negative on the
+  crash-shape front, in direct contrast to `cellphone_dial`'s own unbounded index/unchecked
+  dereference (§45.4). The chop-shop native encodes a genuine new gameplay rule (AI-partner-claim
+  rejection) the hitman native lacks. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
 
 - **2026-10-10 — new §13/§14/§15: `cell_extras`, the music chain, `cell_camera` traced — CLOSES
   THE FULL PHONE-MENU DOCUMENT SURVEY** (SPEC TEAM, agent `a8de47913e44dd0d9`). `cell_extras`'s

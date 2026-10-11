@@ -45,8 +45,19 @@ public:
     // (goldens/ctest run this way). Pass true only for an actual
     // interactive/--visible invocation, where a developer deliberately
     // wants to watch the render happen.
+    // `escQuits` (default true, every pre-existing caller unaffected): when
+    // false, this window's own WM_KEYDOWN handler no longer sets
+    // shouldClose on VK_ESCAPE - for a caller that wants to repurpose Escape
+    // itself for something else (spec-frontend-menu-runtime.md Sec7/Sec9:
+    // the real pause-menu-open binding is keyed off Escape-equivalent
+    // CBA_GAC_PAUSE_MENU, not a quit) while still polling VK_ESCAPE directly
+    // via GetAsyncKeyState, the same convention every other live key in this
+    // project's playtest tool already uses. The window can still be closed
+    // by its own title-bar/X button regardless (WM_CLOSE/WM_DESTROY are
+    // unconditional, see windowProc) - only the Escape-specific quit path is
+    // what this flag disables.
     bool create(const std::string& title, uint32_t width, uint32_t height, std::string& error,
-                bool visible = false);
+                bool visible = false, bool escQuits = true);
 
     // Processes all pending messages. Returns false once the window has
     // been closed (or Escape pressed), which is the caller's cue to stop

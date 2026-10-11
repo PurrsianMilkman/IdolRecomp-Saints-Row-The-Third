@@ -123,6 +123,32 @@ int main() {
         CHECK(es.objectiveTextSlots().count(4) == 0);
         ok(host, gp, "objective_text(-1, 'KEY_D')");
         CHECK(es.objectiveTextSlots().count(-1) == 0);
+
+        // objective_text_clear (Sec1.4, EngineState::recordObjectiveTextClear())
+        // now actually erases a slot's entry (spec-hud-runtime.md Sec6.5
+        // HUD-objective-overlay task, 2026-10-09 - see that method's own
+        // updated doc comment, engine_state.h) rather than leaving a stale
+        // entry behind a counter-only stub. Called directly on EngineState
+        // here, not through Lua, since "objective_text_clear" is not one of
+        // THIS fixture's own registered names (it lives in the Sec1.4
+        // cluster, exercised separately by
+        // synthetic_luahost_trigger_mission_cluster_test.cpp's own counter-
+        // only checks) - this test is specifically about the map-erase side
+        // effect the Lua-visible native and this direct call now share.
+        CHECK(es.objectiveTextSlots().count(1) == 1); // slot 1 still active from above
+        es.recordObjectiveTextClear(1);
+        CHECK(es.objectiveTextSlots().count(1) == 0); // erased, not merely counted
+        CHECK(es.objectiveTextClearCount(1) == 1);     // counter side effect still fires too
+        CHECK(es.objectiveTextSlots().count(0) == 1);  // clearing slot 1 never touches slot 0
+
+        // Clearing a never-written/out-of-range slot is a safe no-op
+        // (std::unordered_map::erase() on an absent key) - matches Sec1.4's
+        // own "no bounds check visible" text with no crash and no spurious
+        // entry created.
+        es.recordObjectiveTextClear(2);
+        CHECK(es.objectiveTextSlots().count(2) == 0);
+        es.recordObjectiveTextClear(-7);
+        CHECK(es.objectiveTextSlots().count(-7) == 0);
     }
 
     // --- on_trigger_exit (§1.7) -----------------------------------------

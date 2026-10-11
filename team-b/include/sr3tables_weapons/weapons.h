@@ -42,7 +42,7 @@
 //    needs the derived geometry can compute it.
 // 4. Fields the spec marks OPEN/UNKNOWN, or whose destination this project
 //    cannot resolve because a dependency table has no spec here (the 33
-//    physical-material names of FUN_006F76F0, the animation-group/state
+//    physical-material names of 0x006f76f0, the animation-group/state
 //    name arrays, the panic-reaction/groundfire id tables, ...), are left
 //    out of the typed struct or kept as raw text, per the task's "don't
 //    guess" rule. See the accompanying report for the full list.
@@ -175,7 +175,7 @@ struct MeleeDamageOverrides {
 };
 
 // `Tracer_Info` (+0x78..+0x88). All four pointer fields are name text here
-// (resolver FUN_005A2FD0 -> weapon_tracers.xtbl is out of scope for a
+// (resolver 0x005a2fd0 -> weapon_tracers.xtbl is out of scope for a
 // single-row parse; see tables in combat.h for weapon_tracers.xtbl itself).
 struct TracerInfo {
     bool present = false;
@@ -198,7 +198,7 @@ struct ConstantEffect {
 
 // `Audio` block (+0xC8..+0xDD). Written only if the block exists.
 // Weapon_Model/Soundbank_Name/*_Event are Wwise event/bank NAMES, not the
-// ids the engine computes through FUN_00462960 (undocumented hash, out of
+// ids the engine computes through 0x00462960 (undocumented hash, out of
 // scope) - stored as name text.
 struct AudioInfo {
     bool present = false;
@@ -357,7 +357,7 @@ struct WaterSprayInfo {
 // `Charge_Release_Info` (+0x460..+0x484).
 //
 // [CONFIRMED/CORRECTED - disassembly, 2026-10-02 (spec section 2.3): the
-// block is NOT uniformly "zero if absent" - `FUN_00B80D40` presets +0x460,
+// block is NOT uniformly "zero if absent" - `0x00b80d40` presets +0x460,
 // +0x478, +0x464(=1.0, not 0), +0x468, +0x46C, +0x47C, +0x480, +0x484 to
 // their listed values UNCONDITIONALLY, before it even checks whether
 // `Charge_Release_Info` exists; +0x470 (Min_Range) and +0x474
@@ -403,7 +403,7 @@ struct TurretPart {  // Middle_Component / Top_Component, 0x20 bytes
     std::optional<float> firingAngleSpeedRadians;    // Firing_Angle_Speed, deg->rad; defaults to Max_Speed
     Always<float> maxForceNewtons;                    // Max_Force, x4.448221683502197 (lbf -> N)
 };
-struct VehicleWeaponComponent {  // 0x50-byte component (FUN_00B7E3A0)
+struct VehicleWeaponComponent {  // 0x50-byte component (0x00b7e3a0)
     Always<uint32_t> uid;                      // UID
     int32_t weaponClass = -1;                    // Weapon_Class, 23-name enum
     bool targetReticule = false;                  // flags bit 0
@@ -420,7 +420,7 @@ struct VehicleWeaponBlock {
 
 // `Camera_Info` (+0x710..+0x774).
 struct CameraShakeWithIntensity {
-    std::optional<std::string> shakeName;  // name text (resolver FUN_0057BEE0 out of scope)
+    std::optional<std::string> shakeName;  // name text (resolver 0x0057bee0 out of scope)
     Always<float> intensity;                // documented default 1.0
 };
 struct CameraInfo {
@@ -584,12 +584,12 @@ struct Weapon {
 
     ProjectileInfo projectileInfo;   // Projectile_Info (+0x348..+0x3AC)
 
-    // [NOTE - spec-tables-weapons-combat.md 1.6 (`FUN_006F76F0` row) now lists the 33 names by cross-reference
+    // [NOTE - spec-tables-weapons-combat.md 1.6 (`0x006f76f0` row) now lists the 33 names by cross-reference
     // to spec-tables-environment.md 11.6 `bitmap_materials.xtbl` [CONFIRMED - disassembly]: slot 0..32, `not set` = 31,
     // `_stricmp`, unknown -> 31. The earlier "never enumerated" wording below pre-dates that cross-reference. Still kept
     // as raw text (label/note only, no behaviour change; resolution to a slot index is out of scope here).]
     // melee_material_effects (+0x3B0..+0x433): the engine indexes 33 slots
-    // by a physical-material name table (FUN_006F76F0) this spec never
+    // by a physical-material name table (0x006f76f0) this spec never
     // enumerates (only referenced, section 1.6) - stored as raw
     // (material name, effect name) pairs, NOT resolved to a 33-slot array.
     std::vector<std::pair<std::string, std::optional<std::string>>> meleeMaterialEffects;
