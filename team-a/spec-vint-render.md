@@ -80,14 +80,26 @@ In order: (1) builds a fresh 128-byte render state (`0x00e26630`, §3.1), overwr
 **Cross-reference, 2026-10-10 (vint-doc tween/keyframe investigation):** step (3)'s "callback slot
 `+0x00`" is a direct (not vtable-indirect) `CALL 0x00e229b0` at `0x00e1f12c`, immediately followed
 by the `+0x594` root-element check that gates step (4)'s walk — independently re-verified against
-the live Ghidra server. `0x00e229b0` was flagged by that investigation as a candidate home for
-tween-progress/interpolation computation, but it was **not opened**, and given it's framed here as
-a generic per-document "callback slot" (plausibly used by other, non-animation document types
-too, not animation-specific), that identification is NOT confirmed — whoever opens `0x00e229b0`
-next should settle whether it's animation-specific or a generic hook first, before assuming it's
-the tween interpolation consumer. `spec-vint-doc-format.md` §7/§8 item 8 has the full open-item
-framing and the now-fully-confirmed file-format side (every tween keyframe is an ordinary named
-property on the tween element itself — no separate keyframe-array encoding exists).
+the live Ghidra server.
+
+**Resolution, 2026-10-10: `0x00e229b0` opened in full (8 instructions, `0x00e229b0`-`0x00e229c2`),
+confirmed GENERIC, not animation-specific — the "tween-interpolation candidate" flag above is
+retracted.** Independently re-verified against the live Ghidra server (body and caller list both
+matched exactly). The body is a bare callback-table thunk: load global `0x02a5a008`, null-check it,
+check offset `+0` of the pointee non-zero, then tail-jump through it (`MOV EAX,[EAX]; JMP EAX`). It
+is one of a structurally identical family of thunks (`0x00e22830`/`22850`/`22870`/`22890`/`22900`/
+`22950`/`22970`/`22990`/`229b0`/`229d0`/`229f0`/`22a10`), each reading the same table pointer
+`0x02a5a008` at a different offset — i.e. this is the generic per-slot dispatch mechanism for the
+whole callback table, not element- or document-type-specific code. Its only caller, confirmed by
+xref, is `0x00e1f12c` inside this same `0x00e1f0b0` — it fires once per document render, for every
+document, independent of whether that document contains any `tween`/`animation` elements. One hop
+further, the slot it dispatches is exactly callback slot `+0x00`, whose game-side body `0x008470a0`
+is already tabulated in §9 as scissor-reset-to-full-UI-bounds + mask-mode-reset — ordinary
+per-document render-state housekeeping, with no interpolation math anywhere in the chain. The real
+tween-progress/interpolation consumer remains unidentified; see `spec-vint-doc-format.md` §7/§8
+item 8 for the full open-item framing and the now-fully-confirmed file-format side (every tween
+keyframe is an ordinary named property on the tween element itself — no separate keyframe-array
+encoding exists).
 
 ### 2.3 The recursive walk `0x00e26a30(state, scratch, capacity)` — 197 instructions
 
@@ -1182,3 +1194,15 @@ About 2,400 instructions read this pass: the `rl_draw` entries and the state man
   call, re-verified) as a candidate — but unconfirmed — home for the still-OPEN tween-interpolation
   question (`spec-vint-doc-format.md` §7/§8 item 8, now closed on the file-format side). Cleanroom
   self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-10 (SPEC TEAM, agent `a24dc40bb8bef1c1d`): **§2.2's `0x00e229b0` genericity question
+  RESOLVED — confirmed GENERIC, retracting the prior "tween-interpolation candidate" flag.** Opened
+  in full (8 instructions): a bare callback-table thunk tail-jumping through global `0x02a5a008`'s
+  slot-0 entry, one of 12 structurally identical sibling thunks reading the same table at different
+  offsets — the table's generic per-slot dispatch mechanism, not element/document-type-specific
+  code. Its only caller (confirmed by xref) is `0x00e1f12c` inside this same `0x00e1f0b0`, firing
+  once per document render regardless of document type. The dispatched slot (`+0x00`) resolves to
+  `0x008470a0`, already tabulated in §9 as ordinary scissor/mask-mode reset — no interpolation math
+  anywhere in the chain. Independently re-verified `0x00e229b0`'s full body and caller list against
+  the live Ghidra server before splicing (both matched exactly). The real tween-interpolation
+  consumer remains unidentified. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.

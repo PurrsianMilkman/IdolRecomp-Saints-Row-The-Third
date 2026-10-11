@@ -431,7 +431,23 @@ standard as §4.4's hitscan search and §7's melee search. Full detail:
 `spec-physics-runtime.md` §10a already fully traces the generic in-tick contact-listener pipeline
 for vehicle collisions (type id `7`). This pass found the SAME registration function
 (`0x00766990`→`0x007669d0`) also covers type id **`0x20`**, paired against `5`/`7`/`0xa`/`0xff`, plus
-a reverse `(7, 0x20)` pairing (handler `0x00765c70`, not opened). `0x00765fa0`/`0x00765f20` (both
+a reverse `(7, 0x20)` pairing. **`0x00765c70` opened in full, 2026-10-11 (CONFIRMED by disassembly):**
+resolves its own two-dword handle argument to a target object via the standard capability-table
+chain (same `+0x33` bit `0x10` liveness check, `0x02cc9900[class][+6]` bit `0x80` capability gate,
+and `0x00853b10` pause-gate this whole family already uses), plus a once-only latch (`param+0x14`
+must be zero) — then calls `0x004d4c70(param+0xc,param+0x8,0)` to compute a value, feeds it through
+`0x00b29e90(target, value)` and `0x00b2a0d0(target, param+0xc, param+0x8)` (neither opened — shaped
+like "apply a force/damage value" and "apply at a position," consistent with the vehicle-side
+damage/force application this whole dispatch family performs), then — only if a SECOND resolve,
+`0x004d7f30(param+0xc, param+0x8, 0)`, succeeds — fires three hash-keyed named trigger/event calls
+(`0x0094c9e0`→`0x0045f5b0`, twice, plus a third `0x0094c9e0`→`0x0045ea70`) with literal hash
+constants (`0x74557e5f`/`0x41654531`/`0xd529362b`) not otherwise identified. **HIGH CONFIDENCE:**
+this is the "projectile hits vehicle" reverse-direction case of the same type-7/type-`0x20` pairing,
+applying damage/force to the vehicle and firing 2-3 named gameplay events (stat/mission-trigger
+shaped) only when a second handle resolves — plausibly gating the events on "this projectile has a
+known owner/instigator." **OPEN:** `0x00b29e90`/`0x00b2a0d0`'s own exact semantics; the three hash
+constants' real event names; `0x004d7f30`'s role (instigator/owner resolve, not independently
+proven). `0x00765fa0`/`0x00765f20` (both
 read in full) route contacts through the same classifier `0x00763350` the vehicle bridge uses, then
 walk an embedded position-history array (the classic fast-mover/tunnelling-mitigation shape — a
 vehicle or character object would not carry this) and dispatch through the target object's own
@@ -998,3 +1014,8 @@ No leaked Volition/Havok/Audiokinetic/RAD material.
   own vtable either. A genuine structural negative over an exhaustive search space. Full detail:
   `scratchpad/projectile_fuse_detonation_consumer_2026-10-10.md`. Cleanroom self-check: strict
   regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-11 (self, direct query, no agent): §2a.5's `0x00765c70` (the reverse type-7/0x20
+  contact-listener pairing) opened and spliced — a self-contained, 90-instruction function
+  resolving a target handle, applying a force/damage value and position via two unopened helpers,
+  then conditionally firing three hash-keyed named trigger events on a second successful resolve.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

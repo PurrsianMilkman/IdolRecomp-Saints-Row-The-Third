@@ -162,22 +162,40 @@
 //                           artifact that does not change which bytes end up
 //                           in which pixels, so this file collapses both
 //                           paths into one byte-granular read).
-//   Primary 1, sub 5      - Two-literal PATTERN entry: two literal bytes
-//                           are read (modelled here, byte-aligned per
-//                           Sec5.3a), then Sec5.3 says the real case body
-//                           "tail-jumps into the largest bitstream engine"
-//                           for the actual per-pixel blend pattern. Sec5.3a
-//                           (2026-10-08) has SINCE dumped the real 2-bit
-//                           blend-mask table pair this engine selects from
-//                           (0x1003c130/0x1003c200) - but NOT the per-block
-//                           traversal that maps bitstream control-byte 2-bit
-//                           fields onto specific pixel positions (how many
-//                           control bytes, what raster order) - still a
-//                           genuine gap, not just the table lookup, so this
-//                           stays an OPEN hook: this file reads the two
-//                           literals (keeping bitstream accounting honest up
-//                           to that point) and then reports OPEN rather than
-//                           guessing the spatial mapping.
+//   Primary 1, sub 5      - Two-literal PATTERN entry: UPDATED 2026-10-09
+//                           (fix/bink-pixel-accuracy-oracle task, spec-bink-
+//                           codec.md's extended Sec5.3 TwoLiteralPattern
+//                           paragraph, "CONFIRMED by live execution against a
+//                           real block, 2026-10-09") - the full byte-level
+//                           grammar that former OPEN gap named is now closed:
+//                           after the 2 literal bytes (read exactly as
+//                           before), the real case body consumes EXACTLY 8
+//                           raw control bytes, each split into 4 two-bit
+//                           fields, each field indexing the already-dumped
+//                           `0x1003c130`/`0x1003c200` 2-bit blend-mask pair
+//                           to produce one blended dword
+//                           (`TABLE1[idx] & literal2_broadcast` OR'd with
+//                           `TABLE2[idx] & literal1_broadcast`), written to
+//                           TWO destination rows (current + one stride below)
+//                           simultaneously - 4 fields x 4 pixels/field = 16
+//                           columns, 8 control bytes x 2 rows/byte = 16 rows,
+//                           a fixed 16x16-pixel output block whose size is
+//                           spec-confirmed to be block-type-specific
+//                           (hardcoded immediates), NOT an instance of this
+//                           project's own general 8x8 per-block dispatch-grid
+//                           convention used everywhere else in this file (see
+//                           twoLiteralPattern16x16() below for the exact
+//                           CHOSEN/DERIVED bit-order and dword-byte-order
+//                           choices the spec text itself leaves unstated, and
+//                           this task's own report for the still-OPEN
+//                           question this does NOT resolve: how the OUTER
+//                           per-row/per-column dispatch loop,
+//                           frame_decoder.h's decodePlaneRasterOrder(), is
+//                           meant to step its own row/col position after one
+//                           of these - spec text confirms the case body's OWN
+//                           16x16 output shape, not the calling loop's
+//                           cell-advance behaviour, which stays a genuine gap,
+//                           flagged rather than invented).
 //   Primary 1, sub 0      - "Giant1": Sec5.3a names this the run-length
 //                           literal/replicate engine, 4-bit-nibble-selected
 //                           through the now-FULLY-DUMPED 64-byte scan-order
@@ -311,20 +329,20 @@
 //                           0x1003c140 tables). Without that table, decoding
 //                           a real AC coefficient VALUE from bits would mean
 //                           inventing a tree, not reading one off the page -
-//                           and because the AC decode's own real bit-cost
-//                           is only known for ONE live-traced example (17
-//                           bits for one specific block, Sec5.3i/Sec5.3h),
-//                           not as a general formula, continuing to read the
-//                           quant-row nibble or anything past the AC decode
-//                           would silently desync the bitstream for every
-//                           later block. decodeOneBlock() below therefore
-//                           implements exactly as far as Sec5.3i gives a
-//                           bit-position-safe read for - the bound check and
-//                           the 16-bit DC literal (recorded in
-//                           BlockRecord::dcLiteral) - then reports OpenHook
-//                           for the AC/IDCT remainder, same discipline as
-//                           TwoLiteralPattern's own "read what's confirmed,
-//                           stop before what isn't" shape below.
+//                           UPDATED 2026-10-10 (Sec5.3j): both gaps CLOSED -
+//                           0x10024eb0's real instruction-level tree-decode
+//                           algorithm and the IDCT's exact bit-exact
+//                           rounding sequence are now implemented
+//                           (ac_tree_decoder.h/idct_butterfly.h) and wired
+//                           in below. The IDCT (Part 1) is bit-exact
+//                           VERIFIED against a real FFmpeg-matched block;
+//                           the tree decoder (Part 2) has NO live bit-exact
+//                           verification available anywhere in the spec
+//                           corpus and required several honestly-flagged
+//                           interpretive judgment calls (see
+//                           ac_tree_decoder.h's own top comment) - its
+//                           real-data bit-cost is therefore NOT confirmed
+//                           the way the IDCT's is.
 //   Primary 4             - Sec5.3b: motion compensation (same unresolved
 //                           motion-vector-encoding gap as primary 2) PLUS a
 //                           Huffman-tree-coded residual add (the tree
@@ -374,13 +392,17 @@
 // INDIVIDUAL case's own remaining data/wiring gap (cited above per case),
 // not an unresolved "which case is which" ambiguity.
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
 
+#include "sr3binkcodec/ac_tree_decoder.h"
 #include "sr3binkcodec/bitstream_reader.h"
 #include "sr3binkcodec/entropy_prestage.h"
+#include "sr3binkcodec/entropy_prestage_tables.h"
+#include "sr3binkcodec/idct_butterfly.h"
 #include "sr3binkcodec/planar_buffer.h"
 #include "sr3luahost/open_state.h"
 
@@ -432,13 +454,18 @@ enum class Case1SubType : uint8_t {
     Giant1RleUpsample0 = 0,  // OPEN: see Primary3/Giant1FullResTwin's citation above - Sec5.3i:
                              // LOWER CONFIDENCE, by-analogy-only, zero live occurrences in 20 sampled frames
     SkipFlag1 = 1,           // Sec5.3i: real mechanism is an earlier flag-bit gate, not this value - see above
-    DcAcIdctEngine2 = 2,     // Sec5.3i: DC literal + bound check now READ (see decodeOneBlock); AC tree
-                             // decode (0x10024eb0's own untranscribed dispatch table) + IDCT stay OPEN
+    DcAcIdctEngine2 = 2,     // Sec5.3i/Sec5.3j: DC literal + bound check, AC tree decode (0x10024eb0), inline
+                             // quant nibble, and the bit-exact IDCT are ALL implemented now (see decodeOneBlock) -
+                             // see ac_tree_decoder.h's own top comment for the honestly-flagged judgment calls
+                             // the tree decoder still carries (no live bit-exact verification for Part 2)
     FlatDcFill = 3,          // Sec5.3i: CONFIRMED real footprint is 16x16 (64 dwords) - this file still
                              // writes 8x8 pending the block-grid reconciliation noted above
     SkipFlag4 = 4,           // Sec5.3i: same early flag-bit gate as sub 1 - see above
-    TwoLiteralPattern = 5,   // OPEN: control-byte spatial mapping not given. Sec5.3i: CONFIRMED real
-                             // footprint is 16x16, same grid caveat as sub 3 above
+    TwoLiteralPattern = 5,   // CONFIRMED (2026-10-09 spec sync, feature/bink-pixel-accuracy-oracle task):
+                             // see twoLiteralPattern16x16() below - produces a block-type-specific 16x16-pixel
+                             // output, not this file's usual 8x8 unit (CHOSEN reconciliation with the outer
+                             // 8x8 dispatch grid flagged at that function's own doc comment; same grid caveat
+                             // Sec5.3i raises for sub 3 above)
     RawCopyDualRowDup6 = 6,  // CONFIRMED (Sec5.3b): see rawCopyDualRowDuplicate8x8() below. Sec5.3i does
                              // NOT include this sub-case in its own 16x16-footprint finding (explicitly
                              // "not measured this pass" for sub 6's output size) - footprint left at 8x8,
@@ -526,6 +553,26 @@ struct BlockRecord {
 // file's own DERIVED simplification, flagged here rather than silently
 // assumed identical to block-copy's independently-confirmed size.
 constexpr int kBlockSize = 8;
+
+// Unpacks one 256-byte row (64 little-endian int32 entries,
+// quant_byte_offset(k)=4k) of kIntraQuantCompiled/kInterQuantCompiled
+// (entropy_prestage_tables.h, spec-bink-static-tables.md) into a plain
+// int32 array idct_butterfly.h's idctColumnPass() can consume directly.
+// `nibble` is the 4-bit quant-row selector (0-15) read inline during
+// Case1SubType::DcAcIdctEngine2's own decode (Sec5.3i: "an inline 4-bit
+// quant-row nibble"). Byte-by-byte LE reconstruction (not a reinterpret
+// of the raw array) to stay portable/alignment-safe.
+inline std::array<int32_t, 64> unpackQuantRow(const std::array<uint8_t, 4096>& table, uint32_t nibble) {
+    std::array<int32_t, 64> row{};
+    const size_t base = static_cast<size_t>(nibble & 0xF) * 256;
+    for (int k = 0; k < 64; ++k) {
+        const size_t off = base + static_cast<size_t>(k) * 4;
+        uint32_t v = static_cast<uint32_t>(table[off]) | (static_cast<uint32_t>(table[off + 1]) << 8) |
+                     (static_cast<uint32_t>(table[off + 2]) << 16) | (static_cast<uint32_t>(table[off + 3]) << 24);
+        row[static_cast<size_t>(k)] = static_cast<int32_t>(v);
+    }
+    return row;
+}
 
 [[noreturn]] inline void throwGiantEngineOpen(const char* which) {
     throw sr3luahost::OpenStateError(
@@ -618,6 +665,98 @@ inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int 
             for (int i = 0; i < 4; ++i) {
                 dest.at(x + i, y) = bytes[i];
                 dest.at(x + i, y + 1) = bytes[i];
+            }
+        }
+    }
+    return true;
+}
+
+// spec-bink-codec.md Sec5.3's extended TwoLiteralPattern paragraph ("CONFIRMED
+// by live execution against a real block, 2026-10-09"): the 2-bit blend-mask
+// pair at `0x1003c130` (TABLE1) / `0x1003c200` (TABLE2), `TABLE2[i] == ~TABLE1[i]`
+// exactly for every entry - transcribed byte-for-byte from that section's own
+// table.
+constexpr uint32_t kTwoLiteralBlendTable1[4] = {0x00000000u, 0x0000FFFFu, 0xFFFF0000u, 0xFFFFFFFFu};
+constexpr uint32_t kTwoLiteralBlendTable2[4] = {0xFFFFFFFFu, 0xFFFF0000u, 0x0000FFFFu, 0x00000000u};
+
+// TwoLiteralPattern (primary=1/secondary=5) payload grammar, spec-bink-
+// codec.md Sec5.3's extended paragraph, CONFIRMED by live execution 2026-10-09:
+// after the 2 literal bytes (already read by the caller, immediately before
+// this function is invoked - see decodeOneBlock() below), the real case body
+// ("tail-jumps into `0x1001b5a3`") consumes EXACTLY 8 further raw control
+// bytes (byte-aligned, no bit-packing - same convention as every other
+// pattern-control-byte read in this codec, readAlignedByte()). Each control
+// byte is split into 4 two-bit fields; each field's value indexes
+// kTwoLiteralBlendTable1/2 above, producing one blended dword
+// (`TABLE1[idx] & literal2_broadcast` OR'd with `TABLE2[idx] & literal1_broadcast`)
+// that is written to TWO destination rows (current row + one stride below)
+// simultaneously - "4 fields x 4 pixels/field = 16 columns, 8 control bytes x
+// 2 rows/byte = 16 rows", a FIXED 16x16-pixel output block, confirmed
+// block-type-specific (hardcoded immediates), NOT an instance of this
+// project's own general 8x8 dispatch-grid unit used by every other case in
+// this file.
+//
+// Two CHOSEN/DERIVED choices the spec text itself does not pin down at the
+// bit level (flagged honestly, not independently confirmed facts):
+//   1. Two-bit field extraction order within each control byte: this
+//      function reads LSB-first (`idx = (byte >> (field*2)) & 3`), matching
+//      this codec's own general LSB-first bit-reading convention
+//      (bitstream_reader.h's own confirmed accumulator shape) and the
+//      existing idx-selection formula spec-bink-codec.md Sec5.3a's own table
+//      section already shows for this exact table pair ("idx = (control_byte
+//      >> shift) & 3").
+//   2. Field-to-column and dword-byte-to-pixel order: field 0 -> leftmost
+//      4-pixel group (columns x0..x0+3), field 3 -> rightmost (x0+12..x0+15);
+//      within one field's blended dword, byte i (0=LSB) -> column
+//      fieldBase+i. This reproduces each table entry's own documented shape
+//      exactly as a 2-colour horizontal split (idx 0 = solid literal1, idx 3
+//      = solid literal2, idx 1/2 = half-literal2/half-literal1 and its
+//      mirror) - the same "this project's own raster convention, flagged
+//      rather than left OPEN" tradeoff rawCopyDualRowDuplicate8x8() above
+//      already makes for its own traversal-order gap.
+//
+// CHOSEN reconciliation with this project's own 8x8 per-block dispatch grid
+// (frame_decoder.h's decodePlaneRasterOrder(), NOT settled by spec text -
+// see this task's own report / block_dispatch.h's top comment for the exact
+// still-OPEN question this leaves): this function writes the full 16x16
+// output anchored at the dispatching block's own (blockCol*8, blockRow*8)
+// pixel origin, clipped to `dest`'s real width/height (never writing out of
+// bounds near a plane edge). It does NOT alter the OUTER loop's own
+// row/column stepping - the loop still advances exactly one 8x8 cell at a
+// time and will attempt a fresh dispatch read at (blockRow, blockCol+1) next,
+// which may re-dispatch (and partially overwrite) pixels this call just
+// wrote. Spec text confirms the case body's OWN output shape, not whether
+// the real game's per-row loop skips the 3 additional 8x8 cells a 16x16
+// output already covers - inventing that loop-skip behaviour here would be
+// exactly the kind of invented fix this project's "no invented fixes" policy
+// forbids, so it is left as-is and flagged rather than guessed. (Neither real
+// golden fixture this project's existing tests use hits this case today -
+// see this task's own report - so this gap does not affect any current
+// regression.)
+inline bool twoLiteralPattern16x16(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol, uint8_t literal1,
+                                    uint8_t literal2) {
+    const int x0 = blockCol * kBlockSize;
+    const int y0 = blockRow * kBlockSize;
+    const uint32_t literal1Broadcast = static_cast<uint32_t>(literal1) * 0x01010101u;
+    const uint32_t literal2Broadcast = static_cast<uint32_t>(literal2) * 0x01010101u;
+    constexpr int kOutputSize = 16;       // CONFIRMED fixed size, see this function's own doc comment
+    constexpr int kRowPairs = kOutputSize / 2;  // 8 control bytes
+    constexpr int kFieldsPerByte = 4;
+    constexpr int kPixelsPerField = 4;
+    for (int rowPair = 0; rowPair < kRowPairs; ++rowPair) {
+        const uint8_t controlByte = br.readAlignedByte();
+        if (br.ranOutOfData()) return false;
+        const int y = y0 + rowPair * 2;
+        for (int field = 0; field < kFieldsPerByte; ++field) {
+            const uint32_t idx = (controlByte >> (field * 2)) & 3u;
+            const uint32_t blended =
+                (kTwoLiteralBlendTable1[idx] & literal2Broadcast) | (kTwoLiteralBlendTable2[idx] & literal1Broadcast);
+            const int xBase = x0 + field * kPixelsPerField;
+            for (int i = 0; i < kPixelsPerField; ++i) {
+                const uint8_t pixel = static_cast<uint8_t>((blended >> (8 * i)) & 0xFFu);
+                const int x = xBase + i;
+                if (x < dest.width && y < dest.height) dest.at(x, y) = pixel;
+                if (x < dest.width && (y + 1) < dest.height) dest.at(x, y + 1) = pixel;
             }
         }
     }
@@ -758,18 +897,23 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             return rec;
         }
         case Case1SubType::TwoLiteralPattern: {
-            // CONFIRMED up to here: "reads two literal bytes, each
-            // broadcast and stored" - then tail-jumps into the largest
-            // bitstream engine (OPEN). Read the two literals so the
-            // bitstream position this far is honestly accounted for, but
-            // do not guess the blend pattern that follows.
-            (void)br.readAlignedByte();
-            (void)br.readAlignedByte();
+            // CONFIRMED (2026-10-09 spec sync, see twoLiteralPattern16x16()'s
+            // own doc comment for the full grammar and the CHOSEN/DERIVED
+            // bit-order choices): "reads two literal bytes, each broadcast
+            // and stored", then the real case body consumes exactly 8 more
+            // raw control bytes producing a fixed 16x16-pixel output block.
+            const uint8_t literal1 = br.readAlignedByte();
+            const uint8_t literal2 = br.readAlignedByte();
             if (br.ranOutOfData()) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
             }
-            rec.outcome = BlockOutcome::OpenHook;
+            const bool ok = twoLiteralPattern16x16(br, dest, blockRow, blockCol, literal1, literal2);
+            if (!ok) {
+                rec.outcome = BlockOutcome::SourceExhausted;
+                return rec;
+            }
+            rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         }
         case Case1SubType::RawCopyDualRowDup6: {
@@ -801,29 +945,61 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // descriptor-L bound check (>=16 bytes remaining in the shared
             // literal-byte stream), then a plain 16-bit little-endian DC
             // literal word read directly off that stream (zero bit-packing
-            // - `cx = word[eax]; eax += 2`). Both are bit-position-safe to
-            // model here with this file's own simplified single-cursor `br`
-            // (this project's existing convention for every other literal
-            // read in this file, e.g. FlatDcFill/TwoLiteralPattern above -
-            // not a new simplification). What follows (`call 0x10024eb0`
-            // for 63 AC coefficients, then the quant-row nibble, then
-            // `call 0x100247d0`) is NOT safe to continue past: the AC
-            // decode's own bit-level dispatch table/seed bytes were never
-            // transcribed (see this sub-case's own top-of-file comment), so
-            // its real bit-cost is unknown in general (only one live
-            // worked example's cost - 17 bits - is on record, not a
-            // formula) - reading anything past this point would silently
-            // desync every later block's dispatch on an invented
-            // bit-count. Stops here, honestly, same discipline as
-            // TwoLiteralPattern above.
+            // - `cx = word[eax]; eax += 2`).
+            //
+            // UPDATED 2026-10-10 (spec-bink-codec.md Sec5.3j): the two
+            // remaining gaps this comment used to cite - 0x10024eb0's own
+            // tree-decode algorithm, and the IDCT butterfly's exact
+            // rounding sequence - are now CLOSED (Sec5.3j Parts 1/2,
+            // ac_tree_decoder.h/idct_butterfly.h). This case now reads the
+            // DC literal, decodes the AC-coefficient tree
+            // (decodeAcCoefficientTree(), see that header's own top comment
+            // for the real algorithm AND the honestly-flagged judgment
+            // calls Part 2's own lack of a bit-exact worked example forced
+            // - unlike the IDCT below, the tree decoder's bit-cost/output
+            // is NOT independently verified against live data), reads the
+            // inline 4-bit quant-row nibble (Sec5.3i), and runs the real
+            // bit-exact IDCT (Sec5.3j Part 1, CONFIRMED) via 0x100247d0's
+            // shared butterfly network to produce real pixels. Uses
+            // kIntraQuantCompiled (this sub-case reads new intra content,
+            // not a motion-compensated residual - no reference-byte-add
+            // step is traced anywhere in Sec5.3i/Sec5.3j for sub=2).
             const uint8_t lo = br.readAlignedByte();
             const uint8_t hi = br.readAlignedByte();
             if (br.ranOutOfData()) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
             }
-            rec.dcLiteral = static_cast<uint16_t>(lo | (static_cast<uint16_t>(hi) << 8));
-            rec.outcome = BlockOutcome::OpenHook;
+            const uint16_t dcLiteral = static_cast<uint16_t>(lo | (static_cast<uint16_t>(hi) << 8));
+            rec.dcLiteral = dcLiteral;
+
+            const AcTreeDecodeResult ac = decodeAcCoefficientTree(br);
+            if (br.ranOutOfData()) {
+                rec.outcome = BlockOutcome::SourceExhausted;
+                return rec;
+            }
+
+            const uint32_t quantNibble = br.readBits(4);  // Sec5.3i: "an inline 4-bit quant-row nibble"
+            if (br.ranOutOfData()) {
+                rec.outcome = BlockOutcome::SourceExhausted;
+                return rec;
+            }
+
+            std::array<int16_t, 64> coeffs = ac.coeffs;
+            coeffs[0] = static_cast<int16_t>(dcLiteral);  // k=0 = DC, struct_byte_offset(0)=0
+
+            const std::array<int32_t, 64> quantRow = unpackQuantRow(kIntraQuantCompiled, quantNibble);
+            uint8_t pixels[64];
+            idctBlock8x8(coeffs.data(), quantRow.data(), pixels);
+
+            const int x0 = blockCol * kBlockSize;
+            const int y0 = blockRow * kBlockSize;
+            for (int y = 0; y < kBlockSize; ++y) {
+                for (int x = 0; x < kBlockSize; ++x) {
+                    dest.at(x0 + x, y0 + y) = pixels[y * kBlockSize + x];
+                }
+            }
+            rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         }
     }

@@ -3154,6 +3154,23 @@ if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(real_bink_test_vector_validation_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# Dedicated real-data bit-exact check for idct_butterfly.h (spec-bink-
+# codec.md Sec5.3j Part 1, 2026-10-10) against the SAME real DC/AC
+# coefficient struct + independently-FFmpeg-verified post-IDCT block
+# Sec5.3j's own "Bit-exact verification" paragraph cites - see
+# tests/real_bink_idct_test.cpp's own top comment. Same gitignored/
+# local-only fixture directory and SKIPPED (exit 77) convention as every
+# other real_bink_*_test above.
+add_executable(real_bink_idct_tests tests/real_bink_idct_test.cpp)
+target_include_directories(real_bink_idct_tests PRIVATE include tests)
+target_link_libraries(real_bink_idct_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_idct_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_idct_test COMMAND real_bink_idct_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_idct_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # Targeted real-data confirmation for the merge-group bit-consumption fix
 # (commit 84820a4, fix/bink-merge-group-bit-consumption branch): unlike
 # real_bink_test_vector_validation_tests above (which drives the FULL
@@ -3206,6 +3223,15 @@ if(WIN32)
     add_executable(bink_frame0_decode tools/bink_frame0_decode.cpp)
     target_include_directories(bink_frame0_decode PRIVATE include)
     target_link_libraries(bink_frame0_decode PRIVATE sr3render sr3binkcodec)
+
+    # fix/bink-pixel-accuracy-oracle task: same convention, but dumps RAW Y
+    # plane bytes as a literal grayscale PNG (no colorspace rescale, no
+    # magenta "unreconstructed" tint) for an honest per-pixel oracle
+    # comparison against an independent decoder - see that tool's own top
+    # comment.
+    add_executable(bink_y_plane_oracle_dump tools/bink_y_plane_oracle_dump.cpp)
+    target_include_directories(bink_y_plane_oracle_dump PRIVATE include)
+    target_link_libraries(bink_y_plane_oracle_dump PRIVATE sr3render sr3binkcodec)
 endif()
 
 # libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.

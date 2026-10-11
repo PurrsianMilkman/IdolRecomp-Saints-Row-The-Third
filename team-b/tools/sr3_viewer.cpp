@@ -15432,6 +15432,55 @@ size_t NearestLaneGraphSegmentStart(const sr3airuntime::TrafficLaneGraph& graph,
     return best;
 }
 
+// Resolves the "nearest near-field vehicle ahead of `selfId`/`selfPos`"
+// stand-in - purrsian-52's own directed resolution for Sec18.6a's
+// unresolved overtake-gate "second record" (sr3airuntime::OvertakeCandidate,
+// see that struct's own doc comment in traffic_lane_follower.h). Factored
+// out to a named, reusable helper (2026-10-10, traffic-overtake-passside-
+// flag task, after a relayed note from the orchestrator about the new
+// spec-ai-runtime.md Sec18.6 finding below) rather than left inline in one
+// call site, so a FUTURE port of Sec18.6's own separate `0xe`/`0x10`-state
+// steering-write path (0x00b2bbc0, which ALSO resolves a "second vehicle" -
+// entity+0xcc0/+0xcc4, Sec18.6's own HIGH-CONFIDENCE "lead/target vehicle",
+// not independently proven to be the same object as Sec18.6a's own second
+// record) can reuse this SAME stand-in resolution if/when that separate
+// path is ever implemented in this codebase, rather than duplicating it.
+// Stated plainly: this is a code-level sharing opportunity only - Sec18.6a's
+// `0x00b47c80`/`0x00b47f10` second records and Sec18.6's `0x00b2bbc0`
+// second handle pair are NOT proven by either spec section to be the same
+// underlying engine object (Sec18.6a: "not proven to be the same object"
+// even between 0x00b47c80's own ECX and 0x00b47f10's own EDI slots;
+// Sec18.6: its own entity+0xcc0/+0xcc4 resolver, 0x004d7f30, was "not
+// opened" either) - sharing this clean-room HELPER is a software-engineering
+// convenience for this project's own stand-in, not a claim that the real
+// engine shares one resolver across both.
+//
+// "Ahead" is tested against `selfHeadingRad` (the caller's own current
+// heading, possibly one tick stale - see the call site's own comment).
+// Returns std::nullopt if no other live vehicle qualifies.
+std::optional<sr3airuntime::OvertakeCandidate> ResolveNearestNearFieldVehicleAhead(
+    const std::vector<sr3airuntime::NearFieldVehicle>& liveVehicles, uint64_t selfId, double selfX, double selfZ,
+    double selfHeadingRad) {
+    const double fwdX = std::cos(selfHeadingRad);
+    const double fwdZ = std::sin(selfHeadingRad);
+    std::optional<sr3airuntime::OvertakeCandidate> best;
+    double bestDist = -1.0;
+    for (const auto& other : liveVehicles) {
+        if (other.id == selfId) continue;
+        const double odx = other.pos.x - selfX;
+        const double odz = other.pos.z - selfZ;
+        const double odist = std::sqrt(odx * odx + odz * odz);
+        if (odist < 1e-6) continue;
+        const double aheadDot = (fwdX * odx + fwdZ * odz) / odist;
+        if (aheadDot <= 0.0) continue;  // not ahead - not a candidate
+        if (bestDist < 0.0 || odist < bestDist) {
+            bestDist = odist;
+            best = sr3airuntime::OvertakeCandidate{other.pos.x, other.pos.z};
+        }
+    }
+    return best;
+}
+
 // Builds this demo's own VehicleTuning via the same real sr3xtbl/
 // sr3vehicleinfo reader path BuildDriveDemoVehicleTuning() (above) uses -
 // but copying tests/synthetic_physics_vehicle_substeps_test.cpp's own
@@ -21214,6 +21263,13 @@ int runPlaytest(int argc, char** argv) {
     sr3airuntime::TrafficLaneGraph trafficLaneGraph(trafficLaneRecord);
     std::unordered_map<uint64_t, sr3airuntime::LaneFollowState> nearFieldVehicleLaneState;
     std::unordered_map<uint64_t, double> nearFieldVehicleHeading;
+    // Sec18.6a overtake-gate task (2026-10-10): this vehicle's own last-
+    // computed speed (world units/sec), fed back into StepLaneFollow()'s
+    // own closing-speed gate test next tick (file header item 5a of
+    // sr3airuntime/traffic_lane_follower.h - CHOSEN one-body simplification,
+    // no 2nd-vehicle velocity is tracked). Same side-car-map convention as
+    // nearFieldVehicleHeading just above.
+    std::unordered_map<uint64_t, double> nearFieldVehicleSpeed;
     // CHOSEN (not spec-stated - Sec18 describes steady-state following
     // only, never a kinematic model for ambient traffic that has no own
     // per-instance Havok body): near-field ambient vehicles do not each get
@@ -21860,6 +21916,7 @@ int runPlaytest(int argc, char** argv) {
                         ++it;
                     } else {
                         nearFieldVehicleHeading.erase(it->first);
+                        nearFieldVehicleSpeed.erase(it->first);
                         it = nearFieldVehicleLaneState.erase(it);
                     }
                 }
@@ -21901,6 +21958,7 @@ int runPlaytest(int argc, char** argv) {
                               .emplace(nfv.id, sr3airuntime::LaneFollowState::Begin(trafficLaneGraph, startSeg))
                               .first;
                 nearFieldVehicleHeading[nfv.id] = 0.0;
+                nearFieldVehicleSpeed[nfv.id] = 0.0;
                 if (startSeg < trafficLaneGraph.segmentCount() &&
                     !trafficLaneGraph.segment(startSeg).polyline.empty()) {
                     const auto& p0 = trafficLaneGraph.segment(startSeg).polyline.front();
@@ -21909,14 +21967,38 @@ int runPlaytest(int argc, char** argv) {
                 }
             }
             double& heading = nearFieldVehicleHeading[nfv.id];
-            sr3airuntime::LaneFollowCommand cmd =
-                sr3airuntime::StepLaneFollow(trafficLaneGraph, stateIt->second, nfv.pos.x, nfv.pos.z, heading);
+            double& trackedSpeedMs = nearFieldVehicleSpeed[nfv.id];  // default-constructed 0.0 on first use
+
+            // Sec18.6a overtake-gate task (2026-10-10): resolve the "nearest
+            // near-field vehicle AHEAD of this one" stand-in for Sec18.6a's
+            // own unresolved "second record" via the shared
+            // ResolveNearestNearFieldVehicleAhead() helper above (factored
+            // out, not left inline, so a future port of Sec18.6's own
+            // separate 0xe/0x10-state steering-write path can reuse the same
+            // stand-in resolution - see that helper's own doc comment for
+            // why this is a code-sharing convenience only, not a claim the
+            // two spec sections name the same engine object). O(live) per
+            // vehicle per frame across the whole near-field population -
+            // acceptable at this population's own small live-cap sizes (same
+            // "cheap enough at this scale" reasoning the rest of this
+            // near-field block already relies on). "Ahead" is tested against
+            // THIS tick's own not-yet-updated heading (the previous tick's
+            // final heading) - a one-tick staleness, same acceptable lag
+            // the cached-target re-query mechanism elsewhere in this file
+            // already tolerates.
+            std::optional<sr3airuntime::OvertakeCandidate> overtakeCandidate =
+                ResolveNearestNearFieldVehicleAhead(nearFieldLive, nfv.id, nfv.pos.x, nfv.pos.z, heading);
+
+            sr3airuntime::LaneFollowCommand cmd = sr3airuntime::StepLaneFollow(
+                trafficLaneGraph, stateIt->second, nfv.pos.x, nfv.pos.z, heading, sr3airuntime::LaneFollowConfig{},
+                trackedSpeedMs, overtakeCandidate);
             // CHOSEN kinematic integration - see this block's own
             // declaration comment above (kNearFieldVehicleTurnRateRadPerSec/
             // kNearFieldVehicleCruiseSpeedMs) for why no per-vehicle Havok
             // body exists to write cmd.steer/throttle/brake into instead.
             heading += cmd.steer * kNearFieldVehicleTurnRateRadPerSec * static_cast<double>(dt);
             const double speedMs = cmd.throttle > 0.0 ? kNearFieldVehicleCruiseSpeedMs * cmd.throttle : 0.0;
+            trackedSpeedMs = speedMs;  // fed into next tick's own overtake closing-speed gate test
             nfv.pos.x += std::cos(heading) * speedMs * static_cast<double>(dt);
             nfv.pos.z += std::sin(heading) * speedMs * static_cast<double>(dt);
         }

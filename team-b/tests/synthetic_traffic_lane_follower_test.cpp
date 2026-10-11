@@ -11,6 +11,14 @@
 // throttle with a full-lock +-1.0 steer magnitude (Sec18.6) - see that
 // header's own file comment for the full CONFIRMED-vs-CHOSEN breakdown.
 //
+// EXTENDED 2026-10-10 (traffic-overtake-passside-flag task, Sec18.6a): the
+// steer-sign tests below now exercise the real overtake-gated
+// state.passSideFlag (replacing the prior cross-product stand-in) - see
+// testStepLaneFollowDefaultPassSideFlagWithNoCandidate/
+// OvertakeGatePassesAndSetsFlag/OvertakeGateFailureKeepsLastValue below and
+// the header's own file header item 5a for the full CONFIRMED-vs-CHOSEN
+// breakdown of the new gate.
+//
 // Fixtures go through sr3zone::TrafficGraph::parseAt() (via
 // BuildLaneGraphFixture() below) rather than constructing
 // sr3zone::TrafficRecord field-by-field - unchanged convention from the
@@ -397,6 +405,103 @@ void testStepLaneFollowCachedQueryThrottle() {
     CHECK(!second.requeried);      // well inside the re-query distance threshold - cache still fresh
 }
 
+// Sec18.6a overtake-gate task (2026-10-10): with no overtakeCandidate given
+// at all, the gate can never pass - state.passSideFlag must stay at its
+// CHOSEN default (false, file header item 5a) across repeated ticks, and
+// steer must follow the CHOSEN false->+1.0 mapping.
+void testStepLaneFollowDefaultPassSideFlagWithNoCandidate() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    CHECK(!state.passSideFlag);  // CHOSEN default
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0);
+    CHECK(!state.passSideFlag);  // no candidate -> gate never ran -> unchanged
+    CHECK(cmd.steer == 1.0);     // false -> +1.0, file header item 5a mapping
+
+    // A second tick, still no candidate - flag must still be untouched.
+    LaneFollowCommand second = StepLaneFollow(graph, state, 0.1, 0.0, 0.0);
+    CHECK(!state.passSideFlag);
+    CHECK(second.steer == 1.0);
+}
+
+// A candidate that passes all three gate components (close, ahead, and this
+// vehicle moving fast enough to count as "closing") must flip
+// state.passSideFlag to match Sec18.6a's own dot-product sign test, and the
+// steer sign must follow it.
+void testStepLaneFollowOvertakeGatePassesAndSetsFlag() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Heading 0 (facing +X). Candidate at (4, 0, 1): close (dist ~4.12,
+    // under kOvertakeGateMaxDistance), and within kOvertakeGateAlignmentCosine
+    // of straight ahead (aheadDot = 4/4.12 = 0.97 >= cos(20deg)) - the gate
+    // passes. Lateral axis (heading rotated +90deg) is (0,1) in (x,z);
+    // sideDot = 1*1 = 1 >= 0, so the real write (sideDot < 0.0) should
+    // leave passSideFlag FALSE.
+    OvertakeCandidate sameSide{4.0, 1.0};
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
+                                            /*vehicleSpeedMs=*/5.0, sameSide);
+    CHECK(!cmd.stuck);
+    CHECK(!state.passSideFlag);
+    CHECK(cmd.steer == 1.0);
+
+    // A candidate offset to -Z instead (4, 0, -1): sideDot = 1*(-1) = -1 < 0,
+    // flips the flag true, and steer must follow it to -1.0.
+    LaneFollowState state2 = LaneFollowState::Begin(graph, 0);
+    OvertakeCandidate otherSide{4.0, -1.0};
+    LaneFollowCommand cmd2 = StepLaneFollow(graph, state2, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
+                                             /*vehicleSpeedMs=*/5.0, otherSide);
+    CHECK(!cmd2.stuck);
+    CHECK(state2.passSideFlag);
+    CHECK(cmd2.steer == -1.0);
+}
+
+// If the gate FAILS (candidate too far away), the flag must keep whatever
+// value it was last set to - NOT reset to the CHOSEN default and NOT get
+// overwritten by the far candidate's own dot-product sign. Sec18.6a's own
+// text: "there is no clear-every-frame... path."
+void testStepLaneFollowOvertakeGateFailureKeepsLastValue() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // First, pass the gate with an "otherSide" candidate to set the flag true.
+    OvertakeCandidate otherSide{4.0, -1.0};
+    StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/5.0, otherSide);
+    CHECK(state.passSideFlag);
+
+    // Now a candidate far outside kOvertakeGateMaxDistance, on the OPPOSITE
+    // side (sideDot > 0, which would set the flag FALSE if the gate ran) -
+    // the gate's own distance test must fail, so the flag must stay true.
+    OvertakeCandidate farAway{1000.0, 1000.0};
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/5.0,
+                                            farAway);
+    CHECK(state.passSideFlag);  // untouched by the failed-gate tick
+    CHECK(cmd.steer == -1.0);
+
+    // Also: a nearby, ahead candidate but with this vehicle's own speed
+    // below the closing-speed gate - must also fail to overwrite.
+    OvertakeCandidate nearSameSide{4.0, 1.0};  // would set FALSE if the gate ran
+    LaneFollowCommand cmd2 = StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/0.0,
+                                             nearSameSide);
+    CHECK(state.passSideFlag);  // closing-speed gate failed - still untouched
+    CHECK(cmd2.steer == -1.0);
+}
+
 void run(const char* name, void (*fn)()) {
     try {
         fn();
@@ -423,6 +528,11 @@ int main() {
     run("testStepLaneFollowFullLockSteerAndAlignmentGate", testStepLaneFollowFullLockSteerAndAlignmentGate);
     run("testStepLaneFollowThrottleZeroWhenMisaligned", testStepLaneFollowThrottleZeroWhenMisaligned);
     run("testStepLaneFollowCachedQueryThrottle", testStepLaneFollowCachedQueryThrottle);
+    run("testStepLaneFollowDefaultPassSideFlagWithNoCandidate",
+        testStepLaneFollowDefaultPassSideFlagWithNoCandidate);
+    run("testStepLaneFollowOvertakeGatePassesAndSetsFlag", testStepLaneFollowOvertakeGatePassesAndSetsFlag);
+    run("testStepLaneFollowOvertakeGateFailureKeepsLastValue",
+        testStepLaneFollowOvertakeGateFailureKeepsLastValue);
 
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed.\n";

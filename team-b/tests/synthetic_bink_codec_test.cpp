@@ -221,24 +221,85 @@ void testFlatDcFillBroadcastsLiteral() {
     CHECK(allLiteral);
 }
 
-void testTwoLiteralPatternIsOpenHook() {
-    uint32_t subRaw = 8;  // sub = 8 - 3 = 5 -> TwoLiteralPattern
-    std::vector<uint8_t> bits = buildBlockBytes(1, &subRaw, {0x11, 0x22});
+void testTwoLiteralPatternReconstructs16x16Block() {
+    // sub = 8 - 3 = 5 -> TwoLiteralPattern. spec-bink-codec.md Sec5.3's
+    // extended paragraph (CONFIRMED by live execution, 2026-10-09): 2 literal
+    // bytes, then exactly 8 raw control bytes, each giving 4 two-bit fields
+    // selecting kTwoLiteralBlendTable1/2 - producing a fixed 16x16-pixel
+    // block (see twoLiteralPattern16x16()'s own doc comment for the full
+    // grammar and this test's hand-computed expectations).
+    uint32_t subRaw = 8;
+    const uint8_t literal1 = 0x10;
+    const uint8_t literal2 = 0xF0;
+    // 8 control bytes: byte k has its 4 two-bit fields set to (k%4, (k+1)%4,
+    // (k+2)%4, (k+3)%4) low-to-high so every idx value (0-3) appears at
+    // least once across the block, exercising all 4 table entries.
+    std::initializer_list<uint8_t> controlBytes = {
+        0b11100100,  // fields (LSB-first 2 bits each): 0,1,2,3
+        0b00011110,  // fields: 2,3,0,1
+        0b01001011,  // fields: 3,2,1,0
+        0b10110001,  // fields: 1,0,3,2
+        0b11100100, 0b00011110, 0b01001011, 0b10110001,
+    };
+    // NOT buildBlockBytes() here - its own bytes() pads to 4 bytes minimum,
+    // which would insert a fake padding byte BEFORE this test's own 8 real
+    // control bytes (3 real bytes so far: dispatch nibbles + literal1, so
+    // padToAtLeast=4 would add exactly one bogus byte right where control
+    // byte 0 needs to be) - same reasoning testRawCopyDualRowDuplicateSub6
+    // above already documents for its own 33-real-byte case. Build the whole
+    // 11-real-byte sequence (1 dispatch byte + 2 literals + 8 control bytes)
+    // directly via BitPacker instead, padding only past the real content.
+    BitPacker packer;
+    packer.appendBits(1u, 4);
+    packer.appendBits(subRaw, 4);
+    packer.appendByte(literal1);
+    packer.appendByte(literal2);
+    for (uint8_t b : controlBytes) packer.appendByte(b);
+    std::vector<uint8_t> bits = packer.bytes(16);
+
     BitstreamReader br(bits.data(), bits.size());
     OwnedPlane dest;
-    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    dest.resize(16, 16, PlanarYuvFrame::kUndecodedSentinel);
     BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0);
-    CHECK(rec.outcome == BlockOutcome::OpenHook);
+    CHECK(rec.outcome == BlockOutcome::Reconstructed);
+    CHECK(rec.primary == PrimaryBlockType::SubDispatch);
+    CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::TwoLiteralPattern);
 
-    // Strict variant must throw OpenStateError naming the gap, not guess.
-    BitstreamReader br2(bits.data(), bits.size());
-    bool threw = false;
-    try {
-        decodeOneBlockStrict(br2, dest.view(), nullptr, 0, 0);
-    } catch (const sr3luahost::OpenStateError&) {
-        threw = true;
+    // Hand-computed expectation, reproducing twoLiteralPattern16x16()'s own
+    // CHOSEN bit-order/column-order exactly: for control byte `controlBytes[rowPair]`,
+    // field = (byte >> (field*2)) & 3 gives idx; the blended dword's byte i
+    // (LSB-first) is the pixel at column field*4+i, written identically to
+    // BOTH rows of the pair.
+    auto expectedPixel = [&](uint8_t idx, int i) -> uint8_t {
+        const uint32_t l1b = static_cast<uint32_t>(literal1) * 0x01010101u;
+        const uint32_t l2b = static_cast<uint32_t>(literal2) * 0x01010101u;
+        const uint32_t blended = (kTwoLiteralBlendTable1[idx] & l2b) | (kTwoLiteralBlendTable2[idx] & l1b);
+        return static_cast<uint8_t>((blended >> (8 * i)) & 0xFFu);
+    };
+    std::vector<uint8_t> controlByteVec(controlBytes.begin(), controlBytes.end());
+    bool allMatch = true;
+    for (int rowPair = 0; rowPair < 8; ++rowPair) {
+        const uint8_t cb = controlByteVec[static_cast<size_t>(rowPair)];
+        for (int field = 0; field < 4; ++field) {
+            const uint8_t idx = static_cast<uint8_t>((cb >> (field * 2)) & 3u);
+            for (int i = 0; i < 4; ++i) {
+                const uint8_t expected = expectedPixel(idx, i);
+                const int x = field * 4 + i;
+                const int y0 = rowPair * 2;
+                allMatch &= (dest.view().at(x, y0) == expected);
+                allMatch &= (dest.view().at(x, y0 + 1) == expected);
+            }
+        }
     }
-    CHECK(threw);
+    CHECK(allMatch);
+
+    // Sanity: idx=0 must be solid literal1, idx=3 must be solid literal2 -
+    // the two "unambiguous" table entries, independent of this test's own
+    // byte-order choice (a wrong byte/field order would still fail THIS
+    // check, since both literal bytes are identical across all 4 lanes of
+    // their own broadcast).
+    CHECK(expectedPixel(0, 0) == literal1 && expectedPixel(0, 3) == literal1);
+    CHECK(expectedPixel(3, 0) == literal2 && expectedPixel(3, 3) == literal2);
 }
 
 void testGiantEngineFamilyIsOpenHook() {
@@ -326,31 +387,50 @@ void testRawCopyDualRowDuplicateSub6() {
     CHECK(allMatch);
 }
 
-void testDcAcIdctEngine2ReadsDcLiteralThenOpenHook() {
+void testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct() {
     // sub = 5 - 3 = 2 -> DcAcIdctEngine2 (spec-bink-codec.md Sec5.3i,
     // 2026-10-10). The 16-bit DC literal is little-endian per the spec's
     // own "cx = word[eax]; eax += 2" - literal bytes {0x4C, 0x02} -> 0x024C.
+    //
+    // UPDATED 2026-10-10 (spec-bink-codec.md Sec5.3j): the AC tree decode
+    // and IDCT are no longer OPEN - this sub-case now produces real pixels.
+    // A generous zero-padded tail follows the DC literal (the AC tree
+    // decoder's own real bit-cost is data-dependent and not independently
+    // verified - see ac_tree_decoder.h's own top comment - so this test
+    // checks the real observable behaviour, not a hand-derived bit count:
+    // the outcome is Reconstructed, the DC literal is read correctly, real
+    // pixel bytes get written, and re-running against the SAME bytes is
+    // deterministic).
     uint32_t subRaw = 5;
-    std::vector<uint8_t> bits = buildBlockBytes(1, &subRaw, {0x4C, 0x02});
+    BitPacker packer;
+    packer.appendBits(1u, 4);
+    packer.appendBits(subRaw, 4);
+    packer.appendByte(0x4C);
+    packer.appendByte(0x02);
+    std::vector<uint8_t> bits = packer.bytes(64);
     BitstreamReader br(bits.data(), bits.size());
     OwnedPlane dest;
     dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
     BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0);
-    CHECK(rec.outcome == BlockOutcome::OpenHook);  // AC tree decode/IDCT stay OPEN - see block_dispatch.h
+    CHECK(rec.outcome == BlockOutcome::Reconstructed);  // Sec5.3j CLOSES the AC tree decode + IDCT gaps
     CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::DcAcIdctEngine2);
     CHECK(rec.dcLiteral.has_value());
     CHECK(*rec.dcLiteral == 0x024C);
 
-    // Strict variant must throw OpenStateError naming the gap, not guess
-    // past the DC literal into the untranscribed AC tree decoder.
-    BitstreamReader br2(bits.data(), bits.size());
-    bool threw = false;
-    try {
-        decodeOneBlockStrict(br2, dest.view(), nullptr, 0, 0);
-    } catch (const sr3luahost::OpenStateError&) {
-        threw = true;
+    bool anyWritten = false;
+    for (size_t i = 0; i < dest.size(); ++i) {
+        if (dest.data()[i] != PlanarYuvFrame::kUndecodedSentinel) anyWritten = true;
     }
-    CHECK(threw);
+    CHECK(anyWritten);
+
+    BitstreamReader br2(bits.data(), bits.size());
+    OwnedPlane dest2;
+    dest2.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec2 = decodeOneBlock(br2, dest2.view(), nullptr, 0, 0);
+    CHECK(rec2.outcome == BlockOutcome::Reconstructed);
+    bool same = true;
+    for (size_t i = 0; i < dest.size(); ++i) same &= (dest.data()[i] == dest2.data()[i]);
+    CHECK(same);
 }
 
 void testGiant1RleUpsample0IsOpenHookWithNoDcLiteral() {
@@ -752,11 +832,11 @@ int main() {
     testBlockCopyWithNoPreviousFrameLeavesSentinel();
     testSkipFlagNoPixelWrite();
     testFlatDcFillBroadcastsLiteral();
-    testTwoLiteralPatternIsOpenHook();
+    testTwoLiteralPatternReconstructs16x16Block();
     testGiantEngineFamilyIsOpenHook();
     testPrimary9BlockCopyReconstructed();
     testRawCopyDualRowDuplicateSub6();
-    testDcAcIdctEngine2ReadsDcLiteralThenOpenHook();
+    testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct();
     testGiant1RleUpsample0IsOpenHookWithNoDcLiteral();
     testOutOfRangeDispatchDetected();
     testRasterOrderStopsAtFirstOpenHook();

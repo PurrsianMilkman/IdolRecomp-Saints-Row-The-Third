@@ -4762,12 +4762,289 @@ traffic-only object. Full chain:
   (§18.3) reads +0x128/+0x12c/+0x130/+0x138/+0xb0/+0x14f off this SAME object.
 ```
 
-**OPEN, narrower than before:** the `0xe`/`0x10`-state sibling path through `0x00b2bbc0` (§18.6's
-other branch out of `0x00b4d070`) was not opened — may be a second, structurally similar write path,
-not fabricated either way. `0x00ad2f80`'s 0-5 vehicle-type/variant selector semantics were not
-decompiled. The exact geometric roles of the two 3-vectors dot-producted in `0x00b47490` (heading
-vs. target-direction) are HIGH CONFIDENCE from context, not independently proven (`0x00abaf10` not
-opened).
+**CONFIRMED (2026-10-10) — the `0xe`/`0x10`-state sibling path through `0x00b2bbc0` is NOT a
+different subsystem: it reaches the SAME write site as the state-`0xd` path, one hop shorter (no
+`0x00b47490` intermediary).** Full body opened (`0x00b2bbc0`-`0x00b2c238`), independently
+re-verified against the live Ghidra server before splicing (confirmed: direct `CALL 0x00a929e0` at
+`0x00b2be43`, pushing the entity's own `+0x8`/`+0xc` handle pair exactly as `0x00b47490` does; and
+`CALL 0x00a92640`/`CALL 0x00a92ab0` pairs at `0x00b2bfb2`/`0x00b2bfcc`, `0x00b2c06f`, and
+`0x00b2c0c0`/`0x00b2c0da`). Mechanism: early-outs on the entity's own `+0xc68` sub-record being null,
+on the same `0x00a1ef50(entity+0x11a4)` gate `0x00b4d070` already checks, or on a braking test
+`0x00ad3820` (not opened) — all three with no dispatcher call. Otherwise it resolves a SECOND
+handle pair at `entity+0xcc0`/`+0xcc4` (HIGH CONFIDENCE: a lead/target vehicle, not independently
+proven — resolver `0x004d7f30` not opened) and gates on a distance-like scalar (`0x0046c9d0`,
+`<=225.0`) plus flag `entity+0xc72` bit `0x20`: when that gate passes, it picks a sign and calls
+`0x00a929e0(entity+0x8, entity+0xc, signFloat)` directly — per this section's own mapping, reaching
+`0x00ae5290(driverInput, signFloat)`, writing **`driverInput+0x130`**; otherwise it falls through a
+shared tail (status-byte checks on `entity+0xc71`/`+0xc6c`/`+0xc70`) that calls
+`0x00a92640(entity+0x8, entity+0xc, 0x3c23d70a)` then `0x00a92ab0(entity+0x8, entity+0xc,
+throttleValue)` — reaching `0x00a90b50`→`0x00ae8fd0(driverInput, value)`, writing
+**`driverInput+0x128`/`+0x12c`** and **`driverInput+0xb0`** — the exact same fields already
+confirmed above. Full chain:
+
+```
+0x00b4d070 (state == 0xe or 0x10, gated on 0x00a1ef50(entity+0x11a4) != 0)
+  -> 0x00b2bbc0 (distance/brake gate against a SECOND handle-pair target at entity+0xcc0/+0xcc4)
+       -> [close/aligned case] 0x00a929e0(entity+0x8, entity+0xc, signFloat)
+            -> 0x00ae5290(driverInput, signFloat)  writes driverInput+0x130
+       -> [far/misaligned case, shared tail] 0x00a92640(entity+0x8, entity+0xc, 0x3c23d70a)
+            -> 0x00a90b50(vehicleEntity, ...) -> 0x00ae8fd0(driverInput, value)
+                 writes driverInput+0x128/+0x12c, +0xb0
+  (same driverInput == *(vehicleEntity + 0x808) as the state-0xd path; one hop from 0x00b2bbc0 to
+  the shared dispatcher, vs. two hops — via 0x00b47490 — on the state-0xd side)
+```
+
+`0x00b2bbc0` itself has 9 call sites spanning many unrelated functions, so it is a generic shared
+"distance/brake-gated steering decision" helper, not traffic-exclusive — consistent with
+`0x00a929e0`/`0x00a92640` already being generic dispatchers (§18.6 above), not a sign this path is
+traffic-specific.
+
+**CONFIRMED (2026-10-10) — `0x00ad3820`, named in this section as a "braking/stop-condition test,"
+is actually a generic entity-status gate, not a literal brake/speed check; its bailout is a hard
+position snap-correction, not a steering/throttle no-op.** Full body opened (`0x00ad3820`-
+`0x00ad3853`, independently re-verified against the live Ghidra server before splicing — matched
+exactly). It returns "continue" (0) only when ALL of: the entity pointer is non-null; `0x008cc4d0`
+(entity) is false (a one-instruction extractor of `+0x3b` bit 0); `0x0091f600`(entity) is false
+(same shape, `+0x3a` bit 0); and `+0x33` bit `0x8` is set. Otherwise it returns "bail" (1). HIGH
+CONFIDENCE (not independently proven at the individual-bit level): with 30 call sites spanning
+dialogue/script triggers, physics, and many unrelated AI functions — not vehicle- or
+traffic-specific — this reads as a generic "entity disabled/suspended/capability-missing" gate
+reused anywhere a caller wants to skip per-tick work on an entity not in a normal active state, not
+a brake-pedal or near-zero-speed test specifically. The concrete meaning of each individual bit
+(`+0x3a` bit 0, `+0x3b` bit 0, `+0x33` bit 3) stays OPEN. When it signals bail, `0x00b2bbc0` calls
+`0x00b2ed40`, passing the same sub-record argument — opened one level: it resolves a second handle-pair object (`param+0x4e0`/
+`+0x4e4`, via `0x00458230`, the SAME liveness/class-capability-table gate pattern
+`0x00a929e0`/`0x00a92640` use), computes a position delta between a cached target point and that
+object's own live position (`+0x40`/`+0x44`/`+0x48`, matching §18.5), blends toward it, then calls
+the resolved object's own vtable slot `+0x40` directly with the corrected position/orientation (a
+transform-setter, not a vehicle-command dispatch) and, if a physics sub-object exists at `+0xe0`,
+zeroes it via two more vtable calls. So the "brake bailout" path snaps the resolved object's
+position/velocity rather than sending any steering/throttle command — no `0x00a929e0`/`0x00a92640`
+call appears anywhere in `0x00b2ed40`'s body. Its own callees (`0x00b1f4d0`/`0x00b2ec20`/
+`0x00da0800`/`0x00da57b0`/`0x00ab98a0`/`0x00c150c0`) were not opened.
+
+**OPEN:** the second handle pair's exact role (`entity+0xcc0`/`+0xcc4`); `0x00ad2f80`'s 0-5
+vehicle-type/variant selector semantics (not decompiled); the exact geometric roles of the two
+3-vectors dot-producted in `0x00b47490` (heading vs. target-direction) are HIGH CONFIDENCE from
+context, not independently proven (`0x00abaf10` not opened).
+
+### 18.6a The lane-side bit itself (`+0xe09` bit 2): setter found — CONFIRMED, dynamically recomputed under an overtake/pass-side gate (2026-10-10)
+
+**CONFIRMED — exactly one instruction pair in the entire binary writes bit 2 of `+0xe09`,
+inside `0x00b47c80`-`0x00b47f03`.** Independently re-verified against the live Ghidra server before
+splicing (confirmed: `0x00b47c80`'s only caller is `0x00b4ad30`, reached via an unconditional direct
+`CALL` at `0x00b4ad67`, immediately following a `TEST AL,AL`/`JZ` on `0x00b47f10`'s return value — the
+masked bit-2 read/write itself sits at `0x00b47dac`-`0x00b47dba`: `XOR AL,[ESI+0xe09]` /
+`AND AL,0x4` / `XOR [ESI+0xe09],AL`). Method (agent's own, re-verified by spot-checking the two central
+functions rather than re-running the full scan myself): a binary-wide raw disp32/literal scan for the
+4-byte pattern encoding offset `0xe09` found 18 genuine code references (plus a handful of unrelated
+matches in non-traffic CRT code and `.rdata`, discarded as false positives). Of those 18, only
+`0x00b47c80` touches bit 2 specifically — the others either only read it (`0x00b47490`, §18.6's own
+reader; `0x00b47730`) or write different bits of the same byte (bit 0/bit 4 at `0x00b4c710`; bit 3 via
+an XOR-toggle at `0x00b4ceb0`; bit 5 at `0x00b4ad30` itself, confirmed directly above the bit-2 call:
+`OR byte ptr [EBX+0xe09],0x20` at `0x00b4ad8f`, a separate case of the same switch, not a second bit-2
+writer).
+
+**CONFIRMED — the write is a standard compiler "assign-bit-from-boolean" idiom, not a flag set once
+and left alone.** The instruction sequence computes
+`new_e09 = old_e09 ^ (((dot < 0.0) ? 4 : 0) ^ old_e09) & 4`, i.e. bit 2 is unconditionally overwritten
+to `1` if a signed dot product is negative, `0` otherwise, every time this code runs. The dot
+product (independently re-read off the disassembly, matching the decompile exactly):
+
+```
+dot = (ESI+0x50) * ((ECX+0x44 + 0.5*halfWidth.y) - (ESI+0x44))
+    + (ESI+0x4c) * ((ECX+0x40 + 0.5*halfWidth.x) - (ESI+0x40))
+    + (ESI+0x54) * ((ECX+0x48 + 0.5*halfWidth.z) - (ESI+0x48))
+```
+
+where `ESI` is the traffic-AI entity record (same record as every other `+0xe0x`/`+0x40` field
+§18.5/§18.6 already document — `ESI+0x40/0x44/0x48` is the entity's own live position, per §18.5), the
+`halfWidth` 3-vector comes from `0x00b47b40` (not independently opened), and `ECX+0x40/0x44/0x48` is a
+position on a second record passed into `0x00b47c80` as its own argument (register-confirmed: `ECX` on
+entry, moved to `EDI` inside the function body) — this second record's identity was NOT resolved.
+`ESI+0x4c/0x50/0x54` is a second 3-vector on the entity, role not independently identified (candidate:
+a lateral/right-axis basis vector, distinct from the `+0x64/0x68/0x6c` orientation row §18.6 names).
+
+**CONFIRMED — the call chain from the known per-vehicle drive tick, `0x00b4d070` (§18.6's own entry
+point), to the setter, via a third sibling call not previously documented in §18.6.** Independently
+re-verified against the live Ghidra server (confirmed: `0x00b4ad30`'s only caller is `0x00b4d070`, an
+unconditional direct call):
+
+```
+0x00b4d070 (per-vehicle drive tick)
+  -> 0x00b4ceb0   (gated target-point refresh, §18.6 — already documented)
+  -> 0x00b4ad30   (UNCONDITIONAL call, every tick — not previously in §18.6)
+       switches on the entity's own drive-state byte +0xc69 (same field §18.6 already names):
+         state 0xd -> calls 0x00b47730 (reads +0xe09 bit 2 via TEST, never writes it); if that
+                      test comes back false AND +0xe08 bit 0 is set, ORs 0x20 into +0xe09 (bit
+                      5, NOT bit 2) and returns; otherwise advances +0xc69 to 0xe.
+         state 0xe -> calls 0x00b47f10 (a geometric gate: tests +0xe09 bit 1 (0x2) as an early-
+                      out, then runs distance/closing-speed/alignment comparisons between the
+                      entity (ESI) and a second record passed as its own parameter (EDI — a
+                      different register slot from the "ECX" second record inside 0x00b47c80;
+                      not proven to be the same object) against several tuning constants — reads
+                      like an overtake/obstacle-pass-opportunity test, not an ordinary lane-
+                      centerline check); ONLY if this gate returns true does it call 0x00b47c80,
+                      the bit-2 setter.
+         states 0xf/0x10 -> unrelated connectivity/overlap bookkeeping, no +0xe09 touch.
+  -> (then 0x00b4d070's own +0xc69 switch: state 0xd -> 0x00b47490, the §18.6 steering-sign reader)
+```
+
+**Answer to the static-vs-dynamic question: dynamic, not a spawn-time/lane-assignment constant — but
+throttled by a nontrivial gate, not recomputed unconditionally every tick.** `0x00b4ad30` runs every
+drive tick (unconditional call from `0x00b4d070`), but it only reaches the bit-2 write when (a) the
+entity's own `+0xc69` drive-state is `0xe`, and (b) `0x00b47f10`'s own multi-stage geometric gate
+against a second record passes. On any tick where either condition fails, bit 2 keeps whatever value
+it was last set to — there is no "clear every frame" or "set once at spawn" path; it is a live
+recomputation gated behind closing-speed/alignment/distance preconditions.
+
+**HIGH CONFIDENCE, not independently proven — semantic reading:** the dot-product sign test (entity's
+own `+0x4c/0x50/0x54` vector · (second-record position + half-width offset − entity's own live
+position)) reads as "which side does this other point currently sit on relative to my own lateral
+axis," recomputed from current positions each time it fires. Given `0x00b47f10`'s own gate shape
+(closing-speed/alignment/width checks against a second vehicle-shaped record, not a lane-segment
+record), this reads more like an **overtake/pass-side decision** than a generic lane-centerline
+cross-track sign. Team B should not assume bit 2 is a drop-in replacement for an ordinary lane-keeping
+cross-track-error sign without accounting for the overtake gate it sits behind.
+
+**OPEN:** the exact identity of the second record passed into `0x00b47c80` (as `ECX`/`EDI` inside the
+function) and into `0x00b47f10` (as `EDI`) — same object or not, not proven; the role of
+`ESI+0x4c/0x50/0x54` (candidate lateral/right-axis vector, not confirmed against any other reader);
+`0x00b47b40`'s half-width output; and the magnitude/distance helpers inside `0x00b47f10`, none
+independently opened. Next concrete step for whoever picks this up: open `0x00b47b40` and resolve
+what object reaches `0x00b4ad30`/`0x00b47f10`/`0x00b47c80` as their second parameter.
+
+### 18.6b `0x00b47f10` fully reconstructed — CONFIRMED gate logic and all three tuning constants read; likely root cause of Team B's gate never firing (2026-10-11)
+
+**Urgent context:** Team B implemented §18.6a's overtake gate using CHOSEN (guessed) thresholds for
+the distance/alignment/closing-speed checks, because the magnitude helpers inside `0x00b47f10` were
+never independently opened. In a live 900-frame test, the gate never fired once. This subsection
+reopens `0x00b47f10` and its helpers in full to give the real numbers.
+
+**CONFIRMED — the three previously-cited tuning constants, read directly off their data addresses
+(cross-checked against raw `.rdata` dwords, independently re-verified against the live Ghidra
+server before splicing — all six constant reads below matched exactly):**
+
+- `0x01117a4c` = `0x3f800000` = **1.0f**. Used TWICE in the gate for two unrelated purposes (steps 5
+  and 10 below) — not one threshold.
+- `0x0126d2cc` = `0x3f000000` = **0.5f**. Also used twice (steps 5 and 10).
+- `0x012a2fb0` = `0x3e800000` = **0.25f**. Used once, gating an unopened helper `0x00dab5e0`, only
+  when a second "lead vehicle" handle resolves.
+- Seven more constants live in the same function and are necessary to reconstruct the real
+  condition: `0x0125e270`=0.0f, `0x01116440`=64.0f (8² units), `0x01116444`=3.0f (raw units),
+  `0x01117da8`=81.0f (9² units), `0x012a2d38`=0.1 (double, clamp floor), `0x0127e354`=0.1f
+  (fallback literal for the same clamp), `0x01116448`/`0x0111644c`≈0.8 (double, margin scale).
+
+**CONFIRMED — the two "magnitude/cross-product" helpers are NOT a cross product and NOT a
+square-rooted magnitude; both are plain FPU dot-product idioms over 3-float vectors, no `sqrt`
+anywhere — independently re-verified against the live Ghidra server before splicing, both bodies
+matched exactly:**
+- `0x0043aa90(vecPtr)` → `vecPtr[0]² + vecPtr[1]² + vecPtr[2]²` (float10/x87 ST0 return). **This is a
+  SQUARED magnitude (`|v|²`), never a linear distance** — every comparison against its result is a
+  squared-units comparison (confirms the 64.0/81.0 constants above are 8²/9², not 8/9).
+- `0x00434f10(a, b)` → `a[0]*b[0] + a[1]*b[1] + a[2]*b[2]`, a plain 3-vector dot product.
+
+**CONFIRMED — `0x00b47b40` is a vehicle bounding-extent accessor, not new math:** resolves the
+passed object's handle pair via the same liveness/class-capability-table chain the main gate uses,
+calls `0x00abae00(outBuf, handle)` and copies its 3-float result out. On failure it falls back to a
+second handle pair at the object's own `+0xcc0`, and if that also fails, calls `0x00d9fc60()` (a
+zero/default-fill, not opened) and returns that.
+
+**HIGH CONFIDENCE, not independently proven — `0x00a78d30(obj)` is a scalar speed/velocity-magnitude
+read:** a thin wrapper making an indirect vtable call through `[*obj+0x60]` (target not identified)
+and returning only the 3rd float (`+0x8`) of whatever struct that call writes. Every call site in
+`0x00b47f10` multiplies this scalar against the same object's own orientation row (`+0x64/+0x68/
++0x6c`) and adds it to that object's live position (`+0x40/+0x44/+0x48`) — used exactly like
+`predicted = position + forward * speed`, a short-horizon dead-reckoning extrapolation.
+
+**CONFIRMED — the full gate, step by step, with real units.** `0x00b47f10(ESI=own entity,
+EDI=second record)`, returns bool in AL. Independently re-verified the forward-vector dot-product
+test (step 3) against the live Ghidra server before splicing — both `EDI+0x64/0x68/0x6c` and
+`ESI+0x64/0x68/0x6c` are read and compared against `0x0125e270` near the function's start, matching
+the claim below:
+
+1. Early-out unless `ESI+0xe09` bit 1 (`0x2`) is set AND (`ESI+0xe0c != 2` OR `0x00b473a0()` returns
+   `> 1`) — else return false immediately. This is the same bit `0x00b47c80` tests as its own
+   early-out, confirming this gate is strictly gated behind that bit already being set from a prior
+   tick.
+2. Resolve `EDI+0x16c0/+0x16c4` as a handle pair into a "lead/target" object (`leadHandle`), via the same
+   class-table chain; `leadHandle` may end up null — a normal "no lead vehicle" case, not an error path.
+3. Require (`ESI+0xe08` bit 0 set OR `leadHandle != 0`) AND `dot(ESI.fwd, EDI.fwd) <= 0.0` (raw
+   `+0x64/+0x68/+0x6c` orientation rows, constant `0x0125e270`=0.0). **This requires the two
+   vehicles' forward axes to be ≥90° apart — an oncoming/crossing-traffic test. A gate wired for
+   same-direction tailgating/following traffic will structurally never satisfy this.**
+4. Require ESI's own bounding half-extent (via `0x00abae00`) to satisfy `|halfExtent|² >= 64.0` (an
+   8-unit combined-half-extent floor — "only run this check for vehicles at least this big"), else
+   bail.
+5. Call `0x00b47b40(EDI, &halfWidth)`. If `leadHandle != 0`: require `dot(halfWidth, EDI.fwd) >= 1.0`
+   (FIRST use of `1.0`), then `dot(halfWidth, EDI.fwd)² >= 0.5 * |ESI.halfExtent|²` (FIRST use of
+   `0.5`), else bail.
+6. Compute a speed-extrapolated predicted position for the other vehicle (or `leadHandle`, if resolved):
+   `predictedOther = other.pos + other.fwd * 0x00a78d30(other)`. Same for ESI itself.
+7. `closingProjection = dot(predictedOther - predictedSelf, ESI.fwd)`. **Require
+   `closingProjection >= 3.0`** (raw linear units — not squared, not a cosine). The real "is the
+   other vehicle far enough ahead of me along my own forward axis" check.
+8. `sizeDelta = EDI.halfWidth - ESI.halfExtent`. `fwdComponent = -dot(ESI.fwd, sizeDelta)`. Require
+   `fwdComponent > 0.0`, else bail.
+9. `passRatio1 = closingProjection / fwdComponent`;
+   `passPoint = sizeDelta * passRatio1 + (predictedOther - predictedSelf)`;
+   `passPointMagSq = 0x0043aa90(passPoint)` (squared magnitude). **Require `passPointMagSq <= 81.0`**
+   (9² — a 9-unit radius bound on the projected pass point), else bail.
+10. Recompute `fwdComponent` and blend: `margin = fwdComponent*0.8 + fwdComponent`, clamped to a 0.1
+    floor. `finalRatio = closingProjection / max(margin, 0.1)`. **The real pass condition is
+    `0.5 <= finalRatio <= 1.0`** — THIS is where `0.5` (second use) and `1.0` (second use) actually
+    apply, on a dimensionless RATIO of two raw-unit distances, NOT independent absolute
+    distance/alignment thresholds.
+11. If `leadHandle != 0`: additionally require `0x00dab5e0() >= 0.25` (`0x00dab5e0` not opened — likely
+    another closing-speed or brake-state scalar, OPEN).
+12. Only if ALL of the above pass does the function return true, letting `0x00b4ad30` call
+    `0x00b47c80`.
+
+**Drop-in guidance for Team B:** do not implement this as three independent threshold comparisons.
+The structurally minimal correct port is: (a) a forward-facing-divergence gate (dot of forward
+vectors ≤ 0 — oncoming/crossing only), (b) an absolute own-vehicle-size floor (8-unit half-extent),
+(c) a speed-extrapolated forward closing-distance floor of 3.0 raw units, (d) a squared-distance cap
+of 81 (9²) on a computed "pass point," and (e) a final ratio test `0.5 <= (forward closing
+distance) / clamp(sizeDeltaProjection*1.8, 0.1, inf) <= 1.0`. **If a 900-frame test never saw step 3
+(forward dot ≤ 0) succeed — i.e. all observed traffic was same-direction, non-crossing — the gate
+was structurally guaranteed never to fire regardless of distance/speed tuning, which is the most
+likely root cause of "never fired once."**
+
+**Secondary item: ordinary lane-keeping steering MAGNITUDE source — RESOLVED 2026-10-11, the curve
+evaluator is fully inline in `0x00ae5290` itself, no separate evaluator function exists.** Full
+body re-opened (`0x00ae5290`-`0x00ae5417`), independently re-verified against the live Ghidra
+server before splicing. **CONFIRMED by direct disassembly:**
+
+1. An early-out gate not previously documented: on entry, `0x00ae5290` calls
+   `0x00d9e4c0`/`0x00d9e1e0` on a sub-object at `this+0x150` (same airborne/grounded-pair shape
+   already seen elsewhere in §18 — e.g. §18.6a's `0x00ad3820`) and returns immediately, writing
+   nothing, when that pair reads "airborne" (`0x00d9e4c0()==1 AND 0x00d9e1e0()==0`).
+2. The input sign is **negated** (multiplied by -1.0) before anything else — the stored
+   convention inside this function is inverted relative to the caller's own sign.
+3. Clamped to `[-1,1]`, then (unless `this+0x164` bit 1 is set) the curve runs: it reads exactly
+   two fields off the struct at `this+0x20` — **`+0x08` = a threshold/breakpoint (float, 0..1 range
+   on the input magnitude)** and **`+0x0c` = a primary slope (float)**. For `|input| <= threshold`,
+   output `= slope × |input|` (simple linear response below the breakpoint). For `|input| >
+   threshold`, output continues linearly but with a SECOND slope computed on the fly
+   (`(1.0 - slope×threshold) / (1.0 - threshold)`) so the curve lands exactly at `±1.0` when
+   `|input| = 1.0` — a two-segment piecewise-linear response shaper (soft deadzone/ramp below the
+   breakpoint, a steeper or shallower ramp above it depending on the two field values), not a
+   lookup table, spline, or any higher-order curve. The sign is reapplied at the very end.
+4. Result is clamped again to `[-1,1]` and written to `this+0x130` (confirming the existing
+   write-site finding).
+
+**Net: the curve struct at `driverInput+0x20` is CONFIRMED as the source of the continuous
+steering magnitude — a 2-float `{threshold, slope}` response-shaper, not a lookup table.** The
+`±1.0` sign from `0x00b47490`/`0x00b2bbc0` is the curve's x-input (after an internal negation);
+the curve's own two parameters determine how sharply steering ramps in near zero vs. how it
+behaves past the breakpoint. **OPEN, not resolved this pass:** who populates the `this+0x20`
+pointer and the two curve fields (a config/tuning table load, not traced), and whether other
+fields exist on that same struct beyond `+0x08`/`+0x0c` (only these two are read by this
+function).
+
+**OPEN:** the vtable target of `0x00a78d30` (confirms/refutes "speed" framing); `0x00dab5e0`'s own
+body (step 11's helper); whether `leadHandle`'s resolution source and the main gate's own second-record
+identity are the same kind of object — carried over from the existing OPEN note above.
 
 ### 18.4 Open items
 
@@ -5878,3 +6155,70 @@ fully absorbed into §20.1 above.
   second, parallel write path; the vehicle-type/variant selector's exact semantics; the precise
   vector roles inside the heading dot-product. Cleanroom self-check: strict regex 0 hits,
   C-cast-dereference check 0 hits.
+
+- **2026-10-10 — new §18.6a: the `+0xe09` bit-2 lane-side status bit's setter found (Team-B-routed
+  request — they were using a labelled cross-product stand-in)** (SPEC TEAM, agent
+  `a8be8f8b3a0e658c6`). An exhaustive binary-wide scan for the `+0xe09` struct-offset literal (18
+  genuine code references, all individually opened and classified by bit) found exactly one bit-2
+  writer in the whole image, `0x00b47c80`, reached from the known per-vehicle drive tick
+  `0x00b4d070` via a third, previously-undocumented sibling call `0x00b4ad30` — unconditional every
+  tick, but only reaching the write when the entity's `+0xc69` drive-state is `0xe` AND a geometric
+  overtake/pass-side gate (`0x00b47f10`, closing-speed/alignment/distance checks against a second
+  vehicle-shaped record) returns true. Answer to Team B's static-vs-dynamic question: dynamic, not a
+  spawn-time constant, but throttled behind that gate rather than recomputed unconditionally.
+  Independently re-verified `0x00b47c80`'s and `0x00b4ad30`'s disassembly against the live Ghidra
+  server before splicing (bit-2 mask instructions, the `0x00b47f10`→`0x00b47c80` conditional call, and
+  the `0x00b4d070`→`0x00b4ad30` unconditional call all matched exactly). Left OPEN: the identity of
+  the second vehicle-shaped record both `0x00b47c80` and `0x00b47f10` compare against, and the role of
+  the entity's own `+0x4c/0x50/0x54` vector. Cleanroom self-check: strict regex 0 hits, C-cast-
+  dereference check 0 hits.
+
+- **2026-10-10 — §18.6's `0x00b2bbc0` OPEN item CLOSED: the `0xe`/`0x10`-state sibling branch is
+  NOT a second subsystem, it reaches the SAME write site one hop shorter** (SPEC TEAM, agent
+  `affd9e1a22bea80aa`). `0x00b2bbc0` early-outs on a null sub-record, the same `0x00a1ef50`
+  readiness gate, or a braking test (`0x00ad3820`, not opened); otherwise it resolves a second
+  handle pair (`entity+0xcc0`/`+0xcc4`, HIGH CONFIDENCE a lead/target vehicle) and, depending on a
+  distance/flag gate, calls `0x00a929e0`/`0x00a92640` DIRECTLY (no `0x00b47490` intermediary) — the
+  same generic vehicle-command dispatchers §18.6 already confirmed reach `0x00ae5290`
+  (`driverInput+0x130`) and `0x00ae8fd0` (`driverInput+0x128`/`+0x12c`/`+0xb0`). Independently
+  re-verified `0x00b2bbc0`'s disassembly against the live Ghidra server before splicing — all 4
+  dispatcher call sites and the entity-handle-pair argument pattern matched exactly. `0x00b2bbc0`
+  itself has 9 call sites across unrelated functions, confirming it's a generic shared helper, not
+  traffic-exclusive. Left OPEN: `0x00ad3820`'s brake semantics, the second handle pair's exact
+  role, and the vehicle-type/variant selector. Cleanroom self-check: strict regex 0 hits, C-cast-
+  dereference check 0 hits.
+
+- **2026-10-10 — §18.6's `0x00ad3820` OPEN item CLOSED: not a literal brake test, a generic
+  entity-status gate; its bailout is a position snap-correction, not a steering no-op** (SPEC
+  TEAM, agent `a7d8c5366122f0495`). `0x00ad3820` returns "continue" only when the entity is
+  non-null, two one-instruction bit-extractors (`0x008cc4d0`/`0x0091f600`, reading `+0x3b`/`+0x3a`
+  bit 0) are both false, and `+0x33` bit `0x8` is set — otherwise it bails. With 30 call sites
+  across dialogue/script triggers, physics, and unrelated AI functions, this reads as a generic
+  "entity disabled/suspended" gate, not a brake-pedal check specifically. The bailout
+  `0x00b2ed40` resolves a second handle-pair object and snaps its position/orientation via a
+  direct vtable call (plus zeroing a physics sub-object if present) — no vehicle-command
+  dispatcher call anywhere in its body. Independently re-verified `0x00ad3820`'s disassembly
+  against the live Ghidra server before splicing (matched exactly). Left OPEN: the individual
+  bit semantics (`+0x3a`/`+0x3b`/`+0x33`) and `0x00b2ed40`'s own unopened callees. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §18.6b: `0x00b47f10`'s overtake gate fully reconstructed, with the real
+  numeric thresholds — Team-B-routed priority item (their implementation never fired once in a
+  900-frame test)** (SPEC TEAM, agent `a091636ed7446e5b2`). The three previously-cited tuning
+  constants are NOT three independent thresholds: two of them (1.0, 0.5) are reused for a
+  completely different purpose earlier in the function, and the real pass condition is a
+  dimensionless RATIO test (`0.5 <= closingProjection/margin <= 1.0`), not absolute
+  distance/speed/alignment comparisons. The two "magnitude/cross-product" helpers are confirmed
+  plain squared-magnitude and dot-product idioms (no sqrt, no cross product). Most actionably: the
+  gate's step 3 requires the two vehicles' forward axes to be ≥90° apart (an oncoming/crossing-
+  traffic test) — if Team B's 900-frame test only observed same-direction traffic, the gate was
+  structurally guaranteed never to fire regardless of tuning, independent of any threshold values.
+  Independently re-verified both helper functions' full bodies, all six cited constant values, and
+  the step-3 forward-dot-product read sites against the live Ghidra server before splicing — all
+  matched exactly. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 (self, direct query, no agent — orchestrator-routed): §18.6's steering-magnitude
+  OPEN item RESOLVED. `0x00ae5290`'s curve is fully inline, no separate evaluator: a 2-field
+  `{threshold at +0x08, slope at +0x0c}` piecewise-linear response shaper read off the struct at
+  `this+0x20`, plus a previously-undocumented airborne-gated early-out and an internal sign
+  negation. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

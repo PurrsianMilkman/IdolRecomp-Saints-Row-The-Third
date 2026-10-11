@@ -2373,8 +2373,25 @@ complete 40+-entry address index: `scratchpad/vehicle_world_collision_response_2
 2. **Construction-info field names** (§4.1 steps 4–5): offsets/values are CONFIRMED, field names are
    HYPOTHESIS from Havok 2010's public header order. Most open: the byte at `+0xe8` = 1, the
    solver-preset argument 5, and the two job-queue construction fields.
-3. **When vehicle code sets the sub-step multiplier k = 2.0** (`0x00a86620`) — has no effect in the
-   shipped default mode, so low priority; a later vehicle unit's concern.
+3. ~~**When vehicle code sets the sub-step multiplier k = 2.0** (`0x00a86620`) — has no effect in the
+   shipped default mode, so low priority; a later vehicle unit's concern.~~ **CLOSED 2026-10-10.**
+   `0x00a86620` (one caller, `0x00ac1950`, an unconditional per-vehicle per-frame update) sets k=2.0
+   (`0x00755400(2.0)`, the same writer already named at `0x012f8c14`) when EITHER the vehicle's
+   linear velocity Z-component (read via `0x00abae00`) is below `-22.352` (exactly 50 mph downward,
+   all 4 SIMD lanes), OR two airborne-state accessors disagree — `0x00d9e4c0()` true AND
+   `0x00d9e1e0()` false (HIGH CONFIDENCE: an airborne/grounded-state pair, by call shape and
+   position relative to the velocity check, not independently named). Both disjuncts read as "hard
+   fall/crash-imminent," not a vehicle type, damage state, or water condition. **CONFIRMED dead in
+   the shipped build, not merely low-impact:** `0x00a86620`'s full body (0x671 bytes) never
+   references the step-mode flag `0x012f8c1e` or the fixed-step cap base `0x012f8c18` — it only ever
+   writes k itself. Per §4.2/§4.3, k is consumed exactly once, by the sub-step-cap computation
+   `round(3×k)`, itself only reached in the unreachable fixed-step mode (`0x012f8c1e == 0`), whose
+   only writer in the whole binary is an unreferenced console handler. So this vehicle code path and
+   the mode gate that would make it matter are two independent, never-conditionally-linked pieces of
+   dead code. Genuinely vestigial in the shipped default mode — no replication needed unless Team B
+   independently revives the fixed-step accumulator path, in which case this high-fall-speed k=2.0
+   behavior would need porting alongside it. OPEN, not chased further: exact identity of
+   `0x00d9e4c0`/`0x00d9e1e0` and of `0x00ac1950`'s own broader role.
 4. ~~**Post-step roles of `0x0077c9d0` and `0x007699a0`** — likely contact-event dispatch and handing the
    stepped time to gameplay; both are game code with no direct Havok call.~~ **RESOLVED/CORRECTED,
    2026-10-08 (§10a): `0x007699a0` is CONFIRMED the deferred contact-event queue drain, called from
@@ -2749,3 +2766,11 @@ complete 40+-entry address index: `scratchpad/vehicle_world_collision_response_2
   registration function this section documents for vehicles also covers type `0x20` (HIGH
   CONFIDENCE "projectile"). Full trace: `spec-weapons-runtime.md` §2a.5. Cleanroom self-check:
   strict regex 0 hits.
+- **2026-10-10 — §11 item 3 CLOSED: the vehicle sub-step multiplier k=2.0 trigger is CONFIRMED
+  dead code, not just low-impact** (SPEC TEAM, agent `a668cefb803361f0b`). `0x00a86620` sets
+  k=2.0 on a hard-fall/crash-imminent condition (downward velocity below -22.352, or disagreeing
+  airborne-state accessors), but its full body never references the step-mode flag or fixed-step
+  cap base that would make k matter — the vehicle code and the mode gate are two independent,
+  never-linked pieces of dead code. Independently re-verified the full disassembly against the
+  live Ghidra server before splicing (trigger condition and absence of the flag references both
+  matched). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

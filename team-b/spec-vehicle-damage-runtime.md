@@ -244,23 +244,130 @@ string). A new, previously undocumented flag bit was also found: on a successful
 
 ## 7. Open items
 
-1. **The exact "HP reached 0, begin destruction" decision instruction was not located.**
-   `0x00a9f4f0`/`0x00a9c1f0` apply damage and clamp HP but never check for zero or call anything
-   destruction-related. Named next steps: `0x00a9e1d0`'s own two callers (`0x00a9eb60`; the tiny thunk
-   `0x00aa04e0`, whose own single caller `0x00896183` was not traced).
-2. **`0x00a9f4f0`'s complex (multi-part) damage-distribution path** (`0x00a9c6f0`/`0x00a9d070`/
-   `0x00a9dbe0`/`0x00a9dd40`) was not opened — very likely where real per-component damage lives for
-   ordinary driveable vehicles, and very likely where item 1's decision is made. **Highest-priority
-   named lead.**
+1. **The exact "HP reached 0, begin destruction" decision instruction was still not located, now
+   after opening `0x007047a0` and `0x00a9f4f0`'s own full body (2026-10-11, continued) in addition
+   to all six previously-named candidates.** `0x00a9f4f0`/`0x00a9c1f0` apply damage and clamp HP but
+   never check for zero or call anything destruction-related (unchanged). **CONFIRMED by full
+   disassembly: `0x007047a0` is NOT the decision instruction and NOT an HP write** — it is a
+   generic 22-instruction event-broadcast primitive (looks up and calls one function-pointer-table
+   entry, then unconditionally walks a fixed 28-slot registered-listener list calling each flagged
+   listener's own vtable `+0x68`), not vehicle-specific, zero hits for `+0x1564`/`+0x155c`/`+0x1560`
+   anywhere in its body. **CONFIRMED by full disassembly: `0x00a9f4f0`'s own body, past its
+   `+0xbd0==1` bifurcation, never reads or writes `+0x1564`/`+0x155c`/`+0x1560` either** (the only
+   hit for any of these offsets in the complete function is the already-known `+0x16c8`
+   destroyed-bit test at the entry gate) — the HP write-back for the complex path does not live in
+   `0x00a9f4f0`'s own instructions. Past the dispatch group, its complex path also calls a
+   previously-unseen validity/component-handle chain (`0x0091f5e0`/`0x00ab50c0`/`0x0096f4f0`/
+   `0x00971cf0`/`0x00950550`/`0x00943ea0`/`0x007f0610`, none opened) and, when the `0x00a9d070`
+   eligibility gate passes and a position vector is present, `0x00a9c5d0`/`0x00a9f430`/`0x00a9b890`
+   plus (conditionally) `0x00b19510(vehicle)`/`0x0045beb0`/`0x00aaebf0(vehicle)`/`0x00a9b910` —
+   none of these were named before this pass. **`0x00a9f430` opened and ruled out**: iterates a
+   short list calling `0x00a9ee70` per qualifying entry, shaped like per-connected-player/occupant
+   targeting (same role-family as `0x00a9dbe0`'s player walk), no HP touch. **`0x00a9b890` opened
+   and independently re-verified against the live Ghidra server before splicing (matched exactly)
+   — the first confirmed "reached zero" check found anywhere in this investigation, but not on the
+   vehicle's own HP field:** it iterates a list of per-vehicle *part* object pointers, calls
+   `0x00a8fd70` on each, then tests `entry+0xf0` bit `0x40` AND `entry+0x10 == 0` to set a boolean
+   it returns — `+0x10` here is a field on the *part* object, not the vehicle's own `+0x1564`.
+   **`0x00a8fd70` opened in full (~280 instructions) — CONFIRMED to be the real per-part
+   damage-apply/clamp routine**, the part-level structural analog of `0x00a9c1f0`: decrements the
+   part's own HP-like counter at `part+0x10` by the clamped damage amount and re-clamps into `[0,
+   part+0xc]` (the part's max), where the vehicle argument reads the same flag bytes `0x00a9f4f0`
+   itself uses (`+0x1d7a`/`+0x1d7b`/`+0x1544`/`+0x135c`/`+0x1358`/`+0xbf8`). **However, this
+   function does not itself call anything destruction-shaped on the zero case** — four separate
+   category/damage-type-gated branches explicitly floor the result back to `1` after the decrement
+   (hard-protecting those categories from ever reaching literal zero through this path), and the
+   one path that can leave it at literal `0` just returns a status value with no destruction call;
+   `0x00a9b890`'s own zero-check likewise only returns a boolean, it does not branch into a
+   notify/spawn-wreck/explosion call either. That boolean flows back into `0x00a9f4f0`'s own
+   local, passed into the already-fully-documented `0x00a9dd40`, confirmed in the prior pass to
+   use it only for camera-shake/rumble feedback scaling, not destruction. **Named next steps,
+   highest-priority first:** `0x00a9c5d0` (called in `0x00a9f4f0` immediately before `0x00a9f430`/
+   `0x00a9b890`, in the same branch, completely uncharacterized); `0x00a8f910` (the non-deferred
+   tail of `0x00a8fd70`, receives vehicle+damage-type+3 vectors but not the part pointer —
+   plausibly a post-decrement notify/finalize step); the deferred-queue consumer of `0x00a8fd70`'s
+   global ring buffer (batch-processing mechanism, consumer not identified); `0x00a9e1d0`'s own two
+   callers (`0x00a9eb60`; the tiny thunk `0x00aa04e0`, whose own single caller `0x00896183` was not
+   traced); and `0x00a9c230`/`0x004d7f30`/`0x009dd230`/`0x00979b30` (named earlier, still unopened).
+
+2. **`0x00a9f4f0`'s complex (multi-part) damage-distribution path — item 1's decision confirmed to
+   live somewhere past `0x00a9b890`'s part-level HP-zero check, not in any function opened so far.**
+   **New structural finding (CONFIRMED by disassembly): vehicle parts carry their own HP-like field
+   at `part+0x10` (max at `part+0xc`), structurally parallel to but entirely distinct from the
+   vehicle's own `+0x1564`/`+0x155c`/`+0x1560` triple** — clamped by `0x00a8fd70` using the same
+   bounded-accumulator shape as `0x00a9c1f0`, with the only confirmed zero-check anywhere in this
+   whole investigation sitting in `0x00a9b890` immediately after. That check produces a boolean,
+   not a call — so the actual "begin destruction" action is now narrowed to either: (a) something
+   downstream of `0x00a9b890`'s boolean inside `0x00a9f4f0`'s own still-unopened calls (`0x00a9c5d0`,
+   `0x00b19510`, `0x0045beb0`, `0x00aaebf0`, `0x00a9b910`); (b) the deferred-queue batch consumer
+   `0x00a8fd70` feeds when not in immediate-apply mode; or (c) `0x00a8f910` (the immediate-apply
+   tail). None of these candidates has been opened yet. The four original dispatch functions'
+   roles, below, are unchanged from the prior pass — none reads HP, none writes HP, none branches
+   on a zero/threshold check:
+   - **`0x00a9c6f0`** — event/notification dispatch only (builds and fires an event-code-`0x42`
+     record through a ~10-call chain). No state mutation relevant to damage or destruction.
+   - **`0x00a9d070`** — the real per-part **damage-type eligibility and amount-scaling gate**:
+     applies invulnerability, difficulty/player-identity multipliers (via `0x00a9c070`/
+     `0x00a9c130`), a part-susceptibility float (`+0x1cc0`), a damage-type-specific scale/suppress
+     (`+0x1d80`/`+0x1d7a` bit `0x8`), a falloff float (`+0x1584`), a time-scaled falloff
+     (`0x00ad3200`/`0x00d9e250`), and a final per-damage-type applicability switch against external
+     descriptor flags (`+0x10` bits `0x800`/`0x1000`). Bails early if the scaled amount reaches `0`
+     — a *filter*, not a destruction trigger.
+   - **`0x00a9dbe0`** — a **per-part replication/notify dispatcher**: conditional calls to
+     `0x004d7f30` and `0x00a9c230` gated on type-table flags, a seat-resolution loop, and a walk
+     over the global connected-player list calling `0x009dd230` for matching entries (shaped like a
+     per-player targeting/proximity notify) — then a final single occupant notify via
+     `0x00979b30`.
+   - **`0x00a9dd40`** — the actual **apply-and-feedback orchestrator**: resolves target/instigator
+     and calls `0x007047a0` — **now opened and ruled out as a destruction site (above): a generic
+     event-broadcast primitive, no HP touch** — optionally plays a sound/VFX (`0x007b4b80`), then —
+     gated by the shared `0x008addb0` pause/suppress predicate — reads the vehicle's
+     `+0x1564`/`+0x155c` HP fields purely to compute a damage-fraction ratio driving occupant and
+     nearby-observer
+     camera-shake/rumble (`0x00e0cfb0`/`0x00e0ce20`/`0x00e0ce00`). This is the only one of the four
+     that reads current HP at all, and it is confirmed feedback/FX scaling, not a decision gate.
+
+   **Verdict: this whole dispatch group computes, filters, and scales a damage amount, applies an
+   impulse, fires notifications, and drives rumble feedback — it does not decrement HP and does not
+   decide destruction.** The HP write-back for the complex path, and item 1's decision instruction,
+   must live elsewhere: most likely directly in `0x00a9f4f0` past its bifurcation, or in
+   `0x007047a0` (highest-priority new lead) or one of this group's other unopened callees
+   (`0x00a9c230`/`0x004d7f30`/`0x009dd230`/`0x00979b30`).
 3. The `+0x16c8` bit `0x1` set/clear tension against `vehicle_is_destroyed`'s own documented read (§2) —
    flagged, not resolved.
 4. Whether `+0x1d7d` bit `0x20` and `+0x1d7e` bit `0x8` correspond to the two still-undocumented Lua
    natives named in a stopped prior tranche (`vehicle_set_invulnerable_to_player_explosives`,
    `vehicle_disable_explosion_and_damage_vfx`) — HIGH-confidence candidates only, by shape/position.
-5. A dozen-plus leaf calls inside `0x00a9e1d0` named but not opened (`0x00af9030`, `0x00a7f850`,
+5. ~~A dozen-plus leaf calls inside `0x00a9e1d0` named but not opened (`0x00af9030`, `0x00a7f850`,
    `0x008cc930`, `0x00722000`, `0x00a88770`, `0x008a8640`, `0x004d47e0`, `0x00a88b00`, `0x009e2ac0`,
    `0x00a7fef0`, `0x00ab9030`/`0x00abae80`/`0x00ab9800`) — each individually small, none load-bearing
-   for this file's own verdicts.
+   for this file's own verdicts.~~ **CLOSED 2026-10-10, all 13 triaged by direct disassembly
+   (bounded one-level pass):**
+
+   | Address | Characterization |
+   |---|---|
+   | `0x00af9030` | Per-seat (8 slots) instigator-handle resolver: for each occupied seat, resolves a handle via the shared capability-table/pause-gate chain and, if it passes, calls `0x00af6310` — a per-seat "notify this seat on destruction" dispatcher. Pure fan-out, writes nothing to vehicle HP/state. |
+   | `0x00a7f850` | Distance/LOD-style damage-stage selector: computes camera/view distance, binary-walks a per-vehicle float table to pick an index, stores it, and — only if the index changed — calls `0x008cc930`. No HP read, no destruction decision. |
+   | `0x008cc930` | Simple status-bit setter: ORs a flag into `+0x74`, calls `0x008cc4e0` (unopened, presumably a "flags changed" notify). |
+   | `0x00722000` | Global pause/replay-state predicate (two shared statics, 90+ other callers elsewhere) — not vehicle-specific. |
+   | `0x00a88770` | Simple getter feeding the part-detachment "qualifies to break" bitfield (§5 pass 1), as already documented there. |
+   | `0x008a8640` | Simple getter, also feeds §5 pass 1's "qualifies to break" test, as documented. |
+   | `0x004d47e0` | Trivial bit-test getter (30+ callers project-wide) — generic, nothing vehicle-specific. |
+   | `0x00a88b00` | Conditional notify: fires a single event/message dispatch (code `0x1b`) if a nested pointer chain is valid. |
+   | `0x009e2ac0` | Kill-attribution/notification dispatcher — confirms §2 step 12's own "plausibly a final kill-attribution/notification call" guess as CONFIRMED shape, not just plausible. |
+   | `0x00a7fef0` | **Vehicle wreck-list lifecycle management, not a trivial leaf** — unlinks the vehicle from one global list and splices it into a different global list (`0x027c2eb4`), clears a status bit, and arms randomized despawn/cleanup timers (`45000`-`75000`ms and `2000`-`3000`ms ranges via the shared timer primitive); re-sets the "destroyed" latch bit near its own end (refining §2 step 13's phrasing — the latch is re-set here, not only by `0x00a9e1d0` directly). Doesn't touch HP or the destroy decision — post-decision wreck bookkeeping, likely governing despawn/respawn-recycle timing. |
+   | `0x00ab9030` | Scalar getter off the vehicle's physics-proxy sub-object (mass or similar), gated on `+0xbd0==1`. |
+   | `0x00abae80` | Vector transform through the physics proxy (quaternion/matrix-shaped), same gate. |
+   | `0x00ab9800` | Vector-pair dispatch through a virtual call on the physics proxy — shaped like "apply an impulse/force at a point," consistent with the §2 step 11 "secondary physics kick" hypothesis. |
+
+   **The spec's "none load-bearing" framing is CONFIRMED** — none of the 13 read current HP, write
+   HP, or make a destroy/no-destroy branch. Two (`0x00a7f850`, `0x00a7fef0`) are meaningfully larger
+   than "individually small" implied; `0x00a7fef0` in particular is a real wreck-list/despawn-timer
+   subsystem worth its own line item if wreck cleanup/respawn timing ever becomes a topic of
+   interest. The deeper callees these 13 reach (`0x008cc4e0`, `0x00ac2380`, `0x00aa2be0`,
+   `0x00abb580`, `0x00b19140`, the timer primitive, `0x00af6310`, `0x00c14790`, `0x00c150c0`,
+   `0x005247f0`, the three destruction-category predicates, `0x009daad0`, `0x00608550`, etc.) were
+   NOT opened — this was a one-level triage, not a deep trace.
 6. Whether a shader/texture-driven progressive dent/deformation system exists was not independently
    verified (would require opening the vehicle material-blend consumer, out of scope).
 7. `vehicle.xtbl`'s own `Death_Explosion`-equivalent field (if any) was not reconciled against the
@@ -332,3 +439,28 @@ real identifiers. No leaked Volition/Havok/Audiokinetic/RAD material.
   from this file's own §1 occupant-kill-on-extract loop and §2-§3's HP-driven destruction economy. Full
   detail: `scratchpad/weapons_fire_damage_and_player_blip_2026-10-08.md`. Cleanroom self-check: 0 new
   hits. Synced to Team B.
+- **2026-10-10 — §7 item 5 CLOSED: all 13 `0x00a9e1d0` leaf calls triaged** (SPEC TEAM, agent
+  `ab7d28c1e44da6410`). Confirms the "none load-bearing" framing — none read/write HP or make a
+  destroy/no-destroy branch. Two (`0x00a7f850`, `0x00a7fef0`) turned out larger than "individually
+  small" implied; `0x00a7fef0` is a real vehicle wreck-list/despawn-timer subsystem (global list
+  splice plus four randomized timer arms) worth its own future line item. Independently
+  re-verified two of the thirteen (`0x00722000`, `0x004d47e0`) against the live Ghidra server
+  before splicing (both matched exactly). Cleanroom self-check: strict regex 0 hits, C-cast-
+  dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `a26783a030db826f6`): §7 items 1/2 — all four named complex-path
+  dispatch functions opened and fully characterized by direct disassembly, plus a 2-hop follow-up
+  (difficulty-multiplier helpers). Confirmed none make the HP-zero destruction decision and, more
+  specifically, none write the vehicle's own `+0x1564` HP field at all — narrowing the still-open
+  decision-instruction search to `0x00a9f4f0`'s own body past its bifurcation, `0x007047a0` (new
+  lead), or the group's other unopened callees. Independently re-verified the HP-field read/write
+  claim myself by grepping the raw disassembly dumps before splicing. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `a204f96e7f0a99109`, continued): opened `0x007047a0` (ruled out — a
+  generic event-broadcast primitive) and `0x00a9f4f0`'s own full body (confirmed it never touches
+  `+0x1564` itself on the complex path). Found a previously-unknown PART-level HP field
+  (`part+0x10`, distinct from the vehicle's own `+0x1564`) clamped by `0x00a8fd70` and zero-checked
+  by `0x00a9b890` — the first confirmed zero-check found in this entire investigation — but that
+  check only returns a boolean, not a call. New named leads: `0x00a9c5d0` (highest priority),
+  `0x00a8f910`, the deferred-queue consumer. Independently re-verified `0x00a9b890`'s disassembly
+  against the live Ghidra server before splicing (matched exactly). Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.

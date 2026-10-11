@@ -16,13 +16,104 @@
 ##    (both: I merge agents' branches myself from the main checkout, AND well-tested small units may
 ##    self-merge - both patterns used successfully this session).
 ## 3. REBASE BEFORE HANDOFF: update onto current main, re-run build+tests, resolve conflicts YOURSELF.
-## 4. NO SILENT PARKING: a stopped branch gets a line in HANDOFF's "Parked branches" section.
+## 4. NO SILENT PARKING: a stopped branch gets a line in HANDOFF's "## Parked branches" section (its OWN
+##    top-level section, deliberately OUTSIDE this resume block so a resume-note rewrite can't wipe it -
+##    search "PARKED-BRANCHES:BEGIN" to find it, further down this file after RESUME-END).
 ## 5. CHECK THE BRANCH ITSELF: audits use merge-base/`git cherry` on the branch itself, never inference
 ##    from siblings (the mistake that caused the whole incident - see LEARNED below).
 ## 6. AUDIT: `sh ~/crreish-orchestration/branch_audit.sh` at the end of every unit.
+## 7. MERGE FROM YOUR OWN WORKTREE, NEVER THE SHARED CHECKOUT (added 2026-10-10, after a real incident):
+##    a concurrent agent's `git merge` in the shared main checkout landed on another agent's
+##    checked-out branch instead of main, because that checkout's HEAD had been moved by a different
+##    agent between the check and the merge. Caught and cleanly fixed that time, but every agent must
+##    run its own merge-into-main from a dedicated worktree it alone controls, not the shared root
+##    checkout, to prevent this race outright.
 
 ### (a) DONE THIS SESSION - do not re-derive, all verified+merged+ctest-clean at 165/169 (0 failed, 4
 ### pre-existing Bink skips) unless noted otherwise:
+- **DONE AND MERGED: Bink IDCT butterfly + AC-coefficient tree decoder** (agent `ad8c2d9a0aac24f70`,
+  merge `be0a160` of `feature/bink-idct-actree-5.3j` into main). Implements spec-bink-codec.md Sec5.3j:
+  `idct_butterfly.h` (the shared 8-point butterfly, column pass + row pass + final descale) and
+  `ac_tree_decoder.h` (`0x10024eb0`'s front/tail BFS tree decoder), wired into `Case1SubType::
+  DcAcIdctEngine2` (primary=1/sub=2) in `block_dispatch.h` - closes that OpenHook to Reconstructed.
+  **Verified (a)/(b)/(c) against the actual spec text, not just the relayed summary** - all three held up:
+  (a) every intermediate `>>0xb` shift is a plain truncating `sar`, the ONLY rounding anywhere is the
+  final per-pixel descale `(sum+0x7f)>>8` (not `+0x80` - exact ties round down); (b) the AC-tree loop
+  really does terminate on front==tail && level==1, no fixed coefficient count; (c) two genuinely
+  distinct sign-recovery mechanisms exist (general multi-bit masked/bias_mask test; single-extra-bit
+  `and/neg/or` shortcut), implemented both, not conflated.
+  **IDCT (Part 1) is bit-exact VERIFIED, independently, against real data**: extracted
+  `dc_ac_coeffs_frame0_block0.bin`/`postidct_block_frame0_row0_col80_VERIFIED.bin` (the exact FFmpeg-
+  matched worked example Sec5.3j itself cites) via `tools/bink_test_vector_extract.cpp`, fed them through
+  `idctBlock8x8()` cold (new `tests/real_bink_idct_test.cpp`, no DLL/Unicorn re-execution) - bit-exact
+  match, all 64 bytes, every run.
+  **AC tree decoder (Part 2) is NOT bit-exact verified - Sec5.3j itself has no live worked example for
+  this part, and this task's own honest real-data check shows it does NOT currently decode real content
+  correctly**: ran the full real entropy pre-stage against `main_menu_bg.bik` frame 0 - decode now gets
+  5 blocks further than before (3x sub=2, 2x sub=3 Reconstructed, up from 0) before stopping at an
+  unrelated pre-existing OpenHook (primary=5/IntraIdct5, Sec5.3j doesn't cover this family) - but the
+  reconstructed pixel bytes do NOT match an independent FFmpeg raw-YUV extraction of the same frame
+  (`ffmpeg -pix_fmt yuv420p -f rawvideo`, NOT `-pix_fmt gray` - that one silently rescales tv-range to
+  full-range and will mislead anyone re-checking this). Root cause, documented in `ac_tree_decoder.h`'s
+  own top comment: several interpretive judgment calls were REQUIRED beyond what Sec5.3j gives literally
+  (which of the two sign mechanisms maps to which of the tree's two terminal-leaf dispatch cases; the
+  extra-bits field width) - flagged explicitly as unverified guesses, not presented as fact. **Primary
+  case 3 was NOT touched** - confirmed directly against Sec5.3j's own text that its scope is the IDCT +
+  `0x10024eb0` only; case 3's RLE/literal token format is a separate, still-open gap, same as before.
+  Golden fixtures regenerated for this task (`tests/golden/bink_main_menu_bg/{frame0_raw.bin,
+  frame1_raw.bin,vectors/*}`, `tests/golden/bink_logo_frame0/`, `tests/golden/bink_logo_amd_hd_frame0/`),
+  all gitignored/local-only per existing convention, re-extractable via `tools/bink_frameN_extract.cpp`
+  + `tools/bink_test_vector_extract.cpp` against the real assets at `D:\Project Crreish\Saints Row 3
+  CRREISH\videos\*.bik`. Full ctest **170/170 passed, 0 skipped** (the 4 previously-skipped Bink tests
+  now run for real with the golden fixtures present) - rebased onto main twice (tip moved both times)
+  before merging, no conflicts either time. `sh ~/crreish-orchestration/branch_audit.sh`: this branch is
+  EQUIVALENT (content now on main); 3 pre-existing unrelated ORPHAN branches
+  (`feature/bink-pixel-accuracy-oracle`, `fix/bink-prestage-len-correction`,
+  `fix/ground-tile-origin-translation`) untouched, already documented in Parked branches. **Worktree
+  `agent-binkidct` left in place (not deleted, per disk-space discipline) - flag for batch cleanup if
+  disk space is ever reviewed.** Relayed to purrsian-52 (honest account of bit-exact IDCT vs. not-yet-
+  correct AC-tree).
+  **2026-10-10 follow-up: AC-tree (Part 2) judgment calls sent to Team A (team-a-66) for a Sec5.3j worked
+  example** - exact file:line citations (`ac_tree_decoder.h` lines 29-41 for the sign-mechanism-to-leaf
+  mapping, lines 42-58 for the extra-bits field width) relayed directly, not paraphrased.
+  **RESOLVED+MERGED 2026-10-10 (`fix/bink-actree-sign-mechanism-5.3j-part3`, per spec-bink-codec.md
+  Sec5.3j Part 3 + its same-day follow-up splice closing Part 3's own remaining OPEN item)** - the
+  park above is LIFTED, both prior judgment calls are gone:
+  - Sign-mechanism-to-leaf mapping: Phase-1 `case 2` AND `case 3` BOTH resolve immediately via
+    mechanism 1 (general multi-bit read) - `case 3` was previously, incorrectly, wired to mechanism 2
+    (the single-extra-bit shortcut); that is now removed from `case 3` and replaced with the same
+    mechanism-1 code `case 2` already had. Mechanism 2 has exactly two real homes, both inside a
+    structurally separate "Phase 2" dispatch (`sel==2`'s gated sub-branch, `sel==3` unconditionally) -
+    confirmed NOT reachable from this file's own Phase-1 case 2/3, so mechanism 2's code was deleted
+    from this file entirely rather than left mis-attached to `case 3`.
+  - Extra-bits width/sign-test operand (the "tautology" judgment call): CONFIRMED exactly as this
+    file's `case 2` already had it - read `level` raw bits into their own untouched snapshot, magnitude
+    `(raw & (bias_mask-1)) | bias_mask`, sign from the ORIGINAL pre-mask raw's own `bias_mask` bit. No
+    change needed here beyond applying the same code to `case 3`.
+  - **Genuinely still OPEN, not invented a fix for**: Phase 2 itself (its own `front2` worklist, its
+    own 4-case dispatch table, and the tag-level mechanics of exactly which worklist entries get
+    routed through it rather than fully resolving within Phase 1's own single-pass queue) is NOT
+    modeled anywhere in `ac_tree_decoder.h` - the spec gives Phase 2's internal BEHAVIOR per `sel`
+    value but not its entry/seed mechanics relative to Phase 1's own front/tail array. Flagged
+    explicitly in the file's own top comment; whether main_menu_bg.bik's real frame 0 ever needs Phase
+    2 remains unmeasured (see the FFmpeg check below).
+  - **Verification**: full ctest suite, 170/170 passed (0 failed; 3 pre-existing Bink `real_*` tests
+    skipped locally - their golden fixtures are gitignored and not present in this checkout, unrelated
+    to this change). `synthetic_bink_codec_test`/`sr3binkcodec_tests.exe` (the test that actually
+    exercises `DcAcIdctEngine2`'s AC-tree+IDCT path) passed directly. Re-ran the real-data check against
+    `main_menu_bg.bik` frame 0 (re-extracted via `tools/bink_frameN_extract.cpp`, D10=0, 1920x1080) vs.
+    an independent FFmpeg `yuv420p`/rawvideo extraction (NOT `-pix_fmt gray`, per this project's own
+    standing caveat about tv-range rescaling) of the same frame: **5 blocks reconstructed structurally
+    (3x primary=1/sub=2 DcAcIdctEngine2, 2x primary=1/sub=3 FlatDcFill), 0/5 exact block match, 0/320
+    pixels matching (0.00%), both BEFORE and AFTER this fix** - confirmed by temporarily stashing the
+    fix and re-running the identical comparison (same 0/5, different wrong byte values pre- vs.
+    post-fix, so this is NOT a regression). The AC-tree sign-mechanism fix is itself now spec-CONFIRMED
+    correct per Part 3's direct re-disassembly, but full pixel-exactness for this block family is
+    gated on other, separately-flagged, still-open gaps (the DC/quant/entropy-prestage alignment this
+    exact family's own code comments already call out, Phase 2 per above, chroma, etc.) - NOT
+    something this task's narrow scope (the two Part-3-resolved judgment calls) could or should fix by
+    itself. Merged to main after clean build+ctest (see merge commit for details); branch
+    `fix/bink-actree-sign-mechanism-5.3j-part3` is EQUIVALENT to main post-merge.
 - Post-crash recovery: vorbis packet+codebook fix merged+493/493 independently oracle-verified against
   vgmstream-cli (SHA-256 `6c4a8a38...22dc6c` verified); inv-slot/conversation/local-player fix merged;
   pause-menu binding merged; 25-branch orphaned-branch audit done, most DONE items merged (hex-rename,
@@ -69,19 +160,38 @@
   source is an unmodelled per-entity "lane-side status bit" (+0xe09 bit 2), uses a labelled cross-product
   stand-in instead. Live-verified 900 frames: real lane-following + correct junction choice + clean
   frozen report at a genuine dead end.
+- **Traffic steering-sign fix, real overtake-gate model (spec-ai-runtime.md Sec18.6a)**: replaces the
+  cross-product stand-in above with the real mechanism Team A specced - `+0xe09` bit 2 is a DYNAMIC
+  "which side to pass the other vehicle on" flag, written only while drive-state `+0xc69==0xe` holds AND
+  an overtake gate (distance/alignment/closing-speed vs. a 2nd vehicle) passes; otherwise keeps its last
+  value. `LaneFollowState::passSideFlag` (CHOSEN default false - Sec18.6a gives no true initial value),
+  `OvertakeCandidate` (the spec's own unresolved "2nd record"), and the gate itself (CHOSEN concrete
+  thresholds, Sec18.6a's own magnitude helpers were never opened) added to
+  `sr3airuntime/traffic_lane_follower.h`. 2nd-vehicle identity: nearest near-field vehicle ahead
+  (purrsian-52's own directed stand-in), resolved via a new, reusable `ResolveNearestNearFieldVehicleAhead()`
+  helper in `tools/sr3_viewer.cpp` - factored out (not inlined) after a relayed note about Sec18.6's own
+  separate `0xe`/`0x10`-state steering-WRITE path (`0x00b2bbc0`) also resolving a "2nd vehicle"
+  (`entity+0xcc0/+0xcc4`); verified against the actual spec text myself (not just the relay) - the two
+  "2nd records" are NOT proven to be the same engine object by either spec section, so only the CODE-level
+  resolution helper is shared, not a claim the two are the same thing. **Honest live-verification result
+  (900 real playtest frames, same fixture as the original merge): the overtake gate never once fires for
+  any of the 48 live near-field vehicles across the whole run (zero -1.0 steer ticks observed) - cmd.steer
+  is constantly +1.0 (the CHOSEN default). Per-vehicle net displacement narrows sharply vs. the pre-fix
+  baseline (7-14 world units now vs. 7-56 before, same run) - junction-bunching does NOT visibly improve,
+  and individual lane-tracking is most plausibly LESS effective in this small synthetic population, because
+  the old (conceptually wrong) cross-product was incidentally tracking each vehicle's own real lookahead
+  target, and this codebase has no general-purpose lane-correction term independent of the overtake flag.**
+  Reported as observed, not assumed - no invented fix applied. Full ctest 165/170 (170 total, 5 pre-existing
+  Bink skips), 0 failed, no regressions. Self-merged (commit `0a1ed63`) per standing permission; merge had
+  to be redone in a dedicated worktree after an accidental first attempt landed on another agent's
+  concurrently-checked-out branch in the shared root checkout (caught and fully reverted before any damage -
+  the other agent's own uncommitted `ac_tree_decoder.h` work was never touched).
 
 ### (b) IN FLIGHT RIGHT NOW
-- **Bink IDCT + AC-tree decoder** (agent `ad8c2d9a0aac24f70`, dispatched after Sec5.3j landed - the exact
-  spec Team A produced in response to this session's own concrete citable-algorithm request). Target:
-  close the `main_menu_bg.bik` first-block stop, whole-frame decode, FFmpeg pixel comparison. Told it:
-  truncating shifts throughout, only the final per-pixel descale rounds (+0x7f not +0x80, exact ties round
-  DOWN), AC-tree loop terminates on "front catches up to tail and level reaches 1" (no fixed count), two
-  distinct sign-recovery mechanisms, inter-frame ref-add path only HIGH confidence (no live P-frame
-  check), 24 auxiliary fields unknown meaning (write through, don't interpret). Self-merge permission
-  given per the new standing rule. **Next step on resume: check for this agent's SubagentHandback report
-  (may already have arrived) - if DONE, independently verify via `git merge-base --is-ancestor <sha>
-  main`, rebuild+ctest in the main checkout, update HANDOFF, relay to purrsian-52. If not yet reported,
-  just keep waiting (task-notifications will keep arriving).**
+- (Bink IDCT + AC-tree decoder, agent `ad8c2d9a0aac24f70` - DONE AND MERGED, see (a) DONE THIS SESSION
+  below for the full report. Moved out of IN FLIGHT.)
+- (Traffic steering-sign fix, agent `a72418d48c265a1c8` - DONE AND MERGED, see (a) DONE THIS SESSION
+  below for the full report. Moved out of IN FLIGHT.)
 - **DONE: v0.10 release cut shipped** (per purrsian-52's explicit request: lane-following traffic + $57
   starting cash + m09 progress + Bink descriptor-B fix). Folder:
   `v0.10_2026-10-10_traffic-lane-following-starting-cash` on
@@ -128,16 +238,58 @@
   negative result for whoever next investigates the known ground-gap-under-feet visual issue.
 - IDCT/AC-tree/quant primitives did NOT exist anywhere in this codebase before this session (confirmed by
   direct grep, not assumption) - primary case 3 and primary cases 5/7 (falsely claimed as "donors" in 2
-  separate relayed summaries) are ALL still unimplemented OpenHooks as of the descriptor-B merge; Sec5.3j
-  (now landed, see IN FLIGHT above) is what's expected to finally close this.
+  separate relayed summaries) are ALL still unimplemented OpenHooks as of the descriptor-B merge.
+  Sec5.3j's own IDCT (Part 1) is now implemented AND merged, bit-exact verified (see (a) DONE THIS
+  SESSION, "Bink IDCT butterfly + AC-coefficient tree decoder") - but primary case 3 and primary 5/7 are
+  STILL unimplemented OpenHooks (Sec5.3j's own scope never covered them - confirmed directly, not
+  assumed), and the AC-tree decoder (Part 2) that DOES feed case 1/sub=2 is implemented but NOT
+  bit-exact-verified (no live worked example exists for it, and this session's own real-data check shows
+  it currently decodes real content WRONG) - do not treat primary=1/sub=2 as "fully closed" the way the
+  IDCT itself is.
 
 ### (e) User/orchestrator asks still pending or awaiting a decision:
-- purrsian-52 wants the v0.10 folder name once cut (see IN FLIGHT above) - they'll do verify+mirror
-  themselves this time, don't run `mirror_build_history.sh`.
-- No other standing asks currently blocked on a human decision - everything else in flight is normal
+- No standing asks currently blocked on a human decision - everything in flight is normal
   agent-dispatch-and-merge flow, continue autonomously per standing "don't wait, broad permission" policy.
 
 <!-- CONTEXT-GUARD:RESUME-END -->
+
+<!-- PARKED-BRANCHES:BEGIN (deliberately OUTSIDE the context-guard resume block, per purrsian-52's
+     2026-10-10 request, so a resume-note rewrite can never silently wipe this section again - a prior
+     rewrite did exactly that and it had to be restored from an hourly branch_audit.sh catch. Keep this
+     section current directly; do not fold it into the resume note above.) -->
+## Parked branches (per the standing branch-hygiene rule's "no silent parking" requirement)
+- `feature/bink-pixel-accuracy-oracle` - MERGED into main 2026-10-10 (commit `c51c94a`), after the
+  `feature/bink-idct-actree-5.3j`/Sec5.3j IDCT+AC-tree work had already landed. Re-checked by hand, not
+  assumed: its real content (the TwoLiteralPattern primary=1/sub=5 full grammar - 2 literal bytes + 8
+  control bytes -> a real 16x16 blended-pixel block, replacing the prior OpenHook stub - plus the
+  real-data Y-plane pixel-accuracy oracle dump tool) was NOT covered by Sec5.3j (that work's own scope was
+  sub=2's DC/AC/IDCT path, a different sub-case entirely). Only CMakeLists.txt and block_dispatch.h needed
+  manual conflict resolution; bitstream_reader.h/entropy_prestage.h/frame_decoder.h and most touched test
+  files turned out to already be byte-identical to main's own later independent work (merge-network
+  bit-cost fix, public-data-table split, runtime data loader, skipAudioChunks) - verified file-by-file via
+  `git diff <branch> -- <file>` post-merge, not assumed from the auto-merge succeeding. Full ctest suite
+  run clean post-merge (see this entry's own session report for the pass count).
+- `fix/bink-prestage-len-correction` - RETIRED (superseded) 2026-10-10, tip SHA
+  `57ea5d4bd567b60983de0b5bb063176903ba8fc2` (base `8584346`) recorded here before any deletion, per the
+  standing rule. Branch NOT force-deleted yet: a live worktree at `D:/Project Crreish/TEAM B/.claude/
+  worktrees/agent-binklencorrection` (339MB, clean working tree, exactly at this tip) still holds it -
+  removing a worktree needs a per-case user yes under the standing disk-space-discipline rule, so this is
+  batched for the orchestrator rather than force-removed. Once that worktree is cleared (`git worktree
+  remove` + `git branch -D fix/bink-prestage-len-correction`), this entry can be dropped entirely. Content
+  is fully superseded regardless of when the deletion happens: both its commits are pure diagnostic
+  documentation of a "genuine,
+  still-open gap" (descriptor-A LEN pre-stage decoding LEN=0 instead of 528 at the Sec5.3g-pinned byte
+  position) - zero functional code changes. That exact gap was independently closed by main's own later
+  commit `84820a4` (2026-10-09, "merge-network calls advance by actual consumed bits, not nominal field
+  width"), which spec-bink-codec.md's own re-trace (citing this branch's negative result by name - "Team
+  B's third independent negative at this exact location") confirms reproduces the real 588-bit/LEN=528
+  figure exactly, call for call. Nothing in this branch's diff exists outside comment-only documentation of
+  a question main has since answered in code; no content was dropped by retiring it.
+- `fix/ground-tile-origin-translation` (1 unique commit) - confirmed REJECTED hypothesis, self-labelled by
+  its own commit message ("WIP: REJECTED hypothesis... do not merge"). Kept, not deleted, as a documented
+  negative result for whoever next investigates the known ground-gap-under-feet visual issue. Not safe to
+  merge.
+<!-- PARKED-BRANCHES:END -->
 
 
 ## 44th rewrite's full resume-note detail (historical, superseded by the compact 45th rewrite

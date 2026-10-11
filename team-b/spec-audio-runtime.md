@@ -4506,8 +4506,29 @@ check 0 hits.
    unresolved); the camera/view-matrix source feeding `0x005546c0`, the sole caller of the listener
    producer (§11a.2); whether continuously-tracked looping emitters (vehicle engines, wind, foley)
    share the one-shot object-sound pool's create-once model or have their own persistent path (§11a.4).
-5. **Code-7 side call** `0x0045c870(record)` when `0x03171a5a` is set and the record never started —
-   result unused; purpose unknown (diagnostic?).
+5. ~~**Code-7 side call** `0x0045c870(record)` when `0x03171a5a` is set and the record never started —
+   result unused; purpose unknown (diagnostic?).~~ **CLOSED 2026-10-10.** `0x0045c870` (body
+   `0x0045c870`-`0x0045c9ce`) is CONFIRMED a locked linear lookup, not a logging/telemetry/counter
+   call: it takes a lock via the vtable call at `[0x031f0280]+0xc`, walks the global `0xa8`-byte
+   group-record table (`0x031f02c0`/`0x031f02bc`/`0x031f02be`/`0x031f02c4`), and within each active
+   group's linked list (hung off `+0x24`) looks for a node pointer equal to the `record` argument,
+   returning the owning group pointer (or 0) after releasing the lock (vtable `+0x10`) — no side
+   effects beyond the lock/unlock when its result goes unused. It has 6 callers total (not just the
+   code-5/code-7 dispatcher — also `0x0045f1a0`/`0x0045ee30`/`0x0045f470`/`0x00469ef0`, not
+   individually checked this pass). The same call is CONFIRMED meaningful in the code-dispatcher
+   `0x0045c9d0`: in the **code-5** case the identical call's return value is used — if non-zero and
+   group flag bit `+0x9e` bit 0 is set and a callback pointer at `+0x4` is non-null, the dispatcher
+   assembles a parameter block and invokes that callback. The **code-7** site
+   (`0x0045cb06`-`0x0045cb1e`) performs the identical lookup but drops the return value immediately
+   with no branch or use of it. **CONFIRMED `0x03171a5a` is read exactly once in the entire binary**
+   (that code-7 gate, `0x0045cb10`, independently re-verified via xref — `total uses 1 in 1
+   functions`) **and has zero write sites anywhere** — it is a zero-fill static, so it is
+   permanently 0 in the shipped executable; nothing in `SaintsRowTheThird.exe`'s own code ever sets
+   it. HIGH CONFIDENCE this is vestigial/dead debug instrumentation (most plausibly an abandoned
+   "re-verify `record` is still registered" sanity check mirroring code-5's real lookup-and-callback
+   pattern) that never executes in the retail build regardless of build config — not a true
+   compiled-out no-op (the instructions are present and would run if the flag were ever set), but a
+   no-op in effect since nothing sets the gating flag.
 6. **Identity of the four required config pointers** `+0x3c`…`+0x48` and the other unnamed config
    fields (§3.1) — whoever builds the config block at `0x00554c90`. **[Partly resolved, §6.4 (U-W5):
    `+0x3c`/`+0x44`/`+0x48` are the game's own file-I/O start/finish/poll primitives, called by both the
@@ -5242,3 +5263,12 @@ logic lives in an unreached per-station "song manager" update. Full detail:
   into a live `PostEvent` was not found (caveat: an indirect, pointer-chasing consumer would be
   invisible to this xref method, so this is not an exhaustive negative). Cleanroom self-check:
   strict regex 0 hits, C-cast-dereference check 0 hits.
+- **2026-10-10 — §12 item 5 CLOSED: the code-7 side call is a dead debug sanity-check, not
+  telemetry** (SPEC TEAM, agent `a47d5f06c1256de01`). `0x0045c870` is a locked linear lookup
+  (membership query against a global group-record table), productively used by the code-5 case to
+  find a callback; the code-7 site performs the identical lookup but drops the result. The gating
+  flag `0x03171a5a` is read exactly once in the whole binary and never written anywhere — a
+  zero-fill static permanently 0 in the shipped build. Independently re-verified via direct
+  disassembly and an xref scan before splicing (both matched; also caught and corrected the
+  agent's "only caller" framing — the function has 6 callers total, not one). Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

@@ -180,25 +180,41 @@ bool runFixture(const std::string& label, const std::string& path, const char* e
     // pre-fix version of this test already used for stopReason/reconstructed-
     // count): whether block (0,0) itself got past Reconstructed. Measured
     // result this pass, AFTER the audio-chunk-skip fix: both real fixtures
-    // still stop AT block (0,0), but for two DIFFERENT, non-fix reasons, not
-    // because the fix is wrong - logo_amd_hd.bik's block (0,0) dispatches
-    // VALIDLY (primary=1/SubDispatch, sub=5/TwoLiteralPattern, both within
-    // their own CONFIRMED 0-9/0-6 ranges) and stops only because that
-    // specific sub-case's pixel math is an ALREADY-DOCUMENTED, pre-existing
-    // OPEN gap (block_dispatch.h's own Case1SubType::TwoLiteralPattern:
-    // "control-byte spatial mapping not given" - nothing to do with D10 or
-    // audio chunks); logo_thq_and_voli_hd.bik's block (0,0) gets a valid
-    // primary=1 too, but then fails the SEPARATE sub-nibble range check
-    // (read directly off `br`, not through the case-selector pre-stage) -
-    // plausibly an entropy_prestage.h edge case for this file's own
-    // unusually tiny Y-plane payload (216 bytes, Sec1.6's own `220`
-    // span-field value minus 4 - far smaller than main_menu_bg.bik's
-    // 135024-byte Y payload every prior entropy-pre-stage validation pass
-    // used), not something this task's own D10 audio-chunk-skip fix caused
-    // or is scoped to chase further (entropy_prestage.h's own algorithm
-    // predates this task and is out of scope here). Both are genuinely
-    // separate, already-named gaps, not silently swept under this fix -
-    // see this task's own report for the full account.
+    // still stop, but for two DIFFERENT, non-fix reasons, not because the
+    // fix is wrong.
+    //
+    // CORRECTED 2026-10-09 (fix/bink-pixel-accuracy-oracle task): the
+    // PRIOR version of this comment claimed logo_amd_hd.bik's block (0,0)
+    // dispatches to primary=1/sub=5 (TwoLiteralPattern) - this is WRONG on
+    // two independent counts, now reconciled: (1) spec-bink-codec.md Sec5.3's
+    // own extended TwoLiteralPattern paragraph (2026-10-09 live-execution
+    // trace) explicitly states that specific claim "does not hold under live
+    // execution - that exact block dispatches into secondary=3 (Flat/DC-fill)
+    // instead, and a full-frame live scan found zero secondary=5 occurrences
+    // anywhere in that frame's 3 planes"; (2) this project's OWN decoder
+    // (entropy_prestage.h's case-selector simulation, not a raw-nibble read)
+    // independently reproduces that same finding on real bytes: this exact
+    // fixture now measures primary=1/sub=3 (FlatDcFill) x 600 blocks, then
+    // stops at block 601 on primary=3 (Giant1FullResTwin, an
+    // ALREADY-DOCUMENTED, pre-existing OPEN gap - the giant run-length engine's
+    // own bit-level token format, nothing to do with D10/audio chunks or
+    // TwoLiteralPattern). TwoLiteralPattern (sub=5) is now itself CONFIRMED
+    // and Reconstructed (block_dispatch.h's twoLiteralPattern16x16(), same
+    // task) but is simply never dispatched anywhere in THIS file's frame 0 -
+    // see spec-bink-codec.md Sec5.3 for the real worked example instead
+    // (main_menu_bg.bik, 183 real secondary=5 occurrences in its own Y-plane).
+    // logo_thq_and_voli_hd.bik's block (0,0) gets a valid primary=1 too, but
+    // then fails the SEPARATE sub-nibble range check (read directly off `br`,
+    // not through the case-selector pre-stage) - plausibly an
+    // entropy_prestage.h edge case for this file's own unusually tiny Y-plane
+    // payload (216 bytes, Sec1.6's own `220` span-field value minus 4 - far
+    // smaller than main_menu_bg.bik's 135024-byte Y payload every prior
+    // entropy-pre-stage validation pass used), not something this task's own
+    // D10 audio-chunk-skip fix caused or is scoped to chase further
+    // (entropy_prestage.h's own algorithm predates this task and is out of
+    // scope here). Both are genuinely separate, already-named gaps, not
+    // silently swept under this fix - see this task's own report for the
+    // full account.
     std::cout << "got past block (0,0) (Reconstructed)? "
               << ((trace.blocks.size() > 1 || trace.blocks.front().outcome == BlockOutcome::Reconstructed) ? "yes"
                                                                                                              : "no")

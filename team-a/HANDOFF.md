@@ -5211,8 +5211,6 @@ independently re-verified. Reported to orchestrator.
 
 **Next: vehicle customisation deep dive (`store_vehicle.lua`/`vcust_*`), per orchestrator's
 stated order.** Still 1 agent at a time; mission blockers jump the queue.
-
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
 ## 45. (ARCHIVED — superseded by §46 below) 2026-10-10 context-guard rewrite at 75%, replaced §44.
 SPEC TEAM role: research via dispatched Sonnet agents (1 at a time, usage-pacer permitting),
 splice CONFIRMED findings into `spec-*.md` myself (never delegate the splice), cleanroom-check
@@ -5932,8 +5930,8 @@ record without treating it as a trust problem — the output itself was verified
 - `dlc2_m01`'s vtable `+0x68` value still needs a live capture — orchestrator said they'd add it
   to an optional capture list; not blocking.
 
-## 46. ▶ RESUME HERE — 2026-10-10 (context-guard rewrite at 76%, replaces §45 above as the live
-note). SPEC TEAM role: research via dispatched Sonnet agents (**1 at a time**), splice CONFIRMED
+## 46. (ARCHIVED — superseded by §47 below) 2026-10-10 context-guard rewrite at 76%, replaced §45.
+SPEC TEAM role: research via dispatched Sonnet agents (**1 at a time**), splice CONFIRMED
 findings into `spec-*.md` myself (never delegate the splice — if an agent splices directly despite
 being told not to, treat its content with the same verification rigor as a handed-back draft, don't
 discard it, but remind future agents to hand back markdown), cleanroom-check (both regex patterns
@@ -6019,11 +6017,165 @@ restart/crash; currently `purrsian-52`).
     discarding it or treating it as a trust violation; flagged to the orchestrator; reminded in
     §46's own standing instructions above to keep telling future agents to hand back markdown.
 
-### 46.2 IN FLIGHT right now — exact next step
+### 46.2 (ARCHIVED — superseded by §47 below, which covers everything after item 10 above)
 
-**Orchestrator's own standing instruction after item 10 landed:** "self-pick your next target; the
-24 auxiliary dword fields [from the AC-tree decoder, §5.3j's own OPEN item] can wait until Team B
-hits them."
+## 47. ▶ RESUME HERE — 2026-10-11 (context-guard rewrite at 75%, replaces §46.2 onward as the live
+note; §46.1 items 1-10 above are still accurate, do not re-derive). SPEC TEAM role unchanged: 1
+dispatched agent at a time (usage pacer active, weekly usage was 37-38% vs 20% planned), splice
+CONFIRMED findings into `spec-*.md` myself (never delegate the splice), run both cleanroom
+self-check regexes (0 hits required, every touched file, every time — `sync_to_teamb.sh`'s own
+gate enforces this and has caught several real leaks this session, listed below), sync via
+`bash tools/sync_to_teamb.sh` (confirm "N file(s) synced... exit 0"), report to the live
+orchestrator peer by name. **Verify peer names via `ListAgents` before messaging — they rotate on
+every session restart.** Last known: orchestrator `purrsian-f5` (also seen as `purrsian-52`,
+`purrsian-8e` earlier this session, same logical role); Team B peer `team-b-26` (also seen as
+`team-b-d0`, `team-b-86` earlier — same logical role, sometimes temporarily unreachable).
+
+<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+### 47.1 DONE this session, after §46.1 item 10 — do not re-derive
+
+11. **Traffic AI overtake gate (`spec-ai-runtime.md` §18.6a/§18.6b), real thresholds found —
+    likely root cause of Team B's gate never firing.** `0x00b47f10`'s full 12-step gate
+    reconstructed: the 3 cited constants (1.0/0.5/0.25) are reused across unrelated purposes, not
+    independent thresholds; the real pass condition is a dimensionless ratio
+    `0.5 <= closingProjection/margin <= 1.0`. Most actionable finding: step 3 requires the two
+    vehicles' forward vectors to be ≥90° apart (dot ≤ 0) — an oncoming/crossing-traffic test. Team
+    B confirmed their 900-frame test only had same-direction ambient traffic — explains "never
+    fired once" exactly. Team B is implementing the real gate now; also independently found the
+    "full-lock steer" regression is likely a stale/missing default on the `+0xe09` bit-2 flag, not
+    a missing fallback steering system (I flagged this; §18.6a already documents the bit persists
+    across ticks, no separate fallback exists in the real game).
+12. **`0x00ae5290`'s steering-curve evaluator (§18.6), fully resolved by direct query, no agent.**
+    No separate evaluator exists — inline in the function itself. Reads 2 floats off
+    `this+0x20` (`+0x08`=threshold, `+0x0c`=slope), applies a 2-segment piecewise-linear response
+    shaper (second segment's slope computed to land exactly at ±1.0 at input=1.0). Also found an
+    undocumented airborne-gated early-out (`0x00d9e4c0`/`0x00d9e1e0` on `this+0x150`) and an
+    internal sign negation.
+13. **Parallel batch of 4 small items (user explicitly authorized parallel agents for this one
+    batch only — standing cap is 1 agent, confirmed with orchestrator afterward):**
+    `spec-save-format.md` §8.5 item 1 (the two live-world counters: row 2 traced to the same
+    60-entry activity-marker list §9.3 names; row 4 traced to an unexpected ambient-sound/
+    trigger-zone mechanism, "Cyberspace_Ambient", not mission/activity as hypothesized);
+    `spec-audio-runtime.md` §12 item 5 (the code-7 diagnostic call is dead debug instrumentation —
+    its gating flag `0x03171a5a` is read once, written nowhere, in the whole binary);
+    `spec-physics-runtime.md` §11 item 3 (vehicle k=2.0 sub-step trigger confirmed genuinely dead
+    code, no path to the mode gate that would make it matter); `spec-vehicle-damage-runtime.md` §7
+    item 5 (all 13 leaf calls off `0x00a9e1d0` triaged — confirms "none load-bearing," but flags
+    `0x00a7fef0` as a real wreck-list/despawn-timer subsystem worth its own future item).
+14. **Ground-missing live-playtest bug — exhausted on static analysis, PARKED pending user
+    go-ahead for live capture (requested via orchestrator, not yet granted as of this note).**
+    Full chain: `0x2244` heightmap ruled out first (`spec-zone-data-format.md` §13.5 — its query
+    chain is pure physics/AI/pathing, zero rendering consequence, confirmed by tracing all 9
+    callers of the grid-cell samplers). Pivoted to `0x2237`'s own render pipeline per orchestrator
+    — the two "spatial-index" candidates `0x0058e380`/`0x00dc8960` are a clean negative (plain
+    AABB-union bookkeeping, 11 unrelated callers, not cull logic; `spec-terrain-format.md` §5 item
+    2a). Full-population census (all 2,971 real `.czn_pc`/`.gzn_pc` pairs, reusing
+    `tools/harnesses/czn_u2_replay.py`) of which records' `0x2237` AABBs overlap tile 0915's real
+    footprint (`X[-1440,-1120]×Z[-700,-420]`, via the tile-centre formula `spec-world-streaming.md`
+    §10.6(g)) found 17 hits — mostly known tile-seam noise, plus two real new leads that were BOTH
+    chased and ruled out: `sr3_city~sawld` (the already-documented "Level Always Loaded" streaming
+    tier, §10/§10.3/§10.4 — its one `0x2237` mesh is only 173 verts spanning the whole 100km+ map,
+    too sparse to be real walkable ground) and `sr3_city~smega_crib...` (the player's safehouse —
+    team-b-26 confirmed the decoded spawn coords `(-1280,-560)` sit ~50m from the garage box's
+    nearest corner, not inside/touching it). Team B separately confirmed: their own renderer draws
+    `0x2237` unconditionally once a tile resolves (no cull/distance/frustum gate at all — ruling
+    out a renderer-side skip as the cause); a previously-tried position-translation fix (snapping
+    the 4 broken tiles' decoded geometry to nominal centre) numerically "worked" but a captured
+    frame still showed the void, AND the translated geometry was only ~26 triangles over a
+    44×23m box — too thin to be real ground even correctly placed. **Net: static analysis has
+    run out of leads. The actual missing-ground mechanism isn't in any `.czn_pc`/`.gzn_pc` data
+    this project can see. Live draw-path capture (hooking the running game) is the only remaining
+    lever — that needs the user's explicit go-ahead per the skip-and-defer policy; orchestrator
+    says they've asked.**
+15. **Bink "DC +128" bug — the project's oldest standing item, narrowed hard this session, one
+    sub-thread resolved an URGENT Team B question, the main thread remains PARKED with a precise
+    recipe.** Chain: §5.3k (live hooks confirm per-row DC-array mechanism's scale: 1,084 calls to
+    `0x1001a160`, 2,453 reads at the DC-literal site `0x1001b311`, full frame) → §5.3l (single-row
+    column diff: exact/+128 runs are only 1-13 columns long, pointing at per-chunk delta
+    corruption, not whole-batch seed/reset boundaries; also found the planned `param1+0x30`
+    bulk-array-dump method doesn't work) → §5.3m (full chunk-loop disassembly of `0x1001a160`'s
+    commit mechanism pinned address-exact through `0x1001a40a`-`0x1001a41a`; explained why the
+    bulk-dump method fails — `param1+0x30` is a transient scratch pointer reused by every call) →
+    §5.3n (found a REAL bug in §5.3m's own commit-hook placement: it hooked `0x1001a40a`, which is
+    one instruction too early — the fix is `0x1001a40d`; with the fix, confirmed only 25 of 1,084
+    `0x1001a160` calls per frame ever reach the delta loop at all, each producing 336-607 commits
+    into ONE contiguous private-heap scratch run — not the assumed 240-column single row; the
+    call-to-row mapping is unresolved, PARKED here with a named recipe) → **§5.3o, URGENT,
+    resolved a live Team-B-reported bug: block (0,0)'s real DC literal does NOT come from
+    `0x1001a160` at all.** It's read at `0x1001b311`-`0x1001b33b` as a zero-bit-cost, byte-aligned
+    16-bit word from a SEPARATE mechanism ("descriptor L"'s own byte cursor) — value 118,
+    independently re-confirmed a THIRD time (matches two pre-existing passes exactly), decoding to
+    pixel value 24, an EXACT match to FFmpeg. Team B's own reported garbage value (16709,
+    `0x4145`) is almost certainly their decoder reading this block's DC from the WRONG array (the
+    `0x1001a160` scratch array, not descriptor L) — a structurally-motivated explanation, not
+    independently verified against their source (no access). One new OPEN curiosity: descriptor
+    L's read address sits exactly 2 bytes before §5.3n's own sampled `0x1001a160` commit-run base
+    — same DLL-heap region, adjacency not yet explained. **Bottom line for whoever picks this up:
+    the `0x1001a160` delta-array thread (call-to-row mapping, exact +128 instruction) remains
+    genuinely unresolved and PARKED — but it does NOT block block (0,0) specifically, which
+    already decodes correctly via the descriptor-L path.**
+16. **`spec-weapons-runtime.md` §2a.5's `0x00765c70` (reverse type-7/`0x20` contact-listener
+    pairing), opened directly with one query, no agent.** Resolves a target handle via the
+    standard capability-table chain, applies a force/damage value via two unopened helpers
+    (`0x00b29e90`/`0x00b2a0d0`), then conditionally fires 3 hash-keyed named trigger/event calls on
+    a second successful resolve.
+17. **Vehicle destruction decision (`spec-vehicle-damage-runtime.md` §7), still NOT found after
+    opening 8 functions across 2 passes — but the search space is now much better bounded.** Ruled
+    out as the decision site (none write the vehicle's own `+0x1564` HP field, none branch on
+    zero): `0x00a9c6f0` (event-notify only), `0x00a9d070` (damage-type eligibility/scaling gate),
+    `0x00a9dbe0` (per-part replication/notify dispatcher), `0x00a9dd40` (apply-and-feedback
+    orchestrator — reads `+0x1564` only for a rumble-intensity ratio, never writes it),
+    `0x00a9c070`/`0x00a9c130` (difficulty/player-identity multiplier helpers), `0x007047a0`
+    (a generic 28-slot event-broadcast primitive, not vehicle-specific), `0x00a9f4f0`'s own full
+    body past its `+0xbd0==1` bifurcation (confirmed zero touches of `+0x1564`/`+0x155c`/`+0x1560`
+    anywhere), `0x00a9f430` (per-player targeting notify). **New structural finding: vehicle
+    PARTS carry their own distinct HP-like field at `part+0x10` (max `part+0xc`), clamped by
+    `0x00a8fd70` (the real per-part damage-apply/clamp routine, structural analog of
+    `0x00a9c1f0`), with the first confirmed "reached zero" check in this whole investigation
+    living in `0x00a9b890` (tests `part+0xf0` bit `0x40` AND `part+0x10==0`) — but that check only
+    returns a boolean, it does not itself call anything destruction-shaped.** 4 separate
+    category/damage-type branches inside `0x00a8fd70` explicitly floor the result back to 1,
+    hard-protecting those categories from ever reaching literal zero through this path. **Named
+    next leads, highest priority first:** `0x00a9c5d0` (called right before `0x00a9f430`/
+    `0x00a9b890` in `0x00a9f4f0`, completely uncharacterized); `0x00a8f910` (the non-deferred tail
+    of `0x00a8fd70`, gets vehicle+damage-type+3 vectors but not the part pointer); the
+    deferred-queue batch consumer `0x00a8fd70` feeds when not in immediate-apply mode (a global
+    ring-buffer region, consumer not identified); `0x00a9e1d0`'s own two callers (`0x00a9eb60`; the
+    tiny thunk `0x00aa04e0`, single caller `0x00896183` not traced); `0x00a9c230`/`0x004d7f30`/
+    `0x009dd230`/`0x00979b30` (named earlier, still unopened).
+
+### 47.2 Cleanroom leaks caught by `sync_to_teamb.sh`'s own gate this session (the discipline
+working as designed — pattern to watch for: decompiler auto-names slipping into freshly-written
+prose, almost always from an agent's report being pasted too literally)
+
+Caught and fixed, same session: a `pcVar1` in an `spec-ai-runtime.md` §18.6 splice; two separate
+`DAT_02a5a004`-style leaks in a `spec-vint-doc-format.md` §8 splice (two rounds); an `iVar3` ×6 in
+an `spec-ai-runtime.md` §18.6b splice; a raw C-cast-dereference (`*(i16*)(...)`) in a
+`spec-zone-data-format.md` §13.5 splice; an `iVar7` in a `spec-vehicle-damage-runtime.md` §7
+splice. Every one caught before sync completed, none reached Team B.
+
+### 47.3 IN FLIGHT right now
+
+Nothing — all dispatched agents this session have reported and been spliced/synced. Next action
+on resume: self-pick a new bounded item (continue chasing `0x00a9c5d0` for the vehicle-destruction
+thread is the most natural next pick, or follow the orchestrator's next instruction if one has
+arrived), 1 agent at a time per the active usage pacer.
+
+### 47.4 Pending on the user/orchestrator specifically
+
+**The ground-missing live-playtest bug's live-capture go-ahead** — static analysis is exhausted
+(§47.1 item 14), orchestrator says they've asked the user, not yet granted as of this note. Do not
+propose or attempt any game-side hook/capture without that explicit go-ahead; Bink Unicorn work is
+unrelated and never needed this approval (isolated DLL emulation, never touches the game).
+
+The live orchestrator peer is `purrsian-f5` (verify via `ListAgents` on resume — names rotate).
+<!-- CONTEXT-GUARD:RESUME-END -->
+
+## 48. Archive: superseded §47.1-item-by-item narration, kept for detail if ever needed
+
+**Orchestrator's own standing instruction after §46.1 item 10 landed:** "self-pick your next
+target; the 24 auxiliary dword fields [from the AC-tree decoder, §5.3j's own OPEN item] can wait
+until Team B hits them."
 
 **Picked: the vint-doc tween/keyframe animation encoding** (`spec-vint-doc-format.md` §7/§8 item
 8) — HIGH CONFIDENCE on structure (tween is an ordinary element-tree type, no separate binary
@@ -6068,17 +6220,231 @@ splice. Splice into `spec-vint-doc-format.md` §7/§8 and/or `spec-vint-render.m
 better per the agent's own placement judgment — check it makes sense before accepting). Cleanroom-
 check (0/0), sync, update this note, report to orchestrator.
 
-**QUEUED next task (Team-B-routed, orchestrator says "small"), after the vint-doc work lands:**
-Team B wired up traffic lane-following (using §46.1 item 7's own newly-spliced work) but the
-steering SIGN comes from a per-vehicle "lane-side status bit" at entity `+0xe09` bit 2 — already
-cited in `0x00b47490`'s own trace (§18.6, picks `+1.0`/`-1.0` from this exact bit) but its own
-setter was never found. Team B is using a labelled cross-product as a stand-in. **Task: find who
-sets `+0xe09` bit 2, and when, and add it to `spec-ai-runtime.md` §18.** Start from an xref census
-of writes to that bit/byte within the already-known traffic address bands
-(`0x00a69000`-`0x00a6e000`, `0x00b1a000`-`0x00b65000`) established in §18.1's own methodology — the
-entity record layout and several nearby fields (`+0xe08`, `+0xe14..+0xe1c`, `+0xe38`/`+0xe40`,
-`+0xc69`) are already named in §18.5/§18.6, giving good landmarks for recognizing the right struct.
-1 agent, Sonnet first.
+**DONE.** Agent `a8be8f8b3a0e658c6` found exactly one bit-2 writer in the whole binary via an
+exhaustive `+0xe09` disp32 literal scan (18 real hits, all individually classified by bit):
+`0x00b47c80`, reached from the known drive tick `0x00b4d070` through a third, previously-
+undocumented sibling call `0x00b4ad30` (unconditional every tick, but only reaching the bit-2
+write when drive-state `+0xc69==0xe` AND a geometric overtake/pass-side gate `0x00b47f10`
+returns true). Answer: dynamic, not a spawn-time constant, throttled behind that gate rather
+than recomputed unconditionally. Independently re-verified `0x00b47c80`'s and `0x00b4ad30`'s full
+disassembly against the live Ghidra server myself before splicing — the bit-2 mask instructions,
+the `0x00b47f10`→`0x00b47c80` conditional call, and the `0x00b4d070`→`0x00b4ad30` unconditional
+call all matched the agent's report exactly. Spliced as new `spec-ai-runtime.md` §18.6a (between
+§18.6 and §18.4) plus a Changelog entry. Cleanroom-check: `sync_to_teamb.sh`'s own gate ran clean
+(no violations flagged). Synced (70 files, byte-identical, HANDOFF.md/spec-output.md untouched,
+exit 0). Left OPEN for whoever picks it up next: identity of the second vehicle-shaped record
+both `0x00b47c80`/`0x00b47f10` compare against, and the role of the entity's own
+`+0x4c/0x50/0x54` vector. Reported to orchestrator (`purrsian-52`) for relay to Team B.
+
+**Self-picked next: resolve the `0x00e229b0` genericity question** I personally flagged as
+unconfirmed in the prior vint-doc splice (whether the Vint document renderer's step-(3) "callback
+slot `+0x00`" call is tween-specific or a generic per-document hook). Dispatched agent
+`a24dc40bb8bef1c1d`. **DONE.** Confirmed GENERIC — `0x00e229b0` is a bare callback-table thunk (8
+instructions, tail-jumps through global `0x02a5a008`'s slot-0 entry), one of 12 structurally
+identical sibling thunks over the same table at different offsets; its only caller is
+`0x00e1f12c` inside `0x00e1f0b0`, firing once per document render regardless of document type; the
+dispatched slot resolves to `0x008470a0`, already tabulated in §9 as ordinary scissor/mask-mode
+reset — no interpolation math anywhere in the chain. Independently re-verified `0x00e229b0`'s full
+body and caller xrefs against the live Ghidra server myself before splicing (matched exactly).
+Retracted the "tween-interpolation candidate" flag in both `spec-vint-render.md` §2.2 and
+`spec-vint-doc-format.md` §7's cross-reference, with Changelog entries in both. The real tween-
+interpolation consumer is still unidentified — that remains the genuinely open thread for a future
+unit. Cleanroom-check: `sync_to_teamb.sh`'s own gate ran clean. Synced (70 files, byte-identical,
+HANDOFF.md/spec-output.md untouched, exit 0). Reported to orchestrator (`purrsian-52`).
+
+**Self-picked next: the `0x00b2bbc0` second-write-path candidate** §18.6 itself flagged as
+genuinely OPEN (the `0xe`/`0x10`-state sibling branch out of `0x00b4d070`, never opened by any
+prior unit). Dispatched agent `affd9e1a22bea80aa`. **DONE.** `0x00b2bbc0` is NOT a different
+subsystem — it reaches the identical `driverInput+0x128`/`+0x12c`/`+0x130`/`+0xb0` write site
+already confirmed for the state-`0xd` path, but one hop shorter (calls `0x00a929e0`/`0x00a92640`
+directly, no `0x00b47490` intermediary). It early-outs on a null sub-record/readiness gate/brake
+test, otherwise gates on distance to a second resolved handle pair (`entity+0xcc0`/`+0xcc4`,
+plausibly a lead/target vehicle) before dispatching. `0x00b2bbc0` itself has 9 call sites across
+unrelated functions, confirming it's a generic shared helper, not traffic-exclusive.
+Independently re-verified all 4 dispatcher call sites and the entity-handle-pair argument pattern
+against the live Ghidra server myself before splicing (matched exactly). Spliced into
+`spec-ai-runtime.md` §18.6 (replacing the old "OPEN, narrower than before" paragraph) plus a
+Changelog entry. Cleanroom-check: `sync_to_teamb.sh`'s own gate ran clean. Synced (70 files,
+byte-identical, HANDOFF.md/spec-output.md untouched, exit 0). Reported to orchestrator
+(`purrsian-52`).
+
+**Self-picked next: `0x00ad3820`'s brake-bailout semantics**, the last narrow OPEN item hanging
+off this same thread. Dispatched agent `a7d8c5366122f0495`. **DONE.** `0x00ad3820` is NOT a
+literal brake/speed test — it's a generic entity-status gate: returns "continue" only when the
+entity is non-null, two one-instruction bit-extractors (`0x008cc4d0`/`0x0091f600`, reading
+`+0x3b`/`+0x3a` bit 0) are both false, and `+0x33` bit `0x8` is set; otherwise it bails. 30 call
+sites across dialogue/script triggers, physics, and unrelated AI functions confirm it's a
+generic "entity disabled/suspended" gate, not traffic- or brake-specific. Its bailout,
+`0x00b2ed40`, turned out to NOT be a no-op either — it resolves a second handle-pair object and
+snaps its position/orientation via a direct vtable call (plus zeroing a physics sub-object if
+present); no vehicle-command dispatcher call anywhere in its body. Independently re-verified
+`0x00ad3820`'s disassembly against the live Ghidra server myself before splicing (matched
+exactly). **Caught one cleanroom leak myself before syncing:** the first splice attempt included
+a literal `pcVar1` (decompiler auto-name) in prose — `sync_to_teamb.sh`'s own gate correctly
+REFUSED the sync and named the exact line; fixed by rewording, re-ran sync, clean on the second
+pass. This is exactly the discipline working as designed — the gate caught a real leak before it
+reached Team B. Spliced into `spec-ai-runtime.md` §18.6 plus a Changelog entry. Synced (70 files,
+byte-identical, HANDOFF.md/spec-output.md untouched, exit 0). Reported to orchestrator
+(`purrsian-52`), who confirmed the traffic-AI thread was sufficiently closed out.
+
+**Self-picked next (now superseded by a priority redirect, see below): the vint-doc `bitmap`
+image-property PEG-vs-BitmapSheets resolution.** Dispatched agent `a8f5c726b9707fb4d`. **DONE.**
+CONFIRMED by disassembly: `bitmap`'s own vtable-slot setter (`0x00e31320`, vtable `0x01258e04`)
+resolves a string-valued `image` through `0x00e30120`, which hashes the string (`0x00d9e8b0`) and
+resolves via a generic 240-bucket handle cache — on a miss, dispatched through one indirect vtable
+call on a shared "current resource manager" pointer at `0x02a5a004`. Neither a direct PEG lookup
+nor the BitmapSheets `.xtbl` manifest reader is called from this chain; the real choice is one hop
+further in, inside whatever object that pointer references (not identified this pass).
+Independently re-verified `0x00e31320`'s and `0x00e30120`'s disassembly against the live Ghidra
+server before splicing. **Caught two more cleanroom leaks myself:** the first two splice attempts
+both left a `DAT_02a5a004`-style auto-name in prose — `sync_to_teamb.sh`'s gate REFUSED both
+times, naming the exact lines; fixed by rewording to "a pointer at `0x02a5a004`," clean on the
+third pass. Spliced into `spec-vint-doc-format.md` §8 item 7 plus a Changelog entry. Synced (70
+files, byte-identical, HANDOFF.md/spec-output.md untouched, exit 0). **Not yet reported to the
+orchestrator** — superseded by the priority redirect below before the report went out; will
+report once the redirect's task is handled.
+
+**PRIORITY REDIRECT (from `purrsian-52`, received mid-self-pick, takes precedence over
+everything above):** Team B's §5.3j AC-tree decoder implementation desyncs on `main_menu_bg`
+frame 0 — 5 blocks decode, pixels wrong (`"209 197 194 180..."` vs. FFmpeg's `"24 24 24 24..."`).
+Team B had to guess on two interpretive calls §5.3j wasn't explicit about: (1) which of the two
+sign-recovery mechanisms applies at which terminal leaf; (2) the width of the extra-bits field.
+**Task: add a worked example to `spec-bink-codec.md` §5.3j** — one real block from
+`main_menu_bg` frame 0 (ideally one of the first 5, which reach the decoder), bit position → each
+decision → output coefficients, at §5.3g's precision, cross-checked against FFmpeg's coefficients
+for that block, stating both open points explicitly. Sonnet first, per standing model-escalation
+rule (§27.H-0). This is Bink-side work — no Ghidra server coverage, use Unicorn
+emulation/disassembly as every prior Bink unit has.
+
+Dispatched agent `ab7edf30d0fb20702`. Mid-flight, Team B themselves sent their own exact two
+judgment calls directly (case2→mech1/case3→mech2 mapping; `level`-bit raw read with sign tested on
+the ORIGINAL raw value, flagging that the existing §5.3j prose's "testing that SAME masked value"
+wording looked tautological to them). Relayed this to the already-running agent via `SendMessage`
+rather than re-dispatching (mis-dispatched a duplicate agent by accident first — caught and
+`TaskStop`'d it before it did real work, then sent the context to the original agent instead).
+
+**DONE.** Both judgment calls resolved, and Team B's suspicion about the existing prose was RIGHT —
+a genuine bug in §5.3j's own prior "Sign recovery" wording, not just an ambiguity. (1) Sign-
+mechanism selection is NOT case-2-vs-case-3: mechanism 1 handles BOTH Phase-1 case 2 and case 3's
+immediate leaf resolutions; mechanism 2 is exclusive to Phase-2's `sel==2` arm's own runtime
+"magnitude-exactly-1" sub-branch (gated by a second, separate bit read at `0x10025593`). Team B's
+mapping was backwards on case 3. (2) Width is confirmed exactly `level` bits, and the sign test's
+real operand is a pre-mask RAW snapshot taken BEFORE the masking/OR runs (`0x10025440`), not the
+post-mask/OR'd value the old prose claimed — testing the post-OR value would indeed be tautological,
+exactly as Team B flagged. Independently re-disassembled both cited address ranges myself via
+`disasm_util.py` (`0x10025439`-`0x10025466`/`0x100250d2`-`0x100250f9` and
+`0x1002556a`-`0x10025637`) before splicing — matched the agent's report exactly, instruction for
+instruction. Spliced as new `spec-bink-codec.md` §5.3j Part 3, plus a strikethrough correction on
+the old Part 2 prose and a Changelog entry. Left OPEN: Phase-2's `sel==1`/`sel==3` arms' own
+eventual mechanism usage; a clean live bit-trace tying one specific block's leaves to the rule
+end-to-end (hit the same self-re-entrancy issue already documented for `0x100244c0`). Cleanroom-
+check: `sync_to_teamb.sh`'s own gate ran clean. Synced (70 files, byte-identical,
+HANDOFF.md/spec-output.md untouched, exit 0). Reported to both `team-b-d0` (unblocking them) and
+`purrsian-52`, and also sent the still-pending vint-doc bitmap-image report that had been delayed
+by this redirect.
+
+**Self-picked next: the one open thread the AC-tree splice itself left** — Phase-2's `sel==1`/
+`sel==3` arms' own sign-mechanism usage, directly adjacent to the just-landed work and worth
+closing before Team B might hit it on later blocks. Dispatched agent `a0940c9e5ac3e0e2f`. **DONE.**
+`sel==1` (`0x10025522`-`0x1002555f`) does no sign recovery at all — pure tag-arithmetic requeue,
+deferring to 3 freshly `sel==2`-tagged children. `sel==3` (`0x10025716`-`0x1002575c`) resolves
+UNCONDITIONALLY via mechanism 2, no gating bit — confirming which arm one of Part 2's already-cited
+mechanism-2 addresses (`0x1002573a`) belongs to. Updated rule: mechanism 1 is Phase-1-only;
+mechanism 2 has two Phase-2 homes (`sel==2` gated, `sel==3` unconditional); `sel==1` reaches
+neither. Independently re-disassembled both ranges myself via `disasm_util.py` before splicing
+(matched exactly). Spliced into `spec-bink-codec.md` §5.3j Part 3 (replacing the old OPEN line)
+plus a Changelog entry. Synced (70 files, byte-identical, exit 0). **Next action:** report to
+orchestrator and Team B, then self-pick again.
+
+**User explicitly asked to parallelize** ("have other agents working on other parts if possible
+and won't cause issues"). Scouted 4 independent, well-scoped open items across 4 DIFFERENT spec
+files (no splice collision risk) via a quick Explore-agent survey, then dispatched all 4 in
+parallel: `a051210415ca25b48` (spec-save-format.md §8.5 item 1, live-world counters),
+`a47d5f06c1256de01` (spec-audio-runtime.md §12 item 5, code-7 diagnostic call),
+`a668cefb803361f0b` (spec-physics-runtime.md §11 item 3, vehicle sub-step k=2.0),
+`ab7d28c1e44da6410` (spec-vehicle-damage-runtime.md §7 item 5, 13-function leaf triage).
+Separately, `purrsian-52` queued a priority follow-up on the just-closed §18.6a overtake gate —
+Team B implemented it but it never fired once in a 900-frame test, because the magnitude helpers
+behind its thresholds were never opened. Dispatched `a091636ed7446e5b2` for that (spec-ai-runtime.md
+§18.6a).
+
+**`a091636ed7446e5b2` DONE — likely found the actual root cause, not just missing numbers.**
+Fully reconstructed `0x00b47f10`'s 12-step gate. The 3 cited constants (1.0/0.5/0.25) are NOT
+independent thresholds — two are reused for an unrelated purpose earlier in the function, and the
+real pass condition is a dimensionless ratio test (`0.5 <= closingProjection/margin <= 1.0`), not
+absolute distance/speed/alignment comparisons as Team B's framing assumed. Most actionably: step 3
+requires the two vehicles' forward axes to be ≥90° apart (an oncoming/crossing-traffic test, not a
+same-direction tailgate test) — if Team B's 900-frame test only ever observed same-direction
+traffic, the gate was structurally guaranteed never to fire regardless of tuning. Independently
+re-verified both magnitude/dot-product helpers' full bodies, all six cited constants' raw values,
+and the step-3 forward-dot-product read sites against the live Ghidra server before splicing — all
+matched exactly. **Caught one cleanroom leak myself:** the splice initially left `iVar3` (a
+decompiler auto-name) in prose in 6 places — `sync_to_teamb.sh`'s gate REFUSED and named every
+line; fixed by renaming to `leadHandle` throughout, clean on the second pass. Spliced as new
+`spec-ai-runtime.md` §18.6b plus a Changelog entry. Synced (70 files, byte-identical, exit 0).
+Reported to both `team-b-d0` and `purrsian-52`.
+
+**Correction from `purrsian-52`: the "use other agents" instruction did NOT come from the
+orchestrator — it came directly from the user in this session (confirmed, not a peer relay).
+Usage-aware cap reverts to 1 Team A agent at a time for self-picks going forward** unless the user
+directly asks for parallelization again. Orchestrator also redirected: self-pick next, preferring
+items that unblock Team B or the playtest — **the ground-surface draw gap under the player is
+still the most visible defect.**
+
+**Self-picked: the live-playtest "ground missing" bug's single most consequential OPEN item**
+(`spec-zone-data-format.md` §13.5) — the `0x2244` heightmap query chain is traced as far as
+`0x00b412c0`/`0x00b41370` (grid-cell samplers), but no xref was ever run on either to find their
+own callers, so it's unknown whether ANY caller actually reads a height sample and builds visible
+render geometry, vs. the data being a pure physics/AI/camera elevation-query API with zero
+rendering consequence. Dispatched 1 Sonnet agent, `a1f07c493367ef98b`, per the reverted cap.
+
+**DONE — found the missing literal read AND a likely-significant negative result for the
+ground-missing bug.** The literal height read is `0x00b41000` (bounds-checked, no scale/bias,
+direct `float10` cast — confirming "raw = whole metres"; flagged a new narrow OPEN item: its
+`-5.0` out-of-bounds sentinel collides with the population's real observed minimum of `-5`).
+Traced every caller of the grid-cell samplers (9 functions total): every one is a scalar
+elevation-query or pathfinding-cost consumer (single/max-height queries, a ground-conform
+position write-back, a slope-capped walkability test, an A*-style pathfinder) — **NONE allocates
+or writes a vertex/index buffer, mesh, or touches any D3D9 object.** Independently re-verified
+`0x00b41000`'s full disassembly against the live Ghidra server before splicing (matched exactly).
+**Net: if `0x2244` is the intended base terrain, nothing in its own query chain ever builds the
+visible ground — the live-playtest bug most likely lies in `0x2237`'s render pipeline or a
+render-state/culling issue, not in heightmap data/decode.** Spliced into
+`spec-zone-data-format.md` §13.5 plus a Changelog entry. **Caught one cleanroom leak myself:** my
+own first splice attempt left a raw C-style pointer-cast-dereference (`*(i16*)(...)`) in prose —
+`sync_to_teamb.sh`'s gate REFUSED and named the line; fixed by rewording to plain prose, clean on
+retry (one unrelated transient fork/resource hiccup from the shell also needed a second retry,
+not a content issue). Synced (70 files, byte-identical, exit 0). Reported to orchestrator
+(`purrsian-52`).
+
+**Orchestrator: "carry the ground gap through to the end."** Audit `0x2237`'s own render-geometry
+pipeline, compare a broken tile against a working one at the geometry level (mesh exists? bounds?
+material? draw/cull path?), and ask `team-b-d0` which tile the default spawn sits on and what
+their renderer does with `0x2237` data (their side may simply cull a chunk). `team-b-d0` is
+currently unreachable (not in `ListAgents`) — relayed both questions through `purrsian-52` instead
+of waiting. Dispatched 1 agent, `a50555d271ba4bd5c`, for the exe-side half: open the two never-
+decompiled spatial-index insertion functions (`0x58e380`/`0xdc8960`) the `0x2237` mesh-ref loop
+feeds into, trace toward the actual draw submission for any cull/skip logic, and compare tile
+`0715` (reported broken) against `0916` (reported working) at the mesh/bounds/material level,
+reusing existing extraction tooling from `scratchpad/pavement_0x2237_real_sample_2026-10-08.md`
+where possible. Awaiting its report.
+
+**All 4 of the first batch DONE, independently spot-checked, spliced, synced together (70 files,
+exit 0):**
+- save-format: row 2's counter traced to the SAME 60-entry activity-marker list §9.3 already
+  names; row 4 traced to a previously-undocumented THIRD per-class list gated through an
+  unexpected ambient-sound/trigger-zone mechanism ("Cyberspace_Ambient"), not a mission/activity
+  counter as hypothesized. Spot-checked the string reference myself — matched.
+- audio: the code-7 diagnostic call is a dead debug sanity-check (lookup result discarded; its
+  gating flag is read once, written nowhere, in the whole binary). Spot-checked disassembly and
+  xref myself — matched, but also caught and corrected the agent's "only caller" framing (6
+  callers exist, not 1).
+- physics: the vehicle k=2.0 trigger is confirmed genuinely dead code — the function never
+  references the step-mode flag that would make k matter. Spot-checked the full disassembly
+  myself — matched, including the absence of the flag references.
+- vehicle-damage: all 13 leaf calls triaged; confirms "none load-bearing," but flags
+  `0x00a7fef0` as a real wreck-list/despawn-timer subsystem worth a future line item. Spot-checked
+  2 of the 13 myself — matched.
 
 ### 46.3 LEARNED this session's own new facts/addresses (beyond what's folded into 46.1's bullets)
 
@@ -6136,9 +6502,6 @@ entity record layout and several nearby fields (`+0xe08`, `+0xe14..+0xe1c`, `+0x
 
 ### 46.5 Pending on the user/orchestrator specifically
 
-Nothing currently blocked on the user. The live orchestrator peer is `purrsian-52` (verify via
-`ListAgents` on resume — names can rotate on session restart/crash). All work this session has
-been self-directed picks confirmed after-the-fact by the orchestrator, or orchestrator-named
-Team-B-routed priorities — no standing decision is awaiting the user specifically right now beyond
-"wait for the in-flight agent (§46.2) to report."
-<!-- CONTEXT-GUARD:RESUME-END -->
+**UPDATE 2026-10-11 (post-restart, usage-pacer active — weekly 37% vs 20% planned, 1-agent cap, targeted reads only):** Orchestrator is now `purrsian-8e`; Team B is `team-b-86`. Ground-missing bug thread: heightmap (`0x2244`) ruled out (zero rendering consequence, `spec-zone-data-format.md` §13.5). Pivoted to `0x2237`'s own render pipeline per orchestrator's "carry it through" — the two spatial-index candidates `0x0058e380`/`0x00dc8960` are now a CONFIRMED clean negative (plain AABB-union bookkeeping, not cull logic); spliced as `spec-terrain-format.md` §5 item 2a, synced (70 files, exit 0). **Still OPEN, not yet attempted:** the forward trace to the actual draw-submission walker (next step: xref sweep on the Mesh sub-block object `0x00e718b0`/`0x00e71410`), and a literal tile `0715`-vs-`0916` byte comparison. `purrsian-8e` says Team B's reply to the two relayed questions (spawn tile location; does their renderer cull `0x2237` chunks) should arrive from `team-b-86`. Given the usage pacer, next move is likely either: wait for Team B's answer, or dispatch one more single targeted agent for the xref-sweep step if nothing arrives.
+
+The live orchestrator peer is `purrsian-8e` (verify via `ListAgents` on resume). No standing decision awaiting the user beyond the ground-gap thread above.

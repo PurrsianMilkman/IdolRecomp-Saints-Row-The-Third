@@ -2033,8 +2033,12 @@ any leaves Phase 1 left as pure shape markers.
 1. **General multi-bit case** (`0x10025439`-`0x10025466`, and four more byte-identical unrolled copies
    earlier in Phase 1's own body, e.g. `0x100250d2`-`0x100250fb`): the raw extra-bits field is first
    masked to its own bit-width and OR'd with the level's `bias_mask` (`0x10025440`-`0x10025448`,
-   `(raw & (bias_mask-1)) | bias_mask`), THEN the sign is recovered by testing that SAME masked value
-   against the level's own bias mask again (`0x10025454`: `test maskedvalue, bias_mask`) — if the test
+   `(raw & (bias_mask-1)) | bias_mask`), THEN the sign is recovered ~~by testing that SAME masked value
+   against the level's own bias mask again~~ **[2026-10-10, CORRECTED — see Part 3 below: the raw,
+   pre-mask value is snapshotted to its own stack slot at `0x10025440` BEFORE the mask/OR runs, and the
+   sign test at `0x10025454` reads THAT snapshot, not the post-mask/OR'd value — testing the masked
+   value, as this sentence originally claimed, would be tautological (its bias-mask bit is always set
+   by the preceding OR), which is exactly the bug a prior version of this prose had.]** — if the test
    bit is clear, the value is used as-is (positive); if set, it is negated (`0x10025464: neg ecx`)
    before the final `mov word [ebp+idx*2-0x14c], cx` store. The sign is encoded as a specific BIT
    POSITION within the raw extra-bits field itself (position given by the level's own bit-width), not
@@ -2098,6 +2102,402 @@ finding). OPEN: the full case-0/case-1 tag-arithmetic meaning (what each of the 
 family concretely encodes about code length/category, beyond "expands the tree by 1 or 4 nodes"); the
 semantic role of the 24 auxiliary dword struct fields at `0x04`-`0x7c`; whether Phase 2 is reachable with
 real content in this specific file (not tested live this pass, only disassembled).]**
+
+#### Part 3 — resolving Team B's two sign/width judgment calls, instruction-level (2026-10-10)
+
+**Scope.** Direct response to Team B's reported `main_menu_bg.bik` frame-0 desync (5 blocks decode,
+6th diverges). Re-opens the exact byte ranges Part 2's own "Sign recovery" subsection already cited,
+at the instruction level, to settle two questions that subsection's prose left implicit (and, as it
+turns out, got wrong on one point — see the strikethrough correction in Part 2 above).
+
+**Re-disassembly of the Phase-1 case-3 immediate-resolution site, `0x10025439`-`0x10025466`
+(capstone/pefile, static, `binkw32.dll`, no decompiler) — CONFIRMED, independently re-verified
+against the raw bytes:**
+```c
+// 0x10025439: ecx = [ebp-0xb8] (bias_mask); 0x1002543f: ecx--      (ecx = bias_mask-1, magnitude mask)
+// 0x10025440: [ebp-0xb4] = ebx                 <-- RAW pre-mask value SNAPSHOTTED HERE, into its OWN
+//                                                   stack slot, BEFORE any masking/OR touches ebx
+// 0x10025446: ebx &= ecx                       (mask ebx to its low (level-1) bits)
+// 0x10025448: ebx |= [ebp-0xbc] (bias_mask)    (force ebx's top bit on -> candidate magnitude; this
+//                                                   ebx is NOT the operand used for the sign test)
+// 0x1002544e: ecx = [ebp-0xb8] (bias_mask, reloaded)
+// 0x10025454: test [ebp-0xb4], ecx             <-- tests the RAW SNAPSHOT from 0x10025440, NOT the
+//                                                   masked/OR'd ebx -- two different stack locations,
+//                                                   read at different times
+// 0x1002545a: [ebp-0xa8] = ebx (store final magnitude)
+// 0x10025460: ecx = ebx
+// 0x10025462: je 0x10025466 (bit clear -> positive, ecx unchanged)
+// 0x10025464: neg ecx       (bit set -> negative)
+```
+Byte-identical sequence re-confirmed at the Phase-1 case-2-chained instance, `0x100250d2`-`0x100250f9`
+(reached immediately after `0x10025087`'s leaf-marking code, NOT deferred to Phase 2 despite Part 2's
+own "cached... for the magnitude/sign read below" phrasing — "below" means a few instructions further
+down in the SAME Phase-1 code path, not literally Phase 2).
+
+**Judgment call 2 (extra-bits width + the apparent tautology), RESOLVED — CONFIRMED, supersedes the
+imprecise wording Part 2 originally had:** the sign test's real operand is the **pre-mask raw
+extra-bits snapshot** (`[ebp-0xb4]` and its sibling slot in the unrolled copy), captured in its own
+stack slot *before* the `and`/`or` sequence runs — not the post-mask/post-OR value that ends up in
+`ebx`. Testing the post-OR value against its own just-forced-on bit would indeed be the tautology
+Team B correctly flagged (always "set" → always negate); that is NOT what the real code does. The
+actual mechanism tests the ORIGINAL, unmodified bit at position `level-1` of the raw field — exactly
+the bit the subsequent `and`/`or` sequence separately forces to 1 in the magnitude copy. **Width,
+CONFIRMED in both re-disassembled instances: exactly `level` raw bits** (the outer level counter's
+current value at the moment this leaf resolves — the same count defining `bias_mask = 1 <<
+(level-1)`), with no category- or tag-dependent variation found in either instance. It is literally
+the same raw field read once and inspected twice: once with the top bit forced on (magnitude), once
+in its untouched original form (sign).
+
+**Re-disassembly of the Phase-2 `sel==2` dispatch arm, `0x1002556a`-`0x10025637`
+(capstone/pefile, static) — CONFIRMED, locates mechanism 2's real home:**
+```c
+// 0x1002556a: shr ecx,2; byte[esi]=0; esi++        -- marks leaf (same shape as Phase-1 case 2)
+// 0x10025577-0x10025590: read one new bit (single-bit refill idiom, Part 2)
+// 0x10025593: je 0x100255ae   -- bit CLEAR: push a +3-tagged node onto front2/[ebp-0x98]
+//                                 (0x10025595-0x100255aa) -- NOT a leaf resolution, a further
+//                                 deferred sub-expansion
+// 0x100255ae-0x100255c6: bit SET: read ONE MORE bit (same refill idiom)
+// 0x100255c7: and esi,1; neg esi; or esi,1          -- MECHANISM 2 fires HERE: that second bit IS
+//                                 the sign, magnitude is always exactly 1
+// 0x100255cf: mov word[ebp+ecx*2-0x14c], si          -- store the final signed coefficient
+```
+Pattern repeats identically for the next worklist slot at `0x100255f1`-`0x10025630`.
+
+**Judgment call 1 (sign-mechanism selection), RESOLVED — CONFIRMED, corrects Team B's case-2→
+mechanism-1/case-3→mechanism-2 mapping:** mechanism selection is **not** a direct function of which
+Phase-1 case (2 vs 3) a leaf came from. Concretely:
+- Phase-1 `case 2` (`sel==2`, leaf marked, falls straight into the inline continuation at
+  `0x100250d2`) uses **mechanism 1**, not mechanism 2 — Team B's "deferred vs inline" guess happened
+  to land on the right case label for the wrong reason (it is not deferred at all).
+- Phase-1 `case 3` (`sel==3`, `0x100253cb`) **also** uses mechanism 1 — Team B's mapping of case 3 to
+  mechanism 2 is **wrong**; case 3 never reaches `0x100255c7`-style code.
+- **Mechanism 2 belongs to Phase 2's own `sel==2` re-dispatch arm specifically**, and only on the
+  sub-branch reached after a *second*, runtime bit-driven categorization test (`0x10025593`'s `je`)
+  comes up "bit set" — the "bit clear" sibling branch instead re-queues the node with a `+3` tag
+  rather than resolving it via either sign mechanism.
+
+**The real selection rule: mechanism 1 for every Phase-1 immediate resolution (both case 2 and case
+3); mechanism 2 only for Phase-2 `sel==2` leaves whose own extra categorization bit selects the
+"magnitude is exactly 1" sub-case.** A conformant reimplementation must replicate this categorization
+bit, not branch on case-2-vs-case-3 alone.
+
+**Phase-2 `sel==1` and `sel==3` arms, instruction-level, CONFIRMED (2026-10-10 follow-up) — resolves
+the item previously left OPEN above.** Both independently re-disassembled (`disasm_util.dump_range`,
+matched exactly):
+
+- **`sel==1` (target `0x10025522`-`0x1002555f`) does NO sign recovery of either kind — it is a pure
+  structural requeue**, the same shape as Phase 1's own `case 1` ("4-way split"), just running inside
+  Phase 2's own walk: `0x10025522`-`0x1002552e` writes `tag' = category*4+2` in place at the current
+  node slot (note `(category*4+2) & 3 == 2`, so the node is simply re-tagged with a `sel==2` shape for
+  later processing, not resolved to a value); `0x10025530`-`0x1002555f` pushes exactly THREE new
+  children onto `tail`, tags `category*4+0x12`/`+0x22`/`+0x32` (all also `&3==2`). No bit-refill idiom,
+  no `test`, no `and`/`neg`/`or` appears anywhere in this arm — pure tag arithmetic, falling through
+  into the shared front/tail loop-control tail (`0x1002575a`-`0x1002575c`) that `sel==3` below also
+  falls into.
+- **`sel==3` (target `0x10025716`-`0x1002575c`) resolves UNCONDITIONALLY via mechanism 2 — no gating
+  categorization bit at all, unlike `sel==2`'s own arm:** `0x10025716`: `ecx = tag>>2` (cached as the
+  coefficient-array index); `0x10025719`-`0x10025731`: one single-bit read via the standard refill
+  idiom; `0x10025732`-`0x10025737`: `and esi,1; neg esi; or esi,1` — mechanism 2's exact pattern. This
+  occurrence at `0x1002573a` is one of the four further copies Part 2's own "Sign recovery" subsection
+  already enumerated by address — this pass confirms which dispatch arm that already-cited address
+  belongs to, it is not a newly-discovered site. `0x1002573a` stores the result (magnitude always 1,
+  sign from the one bit) into the coefficient word array, then falls through to the same shared
+  front/tail advance-and-loop-check code the `sel==1` arm jumps into above.
+
+**Updated selection rule, no longer OPEN:** mechanism 1 is used ONLY by Phase 1's immediate
+resolutions (`case 2`/`case 3`). Mechanism 2 has two homes, both in Phase 2, both address-confirmed:
+the `sel==2` arm's gated sub-branch (bit-set case, `0x100255c7`) and the `sel==3` arm unconditionally
+(`0x1002573a`). The `sel==1` arm reaches neither mechanism — it only expands the tree further (3 new
+`sel==2`-tagged children plus one `sel==2`-retagged resolution of the current node), deferring actual
+value/sign resolution entirely to whatever later visits those freshly-tagged `sel==2` nodes.
+
+**Numeric cross-check against the already-FFmpeg-verified block (consistency check, not a live
+bit-trace).** The block at `Y_BUF+80` (frame 0, row 0, col 80), already independently verified
+byte-for-byte against FFmpeg in Part 1 above, has DC=51 and nonzero AC at k=1,2,8,9,10,17 =
+-3,-1,-3,1,1,1 (`idct_col80_coeffs.bin`). Every nonzero AC value has magnitude 1 or 3 — consistent
+with either a magnitude-1 leaf resolved via mechanism 2 (values -1,1,1,1) or a small multi-bit leaf
+resolved via mechanism 1 with `level` small (values -3,-3). **OPEN, not closed this pass:** a clean
+dynamic bit-trace tying this specific block's own `0x10024eb0` call to the rule above end-to-end — an
+attempt extending `scratchpad/bink_unicorn_harness_2026-10-08/decode_frame0.py` with an entry/exit
+hook on `0x10024eb0` was made, but the capture was unreliable (apparent self-re-entrant call behavior
+at this function's own entry, the same shape as `0x100244c0`'s already-documented self-recursion,
+confused the hook's stack bookkeeping on the second "entry"). The phase/sub-branch rule itself is
+CONFIRMED independent of that gap, from direct static disassembly of both code paths above, not from
+this numeric cross-check.
+
+**[CONFIRMED by direct re-disassembly, all questions: (1) mechanism 1 handles every Phase-1
+immediate leaf resolution (case 2 and case 3 alike); mechanism 2 has two homes, both in Phase 2 —
+`sel==2`'s gated "magnitude-exactly-1" runtime sub-branch, and `sel==3` unconditionally; `sel==1`
+reaches neither mechanism, it only expands the tree further (pure tag requeue, deferring resolution
+to freshly-tagged children). (2) mechanism 1's raw field width is exactly `level` bits in both
+instances checked, and its sign test's real operand is the pre-mask raw snapshot, not the
+post-mask/OR'd magnitude value. OPEN: a clean live bit-trace tying one specific real block's leaves
+to this rule end-to-end (blocked on the same self-re-entrancy capture issue noted above).]**
+
+### 5.3k Per-row DC array capture confirms the +128 split is a decode-side (batch/delta) pattern, not a uniform post-array bias — extends `0x1001a160`'s "called per row" finding to the whole frame (2026-10-11)
+
+**Scope.** Direct follow-up to §5.3h/§5.3d, live Unicorn execution (unmodified `binkw32.dll`,
+unmodified `main_menu_bg.bik`, same harness family), hooking `0x1001a160`'s entry and the DC-literal
+read site `0x1001b311` (`mov cx,[eax]`) across the ENTIRE frame-0 decode via `call_bink_cb`, not a
+single sampled row.
+
+**`0x1001a160` is called 1,084 times across the full frame — CONFIRMED by live hook count, extending
+§5.3h's "twice per row" finding (shown there for one sampled row) in scale to the whole frame**, not
+contradicting it (order-of-magnitude consistent with ~2 calls/row across Y + chromaA + chromaB row
+counts).
+
+**The DC-literal read site (`0x1001b311`) was hit 2,453 times across the full frame — CONFIRMED live.**
+Address pattern: a 16-bit (stride-2) array; repeated reads at an identical address always return an
+identical value (no observed read corruption); addresses advance in contiguous +2 runs, consistent
+with one contiguous per-row array per plane per row (matches §5.3h's "pre-decoded PER-ROW DC array"
+description). **New, not previously noted: the SAME address is sometimes read multiple consecutive
+times before the next address is read** — plausibly one DC entry being shared across a macroblock's
+multiple luma sub-blocks, or a luma/chroma dispatch pairing; not resolved this pass.
+
+**Central diagnostic question (does the DC array differ from ground truth uniformly, or only
+partially/inconsistently): answered using §5.3d/§5.3f's own existing FFmpeg block-level comparison,
+not a new column diff this pass.** That comparison already shows a binary, content-dependent split:
+~16,328/32,400 blocks exact, ~16,000 uniformly +128 on every pixel, a small remainder partial/boundary
+— described there as runs that self-correct on each bitstream ABSOLUTE reset. A binary per-block run
+pattern, not a uniform whole-array offset, is direct evidence against a downstream
+(`0x1001b2ff`/`0x1001b311`-region) post-array bias and FOR an arithmetic fault inside `0x1001a160`'s
+own batch/seed/delta decode (most likely in its DELTA-mode class-nibble chunk accumulation or sign
+handling, per §5.3f's already-mapped structure) that is latched per DPCM run and reset by each
+ABSOLUTE seed.
+
+**[CONFIRMED — live execution this pass: `0x1001a160` call count (1,084) and DC-array read-site hit
+count (2,453) across the full frame-0 decode; the array's stride-2/contiguous-run/repeated-address
+access pattern. HIGH CONFIDENCE — reusing §5.3d/§5.3f's own confirmed block-level ground-truth split:
+the +128 pattern is binary/per-block-run, not uniform, pointing inside `0x1001a160`. OPEN, unchanged
+from §5.3f: the exact instruction/arithmetic step inside `0x1001a160`'s DELTA-mode decode responsible;
+also newly OPEN: why the same DC-array address is sometimes read multiple consecutive times before
+advancing; a narrower single-row capture driver to do a fresh independent column-by-column
+ground-truth diff of one row's own DC array (not completed this pass — the full-frame capture
+interleaves multiple planes/rows in one stream).]**
+
+### 5.3l Row-0 column-grain ground-truth diff: the +128 pattern is finer-grained than block-run, pointing at per-chunk (not per-batch) delta corruption; the §5.3k-planned raw-array dump method is unreliable (2026-10-11)
+
+**Scope.** Direct follow-up to §5.3k's own named next step. Live Unicorn execution (unmodified
+`binkw32.dll`, unmodified `main_menu_bg.bik`), reusing `decode_frame0.py`'s harness plus
+§5.3f/§5.3d's own FFmpeg block-classification method (`probe_fix_test2_global_ecx.py`'s
+`compare()`), applied at single-block-column grain (240 columns) for Y-plane block-row 0 only,
+instead of whole-plane.
+
+**CONFIRMED, live: row 0's EXACT/+128 run pattern is single-digit-column grain, not the long
+block-run pattern the whole-frame-aggregate figures in §5.3d/f/k implied.** Representative run
+summary (block-column ranges, row 0): `0-1:EXACT, 2-5:+128, 6-15:EXACT, 16-18:+128, 19-20:EXACT,
+21-24:+128, 25-27:EXACT, 28-34:+128, ...` (full 240-column table captured). Runs are typically
+1-13 columns long, never the "whole multi-row stretch" shape a coarser per-block aggregate
+statistic could suggest. **This narrows the standing hypothesis**: given §5.3f's own confirmed
+DELTA-mode structure (chunks of up to 8 deltas, keyed by a 4-bit class nibble), run lengths this
+short are consistent with **the fault toggling within individual delta chunks**, not only at
+whole-batch ABSOLUTE-seed boundaries as previously framed — HIGH CONFIDENCE that the corruption
+lives in the per-chunk class-nibble delta-accumulation loop itself (test-cl-1/neg-eax/predictor-
+accumulate idiom, §5.3f), affecting individual deltas within a chunk, not a whole-chunk or
+whole-batch toggle.
+
+**OPEN, refuted plan: `0x1001a160`'s `param1+0x30` field ("writeptr" per
+`probe_param1_fields.py`) is NOT a reliably-dumpable finished per-row DC array.** Dumping 240
+contiguous int16 entries from it after Y row 0's own 2 `0x1001a160` calls return gives mostly
+implausible magnitudes (thousands to tens-of-thousands) for a field whose real values are small
+(§5.3f's own max-magnitude bound: 1504 for luma; real captured DC literals via the
+`0x100244c0`-entry hook are in the 25-53 range). §5.3k's own recommended "narrower harness driver
+that dumps one row's own clean DC-value array" via this field does NOT work as planned — either
+`+0x30` is a transient/scratch pointer rather than the committed array base, the two per-row
+calls' arrays overwrite/interleave by the time both have returned, or the array is not
+contiguous-stride-2 the way §5.3k's full-frame read-site evidence assumed. **Concrete correction
+for the next pass:** capture DC values via the `0x1001b311` zero-cost read site live (as §5.3k's
+full-frame pass already did), scoped to row 0's dispatch window only, and correlate each read to
+its consuming block's column through the case-dispatch call stack — not by bulk-reading the
+backing array after both `0x1001a160` calls finish.
+
+**[CONFIRMED — live execution, this pass: the single-column-grain run pattern for Y-plane row 0,
+240/240 columns classified against FFmpeg ground truth. CONFIRMED — refuted: the `param1+0x30`
+bulk-array-dump method does not yield a usable ground-truth DC array. HIGH CONFIDENCE: the fault
+is in per-chunk delta accumulation, not whole-batch/whole-chunk toggling, based on run-length
+granularity. OPEN, unchanged from §5.3f/k: the exact faulting instruction inside the per-chunk
+class-nibble delta loop — this pass did not reach a live instruction-by-instruction trace of a
+specific bad chunk; a future pass should use the corrected `0x1001b311`-based per-row capture
+above to first isolate ONE short bad run's exact bit-position window, then step that window's
+`0x1001a160` chunk loop live register-by-register.]**
+
+### 5.3m Full chunk-loop disassembly pins the exact commit mechanism; corrects §5.3l's capture method but the column correlation and final instruction-level pin remain OPEN (2026-10-11)
+
+**Scope.** Direct follow-up to §5.3l's own named next step. Live Unicorn execution (unmodified
+`binkw32.dll`, unmodified `main_menu_bg.bik`) plus full static disassembly of `0x1001a160`'s
+per-chunk delta loop via `disasm_util.py`.
+
+**CONFIRMED, live+static: the full per-chunk delta-accumulation loop, address-exact** (independently
+re-disassembled against the real `binkw32.dll` before splicing — matched exactly). The 4-bit class
+nibble is read at `0x1001a363`/`0x1001a375`; `nibble==0` takes a `rep stosd`/`rep stosw` flat-fill
+path (`0x1001a421`-`0x1001a44d`, chunk filled with the previous accumulator value unchanged, no
+further bitstream consumption beyond the nibble). For `nibble!=0`, each of up to 8 values in the
+chunk: extracts `nibble`-bit magnitude into `eax` (mask built at `0x1001a394`-`0x1001a3a0`); if
+`eax==0` after extraction, the sign bit is skipped entirely (`je 0x1001a405` from `0x1001a3de`);
+otherwise consumes exactly one more bit (`test cl,1` at `0x1001a3fe`, `cl` = pre-shift low bit of
+bit-buffer register `esi`) and `neg eax` (`0x1001a403`) if set. The signed delta is then added to
+the previous committed value (`0x1001a405`/`0x1001a408`, predictor-accumulate), truncated to 16
+bits and written to `writeptr` (`0x1001a40a`-`0x1001a410`, advancing by 2 bytes per value); the new
+accumulator becomes `prev` for the next value in the same chunk (`0x1001a417`). Loop continues
+while chunk values remain (`0x1001a41d`), then falls through to the outer per-chunk-count decrement
+(`0x1001a450`-`0x1001a456`).
+
+**CONFIRMED, live: §5.3l's refuted bulk-dump method is now explained, and fixed.** `param1+0x30`
+(`writeptr`) is a **transient scratch pointer re-based to the same address on every call** —
+observed identically (`0x303f8622`) as the writeptr-range start for 6 sampled calls out of 1,084
+total across the frame. Dumping this field after the fact (§5.3l's method) only ever recovers
+whichever call most recently wrote it, never the specific call intended — this fully explains
+§5.3l's "implausible garbage" result. **The fix: capture at the commit instruction (`0x1001a40a`)
+live, per-call, during execution instead.** This produces plausible small values matching §5.3f's
+expected magnitude range (e.g. call #2's first 20 commits: `199, 212, 51, 25, 118, 119, 26, 51, 36,
+37, 53, 38, 38, 36, 56, 50, 43, 53, 20, 170`), unlike the bulk-dump garbage (thousands to
+tens-of-thousands).
+
+**OPEN, unresolved this pass — the task's own named deliverable (the exact faulting instruction)
+was not reached.** (1) The `0x1001b311` zero-cost DC-literal read site, hooked live in this pass's
+own harness run, reproduced §5.3k's exact hit count (2,453) but NOT its value range: captured
+values (tens of thousands) are ~1000x larger than §5.3l's own stated real-DC-literal range (25-53)
+and do not resemble plausible DC values — the sequential-read-order-equals-column assumption is
+UNCONFIRMED. (2) Each `0x1001a160` call's commit-log entry count (518-542, sampled across 6 calls)
+does not divide cleanly into the expected 240-column single-row structure — **the mapping from "one
+`0x1001a160` call" to "one row's worth of columns" needs re-derivation** before any column can be
+correlated to a specific commit-log entry. (3) Consequently: the first EXACT→+128 transition was
+not re-confirmed against live commit data, no specific chunk/iteration was isolated for a bad
+column, and no register-by-register divergence trace between a correct and a faulty chunk was
+performed.
+
+**Recommended next step.** Use the now-proven `0x1001a40a` commit-capture method (not
+`0x1001b311`, not the `param1+0x30` bulk dump) as ground truth. Before attempting any column
+correlation, first resolve what one `0x1001a160` call's ~520-540 commits actually represent (more
+than one row? DC+other interleaved metadata?) by directly correlating `new_accum` sequences
+against known-good per-row reconstructed values, rather than assuming 1 call = 1 240-column row.
+The hook infrastructure (`0x1001a40a` commit, `0x1001a3fe` sign test, `0x1001a3de` zero-magnitude
+bypass) is built and working and can drive the eventual divergence comparison once that mapping is
+fixed.
+
+**[CONFIRMED — live+static: full chunk-loop disassembly, address-exact, through the commit
+instruction, independently re-verified. CONFIRMED — live: §5.3l's bulk-dump method explained and
+replaced with a working per-commit live-capture method. OPEN, unchanged from §5.3f/k/l: the exact
+faulting instruction/condition producing +128 — this pass did not reach a column-correlated live
+trace, let alone a register-by-register divergence comparison between a correct and faulty chunk.
+A future pass must first fix the call-to-row/column mapping (not assumed 1:1) before repeating
+this task's own steps.]**
+
+### 5.3n Corrects §5.3m's own commit-hook off-by-one; call-to-row mapping still unresolved but narrowed to 25 candidate calls out of 1,084 (2026-10-11)
+
+**Scope.** Direct follow-up to §5.3m's own named next step. Live Unicorn execution (unmodified
+`binkw32.dll`, unmodified `main_menu_bg.bik`), reusing `decode_frame0.py`'s setup unchanged.
+
+**CONFIRMED, live+static: §5.3m's own commit-capture method had an off-by-one hook placement, now
+fixed.** `0x1001a40a` (`mov eax, dword ptr [ebp-0xc]`) was hooked directly, but a Unicorn code hook
+fires *before* that instruction executes — so the `eax` §5.3m captured there was stale (leftover
+from the `neg eax` at `0x1001a403`/the zero-magnitude test at `0x1001a3de`), not the write address.
+Independently re-verified against the live disassembly before splicing (confirmed:
+`0x1001a40a: mov eax,[ebp-0xc]` then `0x1001a40d: mov word ptr [eax],cx` — `eax` is only the real
+write pointer from `0x1001a40d` onward). **This is why §5.3m's own "addresses" were tiny/wraparound
+garbage. Fix: hook `0x1001a40d` instead** — one instruction later. `ecx` (the committed value) was
+already correct in §5.3m, since it is computed earlier, at `0x1001a408`.
+
+**CONFIRMED, live, with the corrected hook:**
+1. A single `0x1001a160` call's commits form **exactly one contiguous run**, never multiple
+   sub-runs at different base addresses (sampled call #2: 518 commits, `0x303f8622` to
+   `0x303f8a2c`, step-2 contiguous throughout; same pattern on 7 further sampled calls). This
+   falsifies the "multiple planes/bundles interleaved in one call" hypothesis — a call's own writes
+   never jump base address mid-call.
+2. The write base address (e.g. `0x303f8622`) does not fall inside any of the harness's own mapped
+   regions (`FRAME_BUF_BASE=0x40000000`, `PLANES_BASE=0x42000000` — containing `Y_BUF`/`CA_BUF`/
+   `CB_BUF` — or `SCRATCH9_BASE=0x44000000`). It is a DLL-internal heap allocation. This
+   independently reconfirms §5.3m's "transient re-based scratch pointer" framing from the
+   address-mapping side: **the per-chunk delta loop writes into a private intermediate DC-delta
+   scratch array inside the DLL's own heap, not directly into the final pixel planes.** Correlating
+   a commit to a known-good FFmpeg pixel column requires first finding the downstream code that
+   later copies/transforms this scratch array into `Y_BUF` et al. — not yet located.
+3. **Of 1,084 total `0x1001a160` calls in the frame, only 25 ever reach the per-chunk
+   delta-accumulation loop body at all** — calls #2, 34, 66, 98, 126, 154, 182, 210, 242, 274, 310,
+   350, 374, 390, 406, 426, 446, 478, 506, 542, 654, 730, 770, 814, 816 (roughly periodic ~28-32
+   calls apart through call ~540, then sparse/irregular after). The other ~1,059 calls produced
+   zero commits AND zero flat-fill events on the instrumented `rep stosd`/`rep stosw` sites
+   (`0x1001a437`/`0x1001a43e`). This means most of the 1,084 calls take some other internal branch
+   of `0x1001a160` entirely — **the function is evidently a shared/generic nibble-array decoder
+   invoked for purposes beyond per-row DC decode**, not a DC-row-only routine, which is the real
+   reason §5.3m's "1 call = 1 row" assumption never divided cleanly: most calls aren't DC-row calls
+   at all. Commit-run lengths among the 25 real calls range 336-607 (not 240), consistent with
+   §5.3f's already-documented multi-row refill cadence (batches of several rows per call) rather
+   than a single-row-per-call model.
+
+**OPEN, unresolved this pass.** (1) Which of the 25 real calls maps to which Y-row-group, and why
+lengths are 336-607 rather than a clean multiple of 240 — not yet cross-checked against the call's
+own declared chunk-count stack args. (2) The downstream consumer that copies the scratch array
+into the real plane buffers — unidentified; this is the correct anchor point for any future
+column-exact divergence trace, not the commit loop itself. (3) Consequently, no divergence trace
+was attempted this pass — the mapping blocker was not cleared far enough to make that step
+meaningful yet.
+
+**Recommended next step, concretely.** (a) Re-baseline all future commit captures on the fixed
+hook site `0x1001a40d`, not `0x1001a40a`. (b) For each of the 25 real-commit calls, also capture
+the caller-supplied element-count/chunk-count stack args directly, rather than inferring length
+from commit count, to settle whether 336-607 is "N × 240" for some small N or unrelated to the Y
+row width. (c) Add a Unicorn memory-read hook watching the scratch addresses after each of the 25
+calls returns, to find the code that reads this scratch array back out and locate the copy-to-plane
+step — that is the real correlation point against FFmpeg's pixel columns, not this commit loop.
+
+**[CONFIRMED — live: §5.3m's own commit-hook placement was off-by-one and is now fixed (hook
+`0x1001a40d`, not `0x1001a40a`). CONFIRMED — live: a call's commits are always one contiguous run
+into a private DLL-heap scratch array, never multiple interleaved sub-runs, and only 25 of 1,084
+total calls ever reach the delta-accumulation loop body at all. OPEN, narrowed from §5.3m: the
+call-to-row mapping among those 25 calls, and the still-unidentified scratch-to-plane copy step
+that any future divergence trace must anchor on instead of the commit loop.]**
+
+### 5.3o Resolves an urgent orchestrator question: block (0,0)'s real DC does NOT come from `0x1001a160`; it is a direct 16-bit byte-cursor read, re-confirming the existing secondary=2 trace a third independent time and reconciling against Team B's reported 16709 (2026-10-11)
+
+**Scope.** Direct response to an urgent question (Team B reported pixel (0,0) of block (0,0),
+Y-plane, frame 0 as 236 vs. FFmpeg's real 24, with their own DC literal reading as `0x4145`=16709
+— implausible for a near-black region). Reused and independently re-ran
+`scratchpad/bink_sub012346_grammars_2026-10-10/trace_sub2_block0.py` live (Unicorn, unmodified
+`binkw32.dll`/`main_menu_bg.bik`, path-corrected only, zero logic changes) against the existing
+§5.3 "secondary=2" worked example above, which it reproduces exactly.
+
+**CONFIRMED, live, freshly reproduced this pass — exact match to the existing worked example
+above AND to §5.3h's own independently-traced value, a third independent confirmation:** block
+(0,0)'s DC literal is **not** read from `0x1001a160`'s per-chunk delta-accumulation output (the
+model this question's own framing, and §5.3h's original wording, assumed). It is read at
+`0x1001b311`-`0x1001b33b` as a plain byte-aligned 16-bit little-endian word from descriptor L's own
+byte cursor — **zero-bit-cost, word-granular, not bit-granular** — value `0x0076` (118), exactly as
+already documented above. The resulting decoded pixel (0,0) is `0x18`=24, an EXACT match to
+FFmpeg's ground truth — **this specific pixel is already correctly decoded by the real,
+unmodified `binkw32.dll`** traced here.
+
+**Retracts, for this specific block/dispatch case: the framing that this DC literal's "zero-bit-
+cost read" traces back to `0x1001a160`'s per-row array.** It traces to descriptor L's own
+independent byte cursor instead — a separate mechanism from the `0x1001a160` delta-array work
+§5.3f/h/k/l/m/n have been pursuing. `0x1001a160`'s own role (per §5.3n, only 25/1,084 calls per
+frame even reach its delta loop) remains real and unresolved, but it is NOT what determines block
+(0,0)'s own DC value.
+
+**Reconciling Team B's reported 16709 against the real value 118 — HIGH CONFIDENCE, not verified
+against their own source (no access):** 16709 falls squarely in the "tens of thousands" magnitude
+range §5.3m independently measured for mis-captured `0x1001a160` scratch-array reads (before that
+pass's own off-by-one hook fix, §5.3n). Given this pass confirms block (0,0)'s DC does NOT come
+from `0x1001a160` at all, the most likely explanation is that Team B's own decoder reads this
+block's DC from the `0x1001a160` delta array (the superseded §5.3h framing) rather than from
+descriptor L's direct byte-cursor read — a structurally-motivated explanation for the bug's
+magnitude, not a confirmed code-level diagnosis.
+
+**New, OPEN, not previously flagged:** the DC-read address (`0x303f8620` in this run) sits exactly
+2 bytes before the base address of §5.3n's own sampled `0x1001a160` commit run #2
+(`0x303f8622`-`0x303f8a2c`) — same DLL-heap region, immediately adjacent. Not yet determined
+whether this is a real allocation/handoff relationship between descriptor L's buffer and
+`0x1001a160`'s own scratch array, or coincidental sequential-allocator adjacency. Flag for whoever
+next picks up §5.3n's own "unidentified scratch-to-plane copy step" item — check this adjacency
+first.
+
+**[CONFIRMED — live, freshly reproduced, exact 3-way agreement with the existing secondary=2 trace
+and §5.3h's own independently-traced value: block (0,0)'s real DC literal is 118, read as a
+zero-bit-cost 16-bit word from descriptor L's byte cursor, NOT from `0x1001a160`'s delta array,
+and the resulting decoded pixel (24) exactly matches FFmpeg. OPEN: the suspicious 2-byte heap
+adjacency between descriptor L's cursor and §5.3n's own sampled `0x1001a160` commit-run base.
+OPEN, carried over unchanged: §5.3n's own named next steps — not addressed this pass, since they
+don't determine block (0,0)'s own DC value.]**
 
 ---
 
@@ -2541,6 +2941,55 @@ is better understood as "codec-core utility region" rather than a strict video/a
        order assumption (vs. the now-confirmed real LSB-first convention) could independently explain
        a bit-offset scanner's own zero-hit result (flagged as testable, not confirmed one way or the
        other).
+
+       **Fifth pass, 2026-10-11 (§5.3k):** a live per-row DC-array capture reused §5.3d/§5.3f's own
+       existing FFmpeg block-level ground truth (binary per-block-run split: exact / uniform-+128 /
+       partial) to answer this item's own standing question — the error is a decode-side, per-run
+       pattern, not a uniform bias applied after the DC array is built. This narrows future work to
+       `0x1001a160`'s own DELTA-mode class-nibble/sign-accumulation arithmetic (structure fully
+       mapped since §5.3f) and rules out the `0x1001b2ff`/`0x1001b311` consumer region as the fault
+       site. Still OPEN: the exact instruction. A fresh single-row DC-array-vs-ground-truth column
+       diff (distinct from reusing the existing block comparison) was attempted but not completed —
+       the full-frame capture interleaves multiple planes/rows in one stream; a narrower single-row
+       harness driver is needed to isolate one row cleanly, then hand-decode that row's raw bitstream
+       batch bit-by-bit to find the exact faulting instruction.
+
+       **Sixth pass, 2026-10-11 (§5.3l):** the single-row column diff is done (240/240 Y-plane row-0
+       block-columns classified against FFmpeg), and it REFINES this item's own framing: runs are
+       1-13 columns long, not the long multi-row stretches a coarser aggregate suggested — HIGH
+       CONFIDENCE the fault is in the per-chunk class-nibble delta-accumulation loop itself, not
+       confined to whole-batch ABSOLUTE-seed boundaries. The planned `param1+0x30` bulk-array-dump
+       method to get a clean one-row ground-truth array is REFUTED (implausible magnitudes,
+       thousands to tens-of-thousands, for a field whose real values are 25-1504) — a corrected
+       recipe (capture via the `0x1001b311` zero-cost read site, scoped to one row, not a bulk dump
+       of the backing array) is named for the next pass. Still OPEN: the exact instruction — this
+       pass did not reach a live register-by-register trace of one bad chunk.
+
+       **Seventh pass, 2026-10-11 (§5.3m):** full chunk-loop disassembly of `0x1001a160`'s commit
+       mechanism, address-exact (CONFIRMED). §5.3l's bulk-dump refutation is now explained (the
+       field is a transient scratch pointer re-based identically on every call) and fixed via a
+       working live per-commit capture method (CONFIRMED). The column-correlation and final
+       instruction-level +128 pin remain OPEN — blocked on an unresolved call-to-row/column mapping
+       discrepancy (each call's commit count, 518-542, does not match the expected 240-column
+       single row) and an unreproduced `0x1001b311` value range (hit count matched but values are
+       ~1000x too large). Next pass should resolve the call-to-row mapping first, using the
+       `0x1001a40a` commit-capture method, before re-attempting the divergence trace.
+
+       **Eighth pass, 2026-10-11 (§5.3n):** found and fixed a real off-by-one in the seventh pass's
+       own commit-hook placement (`0x1001a40a` hooks before `eax` is loaded — the fix is
+       `0x1001a40d`). With the corrected hook: a call's commits are always one contiguous run into
+       a private DLL-heap scratch array, never multiple interleaved sub-runs (falsifying the
+       orchestrator's own "multiple planes combined per call" hypothesis in its literal form); and
+       only 25 of the 1,084 total `0x1001a160` calls per frame ever reach the delta-accumulation
+       loop at all — the function is a shared generic nibble-array decoder reused well beyond DC
+       decode, which is the real reason commit counts never divided cleanly by 240. **OPEN,
+       narrowed:** which of the 25 real calls maps to which Y-row-group (336-607 commits each, not
+       a clean multiple of 240); and the still-unidentified scratch-to-plane copy step a future
+       divergence trace must anchor on instead of the commit loop itself. Per the skip-and-defer
+       policy, this sub-thread is parked here with the precise recipe above (re-baseline on the
+       fixed hook; capture each of the 25 calls' own declared chunk-count args directly; watch for
+       reads out of the scratch range to find the real copy-to-plane consumer) rather than ground
+       on further without resolving it.
 6. ~~The exact final pixel-write instruction(s) inside each video case handler were not individually
    located (§5.5) — the destination is structurally certain without pinpointing the literal store.~~
    **CLOSED 2026-10-08 (§5.6):** literal store instructions found and traced to the game-registered
@@ -2959,3 +3408,81 @@ is better understood as "codec-core utility region" rather than a strict video/a
   example this pass (HIGH CONFIDENCE only); the AC write-out confirmed for k=1 only, k=2..63 carried
   over from the already-confirmed read-side finding; the 24 auxiliary dword fields' semantic roles
   not chased. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-10 (SPEC TEAM, agent `ab7edf30d0fb20702`, Team-B-routed priority request via orchestrator):
+  **new §5.3j Part 3 — resolves Team B's exact two interpretive judgment calls on the AC-tree sign
+  recovery, which had caused a real desync on `main_menu_bg.bik` frame 0.** (1) The sign-mechanism
+  selection rule is NOT case-2-vs-case-3 as Team B guessed: mechanism 1 handles BOTH Phase-1 case 2
+  and case 3's immediate leaf resolutions; mechanism 2 is exclusive to Phase-2's `sel==2` arm's own
+  runtime "magnitude-exactly-1" sub-branch. (2) Mechanism 1's extra-bits width is confirmed exactly
+  `level` bits, and — correcting a genuine bug in this section's own prior prose (struck through in
+  Part 2 above) — the sign test's real operand is a pre-mask RAW snapshot taken before the
+  masking/OR runs, not the post-mask/OR'd value; testing the post-OR value, as the prior wording
+  literally said, would have been tautological, exactly as Team B suspected. Independently
+  re-disassembled both cited address ranges (`0x10025439`-`0x10025466`/`0x100250d2`-`0x100250f9` and
+  `0x1002556a`-`0x10025637`) myself via `disasm_util.py` before splicing — matched the agent's
+  report exactly, instruction for instruction. Left OPEN: Phase-2's `sel==1`/`sel==3` arms' own
+  eventual sign-mechanism usage; a clean live bit-trace tying one specific real block's leaves to
+  the rule end-to-end (a dynamic-trace attempt hit the same self-re-entrancy issue already
+  documented for `0x100244c0`). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
+- 2026-10-10 (SPEC TEAM, agent `a0940c9e5ac3e0e2f`): **§5.3j Part 3's remaining OPEN item CLOSED —
+  Phase-2's `sel==1`/`sel==3` arms traced to their own terminus.** `sel==1` (`0x10025522`-
+  `0x1002555f`) does no sign recovery at all — a pure tag-arithmetic requeue, structurally identical
+  to Phase 1's own `case 1`, that defers resolution entirely to three freshly `sel==2`-tagged
+  children. `sel==3` (`0x10025716`-`0x1002575c`) resolves UNCONDITIONALLY via mechanism 2 — no
+  gating bit, unlike `sel==2`'s own arm — confirming which dispatch arm one of Part 2's already-cited
+  mechanism-2 addresses (`0x1002573a`) belongs to, not a new site. Updated selection rule: mechanism
+  1 is Phase-1-only; mechanism 2 has two Phase-2 homes (`sel==2`'s gated sub-branch, `sel==3`
+  unconditionally); `sel==1` reaches neither. Independently re-disassembled both address ranges
+  myself via `disasm_util.py` before splicing (matched exactly). Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `a9e935714b42ee777`, self-picked): new §5.3k, §8 item 5a updated.
+  Live full-frame hooks on `0x1001a160` (1,084 calls) and the DC-literal read site `0x1001b311`
+  (2,453 hits) confirm the per-row DC-array mechanism's scale and access pattern. Reusing
+  §5.3d/§5.3f's own existing FFmpeg block-level ground truth (binary exact/+128/partial split, not
+  a uniform array-wide offset) answers the DC+128 bug's standing diagnostic question: the fault is
+  decode-side, inside `0x1001a160`'s own DELTA-mode arithmetic, not in the downstream consumer.
+  Independently re-verified the pre-existing block-comparison figures this pass cites are actually
+  present in the spec before trusting the agent's reuse of them. Still OPEN: the exact instruction;
+  a fresh single-row column diff (attempted, not completed — flagged honestly by the agent rather
+  than papered over). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `a0f63c36485d467bd`): new §5.3l, §8 item 5a sixth-pass update.
+  Completed the single-row column diff §5.3k left open: 240/240 Y-plane row-0 columns classified
+  against FFmpeg, finding 1-13-column run lengths — much finer-grained than the whole-frame
+  aggregate implied, narrowing the fault to the per-chunk class-nibble delta loop itself rather
+  than whole-batch seed/reset boundaries. Also found and reported a clean negative: the planned
+  `param1+0x30` bulk-array-dump method doesn't work (implausible magnitudes), with a corrected
+  recipe named for the next pass. Independently re-verified the agent's cited pre-existing facts
+  (the 1504 max-magnitude bound, the class-nibble/test-cl-1/neg-eax idiom) are actually present in
+  the spec before trusting its framing. Did not reach the single-instruction pin — still OPEN,
+  honestly reported as incomplete rather than forced. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `a843d8239648ca893`): new §5.3m, §8 item 5a seventh-pass update.
+  Full disassembly of `0x1001a160`'s per-chunk commit mechanism, address-exact — independently
+  re-disassembled against the real `binkw32.dll` before splicing, matched exactly. Explains and
+  fixes §5.3l's refuted bulk-dump method (the field is a transient scratch pointer re-based
+  identically on every call; a live per-commit capture works instead). The task's own named
+  deliverable (the exact faulting instruction/condition) was NOT reached — honestly reported,
+  blocked on an unresolved call-to-row/column mapping discrepancy and an unreproduced read-site
+  value range, both named precisely for the next pass. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+- 2026-10-11 (SPEC TEAM, agent `aa676ccd8fe0ddb00`): new §5.3n, §8 item 5a eighth-pass update.
+  Found and fixed a real off-by-one in the prior pass's own commit-hook placement (independently
+  re-verified against the live disassembly before splicing — the fixed hook site matched exactly).
+  With the fix: falsified the orchestrator's own "multiple planes per call" hypothesis (one call =
+  one contiguous scratch run, never interleaved); found only 25 of 1,084 calls per frame actually
+  reach the DC delta loop, explaining why counts never divided by 240. Per the skip-and-defer
+  policy, parked this sub-thread with a precise recipe rather than grinding further without
+  resolving the row mapping. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0
+  hits.
+- 2026-10-11 (SPEC TEAM, agent `ad6a67acc10a18f93`, urgent Team-B-routed priority): new §5.3o.
+  Resolves an urgent question on Team B's reported 236-vs-24 pixel mismatch: block (0,0)'s real DC
+  literal does NOT come from `0x1001a160`'s delta array at all — it's a zero-bit-cost 16-bit
+  byte-cursor read from a separate mechanism (descriptor L), value 118, decoding to pixel 24 —
+  already an EXACT match to FFmpeg, independently re-confirmed a third time against two
+  pre-existing passes. Retracts the "zero-bit-cost read traces to `0x1001a160`" framing for this
+  specific block. Reconciles Team B's implausible 16709 DC literal as most likely their own
+  decoder reading from the wrong array (the `0x1001a160` scratch array, not descriptor L).
+  Independently re-verified the exact address/mechanism this pass cites is already published,
+  pre-existing CONFIRMED text before trusting the agent's cross-reference. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.

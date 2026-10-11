@@ -555,7 +555,7 @@ The harness builds every field's exact bit positions by simulating the writer, d
 
 ### 8.5 Open items
 
-1. The meaning of the two live-world counters (rows 2 and 4), which vary per save within one playthrough (e.g. 5/8/6/9 for the same location label) and have no snapshot equivalent found.
+1. ~~The meaning of the two live-world counters (rows 2 and 4), which vary per save within one playthrough (e.g. 5/8/6/9 for the same location label) and have no snapshot equivalent found.~~ **[Partially resolved 2026-10-10 — bounded pass, 5 function opens.]** **Row 2's source — CONFIRMED (disassembly).** The slot-summary builder (`0x00B99C50`) sets this field from `0x006D0A10(0xFFFFFFFF, 9)`, which walks `0x03171A64`'s object list at count `+0x2C4`/index `+0x2BC` — the SAME 60-entry activity-marker object list §9.3 identifies behind entry 6's one-way-flag set (`0x2E98`-`0x2E9F`). It counts objects whose `+0xA0` dword is 0 or 3 and `+0xA6` bit 3 is clear, further gated by a boolean from `0x0087BA20` (tests whether a queue at a global handle's `+0x58`/`+0x5C` is empty) and a derived flags byte (bit mask `0xC`). HIGH CONFIDENCE, not nailed down: a live count of activity-marker objects in some currently-flagged state (plausibly "available"/UI-relevant markers), recomputed from world state each save — consistent with having no snapshot analog. OPEN: the object-type system (what type 0/3 mean, the `0x024D8534` handle's identity). **Row 4's source — CONFIRMED (disassembly), in an unexpected subsystem.** The same builder counts, into never-serialised offset `+0x10` then serialised offset `+0x0C` (row 4), objects from a THIRD, previously-undocumented per-class list of `0x03171A64` (count `+0x114`, index `+0x10C` — distinct from entry 6's `+0x2BC` list above and entry 8's `+0xD0` trigger list, §9.3). Qualifying objects have `+0x48` bit 6 clear; the row-4 subset additionally requires `0x0084D430` (which calls `0x0084D2F0`, returning the object's `+0x75` byte) to return 0 — and `0x0084D2F0`'s own logic resolves into an **ambient-sound/zone-trigger state machine keyed off a class pointer seeded from the string "Cyberspace_Ambient"** (object-pool lookup via `0x00458230`/`0x031D152C`, independently re-verified — string and pool addresses confirmed present), not into any mission/activity progress system documented elsewhere in this spec. HIGH CONFIDENCE: row 4 is NOT a mission/activity counter — it is more likely tied to ambient sound/trigger-zone bookkeeping on some world-object class not yet identified. OPEN: the identity of that object class and the `+0x114`/`+0x10C` list; resolving them requires following the ambient-sound/trigger subsystem.
 2. The id-to-name mapping of the location label (row 11). *[Advanced §12.10.1: the word is the index of the current mission in a 50-entry mission table (`0x7F` = none); the display strings are still not decoded.]*
 3. Whether the caller-supplied flag (row 8) is set by anything other than the autosave path (observed only in slot 0, 3/3 directories).
 
@@ -1520,3 +1520,13 @@ Full detail, address index: `scratchpad/save_game_write_path_2026-10-08.md`.
   where fresh-game player defaults get built. Full detail/continuation:
   `spec-frontend-menu-runtime.md` §9 item 1. No new disassembly specific to this file's own content.
   Cleanroom self-check: 0 new hits.
+- **2026-10-10 — §8.5 item 1 partially resolved: both live-world counters' source lists
+  identified** (SPEC TEAM, agent `a051210415ca25b48`). Row 2 counts from the SAME 60-entry
+  activity-marker object list §9.3 already documents behind entry 6's one-way-flag set. Row 4
+  counts from a previously-undocumented THIRD per-class list of the same world-object manager,
+  gated through an unexpected ambient-sound/zone-trigger mechanism keyed off the string
+  "Cyberspace_Ambient" — not a mission/activity counter as hypothesized going in. Independently
+  re-verified the "Cyberspace_Ambient" string reference and pool addresses against the live
+  Ghidra server before splicing (matched exactly). Left OPEN: the object-type semantics behind
+  row 2, and the identity of row 4's own object class and list. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
