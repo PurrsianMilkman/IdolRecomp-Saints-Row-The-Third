@@ -446,10 +446,127 @@ primitive `0x007b4750`.
 
 ## 9. OPEN items
 
-1. Where fresh-game player-record defaults (cash 5700, wardrobe, the 350-entry unlockables table)
-   actually get written when no save is loaded — not in `0x007ae950` itself (§2); must live in the "no
-   file, build defaults" branch of `0x00B98C00`/`0x00B97310` or a player-object constructor, neither
-   opened.
+1. ~~Where fresh-game player-record defaults (cash 5700, wardrobe, the 350-entry unlockables table)
+   actually get written when no save is loaded~~ **NARROWED 2026-10-10 — one of the two named
+   candidate paths is now a CONFIRMED negative, the other traced to a concrete constructor address
+   without finding the literal:**
+   - **Candidate (a), the save-load gate's failure path, is a CONFIRMED dead end** (independently
+     re-verified against the live Ghidra server before splicing). `0x00B94B90`'s header check
+     (`0x00B97310`, `*(buffer+8) != 94`) on failure only tears down a pre-existing save-request
+     object and returns — it never calls the load driver `0x00B98C00`, confirmed directly: the
+     `CALL 0x00b98c00` instruction sits on a separate, later branch, past an intervening `RET` on
+     the failure path. Nothing here constructs a fresh player record.
+   - **Candidate (b), the player-record constructor, was traced to its end — CONFIRMED for the
+     chain, OPEN for the literal.** The live player-record pointer (global `0x0262edfc`, getter
+     `0x009da4e0`) is written exactly once, at an early engine/session-init stage (`0x0091f550` →
+     `0x00941c90` → `0x009e1fc0`, caller chain re-verified directly against the Ghidra server),
+     independent of "New Game" vs "Continue" — architecturally unrelated to the menu routine
+     `0x007ae950` already cleared in §2. `0x009e1fc0` builds the object through the generic entity
+     factory (`0x00456e30`/`0x00456be0`) using class id `0x21`, confirmed as the engine's "player"
+     class by its descriptor constructor `0x009e8400` (literal string `"player"`, re-verified
+     directly). That class's real per-instance constructor is `0x009e8660` → `0x009e85f0` (fixed
+     `0x28D0`-byte pool allocator) → `0x009e85a0` → `0x009de970` (the actual placement constructor).
+     `0x009de970` and its five direct callees (`0x00954340` — the shared "character" base
+     constructor, `0x0056db50`, `0x009db9c0`, `0x00da4130`, `0x00d9e140`) were exhaustively searched
+     for the literal `0x1644` (5700 decimal) and for any write to the confirmed live cash field at
+     player-record `+0x1ca0` (the same field §10.1/§10.3 of `spec-save-format.md` names at save
+     offset `0x4A70` ÷100, clamped ±2,000,000,000 by `0x00960160`): **none found.**
+   - **Still OPEN:** the actual write site of the 5700 default (and the unlockables/wardrobe
+     defaults, not reached this pass at all). HYPOTHESIS, not confirmed: since this engine routes
+     essentially every other cash change (purchases, rewards, cheats) through one shared
+     `cash_adjust`-tagged setter (`0x0094d920` family) rather than a raw field write, the starting
+     5700 may likewise be granted by an intro-mission/tutorial Lua script call into that same
+     native, rather than hard-coded in engine construction code — the most promising next lead, not
+     traced. A literal 5700 disguised as a different encoding (e.g. `57*100` via two immediates, or
+     a float constant) inside `0x00954340` would also not have been caught by this pass's own
+     literal-grep method.
+
+   **Correction before chasing that lead: the raw save value 5700 is cash ×100 — the real,
+   player-visible starting amount is $57.00** (`spec-save-format.md` line ~736, "new game 5,700
+   (= 57.00)"; `0x0094d920`'s own ×100 scaling, §18.1 of `spec-lua-api-behaviour.md`, confirms a
+   script-level grant would pass `57`, not `5700`). This was checked and found to matter: a search
+   for the literal `5700` across the whole Lua corpus finds nothing relevant.
+
+   **Further narrowed 2026-10-10 (second pass, data side + broader engine census):**
+   - **The prologue/bank-heist mission file itself, re-confirmed and re-checked.** There is no
+     separate `m00`/prologue-named mission file in the Lua corpus — `m01.lua` IS the bank-heist/vault
+     opening, confirmed by its own tweak-parameter names (`M01_VAULT_TARGET_TIME1/2`,
+     `M01_seconds_to_wait_for_gat_to_kill_guard`, `M01_Get_Robbed_Line_Time`, `M01_HELI_DAMAGE`), not
+     a later mission mistaken for it. It contains zero occurrences of the string `"cash"` and zero
+     `cash_add`/`game_award_cash` calls. **[CONFIRMED — script text; this is the right file, not a
+     wrong-file false negative.]**
+   - **`player_presets.xtbl` (the shipped source of the new-game gender/ethnicity default,
+     `spec-save-format.md` §10.4) has no cash field.** Its 100-byte `Preset` record is 24/25 dwords
+     mapped (`spec-tables-customization.md` §16.2): name/display hashes, preset-grid and
+     regional-preset arrays, hair/hair-length/hair-colour/skin-colour, up to 5 composite layers, and
+     the `Race`/`Gender` bytes at `+0x5C`/`+0x5D` — nothing else. **[CONFIRMED — disassembly +
+     empirical, cited section.]** A corpus-wide grep of every `tools/*xtbl*` file for
+     `starting_cash`/`initial_cash`/`Starting_Money`-shaped names found nothing; the only `Cash`
+     fields anywhere in the base xtbl set are `gameplay_constants.xtbl`'s cash-pickup glow colour and
+     its unrelated `Coop_Meta_Game > Reward_Cash` (500, a co-op point-to-cash rate) — neither is a
+     new-game default. **No player-defaults-style xtbl exists in this extraction. [CONFIRMED —
+     corpus-wide grep, honest negative.]**
+   - **Full xref census of the shared cash setter, both layers, independently re-verified against
+     the live Ghidra server before splicing (41 uses/32 functions for `0x0094d920`, 9 uses/8
+     functions for `0x0094a800` — matches exactly).** Three of the strongest-looking candidates were
+     decompiled and ruled out by address: `0x009e2440` (the respect-award routine) calls the setter
+     only on its level-cap overflow branch — a confirmed "respect converts to cash past level 50"
+     mechanic, not a grant; `0x00703840` calls it twice, each time with the live cash field
+     (player-record `+0x1ca0`) *negated* first — a cash-loss/fine routine (busted/hospitalized
+     penalty), the opposite of a grant; `0x009e1fc0` (the already-traced player-pointer constructor)
+     was re-read in full with neither setter call nor the literal `0x1644` found. **[CONFIRMED —
+     disassembly, for all three.]**
+   - **One further level of the constructor chain exhausted.** `0x009e85a0` calls only `0x009de970`
+     — nothing else. `0x009e85f0` (previously documented only as "a fixed `0x28D0`-byte pool
+     allocator") turns out to also call one previously-undocumented sibling, `0x005f6640`,
+     immediately beforehand — a 16-bit linked free-list allocator-bookkeeping routine, no
+     cash-setter call, no `5700`/`0x1644` literal. This closes the "a sibling call at this link does
+     the defaults init" possibility specifically. **[CONFIRMED — disassembly.]**
+   - **Still genuinely OPEN, and the strongest remaining lead:** none of the above is where the 5700
+     default comes from. A true whole-binary immediate-operand scan for `0x1644` is not possible
+     with this project's current Ghidra server tooling (`func`/`xref`/`ptrs`/`range`/`calls`/`lua`/
+     `str` modes only — no constant-search mode exists; stated honestly, not fabricated). The single
+     best untried lead, not chased this pass: **`0x00708330`**, the game-start step
+     `spec-save-format.md` §11.1 (step 3a) already identifies as the place that decides "fresh game"
+     vs. "loaded save" and is independently established elsewhere (`spec-lua-api-behaviour.md`
+     §16.8) as the step that applies the `player_presets.xtbl` default identity when no save exists.
+     If the cash default is set anywhere outside the raw object constructor, this specific
+     "apply fresh-game defaults" step — not the constructor chain, now fairly exhaustively checked —
+     is the most promising place to look next.
+
+   **`0x00708330` traced in full, 2026-10-10 — the fresh-game branch is CONFIRMED to NOT write any
+   of the three defaults.** Opened whole (full disassembly + decompile, single pass): the documented
+   save-vs-fresh-game gate is confirmed exactly at `0x0070867e`
+   (`TEST byte ptr [EAX+0xd4],0x4`/`JZ 0x007086a1`, independently re-verified against the live
+   Ghidra server before splicing), and across the whole function's ~140 callees, zero are the
+   cash-setter family (`0x0094d920`/`0x0094a800`), zero reference the unlockables table's base
+   address (`0x01522750`), and zero are `pcr_add_default_clothing` (`0x008306a0`) — also
+   independently re-verified (grepped the full disassembly dump directly, confirmed zero
+   occurrences). **The fresh-game branch itself (`0x007086a1`-`0x00708701`) does exactly four
+   things, none of them cash/unlockables/wardrobe:** (1) two gate checks; (2) `0x00827010`
+   (decompiled in full) — CONFIRMED to be exactly the `player_presets.xtbl` default-identity
+   applier already named in `spec-lua-api-behaviour.md` §16.8, purely visual/mesh-component
+   appearance swapping, no cash/clothing-inventory/unlockables reference anywhere in its own
+   ~21-callee list; (3) a one-byte fresh-game flag clear plus a conditional call to `0x00b9a250`
+   (confirmed, re-verified: `0x00708330` is its ONLY caller anywhere in the binary) — session/
+   world-state global reset, no player-record offsets touched; (4) `0x0084bb20`/`0x009e17f0` —
+   newly characterized as the "place the player entity into its starting zone" step (writes
+   player-record `+0x27b4`), unrelated to economy/inventory. **This closes out `0x00708330` as a
+   candidate — the single best untried lead named above is now exhausted with a clean negative**,
+   on top of the save-load gate, the constructor chain, and both cash-setter layers' full caller
+   censuses already checked.
+
+   **Bottom line for Team B after THREE independent search angles (data: Lua scripts + xtbl tables;
+   engine: both cash-setter layers' full caller lists + the constructor chain; and now the complete
+   fresh-game world-start bring-up sequence) all coming up empty: the $57.00 new-game starting cash,
+   and very likely the unlockables/wardrobe defaults too, are most likely not "granted" by any
+   script call, data-table default, or any of this function's own sub-steps that Team B can
+   discover and replicate.** Recommended path, now on a broader evidentiary base: **hardcode
+   $57.00 (raw 5700, ×100 scale) as the new-game starting cash constant** rather than continuing to
+   search for a "real" data source. No further candidate call site was surfaced by this pass to
+   keep looking — this question is now considered exhausted by static analysis short of a
+   whole-binary constant scan (tooling this project's Ghidra server doesn't support) or a live
+   capture.
 2. ~~The literal pause-menu-open input binding~~ **RESOLVED (HIGH CONFIDENCE) 2026-10-10 — pivoted
    to the input side after the screen-push side was exhausted (see the trail below), and landed
    it.** The pause-menu-open binding is keyed off the CBA action table's `0x55` (85) entry
@@ -577,3 +694,42 @@ executable's own data sections, not sourced externally.
   the shared fade-completion teardown's own dialog-class-driven game-pause push/pop — a concrete worked
   instance of the pre-existing pause-depth-counter mechanism. Full detail:
   `scratchpad/frontend_menu_flow_2026-10-08.md`. Cleanroom self-check: 0 hits. Synced to Team B.
+- **2026-10-10 — §9 item 1 (fresh-game player-record defaults) NARROWED** (SPEC TEAM, agent
+  `a2f20c66910b6c11a`). Candidate (a), the save-load gate's failure path, is now a CONFIRMED dead
+  end — independently re-verified: it only tears down a pre-existing save-request object and
+  returns, never calls the real load driver. Candidate (b), the player-record constructor, traced
+  all the way to its real placement constructor (`0x009de970`, via the engine's generic entity
+  factory, class id `0x21` confirmed as "player" by its own descriptor string) — but the literal
+  cash default `5700`/`0x1644` was not found anywhere in that constructor or its 5 direct callees.
+  New HYPOTHESIS for the next pass: since this engine routes other cash changes through one shared
+  `cash_adjust`-tagged setter, the starting 5700 may be granted by an intro-mission/tutorial Lua
+  script call rather than hard-coded in engine construction code. Unlockables/wardrobe defaults not
+  reached this pass. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- **2026-10-10 — §9 item 1: starting-cash search exhausted on both the data and engine sides —
+  recommending Team B hardcode $57.00** (SPEC TEAM, agent `ad80b15c3f97bb244`). Correction before
+  this pass started: the raw save value 5700 is cash ×100 — the real starting amount is $57.00, not
+  $5700 (so a Lua-side grant would read `cash_add(57,...)`, not `5700`). Re-confirmed `m01.lua` IS
+  the bank-heist prologue (not a later mission) and has zero cash code; confirmed
+  `player_presets.xtbl`'s full record has no cash field, and no player-defaults-style xtbl exists
+  anywhere in the extraction. Full xref census of both cash-setter layers (41 uses/32 functions,
+  9 uses/8 functions — independently re-verified against the live Ghidra server before splicing)
+  found no new-game-reachable caller among the 3 strongest candidates checked. One further
+  constructor-chain level exhausted (a previously-undocumented sibling, `0x005f6640`, turned out to
+  be pool-allocator bookkeeping). **Recommended for Team B: hardcode $57.00 as the new-game
+  starting-cash constant** rather than keep searching — a well-evidenced negative across the two
+  most plausible source locations, not an unexplored gap; one untried lead (`0x00708330`, the
+  fresh-game-defaults application step) flagged for anyone who wants to keep looking. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- **2026-10-10 — §9 item 1: `0x00708330` exhausted as a clean negative, closing the fresh-game
+  defaults search** (SPEC TEAM, agent `abe4d271a077162e5`). Opened the last untried lead in full:
+  the fresh-game branch (`0x007086a1`-`0x00708701`, gate independently re-verified at `0x0070867e`)
+  does exactly 4 things — two gate checks, applying the `player_presets.xtbl` identity default
+  (pure appearance, no economy/inventory reference), a session/world-state flag reset
+  (`0x00b9a250`, re-verified as having `0x00708330` as its only caller anywhere in the binary), and
+  placing the player in its starting zone — none of them cash, unlockables, or wardrobe. Zero
+  occurrences of the cash-setter family, the unlockables table base address, or
+  `pcr_add_default_clothing` anywhere in the function's ~140 callees, independently re-verified
+  against the live Ghidra server. This closes the question to a well-evidenced exhausted state
+  across 3 independent search angles (data, both cash-setter layers, and now this function) —
+  hardcoding $57.00 stands as the recommendation, with no further candidate surfaced. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

@@ -4463,43 +4463,101 @@ covers the consumer code that reads it, how far the actual steering decision cou
 integration point with the Havok driving slice. Method: Ghidra-free, direct `capstone` disassembly of
 every address below (the shared Ghidra server was saturated with concurrent jobs this pass).
 
-### 18.1 Lane selection/following — closer to graph-hopping than to a continuous spline formula (partial)
+### 18.1 Lane selection/following — RESOLVED: a masked, lookahead-bounded forward walk of the point graph (2026-10-10, supersedes the prior "explicitly OPEN" framing)
 
-The consuming code (empirically bounded by an exhaustive absolute-reference census of the
-`0x02705fe0` Traffic-record singleton to roughly `0x00a69000`-`0x00a6e000` and `0x00b1a000`-`0x00b65000`,
-~90 KB of code) walks the segment↔point graph by **index** (pointer-to-index recovery via the
-signed-division-by-24 idiom, `spec-zone-data-format.md` §13.2) and by **handle** (the `0x028921d0` pool),
-decoding real 3-D geometry via the two codecs documented there. This is structurally much closer to "hop
-between graph nodes/segments and read out their point data" than to a single closed-form analytic spline
-with a cross-track-error term — no cross-track/projection-onto-curve math (a closest-point-on-segment
-solve, or a PID-style heading-error correction) was found in any function opened this pass.
+**Correction to the prior pass's own addressing, found and fixed 2026-10-10:** `0x00b1c5a0` was never
+a function entry point — it is an instruction address *inside* a single large function at `0x00b1be40`
+(body `0x00b1be40`-`0x00b1cc5e`, ~450 instructions, exactly one caller). The prior pass's Ghidra-free
+capstone-only method mis-split this function at an internal label; independently re-verified against
+the live Ghidra server this pass (querying `0x00b1c5a0` resolves to the function body
+`0x00b1be40`-`0x00b1cc5e`, confirmed).
 
-**Explicitly OPEN, not guessed:** the actual function that takes a vehicle's current position/segment and
-produces a target point or steering angle. Every function opened this pass (the record fixup, the pool
-methods, the two position-decode codecs) is pure **data-resolution** code — none reads a vehicle
-position, heading, or velocity. That logic almost certainly lives elsewhere in the same ~90 KB module (or
-in the sibling `0x00b31e7a`-`0x00b4e495` cluster §14.5/§14.7 already know calls `0x00a12180`, the general
-navmesh/path-point query — plausibly related, not proven). Whether a chosen point is a single "next
-waypoint" or a continuously re-sampled curve parameter is undetermined from the data alone — the
-per-segment variable-length point list supports either interpretation equally well. Most promising
-follow-up target: the caller(s) of `0x00b1c5a0` (not traced upward this pass).
+**CONFIRMED:** `0x00b1be40` is the forward-search function that walks the point graph from a given
+current point, accumulating along-path distance until a caller-supplied lookahead distance is
+exceeded, and returns a target point. Signature (register-parameter-aware):
 
-### 18.2 Junction/branch handling — a kind flag exists, the choice algorithm does not (partial)
+```
+0x00b1be40(int *visitedHandles, int visitedCount, float3 *originPos,
+            uint maskInclude, uint maskExclude, float lookaheadDist,
+            byte legalModeFlag, int filterHandle,
+            float3 *out_targetPoint, Point *currentPoint /* passed in EDX */)
+```
 
-The 2-bit "segment kind" field (`spec-zone-data-format.md` §13.2, extractor `0x00a69af0`) has at least one
-real consumer (inside `0x00b1c5a0`) that branches away from its "normal" path whenever the value is
-non-zero — the data format already distinguishes at least two segment kinds, and at least one piece of
-consumer code treats a non-"kind 0" segment specially. The same function also scans a small array for a
-pointer match against the just-popped segment handle and, if a flag byte is set, calls a cache-check
-function before falling back to a cached alternate result — the general shape of "is this candidate
-already selected/cached — reuse or defer," plausible groundwork for junction arbitration (e.g. avoiding
-two vehicles claiming the same merge point).
+- It walks the point chain forward from `currentPoint`, using the point's own "exit A"/"exit B" byte
+  indices (offsets `+0x2`/`+0x3` — the same per-point index fields `spec-zone-data-format.md` §13.2
+  already documents) to find the next point(s), accumulating the per-point along-path distance (float
+  at point `+0x4`, read via `0x00b1a870`) until it exceeds `lookaheadDist` (the loop condition is
+  literally `lookaheadDist < accumulatedDistance`).
+- Candidate segments are filtered by `(maskInclude & segmentKindFlags) != 0 && (maskExclude &
+  segmentKindFlags) == 0`, where `segmentKindFlags` is the 4-byte field at segment `+0x1c` (the same
+  struct whose 2-bit "kind" sub-field `spec-zone-data-format.md` §13.2 already documents). Two extra
+  special-case bits (`0x8000`/`0x8000000` within that same field) gate an additional caller-supplied-
+  handle acceptance test (`0x00a6af10(segment, filterHandle)`), plus a pairwise comparison via
+  `0x00a69af0` (the already-documented 2-bit kind extractor) against `filterHandle` — together this
+  reads as a **lane-class/vehicle-class permission filter**, not a cost function: "is this segment
+  legal for a vehicle of this class, and does it belong to the zone/kind the caller is asking for."
+- `originPos` (3 floats) is **not read from a live vehicle transform inside this function** — it is
+  supplied by the caller (see `0x00b1cc60` below) as either a direct copy of a caller-held position or
+  the **midpoint of two corner/junction endpoint positions** (averaged via `0x00a69c30`, which indexes
+  the point pool's own position fields). Consistent with `originPos` being "the corner/handle's own
+  reference position," not necessarily a moving vehicle's live position — whether the caller's own
+  caller eventually substitutes a true vehicle position here is still OPEN (below).
+- The output `out_targetPoint` (3 floats, written through the pointer param) is the function's actual
+  deliverable: a literal 3-D point advanced along the (filtered) path network by the requested
+  lookahead distance. **This directly answers the prior pass's own open item: the function that
+  "produces a target point" is `0x00b1be40`, and the mechanism is a masked forward graph-walk bounded
+  by a lookahead distance, not a closed-form spline/cross-track solve** — confirming, not merely
+  inferring, the prior pass's own structural guess.
 
-**Explicitly OPEN:** the branch-selection algorithm itself. No RNG call, no destination/goal-comparison
-code, and no lowest-cost-neighbor loop was found in any function opened this pass — not answered, not
-inferred from the thin evidence above.
+**HIGH CONFIDENCE — the immediate caller, `0x00b1cc60` (body `0x00b1cc60`-`0x00b1ce70`):** resolves a
+small caller-supplied parameter block into the exact argument list above. It accepts either a
+**single handle** (averaging that corner's own two endpoint positions into `originPos` — the
+"mode==1" path, parameter-block field `+0x10`) or an **explicit list of up to 16 candidate
+next-segment handles** (field `+0x8`, count at field `+0x10`), which it resolves one-by-one via
+`0x00a6b450` (handle→point-table-index validity check, fully decompiled) into the `visitedHandles`
+array passed to `0x00b1be40`. **This means the actual "which branches are even eligible to search"
+decision is made by `0x00b1cc60`'s own caller**, which hands it a ready-made candidate list —
+`0x00b1be40` itself does not choose among arbitrary junction exits from nothing; it either explores
+exactly the two exits recorded on each point it's already walking (graph topology, not a branch
+"choice"), or is handed a pre-filtered candidate set by its caller. `0x00b1cc60`'s own 8 call sites:
+`0x00b1d2e7`, `0x00b20aae`, `0x00b1e775`, `0x00b1e822`, `0x00b45aa2`, `0x00b47089`, `0x00b4cdf1`,
+`0x007d41a1` — independently re-verified against the live Ghidra server this pass; not individually
+opened. Candidate-list cap `0x10` (16) and the parameter-block field layout (fields `+0x14`/`+0x18`
+= include/exclude masks, `+0x1c` = lookahead float, `+0x20` = legal-mode byte, `+0x24` = filter
+handle, `+0x4` = current-point pointer) form a reusable "path query" struct — worth
+cross-referencing against any Lua/behavior-tree binding exposing equivalent fields (not checked this
+pass).
 
-### 18.3 Integration with the physics driving slice — one shared input surface, exact write-site open
+**Still OPEN, narrower than before:** whether a *moving vehicle's* live position/heading/velocity ever
+feeds into `originPos` or into the lookahead-distance parameter (e.g. speed-scaled lookahead) — not
+resolved; the trace stopped at `0x00b1cc60`'s own 8 callers, none opened. The prior pass's blanket
+claim ("no function found reads vehicle position") is now more precisely: *no function at this level
+reads it directly — it would have to come from one of those 8 callers.* Most promising next step:
+open `0x00b1cc60`'s 8 callers, looking for a vehicle-instance position/heading read feeding this
+parameter block.
+
+### 18.2 Junction/branch handling — REFINED: the kind-flag bits gate forward-search cutoff, not a discrete choice (2026-10-10)
+
+Re-examined with the corrected function boundary (§18.1): the "segment kind" bits at `+0x1c` (bits
+`0x1` and `0x2`, matching `spec-zone-data-format.md` §13.2's 2-bit field) are tested as **early-exit/
+cache conditions on each of a point's two exits independently** inside `0x00b1be40`'s main
+forward-walk loop — e.g. "if exit-A's kind bit 0 is already set, stop extending that branch;
+otherwise keep walking it and testing the lane masks." This matches, and now pins down the exact bit
+semantics for, the prior pass's own "is this candidate already selected/cached" cache/arbitration
+hypothesis (bit 0 ↔ exit index at point `+0x2`; bit 1 ↔ exit index at point `+0x3`).
+
+The function explicitly explores **both** exits of a flagged junction point up to the lookahead
+distance (recording the first point along each as the "left"/"right" branch candidates), then
+independently continues walking *both* saved candidates further. **No cost comparison, goal-distance
+comparison, or RNG was found between these two candidates in this function** — the same honest
+negative the prior pass reported, now confirmed on the corrected function rather than guessed.
+**Branch selection at this level is lane-legality filtering (the `maskInclude`/`maskExclude` test,
+§18.1), not cost-based choice** — one side is rejected outright when its kind flags don't satisfy the
+caller's requested vehicle-class bits, not by comparing a cost or goal distance between the two.
+Whether a higher-level cost/goal-driven choice exists in `0x00b1cc60`'s own unopened callers is the
+real remaining open question — same scope as §18.1's own open item.
+
+### 18.3 Integration with the physics driving slice — one shared input surface, write-site CLOSED (updated 2026-10-10, §18.6)
 
 `spec-physics-runtime.md` §10.6 already documents `hk_custom_vehicle_driver_input` (`0x00ae30c0`) as the
 ONE RTTI override class (row 35, §2.1) that converts the game's raw control fields into Havok's
@@ -4525,33 +4583,233 @@ animation-parameter query (`0x00a926b0(vehicleHandle)`) — a vehicle-agnostic "
 used to drive the steering-wheel-holding animation for any vehicle, including presumably
 ambient-traffic-driven ones.
 
-**What was NOT found: the literal write site inside the traffic module.** A disp32 byte-pattern scan for
-the literal `0x128` restricted to the known traffic address range (`0x00a60000`-`0x00b70000`) found 79
-occurrences; spot-checking 10 found every one is a `[esp+0x128]`-style stack-frame-local reference, not a
-`[reg+0x128]` struct-field write on a vehicle-instance pointer — too common a stack offset to discriminate
-this way. **Reported as an honest negative/inconclusive result, not as "no such write exists."** HIGH
-CONFIDENCE, not fully closed: ambient traffic feeds the identical fields player/AI-passenger vehicles use;
-the exact function was not located (most promising next step: trace backward from `0x00ae30c0`'s own
-caller, the Havok component-array slot `+0x20` virtual dispatch inside sub-step `0x00c55f80`,
-`spec-physics-runtime.md` §6.3/§6.4 item 1, to find every concrete vehicle instance stepped, then check
-whether an ambient-traffic-flagged instance's `+0x128`/`+0x130` were written by the traffic module earlier
-the same frame — a data-flow trace, not a byte scan).
+**The literal write site inside the traffic module — RESOLVED 2026-10-10, §18.6.** An earlier disp32
+byte-pattern scan for the literal `0x128` restricted to the known traffic address range
+(`0x00a60000`-`0x00b70000`) found 79 occurrences, all `[esp+0x128]`-style stack-frame-local
+references, not a struct-field write — a real negative for that method, not for the write's
+existence: the write happens one hop further down, inside a shared vehicle-command dispatcher the
+traffic module calls into, not as a direct `[reg+0x128]` store at the traffic-module call site
+itself, which is exactly why the byte scan couldn't find it. §18.6 traces the real chain end to end
+and confirms ambient traffic writes the identical `+0x128`/`+0x12c`/`+0x130`/`+0xb0` fields named
+above, on the same instance layout, via the identical `+0x20` curve-parameter sub-pointer and
+`+0x164` flag-byte semantics `0x00ae30c0`'s own body reads — not merely a plausible-offset guess.
+
+### 18.5 One level above `0x00b1cc60`: live vehicle position found, and the junction cost-comparison located (2026-10-10, continuation)
+
+Opened 6 of `0x00b1cc60`'s 8 call sites (they resolve to 5 distinct functions — `0x00b1e775`/
+`0x00b1e822` are two call sites inside the same function). `0x00b45aa2` and `0x007d41a1` were not
+opened this pass (budget; depth over breadth on the other 6, per standing instruction).
+
+**CONFIRMED — `0x00b4c710` (call site `0x00b4cdf1`) reads a live, moving entity's own position and
+gates the path re-query behind a cached-target distance check.** A `this`-pointer method on a
+per-entity traffic-AI record. It reads three consecutive floats at the entity's own `+0x40`/`+0x44`/
+`+0x48` repeatedly (e.g. `0x00b4c872`, and via `LEA ESI,[EDI+0x40]` feeding two box-builder calls,
+`0x00b4ca40`) — independently re-verified against the live Ghidra server before splicing — the
+first time in this trace a position field has been shown to belong to the entity being driven,
+rather than to a static junction/corner record. It also reads a cached previous target point, stored
+on the same per-entity record at absolute `+0xe38`/`+0xe40` (`0x00b4ccf5`, re-verified), compares it
+against a candidate position via a squared-distance computation against a threshold constant
+(`0x01117a60`), and — **only when the cached point is stale or the vehicle has moved far enough
+away** — rebuilds a search box around the live position, runs the nearest-candidate picker
+`0x00b46fc0`, calls `0x00b1cc60`, and writes the new result back into the same cache fields. **This
+is a throttled re-query mechanism, not a naive per-frame full graph-walk, and it directly answers
+§18.4 item (a) for at least one of the 8 callers: yes, live entity position reaches this query
+layer, gated by a per-entity cached-target/distance threshold rather than fired every frame.** One
+level further up: `0x00b4c710`'s only two call sites are both inside `0x00b4ceb0` (itself called
+only from `0x00b4d070`) — a per-entity update-tick-shaped function (status/counter fields at the
+same entity's `+0xe08`/`+0xe20`) not fully decompiled this pass; its own second parameter (passed
+via a separate object) was not identified. This chain (`0x00b4d070`→`0x00b4ceb0`→`0x00b4c710`) is
+the most promising concrete lead toward the Havok write-site (§18.3/§18.6).
+
+**CONFIRMED — `0x00b46fc0` (call site `0x00b47089`) is a generic "pick the candidate minimizing a
+distance" selector, not itself a live-position reader.** Given a caller-supplied current-point
+pointer and up to 4 candidate next-points, it loops calling `0x00b1cc60` once per candidate,
+measures the resulting target point's distance via `0x00b1ad80`, and keeps the minimum-distance
+candidate — a genuine cost comparison, just not goal-seeking (no destination parameter reaches it).
+
+**CONFIRMED — `0x00b1ce80` (call site `0x00b1d2e7`) runs a genuine goal/destination-distance-
+minimizing choice across candidate branches — this answers §18.2's own open question: yes, a
+cost/goal-driven choice exists, one layer above `0x00b1cc60`.** Signature: `0x00b1ce80(float3
+originPos, float3 *destPos, int *out_pointHandle, byte mode)`. It finds the point nearest `originPos`
+via a spatial box query, separately builds a candidate list from a box query centered near
+`destPos`, and for each candidate calls `0x00b1cc60` to get a lookahead-advanced target point, then
+keeps the candidate minimizing distance-to-`destPos` (`0x00b1d2e7`-`0x00b1d35a`, an explicit
+replace-running-minimum loop). **A real "closest-to-goal" greedy branch choice** — directly
+contradicting the narrower reading that no cost/goal comparison exists above `0x00b1be40`/
+`0x00b1cc60`; it exists, one hop further up than either. Whether `originPos`/`destPos` are
+themselves a live vehicle position/a route destination is NOT resolved — both are plain function
+parameters here; `0x00b1ce80` has exactly 2 callers (`0x00b2578e` inside `0x00b25620`, `0x007e33cb`
+inside `0x007e3380`), neither opened.
+
+**CONFIRMED — `0x00b1e5e0` (call sites `0x00b1e775`/`0x00b1e822`) runs the identical nearest-
+candidate-by-distance shape as `0x00b1ce80`**, over a different box-query radius/offset, parameterized
+by `(originPos, maskInclude, maskExclude)`. Same caveat: `originPos` is a plain parameter; its single
+caller `0x00b20420` (inside `0x00b20390`) was not opened.
+
+**HIGH CONFIDENCE — `0x00b20920` (call site `0x00b20aae`) is static junction/connectivity-graph
+construction, not a per-frame steering consumer.** Takes a junction-definition struct (count, an
+array of corner-position records, flag/handle fields) and, for every pair of its own member corner
+positions, resolves each to a point handle and links adjacent pairs via `0x00b1cc60`'s output, with
+early failure-return on any resolution failure — the shape of a one-time (or infrequent) graph
+build/validation pass over fixed geometry, not a moving entity. 6 callers, none opened, but nothing
+in its own body reads anything resembling a live transform.
+
+**Updated answer to §18.4(a):** of the 6 call sites opened, **one (`0x00b4cdf1`/`0x00b4c710`)
+CONFIRMED to read live entity position**, gated by a cached-target/distance throttle; **two
+(`0x00b1d2e7`/`0x00b1ce80`, `0x00b1e775`+`0x00b1e822`/`0x00b1e5e0`) CONFIRMED to run a genuine
+nearest/goal-distance cost comparison**, though whether their own position parameters are
+themselves live-vehicle-sourced requires opening their own callers (`0x00b25620`, `0x007e3380`,
+`0x00b20390` — not attempted); **one (`0x00b20aae`/`0x00b20920`) is load-time/infrequent graph
+construction, not a steering read**; **two (`0x00b45aa2`, `0x007d41a1`) remain fully unopened.**
+
+### 18.6 The Havok driver-input write site — RESOLVED: traced from `0x00b4d070` through the shared vehicle-command dispatcher to the exact `0x00ae30c0`-matching fields (2026-10-10, continuation)
+
+**CONFIRMED — `0x00b4ceb0` itself never reaches a steering/throttle write; it is purely the
+per-entity state-gate wrapper around `0x00b4c710`'s target-point resolution.** Opened in full (body
+`0x00b4ceb0`-`0x00b4d062`). Its own second parameter (register-passed, correcting §18.5's framing of
+which register) is threaded into five sibling calls (`0x00b4a980`, `0x00b4c270`, `0x00b4a180`,
+`0x00b4a730`, `0x00b4a530`) as a plain argument, never into `0x00b4c710` itself. The function's
+entire body is conditional bookkeeping on the entity's own status bits (`+0xe08`, `+0xe09`, `+0xe20`)
+and throttled countdown timers (`0x00d9e140`) that gate *whether* `0x00b4c710` runs this tick — no
+steering/heading computation, no write to anything resembling a vehicle-instance field, appears
+anywhere in `0x00b4ceb0`.
+
+**CONFIRMED — the write happens one level up, in a sibling call from `0x00b4ceb0`'s only caller,
+`0x00b4d070`, independently re-verified against the live Ghidra server before splicing (confirmed:
+`0x00b4d070` subtracts `0xd` from its own state byte and calls `0x00b47490` directly after).**
+`0x00b4d070` (body `0x00b4d070`-`0x00b4d25a`) calls `0x00b4ceb0` first (the gated target-point
+refresh), then switches on the entity's own state byte at `+0xc69`:
+
+- state `0xd` → calls `0x00b47490` (opened in full this pass — the write path, below).
+- states `0xe`/`0x10` (conditioned on `0x00a1ef50(entity+0x11a4)` returning nonzero) → calls
+  `0x00b2bbc0` (NOT opened — a second possible write path left genuinely OPEN, not fabricated).
+- Either way, it then calls `0x00b49820` (an "is a path/route pending" test) and, when false, runs a
+  path-request block that caches the entity's own live position (`+0x40`/`+0x44`/`+0x48`, matching
+  §18.5) into `+0xe44`/`+0xe4c` and advances the state to `0x10` — route bookkeeping, a different
+  code path from the write traced below.
+
+**CONFIRMED — `0x00b47490` computes a steering sign from a heading/target dot-product and distance
+check, and writes it through the engine's shared vehicle-command API, which lands in fields that
+exactly match `0x00ae30c0`'s own documented layout.** Full body opened (`0x00b47490`-`0x00b475f3`),
+independently re-verified against the live Ghidra server before splicing (confirmed: calls both
+`0x00a929e0` and `0x00a92640` directly). Mechanism:
+
+1. Computes a dot product of two 3-vectors read off the entity record — `(+0xe14,+0xe18,+0xe1c)·
+   (+0x64,+0x68,+0x6c)` — into a scalar (HIGH CONFIDENCE, not independently proven: the shape
+   matches "cosine of the angle between the desired heading and the vehicle's current forward
+   axis," consistent with `+0x64..0x6c` being a live orientation-basis row and `+0xe14..0xe1c` being
+   a target-direction vector cached near the `+0xe38`/`+0xe40` target-point fields §18.5 already
+   found, but the vector roles were not independently confirmed — the magnitude helper
+   `0x00abaf10`, called right after, was not opened).
+2. Picks a sign (`+1.0`/`-1.0`) from a lane-side status bit at `+0xe09` bit 2.
+3. Calls **`0x00a929e0(entityHandleLo=+0x8, entityHandleHi=+0xc, signFloat)`** — the entity's own
+   vehicle-handle pair, not a raw pointer.
+4. Based on which side of a `cos(30°)`/5.0-unit distance gate the dot-product/magnitude pair falls
+   on, also calls either `0x00a92640(+0x8, +0xc, 0)` (far/misaligned case) or `0x00b207d0(entity+
+   0xc68, 3.5, distance, 1)` (close/aligned case — not opened), then unconditionally calls
+   `0x00a92ab0(+0x8, +0xc, 0)` (not opened — likely a third command, "set brake/handbrake 0").
+
+**CONFIRMED — `0x00a929e0` and `0x00a92640` are the SAME generic "send a float command to a
+handle-addressed vehicle" dispatcher used everywhere in the traffic/vehicle code (21+ and 30+ call
+sites respectively, spanning player, mission-script, and traffic systems alike) — the shared
+command API `spec-player-runtime.md`'s pre-existing `0x00a926b0` "Vehicle Steering" query sits
+alongside, not a traffic-specific path.** Both resolve the handle pair via `0x00458230` into an
+object pointer; validate a liveness flag (`+0x33` bit `0x10` clear), a class-dispatch byte at `+0x34`
+indexing a global per-class capability table (`0x02cc9900`) whose own `+0x6` byte has bit `0x80` set
+("this class supports vehicle driving"), that `0x00853b10` returns false, and — only for
+`0x00a929e0` — that `+0xbd0 == 1` ("currently vehicle-controlled"). Then: `0x00a929e0` switches
+(via a 0-5 vehicle-type/variant selector, `0x00ad2f80`, not decompiled) between calling
+**`0x00ae5290`** with the sub-object at `entity+0x808` (cases 0/1/2/4-fallthrough) or `0x00aed340`
+with the sub-object at `entity+0x818` (case 5, not opened — plausibly a different vehicle-class
+variant's own driver-input instance). `0x00a92640` calls `0x00a90b50` directly (skipping the
+class-table gate), which re-reads the same selector and switches among `0x00aed2f0`
+(`entity+0x818`), `0x00ad9910`, and **`0x00ae8fd0`** (`entity+0x808` — the SAME sub-object slot
+`0x00ae5290` targets).
+
+**CONFIRMED — `0x00ae5290` and `0x00ae8fd0` write exactly the fields §18.3 already documented for
+`0x00ae30c0`, with matching flag-bit semantics, not merely matching offsets — both opened in full,
+independently re-verified against the live Ghidra server before splicing:**
+
+- `0x00ae5290(this, signFloat)`: reads `this+0x164` bits 0/1 (the SAME zero-override and
+  curve-disable flags §18.3 names as gating the sign-preserving-squared curve on `+0x130`/`+0x138`),
+  clamps the input to `[-1,1]`, and — unless bit 1 is set — runs it through a curve parameterized by
+  a struct at `this+0x20`, then **writes the result to `this+0x130`** (confirmed by direct
+  disassembly: `MOVSS dword ptr [ESI+0x130],XMM0`, 3 write sites) — the exact steering-accumulator
+  field §18.3 names.
+- `0x00ae8fd0(this, value)`: same `this+0x164` bit-0 gate, clamps/curves the value, and writes
+  **`this+0x128` and `this+0x12c`** (confirmed by direct disassembly, multiple write sites), plus the
+  status byte **`this+0xb0`** and a secondary byte at `this+0xcd` — exactly the `+0x128`/`+0x12c`/
+  `+0xb0` fields §18.3's own disassembly of `0x00ae30c0` already named, read off the identical
+  instance layout (same `+0x164` flag byte, same `+0x20` curve-param pointer `0x00ae5290` also
+  reads).
+
+**This closes §18.3/§18.4(c)'s open item: the ambient-traffic write site is CONFIRMED, not a
+byte-pattern guess.** The structural match is what closes it — the `+0x164` bit-0/bit-1 flag
+semantics, the `+0x20` curve-parameter sub-pointer, and the `+0x128`/`+0x12c`/`+0x130`/`+0xb0` field
+set are all read off the SAME instance layout `0x00ae30c0`'s own body (§18.3) reads from, reached
+here via an ordinary component-slot pointer (`vehicleEntity+0x808`), not any special-cased
+traffic-only object. Full chain:
+
+```
+0x00b4d070 (per-vehicle traffic-AI drive tick, state == 0xd)
+  -> 0x00b47490 (heading-dot-product + distance gate, picks a steering sign)
+       -> 0x00a929e0(vehicleHandle, vehicleHandle, signFloat)   [generic vehicle-command dispatch]
+            -> 0x00ae5290(driverInput, signFloat)  writes driverInput+0x130   (steering accumulator)
+       -> 0x00a92640(vehicleHandle, vehicleHandle, 0)           [generic vehicle-command dispatch]
+            -> 0x00a90b50(vehicleEntity, 0) -> 0x00ae8fd0(driverInput, 0)
+                 writes driverInput+0x128/+0x12c (throttle pair), +0xb0 (status byte)
+  where driverInput == *(vehicleEntity + 0x808), and 0x00ae30c0's own field map
+  (§18.3) reads +0x128/+0x12c/+0x130/+0x138/+0xb0/+0x14f off this SAME object.
+```
+
+**OPEN, narrower than before:** the `0xe`/`0x10`-state sibling path through `0x00b2bbc0` (§18.6's
+other branch out of `0x00b4d070`) was not opened — may be a second, structurally similar write path,
+not fabricated either way. `0x00ad2f80`'s 0-5 vehicle-type/variant selector semantics were not
+decompiled. The exact geometric roles of the two 3-vectors dot-producted in `0x00b47490` (heading
+vs. target-direction) are HIGH CONFIDENCE from context, not independently proven (`0x00abaf10` not
+opened).
 
 ### 18.4 Open items
 
-Not individually decoded/traced this pass: the segment-entry fields the main graph fixup leaves alone
-(`spec-zone-data-format.md` §13.2); the `0x00a69330` tail-jump target; the record `+0x70` name/key buffer;
-the `0x0115a220` quantization constant's value; whether `0x007d1040`/`0x007d3830`'s object is pair #8's
-point pool or a shared generic point-list class (not cross-checked against any camera/cutscene-spline
-spec); the steering/target-point computation and junction branch-choice algorithms (§18.1/§18.2); the
-literal Havok driver-input write site (§18.3); whether the Traffic record is strictly one-per-zone-file
-(not population-checked); `0x00b1a560` (the shared growth/removal helper both pool mutators tail-call
+**Updated 2026-10-10:** the steering/target-point computation is now CONFIRMED at `0x00b1be40` (a
+masked, lookahead-bounded forward graph-walk, §18.1); the junction kind-flag semantics are REFINED
+(per-exit cache/already-resolved bits plus lane-legality filtering, not a discrete RNG/cost choice,
+§18.2). **Item (a) is now substantially answered, §18.5:** live entity position does reach this
+query layer (confirmed at `0x00b4c710`, gated by a cached-target/distance throttle), and a genuine
+goal/nearest-distance cost comparison does exist one layer above `0x00b1cc60` (confirmed at
+`0x00b1ce80` and `0x00b1e5e0`) — resolving §18.2's own "does a cost-based choice exist" question in
+the affirmative, just one hop higher than originally searched. Still OPEN, narrower: whether
+`0x00b1ce80`/`0x00b1e5e0`'s own `originPos`/`destPos` parameters are themselves live-vehicle-sourced
+(their callers, `0x00b25620`/`0x007e3380`/`0x00b20390`, not opened); 2 of the original 8 callers
+(`0x00b45aa2`, `0x007d41a1`) never opened. (b) unchanged, still OPEN: the exact purpose of
+`0x0084b170` (a 3-float-vs-reference-position boolean test against the `0x007d1040`/`0x007d3830`
+corner-curve point pool — plausibly a "has the vehicle passed this curve sample" progress test, not
+independently confirmed). **(c) RESOLVED, §18.6/§18.3:** the literal Havok driver-input write site is
+now CONFIRMED end-to-end — `0x00b4d070` (state `0xd`) → `0x00b47490` (heading-dot-product steering
+sign) → the shared vehicle-command dispatcher `0x00a929e0`/`0x00a92640` → `0x00ae5290`/`0x00ae8fd0`,
+writing `driverInput+0x130`/`+0x128`/`+0x12c`/`+0xb0` on the SAME `0x00ae30c0`-shaped instance layout.
+**This closes the full §18 arc the orchestrator asked to finish** — the decision (§18.1/§18.2/§18.5)
+and the write (§18.3/§18.6) are now both traced. New, narrower opens surfaced by closing this:
+whether `0x00b4d070`'s `0xe`/`0x10`-state branch (`0x00b2bbc0`) is a second, parallel write path; the
+`0x00ad2f80` vehicle-type/variant selector's exact semantics; the precise vector roles inside
+`0x00b47490`'s heading dot-product (`0x00abaf10` not opened).
+
+Not individually decoded/traced in either pass: the segment-entry fields the main graph fixup leaves
+alone (`spec-zone-data-format.md` §13.2); the `0x00a69330` tail-jump target; the record `+0x70`
+name/key buffer; the `0x0115a220` quantization constant's value; whether `0x007d1040`/`0x007d3830`'s
+object is pair #8's point pool or a shared generic point-list class (not cross-checked against any
+camera/cutscene-spline spec); whether the Traffic record is strictly one-per-zone-file (not
+population-checked); `0x00b1a560` (the shared growth/removal helper both pool mutators tail-call
 into, not opened).
 
-**[CONFIRMED — disassembly for everything attributed above to a specific address. HIGH CONFIDENCE — the
-Havok single-input-surface argument. OPEN — the steering/junction decision algorithms and the literal
-Havok write site, reported honestly rather than inferred.]** Full detail, every address, and the complete
-raw disassembly: `scratchpad/traffic_ai_lane_following_2026-10-08.md`.
+**[CONFIRMED — `0x00b1be40`'s full behavior and its caller `0x00b1cc60`'s parameter resolution, both
+fully disassembled/decompiled via the live Ghidra server, 2026-10-10, independently re-verified
+(function-boundary resolution and the 8-caller list both spot-checked directly against the Ghidra
+server before splicing). HIGH CONFIDENCE — the lane-mask-filtering interpretation of branch handling,
+the Havok single-input-surface argument (§18.3), and that `0x00b1cc60`'s 8 callers are the next
+concrete trace target. OPEN — whether live vehicle state ever reaches this query, and the Havok
+write-site, reported honestly rather than inferred.]** Full detail, every address, and the complete
+raw disassembly: `scratchpad/traffic_ai_lane_following_2026-10-08.md` (original pass).
 
 ---
 
@@ -5571,3 +5829,52 @@ fully absorbed into §20.1 above.
   topology and boot sequence) and to `spec-player-runtime.md` §5.1 (the full cross-subsystem per-frame
   order this dispatcher's own call from `0x00702a50` sits inside). No new disassembly in this file.
   Cleanroom self-check: 0 new hits. Synced to Team B.
+- **2026-10-10 — §18.1/§18.2 RESOLVED/REFINED: traffic AI's real steering/target-point function and
+  junction-exit handling found** (SPEC TEAM, agent `ad96ea71d4c43e15d`). Corrected a function-boundary
+  error from the original 2026-10-08 pass (its Ghidra-free capstone method had mis-split one function
+  at an internal label): `0x00b1c5a0` is not a function entry, it's inside `0x00b1be40` — independently
+  re-verified against the live Ghidra server before splicing. `0x00b1be40` is CONFIRMED as the
+  steering/target-point search the prior pass couldn't find: a masked, lookahead-bounded forward walk
+  of the point graph, filtered by a lane-class/vehicle-class permission mask (not a cost function).
+  Its immediate caller `0x00b1cc60` resolves either a single junction handle or an explicit
+  up-to-16-candidate list into the walk's inputs — meaning "which branches are eligible" is decided one
+  level further up, not inside the walk itself. Junction kind-flag bits are REFINED to per-exit
+  cache/already-resolved bookkeeping, not a discrete RNG/cost choice — confirms, rather than merely
+  re-flags, the prior pass's own cache/arbitration hypothesis. Narrowed, not fully closed: whether a
+  live vehicle's own position/heading ever feeds this query was traced to `0x00b1cc60`'s own 8 callers,
+  none individually opened — the Havok driver-input write-site trace (§18.3) was not attempted this
+  pass either. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits (caught and
+  fixed several decompiler-auto-name leaks — `FUN_`/`param_N` — in the agent's own draft before
+  splicing).
+- **2026-10-10 — new §18.5/§18.6: traffic AI's live-position feed and junction cost-comparison
+  found; the Havok write-site still open** (SPEC TEAM, agent `a470f1a9d75ce284e`). Opened 6 of
+  `0x00b1cc60`'s 8 callers. CONFIRMED: `0x00b4c710` reads a live, moving entity's own position
+  (`+0x40`/`+0x44`/`+0x48`), gating the path re-query behind a per-entity cached-target/distance
+  throttle rather than re-querying every frame — independently re-verified against the live Ghidra
+  server before splicing. CONFIRMED: `0x00b1ce80` and `0x00b1e5e0` each run a genuine goal/nearest-
+  distance cost comparison across candidate branches, answering §18.2's own "does a cost-based
+  choice exist" question — yes, one layer above `0x00b1be40`/`0x00b1cc60`, not inside either.
+  `0x00b20920` identified as static junction-graph construction, not a per-frame steering consumer.
+  Still OPEN: whether `0x00b1ce80`/`0x00b1e5e0`'s own position parameters are themselves
+  live-vehicle-sourced (their own callers not opened); 2 of the 8 original callers never opened;
+  **the Havok driver-input write site (§18.3) was not attempted this pass** — a concrete forward
+  lead was surfaced instead (`0x00b4d070`→`0x00b4ceb0`→`0x00b4c710`) rather than the originally-
+  suggested backward trace. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0
+  hits.
+- **2026-10-10 — §18.6 RESOLVED, closing the full §18 traffic-AI driving arc end-to-end** (SPEC
+  TEAM, agent `a047382407ef16c3f`). Traced the Havok driver-input write site the orchestrator
+  explicitly asked to finish: `0x00b4ceb0` is confirmed to be pure state-gate bookkeeping around
+  `0x00b4c710`'s target-point resolution, never itself writing a steering/throttle field; the real
+  write happens one level up, in `0x00b4d070`'s state-`0xd` sibling call `0x00b47490` (a
+  heading/target dot-product that picks a steering sign), through the shared, vehicle-agnostic
+  command dispatcher `0x00a929e0`/`0x00a92640`→`0x00a90b50`, landing in `0x00ae5290`/`0x00ae8fd0` —
+  writing `driverInput+0x130`/`+0x128`/`+0x12c`/`+0xb0` on the exact same instance layout
+  `0x00ae30c0` (§18.3) already documented (same `+0x164` flag-byte semantics, same `+0x20`
+  curve-parameter sub-pointer), reached via an ordinary `vehicleEntity+0x808` component slot, not a
+  special-cased traffic-only object. Independently re-verified every link in the chain against the
+  live Ghidra server before splicing (the state-byte switch, both dispatcher calls, and both write
+  instructions all matched exactly). Updated §18.3's own title/body (write-site CLOSED) and §18.4's
+  item (c) to match. Remaining narrow opens: whether `0x00b4d070`'s `0xe`/`0x10`-state branch is a
+  second, parallel write path; the vehicle-type/variant selector's exact semantics; the precise
+  vector roles inside the heading dot-product. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.

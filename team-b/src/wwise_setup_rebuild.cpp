@@ -330,6 +330,14 @@ bool transcodeOneCodebook(oggpack_buffer& in, oggpack_buffer& out, std::string& 
         }
     }
 
+    // UPDATE 2026-10-09 (488/493 codebook-count investigation task): expose
+    // the fully resolved per-entry length list to CodebookParseInfo here -
+    // see that struct's own 2026-10-09 UPDATE comment (wwise_setup_
+    // rebuild.h). Pure diagnostic data exposure, filled at the same point
+    // the re-emit loop below starts consuming `lengths` - no behavior
+    // change to the actual rebuild.
+    if (info) info->lengths = lengths;
+
     // --- emit a standard-conformant codebook (third_party/libvorbis/lib/
     // codebook.c's vorbis_staticbook_unpack, written in reverse) ---
     oggpack_write(&out, 0x564342, 24);  // standard sync marker - not present in the stripped input, synthesized fresh

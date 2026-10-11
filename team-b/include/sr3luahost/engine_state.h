@@ -3362,6 +3362,24 @@ public:
     double& playerCash() { return playerCash_; }
     std::vector<PurchaseRecord>& purchaseLedger() { return purchaseLedger_; }
 
+    // New-game-with-no-save starting cash, raw units (cash x100, matching
+    // the same x100 scale as cash_add/playerCash() elsewhere and the
+    // save-file field's own encoding, spec-save-format.md Sec10.3/§10.1).
+    // spec-frontend-menu-runtime.md Sec9 item 1: the real engine's own
+    // write-site for this default is NOT confirmed - two independent search
+    // passes (data: m01.lua/player_presets.xtbl/xtbl corpus census; engine:
+    // both cash-setter layers' full caller lists + the player-record
+    // constructor chain down to its placement constructor) came up empty.
+    // This is Team B's CHOSEN application point (EngineState's own default-
+    // constructed value, used whenever no save snapshot gets applied via
+    // applySaveSnapshotFields()/lua_save_game_bridge.cpp, i.e. the "new
+    // game, no save present" case this project already distinguishes from
+    // "continue"), not a confirmed reproduction of the real engine's
+    // mechanism. Value: 5700 raw (= $57.00), spec-frontend-menu-runtime.md
+    // Sec9 item 1 / spec-save-format.md line ~736 ("new game 5,700 (=
+    // 57.00)").
+    static constexpr double kNewGameStartingCashCents = 5700.0;
+
     // skydive_move_to_do (Sec39.1): "the target resolves through the
     // generic third-tier resolver with NO guard on failure: an absent/
     // unresolved name leaves the target pointer at literal zero, and the
@@ -10890,7 +10908,10 @@ private:
     // ("ranking tranches 06/07/08") - see each public accessor's own doc
     // comment above. ---
     VcustPreview vcustPreview_;
-    double playerCash_ = 0.0; // CHOSEN starting balance - no real initial value given anywhere in scope
+    // New-game-with-no-save default (see kNewGameStartingCashCents's own
+    // doc comment above, spec-frontend-menu-runtime.md Sec9 item 1): CHOSEN
+    // application point, real write-site still OPEN.
+    double playerCash_ = kNewGameStartingCashCents;
     std::vector<PurchaseRecord> purchaseLedger_;
     int skydiveMoveToNullTargetGuardCount_ = 0; // Sec39.1 - test-observable only, not a real engine field
     SaveSystemUi saveSystemUi_;

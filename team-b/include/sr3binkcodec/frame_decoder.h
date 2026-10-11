@@ -49,35 +49,29 @@
 // deterministic check and a real-data check against the confirmed 135028
 // figure above).
 //
-// NOT established for every Bink file, and EMPIRICALLY REFUTED as a
-// universal default - this is why decodeLumaPlane() below takes an
-// explicit `hasLeadingSubChunkSpan` parameter instead of always skipping (or
-// never skipping) 4 bytes. spec-bink-codec.md Sec1.6's own "On-disk layout"
-// paragraph draws exactly this file-by-file line: for files with `D10=0`
-// ("no audio tracks" - main_menu_bg.bik, 01_crawl.bik, both confirmed),
-// frame N's raw blob is cleanly `file_bytes[offs[N]:offs[N+1]]` with no
-// extra bytes; for files with `D10>=1` (one or more audio tracks, Sec1.6's
-// own named example is `logo_thq_and_voli_hd.bik` - this project's OTHER
-// real golden fixture, tests/golden/bink_logo_frame0/frame0_raw.bin) "extra
-// per-track header bytes" are inserted before the frame-offset table,
-// "breaking this exact formula - not chased further" by that spec pass.
-// This task tried the unconditional-skip hypothesis against the logo
-// fixture anyway (the only other real sample available) specifically to
-// check whether the SAME per-plane span-field convention also happens to
-// hold there despite the unresolved D10 complication, and found a clear
-// EMPIRICAL NEGATIVE: with the skip applied, decode desyncs immediately
-// (BlockOutcome::OutOfRangeDispatch at block (0,0), raw dispatch nibble 10,
-// down from 418/419 blocks reconstructed on the pre-this-task code).
-// Per this project's "no invented fixes" rule, that negative result is
-// reported as a Team A spec-sync question (does logo_thq_and_voli_hd.bik's
-// own already-extracted frame0_raw.bin carry this same per-plane span-field
-// convention, a different one, or none at all, given its own D10>=1
-// per-track header bytes ahead of the frame-offset table itself?) rather
-// than silently forcing either skip=true (confirmed correct for
-// main_menu_bg, confirmed WRONG for logo) or skip=false (the reverse) as a
-// hardcoded, unstated default. Every real-data call site below states its
-// own stance explicitly, backed by which of Sec1.6's two D10 cases its own
-// input file is confirmed to be - see decodeLumaPlane()'s own doc comment.
+// RESOLVED 2026-10-09 (spec-bink-codec.md Sec1.6, "Frame N's own blob, for
+// D10>=1..." paragraph, fix/bink-d10plus-audio-chunk-skip task): the
+// EMPIRICAL NEGATIVE the prior pass recorded here (forcing the unconditional
+// D10=0-style skip onto logo_thq_and_voli_hd.bik desynced immediately) was
+// not evidence that the span-field convention fails to generalize - it was
+// evidence that the file's blob does NOT start with the video chunk at all
+// for `D10>=1`. Sec1.6 now CONFIRMS (two independent real samples, both
+// structural byte-math AND live execution): for files with one or more
+// audio tracks, frame N's blob leads with, per audio track IN ORDER, a
+// plain 4-byte little-endian chunk-size field followed by that many bytes
+// of that track's own compressed payload - repeated once per track - and
+// ONLY THEN does the video chunk begin, byte-for-byte the SAME shape
+// already confirmed for `D10=0` files (leading 4-byte Y-plane span field,
+// etc.), no gap, no padding. skipAudioChunks() below implements exactly
+// that per-track skip; call it once, before readPlaneSubChunkSpan()/
+// decodeLumaPlane(), for every `D10>=1` file - once the audio chunks are
+// skipped, the video chunk's own leading span field is universal again, so
+// every real file (D10=0 directly, D10>=1 after skipAudioChunks()) ends up
+// passing `hasLeadingSubChunkSpan=true`. The parameter itself is kept
+// (rather than hardcoding true) so every call site still states its own
+// stance explicitly and cites which of Sec1.6's two D10 cases its input is,
+// per this project's "no invented fixes" convention - see decodeLumaPlane()'s
+// own doc comment and skipAudioChunks() below.
 //
 // SEPARATELY NOT resolved, flagged rather than assumed: whether this SAME
 // convention (a 4-byte span field, skip 4 to reach data, position+rawValue
@@ -186,6 +180,29 @@ inline uint64_t nextPlaneSubChunkPosition(uint64_t thisPlaneSubChunkPosition, co
     return thisPlaneSubChunkPosition + 4 + span.payloadSpan;
 }
 
+// spec-bink-codec.md Sec1.6 ("Frame N's own blob, for D10>=1...", CLOSED
+// 2026-10-09): for a `D10>=1` file, call this ONCE at the very start of
+// frame N's blob (before readPlaneSubChunkSpan()/decodeLumaPlane() ever
+// touches `br`), passing `numAudioTracks` = that file's own D10 field. Per
+// audio track, in order, reads a plain 4-byte little-endian chunk-size
+// field (via `br.readBits(32)`, matching the SAME cold/byte-aligned
+// convention readPlaneSubChunkSpan() relies on) and skips exactly that many
+// payload bytes (`br.skipBytes()`) - leaving `br` positioned exactly at the
+// video chunk's own start, which carries the SAME leading-span-field shape
+// already confirmed for `D10=0` files (no gap, no padding, confirmed on two
+// independent real samples: logo_thq_and_voli_hd.bik, D10=1, audio chunk
+// size 28952 at blob offset 0, video chunk at blob offset 29056; and
+// logo_amd_hd.bik, D10=1, audio chunk size 25600 at blob offset 0, video
+// chunk at blob offset 25604). A `D10=0` file has zero tracks, so calling
+// this with `numAudioTracks=0` is a correct no-op - callers may call it
+// unconditionally with the file's own real D10 value rather than branching.
+inline void skipAudioChunks(BitstreamReader& br, int numAudioTracks) {
+    for (int i = 0; i < numAudioTracks; ++i) {
+        const uint32_t chunkSize = br.readBits(32);
+        br.skipBytes(chunkSize);
+    }
+}
+
 struct DispatchCount {
     PrimaryBlockType primary;
     std::optional<Case1SubType> sub;
@@ -284,7 +301,8 @@ struct DecodeTrace {
 // pay that 23-call bit cost 30x too often for a 240-column-wide frame,
 // desyncing the shared bit cursor from the very first row.
 inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockCols,
-                                           int blockRows, CaseSelectorScratchSource* caseSelector = nullptr) {
+                                           int blockRows, CaseSelectorScratchSource* caseSelector = nullptr,
+                                           CaseSelectorScratchSource* caseSelectorB = nullptr) {
     DecodeTrace trace;
     trace.blockCols = blockCols;
     trace.blockRows = blockRows;
@@ -292,7 +310,16 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
 
     for (int row = 0; row < blockRows; ++row) {
         if (caseSelector != nullptr) {
-            const CaseSelectorStatus rowStatus = caseSelector->beginBlockRow();
+            // spec-bink-codec.md Sec5.3h: descriptor B's own refill fires
+            // unconditionally right after descriptor A's own refill
+            // returns, sharing the SAME 23-call per-row table-build pass -
+            // beginBlockRow(caseSelectorB) below models exactly that (see
+            // entropy_prestage.h's own beginBlockRow() doc comment).
+            // caseSelectorB is nullptr for any caller that hasn't wired
+            // descriptor B at all (e.g. a future chroma-plane caller before
+            // that scope is opened) - beginBlockRow() handles that case
+            // exactly like before this task.
+            const CaseSelectorStatus rowStatus = caseSelector->beginBlockRow(caseSelectorB);
             if (rowStatus != CaseSelectorStatus::Ok) {
                 // No block in this row got a chance to run at all - record
                 // one synthetic BlockRecord at this row's first column so
@@ -316,7 +343,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
             }
         }
         for (int col = 0; col < blockCols; ++col) {
-            BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector);
+            BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector, caseSelectorB);
             trace.blocks.push_back(rec);
             if (rec.outcome != BlockOutcome::Reconstructed) {
                 switch (rec.outcome) {
@@ -366,13 +393,21 @@ inline int blockGridRows(int planeHeight) { return (planeHeight + kBlockSize - 1
 // field, NOT yet past it (true: this function reads and skips that field
 // itself via readPlaneSubChunkSpan() before touching anything else) - or
 // already sitting at Y's own real entropy-data start, with no such field to
-// skip (false). MANDATORY, no default: per this file's own top "PLANE
-// SUB-CHUNK SPAN FIELD" note, this is CONFIRMED true for main_menu_bg.bik
-// (a spec-bink-codec.md Sec1.6 `D10=0`/"no audio tracks" file) and
-// EMPIRICALLY WRONG for tests/golden/bink_logo_frame0/frame0_raw.bin (a
-// `D10>=1` file per that same section) - there is no safe shared default,
-// so every caller must say which side of this still-open, per-file question
-// its own input stands on, citing the fact that puts it there.
+// skip (false). MANDATORY, no default, kept as an explicit parameter rather
+// than hardcoded per this file's own top "PLANE SUB-CHUNK SPAN FIELD" note's
+// "no invented fixes" convention. CONFIRMED true for main_menu_bg.bik (a
+// spec-bink-codec.md Sec1.6 `D10=0`/"no audio tracks" file, `br` positioned
+// at the blob's own byte 0) directly. For a `D10>=1` file (e.g.
+// logo_thq_and_voli_hd.bik / logo_amd_hd.bik), the PRIOR pass's "EMPIRICALLY
+// WRONG" finding here was diagnosing a different bug, now RESOLVED
+// (fix/bink-d10plus-audio-chunk-skip, 2026-10-09, Sec1.6's "Frame N's own
+// blob, for D10>=1..." paragraph): the blob's own byte 0 is an AUDIO chunk,
+// not the video chunk, for such files - the caller must first call
+// skipAudioChunks(br, D10) (above) to walk past every per-track audio
+// chunk, which leaves `br` positioned exactly at the video chunk's own
+// start. Once there, the SAME leading-span-field shape applies universally,
+// so this parameter is `true` for every real file this project has
+// confirmed, D10=0 directly or D10>=1 after skipAudioChunks().
 //
 // FIX (2026-10-09, fix/bink-merge-group-bit-consumption follow-up):
 // when `hasLeadingSubChunkSpan` is true, readPlaneSubChunkSpan() consumes
@@ -384,19 +419,23 @@ inline int blockGridRows(int planeHeight) { return (planeHeight + kBlockSize - 1
 // the pre-stage already-cold at the span field's OWN position (4 bytes/32
 // bits too early), which desynced the very first of the 23 calls and
 // poisoned block (0,0) immediately on real data (main_menu_bg.bik frame 0)
-// - see this file's own top comment for the full citation trail. This
-// parameter was added (rather than making the skip unconditional) after
-// confirming that same unconditional skip EMPIRICALLY BREAKS the logo
-// fixture (OutOfRangeDispatch at block (0,0), down from 418/419 blocks
-// reconstructed) - see this file's own top comment for why that file is a
-// genuinely different, still-open case, not a bug in this function.
+// - see this file's own top comment for the full citation trail. The prior
+// pass's "EMPIRICALLY BREAKS the logo fixture" note (OutOfRangeDispatch at
+// block (0,0) when skipping unconditionally) is now understood to be the
+// D10>=1 audio-prefix bug this task's skipAudioChunks() fixes, not a flaw
+// in the span-field convention itself - see this file's own top comment.
 //
-// Constructs one entropy_prestage.h CaseSelectorScratchSource (keyed on
-// this frame's own luma width, for Sec5.3c's length-field bit-width
-// formula) and threads it through every block's primary dispatch read -
-// see block_dispatch.h's "ENTROPY PRE-STAGE WIRING" note and
-// entropy_prestage.h's own top comment for exactly what that means for
-// real-data decode today.
+// Constructs TWO entropy_prestage.h CaseSelectorScratchSource instances -
+// descriptor A (keyed on this frame's own luma width, Sec5.3c's own
+// length-field bit-width formula, sibling-table call #1) and descriptor B
+// (Sec5.3h's own N_B formula, caseSelectorLengthFieldBitWidthB(), sibling-
+// table call #2 - entropy_prestage.h's kDescriptorBSiblingTableIndex) - and
+// threads BOTH through every block: A for the primary dispatch read, B for
+// case 1 (SubDispatch)'s own secondary/sub-type read (block_dispatch.h's
+// "DESCRIPTOR B / CASE-1 SUB-DISPATCH WIRING" note). See
+// entropy_prestage.h's own top comment for exactly what each source can and
+// cannot do today, and for the one DERIVED/flagged choice
+// (kDescriptorBSiblingTableIndex) this wiring still carries.
 inline DecodeTrace decodeLumaPlane(BitstreamReader& br, PlanarYuvFrame& frame, const PlaneView* prevLuma,
                                     bool hasLeadingSubChunkSpan) {
     if (hasLeadingSubChunkSpan) {
@@ -405,8 +444,10 @@ inline DecodeTrace decodeLumaPlane(BitstreamReader& br, PlanarYuvFrame& frame, c
     PlaneView dest = frame.luma().view();
     const int cols = blockGridCols(frame.dims().lumaWidth);
     const int rows = blockGridRows(frame.dims().lumaHeight);
-    CaseSelectorScratchSource caseSelector(br, frame.dims().lumaWidth);
-    return decodePlaneRasterOrder(br, dest, prevLuma, cols, rows, &caseSelector);
+    CaseSelectorScratchSource caseSelectorA(br, frame.dims().lumaWidth);
+    CaseSelectorScratchSource caseSelectorB(br, frame.dims().lumaWidth, caseSelectorLengthFieldBitWidthB,
+                                             kDescriptorBSiblingTableIndex);
+    return decodePlaneRasterOrder(br, dest, prevLuma, cols, rows, &caseSelectorA, &caseSelectorB);
 }
 
 // Builds an explicit per-pixel "was this byte actually written by a

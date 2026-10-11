@@ -54,7 +54,18 @@ These are the concrete object fields behind the property names `spec-lua-binding
 
 **There is no cached or dirty-flag render tree.** Every element of every rendered document is re-walked and its render state fully recomposed, every frame.
 
-- **Main path.** The UI frame function `0x00848e40` runs from `0x007025bc`, immediately after the per-frame UI update `0x00846ae0` (tween/animation/data-item processing). It calls `0x00e22660` → `0x00e1f6e0`, "render all documents":
+- **Main path.** The UI frame function `0x00848e40` runs from `0x007025bc`, immediately after
+  `0x00846ae0`. **Correction, 2026-10-10: `0x00846ae0` is NOT a tween/animation/data-item update
+  function — that label is wrong, struck here.** Opened in full disassembly (body
+  `0x00846ae0`-`0x00846c52`, independently re-verified against the live Ghidra server): it's a
+  critical-section-guarded block of OS-cursor-visibility/exclusive-mode/window-focus housekeeping —
+  reads window focus/state flags, compares against two cached bytes, conditionally calls a
+  cursor/focus-state handler (`0x008464b0`) only on change, conditionally releases a cached object
+  (gated by `0x00841ba0`), and ends with a few more state/flag calls. Nothing in its body touches
+  any Vint document, element, or property. This closes `spec-vint-doc-format.md` §7/§8 item 8's own
+  runtime-consumer question *negatively* for this specific address — the real tween-interpolation
+  consumer is still unidentified; see the trace below for how far the real call chain was pushed.
+  `0x00848e40` itself calls `0x00e22660` → `0x00e1f6e0`, "render all documents":
   1. clears global `0x02a4d184`;
   2. walks the circular document list rooted at `0x02a4d17c` (next pointer at document `+0`), collecting every document whose byte `+0x59b` is non-zero into a **64-entry stack array** (no bound check in the loop — CONFIRMED by listing; HIGH that the game never exceeds 64 simultaneously active documents);
   3. sorts them with `qsort` and comparator `0x00e1edb0` — **descending `document_depth`** (§6.1);
@@ -65,6 +76,18 @@ These are the concrete object fields behind the property names `spec-lua-binding
 ### 2.2 Document render `0x00e1f0b0(pass)`
 
 In order: (1) builds a fresh 128-byte render state (`0x00e26630`, §3.1), overwriting tint/alpha to 1.0, `render_mode` dword to 1, and the pass byte into state `+0x65`; (2) calls the **screen fit** `0x00e1ef70` (§4.1) and folds its scale/offset into the state; (3) fires callback slot `+0x00`; (4) if the document's root element (`+0x594`) is non-null, calls the walk `0x00e26a30` on it with the state, a per-thread **256-slot scratch array** (TLS `+0x270`), and capacity 256.
+
+**Cross-reference, 2026-10-10 (vint-doc tween/keyframe investigation):** step (3)'s "callback slot
+`+0x00`" is a direct (not vtable-indirect) `CALL 0x00e229b0` at `0x00e1f12c`, immediately followed
+by the `+0x594` root-element check that gates step (4)'s walk — independently re-verified against
+the live Ghidra server. `0x00e229b0` was flagged by that investigation as a candidate home for
+tween-progress/interpolation computation, but it was **not opened**, and given it's framed here as
+a generic per-document "callback slot" (plausibly used by other, non-animation document types
+too, not animation-specific), that identification is NOT confirmed — whoever opens `0x00e229b0`
+next should settle whether it's animation-specific or a generic hook first, before assuming it's
+the tween interpolation consumer. `spec-vint-doc-format.md` §7/§8 item 8 has the full open-item
+framing and the now-fully-confirmed file-format side (every tween keyframe is an ordinary named
+property on the tween element itself — no separate keyframe-array encoding exists).
 
 ### 2.3 The recursive walk `0x00e26a30(state, scratch, capacity)` — 197 instructions
 
@@ -1150,3 +1173,12 @@ About 2,400 instructions read this pass: the `rl_draw` entries and the state man
   blit. No new disassembly in this file; this entry documents a cross-reference update only. Full detail:
   `scratchpad/weapons_fire_damage_and_player_blip_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced
   to Team B.
+- 2026-10-10 (SPEC TEAM, agent `a8dce4cc1610b5a56`): **correction** — `0x00846ae0`, previously
+  cited here as "tween/animation/data-item processing," is NOT that — opened in full, it's OS-
+  cursor-visibility/exclusive-mode/window-focus housekeeping with zero Vint document/element
+  touches, independently re-verified against the live Ghidra server before splicing. The real
+  per-frame document walk (§2.1's own `0x00848e40`→`0x00e22660`→`0x00e1f6e0` chain) is unaffected
+  by this correction. Cross-referenced §2.2's own "callback slot `+0x00`" (`0x00e229b0`, a direct
+  call, re-verified) as a candidate — but unconfirmed — home for the still-OPEN tween-interpolation
+  question (`spec-vint-doc-format.md` §7/§8 item 8, now closed on the file-format side). Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

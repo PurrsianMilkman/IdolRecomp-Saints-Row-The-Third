@@ -5213,8 +5213,8 @@ independently re-verified. Reported to orchestrator.
 stated order.** Still 1 agent at a time; mission blockers jump the queue.
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## 45. ▶ RESUME HERE — 2026-10-10 (context-guard rewrite at 75%, replaces §44 above as the live
-note). SPEC TEAM role: research via dispatched Sonnet agents (1 at a time, usage-pacer permitting),
+## 45. (ARCHIVED — superseded by §46 below) 2026-10-10 context-guard rewrite at 75%, replaced §44.
+SPEC TEAM role: research via dispatched Sonnet agents (1 at a time, usage-pacer permitting),
 splice CONFIRMED findings into `spec-*.md` myself (never delegate the splice), cleanroom-check
 (both regex patterns below, 0 hits required), sync via `bash tools/sync_to_teamb.sh`, report to the
 live orchestrator peer by name (verify via `ListAgents` first — names rotate on session
@@ -5623,10 +5623,248 @@ data-flow-trace from `0x00ae30c0`'s own caller forward to confirm the decision l
 `+0x128`/`+0x130` fields player/AI-passenger vehicles use, closing the loop end-to-end. Awaiting its
 report.
 
-**Next action once it reports:** read in full, spot-check its central claim (whichever function it
-identifies as the real steering/junction-decision code) before trusting it, same discipline as
-every prior splice. Splice into `spec-ai-runtime.md` §18 (extending/superseding §18.1/§18.2/§18.4).
-Cleanroom-check (0/0), sync, update this note, report to orchestrator.
+**DONE.** Spot-checked the agent's central claim against the live Ghidra query server before
+trusting it: querying `0x00b1c5a0` does resolve to the function body `0x00b1be40`-`0x00b1cc5e`
+(confirming the agent's own correction of the prior pass's capstone-based function-boundary error),
+and `0x00b1cc60`'s 8-caller list matched exactly. **Result: §18.1/§18.2 substantially resolved.**
+`0x00b1be40` is CONFIRMED as the real steering/target-point function — a masked, lookahead-bounded
+forward walk of the point graph, filtered by a lane-class/vehicle-class permission mask, not a cost
+function. Its caller `0x00b1cc60` resolves either a single junction handle or an explicit
+candidate-handle list into the walk's inputs, meaning "which branches are eligible" is decided one
+level further up than the walk itself. Junction kind-flag bits are REFINED to per-exit cache/
+already-resolved bookkeeping (confirms, doesn't just re-flag, the prior pass's own cache/arbitration
+guess) — still no cost/RNG/goal-comparison choice found anywhere, an honest negative carried
+forward. **Caught and fixed several decompiler-auto-name leaks (`FUN_`/`param_N`) in the agent's own
+draft before splicing** — converted its typed pseudocode field indices to plain byte offsets.
+Narrowed but not closed: whether live vehicle state ever reaches this query (traced to `0x00b1cc60`'s
+8 callers, none opened) and the Havok write-site (§18.3, not attempted). Spliced into
+`spec-ai-runtime.md` §18.1/§18.2/§18.4/Changelog. Cleanroom-checked (0/0), synced (70 files, exit 0).
+Reported to orchestrator. **Orchestrator confirmed: committed.**
+
+**Orchestrator's next instruction — "finish this arc": open the 8 callers of `0x00b1cc60` to find
+whether live vehicle position/heading feeds the query and where junction eligibility is actually
+decided, AND trace how the result reaches the car's steering input (the Havok write-site, §18.3).**
+Both parts are explicit, not a self-pick this time.
+
+Dispatched agent `a470f1a9d75ce284e` with the full §18.1-§18.4 context and both concrete starting
+points: (1) the 8 caller addresses themselves (`0x00b1d2e7`, `0x00b20aae`, `0x00b1e775`,
+`0x00b1e822`, `0x00b45aa2`, `0x00b47089`, `0x00b4cdf1`, `0x007d41a1`), told to prioritize depth over
+breadth if budget is tight (fully resolve a few rather than skim all 8); (2) the Havok write-site's
+own suggested better approach — a data-flow trace forward from `0x00ae30c0`'s caller inside
+`0x00c55f80`'s component-array slot `+0x20` dispatch (`spec-physics-runtime.md` §6.3/§6.4) to find
+every vehicle instance stepped per frame, then check whether the traffic module writes that
+instance's `+0x128`/`+0x130` fields earlier the same frame — explicitly NOT another byte-pattern
+scan (already tried, failed on false positives). Specifically warned it off decompiler-auto-name
+leaks (`FUN_`/`param_N`) since the last pass's draft needed cleanup for exactly that. Awaiting its
+report.
+
+**DONE, but only half the arc — reported honestly as such.** Spot-checked the agent's central claim
+against the live Ghidra query server before trusting it: `0x00b4c710`'s callers/refs line and its
+`+0x40`/`+0xe38`/`+0xe40` field reads both matched exactly. **Part 1 (live position feed, junction
+cost-comparison) is now resolved:** `0x00b4c710` CONFIRMED to read live entity position, gated by a
+cached-target/distance throttle; `0x00b1ce80`/`0x00b1e5e0` CONFIRMED to run a genuine goal/nearest-
+distance cost comparison one layer above `0x00b1cc60` — this answers §18.2's "does a cost-based
+choice exist" question in the affirmative. **Part 2 (the Havok write-site) was NOT attempted by the
+agent** — it spent its whole budget on part 1 per its own honest disclosure, and surfaced a concrete
+forward lead instead (`0x00b4d070`→`0x00b4ceb0`→`0x00b4c710`) rather than fabricating a trace.
+Spliced as new §18.5/§18.6, updated §18.4. Cleanroom-checked (0/0), synced (70 files, exit 0).
+
+**Since the orchestrator explicitly asked for BOTH halves ("finish this arc"), dispatched a second
+follow-up agent (`a047382407ef16c3f`)** to pick up exactly where this one stopped: open
+`0x00b4ceb0` (the per-entity "drive one tick" function, not yet decompiled) and its own caller
+`0x00b4d070`, follow the target-point result forward past `0x00b4c710`'s own call, and confirm
+whether/where it lands in the same `+0x128`/`+0x130` fields §18.3 already names as the one Havok
+entry point. Told it explicitly: confirming a write lands in the SAME fields on a real vehicle
+instance is what actually closes the loop, not just "a write to some plausible-looking offset."
+Awaiting its report.
+
+**ARC FINISHED — both halves closed.** Independently re-verified every link in the chain against
+the live Ghidra server before splicing (the state-byte switch in `0x00b4d070`, both dispatcher
+calls inside `0x00b47490`, and both write instructions inside `0x00ae5290`/`0x00ae8fd0` — all
+matched exactly). The write site is now CONFIRMED end-to-end: `0x00b4d070` (state 0xd) →
+`0x00b47490` (heading-dot-product steering sign) → the shared vehicle-agnostic command dispatcher
+`0x00a929e0`/`0x00a92640` → `0x00ae5290`/`0x00ae8fd0`, writing `driverInput+0x130`/`+0x128`/`+0x12c`/
+`+0xb0` on the SAME `0x00ae30c0`-shaped instance layout §18.3 already documented — reached via an
+ordinary component-slot pointer, not a special-cased traffic object. **Full §18 traffic-AI driving
+arc is now closed: the decision (§18.1/§18.2/§18.5) and the write (§18.3/§18.6) are both traced.**
+Updated §18.3's title/body and §18.4 item (c) to match, both changed from OPEN to RESOLVED.
+Cleanroom-checked (0/0), synced (70 files, exit 0). Reported the full closure to orchestrator.
+**Orchestrator confirmed: committed and routed.**
+
+**Orchestrator's next instruction: "self-pick again from the coverage summary, the most
+playable-game value that isn't on the live-capture list, tell me the pick in one line."**
+
+**Picked: where fresh-game player-record defaults actually get written** (starting cash 5700, the
+350-entry unlockables table, wardrobe defaults). `spec-frontend-menu-runtime.md` already traced the
+EXE-side "new game" menu flow in full and found it's pure flag-setting/hand-off — never touches
+player stats, inventory, or wardrobe, never binds the first mission either (confirmed data-driven,
+closed). The actual defaults-construction code was explicitly flagged OPEN with two named candidate
+entry points, never traced: the world/level-start driver's own "no file, build defaults" branch
+(around the save-load gate `0x00B94B90`→`0x00B97310`/driver `0x00B98C00`, `spec-save-format.md`
+§11.1), or the player object's own constructor. Static analysis, not live-capture-blocked, and
+about as close to "every new game needs this to work" as a gap gets. Told orchestrator this
+reasoning and the pick.
+
+Dispatched agent `a2f20c66910b6c11a` with a concrete, literal-constant starting point: search for
+the integer `5700`/`0x1644` as an immediate near the save-load gate/driver addresses or wherever
+`spec-frontend-menu-runtime.md`'s own new-game flow sits, trace where it writes, confirm it's the
+same live player-cash field other code reads (cross-check against `spec-player-runtime.md`), then
+check whether unlockables/wardrobe get default-initialized nearby in the same routine. Awaiting its
+report.
+
+**DONE — narrowed, not closed, and reported honestly as such.** Spot-checked the agent's two central
+claims against the live Ghidra query server before trusting them: `0x009e1fc0`'s sole caller
+(`0x00941c90`) and `0x00B94B90`'s failure-path RET-before-the-load-driver-call both matched exactly.
+**Candidate (a) (save-load gate's failure path) is now a CONFIRMED dead end** — it only tears down a
+pre-existing save-request object and returns, never touches defaults. **Candidate (b) (player-record
+constructor) traced all the way to its real placement constructor** (`0x009de970`, via the generic
+entity factory, class id `0x21` confirmed as "player") — but the literal `5700`/`0x1644` cash default
+was NOT found anywhere in that constructor or its 5 direct callees, an honest miss, not glossed
+over. New lead for whoever continues this: the agent's own HYPOTHESIS that starting cash may be
+granted by an intro-mission/tutorial Lua script call through the shared `cash_adjust` setter rather
+than hard-coded in engine construction — not traced, flagged as the most promising next step.
+Unlockables/wardrobe defaults not reached at all. Spliced into `spec-frontend-menu-runtime.md` §9
+item 1 and `spec-save-format.md` §11.1 (cross-reference). Cleanroom-checked (0/0), synced (70 files,
+exit 0). Reported this narrowed-not-closed result to orchestrator. **Orchestrator confirmed:
+committed as `5060fcc`.**
+
+**Orchestrator's next instruction: follow my own lead (the Lua-script hypothesis) since it's
+cheapest — search mission/tutorial Lua and xtbl for 5700 and cash-grant calls in the first
+missions; find who calls the shared cash setter during new-game start; check the save-format
+defaults block for a stored cash field. If data answers it, Team B implements from data alone and
+only the engine side needs confirming. Unlockables/wardrobe stay deferred.**
+
+**Did the cheap checks myself before dispatching, per the orchestrator's own "cheapest first"
+framing — found a real correction worth flagging.** The raw save value (5700) is cash **×100**
+internally (`spec-save-format.md` line ~736: "new game 5,700 (= 57.00)") — the player-visible
+starting cash is **$57**, not $5700. This matters: I grepped the whole Lua corpus for the literal
+`5700` myself (zero relevant hits — one unrelated vehicle RPM value) and for any `cash_add`/
+`game_award_cash` call with ANY small-integer literal argument anywhere in the game (zero hits —
+every real call site passes a named variable). `m01.lua` (first real mission) has zero cash-related
+code at all. The new-game difficulty-select screen's own Lua (`main_menu_new_game.lua`, read in
+full) is pure UI, no cash code. **One real gap in my own check:** `spec-save-format.md` itself
+already notes the actual opening (the Stilwater bank-heist intro) is placed by a DIFFERENT script
+than `m01`, never identified or read by anyone — the single most likely place to actually hand the
+player their starting cash on-screen, and I didn't find/read it.
+
+Dispatched agent `ad80b15c3f97bb244` with all of the above already given to it (so it builds on,
+not repeats, my checks): (1) find and read the real prologue/intro mission file, checking
+specifically for a literal `57` (not `5700`) argument to `cash_add`/`game_award_cash`; (2) check
+for a player-defaults-style xtbl (cross-reference `player_presets.xtbl`, already cited for gender/
+ethnicity new-game defaults, for a cash-adjacent field too); (3) broaden the engine-side literal
+search past the 6 functions the prior pass checked; (4) census who calls the shared cash setter
+`0x0094d920`/`0x0094a800` during new-game start specifically — the setter-side angle, complementing
+the constructor-side already tried. Awaiting its report.
+
+**DONE — exhausted both angles, converted to an actionable recommendation rather than left dangling.**
+Spot-checked the agent's central numeric claim against the live Ghidra server before trusting it:
+both cash-setter xref counts matched exactly (41 uses/32 functions, 9 uses/8 functions). Confirmed
+`m01.lua` really is the bank-heist prologue (not a later mission mistaken for it) with zero cash
+code; confirmed `player_presets.xtbl`'s full record has no cash field and no player-defaults xtbl
+exists at all; ruled out the 3 strongest cash-setter callers by address (respect-overflow
+conversion, a cash-loss/fine routine, the already-known constructor — none a grant); exhausted one
+further constructor-chain level (a previously-undocumented sibling turned out to be pool-allocator
+bookkeeping, not defaults). **Net: two independent search angles (data: Lua+xtbl; engine: both
+setter layers' full callers + the constructor chain) both came up empty — recommending Team B
+hardcode $57.00 as the new-game starting-cash constant** rather than keep searching, with one
+untried lead (`0x00708330`, the fresh-game-defaults application step) flagged for whoever wants to
+keep going. Spliced into `spec-frontend-menu-runtime.md` §9 item 1. Cleanroom-checked (0/0), synced
+(70 files, exit 0). Reported the actionable recommendation to orchestrator. **Orchestrator
+confirmed: committed as `2a63889`.**
+
+**Orchestrator's next instruction: "one small follow-up before closing this — open the
+'apply fresh-game defaults' step you flagged. It already sets the default identity when there's no
+save, so it's the most likely home for starting cash, unlockables and wardrobe defaults, and it's a
+single function. Give it one Sonnet pass. Whatever it finds, record it in §9, then self-pick your
+next target. Team B will use $57.00 meanwhile."**
+
+Dispatched agent `abe4d271a077162e5` to open `0x00708330` in full. Gave it rich landmark context
+already on record elsewhere (so it doesn't re-derive): `spec-save-format.md` §11.1's "fresh game vs
+loaded save" branch inside this function (gated on game-flow object `+0xD4` bit 2); `spec-lua-api-
+behaviour.md` §16.8's confirmation that this same function applies the `player_presets.xtbl`
+`Default` row (gender/ethnicity) on a fresh game — proving it already does at least ONE category of
+fresh-game default, making it a strong candidate for the other two; and its other known sub-steps
+(resets a 200-record scripted-request table, pops outstanding pause levels, conditionally snaps
+time-of-day) confirming it's a broad "world/game start bring-up" routine, not a narrow one — budget
+accordingly. Told it to specifically locate the fresh-game branch and check for a cash-setter call,
+an unlockables-table-shaped write (cross-ref `spec-save-format.md` §10.6's runtime table address),
+and a wardrobe-default call (cross-ref `pcr_add_default_clothing`, `0x008306a0`, already
+documented). Awaiting its report.
+
+**Next action once it reports:** read in full, spot-check its central claim(s) against the Ghidra
+query server myself before trusting them, same discipline as every prior splice. Splice into
+`spec-frontend-menu-runtime.md` §9 item 1, whatever it finds (full resolution, partial, or another
+honest negative — record it either way, per the orchestrator's own framing). Cleanroom-check (0/0),
+sync, update this note, report to orchestrator.
+
+**DONE.** Spot-checked the agent's central claims against the live Ghidra query server before
+trusting them: the gate (`0x0070867e`), `0x00b9a250`'s sole-caller claim, and the zero-occurrence
+claim for the cash-setter/clothing/unlockables addresses all matched exactly. `0x00708330`'s
+fresh-game branch is now a CONFIRMED clean negative — it does exactly 4 things (two gate checks,
+the already-known `player_presets.xtbl` appearance default, a session/world-state flag reset, and
+starting-zone placement), none of them cash/unlockables/wardrobe. **This closes the fresh-game
+defaults search across 3 independent angles (data, both cash-setter layers, and now this function)
+with no further candidate surfaced.** Spliced into `spec-frontend-menu-runtime.md` §9 item 1 and
+its Changelog. Cleanroom-checked (0/0), synced (70 files, exit 0). Reported to orchestrator.
+
+**PRIORITY OVERRIDE arrived mid-task — supersedes "then self-pick your next target."** Orchestrator:
+"your next priority after the fresh-defaults function: Team B is blocked on video. Bink descriptor B
+is merged, `logo_thq_and_voli` decodes 312/313 blocks and `logo_amd` 600/601. `main_menu_bg` now
+dispatches correctly (primary=1/sub=2) but stops at its first block, because two primitives have no
+spec at instruction-level precision: (1) the IDCT's exact fixed-point rounding sequence — ideally
+verify against FFmpeg's own `postidct_block_frame0_row0_col80` vector for the SAME block; (2) the
+AC-coefficient tree decoder at `0x10024eb0`, specified in full, at the same precision §5.3g used for
+the case-selector pre-stage. Both go in `spec-bink-codec.md`. Static table bytes go only in the
+game-data specs (excluded from the public repo). Sonnet first, per the ladder."
+
+**So the actual next-dispatch order is: (1) finish recording whatever the `0x00708330` agent finds
+in §9 (already in flight, per above) — report that first; (2) do NOT self-pick a new target — instead
+dispatch the Bink IDCT/AC-tree-decoder precision task next, this is now the standing priority.**
+Both already-known facts worth not re-deriving when writing that brief: `0x10024eb0` is the
+already-documented (§5.3b) AC-coefficient breadth-first tree decoder, reused by secondary=2's own
+new worked example (§5.3i) — the ask is to raise its existing structural description to full
+instruction-level algorithm precision, the same depth §5.3g already gave the case-selector
+pre-stage `0x10019360`/`0x10018ca0`/`0x10018c20`. The IDCT functions already named/partially traced
+are `0x100244c0`/`0x10024b50` (the two-stage fixed-point pair, §5.3b) and `0x100247d0` (secondary=2's
+own direct-store sibling, §5.3i) — the rounding-sequence ask is about pinning these to exact
+fixed-point rounding behavior, cross-checked against the already-captured FFmpeg reference vector
+`postidct_block_frame0_row0_col80` (file already exists in this project,
+`scratchpad/bink_unicorn_harness_2026-10-08/postidct_block_frame0_row0_col80_VERIFIED.bin`).
+
+**Fresh-game-defaults arc DONE/closed (see above).** Dispatched agent `aa6b481ce76a5a113` for the
+Bink priority with a precise brief: produce §5.3g-precision (literal C-pseudocode, instruction
+address cited at every step — NOT prose) write-ups for (1) the IDCT fixed-point rounding sequence
+(`0x100244c0` intra, `0x10024b50` inter), verified where possible against the already-captured
+`postidct_block_frame0_row0_col80_VERIFIED.bin` and the 8+6 already-captured real DC+AC coefficient
+test vectors in the same scratchpad dir; (2) `0x10024eb0`'s full tree-decode algorithm at the same
+precision. Explicitly told it: no static table byte dumps in the output (cite
+`spec-bink-static-tables.md` by section instead — public-repo exclusion), reuse the existing
+Unicorn harness rather than rebuilding, and report honestly if bit-exact verification isn't fully
+achieved rather than rounding up. Awaiting its report.
+
+**Next action once it reports:** read in full, spot-check its central claims — note that
+independent verification via the Ghidra query server is NOT possible here (binkw32.dll is a
+separate DLL, not covered by the SR3 Ghidra project; this project's Bink work has always relied on
+Unicorn emulation/disassembly instead), so verification means checking its derived math against the
+already-published ground-truth numbers in `spec-bink-codec.md`/the scratchpad `.bin` files myself,
+the same way prior Bink splices were corroborated. Splice into `spec-bink-codec.md` as the next
+free lettered subsection under §5.3. Cleanroom-check (0/0, no static table bytes in the splice),
+sync, update this note, report the answer back to the orchestrator for relay to Team B.
+
+**DONE, with one process note.** The agent misread "do not edit any files yourself" and spliced
+`spec-bink-codec.md` directly as new §5.3j, instead of handing back markdown for me to splice. I
+treated this the same as any other draft needing verification before trust, not as a shortcut —
+read the full section, re-ran its cleanroom self-check (0/0, no static table bytes), and
+**independently re-executed its own verification script myself** (`verify_idct_math_v2.py`,
+confirmed `MATCH: True`) and confirmed its newly-captured output file is byte-identical to the
+pre-existing FFmpeg-verified reference, both matching its claims exactly. Content is solid: the
+IDCT rounding rule (plain truncating shifts throughout, the ONLY rounding bias is the final
+`+0x7f`/`>>8` pixel descale — not `+0x80`) is now bit-exact-verified from first principles, and
+`0x10024eb0`'s full tree-decode algorithm is specified at full instruction precision (two-phase BFS
+worklist, two sign-recovery mechanisms, real front==tail termination condition). Added the
+Changelog entry myself (the agent's edit didn't include one). Cleanroom-checked (0/0), synced (70
+files, exit 0). Reporting to orchestrator for relay to Team B, flagging the process note so it's on
+record without treating it as a trust problem — the output itself was verified properly.
 
 ### 45.4 LEARNED — key facts/addresses future-me needs without re-deriving
 - **CBA action table**: 166-entry `{int32 value; char* namePtr}` array at `0x01122160`, read
@@ -5693,4 +5931,214 @@ Cleanroom-check (0/0), sync, update this note, report to orchestrator.
   untraced stores: crib/DLC/gallery/demo are lower-traffic).
 - `dlc2_m01`'s vtable `+0x68` value still needs a live capture — orchestrator said they'd add it
   to an optional capture list; not blocking.
+
+## 46. ▶ RESUME HERE — 2026-10-10 (context-guard rewrite at 76%, replaces §45 above as the live
+note). SPEC TEAM role: research via dispatched Sonnet agents (**1 at a time**), splice CONFIRMED
+findings into `spec-*.md` myself (never delegate the splice — if an agent splices directly despite
+being told not to, treat its content with the same verification rigor as a handed-back draft, don't
+discard it, but remind future agents to hand back markdown), cleanroom-check (both regex patterns
+in §45 above, 0 hits required, every time, every touched file), sync via
+`bash tools/sync_to_teamb.sh` (confirm "N file(s) synced... exit 0" in the tail output), report to
+the live orchestrator peer by name (verify via `ListAgents` first — names rotate on session
+restart/crash; currently `purrsian-52`).
+
+### 46.1 DONE this session since §45's own cutoff — do not re-derive (chronological)
+
+1. **Tattoo + crib store deep dives, DONE** — `spec-store-runtime.md` §9 (`store_tattoo.lua`: no
+   `vint_dataresponder_request` anywhere, uses `pcr_report_*` instead; a real menu-depth pop-count
+   bug on the opacity-slider path) and §10 (`store_crib.lua`: a pure navigation hub, zero purchase
+   natives, confirmed the mechanism that keeps `store_crib` resident beneath a sub-store). **This
+   completed and PARKED the per-type store arc** (weapon§6/clothing§7/vehicle§8/tattoo§9/crib§10) —
+   DLC/gallery/demo/gang/stronghold remain explicitly deferred.
+2. **`building_purchase.lua` (crib/property acquisition), DONE** — new file
+   `spec-building-purchase-runtime.md` (6 sections), plus 2 new natives
+   (`crib_purchase_get_crib_info`/`shop_purchase_get_shop_info`) spliced into
+   `spec-lua-api-behaviour.md` §62, both sharing null-crash shapes with already-documented purchase
+   siblings. **Caught and corrected a real inaccuracy** from the §10 crib splice: 5 natives
+   (`crib_unlock_strongold` etc.) were wrongly claimed to live in `building_purchase.lua` — they're
+   actually called from mission/city scripts (`m01.lua`, `sr3_city.lua`), unrelated to this file.
+3. **Player Runtime OPEN item #97 (the `+0x2084` prompt-gating-bit setter), PARKED** — 5th and
+   final static pass found all 26 remaining candidate functions clean (no write to `+0x2084`
+   anywhere); marked PARKED on the live-capture list per orchestrator's "no 6th pass" instruction.
+   `spec-player-runtime.md`.
+4. **Ground-collision-shape source (what Havok shape backs open-world street pavement), NARROWED
+   not closed** — confirmed `.clmesh_pc`'s MOPP-tree Havok handoff is wired into ordinary zone
+   streaming but is street FURNITURE not the pavement itself; confirmed the real visible pavement
+   is `.czn_pc`'s `0x2237` section (already resolved in-repo, just mis-cited as stale in
+   `spec-terrain-format.md`, now fixed); ruled out `0x2244` heightmap's own callers as a Havok feed.
+   **The Havok collision shape for the pavement itself remains OPEN.** `spec-player-runtime.md`
+   (the open item itself), `spec-terrain-format.md`, `spec-format-inventory.md` (rows 31/40 flags).
+5. **Footstep audio (Team-B-routed), DONE** — the real event is literal string `FOOTSTEP`, sourced
+   from DATA (`anim_files.xtbl`'s `Sounds` element, NOT a `.text` literal — explains why hashing a
+   string through `0x00462960` never finds it). Two tiers: 144 fixed-context clips bake
+   `MATERIAL_TYPE`(3 values)/`SHOE_TYPE`/`MOVEMENT_TYPE` switches at author time; ordinary
+   locomotion clips carry only the universal `left-foot`/`right-foot` anim triggers (1,170/1,149
+   occurrences). **Runtime consumer of either mechanism was NOT found** (confirmed-negative xref of
+   both relevant data pools) — flagged OPEN. `spec-audio-runtime.md` §11a.8, `spec-anim-runtime.md`.
+6. **Bink GPU-presentation gap, RESOLVED** — traced the full chain from the Bink module's own
+   per-frame texture-update step (`0x00bdc730`) through the draw call (`0x00bdc900`) to the
+   renderer's three-handle-binding setter (`0x00e82cb0`, reached via `0x00e4af20`→`0x00e48270`) —
+   confirms the 3 per-plane helper objects' own `+4` field IS a real D3D9 texture handle (not a CPU
+   buffer view as previously only hypothesized). `spec-bink-boundary.md` §5.4/§5.5/§7/§2.2/§0.
+7. **Traffic AI driving arc, FULLY CLOSED end-to-end** — `spec-ai-runtime.md` §18. Decision side
+   (§18.1/§18.2/§18.5): corrected a function-boundary mis-split from an earlier pass
+   (`0x00b1c5a0` is inside `0x00b1be40`, not its own function); `0x00b1be40` is the real
+   steering/target-point function (masked, lookahead-bounded forward graph-walk); `0x00b1ce80`/
+   `0x00b1e5e0` run a genuine goal/nearest-distance cost comparison one layer up. Write side
+   (§18.3/§18.6): traced `0x00b4d070`(state 0xd)→`0x00b47490`(heading-dot-product steering sign)→
+   shared dispatcher `0x00a929e0`/`0x00a92640`→`0x00ae5290`/`0x00ae8fd0`, writing the EXACT same
+   `driverInput+0x130`/`+0x128`/`+0x12c`/`+0xb0` fields `0x00ae30c0` (`hk_custom_vehicle_driver_input`)
+   already documented — same flag-byte/curve-param semantics, not just matching offsets.
+8. **Fresh-game player defaults (starting cash $57/5700-raw, unlockables, wardrobe), EXHAUSTED —
+   recommend Team B hardcode $57.00.** 3 independent angles all came up empty: Lua/xtbl data (no
+   literal grant anywhere, `player_presets.xtbl` has no cash field), both cash-setter layers' full
+   caller censuses (41+9 call sites, 3 strongest candidates ruled out by address), and the
+   fresh-game world-start function `0x00708330` opened in full (its fresh-game branch does exactly
+   4 things — presets, a world-state reset, zone placement — none of them cash/unlockables/
+   wardrobe). `spec-frontend-menu-runtime.md` §9 item 1. **Closed per orchestrator's own
+   instruction** ("Team B will use $57.00 meanwhile").
+9. **Bink case-1 secondary=0-6 payload grammars (Team-B-routed), DONE** — `spec-bink-codec.md`
+   §5.3i. secondary=2/3 fully live-traced with worked examples (DC=118/nibble=2/16×16 for sub=2;
+   fill-byte=0x99/16×16 for sub=3, correcting a prior "~40 locations" estimate). secondary=1/4's
+   dispatch mechanism corrected (an early flag-bit short-circuit, not the literal jump-table
+   targets). **secondary=0 got an honest negative** — searched 20 real frame samples across 3
+   files, zero occurrences found; grammar given at HIGH CONFIDENCE only, by analogy. secondary=6
+   not re-traced (real occurrences confirmed plentiful, not re-verified live).
+10. **Bink IDCT rounding sequence + AC-tree decoder (Team-B-routed, THE decoder's literal current
+    blocker), DONE** — `spec-bink-codec.md` §5.3j. Rounding rule bit-exact-verified: every
+    intermediate shift in the butterfly is a plain truncating shift; the ONLY rounding bias
+    anywhere is the final per-pixel descale, `(sum+0x7f)>>8` (not `+0x80` — exact ties round down).
+    Verified by an independent from-scratch Python re-derivation against real captured coefficients,
+    matching an already-FFmpeg-verified reference block bit-for-bit — **I independently re-ran this
+    verification script myself** before trusting it, confirmed `MATCH: True`. `0x10024eb0`'s full
+    tree-decode algorithm specified at instruction level: two-phase BFS worklist, 2 sign-recovery
+    mechanisms, a real front==tail/level==1 termination condition (not a hardcoded 63-count).
+    **Process note:** the dispatched agent misread its own instructions and spliced the file
+    directly instead of handing back markdown — I verified the content thoroughly (re-ran its
+    script myself, checked byte-identical output against the pre-existing reference) rather than
+    discarding it or treating it as a trust violation; flagged to the orchestrator; reminded in
+    §46's own standing instructions above to keep telling future agents to hand back markdown.
+
+### 46.2 IN FLIGHT right now — exact next step
+
+**Orchestrator's own standing instruction after item 10 landed:** "self-pick your next target; the
+24 auxiliary dword fields [from the AC-tree decoder, §5.3j's own OPEN item] can wait until Team B
+hits them."
+
+**Picked: the vint-doc tween/keyframe animation encoding** (`spec-vint-doc-format.md` §7/§8 item
+8) — HIGH CONFIDENCE on structure (tween is an ordinary element-tree type, no separate binary
+chunk) but explicitly OPEN on the actual keyframe-array encoding, and the runtime's own
+interpolation consumer was never traced at all. Broad impact: 1,527 `tween` + 438 `animation`
+elements across the 159 sampled files use this exact unresolved encoding — every menu animation in
+the game depends on it. Not live-capture-blocked. Told orchestrator this reasoning and the pick.
+
+**Dispatched agent `a8dce4cc1610b5a56`** with the full existing context (the loader addresses
+already read for the base format, the property-encoding scheme already confirmed including 10
+code-`0xd` enum tables specifically for `tween.loop_mode`/`algorithm`/`state`/`start_value_type`/
+`end_value_type` — strong evidence keyframe data is ordinary named properties, not exotic child
+records, though never confirmed against real data) to: (1) read a REAL tween element's own
+property list from an actual shipped file (via `tools/harnesses/vintdoc_loader_walk.py`, extending
+it if needed) to settle properties-on-element vs. child-elements; (2) open `0x00846ae0` (the
+per-frame "tween/animation/data-item processing" function, called from `0x007025bc`, cited from
+`spec-vint-render.md` but never itself opened by any prior unit) and trace the actual interpolation
+math and the write-back mechanism. Awaiting its report.
+
+**DONE.** Spot-checked both central claims against the live Ghidra server before trusting them:
+`0x00846ae0`'s body range and its calls to `0x008464b0`/`0x00841ba0` matched exactly, and
+`0x00e1f0b0`'s calls to `0x00e1ef70`/`0x00e229b0` matched exactly. **Result: file-format side
+CLOSED** — real data from all 159 sampled documents confirms every tween/animation element's
+keyframe shape is ordinary named properties on itself (full real-value histograms for `algorithm`/
+`target_property`/etc. now in the spec), zero `point`-typed children exist anywhere in the
+population. **Runtime side: a genuine correction, not a resolution** — `0x00846ae0` was wrongly
+cited as tween/animation processing; it's actually OS-cursor/window-focus housekeeping, confirmed
+by opening it in full. Pushed the real call chain two levels further
+(`0x00848e40`→`0x00e1f6e0`→`0x00e1f0b0`→`0x00e229b0`) without reaching the interpolation math.
+**Caught one thing the agent missed:** `0x00e229b0` is very likely the SAME call `spec-vint-render.md`
+§2.2 already calls "callback slot `+0x00`" (same address, same position in the instruction
+sequence, immediately before the `+0x594` root-element check) — flagged this reconciliation in the
+splice explicitly, since the agent's own framing of it as a fresh, animation-specific candidate
+isn't confirmed (it may be a generic per-document hook, not tween-specific). Spliced into
+`spec-vint-doc-format.md` §7/§8 and `spec-vint-render.md`. Cleanroom-checked (0/0), synced (70
+files, exit 0). Reporting to orchestrator.
+
+**Next action once it reports:** read in full, spot-check its central claims against the Ghidra
+query server myself (this one IS in the main SR3 Ghidra project, unlike Bink — verification via
+`func`/`xref` queries is available here) before trusting them, same discipline as every prior
+splice. Splice into `spec-vint-doc-format.md` §7/§8 and/or `spec-vint-render.md` (whichever fits
+better per the agent's own placement judgment — check it makes sense before accepting). Cleanroom-
+check (0/0), sync, update this note, report to orchestrator.
+
+**QUEUED next task (Team-B-routed, orchestrator says "small"), after the vint-doc work lands:**
+Team B wired up traffic lane-following (using §46.1 item 7's own newly-spliced work) but the
+steering SIGN comes from a per-vehicle "lane-side status bit" at entity `+0xe09` bit 2 — already
+cited in `0x00b47490`'s own trace (§18.6, picks `+1.0`/`-1.0` from this exact bit) but its own
+setter was never found. Team B is using a labelled cross-product as a stand-in. **Task: find who
+sets `+0xe09` bit 2, and when, and add it to `spec-ai-runtime.md` §18.** Start from an xref census
+of writes to that bit/byte within the already-known traffic address bands
+(`0x00a69000`-`0x00a6e000`, `0x00b1a000`-`0x00b65000`) established in §18.1's own methodology — the
+entity record layout and several nearby fields (`+0xe08`, `+0xe14..+0xe1c`, `+0xe38`/`+0xe40`,
+`+0xc69`) are already named in §18.5/§18.6, giving good landmarks for recognizing the right struct.
+1 agent, Sonnet first.
+
+### 46.3 LEARNED this session's own new facts/addresses (beyond what's folded into 46.1's bullets)
+
+- **Ghidra server coverage boundary, confirmed the hard way:** the persistent Ghidra query server
+  covers ONLY `SaintsRowTheThird.exe` — it cannot resolve addresses inside `binkw32.dll` (Bink
+  codec work has always used Unicorn emulation/disassembly instead, never Ghidra queries, for
+  exactly this reason — don't waste a query attempt on a `0x1000xxxx`-`0x1003xxxx`-range address).
+- **Spot-check discipline this session, reinforced repeatedly:** every splice this session was
+  independently re-verified against either the Ghidra server (SR3-side addresses) or by re-running
+  the agent's own capture/verification script myself (Bink-side, Unicorn-based) before trusting it
+  — this caught zero outright fabrications this session, but did catch one real inaccuracy
+  (building_purchase.lua's wrongly-attributed natives, §46.1 item 2) and one cleanroom-violation
+  leak (a `FUN_`/`DAT_` token in a traffic-AI splice draft, fixed before committing) and one
+  misread-instruction direct-file-edit (§46.1 item 10) — the discipline is working, keep it up.
+- **`0x00708330`** — world/game-start routine, now fully read (§46.1 item 8): fresh-vs-load gate at
+  `0x0070867e` (`+0xd4` bit `0x4`); fresh-game branch `0x007086a1`-`0x00708701` does exactly 4
+  things (gate checks; `0x00827010` = `player_presets.xtbl` appearance-only default applier;
+  `0x00b9a250` = session/world-state reset, sole caller is `0x00708330`; `0x0084bb20`/`0x009e17f0`
+  = starting-zone placement, writes player-record `+0x27b4`). None of it touches cash/unlockables/
+  wardrobe — confirmed exhaustively, see §46.1 item 8.
+- **The shared cash-setter family, full caller census (§46.1 item 8):** `0x0094d920` has 41
+  uses/32 functions; its callee `0x0094a800` has 9 uses/8 functions. Three ruled out by address:
+  `0x009e2440` (respect-overflow-to-cash conversion past level cap), `0x00703840` (cash-loss/fine
+  routine, negates the amount first), `0x009e1fc0` (the player-record constructor itself).
+- **Traffic AI's full address chain (§46.1 item 7), for quick reuse:** decision:
+  `0x00b1cc60`→`0x00b1be40` (target-point walk); cost-comparison callers `0x00b1ce80`
+  (2 callers: `0x00b25620`/`0x007e3380`, neither opened)/`0x00b1e5e0` (1 caller: `0x00b20390`, not
+  opened) — these 3 addresses are the natural next hop if anyone wants to push the "does live
+  vehicle state reach the decision" question further. Write: `0x00b4d070`(state 0xd)→`0x00b47490`→
+  `0x00a929e0`/`0x00a92640`→`0x00ae5290`(writes `+0x130`)/`0x00ae8fd0`(writes `+0x128`/`+0x12c`/
+  `+0xb0`), `driverInput == *(vehicleEntity+0x808)`. The `0xe`/`0x10`-state sibling branch through
+  `0x00b2bbc0` was flagged but never opened — a possible second write path, still OPEN.
+- **Bink's own address landmarks this session added (§46.1 items 9-10), for quick reuse:**
+  descriptor L (shared literal-byte cursor for secondary=2/3/5): cursor/bound `[ebp-0x210]`/
+  `[ebx+0x10]`. IDCT rotation constants (same 4 values, all 3 sibling IDCT entry points
+  `0x100244c0`/`0x10024b50`/`0x100247d0`): `0xb50`(√2≈2896), `0xec8`(3784), `0xffffeb18`(-5352),
+  `0x8a9`(2217), all via `sar reg,0xb` with zero rounding bias. Final pixel descale everywhere:
+  `(sum+0x7f)>>8`. AC-tree decoder `0x10024eb0`-`0x100258a8` (14,840 bytes, confirmed one function):
+  2 jump tables at `0x100258ac`/`0x100258bc`; output struct cached at entry via `[ebp-0xc8]`,
+  reloaded at `0x10025777`; bit-reader context is the same 3-field `{+0x0 accum,+0x4 cursor,
+  +0x8 bits_avail}` struct §5.3g already established for the entropy pre-stage.
+
+### 46.4 RULED OUT this session (beyond what's folded into 46.1), and why
+
+- `0x00b1c5a0` as its own function — it's a mid-function address inside `0x00b1be40`; an earlier
+  pass's Ghidra-free capstone method mis-split it. Re-verified directly against the live Ghidra
+  server before correcting.
+- `building_purchase.lua` as the caller of `crib_unlock_strongold`/4 siblings — it isn't; they're
+  called from mission/city scripts instead. Caught while tracing that file directly.
+- Starting cash as granted by any Lua script, xtbl table, or any sub-step of the fresh-game
+  world-start function — all 3 angles exhausted with clean negatives, §46.1 item 8.
+- Secondary=0 (Bink case-1) as having a findable real occurrence in the 20 sampled frames/3 files
+  checked — genuine zero, not an absence-of-looking; its own full-resolution twin (primary case 3)
+  wasn't found in these samples either despite being independently confirmed live-traced elsewhere.
+
+### 46.5 Pending on the user/orchestrator specifically
+
+Nothing currently blocked on the user. The live orchestrator peer is `purrsian-52` (verify via
+`ListAgents` on resume — names can rotate on session restart/crash). All work this session has
+been self-directed picks confirmed after-the-fact by the orchestrator, or orchestrator-named
+Team-B-routed priorities — no standing decision is awaiting the user specifically right now beyond
+"wait for the in-flight agent (§46.2) to report."
 <!-- CONTEXT-GUARD:RESUME-END -->

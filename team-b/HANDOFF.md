@@ -3,563 +3,140 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## RESUMED 2026-10-10 in the renamed/moved folder ("IdolRecomp Saints Row The Third",
-## `D:\IdolRecomp Saints Row The Third`; `D:\Project Crreish` is now a junction to it, old archived .bat
-## paths and scripts still resolve). Orchestrator: purrsian-52 (continuity of purrsian-a5/4a naming across
-## restarts). Usage-pacer: ahead of plan, 1-2 Sonnet agents max, conserve.
+## RESUMED 2026-10-10 in "D:\IdolRecomp Saints Row The Third" (renamed/moved from "D:\Project Crreish",
+## which is now a junction to it - old archived paths/scripts still resolve). Orchestrator: purrsian-52
+## (continuity of purrsian-a5/4a/5a naming across restarts - same person/process, just a new session each
+## time it reconnects). Usage-pacer: was ahead of plan earlier this session, not re-checked recently.
 
-### DONE: v0.6 release cut, shipped
-Folder: `v0.6_2026-10-10_vorbis-fix-pause-menu-objective-text` on
-`D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: (`mirror_build_history.sh` ran
-clean this time, "history: 9 versions on G: (1 new)" - purrsian-a5's earlier script fix held). Cut from
-main `030c108` (post-pause tip at the time). Full ctest 164/168 clean, 4 pre-existing Bink skips. Live
-mission re-check (full real archives incl. dlc2+cutscene_tables): m05/m09 clean as before; **m07 now
-ALSO runs fully clean** (real improvement from this session's inv-slot/conversation + get_dist merges -
-was previously the "character-position data" blocker in v0.5b's notes); dlc2_m01 same known-open
-vtable-predicate gap (Sec7.10, Team A's domain per earlier instruction); dlc2_m03 now gets FURTHER than
-v0.5b reported before hitting a different, later open gap (tutorial-dispatcher byte 0x014f3d34, Sec6.19).
-Screenshots (plain launch, new objective-text HUD overlay with minimap, traffic-visible walk) all
-personally viewed before inclusion - honestly noted that no shot this cut clearly shows the car body
-during driving (close follow-cam), though the pose itself is still real/test-covered. Read-only + swapped
-into `TEAM B\playtest\` (left `sr3_viewer_old_backup.exe` alone, matching the existing pattern). Also
-moved the untracked `check_keys.obj` to `G:\AI\Claude Projects\recomp\TEAM-B-misc\` per purrsian-52.
-**Relayed to purrsian-52, folder name sent.** purrsian-52 confirmed v0.6 md5-verified clean (D:/G:/live)
-and GitHub pushed (`e3f7f57`).
+## STANDING RULE 2026-10-10, "Branch hygiene: done means ON MAIN" (user-requested; full text
+## `~/crreish-orchestration/AI-WORKFLOW-INSTRUCTIONS.md`, verified directly - copy into every dispatch):
+## 1. REPORT STATES: "DONE" only when `git merge-base --is-ancestor <commit> main` is true. Otherwise
+##    "READY-TO-MERGE <branch>" or "PARKED <branch>: <reason>". Never plain "done".
+## 2. MERGE SMALL, MERGE SOON: merge each unit as soon as its own tests pass. Standing permission to merge
+##    (both: I merge agents' branches myself from the main checkout, AND well-tested small units may
+##    self-merge - both patterns used successfully this session).
+## 3. REBASE BEFORE HANDOFF: update onto current main, re-run build+tests, resolve conflicts YOURSELF.
+## 4. NO SILENT PARKING: a stopped branch gets a line in HANDOFF's "Parked branches" section.
+## 5. CHECK THE BRANCH ITSELF: audits use merge-base/`git cherry` on the branch itself, never inference
+##    from siblings (the mistake that caused the whole incident - see LEARNED below).
+## 6. AUDIT: `sh ~/crreish-orchestration/branch_audit.sh` at the end of every unit.
 
-### DONE AND MERGED: weapon fire + audio playback, both landed (v0.7 next)
-- **Weapons** (merge `13441d8` of `feature/playtest-weapon-fire-wiring`): LMB fires Brad's real equipped weapon
-  (weapons.xtbl row, 82 rows parsed) via the already-merged hitscan dispatch
-  (`weapon_fire.h`/`weapon_fire.cpp`) into a real `IWeaponDamageSink` (closed the ONE genuine missing
-  link: `EngineStateLethalDamageSink` in `character_damage_sink.h` wasn't actually deriving from
-  `IWeaponDamageSink` before this) -> `EngineState::applyGuaranteedLethalHit()` ->
-  `EvaluateGunfireReaction()`/`ChooseFleeOrCower()` (already spec-confirmed, just never called before).
-  Live-verified: `isDeadHighConfidence` false->true through the real sink on a real hit against the
-  near-field ped population. **Honest gap, not invented around**: `PedReactionMode` has NO movement/AI
-  consumer anywhere yet - the decision computes and is observable (printed + asserted in the new
-  `real_playtest_weapon_fire_smoke_test`) but nothing turns "Flee" into actual ped movement - that's the
-  next natural follow-up if queued.
-- **Audio playback** (merge `ad159c4` of `feature/audio-output-device`): minimal XAudio2 output device
-  (8-voice pool, one-shot), wired to the real SFX lookup (Sec9.8, `walkHircItems`/`resolveSoundIdToMedia`
-  against `sounds.vpp_pc` - `cutscene_sounds.vpp_pc` empirically resolves ZERO kind-2 items, it's pure
-  dialogue, corrected from the initial CHOSEN default), playing on a footstep-shaped cadence while
-  walking. Emitter/listener wired per Sec11a.1/11a.2. **Volume is deliberately flat** - Sec11a.5 confirms
-  the real Wwise attenuation curve is architecturally unreachable (inside statically-linked Wwise code),
-  not a time-boxed cut. `--no-audio` plus `--headless`/`--no-input` each independently veto opening a
-  device - verified silent under the existing ctest smoke-test flags. Verified without literally
-  listening: exact submitted-byte-count match to the real decoded clip's frame count, 0 leaked voices,
-  opt-in `SR3_AUDIO_DUMP_WAV` capture hex-inspected to confirm real non-silent waveform data.
-- One CMakeLists.txt conflict between the two (both appended to the same `target_link_libraries(sr3_viewer
-  ...)` line) - resolved by keeping both as separate calls (CMake accumulates), not picking one.
-- Full combined ctest on main: **165/169 passed, 0 failed, 4 pre-existing Bink skips.**
-- **DONE: v0.7 shipped.** Folder: `v0.7_2026-10-10_weapons-and-audio` on
-  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 10 versions on G: (1
-  new)"). Screenshots (plain launch, post-fire HUD/objective state - the shot ped wasn't in camera frame
-  this take, said honestly, hit/death/flee all confirmed via console log instead) personally viewed.
-  Read-only + swapped into `TEAM B\playtest\`. **Relayed to purrsian-52.** purrsian-52 confirmed v0.7
-  md5-verified clean (D:/G:/live) and GitHub pushed.
+### (a) DONE THIS SESSION - do not re-derive, all verified+merged+ctest-clean at 165/169 (0 failed, 4
+### pre-existing Bink skips) unless noted otherwise:
+- Post-crash recovery: vorbis packet+codebook fix merged+493/493 independently oracle-verified against
+  vgmstream-cli (SHA-256 `6c4a8a38...22dc6c` verified); inv-slot/conversation/local-player fix merged;
+  pause-menu binding merged; 25-branch orphaned-branch audit done, most DONE items merged (hex-rename,
+  respect-progression, vehicle-handling, mission-fail-success, near-field-ped-spawner, objective-text HUD,
+  tower-diag tooling, unified-registry no-op).
+- Folder move/rename handled cleanly (paused, verified clean, resumed in new location).
+- v0.6 through v0.9 all shipped to `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G:,
+  all relayed+confirmed verified+pushed by purrsian-52.
+- Weapons: LMB fires Brad's real weapon (weapons.xtbl) through the already-merged hitscan dispatch into a
+  NOW-real `IWeaponDamageSink` (closed the one missing link) -> real damage/death. Ped flee movement:
+  shot peds actually flee via the real sidewalk/wander graph (CHOSEN flee-dest/speed, labelled).
+  Ambient-ped general idle/wander tick: EVERY near-field ped now moves (not just Flee case) - this was a
+  genuinely new capability, ambient peds were NEVER ticked at all before this session.
+  Audio playback: first-ever audible output (XAudio2), footstep timing now driven by REAL foot-plant anim
+  triggers (not a cadence guess) after purrsian-52's mid-flight correction; exact footstep CLIP is still
+  an honest arbitrary placeholder (real identity resolved+logged but media-resolution needs the
+  Event->Action->SwitchContainer HIRC layout, not yet reverse-engineered).
+- m09 in-world mission progress: real screen-fade tick was ALREADY wired (stale HANDOFF claim corrected);
+  real `on_boat_trigger` ENTER dispatch proven firing end-to-end for the first time via new `--spawn-y`
+  test flag; new permanent diagnostic reports every suspended mission thread's real file:line on session
+  end. m09's real current blocker: suspended at `m09.lua:2099` inside `m09_go_to_boat`.
+- Branch-hygiene incident+fix: `fix/bink-descriptor-b-case1-selector` was wrongly classified "stale" by an
+  EARLIER audit that checked its 2 siblings, not its own content - it was real (took logo Bink files to
+  312/313 and 600/601 blocks). User added the standing rule above as a result. Full triage done on all
+  ORPHANs from `branch_audit.sh`: 7 branches retired (SHAs recorded in the triage table further down this
+  file - search "Branch-hygiene triage"), 4 parked with reasons (3 Bink-area behind active work, 1
+  confirmed-rejected ground-tile hypothesis kept for reference), vorbis-488 Kraft-inequality investigation
+  merged (real, pure diagnostic, Team A question relayed).
+- Bink codec, 3 real merges this session: (1) Sec5.3i secondary-grammar (all 7 secondary cases for
+  primary case 1, correctly documented/partially implemented, caught 2 wrong relayed claims - no donor
+  for sub=0, no IDCT/tree-decoder/quant primitives existed anywhere). (2) descriptor-B fix + quant-table
+  primitive (real scratch-buffer read for the secondary-dispatch value, closes the Sec5.3i-found blocker;
+  transitively also closed d10plus-audio-chunk-skip which was never actually merged despite being listed
+  CLOSED; caught a 3rd wrong relayed claim - case 3 is not case-1/sub=2's donor, both unimplemented).
+  Confirmed via real fixtures: `logo_thq_and_voli_hd.bik` 312/313 blocks, `logo_amd_hd.bik` 600/601.
+  `main_menu_bg.bik` now correctly dispatches `primary=1/sub=2` via the real descriptor-B path but still
+  stops at the first block (IDCT/AC-tree genuinely unimplemented at that point).
+- New-game starting cash: `kNewGameStartingCashCents = 5700.0` (spec-frontend-menu-runtime.md Sec9, real
+  write-site confirmed OPEN by Team A after 3 traced candidate paths, explicitly recommended hardcoding).
+  Self-merged by its own agent under the new rule, independently re-verified by me.
+- Real traffic lane-following (spec-ai-runtime.md Sec18.1/18.2/18.5/18.6): replaces the old uniform-random
+  stand-in; ambient vehicles were POSITION-ONLY with a cosmetic heading before this (no real driving at
+  all). Caught a wrong relayed claim: steering SIGN is not from the dot product as summarized - real
+  source is an unmodelled per-entity "lane-side status bit" (+0xe09 bit 2), uses a labelled cross-product
+  stand-in instead. Live-verified 900 frames: real lane-following + correct junction choice + clean
+  frozen report at a genuine dead end.
 
-### 2 agents in flight (next: ped flee movement + real footstep audio question, v0.8 once flee lands)
-- `afb3defb7c1f860ae` - make peds actually move when `PedReactionMode==Flee` (currently computed and
-  observable but unconsumed, see weapons merge above). Told it to reuse the EXISTING sidewalk/ped-pathing
-  mechanism ambient peds already use for idle wander (NOT invent a new movement system), pick a CHOSEN
-  flee-destination rule if the real one isn't spec-confirmed (labelled honestly, not hidden), wire
-  `tools/sr3_viewer.cpp`'s already-computed-but-discarded `PedReactionMode` to drive it, verify real
-  before/after position change live via `--script-fire`.
-- **DONE: footstep-audio investigation, NO code change (correctly)** - `aab08c973330acd49` confirmed the
-  real material->footstep-event mapping is genuinely NOT specced anywhere accessible (checked
-  spec-audio-runtime.md Sec11a.4/Sec11a.7/Sec12 item4, spec-player-runtime.md, spec-anim-runtime.md,
-  ground/surface-material specs - nothing). Neither half exists: no confirmed Wwise HIRC footstep event
-  name, no animation foot-plant hook, no ground-surface-material classification anywhere in this
-  project. Left the already-honestly-labelled placeholder as-is. **Exact Team A question written, needs
-  relay** (see this unit's own report for the full 3-part question - real HIRC event name/trigger site,
-  whether it varies by surface material, and the real material->event table if so - points Team A at the
-  SAME Sec11a.7 call-site-tracing method that already found 3 unrelated real event names, just not yet
-  aimed at the on-foot movement state machine).
-- **DONE: ped flee movement merged (`7a10ba4`)** - shot peds in Flee mode now move continuously via the real
-  sidewalk/wander graph, verified live (real position change every traced frame). Found+flagged a wider
-  pre-existing gap: ambient peds were NEVER ticked at all before this (idle wander included) - only the
-  Flee case is wired now. Full ctest 165/169 clean.
-- **DONE: v0.8 shipped and relayed.** Folder: `v0.8_2026-10-10_peds-flee-when-shot`, mirrored to G:
-  (11 versions). purrsian-52 confirmed verified+pushed.
-- **DONE: general ambient-ped idle/wander/sidewalk tick merged (`b8a985e`, merged into main)** -
-  EVERY near-field ped now ticked every frame (not just Flee), real sidewalk->wander->one-frame-transition
-  cycling confirmed live across multiple distinct peds over 900 frames; flee priority confirmed never
-  overridden. Caught+fixed a real teleport bug during development (incremental step vs. absolute
-  segmentProgress remap). CHOSEN: 1.4 m/s ordinary walk speed, segmentProgress>=1.0 sidewalk-abandon
-  trigger. ctest clean.
-- **DONE: real FOOTSTEP event + real foot-plant trigger timing merged** - Team A specced footsteps
-  (spec-audio-runtime.md Sec11a.8): real event name `FOOTSTEP`, `anim_files.xtbl` Sounds rows,
-  `MATERIAL_TYPE`+`SHOE_TYPE`/`MOVEMENT_TYPE` switches, 144 fixed-context rows (not general locomotion) -
-  `MATERIAL_TYPE:CONCRETE`+`SHOE_TYPE:SNEAKER` used as purrsian-52's own labelled CHOSEN default.
-  **purrsian-52's mid-flight correction applied**: the foot-plant TRIGGER DATA is real/known (left/right-
-  foot anim triggers, spec-anim-runtime.md Sec7.13, 1,170/1,149 occurrences) even though the engine's own
-  consumer function is OPEN - timing is now driven by real trigger-frame crossings during walk-clip
-  playback, not a guessed cadence (cadence kept only as an explicit fallback). **Genuine new gap found,
-  not invented around**: resolving the real FOOTSTEP+switches identity to actual Wwise media needs the
-  Event->Action->SwitchContainer HIRC on-disk layout, which no spec documents - demo still plays the
-  prior real-but-arbitrary clip for actual output, now with the real identity it couldn't resolve media
-  for logged honestly. ctest clean.
-- Both merges combined, full main ctest: **165/169 passed, 0 failed, 4 pre-existing Bink skips.**
-- **DONE: v0.9 shipped.** Folder: `v0.9_2026-10-10_ambient-peds-walk-real-footstep-timing` on
-  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 12 versions on G: (1
-  new)"). Screenshot (plain launch) personally viewed; honestly noted ambient-ped-wandering isn't shown
-  on screen (camera limitation, same as flee) but was directly confirmed via live multi-ped position
-  tracking. Read-only + swapped into `TEAM B\playtest\`. **Relay to purrsian-52 - DO THIS NEXT.**
+### (b) IN FLIGHT RIGHT NOW
+- **Bink IDCT + AC-tree decoder** (agent `ad8c2d9a0aac24f70`, dispatched after Sec5.3j landed - the exact
+  spec Team A produced in response to this session's own concrete citable-algorithm request). Target:
+  close the `main_menu_bg.bik` first-block stop, whole-frame decode, FFmpeg pixel comparison. Told it:
+  truncating shifts throughout, only the final per-pixel descale rounds (+0x7f not +0x80, exact ties round
+  DOWN), AC-tree loop terminates on "front catches up to tail and level reaches 1" (no fixed count), two
+  distinct sign-recovery mechanisms, inter-frame ref-add path only HIGH confidence (no live P-frame
+  check), 24 auxiliary fields unknown meaning (write through, don't interpret). Self-merge permission
+  given per the new standing rule. **Next step on resume: check for this agent's SubagentHandback report
+  (may already have arrived) - if DONE, independently verify via `git merge-base --is-ancestor <sha>
+  main`, rebuild+ctest in the main checkout, update HANDOFF, relay to purrsian-52. If not yet reported,
+  just keep waiting (task-notifications will keep arriving).**
+- **DONE: v0.10 release cut shipped** (per purrsian-52's explicit request: lane-following traffic + $57
+  starting cash + m09 progress + Bink descriptor-B fix). Folder:
+  `v0.10_2026-10-10_traffic-lane-following-starting-cash` on
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\`. purrsian-52 said they'll verify+mirror to G:
+  themselves this cut - did NOT run `mirror_build_history.sh`. 3 screenshots personally viewed (plain
+  launch; HUD confirming "MONEY $57" - the starting-cash fix, real and working; traffic near a junction -
+  honestly noted in NOTES.txt that cars can look a bit bunched up at intersections before sorting out,
+  the underlying lane-following mechanism itself IS verified correct via the merge's own live frame-trace
+  though). Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 - DO THIS NEXT**
+  (they explicitly want the folder name for their own verify+mirror step).
 
-### 1 agent in flight (Bink secondary grammar, gates the Bink-to-screen task below)
-`a26d15cd42b40f051` - implement the full 7-way secondary payload grammar for Bink primary case 1
-(spec-bink-codec.md Sec5.3i, just landed - closes a long-named blocker). Secondary 2=DC literal+AC tree+
-quant-row nibble+IDCT(16x16, different calling convention); secondary 3=flat single-byte fill(16x16);
-secondary 1/4 skip reached via an EARLIER flag-bit check (gate at primary case 1, not inside 1/4
-themselves); 2/3/5 share ONE literal-byte stream, all 16x16 output; secondary 0 ("giant1" RLE+permutation)
-has NO live example in sampled frames - implement by analogy with primary case 3 at LOWER confidence,
-flagged not claimed-confirmed; secondary 6=raw copy. Target: whole-frame decode of `main_menu_bg.bik`,
-report exactly how far it gets (full target is a pixel comparison against FFmpeg, may be a follow-up).
+### (c) LEARNED - facts/numbers/paths/addresses, don't re-derive:
+- Real archive cache path (current, post-move): `D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/
+  packfiles/pc/cache`. Playtest builds: `D:\IdolRecomp Saints Row The Third\playtest-builds\`. Live
+  playtest swap target: `D:\IdolRecomp Saints Row The Third\TEAM B\playtest\` (has `sr3_viewer.exe`,
+  `run_playtest.bat`, `lua_all_registered_1490_tagged.txt`, plus a never-touched
+  `sr3_viewer_old_backup.exe`).
+- `--spawn-y <Y>` (new this session): test-only flag bypassing the ground-Y fallback (which resolves to
+  0.0 over water/dock areas like `on_boat_trigger`'s footprint) - combine with `--spawn X Z
+  --script-forward-frames 0` to deterministically place the player inside a specific real trigger volume.
+- `--script-fire` triggers a deterministic LMB fire at frame 60 against the nearest live ped under
+  `--no-input`, aim = real camera-forward ray.
+- vgmstream-cli r2117 (official GitHub release `vgmstream-win64.zip`) SHA-256 `6c4a8a3813864fefed081bbd
+  337dbc0ad93bf88e0b92f5db98d7ab258b22dc6c` - already downloaded+verified once this session if still
+  present in scratchpad, otherwise re-download+re-verify before reuse.
+- FFmpeg is available on this machine: `.claude/worktrees/agent-afcad4c7b0433667/tools/ffmpeg_dl/bin/
+  ffmpeg.exe` (found pre-downloaded by an earlier Bink task) - for the next whole-frame Bink pixel
+  comparison once decode completes.
+- m09's real next blocker: `m09_start` suspended at `m09.lua:2099` inside `m09_go_to_boat`.
+- Several stale PRE-MOVE worktrees (pointing at the old `D:\Project Crreish\...` path) block `git branch
+  -D` until removed with `git worktree remove ... --force` first - hit this retiring 3 of the 7 branches,
+  may recur for other old worktrees not yet touched.
 
-### QUEUED, dispatch once the Bink-secondary-grammar unit reports (it GATES this)
-Bink-to-screen pipeline (spec-bink-boundary.md Sec5.4/5.5/7, just landed): per frame, Y/U/V planes upload
-into 3 separate textures (per-plane helper, `+4` = texture handle), a quad draws via the UI renderer's
-3-texture draw mode (`rl_draw` codes `0xc`/`0x13`, shader `rl_prim_2d_bink` - YUV->RGB happens IN the
-shader). Task: `--video` flag to play `main_menu_bg.bik` as a fullscreen quad in the playtest, using this
-project's own Bink decoder + 3 textures + a YUV->RGB shader (CHOSEN coefficients until the real shader
-bytecode is read). **Explicit gate, per purrsian-52's own instruction**: do NOT dispatch this until the
-Bink-secondary-grammar unit above confirms whole-frame decode actually works - if the decoder still can't
-produce full frames, that must be finished FIRST, this renderer task is not useful against partial frames.
+### (d) RULED OUT / confirmed-wrong, don't retry:
+- 3 separate relayed-claim errors caught and corrected this session in the Bink thread alone (see (a)
+  above) - this is now a WELL-ESTABLISHED pattern for this specific thread (Bink spec summaries from the
+  orchestrator have been wrong 3 times in a row on specific technical details, though right on the overall
+  shape) - verify Bink claims against the actual spec text every single time, don't shortcut it.
+  Separately, the traffic lane-following steering-sign claim was also wrong (4th instance, different
+  subsystem) - the pattern may be broader than just Bink; treat ALL technical specifics in relayed task
+  summaries as needing direct verification, not just Bink ones.
+- `fix/ground-tile-origin-translation` is a confirmed-REJECTED hypothesis (self-labelled by its own commit
+  message) - do not revisit unless new evidence emerges; kept (parked, not deleted) only as a documented
+  negative result for whoever next investigates the known ground-gap-under-feet visual issue.
+- IDCT/AC-tree/quant primitives did NOT exist anywhere in this codebase before this session (confirmed by
+  direct grep, not assumption) - primary case 3 and primary cases 5/7 (falsely claimed as "donors" in 2
+  separate relayed summaries) are ALL still unimplemented OpenHooks as of the descriptor-B merge; Sec5.3j
+  (now landed, see IN FLIGHT above) is what's expected to finally close this.
 
-### Previously (pre-move), now historical: v0.6 planning note
-All of this session's queued work (vorbis merge+independent oracle verify, inv-slot/conversation merge,
-pause-menu binding, the full 25-branch audit and every DONE item in it) is complete and merged. The next
-concrete, not-yet-started task is cutting a new playtest release (v0.6) per the established procedure
-(see the "EXTENDED, USER INSTRUCTION" release-procedure block further down this file) - main has moved
-substantially since v0.5b (`ce321fb`): named-object-resolution fix, vorbis decode fix, inv-slot/
-conversation fix, pause-menu binding, several orphaned-branch merges (respect-progression, vehicle-
-handling, mission-fail-success, near-field-ped-spawner, objective-text HUD overlay, tower-diag tooling,
-hex-address rename). Fresh build+ctest+screenshots+NOTES.txt+mirror+read-only+swap, same discipline as
-v0.1-v0.5b. Re-check `git log -1 main` first - purrsian-a5 may land more spec syncs before this resumes.
+### (e) User/orchestrator asks still pending or awaiting a decision:
+- purrsian-52 wants the v0.10 folder name once cut (see IN FLIGHT above) - they'll do verify+mirror
+  themselves this time, don't run `mirror_build_history.sh`.
+- No other standing asks currently blocked on a human decision - everything else in flight is normal
+  agent-dispatch-and-merge flow, continue autonomously per standing "don't wait, broad permission" policy.
 
-## LIVE STATE 2026-10-10 (49th rewrite, compacted - prior block ~41KB, over budget). Orchestrator:
-## purrsian-4a. User directive standing: "keep going, never stop, usage-aware" - no fixed agent cap unless
-## usage-pacer fires (then: write HANDOFF, wait); no speculative units; prefer small high-value; merges go
-## through on standing permission, STOP on conflict (don't resolve blind in the main checkout - dispatch a
-## unit or resolve carefully in a worktree then merge). I do the actual `git merge --no-ff` into main
-## myself from the main checkout; agents never merge to main themselves, only report a commit SHA.
-
-**Git main tip**: `d3290b1` (post-crash recovery, inv-slot+vorbis both merged+verified clean). Re-check
-`git log -1 main`.
-
-### POST-CRASH RECOVERY 2026-10-10 (orchestrator purrsian-a5 resumed after a crash, usage-pacer: 1 agent max)
-**DONE, merged+ctest-verified clean this tail** (all direct merges by me, no agent spawned, per usage-pacer):
-`faa96b7` respect-progression, `e45b754` continuous-spawn-arg4, `a620180` vehicle-handling-wired,
-`3e0934d` mission-fail-success, `c032a25` near-field-ped-spawner, `03ce96b` vorbis packet+codebook fix,
-`d3290b1` inv-slot/conversation/local-player (merge of the crashed agent's already-resolved-but-uncommitted
-work, `4161106` in worktree `wt-merge-invslot` - committed it, built, ctest 163/167 clean, then merged).
-Full main ctest after ALL of the above: **164/168 passed, 0 failed, 4 pre-existing Bink skips.**
-- **Vorbis independent oracle check (purrsian-a5's top priority)**: downloaded vgmstream-cli r2117
-  (official GitHub release asset `vgmstream-win64.zip`, SHA-256 verified EXACT match against
-  `6c4a8a38...22dc6c`) into its own scratch dir, extracted separately, ran the full 493-record oracle
-  sweep on main's build (internal: 493/493 OK, unchanged from the branch's own claim). **Full 493-record
-  independent comparison DONE**: all 493 processed, 0 missing/failed, correlation 1.000000 on EVERY record,
-  max RMS diff 0.000002, max abs diff <0.0001 - genuine independent confirmation (not our own code
-  agreeing with itself) that main's Vorbis decode is correct. Relayed to purrsian-a5. **Vorbis item is
-  fully closed, no further action needed.**
-- **DONE AND MERGED: pause-menu open binding** (worktree `agent-pausemenu`, branch `feature/pause-menu-
-  open-binding`). Found the crashed agent's work (`a82af8ee0688cbe1e`) uncommitted but complete/coherent
-  (reviewed in full: `Window::create` gets a new `escQuits` flag default-true so no existing caller is
-  affected; Esc repurposed to open/close the real CBA_GAC_PAUSE_MENU binding via the ALREADY-REAL
-  `EngineState::pushGamePauseReason()`/`LaunchLuaCoroutine("dialog_pause_show"/"dialog_pause_hide")`
-  primitives, F10 is the replacement quit key, dt forced to 0 while open). Committed it, caught the branch
-  up to current main (clean, no conflicts), rebuilt, ctest 164/168 clean, merged to main. Honest gaps
-  stated in-code: the native's own 3 blocking-UI gate checks aren't modelled (only "not already open" is);
-  the visible resume/quit overlay text is a synthetic label, not the full real `pause_menu_common.vint_doc`
-  element-tree render (best-effort load of the real doc happens for element/animation counts only).
-  Phone's open binding not attempted (unknown per Team A, as instructed).
-- **DONE: `fix/unified-registry-test-missing-b10-sum`** - confirmed a genuine no-op: main's current
-  `expectedTotal` sum already includes `namesB10()` plus everything through B31 (landed independently
-  via later batches) - this branch's fix was already subsumed. Zero net diff vs main, merged as a
-  formality so it stops showing as orphaned.
-- **DONE: `feature/objective-text-localization`** (supersedes `mission-hud-objectives`) - 4 real conflicts
-  in `tools/sr3_viewer.cpp` against mission-host/roadblock/pause-menu/minimap, all additive-not-
-  overlapping, resolved by keeping both sides as siblings. **Caught a real bug**: only this branch's own
-  `for (h : hudObjectiveH) drawHudLabel(...)` loop actually RENDERS the objective-text labels - the
-  shared per-frame loop that resolves/sets their text only calls `hudSetLabel`, never `drawHudLabel` -
-  dropping this branch's content would have silently left objective text set but invisible. ctest 164/168
-  clean, merged.
-- **DONE: `diag/tower-constant-consumption-control`** - clean merge, no conflicts. Per purrsian-4a:
-  archived the 2 `.rdc` capture binaries (~2.4MB each) to `G:\AI\Claude Projects\recomp\TEAM-B-diag\
-  renderdoc_captures\`, removed from git, added `renderdoc_captures/`/`*.rdc` to `.gitignore`. Kept the
-  small PNG/txt results (consistent with this repo's existing results/ convention). ctest 164/168 clean.
-- **DONE (no merge needed): `feature/m09-inworld-trigger-test`** - side-by-side check done per
-  purrsian-a5's instruction. Its 2 test files (`real_playtest_mission_test.cpp`,
-  `synthetic_mission_host_live_bridge_test.cpp`) are BYTE-IDENTICAL to main's current versions (already
-  landed via the mission-host merges) - zero diff. Its one real content change
-  (`tools/zone_object_resolver_probe.cpp`'s CLI generalization, object_name/archive_filename overrides) is
-  actually a REGRESSION risk if merged: main's current version of that same file is strictly MORE advanced
-  (carries the later Trigger_Volume shape/extent/radius population scan this branch predates and doesn't
-  have) - merging would silently remove that scan. Correctly classified SUPERSEDED, not merged.
-- Still queued: `fix/hex-address-rename` (last, heavy conflicts expected). Bink-pixel-accuracy-oracle:
-  explicitly deferred/skip per purrsian-4a ("redo fresh later if still needed"). Stray leftover worktree
-  `wt-unifiedregistry` could not be removed (permission denied, likely a lingering file handle) - harmless,
-  flag for later cleanup.
-
-### BRANCH AUDIT (purrsian-4a's ask - `git branch --no-merged main`, 25 branches, classified below)
-Method: for each, compared its unique content (merge-base..tip diff) against main's CURRENT state (existence/
-content of the same functions/files), not just raw diff-vs-main (which is dominated by main's own later
-growth and is noise). Merging the DONE ones one at a time now, dispatching only where a real conflict
-appears (per standing rule), resolving clean ones directly myself.
-
-**DONE - should merge (real, unmerged, not superseded):**
-1. `fix/inv-slot-conversation-localplayer-blockers` (`69058b4`) - ALREADY being merge-resolved by in-flight
-   agent `a56c3ff76dba826b8` (conflicts in 4 files), not re-queued here.
-2. `feature/objective-text-localization` (`cc22000`) - confirmed via `merge-base --is-ancestor` that
-   `feature/mission-hud-objectives` (`2d9ac67`) IS an ancestor of this branch - it's the superset, merge
-   THIS one and treat `mission-hud-objectives` as subsumed (do not merge separately).
-3. `feature/mission-fail-success-presentation` (`97aae3f`) - real spec-confirmed feature (lua-api 21.27c),
-   5 files/310 lines, not found elsewhere on main.
-4. `feature/near-field-ped-spawner` (`9169966`) - confirmed via direct content diff: fixes a real
-   disconnected-map bug in `spawn_override_clear_override_for_hood` (erased from the wrong map) and a real
-   missing-square bug in `spawn_region_min_spawn_dist` - neither fix is on main yet (spec sync `3ecbf84`).
-   Distinct from the already-merged `near-field-peds-playtest`/`ped-spawn-distance-spec-tuning` branches
-   (different base, different bugs - no overlap).
-5. `feature/respect-progression-runtime` (`a852f61`) - **discrepancy found**: an earlier HANDOFF entry
-   implied this was already merged ("`a852f61`+merge: respect lifetime cap... on feature/respect-
-   progression-runtime") but `git merge-base --is-ancestor a852f61 main` says NO - genuinely orphaned
-   despite the old note's wording. Real fix (lifetime cap, Sec5.4), should merge.
-6. `feature/vehicle-handling-wired` (`c1d24e7`) - real xtbl wiring (5 transmission/brake fields,
-   spec-physics-runtime.md Sec10.10/Sec10.7), not found on main.
-7. `fix/continuous-spawn-start-arg4-default` (`4c126bb`) - real confirmed spec fix (Sec4.8, OPEN->"").
-8. `fix/unified-registry-test-missing-b10-sum` (`8662f74`) - trivial test fix, 1 file/18 lines.
-9. `fix/hex-address-rename` (`b5d8df2`) - real, per direct USER ruling (every Ghidra auto-name -> hex
-   address), 61 files mechanical rename - **expect HEAVY conflicts** (main has changed almost everywhere
-   since), do this one LAST, likely needs a dedicated conflict-resolve unit or a from-scratch re-rename
-   rather than merging the old branch - judge when reached.
-10. `diag/tower-constant-consumption-control` (`c312c70`) - adds a REUSABLE, opt-in-only diagnostic
-    (RenderDoc capture loader + raw-cbuffer-dump tool, `SR3_DUMP_CBUFFER_RAW`/`SR3_RENDERDOC_CAPTURE` env
-    gates, zero behavior change otherwise) - low-risk, real tooling value per its own doc comment. Also
-    carries large binary `.rdc` capture files + verbose result dumps - merge the code, use judgment on
-    whether the binaries are worth keeping in the repo (flag, don't decide unilaterally if large).
-
-**NEEDS DEDICATED REVIEW - do NOT merge blind (real unique content exists, but subsystem has moved on
-since divergence and a naive merge risks silently reintroducing an already-fixed bug or missing a since-
-discovered better fix):**
-11. `diag/vorbis-488-codebook-investigation` (`028b6ae`) - real Kraft-inequality codebook fix, NOT present
-    on current main's `wwise_setup_rebuild.cpp` (confirmed via grep) - but the whole Wwise/Vorbis path has
-    had major rework since (`be602fb`/`ffce7ee`, "493/493 byte-identical" claim) - needs a dedicated unit
-    to confirm the bug still applies post-rework before merging, not a blind merge.
-12. `fix/vorbis-codebook-library-index` (`eeebd91`) - same subsystem, same caution.
-13. `integration/vorbis-packet-plus-codebook-fix` (`08b4265`) - same subsystem, same caution.
-14. `feature/bink-pixel-accuracy-oracle` (`7218883`) - TwoLiteralPattern grammar work, not on main - but
-    this is the SAME Bink-codec area a prior session already found 3 other branches "badly stale, not safe
-    to continue from" in (see #15). The ACTUAL current Bink fix landed via a completely fresh branch off
-    main instead (`fix/bink-merge-group-bit-consumption`, already merged). Recommend NOT merging this old
-    branch - if TwoLiteralPattern is still a real gap, redo it fresh off current main like that fix was,
-    don't trust this branch's base.
-15. `feature/m09-inworld-trigger-test` (`6122714`) - extends `zone_object_resolver_probe`; `lua_menu_
-    runtime.cpp` already exists on main (not obviously missing this branch's content, not fully verified
-    line-by-line) - possible duplicate of already-merged `inworld-mission-host-triggers-v2` work. Needs a
-    real side-by-side check before deciding merge vs. discard.
-
-**STALE/SUPERSEDED - do not merge (confirmed via direct check, not just age):**
-16. `fix/bink-d10plus-audio-chunk-skip` (`3f1d1e7`), `fix/bink-descriptor-b-case1-selector` (`137e70d`),
-    `fix/bink-prestage-len-correction` (`57ea5d4`) - these are (3 of) the "4 old pre-pause Bink branches" a
-    prior session explicitly checked and found "badly stale... not safe to continue from" (already
-    documented earlier in this file's own history) - confirmed finding stands.
-17. `worktree-agent-ae8d4fdb38c19c597` (tip `5927dce`, Oct 7), `worktree-agent-af66ee0cdda9dafdd` (tip
-    `a6ea0d6`, Oct 8) - unnamed/generic worktree branches, 2-3 days old in a project this fast-moving;
-    `SR3_FORCE_WARP` (the fix `ae8d4fdb...` targets) already appears in 4 current main files, and
-    `af66ee0cdda9dafdd`'s tip is literally just a planning-note commit, not code. Both superseded.
-18. `wip/cutscene-pipeline-bleed-recovery` (`a3da915`) - confirmed: the test file it recovers
-    (`synthetic_luahost_cutscene_camera_script_test.cpp`) ALREADY exists on main (recovered via the actual
-    real incident-recovery path) - this branch was an abandoned parallel recovery attempt.
-19. `design/mission-host-in-engine-loop` (`775cd61`) - pure design doc; confirmed via `git log --grep` that
-    ALL 3 phases it designs are already implemented AND merged (`feature/mission-host-phase1/2/3`) - doc is
-    now historical record only, not actionable.
-20. `verify-onto-main` (`ca97f84`, "Fix findTileZoneEntryName() to see ~al/variant zone candidates") -
-    confirmed: main's current `findTileZoneEntryName()` already has its own "~al"/"~s FAMILY" doc-comment
-    handling - this is covered by the already-merged `fix/tile-lookup-tilde-s-variant` (`508da45`) via a
-    different implementation path.
-21. `feature/mission-hud-objectives` (`2d9ac67`) - subsumed as an ancestor of #2 above, merge that one
-    instead.
-
-**REJECTED (self-labeled, confirmed):**
-22. `fix/ground-tile-origin-translation` (`07ba09f`) - commit message itself says "WIP: REJECTED
-    hypothesis - per-tile origin translation, do not merge." Leave as-is, candidate for eventual deletion
-    (per-case yes needed, not done here).
-
-### DONE - fresh verify (`verify/main-e239651-fresh`, no commit needed, nothing to fix)
-Fresh configure+build+full ctest on main `90f5afd`: **163/167 passed, 0 failed, 4 skipped - 100% of run
-tests passed.** The 4 skips are the documented, intentional `CRREISH_VERIFY_BUILD`-gated real-Bink-data
-fixture tests (exit 77, not failures). **The 161-vs-163 "mystery failures" are CONFIRMED fully resolved**
-by `e239651`'s own stack-overflow fix (already merged, an ancestor of this tip) - no regression found, no
-action needed.
-
-### DONE AND MERGED: named-object-resolution persona/empty-name fixes (`0749908`, merge of
-### `fix/named-object-resolution-persona-empty` @ `4b72d87`)
-Both m05/m09 blockers were REAL STUB BUGS, not genuine open spec gaps - no Team A question needed:
-- **m09 `'Paparazzi_WM'`**: `audio_persona_load_2d` had a wrong `objectResolves()` gate - persona names
-  are resolved via the Wwise-ID hash resolver chain (Sec8.5/Sec2.5, "always succeeds for any non-null
-  input"), never a zone-object registry lookup. Gate removed, always returns a fresh handle.
-- **m05 `''`**: `helicopter_fly_to`/`helicopter_fly_to_direct` hard-code `local follow = ""` in the REAL
-  shipped `game_lib.lua` (re-extracted via `tools/validation/lua_source_dump.cpp`) - `helicopter_fly_to_do`
-  was missing the empty-string short-circuit on that arg that this project's other natives already use
-  (e.g. `effect_play_finisher`'s `target.empty()` guard convention). Added.
-- **Live-verified after fix**: both missions now run their full 30-frame headless window with ZERO
-  named-object-resolution errors. m05 advances to REAL in-world trigger registration (`m05_trigger_kill`/
-  `m05_trigger_lt_kill`, real position+shape). m09 cleanly suspends at `fade_out_block`. Full ctest
-  167/167, 4 pre-existing Bink skips, no regressions. Results archived under
-  `results/verify_namedobjectfix_*`.
-- **NOT yet relayed to purrsian-4a - DO THIS NEXT.**
-
-### v0.5 release: SHIPPED as `v0.5b_2026-10-10_named-object-resolution-fix` (not the original v0.5 - see below)
-The original `af6c2c45a52c4ac0f` release-cut agent (worktree `agent-v05release`, branch `release/v0.5-cut`,
-off stale `0d4764d`) stalled mid-procedure - purrsian-4a caught it: only exe/bat/lua txt copied into
-`D:\Project Crreish\playtest-builds\v0.5_2026-10-10_shadows-and-nearfield-peds\`, no screenshots/NOTES/
-mirror/read-only/swap. I stopped that agent (`TaskStop`, after ~124 tool uses with no progress) and left
-its worktree + half-made folder UNTOUCHED (per purrsian-4a's own instruction) for a later cleanup pass -
-**NOTE**: a follow-up report from the replacement agent below observed that folder gained
-`screenshot.png/2/3/4` + an updated `.bat` with timestamps AFTER my stop call - something (another session?
-a lingering child process?) kept writing to it. Treat that folder's current contents as unverified/
-unknown provenance until someone checks - don't assume it's still just "stale exe/bat/lua."
-
-Dispatched a FRESH agent (`ab5f9f50819b1f5f9`) in a new worktree off current main (post named-object-fix,
-`ce321fb`) to cut a clean `v0.5b_...` release instead. **DONE, SHIPPED**:
-- **Folder**: `D:\Project Crreish\playtest-builds\v0.5b_2026-10-10_named-object-resolution-fix\` (+ mirrored
-  to `G:\AI\Claude Projects\recomp\playtest-builds\`, same name). Worktree `agent-v05brelease`, branch
-  `release/v0.5b-cut`, built from `ce321fb`. No code changes, nothing committed (pure packaging).
-- Fresh build clean, full ctest **167/167 passed**, 4 pre-existing Bink skips only.
-- **Live mission re-check with full real archives (incl. `cutscene_tables.vpp_pc` + `dlc2.vpp_pc`)**:
-  m05/m09/dlc2_m03 all suspend cleanly at a scripted fade-out point, zero errors. m07 and dlc2_m01 now get
-  PAST the fade-out (further than v0.4) before hitting new, later, separate blockers: m07 hits an unmodeled
-  `get_dist`/character-world-position lookup (Sec4.2); dlc2_m01 hits an unidentified character-vtable
-  predicate (Sec7.10). Both are genuinely NEW/next blockers to queue, not yet dispatched. m13 not re-checked
-  (NOTES.txt says so honestly, points to v0.4 notes).
-- Screenshots (plain launch, seated driving pose, peds+traffic together) all personally viewed by the
-  agent. Deliberately NO dedicated shadow screenshot - agent tried several spots, couldn't get a clear
-  visible cast shadow in frame, and said so honestly in NOTES.txt rather than faking it (shadows ARE
-  covered by the passing `golden_scene_check` test, just not visually obvious in this cut's shots).
-- Read-only applied (D: and G:, since the mirror script didn't reach its own attrib step - see bug below).
-  Swapped into `TEAM B\playtest\` (3 live files replaced, pre-existing `sr3_viewer_old_backup.exe` left
-  alone - untouched, unclear rotation convention, not worth guessing).
-- **Mirror script bug found, NOT fixed (flagging only)**: `~/crreish-orchestration/mirror_build_history.sh`
-  hit `set -e` on `cp -p` "Permission denied" re-copying `README.txt` to G: (already read-only there from
-  an earlier run) - exits BEFORE printing its own "history: N versions on G:" line and before its own
-  `attrib +R` step. Agent worked around it by hand (manually verified 8 folders present on G: - v0, v0.1,
-  v0.1a, v0.2, v0.3, v0.4, v0.5, v0.5b - and manually set read-only) rather than editing the script itself.
-  **Will recur every future release cut** until someone either un-read-only's G:'s `README.txt` or makes
-  that copy step tolerant of a pre-existing read-only target. Queued, not yet fixed.
-- Worktree `build/` is 2.1GB, flagged not deleted (disk-space-discipline).
-- **Relayed to purrsian-4a** with the folder name as explicitly requested.
-- **purrsian-4a confirmed**: md5 verified clean on D:/G:/live; GitHub pushed (`922ac15`); fixed
-  `mirror_build_history.sh` themselves (clears read-only before copying README/BUILD-LOG, now completes
-  - "8 versions on G:"); marked the old stalled `v0.5_...` folder's NOTES.txt "incomplete, superseded by
-  v0.5b" and synced its G: copy. That folder's mystery concurrent-write is explained/resolved now.
-
-### DONE AND MERGED: zone-data fallback for character/navpoint world positions (m07 unblock,
-### merge commit pending - check `git log -1 main`, merge of `fix/get-dist-character-position` @ `af98b6e`)
-purrsian-4a's hypothesis was HALF right: the gap was real, but the actual blocking m07 call was
-`npc_leash_to_nav("Nav Kinzie Leash", ...)`, NOT `get_dist` itself - the shared `worldPosition` OpenValue
-field's error message doesn't distinguish call sites, so the agent instrumented to confirm the real site
-before fixing (don't trust that error message alone next time either). Root cause: the live per-frame
-position bridge (`bridgeLiveCharacterPosition()`) only ever writes `"#PLAYER1#"` by design (no producer for
-any other name in a minimal SP playtest) - correct as far as it goes, just incomplete coverage. Added
-`EngineState::tryResolveWorldPositionFromZoneData()` - falls back to the existing real zone-data object
-position lookup (`sr3zone::ObjectRecord`/`ObjectPosition()`, Sec1.14, already used by in-world-trigger
-auto-registration, independently confirmed to cover navpoints too via `tests/real_zone_objects_test.cpp`)
-before throwing OPEN. Wired into `get_dist`, `npc_leash_to_nav`, `teleport_vehicle`, `get_object_pos`,
-`turn_to_do`, `vehicle_rc_get_signal_strength` (all share the same field/reasoning). **Live-verified**: m07
-now advances PAST this point (0.3s->2.4s) to a new, separate, genuinely-OPEN gap: `audio_conversation_play`'s
-"current conversation" lookup (Sec2.10) - already documented OPEN in `stub_audio_conversation_play`'s own
-doc comment, not touched, worth queuing as m07's next blocker (likely needs a Team A question on real
-semantics). Full ctest 167/167, 4 pre-existing Bink skips, no regressions.
-**NOT yet relayed to purrsian-4a - DO THIS NEXT, and correct the v0.5b NOTES.txt framing** (it said m07
-"asks for a specific piece of character-position data" - accurate on symptom, wrong on which native).
-
-### 2 agents in flight
-- `a56c3ff76dba826b8` - fresh worktree off current main - resolve + merge-prep the never-merged
-  `69058b4` branch (inv_item_in_slot 11-slot table Sec13.21, audio_conversation_play "current
-  conversation" 3-slot table Sec2.10 - purrsian-4a confirmed this is spec-COMPLETE not open, it's m07's
-  current blocker, local-player default Sec10.3). I attempted `git merge --no-ff 69058b4` directly in
-  main, hit conflicts in 4 files (`lua_spec_initial_state.cpp`,
-  `synthetic_luahost_batch2728_test.cpp`/`sec13_14_batch4_test.cpp`/`_test.cpp`), ABORTED per standing
-  "never resolve blind in main checkout" rule, dispatched this unit to resolve carefully in an isolated
-  worktree instead. Told it to preserve both sides (don't drop the stack-overflow-fix test restructuring
-  OR this branch's 3 real fixes), build+ctest+re-verify m07 live, report commit SHA for me to merge.
-- `a82af8ee0688cbe1e` - fresh worktree off current main - pause-menu open binding (spec-frontend-menu.md
-  Sec7/Sec9, HIGH confidence per Team A spec sync): action `CBA_GAC_PAUSE_MENU` (`0x55`) each frame, gate
-  of 3 "already in blocking UI/cutscene" checks, shared pause-push `(4,1)`, shows `dialog_pause_show`. Told
-  it to wire Esc (preserving quit on another key if Esc currently quits), use existing real dialog-loading
-  mechanism (not a fake menu), verify live pause actually stops sim/shows resume+quit. Phone's open binding
-  explicitly skipped (unknown per Team A).
-
-### BIG WIN just landed: `34bc55d`+merge `e239651` - real trigger shape/extent AND the zscene_is_loaded
-### root cause, BOTH fixed, m05 AND m09 BOTH genuinely advance further live
-Real on-disk `Trigger_Volume` shape encoding (Sec1.14, re-derived from REAL data not disassembly - the
-spec text doesn't give the literal strings): exactly 3 real strings in the cache -
-`"sphere"`/`"cylinder"`/`"bounding box"` (NOT bare "box"), case-insensitive substring match. Box reads
-BOTH params as real min/max corner vec3s; sphere reads param1 as radius only; cylinder reads both as
-scalars (radius, length) - cylinder's 2nd axis endpoint stays genuinely OPEN (spec's own admission).
-`on_boat_trigger` (m09's own trigger) is actually a `"bounding box"` (enum 0), NOT a sphere - the old
-CHOSEN stand-in had the wrong SHAPE, not just the wrong size: real box extent `min(-87.8,0,-22.3)` to
-`max(87.8,30.8,22.3)` at position `(2488.54,6.82348,-4.15918)`.
-**zscene_is_loaded's real root cause, found**: `EngineState::zsceneIsLoaded()`'s own kind-gate logic was
-ALREADY correct all along - the bug was that `tools/sr3_viewer.cpp`'s live `--mission` path never
-installed the real cutscene table at all (unlike `lua_host_run.cpp`'s separate batch loop, which always
-did via `installSceneTableFromCache()`) - so every call fell through to the OPEN per-name map and threw.
-Fixed: new `missionzoneobj::installZsceneTableFromArchives()`, wired into `runPlaytest()`. **Real verified
-result**: `--mission=m09` no longer hits `zscene_is_loaded` AT ALL - advances to a later, SEPARATE,
-already-known OPEN gap (`named-object resolution['Paparazzi_WM']` - a 2D Wwise audio-persona name, not a
-zone object, zone-data Sec11.7's own already-identified item). `--mission=m05` same pattern, different
-later gap (`named-object resolution['']`, empty name). **Neither mission reaches the trigger-overlap loop
-THIS session either** (both error in their own `_start` before ever registering an `on_trigger` callback)
-- so the new real trigger-shape data isn't exercised live yet, matching the task's own original scoping.
-**Bonus**: found+fixed a real, unrelated, pre-existing `STATUS_STACK_OVERFLOW` crash in
-`synthetic_luahost_sec13_14_batch4_test.cpp` (same "EngineState growing every batch, 18 blocks one stack
-frame" class of bug HANDOFF already documented fixing once elsewhere) using the identical already-proven
-fix pattern (split into per-block functions). **Full ctest: 167/167 (100%), 4 pre-existing Bink skips** -
-this may well explain/subsume the 161-vs-163 discrepancy queued below (the stack-overflow crash this unit
-fixed could easily have been one of the "mystery" failures) - worth checking before dispatching that unit
-blind, it may already be resolved.
-
-### DONE AND MERGED TO MAIN this tail (commit SHAs on main, chronological) - do not re-derive/redo:
-- `2bba81e` vehicle_set_obey_traffic_lights/use_short_cuts -> real vai_force_flags bits (Sec4.5a)
-- `a852f61`+merge: respect lifetime cap (Sec5.4, 238,875) on feature/respect-progression-runtime
-- `0b6c934` trigger-callback coroutine dispatch (real, via BareThreadTable) - prereq, later actually merged
-  as part of the mission-host stack (see below)
-- `8b82232`/`a10a9ba`/`265f729`/`1645584`/etc. vehicle-enter-submit chain, group-check-done, heli-class,
-  stateCodeByte501/Hijack - all landed via the 6-branch `integration/mission-blocker-batch2` merge
-  (`4ab74e8`) - real combined mission-drive wins on m05/m07/dlc2_m01/dlc2_m03, 0 regressions (158/0/4skip)
-- `be602fb`+`ffce7ee` (merged `2673cd1`,`bc0b0a2`): public-build data exclusion PART 1+2 - Wwise codebook +
-  Bink tables made optional/loadable-from-install w/ SHA-256 gate (spec-runtime-data-sources.md). Vorbis
-  493/493 byte-identical loader-vs-compiled-in. Denylist names: `include/sr3binkcodec/
-  entropy_prestage_tables.h` (exclude), `src/wwise_codebook_library_blob_stub.cpp` (do NOT exclude, it's
-  the algorithm-side fallback).
-- `9efbf67`+merge `3f46b8f`: seated/driving pose (real Sec7.4b pose) + full main verify (caught+fixed a
-  real CMake ordering bug: `CRREISH_GAME_CACHE_DIR` referenced before its own `set()`)
-- **v0.4 SHIPPED**: `v0.4_2026-10-10_seated-driving-pose` on G: and `D:\Project Crreish\playtest-builds\`
-  + live-swapped into `TEAM B\playtest\`. Screenshots personally viewed (seated pose confirmed real, not
-  empty-seat/standing). No HUD-objective-text/shadow screenshots - confirmed absent from this playtest
-  tool, stated honestly in NOTES.txt (shadows landed SEPARATELY after, see below - may want a v0.5 shot).
-  `mirror_build_history.sh`: "history: 6 versions on G:".
-- `759a6bc`+merge `cd84cf6`: shadow-map merged (conflict resolved carefully: kept BOTH `vehWorld`
-  computations - one for shadow-caster pass, one for visible draw - don't let anyone "simplify" this later)
-- `3023552`+merge `30a161c`: mission-host Phase1-3 + trigger-callback-coroutine-dispatch stack, FOR REAL
-  this time (confirm via `git merge-base --is-ancestor 0b6c934 main` before ever assuming it's in). Real
-  `--mission=<stem>` flag confirmed alive end-to-end against `mm_p_03`.
-- `5d6e539`+merge (my own catch-up, commit on main directly): recorder-state (dlc2_m03 Sec6.19 step2 global
-  0x029443bc, machinima recorder not tutorial dispatcher, seeded 0/idle)
-- `84805c0`+merge (catch-up): vehicle-class-xtbl-wiring - REAL per-type class from zone-spawn
-  `script_vehicle_type_name` join to `*_veh.xtbl`, m05_heli_pierce special case REMOVED (real: resolves to
-  `heli_fighter_03_MS05`, class 3). **Still queued, NOT yet redispatched**: generalize further if any other
-  mission needs it (currently works for all real data, no known gap left).
-- `e821841`+merge (catch-up): vehicle_exit_do mirror-bug fix (real spec: "on foot" = stateEnum=0 + vehicle
-  link nulled, Sec6.11/6.13/7.8) - m05 moved from exit-teleport deadlock to `m05_parachute_in` wait.
-- `917ce08`+merge `99d616c`: RECONCILED 2 colliding coop_is_active fixes (triggers-v2 branch kept
-  present=true+memberCount=1; m05jump branch removed present-force entirely) - **removed the force-set
-  entirely is correct** (spec: present=false default in SP, coopIsActive short-circuits before
-  memberCount which stays OPEN/unreachable, fine). **IMPORTANT, already resolved**: purrsian-4a's own
-  relayed "re-point notoriety's host-gate to local-authority" instruction was WRONG for this specific
-  gate - verified against spec directly and refused to apply it: notoriety_set uses a DIFFERENT accessor
-  (`0x0087ba20`, same as game_get_is_host, CLOSED false-in-SP, Sec6.22/8.27/26.28) already correctly read
-  by `EngineState::coopLocalIsHost()` - don't touch it again, this is settled, purrsian-4a confirmed the
-  relay was their own error (conflated the corrected 0x00bc5610 machinima-recorder relabel with a real but
-  separate "local authority" finding that belongs to `CharacterState::humanShieldReleaseIsLocalAuthority`
-  instead, untouched/correct). Also merged: real trigger-volume dispatch (position loads for real,
-  13,447 objects from sr3_city_0.vpp_pc; shape/extent was CHOSEN stand-in at this point, see below) +
-  M05_JUMP hud_prompt scripting mechanism (built, but never fires live - m05/m09 both hit `zscene_is_loaded`
-  OPEN before ever reaching their respective waits, see next item).
-- `029d174`+merge `20f2a56`: near-field AMBIENT PEDS wired into live playtest (mirrors vehicle-traffic
-  wiring exactly, ALWAYS ON no flag). Verified live: grows 1->48/48 cap by frame 390, stays filled to 600.
-- `a337292`+merge `538483d` (JUST LANDED, not yet relayed to purrsian-4a - DO THIS NEXT): ped spawn-distance
-  fix - settled "distance vs frustum" question as BOTH (3 separate reject conditions in the real gate:
-  unconditional ~90-unit floor regardless of visibility, an unspecified far threshold, PLUS a separate
-  visibility/frustum test). Added `ApproxVisibleToCamera()` (CHOSEN 50° horizontal-FOV cone, no vertical
-  FOV given by spec, honest about this being approximate not recovered). Candidate gen changed from
-  heading-biased to full-circle 90.5-160m annulus so off-screen-behind-player candidates can spawn near
-  the real ~90-unit floor. Verified live: ped visibly closer in frame 599 capture. **Caveat, not
-  independently re-verified by me**: this agent reported 161/167 pass, 6 failures it called pre-existing/
-  unrelated (5 are contradictory CMake-registration-vs-LastTest.log quirks in UNRELATED subsystems -
-  env tables, d3d9bc CTAB, material binding, tree, luahost tranche03 batch7; 1 is
-  `lua_host_run_integration_py` missing a prebuilt fixture exe) - I have NOT independently confirmed these
-  6 are truly pre-existing/harmless, just relaying the agent's own claim. Worth a sanity check on a fresh
-  main build before fully trusting this.
-
-### STILL UNMERGED / outstanding work queued, not yet re-dispatched (no current agent working these):
-- **Real trigger SHAPE from zone data + zscene_is_loaded cutscene-kind-gate fix** - was folded into the
-  trigger-shape agent (`a77953e498985e0a7`, worktree `agent-triggershapes`, branch
-  `feature/trigger-shape-from-zone-data`) which was STILL RUNNING when this compaction hit - **CHECK
-  ListAgents/task notifications for this agent's completion FIRST on resume**, it may have already
-  finished and be waiting for a handback read. This is the single most important unfinished thread: the
-  zscene_is_loaded fix (spec Sec26.25 - cutscene-KIND gate; non-Zscene-kind names like "09_in"/"05_in"
-  [CutsceneType=Story, kind 2, from .cte_xtbl in cutscenes.vpp_pc] should return `true` immediately without
-  ever reaching the Zscene state machine; this project currently skips the kind check entirely) is
-  expected to be a REAL, HIGH-VALUE unblock for BOTH m05 and m09 live missions - re-run `--mission=m05`
-  and `--mission=m09` after it lands to confirm.
-- Nothing else currently queued beyond the above - all 4 of purrsian-4a's originally-queued items (merge
-  seated-pose+shadow-map; in-world mission-host trigger work; M05_JUMP test; near-field peds) are DONE.
-- **QUEUED, dispatch when a slot frees**: purrsian-4a caught a real discrepancy - the ped spawn-distance
-  agent reported 161/167 (6 failures, called "pre-existing") but the baseline immediately before it was
-  163/167 - that's 2 WORSE, doesn't add up to "all pre-existing." Need: fresh worktree build of main
-  `538483d` (or whatever main's current tip is by the time this is dispatched), full ctest, list EVERY
-  failing test by NAME with its real cause (not accepted as "CMake registration quirks" without naming
-  them) - fix anything this merge (or an earlier one) actually introduced.
-
-### KEY LEARNED FACTS/ADDRESSES (for quick reference, don't re-derive):
-- `on_boat_trigger` (m09's trigger): `x=2488.54 y=6.82348 z=-4.15918`, class `Trigger_Volume`, in
-  `sr3_city_0.vpp_pc`. Real shape/extent encoding (Sec1.14/zone-data Sec11.7, CONFIRMED): named-string
-  zone-object properties `trigger_shape_type` (string->0=box/1=sphere/2=cylinder), `trigger_shape_param1`/
-  `param2` (box=2 vec3 corners; sphere=radius; cylinder=radius+length). `+0xe8` = `trigger_action_param`,
-  NOT a hook slot.
-- `BareThreadTable::allocate()` is THE established coroutine-spawn primitive for any "fire a registered
-  Lua callback" consumer (triggers, hud_prompt, mission _start) - never invent a parallel mechanism.
-- `CharacterState::stateEnum` values: 0=none/on-foot,1=entering,2=exiting,3=seated (Sec7.2/7.3/8.0/8.1).
-  Vehicle enter/exit instant paths now correctly write the FULL transition including stateEnum=0 clear +
-  vehicle-link null on exit, stateEnum=3+vehicle-name set on enter (both fixed this tail).
-- `CharacterState::stateCodeByte501`/`aiSubStateByte500`: AI mode/sub-state, CONFIRMED spawn default 0x00
-  Idle (3 writers total: construction, main transition primitive, proxy-network-read). `kAiModeHijack=0x12`.
-- `attackerThreatRef` was a REAL BUG (unseeded OpenValue, never the actual spec concept) - removed, replaced
-  by `reviverHandle` (+0x18f0/+0x18f4, seeded 0, cleared on death, "reviver handle" only - NOT last-attacker).
-- Respect lifetime cap formula: Sigma(all respect_levels.xtbl rows' Respect) - last row's own Respect =
-  238,875 real data (L50's own Respect = 0, which is WHY reaching the cap in one award also reaches level
-  50 in the same call - the "free" last transition).
-- `vehicleAiForceFlagsByte4`/`Byte6` real bits: obey_traffic_lights=bit0x01 byte+4, use_short_cuts=bit0x20
-  byte+6 (NEW byte, not previously catalogued).
-- Vehicle TYPE class (real, +0xbf4+0x2c): 0=car,2=airplane,3=heli,4=VTOL confirmed; 1/5/6 still OPEN. Real
-  join: zone-object `script_vehicle_type_name` -> `*_veh.xtbl` row -> `VehicleTypeUnion::vehicleClass`.
-- Group `+0x40` (Sec28.5/28.6) = HEAD-of-circular-linked-list handle (next link `+0x9c`, name `+0x18`) - NOT
-  a light-group's own unrelated `+0x40` flags byte (different structure, same offset number, real
-  transposition risk).
-- m05's blocker chain this tail: enter-submitter(FIXED) -> exit-teleport(FIXED) -> m05_parachute_in's
-  `M05_jumped` wait (mechanism built, never fires live - blocked by zscene_is_loaded, see above) ->
-  (presumably heli-class/group-head-name blockers further out, both separately fixed already).
-- m09's blocker chain: session-member-count(FIXED, coop_is_active) -> zscene_is_loaded (STILL BLOCKING,
-  see above, real fix identified not yet landed) -> trigger wait at game_lib.lua:2099 (mechanism built).
-- dlc2_m01: real OPEN gap, vtable+0x68 predicate (Sec7.10) - CONFIRMED needs a live capture, correctly
-  stays OPEN, not our bug.
-- dlc2_m03: recorder-state fixed; now blocked on a DIFFERENT dispatcher step (0x014f3d34-ish per latest
-  census) - not yet investigated further, not urgent.
-
-### RULED OUT / refuted this tail (don't re-attempt):
-- `dlc2_m02_cellphone_call_wait`, `m24_enable_continuous_spawn_region`: script typos on unreachable paths,
-  not real blockers.
-- purrsian-4a's "re-point notoriety to local-authority" - refuted, see above, settled.
-- "0x00bc5610 = connection-state machine" - refuted by Team A itself (it's the machinima recorder predicate).
-
-### Standing rules, unchanged, keep exact:
-- **Serial-merge rule**: when 2+ in-flight agents conflict-resolve the SAME file against the SAME main tip,
-  their merges into main MUST land one at a time; whichever lands second must re-merge/rebase onto the
-  post-first-merge main and re-verify before I actually merge it. I do this merging myself, never the agents.
-- **Disk**: purrsian-4a is handling bulk old-worktree build/ cleanup on their own separate list (checked:
-  no overlap with currently-active worktrees). I still flag each NEW unit's own build/ size in its own
-  report, don't delete, don't worry about the bulk list - that's handled.
-- **Release procedure step 4**: `sh ~/crreish-orchestration/mirror_build_history.sh` (not `make_build_
-  log.sh`). Report "history: N versions on G:" + folder name every time.
-- **Model escalation**: Sonnet 5.5 first; 1 Sonnet failure -> Opus 5.5; 3 Opus failures -> report BLOCKED;
-  Fable needs per-task user yes.
-- **Team B never disassembles** - zero exceptions, relay address/instruction-level questions to Team A.
-- **`git stash` HAZARD**: `refs/stash` SHARED across all worktrees - avoid bare stash, prefer a temp commit.
-- **Spec-file commits**: use `sh ~/crreish-orchestration/spec_commit.sh`, not plain `git commit`, for spec
-  doc files specifically (not needed for this session's own code/HANDOFF commits).
-- **User directive, standing**: "keep going, never stop, but usage-aware" - respond to usage-pacer stop
-  instructions by writing HANDOFF and waiting, nothing more drastic.
 <!-- CONTEXT-GUARD:RESUME-END -->
 
 

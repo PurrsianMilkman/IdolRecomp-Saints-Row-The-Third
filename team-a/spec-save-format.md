@@ -855,6 +855,15 @@ Notes on the record semantics (all **CONFIRMED — disassembly** unless stated):
 | 4. gate | `0x00B94B90` → `0x00B97310` | **the only content check: the `u32` at `+0x008` must equal 94.** Otherwise the driver is *not called*, the arena is freed, and nothing is reported |
 | 5. driver | `0x00B98C00` | clears a per-load counter (global `0x0290DF80`), walks all 32 table entries: `[4]` min-version ≤ the file's version word, then picks `[1]` or, in guest mode (§11.7), `[3]` (falling back to `[1]` when `[3]` is null), and calls it with (buffer, full flag); afterwards a few world-refresh calls |
 
+**Cross-reference, 2026-10-10:** the gate's failure path (`0x00B94B90` when `0x00B97310` reports
+`+0x008 != 94`) was independently checked from the fresh-game-defaults angle
+(`spec-frontend-menu-runtime.md` §9 item 1) — CONFIRMED, independently re-verified against the live
+Ghidra server: it does nothing but tear down a pre-existing save-request object and return; no
+"build defaults" branch exists there. Confirms this document's own framing that when no save is
+loaded, the driver's 32 serializer entries are simply never reached; whatever constructs default
+player state must do so on a wholly separate path (traced partway in the cross-referenced item — the
+live player-record pointer's own one-time constructor, `0x009e1fc0` — not yet closed).
+
 **Error codes** (last-error global `0x0130F5D4`; the UI mapping in `0x007D05A0`): `-1` none; `0` "no profile"; `1`, `2` "save device full" family (produced on the *save* side: `1` = not enough space); `3` and `5` "file not loadable" (`3` is the reader's; `5` was not traced to a producer) *[OPEN — desk review 2026-09-30: §6.1 names a producer of 5 in the *directory* reader (`0x00B96340`, active-count recount mismatch), and the directory's 3 is its size check; whether those directory codes reach this last-error global and the UI map `0x007D05A0` is not shown]*; `4` "device unavailable/full"; `6` **silent** (no message); anything else "unknown error". A main-menu warning ("file not loadable") is also raised when the load fails outside the mission state.
 
 **What is *not* checked (all static observations):**
@@ -1504,3 +1513,10 @@ Full detail, address index: `scratchpad/save_game_write_path_2026-10-08.md`.
   storage" block (`0x00b97270`→`memset(0x0290df88,0,0xE20)`). No new disassembly in this file. Full
   detail: `scratchpad/frontend_menu_flow_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced to
   Team B.
+- **2026-10-10 — §11.1 gains a cross-reference confirming the load gate's failure path builds no
+  fresh-game defaults** (SPEC TEAM, agent `a2f20c66910b6c11a`). Independently re-verified: on a bad
+  header, `0x00B94B90` only tears down a pre-existing save-request object and returns, never reaching
+  the real load driver `0x00B98C00` — confirms this section's own framing, a CONFIRMED negative for
+  where fresh-game player defaults get built. Full detail/continuation:
+  `spec-frontend-menu-runtime.md` §9 item 1. No new disassembly specific to this file's own content.
+  Cleanroom self-check: 0 new hits.

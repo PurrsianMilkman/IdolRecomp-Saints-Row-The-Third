@@ -407,6 +407,114 @@
 //   guess-fixed further per "no invented fixes." No production code
 //   changed this pass. Full detail:
 //   results/verify_vorbis_oracle_comparison_20261008.md.
+//
+//   UPDATE 2026-10-09 (488/493 codebook-count investigation task): the
+//   488/493 Kraft-inequality residual directly above is now root-caused to
+//   an EXACT library slot, not just "codebookCount 32 or 34" - diagnostic
+//   tool `tools/wwise_vorbis_codebook_kraft_probe.cpp` (new).
+//
+//   (1) Standalone library sweep: ran the REAL, vendored, unmodified
+//   `vorbis_book_init_decode()` (third_party/libvorbis/lib/sharedbook.c,
+//   linked, not reimplemented) against each of the 599 real library slots
+//   individually (no record/setup-header context at all - this is a pure
+//   function of one codebook's own dim/entries/lengths, so a per-slot
+//   result applies unconditionally to every record that ever selects that
+//   slot). RESULT: exactly 7/599 slots fail - 16, 160, 161, 183, 200, 317,
+//   598 - every other slot (592/599) passes standalone.
+//
+//   (2) Population cross-reference: re-ran the per-codebook 10-bit-index
+//   list against EVERY ONE of the real 488 failing records (not a sample -
+//   all 442 codebookCount=32 and all 46 codebookCount=34 records from
+//   cutscene_sounds.vpp_pc) and every one of the 5 passing records.
+//   RESULT, zero exceptions either way: all 488 failing records select
+//   library slot 160 at codebook list position 1 (the second codebook),
+//   and FAIL vorbis_book_init_decode there (confirmed by reaching into the
+//   record's own already-libvorbis-unpacked `vorbis_info::codec_setup` and
+//   calling vorbis_book_init_decode() per position directly - the REAL
+//   parsed static_codebook for that position, not this project's own
+//   transcode struct); no other position in any of these 488 records ever
+//   fails. None of the 5 passing records (4 at codebookCount=35, 1 at
+//   codebookCount=42) ever select slot 160, or any of the other 6
+//   standalone-failing slots. In this corpus, slot 160 alone accounts for
+//   100% of the 488/493 split.
+//
+//   (3) Slot 160 hand bit-traced to certainty: its real library body is 4
+//   bytes (`41 00 0c 04`), byteLen matching spec-audio-codebook-library.md's
+//   own table exactly. Every field - dim(4b)=1, entries(14b)=4, ordered(1b)
+//   =1, length-field-width(3b)=1(+1=2), seed-length(2b)=0(+1=1), run-count
+//   (ilog(4)=3b)=4 - reads unambiguously, closing with exactly 4 leftover
+//   bits (ordinary byte-alignment slack, same bar every other pass on this
+//   branch uses) - i.e. this project's OWN bitstream-reading grammar for
+//   this slot is airtight, not in question. The resolved lengths are
+//   `[1,1,1,1]`: four length-1 codewords is mathematically impossible (only
+//   2 distinct 1-bit codewords exist) - Kraft sum = 2.0 exactly, double the
+//   legal maximum of 1.0. Slot 161 is BYTE-IDENTICAL to slot 160 (same 4
+//   raw bytes, same failure) - a striking duplication worth flagging on its
+//   own. The other 4 "49-entry" slots (16, 183, 200, 317) each ALSO sum to
+//   EXACTLY 2.0 (verified at full double precision, not a rounding
+//   coincidence) - and shifting every one of their lengths by exactly +1
+//   makes every one of those 6 slots sum to EXACTLY 1.0 (a perfectly
+//   complete, valid tree). Slot 598 (the LAST real slot before the
+//   library's own NULL terminator at 599, entries=3276/dim=13) does NOT fit
+//   this pattern - its Kraft sum is 197.91, a qualitatively different and
+//   much larger overpopulation, not a simple off-by-one.
+//
+//   (4) Independent corroboration via the public, off-the-shelf
+//   `vgmstream-cli` (official prebuilt binary r2117, same SHA-256 as the
+//   independent-oracle task above, run as a pure black box, same discipline):
+//   fed the SAME raw bytes for one codebookCount=32 record and one
+//   codebookCount=34 record (plus one of each passing bucket for a
+//   baseline) - vgmstream recognizes and FULLY decodes all four, correct
+//   full-length PCM (durations/sample counts match the WAV file sizes
+//   exactly), real-audio-shaped sample statistics (0% clipping, lag-1
+//   autocorrelation 0.92-0.99). This rules out "the record is malformed" or
+//   "uses a format vgmstream also can't handle" - these are ordinary,
+//   valid, decodable records; the defect is entirely within this project's
+//   own compiled-in copy of the shared codebook library
+//   (`kWwiseCodebookLibraryBlob`/`wwise_codebook_library_data.cpp`), not a
+//   property of the real game data, and not a bitstream-grammar/field-width
+//   bug (see (3) - the grammar reads this exact slot unambiguously).
+//
+//   **This appears to conflict with spec-audio-codebook-library.md's own
+//   2026-10-09 "Re-validated" provenance note** ("this library is ruled
+//   OUT as the cause... every referenced body byte-exact and
+//   Kraft-complete"), which reports reproducing this exact 488-vs-5,
+//   32/34-vs-35/42 split but finding no Kraft failures. That note's own
+//   headline names `vorbis_synthesis_headerin` as the failing call; on
+//   this branch (already confirmed before this pass, and reconfirmed by
+//   this pass's own full population run) `vorbis_synthesis_headerin`
+//   ACCEPTS all 493/493 records (0 OV_EBADHEADER) - the Kraft check this
+//   pass found is NOT part of `vorbis_synthesis_headerin`'s own validation
+//   at all (that function's `_vorbis_unpack_books` never calls
+//   `vorbis_book_init_decode`/`_make_words`); it is strictly a LATER,
+//   separate libvorbis call, `vorbis_synthesis_init` -> `_vds_shared_init`
+//   -> `vorbis_book_init_decode` (third_party/libvorbis/lib/block.c line
+//   ~240, sharedbook.c line ~354). Whether that note tested a genuinely
+//   different check (in which case there is no real conflict, just two
+//   different validators answering two different questions) or the same
+//   one under a mislabeled call name (in which case the two results
+//   directly disagree on the same bytes) is NOT resolved here - Team B
+//   cannot disassemble to adjudicate it directly. RELAYED to Team A as a
+//   spec-sync question, not decided here: please re-check specifically
+//   whether your own validation pass ever called the real
+//   `vorbis_book_init_decode()` (or reimplemented its exact Kraft-
+//   inequality/`_make_words` logic) on library slots 16/160/161/183/200/
+//   317/598 in isolation, and if so, what dim/entries/lengths it computed
+//   for slot 160 - this pass's own tool
+//   (`wwise_vorbis_codebook_kraft_probe sweep`) is fully reproducible and
+//   its slot-160 hand trace above is laid out byte-by-byte for an
+//   independent re-check.
+//
+//   NOT fixed this pass, per "no invented fixes": (3)'s "+1 to every
+//   length" pattern is a strong, exact, mathematically clean clue for 6 of
+//   the 7 bad slots, but this project has no clean-room way to confirm it
+//   is the TRUE correct data (vs. e.g. a wrong entries/dim count, or a
+//   mistranscribed length-field-width specific to just these slots) without
+//   crossing into disassembly, which Team B does not do. Patching lengths
+//   to force a passing Kraft check would be exactly the kind of
+//   unconfirmed, non-authentic fix this project's standing discipline
+//   forbids. Full detail: results/verify_vorbis_488_codebook_kraft_
+//   investigation_20261009.md.
 
 #include <cstdint>
 #include <string>
@@ -593,6 +701,19 @@ AudioPacketRebuildResult rebuildWwiseAudioPacket(const uint8_t* packet, size_t p
 // valueBits/quantvals stay 0 when maptype==0, same as the spec's own
 // `value_bits_if_lookup`/`quantvals_if_lookup` CSV columns do for a
 // no-lookup codebook).
+//
+// UPDATE 2026-10-09 (488/493 codebook-count investigation task): `lengths`
+// added - the resolved per-entry codeword-length list (0 = unused entry,
+// same convention transcodeOneCodebook()'s own re-emit loop uses), filled
+// whenever the parse reaches the end of the length-list read (both the
+// ordered and unordered/dense-or-sparse branches), regardless of whether a
+// LATER field (maptype/lookup table) still fails. This is the exact input
+// third_party/libvorbis/lib/sharedbook.c's own `_make_words()` (the Kraft-
+// inequality "lengths must specify an overpopulated tree" check inside
+// `vorbis_book_init_decode`) consumes - exposed purely so a diagnostic
+// probe can run that REAL libvorbis check standalone, per codebook, without
+// needing a full record/setup-header context. Pure data exposure, no
+// change to rebuildVorbisSetupHeader()'s own behavior.
 struct CodebookParseInfo {
     long dim = 0;
     long entries = 0;
@@ -600,6 +721,7 @@ struct CodebookParseInfo {
     long maptype = 0;
     long valueBits = 0;
     long quantvals = 0;
+    std::vector<long> lengths;
 };
 
 // Parses ONE codebook body (e.g. a slice of kWwiseCodebookLibraryBlob,

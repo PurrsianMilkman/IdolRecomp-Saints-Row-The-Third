@@ -2881,6 +2881,31 @@ target_link_libraries(wwise_vorbis_oracle_extract PRIVATE sr3audioruntime sr3aud
 add_executable(wwise_vorbis_packet_divergence_probe tools/wwise_vorbis_packet_divergence_probe.cpp)
 target_link_libraries(wwise_vorbis_packet_divergence_probe PRIVATE sr3audioruntime sr3audio vpp_container oggstatic vorbisstatic)
 
+# DIAGNOSTIC-ONLY tool (2026-10-09, 488/493 codebook-count investigation
+# task, NOT a ctest): isolates the EXACT codebook-library-slot(s) causing
+# vorbis_synthesis_init() to fail for the 488/493 records whose
+# rebuilt.codebookCount is 32 or 34 (wwise_setup_rebuild.h's own "STILL
+# genuinely OPEN" note already pointed at vorbis_book_init_decode()'s own
+# Kraft-inequality check, third_party/libvorbis/lib/sharedbook.c's
+# `_make_words()`, but never located which slot(s) or confirmed it against
+# real records). `sweep` mode runs the REAL, vendored vorbis_book_init_decode()
+# standalone against all 599 library slots; `record` mode reaches into a
+# record's own already-libvorbis-unpacked `vorbis_info::codec_setup` to
+# isolate which per-record codebook position fails, cross-referenced against
+# the sweep. See tools/wwise_vorbis_codebook_kraft_probe.cpp's own top
+# comment. Needs libvorbis's own PRIVATE codebook.h (not exposed by
+# vorbisstatic's PUBLIC include dir, so added here directly, same "read the
+# vendored library's own internal headers for exactly this purpose" footing
+# wwise_setup_rebuild.h's own header comment already claims elsewhere on this
+# branch) plus a small C-compiled bridge TU (wwise_vorbis_codec_setup_bridge.c)
+# for the one reach-in (codec_internal.h) that cannot be included from C++ -
+# see that file's own header comment for why.
+add_executable(wwise_vorbis_codebook_kraft_probe
+    tools/wwise_vorbis_codebook_kraft_probe.cpp
+    tools/wwise_vorbis_codec_setup_bridge.c)
+target_include_directories(wwise_vorbis_codebook_kraft_probe PRIVATE ${VORBIS_DIR}/lib)
+target_link_libraries(wwise_vorbis_codebook_kraft_probe PRIVATE sr3audioruntime sr3audio vpp_container oggstatic vorbisstatic)
+
 # Real-data regression for the HEAD -> MIDDLE g-cursor handoff fix
 # (sr3clmesh::LevelMesh::gCursorAfterHeadChain(), include/sr3clmesh/
 # level_mesh.h note 9, 2026-10-08) - 5 named real `.clmesh_pc` street/ramp
@@ -3090,11 +3115,18 @@ endif()
 # report rather than re-deriving it from anywhere" if missing/mismatched).
 # SKIPPED (exit 77) when the fixture is absent or its MD5 doesn't match,
 # same convention as every other real_*_test in this repo.
+# fix/bink-d10plus-audio-chunk-skip (2026-10-09): this test now also covers
+# frame 0 of a SECOND real D10>=1 asset, logo_amd_hd.bik (1920x1080,
+# tests/golden/bink_logo_amd_hd_frame0/frame0_raw.bin, same gitignored/
+# local-only/MD5-verified convention) - spec-bink-codec.md Sec1.6's own
+# second cross-sample confirmation sample for the per-track audio-chunk-skip
+# fix, independent of logo_thq_and_voli_hd.bik above.
 add_executable(real_bink_frame0_decode_tests tests/real_bink_frame0_decode_test.cpp)
 target_include_directories(real_bink_frame0_decode_tests PRIVATE include)
 target_link_libraries(real_bink_frame0_decode_tests PRIVATE sr3binkcodec sr3runtimedata)
 target_compile_definitions(real_bink_frame0_decode_tests PRIVATE
-    BINK_FRAME0_GOLDEN_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_logo_frame0/frame0_raw.bin")
+    BINK_FRAME0_GOLDEN_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_logo_frame0/frame0_raw.bin"
+    BINK_LOGO_AMD_HD_GOLDEN_PATH="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_logo_amd_hd_frame0/frame0_raw.bin")
 add_test(NAME real_bink_frame0_decode_test COMMAND real_bink_frame0_decode_tests)
 if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(real_bink_frame0_decode_test PROPERTIES SKIP_RETURN_CODE 77)

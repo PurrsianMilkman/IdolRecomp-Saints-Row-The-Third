@@ -1,19 +1,22 @@
-// Synthetic tests for the CHOSEN traffic-AI lane-following/graph-hopping
-// module (sr3airuntime::TrafficLaneGraph/StepLaneFollow,
-// include/sr3airuntime/traffic_lane_follower.h) - spec-ai-runtime.md Sec18,
-// read alongside spec-zone-data-format.md Sec13.2.
+// Synthetic tests for the traffic-AI lane-following/graph-hopping module
+// (sr3airuntime::TrafficLaneGraph/StepLaneFollow,
+// include/sr3airuntime/traffic_lane_follower.h) - spec-ai-runtime.md
+// Sec18.1/18.2/18.5/18.6, read alongside spec-zone-data-format.md Sec13.2.
+//
+// REWRITTEN 2026-10-10 (traffic-lane-follow-real-mechanism task) to match
+// the header's own replaced algorithm: a masked lookahead walk (Sec18.1),
+// nearest-distance junction choice (Sec18.2/18.5, REPLACING the first
+// pass's uniform-random ChooseNextSegment()), a cached-target distance-
+// throttled re-query (Sec18.5), and a dot-product alignment gate picking
+// throttle with a full-lock +-1.0 steer magnitude (Sec18.6) - see that
+// header's own file comment for the full CONFIRMED-vs-CHOSEN breakdown.
 //
 // Fixtures go through sr3zone::TrafficGraph::parseAt() (via
 // BuildLaneGraphFixture() below) rather than constructing
-// sr3zone::TrafficRecord field-by-field, because sr3zone::TrafficPointPool
-// only ever decodes from real backing bytes (no "build from a plain point
-// list" convenience exists, deliberately - see traffic_graph.h's own file
-// comment on why the point pool's shape is itself a CHOSEN, not
-// assumed-trivial, decode). This file's own job is to prove
-// TrafficLaneGraph's CHOSEN adjacency/target/junction algorithms, not to
-// re-test sr3zone's byte-level parsing (already covered by
-// synthetic_traffic_graph_test.cpp).
+// sr3zone::TrafficRecord field-by-field - unchanged convention from the
+// first pass, see that function's own comment.
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <iostream>
 #include <optional>
@@ -79,18 +82,17 @@ void appendPoint(std::vector<uint8_t>& b, float x, float y, float z) {
 }
 
 struct SegSpec {
-    uint8_t kind = 0;
+    uint32_t rawKindField = 0;  // the FULL +0x1c word - Sec18.1's own mask test reads this, not just the 2-bit kind
     std::vector<std::array<float, 3>> points;  // this segment's own CSR point list, in order
 };
 
 // Builds a Traffic (0x2236) buffer (12-byte wrapper + payload) for an
-// arbitrary set of segments, each with its own kind and CSR point list,
-// INTO `outBuf` (cleared first), and parses it - see this file's own
-// header comment for why this goes through real bytes rather than struct
-// literals. The caller owns `outBuf` and MUST keep it alive for as long as
-// the returned TrafficRecord (and anything built from it, e.g. a
-// TrafficLaneGraph) is used - TrafficRecord::pointPool holds a ByteView
-// into `outBuf`'s own memory, not a copy.
+// arbitrary set of segments, each with its own raw +0x1c field and CSR
+// point list, INTO `outBuf` (cleared first), and parses it - see this
+// file's own header comment for why this goes through real bytes rather
+// than struct literals. The caller owns `outBuf` and MUST keep it alive for
+// as long as the returned TrafficRecord (and anything built from it, e.g.
+// a TrafficLaneGraph) is used.
 TrafficRecord BuildLaneGraphFixture(const std::vector<SegSpec>& segs, std::vector<uint8_t>& outBuf) {
     outBuf.clear();
     std::vector<uint8_t>& b = outBuf;
@@ -119,8 +121,7 @@ TrafficRecord BuildLaneGraphFixture(const std::vector<SegSpec>& segs, std::vecto
     uint16_t cumulative = 0;
     for (const auto& s : segs) {
         cumulative += static_cast<uint16_t>(s.points.size());
-        const uint32_t rawField = static_cast<uint32_t>(s.kind & 0x3u) << 28;
-        appendExtendedSegmentRecord(b, rawField, cumulative);
+        appendExtendedSegmentRecord(b, s.rawKindField, cumulative);
     }
     for (size_t i = 0; i < n; ++i) appendSegmentRecord(b);
     for (const auto& s : segs)
@@ -131,7 +132,8 @@ TrafficRecord BuildLaneGraphFixture(const std::vector<SegSpec>& segs, std::vecto
 }
 
 // ===========================================================================
-// TrafficLaneGraph: polyline/kind decode and CHOSEN geometric adjacency.
+// TrafficLaneGraph: polyline/kind decode and CHOSEN geometric adjacency -
+// unchanged from the first pass.
 // ===========================================================================
 
 void testTrafficLaneGraphDecodesPolylinesAndKind() {
@@ -155,71 +157,53 @@ void testTrafficLaneGraphDecodesPolylinesAndKind() {
 }
 
 // ===========================================================================
-// ChooseNextSegment(): kind-preference and the RNG seam's defensive clamp.
+// PassesLaneMask(): Sec18.1's own maskInclude/maskExclude test.
 // ===========================================================================
 
-void testChooseNextSegmentPrefersKindZero() {
+void testPassesLaneMaskIncludeExclude() {
+    TrafficLaneSegment seg;
+    seg.rawKindField = 0x2u;  // bit 1 set
+    CHECK(PassesLaneMask(seg, /*maskInclude=*/0x2u, /*maskExclude=*/0x0u));   // included, not excluded
+    CHECK(!PassesLaneMask(seg, /*maskInclude=*/0x1u, /*maskExclude=*/0x0u));  // not included
+    CHECK(!PassesLaneMask(seg, /*maskInclude=*/0x2u, /*maskExclude=*/0x2u));  // included but also excluded
+    CHECK(PassesLaneMask(seg, kMaskIncludeAll, kMaskExcludeNone));            // neutral defaults accept everything
+}
+
+// ===========================================================================
+// ChooseNextSegmentByNearestDistance(): REPLACES the first pass's
+// uniform-random ChooseNextSegment() - deterministic nearest-distance cost
+// (Sec18.2/18.5), compared against each candidate's own first DISTINGUISHING
+// point (index 1, not index 0 - every candidate at a true junction shares
+// the SAME index-0 junction-node point by this file's own adjacency rule,
+// see the header's own item 2 note).
+// ===========================================================================
+
+void testChooseNextSegmentByNearestDistancePicksCloserBranch() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {5, 0, 0}}},
-        SegSpec{0, {{5, 0, 0}, {10, 0, 0}}},  // kind 0 - the preferred candidate
-        SegSpec{1, {{5, 0, 0}, {0, 0, 10}}},  // kind 1 - a junction/branch candidate
+        SegSpec{0, {{5, 0, 0}, {8, 0, 0}}},    // short branch - distinguishing point (8,0,0), dist 3 from (5,0,0)
+        SegSpec{0, {{5, 0, 0}, {5, 0, 50}}},   // long branch - distinguishing point (5,0,50), dist 50 from (5,0,0)
     };
     std::vector<uint8_t> buf;
     TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
     TrafficLaneGraph graph(rec);
 
     const std::vector<size_t>& candidates = graph.NextSegments(0);
-    CHECK(candidates.size() == 2);  // both segment 1 and segment 2 start at (5,0,0)
+    CHECK(candidates.size() == 2);
 
-    // Every pickUniform response (even an out-of-range one, exercising the
-    // defensive clamp) must still resolve to segment 1 - the only kind-0
-    // candidate - under this file's own "prefer kind 0" reading.
-    for (size_t fakePick : {static_cast<size_t>(0), static_cast<size_t>(1), static_cast<size_t>(999)}) {
-        auto chosen = ChooseNextSegment(graph, candidates, [fakePick](size_t) { return fakePick; });
-        CHECK(chosen.has_value());
-        CHECK(*chosen == 1);
-    }
+    auto chosen = ChooseNextSegmentByNearestDistance(graph, candidates, /*originX=*/5.0, /*originZ=*/0.0);
+    CHECK(chosen.has_value());
+    CHECK(*chosen == 1);  // the short branch (segment 1) - nearest distinguishing point
 }
 
-void testChooseNextSegmentFallsBackWhenAllNonZeroKind() {
-    std::vector<SegSpec> segs = {
-        SegSpec{0, {{0, 0, 0}, {5, 0, 0}}},
-        SegSpec{1, {{5, 0, 0}, {10, 0, 0}}},
-        SegSpec{2, {{5, 0, 0}, {0, 0, 10}}},
-    };
-    std::vector<uint8_t> buf;
-    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
-    TrafficLaneGraph graph(rec);
-
-    const std::vector<size_t>& real = graph.NextSegments(0);
-    CHECK(real.size() == 2);
-
-    auto chosenFirst = ChooseNextSegment(graph, real, [](size_t) { return static_cast<size_t>(0); });
-    CHECK(chosenFirst.has_value());
-    CHECK(*chosenFirst == real[0]);
-
-    auto chosenSecond = ChooseNextSegment(graph, real, [](size_t) { return static_cast<size_t>(1); });
-    CHECK(chosenSecond.has_value());
-    CHECK(*chosenSecond == real[1]);
-}
-
-void testChooseNextSegmentEmptyCandidatesReturnsNullopt() {
-    // No real graph needed - candidates.empty() short-circuits before
-    // `graph` is ever touched. A trivially-empty fixture is enough.
-    std::vector<SegSpec> segs;  // zero segments
-    std::vector<uint8_t> buf;
-    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
-    TrafficLaneGraph graph(rec);
-
-    std::vector<size_t> none;
-    auto chosen = ChooseNextSegment(graph, none, [](size_t) { return static_cast<size_t>(0); });
+void testChooseNextSegmentByNearestDistanceEmptyCandidatesReturnsNullopt() {
+    auto chosen = ChooseNextSegmentByNearestDistance(TrafficLaneGraph(TrafficRecord{}), {}, 0.0, 0.0);
     CHECK(!chosen.has_value());
 }
 
 // ===========================================================================
-// StepLaneFollow(): the full target-point/advance/junction-hop loop,
-// end to end - the exact "traces a real segment's point path, not a
-// straight line" proof the orchestrator asked for, at unit-test scale.
+// StepLaneFollow(): the full target-point/advance/junction-hop/alignment-
+// gate loop, end to end.
 // ===========================================================================
 
 void testStepLaneFollowTracesBendAndStopsAtDeadEnd() {
@@ -234,19 +218,24 @@ void testStepLaneFollowTracesBendAndStopsAtDeadEnd() {
     LaneFollowState state = LaneFollowState::Begin(graph, 0);
     CHECK(state.valid);
 
-    // A trivial "snap exactly onto the aimed-at point every tick"
-    // integrator - sufficient to prove the FOLLOWER's own sequencing
-    // (which points it aims at, in which order, when it hops segments),
-    // independent of any real vehicle dynamics (the real physics
-    // integration is exercised separately by the sr3_viewer
-    // `traffic_lane_demo` command, not by this unit test).
+    // A small lookaheadDistance (well under either leg's own length) and a
+    // tight arrivalRadius, so a "snap exactly onto the cached lookahead
+    // target every tick" integrator re-queries a fresh target almost every
+    // tick (item 4's own re-query-on-arrival condition) - sufficient to
+    // trace the FOLLOWER's own sequencing (masked walk + junction hop,
+    // items 1/2) end to end without needing dozens of ticks the way the
+    // default lookaheadDistance (15, close to this fixture's own total
+    // path length) would collapse into 1-2 ticks.
+    LaneFollowConfig config;
+    config.arrivalRadius = 1.0;
+    config.lookaheadDistance = 5.0;
+
     double vx = 0.0, vz = 0.0;
     std::vector<sr3zone::TrafficPoint> targets;
     bool advancedSeen = false;
     bool stuckSeen = false;
     for (int tick = 0; tick < 10 && !stuckSeen; ++tick) {
-        LaneFollowCommand cmd =
-            StepLaneFollow(graph, state, vx, vz, /*heading=*/0.0, [](size_t) { return static_cast<size_t>(0); });
+        LaneFollowCommand cmd = StepLaneFollow(graph, state, vx, vz, /*heading=*/0.0, config);
         if (cmd.stuck) {
             stuckSeen = true;
             break;
@@ -259,18 +248,72 @@ void testStepLaneFollowTracesBendAndStopsAtDeadEnd() {
 
     CHECK(stuckSeen);     // segment 1 has no outgoing edge - a genuine dead end
     CHECK(advancedSeen);  // the follower really did hop from segment 0 to segment 1
-    CHECK(targets.size() == 3);
-    CHECK(targets[0].x == 10.0f && targets[0].z == 0.0f);
-    CHECK(targets[1].x == 20.0f && targets[1].z == 0.0f);
-    CHECK(targets[2].x == 20.0f && targets[2].z == 10.0f);  // the turn - z changes, NOT a straight line in x alone
 
-    // Non-straight-line proof: the visited targets do not all share the
-    // same z (a straight run along +X would never leave z==0).
     bool sawNonZeroZ = false;
     for (const auto& t : targets) {
         if (t.z != 0.0f) sawNonZeroZ = true;
     }
-    CHECK(sawNonZeroZ);
+    CHECK(sawNonZeroZ);  // the turn - z changes, NOT a straight line in x alone
+    // The walk must have reached at least as far as the junction (x==20)
+    // at some point before the dead end stopped it.
+    bool sawJunctionOrBeyond = false;
+    for (const auto& t : targets) {
+        if (t.x >= 19.9f) sawJunctionOrBeyond = true;
+    }
+    CHECK(sawJunctionOrBeyond);
+}
+
+// WalkLookahead(): the masked, distance-accumulating lookahead walk itself
+// (Sec18.1/item 1) - the piece StepLaneFollow() above calls on every
+// re-query.
+void testWalkLookaheadAccumulatesDistanceAndInterpolates() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {10, 0, 0}, {20, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LookaheadWalkResult walk = WalkLookahead(graph, /*startSegmentIndex=*/0, /*startPointCursor=*/0,
+                                              /*lookaheadDistance=*/15.0, kMaskIncludeAll, kMaskExcludeNone);
+    CHECK(walk.ok);
+    CHECK(!walk.ranIntoDeadEnd);
+    // 10 units to (10,0,0), 5 more units half-way to (20,0,0) -> (15,0,0).
+    CHECK(std::fabs(walk.target.x - 15.0f) < 1e-3f);
+    CHECK(std::fabs(walk.target.z - 0.0f) < 1e-3f);
+}
+
+void testWalkLookaheadHopsJunctionAndTracksAdvancedFlag() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {10, 0, 0}}},
+        SegSpec{0, {{10, 0, 0}, {30, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LookaheadWalkResult walk = WalkLookahead(graph, 0, 0, /*lookaheadDistance=*/15.0, kMaskIncludeAll,
+                                              kMaskExcludeNone);
+    CHECK(walk.ok);
+    CHECK(walk.advancedSegment);  // had to hop from segment 0 to segment 1 to satisfy the lookahead
+    CHECK(!walk.ranIntoDeadEnd);
+    // 10 units to the junction, 5 more units into segment 1 -> (15,0,0).
+    CHECK(std::fabs(walk.target.x - 15.0f) < 1e-3f);
+}
+
+void testWalkLookaheadReportsDeadEndShortOfLookahead() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},  // only 4 units of track, no successor
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LookaheadWalkResult walk = WalkLookahead(graph, 0, 0, /*lookaheadDistance=*/15.0, kMaskIncludeAll,
+                                              kMaskExcludeNone);
+    CHECK(walk.ok);
+    CHECK(walk.ranIntoDeadEnd);
+    CHECK(std::fabs(walk.target.x - 4.0f) < 1e-3f);  // got as far as it could, not goal-seeking past the dead end
 }
 
 void testStepLaneFollowReportsStuckWhenNeverStarted() {
@@ -282,11 +325,76 @@ void testStepLaneFollowReportsStuckWhenNeverStarted() {
     LaneFollowState state = LaneFollowState::Begin(graph, 0);
     CHECK(!state.valid);
 
-    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0, 0, 0, [](size_t) { return static_cast<size_t>(0); });
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0, 0, 0);
     CHECK(cmd.stuck);
     CHECK(cmd.brake == 1.0);
     CHECK(cmd.steer == 0.0);
     CHECK(cmd.throttle == 0.0);
+}
+
+// Sec18.6's own CONFIRMED full-lock +-1.0 steer magnitude and dot-product
+// alignment gate: a target straight ahead and close (within
+// kAlignmentDistanceThreshold) must report aligned==true and a driving
+// throttle; steer magnitude must be exactly 1.0 in either direction, never
+// a proportional in-between value.
+void testStepLaneFollowFullLockSteerAndAlignmentGate() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},  // target 4 units straight ahead - within the 5.0-unit gate
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Heading 0 (facing +X) looking at a target straight along +X - fully aligned.
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0);
+    CHECK(!cmd.stuck);
+    CHECK(cmd.aligned);
+    CHECK(cmd.throttle > 0.0);
+    CHECK(cmd.steer == 1.0 || cmd.steer == -1.0);  // CONFIRMED full-lock magnitude, never proportional
+    CHECK(cmd.brake == 0.0);
+}
+
+void testStepLaneFollowThrottleZeroWhenMisaligned() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {0, 0, 4}}},  // target 4 units along +Z
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Heading 0 (facing +X) but the target is along +Z - 90 degrees off,
+    // well outside cos(30deg) - misaligned.
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0);
+    CHECK(!cmd.stuck);
+    CHECK(!cmd.aligned);
+    CHECK(cmd.throttle == 0.0);  // Sec18.6 step 4: CONFIRMED throttle=0 when far/misaligned
+    CHECK(cmd.brake == 0.0);     // Sec18.6 step 4 tail: brake/handbrake unconditionally 0 outside the stuck case
+}
+
+// Sec18.5's own cached-target distance-throttle re-query gate: the first
+// tick always re-queries (no cache yet); a second tick from nearly the same
+// position should NOT force a fresh junction re-pick (the existing walk
+// simply continues) - exercised indirectly via `requeried`, which this file
+// surfaces as a diagnostic flag.
+void testStepLaneFollowCachedQueryThrottle() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {30, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    CHECK(!state.hasCachedQuery);
+
+    LaneFollowCommand first = StepLaneFollow(graph, state, 0.0, 0.0, 0.0);
+    CHECK(first.requeried);        // very first tick - no cache yet
+    CHECK(state.hasCachedQuery);
+
+    LaneFollowCommand second = StepLaneFollow(graph, state, 0.1, 0.0, 0.0);  // moved a tiny amount
+    CHECK(!second.requeried);      // well inside the re-query distance threshold - cache still fresh
 }
 
 void run(const char* name, void (*fn)()) {
@@ -302,11 +410,19 @@ void run(const char* name, void (*fn)()) {
 
 int main() {
     run("testTrafficLaneGraphDecodesPolylinesAndKind", testTrafficLaneGraphDecodesPolylinesAndKind);
-    run("testChooseNextSegmentPrefersKindZero", testChooseNextSegmentPrefersKindZero);
-    run("testChooseNextSegmentFallsBackWhenAllNonZeroKind", testChooseNextSegmentFallsBackWhenAllNonZeroKind);
-    run("testChooseNextSegmentEmptyCandidatesReturnsNullopt", testChooseNextSegmentEmptyCandidatesReturnsNullopt);
+    run("testPassesLaneMaskIncludeExclude", testPassesLaneMaskIncludeExclude);
+    run("testChooseNextSegmentByNearestDistancePicksCloserBranch",
+        testChooseNextSegmentByNearestDistancePicksCloserBranch);
+    run("testChooseNextSegmentByNearestDistanceEmptyCandidatesReturnsNullopt",
+        testChooseNextSegmentByNearestDistanceEmptyCandidatesReturnsNullopt);
     run("testStepLaneFollowTracesBendAndStopsAtDeadEnd", testStepLaneFollowTracesBendAndStopsAtDeadEnd);
+    run("testWalkLookaheadAccumulatesDistanceAndInterpolates", testWalkLookaheadAccumulatesDistanceAndInterpolates);
+    run("testWalkLookaheadHopsJunctionAndTracksAdvancedFlag", testWalkLookaheadHopsJunctionAndTracksAdvancedFlag);
+    run("testWalkLookaheadReportsDeadEndShortOfLookahead", testWalkLookaheadReportsDeadEndShortOfLookahead);
     run("testStepLaneFollowReportsStuckWhenNeverStarted", testStepLaneFollowReportsStuckWhenNeverStarted);
+    run("testStepLaneFollowFullLockSteerAndAlignmentGate", testStepLaneFollowFullLockSteerAndAlignmentGate);
+    run("testStepLaneFollowThrottleZeroWhenMisaligned", testStepLaneFollowThrottleZeroWhenMisaligned);
+    run("testStepLaneFollowCachedQueryThrottle", testStepLaneFollowCachedQueryThrottle);
 
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed.\n";

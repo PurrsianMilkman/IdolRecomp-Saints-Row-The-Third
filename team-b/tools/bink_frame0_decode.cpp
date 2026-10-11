@@ -67,6 +67,24 @@ int main(int argc, char** argv) {
         lumaWidth = std::atoi(argv[3]);
         lumaHeight = std::atoi(argv[4]);
     }
+    // D10 (audio-track count) for the default fixture is 1 (spec-bink-
+    // codec.md Sec1.6: logo_thq_and_voli_hd.bik is the section's own named
+    // D10>=1 example). A caller pointing this tool at a different extracted
+    // frame may pass its own real D10 value via argv[5] (0 for a D10=0
+    // file such as main_menu_bg.bik). SUPERSEDES this tool's own prior
+    // "hasLeadingSubChunkSpan override" argv[5] convention (merge/bink-
+    // descriptor-b-case1-selector, 2026-10-10): that pre-audio-chunk-skip
+    // version hardcoded hasLeadingSubChunkSpan=false for this fixture
+    // because forcing it true WITHOUT first skipping the per-track audio
+    // chunks reads audio bytes as video data and desyncs immediately -
+    // fix/bink-d10plus-audio-chunk-skip's own skipAudioChunks() (below)
+    // fixes the real root cause, after which hasLeadingSubChunkSpan is
+    // unconditionally true for every real file (D10=0 directly, D10>=1
+    // after the skip) - see frame_decoder.h's own top comment.
+    int numAudioTracks = 1;
+    if (argc > 5) {
+        numAudioTracks = std::atoi(argv[5]);
+    }
 
     std::printf("bink_frame0_decode: decoder-skeleton driver (sr3binkcodec)\n");
     std::printf("input: %s (luma %dx%d, assumed per spec-bink-codec.md Sec1.2's own macroblock rounding)\n",
@@ -95,15 +113,19 @@ int main(int argc, char** argv) {
     frame.chromaA().fillFlat(128);
     frame.chromaB().fillFlat(128);
 
-    // hasLeadingSubChunkSpan=false: this tool's default target
-    // (logo_thq_and_voli_hd.bik) is a spec-bink-codec.md Sec1.6 D10>=1
-    // ("audio tracks") file - forcing the leading-span-field skip CONFIRMED
-    // for the OTHER real fixture (main_menu_bg.bik, D10=0) onto this one was
-    // tried and empirically desyncs it immediately; see include/sr3binkcodec/
-    // frame_decoder.h's own top comment. A caller pointing this tool at a
-    // DIFFERENT, D10=0-confirmed file would need to flip this to true.
+    // FIX (2026-10-09, fix/bink-d10plus-audio-chunk-skip, spec-bink-codec.md
+    // Sec1.6's "Frame N's own blob, for D10>=1..." paragraph): this tool's
+    // default target (logo_thq_and_voli_hd.bik) is a D10>=1 ("audio
+    // tracks") file - its blob leads with `numAudioTracks` per-track audio
+    // chunks (each a 4-byte LE size field + that many payload bytes) before
+    // the video chunk begins. skipAudioChunks() walks past exactly those
+    // chunks; once past them, the video chunk's own leading span field is
+    // the SAME shape already confirmed for D10=0 files, so
+    // hasLeadingSubChunkSpan=true universally from here - see
+    // include/sr3binkcodec/frame_decoder.h's own top comment.
+    skipAudioChunks(br, numAudioTracks);
     DecodeTrace trace = decodeLumaPlane(br, frame, nullptr /* no previous frame: a keyframe test */,
-                                         /*hasLeadingSubChunkSpan=*/false);
+                                         /*hasLeadingSubChunkSpan=*/true);
 
     std::printf("\n--- Dispatch trace (spec-bink-codec.md Sec5.3/Sec5.3a) ---\n");
     std::printf("grid                : %d x %d = %d 8x8 blocks\n", trace.blockCols, trace.blockRows,

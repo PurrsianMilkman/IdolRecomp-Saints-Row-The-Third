@@ -75,6 +75,26 @@
 // dispatch-nibble stream on purpose - those tests exercise CASE BODIES,
 // not the pre-stage, and are unaffected by any of the above.
 //
+// DESCRIPTOR B / CASE-1 SUB-DISPATCH WIRING (2026-10-09, fix/bink-
+// descriptor-b-case1-selector task, spec-bink-codec.md Sec5.3h): case 1's
+// own secondary/sub-type nibble - the "subtract 3, range-check 0-6" value
+// this file used to read via `br.readBits(4)` directly off the raw
+// bitstream - is likewise NOT a raw bitstream read. Sec5.3h, extending
+// Sec5.3c/Sec5.3g's already-confirmed treatment of the PRIMARY dispatch
+// byte, live-traces the SECONDARY byte to the exact same shape: "a
+// zero-bit-cost memory read from descriptor A's and descriptor B's own
+// pre-decoded SCRATCH buffers respectively... the secondary/sub-dispatch
+// byte (confirmed value 5, `-3` -> 2, matching the already-documented
+// 'byte minus 3' formula)". decodeOneBlock() below models this exactly like
+// the primary byte: when given a non-null `caseSelectorB`
+// (entropy_prestage.h's CaseSelectorScratchSource, constructed with
+// descriptor B's own LEN-field formula and sibling-table index - see that
+// file's own caseSelectorLengthFieldBitWidthB()/
+// kDescriptorBSiblingTableIndex), the sub-dispatch byte is pulled from
+// `caseSelectorB->next()` instead of `br.readBits(4)`. When `caseSelectorB`
+// is null (every existing synthetic/hand-built-sub-nibble test, unchanged),
+// the original `br.readBits(4)` path is used, exactly as before.
+//
 // Case bodies CONFIRMED (Sec5.3's own table, UPDATED by Sec5.3b's 2026-10-08
 // full case-by-case map) and what this file does with each:
 //
@@ -87,7 +107,37 @@
 //                           code path to primary 0.
 //   Primary 1, sub 1 or 4 - Mark skip flag, no pixel write. FULLY
 //                           RECONSTRUCTED here (trivially - there is no
-//                           pixel math to get wrong).
+//                           pixel math to get wrong). UPDATED 2026-10-10
+//                           (Sec5.3i): live register trace of a real
+//                           dispatch (frame 0, Y-plane, dispatch index 178,
+//                           `main_menu_bg.bik`) found the real binary does
+//                           NOT reach this behaviour via a raw secondary byte
+//                           value of 1 or 4 at all - it tests bit 3 of a
+//                           per-call flags byte at `[ebp-0x210]` BEFORE ever
+//                           reading the secondary byte, and jumps straight
+//                           to the shared skip-epilogue if set. Every one of
+//                           5,222 "secondary=None" dispatches this pass
+//                           observed in frame 0 took that flag-bit path;
+//                           none was observed reaching sub=1/4 via the
+//                           literal 7-way jump table. Sec5.3i leaves OPEN,
+//                           not resolved, exactly where that flags byte's
+//                           own value comes from (whether it is a real
+//                           field of the same shared stack slot descriptor
+//                           L's byte-cursor lives at, or two unrelated
+//                           variables coincidentally sharing an offset) -
+//                           without that, this file cannot wire a REAL
+//                           bit-exact "read the flag, gate before the
+//                           sub-byte read" check (there is nothing concrete
+//                           to read it FROM). The sub=1/4-triggered behaviour
+//                           below is kept as the best-available functional
+//                           stand-in - it produces the identical observable
+//                           outcome (skip, no pixel write) the real
+//                           flag-gate produces, just reached via a different,
+//                           not-necessarily-real trigger path. Flagged
+//                           honestly rather than silently presented as the
+//                           real mechanism; implementing the real gate is a
+//                           distinct, still-open follow-up pending the flag
+//                           byte's own provenance.
 //   Primary 1, sub 3      - Flat/DC fill: one literal byte, broadcast
 //                           across the block. FULLY RECONSTRUCTED here.
 //   Primary 1, sub 6      - Sec5.3b (2026-10-08) CLOSES this sub-case:
@@ -151,6 +201,60 @@
 //                           and found NOT to be the case - correcting that
 //                           assumption here rather than silently building on
 //                           it.)
+//                           UPDATED 2026-10-10 (Sec5.3i): a follow-up task's
+//                           own relayed framing claimed this sub-case should
+//                           be implemented "by analogy with primary case 3's
+//                           own already-implemented shape." Checked directly
+//                           against THIS file, again: PrimaryBlockType::
+//                           Giant1FullResTwin (primary 3) is, right now,
+//                           still an OPEN hook below (see the `rec.primary !=
+//                           PrimaryBlockType::SubDispatch` branch) - it has
+//                           no implemented pixel-producing body to copy from.
+//                           A second, independently-checked instance of a
+//                           relayed "already implemented" claim not holding
+//                           up (per this project's own peer-relay-
+//                           authorization discipline: verify, don't just
+//                           relay). Sec5.3i's own text is honest about this
+//                           same gap from its side: it gives the shape by
+//                           analogy (CONFIRMED structurally: same 64-byte
+//                           permutation table, same engine family as case 3,
+//                           minus the 2x upsample) at explicitly LOWER
+//                           CONFIDENCE than sub 1/2/3/4/6, and separately
+//                           reports a genuine, honestly-obtained NEGATIVE
+//                           live-occurrence result: zero real sub=0
+//                           dispatches found across 20 sampled frame
+//                           instances (3 files, keyframes and P-frames
+//                           alike) using the same methodology that easily
+//                           found sub=2 (2,457x), sub=3 (1,284x), sub=5
+//                           (183x), and sub=6 (258x) in the very same
+//                           frames. Net: implementing this sub-case for real
+//                           would mean inventing the RLE/literal token
+//                           format on top of an unimplemented analogy
+//                           target, with no live worked example to check
+//                           against either way - stays an OPEN hook, now
+//                           with its true (doubled) blocker cited precisely
+//                           instead of the single-engine framing above.
+//                           UPDATED 2026-10-10 (3rd independent check, Bink
+//                           descriptor-B merge task): a THIRD relayed task
+//                           framing repeated the same refuted claim again,
+//                           this time inverted - "primary case 3 needs
+//                           Sec5.3i's sub=2 (DcAcIdctEngine2) as ITS OWN
+//                           donor" (sub=2 is the IDCT engine; case 3 is the
+//                           RLE engine - the two are unrelated families per
+//                           Sec5.3b's own case table). Checked directly
+//                           against this file again: still no implemented
+//                           donor exists for either the RLE token format
+//                           (case 3/sub-0) or the AC-coefficient tree
+//                           decoder 0x10024eb0 sub=2 actually needs (grepped
+//                           this whole codebase for 0x100258d0/breadth-
+//                           first-worklist-tree content - NOT implemented
+//                           anywhere). Both stay OPEN hooks for the same
+//                           reason as before: no citable instruction-level
+//                           algorithm to copy, only structural/aggregate
+//                           descriptions. Flagging a THIRD time rather than
+//                           silently building on an unverified claim, per
+//                           this project's own peer-relay-authorization
+//                           discipline.
 //   Primary 2             - Sec5.3b (2026-10-08): "a third motion-copy
 //                           variant (CONFIRMED). Signed dy/dx motion vector,
 //                           dual bounds-checked, straight 8x8 block copy from
@@ -174,11 +278,53 @@
 //                           fill" mis-grouping for this sub-case too: it is a
 //                           "third DC+AC dequant/IDCT engine (direct-store)"
 //                           - real content, a real DCT, sibling of primary
-//                           5/7's IDCT pair. Blocked by the SAME two gaps
-//                           Sec8 item 5a still lists open for primary 5/7
-//                           below (quantization table byte contents not
-//                           transcribed; AC-coefficient byte-offset-to-index
-//                           mapping not given) - OPEN hook, not a guess.
+//                           5/7's IDCT pair. UPDATED 2026-10-10 (Sec5.3i):
+//                           the two gaps this comment used to cite (quant
+//                           table bytes; AC-coefficient index mapping) were
+//                           in fact ALREADY CLOSED before this update - both
+//                           tables are byte-exact dumped in spec-bink-
+//                           static-tables.md and the index mapping is
+//                           row-major/struct_byte_offset(k)=2k, confirmed in
+//                           spec-bink-codec.md around line 743-748 - this
+//                           comment was simply stale, a real finding caught
+//                           by verifying the relayed premise against this
+//                           file's own prior state rather than trusting it.
+//                           Sec5.3i itself live-traces this sub-case's full
+//                           byte-level sequence: a descriptor-L bound check,
+//                           a 16-bit LE DC literal read straight off the
+//                           literal-byte stream (zero bit-packing - a plain
+//                           pointer read/advance), `call 0x10024eb0` for the
+//                           63 AC coefficients, an inline 4-bit quant-row
+//                           nibble, then `call 0x100247d0` - a THIRD,
+//                           direct-store IDCT entry point with its OWN
+//                           calling convention, different from
+//                           0x100244c0's (Sec5.3i: "the two 'sibling' IDCT
+//                           entry points do not share one calling
+//                           convention"). What Sec5.3i does NOT give, and
+//                           what genuinely remains OPEN: `0x10024eb0`'s own
+//                           private 4-entry dispatch table and seed bytes
+//                           (spec-bink-codec.md line ~669: "shared seed
+//                           bytes, same cache-then-refill bit read, a
+//                           private 4-entry dispatch table" - never
+//                           transcribed byte-for-byte anywhere, unlike the
+//                           sibling 0x10018ca0 tree's own 0x1003bd44/
+//                           0x1003c140 tables). Without that table, decoding
+//                           a real AC coefficient VALUE from bits would mean
+//                           inventing a tree, not reading one off the page -
+//                           and because the AC decode's own real bit-cost
+//                           is only known for ONE live-traced example (17
+//                           bits for one specific block, Sec5.3i/Sec5.3h),
+//                           not as a general formula, continuing to read the
+//                           quant-row nibble or anything past the AC decode
+//                           would silently desync the bitstream for every
+//                           later block. decodeOneBlock() below therefore
+//                           implements exactly as far as Sec5.3i gives a
+//                           bit-position-safe read for - the bound check and
+//                           the 16-bit DC literal (recorded in
+//                           BlockRecord::dcLiteral) - then reports OpenHook
+//                           for the AC/IDCT remainder, same discipline as
+//                           TwoLiteralPattern's own "read what's confirmed,
+//                           stop before what isn't" shape below.
 //   Primary 4             - Sec5.3b: motion compensation (same unresolved
 //                           motion-vector-encoding gap as primary 2) PLUS a
 //                           Huffman-tree-coded residual add (the tree
@@ -261,14 +407,42 @@ enum class PrimaryBlockType : uint8_t {
 // confirmed "subtract 3"). Sec5.3b (2026-10-08) individually named sub 2 and
 // sub 6 (previously lumped together as "DC/flat fill", a transcription slip
 // the spec itself now flags) - sub 0/5 were already named by Sec5.3/Sec5.3a.
+//
+// Sec5.3i (2026-10-10) delivered the full 7-way byte-level grammar and, as
+// a cross-cutting finding, confirmed sub 2/3/5 all write a physical 16x16
+// (not 8x8) pixel footprint - a block-type-FAMILY-wide convention for
+// primary=1's own "new content" sub-cases, distinct from the 8x8 grid used
+// everywhere else in this file/frame_decoder.h. GENUINE ARCHITECTURAL GAP,
+// flagged honestly rather than silently patched: this project's own block
+// grid (frame_decoder.h's kBlockSize==8, blockGridCols/Rows, and
+// decodePlaneRasterOrder's one-dispatch-per-8x8-cell raster walk) has no
+// representation for a dispatch that covers a 16x16 footprint without
+// colliding with - or silently absorbing - whatever the grid's NEXT 8x8
+// cell would otherwise dispatch as its own, separate block. Reconciling
+// that (most likely: primary=1's own secondary dispatch loop advances by 2
+// grid columns per dispatch for sub 2/3/5 specifically, not 1) is real,
+// scoped, un-invented follow-up work, not done here - doing it without
+// first confirming the real per-dispatch column-advance amount against live
+// data would risk silently breaking every OTHER already-correct 8x8 case
+// this file reconstructs. The functions below therefore keep writing their
+// previously-established 8x8 footprint where they write pixels at all
+// (FlatDcFill) - the 16x16 CONFIRMED-real footprint is cited in each case's
+// own comment for the follow-up work, not applied yet.
 enum class Case1SubType : uint8_t {
-    Giant1RleUpsample0 = 0,  // OPEN: see Primary3/Giant1FullResTwin's citation above
-    SkipFlag1 = 1,
-    DcAcIdctEngine2 = 2,     // OPEN: same quant-table/index-mapping gap as primary 5/7
-    FlatDcFill = 3,
-    SkipFlag4 = 4,
-    TwoLiteralPattern = 5,   // OPEN: control-byte spatial mapping not given
-    RawCopyDualRowDup6 = 6,  // CONFIRMED (Sec5.3b): see rawCopyDualRowDuplicate8x8() below
+    Giant1RleUpsample0 = 0,  // OPEN: see Primary3/Giant1FullResTwin's citation above - Sec5.3i:
+                             // LOWER CONFIDENCE, by-analogy-only, zero live occurrences in 20 sampled frames
+    SkipFlag1 = 1,           // Sec5.3i: real mechanism is an earlier flag-bit gate, not this value - see above
+    DcAcIdctEngine2 = 2,     // Sec5.3i: DC literal + bound check now READ (see decodeOneBlock); AC tree
+                             // decode (0x10024eb0's own untranscribed dispatch table) + IDCT stay OPEN
+    FlatDcFill = 3,          // Sec5.3i: CONFIRMED real footprint is 16x16 (64 dwords) - this file still
+                             // writes 8x8 pending the block-grid reconciliation noted above
+    SkipFlag4 = 4,           // Sec5.3i: same early flag-bit gate as sub 1 - see above
+    TwoLiteralPattern = 5,   // OPEN: control-byte spatial mapping not given. Sec5.3i: CONFIRMED real
+                             // footprint is 16x16, same grid caveat as sub 3 above
+    RawCopyDualRowDup6 = 6,  // CONFIRMED (Sec5.3b): see rawCopyDualRowDuplicate8x8() below. Sec5.3i does
+                             // NOT include this sub-case in its own 16x16-footprint finding (explicitly
+                             // "not measured this pass" for sub 6's output size) - footprint left at 8x8,
+                             // not extrapolated from the sub 2/3/5 finding
 };
 
 enum class BlockOutcome : uint8_t {
@@ -326,6 +500,19 @@ struct BlockRecord {
     // found by measurement, not a cosmetic change - see this project's own
     // measurement-discipline note for why this matters.
     uint32_t rawPrimaryNibble = 0;
+
+    // Set only for Case1SubType::DcAcIdctEngine2 (spec-bink-codec.md
+    // Sec5.3i, added 2026-10-10): the 16-bit little-endian DC literal word
+    // read directly from the literal-byte stream ("descriptor L") - a real,
+    // CONFIRMED, bit-position-safe read (zero bit-packing, a plain
+    // pointer read/advance). This is as far as the pixel-producing grammar
+    // is safe to read without inventing the AC-coefficient tree decoder's
+    // own untranscribed dispatch table (see Case1SubType::DcAcIdctEngine2's
+    // own comment above) - outcome is still OpenHook for this sub-case, but
+    // the DC value is real and worth keeping for any caller that wants to
+    // inspect how far the real grammar got. std::nullopt for every other
+    // case/outcome.
+    std::optional<uint16_t> dcLiteral;
 };
 
 // 8x8 pixels, 1 byte/pixel - the one block size spec-bink-codec.md Sec5.6
@@ -454,8 +641,14 @@ inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int 
 // cannot do today. When null (the default - every existing synthetic/
 // hand-built-nibble test uses this path, unchanged), `br.readBits(4)` is
 // used directly, preserving this function's original behaviour exactly.
+//
+// `caseSelectorB`: same idea, for case 1's own secondary/sub-dispatch byte
+// (see this file's own top comment, "DESCRIPTOR B / CASE-1 SUB-DISPATCH
+// WIRING"). Only consulted when `rec.primary == SubDispatch`; every other
+// primary value never touches it.
 inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockRow,
-                                   int blockCol, CaseSelectorScratchSource* caseSelector = nullptr) {
+                                   int blockCol, CaseSelectorScratchSource* caseSelector = nullptr,
+                                   CaseSelectorScratchSource* caseSelectorB = nullptr) {
     BlockRecord rec;
     rec.blockRow = blockRow;
     rec.blockCol = blockCol;
@@ -510,10 +703,32 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
         return rec;
     }
 
-    const uint32_t subRaw = br.readBits(4);  // DERIVED width - see top-of-file comment
-    if (br.ranOutOfData()) {
-        rec.outcome = BlockOutcome::SourceExhausted;
-        return rec;
+    uint32_t subRaw = 0;
+    if (caseSelectorB != nullptr) {
+        // spec-bink-codec.md Sec5.3h: zero-bit-cost read from descriptor B's
+        // own pre-decoded SCRATCH buffer - see this file's own top comment
+        // ("DESCRIPTOR B / CASE-1 SUB-DISPATCH WIRING").
+        uint8_t secondaryByte = 0;
+        const CaseSelectorStatus statusB = caseSelectorB->next(secondaryByte);
+        if (statusB == CaseSelectorStatus::SourceExhausted) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
+        if (statusB == CaseSelectorStatus::PreStageOpen) {
+            rec.outcome = BlockOutcome::PreStageOpen;
+            return rec;
+        }
+        if (statusB == CaseSelectorStatus::Poisoned) {
+            rec.outcome = BlockOutcome::CaseSelectorPoisoned;
+            return rec;
+        }
+        subRaw = secondaryByte;
+    } else {
+        subRaw = br.readBits(4);  // DERIVED width - legacy/synthetic path, unchanged (see top-of-file comment)
+        if (br.ranOutOfData()) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
     }
     const int32_t sub = static_cast<int32_t>(subRaw) - 3;  // CONFIRMED: "subtracts 3"
     if (sub < 0 || sub > 6) {
@@ -570,9 +785,47 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             return rec;
         }
         case Case1SubType::Giant1RleUpsample0:
-        case Case1SubType::DcAcIdctEngine2:
+            // Sec5.3i (2026-10-10): LOWER CONFIDENCE, by-analogy-only (to
+            // primary case 3 - which is ITSELF still an OPEN hook in this
+            // file, see Case1SubType::Giant1RleUpsample0's own top-of-file
+            // comment for the full citation) - zero real live occurrences
+            // found in 20 sampled frame instances across 3 files. No bytes
+            // are read here: the engine's own bit-level RLE/literal token
+            // format was never given, and reading even a provisional nibble
+            // would risk desyncing the bitstream for every later block on a
+            // guess, not a confirmed field width for THIS engine.
             rec.outcome = BlockOutcome::OpenHook;
             return rec;
+        case Case1SubType::DcAcIdctEngine2: {
+            // Sec5.3i (2026-10-10), live-traced byte-level sequence: a
+            // descriptor-L bound check (>=16 bytes remaining in the shared
+            // literal-byte stream), then a plain 16-bit little-endian DC
+            // literal word read directly off that stream (zero bit-packing
+            // - `cx = word[eax]; eax += 2`). Both are bit-position-safe to
+            // model here with this file's own simplified single-cursor `br`
+            // (this project's existing convention for every other literal
+            // read in this file, e.g. FlatDcFill/TwoLiteralPattern above -
+            // not a new simplification). What follows (`call 0x10024eb0`
+            // for 63 AC coefficients, then the quant-row nibble, then
+            // `call 0x100247d0`) is NOT safe to continue past: the AC
+            // decode's own bit-level dispatch table/seed bytes were never
+            // transcribed (see this sub-case's own top-of-file comment), so
+            // its real bit-cost is unknown in general (only one live
+            // worked example's cost - 17 bits - is on record, not a
+            // formula) - reading anything past this point would silently
+            // desync every later block's dispatch on an invented
+            // bit-count. Stops here, honestly, same discipline as
+            // TwoLiteralPattern above.
+            const uint8_t lo = br.readAlignedByte();
+            const uint8_t hi = br.readAlignedByte();
+            if (br.ranOutOfData()) {
+                rec.outcome = BlockOutcome::SourceExhausted;
+                return rec;
+            }
+            rec.dcLiteral = static_cast<uint16_t>(lo | (static_cast<uint16_t>(hi) << 8));
+            rec.outcome = BlockOutcome::OpenHook;
+            return rec;
+        }
     }
     rec.outcome = BlockOutcome::OpenHook;  // unreachable, defensive
     return rec;
@@ -587,8 +840,9 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
 // keep counting dispatch TYPES even past the point pixel reconstruction
 // stops.
 inline BlockRecord decodeOneBlockStrict(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockRow,
-                                         int blockCol, CaseSelectorScratchSource* caseSelector = nullptr) {
-    BlockRecord rec = decodeOneBlock(br, dest, prev, blockRow, blockCol, caseSelector);
+                                         int blockCol, CaseSelectorScratchSource* caseSelector = nullptr,
+                                         CaseSelectorScratchSource* caseSelectorB = nullptr) {
+    BlockRecord rec = decodeOneBlock(br, dest, prev, blockRow, blockCol, caseSelector, caseSelectorB);
     if (rec.outcome == BlockOutcome::OpenHook) {
         std::string which = "primary=" + std::to_string(static_cast<int>(rec.primary));
         if (rec.sub) which += " sub=" + std::to_string(static_cast<int>(*rec.sub));

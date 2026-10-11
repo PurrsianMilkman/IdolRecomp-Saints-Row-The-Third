@@ -326,6 +326,49 @@ void testRawCopyDualRowDuplicateSub6() {
     CHECK(allMatch);
 }
 
+void testDcAcIdctEngine2ReadsDcLiteralThenOpenHook() {
+    // sub = 5 - 3 = 2 -> DcAcIdctEngine2 (spec-bink-codec.md Sec5.3i,
+    // 2026-10-10). The 16-bit DC literal is little-endian per the spec's
+    // own "cx = word[eax]; eax += 2" - literal bytes {0x4C, 0x02} -> 0x024C.
+    uint32_t subRaw = 5;
+    std::vector<uint8_t> bits = buildBlockBytes(1, &subRaw, {0x4C, 0x02});
+    BitstreamReader br(bits.data(), bits.size());
+    OwnedPlane dest;
+    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0);
+    CHECK(rec.outcome == BlockOutcome::OpenHook);  // AC tree decode/IDCT stay OPEN - see block_dispatch.h
+    CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::DcAcIdctEngine2);
+    CHECK(rec.dcLiteral.has_value());
+    CHECK(*rec.dcLiteral == 0x024C);
+
+    // Strict variant must throw OpenStateError naming the gap, not guess
+    // past the DC literal into the untranscribed AC tree decoder.
+    BitstreamReader br2(bits.data(), bits.size());
+    bool threw = false;
+    try {
+        decodeOneBlockStrict(br2, dest.view(), nullptr, 0, 0);
+    } catch (const sr3luahost::OpenStateError&) {
+        threw = true;
+    }
+    CHECK(threw);
+}
+
+void testGiant1RleUpsample0IsOpenHookWithNoDcLiteral() {
+    // sub = 3 - 3 = 0 -> Giant1RleUpsample0. Unlike DcAcIdctEngine2 above,
+    // this sub-case reads nothing at all (no confirmed field width exists
+    // for its own RLE/literal token format) - dcLiteral must stay unset,
+    // distinguishing it from sub=2's partial real read.
+    uint32_t subRaw = 3;
+    std::vector<uint8_t> bits = buildBlockBytes(1, &subRaw, {});
+    BitstreamReader br(bits.data(), bits.size());
+    OwnedPlane dest;
+    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0);
+    CHECK(rec.outcome == BlockOutcome::OpenHook);
+    CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::Giant1RleUpsample0);
+    CHECK(!rec.dcLiteral.has_value());
+}
+
 void testOutOfRangeDispatchDetected() {
     std::vector<uint8_t> bits = buildBlockBytes(0xA /* 10, > 9 */, nullptr, {});
     BitstreamReader br(bits.data(), bits.size());
@@ -713,6 +756,8 @@ int main() {
     testGiantEngineFamilyIsOpenHook();
     testPrimary9BlockCopyReconstructed();
     testRawCopyDualRowDuplicateSub6();
+    testDcAcIdctEngine2ReadsDcLiteralThenOpenHook();
+    testGiant1RleUpsample0IsOpenHookWithNoDcLiteral();
     testOutOfRangeDispatchDetected();
     testRasterOrderStopsAtFirstOpenHook();
     testDecodeIsDeterministic();

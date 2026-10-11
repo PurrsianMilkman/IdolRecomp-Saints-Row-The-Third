@@ -15214,12 +15214,17 @@ std::string vintFmt(double v) {
 //     out exactly per Sec13.2's own confirmed field offsets/strides: two
 //     real 90-degree turns (3 segments, each ending exactly where the next
 //     begins), so a straight-line driver would visibly fail to track it.
-//   * CHOSEN (clearly labelled, see sr3zone/traffic_graph.h and
-//     sr3airuntime/traffic_lane_follower.h's own file comments for the
-//     full accounting): the point pool's float3 stride, the segment
-//     adjacency rule (coincident polyline endpoints), the target-point
-//     "aim and advance" algorithm, the junction/branch uniform-random pick,
-//     and every steering/throttle gain in LaneFollowConfig.
+//   * UPDATED 2026-10-10 (traffic-lane-follow-real-mechanism task, spec
+//     Sec18.1/18.2/18.5/18.6 now RESOLVED/REFINED): the masked lookahead
+//     walk, nearest-distance junction choice, cached-target distance-
+//     throttled re-query, dot-product alignment gate, and full-lock +-1.0
+//     steer magnitude are now REAL (disassembly-confirmed shapes, see
+//     sr3airuntime/traffic_lane_follower.h's own file comment). CHOSEN
+//     (clearly labelled there): the point pool's float3 stride, the
+//     segment adjacency rule (coincident polyline endpoints), the steer
+//     SIGN source (a lateral/cross-track test standing in for the real,
+//     unmodelled per-entity lane-side flag), and the driving-throttle
+//     magnitude.
 namespace {
 
 void TrafficDemoAppendU32(std::vector<uint8_t>& b, uint32_t v) {
@@ -15321,6 +15326,112 @@ sr3zone::TrafficRecord BuildTrafficLaneDemoFixture(std::vector<uint8_t>& outBuf)
     return sr3zone::TrafficGraph::parseAt(view, payloadOffset);
 }
 
+// ===========================================================================
+// BuildPlaytestTrafficLaneGraphFixture (TRAFFIC-LANE-FOLLOW-REAL-MECHANISM
+// TASK, 2026-10-10) - the SAME "SYNTHETIC DATA, REAL FORMAT" convention
+// BuildTrafficLaneDemoFixture() above already establishes (hand-built bytes,
+// laid out exactly per spec-zone-data-format.md Sec13.2's own confirmed
+// header/segment/point-pool layout), anchored near the playtest's own
+// vehicle spawn point rather than at the origin - this project's playtest
+// `city` loader has no real Traffic (0x2236) `.czn_pc` content-kind reader
+// (see this function's own runPlaytest() call site's doc-comment note), so
+// the near-field ambient-vehicle driving loop needs ITS OWN real-shape lane
+// graph to walk, the same way the near-field ped population already walks a
+// synthetic sidewalk-segment graph.
+//
+// UNLIKE the demo fixture above (one dead-ending straight run), this layout
+// is a closed 4-leg rectangular loop PLUS one real junction with two legal
+// candidates - so the junction-choice cost function
+// (ChooseNextSegmentByNearestDistance(), sr3airuntime/traffic_lane_follower.h
+// item 2) has an actual decision to make, and ordinary ambient vehicles can
+// keep driving indefinitely without hitting a dead end every lap:
+//   seg0: (ax,az)        -> (ax+20,az)    -> (ax+40,az)     east leg
+//   [junction at (ax+40,az) - two legal next segments]
+//     seg1: (ax+40,az)   -> (ax+40,az+20) -> (ax+40,az+40)  continues the loop (north)
+//     seg4: (ax+40,az)   -> (ax+46,az+6)                    short dead-end spur
+//   seg2: (ax+40,az+40)  -> (ax+20,az+40) -> (ax,az+40)     west leg
+//   seg3: (ax,az+40)     -> (ax,az+20)    -> (ax,az)        south leg, closes
+//                                                           the loop back onto seg0's own start
+// Every "leg" segment's own last point is bit-identical to the next
+// segment's own first point (this reader's own CHOSEN geometric adjacency
+// rule, sr3airuntime/traffic_lane_follower.h item 3) - including seg3->seg0,
+// closing the rectangle into a real loop, and seg0->{seg1,seg4}, the one
+// real junction. seg4 has no successor - a vehicle routed onto it (per the
+// nearest-distance cost function, which is NOT goal-seeking - see that
+// file's own item 2 note) reaches a genuine dead end and reports `stuck`,
+// same as the demo fixture's own segment 2.
+sr3zone::TrafficRecord BuildPlaytestTrafficLaneGraphFixture(float ax, float az, std::vector<uint8_t>& outBuf) {
+    struct PlaytestSegSpec {
+        uint32_t rawKind;
+        std::vector<std::array<float, 3>> points;
+    };
+    const std::vector<PlaytestSegSpec> segs = {
+        {0, {{ax, 0, az}, {ax + 20, 0, az}, {ax + 40, 0, az}}},                              // seg0 - east leg
+        {0, {{ax + 40, 0, az}, {ax + 40, 0, az + 20}, {ax + 40, 0, az + 40}}},                // seg1 - north leg (loop continues)
+        {0, {{ax + 40, 0, az + 40}, {ax + 20, 0, az + 40}, {ax, 0, az + 40}}},                // seg2 - west leg
+        {0, {{ax, 0, az + 40}, {ax, 0, az + 20}, {ax, 0, az}}},                               // seg3 - south leg, closes the loop
+        {0, {{ax + 40, 0, az}, {ax + 46, 0, az + 6}}},                                        // seg4 - dead-end spur off the junction
+    };
+    const size_t n = segs.size();
+
+    outBuf.clear();
+    std::vector<uint8_t>& b = outBuf;
+    TrafficDemoAppendU32(b, 0x80000000u | sr3zone::kTrafficSectionTag);
+    TrafficDemoAppendU32(b, 0);
+    TrafficDemoAppendU32(b, 0);
+    const size_t payloadOffset = b.size();
+
+    const size_t extendedRel = sr3zone::kTrafficHeaderSize;
+    const size_t segmentRel = extendedRel + n * sr3zone::kExtendedSegmentRecordStride;
+    const size_t pointPoolRel = segmentRel + n * sr3zone::kSegmentRecordStride;
+
+    size_t totalPoints = 0;
+    for (const auto& s : segs) totalPoints += s.points.size();
+
+    TrafficDemoAppendHeaderPair(b, static_cast<int32_t>(n), static_cast<int32_t>(extendedRel));
+    for (int slot = 1; slot <= 5; ++slot) TrafficDemoAppendHeaderPair(b, 0, sr3zone::kSelfRelativeNullSentinel);
+    TrafficDemoAppendHeaderPair(b, static_cast<int32_t>(n), static_cast<int32_t>(segmentRel));
+    TrafficDemoAppendHeaderPair(b, static_cast<int32_t>(totalPoints), static_cast<int32_t>(pointPoolRel));
+    TrafficDemoAppendHeaderPair(b, 0, sr3zone::kSelfRelativeNullSentinel);
+    TrafficDemoAppendHeaderPair(b, 0, sr3zone::kSelfRelativeNullSentinel);
+    for (int slot = 10; slot <= 13; ++slot) TrafficDemoAppendHeaderPair(b, 0, sr3zone::kSelfRelativeNullSentinel);
+
+    uint16_t cumulative = 0;
+    for (const auto& s : segs) {
+        cumulative += static_cast<uint16_t>(s.points.size());
+        TrafficDemoAppendExtendedSegmentRecord(b, s.rawKind, cumulative);
+    }
+    for (size_t i = 0; i < n; ++i) TrafficDemoAppendSegmentRecord(b);
+    for (const auto& s : segs)
+        for (const auto& p : s.points) TrafficDemoAppendPoint(b, p[0], p[1], p[2]);
+
+    sr3zone::ByteView view(b.data(), b.size());
+    return sr3zone::TrafficGraph::parseAt(view, payloadOffset);
+}
+
+// Finds the lane-graph segment whose own first polyline point is nearest to
+// `pos` (XZ-plane only, matching sr3airuntime::traffic_lane_detail::Dist2D) -
+// the CHOSEN placement rule this task uses to snap a newly-spawned near-field
+// ambient vehicle onto BuildPlaytestTrafficLaneGraphFixture()'s own loop (not
+// spec-stated anywhere - Sec18 never addresses initial placement, only
+// steady-state following). Returns 0 if `graph` has no segments.
+size_t NearestLaneGraphSegmentStart(const sr3airuntime::TrafficLaneGraph& graph, const sr3airuntime::Vec3& pos) {
+    size_t best = 0;
+    double bestDist = -1.0;
+    for (size_t i = 0; i < graph.segmentCount(); ++i) {
+        const auto& seg = graph.segment(i);
+        if (seg.polyline.empty()) continue;
+        const double dx = static_cast<double>(seg.polyline.front().x) - pos.x;
+        const double dz = static_cast<double>(seg.polyline.front().z) - pos.z;
+        const double d = dx * dx + dz * dz;
+        if (bestDist < 0.0 || d < bestDist) {
+            bestDist = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
 // Builds this demo's own VehicleTuning via the same real sr3xtbl/
 // sr3vehicleinfo reader path BuildDriveDemoVehicleTuning() (above) uses -
 // but copying tests/synthetic_physics_vehicle_substeps_test.cpp's own
@@ -15399,10 +15510,14 @@ int runTrafficLaneDemo(int argc, char** argv) {
                 "         (DriverInput steer/throttle/brake, spec-physics-runtime.md Sec10.6).\n");
     std::printf("SYNTH  : the Traffic record bytes below are hand-built, laid out exactly per Sec13.2's\n"
                 "         own confirmed field offsets - this clean-room project reads no real .czn_pc data.\n");
-    std::printf("CHOSEN : the point-pool float3 stride, segment adjacency (coincident endpoints),\n"
-                "         target-point aim-and-advance, junction uniform-random pick, steering/throttle\n"
-                "         gains - see sr3zone/traffic_graph.h and sr3airuntime/traffic_lane_follower.h's\n"
-                "         own file comments for the full CONFIRMED-vs-CHOSEN breakdown.\n\n");
+    std::printf("CONFIRMED (Sec18.1/18.2/18.5/18.6): masked lookahead walk, nearest-distance junction\n"
+                "         choice, cached-target distance-throttled re-query, dot-product alignment gate\n"
+                "         picking throttle, full-lock +-1.0 steer magnitude.\n");
+    std::printf("CHOSEN : the point-pool float3 stride, segment adjacency (coincident endpoints), the\n"
+                "         steer SIGN source (lateral/cross-track test, standing in for the real, unmodelled\n"
+                "         per-entity lane-side flag) - see sr3zone/traffic_graph.h and\n"
+                "         sr3airuntime/traffic_lane_follower.h's own file comments for the full\n"
+                "         CONFIRMED-vs-CHOSEN breakdown.\n\n");
 
     std::vector<uint8_t> buf;
     sr3zone::TrafficRecord rec = BuildTrafficLaneDemoFixture(buf);
@@ -15423,9 +15538,6 @@ int runTrafficLaneDemo(int argc, char** argv) {
         return 1;
     }
 
-    sr3airuntime::DeterministicRng rng(12345);
-    auto pickUniform = sr3airuntime::MakePickUniform(rng);
-
     const double dt = 1.0 / 60.0;
     double minX = sim.state_.posX, maxX = sim.state_.posX;
     double minZ = sim.state_.posZ, maxZ = sim.state_.posZ;
@@ -15437,7 +15549,7 @@ int runTrafficLaneDemo(int argc, char** argv) {
 
     for (int tick = 0; tick < ticks; ++tick) {
         sr3airuntime::LaneFollowCommand cmd =
-            sr3airuntime::StepLaneFollow(graph, lane, sim.state_.posX, sim.state_.posZ, sim.state_.heading, pickUniform);
+            sr3airuntime::StepLaneFollow(graph, lane, sim.state_.posX, sim.state_.posZ, sim.state_.heading);
 
         sr3physics::DriverInput input;
         input.steer = cmd.steer;
@@ -18738,6 +18850,8 @@ int runPlaytest(int argc, char** argv) {
     // OLD dark clear colour too, just camouflaged there), not introduced by this change.
     // Full investigation: results/verify_playtest_visuals_20261008/gap_investigation/.
     float spawnX = -1280.0f, spawnZ = -560.0f;
+    bool spawnYOverrideGiven = false;  // --spawn-y, see its own doc comment below
+    float spawnYOverride = 0.0f;
     float farZ = 3000.0f;
     std::string animArchiveOverride;
     float mouseSensitivity = 1.0f;
@@ -18902,6 +19016,18 @@ int runPlaytest(int argc, char** argv) {
         } else if (arg == "--spawn" && argi + 2 < argc) {
             spawnX = static_cast<float>(std::atof(argv[++argi]));
             spawnZ = static_cast<float>(std::atof(argv[++argi]));
+        } else if (arg == "--spawn-y" && argi + 1 < argc) {
+            // TEST-ONLY override (this task, screen-fade/m09-progress verification): the
+            // real GROUND-Y MEASUREMENT/heightmap-follow logic below has no data at all
+            // over water/dock areas (confirmed live: 0 ground tiles resolved at m09's own
+            // on_boat_trigger position), so there is no real way to stand a scripted
+            // --no-input player inside an elevated real in-world trigger box there without
+            // this. Bypasses both the measured flat-plane fallback AND the per-frame
+            // heightmap follower's own fallback target (same value fed to both
+            // GroundFollower instances below) - CHOSEN test scaffolding, not game logic;
+            // does nothing unless passed.
+            spawnYOverrideGiven = true;
+            spawnYOverride = static_cast<float>(std::atof(argv[++argi]));
         } else if (arg == "--far" && argi + 1 < argc) {
             farZ = static_cast<float>(std::atof(argv[++argi]));
         } else if (arg == "--anim-archive" && argi + 1 < argc) {
@@ -20808,6 +20934,7 @@ int runPlaytest(int argc, char** argv) {
     if (haveGroundBounds && (groundYMin > 3.0f || groundYMax < -3.0f)) {
         finalGroundY = 0.5f * (groundYMin + groundYMax);
     }
+    if (spawnYOverrideGiven) finalGroundY = spawnYOverride;  // --spawn-y, see its own doc comment above
     // Honest banner note (this task, 2026-10-08): says directly whether what was just
     // measured is flat/street-level or not, rather than leaving a reader to infer it from
     // raw numbers - see this function's own "RELOCATED" doc comment above spawnX/spawnZ for
@@ -21058,6 +21185,54 @@ int runPlaytest(int argc, char** argv) {
     std::printf("traffic  : near-field ambient vehicle population ALWAYS ON (cap %d, spec-ai-runtime.md "
                 "Sec17.4c)\n",
                 sr3airuntime::kNearFieldVehicleCap);
+
+    // ===================== NEAR-FIELD TRAFFIC LANE-FOLLOWING (TRAFFIC-LANE-
+    // FOLLOW-REAL-MECHANISM TASK, 2026-10-10) =====================
+    // REPLACES the prior "position-only, cosmetic deterministic-per-id
+    // heading" rendering (Sec17.4c itself never traces a heading/driving
+    // field for this tier - see NearFieldVehicle's own file comment) with
+    // the now-CONFIRMED lane-following drive loop (spec-ai-runtime.md
+    // Sec18.1/18.2/18.5/18.6): sr3airuntime::TrafficLaneGraph (the REAL
+    // 0x2236 Traffic record reader, sr3zone/traffic_graph.h) over a
+    // SYNTHETIC-DATA/REAL-FORMAT fixture (BuildPlaytestTrafficLaneGraphFixture()
+    // above - this playtest's own `city` loader has no real Traffic
+    // `.czn_pc` content-kind reader, same honest gap
+    // GatherNearFieldSpawnCandidatesAroundPlayer()'s own doc comment already
+    // states for the distant-tier synthetic road grid), anchored at the
+    // vehicle spawn point so it is reachable on foot/by car from the
+    // player's own start position.
+    //
+    // Per-vehicle driving state (LaneFollowState + a live heading double) is
+    // kept in two side-car maps, keyed by NearFieldVehicle::id - the SAME
+    // "caller-owned side-car map, not a field added to the population
+    // struct itself" convention nearFieldPedWanderDestination/
+    // nearFieldPedFleeDestination already establish for the near-field PED
+    // population just below.
+    std::vector<uint8_t> trafficLaneGraphBuf;
+    sr3zone::TrafficRecord trafficLaneRecord =
+        BuildPlaytestTrafficLaneGraphFixture(vehicleSpawnX, vehicleSpawnZ, trafficLaneGraphBuf);
+    sr3airuntime::TrafficLaneGraph trafficLaneGraph(trafficLaneRecord);
+    std::unordered_map<uint64_t, sr3airuntime::LaneFollowState> nearFieldVehicleLaneState;
+    std::unordered_map<uint64_t, double> nearFieldVehicleHeading;
+    // CHOSEN (not spec-stated - Sec18 describes steady-state following
+    // only, never a kinematic model for ambient traffic that has no own
+    // per-instance Havok body): near-field ambient vehicles do not each get
+    // a full sr3physics::VehicleSubstepSimulator instance (48 live Havok-
+    // shaped sims every frame is out of this task's own scope and no
+    // per-ambient-vehicle physics object exists anywhere else in this
+    // codebase either - near-field vehicles are, and remain, "position +
+    // id only" per NearFieldVehicle's own struct). Instead, the REAL
+    // LaneFollowCommand{steer,throttle,brake} this task's own confirmed
+    // algorithm computes is integrated through a simple CHOSEN kinematic
+    // bicycle-style update (heading rate from steer, speed from throttle) -
+    // the steering/throttle DECISION is the real, newly-confirmed mechanism
+    // under test; the vehicle BODY that decision drives is the same
+    // honest "every ambient vehicle currently looks like the same car
+    // model" simplification tier this file's own near-field rendering
+    // comment already documents, extended from "position" to "position +
+    // heading, driven by a real decision".
+    constexpr double kNearFieldVehicleTurnRateRadPerSec = 1.4;
+    constexpr double kNearFieldVehicleCruiseSpeedMs = 6.0;
 
     // ===================== NEAR-FIELD AMBIENT PEDESTRIAN POPULATION (THIS TASK) =====================
     // Wires include/sr3airuntime/near_field_ped_population.h's own
@@ -21667,6 +21842,83 @@ int runPlaytest(int argc, char** argv) {
                     kNearFieldDespawnDistanceSq, /*eligibleHumanCount=*/0, nfCandidates, nearFieldPickUniform,
                     nearFieldNextId);
             }
+
+            // ---- Prune the two side-car driving-state maps against the
+            // live population (THIS TASK) - the maintenance pass above may
+            // have just despawned vehicles; same "erase on despawn" hygiene
+            // nearFieldPedFleeDestination/nearFieldPedWanderDestination
+            // already apply to the ped side-car maps elsewhere in this
+            // function. O(live) per maintenance tick, not every frame -
+            // cheap, and this block only runs on the SAME ticks the
+            // maintenance pass itself runs. ----
+            if (nfRunMaintenance || nfRunDespawnSchedule) {
+                for (auto it = nearFieldVehicleLaneState.begin(); it != nearFieldVehicleLaneState.end();) {
+                    const bool stillLive =
+                        std::any_of(nearFieldLive.begin(), nearFieldLive.end(),
+                                    [id = it->first](const sr3airuntime::NearFieldVehicle& v) { return v.id == id; });
+                    if (stillLive) {
+                        ++it;
+                    } else {
+                        nearFieldVehicleHeading.erase(it->first);
+                        it = nearFieldVehicleLaneState.erase(it);
+                    }
+                }
+            }
+        }
+
+        // ---- Near-field ambient-vehicle LANE-FOLLOWING drive tick (THIS
+        // TASK) - runs EVERY frame (not gated by the maintenance timers
+        // above), same "driving is continuous, spawning/despawning is
+        // throttled" split the near-field PED population's own flee/wander
+        // tick already establishes just below. A vehicle not yet in
+        // nearFieldVehicleLaneState (newly spawned this tick, or the very
+        // first tick after bootstrap) is snapped onto the nearest lane-
+        // graph segment (NearestLaneGraphSegmentStart(), CHOSEN placement
+        // rule - see that function's own comment) and given heading 0 as a
+        // starting value only; the first real StepLaneFollow() call
+        // immediately recomputes a real steer/throttle command from its
+        // actual position.
+        //
+        // ALSO SNAPS nfv.pos ONTO the chosen segment's own first point
+        // (CHOSEN, same placement-rule scope as the segment choice itself -
+        // Sec18 never addresses initial placement at all). Without this, a
+        // vehicle that spawned somewhere off GatherNearFieldSpawnCandidates
+        // AroundPlayer()'s own wider radius (which has no awareness of this
+        // task's own small lane-graph fixture) could start arbitrarily far
+        // from the graph; StepLaneFollow()'s own alignment-AND-distance
+        // throttle gate (Sec18.6 step 4, see traffic_lane_follower.h's own
+        // file header item 5 second note) requires the vehicle to already
+        // be near the lane before it ever receives nonzero throttle - a
+        // genuine deadlock caught during this task's own live playtest
+        // verification (vehicles spun in place, heading changing every
+        // frame, position frozen, across 600 real frames) and fixed here by
+        // placement, not by loosening the real confirmed gate. ----
+        for (auto& nfv : nearFieldLive) {
+            auto stateIt = nearFieldVehicleLaneState.find(nfv.id);
+            if (stateIt == nearFieldVehicleLaneState.end()) {
+                const size_t startSeg = NearestLaneGraphSegmentStart(trafficLaneGraph, nfv.pos);
+                stateIt = nearFieldVehicleLaneState
+                              .emplace(nfv.id, sr3airuntime::LaneFollowState::Begin(trafficLaneGraph, startSeg))
+                              .first;
+                nearFieldVehicleHeading[nfv.id] = 0.0;
+                if (startSeg < trafficLaneGraph.segmentCount() &&
+                    !trafficLaneGraph.segment(startSeg).polyline.empty()) {
+                    const auto& p0 = trafficLaneGraph.segment(startSeg).polyline.front();
+                    nfv.pos.x = static_cast<double>(p0.x);
+                    nfv.pos.z = static_cast<double>(p0.z);
+                }
+            }
+            double& heading = nearFieldVehicleHeading[nfv.id];
+            sr3airuntime::LaneFollowCommand cmd =
+                sr3airuntime::StepLaneFollow(trafficLaneGraph, stateIt->second, nfv.pos.x, nfv.pos.z, heading);
+            // CHOSEN kinematic integration - see this block's own
+            // declaration comment above (kNearFieldVehicleTurnRateRadPerSec/
+            // kNearFieldVehicleCruiseSpeedMs) for why no per-vehicle Havok
+            // body exists to write cmd.steer/throttle/brake into instead.
+            heading += cmd.steer * kNearFieldVehicleTurnRateRadPerSec * static_cast<double>(dt);
+            const double speedMs = cmd.throttle > 0.0 ? kNearFieldVehicleCruiseSpeedMs * cmd.throttle : 0.0;
+            nfv.pos.x += std::cos(heading) * speedMs * static_cast<double>(dt);
+            nfv.pos.z += std::sin(heading) * speedMs * static_cast<double>(dt);
         }
 
         // ---- Near-field (fully-simulated) ambient-pedestrian population -
@@ -21942,6 +22194,23 @@ int runPlaytest(int argc, char** argv) {
             std::printf("[traffic] frame %d near-field live=%zu/%d; roadblock armed=%d filled=%zu/%zu\n", frames,
                         nearFieldLive.size(), sr3airuntime::kNearFieldVehicleCap, roadblockDriver.armed ? 1 : 0,
                         roadblockFilledNow, roadblockSlots.size());
+            // TRAFFIC-LANE-FOLLOW-REAL-MECHANISM TASK (2026-10-10): per-
+            // vehicle lane-following trajectory trace - live proof that
+            // near-field ambient vehicles now follow the real Traffic
+            // lane graph (seg/pointCursor advancing, position tracing the
+            // segment polyline) rather than sitting at a static spawn
+            // position with only a cosmetic heading, and that a junction
+            // (segment 0's own two legal next segments) is actually
+            // reached and resolved deterministically.
+            for (const auto& nfv : nearFieldLive) {
+                const auto stIt = nearFieldVehicleLaneState.find(nfv.id);
+                const auto hIt = nearFieldVehicleHeading.find(nfv.id);
+                std::printf("  [lane] id=%llu pos=(%.2f,%.2f) heading=%.1fdeg seg=%zu valid=%d\n",
+                            static_cast<unsigned long long>(nfv.id), nfv.pos.x, nfv.pos.z,
+                            (hIt != nearFieldVehicleHeading.end() ? hIt->second * 180.0 / 3.14159265358979323846 : 0.0),
+                            (stIt != nearFieldVehicleLaneState.end() ? stIt->second.currentSegmentIndex : 0),
+                            (stIt != nearFieldVehicleLaneState.end() ? (stIt->second.valid ? 1 : 0) : -1));
+            }
             std::printf("[peds] frame %d near-field ambient peds live=%zu/%zu\n", frames, nearFieldPedsLive.size(),
                         kNearFieldPedLocalCap);
             // THIS TASK (2026-10-10): per-fleeing-ped position trace, for
@@ -23000,11 +23269,20 @@ int runPlaytest(int argc, char** argv) {
         // the population/despawn bookkeeping above still runs regardless.
         if (vehicleEnabled && vehicleRig.ready) {
             for (const auto& nfv : nearFieldLive) {
-                // Deterministic per-id heading - NearFieldVehicle itself is
-                // position-only (Sec17.4c never traces a heading field for
-                // this tier) - cosmetic variety only, not a simulated value.
-                const double nfHeading =
-                    std::fmod(static_cast<double>(nfv.id) * 2.39996323, 6.28318530717958648);
+                // REAL heading (TRAFFIC-LANE-FOLLOW-REAL-MECHANISM TASK,
+                // 2026-10-10) - driven every frame by the lane-following
+                // tick above (nearFieldVehicleHeading), REPLACING the prior
+                // cosmetic deterministic-per-id formula. Falls back to the
+                // old cosmetic formula only in the practically-unreachable
+                // case a vehicle is drawn the SAME frame it spawned before
+                // the drive tick above has run for it yet (defensive, not
+                // expected to trigger - the drive tick runs earlier this
+                // same frame, before this draw loop, for every entry
+                // currently in nearFieldLive).
+                const auto headingIt = nearFieldVehicleHeading.find(nfv.id);
+                const double nfHeading = (headingIt != nearFieldVehicleHeading.end())
+                                             ? headingIt->second
+                                             : std::fmod(static_cast<double>(nfv.id) * 2.39996323, 6.28318530717958648);
                 float nfWorld[16];
                 sr3render::buildWorldMatrix(static_cast<float>(nfv.pos.x), finalGroundY,
                                             static_cast<float>(nfv.pos.z), static_cast<float>(nfHeading), 1.0f,
@@ -23324,6 +23602,29 @@ int runPlaytest(int argc, char** argv) {
         if (maxFrames >= 0 && frames >= maxFrames) break;
     }
     if (cursorHidden) ShowCursor(TRUE);
+    // MISSION-HOST (this task, screen-fade-mainloop-tick/m09-progress): if the mission is
+    // STILL suspended when this session ends (frame budget exhausted or window closed, not
+    // finished/errored/timed out - those paths already print their own line above), say
+    // precisely where every still-live mission script thread is waiting instead of silently
+    // ending the run. "How far did the mission get" should always be a measured fact from
+    // this real per-thread Lua debug info, never an inference from the absence of a print.
+    if (missionEnabled && missionDriveActive) {
+        for (uint16_t id : hudHost->bareGlobals().threads().liveIds()) {
+            const sr3luahost::BareThreadTable::Record* rec = hudHost->bareGlobals().threads().findAlive(id);
+            if (!rec) continue;
+            // Level 0 is the C builtin the coroutine is parked inside (thread_yield, almost
+            // always); level 1 is its Lua caller's own file:line - the one worth reporting.
+            std::string at = "?";
+            lua_Debug ar{};
+            if (lua_getstack(rec->co, 1, &ar) && lua_getinfo(rec->co, "Sln", &ar)) {
+                at = (ar.short_src[0] ? ar.short_src : "?") + std::string(":") + std::to_string(ar.currentline) +
+                     (ar.name ? (std::string(" (in ") + ar.name + ")") : "");
+            }
+            std::printf("mission  : --mission=%s script thread '%s' (id %u) still suspended at %s when this "
+                        "session ended\n",
+                        missionStem.c_str(), rec->name.c_str(), static_cast<unsigned>(id), at.c_str());
+        }
+    }
     // THIS TASK (world-streaming-reconcile): appends the real streaming totals (cell
     // loads/evictions and tiles still resident) to the end of this existing summary line -
     // the "frames   : %d presented" PREFIX real_playtest_smoke_test.cpp's/

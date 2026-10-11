@@ -126,21 +126,42 @@
 //     boundary (a separate, still-open issue - see frame_decoder.h, which
 //     does not yet call this for chromaA/chromaB at all).
 //   - Descriptor B (the second sibling output stream at the real DLL's
-//     `[ebp-0x1a4]`, "built/expanded identically" per Sec5.3g): WHICH of
-//     the 23 per-row 0x10018ca0 calls feeds ITS OWN table16/classByte/lutA,
-//     and who downstream CONSUMES its byte stream, are both still OPEN in
-//     Sec5.3g itself (no address cross-reference given for B, unlike A's
-//     confirmed "call #1"). CaseSelectorScratchSource below models
-//     descriptor A only - the one the real case_selector_scratch_frame0.bin
-//     test vector captures and the one block_dispatch.h's primary dispatch
-//     byte has always been sourced from (Sec5.3c). A second instance of
-//     this same class COULD model B mechanically, but WHERE in the 23-call
-//     sequence to snapshot its table is not something this file guesses.
-//   - The 22 non-A/non-B sibling 0x10018ca0 calls' own downstream consumers
+//     `[ebp-0x1a4]`, "built/expanded identically" per Sec5.3g): NOW MODELLED
+//     below (spec-bink-codec.md Sec5.3h, 2026-10-09 extension) - Sec5.3h
+//     live-traced B's own refill call firing unconditionally right after A's
+//     own refill returns (7 pure marshaling instructions, zero conditional
+//     branches, no FURTHER 0x10018ca0 table-build calls in between), with
+//     its own LEN-field formula (N_B = bit_length(Width/16 + 0x1ff), built
+//     from `Width>>1>>3` - see caseSelectorLengthFieldBitWidthB() below) and
+//     its own idempotency-guarded refill(), byte-identical mechanics to A's
+//     own 0x10019360 otherwise. The ONE thing Sec5.3h does NOT give an
+//     address cross-reference for (still OPEN, same as it was for A before
+//     Sec5.3g's "call #1" finding): WHICH of the 23 per-row 0x10018ca0 calls
+//     builds B's own table16/classByte/lutA. This file uses
+//     kDescriptorBSiblingTableIndex (below) - call #2 (0-indexed 1), the
+//     second of Sec5.3g's own documented "2 direct calls" prefix - a
+//     DERIVED, FLAGGED choice (not an invented one: it is the most
+//     structurally parsimonious reading of Sec5.3g's own call-order
+//     breakdown, since A and B are now BOTH confirmed, Sec5.3h, to be
+//     always-exercised once-per-row consumers, the natural candidates for
+//     the "2 direct" prefix that precedes the 16-call loop and the trailing
+//     "1 more + 4 more" - rather than one of the 16-loop/trailing entries
+//     Sec5.3g's own text groups together as "22 other sibling... this
+//     project does not consume"), NOT independently address-cross-referenced
+//     the way A's call #1 is. See kDescriptorBSiblingTableIndex's own doc
+//     comment for the full citation.
+//   - The 21 non-A/non-B sibling 0x10018ca0 calls' own downstream consumers
 //     (motion-vector-adjacent and/or other alphabets, Sec5.3g) - not
 //     consumed by sr3binkcodec at all today; their bit COST is correctly
 //     paid (beginBlockRow() executes all 23 calls for real), their RESULTS
 //     are correctly discarded (OPEN, not invented).
+//   - Descriptor B's own secondary/sub-dispatch consumer is now wired
+//     (block_dispatch.h's case-1/SubDispatch sub-type nibble read,
+//     spec-bink-codec.md Sec5.3h's "the secondary/sub-dispatch byte... is
+//     each a zero-bit-cost memory read from descriptor A's and descriptor
+//     B's own pre-decoded SCRATCH buffers respectively"). Whether descriptor
+//     B feeds anything ELSE downstream (beyond this one consumer) is still
+//     OPEN, same as before.
 
 #include <algorithm>
 #include <array>
@@ -172,6 +193,36 @@ inline int bitLength(uint32_t x) {
 // bitLength(751) == 10, matching that worked example exactly.
 inline int caseSelectorLengthFieldBitWidth(int lumaWidthPixels) {
     return bitLength(static_cast<uint32_t>(lumaWidthPixels) / 8 + 0x1ff);
+}
+
+// spec-bink-codec.md Sec5.3h (2026-10-09, descriptor B's own downstream
+// consumer trace), CONFIRMED by tracing B's own setup code instructions
+// directly (not assumed to share A's formula): "N_B = bit_length(Width/16 +
+// 0x1ff), built from Width>>1>>3 rather than Width>>3 again". For
+// `main_menu_bg.bik`'s Width=1920: N_A's own input is 751, N_B's own input
+// is 631 - "different numbers that happen to both fall in the [512,1024)
+// power-of-two bracket, so bit_length gives 10 for both - the same final N
+// from a genuinely different formula, not the same formula". Implemented
+// here as the literal `Width>>1>>3` the spec names, not `Width/16` directly
+// - identical for even widths, and this file has no reason to assume the
+// real DLL's two separate shifts and one combined division always agree for
+// an odd width (not checked either way, flagged rather than assumed).
+//
+// NOTE on kRunLength/kClassByte/kLutOffset/kLutBlob: this function's own
+// origin branch (fix/bink-descriptor-b-case1-selector) predates the
+// "PUBLIC-BUILD SPLIT" refactor (this file's own top comment) that moved
+// those 4 regions out of this file into mutable extern storage
+// (entropy_prestage_runtime.h, defined in src/bink_entropy_tables.cpp) so a
+// public source export can exclude the game-data bytes while keeping the
+// algorithm. That origin branch's own copies of those 4 constexpr arrays are
+// therefore NOT reintroduced here (they would be duplicate/conflicting
+// definitions of the same extern-backed names, and a strictly OLDER,
+// pre-split copy of the data at that) - buildCaseSelectorTable() below
+// already resolves kClassByte/kLutOffset/kLutBlob/kRunLength via the
+// extern declarations from entropy_prestage_runtime.h (included above).
+inline int caseSelectorLengthFieldBitWidthB(int lumaWidthPixels) {
+    const uint32_t halved = static_cast<uint32_t>(lumaWidthPixels) >> 1;  // Width>>1
+    return bitLength((halved >> 3) + 0x1ff);                              // >>3 again, then +0x1ff
 }
 
 // `0x10018ca0`'s own CONFIRMED trivial fast path (spec-bink-codec.md
@@ -343,6 +394,31 @@ inline BuiltTable buildCaseSelectorTable(BitstreamReader& br) {
 // this project does not consume.
 constexpr int kSiblingTableBuildsPerBlockRow = 23;
 
+// Which of the 23 per-row 0x10018ca0 calls (above) feeds descriptor B's own
+// table16/classByte/lutA. spec-bink-codec.md Sec5.3h CONFIRMS descriptor B's
+// own refill() call fires right after descriptor A's own refill returns,
+// with ZERO further 0x10018ca0 calls in between - so B's table must already
+// be one of the SAME 23 calls A's own call #1 comes from, not a 24th call of
+// its own. Sec5.3h itself does NOT give an address cross-reference pinning
+// down WHICH of the 23 (unlike A's own call #1, Sec5.3g). This file picks
+// call #2 (0-indexed 1) - the second of Sec5.3g's own documented "2 direct
+// [calls]" prefix (2 direct + a 16-call loop + 1 more + 4 more direct calls
+// = 23) - a DERIVED, explicitly flagged choice, not an independently
+// confirmed one: A and B are the only two per-row sub-streams Sec5.3h
+// confirms are ALWAYS exercised (every block's primary byte from A; every
+// primary==1 block's secondary byte from B), making them the natural
+// candidates for the "2 direct" prefix Sec5.3g's own call-order breakdown
+// singles out ahead of the 16-call loop and the trailing "1 more + 4 more" -
+// which Sec5.3g's own text groups together as feeding "22 other sibling
+// per-row sub-streams this project does not consume" (now 21, since this
+// file newly consumes one of them for B). OPEN, named precisely: no exact
+// address cross-reference confirms index 1 specifically over any other
+// index in the 16-call loop or the trailing 5 - a future pass with live
+// Unicorn access to desc_B's own real table16/classByte/lutA pointer could
+// confirm or correct this by comparing against whichever call's OUTPUT
+// matches that pointer, the same method Sec5.3g used for A's call #1.
+constexpr int kDescriptorBSiblingTableIndex = 1;
+
 // Outcome of asking CaseSelectorScratchSource for the next dispatch byte,
 // or of its own beginBlockRow() call.
 enum class CaseSelectorStatus : uint8_t {
@@ -375,13 +451,28 @@ enum class CaseSelectorStatus : uint8_t {
 };
 
 // Models one `0x1001a530`-call's worth of case-selector dispatch bytes for
-// ONE descriptor (A - see this file's own top comment for why descriptor B
-// is not modelled here), refilling from the entropy pre-stage (`0x10019360`)
-// on demand, with its own table (`0x10018ca0`) rebuilt once per block-row.
+// ONE descriptor - A or B, selected by the constructor's
+// `lengthFieldBitWidthFn`/`siblingTableIndex` parameters (spec-bink-codec.md
+// Sec5.3h, 2026-10-09: B's refill mechanics are byte-identical to A's,
+// modulo its own LEN-field formula and its own slot among the 23 per-row
+// table-builds - see caseSelectorLengthFieldBitWidthB()/
+// kDescriptorBSiblingTableIndex above for the per-field citations). Refills
+// from the entropy pre-stage (`0x10019360`) on demand, with its own table
+// (`0x10018ca0`) rebuilt once per block-row.
 class CaseSelectorScratchSource {
 public:
-    CaseSelectorScratchSource(BitstreamReader& br, int lumaWidthPixels)
-        : br_(br), lumaWidthPixels_(lumaWidthPixels) {}
+    // `lengthFieldBitWidthFn`/`siblingTableIndex` default to descriptor A's
+    // own values (Sec5.3c/Sec5.3g: N_A's formula, call #1) - a caller
+    // constructing descriptor B's own instance passes
+    // caseSelectorLengthFieldBitWidthB and kDescriptorBSiblingTableIndex
+    // explicitly (see frame_decoder.h's decodeLumaPlane()).
+    CaseSelectorScratchSource(BitstreamReader& br, int lumaWidthPixels,
+                               int (*lengthFieldBitWidthFn)(int) = caseSelectorLengthFieldBitWidth,
+                               int siblingTableIndex = 0)
+        : br_(br),
+          lumaWidthPixels_(lumaWidthPixels),
+          lengthFieldBitWidthFn_(lengthFieldBitWidthFn),
+          siblingTableIndex_(siblingTableIndex) {}
 
     // Must be called exactly once per 8-pixel block-row, BEFORE any next()
     // call for that row's blocks (spec-bink-codec.md Sec5.3g: "before ever
@@ -390,26 +481,66 @@ public:
     // bit-reader cursor the case-selector pre-stage itself reads from").
     // Runs all 23 calls for real (paying their actual, content-dependent
     // bit cost against the SAME shared `br` this source refills from),
-    // keeping only call #1's result (this descriptor's own fresh
-    // table16/classByte/lutA - CONFIRMED by address cross-reference, see
-    // this file's own top comment) and discarding the other 22's. THEN
-    // performs 0x10019360's own idempotency-guarded refill using that
-    // freshly-built table, exactly as the real per-row call order does.
-    CaseSelectorStatus beginBlockRow() {
+    // keeping only THIS instance's own designated call's result
+    // (`siblingTableIndex_` - CONFIRMED-by-address-cross-reference call #1
+    // for descriptor A; a DERIVED/flagged choice, call #2, for descriptor B
+    // - see kDescriptorBSiblingTableIndex's own doc comment) and discarding
+    // the rest. THEN performs 0x10019360's own idempotency-guarded refill
+    // using that freshly-built table, exactly as the real per-row call
+    // order does.
+    //
+    // `sibling`, when given (spec-bink-codec.md Sec5.3h): ALSO captures
+    // `sibling`'s own designated call's result from the SAME 23-call pass
+    // (Sec5.3h confirms there is only ONE such pass per row shared by both
+    // descriptors - B's own refill is NOT preceded by a second, separate
+    // table-build sequence), then, immediately after THIS descriptor's own
+    // refill completes, performs `sibling`'s own refill too - matching
+    // Sec5.3h's own confirmed real call order exactly ("descriptor B's
+    // refill fires unconditionally"... "7 instructions... sit between A's
+    // refill returning... and B's refill being called... zero conditional
+    // branches anywhere in between"). `sibling`'s own resulting status
+    // (Poisoned in particular) is NOT propagated through this call's own
+    // return value - unlike A, which every block's primary dispatch needs,
+    // not every block needs B's own secondary byte (only primary==1 blocks
+    // do), so a poisoned/not-yet-exhausted B must not halt the whole row
+    // here; it surfaces later, lazily, the first time a caller actually
+    // calls `sibling->next()` (block_dispatch.h's case-1 sub-dispatch read).
+    // A genuine SourceExhausted while running `sibling`'s own refill IS
+    // propagated, since that means the real bitstream itself ran dry - a
+    // hard stop for every subsequent read, A's or B's, not B-specific.
+    CaseSelectorStatus beginBlockRow(CaseSelectorScratchSource* sibling = nullptr) {
         if (!caseSelectorTablesAvailable()) return CaseSelectorStatus::TablesNotLoaded;  // see this
                                                                                            // file's own top comment
         if (poisoned_) return CaseSelectorStatus::Poisoned;  // permanent, see refill()
-        BuiltTable fresh;
+        const bool siblingAlreadyPoisoned = (sibling != nullptr) && sibling->poisoned_;
+        BuiltTable freshSelf;
+        BuiltTable freshSibling;
         for (int i = 0; i < kSiblingTableBuildsPerBlockRow; ++i) {
             BuiltTable built = buildCaseSelectorTable(br_);
             if (br_.ranOutOfData()) return CaseSelectorStatus::SourceExhausted;
-            if (i == 0) fresh = built;  // CONFIRMED: call #1 feeds this descriptor
+            if (i == siblingTableIndex_) freshSelf = built;
+            if (sibling != nullptr && i == sibling->siblingTableIndex_) freshSibling = built;
         }
-        builtTable_ = fresh;
+        builtTable_ = freshSelf;
         haveTable_ = true;
-        if (pos_ < buffer_.size()) return CaseSelectorStatus::Ok;  // idempotency guard: prior
-                                                                     // range not yet drained
-        return refill();
+        const CaseSelectorStatus selfStatus = (pos_ < buffer_.size()) ? CaseSelectorStatus::Ok
+                                                                       : refill();  // idempotency guard: prior
+                                                                                    // range not yet drained
+        if (selfStatus == CaseSelectorStatus::SourceExhausted) return selfStatus;
+
+        if (sibling != nullptr && !siblingAlreadyPoisoned) {
+            sibling->builtTable_ = freshSibling;
+            sibling->haveTable_ = true;
+            if (!(sibling->pos_ < sibling->buffer_.size())) {
+                const CaseSelectorStatus siblingStatus = sibling->refill();
+                if (siblingStatus == CaseSelectorStatus::SourceExhausted) return siblingStatus;
+                // Poisoned is retained on `sibling` itself (its own
+                // poisoned_ flag, set inside its own refill()) and
+                // deliberately not returned here - see this method's own
+                // doc comment above.
+            }
+        }
+        return selfStatus;
     }
 
     // Returns the next case-selector dispatch byte (spec-bink-codec.md
@@ -447,7 +578,7 @@ private:
     // freshly-built table, set by beginBlockRow() immediately before this
     // call).
     CaseSelectorStatus refill() {
-        const int lengthFieldBits = caseSelectorLengthFieldBitWidth(lumaWidthPixels_);
+        const int lengthFieldBits = lengthFieldBitWidthFn_(lumaWidthPixels_);
         const uint32_t len = br_.readBits(lengthFieldBits);  // 0x10019382-0x100193d1
         if (br_.ranOutOfData()) return CaseSelectorStatus::SourceExhausted;
         if (len == 0) {  // 0x100193d4-0x100193df (LEN > desc->CAP half NOT checked - see top comment)
@@ -511,6 +642,8 @@ private:
 
     BitstreamReader& br_;
     int lumaWidthPixels_;
+    int (*lengthFieldBitWidthFn_)(int);
+    int siblingTableIndex_;
     std::vector<uint8_t> buffer_;
     size_t pos_ = 0;
     BuiltTable builtTable_;

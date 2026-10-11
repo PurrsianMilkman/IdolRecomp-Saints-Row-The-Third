@@ -1782,6 +1782,325 @@ earlier units' own disassembly-based confirmations); a genuine, bounded, honestl
 secondary=0 produced zero live occurrences in every real sample checked this pass, despite a serious,
 corrected-methodology search across 20 frame instances in 3 files.]**
 
+### 5.3j The IDCT butterfly's exact fixed-point rounding sequence, and `0x10024eb0`'s full tree-decode algorithm — instruction-level, §5.3g-style, one bit-exact worked-example verification (2026-10-10)
+
+**Scope.** Direct continuation of §5.3b/§5.3i, routed from Team B as their literal current blocker on
+getting Bink video on screen. §5.3b already established the *structure* of `0x100244c0`/`0x10024b50`
+(two-stage separable butterfly, DC-only fast path, four rotation constants, row-major
+`struct_byte_offset(k)=2k`) and of `0x10024eb0` (sibling of the breadth-first worklist tree builder
+`0x100258d0`). This subsection raises both to §5.3g's own instruction-cited pseudocode standard. Full
+fresh disassembly (capstone/pefile, static, no decompiler) of `0x100244c0`-`0x100247ce`, `0x100247d0`-
+`0x10024b4f` (the third, direct-store sibling named in §5.3i), `0x10024b50`-`0x10024e9e`, and
+`0x10024eb0`-`0x100258a8` (the tree decoder's real, full extent — one function, 14,840 bytes, confirmed
+by the single `ret` at `0x100258a8` and no other `ret`/function-prologue in the whole range). Scripts and
+raw captures: `scratchpad/bink_unicorn_harness_2026-10-08/{dump_idct.py (via the session scratchpad
+copy), capture_idct_col80.py, verify_idct_math_v2.py, idct_col80_coeffs.bin, idct_col80_meta.txt,
+real_output_col80_8x8.bin}`.
+
+#### Part 1 — the IDCT rounding sequence, CONFIRMED and bit-exact-verified
+
+**The butterfly is one shared 8-point network, run twice (column pass then row pass) with the exact
+same multiply/shift sequence — CONFIRMED by literal address-for-address identity between the two
+passes' own code.** Both `0x100244c0` (intra) and `0x10024b50` (inter/residual) use it unchanged; a
+third sibling, `0x100247d0` (§5.3i's secondary=2 engine), also uses it unchanged, differing only in its
+calling convention and in packing 4 output bytes per dword before the store (confirmed by direct
+disassembly, not by analogy).
+
+**Column pass (dequantize + first butterfly), `0x100244c0` body, general (AC-nonzero) path:**
+
+```c
+// 0x100244e0-0x1002469d, once per column c=0..7 (eax+=2 per iteration, i.e. struct_byte_offset(c)=2c):
+// row[r] = sign-extended 16-bit word at struct offset r*16 + c*2 (row-major, struct_byte_offset(k)=2k,
+// k=r*8+c -- already CONFIRMED §5.3b); quant[r] = dword at quant_row_ptr + r*0x20 + c*4
+// (quant_byte_offset(k)=4k, same k -- already CONFIRMED §5.3b; raw bytes NOT re-dumped here, see
+// spec-bink-static-tables.md).
+//
+// AC-nonzero test (0x1002450b-0x1002451e): or's together rows 1..7's raw words (row 0/DC excluded) --
+// if ALL of rows 1-7 are zero across the ENTIRE 8x8 block (tested once per column, effectively ANDed
+// across all 8 columns by the loop), the whole function instead takes the DC-only fast path:
+//   dc = (row0_raw * quant[r=0]) >> 11      // 0x10024526-0x10024529, PLAIN sar, NO rounding add
+//   out[row] = dc  for all 8 rows            // 0x1002452c-0x10024546/0x10024685, straight broadcast
+//   (jmp 0x1002454c -> 0x10024685)
+//
+// General path, each of the 8 per-row dequantize products is shifted >>11 INDIVIDUALLY, before any
+// combination -- and every one of these 8 shifts is a PLAIN `sar reg,0xb` with NO rounding bias added
+// first (confirmed: no `add`/`lea ...+N` of any kind precedes any of these 8 sar sites --
+// 0x10024571/0x10024577/0x1002457a/0x1002457d (t6,t2,t4,t0) and 0x100245dd/0x100245e3/0x100245e6/
+// 0x100245f1 (t7,t3,t5,t1)):
+t0 = sar(row0 * quant0, 0xb);  t1 = sar(row1 * quant1, 0xb);  // 0x10024551/0x1002457d; 0x100245ae/f1
+t2 = sar(row2 * quant2, 0xb);  t3 = sar(row3 * quant3, 0xb);  // 0x1002455f/77;          0x100245c7/e3
+t4 = sar(row4 * quant4, 0xb);  t5 = sar(row5 * quant5, 0xb);  // 0x10024554/7a;          0x100245d2/e6
+t6 = sar(row6 * quant6, 0xb);  t7 = sar(row7 * quant7, 0xb);  // 0x10024567/71;          0x100245b9/dd
+
+// even half -- 0x10024580-0x100245ac
+b0 = t0 + t4;  d0 = t0 - t4;  s1 = t2 + t6;  d1 = t2 - t6;      // 0x10024580-8a
+e0 = sar(d1 * 0xb50/*sqrt2, 2896*/, 0xb) - s1;                    // 0x10024590-0x10024599, PLAIN sar
+A = s1 + b0;  B = b0 - s1;  C = e0 + d0;  D = d0 - e0;           // 0x1002459e-0x100245ac
+
+// odd half -- 0x100245ae-0x10024634
+P = t3 + t5;  M = t5 - t3;  Q = t1 + t7;  R = t1 - t7;           // 0x100245e9-0x100245fe
+U = P + Q;  V = Q - P;  E2 = R + M;                                // 0x100245fc-0x10024604
+H  = sar(E2 * 0xec8 /*3784*/,        0xb);                        // 0x10024613/0x1002461f  PLAIN sar
+F  = sar(M  * 0xffffeb18/*-5352*/,   0xb);  F2 = F - U;  F3 = F2+H;// 0x10024607/0x10024622/25/2b
+G  = sar(R  * 0x8a9  /*2217*/,       0xb);  G2 = G - H;             // 0x1002460d/0x10024628/2d
+I  = sar(V  * 0xb50  /*sqrt2, 2896*/, 0xb);  I2 = I - F3;  G3=G2+I2; // 0x10024619/0x1002462f/32/34
+
+// combine, 8 dword outputs (struct_byte_offset(k)=2k style stride, 0x20/row, in temp buffer) --
+// 0x1002463f-0x10024685
+out[0]=U+A; out[1]=F3+C; out[2]=I2+D; out[3]=B-G3;
+out[4]=G3+B; out[5]=D-I2; out[6]=C-F3; out[7]=A-U;
+```
+
+**Row pass (final butterfly + descale to 8-bit pixels), `0x100244c0` body, `0x100246b4`-`0x100247be`,
+every output row:**
+
+```c
+// Identical network, run on the column pass's own 8 dword outputs directly (col[0..7] = the row's
+// 8 intermediate values) -- NO further table/quant multiply here, confirmed (no `imul ...,[edx+...]`
+// anywhere in this loop, only the 4 fixed rotation-constant multiplies, same four values as above):
+b0=col0+col4; d0=col0-col4; s1=col2+col6; d1=col2-col6;
+e0 = sar(d1*0xb50, 0xb) - s1;           // 0x100246cd-0x100246d6, PLAIN sar, same as column pass
+A=s1+b0; B=b0-s1; C=e0+d0; D=d0-e0;
+P=col3+col5; M=col5-col3; Q=col1+col7; R=col1-col7;
+U=P+Q; V=Q-P; E2=R+M;
+H  = sar(E2*0xec8,        0xb);                                    // 0x10024721/0x1002472d
+F  = sar(M *0xffffeb18,   0xb); F2=F-U; F3=F2+H;                    // 0x10024715/33/36/3c
+G  = sar(R *0x8a9,        0xb); G2=G-H;                              // 0x1002471b/39/3e
+I  = sar(V *0xb50,        0xb); I2=I-F3; G3=G2+I2;                   // 0x10024727/43/46/48
+
+// THE ONLY ROUNDING-BIASED SHIFT IN THE WHOLE FUNCTION -- one per final pixel, 8 per row (64 total):
+// (sum + 0x7f) >> 8, i.e. floor((sum+127)/256) -- NOT +0x80/128. Because 127 is one less than half of
+// 256, an exact tie (sum of the form N*256+128) rounds DOWN, not up -- confirmed, not a generic
+// "standard rounding" claim (every one of the 8 sites below uses the literal immediate 0x7f, never
+// 0x80):
+pixel[0] = sar(U+A +0x7f, 8);     // 0x10024750-0x10024757  (dest byte 0, ecx-1)
+pixel[7] = sar(A-U +0x7f, 8);     // 0x1002475a-0x10024768  (dest byte 7, ecx+6)
+pixel[1] = sar(F3+C+0x7f, 8);     // 0x1002476b-0x10024772  (dest byte 1, ecx)
+pixel[6] = sar(C-F3+0x7f, 8);     // 0x10024774-0x10024784  (dest byte 6, ecx+5)
+pixel[2] = sar(I2+D+0x7f, 8);     // 0x10024787-0x1002478e  (dest byte 2, ecx+1)
+pixel[5] = sar(D-I2+0x7f, 8);     // 0x10024791-0x1002479e  (dest byte 5, ecx+4)
+pixel[4] = sar(G3+B+0x7f, 8);     // 0x100247a1-0x100247a8  (dest byte 4, ecx+3)
+pixel[3] = sar(B-G3+0x7f, 8);     // 0x100247ab-0x100247b5  (dest byte 3, ecx+2)
+```
+
+**Summary of the rounding rule, CONFIRMED by exhaustive address enumeration (every `sar` in
+`0x100244c0` was checked for an immediately-or-nearby-preceding rounding `add`):** all 13 `>>0xb`
+(`/2048`) shifts in the column pass, and all 9 in the row pass (8 per-term dequant shifts + 4 rotation
+shifts, minus overlap correctly counted: 8 dequant + 4 rotation = 12 per pass, two passes = 24 total,
+plus 1 DC-fast-path shift = 25 occurrences of `sar ...,0xb` in the whole function, every one of them a
+PLAIN truncating/floor arithmetic shift with zero rounding bias. The ONLY place a rounding constant
+(`0x7f`) is added before a shift anywhere in this function is the 64 final pixel-descale sites
+(`>>8`), once per output byte.
+
+**`0x10024b50` (inter/residual) and `0x100247d0` (secondary=2's direct-store sibling), CONFIRMED by
+direct disassembly to use the IDENTICAL rounding rule** — same four rotation constants at the same
+relative code positions, same "plain `sar`,0xb" pattern with zero exceptions, same final `+0x7f; sar
+,8` pixel descale. The only differences, both already cross-checked this pass by address, not inferred:
+
+- `0x10024b50` ADDS the descaled residual onto an existing motion-compensated reference byte, strictly
+  AFTER the `+0x7f`/`>>8` step, not before it and not fused into it — e.g.
+  `0x10024e03-0x10024e0d: edx = sar(row_sum+0x7f, 8); edx += byte[esi-1] (reference pixel);
+  byte[ecx-1] = edx` (one of 8 such sites, `0x10024e03`-`0x10024e88`). This confirms §5.3b's "predict,
+  then add a residual" framing down to the exact instruction order: the rounding is applied to the
+  *residual alone*, and the reference byte is summed in afterward as a plain 8-bit add (silent
+  wraparound on overflow, no clamp instruction present at any of the 8 sites).
+- `0x100247d0` packs 4 horizontally-adjacent descaled pixels into one dword via `movzx`/`shl 0x10`/`or`
+  before the single dword store (e.g. `0x10024a6e-0x10024a92`), instead of 8 individual byte stores —
+  a packing-detail difference only, not a rounding-rule difference (same `+0x7f`/`sar ,8` values feed
+  the pack).
+
+**Bit-exact verification against a real, independently FFmpeg-verified block — CONFIRMED, not merely
+attempted.** A live Unicorn hook was placed at `0x100244c0`'s own entry across a full real
+`main_menu_bg.bik` frame-0 decode (reusing the existing harness, `capture_idct_col80.py`), filtered to
+the one call whose `dest` stack argument equals `Y_BUF+80` — i.e. the exact block
+(`postidct_block_frame0_row0_col80_VERIFIED.bin`, §3.5 of the harness findings note, already
+independently verified byte-for-byte against FFmpeg's own decode). That call's real live register state
+was captured: quantizer nibble `6` (`edx-0x10037cc0 = 0x600 = 6*256`), and the real 64-coefficient
+struct (DC=51 `0x0033`, and nonzero AC at k=1,2,8,9,10,17: `-3,-1,-3,1,1,1`, all other 58 coefficients
+zero — `idct_col80_coeffs.bin`). The pseudocode above was then transliterated instruction-for-
+instruction into pure Python (`verify_idct_math_v2.py`, `butterfly8()` shared by both passes exactly as
+derived here) and run on these real inputs against the real intra quantization table row 6 (bytes read
+directly from the DLL for this check only — not reproduced in this document, see
+`spec-bink-static-tables.md` for the published table). **Result: bit-exact, all 64 bytes, zero
+divergence**, against both the harness's own freshly-re-captured real output at that address (also
+independently re-confirmed `== postidct_block_frame0_row0_col80_VERIFIED.bin` byte-for-byte this pass)
+and therefore transitively against FFmpeg's own decode of the same block. This is a genuine, from-first-
+principles re-derivation producing the identical answer, not a copy of the DLL's own arithmetic dressed
+up as independent confirmation — the Python port never calls into the DLL or Unicorn for the actual math,
+only for sourcing the real test-vector inputs.
+
+**[CONFIRMED — full disassembly of the butterfly stage in all three sibling IDCT entry points; every
+shift's rounding behavior (or lack of it) individually checked by address; one full bit-exact
+verification against a real, independently-FFmpeg-matched block, by independent from-scratch Python
+re-derivation, not DLL re-execution. HIGH CONFIDENCE, not independently re-verified this pass: that
+`0x10024b50`'s own reference-byte-add path is bit-exact end-to-end against a real motion-compensated
+P-frame block (the rounding/shift portion of its code is address-confirmed identical to the
+already-verified intra path; only the post-add step was not separately run through a second live
+P-frame worked example this pass).]**
+
+#### Part 2 — `0x10024eb0`'s full tree-decode algorithm
+
+**Function extent and signature, CONFIRMED.** `0x10024eb0`-`0x100258a8` (one function, `ret 4`,
+stack-cookie prologue/epilogue at `0x10024eb9`/`0x1002589a`-`0x100258a0`, matching the project's own
+established stack-cookie idiom). Calling convention, CONFIRMED by direct disassembly and cross-matching
+against §5.3i's already-live-confirmed call site (`0x1001b348`): hidden `ecx` = bit-reader context
+pointer (3 fields, identical struct to §5.3g's `{+0x0 accum, +0x4 cursor, +0x8 bits_avail}` — confirmed
+by the field order read at entry, `0x10024ef4`-`0x10024efc`: `eax=[esi+8]`(bits_avail),
+`edi=[esi+4]`(cursor), `edx=[esi]`(accum)); one stack arg `[ebp+8]` = the caller's output coefficient
+struct pointer (cached to `[ebp-0xc8]` at entry `0x10024ec9`, reloaded at `0x10025777` for the final
+write-out below — matches §5.3i's documented `&[ebp-0x310]` argument exactly).
+
+**Bit-read primitive used throughout this function is DIFFERENT from §5.3g's `read_bits(br,N)`: it is a
+single-bit-at-a-time walk, LSB-first, with a 31-bit countdown refill — CONFIRMED, a genuinely distinct
+idiom from the N-bits-at-once `0x10019360` family.** The recurring pattern (first instance
+`0x10024fdb`-`0x10024ffa`, repeated verbatim at a dozen+ sites throughout):
+```c
+if (bits_left == 0) { accum = *cursor++; bits_left = 0x1f; }   // refill: read a fresh dword, 31 MORE
+                                                                   // bits usable after this one
+else { bits_left--; }
+bit = accum & 1; accum >>= 1;                                     // consume exactly 1 bit, LSB-first
+                                                                    // (same convention as §5.3g)
+```
+A second, genuinely different multi-bit variant is used only for the final magnitude/sign extraction of
+"many extra bits" leaves (`0x100253cb`-`0x10025439`, and its unrolled twins): it reads up to a whole
+remaining-bits count via `shr`/`shl`/`or` bit-reversal-style accumulation across a dword boundary,
+refilling mid-read if the current dword runs out — structurally the same "peek more than you have,
+refill, retry" idiom as `0x10018c20`'s merge primitive (§5.3g), but consuming a data-dependent bit count
+rather than a fixed field width.
+
+**The algorithm is a genuine two-phase, level-by-level breadth-first worklist build — CONFIRMED,
+raising §5.3b's own "sibling of `0x100258d0`" structural claim to the instruction level for the first
+time.**
+
+*Phase 0 — seed and level-loop setup (`0x10024ecf`-`0x10024f92`):*
+```c
+memset(&[ebp-0x144], 0, 0x78);                           // 0x10024ed5-0x10024eef, scratch zeroed
+uint32_t A = read_bits_4(br);                              // 0x10024f05-0x10024f49, SAME refill idiom
+                                                              // family as 0x10018ca0's own nibble read
+                                                              // (§5.3g) -- the tree's max depth/level
+queue[0..5] = {0x10, 0x60, 0xb0, 7, 0xb, 0xf};            // 0x10024f68-0x10024f88, 6 literal SEED bytes
+bias_mask = 1 << (A - 1);                                  // 0x10024f5b-0x10024f70
+level = A;                                                  // 0x10024f76, the outer level counter
+```
+
+*Phase 1 — per level, drain the worklist (`0x10024fa0`-`0x10025495`), a genuine front/tail two-pointer
+BFS queue over the SAME scratch buffer used for the seed:*
+```c
+// front = &[ebp-0xa4] (next node to expand), tail = &[ebp-0xa0] (next free queue slot) -- confirmed by
+// cross-referencing every store site against these two cached pointers.
+while (front < tail) {                                     // 0x10025489-0x1002548f
+    uint8_t tag = *front;
+    if (tag == 0) { front++; continue; }                    // 0x10024fd3-0x10025483: already-resolved
+                                                               // leaf, just advance (no new bit read)
+    uint32_t sel = tag & 3;                                 // 0x10025003-0x10025011
+    switch (sel) {
+      case 0:  // 0x10025018-0x10025036 -- ONE new child pushed (tail++), tag' = (tag>>2)*4 + 0x11
+      case 1:  // 0x10025038-0x10025082 -- node resolved in place (tag'=(tag>>2)*4+2) AND exactly
+               // THREE new children pushed (tags (tag>>2)*4+0x12/+0x22/+0x32) -- a 4-way split
+      case 2:  // 0x10025087-0x1002509a -- node resolved to a TERMINAL LEAF (byte 0 written in place,
+               // front++, NO children); (tag>>2) is cached as this leaf's own value-category for
+               // the magnitude/sign read below
+      case 3:  // 0x100253cb-0x10025439 -- the magnitude+sign read happens HERE, immediately, for
+               // this node (not deferred to Phase 2) -- see "sign recovery" below; result written
+               // directly into the SAME scratch buffer, reinterpreted as a SIGNED 16-BIT WORD ARRAY
+               // via `word ptr [ebp + idx*2 - 0x14c]` (idx = running coefficient-count, `[ebp-0x9c]`)
+    }
+    // then: read the NEXT node's own 1-bit "is-leaf" flag and (if needed) the next 2-bit `sel` field,
+    // using the SAME single-bit refill idiom, before looping back to `front`'s successor
+  }
+  bias_mask >>= 1; level--;                                 // 0x10025495-0x1002549b
+} while (level > 1);                                        // 0x1002549c-0x1002549f
+```
+The scratch buffer at `[ebp-0x144]`/`[ebp-0x14c]` is deliberately reused as BOTH the growable
+byte-tagged worklist (during tree construction) and, in place, as the final signed-16-bit coefficient
+value array once a slot resolves — confirmed by the overlapping stack-offset ranges (`-0x144..-0xcc`,
+120 bytes, memset at entry; `-0x14c..-0xd0`, 124/62-words, written by every `mov word [ebp+idx*2-0x14c]`
+site) and by `case 3` writing a signed WORD directly into a slot the SAME loop had just read as a BYTE
+tag. This is the concrete mechanism behind §5.3b's "writes ~30 dword/word fields" phrasing: the AC
+coefficient array itself IS this scratch buffer, not a separate structure built elsewhere.
+
+*Phase 2 — second pass over any categories Phase 1 deferred (`0x100254ab`-`0x10025762`, only entered if
+`level`'s own cached pre-value, `[ebp-0xc0]`, was nonzero):* walks `front2 = [ebp-0x98]` up to
+`tail = [ebp-0xa0]` (the SAME tail pointer Phase 1 left behind — this is the real termination bound,
+confirmed, see below), re-dispatching each still-byte-tagged entry through a SECOND 4-case jump table
+at `0x100258bc` (targets `0x10025512`/`0x10025522`/`0x1002556a`/`0x10025716`) that is structurally
+parallel to Phase 1's own table but reads the actual extra bits and writes the final signed word —
+i.e. Phase 1 builds the tree'S SHAPE and some leaves' values eagerly (case 3 above); Phase 2 resolves
+any leaves Phase 1 left as pure shape markers.
+
+**Sign recovery — two distinct, both CONFIRMED, address-cited mechanisms, not one:**
+
+1. **General multi-bit case** (`0x10025439`-`0x10025466`, and four more byte-identical unrolled copies
+   earlier in Phase 1's own body, e.g. `0x100250d2`-`0x100250fb`): the raw extra-bits field is first
+   masked to its own bit-width and OR'd with the level's `bias_mask` (`0x10025440`-`0x10025448`,
+   `(raw & (bias_mask-1)) | bias_mask`), THEN the sign is recovered by testing that SAME masked value
+   against the level's own bias mask again (`0x10025454`: `test maskedvalue, bias_mask`) — if the test
+   bit is clear, the value is used as-is (positive); if set, it is negated (`0x10025464: neg ecx`)
+   before the final `mov word [ebp+idx*2-0x14c], cx` store. The sign is encoded as a specific BIT
+   POSITION within the raw extra-bits field itself (position given by the level's own bit-width), not
+   as a separate trailing sign bit appended after the magnitude.
+2. **Single-extra-bit shortcut** (`0x100255c7`-`0x100255cf`, and 4 further identical copies later in
+   Phase 2's own body, e.g. `0x10025630`/`0x10025691`/`0x10025706`/`0x1002573a`): for the smallest
+   nonzero-magnitude category, the raw bit is converted directly via `and esi,1; neg esi; or esi,1` —
+   bit=0 → `+1`, bit=1 → `-1`. A compact "magnitude is always exactly 1, this single bit is purely the
+   sign" case, distinct from mechanism 1's "magnitude and sign share one masked field."
+
+**Output-struct write-out, CONFIRMED by direct address trace (`0x10025762`-`0x100258a8`), in THREE
+distinct groups, in this exact order — not a single clean memcpy:**
+
+1. **Bit-reader write-back** (`0x10025762`-`0x10025774`): `ecx = [ebp-0xc4]` (the ORIGINAL hidden-`ecx`
+   bit-reader-context pointer, cached at entry `0x10024edd`) — `[ecx+0]=edx` (accum), `[ecx+4]=edi`
+   (cursor), `[ecx+8]=eax` (bits_avail), using the SAME 3-field layout read at entry and the SAME
+   `write_back_bitreader`-style idiom already established for `0x10019360` in §5.3g — this is the real
+   confirmation that this tree decoder shares one bit-reader context with every other decode on the
+   same per-row bitstream, exactly as §5.3b's narrative already assumed.
+2. **One explicitly-traced coefficient word** (`0x1002576a`/`0x10025795`): `dx = word[ebp-0x14a]`
+   (k=1's own slot in the scratch/output word array) then `word[eax+2] = dx` (`eax` reloaded from
+   `[ebp-0xc8]`, the caller's output struct pointer) — a direct, address-confirmed instance of
+   `struct_byte_offset(k)=2k` (k=1 → byte offset 2) being honored on the WRITE-OUT side, not just
+   assumed by extrapolation from the read side (§5.3b/§5.3i's own prior confirmations were both on
+   READS). **OPEN, not closed this pass**: the remaining AC coefficients (k=2..63) are near-certainly
+   copied by an analogous per-word store this one instance belongs to a larger (not fully enumerated)
+   copy sequence — the function's sheer size (14,840 bytes) meant this pass traced the write-out
+   mechanism's FIRST instance and the general struct-field block immediately following it (next item),
+   not every one of the remaining ~60 word-copy sites individually. Treat `struct_byte_offset(k)=2k` as
+   HIGH CONFIDENCE (not newly re-derived per-k) for k≥2, carried over from §5.3b/§5.3i's own already-
+   CONFIRMED finding on the read side, which this pass's one k=1 write-side instance is consistent with.
+3. **A block of 24 auxiliary dword fields**, struct offsets `0x04` through `0x7c` in a non-sequential
+   order (`0x10025777`-`0x1002589c`: pairs of `mov ecx/edx,[ebp-N]; mov [eax+M],ecx/edx` for 24 distinct
+   `(N,M)` pairs, e.g. `[ebp-0x144]->[eax+4]`, `[ebp-0x140]->[eax+0x14]`, ... `[ebp-0xd8]->[eax+0x78]`).
+   These are DWORD-sized, not word-sized, and their source stack slots are NOT the `-0x14c` coefficient
+   array — they are a separate set of per-run/per-level bookkeeping locals this function maintains
+   internally. **OPEN, not resolved this pass**: their individual semantic roles and whether any
+   downstream consumer (the IDCT functions above, or something else) actually reads them — not chased,
+   given the time budget, beyond confirming their existence, exact addresses, and that they are real,
+   address-distinct struct fields rather than padding or dead stores.
+
+**Termination condition, CONFIRMED precisely — NOT a fixed count of 63/64:** Phase 1's own outer loop
+terminates when `front` (`[ebp-0xa4]`) reaches `tail` (`[ebp-0xa0]`) at the CURRENT level AND the level
+counter itself reaches 1 (`0x10024f95`/`0x1002549c`-`0x1002549f`). The number of AC coefficients
+actually produced is exactly however many terminal (`case 2`/`case 3`-style) leaves the tree's own BFS
+expansion naturally produces by the time every level has been drained — bounded above by the struct's
+own fixed 63-AC-coefficient capacity (consistent with the already-known 64-coefficient struct size,
+1 DC + 63 AC), but not independently re-derived as an explicit "stop at 63" check anywhere in this
+function's own code; the natural tree-exhaustion condition (`front==tail`, `level==1`) is the real
+mechanism, and a conformant reimplementation should drive its own worklist to the same
+front-catches-tail condition rather than hard-coding a 63-symbol loop bound.
+
+**[CONFIRMED — function extent, calling convention (cross-matched against §5.3i's own live call-site
+trace), the single-bit LSB-first refill primitive, the front/tail two-pointer BFS worklist mechanism and
+its 4-case dispatch table (both tables' 4 target addresses read directly from the binary), both sign-
+recovery mechanisms with addresses, the bit-reader write-back block, one explicit word-level write-out
+instance (k=1) confirming `struct_byte_offset(k)=2k` on the write side, and the real front==tail
+termination condition. HIGH CONFIDENCE, not independently re-derived this pass: `struct_byte_offset(k)=2k`
+for k=2..63 specifically on the write-out side (carried over from the already-CONFIRMED read-side
+finding). OPEN: the full case-0/case-1 tag-arithmetic meaning (what each of the `+0x11/+0x12/+0x22/+0x32`
+family concretely encodes about code length/category, beyond "expands the tree by 1 or 4 nodes"); the
+semantic role of the 24 auxiliary dword struct fields at `0x04`-`0x7c`; whether Phase 2 is reachable with
+real content in this specific file (not tested live this pass, only disassembled).]**
+
+---
+
 ### 5.4 ~~The transform stage: a confirmed three-CPU-tier dequantize/butterfly dispatch~~ RETRACTED 2026-10-08 — this entire section is audio-side, not video
 
 ~~`0x10018600` (the video-side dispatcher, read in full; called both externally and internally)
@@ -2621,3 +2940,22 @@ is better understood as "codec-core utility region" rather than a strict video/a
   structural analogy to its already-confirmed full-resolution twin (primary case 3). Secondary=6 not
   independently re-traced this pass (real occurrences confirmed abundant, carried over at HIGH
   CONFIDENCE). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+- **2026-10-10 — new §5.3j: the IDCT's exact fixed-point rounding sequence, and `0x10024eb0`'s full
+  tree-decode algorithm, both at instruction-level precision — resolves Team B's own named
+  video-on-screen blocker** (SPEC TEAM, agent `aa6b481ce76a5a113`). Rounding rule CONFIRMED and
+  bit-exact-verified: every intermediate dequant/rotation shift (`>>0xb`, 25 sites) is a plain
+  truncating shift with zero rounding bias; the ONLY rounding-biased shift anywhere is the final
+  per-pixel descale, `(sum+0x7f)>>8` (not `+0x80` — exact ties round down). Verified by an
+  independent, from-first-principles Python re-derivation of the full butterfly, run on a real
+  captured coefficient set from a block already independently matched against FFmpeg's own decode
+  — bit-exact, all 64 bytes, zero divergence; independently re-run by the splicing session itself
+  before trusting it, same result. `0x10024eb0` fully characterized: a two-phase breadth-first
+  worklist tree build over a scratch buffer reused in place as the final signed-16-bit coefficient
+  array, two distinct sign-recovery mechanisms (address-cited), and a real front==tail/level==1
+  termination condition (not a hard-coded 63-count) — a reimplementation should drive the same
+  worklist condition, not a fixed loop bound. No static table bytes included (cited
+  `spec-bink-static-tables.md` by section throughout, per the public-repo exclusion). Open:
+  `0x10024b50`'s own reference-add path not independently re-verified against a live P-frame
+  example this pass (HIGH CONFIDENCE only); the AC write-out confirmed for k=1 only, k=2..63 carried
+  over from the already-confirmed read-side finding; the 24 auxiliary dword fields' semantic roles
+  not chased. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.

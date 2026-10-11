@@ -125,6 +125,28 @@ public:
     // as if the nominal width were the real cost.
     void skipBits(int bits) { readBits(bits); }
 
+    // Skips `n` raw bytes forward through the SAME accumulator-based
+    // readBits() path every other read in this file uses (never a raw
+    // pointer seek) - added 2026-10-09 (spec-bink-codec.md Sec1.6, the
+    // `D10>=1` per-track audio-chunk skip) for frame_decoder.h's
+    // skipAudioChunks(): each audio chunk is a plain 4-byte little-endian
+    // size field (already consumed by the caller via readBits(32)) followed
+    // by that many bytes of that track's own compressed payload, which must
+    // be stepped over (not decoded) before the video chunk's own span field
+    // begins. Correct from any starting bit-alignment, not just a byte-
+    // aligned cold start, since it is built from the same readBits() calls
+    // as every other consumer.
+    void skipBytes(size_t n) {
+        while (n >= 4) {
+            readBits(32);
+            n -= 4;
+        }
+        while (n > 0) {
+            readBits(8);
+            --n;
+        }
+    }
+
     // Sec5.3a's "several byte-aligned (non-bit-packed) reads for
     // pattern-control bytes" - see this file's own top comment for the
     // DERIVED realignment convention used here.
