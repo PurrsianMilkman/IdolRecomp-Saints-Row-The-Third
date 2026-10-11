@@ -102,8 +102,13 @@ AnimFile ParseAnimFile(const Node* row) {
         ++f.triggerElements;
         // Shape OPEN (Sec3.1 text vs Sec3.2 Name child): read the Name child,
         // count the rest rather than dropping them silently.
-        if (auto n = getText(t, "Name")) f.triggerNames.push_back(*n);
-        else ++f.triggerElementsUnread;
+        if (auto n = getText(t, "Name")) {
+            f.triggerNames.push_back(*n);
+            // ADDED (footstep-real-event task): index-aligned with triggerNames above.
+            f.triggerFrames.push_back(sr3xtbl::ReadInt32Always(t, "Frame").value);
+        } else {
+            ++f.triggerElementsUnread;
+        }
     }
 
     const Node* iks = sr3xtbl::FindChild(row, "IKs");

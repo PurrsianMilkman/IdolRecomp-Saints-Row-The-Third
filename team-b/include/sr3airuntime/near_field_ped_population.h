@@ -786,6 +786,30 @@ inline std::optional<Vec3> ChooseFleeDestination(const Vec3& pedPos, const Vec3&
 // had ever actually succeeded - is unconfirmed anywhere in this spec.
 inline constexpr double kFleeSpeedMsChosen = 5.0;
 
+// CHOSEN stand-in for ORDINARY (non-fleeing) ambient-ped wander movement
+// (general-ped-idle-tick task, 2026-10-10) - same OPEN gap as
+// kFleeSpeedMsChosen immediately above (no ped-specific walk speed
+// anywhere in this project), a SEPARATE, slower figure because an idly
+// wandering ped is walking, not fleeing a threat. A plausible average
+// human walking pace, well below kFleeSpeedMsChosen. Flag for Team A: the
+// real ordinary-idle walk rate is unconfirmed anywhere in this spec, same
+// as the flee rate.
+inline constexpr double kWanderWalkSpeedMsChosen = 1.4;
+
+// CHOSEN per-second sidewalk-progress advance rate for ORDINARY idle
+// ticking (general-ped-idle-tick task) - TickSidewalk's own advancePerTick
+// parameter already documents this exact figure as OPEN ("HIGH CONFIDENCE
+// shape, not independently disassembled to its own last instruction");
+// this is simply a nonzero stand-in (a caller multiplies by dt to get the
+// per-tick delta) so the abstract 0..1 completion scalar actually
+// advances instead of permanently sitting at 0, same as never calling
+// TickSidewalk at all. Deliberately NOT used to derive the ped's own
+// actual world-position movement (see this task's own sr3_viewer.cpp call
+// site comment for why an incremental StepTowardDestination is used for
+// that instead of a segmentProgress->point remap) - this constant drives
+// only the abstract completion/abandon-trigger timing.
+inline constexpr double kSidewalkAdvancePerSecondChosen = 0.3;
+
 // Move `pos` toward `dest` by at most `maxStepDist` this tick (planar XZ
 // only - y is left to the caller's own ground-snap, the SAME split
 // SelectNearFieldPedSpawn's own y-handling already uses elsewhere in this

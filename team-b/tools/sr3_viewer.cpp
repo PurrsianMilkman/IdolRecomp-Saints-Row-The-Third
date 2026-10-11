@@ -18406,18 +18406,32 @@ sr3luahost::Host::RunResult missionRunChunkWithWatchdog(sr3luahost::Host& host, 
 //      the same, already independently oracle-verified pipeline - see
 //      HANDOFF.md's 493/493 cutscene_sounds.vpp_pc citation).
 // Returns on the FIRST Sound item that resolves AND decodes successfully;
-// does not try to pick a semantically meaningful one (e.g. a literal
-// "footstep" event) because NO confirmed footstep-specific SFX identity
-// exists anywhere in spec-audio-runtime.md as of this task (Sec11a.7 names
-// real event strings for crowd/boss/vehicle-minigame cues, never foley/
-// footsteps) - inventing a plausible-looking id/name here would be exactly
-// the kind of fabrication the project's no-invented-fixes rule forbids.
-// This is therefore an HONEST SUBSTITUTE for "the real footstep sound":
-// the nearest thing this project can point to that is (a) reached through
-// the real, spec-confirmed lookup mechanism and (b) independently proven to
-// decode correctly - not a claim that the specific clip played IS a
-// footstep sample. The result is played on a footstep-shaped CADENCE
-// (while the player is moving, see runPlaytest()'s own call site) as the
+// does not try to pick a semantically meaningful one.
+// UPDATE (footstep-real-event task, 2026-10-10): spec-audio-runtime.md
+// Sec11a.8 (landed after the original audio-playback task above) DOES now
+// confirm a real footstep-specific SFX identity: the literal Wwise event
+// string "FOOTSTEP", sourced from anim_files.xtbl Sounds/Sound rows (144 in
+// the base game), each pairing a MATERIAL_TYPE switch with a SHOE_TYPE/
+// MOVEMENT_TYPE switch. runPlaytest() now looks that identity up by name
+// (see its own "REAL FOOTSTEP event identity + CHOSEN switch selection"
+// block) using MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN, per
+// purrsian-52, for open-world walking which has no author-baked material
+// context). What is STILL genuinely open, and why this function itself is
+// UNCHANGED: resolving that named event+switch identity to an actual Wwise
+// media id requires walking Event(kind4)->Action(kind3)->SwitchContainer,
+// and no switch-container HIRC on-disk layout is reverse-engineered
+// anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document
+// Event->Action->plain-Sound only, never a switch-keyed container) -
+// guessing that binary layout would be exactly the kind of invented engine
+// behaviour the no-invented-fixes rule forbids. So this function still
+// returns the nearest REAL, independently decode-verified SFX media this
+// project can point to (by raw HIRC id, not by the real event name) -
+// NOT a claim that the specific clip played IS the real FOOTSTEP media,
+// but now paired with an honest, explicit statement (in runPlaytest()'s own
+// log output) of the real identity that could not yet be resolved to it.
+// The result is played when the real left-foot/right-foot anim-clip
+// Trigger (Sec11a.8 again) fires (or, lacking that data, a footstep-shaped
+// CADENCE - see runPlaytest()'s own call site for which) as the
 // first concrete end-to-end proof that decoded PCM reaches a real speaker,
 // not as a claim about which game sound is now correctly audible.
 struct FootstepCadenceSfxClip {
@@ -18635,15 +18649,20 @@ int runPlaytest(int argc, char** argv) {
                      "       pause_menu_common.vint_doc is read from for the overlay's own best-effort\n"
                      "       real-document load (CHOSEN default: derived from <characters.vpp_pc>'s own\n"
                      "       directory, same convention --vehicle-archive's own default uses).\n"
-                     "       AUDIO (THIS TASK, audio-playback): a real XAudio2 output device opens by\n"
-                     "       default (interactive runs only - see below) and a real SFX clip, resolved\n"
-                     "       through this project's own CONFIRMED HIRC/media-bank lookup mechanism\n"
-                     "       (spec-audio-runtime.md Sec9.8, findFirstPlayableSfxClip()'s own doc comment\n"
-                     "       above this function), plays on a footstep-shaped cadence while the player is\n"
-                     "       moving on foot - HONESTLY NOT the confirmed real footstep sound (no such\n"
-                     "       identity exists yet in spec-audio-runtime.md), the nearest real, independently\n"
-                     "       decode-verified SFX media this project can point to without inventing an event\n"
-                     "       name. Flat (non-attenuated) volume - distance is computed and logged from the\n"
+                     "       AUDIO (audio-playback task, updated by footstep-real-event task 2026-10-10):\n"
+                     "       a real XAudio2 output device opens by default (interactive runs only - see\n"
+                     "       below). The real Wwise footstep event (the literal string \"FOOTSTEP\", from\n"
+                     "       anim_files.xtbl Sounds/Sound rows, spec-audio-runtime.md Sec11a.8) is looked\n"
+                     "       up by name with CHOSEN switches MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (no\n"
+                     "       author-baked material context exists for open-world walking); resolving that\n"
+                     "       identity to a specific Wwise media id is still OPEN (no switch-container HIRC\n"
+                     "       layout reverse-engineered anywhere in this project), so the SAME real,\n"
+                     "       independently decode-verified SFX media findFirstPlayableSfxClip() resolves\n"
+                     "       (by raw HIRC id, Sec9.8) still plays - now correctly labelled as standing in\n"
+                     "       for a KNOWN real identity, not an arbitrary pick. Timing: fires on the real\n"
+                     "       left-foot/right-foot anim-clip Trigger Frame crossing when that data is found\n"
+                     "       for the walk clip actually played (Sec11a.8), else a footstep-shaped CADENCE\n"
+                     "       fallback. Flat (non-attenuated) volume - distance is computed and logged from the\n"
                      "       real emitter/listener positions (Sec11a.1/Sec11a.2) but the actual Wwise\n"
                      "       distance-attenuation curve is confirmed to live entirely inside Wwise's own\n"
                      "       statically-linked code (Sec11a.5) - not reachable, not guessed. --no-audio\n"
@@ -19293,6 +19312,109 @@ int runPlaytest(int argc, char** argv) {
     }
     const sr3animruntime::StateActionRegistry stateActions = sr3animruntime::StateActionRegistry::build({}, states, actions);
     const sr3animruntime::TriggerRegistry triggers = sr3animruntime::TriggerRegistry::build(triggerNames);
+
+    // ---- REAL foot-plant trigger frames for the walk clip (THIS TASK, 2026-10-10, orchestrator
+    // correction after spec-audio-runtime.md Sec11a.8 / spec-anim-runtime.md Sec7.13's own
+    // 2026-10-10 update) --------------------------------------------------------------------
+    // anim_files.xtbl's generic `left-foot`/`right-foot` Triggers/Trigger markers (each with a
+    // real Frame child) are REAL, universally-authored data - 1,170/1,149 occurrences base-game-
+    // wide (Sec11a.8). This is the real foot-plant frame the walk/run/sprint locomotion clips
+    // themselves carry, as opposed to the earlier fixed-cadence GUESS (kFootstepCadenceFrames
+    // below) this task's original placeholder used.
+    // HONEST CAVEAT: RealClipRegistry's own doc comment above ("WHICH CLIPS, AND WHY THESE")
+    // already states "plym_ps_wlk.anim_pc" is a CHOSEN rig-compatible substitute for the real
+    // "player state machine" walk clip, NOT confirmed to be the production mapping's own walk
+    // clip ("this project has no anim_files.xtbl-backed clip registry anywhere"). So this lookup
+    // only activates when anim_files.xtbl happens to carry a row whose Filename stem is literally
+    // "plym_ps_wlk" (matched case-insensitively, extension-agnostic - the xtbl's own Filename is
+    // ".animx", the loaded clip is ".anim_pc", same base name) AND that row carries at least one
+    // left-foot/right-foot trigger. If not found, this falls back to the original cadence guess
+    // below - NOT invented, an honest degrade matching this task's own "keep the trigger-timing
+    // side as-is if genuinely open" instruction.
+    std::vector<int32_t> walkLeftFootFrames, walkRightFootFrames;
+    bool walkTriggerFramesFound = false;
+    bool footstepEventRowFound = false;
+    std::string footstepEventClipFilename;
+    int32_t footstepEventFrame = 0;
+    try {
+        const sr3xtbl::Document animFilesDoc = docOf("anim_files.xtbl");
+        const std::vector<sr3tables_animation::AnimFile> animFiles =
+            sr3tables_animation::ParseAnimFilesTable(animFilesDoc);
+        auto stemOfLower = [](const std::string& fn) {
+            std::string s = fn;
+            const size_t dot = s.find_last_of('.');
+            if (dot != std::string::npos) s = s.substr(0, dot);
+            for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return s;
+        };
+        for (const auto& f : animFiles) {
+            if (!f.filename || stemOfLower(*f.filename) != "plym_ps_wlk") continue;
+            for (size_t i = 0; i < f.triggerNames.size(); ++i) {
+                std::string n = f.triggerNames[i];
+                for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                if (i >= f.triggerFrames.size()) continue;
+                if (n == "left-foot") walkLeftFootFrames.push_back(f.triggerFrames[i]);
+                else if (n == "right-foot") walkRightFootFrames.push_back(f.triggerFrames[i]);
+            }
+            break;  // first matching row only - same "first match" convention used elsewhere in this file
+        }
+        walkTriggerFramesFound = !walkLeftFootFrames.empty() || !walkRightFootFrames.empty();
+
+        // ---- REAL FOOTSTEP event identity + CHOSEN switch selection (THIS TASK) -----------
+        // spec-audio-runtime.md Sec11a.8: the real Wwise event for footsteps is the literal
+        // string "FOOTSTEP", sourced from these SAME anim_files.xtbl rows (144 in the base
+        // game carry a Sounds/Sound with Audio_Event=="FOOTSTEP", each pairing a MATERIAL_TYPE
+        // switch (CONCRETE/METAL_SOLID/FLESH) with a SHOE_TYPE or MOVEMENT_TYPE switch). Open-
+        // world walking has no author-baked material context (those 144 rows are fixed-context
+        // clips - vehicle floor entry/exit, the Brute NPC kit - not general locomotion, Sec11a.8
+        // point 2), so per purrsian-52's direction this uses MATERIAL_TYPE:CONCRETE +
+        // SHOE_TYPE:SNEAKER as a labelled CHOSEN default for general walking - NOT invented
+        // freshly here, just implemented per that direction. First matching row wins (same
+        // "first match" convention used throughout this file).
+        for (const auto& f : animFiles) {
+            for (const auto& s : f.sounds) {
+                if (!s.audioEvent || *s.audioEvent != "FOOTSTEP") continue;
+                const bool sw0Match = (s.audioSwitch0 && *s.audioSwitch0 == "MATERIAL_TYPE:CONCRETE") ||
+                                       (s.audioSwitch1 && *s.audioSwitch1 == "MATERIAL_TYPE:CONCRETE");
+                const bool sw1Match = (s.audioSwitch0 && *s.audioSwitch0 == "SHOE_TYPE:SNEAKER") ||
+                                      (s.audioSwitch1 && *s.audioSwitch1 == "SHOE_TYPE:SNEAKER");
+                if (!sw0Match || !sw1Match) continue;
+                footstepEventRowFound = true;
+                footstepEventClipFilename = f.filename.value_or(std::string());
+                footstepEventFrame = s.frame.value;
+                break;
+            }
+            if (footstepEventRowFound) break;
+        }
+    } catch (const std::exception&) {
+        // anim_files.xtbl not available this run - falls back to the cadence guess below, same
+        // honest-fallback convention every other optional docOf() table in this function uses.
+    }
+    std::printf("footstep : real left-foot/right-foot trigger frames for 'plym_ps_wlk' %s (%zu/%zu) - %s\n",
+                walkTriggerFramesFound ? "FOUND" : "NOT found this run", walkLeftFootFrames.size(),
+                walkRightFootFrames.size(),
+                walkTriggerFramesFound ? "driving real footstep timing" : "falling back to fixed-cadence guess");
+    if (footstepEventRowFound) {
+        std::printf("footstep : real anim_files.xtbl row for event='FOOTSTEP' "
+                    "MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN per purrsian-52) FOUND - "
+                    "clip='%s' frame=%d. HONEST GAP: resolving this event+switch identity to a\n"
+                    // ^ %s/%d filled below (clip filename, clip-local frame) - keep in sync.
+
+                    "         specific Wwise media id requires walking Event(kind4)->Action(kind3)->\n"
+                    "         SwitchContainer, and NO switch-container HIRC layout is reverse-engineered\n"
+                    "         anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document\n"
+                    "         Event->Action->plain-Sound only) - guessing that binary layout here would be\n"
+                    "         exactly the kind of invented engine behaviour this project's no-invented-\n"
+                    "         fixes rule forbids. The demo therefore still plays the same real, proven-\n"
+                    "         decodable SFX clip findFirstPlayableSfxClip() resolves below, now correctly\n"
+                    "         labelled as a stand-in for a KNOWN real identity rather than an arbitrary pick.\n",
+                    footstepEventClipFilename.c_str(), footstepEventFrame);
+    } else {
+        std::printf("footstep : no anim_files.xtbl row matched event='FOOTSTEP' with the CHOSEN "
+                    "MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER switches this run (xtbl not available, or no "
+                    "such row) - falling back to findFirstPlayableSfxClip()'s own real-but-unidentified pick.\n");
+    }
+
     const sr3xtbl::Document listDoc = docOf("node_graph_files.xtbl");
     sr3animruntime::NodeGraphLoadInputs loadIn;
     loadIn.registry = &registry;
@@ -19375,8 +19497,23 @@ int runPlaytest(int argc, char** argv) {
             };
         }
     }
+    // The walk clip's OWN real durationTotal() (THIS TASK, footstep-real-event) - same
+    // "clip header word +0x06" 30Hz-tick unit the xtbl Trigger Frame fields above are authored
+    // in (clip_pose_bridge.h's own "TIME UNITS" doc comment) - needed to map a real Trigger
+    // Frame into the [0,1) phase space loopPhase (just below) already tracks.
+    int32_t walkClipDurationUnits = 0;
+    if (wlkRecord >= 0) {
+        if (const sr3animpose::ResolvedClip* rc = clipRegistry.lookup(wlkRecord)) {
+            walkClipDurationUnits = static_cast<int32_t>(rc->animation->durationTotal());
+        }
+    }
+    std::printf("footstep : walk clip durationTotal()=%d (30Hz units) - left-foot frames=[%s] right-foot frames=[%s]\n",
+                walkClipDurationUnits,
+                [&] { std::string s; for (int32_t f : walkLeftFootFrames) s += std::to_string(f) + ","; return s; }().c_str(),
+                [&] { std::string s; for (int32_t f : walkRightFootFrames) s += std::to_string(f) + ","; return s; }().c_str());
     sr3animpose::LoopPhaseTracker loopPhase;
     const bool realPoseEnabled = runRecord >= 0 || jogRecord >= 0 || wlkRecord >= 0;
+    float prevWalkTriggerPhase = 0.0f;  // footstep-real-event: last frame's loopPhase.phaseUnit(), for crossing detection
 
     // ---- seated/driving pose (THIS TASK, 2026-10-09, spec-player-runtime.md Sec7.4b) -------
     // Replaces the standing BIND POSE this command previously rendered (or, before that,
@@ -19638,14 +19775,13 @@ int runPlaytest(int argc, char** argv) {
             }
         }
     }
-    // Footstep-cadence bookkeeping: triggers roughly once per "step" while the player is
-    // actually moving (either live WASD input or the --no-input scripted walk both already
-    // drive moveSrc.A/moveSrc.B - see that struct's own declaration above). kFootstepCadenceFrames
-    // is a CHOSEN (not spec-derived - no authored footstep-interval table was found/opened)
-    // walk-cycle-shaped interval at this run's fixed 30Hz tick rate (dt==1/30, this function's
-    // own --no-input substitution convention) - a plain, stated guess at a PRESENTATION
-    // interval, not a fabricated GAMEPLAY value, and clearly distinct from the no-invented-
-    // fixes rule's concern (inventing missing spec data) since no spec claims to cover this at all.
+    // Footstep-cadence FALLBACK bookkeeping (THIS TASK, footstep-real-event, downgraded from the
+    // PRIMARY mechanism to a fallback): used only when walkTriggerFramesFound is false (no real
+    // anim_files.xtbl left-foot/right-foot Trigger Frame data located for the walk clip actually
+    // being played this run - see the setup+doc comment above this function's graph-load block).
+    // kFootstepCadenceFrames remains a CHOSEN (not spec-derived) walk-cycle-shaped interval at
+    // this run's fixed 30Hz tick rate - a plain, stated guess at a PRESENTATION interval, kept
+    // as an honest degrade rather than removed outright.
     constexpr int kFootstepCadenceFrames = 18;  // ~0.6s/step at 30Hz - CHOSEN, not spec-derived
     int framesSinceLastFootstep = 0;
     uint64_t footstepsTriggered = 0;
@@ -20467,6 +20603,31 @@ int runPlaytest(int argc, char** argv) {
     // header's own ChooseFleeDestination/kFleeSpeedMsChosen for the CHOSEN
     // destination rule and speed stand-in this reuses.
     std::unordered_map<uint64_t, sr3airuntime::Vec3> nearFieldPedFleeDestination;
+    // GENERAL-PED-IDLE-TICK TASK (2026-10-10): the wider pre-existing gap
+    // the flee task's own HANDOFF entry flagged but did not take on -
+    // "ordinary idle peds never actually sidewalk-walk or wander either."
+    // These two maps are this task's own per-ped state, same scope-split
+    // discipline as nearFieldPedFleeDestination just above (caller-owned
+    // facts, not new NearFieldPed fields):
+    //  - nearFieldPedWanderDestination: a non-fleeing ped's own chosen
+    //    wander-move target (near_field_ped_population.h's own WanderMove
+    //    sub-state, Sec20.2), persisted across frames the same way Flee's
+    //    own destination map already is, so TickWander's own
+    //    hasReachedDestination check is against one stable point rather
+    //    than a re-rolled one every frame.
+    //  - nearFieldPedSidewalkSegGeo: the real stand-in SidewalkSegment
+    //    geometry (start/end) a ped most recently snapped onto (sub-state
+    //    13's own "snap onto the graph" gate, 0x0051bb70) - captured here
+    //    because TickSidewalk itself only advances the abstract 0..1
+    //    segmentProgress scalar (near_field_ped_population.h's own file
+    //    header: no C++ Sidewalks graph reader exists, caller resolves
+    //    geometry) and does not touch NearFieldPed::pos at all; this map
+    //    lets the per-frame mover below translate progress into an actual
+    //    world position via SidewalkSegment::PointAt (the SAME helper
+    //    SelectNearFieldPedSpawn already uses for an identical progress->
+    //    point mapping, not a new formula).
+    std::unordered_map<uint64_t, sr3airuntime::Vec3> nearFieldPedWanderDestination;
+    std::unordered_map<uint64_t, sr3airuntime::SidewalkSegment> nearFieldPedSidewalkSegGeo;
     bool prevFireDown = false;
 
     std::map<size_t, std::unique_ptr<CityLoadedCell>> loaded;
@@ -21545,53 +21706,201 @@ int runPlaytest(int argc, char** argv) {
                                                        /*eligibleHumanCount=*/0, pedCandidateSegments,
                                                        nearFieldPedGates, trafficReferencePos,
                                                        nearFieldPedPickUniform, nearFieldPedNextId);
+                // GENERAL-PED-IDLE-TICK TASK (2026-10-10): the spawn pass
+                // above places a newly-created ped directly onto a real
+                // segment (onSegment=true, currentSegmentId = the real
+                // segment it spawned on - near_field_ped_population.h's own
+                // "already placed on the chosen segment -> steady-state 14,
+                // bypassing 13's own 'waiting to snap' phase" comment) but
+                // only carries the segment's ID forward, not its geometry -
+                // capture it here (while pedCandidateSegments, the ONLY
+                // place that geometry still exists this tick, is in scope)
+                // into nearFieldPedSidewalkSegGeo so the general idle-tick
+                // block below can translate this ped's segmentProgress into
+                // an actual world position from frame one, instead of
+                // sitting frozen until it first falls off the segment and
+                // re-snaps.
+                for (const auto& nfp : nearFieldPedsLive) {
+                    if (!nfp.onSegment || nfp.currentSegmentId == 0) continue;
+                    if (nearFieldPedSidewalkSegGeo.count(nfp.id)) continue;
+                    for (const auto& seg : pedCandidateSegments) {
+                        if (seg.id == nfp.currentSegmentId) {
+                            nearFieldPedSidewalkSegGeo[nfp.id] = seg;
+                            break;
+                        }
+                    }
+                }
             }
         }
 
-        // ---- Near-field ambient-ped FLEE movement (THIS TASK, 2026-10-10):
-        // the actual per-frame mover for any ped currently in
-        // nearFieldPedFleeDestination (set only by the WEAPON FIRE block
-        // below, on a genuine Flee reaction). Runs every frame regardless of
-        // the walking/driving branch split further down, the same way the
-        // spawn pass just above also runs unconditionally - a fleeing ped
-        // keeps fleeing while Brad is driving, not just while on foot. This
-        // is the ONLY per-frame Idle/sidewalk/wander ticking wired for ANY
-        // near-field ped in this codebase (confirmed: no other call site
-        // calls TickIdleSubBehaviour/TickWander/TickSidewalk at all) - a
-        // pre-existing, wider gap (ordinary idle peds never actually
-        // sidewalk-walk or wander either) this task does not take on, since
-        // the brief is specifically "close the gap for the Flee case." Reuses
-        // the real header machinery (TickWander/TickOneFrameTransition,
-        // Sec20.2) rather than a parallel mover. ----
+        // ---- Near-field ambient-ped FLEE + GENERAL IDLE/WANDER/SIDEWALK
+        // movement (FLEE part: THIS TASK's own earlier pass, 2026-10-10;
+        // GENERAL part: general-ped-idle-tick task, 2026-10-10, closing the
+        // wider gap that earlier pass explicitly flagged but did not take
+        // on - "ordinary idle peds never actually sidewalk-walk or wander
+        // either"). Runs every frame regardless of the walking/driving
+        // branch split further down, the same way the spawn pass just
+        // above also runs unconditionally - a ped keeps fleeing/wandering
+        // while Brad is driving, not just while on foot. This is now the
+        // ONLY per-frame Idle/sidewalk/wander ticking wired for ANY
+        // near-field ped in this codebase, but it now covers EVERY live
+        // ped, not just the Flee case. A ped currently fleeing (present in
+        // nearFieldPedFleeDestination) ALWAYS takes the flee branch and
+        // never falls into the general branch below it - flee priority
+        // over ordinary wandering is enforced by this if/else split itself,
+        // not a separate flag. Reuses the real header machinery
+        // (TickSidewalk/TickWander/TickOneFrameTransition, Sec20.2) rather
+        // than a parallel mover, same discipline both halves already
+        // shared. ----
         for (auto& nfp : nearFieldPedsLive) {
             auto destIt = nearFieldPedFleeDestination.find(nfp.id);
-            if (destIt == nearFieldPedFleeDestination.end()) continue;
-            if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderMove) {
-                nfp.pos = sr3airuntime::StepTowardDestination(nfp.pos, destIt->second,
-                                                               sr3airuntime::kFleeSpeedMsChosen * static_cast<double>(dt));
-                // CHOSEN arrival radius (1.0m) - Sec20.2's own "wander-move
-                // completion criteria... was identified by call shape only,
-                // not independently confirmed"; this file's own
-                // WanderTickParams::hasReachedDestination already documents
-                // that same OPEN item, so this is this task's own CHOSEN
-                // value for it, not a new gap.
-                const double kArriveEpsM = 1.0;
-                sr3airuntime::WanderTickParams wtp;
-                const sr3airuntime::Vec3 destCopy = destIt->second;
-                wtp.hasReachedDestination = [destCopy, kArriveEpsM](const sr3airuntime::Vec3& p) {
-                    const double dx = p.x - destCopy.x, dz = p.z - destCopy.z;
-                    return (dx * dx + dz * dz) <= kArriveEpsM * kArriveEpsM;
-                };
-                sr3airuntime::Vec3 destInOut = destIt->second;
-                sr3airuntime::TickWander(nfp, wtp, destInOut);
-            } else if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderToSidewalk) {
-                // Real one-frame transition (Sec20.2) back onto the sidewalk
-                // graph - the ped has arrived and is done fleeing; hand it
-                // back to the (currently unticked, see this block's own
-                // doc-comment) sidewalk/idle state rather than leaving it
-                // permanently parked in a wander sub-state.
-                sr3airuntime::TickOneFrameTransition(nfp);
-                nearFieldPedFleeDestination.erase(destIt);
+            if (destIt != nearFieldPedFleeDestination.end()) {
+                // ---- FLEE (priority branch) - unchanged from the prior task. ----
+                if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderMove) {
+                    nfp.pos = sr3airuntime::StepTowardDestination(
+                        nfp.pos, destIt->second, sr3airuntime::kFleeSpeedMsChosen * static_cast<double>(dt));
+                    // CHOSEN arrival radius (1.0m) - Sec20.2's own "wander-move
+                    // completion criteria... was identified by call shape only,
+                    // not independently confirmed"; this file's own
+                    // WanderTickParams::hasReachedDestination already documents
+                    // that same OPEN item, so this is this task's own CHOSEN
+                    // value for it, not a new gap.
+                    const double kArriveEpsM = 1.0;
+                    sr3airuntime::WanderTickParams wtp;
+                    const sr3airuntime::Vec3 destCopy = destIt->second;
+                    wtp.hasReachedDestination = [destCopy, kArriveEpsM](const sr3airuntime::Vec3& p) {
+                        const double dx = p.x - destCopy.x, dz = p.z - destCopy.z;
+                        return (dx * dx + dz * dz) <= kArriveEpsM * kArriveEpsM;
+                    };
+                    sr3airuntime::Vec3 destInOut = destIt->second;
+                    sr3airuntime::TickWander(nfp, wtp, destInOut);
+                } else if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderToSidewalk) {
+                    // Real one-frame transition (Sec20.2) back onto the sidewalk
+                    // graph - the ped has arrived and is done fleeing; hand it
+                    // back to the (now also ticked, see below) ordinary
+                    // sidewalk/idle state rather than leaving it permanently
+                    // parked in a wander sub-state.
+                    sr3airuntime::TickOneFrameTransition(nfp);
+                    nearFieldPedFleeDestination.erase(destIt);
+                    nearFieldPedSidewalkSegGeo.erase(nfp.id);  // force a fresh snap next time this ped reaches the sidewalk group below
+                }
+                continue;  // flee takes priority - never also run the general branch this frame
+            }
+
+            // ---- GENERAL ORDINARY IDLE TICK (general-ped-idle-tick task):
+            // every near-field ped NOT currently fleeing, every frame,
+            // through its real idle sub-state machine (Sec20.2). ----
+            switch (sr3airuntime::TickGroupFor(nfp.idleSubState)) {
+                case sr3airuntime::PedIdleTickGroup::Sidewalk: {
+                    sr3airuntime::SidewalkTickParams sp;
+                    sp.advancePerTick = sr3airuntime::kSidewalkAdvancePerSecondChosen * static_cast<double>(dt);
+                    // Real abandon TARGET ("sidewalk" -> "wander choose
+                    // dest", Sec20.2's own 0x0051bd20) applied at a CHOSEN
+                    // TRIGGER point (reaching the stand-in segment's own
+                    // end, segmentProgress>=1.0) - Sec20.2 itself flags the
+                    // real trigger as unidentified ("what decides to call
+                    // it" is OPEN), and separately flags "what happens at
+                    // segmentProgress==1" as OPEN; this picks the already-
+                    // named real target as the answer to both at once
+                    // (reach the end of this stand-in sidewalk -> start
+                    // wandering) rather than parking the ped at progress==1
+                    // forever, which would silently reproduce the exact
+                    // "never actually moves" bug this task exists to fix.
+                    sp.shouldAbandonToWander = [&nfp] { return nfp.segmentProgress >= 1.0; };
+                    if (!nfp.onSegment) {
+                        // Re-snap onto a fresh stand-in segment near the
+                        // ped's OWN current position - the exact same
+                        // GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer
+                        // generation call the flee branch above already
+                        // uses for its own candidate geometry (ChooseFleeDestination's
+                        // call site), just centered on the ped instead of
+                        // the camera/player, since this file owns no real
+                        // persistent Sidewalks graph to snap onto instead
+                        // (file header: "no C++ reader for that content
+                        // kind exists").
+                        const std::vector<sr3airuntime::SidewalkSegment> snapCandidates =
+                            GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer(nfp.pos, 0.0, nearFieldPedRng);
+                        if (!snapCandidates.empty()) {
+                            const sr3airuntime::SidewalkSegment& seg = snapCandidates[0];
+                            sp.snapSegmentId = seg.id != 0 ? seg.id : 1;  // TickSidewalk's own gate treats 0 as "no resolution yet"
+                            nearFieldPedSidewalkSegGeo[nfp.id] = seg;
+                        }
+                    }
+                    sr3airuntime::TickSidewalk(nfp, sp);
+                    // Move the ped's actual world position (segmentProgress
+                    // itself is only the abstract 0..1 completion scalar
+                    // TickSidewalk owns - near_field_ped_population.h's own
+                    // file header: this file does not touch NearFieldPed::pos
+                    // at all, that mapping is the caller's own job). CHOSEN:
+                    // step toward the resolved segment's own END point with
+                    // the SAME StepTowardDestination helper the wander/flee
+                    // branches already use, rather than recomputing an
+                    // absolute point from segmentProgress via PointAt - a
+                    // freshly-spawned ped's own spawn position (a random
+                    // point ALONG the segment plus a sideways offset,
+                    // SelectNearFieldPedSpawn) does not generally equal
+                    // PointAt(0), so an absolute remap would teleport it
+                    // back onto the segment's spine the first tick after
+                    // spawn; stepping incrementally from wherever the ped
+                    // actually is avoids that regression.
+                    if (nfp.onSegment) {
+                        auto geoIt = nearFieldPedSidewalkSegGeo.find(nfp.id);
+                        if (geoIt != nearFieldPedSidewalkSegGeo.end()) {
+                            nfp.pos = sr3airuntime::StepTowardDestination(
+                                nfp.pos, geoIt->second.end,
+                                sr3airuntime::kWanderWalkSpeedMsChosen * static_cast<double>(dt));
+                        }
+                    }
+                    break;
+                }
+                case sr3airuntime::PedIdleTickGroup::Wander: {
+                    auto wdIt = nearFieldPedWanderDestination.find(nfp.id);
+                    if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderMove &&
+                        wdIt != nearFieldPedWanderDestination.end()) {
+                        nfp.pos = sr3airuntime::StepTowardDestination(
+                            nfp.pos, wdIt->second, sr3airuntime::kWanderWalkSpeedMsChosen * static_cast<double>(dt));
+                    }
+                    const double kArriveEpsM = 1.0;  // same CHOSEN arrival radius the flee branch above already uses
+                    sr3airuntime::WanderTickParams wtp;
+                    wtp.chooseRandomDestination = [&]() -> std::optional<sr3airuntime::Vec3> {
+                        // Same candidate-segment generation call the flee
+                        // branch's own ChooseFleeDestination already feeds
+                        // on (GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer),
+                        // just picking a uniformly-random candidate endpoint
+                        // instead of the "furthest away from threat" one -
+                        // there is no threat to run from here (Sec20.2's own
+                        // "wander choose dest... generates a validated
+                        // random candidate point" is itself a random pick,
+                        // not a directional one).
+                        const std::vector<sr3airuntime::SidewalkSegment> wanderCandidates =
+                            GatherNearFieldPedSpawnCandidateSegmentsAroundPlayer(nfp.pos, 0.0, nearFieldPedRng);
+                        if (wanderCandidates.empty()) return std::nullopt;
+                        const size_t segIdx = nearFieldPedPickUniform(wanderCandidates.size());
+                        const sr3airuntime::SidewalkSegment& seg =
+                            wanderCandidates[segIdx < wanderCandidates.size() ? segIdx : 0];
+                        return (nearFieldPedPickUniform(2) == 0) ? seg.start : seg.end;
+                    };
+                    if (wdIt != nearFieldPedWanderDestination.end()) {
+                        const sr3airuntime::Vec3 destCopy = wdIt->second;
+                        wtp.hasReachedDestination = [destCopy, kArriveEpsM](const sr3airuntime::Vec3& p) {
+                            const double dx = p.x - destCopy.x, dz = p.z - destCopy.z;
+                            return (dx * dx + dz * dz) <= kArriveEpsM * kArriveEpsM;
+                        };
+                    }
+                    sr3airuntime::Vec3 destInOut =
+                        (wdIt != nearFieldPedWanderDestination.end()) ? wdIt->second : sr3airuntime::Vec3{};
+                    sr3airuntime::TickWander(nfp, wtp, destInOut);
+                    if (nfp.idleSubState == sr3airuntime::PedIdleSubState::WanderMove)
+                        nearFieldPedWanderDestination[nfp.id] = destInOut;  // just committed (WanderChooseDest -> WanderMove) or already-tracked
+                    break;
+                }
+                case sr3airuntime::PedIdleTickGroup::OneFrameTransition:
+                    sr3airuntime::TickOneFrameTransition(nfp);
+                    nearFieldPedWanderDestination.erase(nfp.id);
+                    nearFieldPedSidewalkSegGeo.erase(nfp.id);  // force a fresh snap, consistent with onSegment being reset to false by TickOneFrameTransition itself
+                    break;
+                case sr3airuntime::PedIdleTickGroup::Other:
+                    break;  // Idle(9)/WaitToHolsterWeapon(11)/Sleeping(36)/Sitting(37) - out of this file's own scope (Sec20.3), not driven here
             }
         }
 
@@ -21644,6 +21953,18 @@ int runPlaytest(int argc, char** argv) {
             for (const auto& nfp : nearFieldPedsLive) {
                 if (!nearFieldPedFleeDestination.count(nfp.id)) continue;
                 std::printf("[flee-trace] frame %d ped id=%llu pos=(%.2f,%.2f,%.2f) idleSubState=%d\n", frames,
+                            static_cast<unsigned long long>(nfp.id), nfp.pos.x, nfp.pos.y, nfp.pos.z,
+                            static_cast<int>(nfp.idleSubState));
+            }
+            // GENERAL-PED-IDLE-TICK TASK (2026-10-10): the SAME per-ped
+            // position trace as [flee-trace] above, but for every ORDINARY
+            // (non-fleeing) near-field ped - live verification that the
+            // general idle/sidewalk/wander tick wired in this task actually
+            // moves MULTIPLE ambient peds' own NearFieldPed::pos over time,
+            // not just the one that happens to get shot.
+            for (const auto& nfp : nearFieldPedsLive) {
+                if (nearFieldPedFleeDestination.count(nfp.id)) continue;
+                std::printf("[idle-trace] frame %d ped id=%llu pos=(%.2f,%.2f,%.2f) idleSubState=%d\n", frames,
                             static_cast<unsigned long long>(nfp.id), nfp.pos.x, nfp.pos.y, nfp.pos.z,
                             static_cast<int>(nfp.idleSubState));
             }
@@ -21760,30 +22081,60 @@ int runPlaytest(int argc, char** argv) {
         if (audioReady && footstepClip.valid) {
             audioDevice.pump();  // reap finished one-shot voices before this frame's own submit attempt
             const bool movingOnFoot = (std::fabs(moveSrc.A) > 0.05f || std::fabs(moveSrc.B) > 0.05f);
-            if (movingOnFoot) {
+            bool fireFootstepThisFrame = false;
+            // REAL foot-plant-trigger-driven timing (THIS TASK, 2026-10-10, orchestrator
+            // correction) - when the walk clip's own real left-foot/right-foot Trigger Frame
+            // data was found (walkTriggerFramesFound, see the doc comment+setup above this
+            // function's own graph-load block), fire exactly when loopPhase's real [0,1) phase
+            // crosses one of those real Frame positions (mapped into the same phase space via
+            // walkClipDurationUnits) - NOT a fixed-interval guess. prevWalkTriggerPhase is
+            // updated every frame (not just while moving) so a crossing check after an idle
+            // spell compares against the correct, un-stale previous phase.
+            const float currWalkPhase = loopPhase.phaseUnit();
+            if (realPoseEnabled && walkTriggerFramesFound && walkClipDurationUnits > 0) {
+                if (movingOnFoot) {
+                    auto crossedFrame = [&](int32_t triggerFrame) {
+                        const float p = static_cast<float>(triggerFrame) / static_cast<float>(walkClipDurationUnits);
+                        if (currWalkPhase >= prevWalkTriggerPhase) return p > prevWalkTriggerPhase && p <= currWalkPhase;
+                        return p > prevWalkTriggerPhase || p <= currWalkPhase;  // wrapped past 1.0 this tick
+                    };
+                    for (int32_t f : walkLeftFootFrames) if (crossedFrame(f)) { fireFootstepThisFrame = true; break; }
+                    if (!fireFootstepThisFrame)
+                        for (int32_t f : walkRightFootFrames) if (crossedFrame(f)) { fireFootstepThisFrame = true; break; }
+                }
+                prevWalkTriggerPhase = currWalkPhase;
+            } else if (movingOnFoot) {
+                // FALLBACK (real trigger data not available this run - no real-pose compose
+                // active, or no matching anim_files.xtbl row found): the original CHOSEN fixed-
+                // cadence guess, kept honestly rather than silently dropped.
                 ++framesSinceLastFootstep;
                 if (framesSinceLastFootstep >= kFootstepCadenceFrames) {
                     framesSinceLastFootstep = 0;
-                    const float emitterPos[3] = {static_cast<float>(pm.st.position.x),
-                                                  static_cast<float>(pm.st.position.y),
-                                                  static_cast<float>(pm.st.position.z)};
-                    double distance = 0.0;
-                    std::string playError;
-                    if (audioDevice.playOneShot3D(footstepClip.decoded, /*volume=*/0.6f, emitterPos, camEye,
-                                                   playError, &distance)) {
-                        ++footstepsTriggered;
-                        if (footstepsTriggered <= 5 || footstepsTriggered % 20 == 0) {
-                            std::printf(
-                                "footstep-sfx: #%llu frame=%d emitter-listener distance=%.2fm "
-                                "(logged only, see playOneShot3D doc comment - NOT attenuating volume)\n",
-                                static_cast<unsigned long long>(footstepsTriggered), frames, distance);
-                        }
-                    }  // a transient failure (e.g. voice pool momentarily full) is silently
-                       // skipped for this one cadence tick, same as a real missed footstep cue -
-                       // not fatal, not worth spamming stderr every tick for.
+                    fireFootstepThisFrame = true;
                 }
             } else {
                 framesSinceLastFootstep = 0;  // reset cadence on stop, same as a real walk-cycle would
+            }
+            if (fireFootstepThisFrame) {
+                const float emitterPos[3] = {static_cast<float>(pm.st.position.x),
+                                              static_cast<float>(pm.st.position.y),
+                                              static_cast<float>(pm.st.position.z)};
+                double distance = 0.0;
+                std::string playError;
+                if (audioDevice.playOneShot3D(footstepClip.decoded, /*volume=*/0.6f, emitterPos, camEye,
+                                               playError, &distance)) {
+                    ++footstepsTriggered;
+                    if (footstepsTriggered <= 5 || footstepsTriggered % 20 == 0) {
+                        std::printf(
+                            "footstep-sfx: #%llu frame=%d emitter-listener distance=%.2fm timing=%s "
+                            "(logged only, see playOneShot3D doc comment - NOT attenuating volume)\n",
+                            static_cast<unsigned long long>(footstepsTriggered), frames, distance,
+                            (realPoseEnabled && walkTriggerFramesFound && walkClipDurationUnits > 0)
+                                ? "real-trigger" : "cadence-fallback");
+                    }
+                }  // a transient failure (e.g. voice pool momentarily full) is silently
+                   // skipped for this one tick, same as a real missed footstep cue -
+                   // not fatal, not worth spamming stderr every tick for.
             }
         }
 

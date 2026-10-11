@@ -79,20 +79,52 @@ and GitHub pushed (`e3f7f57`).
   sidewalk/wander graph, verified live (real position change every traced frame). Found+flagged a wider
   pre-existing gap: ambient peds were NEVER ticked at all before this (idle wander included) - only the
   Flee case is wired now. Full ctest 165/169 clean.
-- **DONE: v0.8 shipped.** Folder: `v0.8_2026-10-10_peds-flee-when-shot` on
-  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 11 versions on G: (1
-  new)"). Screenshot (plain launch) personally viewed; honestly noted the flee behavior itself isn't
-  shown on screen (camera follows Brad, fled ped ends up out of frame) but was directly confirmed via
-  live position tracking. Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 -
-  DO THIS NEXT.**
-- `a4ab5e5905a46e13f` - Team A specced footsteps (spec-audio-runtime.md Sec11a.8, just landed): real event
-  name `FOOTSTEP`, sourced from `anim_files.xtbl` Sounds rows, `MATERIAL_TYPE`
-  (CONCRETE/METAL_SOLID/FLESH) + `SHOE_TYPE`/`MOVEMENT_TYPE` switches, 144 fixed-context rows (vehicle
-  entry/exit clips, not general locomotion). Open-world walking has no author-baked material context -
-  purrsian-52 directed `MATERIAL_TYPE:CONCRETE`+`SHOE_TYPE:SNEAKER` as a labelled CHOSEN default. The real
-  engine's foot-plant TRIGGER mechanism is still OPEN (not found by Team A's trace either) - told the unit
-  to keep the existing cadence-based trigger timing and just swap which real clip plays, extending the
-  existing HIRC event->media lookup to resolve by name+switches if it doesn't already support that.
+- **DONE: v0.8 shipped and relayed.** Folder: `v0.8_2026-10-10_peds-flee-when-shot`, mirrored to G:
+  (11 versions). purrsian-52 confirmed verified+pushed.
+- **DONE: general ambient-ped idle/wander/sidewalk tick merged (`b8a985e`, merged into main)** -
+  EVERY near-field ped now ticked every frame (not just Flee), real sidewalk->wander->one-frame-transition
+  cycling confirmed live across multiple distinct peds over 900 frames; flee priority confirmed never
+  overridden. Caught+fixed a real teleport bug during development (incremental step vs. absolute
+  segmentProgress remap). CHOSEN: 1.4 m/s ordinary walk speed, segmentProgress>=1.0 sidewalk-abandon
+  trigger. ctest clean.
+- **DONE: real FOOTSTEP event + real foot-plant trigger timing merged** - Team A specced footsteps
+  (spec-audio-runtime.md Sec11a.8): real event name `FOOTSTEP`, `anim_files.xtbl` Sounds rows,
+  `MATERIAL_TYPE`+`SHOE_TYPE`/`MOVEMENT_TYPE` switches, 144 fixed-context rows (not general locomotion) -
+  `MATERIAL_TYPE:CONCRETE`+`SHOE_TYPE:SNEAKER` used as purrsian-52's own labelled CHOSEN default.
+  **purrsian-52's mid-flight correction applied**: the foot-plant TRIGGER DATA is real/known (left/right-
+  foot anim triggers, spec-anim-runtime.md Sec7.13, 1,170/1,149 occurrences) even though the engine's own
+  consumer function is OPEN - timing is now driven by real trigger-frame crossings during walk-clip
+  playback, not a guessed cadence (cadence kept only as an explicit fallback). **Genuine new gap found,
+  not invented around**: resolving the real FOOTSTEP+switches identity to actual Wwise media needs the
+  Event->Action->SwitchContainer HIRC on-disk layout, which no spec documents - demo still plays the
+  prior real-but-arbitrary clip for actual output, now with the real identity it couldn't resolve media
+  for logged honestly. ctest clean.
+- Both merges combined, full main ctest: **165/169 passed, 0 failed, 4 pre-existing Bink skips.**
+- **DONE: v0.9 shipped.** Folder: `v0.9_2026-10-10_ambient-peds-walk-real-footstep-timing` on
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G: ("history: 12 versions on G: (1
+  new)"). Screenshot (plain launch) personally viewed; honestly noted ambient-ped-wandering isn't shown
+  on screen (camera limitation, same as flee) but was directly confirmed via live multi-ped position
+  tracking. Read-only + swapped into `TEAM B\playtest\`. **Relay to purrsian-52 - DO THIS NEXT.**
+
+### 1 agent in flight (Bink secondary grammar, gates the Bink-to-screen task below)
+`a26d15cd42b40f051` - implement the full 7-way secondary payload grammar for Bink primary case 1
+(spec-bink-codec.md Sec5.3i, just landed - closes a long-named blocker). Secondary 2=DC literal+AC tree+
+quant-row nibble+IDCT(16x16, different calling convention); secondary 3=flat single-byte fill(16x16);
+secondary 1/4 skip reached via an EARLIER flag-bit check (gate at primary case 1, not inside 1/4
+themselves); 2/3/5 share ONE literal-byte stream, all 16x16 output; secondary 0 ("giant1" RLE+permutation)
+has NO live example in sampled frames - implement by analogy with primary case 3 at LOWER confidence,
+flagged not claimed-confirmed; secondary 6=raw copy. Target: whole-frame decode of `main_menu_bg.bik`,
+report exactly how far it gets (full target is a pixel comparison against FFmpeg, may be a follow-up).
+
+### QUEUED, dispatch once the Bink-secondary-grammar unit reports (it GATES this)
+Bink-to-screen pipeline (spec-bink-boundary.md Sec5.4/5.5/7, just landed): per frame, Y/U/V planes upload
+into 3 separate textures (per-plane helper, `+4` = texture handle), a quad draws via the UI renderer's
+3-texture draw mode (`rl_draw` codes `0xc`/`0x13`, shader `rl_prim_2d_bink` - YUV->RGB happens IN the
+shader). Task: `--video` flag to play `main_menu_bg.bik` as a fullscreen quad in the playtest, using this
+project's own Bink decoder + 3 textures + a YUV->RGB shader (CHOSEN coefficients until the real shader
+bytecode is read). **Explicit gate, per purrsian-52's own instruction**: do NOT dispatch this until the
+Bink-secondary-grammar unit above confirms whole-frame decode actually works - if the decoder still can't
+produce full frames, that must be finished FIRST, this renderer task is not useful against partial frames.
 
 ### Previously (pre-move), now historical: v0.6 planning note
 All of this session's queued work (vorbis merge+independent oracle verify, inv-slot/conversation merge,

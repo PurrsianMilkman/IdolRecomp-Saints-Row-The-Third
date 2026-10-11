@@ -234,6 +234,17 @@ struct AnimFile {
                                               // 0x004CAD90 though - storage target HYPOTHESIS, untraced) -
                                               // kept here as real, present XML data, not as stored engine
                                               // state
+    std::vector<int32_t> triggerFrames;      // ADDED (footstep-real-event task, 2026-10-10): the same
+                                              // Triggers/Trigger's own Frame child, index-aligned 1:1 with
+                                              // triggerNames above (both built from the SAME loop, same
+                                              // "only Name-bearing Trigger elements counted" filter) - real,
+                                              // present XML data (anim_files.xtbl Sec3.2: every real
+                                              // Trigger carries a Frame child, 7,060/7,060 rows). This is
+                                              // what spec-audio-runtime.md Sec11a.8 identifies as the real
+                                              // foot-plant frame for the generic `left-foot`/`right-foot`
+                                              // markers (1,170/1,149 occurrences base-game-wide) - the
+                                              // engine's own runtime consumer of this Frame value is still
+                                              // OPEN per that section, this struct only surfaces the data.
     // Shape VALIDATED-BY-DATA 2026-10-01 (job 20261001T004133-team-b-kmsh, 7,060/7,060 real rows):
     // Sec3.1's `<Trigger>` with direct text was WRONG; Sec3.2's `<Trigger><Name>...</Name>` is the
     // real shape, matching the Name-child reading below. Every real Trigger also carries a `Frame`

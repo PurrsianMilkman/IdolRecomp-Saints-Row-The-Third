@@ -75,9 +75,11 @@ inside `binkw32.dll` — remains scope-only (`review/scoping-bink.md` §8) and i
    wired to real Bink calls, but is dead code as far as static analysis can show.
 5. **The game does not use `BinkCopyToBuffer`/`BinkCopyToBufferRect` at all** — neither is imported. It
    uses the lower-level `BinkRegisterFrameBuffers`/`BinkGetFrameBuffersInfo` pair to decode straight into
-   its own CPU heap allocation (§5, CONFIRMED). **The GPU upload/YUV→RGB step is a separate, unlocated
-   piece of code and is this unit's single most load-bearing OPEN item** — it is flagged as a gap here,
-   not guessed at.
+   its own CPU heap allocation (§5, CONFIRMED). **The GPU upload/presentation step — RESOLVED
+   2026-10-10 — is a dedicated three-texture draw path through the generic Vint/UI primitive renderer**
+   (one D3D9 texture per decoded plane, bound simultaneously and drawn via a dedicated shader,
+   `rl_prim_2d_bink`; §5.5, CONFIRMED down to the renderer's own texture-handle setter). Two small
+   sub-gaps remain: the exact per-plane CPU→texture upload call, and the shader's own unread bytecode.
 6. **Logo splash and (most likely) cutscenes are two different trigger paths into the same underlying
    player**, and the exact wiring into *both* triggers is reached only indirectly and was not closed by
    the scoping pass — each is flagged OPEN rather than forced (§6).
@@ -182,6 +184,9 @@ handle-table-based "movie player" object type.
 | `0x00bdc3b0` | **"Open."** Resolves which sound track to use via a helper at `0x00462890` whose result is tested against flag bit `0x1000000` (HYPOTHESIS: a language/subtitle-track selector), conditionally calls `SetIOSize`, looks up a small table at `0x00849940` to pick between two track-index layouts, calls `SetSoundTrack` again with the resolved layout, then calls `Open` with flags composed as `(0x4400 or 0x204400, optionally |0x1000000) | 0x4000` (plain hex; exact bit meanings not asserted, HYPOTHESIS for any public-SDK name). Stores the resulting handle and sets the slot's "opened" state. |
 | `0x00bdc890` | **"Choose resolution."** Picks a target width/height by aspect ratio: if `screen_width/screen_height` is at or above a stored threshold, targets `0x500×0x2d0` (1280×720); otherwise `0x280×0x168` (640×360) and also writes a `0x3c` (60) field into the descriptor. This is logo-splash-specific (§6.1) — a generic file-driven cutscene has no reason to pick its own target resolution this way. |
 | `0x00bdd660` | **"Open, top-level."** Allocates/zeroes a slot, calls `0x00bdc3b0`, then on success calls `BinkGetFrameBuffersInfo`, allocates and builds the plane-pointer table, and calls `BinkRegisterFrameBuffers` + `BinkGetSummary` (§5). **Exactly one call site in the whole binary** (§6.1). |
+| `0x00bdc730` | **"Update plane textures."** (newly identified, 2026-10-10, §5.5.) Per open/playing movie, once per frame: for each of the 3 per-plane helper objects, calls that object's own vtable `+0x20` with the current plane-pointer record's `(pointer, pitch)`; clears a "needs update" flag (`+0xd8`). Called via `0x00bdd520`, itself called once per frame from an outer driver (`0x007ad570`, outside this module). |
+| `0x00bdc900` | **"Draw one movie's current frame."** (newly identified, 2026-10-10, §5.5.) Clears the plain UI texture handle, sets the draw colour from the movie's own `+0xa8` alpha field, sets the three-handle Bink texture binding from the helper objects' own `+4` fields (via `0x00e4af20`), computes a quad position/scale from `+0x98`/`+0x9c`/`+0xa0`/`+0xa4`, submits the quad, then immediately clears the binding again. |
+| `0x00bdca80` / `0x00bdcba0` | **Draw-all-open-movies loop / draw-by-handle.** (newly identified, 2026-10-10, §5.5.) Walk the handle table for qualifying slots (or resolve one handle) and call `0x00bdc900` per slot. `0x00bdca80` is called from the same outer per-frame driver (`0x007ad570`) as `0x00bdc730`'s own caller; `0x00bdcba0` is called from `0x00842ff0` (outside this module, not traced). |
 | `0x00bdc560` | **"Close."** Releases the three render-plane helper objects (slot `+0x90`/`+0x8c`/`+0x94`, via their own vtables), calls `Close` on the handle if non-null, then frees two more sub-objects through a tagged allocator (debug tag string `"bink internal alloc"`). |
 | `0x00bdc7a0` | **"Seek."** If the module is async-enabled (always false in the shipped build, §4), calls `DoFrameAsyncWait` with a −1 (block) timeout to flush any in-flight async decode; then unconditionally calls `GetKeyFrame` (mode `2`, HYPOTHESIS "nearest keyframe") and `Goto` with the resolved keyframe number. |
 | `0x00bdcd70` / `0x00bdcdc0` | Handle-validated public **pause** wrappers over the handle table. |
@@ -358,20 +363,101 @@ satisfy this half of the contract.
 Three small helper objects, at handle-table slot `+0x90`/`+0x8c`/`+0x94` (§2.1), generic vtable
 `0x012a0dd0`, constructed via a shared non-Bink-specific helper at `0x00487fc0`. They receive per-plane
 rect/pitch data (`0x00bdc730`) and are released in `Close` (§2.2) and in the dispatcher's cleanup pass
-(§4.4). Most likely thin CPU-side "buffer view" wrappers over sub-ranges of the one allocated block (one
-per plane), not D3D9 objects — this was not traced further by the scoping pass since it does not change
-the §5.1–§5.3 verdict (OPEN item 3, §7).
+(§4.4).
 
-### 5.5 OPEN — the GPU-upload gap (flagged, not invented)
+**CORRECTED/RESOLVED 2026-10-10, §5.5:** these are **not** CPU-side "buffer view" wrappers — each
+object's own `+4` field holds a real D3D9 texture handle, confirmed by disassembly: the draw step
+(`0x00bdc900`) reads `[helper+4]` from all three objects and passes them directly into the renderer's
+three-handle Bink-texture setter (`0x00e4af20`→`0x00e48270`→`0x00e82cb0`). Each object's own vtable
+slot `+0x20` (called once per frame, `0x00bdc730`, with the Bink-decoded plane's `(pointer, pitch)`)
+is therefore most likely the per-plane texture-upload step (a `LockRect`/memcpy/`UnlockRect` shape,
+HIGH CONFIDENCE, not read to the instruction level — see §5.5's own narrowed OPEN item). Full detail:
+§5.5.
 
-**The actual GPU presentation step — however the game turns this Y/U/V system-memory buffer into an
-on-screen D3D9 image — is not in this module and was not located by the scoping pass.** A locked
-dynamic-texture update plus a YUV→RGB pixel shader is the most likely shape for a title of this vintage,
-but that is HYPOTHESIS, not checked, and is explicitly **not** asserted as a finding here. This is the
-single most load-bearing OPEN item for "unblocking Team B playing videos through any backend": the
-game↔Bink half of the contract (this file) is well understood; the Bink-buffer↔screen half needs its own
-short, targeted investigation, starting from `0x00bdd660`'s `BinkRegisterFrameBuffers` call outward
-(OPEN item 1, §7).
+### 5.5 GPU presentation — CONFIRMED: a dedicated three-texture draw path through the generic Vint/UI primitive renderer, found and traced to its D3D9/Bink-module boundary (2026-10-10)
+
+**RESOLVED, superseding the original "not located" framing.** The game turns the decoded Y/U/V
+system-memory buffer into an on-screen image by uploading each plane into its own D3D9 texture (one
+per plane, held by the three per-plane helper objects already named in §5.4) and drawing a quad
+textured by all three simultaneously, through a dedicated shader — **not** a single packed/interleaved
+texture, and not a bespoke Bink-only renderer: it reuses the same generic 2-D primitive-draw system
+(`rl_draw`) the Vint/UI layer's own `bitmap`/glyph-run drawing already uses (`spec-vint-render.md` §15),
+via a parallel, higher-priority primitive mode the UI itself never emits.
+
+**The call chain, traced this pass from the Bink module outward (CONFIRMED by disassembly):**
+
+```
+0x007ad570 (outer per-frame driver, outside the Bink module's own 0x00bdb850-0x00bde150 range)
+  -> 0x00bdd520 -> 0x00bdc730 (per-open-movie texture-update step, inside the Bink module)
+       for each of the 3 per-plane helper objects (slot +0x90/+0x8c/+0x94):
+         calls that object's own vtable slot +0x20 with the plane-pointer record's
+         (pointer, pitch) pair — i.e. hands each helper object its current decoded
+         plane directly, once per frame. (The actual LockRect/memcpy/UnlockRect, if
+         that is the shape, lives inside this call target — generic vtable 0x012a0dd0,
+         built via 0x00487fc0 — not traced to the instruction level this pass; see
+         the narrowed OPEN item below.)
+       clears a per-movie "needs update" flag (+0xd8 = 0)
+  -> 0x00bdca80 (draw-all-open-movies loop, inside the Bink module) OR 0x00bdcba0
+     (draw-by-handle single entry, called from 0x00842ff0)
+       walks the handle table (the same array/stride §2.1 already documents), and for
+       every slot whose flags qualify (+0xd9==0, +0xd5==0, +0xd6!=0, "opened"==1) calls:
+       -> 0x00bdc900 (THE DRAW STEP, CONFIRMED by disassembly, inside the Bink module):
+            1. 0x00e4aef0(-1) — clears the plain UI texture handle (mutual exclusivity
+               with the Bink triple, matching §15.2's own priority rule, now confirmed
+               from the Bink-caller side too)
+            2. 0x00e4ae90(1.0, 1.0, 1.0, movie's own +0xa8 alpha field) — sets draw colour
+            3. 0x00e4af20( [helper(+0x94)+4], [helper(+0x8c)+4], [helper(+0x90)+4] )
+               -> 0x00e48270 -> 0x00e82cb0: THE SETTER for the "three-handle Bink binding"
+               (spec-vint-render.md §15.8's 0x00e82cb0/0x00e82ce0 pair — 0x00e82cb0 is the
+               setter, 0x00e82ce0 the getter; §15.8's own text names the storage but not
+               this setter). **This independently CONFIRMS §5.4/OPEN-item-3's own
+               HYPOTHESIS: the three per-plane helper objects' own +4 field IS the D3D9
+               texture handle bound into this triple** — read directly out of each helper
+               object (not out of the Bink SDK handle or the raw CPU buffer).
+               0x00e48270 also re-confirms mutual exclusivity from this side: once all
+               three handles are valid, it explicitly clears the plain texture handle
+               (0x00e485e0(-1)) and the material handle (0x00e48630(0xffff)).
+            4. Computes a quad position/scale from the movie object's own +0x98/+0x9c/
+               +0xa0/+0xa4 fields and calls 0x00e4af50(...) — the actual quad submission,
+               using the global sampler/state record at 0x0132d488 (not decoded further
+               this pass).
+            5. 0x00e4af20(-1,-1,-1) — clears the Bink triple again immediately after
+               drawing, so the binding is live only for the duration of this one draw.
+```
+
+**This closes the structural question completely** (three separate textures, one per plane, drawn
+via a dedicated mode of the generic primitive renderer — not the task's original "one packed texture"
+hypothesis) **and substantially narrows what remains open:**
+
+- **CONFIRMED, this pass:** the setter/getter pair for the three-handle binding (`0x00e82cb0`/
+  `0x00e82ce0`), the draw-step function (`0x00bdc900`), the per-frame draw-all/draw-by-handle entry
+  points (`0x00bdca80`/`0x00bdcba0`), the per-frame texture-update hookup (`0x00bdc730`'s calls into
+  each helper object's own vtable `+0x20`), and the mutual-exclusivity logic on both the setter side
+  (`0x00e48270`) and the clearer side (already CONFIRMED in `spec-vint-render.md` §15.2). All of
+  `0x00bdc730`/`0x00bdc900`/`0x00bdca80`/`0x00bdcba0` are newly-identified functions inside the
+  already-established Bink-module address range (`0x00bdb850`–`0x00bde150`) that were not previously
+  named in §2.2's function table.
+- **Cross-reference, cited not re-derived:** `spec-vint-render.md` §15.1–§15.2/§15.8 independently
+  establishes the render-side half — the primitive-code priority rule (Bink triple > texture >
+  material), the dedicated shader `rl_prim_2d_bink` (one of exactly 5 startup-built shader materials,
+  a first-class sibling of the ordinary UI quad shaders, not a hack), and that codes `0xc`/`0x13`
+  (which this draw step's quad submission reaches) are "not used by the UI" — i.e. reached only by
+  this Bink path.
+- **Still genuinely OPEN, narrower than before:**
+  1. **The exact per-plane upload mechanism inside the helper object's own vtable `+0x20`** (generic
+     vtable `0x012a0dd0`, built via `0x00487fc0`) — whether it's a `LockRect`/memcpy/`UnlockRect` pair
+     as hypothesized, or something else, was not traced to the instruction level this pass. This is now
+     a small, well-bounded next step (one vtable slot, one object type) rather than an open-ended
+     search.
+  2. **`rl_prim_2d_bink`'s own compiled pixel-shader bytecode** — not read this pass. The actual
+     YUV→RGB math, if that's what it does, is inferred from "three stages, vector form"
+     (`spec-vint-render.md` §15.2 item 4), not confirmed by reading the shader itself. Reading
+     `rl_prim_2d_bink_s.fxo_pc` from `shaders.vpp_pc` the same way `spec-vint-render.md` §15.7 already
+     read its two siblings is a cheap, well-scoped next step.
+  3. The global sampler/state record `0x0132d488` consumed by the quad-submission call `0x00e4af50`
+     was not decoded.
+
+Full detail: this pass's own disassembly, folded in here; no separate scratch file.
 
 ---
 
@@ -459,14 +545,18 @@ genuine, unresolved OPEN item.
 
 ## 7. OPEN items
 
-1. **GPU presentation of the decoded Y/U/V buffer (§5.5).** Not located by this unit. Likely small, once
-   found — start from `0x00bdd660`'s `BinkRegisterFrameBuffers` call outward. The single highest-priority
-   item for unblocking a replacement backend's render path.
+1. **GPU presentation of the decoded Y/U/V buffer (§5.5) — RESOLVED 2026-10-10.** A dedicated
+   three-texture draw path through the generic Vint/UI primitive renderer was found and traced in
+   full, from the Bink module's per-frame texture-update step through the draw call to the renderer's
+   own three-handle binding setter. Two small sub-gaps remain, both narrow: the exact per-plane
+   upload mechanism inside the helper objects' own vtable `+0x20` (§5.4), and `rl_prim_2d_bink`'s own
+   unread shader bytecode.
 2. **The logo/startup splash gate's own caller (§6.2).** Neither `0x00bddcd0` nor `0x00bddd50` has a
    direct E8 caller; almost certainly a stored function pointer in a boot-sequence table. Not traced.
-3. **The three per-plane helper objects' exact role (§5.4).** Generic vtable `0x012a0dd0`, constructed
-   via `0x00487fc0`; most likely CPU-side "buffer view" wrappers, not D3D9 objects, but not independently
-   confirmed.
+3. **The three per-plane helper objects' exact role (§5.4) — RESOLVED 2026-10-10.** Each object's own
+   `+4` field is a real D3D9 texture handle (CONFIRMED by disassembly, §5.5) — not a CPU-side
+   buffer-view wrapper as previously hypothesized. The remaining open piece (the upload mechanism
+   itself) is folded into item 1 above.
 4. **The cutscene-xtbl → Bink-module call chain (§6.4).** The `BinkMovieFilename` reader
    (`0x00736800`–`0x00738000`) makes zero direct calls into this module; the real consumer of the parsed
    filename is unidentified. The clearest concrete gap in part (a).
@@ -543,3 +633,20 @@ genuine, unresolved OPEN item.
   both negative, narrowing (not closing) this item's search space to that state machine's 4 remaining
   undumped handlers. No new disassembly in this file. Full detail:
   `scratchpad/cutscene_playback_sequencing_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+- **2026-10-10 — §5.5/OPEN item 1 (GPU presentation) RESOLVED; §5.4/OPEN item 3 (per-plane helper
+  objects' role) RESOLVED** (SPEC TEAM, agent `aad9a14996668b228` plus independent disassembly by
+  the splicing session). The agent's own pass was a synthesis (no new disassembly) that surfaced an
+  uncross-referenced lead already sitting in `spec-vint-render.md` §15.1-§15.2: a dedicated
+  three-texture draw mode (`rl_draw` codes `0xc`/`0x13`, shader `rl_prim_2d_bink`) that the UI layer
+  itself never emits. The splicing session then independently traced the actual call chain by fresh
+  disassembly via the Ghidra query server: `0x00bdc730` (per-frame texture-update, newly identified,
+  inside the Bink module) feeds each of the 3 per-plane helper objects' own vtable `+0x20`; the draw
+  step `0x00bdc900` (newly identified) reads each helper object's own `+4` field — CONFIRMING those
+  fields are real D3D9 texture handles, not CPU buffer views as previously hypothesized — and passes
+  them into the renderer's three-handle-binding setter `0x00e82cb0` (reached via `0x00e4af20`→
+  `0x00e48270`), submits the quad, then clears the binding. `0x00bdca80`/`0x00bdcba0` (also newly
+  identified) are the per-frame draw-all/draw-by-handle entry points. All 4 newly-identified
+  functions fall inside the already-documented Bink-module address range. Two narrow sub-gaps
+  remain, both flagged in place: the exact per-plane upload call inside the helper object's own
+  vtable slot, and `rl_prim_2d_bink`'s own unread shader bytecode. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.

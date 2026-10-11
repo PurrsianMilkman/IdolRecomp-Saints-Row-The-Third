@@ -5497,8 +5497,136 @@ xref (caveat: an indirect, pointer-chasing consumer reading through a record's o
 would be invisible to that method, so not exhaustive). Spliced as `spec-audio-runtime.md` §11a.8
 (full material→switch table included) plus an update to `spec-anim-runtime.md`'s `Left Foot
 Bool`/`Right Foot Bool` entries. Cleanroom-checked (0/0) on both files, synced (70 files, exit 0).
-**Reporting the full, actionable answer to the orchestrator for relay to Team B next** — not just
-"done," the actual event name/mechanism/table, since they're waiting to act on this directly.
+Reported the full, actionable answer to the orchestrator for relay to Team B — not just "done,"
+the actual event name/mechanism/table. **Orchestrator confirmed: committed (`8bb6596`).**
+
+**Orchestrator: "keep going at 1 agent: self-pick the next gap with the most value toward a
+playable game that isn't on the live-capture list. Suggestions: in-vehicle radio/music (§14 has
+switching; is the source/stream path specced?), or the cutscene/Bink video playback hand-off into
+the game loop."**
+
+**Checked both before picking.** Vehicle radio (`spec-audio-runtime.md` §14) is already mature —
+station switching/input binding/OFF state all traced 2026-10-09, only "track selection within a
+station" left open, not a real gap. Cutscene/Bink is the better candidate — but within it, picked
+the SHARPER of its two open items over the one the orchestrator named: `spec-bink-boundary.md`'s
+own §5.5/OPEN-item-1, **the GPU-presentation gap**, not the cutscene-trigger-wiring gap (§6.4). The
+spec's own text explicitly flags GPU-presentation as "the single most load-bearing OPEN item for
+unblocking Team B playing videos through any backend" — the game hands Bink a plain CPU YUV buffer
+(CONFIRMED, no D3D9 texture touched anywhere in the Bink module itself, `BinkCopyToBuffer` not
+even imported), but how that buffer ever reaches the screen was never located. The trigger-wiring
+question (which code decides to open a cutscene movie) is real but lower-value — the low-level
+player already works once opened, it's purely a question of the call site. Told orchestrator this
+reasoning and the pick.
+
+Dispatched agent `aad9a14996668b228` with a concrete, already-scoped starting point: forward-trace
+from `0x00bdd660`'s `BinkRegisterFrameBuffers` call and the per-frame pump (`0x00bdd040`, already
+fully traced §4) to find what reads the CPU YUV buffer per-frame; secondary lead, the 3 per-plane
+helper objects at handle-table slots `+0x90`/`+0x8c`/`+0x94` (§5.4, OPEN item 3, never traced to
+their own consumer) may be exactly the renderer-side "buffer view" a draw call reads from. Also
+pointed it at `spec-render-pipeline.md`/`spec-vint-render.md` for any existing YUV→RGB/video-surface
+concept, and at a D3D9 dynamic-texture-creation search matching the YUV plane dimensions as a
+fallback approach. Awaiting its report.
+
+**DONE — substantially beyond the agent's own report.** The agent's pass was a synthesis only (no
+new disassembly): it correctly surfaced an uncross-referenced lead already sitting in
+`spec-vint-render.md` §15.1-§15.2 (a dedicated three-texture draw mode, `rl_draw` codes `0xc`/`0x13`,
+shader `rl_prim_2d_bink`, never emitted by the UI itself) but left the actual call chain fully open.
+**I then independently traced the real call chain myself via the Ghidra query server, going well
+past what the agent handed back**, and found: `0x00bdc730` (newly identified, per-frame
+texture-update, inside the Bink module) feeds each of the 3 per-plane helper objects' own vtable
+`+0x20`; the draw step `0x00bdc900` (newly identified) reads each helper object's own `+4` field —
+**CONFIRMING those fields are real D3D9 texture handles, not CPU buffer views** as both the original
+spec and the agent's own report had only hypothesized — and passes them into the renderer's
+three-handle-binding setter `0x00e82cb0` (reached via `0x00e4af20`→`0x00e48270`), submits the quad,
+then clears the binding. `0x00bdca80`/`0x00bdcba0` (also newly identified) are the per-frame
+draw-all/draw-by-handle entry points, both falling inside the already-documented Bink-module
+address range. **This resolves both §5.5/OPEN item 1 (GPU presentation) and §5.4/OPEN item 3 (the
+helper objects' role) together** — exactly the kind of connected resolution the spec itself had
+flagged as possible but unconfirmed. Two narrow sub-gaps remain, flagged in place: the exact
+per-plane upload call inside the helper object's own vtable slot, and the shader's own unread
+bytecode. Spliced into `spec-bink-boundary.md` (§5.4, §5.5 rewritten, §7 items 1/3, §2.2's function
+table, §0's verdict item 5, Changelog). Cleanroom-checked (0/0), synced (70 files, exit 0).
+Reporting this to the orchestrator as a real resolution, not just progress. **Orchestrator
+confirmed: committed (`48d29eb`).**
+
+**Orchestrator's next instruction (Team-B-routed): "what blocks video on screen now is Team B's
+decoder stopping on unimplemented case-1 sub-types (TwoLiteralPattern is done; others aren't). Spec
+the remaining case-1 sub-type payload grammars in bink-codec §5.3c (secondary values 0-6, what each
+reads and writes), using the same live-Unicorn approach, with a worked example per sub-type where
+the frames contain one."**
+
+Read `spec-bink-codec.md` §5.3/§5.3c/§5.3d/§5.3g first. Current state of the 7 secondary values
+(primary=1, secondary = byte−3, range 0-6): **sub=5 (TwoLiteralPattern) is the only one with a full
+live-execution worked example** (§5.3, the template to match). Sub=1/4 (skip-flag mark) and sub=3
+(DC/flat fill) are simple and already structurally documented, just never individually
+live-confirmed. **Sub=0 ("giant1," RLE+permutation half-res 2× upsample, `0x1001ada6`/`0x1001af5e`)
+and sub=2 (third DC+AC dequant/IDCT engine, `0x1001b2ff`-`0x1001b3d2`) are structurally
+disassembled but have NEVER been traced live or given a byte-level worked example** — these are
+almost certainly Team B's actual blocker, since they're the two genuinely bitstream-heavy,
+unconfirmed cases. Sub=6 (literal/raw copy, no entropy decode at all) is already well-understood
+structurally, lowest priority for a live trace.
+
+Dispatched agent `a0e7757df0cf66e27`, pointed at the reusable Unicorn harness
+(`scratchpad/bink_unicorn_harness_2026-10-08/bink_harness.py`) and the TwoLiteralPattern scan/trace
+scripts (`scratchpad/bink_twoliteralpattern_0x1001b5a3_2026-10-09/`) as direct templates to adapt
+rather than rebuild, with `main_menu_bg.bik` as the first real-sample target (already confirmed to
+carry real secondary=5 occurrences; check it for the other sub-types too before looking elsewhere).
+Told it to prioritize sub=0/sub=2 (the real blockers) and spend less budget on 1/3/4/6 (already
+well-understood, lower value). Awaiting its report.
+
+**DONE.** Couldn't spot-check via the Ghidra query server (that server covers only
+`SaintsRowTheThird.exe` — Bink work has always used Unicorn emulation/disassembly instead, since the
+codec lives inside `binkw32.dll`'s own separate address space). Instead verified via the next-best
+thing: the agent's own trace independently reproduced two already-published, verifiable numbers from
+an earlier, unrelated unit's own live trace — §5.3h's exact dispatch-reach counts (23,914 Y-plane,
+6,042 chromaA) and its exact DC literal value (118) for the same block (0,0). Both matched exactly,
+giving strong confidence the harness setup and methodology are sound before trusting the new claims.
+
+Agent placed its answer as new **§5.3i** (correctly identified as the next free letter after §5.3h,
+not §5.3c as the orchestrator initially said — §5.3c is specifically about the entropy pre-stage,
+§5.3i's content didn't fit there). **Result: secondary=2 and secondary=3 fully live-traced with
+worked examples** (DC=118/nibble=2/16×16-output for sub=2, with a new `0x100247d0`
+calling-convention finding; fill-byte=0x99/16×16-output for sub=3, correcting a prior "~40 locations"
+estimate to an exact count). **Secondary=1/4's dispatch mechanism corrected** — reached via an early
+flag-bit short-circuit, not the literal jump-table targets the old case table implied. **Secondary=0
+got an honest negative result** — searched across 20 real frame/file samples (3 files), found zero
+occurrences; its grammar is given at HIGH CONFIDENCE only (structural analogy to its already-confirmed
+twin, primary case 3), explicitly not fabricated as a worked example. Secondary=6 not re-traced
+(budget went to the two real priorities), carried over at HIGH CONFIDENCE. New structural finding
+unifying 3 of the cases: a shared "descriptor L" literal-byte cursor, and a uniform 16×16
+output-block-family convention. Spliced as `spec-bink-codec.md` §5.3i, cleanroom-checked (0/0),
+synced (70 files, exit 0). Reporting this to the orchestrator for relay to Team B — flagging the
+secondary=0 negative result prominently so they don't wait on a worked example that doesn't exist yet.
+**Orchestrator confirmed: committed and routed.**
+
+**Orchestrator's next instruction: "self-pick the next gap with the most value toward a playable
+game, not on the live-capture list. Something for the open-world in-vehicle experience (traffic AI
+driving behaviour at junctions, or vehicle damage visuals) is a good area."**
+
+**Checked both before picking.** Vehicle damage visuals is already well-covered
+(`spec-vehicle-damage-runtime.md` §1-6a: destruction trigger, part detachment as the real
+deformation mechanism, fire/smoke VFX, occupant crush all traced in depth — remaining items narrow).
+**Picked traffic AI steering/junction behavior instead** — `spec-ai-runtime.md` §18.1/§18.2 already
+decoded the Traffic record's data format (segment/point graph, a 2-bit segment-kind flag, a
+plausible merge-arbitration cache-check shape) but explicitly never found the actual steering/
+target-point computation OR the junction branch-choice algorithm — honestly flagged OPEN, not
+guessed, with a concrete next step already scoped (trace the caller(s) of `0x00b1c5a0` upward).
+Static analysis, not live-capture-blocked, and core to how every AI-driven car in the open world
+moves. Told orchestrator this reasoning and the pick.
+
+Dispatched agent `ad96ea71d4c43e15d` with the full prior-pass context (the two established address
+bands `0x00a69000`-`0x00a6e000`/`0x00b1a000`-`0x00b65000`, the exactly-one-RTTI-class physics
+integration point `0x00ae30c0` already fully resolved by §18.3, and both of §18's own named next
+steps) to: (1) trace `0x00b1c5a0`'s callers upward to find the real steering-decision function, (2)
+find the junction branch-selection logic once that function is in hand, (3) if budget allows,
+data-flow-trace from `0x00ae30c0`'s own caller forward to confirm the decision lands in the same
+`+0x128`/`+0x130` fields player/AI-passenger vehicles use, closing the loop end-to-end. Awaiting its
+report.
+
+**Next action once it reports:** read in full, spot-check its central claim (whichever function it
+identifies as the real steering/junction-decision code) before trusting it, same discipline as
+every prior splice. Splice into `spec-ai-runtime.md` §18 (extending/superseding §18.1/§18.2/§18.4).
+Cleanroom-check (0/0), sync, update this note, report to orchestrator.
 
 ### 45.4 LEARNED — key facts/addresses future-me needs without re-deriving
 - **CBA action table**: 166-entry `{int32 value; char* namePtr}` array at `0x01122160`, read

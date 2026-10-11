@@ -1502,6 +1502,286 @@ formulas, cross-checked live. OPEN: the 4 newly-pinned per-row setup functions' 
 why N_A and N_B use a different halving factor at all.]** Full detail:
 `scratchpad/bink_d10_and_bit1757_trace_2026-10-09.md` Part 2.
 
+### 5.3i Primary case 1's full 7-way secondary payload grammar, all values 0-6, closing Team B's own named blocker (2026-10-10)
+
+**Scope and why this is its own subsection, not folded into 5.3c.** 5.3c/5.3d/5.3g/5.3h establish the
+entropy *pre-stage* that supplies the primary and secondary case-selector bytes themselves (descriptors
+A and B) and, in 5.3h's own closing paragraph, trace ONE real block (`main_menu_bg.bik` frame 0, Y-plane,
+block (0,0)) as far as "a pure-arithmetic IDCT call (zero further bitstream reads)" without opening that
+call's own argument/output grammar. This subsection is the direct continuation Team B asked for: a
+byte-level payload grammar, in the same style as 5.3's own TwoLiteralPattern (secondary=5) entry, for
+EVERY one of the 7 secondary values — reusing the already-built Unicorn harness
+(`scratchpad/bink_unicorn_harness_2026-10-08/bink_harness.py`, `decode_frame0.py`) and the
+TwoLiteralPattern-era scan/trace scripts as a direct template. New scripts for this pass live in
+`scratchpad/bink_sub012346_grammars_2026-10-10/`.
+
+**A methodology correction, found and fixed before any of the results below were trusted.** The
+TwoLiteralPattern-era scan script (`scan_for_sub5_mmbg.py`) and this pass's own first two scan attempts
+(copied from it) pass the top-level `0x1001cb00` call's `[ebp+8]` in/out-scratch argument as literal `0`
+— which `decode_frame0.py`'s own comment already documents as forcing `[ebp+0xc]` (macroblock column
+count) to zero as a side effect, silently making the Y-plane call (call 1) process **zero** columns
+every time. The buggy scripts' own distribution counts are consequently accidental chromaA-only data,
+not Y+chromaA as assumed. Every live result below was re-run (`scan_v2_sub0_sub2.py`) against the
+correctly-configured harness setup (`decode_frame0.py`'s own known-good `call_bink_cb`, non-null
+`SCRATCH_DWORD`) before being reported as CONFIRMED. One live cross-check this correction itself
+produced: the corrected Y-plane dispatch-reach count for `main_menu_bg.bik` frame 0 (23,914 real
+dispatches) and chromaA's (6,042) **independently reproduce §5.3h's own already-published figures
+exactly** (§5.3h: "23,914/23,914 attempts; chromaA 6,042/6,202"), confirming the fix is right, not just
+plausible.
+
+**A new structural finding, confirmed by live register inspection, underlying several of the grammars
+below: a THIRD independent per-row byte cursor, distinct from descriptors A (primary selector) and B
+(secondary selector).** Every literal-byte read traced this pass and in the original TwoLiteralPattern
+pass shares the identical cursor/bound pair, `[ebp-0x210]` (cursor) / `[ebx+0x10]` (bound), checked by
+the idiom `ecx = [ebx+0x10] - [ebp-0x210]; cmp ecx,0x10; jb <bail>` immediately on entry to the
+secondary=2, secondary=3, and (per the original 2026-10-09 trace) secondary=5 case bodies alike. This is
+a SEPARATE descriptor from both A (`[ebp-0x170]`/`[ebp-0x16c]`, 5.3c) and B (`[ebp-0x1a4]`/`[ebp-0x1a0]`,
+5.3c's "Extended 2026-10-09" paragraph) — call it **descriptor L** ("literal") pending a real name.
+**CONFIRMED: descriptor L feeds the DC literal word (secondary=2), the flat-fill byte (secondary=3), and
+both pattern-literal bytes (secondary=5) — i.e. every "raw literal value" read by any primary=1 case
+body comes from this one shared byte stream.** OPEN, not chased this pass: whether descriptor L is
+itself filled by its own `0x10019360`-style pre-stage call (by analogy to A and B) or reads raw
+un-decoded bitstream bytes directly — not traced upstream of its own cursor/bound pair this pass.
+
+**A second new structural finding, also confirmed by live register trace: primary=1's "mark skip, no
+pixel write" behavior is reached by an early flag-bit short-circuit, BEFORE the secondary byte is ever
+read — not via the secondary byte's own value 1 or 4 as the dispatch table's literal shape might
+suggest.** Traced live (dispatch index 178 of `main_menu_bg.bik` frame 0's Y-plane; see secondary=1/4
+below) — this corrects the framing in §5.3's own case table, which lists this behavior under "secondary
+1 or 4" as if it were one of the 7 sub-dispatch targets. It is not reached that way in this real sample;
+see below for the actual confirmed mechanism and an open question about whether raw secondary bytes 4/7
+(→ sub 1/4) are ever produced by this encoder at all.
+
+**A third, unifying finding across three independently-traced case bodies: secondary=2, secondary=3,
+and secondary=5 (TwoLiteralPattern, already published) all write a physical 16-column x 16-row (256
+pixel) output block, not an 8x8 block.** This was previously flagged for secondary=5 alone as "does NOT
+match the Width/8 macroblock-column convention... block-type-specific." Live evidence this pass shows
+the SAME 16x16 footprint for secondary=2 (confirmed by exact write-address enumeration, below) and
+secondary=3 (confirmed likewise). This is now a block-type-FAMILY-wide convention for primary=1's own
+new-content sub-cases specifically, distinct from the real 8x8 IDCT blocks used by primary cases 5/7
+(5.3b).
+
+#### secondary=2 — third DC+AC dequant/IDCT engine (`0x1001b2ff`-`0x1001b3d2`), CONFIRMED by live execution
+
+**Occurrence rate, corrected scan:** abundant and easy to find — 2,457 real occurrences in
+`main_menu_bg.bik` frame 0 alone (corrected Y+chromaA scan), including the very FIRST dispatch of the
+entire frame (global dispatch index 0 = Y-plane block (0,0)) — independently corroborated by §5.3h's own
+unrelated trace of the identical block, which stopped short of opening this call's own grammar.
+
+**Byte-level read/write sequence, CONFIRMED live (`main_menu_bg.bik` frame 0, Y-plane block (0,0)):**
+
+1. `0x1001b2ff`-`0x1001b30b`: bound check on **descriptor L** (`[ebx+0x10]`(bound) `-`
+   `[ebp-0x210]`(cursor) `>= 0x10`) — bails to the generic end-of-row handler (`0x1001acc9`) if fewer
+   than 16 bytes remain in the shared literal stream.
+2. `0x1001b311`-`0x1001b33b`: reads a **16-bit little-endian DC literal word** directly from descriptor
+   L's cursor (no bit-packing — a plain byte-pointer read/advance, `cx = word[eax]; eax += 2`), writes
+   it into the shared per-block coefficient struct at `[ebp-0x310]+0` (the same struct §5.3b already
+   names for cases 5/7's own DC+AC engine). **Live value: `0x0076` (118)** — exact match to §5.3h's own
+   independently-traced DC value for this identical block, cross-confirming both passes.
+3. `0x1001b348`: `call 0x10024eb0(hidden-ecx=bitreader-context, stack-arg=&[ebp-0x310])` — the
+   already-documented (§5.3b) AC-coefficient breadth-first tree decoder, filling the struct's remaining
+   63 coefficients (row-major, `struct_byte_offset(k)=2k`, per §5.3b's own closed finding) from the
+   MAIN per-row bitstream (a real, bit-costly read — 17 bits for this specific block, per §5.3h).
+4. `0x1001b34d`-`0x1001b3b5`: an **inline 4-bit nibble read** from the main bit-reader's own shared
+   accumulator (two converging code paths depending on whether the current accumulator holds >=4
+   unconsumed bits or needs a refill first — both paths land on the identical `edx = nibble (0-15)` at
+   `0x1001b3b5`). **Live value: `2`.** This selects a row of the SAME 16-row x 256-byte quantization
+   matrix (`0x10037cc0`) that primary cases 5/7 use (§5.3b): `quant_row_ptr = 0x10037cc0 + nibble*256`.
+   **Live cross-check: `quant_row_ptr - 0x10037cc0 = 0x200 = 512 = 2*256` — an exact arithmetic match to
+   the live nibble value, confirmed by direct register read, not computed after the fact.**
+5. `0x1001b3c8`: `call 0x100247d0(hidden-ecx=PITCH, hidden-edx=quant_row_ptr, [ebp+8]=dest_ptr,
+   [ebp+0xc]=&[ebp-0x310] struct)` — the third, "direct-store" sibling of the `0x100244c0`/`0x10024b50`
+   two-stage fixed-point 8-point IDCT pair (§5.3b). **Live register values: hidden-ecx = `1920` (exactly
+   `Width` for this file — an independent confirmation this really is the plane pitch, not a block-local
+   stride); `[ebp+8]` = `0x42001000` = this harness's own `Y_BUF` exactly (block (0,0)'s own dest base,
+   zero offset, consistent with it being block index 0).** **This is a NEW, directly-register-confirmed
+   finding, not previously resolved: `0x100247d0`'s own calling convention is `(pitch, quant_row_ptr |
+   dest_ptr, coeff_struct_ptr)` — DIFFERENT from `0x100244c0`'s already-closed `([ebp+8]=dest,
+   [ebp+0xc]=pitch)` convention (§5.3e). The two "sibling" IDCT entry points do not share one calling
+   convention; each must be implemented to its own observed signature.**
+
+**Output, CONFIRMED by exhaustive live write-address enumeration (916,416 raw Y-plane write events were
+captured for the rest of the frame after this call; the FIRST 64 belong to this one block and were
+isolated by address order):** exactly **64 dword writes** (4 per row x 16 rows), covering **columns
+0-15, rows 0-15** of the Y-plane relative to the block's own base — a **16x16 pixel output block**, not
+8x8. For this specific real block, the IDCT output is NOT a single flat DC broadcast (which would mean
+all-zero AC): rows 0-3 are uniformly `0x18` (24) and rows 4-15 are uniformly `0x19` (25), a genuine
+two-band vertical pattern with zero horizontal variation — direct, real-world evidence that the AC tree
+decoder produced at least one nonzero (low-frequency, vertical-only) coefficient for this block, not
+just a convenient all-zero test case.
+
+**[CONFIRMED — live execution (Unicorn, real unmodified `binkw32.dll`), one full worked example at a
+real block boundary (frame 0, Y-plane, block (0,0) of `main_menu_bg.bik`), cross-validated against
+§5.3h's own independently-traced DC value (exact match) and against the nibble-to-quant-row-offset
+arithmetic (exact match). Every register value quoted above was read live, not inferred. OPEN: the
+exact `0x100247d0` dequantization math itself (whether it reuses the same butterfly constants as
+`0x100244c0`/`0x10024b50` — structurally very likely given the shared `0x10037cc0` table and "DC-only
+fast path" family resemblance already established in §5.3b, but not independently re-derived this pass);
+a second worked example at a block with genuinely nonzero AC in BOTH axes (this block's own AC content,
+while real, happens to be vertical-only).]** Full detail/scripts:
+`scratchpad/bink_sub012346_grammars_2026-10-10/trace_sub2_block0.py`,
+`disasm_sub2.py`, `mem_writes_sub2_block0.txt`.
+
+#### secondary=0 — "giant1" RLE+permutation engine (`0x1001ada6`/`0x1001af5e`) — structural grammar carried over, but a genuine, honestly-reported NEGATIVE live-occurrence result
+
+**What is already CONFIRMED (prior units, re-cited, not re-derived here):** `0x1001af5e` (real entry
+`0x1001ada6`) is a run-length literal/replicate expansion engine, written through a 4-bit-nibble-selected
+row of the already-dumped 64-byte scan-order permutation table (`0x100378c0`, full bytes published in
+§5.3a above), then 2x pixel-doubled/upsampled in the same engine (§5.3a). **Primary case 3 (`0x1001bfcb`)
+is this engine's own already-CONFIRMED, already-live-traced full-resolution twin** (§5.3b) — identical
+64-byte permutation table, identical 64-coefficient budget, identical literal/replicate semantics, minus
+the final upsample step. This gives a HIGH-CONFIDENCE (not this-pass-reverified) basis for secondary=0's
+own grammar by direct analogy: read a 4-bit nibble selecting a permutation-table row, then decode a
+run-length/literal-replicate stream (identical mechanism to case 3's own confirmed engine) into a
+half-resolution 8x8 (or similarly-sized) coefficient buffer permuted by that row, then upsample 2x
+(duplicate each decoded pixel into a 2x2 output cell) to produce the final block.
+
+**This pass's own contribution: an exhaustive, honestly-reported search for a real secondary=0
+occurrence — zero found.** A corrected (Y+chromaA, properly-configured harness) full-frame dispatch scan
+was run across **main_menu_bg.bik frames 0, 1, and 2** (3 full frames, one keyframe + two P-frames,
+29,956 / 38,398 / 46,420 total dispatch events respectively) plus an earlier (chromaA-only, due to the
+`[ebp+8]=0` bug caught above — still a valid negative for that plane) scan across **17 further
+frame/file samples**: `main_menu_bg.bik` frames 50, 300, 700, 1200, 1800, 2400, and 11 early frames
+(0-11); `logo_amd_hd.bik` frames 0, 1, 30, 90, 150; `logo_thq_and_voli_hd.bik` frames 0, 1, 30, 100, 200,
+300 — Team B's own two named files. **Secondary=0 occurred in NONE of these 20 total frame instances,
+across both a high-bitrate background loop and two logo/bumper videos, keyframes and P-frames alike.**
+This is a real, reproducible negative result, not an absence of looking — the identical methodology
+found secondary=2 (2,457x), secondary=3 (1,284x), secondary=5 (183x, original pass), and secondary=6
+(258x) without difficulty in the very same frames. **Honest interpretation: secondary=0 may be a real
+but rare code path in this game's actual shipped content (its own full-resolution twin, primary case 3,
+was similarly never observed by this pass's own scans either, despite being independently confirmed
+live-traced by an EARLIER unit — meaning it does occur somewhere, just not in any of these 20 samples),
+or it may be dead/legacy-only code this specific encoder configuration never emits. Team B should treat
+this case as structurally well-understood and safe to implement by analogy to case 3's confirmed engine,
+but should NOT expect to find abundant real-world test material for it the way secondary=2/3/5/6 offer.**
+
+**[HIGH CONFIDENCE, not independently live-reverified this pass: the byte-level grammar, by direct
+structural analogy to primary case 3's own already-CONFIRMED, already-live-traced identical engine
+(§5.3b) minus the 2x upsample. CONFIRMED, this pass: the negative occurrence result across 20 real
+frame/file samples (listed above), via a corrected, properly-configured harness. OPEN: a genuine live
+worked example for secondary=0 specifically (not found this pass, not fabricated); whether it occurs
+anywhere at all in this game's real shipped `.bik` corpus (bounded, not exhaustive — only 3 files and 20
+frames checked); the exact half-resolution block output dimensions before the 2x upsample (not measured
+live for THIS entry point — case 3's own confirmed 8x8-no-upsample result is the best available proxy).]**
+Full detail/scripts: `scratchpad/bink_sub012346_grammars_2026-10-10/scan_v2_sub0_sub2.py`,
+`scan_multi_frame_sub0.py`, `scan_multi_file_sub0.py`.
+
+#### secondary=1/4 — "mark skip flag, no pixel write" — CONFIRMED live, with a correction to the dispatch mechanism itself
+
+**Live-traced mechanism (dispatch index 178, `main_menu_bg.bik` frame 0's Y-plane; properly-configured
+harness):** primary=1's case body, on entry at `0x1001abfb`, does **NOT** unconditionally read the
+secondary byte. It first runs a short, generic bound check (`cmp [ebp-0x218],0x10; jb <bail>` at
+`0x1001ad5d`), then tests **bit 3 (`0x8`) of a per-call flags byte at `[ebp-0x210]`** — note this is the
+SAME stack address descriptor L's own cursor lives at (`test byte ptr [ebp-0x210],8` here vs. the dword
+read `sub ecx,[ebp-0x210]` in secondary=2/3's own bound checks), confirmed by direct address match: the
+compiler is reusing this one stack slot's low byte as a flag in this early check and its full dword as
+descriptor L's byte-cursor value in the case bodies that actually consume literal bytes. Not yet
+resolved whether this is a real shared field (i.e. whether the flag bit is literally encoded into
+descriptor L's own cursor value) or two unrelated variables that merely happen to share a stack offset
+(OPEN, flagged honestly rather than guessed). **If that bit is set, execution jumps straight to a shared
+epilogue at `0x1001be76` WITHOUT EVER READING THE SECONDARY BYTE AT ALL** — i.e., this is reached
+BEFORE the 7-way secondary dispatch, not as one of its 7 targets. At `0x1001be76`: writes a literal `1`
+byte into a per-macroblock flag array at `[per-row-flag-cursor + (stride>>1)]`, advances the flag cursor
+by `[ebx+0x24]` (a per-plane macroblock-row stride), and repeats this mark-and-advance exactly **twice**
+per invocation — covering what the surrounding `add edi,0x10` (16 pixels) confirms is one 16-pixel-wide
+block-column, matching this subsection's own 16-wide block-family convention.
+
+**Correction to §5.3's own case table:** the table lists this behavior under "secondary 1 or 4," framing
+it as one of the 7 sub-dispatch jump-table targets reached via a raw secondary byte value of 4 or 7
+(byte-3=1 or 4). Live evidence for this real sample shows the identical skip/no-write behavior reached
+by an EARLIER flag-bit short-circuit that bypasses the secondary byte read entirely. **OPEN, not
+resolved this pass: whether raw secondary byte values 4/7 (true sub=1/4, reached via the normal 7-way
+jump table at `0x1001cae0`) are EVER actually produced by this encoder, or whether the flag-bit
+short-circuit is the ONLY real path to this behavior in practice** — every "secondary=None" dispatch
+event observed in this pass's own scans (5,222 of them in frame 0 alone) took the flag-bit path, and
+none was observed reaching the jump-table's own sub=1/4 targets directly. Implementers should treat the
+flag-bit short-circuit as the PRIMARY mechanism to implement, and the literal sub=1/4 jump-table entries
+as a secondary, possibly-unreachable-in-practice fallback — not the reverse.
+
+**[CONFIRMED — live execution, this pass, including the exact bit tested, the shared epilogue address,
+the two-writes-per-16-pixel-column pattern, and the flag-array stride source (`[ebx+0x24]`). OPEN: the
+literal jump-table sub=1/4 targets' own existence/reachability in real content (not observed, not ruled
+out); the flag array's own downstream consumer semantics (pre-existing OPEN item, §5.6).]** Full
+detail/script: `scratchpad/bink_sub012346_grammars_2026-10-10/trace_none178.py`.
+
+#### secondary=3 — DC/flat fill (`0x1001b3d8`-...) — CONFIRMED live, with a precise correction to the output footprint
+
+**Byte-level read/write sequence, CONFIRMED live (`main_menu_bg.bik` frame 0, Y-plane, dispatch index 1
+= block (0,1)):**
+
+1. `0x1001b3d8`-`0x1001b3e4`: the identical descriptor-L bound check used by secondary=2 (`[ebx+0x10] -
+   [ebp-0x210] >= 0x10`) — direct confirmation secondary=2 and secondary=3 share the same literal-byte
+   source stream.
+2. `0x1001b3f8`: reads **one literal byte** from descriptor L's cursor (`movzx ecx, byte ptr [eax]`).
+   **Live value: `0x99` (153).**
+3. `0x1001b3fb`-`0x1001b407`: broadcasts that one byte to a full 32-bit dword by successive
+   shift-and-or (`ecx |= ecx<<8; ecx |= ecx<<0x10`), confirmed live: `0x99` -> `0x9999` -> `0x99999999`.
+4. `0x1001b409`-...: stores the replicated dword to **4 consecutive dwords per row** (16 bytes = 16
+   pixels), then advances to the row one stride (`esi`=pitch) below and repeats — **writing BOTH the
+   current row and the row directly below it on each loop iteration** (the identical "two destination
+   rows at once" idiom already confirmed for secondary=5's engine), for a total of **16 rows**.
+
+**Output, CONFIRMED by live address enumeration: exactly 64 dword writes (4/row x 16 rows) = a 16x16
+pixel block, uniformly filled with the single broadcast byte value (`0x99` for this real occurrence) —
+not the "~40 consecutive locations spanning a whole macroblock" the prior high-level description
+estimated.** This is a precise correction, not a contradiction: the real count is exactly 64 dwords (256
+bytes / 256 pixels), matching the same 16x16 footprint now confirmed for secondary=2 and secondary=5
+alike.
+
+**[CONFIRMED — live execution (Unicorn, real unmodified `binkw32.dll`), one full worked example
+(`main_menu_bg.bik` frame 0, Y-plane block (0,1), fill byte `0x99`), every register value read live.
+Correction, this pass: output footprint is exactly 16x16/64 dwords, not an approximate "~40" count.]**
+Full detail/script: `scratchpad/bink_sub012346_grammars_2026-10-10/trace_sub3_idx1.py`.
+
+#### secondary=5 — TwoLiteralPattern — already DONE, cited only
+
+No new work this pass. Full grammar, worked example, and register cross-checks already published above
+(§5.3, "TwoLiteralPattern... payload grammar, CONFIRMED by live execution... 2026-10-09") and in
+`scratchpad/bink_twoliteralpattern_0x1001b5a3_2026-10-09/`. This pass's own secondary=2/3 traces
+independently confirm that secondary=5's shared descriptor-L literal-byte source and 16x16 output
+footprint are not special cases but a family-wide convention across primary=1's "new content" sub-cases
+— see the unifying finding at the top of this subsection.
+
+#### secondary=6 — literal/raw copy, dual-row duplication (`0x1001ba40`-`0x1001be6a`) — structural grammar carried over, not independently re-confirmed this pass
+
+**What is already CONFIRMED (prior unit, §5.3b, re-cited, not re-derived here):** an alignment test
+(`test al,3` at `0x1001ba6f`) selects a byte-granular ("unaligned") copy loop (`0x1001ba90`-`0x1001bb67`)
+or a word-granular ("aligned") copy loop (`0x1001bb72`-`0x1001be6a`); each repacks literal source
+bytes/words into a dword written to two destination rows at once; zero bitstream bit-reads, table
+lookups, or external calls — a sibling of the plain block-copy cases (primary 0/9), not of secondary=3's
+DC/flat fill. **This pass's own scans confirm it is real and abundant** (258 occurrences in
+`main_menu_bg.bik` frame 0's corrected Y+chromaA scan — comparable in frequency to secondary=5), but
+budget this pass went to the two genuinely-unworked cases (0 and 2) per the task's own stated priority,
+plus the two "quick-confirm" cases (1/4, 3) that turned up the flag-bit-short-circuit and footprint
+corrections above. **Not independently live-traced this pass — the existing structural analysis stands
+uncorrected, and (unlike secondary=0) real occurrences are plentiful and easy to re-locate with this
+pass's own scan scripts whenever budget allows a live confirmation pass.**
+
+**[HIGH CONFIDENCE, carried over from §5.3b's own disassembly-based confirmation, not downgraded or
+re-verified. CONFIRMED, this pass, as a byproduct of the dispatch-distribution scans: real occurrence
+count and frequency. OPEN: a live worked example with real source/destination bytes and a register-level
+cross-check, to bring this entry to the same standard as secondary=0/2/3/5 above.]**
+
+#### Updated summary table (supersedes/extends §5.3's own case-by-case map for primary=1's secondary values only)
+
+| Secondary | Mechanism | Output footprint | Live worked example this pass? |
+|---|---|---|---|
+| 0 | RLE+permutation (giant1), half-res, 2x upsampled | Unconfirmed this pass (by analogy to case 3: 8x8 pre-upsample) | No — 0 real occurrences found in 20 sampled frames across 3 files (negative result, see above) |
+| 1 or 4 | Flag-bit short-circuit (`[ebp-0x210]`&8) -> shared epilogue `0x1001be76`; mark skip flag x2, no pixel write | N/A (flag array only), 16px-wide column granularity | Yes — dispatch idx 178, frame 0 Y-plane |
+| 2 | Third DC+AC dequant/direct-store-IDCT engine | **16x16 pixels (64 dwords), CONFIRMED** | Yes — dispatch idx 0 (block (0,0)), frame 0 Y-plane; DC=118, nibble=2 |
+| 3 | DC/flat fill | **16x16 pixels (64 dwords), CONFIRMED (corrects prior "~40" estimate)** | Yes — dispatch idx 1 (block (0,1)), frame 0 Y-plane; fill byte=0x99 |
+| 5 | TwoLiteralPattern (giant2) | 16x16 pixels (64 dwords) | Already done, 2026-10-09 (cited only) |
+| 6 | Literal/raw copy, dual-row duplication | Not measured this pass | No — structural only, carried over from §5.3b |
+
+**[Overall confidence for this subsection: CONFIRMED for secondary=2/3's full grammars and secondary=1/4's
+real dispatch mechanism (all three live-executed against real unmodified `binkw32.dll` code, real
+`main_menu_bg.bik` bytes, with register-level cross-checks); CONFIRMED for the "descriptor L" shared
+literal-byte-cursor finding and the 16x16-output-footprint-family finding (both cross-case, live-derived);
+HIGH CONFIDENCE but not this-pass-reverified for secondary=0 and secondary=6 (both carried over from
+earlier units' own disassembly-based confirmations); a genuine, bounded, honestly-reported OPEN item that
+secondary=0 produced zero live occurrences in every real sample checked this pass, despite a serious,
+corrected-methodology search across 20 frame instances in 3 files.]**
+
 ### 5.4 ~~The transform stage: a confirmed three-CPU-tier dequantize/butterfly dispatch~~ RETRACTED 2026-10-08 — this entire section is audio-side, not video
 
 ~~`0x10018600` (the video-side dispatcher, read in full; called both externally and internally)
@@ -2324,3 +2604,20 @@ is better understood as "codec-core utility region" rather than a strict video/a
   zero-bit-cost SCRATCH-buffer reads from both descriptors, not a fresh bitstream read. Full detail:
   `scratchpad/bink_d10_and_bit1757_trace_2026-10-09.md`. Cleanroom self-check: strict regex 0 hits,
   C-cast-dereference check 0 hits.
+- **2026-10-10 — new §5.3i: full 7-way secondary payload grammar for primary case 1 (secondary 0-6),
+  closing Team B's own named decoder blocker** (SPEC TEAM, agent `a0e7757df0cf66e27`). Live-confirmed
+  byte-level grammars for secondary=2 (DC+AC dequant/IDCT, DC=118/nibble=2/16x16-output, plus a new
+  `0x100247d0` calling-convention finding independently cross-checked against §5.3h's own published
+  DC value — exact match) and secondary=3 (flat fill, corrects the prior "~40 locations" estimate to
+  an exact 16x16/64-dword count). Corrected the dispatch mechanism for secondary=1/4 (reached via an
+  earlier flag-bit short-circuit, not the literal jump-table targets, per live trace). Found and fixed
+  a real methodology bug in the inherited scan scripts (`[ebp+8]=0` silently zeroed the Y-plane column
+  count), validated by independently reproducing §5.3h's own exact dispatch-count figures after the
+  fix. New structural finding: a third shared literal-byte cursor ("descriptor L") feeds every raw
+  literal value across secondary=2/3/5, and all three write a uniform 16x16 output footprint — a
+  block-type-family-wide convention, not special to any one sub-case. **Honest negative result:**
+  secondary=0 was searched for across 20 real frame/file samples (3 files) and found zero times —
+  reported as a real negative, not fabricated; its grammar is given at HIGH CONFIDENCE only, by
+  structural analogy to its already-confirmed full-resolution twin (primary case 3). Secondary=6 not
+  independently re-traced this pass (real occurrences confirmed abundant, carried over at HIGH
+  CONFIDENCE). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
