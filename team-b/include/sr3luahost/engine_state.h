@@ -1063,6 +1063,15 @@ public:
     // Pushed AS A NUMBER by the real native (CONFIRMED, Sec9.10 - NOT a
     // boolean, unlike the three siblings above): the raw 0/1/2 status code.
     double vehiclePathfindCheckDoneCode(const std::string& vehicleName);
+    // Sec9.10a (spec e8dc04d): vehicle path-follow arrival condition. Called by
+    // vehicle_pathfind_to_do once it accepts a request: registers a PENDING kind-2
+    // request keyed by the vehicle, remembering the goal object name.
+    void registerVehiclePathfindRequest(const std::string& vehicleName, const std::string& targetName);
+    // Pure arrival test, Sec9.10a item 1 (0x00b4ea00, last node): horizontal (X/Z
+    // only, Y ignored) squared distance <= threshold; threshold 4.0 (sub +0x1c bit 0
+    // set) else 16.0; mode 2 overrides to 2500.0.
+    static bool vehiclePathfindArrived(const WorldPosition& vehicle, const WorldPosition& goal,
+                                       bool tightThreshold = false, bool mode2 = false);
 
     // --- store_vehicle_get_state (Sec10.1) ----------------------------------
 
@@ -1626,6 +1635,95 @@ public:
         return true;
     }
     uint64_t zoneDataWorldPositionHitCount() const { return zoneDataWorldPositionHitCount_; }
+
+    // --- generic get_dist "same stall point" tracker (feature/auto-objective-
+    // harness, 2026-10-12) --------------------------------------------------
+    // The m07 spawn-at-barge diagnostic (results/verify_m07_spawn_at_barge_
+    // 20261012/) manually confirmed that a navigation-gated mission re-issues
+    // the SAME get_dist(a,b) call every scheduler resume while its own wait
+    // loop sits unsatisfied (340 identical calls observed for m07), and that
+    // the non-player name's own tryResolveWorldPositionFromZoneData() position
+    // IS the real target a scripted player needs to reach. This generalizes
+    // that observation into reusable state stub_get_dist (src/lua_spec_
+    // confirmed_stubs_b05_invuln_r15_23.cpp) records on EVERY call, zero
+    // behavior change to get_dist's own return value - --auto-objective
+    // (tools/sr3_viewer.cpp) is the only reader. Not get_dist-specific in
+    // spirit (any "same two names, N frames running" check would work), but
+    // get_dist is the ONLY position-shaped native this project's missions are
+    // confirmed (m07, live) to stall on, so it's the only one wired here -
+    // not inventing a GPS-waypoint or objective-marker tracker this project
+    // has no CONFIRMED source for (engine_state.h's own waypoint_add/_remove
+    // comments: "this project has no real waypoint/HUD-marker tracking").
+    struct GetDistStallInfo {
+        std::string nameA;
+        std::string nameB;
+        WorldPosition posA;
+        WorldPosition posB;
+        bool knownA = false;
+        bool knownB = false;
+        uint64_t repeatCount = 0; // consecutive calls with the SAME unordered {a,b} pair, including this one
+    };
+    void recordGetDistCall(const std::string& a, const std::string& b,
+                            const WorldPosition& pa, bool knownA,
+                            const WorldPosition& pb, bool knownB) {
+        const bool samePair = (a == getDistStall_.nameA && b == getDistStall_.nameB) ||
+                               (a == getDistStall_.nameB && b == getDistStall_.nameA);
+        getDistStall_.repeatCount = samePair ? (getDistStall_.repeatCount + 1) : 1;
+        getDistStall_.nameA = a;
+        getDistStall_.nameB = b;
+        getDistStall_.posA = pa;
+        getDistStall_.knownA = knownA;
+        getDistStall_.posB = pb;
+        getDistStall_.knownB = knownB;
+    }
+    const GetDistStallInfo& getDistStallInfo() const { return getDistStall_; }
+
+    // --- generic on_trigger "stalled wait" tracker (feature/auto-objective-
+    // trigger-vehicle-seat, 2026-10-12) ---------------------------------
+    // Mirrors GetDistStallInfo/recordGetDistCall() above, but for the
+    // SEPARATE wait-shape m09/m13 actually stall on: a mission script that
+    // waits on an on_trigger()/on_trigger_exit() callback to fire (e.g.
+    // m13.lua's own m13_goto_a_trigger, per results/verify_combined_with_
+    // seatedpose_20261010's own stall-point dump) never calls get_dist at
+    // all, so the get_dist tracker above cannot see it stall. runPlaytest()'s
+    // own per-frame in-world-trigger block (tools/sr3_viewer.cpp) calls
+    // recordTriggerWaitFrame() once per frame, naming the EARLIEST-registered
+    // trigger (triggerRegistrationOrder() below) that has geometry but has
+    // never produced an ENTER transition yet (triggerEverEntered() below) -
+    // the trigger-volume analogue of "the same get_dist pair, N frames
+    // running." A name CHANGE (a different trigger becomes the earliest
+    // still-pending one, e.g. because the previous one finally fired) resets
+    // the counter to 1, exactly like recordGetDistCall()'s own unordered-pair
+    // reset rule.
+    struct TriggerWaitStallInfo {
+        std::string triggerName;
+        uint64_t framesWaiting = 0;
+    };
+    void recordTriggerWaitFrame(const std::string& triggerName) {
+        triggerWaitStall_.framesWaiting =
+            (triggerName == triggerWaitStall_.triggerName) ? (triggerWaitStall_.framesWaiting + 1) : 1;
+        triggerWaitStall_.triggerName = triggerName;
+    }
+    const TriggerWaitStallInfo& triggerWaitStallInfo() const { return triggerWaitStall_; }
+
+    // Registration order (FIFO, first-seen-wins, no duplicates) of every
+    // trigger name runPlaytest()'s own tryAutoRegister() lambda has
+    // successfully registered geometry for this session - deterministic
+    // "which trigger is the mission most likely waiting on first" ordering
+    // that an unordered_map's own iteration order cannot give.
+    void noteTriggerRegistrationOrder(const std::string& triggerName) {
+        for (const std::string& existing : triggerRegistrationOrder_) {
+            if (existing == triggerName) return;
+        }
+        triggerRegistrationOrder_.push_back(triggerName);
+    }
+    const std::vector<std::string>& triggerRegistrationOrder() const { return triggerRegistrationOrder_; }
+
+    // True once a trigger name's own ENTER transition (triggerCurrentlyInside()
+    // going false->true) has fired at least once this session - separate from
+    // triggerCurrentlyInside() itself, which can go back to false on EXIT and
+    // would otherwise look identical to "never entered" to a stall tracker.
+    bool& triggerEverEntered(const std::string& triggerName) { return triggerEverEntered_[triggerName]; }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
     // batch 2026-10-01, lifecycle driver + scene table 2026-10-01 nnlt text;
@@ -5554,6 +5652,29 @@ public:
         }
     }
 
+    // --auto-objective's own trigger-stall teleport target (feature/auto-
+    // objective-trigger-vehicle-seat, 2026-10-12): a representative point
+    // GUARANTEED (for every shape this project decodes) to satisfy
+    // TriggerVolumeContainsPoint() above for the SAME geometry - the
+    // trigger-volume analogue of get_dist's own "warp to the target's real
+    // resolved position" teleport. Sphere/box/cylinder all return a point on
+    // (box/cylinder) or at (sphere) the shape's own real center, never an
+    // edge/corner, so a player warped here lands solidly inside, not right
+    // on a containment boundary.
+    static WorldPosition TriggerVolumeRepresentativePoint(const TriggerVolumeGeometry& g) {
+        switch (g.shapeCode) {
+            case 0: // box: midpoint of the real on-disk min/max corner, offset from (px,py,pz)
+                return WorldPosition{g.px + (g.boxMinX + g.boxMaxX) * 0.5,
+                                      g.py + (g.boxMinY + g.boxMaxY) * 0.5,
+                                      g.pz + (g.boxMinZ + g.boxMaxZ) * 0.5};
+            case 2: // capped cylinder: midpoint of the axis (px,py,pz)-(px+ex,py+ey,pz+ez)
+                return WorldPosition{g.px + g.ex * 0.5, g.py + g.ey * 0.5, g.pz + g.ez * 0.5};
+            case 1: // sphere
+            default:
+                return WorldPosition{g.px, g.py, g.pz};
+        }
+    }
+
     // spawn_region_enable (Sec1.8): per-spawn-region byte +0x94 bit 0x1,
     // CONFIRMED branchless conditional-XOR, single-bit-only scope. This
     // project's flat objectResolves() map stands in for the dedicated
@@ -7145,8 +7266,29 @@ public:
     std::vector<HudPromptRequest>& hudPromptRequests() { return hudPromptRequests_; }
     void recordHudPrompt(const std::string& target, const std::string& a2, const std::string& a3) {
         hudPromptRequests_.push_back({target, a2, a3});
+        hudPromptActive_ = true; // 0x00a370c0 stores a nonzero prompt id into 0x02703cac ("prompt active")
+        hudPromptCallbackName_ = a3; // slot 9 (local) interned callback name, 0x005e46b0
     }
-    void recordHudPromptDefaultReset() { ++hudPromptDefaultResetCount_; }
+    void recordHudPromptDefaultReset() {
+        ++hudPromptDefaultResetCount_;
+        hudPromptActive_ = false; // 0x00a36e60(0): zeroes 0x02703cac, clears slots 9/10
+        hudPromptCallbackName_.clear();
+    }
+    // Sec13.3 (e8dc04d): hud_prompt's arg-3 callback fires on an interact press
+    // (handler-table 0x0111f2d0 entry 13, 0x009da810) while 0x02703cac != 0 (and
+    // no lower-bit handler consumed the press): the named global is called with
+    // NO args, then the prompt is cleared (0x00a36e60(0)). Returns the callback
+    // name to invoke ("" when no prompt is active - the press is not consumed)
+    // and clears the prompt. The caller (the interact-press dispatcher) does the
+    // by-name call.
+    bool hudPromptActive() const { return hudPromptActive_; }
+    std::string takeHudPromptCallbackOnInteract() {
+        if (!hudPromptActive_) return std::string();
+        std::string name = std::move(hudPromptCallbackName_);
+        hudPromptActive_ = false;
+        hudPromptCallbackName_.clear();
+        return name;
+    }
     uint64_t hudPromptDefaultResetCount() const { return hudPromptDefaultResetCount_; }
 
     // customization_outfit_wear (Sec13.4): arg 1 is a data-table key hashed
@@ -11097,6 +11239,7 @@ private:
     // kScriptedRequestKind* above for the 3 real kind values. `bool` = done
     // (true) vs. pending (false); absent = "no matching request" (status 2).
     std::map<std::pair<std::string, int>, bool> scriptedRequestDone_;
+    std::map<std::string, std::string> vehiclePathfindGoal_;   // Sec9.10a: vehicle -> goal object name
     std::unordered_set<std::string> vehiclePathfindResolvable_; // Sec9.10, test-only gate
 
     // --- fields backing the 9 functions from spec-lua-api-behaviour.md
@@ -11137,6 +11280,10 @@ private:
     // REAL (not diagnostic) - see tryResolveWorldPositionFromZoneData()'s
     // own doc comment above. Always active, no opt-in flag.
     uint64_t zoneDataWorldPositionHitCount_ = 0;
+    GetDistStallInfo getDistStall_; // feature/auto-objective-harness, 2026-10-12
+    TriggerWaitStallInfo triggerWaitStall_;             // feature/auto-objective-trigger-vehicle-seat, 2026-10-12
+    std::vector<std::string> triggerRegistrationOrder_; // ditto
+    std::unordered_map<std::string, bool> triggerEverEntered_; // ditto
 
     // --- action_play_do (Sec22.29), see the public accessor doc comments
     // above for citation/reasoning. Test-observable only, not real engine
@@ -11708,6 +11855,8 @@ private:
                                                            "spec-lua-api-behaviour.md Sec6.2"};
     std::vector<HudPromptRequest> hudPromptRequests_;
     uint64_t hudPromptDefaultResetCount_ = 0;
+    bool hudPromptActive_ = false;            // 0x02703cac != 0, Sec13.3
+    std::string hudPromptCallbackName_;       // slot 9 callback name, Sec13.3
     std::vector<CustomizationOutfitWearRequest> customizationOutfitWearRequests_;
     std::vector<CustomizationItemWearRequest> customizationItemWearRequests_;
     bool customizationRevertPending_ = false;

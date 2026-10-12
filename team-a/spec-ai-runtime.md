@@ -5146,6 +5146,228 @@ shaping entirely and pass steering input straight through.**
 body (step 11's helper); whether `leadHandle`'s resolution source and the main gate's own second-record
 identity are the same kind of object — carried over from the existing OPEN note above.
 
+### 18.7 Traffic driver reactions to the player — port recipe (2026-10-12, FINAL)
+
+Static analysis only (listings and decompiles of the read-only `gp_shadow1` copy, plus raw `E8` caller
+scans). The reactions are not done by the human AI modes of §6. The in-vehicle human stays seated, and
+nearly every reaction is a write to the **vehicle-AI directive sub-record** at vehicle `+0xc68`
+(called "the directive" below; its handle pair is at `+0x4e0`/`+0x4e4`). Only bail-outs (GetOut, and the
+"aimed at" kind 6) touch the occupants, through the generic seat-exit call `0x00af3cd0(occupant, request)`.
+
+#### 18.7.1 The directive's mode byte (`+0xc68`, i.e. directive `+0`) — the codes used here
+
+The mode is set by `0x00b24e40(directive, mode, sub)` (thiscall; `0x00b26250` is a cdecl wrapper). The
+setter runs the old mode's exit slot and the new mode's enter slot. These come from a 5-dword-per-mode
+table at `0x01186da0`, with slots +0 exit, +4 tick, +8 enter, +0xc net write and +0x10 net read. Mode 11
+skips the old mode's exit. The setter keeps the previous mode and sub-mode at directive `+2`/`+3`. It
+clears directive `+8` bit 0x80 and `+9` bits 0x02/0x80; bit 0x80 of `+9` re-arms a 20000 ms timer. It
+also sets **obey-traffic-lights** through `0x00b22a80(on)`: on for modes 0, 7, 8, 0xf, off for modes
+1–6, 9, 10, 0xc, 0xd, 0x10. Modes 1–6, 9, 10, 0xc, 0xd and 0x10 also clear directive `+8` bit 0x04.
+CONFIRMED.
+
+| Mode | Meaning (evidence) | Set by |
+|---|---|---|
+| 2 | **Flee** (sub 5). Two forms: from an object handle (`0x00b464c0(directive, lo, hi)`, which stores the threat at `+0x58`/`+0x5c` and its position at `+0x238`, with `+0x228` bit 0 = 1) or from a point (`0x00b462a0(directive, &xyz)`). Same vetoes in both: the driver is a player (flag `0x21`), directive `+4` bit 0x80, or the co-op proximity veto (25 m). A non-owner forwards network opcode `0x42`. | below |
+| 3 | **Ambient traffic / go back to lane following** (sub 7). `0x00b61cc0(vehicle, &block)`: a no-op when already 3; builds the cruise flags at vehicle `+0xfe8`/`+0xfe9` from the block; any player occupant clears `+0xfe8` bit 0x40 (the random cruise-speed bias). A target in the block whose team differs from the vehicle's (`+0x16e0` vs human `+0x1ca8`) is stored at `+0xff8`/`+0xffc` with `+0xfe9` bit 4. The default block comes from `0x004fa060`. | many (§18.7.4) |
+| 4 | **Chase/attack a target** (sub 0xe, or 0xf when the block flag 0x100 is set and the driver's crew count is at least 2). `0x00b4d260(directive, &block)`, block built by `0x00b47110(block, lo, hi, isPolice)`. Refused when the driver is a player, or the driver's `+0x16c0` bit 0x4000000 is set. | collision Attack, threat kinds |
+| 6 | Route-to-ambient re-entry (sub 0x11). `0x00b63ac0(directive, …)`, which falls back to clearing the directive (`0x00b46ca0`) when there is no road graph (`0x02705fe0`) or directive `+7` bit 4 (`never_go_ambient`) is set. | flee end |
+| 11 | **Hold/wait** (sub 0x13). `0x00b50180(directive, lo, hi)` saves the previous mode and sub-mode at directive `+0x3c8`/`+0x3c9` and the handle at `+0x3c0`. A no-op when already 11 or 14. | carjack approach |
+| 12 | Set by `0x00b37210` (sub 0) for a vehicle that passes `0x00ad31a0`. Not part of this chain. | — |
+
+`0x00b1f6c0(mode)` = "mode is 11 or 14" (held). CONFIRMED.
+
+#### 18.7.2 (a) Something in the path: wait, honk, threaten; the stuck give-up
+
+- **Wait response** (`0x00b55460`, reached from the per-vehicle tick `0x00b58320`). It runs while the
+  directive is mode **8** with `+0xc70` bit 2 set, no `0x00ad4160` result, and `+0xc70` bit 4 clear.
+  Every **2000–4000 ms** (random) it draws the driver's `VehicleWaitResponse` from the personality record
+  (`0x00507e30(driver)`, `spec-tables-traffic-ai.md` §11, bytes `+0x11..+0x13` = DoNothing / Honk /
+  Threaten; draw `0x00507a00` = uniform over the weight sum).
+  - Honk (1): calls `0x0055a520(vehicle handle)` (the horn) and adds the horn length `0x00559840()` to
+    the next 2–4 s wait.
+  - Threaten (2): re-arms in 500 ms.
+
+  The result is cached at vehicle `+0x1114`; −1 at `+0x1110` resets. CONFIRMED.
+- **Stuck give-up** (`0x00b20e20(vehicle, active)`, called from the flee tick and 8 other mode ticks).
+  - It needs vehicle `+0x33` bit 8 and `+0x11e0` ≠ 0.
+  - After **13000 ms** without progress it calls `0x00b1e410`. That re-issues mode 3 (ambient) when the
+    directive is 2 (flee), 4 (chase) or any other mode except 3 and 0xf, which return "not handled".
+  - A reverse-out window applies: **1000 ms**, or **2000 ms** in modes 4 and 8, with the progress check
+    once 751 ms (`0x2ef`) have passed. The vehicle counts as stuck when it moved less than **4.0**
+    (16.0 squared, `0x0127e214`) since the last sample (`+0x10d4`). Two such samples in a row also call
+    `0x00b1e410`.
+  - Hard stop: when within 1000 ms the larger of (distance moved)² and (speed ÷ (`+0xc58` × 2.0))² is
+    below **6.25** (`0x01115350`), it commands brake 0, throttle 0.1 or 1.0 (`+0xc71` bit 0x10 picks)
+    and steering 0 through the §18.6 dispatchers on the handle at `+0x1148`.
+
+  CONFIRMED (constants read from the image).
+- **Braking for a car or the player in the lane** is the §18.6 follow logic. `0x00b2bbc0` steers on a
+  lead handle at `+0xcc0`/`+0xcc4` inside **15.0** (225.0 squared). Otherwise it applies throttle `0.01`
+  (`0x3c23d70a`) plus brake. The traffic tick `0x00b4d070` drops into mode 3 (re-plan) when
+  `0x00b49820` reports a blocked route, carrying `+0xe0a`, the `+0xcc0` lead and `+0xe09` bit 6 → block
+  flag 0x800. **OPEN:** the exact "player ahead" gap distance. No separate pedestrian-in-lane test was
+  found besides this lead-handle path.
+
+#### 18.7.3 (b) Rammed or shot: the two entry points
+
+**Collision response** — `0x007642f0` → `0x00b29e10(vehA, vehB, impulse)`:
+- impulse ≥ **3.0** (`0x01116444`): clear `+0xc71` bit 0x80 on both vehicles (and re-arm 20000 ms if it
+  was set);
+- then `0x00b273e0`. It does nothing below impulse **6.0** (`0x012a2f7c`), nothing for `0x00ad31a0`
+  vehicles, and nothing when either driver is dead (`0x0096f4f0`) or the two drivers are friends
+  (`0x00950550`). An unmanned vehicle uses its `+0x1a3c` last-driver link. For each side whose driver is
+  **not** a player:
+  1. Skip when the directive mode is 2, 4, 9, 10 or 0xf, or mode 6 with `+0xed4` bit 0 set. Skip when
+     the per-vehicle response timer started less than **10000 ms** ago.
+  2. Draw `VehicleCollisionResponse` with `0x00507a50(record, otherIsPlayer)`. The weights are bytes
+     `+0x14..+0x1a` = DoNothing, Honk, Threaten, Flee, GetOut, Attack, AttackPlayer. Against a player,
+     AttackPlayer's weight replaces Attack's and an Attack result reads as AttackPlayer.
+  3. When `+0xc6d` bit 2 is set, or the mode is 7, Attack/AttackPlayer become Honk (random ≤ **0.5**,
+     `0x0126d2cc`) or Threaten.
+  4. Act (jump table `0x00b27754`):
+     - 0 nothing;
+     - 1 Honk `0x0055a520`;
+     - 2 Threaten `0x00b1e2c0`: a random occupant, weighted driver **0.8** / others **0.1** (`0x01173df8` /
+       `0x0127e354`), plays gesture 0x3f1/0x3f2/0x3f3 through `0x00959b50`, with voice line hash
+       `0x6ba26edd` when `0x00ad3290`;
+     - 3 **Flee** `0x00b462a0(directive, other vehicle +0x40)` unless already 2;
+     - 4 **GetOut** = mode 3 with block byte 0 bit 0x80, unless already 3;
+     - 5/6 **Attack** = `0x00b47110(block, other driver, isPolice = vehicle team 5 or 6)` → `0x00b4d260`
+       (mode 4). Skipped when directive `+5` bit 0 or `+4` bit 0x20 is set.
+
+     Every non-zero result restarts the 10 s timer. CONFIRMED.
+
+**Threat notification** — `0x00b33dc0(vehicle, attacker lo, hi, &pos, kind, extra)`. It records the threat;
+the reaction is processed later by `0x00b34040` (from `0x00b2abe0`).
+
+Kinds, by call site (CONFIRMED pushes):
+
+| Kind | Caller | Trigger |
+|---|---|---|
+| 4 | `0x00b29d60` | from `0x00950320`; HIGH: a human hit the car |
+| 5 | `0x0051f5c0` | the `Passenger` mode's event handler (§6 row 25); an occupant's perception event **76** (gunfire). Re-armed at most every **4000 ms**. |
+| 6 | `0x0051f5c0` | occupant event **1** (aimed at) |
+| 7 | `0x00afb8ad`, `0x00afd49a` | hijack attempt |
+| 8 | `0x00b5680f` | the local player near the vehicle |
+| 9 | `0x00ab76f0` | a vehicle part damaged; carries the damage source |
+| 10 | `0x0051f5c0` | event **0x6b** on a civilian driver |
+| reg | `0x00a9c230` | the damage callback, cases 0/1/2/4 |
+
+Recording:
+1. Gates: the vehicle has a live driver d (`0x004d7e00` of seat 0), and `0x00b33ab0` is false (the
+   directive is "interruptible": mode 0, 5, 8, 11, 14, 0x10, or 6 without `+0xed4` bit 0, and neither
+   `0x00b1f450` nor `0x007e2cd0`). The attacker is not the vehicle itself and not a friend.
+2. Kind 6 additionally passes the cone test `0x00b33c70`. It stores `+0xdf0` = attacker, `+0xdfc` = 6 and
+   a 750–1250 ms delay.
+3. Other kinds need one of two conditions. Either d is a civilian (team 7, `0x00943ea0`-style) and
+   `0x00b33a50` holds; or `0x00b33a80` holds, d can fight (`0x004e9110`), d is hostile to the attacker
+   and, when d is team 7, the kind is not 8 or 10 and the attacker is not a player unless
+   `0x009ba760`/`0x009ba7a0` holds.
+4. On pass: `+0xdf0` = attacker, a 0–500 ms delay, `+0xdfc` = kind, and **`+0xdf8` = attack flag =
+   NOT(personality `flee_events` bit 0x08 "bullet hit")**.
+
+Processing (`0x00b34040`, when the delay expires and `0x00b33b20` allows it: modes 0, 5, 8, 0x10, or 6
+without `+0xed4` bit 0; modes 11/14 wait):
+- **kind 6**: unless `+0xc6c` bit 0x20, every occupant without `+0x1c9c` bit 8 gets a seat-exit request
+  (`0x00af3cd0`, 250–1000 ms stagger), so the occupants **bail out on foot**.
+- **attack flag 1** and `0x00b33a80` (not `0x00ad31a0`, `+0xc6d` bit 0 clear): **chase/attack**,
+  `0x00b47110` + `0x00b4d260` → mode 4.
+- otherwise, if `0x00b33a50` (`+0xc6c` bit 0x80 clear): **flee**, mode 2. For kind 8 with no attacker
+  object, it flees from the player's position, or from its own position when within **30.0** (900.0
+  squared, `0x01115340`) of the player.
+- then a persona line, hash `0xfc4d52f7`, on d (`0x0070dcf0`) unless the voice check returns
+  `0xaab95695`.
+
+**A third path, only for a player-driven tank:** `0x005058e0`, the perception vehicle sweep (§10).
+A civilian (team 7) driver near a player-driven vehicle that passes `0x00ad3140` (the special type 14,
+tank) takes one of two actions, unless its directive is already 2, 3 or 8+`+0xee0` bit 2:
+- **1 call in 4** (the global counter `0x013b8014` mod 4 = 0): flee from the player (mode 2);
+- **the other 3**: mode 3 with the `0x004fa060` default block.
+
+A civilian on foot gets `0x004eaae0` instead (§20.4). CONFIRMED.
+
+Notoriety (§19.8) does not appear in any of these gates. Hostility is team/friend based (`0x00950550`,
+`0x009d8ca0`), plus the player exemptions above.
+
+#### 18.7.4 (c) Carjack: flee in the car, hold still, resist
+
+- **On approach** (the routing hub `0x00afd4c0`, `spec-player-runtime.md` §10 step 16): when the player
+  goes for seat 0, the driver d is examined if the directive is not 3 and not held.
+  `0x004e6600(d, jacker)` decides **flee**:
+  - false when d and the jacker share a team, or d's team is 1, 2, 3, 5 or 6 (gangs and police never
+    pre-flee);
+  - true when the jacker is a player and d's vehicle passes `0x0069d470`;
+  - otherwise **`rand % 100 <= PreJackFleeChance`** (personality `+0x1d`).
+
+  Flee → `0x00b464c0` and a 5000 ms vehicle timer. The car speeds off (mode 2). Otherwise, team-7
+  `Passenger` occupants get `+0x8d0` |= 2 and condition row 9, and the vehicle **holds** (mode 11,
+  `0x00b50180`). CONFIRMED.
+- **Resist**: `0x004de220(victim, jacker)` (from `0x00afb220`) = different team **and**
+  `rand % 100 <= JackFailureChance` (`+0x1b`). Its sibling at `0x004de266` reads `PostResistFleeChance`
+  (`+0x1c`) the same way. CONFIRMED read sites. **OPEN:** what the hijack state machine does on each
+  outcome (whether a failed jack becomes a brawl or the driver drives off) is in
+  `spec-player-runtime.md` §10 (the hijack chooser `0x00afa540`), not re-derived here.
+- **After the victim is out on foot**: the human force flag `dont_flee_post_vehicle_exit` (`+0x2bb`
+  bit 3, §9.9) gates the on-foot flee. **OPEN:** its reader was not located in this pass. Hijack kind
+  7 (above) also notifies the jacked vehicle's directive.
+- **An NPC thief** (seating commit `0x00afbd90`): an AI human with flag `0x22` who takes the wheel with
+  request bit 2 flees (mode 2) from the recorded threat, or from its own spot when there is none.
+
+#### 18.7.5 (d) Back to normal, or gone
+
+- **Flee tick** (`0x00b467b0`, mode 2):
+  1. Sub-state **5**: plan with `0x00b45840`. It takes the road-graph node (`0x02705fe0`) farthest
+     from the threat position (`+0x238`), walks it with the §18.1 lane walker
+     (`0x00b1a760`/`0x00b1cc60`, flags 0x100) and commits the route (`0x00b516b0`). The planner re-runs
+     every 200 ms until it succeeds; then a 5000 ms timer starts and sub-state becomes 6. A
+     `+0x33`-bit-8 vehicle uses `0x00b45c40` instead, with escape points at distance bands chosen by
+     the retry count `+0xe91` (<4, <8, more).
+  2. Sub-state **6** (`0x00b46230`):
+     - the stuck give-up `0x00b20e20` runs first;
+     - on the timer, re-plan;
+     - steer and brake with `0x00b2bbc0`;
+     - **end test `0x00b46120`**, checked every 1000–2000 ms. It ends when the threat object is gone or
+       dead, or when the vehicle is at least **70.0** from the threat object (`0x0116dba4`), or at least
+       **45.0** from a threat point (`0x011169a8`). `+0xc6e` bit 0x40 or `+0xc72` bit 0x40 suppresses it.
+     - When it ends: `0x00b63ac0(directive, 0, 0, 0)` → mode 6/0x11, which rejoins ambient traffic, or
+       the directive is cleared when `never_go_ambient` is set or there is no road graph.
+
+  The flee route still uses the lane graph. It does not leave the lanes; it ignores traffic lights
+  (§18.7.1). **OPEN:** whether mode 2 also raises the speed cap. No speed write was seen in the planner
+  or the tick.
+- **Chase (mode 4)** has no end of its own here. It ends through the stuck give-up (13 s, → mode 3) or a
+  later directive.
+- **Despawn**: none of these reactions despawns a vehicle. Removal is the ordinary near-field budget and
+  distance cull of §17.4/§17.4c.
+
+#### 18.7.6 Port recipe
+
+1. Give each AI vehicle a directive {mode, sub, prevMode, prevSub, threat handle, threat point, flags}
+   and implement `setMode` with the table in §18.7.1. Include the traffic-light rule.
+2. Load the `ai_personalities.xtbl` rows (§11 of `spec-tables-traffic-ai.md`) and resolve each driver's
+   row.
+3. In mode 8 when blocked (`+0xc70` bit 2): every 2–4 s draw a `VehicleWaitResponse`; Honk = horn.
+4. Run the stuck give-up: 13 s without progress, or 2 samples < 4.0 m apart → mode 3.
+5. Vehicle–vehicle contact with impulse ≥ 6.0 and a non-player driver not in modes {2, 4, 9, 10, 0xf},
+   with the 10 s cooldown: draw a `VehicleCollisionResponse` from the 7 weights (Attack→AttackPlayer
+   against a player; attack downgraded to Honk/Threaten 50/50 on `+0xc6d` bit 2). Dispatch: Honk;
+   Threaten gesture; Flee-from-point; GetOut (mode 3 + bit 0x80); Attack (mode 4).
+6. Threat kinds 4–10: record them with a 0–500 ms delay (750–1250 ms for kind 6). attack =
+   NOT(`flee_events` & 0x08). On expiry: kind 6 → all occupants exit; attack → mode 4; else → mode 2.
+7. Carjack approach: `PreJackFleeChance` roll (teams 1, 2, 3, 5, 6 never) → mode 2 + 5 s; else mode 11
+   hold (save the previous mode).
+8. Flee: plan to the road node farthest from the threat, re-plan every 5 s. End at 70 m (object) or
+   45 m (point), or when the threat dies → mode 6 → ambient (mode 3).
+9. Never react when the driver is a player; all reactions are owner-only (non-owners send opcode 0x42).
+
+**OPEN (carried):**
+- the player-ahead brake gap;
+- the GetOut bit 0x80 consumer (who actually issues the exit for collision GetOut);
+- the reader of `dont_flee_post_vehicle_exit`;
+- the meaning of `0x00b1f450` and of `0x0069d470`;
+- the semantics of modes 5, 7, 8, 9, 10 and 0x10 beyond the gates above;
+- whether flee raises the cruise speed.
+
 ### 18.4 Open items
 
 **Updated 2026-10-10:** the steering/target-point computation is now CONFIRMED at `0x00b1be40` (a
@@ -5468,10 +5690,16 @@ creation dispatches. `roadblock_notoriety.xtbl`/`notoriety_spawn.xtbl`'s runtime
 narrowed but still OPEN); ~~whether `"roadblock"`'s toggle category connects to `0x00606b80`~~ **RESOLVED
 2026-10-08, §19.7: it doesn't — `0x0092ed10` is a plain debug cvar, and the real spawn tick is an
 independent sibling of `0x0090faf0`'s ambient-population calls, not reached from `0x00606b80` at all**;
-the crime-report function's ×3 points-bonus trigger condition; several record fields'
-exact roles (`+0x08`/`+0x0c`/`+0x14`/`+0x18` bit 0, §19.1); the per-frame/per-tick top-level caller of the
-decay-tick driver (the equivalent of §17's own `0x0090faf0`/`0x00702a50` chain, for this system); whether
-a distance/line-of-sight "lost the cops" condition exists in code this pass's call graph didn't reach.
+~~the crime-report function's ×3 points-bonus trigger condition~~ **CLOSED 2026-10-12, §19.8 G2:
+pending-crime flag bit 1, from `0x00b81760` on the report's object (the meaning of that descriptor flag is
+still OPEN)**; ~~several record fields' exact roles (`+0x08`/`+0x0c`/`+0x14`/`+0x18` bit 0, §19.1)~~
+**CLOSED §19.8: these are the decay timer, the 2 s just-cleared timer, the network stamp (HIGH), and the
+per-frame "hold at level ≥ 1" flag**; ~~the per-frame/per-tick top-level caller of the decay-tick driver~~
+**CLOSED §19.8: `0x00702a50` → `0x00609dc0`; the real decay tick is `0x00607380`, and `0x00607200` is a
+ramp-to-minimum tick (correcting §19.3)**; ~~whether a distance/line-of-sight "lost the cops" condition
+exists~~ **CLOSED §19.8: there is no distance formula; escape means the AI "seen within 15 s" re-arm of
+the first-decay timer stops.** Also corrected in §19.8: `Check_Detection` quarters the award (minimum 1)
+rather than suppressing it (correcting §19.2).
 New OPEN items from §19.7: the upstream notoriety-level→slot-table scheduling link (narrowed per above,
 and further narrowed 2026-10-09 — the allocation primitive itself is now named, `0x00930950`, only its
 caller remains unfound); `0x0092c280`/`0x0092d300`/`0x0092c580`'s own interiors; a slot's real authored
@@ -5630,6 +5858,158 @@ registry, whose own real trigger (what actually invokes its vtable slot) was not
 flagged honestly OPEN, HIGH CONFIDENCE it is a Lua-exposed or debug/console "request a roadblock now"
 entry point given its registration and staging-buffer shape, not confirmed further. Full detail,
 every address and cross-check: `scratchpad/notoriety_roadblock_spawn_caller_2026-10-09.md`.
+
+### 19.8 Escalation rules — port recipe (2026-10-12, FINAL)
+
+Static disassembly only (capstone over the image, plus the raw call scanner). **Two corrections to
+§19.2/§19.3 come first; they change the port.**
+
+- **`0x00607200` is NOT the decay tick.** It ADDS points. It is a timer-gated "ramp up to the minimum
+  bound" tick: the timer is at `+0x10` and re-arms every 500 ms. Each tick adds
+  `max(1, trunc(limit(set, level+1) × 0.02))`. The `0.02` is the double at `0x01123400`, which closes
+  the "value not read" item. The step is capped at the points still needed to reach the minimum-bound
+  level (`0x00604f90`). The level then rolls up, and the timer is disarmed (`-1`) once the level equals
+  the minimum bound (`0x00604780`). This is how `notoriety_set_min` raises the level gradually, at
+  50 ticks (25 s) per level. **The real decay tick is `0x00607380`** (below).
+- **`Check_Detection` does not suppress an unwitnessed crime. It reduces the award** (rule G3 below).
+  §19.2's "silently suppressed" is wrong.
+
+**Record fields** (`0x014A4F70 + 0x4C·track`). Every timer is a single dword holding an absolute
+expiry time. It is armed by `0x00d9e140(ms)`, tested by `0x00d9e1e0`, and `-1` means disarmed.
+- `+0x00` level (s32, 0…5). `+0x04` fraction (float points banked inside the current level).
+- `+0x08` **the decay timer** (closes §19.6 (e)). A crime arms it with the first-decay delay, and a
+  decay step re-arms it with the decay interval.
+- `+0x0c` **the "just cleared" window timer.** The clear-to-zero branch of `0x00606b80` arms it for
+  2000 ms. Any upward change and the level>0 branch set it to `-1`. `0x00606410(track)` reads it as
+  "this track was cleared within the last 2 s". For track 5 it reads the global timer at `0x012ED168`
+  instead, which every crime report also resets to `-1`.
+- `+0x10` the 500 ms ramp-to-minimum timer described above.
+- `+0x14` a network stamp. At init it is set from `0x0086be20()`, the session object's `+0x68`.
+  The co-op state receiver at `0x00609345` compares it against an incoming value and drops stale
+  updates. HIGH CONFIDENCE.
+- `+0x18` bit 0: **"hold at level ≥ 1 this frame".** `0x00608740(track)` sets it. That function has
+  two AI-side callers (`0x004de8d4` and `0x005076fe`, both on AI-versus-player engagement paths). When
+  the maximum bound is ≥ 1, it first raises a level-0 track to exactly 1.0 through `0x006079c0`, then
+  sets the bit. While the bit is set, the decay roll-down floors at 1 instead of at the minimum bound.
+  The master tick clears the bit on every track, every frame, after decay has run (`0x00609e31`).
+  Net effect: **an AI of that team actively engaging the player keeps that track at level 1 or above.**
+
+**Thresholds and maximum** (closes (b)). `set = (track == 3)`: 1 for police, 0 for the gangs.
+`limit(set, L)` is `NotorietyLevelLimit` for level L, an xtbl field (`0x014A45F0 + 4·(5·set + L)`,
+L = 1…5). It is the number of points that must be banked inside level L−1 to reach level L. **The
+maximum level is the literal constant 5** (`cmp …, 5`) in every roll-up loop. The maximum-bound getter
+`0x00605640` also defaults to 5. On reaching level 5 the fraction is zeroed and `0x00bd31f0(localPlayer,
+…)` is called, which is most plausibly the time-at-maximum stat start. Base-game threshold values are
+not in the executable: they come from the base `notoriety_levels.xtbl`, which was not read.
+
+**Gain path** (`0x006085a0` enqueue → `0x00607960` drain → `0x00607840` → `0x006077d0` → `0x006076a0`
+→ `0x00606f40`):
+- G1. **Enqueue.** A report becomes a pending record in the 40-entry ring at `0x014A4C50` (stride
+  `0x14`). The ring count is at `0x014A4580`. When the ring is full, the report is processed
+  immediately. Record fields: `+0x00` activity index, `+0x04` team, `+0x08` timer armed with the
+  activity's `Delay`, `+0x0c` session stamp, `+0x10` flags. For activities 0, 3, 4, 11 and 23, a
+  pending duplicate (same activity, team and stamp) is dropped. For activity 20, reports are
+  dropped once 5 or more are pending.
+- G2. **The ×3 bonus** (closes (a)). It is **pending-flag bit 1**, set at enqueue to
+  `0x00b81760(obj)`. That test is true when the report's optional object argument is non-null, its
+  descriptor pointer at `+0x110` is non-null, and that descriptor's byte `+0x08` has bit `0x10` set.
+  A null object gives no bonus. **The real-world meaning of that descriptor flag is OPEN**
+  (two other callers: `0x005062d7` and `0x009baa1e`). Pending-flag bit 0 is the caller's "treat as
+  witnessed" flag, which skips the detection test. Raw points: `P = Points(sub-block) × (bit1 ? 3 : 1)`.
+- G3. **The award** (`0x00606f40`, `D` = witnessed). Reports are skipped when `Points ≤ 0`, or when
+  the gain-suppress byte `0x014A4C0D` is set and the delta is positive. `D` is 1 unless
+  `Check_Detection` is set, bit 0 is clear, and neither the local player (`0x009da4e0`) nor the co-op
+  player (`0x009df3d0`) passes `0x00606570`. The award `A` is chosen as follows:
+  - If level ≥ the maximum bound, or level ≥ the activity's `Max_Level`: `A = 0`.
+  - Else if level < `Min_Level`: `A = D ? max(P, pointsTo(Min_Level)) : max(1, P/4)`.
+    So a witnessed crime always lifts the level at least to its `Min_Level`.
+  - Else: `A = D ? P : max(1, P/4)` (`P/4` truncates toward 0).
+  - Then `A = min(A, pointsTo(Max_Level))`, where
+    `pointsTo(T) = (limit(set, level+1) − trunc(fraction)) + Σ_{k=level+2..T} limit(set, k)`
+    (`0x00604f90`, 0 when `level ≥ T`).
+- G4. **Roll-up.** `fraction += A`; `+0x0c := -1`. While `level < 5` and `trunc(fraction) ≥
+  limit(set, level+1)`: subtract that limit and increment the level. If the level passes the maximum
+  bound, clamp to it with `fraction = limit(set, max+1) − 1`. At 5, `fraction = 0`. On a change, call
+  `0x00606b80(level, track)`. Then, if the level is below 5,
+  `fraction = max(fraction, 0.25 × limit(set, level+1))`, using the double `0.25` at `0x012A2EB8`:
+  **a fresh level starts at least a quarter of the way to the next one.**
+- G5. **The decay timer is reset by the crime.** Before the award, `0x00605020(track)` arms `+0x08`
+  with `FirstDecay(set, level) × difficulty[+0x10]`. `FirstDecay` is read at
+  `0x014A4594 + 4·(6·set + level)` and is already in ms. `difficulty[+0x10]` is the
+  `difficulty_levels.xtbl` `Notoriety_Decay_Mult` reciprocal (`spec-tables-progression.md` §7),
+  taken from the record that `0x005f4a50` picks. When the global mode byte `0x014A4C0C` is set, the
+  delay is capped at 5000 ms. The identity of that mode byte is OPEN: the master tick toggles it
+  together with the gain-suppress byte and `0x008ed270`.
+
+**Decay** (`0x00607380`, closes (c)). It runs only when the decay timer `+0x08` has expired and the
+gate `0x006096e0` passes. That gate fails if the decay-suppress byte `0x014A4C0F` is set, or if the
+local or co-op player is in a vehicle of `Vehicle_Type` 2, 3, 4 or 5 (airplane, helicopter, VTOL or
+watercraft; tests `0x00ad3160`, `0x00ad31a0` and `0x00ad3290`). **Decay is not paused by vehicles in
+any other way, and it is not paused by distance.**
+- Step: `fraction −= DecayRate(set, level) × saveMult[track]`. `DecayRate` is at
+  `0x014A45C4 + 4·(6·set + level)`. `saveMult` holds the four floats at `0x014A4584`, the save-file
+  decay multipliers of §19.1, defaulting to 1.0.
+- Roll-down: while `fraction < 0`, add `limit(set, level)` and decrement the level. The floor is
+  `floor = minBound`, or 1 when `minBound < 1` and `+0x18` bit 0 is set. On reaching the floor, set
+  `fraction = 0`. On a change, call `0x00606b80`.
+- Re-arm: if `level ≤ minBound` and `fraction ≤ 0`, set `+0x08 = -1` (decay finished). Otherwise
+  re-arm with `1000 × difficulty[+0x10]` ms (`1000.0` at `0x012A2D90`). **The decay interval is
+  1 s, scaled by difficulty.**
+- (A positive DecayRate would take a mirror "gain" branch with the same award logic. Shipped data
+  presumably never uses it.)
+
+**"Seen by cops" suppression and "lost the cops"** (closes (d)). **No distance or line-of-sight
+formula exists in the notoriety code itself.** Escape works by starving the first-decay timer. While
+an AI perceives a player, per-AI code keeps re-arming `+0x08` through `0x00605100(team)`, which
+resolves the team to a track and then calls `0x00605020`. The call sites are `0x009dd0a8`/`0x009dd2d9`
+(police, track 3) and `0x009e274a`/`0x009e2894` (team resolved by `0x006051c0`). "Perceives" means
+the AI's handle is in one of two 25-slot "recently seen" tables on the player, with stride `0x10`
+and a timer at `+0x08` of each slot. The police table is at `+0x25C8` (`0x009dc590`); the generic
+table is at `+0x2118` (`0x009dc4a0`). A slot counts only if its elapsed time is ≤ **15000 ms** (the
+literal `0x3A98`). So **the player loses the cops once no pursuing AI has seen them for long enough
+that `FirstDecay(set, level) × difficulty` ms pass with no re-arm**. Each table slot itself stays
+"fresh" for at most 15 s after the sighting. After that, decay proceeds at 1 s steps as above. Other
+re-arms: the `notoriety_set`/`_min`/`_max` paths (`0x00607bcb`, `0x00607e47`, `0x00608096`,
+`0x0060848f`, `0x006094dd`, `0x006095a9`). `0x00607e15` arms a flat 5000 ms first.
+
+**The per-frame driver** (closes (c), last part). `0x00702a50` calls `0x00609dc0` at call site
+`0x00702f04`. The per-frame order inside `0x00609dc0` is:
+1. `0x00607960` drains due pending crimes (G1).
+2. If not a network client, for each track 0…3: `0x00607200(set)` ramps toward the minimum bound.
+3. For each track: if `0x006096e0()` passes, `0x00607380(set)` runs decay; then `+0x18 &= ~1`.
+4. Maintain the `0x014A4C0C`/`0x014A4C0D` mode bytes.
+5. Every expiry of the `0x012ED164` timer, call `0x006069c0` (co-op sync, HIGH CONFIDENCE).
+
+**Level → response** (f).
+- Hostility: binary at level > 0 (§19.4).
+- Roadblocks: `0x0060a8d0` requires level 1…5 and reads `roadblock_notoriety.xtbl` row `level−1`
+  for the track (§19.7).
+- `notoriety_spawn.xtbl` `level_info` is keyed by the same 0…5 level (`spec-tables-progression.md`
+  §6.3). Its runtime reader is still not found.
+- `RoadblockSpawnTime*`/`BruteSpawnTime*` (`0x014A4BA8`/`0x014A4B48`): the only literal-address
+  references are in the loader, so their consumer is OPEN, as in §19.5.
+
+**Port recipe.**
+1. Keep `track[4] = {level, fraction, decayT, clearedT, rampT, netStamp, holdFlag, min/max stacks}`,
+   with `set = (track == 3)`.
+2. On a crime: enqueue it with the activity `Delay`, `bonus = victimDescriptorFlag0x10`, and
+   `witnessedOverride`. When it comes due, apply G3–G5.
+3. Each frame, in order: drain the queue; run the ramp-to-minimum tick (500 ms, 2 % of the next
+   threshold); run decay if `decayT` has expired and the gate passes; clear `holdFlag`.
+4. Decay step: subtract `DecayRate × saveMult` every `1000 × diffRecip` ms. Roll down with
+   `limit(set, level)`, floor at the minimum bound (or 1 while held), and stop at the floor with
+   fraction 0.
+5. Each AI that has seen a player within 15 s re-arms that team's `decayT` to
+   `FirstDecay(set, level) × diffRecip`. AI in combat sets `holdFlag` (level ≥ 1).
+6. On any level change, call the §19.4 dispatcher (hostile when level > 0; stand down and start the
+   2 s `clearedT` at 0). The roadblock scheduler then reads the level directly every frame (§19.7).
+7. Level cap 5; thresholds from `NotorietyLevelLimit`; a new level's fraction is at least 25 % of
+   the next threshold.
+
+**[CONFIRMED — disassembly for every rule, constant and address above, except items marked HIGH or
+OPEN. HIGH: the `+0x14` network-stamp role, the AI-engagement meaning of the `0x00608740` callers,
+and the `0x006069c0` sync role. OPEN: the meaning of the ×3 descriptor flag; the identity of the
+`0x014A4C0C` mode byte; the spawn-timer arrays' consumer; shipped threshold values.]**
 
 ---
 

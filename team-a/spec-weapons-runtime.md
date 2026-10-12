@@ -604,6 +604,163 @@ is a live capture on `0x0096fa20`'s own callers during one real fire sequence �
 this pass; whether to pursue it is a scope decision, not a static-analysis one. Full detail:
 `scratchpad/hitscan_damage_sink_caller_search_2026-10-09.md`.
 
+### 4.5 Damage modifier pipeline — port recipe (2026-10-12, FINAL)
+
+Static pass over the full decompile of the sink `0x0096fa20`, the bullet-hit resolver `0x0096aee0`, the
+weapon base-damage routine `0x00b86340`, the per-type resistance lookup `0x009dd8f0`, the regen tick
+`0x009998c0` and the `tweak_table.xtbl` console-variable registrations. Values quoted are from the real
+`tools/ai_base_xtbl/tweak_table.xtbl` / `gameplay_constants.xtbl` / `difficulty_levels.xtbl` (§14.7 of
+`spec-tables-progression.md`). Object shorthand: **V** = victim, **A** = attacker/instigator, **W** = the
+weapon-definition record (the sink's 6th argument; `weapons.xtbl` layout, `spec-tables-weapons-combat.md`),
+**F** = the 32-bit flags word of the damage-request record (§4.3; null → the default record `0x0262524c`),
+**P(x)** = "x is player-class" (`0x00853b30(x, 0x21)`, entity-capability row `+0xa` bit `0x2`).
+
+**Corrections to existing text (CONFIRMED, disassembly):**
+- §4.1 "the sink is agnostic": the sink applies ~15 multiplicative modifiers itself (below). It is still
+  weapon-*damage*-agnostic (it never reads `Damage_Max/Min`); it does read `W+0x14`, `W+0x4c`, `W+0x54`.
+- `spec-player-runtime.md` §15.3 / `spec-tables-progression.md` §4.4: the `Damage_Resist` array is at
+  **player `+0x2758`** (5 floats: bullet `+0x2758`, explosion `+0x275c`, vehicle `+0x2760`, fire `+0x2764`,
+  falling `+0x2768`), written by `0x009db2f0(player, type, 1 − Resist_Percent/100)` (rejects type ≥ 5 and
+  negative values). **`+0x276C` is a different field**: an *int* "regen-wait reduction, ms" (setter
+  `0x009db390`, which also re-arms the running regen timer); `+0x2770` is the `Health` unlockable's
+  regen-speed float (type 11, setter `0x009db3e0`).
+- `spec-tables-progression.md` §7.3 set A vs set B is **CLOSED**: the record picker `0x005f4a50` returns
+  `0x014A10B8 + 0x28·level` (set B) when the co-op predicate `0x00867830` is true (≥ 2 connected players),
+  else `0x014A1130 + 0x28·level` (set A). `level` = the global difficulty `0x012ece10` (0 easy, 1 normal,
+  2 hard; the same global `difficulty_get_level` returns). **Set A = single-player, set B = co-op.**
+
+#### 4.5.1 Damage-type enum (e)
+
+There is no damage-type field in the request record. The five-entry type enum exists only for
+resistance: string table `0x01175aa8` = `bullet` 0, `explosion` 1, `vehicle` 2, `fire` 3, `falling` 4
+(`script` 5, never applied). Each damage *producer* calls the resistance lookup with a literal type before
+calling the sink: bullet `0x009699be`; explosion `0x0096b9ef`; vehicle-hit `0x009626aa`; fire
+`0x0096b5f8`/`0x0097d0ba`/`0x0097da58` (burn tick); falling `0x00784247` and `0x0098a4c3…0x0098a983`
+(landing). Melee has no resistance type (its bonus is `Melee_Damage_Bonus` → player `+0x1B70`). Inside the
+sink, the "kind" of damage is expressed only through F bits (CONFIRMED meanings: `0x800` nutshot override,
+`0x2000` forced lethal, `0x100` bypass scripted invulnerability, `0x200` skip the local-notify block,
+`0x40` local-only (no network forward), `0x8000` no burning scale, `0x1c00` "may not instakill", bits
+`0`/`1`/`3`/`9` exempt-from-group-scale = mask `0x9`; bit 0 marks a ranged/bullet-class hit — HIGH,
+from its pairing with the bullet-only riot-shield gate). Script `-1.0` damage = "lethal" (see step 13).
+
+#### 4.5.2 Resistance lookup `0x009dd8f0(player, type)` (c)
+
+Returns `1.0` for null/invalid type; returns **`0.0` when cheat-flag byte `0x014F71EA` bit 0** (i.e.
+global cheat word `0x014F71E8` bit `0x10000`) is set — full immunity to all five typed sources; if player
+`+0x1c9c` bit 19 is set and the stored scale is above `0.1` (`0x012a2d38`) it returns `0.1`
+(`0x01175aa4`) — a 90 % resistance cap-floor; otherwise returns the stored `1 − pct` value. The caller
+multiplies its own computed damage by the result **before** calling the sink.
+
+#### 4.5.3 Producer-side: base damage and hit zone (a)
+
+- **Base:** `0x00b86340(V, W, dist², A)`: column `k` = `0x00b86210(V)` (0 = NPC target, 1 = player target,
+  2 = third column; HIGH); `near = W+0x14c[k]` (`Damage_Max`), `far = W+0x158[k]` (`Damage_Min`); if
+  `far < near` and `Damage_Max_Dist² < dist² < Damage_Min_Dist²` (`W+0x17c`/`W+0x180`) the value is the
+  linear lerp on `sqrt(dist²)`, below the near range `near`, beyond the far range `far`. If both V and A
+  are players and game mode `0x006a3910() == 27`, × `0x006cb2a0()` (mode scalar, OPEN meaning). Then
+  × **A's character descriptor `+0x44` = `Firearm_Damage_Multiplier`** (character xtbl, loader at
+  `0x00be3ed2`), and when `0x00941f60()` holds × **`W+0x164` `Riot_Shield_Damage_Multiplier`**.
+- **Shotgun pellets** (A not player, `W+0x4c` `Weapon_Class == 3`): × `0x00963920` — distance factor
+  `t = clamp(1 − d/Range_Max, 0, 1)`, result = `max(1, round((1 + (Shots_Per_Round − 1)·t²)·t²))`.
+- **Hit zone enters as a byte on the shooter, `A+0x13c7`** (the hit-location code; same codes as
+  `anim_flinches.xtbl` `Hit_Location`: Head 6, Chest 2, Groin 3, Pelvis 11). In `0x0096aee0`:
+  - **6 = head** (and V is not A's own follower, or A is a player): multiplier = **V's descriptor `+0x40`
+    `Headshot_Multiplier`**; if absent (`-1.0` sentinel `0x012a2d54`) use tweak **`Headshot_multiplier`
+    = 8.0** (`0x02624cfc`); if V sits in a vehicle passing `0x00ad3670`, use **2.0** (`0x01187ebc`)
+    instead. Sets result-flag bit 1 ("headshot"). **The headshot path is gated on `P(A)`** — NPC shooters
+    get no headshot multiplier (CONFIRMED).
+  - **3 = groin** with V facing away test `≤ 0` → result-flag bit 2 (nutshot reaction; damage unchanged
+    here — the 500-point override is the separate F `0x800` path, step 2).
+  - codes 9 / 10 / 12 → damage forced to 0 (special-reaction handlers; 9 → reaction 5, 10/12 → kind 0xf).
+  - `W+0x14` bit `0x800000` → ignite V (`0x0097cf80`).
+
+#### 4.5.4 The sink's modifier chain — numbered recipe, in application order
+
+`dmg` = incoming float. "Bail" = return with no HP change.
+
+1. Bail if V null, V dead (`0x00853b10`), or V descriptor `+0x33` bit 2 (hard invulnerable).
+2. If F `0x800`: `dmg = Testicular_assault_damage_override` (**500**, `0x026251ec`).
+3. (Non-owner only: forward request over the network, opcode `0x41`; owner continues.)
+4. If `P(V)`: if V burning (`V+0xe8` bit 8) and not F `0x8000` and A ≠ V → `dmg ×= Fire_Damage_Scalar`
+   (**0.25**, `0x026251e8`); else if V's AI mode (`+0x501`) is 34 *Stunned* or 24 *Panic* →
+   `dmg ×= Stunned_Damage_Scalar` (**0.25**, `0x026251e4`). (HIGH on the burning reading of `+0xe8` bit 8.)
+5. **Human shield:** if V is a held hostage (`0x009aa360`) and its holder is a player →
+   `dmg ×= Human_shield_damage_multiplier` (**0.25**, `0x026251f8`); if V is the *holder*
+   (`0x009aa460`), damage is redirected to the hostage (`0x009aa130`), bail if none.
+6. **Co-op friendly fire:** if co-op active and V = local player and A = remote player, mode
+   `0x007029a0()`: raw 0 → no damage (bail); raw 2 → `dmg ×= FriendlyFirePercentage` (**25 → 0.25**,
+   `0x014A136C`); raw 1 → full. (Lua `game_set_coop_friendly_fire` maps external 0/1/2 → raw 1/2/0.)
+7. **Difficulty (b):** `R = 0x005f4a50()` (set A or B, §above). If `P(A)` and `dmg > 0` →
+   `dmg ×= R.Damage_Dealt_Mult (+0x0C)`. If `P(V)` **or V is a follower of the local player**
+   (`0x0097e940(V, player)` — homies take the player's received scale) and `dmg > 0` →
+   `dmg ×= R.Damage_Received_Mult (+0x00)`. Values: SP 0.3/0.75/1.5 received, 1.1/1.0/0.75 dealt;
+   co-op 0.5/0.95/1.75 and 1.0/0.9/0.6.
+8. **NPC group scale:** if V is not a player, belongs to a squad (`V+0x994` < 40 → record `0x013B8780 +
+   0xa8·i`) and F & `0x9` == 0: `n` = squad engaged-count byte (`+9`), `m` =
+   `NPC_group_scale_damage_max_enemies` (**6**) or, when `W` exists and `W+0x4c == 0` (pistol class),
+   `…_pistol` (**6**); if `n > m`: `dmg ×= m / n`.
+9. Bail if global state `0x0153B520 ≥ 2` with `0x0153B528` set (OPEN meaning: a cutscene/transition
+   state), or (F bit 0 and V descriptor `+0x48` bit `0x200` and V's held weapon passes `0x00b817d0`) —
+   the "shield blocks bullets" gate (HIGH).
+10. **Player-only block (when V is a player):**
+    a. If V is in the co-op/party roster `0x0060b530` and A is not → `dmg = 0` (OPEN which roster).
+    b. `dmg ×= M16_player_avatar_damage_received_mult` (**0.4**, `0x0149fa24`) when `0x005e6ce0(V)`
+       (player in avatar state `+0xcc8` = 16, or 12 with `+0x15c5` bit 2 — the m16 "avatar" mission).
+    c. **Damage assist (low-health mercy):** `chunk = 0.05 × maxHP` (`0x01309ec0`); consume `dmg` in
+       chunks; for each chunk `c`: `f = cur/max − c/max` (floored 0); if `f < Damage_assist_start_percent`
+       (**0.3**) then `c ×= 1 + (1 − f/0.3)·(Damage_assist_scale_multiplier − 1)` (scale **0.1**, so
+       damage falls linearly to ×0.1 as HP → 0); accumulate `c`, `cur −= c`.
+    d. Bail (player immune) if: player `+0x1d94` bit 2; `0x004d3190(V,0)`; the **full-restore timer
+       `V+0x19c4` is armed**; player `+0x1d99` bit 8; or the global game-state `0x012e6aa4` ≠ 2.
+11. Bail if V already dead (`0x0096f4f0`), the **generic damage-immunity timer `V+0x19e4`** is armed,
+    or `V+0xec` bit `0x2000`.
+12. If the global timer `0x012ff8ec` is *not* running and V is a non-player squad member:
+    `dmg ×= 0.1` (`0x012a2d38`; OPEN meaning — probably an "un-alerted squad" damping).
+13. **Scripted invulnerability (d):** if `V+0x1c98` bit 5 (`0x20`, set by `turn_invulnerable`) and not
+    F `0x100` → no damage, unless `V+0x1c98` bit 9 (`0x200`) is set and A is accepted by an entry of the
+    registry `0x03171a64` (`0x00544fe0`). (Then only hit reactions run.)
+14. `dmg ×= V's held weapon W'+0x184 Operator_Damage_Multiplier` (if V holds one).
+15. **Instakill test:** lethal if (F `0x2000`) or (`W+0x14` bit `0x2000000`) or (F bit 0 and `dmg ≠ 0` and
+    `A+0x1c9b` bit 0), **and** `0x0096f990(V)` and F & `0x1c00` == 0. If lethal **or `dmg < 0`** →
+    `dmg = maxHP (V+0x1cac)`. Otherwise:
+    `dmg ×= Npc_to_npc_damage_multiplier` (**1.0**, `0x026251e0`) when V is an AI character and
+    `0x00853b30(A, 0x22)`; then **`dmg ×= V+0x1cbc` (`character_set_damage_multiplier`, taken)** and
+    **`dmg ×= A+0x1cc0` (`character_set_attack_multiplier`, dealt)**.
+16. If `dmg == 0` → reaction only, done.
+17. **Apply:** if `V+0x1c98` bit 6 (`0x40`, "never die") and `dmg ≥ cur` and not F `0x100` → HP is
+    *refilled* to max instead. Else: if F bit 1 (copied to `V+0x1568` bit 0) and not `0x0052a230(V)`
+    and `cur ≤ dmg` → snap HP to 0; then `HP += −dmg` via `0x0094d520` (clamp `[0, maxHP]`).
+18. Player-attacker cheat: global cheat word `0x014F71E8` bit `0x40000` makes any player hit lethal
+    (death path `0x00970e70`); bit `0x80000` (in `0x00968380`) forces damage to `−1.0` (= lethal, step 15).
+19. **Regen wait reset (f):** unless `V+0x1c98` bit 1 (`human_force_flags dont_regen_health`):
+    `wait = restore_wait_time_ms (6000, 0x014A13E4) − reduction`, where reduction = **3000** if cheat
+    bit `0x10000`, else `player+0x276C` (non-players 0); if `P(V)`: `wait ×= R.Health_Regen_Wait_Mult
+    (+0x04)` (truncate to int); if `0x009aa4e0(V)` `wait = 0`; arm timer `V+0x19c0` = now + wait.
+20. If `A+0x1c9c` bit 14 (incendiary shots) and W and not `V+0x3b` bit 0 → ignite. If `HP ≤ 0` →
+    ragdoll `0x009bc0d0(V,1,1,1)` and death `0x00963530(V)`.
+
+#### 4.5.5 Health regeneration (f) — CONFIRMED
+
+Per-character update `0x009a02a0`: if the full-restore timer `+0x19c4` has *elapsed* → HP := maxHP and
+disarm it (`full_restore_time_ms` 2000 is its likely source; its arming site is OPEN). Else, when the
+regen-wait timer `+0x19c0` has elapsed, tick `0x009998c0`: skip if `+0x1c98` bit 1; only while
+`HP < maxHP × restore_max_pct_sp` (**1.0**, `0x014A13D4`); `rate = restore_per_sec_sp` (**125**,
+`0x014A13CC`) or `restore_per_sec_vampire_sp` (**500**, `0x014A13D0`) when `0x009aa4e0` (HIGH: holding a
+human shield); for players `rate ×= R.Health_Regen_Speed_Mult (+0x08)` (SP 1.3/1.0/1.0, co-op 1.1/1.0/1.0)
+`× player+0x2770` (`Health` unlockable); `HP += rate × (1/30)` (`0x0132a0ac`, fixed 30 Hz step).
+The `_mp` / `vehicle_mp` variants (`0x014A13D8…13E8`) have no reader in this exe beyond the loader.
+
+#### 4.5.6 Port checklist / OPEN
+
+- Order matters: producer (base × firearm mult × riot-shield × pellets × headshot) → producer resistance
+  `0x009dd8f0` → sink steps 1–20. Armor: **no player armor stat exists**; "armor" in this engine is the
+  weapon `armor piercing` flag (`0x1000000`) and the shield-block gate (step 9).
+- OPEN: the meanings of `0x0060b530`'s roster (10a), `0x012ff8ec` (12), `0x0153B520` (9), mode 27's
+  scalar; the arming site of `+0x19c4`; the call site of the `+0x276C` setter `0x009db390`; which cheat
+  names map to bits `0x10000`/`0x40000`/`0x80000` of `0x014F71E8`; `Friendly_Fire_Mult` (an xtbl field
+  read at `0x0062efe3`, consumer not traced) and `Player_friendly_fire_threshold`/`_expire_time`
+  (150 / 6, read by the AI at `0x004fa180`, i.e. NPC turn-on-player logic, not damage scaling).
+
 ## 5. Ammo tracking
 
 ### 5.1 The per-character, per-weapon inventory-slot mechanism
@@ -772,6 +929,27 @@ vtable slot to `0x0064c580`'s own (the cache-station class, §5.1 above — same
 method: find the class's own vtable base, dump every slot, look for one with a position-match
 scan against the player and a call into `0x00614ec0`/`0x00B84330`). Team B's own walk-over trigger
 stays a labeled stand-in in the meantime.
+
+**Update 2026-10-12, 4th pass [direct work, no agent; HONEST NEGATIVE — walk-over grant still
+not found, no radius found].** A raw E8 scan (Ghidra misses some) found **19 `call 0x00B84330`,
+5 `call 0x00614ec0`, 30 `call 0x00601380`** sites; every one in a resolvable function was
+decompiled (`tools\scratchpad\PickupScan1/2.java`, `_out.txt`). **None does a player-distance or
+overlap test against a dropped-item position.** Ruled out by body: `0x006ed950`/`0x006ee130` (net
+message replay switch, vtable `0x0113d14c`, HordeMode/co-op), `0x0066a2d0`/`0x0063be30`/
+`0x006cb382` (11/8-slot loadout grants), `0x0060dd60` (vehicle/seat weapon grant, globals
+`0x014b01c0`), `0x009afa70` (mission M02 script, "SMG-Gang"), `0x00a510c0` (Lua native),
+`0x006e41b0` (thin `+0x5c` bind helper), `0x0064c580`/`0x0064bef0` (cache stations, known).
+**Correction to the interact-entry-0 note above:** `0x00972a70` DOES call `0x00B84330`
+(`0x00972b96`), but its second argument is a CHARACTER (type gate `0x00853b30(x,0x21)`, cross-writes
+`+0x18f0`/`+0x18f4` on both characters, grants the weapon held in the global at `0x026252dc`,
+toggles the global at `0x02625368`) — a character-to-character exchange/hand-off, NOT a world heavy-weapon pickup;
+treat its "heavy weapon" label as unconfirmed. Unresolved sites (no Ghidra function):
+`0x00b8536f` (inside the `0x00B84330` family itself) and `0x0072eee1` (→`0x00601380`) — next
+leads, plus 0x00601380 callers not yet read: `0x009d35e0`, `0x009d4060`, `0x009d7480` (7+
+callers, character weapon-equip core), `0x006e58c0`, `0x006e7280` (vtable `0x0113d2e8`),
+`0x00735bf0`, `0x0066ae70`, `0x00636320`, `0x006265b0`, `0x006603a0`. Remaining hypothesis: the
+walk-over pickup may not grant via `0x00B84330` at all but transfer the dropped item object
+directly into the inventory via `0x009d7480`'s equip path; the radius constant is still unknown.
 `+0x1b78`'s own internal sub-object layout past the two locator calls; `0x00601380`'s
   own full body (only its role as called from here was traced, not its own internals).
 

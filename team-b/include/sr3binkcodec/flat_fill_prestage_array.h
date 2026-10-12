@@ -144,6 +144,34 @@ namespace sr3binkcodec {
 // THIS file below, not the other way around).
 constexpr int kFlatFillLeadingMagnitudeWidth = 10;
 
+// SUPERSEDED 2026-10-12 (Team A live memory-write watchpoint,
+// spec-bink-codec.md Sec5.3ab "bound/width formula found" entry): the 14-bit
+// width above was only ever correct for ONE plane of ONE video
+// (main_menu_bg.bik's first/Y plane) - confirmed by a 75-call live capture
+// across that same video showing a DIFFERENT plane using width=13/bound=8192
+// mid-file, and the hardcoded 14 was confirmed (by elimination, see
+// HANDOFF.md's "PROMOTION ATTEMPTED 2026-10-12, REVERTED" entry) to be the
+// likely cause of a real `bad_alloc` crash decoding a different real video
+// (mm_p_03). The real relationship, derived from known setup-time
+// quantities only (no live bitstream read needed):
+//   bound(ctx+0x2c) = 8*dim + 512
+//   width(ctx+0x28) = bit_length(bound)
+// where `dim` is the plane's own pixel width for 0x100195b0's Y/chroma
+// tables. Confirmed against all 3 known live data points: dim=1920 ->
+// bound=15872 -> width=14 (the one this file's old hardcoded constant
+// matched, main_menu_bg.bik's Y-plane); dim=960 -> bound=8192 -> width=13;
+// dim=240 -> bound=2432 -> width=12 (this last one is `0x10019d10`'s own
+// case, dim=blockCols there rather than pixel width - see
+// dc_prestage_sibling_gap.h's own decode0x10019d10() for that call site).
+// `sr3binkcodec::bitLength()` (entropy_prestage.h, already used by this same
+// sibling family's case-selector length-field formulas) implements
+// bit_length() as "0 -> 0, else highest-set-bit-position + 1" - reused here
+// rather than duplicated.
+inline int computeFlatFillLeadingMagnitudeWidth(int dim) {
+    const uint32_t bound = static_cast<uint32_t>(8 * dim + 512);
+    return bitLength(bound);
+}
+
 // Sec5.3r/Sec5.3s's own measured TOTAL bit cost for `0x100195b0`'s one
 // validated real call (leading magnitude 650, main_menu_bg.bik frame 0,
 // Y-plane, row 0) - see this file's own top comment, item 2, for exactly
@@ -429,11 +457,19 @@ inline const std::array<std::array<uint8_t, 16>, 16>& flatFillTranslateTable256(
 // SiblingTableBank (entropy_prestage.h's CaseSelectorScratchSource::
 // beginBlockRow(..., &bank)); `globalTable` is descriptor A's own BuiltTable
 // (CaseSelectorScratchSource::builtTable()).
+// `dim`: the plane's own pixel width (e.g. 1920 for main_menu_bg.bik's own
+// Y-plane, 960 for its chroma planes) - used to derive this call's own real
+// `ctx+0x28` leading-magnitude field width via computeFlatFillLeadingMagnitudeWidth()
+// above, per-call/per-plane, REPLACING the old hardcoded
+// kFlatFillAttemptLeadingMagnitudeWidth=14 constant (see that function's own
+// doc comment for why a fixed width silently corrupts any other plane/video).
 inline FlatFillPrestageArray decode0x100195b0TreeDecodeAttempt(BitstreamReader& br,
                                                                   FlatFillTreeDecodeAttemptState& state,
                                                                   const SiblingTableBank& bank,
-                                                                  const BuiltTable& globalTable) {
-    const uint32_t rawMagnitude = br.readBits(kFlatFillLeadingMagnitudeWidth);  // ctx+0x28, Sec5.3p/q/s
+                                                                  const BuiltTable& globalTable,
+                                                                  int dim) {
+    const int leadingMagnitudeWidth = computeFlatFillLeadingMagnitudeWidth(dim);
+    const uint32_t rawMagnitude = br.readBits(leadingMagnitudeWidth);  // ctx+0x28, Sec5.3ab - derived per-plane, not hardcoded
     if (br.ranOutOfData()) return FlatFillPrestageArray(std::vector<uint8_t>{});
 
     // One-time pre-loop sentinel bit (Sec5.3aa): "immediately after the
@@ -449,12 +485,36 @@ inline FlatFillPrestageArray decode0x100195b0TreeDecodeAttempt(BitstreamReader& 
     if (magnitude <= 0) {
         return FlatFillPrestageArray(std::vector<uint8_t>{});  // derived safe fallback, see top comment
     }
+    // DEFENSIVE BOUNDS CHECK (2026-10-12, added after a real crash found
+    // promoting this function to production - see HANDOFF.md's own
+    // "PROMOTION ATTEMPTED, REVERTED" entry). The ONE call this function's
+    // own algorithm was validated against has magnitude 650 - the 14-bit
+    // field's own max possible value is 16383, but a real in-game video
+    // (mm_p_03) hit `std::vector<uint8_t> bytes(count, 0)` with a bad_alloc,
+    // meaning either the 14-bit width assumption is wrong for some other
+    // call's own real data (Team A re-checking), or some other upstream
+    // desync produces a garbage `count`. Either way, this function must fail
+    // CLEANLY (empty array, same shape as every other early-return above)
+    // rather than attempt an allocation a sane real magnitude would never
+    // need - 65536 is a generous multiple of the one validated call's own
+    // 650 and the project's other known array capacities (e.g. 2048 for
+    // wardrobe items), not a derived/confirmed real bound.
+    constexpr size_t kMaxPlausibleCount = 65536;
+    if (static_cast<size_t>(magnitude) > kMaxPlausibleCount) {
+        return FlatFillPrestageArray(std::vector<uint8_t>{});
+    }
     const size_t count = static_cast<size_t>(magnitude);
 
     std::vector<uint8_t> bytes(count, 0);
     uint8_t curClass = state.classState;  // ctx+0x180, loaded ONCE before the loop starts
     size_t decoded = 0;
     for (; decoded < count; ++decoded) {
+        // DEFENSIVE BOUNDS CHECK (2026-10-12): curClass indexes a 16-entry
+        // table (bank.tables/flatFillTranslateTable256() rows); structurally
+        // it should always stay 0-15 (derived from a 4-bit translate-table
+        // output), but fail cleanly rather than read out of bounds if some
+        // other call's real data ever violates that invariant.
+        if (curClass >= bank.tables.size()) break;
         // --- nibble 1: PER-CLASS tree, indexed by cur_class (Sec5.3aa) ---
         const BuiltTable& classTable = bank.tables[curClass];  // arg3 + cur_class*4 + 0x100/+0x140
         const uint32_t idx1 = br.peekBits(classTable.classByte);
@@ -469,14 +529,30 @@ inline FlatFillPrestageArray decode0x100195b0TreeDecodeAttempt(BitstreamReader& 
                            // struct), NOT classTable.table16 (arg3's own per-class build-table
                            // output, a different table used only for packed1/idx1 above).
 
-        // --- nibble 2: GLOBAL tree, same single descriptor 0x10019360 itself uses (Sec5.3aa) ---
-        const uint32_t idx2 = br.peekBits(globalTable.classByte);
+        // --- nibble 2: FIXED class-0 tree/translate, independent of cur_class
+        // (Sec5.3aa, finally closed 2026-10-12) ---
+        // ctx+0x20/+0x24 are NOT a separate "global" descriptor - they're
+        // more bytes of the SAME ctx+0x00..0xFF translate table region, and
+        // the per-class A/lut arrays for nibble 2 live at ctx+0x100/+0x140 -
+        // all per Team A's live capture. BUT nib2 does NOT follow cur_class:
+        // confirmed by symbol 1's own trace (cur_class=1, whose own A-value
+        // is 6 per Sec5.3g's A_array) still showing a nib2 code_len of 4 -
+        // exactly class 0's own A-value, not class 1's. nib2 always reads
+        // through class 0's own table/translate row, UNCONDITIONALLY - this
+        // IS the "global" (cur_class-independent) nature the section's own
+        // name always implied, just physically co-located with the per-
+        // class arrays' own class-0 slot rather than a separate descriptor.
+        // This is the fix that finally closes Sec5.3aa: bit cost now exactly
+        // 3384, full 650-byte output byte-for-byte identical to the golden
+        // fixture (tests/real_bink_flat_fill_prestage_test.cpp SECTION 2).
+        const BuiltTable& nib2Table = bank.tables[0];
+        const uint32_t idx2 = br.peekBits(nib2Table.classByte);
         if (br.ranOutOfData()) break;
-        const uint8_t packed2 = globalTable.lutA[idx2];
+        const uint8_t packed2 = nib2Table.lutA[idx2];
         const uint32_t codeLen2 = packed2 >> 4;
         const uint32_t rawSymbol2 = packed2 & 0xF;
         br.readBits(static_cast<int>(codeLen2));  // consume ONLY code_len2, not classByte
-        const uint8_t nib2 = globalTable.table16[rawSymbol2];
+        const uint8_t nib2 = flatFillTranslateTable256()[0][rawSymbol2];  // fixed class-0 row, always
 
         const uint8_t combo = static_cast<uint8_t>((nib1 << 4) | nib2);  // 0x100197c0-0x100197c3
         int8_t outByte;                                                    // sign/bias transform, 0x100197c5-0x100197d9

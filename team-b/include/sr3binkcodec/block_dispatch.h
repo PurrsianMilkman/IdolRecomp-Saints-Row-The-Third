@@ -678,26 +678,39 @@ inline void fillBlock8x8(PlaneView dest, int blockRow, int blockCol, uint8_t val
 // necessary ordering choice rather than leaving an otherwise-fully-shaped
 // case entirely OPEN (the same tradeoff this file's own top comment
 // already documents for the 4-bit dispatch-width DERIVED choice).
-inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol) {
+// 2026-10-12 (spec-bink-codec.md, commits 8cc17a2/122c528): secondary=2 and
+// secondary=6 produce an 8x8 core written to a 16x16 footprint by plain 2x2
+// nearest-neighbour replication: dest[2r+i][2c+j] = core[r][c]. Writes are
+// clipped to the plane bounds (the 16x16 footprint can hang off the edge).
+inline void upsample2x2Store(PlaneView dest, int blockRow, int blockCol, const uint8_t* core8x8) {
     const int x0 = blockCol * kBlockSize;
     const int y0 = blockRow * kBlockSize;
-    constexpr int kRowPairs = kBlockSize / 2;       // 4
-    constexpr int kColGroups = kBlockSize / 4;       // 2 (4 bytes/dword)
-    for (int rowPair = 0; rowPair < kRowPairs; ++rowPair) {
-        const int y = y0 + rowPair * 2;
-        for (int colGroup = 0; colGroup < kColGroups; ++colGroup) {
-            const int x = x0 + colGroup * 4;
-            uint8_t bytes[4];
-            for (uint8_t& b : bytes) {
-                b = br.readAlignedByte();
-                if (br.ranOutOfData()) return false;
-            }
-            for (int i = 0; i < 4; ++i) {
-                dest.at(x + i, y) = bytes[i];
-                dest.at(x + i, y + 1) = bytes[i];
+    for (int r = 0; r < kBlockSize; ++r) {
+        for (int c = 0; c < kBlockSize; ++c) {
+            const uint8_t v = core8x8[r * kBlockSize + c];
+            for (int i = 0; i < 2; ++i) {
+                for (int j = 0; j < 2; ++j) {
+                    const int x = x0 + 2 * c + j;
+                    const int y = y0 + 2 * r + i;
+                    if (x < dest.width && y < dest.height) dest.at(x, y) = v;
+                }
             }
         }
     }
+}
+
+// secondary=6: 64 raw bytes (8x8 core, row-major - OPEN/DERIVED: the spec
+// confirms a 16x16 footprint = 2x2 NN of an "8x8-equivalent source" but never
+// states the raw byte count; 64 = 8x8 core is the only count consistent with
+// that), each pixel = (int8_t)raw + 128 (CONFIRMED), then 2x2 NN upsample.
+inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol) {
+    uint8_t core[kBlockSize * kBlockSize];
+    for (uint8_t& px : core) {
+        const uint8_t raw = br.readAlignedByte();
+        if (br.ranOutOfData()) return false;
+        px = static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(raw)) + 128);
+    }
+    upsample2x2Store(dest, blockRow, blockCol, core);
     return true;
 }
 
@@ -1009,7 +1022,20 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
                     return rec;
                 }
             }
-            fillBlock8x8(dest, blockRow, blockCol, literal);
+            // BIAS FIX (2026-10-12, Team A confirmed): the fill byte is read
+            // unsigned by the real native (`0x1001b3f8`, `movzx`), but the
+            // real PIXEL value is `(int8_t)literal + 128` - a flat DC bias,
+            // not a raw 0-255 value written straight through. Confirmed
+            // exactly against real ffmpeg ground truth: literal=0x99 (153
+            // unsigned) -> signed -103 -> -103+128=25, matching idx1/idx2's
+            // own real decoded pixel value (uniformly 25 across all 256
+            // pixels of both blocks, no rounding slop). Equivalent forms:
+            // `(int8_t)literal + 128` or `literal ^ 0x80` (same result for
+            // the full int8 range) - same residual-around-neutral-gray bias
+            // convention the DC/AC (secondary=2) dequant/IDCT path already
+            // uses for its own DC term.
+            const uint8_t pixelValue = static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(literal)) + 128);
+            fillBlock8x8(dest, blockRow, blockCol, pixelValue);
             rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         }
@@ -1146,13 +1172,7 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             uint8_t pixels[64];
             idctBlock8x8(coeffs.data(), quantRow.data(), pixels);
 
-            const int x0 = blockCol * kBlockSize;
-            const int y0 = blockRow * kBlockSize;
-            for (int y = 0; y < kBlockSize; ++y) {
-                for (int x = 0; x < kBlockSize; ++x) {
-                    dest.at(x0 + x, y0 + y) = pixels[y * kBlockSize + x];
-                }
-            }
+            upsample2x2Store(dest, blockRow, blockCol, pixels);  // 8x8 core -> 16x16, 2x2 NN, no bias
             rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         }

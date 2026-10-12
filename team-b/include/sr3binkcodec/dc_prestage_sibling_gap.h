@@ -240,8 +240,23 @@ inline SiblingLeadingMagnitude skip0x10019d10(BitstreamReader& br) {
 // pays skip0x10019d10()'s own measured-total model, unchanged) - swapping
 // this in would desync the shared per-row bit cursor for every downstream
 // consumer in the row, a regression across multiple already-passing tests.
-inline std::vector<uint8_t> decode0x10019d10(BitstreamReader& br, const BuiltTable& globalTable) {
-    const uint32_t count = br.readBits(kDcSiblingMagnitudeWidth);  // ctx+0x28, Sec5.3t - real leading-count, content-correct
+// `dim`: the macroblock-COLUMN count (blockCols) for this plane - NOT pixel
+// width (contrast flat_fill_prestage_array.h's own decode0x100195b0TreeDecodeAttempt(),
+// whose `dim` IS the plane's pixel width) - per Team A's own confirmation
+// (spec-bink-codec.md Sec5.3ab "bound/width formula found" entry: dim=240
+// blockCols for a 1920px-wide Y plane gives bound=2432/width=12, matching
+// this function's own already-documented 12-bit overrun (2993 measured vs
+// 2981 expected) exactly). Uses the SAME bound/width formula
+// flat_fill_prestage_array.h's computeFlatFillLeadingMagnitudeWidth()
+// implements (reused directly, not duplicated) - REPLACES the old
+// kDcSiblingMagnitudeWidth=10 read this function used to make for its own
+// leading-count field (kDcSiblingMagnitudeWidth itself is untouched and
+// still correct for the OTHER, genuinely-fixed-width siblings in this file:
+// 0x1001a160, 0x10019f00, both confirmed fixed at 10 bits regardless of
+// plane geometry).
+inline std::vector<uint8_t> decode0x10019d10(BitstreamReader& br, const BuiltTable& globalTable, int dim) {
+    const int leadingCountWidth = computeFlatFillLeadingMagnitudeWidth(dim);
+    const uint32_t count = br.readBits(leadingCountWidth);  // ctx+0x28, Sec5.3ab - derived per-plane, not hardcoded
     if (br.ranOutOfData()) return {};
 
     std::vector<uint8_t> bytes(static_cast<size_t>(count), 0);
@@ -389,19 +404,33 @@ struct DcArrayPreStageGapResult {
 // error by this project's own BitstreamReader contract, so this is NOT a
 // safe no-op fallback; every real call site below passes the row's own real
 // table.
-inline DcArrayPreStageGapResult consumeDcArrayPreStageGap(BitstreamReader& br, const BuiltTable& globalTable) {
+// `bank`/`blockCols` (2026-10-12, fix/flat-fill-perplane-width-promotion
+// task, spec-bink-codec.md Sec5.3ab "bound/width formula found" entry):
+// `bank` is this row's own SiblingTableBank (CaseSelectorScratchSource::
+// beginBlockRow(..., &bank), descriptor A's 16-table per-class capture) -
+// REQUIRED now to run decode0x100195b0TreeDecodeAttempt() (the real,
+// golden-fixture-exact per-symbol decode, HANDOFF.md's "RESOLVED 2026-10-12
+// - flat-fill CLOSED" entry) instead of decode0x100195b0()'s own prior
+// measured-total-skip stopgap. `blockCols` is this plane's own real
+// macroblock-column count - `0x100195b0`'s own leading-magnitude width needs
+// the plane's PIXEL width (`blockCols*8`, 8 pixels per block-column, see
+// frame_decoder.h's own "ENTROPY PRE-STAGE ROW SEQUENCING" comment for that
+// ratio), per computeFlatFillLeadingMagnitudeWidth()'s own dim contract.
+inline DcArrayPreStageGapResult consumeDcArrayPreStageGap(BitstreamReader& br, const BuiltTable& globalTable,
+                                                           const SiblingTableBank& bank, int blockCols) {
     // Sec5.3s: "a running value is written back to `arg3+0x180` at every
     // return, carried into the next call on the SAME `arg3` struct" - but
     // this gap is only ever paid ONCE per row (consumeDcArrayPreStageGap()'s
-    // own caller contract), so a fresh, local FlatFillPrestageState per call
-    // is equivalent to a real per-row-fresh context UNLESS the real
+    // own caller contract), so a fresh, local FlatFillTreeDecodeAttemptState
+    // per call is equivalent to a real per-row-fresh context UNLESS the real
     // `arg3+0x180` state is proven to persist ACROSS rows too - not
     // established by any spec text available to this task (flagged, not
-    // silently assumed either way, same posture as flat_fill_prestage_array.h's
-    // own item 4).
-    FlatFillPrestageState state;
+    // silently assumed either way, same posture the pre-promotion stopgap's
+    // own FlatFillPrestageState already flagged).
+    FlatFillTreeDecodeAttemptState state;
     DcArrayPreStageGapResult result;
-    result.flatFillArray = decode0x100195b0(br, state);
+    const int flatFillDim = blockCols * 8;  // plane pixel width, Sec5.3ab's dim contract for 0x100195b0
+    result.flatFillArray = decode0x100195b0TreeDecodeAttempt(br, state, bank, globalTable, flatFillDim);
     // KNOWN DISCREPANCY (2026-10-11, fix/bink-0x10019d10-real-decode task,
     // Sec5.3ab - see HANDOFF.md's "Known stopgaps" entry for the full
     // diagnostic trail): decode0x10019d10() below is a literal

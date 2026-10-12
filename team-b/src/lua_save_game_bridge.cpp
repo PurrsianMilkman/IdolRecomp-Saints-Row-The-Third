@@ -128,6 +128,11 @@ sr3save::SaveSnapshotFields buildSaveSnapshotFields(EngineState& st) {
         r.pad = w.pad;
         f.weaponInventory.push_back(r);
     }
+    f.regionRecords = sg.regionRecords;
+    f.activityRecords = sg.activityRecords;
+    f.activityMarkerFlags = sg.activityMarkerFlags;
+    f.activeCheatIds = sg.activeCheatIds;
+    f.statistics = sg.statistics;
     formatSaveTimeDate(f.saveTime, f.saveDate);
     return f;
 }
@@ -187,6 +192,14 @@ void applySaveSnapshotFields(const sr3save::SaveSnapshot& snap, EngineState& st)
         r.flag1 = w.flag1;
         r.pad = w.pad;
         sg.weaponInventory.push_back(r);
+    }
+    sg.regionRecords = snap.regionRecords();
+    sg.activityRecords = snap.activityRecords();
+    sg.activityMarkerFlags = snap.activityMarkerFlagsRaw();
+    sg.activeCheatIds = snap.activeCheatIds();
+    for (size_t i = 0; i < sr3save::kSnapshotStatCount; ++i) {
+        const sr3save::SnapshotStat* s = snap.statistic(static_cast<uint32_t>(sr3save::kFirstSnapshotStatId + i));
+        sg.statistics[i] = s ? *s : sr3save::SnapshotStat{};
     }
     // Sec15's own task brief: display-only on load, round-tripped as inert
     // data - never used to resume a mission.

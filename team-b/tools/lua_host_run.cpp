@@ -1899,6 +1899,16 @@ int main(int argc, char** argv) {
                      "      that is just mid-way through a long, legitimate wait; mission_simulated_seconds_budget=\n"
                      "      in verdict_summary.txt reports what this host modelled, and start_still_suspended_at=\n"
                      "      (per-mission output / TSV) reports where it ended up parked.\n"
+                     "  --auto-answer-hud-prompts[=N]  THIS TASK (hud-prompt-autoanswer-harness): each tick,\n"
+                     "      any live hud_prompt(target, promptId, callbackName) request (Sec13.3) that has been\n"
+                     "      showing for at least N ticks (default 15) is answered by spawning a coroutine for\n"
+                     "      its own callbackName - the SAME BareThreadTable allocate()-then-let-the-scheduler-\n"
+                     "      resume-it mechanism --probe-autopilot already uses for on_trigger/on_death/etc,\n"
+                     "      reused here for hud_prompt. Generic over every currently showing prompt, not\n"
+                     "      hardcoded to M05_JUMP. Fires LIVE during the normal tick loop (not a post-hoc probe\n"
+                     "      like --probe-autopilot) so a mission blocked only on a HUD-prompt wait can keep\n"
+                     "      advancing within its own --tick-budget= instead of tick-budget-stalling on it\n"
+                     "      forever and masking whatever its own NEXT real stall point is.\n"
                      "  --probe-unresolved-names  DIAGNOSTIC ONLY, off by default, NEVER a real measurement: a\n"
                      "      named-object resolution miss (the OPEN gate behind most 'Killbane'-style blockers)\n"
                      "      returns a synthetic \"resolves\" placeholder instead of refusing, so a mission can\n"
@@ -1979,6 +1989,38 @@ int main(int argc, char** argv) {
     // --probe-autopilot: DIAGNOSTIC ONLY, off by default - see its own
     // usage text above and g_probeAutopilotEnabled's own doc comment.
     bool probeAutopilot = false;
+    // --auto-answer-hud-prompts[=N] (THIS TASK, hud-prompt-autoanswer-
+    // harness): this mission-drive loop has no keyboard/player-input concept
+    // at all (it drives a mission's own Lua coroutines directly, tick by
+    // tick - there is no "--no-input" flag here because there is no OTHER
+    // mode; every run through this tool already IS the scripted/automated
+    // case tools/sr3_viewer.cpp's own --no-input covers for its separate,
+    // interactive --mission playtest path). A genuine player-input-gated
+    // wait - e.g. m05.lua:1141's `while not M05_jumped do thread_yield() end`,
+    // unblocked only by the registered callback a live
+    // hud_prompt(target, promptId, callbackName) call names (spec-lua-api-
+    // behaviour.md Sec13.3) - has no scripted way through this loop today,
+    // so a mission stuck on one tick-budget-stalls regardless of how large
+    // --tick-budget= is set, masking whatever that mission's own NEXT real
+    // stall point is further down its script. When this flag is given, each
+    // tick, any EngineState::hudPromptRequests() entry that has been showing
+    // for at least N ticks (default 15; --auto-answer-hud-prompts=N
+    // overrides; same semantics as --tick-budget='s own "=N" convention)
+    // is answered by spawning a coroutine for its own registered callback
+    // name via BareThreadTable::allocate() - the SAME "spawn, let the next
+    // scheduler pass resume it" mechanism this file's own --probe-autopilot
+    // dispatch block (isCallbackRegistrationNative family, further above)
+    // already established for on_trigger/on_death/on_vehicle_enter, reused
+    // here for hud_prompt rather than inventing a parallel mechanism -
+    // generic over ANY currently showing prompt, not hardcoded to M05_JUMP.
+    // Unlike --probe-autopilot (a post-hoc, one-shot diagnostic fired only
+    // AFTER a mission is already classified still_suspended at budget
+    // exhaustion), this fires LIVE, every tick, while the main tick loop is
+    // still running - so a mission that is only blocked on a HUD prompt can
+    // actually keep advancing within its own normal tick budget, rather than
+    // needing a separate follow-up probe after the fact.
+    bool autoAnswerHudPrompts = false;
+    int hudPromptAutoAnswerDelayTicks = 15; // CHOSEN default, overridden by --auto-answer-hud-prompts=N
     std::vector<std::string> extraPositional;
     for (int a = 4; a < argc; ++a) {
         std::string arg = argv[a];
@@ -1994,6 +2036,16 @@ int main(int argc, char** argv) {
         }
         else if (arg == "--probe-unresolved-names") probeUnresolvedNames = true;
         else if (arg == "--probe-autopilot") probeAutopilot = true;
+        else if (arg == "--auto-answer-hud-prompts") autoAnswerHudPrompts = true;
+        else if (arg.rfind("--auto-answer-hud-prompts=", 0) == 0) {
+            std::string v = arg.substr(std::string("--auto-answer-hud-prompts=").size());
+            if (v.empty() || v.find_first_not_of("0123456789") != std::string::npos) {
+                std::cerr << "bad --auto-answer-hud-prompts value (want a non-negative integer): " << v << "\n";
+                return 1;
+            }
+            autoAnswerHudPrompts = true;
+            hudPromptAutoAnswerDelayTicks = std::stoi(v);
+        }
         else if (arg == "--no-vint-docs") vintDocs = false;
         else if (arg.rfind("--trace-host-calls-before-error=", 0) == 0) {
             std::string v = arg.substr(32);
@@ -2960,6 +3012,9 @@ int main(int argc, char** argv) {
          " context_misses=" + std::to_string(docContextMisses) +
          " (real .vint_doc element trees in the Vint object registry; per-call current document = the "
          "document naming the defining chunk as lua_script_file - CHOSEN; see --no-vint-docs)");
+    line("auto_answer_hud_prompts=" +
+         std::string(autoAnswerHudPrompts ? ("on delay_ticks=" + std::to_string(hudPromptAutoAnswerDelayTicks))
+                                           : "off"));
     {
         // Typed property path counters (EngineState::setVintProperty/
         // getVintProperty doc comments), cumulative at this point of the run.
@@ -3468,6 +3523,21 @@ int main(int argc, char** argv) {
     std::vector<MissionResult> missionResults;
     missionResults.reserve(missions.size());
     uint64_t schedulerForeignErrorsTotal = 0; // leftover records' own errors on a resume (not in any mission's row)
+    // --auto-answer-hud-prompts (THIS TASK): persists across the WHOLE
+    // mission loop below (same reason schedulerForeignErrorsTotal does,
+    // immediately above) - EngineState::hudPromptRequests() is a single
+    // host-wide vector that only ever grows (same convention as
+    // tools/sr3_viewer.cpp's own identical tracker), never reset per
+    // mission, so these must not be either (resetting per mission would
+    // re-dispatch an already-answered earlier mission's own old requests).
+    // globalTick increments once per tick of every mission in this run (NOT
+    // the per-mission `tick` loop variable, which restarts at 1 each
+    // mission) so "N ticks since first seen" stays correct even if a prompt
+    // happens to still be unanswered at a mission boundary (should not
+    // happen in practice within a sane delay, but is harmless either way).
+    size_t hudPromptRespondedCount = 0;
+    std::vector<long long> hudPromptFirstSeenGlobalTick;
+    long long globalTick = 0;
 
     // Snapshot host.hitLog() right before step 1 begins - the "before"
     // half of the NEW stub-hit-with-missions ranking's own incremental
@@ -3698,6 +3768,65 @@ int main(int argc, char** argv) {
                                 }
                             }
                         });
+                }
+                ++globalTick;
+                // ===================== AUTO-ANSWER-HUD-PROMPTS (THIS TASK) =====================
+                // See --auto-answer-hud-prompts's own usage text (above) for the
+                // full citation. Any hud_prompt request recorded this tick (or
+                // any earlier tick not yet answered - hudPromptRespondedCount
+                // tracks the boundary) is answered once it has been showing for
+                // at least hudPromptAutoAnswerDelayTicks ticks: spawn a
+                // coroutine for its own registered callback name via the SAME
+                // BareThreadTable mechanism --probe-autopilot's own dispatch
+                // block (further above) already uses. Spawn only - the callback
+                // body runs on the NEXT tick's own scheduler pass, same
+                // decoupled-in-time shape Sec1.14 confirms for the real
+                // dispatcher, not a synchronous call here.
+                if (autoAnswerHudPrompts) {
+                    auto& hudPromptReqs = host.engineState().hudPromptRequests();
+                    while (hudPromptFirstSeenGlobalTick.size() < hudPromptReqs.size()) {
+                        hudPromptFirstSeenGlobalTick.push_back(globalTick);
+                    }
+                    while (hudPromptRespondedCount < hudPromptReqs.size()) {
+                        const auto& req = hudPromptReqs[hudPromptRespondedCount];
+                        const long long firstSeen = hudPromptFirstSeenGlobalTick[hudPromptRespondedCount];
+                        if (globalTick - firstSeen < hudPromptAutoAnswerDelayTicks) {
+                            // Not due yet - later requests (recorded even more
+                            // recently) can't be due either, so stop here and
+                            // re-check next tick.
+                            break;
+                        }
+                        ++hudPromptRespondedCount;
+                        if (req.arg3.empty()) continue; // no callback name to respond with
+                        // CHOSEN stand-in (hud-prompt-direct-callback-standin task, 2026-10-12):
+                        // the real dispatch path that resolves hud_prompt's arg3 to a callback is
+                        // not yet traced (spec-lua-api-behaviour.md Sec13.3, 2026-10-12 update -
+                        // confirmed arg3 genuinely IS the callback name the engine calls, e.g.
+                        // "m05_jump_local" in m05.lua, but via a mechanism NOT inside
+                        // 0x00a4cff0/0x00a37210/0x00a370c0's own call chain). Measured
+                        // (results/verify_m05_hud_prompt_autoanswer_20261012.md): spawning a
+                        // coroutine for arg3 via BareThreadTable::allocate() (the prior approach)
+                        // does NOT advance m05 past m05.lua:1141, even given 185 further ticks for
+                        // the spawned coroutine to run. This directly calls the named global Lua
+                        // function by string lookup instead (Host::callGlobalFunctionByName(),
+                        // lua_host.cpp) - NOT how the real engine dispatches it, but produces the
+                        // same observable effect (the callback body actually running, setting
+                        // whatever flag the waiting script polls) for any script that only cares
+                        // about the callback having run. Synchronous, not spawn-and-defer: there is
+                        // no real-engine decoupled-dispatch evidence for THIS specific call (unlike
+                        // on_trigger/on_death, Sec1.14), so no coroutine shape is assumed either way.
+                        std::cerr << "[auto-answer-hud-prompts] hud_prompt(\"" << req.target << "\", \""
+                                  << req.arg2 << "\", \"" << req.arg3 << "\") seen " << (globalTick - firstSeen)
+                                  << " tick(s) ago - CHOSEN stand-in: calling global '" << req.arg3
+                                  << "' directly\n";
+                        std::string callErr;
+                        bool called = host.callGlobalFunctionByName(host.gameplayState(), req.arg3, callErr);
+                        if (!called) {
+                            std::cerr << "[auto-answer-hud-prompts] callback '" << req.arg3
+                                      << "' not called: " << (callErr.empty() ? "no such global function" : callErr)
+                                      << "\n";
+                        }
+                    }
                 }
                 auto tickHooks = host.fireConfirmedHooks(host.gameplayState(), hooks, script.entryName);
                 TickSig sig;

@@ -1205,6 +1205,24 @@ int stub_get_dist(lua_State* L) {
     const WorldPosition kProbeOrigin{}; // CHOSEN (0,0,0), logged as probe - never a real baseline value
     WorldPosition pa = st->worldPositionOr(ca.worldPosition, kProbeOrigin);
     WorldPosition pb = st->worldPositionOr(cb.worldPosition, kProbeOrigin);
+    // DIAGNOSTIC ONLY (results/verify_m07_spawn_at_barge_20261012 task,
+    // 2026-10-12): opt-in via SR3_TRACE_GETDIST env var, OFF by default -
+    // generic/reusable (not m07-specific), prints the two resolved object
+    // names and their resolved worldPosition for EVERY get_dist call so a
+    // one-run capture can identify a mission's own live distance-check
+    // target object without needing readable Lua source. No behavior
+    // change when the env var is unset.
+    if (std::getenv("SR3_TRACE_GETDIST")) {
+        std::fprintf(stderr, "[get_dist-trace] a='%s' pos=(%.2f,%.2f,%.2f) resolvedA=%d | b='%s' pos=(%.2f,%.2f,%.2f) resolvedB=%d\n",
+                      a.c_str(), pa.x, pa.y, pa.z, ca.worldPosition.known() ? 1 : 0,
+                      b.c_str(), pb.x, pb.y, pb.z, cb.worldPosition.known() ? 1 : 0);
+    }
+    // feature/auto-objective-harness (2026-10-12): generic, always-on,
+    // zero-behavior-change bookkeeping of the last get_dist(a,b) call and
+    // how many consecutive calls were the SAME unordered pair - the exact
+    // "stalled on this distance check" signal --auto-objective
+    // (tools/sr3_viewer.cpp) reads to decide when/where to teleport.
+    st->recordGetDistCall(a, b, pa, ca.worldPosition.known(), pb, cb.worldPosition.known());
     double dx = pa.x - pb.x;
     double dy = pa.y - pb.y; // Y = vertical (spec-physics-runtime.md: gravity (0,-9.8,0), Y-up)
     double dz = pa.z - pb.z;

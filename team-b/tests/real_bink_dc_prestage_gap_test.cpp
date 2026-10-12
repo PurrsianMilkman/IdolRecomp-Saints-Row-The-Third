@@ -169,12 +169,16 @@ int main() {
     CaseSelectorScratchSource caseSelectorA2(br2, kLumaWidthPixels);
     CaseSelectorScratchSource caseSelectorB2(br2, kLumaWidthPixels, caseSelectorLengthFieldBitWidthB,
                                               kDescriptorBSiblingTableIndex);
-    CHECK(caseSelectorA2.beginBlockRow(&caseSelectorB2) == CaseSelectorStatus::Ok);
+    SiblingTableBank siblingBank2;
+    CHECK(caseSelectorA2.beginBlockRow(&caseSelectorB2, &siblingBank2) == CaseSelectorStatus::Ok);
     // UPDATE (2026-10-11, fix/bink-0x10019d10-real-decode task): now takes
     // descriptor A's own BuiltTable (decode0x10019d10()'s own required
     // input, Sec5.3ab) and returns the bundled DcArrayPreStageGapResult
     // instead of a bare FlatFillPrestageArray - see dc_prestage_sibling_gap.h.
-    consumeDcArrayPreStageGap(br2, caseSelectorA2.builtTable());
+    // UPDATE (2026-10-12, fix/flat-fill-perplane-width-promotion task): now
+    // also takes the row's own SiblingTableBank + blockCols, required by the
+    // now-production real flat-fill decode.
+    consumeDcArrayPreStageGap(br2, caseSelectorA2.builtTable(), siblingBank2, kLumaWidthPixels / 8);
     std::cout << "  cumulative bits: " << br2.bitsConsumedSoFar() << " (expected 9256)\n";
     CHECK(br2.bitsConsumedSoFar() == 9256);
     CHECK(!br2.ranOutOfData());

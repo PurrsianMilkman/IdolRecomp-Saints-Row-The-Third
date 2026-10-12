@@ -354,6 +354,18 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
     trace.totalBlocksInGrid = blockCols * blockRows;
 
     for (int row = 0; row < blockRows; ++row) {
+        // SiblingTableBank (2026-10-12, fix/flat-fill-perplane-width-
+        // promotion task): descriptor A's own 16-table per-class capture for
+        // this row, declared at per-row scope (not inside the
+        // `caseSelector != nullptr` block below) so consumeDcArrayPreStageGap()
+        // further down this same row iteration can still see it - REQUIRED
+        // by that function now to run the real (golden-fixture-exact)
+        // flat-fill decode rather than its prior measured-total-skip
+        // stopgap. Left default-constructed (valid=false) for any caller
+        // with `caseSelector == nullptr` - such a caller never reaches the
+        // `decodeDcArray` branch below either (same existing gating), so an
+        // invalid bank is never actually consumed.
+        SiblingTableBank rowSiblingBank;
         if (caseSelector != nullptr) {
             // spec-bink-codec.md Sec5.3h: descriptor B's own refill fires
             // unconditionally right after descriptor A's own refill
@@ -364,7 +376,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
             // descriptor B at all (e.g. a future chroma-plane caller before
             // that scope is opened) - beginBlockRow() handles that case
             // exactly like before this task.
-            const CaseSelectorStatus rowStatus = caseSelector->beginBlockRow(caseSelectorB);
+            const CaseSelectorStatus rowStatus = caseSelector->beginBlockRow(caseSelectorB, &rowSiblingBank);
             if (rowStatus != CaseSelectorStatus::Ok) {
                 // No block in this row got a chance to run at all - record
                 // one synthetic BlockRecord at this row's first column so
@@ -422,7 +434,8 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // (confirmed: decodeLumaPlane() below is the only one), so this is
         // safe without an extra null-table fallback branch.
         DcArrayPreStageGapResult rowPreStageGap =
-            decodeDcArray ? consumeDcArrayPreStageGap(br, caseSelector->builtTable()) : DcArrayPreStageGapResult{};
+            decodeDcArray ? consumeDcArrayPreStageGap(br, caseSelector->builtTable(), rowSiblingBank, blockCols)
+                          : DcArrayPreStageGapResult{};
         FlatFillPrestageArray& rowFlatFillArray = rowPreStageGap.flatFillArray;
         // DC DELTA ARRAY ROW DECODE (2026-10-11, fix/bink-dc-array-indexing
         // task, spec-bink-codec.md Sec5.3p/Sec5.3m): run the FULL per-row

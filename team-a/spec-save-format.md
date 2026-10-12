@@ -682,6 +682,13 @@ index against it; no function reading `+0xA8` at all was found in the enable/dis
 checked. See `spec-store-runtime.md` §2's own update for the (separately confirmed) native call
 path that actually opens a walk-in store's screen — likely the same unresolved "what triggers it"
 gap applies to crib entry, one hop further back than originally framed.
+**RESOLVED 2026-10-12:** the `+0xA8` reader is the activation dispatcher `0x0093B3C0` (and
+`__thiscall` twin `0x0093B1C0`): activation is a per-kind function-pointer table at
+`0x026232a8 + 0x24·kind` (`+0x14` activate, `+0x18` exit, `+0x1C` init), registered via
+`0x0093AFE0(kind, cbs)` — no virtual `use_activated` method exists. Kind index = 0-based
+`triggers.xtbl` `<Trigger>` order (consistent with 12/13/14 above). Crib purchase (kind 3) activate =
+`0x006D47B0` (→ `0x006D2720`, then self-disable `0x0093BDE0`); multiplayer_crib (kind 8) =
+`0x00833FB0` → `0x0080CC90`. Full kind→callback list in `spec-store-runtime.md` §2 update 2026-10-12.
 
 **Source [CONFIRMED — disassembly].** The save routine walks the manager's list at `+0xD0` (count `+0xD8`) and, for every object whose kind field (`+0xA8`) is **12, 13 or 14**, appends a 16-byte record at `0xFC68 + 0x10·count`, then increments the count at `0xFC60`. **There is no capacity check in the save routine**: 250 is only the size the following span leaves. *[desk review 2026-09-30: the 4 bytes `0xFC64`–`0xFC67` lie between the count and the first record (`0xFC68 + 250 × 16 = 0x10C08`).]* Record: **{handle id, handle second word, `u8` flags, 7 × 0}** where flags bit 0 = **NOT** (object byte `+0xE4` bit 0, the "enabled" state) and bit 1 = **object byte `+0x7B` bit 0** (the same one-way flag entry 6 samples for activity markers, §9.3b). Load (`0x00B9A9C0`): resolve the handle; require the marker/trigger class flag and a live object; if bit 1 → set the flag (`0x0093B190`); if bit 0 == 0 → enable (`0x0093D320`, argument 3) else disable (`0x0093BDE0`, argument 3).
 

@@ -1473,8 +1473,44 @@ void EngineState::setVehiclePathfindResolvableForTesting(const std::string& vehi
     else vehiclePathfindResolvable_.erase(vehicleName);
 }
 
+void EngineState::registerVehiclePathfindRequest(const std::string& vehicleName, const std::string& targetName) {
+    scriptedRequestDone_[{vehicleName, kScriptedRequestKindMoveOrPathfind}] = false; // 0x006f61b0 clears the done bit
+    vehiclePathfindGoal_[vehicleName] = targetName;
+}
+
+bool EngineState::vehiclePathfindArrived(const WorldPosition& v, const WorldPosition& g, bool tight, bool mode2) {
+    double dx = g.x - v.x, dz = g.z - v.z; // 0x00d9fc80: X/Z only, Y ignored
+    double threshold = mode2 ? 2500.0 : (tight ? 4.0 : 16.0); // 0x011173a4 / 0x012a2f6c / 0x0127e214
+    return dx * dx + dz * dz <= threshold;
+}
+
 double EngineState::vehiclePathfindCheckDoneCode(const std::string& vehicleName) {
-    if (!vehiclePathfindResolvable_.count(vehicleName)) return 2.0; // Sec9.10: unresolved vehicle/no slot-0 occupant fallback
+    auto goalIt = vehiclePathfindGoal_.find(vehicleName);
+    bool hasRequest = goalIt != vehiclePathfindGoal_.end();
+    if (!vehiclePathfindResolvable_.count(vehicleName) && !hasRequest) return 2.0; // Sec9.10: unresolved vehicle/no slot-0 occupant fallback
+    if (hasRequest) {
+        auto reqIt = scriptedRequestDone_.find({vehicleName, kScriptedRequestKindMoveOrPathfind});
+        if (reqIt == scriptedRequestDone_.end()) {
+            vehiclePathfindGoal_.erase(goalIt); // cancelled/consumed: Sec9.10a "no ctx -> 2"
+        } else if (!reqIt->second) {
+            // Sec9.10a item 1 / port recipe 3+5: complete (done = 1 once) on ABORT
+            // (goal/vehicle dead or missing) or ARRIVE; with no path/motion model and
+            // no known positions, the recipe's step 5 immediate completion applies.
+            const std::string goal = goalIt->second;
+            bool complete = false;
+            if (!hasVehicle(vehicleName) || !objectResolves().get(goal)) {
+                complete = true; // ABORT: target does not resolve
+            } else {
+                const VehicleState& v = getOrCreateVehicle(vehicleName);
+                const WorldPosition* gp = nullptr;
+                if (hasVehicle(goal)) { const VehicleState& gv = getOrCreateVehicle(goal); if (gv.worldPosition.known()) gp = &gv.worldPosition.get(); }
+                else if (hasCharacter(goal)) { const CharacterState& gc = getOrCreateCharacter(goal); if (gc.worldPosition.known()) gp = &gc.worldPosition.get(); }
+                if (!v.worldPosition.known() || !gp) complete = true; // step 5: nothing to measure -> immediate completion
+                else complete = vehiclePathfindArrived(v.worldPosition.get(), *gp);
+            }
+            if (complete) { reqIt->second = true; vehiclePathfindGoal_.erase(goalIt); }
+        }
+    }
     return static_cast<double>(scriptedRequestStatusCode(vehicleName, kScriptedRequestKindMoveOrPathfind));
 }
 

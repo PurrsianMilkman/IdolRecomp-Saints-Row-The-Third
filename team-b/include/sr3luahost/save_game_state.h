@@ -38,6 +38,8 @@
 #include <string>
 #include <vector>
 
+#include "sr3save/save_snapshot.h"
+
 namespace sr3luahost {
 
 // One collected collectible (mirrors sr3save::CollectibleRecord 1:1,
@@ -163,6 +165,41 @@ struct SaveGameState {
     // Lua host has no world-loading system to apply it to, so it is
     // round-tripped as inert data too, same as activeMissionLabelIndex.
     std::string levelName;
+
+    // 0x113B8/0x113C0 (Sec12.4.1): the city-takeover region records, up to
+    // 156, 154 used in every real sample. Reuses sr3save::RegionRecord
+    // directly (handleLo/handleHi/controlled/tail) rather than a parallel
+    // SaveGameState-local struct - same object-list shape as
+    // garageVehicles/wardrobeItems/weaponInventory, but with nothing this
+    // project's own records need to translate (no vehicle-handle-shaped
+    // exclusion, no colour/wear sub-fields), so the sr3save type itself is
+    // the simplest live representation. Starts empty - no in-scope native
+    // currently produces one; a test (or a future region/takeover native)
+    // appends to it directly.
+    std::vector<sr3save::RegionRecord> regionRecords;
+
+    // 0x2B90/0x2E98 (Sec9.3a/Sec9.3b): the activity progress table (up to
+    // 64 records, 60 used in every real sample) and its companion 64-bit
+    // marker-flag set. Reuses sr3save::ActivityRecord directly for the
+    // same reason as regionRecords above. Starts empty/0 - no in-scope
+    // native currently produces one; a test (or a future activity-complete
+    // native) appends to it directly.
+    std::vector<sr3save::ActivityRecord> activityRecords;
+    uint64_t activityMarkerFlags = 0;
+
+    // 0x0CC (Sec9.5): ids of the currently-active cheats, up to 200.
+    // Default empty, matching cheatsUsed's own "cheats never used" default
+    // above - a real new-game save activates none.
+    std::vector<uint32_t> activeCheatIds;
+
+    // 0x3340 (Sec12.6.1): the 149 per-save statistics, ids 68..216.
+    // Reuses sr3save::SnapshotStat/kSnapshotStatCount directly (a plain
+    // value array, not an object list, so there is no separate
+    // SaveGameState-local struct to mirror, matching
+    // SaveSnapshotFields::statistics's own array type exactly). Default
+    // all-zero - every statistic's own documented "not yet earned" value,
+    // matching a real new-game save.
+    std::array<sr3save::SnapshotStat, sr3save::kSnapshotStatCount> statistics{};
 };
 
 } // namespace sr3luahost

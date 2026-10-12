@@ -549,6 +549,131 @@ screen (`cell_music_sub`) stays resident underneath its own children rather than
 the fan-out. `cell_extras`'s own top-level page is a minimal, ungated 2-entry icon grid with a
 completely standard §4-shaped exit.
 
+## 16a. Contacts screen and homie/contact calls — port recipe (2026-10-12, FINAL)
+
+Sources: §5 (Lua side), `spec-tables-traffic-ai.md` §15 (`homies.xtbl` record), tranche 13 E.1 / tranche 19
+H.1 notes, plus a fresh read-only decompile of the C side (helper scripts `tools/scratchpad/CellContacts1..3.java`).
+
+**Key correction.** The phone's "contacts" (book) page is **not** fed by `contacts_sr3.xtbl`
+(`spec-tables-vehicle-world.md` §17). It is fed by the **homie record table** loaded from `homies.xtbl`
+(+ DLC `<framework>_homies.xtbl`): base array `0x022AD780` (count `0x022AD758`), DLC array `0x022B0180`
+(count `0x022AD75C`), stride `0x180`. `contacts_sr3.xtbl` (Name/Image/Persona) is a separate roster with no reader
+on this path (its consumer stays OPEN; most plausibly mission-giver contact art/voice). **[CONFIRMED.]**
+
+### 16a.1 The phone-book array (C side)
+
+Built by `0x0083d3c0`; array `0x023156A8`, entry stride `0x18`, count `0x02315690` (no capacity check seen — OPEN).
+
+| Entry off | Meaning | Source |
+|---|---|---|
+| `+0x00` | name text key | record `+0x28` (`Display_Name` key) |
+| `+0x04` | description key | record `+0x2C` (`Display_Desc` key) |
+| `+0x08` | byte "listed" | 1 for every entry written |
+| `+0x09` | byte "callable" | see status table |
+| `+0x0A` | byte "extra" | `0x007e7ba0` (1 only for status 5/6 with record byte `+0x178` = 1); not passed to Lua |
+| `+0x10` | image CRC | record `+0x30` (`Image_name`) |
+| `+0x14` | homie index | combined record index (`0x007e5ae0`), or **−1** = special "hitman target" entry |
+
+**Ordering:** (1) if a hitman-target contact is active (`0x006b2030` non-zero), entry 0 is it (name/desc taken from the
+object `0x006a7f10` returns, `+0x14` = −1, listed + callable); (2) then every homie record in **table order** — base
+rows in `homies.xtbl` file order, then DLC rows — via the iterator `0x007e5b80`/`0x007e5bb0`. No sorting.
+
+**Inclusion gate per record:** the DLC gate byte `+0x24` must pass (`0x0045b3a0`); record status `+0xBC` ≠ 7; and if
+status = 0, the record's name-hash unlock test `0x0071dfd0(+0x20)` must be true. Callable byte by status:
+
+| `+0xBC` status | listed | callable (`+0x09`) |
+|---|---|---|
+| 0, 1, 4 | yes | 1 unless the homie's character is already spawned and alive near the player (`0x007e7b30` non-zero → 0) |
+| 2, 3, 5, 6 | yes | 0 |
+| 8 | yes | 1 |
+| 7 | no | — |
+
+(Status-value names are OPEN; 1 and 8 behave as "unlocked", 0 as "unlocked only when the unlock flag is set".)
+
+**Populate responder:** registration `0x0083df80` binds data-responder `"cell_phone_pad_populate"` to handler
+`0x0083dba0`. With list id 0 (`CELL_HOMIE_LIST`) it calls the Lua callback once per entry whose `+0x08` = 1 with
+`(entry_index, name_key, desc_key, image_crc, callable_bool)` — the exact signature of
+`cell_phone_populate_list(homie_index, homie_name_crc, description_crc, image_crc, is_available)`. Note the Lua
+`homie_index` is the **phone-book entry index**, not the record index. With list id 1 it walks the garage vehicle
+list `0x014A1D00` (§5 garage page), storing each row pointer in `0x02315428[n]` (count `0x02315698`) and passing
+`(n, display_name_string, value at row +0x74)`. **[CONFIRMED.]**
+
+### 16a.2 Call dispatch — `cellphone_dial` (`0x0083d930`)
+
+State word `0x02315688`: 0 idle, 1 connected, 2 busy, 3 "record status 5" special, 4 (set elsewhere, OPEN).
+1. Copy the two callback names (32 bytes each) to `0x023153F8` / `0x023153D8`; current entry `0x0231568C` = entry[idx]
+   (no bound check — a port must bound-check).
+2. Entry `+0x14` = −1 → hitman-target call → **connect**.
+3. Record = homie table[`+0x14`]. If record status = 5 → state 3, play Cell Phone event `0x59B17C4E`, Lua callback(−1).
+4. Else connect only if **all** of: `0x007e74f0(record)` (available: DLC gate ok; not blocked by mission — see 16a.3;
+   override `+0xC0`: 2 → yes, 1 → no, 0 → status 0 with unlock flag, or status 1 / 8); entry `+0x09` set; context gate
+   `0x0083d800(record)` (16a.3).
+5. Otherwise **busy**: state 2, play "UI_Cell_Line_Busy" (switch `0xD46667BB`) on the "busy signal" object, callback(−1).
+6. **Connect**: ring timer `0x0231541C` = 1.0, play Cell Phone event `0x604161D4` (id in `0x02315424`), state 1,
+   `0x02315420` = 1. The connect callback to Lua (`CELL_CALL_CONNECTED`/`CELL_CALL_GARAGE_SHOW`) is issued later from
+   the update neighbourhood `0x0083d150`–`0x0083d3b0` (outside a defined function; exact timing OPEN).
+
+**Hang-up / completion** (`0x0083d090`, the `cellphone_end_call` neighbourhood): stops the ring sound; if state is 1
+or 4: hitman entry → `0x006aac60(0)`; else, if the record's follower-cap check `0x0083d040` passes **and** the record
+lacks flag `player selects vehicle` (`+0xF1` bit `0x10`) → **summon** `0x007e2c70(index)`. State → 0.
+
+**Garage-pick homie** (record flag `player selects vehicle`, `+0xF1` bit `0x10`): the call pivots to the garage page;
+`cellphone_choose_vehicle` (`0x0083d5e0`) validates the chosen garage row (vehicle slot `+0x0E`, DLC gate `+0x1C`),
+stores it as the delivery vehicle (`0x007e5c70` → `0x022AD760`), summons `0x007e2c70(index)`, then — unless the
+`"Vehicle_delivery"` tutorial/flag is already set (`0x0071d180`) — fires the delivery hint (`0x0094a800`).
+
+**Summon** `0x007e2c70(index)`: if `0x022AD6CC` = 0 (no homie call already in flight), run `0x007e30b0` (clear/prepare)
+then `0x007e3ba0(index)` (spawn-and-drive-up). The spawn itself is driven by the record: `Humans` (up to 8
+characters), the weighted `Vehicles` pick (2 entries, weight sum `+0x6C`), and `Flags` byte `+0xF1`/`+0xF2` effects
+(`clear gang notoriety` 0x01, `clear police notoriety` 0x02, `form own squad` 0x04, `give random weapons` 0x08,
+`repair players vehicle` 0x20, `turn to ped after driveup` 0x40, `emergency` 0x80; `taxi` / `requires saints`).
+**The inner bodies of `0x007e30b0`/`0x007e3ba0` (arrival logic, despawn) are OPEN.**
+
+### 16a.3 Limits
+
+- **Follower cap** (`0x0083d040`): skipped entirely for service calls (record `+0xF1` & `0x43`: either notoriety-clear
+  flag or `turn to ped after driveup`). Otherwise compare the player's max-followers `0x0097e780(player)` with current
+  followers `0x0097e260(player)`; if full, **dismiss one** (`0x009db1b0(player, 0)`) and re-check; still full → no summon.
+  The numeric max is OPEN (Lua `party_allow_max_followers` `0x00a59380` toggles the per-player flag at `+0x28AC` bit 0;
+  `party_add_ignore_limits` bypasses it).
+- **Mission disable:** `0x007e6240(record)` → blocked when any of six named missions/activities is active
+  (three string constants at `0x011169A4`/`0x0111F720`/`0x0111F724`, plus `dlc3_m01`..`dlc3_m03`), or when any mission in
+  the record's `Blocked_for_Mission` list is active-and-not-complete. A blocked record answers **busy**.
+- **Context gate** (`0x0083d800`): requires `0x007e2d60()` (no global phone-lock `0x022AD2D8` and no call in flight
+  `0x022AD6CC`); notoriety-clear records (`+0xF1` & 3) pass immediately; others apply a distance box against the
+  constant `0x013B8770` and, for garage-pick homies, a vehicle-availability check (`0x00bb88f0(5)+(6)`, `0x005f9070`).
+  The return-value polarity of each branch is not recoverable from the decompile — **OPEN**.
+- **Cooldown:** no timer was found on the dial path; the only "in-flight" lock is `0x022AD6CC`. Any re-call cooldown is
+  OPEN (likely inside `0x007e3ba0`).
+- **Cash cost:** none on the homie path. Only the garage page charges (repair cost, Lua-side dialog, §5).
+- **Script overrides:** `homie_mission_unlock` (`0x00a4cf70`) / `homie_mission_lock` (`0x00a4cf40`) write record
+  `+0xC0` = 2 / 1.
+
+### 16a.4 Lua natives
+
+| Native | Address | Role |
+|---|---|---|
+| `cellphone_dial` | `0x0083d930` | 16a.2 |
+| `cellphone_end_call` | `0x0083d130` | hang-up wrapper (body near `0x0083d090`) |
+| `cellphone_choose_vehicle` | `0x0083d5e0` | garage-pick summon |
+| `homie_mission_unlock` / `_lock` | `0x00a4cf70` / `0x00a4cf40` | availability override |
+| `party_allow_max_followers` | `0x00a59380` | follower-cap flag |
+| `party_dismiss_all` | `0x00a593f0` | clears followers |
+| `party_set_dismissable` / `_recruitable` | `0x00a59430` / `0x00a59460` | party globals |
+| data responder `cell_phone_pad_populate` | reg `0x0083df80`, handler `0x0083dba0` | 16a.1 |
+
+### 16a.5 Port recipe
+
+1. Load `homies.xtbl` (+ DLC) into records per `spec-tables-traffic-ai.md` §15; keep `status` (+0xBC) and override (+0xC0, default 0).
+2. On phone open, rebuild the phone book (16a.1): optional hitman entry first, then records in table order, applying the inclusion and callable rules.
+3. Serve `cell_phone_pad_populate` list 0 with `(entry_idx, name_key, desc_key, image_crc, callable)` for each listed entry.
+4. On Lua `cellphone_dial(entry_idx, cb1, cb2)`: bound-check `entry_idx`; run steps 2–6 of 16a.2; report busy via `cb1(-1)`.
+5. On connect + hang-up: if `player selects vehicle`, go to garage page and summon from `cellphone_choose_vehicle`; else check follower cap (16a.3, dismissing one if full) and summon.
+6. Summon: refuse while a call is in flight; spawn the record's humans in a weighted-pick vehicle, drive up to the player, apply the `Flags` effects, then join the party (service-type rows: perform effect and leave).
+7. No cash charge; mission blocks answer busy.
+
+OPEN: status-value names; arrival/despawn bodies (`0x007e30b0`, `0x007e3ba0`); max-follower number; any cooldown; `0x0083d800` branch polarity; connect-callback timing; `contacts_sr3.xtbl` consumer.
+
 ## 16. Open items
 
 1. The literal native binding(s) that push `cell_foreground`/`cell_background`/`cell_menu_main`

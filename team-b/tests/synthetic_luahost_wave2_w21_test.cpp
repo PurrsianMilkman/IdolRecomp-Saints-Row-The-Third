@@ -171,7 +171,7 @@ int main() {
     // this comment's own pre-fix text. The NON-instant path stops here (2026-
     // 10-10's own instant-completion fix does not touch this branch - see
     // stub_vehicle_exit_do's own doc comment).
-    CHECK(xd.stateEnum.get() == 2);
+    CHECK(xd.stateEnum.get() == 0); // Sec24.9a (e8dc04d): non-instant now completes 3->2->0 too (m05 stall)
     CHECK(xd.vehicleExitCancelCount == 0);
     // CAE table sanity: ids 37-39 are the three "follow ... car" actions.
     CHECK(es.lookupCaeActionIndex("follow to car") == 37);
@@ -184,6 +184,7 @@ int main() {
     // branch structure: not seated, arg 2 absent -> the final "otherwise"
     // branch -> false; arg 2 = true with phase in {1,2} -> the cancel path
     // (0 Lua values), not the seated-true path either.
+    xd.stateEnum.set(2); // force mid-exit for the not-seated/cancel narrative
     ok(host, gp, "assert(vehicle_exit_do('xd_seat') == false)");
     CHECK(xd.vehicleExitRequestCount == 1); // unchanged: the seated branch was NOT re-entered
     ok(host, gp, "assert(select('#', vehicle_exit_do('xd_seat', true)) == 0)"); // cancel path, not "true" again
@@ -200,7 +201,7 @@ int main() {
     CHECK(xd.lastVehicleExitRequest->instant == false);
     CHECK(xd.lastVehicleExitRequest->flag30Bit4 == false);
     CHECK(xd.lastVehicleExitRequest->animationOverrideId == -1);
-    CHECK(xd.stateEnum.get() == 2);
+    CHECK(xd.stateEnum.get() == 0);
     xd.stateEnum.set(3);
     ok(host, gp, "assert(vehicle_exit_do('xd_seat', false, true) == true)"); // arg 3 alone: same record
     CHECK(xd.lastVehicleExitRequest->instant == false && xd.lastVehicleExitRequest->flag30Bit4 == false);
@@ -208,6 +209,17 @@ int main() {
     ok(host, gp, "vehicle_exit_do('xd_seat', false, nil, nil, 'unregistered_anim')");
     CHECK(xd.lastVehicleExitRequest->animationOverrideId == -1);
     CHECK(xd.vehicleExitRequestCount == 4);
+
+    // Sec24.9a (e8dc04d, m05 stall): game_lib.lua's vehicle_exit wrapper
+    // (vehicle_exit_do(name,false,...) then loop while not check_done) must
+    // terminate on the animated (non-instant) path: done iff +0x16d4 in {0,1}.
+    CharacterState& xw = seatChar(es, "xd_wrapper", 3);
+    xw.currentVehicleName.set("xd_wrapper_car");
+    ok(host, gp, "local n=0; if vehicle_exit_do('xd_wrapper', false, nil, false, nil) then while not vehicle_exit_check_done('xd_wrapper') do n=n+1; assert(n<3) end end");
+    CHECK(xw.stateEnum.get() == 0);
+    CHECK(xw.currentVehicleName.get().empty());
+    xw.stateEnum.set(1); ok(host, gp, "assert(vehicle_exit_check_done('xd_wrapper') == true)"); // entering: done
+    xw.stateEnum.set(2); ok(host, gp, "assert(vehicle_exit_check_done('xd_wrapper') == false)"); // exiting: not done
 
     // FIXED (2026-10-10, mission-drive m05 deadlock at vehicle_exit_teleport
     // / game_lib.lua:3182 - the structural mirror of a10a9ba/b706fbb's own
@@ -233,7 +245,7 @@ int main() {
     ok(host, gp, "assert(vehicle_exit_do('xd_gate') == true)");
     CHECK(xdg.actionDelayByIndex.empty());
     CHECK(xdg.vehicleExitRequestCount == 1);
-    CHECK(xdg.stateEnum.get() == 2); // written regardless of the back-off gate - a separate, unrelated gate
+    CHECK(xdg.stateEnum.get() == 0); // 3->2->0 completed (Sec24.9a), written regardless of the back-off gate - a separate, unrelated gate
 
     // Cancel path: entering/exiting + arg 2 -> ZERO return values.
     CharacterState& xc1 = seatChar(es, "xd_entering", 1);
@@ -628,7 +640,8 @@ int main() {
     es.objectResolves().set("sym_x", true);
     CharacterState& symx = seatChar(es, "sym_x", 3);
     ok(host, gp, "assert(vehicle_exit_do('sym_x') == true)");
-    CHECK(symx.stateEnum.get() == 2); // +0x16d4 advanced synchronously, not left at 3
+    CHECK(symx.stateEnum.get() == 0); // 3->2->0 completed (Sec24.9a)
+    symx.stateEnum.set(2);
     ok(host, gp, "assert(vehicle_exit_do('sym_x') == false)"); // no longer true again
 
     // Symptom 2 (enter): vehicle_enter_check_done must no longer get stuck.

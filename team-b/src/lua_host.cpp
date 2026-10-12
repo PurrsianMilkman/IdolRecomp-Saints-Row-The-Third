@@ -431,4 +431,27 @@ std::vector<Host::HookFireResult> Host::fireConfirmedHooks(lua_State* L, const s
     return out;
 }
 
+bool Host::callGlobalFunctionByName(lua_State* L, const std::string& name, std::string& error) {
+    error.clear();
+    // CORRECTED 2026-10-12 (hud-prompt-direct-callback-standin task): a bare
+    // lua_getglobal+lua_pcall (the first version of this helper) fails for
+    // m05's own real callback with "attempt to yield across metamethod/C-call
+    // boundary" - m05_jump_local itself yields (confirmed by direct
+    // measurement, results/verify_m05_direct_callback_stand_in_20261012.md),
+    // so it cannot be invoked through an ordinary C-call frame like
+    // lua_pcall. BareThreadTable::startThread() (bare_globals.h) is this
+    // project's own existing "allocate a root record for global `name` and
+    // run it AT ONCE" helper - the same primitive callMissionStart()'s own
+    // root entry uses - and runs the callback via lua_resume on a fresh
+    // coroutine, so a yield inside it is tolerated exactly like any other
+    // script thread: this call starts it immediately (no deferred spawn-
+    // and-wait-for-next-scheduler-pass), and if it yields instead of
+    // finishing, it is left alive in the thread table for later
+    // runScriptThreadSchedulerPass() calls to resume, same as any other
+    // live thread. Still a CHOSEN stand-in overall (see call sites' own
+    // comments): real engine dispatch for hud_prompt's arg3 is unconfirmed.
+    uint16_t id = bareGlobals_.threads().startThread(L, name, error);
+    return id != BareThreadTable::kNoThread;
+}
+
 } // namespace sr3luahost

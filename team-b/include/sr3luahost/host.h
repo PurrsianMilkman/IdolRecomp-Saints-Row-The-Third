@@ -132,6 +132,23 @@ public:
     std::vector<HookFireResult> fireConfirmedHooks(lua_State* L, const std::vector<HookSpec>& hooks,
                                                     const std::string& scriptFilename = std::string());
 
+    // CHOSEN stand-in helper (hud-prompt-direct-callback-standin task,
+    // 2026-10-12): a reusable "call a global Lua function by name, right
+    // now, synchronously" primitive, factored out of the existing
+    // lua_getglobal+lua_pcall idiom fireConfirmedHooks() above already uses
+    // per hook name - no second call-by-name mechanism invented, this is the
+    // SAME idiom under its own name so other call sites (the hud_prompt
+    // auto-answer harness, see sr3_viewer.cpp/lua_host_run.cpp) can reuse it
+    // instead of writing raw Lua C-API calls inline. Zero arguments, zero
+    // results kept (LUA_MULTRET results are discarded via lua_settop) -
+    // matches the only real call shape this task needs (a bare callback-name
+    // dispatch), not a general n-arg/n-result call primitive. Returns false
+    // (with `error` left empty) when the named global does not exist or is
+    // not a function - the real engine's own confirmed "silent existence
+    // check" shape (spec Sec8.3), not treated as an error. Returns false
+    // with `error` set when the call itself raised a Lua error.
+    bool callGlobalFunctionByName(lua_State* L, const std::string& name, std::string& error);
+
     // The single ThreadScheduler backing this Host's thread_new/_yield/
     // _kill/_check_done/_close registration in BOTH states (see
     // thread_scheduler.h). Exposed for tools that want real, direct

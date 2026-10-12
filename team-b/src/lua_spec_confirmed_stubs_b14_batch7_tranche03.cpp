@@ -550,6 +550,7 @@ int stub_vehicle_pathfind_to_do(lua_State* L) {
     int32_t requestId = st->allocateScriptRequestId(vehicleName, /*channel=*/2); // 0x006f62b0
     double result = st->pathfindResult().get(); // OPEN until set - 0x00b2b140's own return semantics
     if (result == 0.0) st->releaseScriptRequestId(vehicleName, 2); // CONFIRMED: "a 0 result releases the id"
+    else st->registerVehiclePathfindRequest(vehicleName, targetName); // Sec9.10a: pending request, completes on arrival/abort
     (void)requestId;
     lua_pushnumber(L, result);
     return 1;

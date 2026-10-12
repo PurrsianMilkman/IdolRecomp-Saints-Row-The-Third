@@ -156,7 +156,8 @@ int main() {
     CaseSelectorScratchSource caseSelectorA(br, kLumaWidthPixels);
     CaseSelectorScratchSource caseSelectorB(br, kLumaWidthPixels, caseSelectorLengthFieldBitWidthB,
                                              kDescriptorBSiblingTableIndex);
-    const CaseSelectorStatus rowStatus = caseSelectorA.beginBlockRow(&caseSelectorB);
+    SiblingTableBank siblingBankSection1;
+    const CaseSelectorStatus rowStatus = caseSelectorA.beginBlockRow(&caseSelectorB, &siblingBankSection1);
     CHECK(rowStatus == CaseSelectorStatus::Ok);
     CHECK(br.bitsConsumedSoFar() == 2871);  // Sec5.3r: descriptor B's own real build/expansion ends at bit 2871
 
@@ -164,7 +165,14 @@ int main() {
     // UPDATE (2026-10-11, fix/bink-0x10019d10-real-decode task): now takes
     // descriptor A's own BuiltTable and returns the bundled
     // DcArrayPreStageGapResult - see dc_prestage_sibling_gap.h.
-    FlatFillPrestageArray flatFillArray = consumeDcArrayPreStageGap(br, caseSelectorA.builtTable()).flatFillArray;
+    // UPDATE (2026-10-12, fix/flat-fill-perplane-width-promotion task): now
+    // ALSO takes the row's own SiblingTableBank + blockCols, and runs the
+    // REAL per-symbol tree-decode (decode0x100195b0TreeDecodeAttempt(), per-
+    // plane width formula, HANDOFF.md's "RESOLVED 2026-10-12 - flat-fill
+    // CLOSED" + "PROMOTION" entries) in production, instead of the prior
+    // measured-total-skip stopgap this file's own SECTION 1 used to exercise.
+    FlatFillPrestageArray flatFillArray =
+        consumeDcArrayPreStageGap(br, caseSelectorA.builtTable(), siblingBankSection1, kLumaWidthPixels / 8).flatFillArray;
     CHECK(br.bitsConsumedSoFar() == 9256);  // unchanged bit-position behavior, Sec5.3q/r
     CHECK(!br.ranOutOfData());
 
@@ -209,17 +217,23 @@ int main() {
     std::cout << "] expected [154,157,158,158,157,154,153,153] -> " << (last8Ok ? "MATCH" : "MISMATCH") << "\n";
     CHECK(last8Ok);
 
-    // CHECK 4: the genuine, named spec gap - indices 64..641 honestly
-    // unavailable, never fabricated. Sampling a few representative points
-    // rather than all 578 for brevity.
-    bool gapHonest = true;
+    // CHECK 4: UPDATED 2026-10-12 (fix/flat-fill-perplane-width-promotion
+    // task) - the production path now runs the REAL per-symbol tree-decode
+    // (decode0x100195b0TreeDecodeAttempt(), not the prior measured-total-skip
+    // stopgap that only ever populated a 64-byte prefix + 8-byte suffix), so
+    // every one of the 650 real indices is now genuinely decoded content,
+    // not a named gap. This SUPERSEDES the old "indices 64..641 honestly
+    // unavailable" check - the old stopgap's own partial-content limitation
+    // is exactly what this task's promotion closes.
+    bool middleIndicesAvailable = true;
     for (size_t idx : {static_cast<size_t>(64), static_cast<size_t>(100), static_cast<size_t>(325),
                         static_cast<size_t>(600), static_cast<size_t>(641)}) {
-        if (flatFillArray.hasIndex(idx)) gapHonest = false;
+        if (!flatFillArray.hasIndex(idx)) middleIndicesAvailable = false;
     }
-    std::cout << "  indices 64..641 (LUT-table-content gap, flagged not fabricated) honestly unavailable -> "
-              << (gapHonest ? "CONFIRMED" : "UNEXPECTEDLY AVAILABLE") << "\n";
-    CHECK(gapHonest);
+    std::cout << "  indices 64..641 (formerly a named LUT-table-content gap, now genuinely decoded by the "
+                 "real per-symbol promotion) available -> "
+              << (middleIndicesAvailable ? "CONFIRMED" : "UNEXPECTEDLY MISSING") << "\n";
+    CHECK(middleIndicesAvailable);
 
     // CHECK 5: idx1/idx2's own real pixel value, via the exact
     // FlatFillPrestageCursor wiring frame_decoder.h uses.
@@ -260,7 +274,8 @@ int main() {
     const size_t bitsBeforeAttempt = br2.bitsConsumedSoFar();
     FlatFillTreeDecodeAttemptState attemptState;
     FlatFillPrestageArray attemptArray =
-        decode0x100195b0TreeDecodeAttempt(br2, attemptState, siblingBank, caseSelectorA2.builtTable());
+        decode0x100195b0TreeDecodeAttempt(br2, attemptState, siblingBank, caseSelectorA2.builtTable(),
+                                          kLumaWidthPixels);
     const size_t attemptBitCost = br2.bitsConsumedSoFar() - bitsBeforeAttempt;
     std::cout << "  bit cost = " << attemptBitCost << " (Sec5.3r/Sec5.3s/Sec5.3aa: expected 3384)\n";
     const bool attemptBitCostOk = (attemptBitCost == 3384);
@@ -276,7 +291,28 @@ int main() {
     std::cout << "] expected [153,153,153,153,153,153,153,153] -> " << (attemptFirst8Ok ? "MATCH" : "MISMATCH")
               << "\n";
 
-    const bool attemptMatches = attemptBitCostOk && attemptFirst8Ok;
+    bool attemptFirst64Ok = (attemptArray.hasIndex(63));
+    for (int i = 0; attemptFirst64Ok && i < 64; ++i) {
+        if (!attemptArray.hasIndex(static_cast<size_t>(i)) ||
+            attemptArray.byteAt(static_cast<size_t>(i)) != kExpectedFirst64[i]) {
+            attemptFirst64Ok = false;
+        }
+    }
+    std::cout << "  first 64 bytes match Sec5.3s's own published worked example -> "
+              << (attemptFirst64Ok ? "MATCH" : "MISMATCH") << "\n";
+
+    bool attemptLast8Ok = (attemptArray.hasIndex(649));
+    for (int i = 0; attemptLast8Ok && i < 8; ++i) {
+        const size_t idx = 642 + static_cast<size_t>(i);
+        if (!attemptArray.hasIndex(idx) || attemptArray.byteAt(idx) != kExpectedLast8[i]) {
+            attemptLast8Ok = false;
+        }
+    }
+    std::cout << "  last 8 bytes match -> " << (attemptLast8Ok ? "MATCH" : "MISMATCH") << "\n";
+    std::cout << "  array.size() = " << attemptArray.size() << " (expected 650)\n";
+    const bool attemptSizeOk = (attemptArray.size() == 650);
+
+    const bool attemptMatches = attemptBitCostOk && attemptFirst8Ok && attemptFirst64Ok && attemptLast8Ok && attemptSizeOk;
     if (!attemptMatches) {
         std::cout << "  SECTION 2 KNOWN DISCREPANCY (see HANDOFF.md): decode0x100195b0TreeDecodeAttempt()'s\n"
                       "  literal Sec5.3aa algorithm does not reproduce this golden fixture. decode0x100195b0()\n"

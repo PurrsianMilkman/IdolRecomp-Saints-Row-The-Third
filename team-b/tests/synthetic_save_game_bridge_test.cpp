@@ -171,6 +171,26 @@ int main() {
             wi1.flag1 = 1;
             es.saveGame().weaponInventory = {wi0, wi1};
         }
+        {
+            sr3save::RegionRecord r0;
+            r0.handleLo = 0x1000u; r0.handleHi = 0x2000u; r0.controlled = true;
+            sr3save::RegionRecord r1;
+            r1.handleLo = 0x3000u; r1.handleHi = 0x4000u; r1.controlled = false;
+            es.saveGame().regionRecords = {r0, r1};
+        }
+        {
+            sr3save::ActivityRecord a0;
+            a0.nameHash = 0xAAAA1111u; a0.levelsCompleted = 1; a0.completedMask = 0x07; a0.secondMask = 0x03;
+            sr3save::ActivityRecord a1;
+            a1.nameHash = 0xBBBB2222u; a1.levelsCompleted = 0; a1.completedMask = 0x00; a1.secondMask = 0x00;
+            es.saveGame().activityRecords = {a0, a1};
+        }
+        es.saveGame().activityMarkerFlags = 0x0123456789ABCDEFull;
+        es.saveGame().activeCheatIds = {11u, 22u, 33u};
+        es.saveGame().statistics[0].rawValue = 777u;
+        es.saveGame().statistics[0].denominatorStatId = 0u;
+        es.saveGame().statistics[5].rawValue = 42u;
+        es.saveGame().statistics[5].denominatorStatId = 4u;
 
         ok(host, gp, "mission_set_checkpoint('cp1')");
         CHECK(es.missionCheckpoint().setCount == 1);
@@ -205,6 +225,14 @@ int main() {
         es.saveGame().garageVehicles.clear();
         es.saveGame().wardrobeItems.clear();
         es.saveGame().weaponInventory.clear();
+        es.saveGame().regionRecords.clear();
+        es.saveGame().activityRecords.clear();
+        es.saveGame().activityMarkerFlags = 0;
+        es.saveGame().activeCheatIds.clear();
+        es.saveGame().statistics[0].rawValue = 1;
+        es.saveGame().statistics[0].denominatorStatId = 1;
+        es.saveGame().statistics[5].rawValue = 1;
+        es.saveGame().statistics[5].denominatorStatId = 1;
 
         // Loading the checkpoint back must recover the ORIGINAL (pre-
         // mutation) values, not the current ones - the real proof of a
@@ -271,6 +299,26 @@ int main() {
             CHECK(wi1.flag0 == 0);
             CHECK(wi1.flag1 == 1);
         }
+        CHECK(es.saveGame().regionRecords.size() == 2);
+        {
+            const sr3save::RegionRecord& r0 = es.saveGame().regionRecords[0];
+            CHECK(r0.handleLo == 0x1000u && r0.handleHi == 0x2000u && r0.controlled);
+            const sr3save::RegionRecord& r1 = es.saveGame().regionRecords[1];
+            CHECK(r1.handleLo == 0x3000u && r1.handleHi == 0x4000u && !r1.controlled);
+        }
+        CHECK(es.saveGame().activityRecords.size() == 2);
+        {
+            const sr3save::ActivityRecord& a0 = es.saveGame().activityRecords[0];
+            CHECK(a0.nameHash == 0xAAAA1111u && a0.levelsCompleted == 1 && a0.completedMask == 0x07 && a0.secondMask == 0x03);
+            const sr3save::ActivityRecord& a1 = es.saveGame().activityRecords[1];
+            CHECK(a1.nameHash == 0xBBBB2222u && a1.levelsCompleted == 0);
+        }
+        CHECK(es.saveGame().activityMarkerFlags == 0x0123456789ABCDEFull);
+        CHECK(es.saveGame().activeCheatIds.size() == 3);
+        CHECK(es.saveGame().activeCheatIds[0] == 11u && es.saveGame().activeCheatIds[1] == 22u &&
+              es.saveGame().activeCheatIds[2] == 33u);
+        CHECK(es.saveGame().statistics[0].rawValue == 777u && es.saveGame().statistics[0].denominatorStatId == 0u);
+        CHECK(es.saveGame().statistics[5].rawValue == 42u && es.saveGame().statistics[5].denominatorStatId == 4u);
 
         // applyCheckpointSnapshot() on a fresh EngineState with no
         // checkpoint ever set reports false rather than fabricating state.
@@ -339,6 +387,20 @@ int main() {
             wi1.flag1 = 1;
             es.saveGame().weaponInventory = {wi0, wi1};
         }
+        {
+            sr3save::RegionRecord r0;
+            r0.handleLo = 0x9000u; r0.handleHi = 0xA000u; r0.controlled = true;
+            es.saveGame().regionRecords = {r0};
+        }
+        {
+            sr3save::ActivityRecord a0;
+            a0.nameHash = 0xCCCC3333u; a0.levelsCompleted = 1; a0.completedMask = 0x0F; a0.secondMask = 0x05;
+            es.saveGame().activityRecords = {a0};
+        }
+        es.saveGame().activityMarkerFlags = 0xFEDCBA9876543210ull;
+        es.saveGame().activeCheatIds = {99u, 100u};
+        es.saveGame().statistics[1].rawValue = 555u;
+        es.saveGame().statistics[1].denominatorStatId = 0u;
 
         CHECK(es.autosaveFileWriteCount() == 0);
         ok(host, ui, "game_autosave()");
@@ -385,6 +447,16 @@ int main() {
             CHECK(fromDisk.weaponInventory()[1].ammo[0] == 7 && fromDisk.weaponInventory()[1].ammo[1] == -5 &&
                   fromDisk.weaponInventory()[1].ammo[2] == 99 && fromDisk.weaponInventory()[1].ammo[3] == 3);
             CHECK(fromDisk.weaponInventory()[1].flag0 == 1 && fromDisk.weaponInventory()[1].flag1 == 1);
+            CHECK(fromDisk.regionRecords().size() == 1);
+            CHECK(fromDisk.regionRecords()[0].handleLo == 0x9000u && fromDisk.regionRecords()[0].handleHi == 0xA000u &&
+                  fromDisk.regionRecords()[0].controlled);
+            CHECK(fromDisk.activityRecords().size() == 1);
+            CHECK(fromDisk.activityRecords()[0].nameHash == 0xCCCC3333u && fromDisk.activityRecords()[0].levelsCompleted == 1 &&
+                  fromDisk.activityRecords()[0].completedMask == 0x0F && fromDisk.activityRecords()[0].secondMask == 0x05);
+            CHECK(fromDisk.activityMarkerFlagsRaw() == 0xFEDCBA9876543210ull);
+            CHECK(fromDisk.activeCheatIds().size() == 2 && fromDisk.activeCheatIds()[0] == 99u && fromDisk.activeCheatIds()[1] == 100u);
+            CHECK(fromDisk.statistic(sr3save::kFirstSnapshotStatId + 1) != nullptr &&
+                  fromDisk.statistic(sr3save::kFirstSnapshotStatId + 1)->rawValue == 555u);
         }
 
         // The world keeps playing after the autosave...
@@ -399,6 +471,12 @@ int main() {
         es.saveGame().garageVehicles.clear();
         es.saveGame().wardrobeItems.clear();
         es.saveGame().weaponInventory.clear();
+        es.saveGame().regionRecords.clear();
+        es.saveGame().activityRecords.clear();
+        es.saveGame().activityMarkerFlags = 0;
+        es.saveGame().activeCheatIds.clear();
+        es.saveGame().statistics[1].rawValue = 0;
+        es.saveGame().statistics[1].denominatorStatId = 0;
 
         // ...and loading the autosave file back recovers what was there
         // AT SAVE TIME, not the current (mutated) state - the file-based
@@ -433,6 +511,15 @@ int main() {
         CHECK(es.saveGame().weaponInventory[1].ammo[0] == 7 && es.saveGame().weaponInventory[1].ammo[1] == -5 &&
               es.saveGame().weaponInventory[1].ammo[2] == 99 && es.saveGame().weaponInventory[1].ammo[3] == 3);
         CHECK(es.saveGame().weaponInventory[1].flag0 == 1 && es.saveGame().weaponInventory[1].flag1 == 1);
+        CHECK(es.saveGame().regionRecords.size() == 1);
+        CHECK(es.saveGame().regionRecords[0].handleLo == 0x9000u && es.saveGame().regionRecords[0].handleHi == 0xA000u &&
+              es.saveGame().regionRecords[0].controlled);
+        CHECK(es.saveGame().activityRecords.size() == 1);
+        CHECK(es.saveGame().activityRecords[0].nameHash == 0xCCCC3333u && es.saveGame().activityRecords[0].levelsCompleted == 1 &&
+              es.saveGame().activityRecords[0].completedMask == 0x0F && es.saveGame().activityRecords[0].secondMask == 0x05);
+        CHECK(es.saveGame().activityMarkerFlags == 0xFEDCBA9876543210ull);
+        CHECK(es.saveGame().activeCheatIds.size() == 2 && es.saveGame().activeCheatIds[0] == 99u && es.saveGame().activeCheatIds[1] == 100u);
+        CHECK(es.saveGame().statistics[1].rawValue == 555u && es.saveGame().statistics[1].denominatorStatId == 0u);
 
         std::error_code ec;
         fs::remove_all(sandbox, ec); // this test's own scratch output, not a project artifact

@@ -6445,7 +6445,324 @@ line in place rather than just appending below it (§5a item 14 — this session
 marker trap twice before that rule was added).
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+### 54. ▶ RESUME HERE — 2026-10-12, context-guard rewrite at 75%, replaces §53 as the live note (§53 and below are DONE/superseded, kept for detail — do not re-derive)
+
+**Peer naming, live as of this rewrite (verify via `ListAgents` on resume — names rotate on
+restart):** orchestrator `purrsian-ea`, Team B `team-b-31`.
+
+**STANDING RULES active this session, still in force:**
+- User wants normal pace kept through usage-pacer warnings — don't pause to ask on a critical/
+  ahead-of-plan usage notice alone, only actually stop if the pacer hard-halts at 95%.
+- Live game-process captures still need explicit user go-ahead (§49.4 below, untouched, still
+  pending) — the Bink Unicorn work on `binkw32.dll`/standalone `.bik` files is NOT covered by
+  that gate and never needed approval (isolated DLL emulation, never touches the game process).
+
+### 54.1 DONE this session (all spliced+synced+reported already, do not re-derive)
+
+- **Crib walk-in UI chain CLOSED, full hop-by-hop:** press interact (CBA `0x52`) → `0x005b6870`
+  (direct 22-entry bit-walk of array `0x0111f2d0`, gated by player `+0x2084`) → entry 8
+  (`0x009da580`) → `0x005eee70` → `0x0080cc90(this=0x022ccef8`, the known `"store_crib"` static
+  object`)` → `0x007b5fe0(this)`. Found via cross-referencing an EARLIER (2026-10-09) scratchpad
+  discovery of a parallel same-indexed UI-prompt-TEXT table at `0x0111f488` (slot 8 =
+  `"HUD_USE_CRIB"`). In `spec-store-runtime.md` §2.
+- **Shop's own entry: exhausted, genuine negative.** Checked ALL 7 tables in this interact-prompt
+  family (`0x0111f2d0`/`0x111f328`/`0x111f380`/`0x111f3d8`/`0x111f430`/`0x111f488`/`0x111f4e0`),
+  every nonzero slot, plus `store_common`'s own static object (`0x022cce68`) for a generic-opener
+  call (none found — `store_common` is architecturally hardcoded-by-name via `0x0083ECC0`, NOT
+  the generic-object pattern crib uses, so crib's method doesn't generalize). Dead end confirmed
+  at `0x0083EE80`/`0x0083EDF0` (0x0083ECC0's only 2 callers, already known unreachable from player
+  input, a UI-boot routine `0x007b4d70`). In `spec-store-runtime.md` §2.
+- **Weapon auto-pickup: 2 real findings, grant matcher PARKED.** (1) Entry 0 of the SAME interact
+  array is actually a weapon pickup/exchange action via a kind-indexed handler table at
+  `0x01309f10` (`+0x1b78` write). (2) The real held-weapon world-DROP registration found and
+  closed: NPC death → `0x00952760` → `0x006fa9e0` writes position + a `0x2710`(10000ms) lifetime
+  into a GLOBAL 20-entry ring buffer (base `0x014fdc68`, count `0x014f71e4`, stride `0x18`); its
+  only reader `0x006f9f50` is pure physics/despawn (gravity/bounce, no grant). **PARKED (3 passes,
+  diminishing returns):** what reads this buffer to actually GRANT the weapon on walk-over is
+  unfound — recipe: look for a collision-callback vtable slot on the dropped-weapon object's OWN
+  class (same method as the cache-station class `0x0064c580` was found with). In
+  `spec-weapons-runtime.md` §5.1.
+- **4 user-observed ground-truth notes spliced:** diversion rewards grant on teardown/exit-to-
+  freeroam not in-activity (`spec-activity-runtime.md` §4); weapon auto-pickup except heavy
+  "pickup-only" class (`spec-weapons-runtime.md` §5.1); crib=shop same press-E mechanism (spec-
+  store-runtime.md §2); cutscene destinations optional per-call (`spec-lua-api-behaviour.md`
+  cutscene_play section).
+- **Bink §5.3aa: 3 real bugs found and fixed, all independently confirmed by Team B's own tests:**
+  (1) nib1's translate table lives at `ctx+0x00..0xFF` not `arg3` (fixed earlier session). (2)
+  nib2's "global tree at ctx+0x20/+0x24" was ALSO wrong — those bytes are just more of the SAME
+  translate table; real per-class arrays are at `ctx+0x100`(max-code-len)/`ctx+0x140`(LUT ptr),
+  confirmed live, exact match to the published `A_array` `(4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4)`. Team
+  B applied it, byte-compared their own LUT content against mine — CONFIRMED same table (every
+  disputed value both sides saw is a real entry, just different indices), which redirected the
+  search correctly to (3): **the pre-loop cost (leading count + sign probe) is 15 bits, not the
+  assumed 10+1=11 — a missing, unidentified 4-bit field.** Found via LIVE register-state capture
+  (hooking function entry vs. the per-symbol loop-top at `0x10019690`, reading `edx`/`esi`/`edi`
+  and the `[ebp-4]` cursor spill directly — the shared bitreader struct in memory is STALE through
+  this entire pre-loop section, same trap as the per-symbol loop itself). Team B independently
+  confirmed by testing bit **2886** (=2871+15, not 2882) directly against their fixture raw bytes
+  — EXACT match (`idx1=1`/`idx2=9` at `[2886,2890)`/`[2890,2894)`). All 3 fixes in
+  `spec-bink-codec.md` §5.3aa, synced.
+- **hud_prompt arg2/arg3 roles resolved, §13.3 (`spec-lua-api-behaviour.md`):** arg 2 (not arg 3)
+  is the localization-key argument (confirmed: `0x00a37210` converts its OWN 3rd positional param,
+  = Lua's arg 2, via `0x00849fa0`). Arg 3 (the callback-name string, e.g. `"m05_jump_local"`) is
+  CONFIRMED the right argument position (only one matching a function name in `m05.lua`'s own
+  call) but its real call-by-name dispatch is NOT inside `0x00a4cff0`/`0x00a37210`/`0x00a370c0`
+  (all opened) — **worded as "path not yet traced," NOT "unused," per the negative-result rule**
+  (orchestrator caught an overclaim here, already fixed). `m05.lua`'s own wait loop confirmed:
+  `while not M05_jumped do thread_yield() end` (line 1140), `M05_jumped` set true ONLY inside
+  `m05_jump_local`/`m05_jump_remote` (the hud_prompt callbacks themselves) — gives Team B a direct
+  stand-in (call the named function themselves) regardless of the real dispatch.
+- **m09 crate-trigger stall: confirmed already-exhausted by prior passes, needs live capture.** 1
+  dispatched agent re-confirmed the full `on_trigger` chain (`0x00a58680`→`0x00a56cb0` writer,
+  `0x00a29e40` 6-way by-kind dispatcher, `0x00a1fe10` spawns a Lua COROUTINE not a sync call) and
+  that `0x00a29e40`'s own caller is genuinely unresolvable statically (2 independent whole-image
+  scans, only ref is a thunk with zero refs of its own). **PARKED per orchestrator** — Team B's
+  upcoming `--auto-objective` harness will test "does the callback fire" directly; hold for that
+  or a user decision on live capture.
+- **13587 vs 13619 bit-position discrepancy (Bink, separate thread):** narrowed to a likely 4-byte
+  `y_base` reference-origin mismatch between two measurement passes (both use the identical
+  `words_read*32 - bits_avail` formula, confirmed via script read; a 4-byte/32-bit difference in
+  what each calls "start of the Y plane's bitstream" would explain it exactly). Not fully pinned
+  to the 2 responsible lines of code — reported to Team B as a narrowed, testable claim, not
+  chased further (they're mid-task on the v0.12 playtest cut).
+
+### 54.2 CLOSED — the missing 4-bit pre-loop field (Bink §5.3aa), was IN FLIGHT, now DONE
+
+**Resolved, same session, both static+live.** Confirmed `0x100195b0` uses the exact same
+`ctx+0x28`/`+0x2c` fixed-bound shift-chain as `0x1001a160`'s value[0] (disassembly: `ebx=[ecx+
+0x28]` at `0x100195cb` feeds `ecx=0x20; ecx-=ebx; shr eax,cl`; `cmp eax,[ecx+0x2c]` at `0x10019625`
+is the upper-bound check). Live-captured for this exact call: `ctx+0x28`=**14** (not the assumed
+10), `ctx+0x2c`=15872, decoded magnitude=650 (matches published value). So 14-bit magnitude +
+1-bit sign probe = 15 bits exactly, matching the measured total — the original "10-bit" figure
+was just the wrong assumed width, not a missing field. Relayed to `team-b-31` (told them their
+existing `dc_delta_array.h` fixed-bound decoder should work, just needs to read the bound from
+the struct rather than hardcoding 10) and spliced into `spec-bink-codec.md` §5.3aa, synced clean.
+
+**UPDATE — the WHOLE §5.3aa algorithm is now FULLY CLOSED, confirmed by Team B's own full
+650-byte test.** The 14-bit width fix above was the first of 2 needed; the second (found by Team
+B via a symbol-1 cross-check): **nib2 is NOT cur_class-indexed — it always reads class 0's own
+slot unconditionally**, regardless of the real cur_class (proof: symbol 1 has cur_class=1, own
+`A_array[1]`=6, but nib2's own code_len stayed 4, the class-0 value). With both fixes, Team B's
+full decode is byte-for-byte identical to the fixture, bit cost exactly 3384. This closes the
+entire multi-session §5.3aa bug chain (translate-table location → nib2-tree-location →
+pre-loop-width → nib2-class-indexing). Spliced, synced. Nothing pending on this thread.
+
+### 54.5 CLOSED — `0x10019d10`'s own pre-loop width + plane-dependent width discovery (same session, after 54.2)
+
+Orchestrator follow-up after `0x10019d10` showed a 12-bit overrun in Team B's own reimpl (2993 vs
+2981). Confirmed `0x10019d10` uses the same `ctx+0x28`/`ctx+0x2c` bound mechanism as `0x100195b0`:
+live-captured `ctx+0x28`=12, `ctx+0x2c`=2432, magnitude=528 (matches published word count). Unlike
+`0x100195b0`, found NO extra sign-probe bit here — pre-loop cost is just the 12-bit width. Its
+`ctx+0x20`/`+0x24` are genuine dedicated tree fields (not aliased with any translate table, no
+class-carry at all), so §5.3aa's nib2-class bug doesn't apply to this function. Relayed to
+`team-b-31`.
+
+**Bigger finding, higher priority, same thread:** Team B tried promoting the `0x100195b0` fix
+(§5.3aa) to production and it crashed on `mm_p_03` ("bad allocation") — orchestrator suspected the
+14-bit width wasn't actually fixed. Confirmed by capturing all 75 calls to `0x100195b0` across one
+`main_menu_bg.bik` frame0 decode: **`ctx+0x28`/`ctx+0x2c` are constant WITHIN a plane but change
+PLANE-TO-PLANE in the same video** (14/15872 for one plane, 13/8192 for the next).
+`preloop_bits_consumed` = width+1 always, no exceptions. So hardcoding width=14 will desync any
+plane whose bound differs from 15872 — almost certainly the real mm_p_03 crash cause, not a
+`cur_class` bounds gap. Team B already merged a defensive bounds check (`b9eb062`) that stops the
+crash safely; true correctness (deriving the bound from plane dimensions, or more live capture to
+find the formula) is queued by them as a later step, not blocking right now.
+
+**UPDATE — formula found, CLOSED.** Static search of the obvious call chain (`0x10018ca0`,
+`0x10019300`, `0x10019360`, header-parsing region) missed the real writer. A live memory-write
+watchpoint on `ctx+0x2c` found it at `0x1001a742`-`0x1001a757`, in the per-plane/per-table ctx-setup
+block that runs once before that table's whole run of calls: `bound = 8*dim + 512` (dim = pixel
+width for Y/chroma planes, MB-column count for `0x10019d10`-style tables), confirmed exact against
+all 3 points (1920→15872, 960→8192, 240→2432). `width(ctx+0x28) = bound.bit_length()` holds exactly
+too — no bitstream read, no second formula needed. Spliced into `spec-bink-codec.md` §5.3ab, sent
+to `team-b-31`. Nothing pending on this thread.
+
+### 54.6 CLOSED — `zscene_is_loaded("05_in")` m05 blocker, self-picked after orchestrator said "self-pick, ask team-b-31"
+
+Team B's fade_out_block stall turned out to be a timeout artifact (not mine to chase); their next
+real blocker was m05 erroring in `zscene_is_loaded` for `"05_in"`. Same pattern already closed for
+`"09_in"` (§26.25/§14.23): extracted the real `05_in.cte_xtbl` (`cutscenes.vpp_pc` →
+`05_IN.str2_pc` → `05_in.cte_xtbl`, §7.6 recipe one level deeper) — `CutsceneType = Story` (kind 2,
+not Zscene/kind 1). `m05.lua`'s own `m05_start` confirms the call shape (`cutscene_play("05_IN",
+...)` through the shared `game_lib.lua` wrapper, no mission-side `zscene_prep`). Fix is identical
+to 09_in's already-documented rule: short-circuit `zscene_is_loaded` to `true` via the kind-gate,
+never fall through to the current-scene/load-state check. Flagged the `"05_in"` vs `"05_IN"` casing
+as a secondary possible bug (lowercase filenames in the archive vs uppercase Lua/registered name)
+in case Team B's lookup is case-sensitive somewhere it shouldn't be. Spliced into
+`spec-lua-api-behaviour.md` §26.25, sent to `team-b-31` — they relayed it to the agent already
+working the fix. Nothing pending on this thread.
+
+### 54.7 CLOSED — chromaB "pre-stage stall" corrected + settled (orchestrator-routed self-pick)
+
+§5.3g/§5.3x described chromaB as hitting a per-call LEN>CAP "poison" path starting from its 2nd
+`0x10019360` call. Captured every completed call across the whole frame0 decode grouped by
+descriptor pointer: found exactly 2 descriptor groups (Y, chromaA), 271 calls each — **zero calls
+with a third/chromaB descriptor, not "one real call then stall."** `0x1001a530` does get entered
+with a 3rd, distinct bitstream-cursor value for chromaB, but never reaches the entropy-pre-stage
+call at all. Orchestrator supplied the cheap settling check: decode frame0 with the project's own
+ffmpeg build (`tools/ffmpeg_dl`), inspect the real V (chroma-B) plane. Verdict: **(a) — legitimate
+skip-coding, not a harness gap.** The real `(0,0)` 16×16 block is flat (132-133 throughout), V
+plane overall is a slowly-varying near-uniform background hue — consistent with the encoder
+genuinely skip/flat-coding this block/plane, not a `FLAGS18`/`FLAGS1C`/`MB_COLS` harness
+misconfiguration. Spliced into `spec-bink-codec.md` §5.3x (both the stall-mechanism correction and
+the settled verdict), sent to `purrsian-ea`. Nothing pending on this thread.
+
+### 54.8 CLOSED — secondary=3 flat-fill byte→pixel formula (orchestrator-routed, after flat-fill promotion)
+
+Flat-fill promoted and exact against the DLL (24aa774), mission video no longer crashes, but
+idx1/idx2's fill byte (0x99/153) didn't match ffmpeg's real pixel value there (~24-25).
+**Confirmed: `pixel = (int8_t)fill + 128`** — reinterpret the native `movzx`-read unsigned byte as
+signed, then bias +128. `0x99` signed = -103; -103+128=25; checked against the real ffmpeg frame0
+Y plane at idx1 `(0,16)` and idx2 `(0,32)`: both blocks uniformly 25, exact match. The bias step
+isn't in the native disassembly's read itself (plain `movzx`) — it's a separate step a
+reimplementation must add. Flagged as likely the same bias convention secondary=2's own DC value
+needs (not independently checked this pass). Spliced into `spec-bink-codec.md`'s secondary=3
+subsection, sent to `team-b-31`.
+
+**UPDATE — checked, CLOSED: secondary=2's own DC path needs NO such bias, already fully correct.**
+Re-verified idx0/3/4 against real ffmpeg ground truth directly: all 3 match exactly (idx0
+uniformly 24; idx3/idx4 match their published core IDCT rows after the documented 2x upsample,
+byte-for-byte). No `+128`/bias constant anywhere in the dequant/IDCT/rounding chain (already
+exhaustively enumerated, §5.3j). The two mechanisms are genuinely different: secondary=2's DC
+feeds the full dequant+IDCT transform directly (unsigned, no bias needed, the transform's own
+arithmetic handles scaling); secondary=3's flat byte bypasses the transform entirely and needed
+the bias specifically because nothing else absorbs the level-shift on that path. Sent to
+`team-b-31`. Nothing pending on this thread.
+
+### 54.9 `0x10019d10` content-mismatch — self-picked, ground truth handed off, not independently resolved
+
+**Peer name rotated after a restart: Team B is now `team-b-fd`, not `team-b-31` — verify live via
+`ListAgents` before messaging either.** Captured the full 528-byte real output + tree build inputs
+(`ctx=0x303f5034`, `A=6`, `lut_ptr=0x1003beb0`, `translate16=[0,15,8,1,3,12,14,7,2,4,5,6,9,10,11,
+13]`) live from the DLL, read right at the call's own return (`0x10019ef6`) — had to fix a
+buffer-staleness bug first (the scratch buffer gets reused by later calls if read at frame-end
+instead). First 8 bytes match the already-published sequence. Sent the full hex dump to
+`team-b-fd` for a direct byte-diff — did NOT myself diff it against their reimplementation (no
+access to their code this pass), so the actual divergence point is still theirs to find. Script:
+`probe_19d10_full_2026-10-12.py` in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+OPEN until they report back. **[2026-10-12, later: the orchestrator committed this as e486170. The coverage audit found no unspecced system Team B lists. The weapon walk-over pickup 4th pass is NEGATIVE (spec-weapons-runtime.md §5.1). It also CORRECTS the heavy-weapon interact-entry-0 label: `0x00972a70` does a character-to-character weapon swap. Remaining leads: un-functioned `0x00b8536f`/`0x0072eee1` and the `0x00601380` callers (`0x9d7480` first). Low odds, parked.]** **[Orchestrator batch, 2026-10-12, all FINAL: (1) m05 vehicle_exit → spec-lua-api-behaviour.md §24.9a. The Lua wrapper loops until +0x16d4 ∈ {0,1}, so the port's exit never reaches slot release (+0x16d4=0). (2) m07/m09 navigation → §9.10a. Pathfind completion = `0x006f66d0` sets the done bit; arrival is x/z dist² ≤ 4/16/2500, or move-to < radius at +0xc94; heli fly-to via `0x00b405b0`. A failure also marks it done. An empty path never completes. The other m07/m09 waits are player-arrival checks (get_dist_closest_player_to_object, trigger .hit). (3) The hud_prompt dispatch was already done in §13.3.]** **[Batch 2, 2026-10-12, committed e8dc04d before this: sweep exit-1 — the six DLC missions fail only because the harness didn't pass dlc2/dlc3.vpp_pc. spec-mission-packages.md §5 has a CORRECTED FINAL note. m04 is Team B's system_lib preload. Notoriety escalation → spec-ai-runtime.md §19.8 FINAL. It corrects 0x00607200 (a min-level raise, not decay; the real decay is 0x00607380). Traffic driver reactions → spec-ai-runtime.md §18.7 FINAL: mode writes via setter `0x00b24e40` on +0xc68; ram/shot/carjack rules, xtbl response weights. OPEN: brake gap, jack outcomes. Batch 2 is complete.]** **[Batch 3 (orchestrator committed batch 2 as bf1ceac): vehicle handling is already covered (physics §10-10.10, wired by Team B), so I skipped it. Damage modifiers → spec-weapons-runtime.md §4.5 FINAL: headshot ×8 tweak or the per-character value, difficulty set A=SP / B=co-op, Damage_Resist at +0x2758, a 20-step sink recipe, regen 6000 ms / 125 per s. OPEN: listed in §4.5.6.]** **[Batch 4 (7 topics): coverage check found 5 already specced (respect/upgrades: progression §5.4 + save §10.6; phone: cellphone-menu-runtime; radio: audio-runtime §14 + tables-audio-radio; weather/TOD: tables-environment §18; character creator: morph-format §14 + tables-customization §14-16). NEW, FINAL: activity rules → spec-activity-runtime.md §6 (8 activities, reward ladder, payout via `0x0061bb50`); takeover economy → spec-building-purchase-runtime.md (15-min real-time payout into the crib stash with a Max_Stash cap, area-weighted hood_income, no 100% bonus).]** **[Batch 4 remainder, re-checked at the orchestrator's request: items (1)/(5)/(6)/(7) are COVERED (cell_rewards §12 = upgrades; music §14; TOD clock `0x005A23F0` in tables-environment §18; morph §14). Item (4) has ONE GAP: the phone contacts/homie-call runtime → DONE: spec-cellphone-menu-runtime.md §16a FINAL. The contacts list is built from the homies.xtbl table, not contacts_sr3; dial `0x0083d930`; follower cap `0x0083d040`. OPEN: the spawn/arrival bodies and the max-follower value. Batch 4 is complete.]** **[STANDING (orchestrator 2026-10-12): mine Team B's mission sweeps for spec gaps, most-blocking first. Pass 1 on results/mission_sweep_49_20261012_rerun2. 33 missions die on `_GetAnyGlobalSilent`/`delay` nil = system_lib.lua not preloaded, a harness input gap; sweep `_iface` (in progress) adds interface.vpp_pc and should clear it. Re-mine `_iface` when it finishes. Spec patches, all FINAL in spec-lua-api-behaviour.md: §4.10 weapon-table contents cross-ref (m01/m19/m24); §17.25 items_inventory lookup + unknown name = no-op (m16); §39.2 RC range default = tweak RC_vehicle_gun_max_distance = 200 (m20); §60.1 customization_screen_is_ready = Store_lineup_is_loaded from store_character.lua (mm_m1_5); §14.22 per-slot conversation query exact, manager `0x014E9AD0` (mm_m16_5). m22 (mission_is_complete 'm23') is already specced (writer `0x006d6870`); fresh game = false.]** **[Pass 1b: mm_p_01/mm_p_06 zscene waits are already specced (scene-table state, §26.25 table); port side. mm_p_07 → §12.2 "Callback firing — RESOLVED 2026-10-12, FINAL": cb1 = answered, cb2 = ended for ANY reason (may fire twice), no args; arg 2 = receiving_call, arg 3 = auto-answer. NEXT: re-mine sweep `_iface` when it completes (~49×3 min from 16:00).]** **[Pass 2 (orchestrator: don't wait; no older full stall table actually exists, verified across all 6 sweep dirs). _iface so far: dlc1_mm_01..06 finish cleanly; dlc2_m01 dies on the set_attack_player_flag vtable+0x68 predicate → §7.10 call-shape re-read + labelled CHOSEN port rule (treat it as true for characters), FINAL as guidance. Keep re-mining _iface as missions land. dlc2_m02 (object_is_in_trigger): already fully specced (§28.7 shapes); added a §1.12 port pointer. Done through 9/49.]** **[2026-10-12: the SendMessage never arrived (the teams are headless). The full dump and inputs are now spec-bink-codec.md §5.3ad TEST VECTOR, marked FINAL for the orchestrator to commit via spec_commit.sh. Output re-captured to `probe_19d10_full_out.txt`.]**
+
+### 54.10 CLOSED — block-footprint + 2x upsample rule reference table for Team B's grid task
+
+Pinned down the upsample rule: **plain 2x2 nearest-neighbor block replication**, `dest[2r+i][2c+j]
+= core[r][c]` for `i,j∈{0,1}` — both axes doubled, not interpolated. Verified against real ffmpeg
+pixels for idx3 (secondary=2): published core row0 matches real dest row 0 exactly (`core[i]` at
+`dest[2i]`/`dest[2i+1]`), dest row 1 == row 0 (vertical doubling, freshly checked, wasn't nailed
+down before), dest rows 2/3 == each other and differ from 0/1. Compiled a full footprint table
+across every primary/secondary case (secondary=2 upsampled-16x16 CONFIRMED; secondary=3/5 native
+16x16 no upsample; secondary=0 upsampled by analogy only, unconfirmed; secondary=6 footprint not
+independently measured, flagged OPEN; primary 5/7's real 8x8 IDCT has no upsample at all, a
+different block-type tier). Spliced into `spec-bink-codec.md`'s secondary=2/3/5 unifying-finding
+subsection, sent to `team-b-fd`. Nothing pending on this thread.
+
+### 54.11 PARTIAL — secondary=0/secondary=6 footprint follow-up (usage-conservation mode, stopped honest/incomplete rather than forced)
+
+secondary=0: negative confirmed much more broadly — scanned ~90 more frames across
+`logo_amd_hd.bik`/`logo_thq_and_voli_hd.bik`/`kinzie_typing.bik`/`01_crawl.bik` (fixed a stale path
+in `scan_multi_file_sub0.py` first), zero `(1,0)` dispatch events anywhere — combined with the
+existing "0/20 frames, 3 files" result, now ~110 frames/5 files, still zero. secondary=6: DOES have
+real occurrences — 61 in `main_menu_bg.bik` frame0 alone (the scan script's own top-6 cutoff was
+hiding it; widened to top-20 and found it). Static disassembly of its body (`0x1001ba40`-
+`0x1001bb67`) is structurally consistent with 8x8-source→16x16 via the same 2x replication as
+secondary=2/3/5, but **live confirmation against ffmpeg was NOT completed this pass** — a live
+hook wasn't catching the dispatch correctly and I stopped debugging it rather than keep spending
+under the usage-conservation guidance. Reported honestly to `purrsian-a9`, not spliced into the
+spec as fact (would overclaim). Pick-up point: `main_menu_bg.bik` frame0, `(primary=1,secondary=6)`
+×61, via `scan_multi_file_sub0.py` in `scratchpad/bink_sub012346_grammars_2026-10-10/`.
+
+**UPDATE — CLOSED, fixed the hook (wrong video path in the script), got a full live-confirmed
+result.** secondary=6: same 2x2 NN upsample as secondary=2/3/5 (rows and values pair up exactly
+in the real capture), AND needs the same `(int8_t)+128` bias as secondary=3 (raw bytes, no
+dequant/IDCT to absorb a level-shift) — checked numerically against ffmpeg, every value in the
+captured 16x16 block matches exactly with this one rule. Rule: `pixel = (int8_t)raw_byte + 128`.
+Spliced into `spec-bink-codec.md`'s footprint table + a new addendum, sent to `team-b-fd`. Nothing
+pending on this thread.
+
+### 54.12 CLOSED — `_DynamicGlobalsLoadComplete` nil-call blocker, self-picked off Team B's in-progress 49-mission sweep
+
+Team B's sweep (14/49 done) hit this error on 10/14 missions, a widely-shared hook — strong
+self-pick candidate since fixing it could unblock most of the sweep at once rather than one
+mission at a time. Turned out to be already fully resolved in spec, no new RE needed: `_Dynamic
+GlobalsLoadComplete`/`_PrepareForDynamicGlobals` aren't native functions, they're plain Lua
+globals DEFINED in `system_lib.lua` itself (confirmed in the real extracted file,
+`scratchpad/ui_lua_dumps/system_lib.lua` lines 81/90); the native side (`0x00e0de80`) just calls
+them by name unconditionally (`spec-lua-bindings.md` §12.4/§14.1, already CONFIRMED). Root cause
+of Team B's error: a harness setup-order gap, not a mission bug — the gameplay Lua state needs
+`system_lib.lua` loaded BEFORE `game_lib.lua` and before any mission script (§16.1/§16.2, already
+documented); if `system_lib.lua` is skipped, every `_DynamicGlobals*` call hits exactly this nil
+error. Sent to `team-b-fd`. Nothing pending on this thread.
+
+### 54.13 CLOSED — reconciled a real self-contradiction in spec-lua-api-behaviour.md re: 0x00a370c0/hud_prompt arg3, self-picked while waiting on Team B's sweep re-run
+
+Found the doc genuinely contradicted itself: an older (2026-10-11) passage claimed `0x00a370c0`
+interns the callback-name string via the `0x00a1fcc0` table (same mechanism as `on_trigger`), but
+a same-day-later "Update" at §13.3 said the opposite (no interning found at all) — the older
+passage was never corrected in place. Settled it by disassembling `0x00a370c0` directly in the
+main exe: **confirmed the LATER claim is right, the older one is wrong.** No call to `0x00a1fcc0`
+or any intern helper exists in this function. Real body: branch on local/remote player handle,
+write prompt-manager singleton `0x026e9528` slot 9/0xa either way, local-branch-only write to
+`[0x02703cac]`, remote-branch additionally opens a network record (opcode `0x4a`). Struck through
+the stale claim in place with a correction note. Net effect: `hud_prompt` arg 3's real by-name
+dispatch mechanism is confirmed NOT in this call chain, genuinely OPEN — worth flagging to Team B
+if/when they hit another `hud_prompt`-driven mission stall, since the "same shape as on_trigger"
+assumption doesn't hold. Nothing further pending; self-correction only, not sent anywhere yet.
+
+### 54.3 Key addresses/numbers learned this session (for quick reference, not narrative)
+
+- Crib: action array `0x0111f2d0`, entry 8 = `0x009da580`; `0x005eee70`; `0x0080cc90`; store_crib
+  object `0x022ccef8`; `0x007b5fe0`. Shop: `store_common` object `0x022cce68`; opener `0x0083ECC0`
+  (hardcoded `"store_common"` push at `0x0083ed69`); dead-end callers `0x0083EE80`/`0x0083EDF0`.
+- Weapon drop: writer `0x006fa9e0`, ring buffer base `0x014fdc68`/count `0x014f71e4`/stride
+  `0x18`/cap 20/lifetime `0x2710`; reader (physics-only) `0x006f9f50`. Weapon pickup-via-interact:
+  entry 0 `0x009da510`→`0x00971b10`→kind table `0x01309f10`→`0x00972a70`→`0x005fe460`.
+  Cache-station class vtable (for method, not value, reuse): `0x0112eb60`-`0x0112ebd0`
+  (`0x0064c580`/`0x0064bef0`).
+- Bink nib2 fix: `ctx+0x100` (A_array, 16 dwords) / `ctx+0x140` (LUT ptr array, 16 dwords).
+  Pre-loop bit cost: measured 15, was assumed 11 (10+1). Corrected symbol-0 start: bit **2886**
+  (call entry `2871` + 15). Symbol 0 = nib1 `[2886,2890)`, nib2 `[2890,2894)`. Symbol 1 starts
+  2894, nib1 `[2894,2895)` (code_len 1), nib2 `[2895,2899)`.
+- hud_prompt: `0x00a4cff0`→`0x00a37210`(arg2→loc-id via `0x00849fa0`)→`0x00a370c0` (writes
+  `0x02703cac`, confirmed phone-answer-specific via full xref, NOT a generic dispatcher).
+- m09: `on_trigger` `0x00a58680`/`on_trigger_exit` `0x00a58720`→writer `0x00a56cb0` (350-slot
+  intern table `0x026e83e8`)→dispatcher `0x00a29e40` (6-way, trigger branch is `0x00807930`, last
+  in chain)→`0x00a1fe10` (spawns coroutine via `0x00e0ca80`/`0x00e0c720`, resumed by scheduler
+  `0x00e0cba0`). `0x00a29e40`'s own caller: unresolvable statically (thunk `0x00a2a1c0`, 0 refs).
+
+### 54.4 Ruled out this session (don't re-check)
+
+- Shop opens via the SAME generic-object pattern as crib — NO, architecturally different
+  (hardcoded-name vs generic-object).
+- The weapon-drop ring buffer (`0x014fdc68`) is read by anything other than pure physics —
+  exhaustive xref, only 2 functions touch it, confirmed.
+- `0x02703cac` is a shared generic "any pending UI prompt" dispatcher — NO, exhaustively
+  cell-phone-answer-specific (10 sites/9 functions, all checked).
+- `0x00a29e40`'s caller is findable by more static analysis — NO, confirmed exhausted by 2
+  independent whole-image scans this session (a prior-session conclusion, now re-verified).
+
+<!-- SUPERSEDED-BELOW, kept for detail -->
 ### 53. ▶ RESUME HERE — 2026-10-11, replaces §52 as the live note (§52/§51/§50 below are DONE, kept for detail)
+
+**STANDING PACING RULE, confirmed with the user 2026-10-12, overrides the usual "stop and ask on
+critical usage" default for THIS session specifically: the user wants normal pace kept through
+usage-pacer warnings. Do not pause to ask on a critical/ahead-of-plan usage notice alone — only
+actually stop if the pacer hard-halts at 95%.** (Does not relax any other standing rule — live
+game-process captures still need explicit go-ahead per §49.4 below; this is specifically about
+not over-asking on routine usage percentage warnings.)
+
+**PARKED, 2026-10-12: `hud_prompt`'s arg-3 callback dispatch (the real engine mechanism that
+calls a Lua function BY NAME when a HUD prompt is confirmed — e.g. `m05.lua`'s own
+`hud_prompt(LOCAL_PLAYER, "M05_JUMP", "m05_jump_local")`).** Confirmed NOT inside `hud_prompt`'s
+own native chain (`0x00a4cff0`/`0x00a37210`/`0x00a370c0`, all opened — arg 2 is a localization
+key, arg 3 is never touched there). Confirmed NOT via the shared global `0x02703cac` either — its
+full xref list (10 sites/9 functions) is exhaustively cell-phone-answer-specific (pending-call
+check, contact-name resolve, accept/decline, the shared reset path), no generic name-dispatch
+anywhere in it. Team B's own stand-in (call the named function directly) covers gameplay for now,
+not blocking. **Better recipe for whoever resumes this, per orchestrator:** start from the
+engine's generic "call a Lua function by name" helper — the SAME one `on_trigger`-style callbacks
+already use to invoke script functions by name (this project has already documented that
+mechanism elsewhere, search existing specs for `on_trigger`'s own native dispatcher) — and find
+which of ITS OWN callers sits on a HUD-prompt/button-press path, rather than guessing from a state
+field. Anchored on the mechanism, not a coincidental global.
 
 **Peer naming, live as of this rewrite (verify via `ListAgents` on resume — names rotate on
 restart):** orchestrator `purrsian-ea`, Team B `team-b-31`. Usage pacer CRITICAL again this
@@ -6539,7 +6856,7 @@ reporting this as closed-for-now rather than spending further static-search effo
   class-flag note). Reported the negative; did not force it. **Part 3 (self-pick) not started —
   paused per orchestrator, conserving usage while Team B is down.**
 
-**NEXT ITEM on resume (orchestrator-approved, do NOT dispatch solo — wait for the go-ahead/Team B
+**[DONE 2026-10-12 — this is a fn-ptr table, not a vtable: `0x026232A8+0x24*kind` (+0x14 activate/+0x18 exit/+0x1C init), registered via `0x0093AFE0`. kind5 garage and kind8 mp_crib reach `0x0080CC90`; no kind reaches store_common. Still OPEN: kind0 `0x00A1FE10`/`0x00E0CFB0`, and the screen ids passed by the 31 callers of `0x007B4750`. Details: spec-store-runtime.md §2 and spec-save-format.md §9.4.] [DONE 10-12b: swept the `0x007B4750` screen ids. There is no static id→name table (ids are assigned at runtime). Stores open via `0x0080CC90`, which pushes 0x28 and then the store's own runtime id. Kind 0 opens no screen. OPEN: which of `0x0080CC90`'s 10 callers is the walk-in store; best guesses are the un-functioned sites `0x0081280A`/`0x00815495`. Scripts are in tools/scratchpad/ScreenIds*.java.] [DONE 10-12c: the walk-in store gap is closed (one link inferred). Interaction → `0x00A03940` → per-store-type callback table `0x0268D2DC[type]` (filled by `0x00A00510`). Slot1 = weapon `0x00815490` (id 0x2F), slot4 = tattoo `0x00812800` (0x30), slot5 = garage, slot0 = `0x0082B0C0`. Each callback → `0x0080CC90`. store_common is the shared base layer and is never pushed. 10-12f: slot2 = plastic surgeon (`0x00836460` registers it; confirm-yes `0x00833D50` → `0x0080CC90`). Slot 3 is never filled. The interact link is VERIFIED: table `0x0111f2d0` slot 6 = `0x009DA560` → `JMP 0x00A03940`. 10-12g: `0x0082F840` = the store_clothing opener (gates on `[0x022CCD9E]`), and `0x00820CD0` = vehicle customization. Neither address appears anywhere as data, so both are probably reached by E8 calls in undisassembled code. 10-12h: ran the raw E8/E9 scan (scratchpad e8scan.py, on SaintsRowTheThird.exe; the DX11 exe gives 0 hits, so a different layout). `0x0082F840` has NO direct callers, so it is probably a mid-function label of a larger function; its call to `0x80CC90` is at `0x82f97d`. `0x820CD0` is called from `0x5fc207` (garage path) and `0x8132ca`. The scan also finds JMP tail-calls into `0x80CC90` that the 10-caller list missed: `0x80d354`, `0x80d368`, `0x80dfe5`, `0x811d85`, `0x8127f5`, `0x815485`, `0x82b153`, `0x831905`, `0x8322dc`, plus a call at `0x83404c`. 12i: `0x82F840` IS a real function start, and its address appears nowhere in the file. So it is dead code or computed-address only, and the clothing store is statically unresolved (needs the dynamic pass, which is gated by §49.4). OPEN: the unclassified tail-call sites. Also still open: `0x00820CD0`/`0x0082F840` are unclassified.] [DONE 10-12d: hud_prompt arg3 IS interned (this overturns §54.13). `0x00a370c0` → `0x005e46b0` (calls `0x00a1fcc0`) → stored at `0x026e954c` (local) / `0x026e9550` (remote). It fires via interact-table entry 13 `0x009da810` → `0x00a36fb0` → `0x005e44c0` → `0x00a1f990`, and the callback gets 0 args. In spec-lua-api-behaviour.md §13.3 RESOLVED block, but the older text above it there is stale. 10-12e: index 13 fires on the same interact press (CBA 0x52). The first handler in bit order that returns 1 wins, so crib (bit 8) beats hud_prompt (bit 13). OPEN: what sets bit 13 of player +0x2084; this is the same unknown setter as Player Runtime OPEN #97.]** ~~NEXT ITEM on resume (orchestrator-approved, do NOT dispatch solo — wait for the go-ahead/Team B
 being back, this is explicitly deferred, not just low-priority):** the trigger-volume class's
 activation vtable — i.e. what virtual method fires when the player walks into/activates a world
 trigger, and how it resolves to a `push_screen` call. This is high value: it's the SAME unresolved

@@ -210,6 +210,11 @@ void testSkipFlagNoPixelWrite() {
 void testFlatDcFillBroadcastsLiteral() {
     uint32_t subRaw = 6;  // sub = 6 - 3 = 3 -> FlatDcFill
     const uint8_t literal = 0x2A;
+    // BIAS FIX (2026-10-12, Team A confirmed): the real pixel value is
+    // (int8_t)literal + 128, not the raw literal byte written through
+    // directly - see block_dispatch.h's own FlatDcFill case body comment
+    // for the full derivation/ground-truth check.
+    const uint8_t expectedPixel = static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(literal)) + 128);
     std::vector<uint8_t> bits = buildBlockBytes(1, &subRaw, {literal});
     BitstreamReader br(bits.data(), bits.size());
     OwnedPlane dest;
@@ -218,7 +223,7 @@ void testFlatDcFillBroadcastsLiteral() {
     CHECK(rec.outcome == BlockOutcome::Reconstructed);
     CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::FlatDcFill);
     bool allLiteral = true;
-    for (size_t i = 0; i < dest.size(); ++i) allLiteral &= (dest.data()[i] == literal);
+    for (size_t i = 0; i < dest.size(); ++i) allLiteral &= (dest.data()[i] == expectedPixel);
     CHECK(allLiteral);
 }
 
@@ -343,49 +348,61 @@ void testPrimary9BlockCopyReconstructed() {
 }
 
 void testRawCopyDualRowDuplicateSub6() {
-    // sub = 9 - 3 = 6 -> RawCopyDualRowDup6 (spec-bink-codec.md Sec5.3b).
-    // 32 literal bytes (4 row-pairs x 2 column-groups x 4 bytes/dword),
-    // sequential values so each dword-write's 4 source bytes are easy to
-    // identify in the assertion below.
+    // sub = 9 - 3 = 6 -> RawCopyDualRowDup6. 2026-10-12: 64 raw bytes (8x8
+    // core) -> pixel = (int8_t)raw + 128 -> 2x2 NN upsample to 16x16.
+    // Live-confirmed values: raw 153->25, 154->26, 158->30, 159->31.
     uint32_t subRaw = 9;
-    std::initializer_list<uint8_t> literals = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
-                                                16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
-    // NOT buildBlockBytes() here (its own packer.bytes() only pads to 4) -
-    // this test's real content is 33 bytes (1 dispatch + 32 literal), and
-    // BitstreamReader::readBits() always refills a FULL dword (4 bytes) at
-    // a time even when fewer bits are actually needed, so the very last
-    // aligned-byte read would reach 3 bytes past the real 33-byte end and
-    // spuriously set ranOutOfData() - pad well past the last real dword
-    // refill boundary so that correctly-behaving code is never misread as
-    // having run out of data.
     BitPacker packer;
     packer.appendBits(1u, 4);
     packer.appendBits(subRaw, 4);
-    for (uint8_t b : literals) packer.appendByte(b);
-    std::vector<uint8_t> bits = packer.bytes(40);
+    uint8_t rawCore[64];
+    for (int i = 0; i < 64; ++i) rawCore[i] = static_cast<uint8_t>(i);
+    rawCore[0] = 153;
+    rawCore[1] = 154;
+    rawCore[2] = 158;
+    rawCore[3] = 159;
+    for (uint8_t b : rawCore) packer.appendByte(b);
+    std::vector<uint8_t> bits = packer.bytes(80);
     BitstreamReader br(bits.data(), bits.size());
     OwnedPlane dest;
-    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    dest.resize(16, 16, PlanarYuvFrame::kUndecodedSentinel);
     BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0);
     CHECK(rec.outcome == BlockOutcome::Reconstructed);
     CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::RawCopyDualRowDup6);
 
-    // This file's own DERIVED traversal order (rawCopyDualRowDuplicate8x8's
-    // doc comment): row-pair-major, column-group-minor, both rows of a pair
-    // identical. literalIndex = (rowPair*2 + colGroup)*4 + byteInDword.
+    const uint8_t expectFirst[4] = {25, 26, 30, 31};
     bool allMatch = true;
-    for (int rowPair = 0; rowPair < 4; ++rowPair) {
-        for (int colGroup = 0; colGroup < 2; ++colGroup) {
-            for (int i = 0; i < 4; ++i) {
-                const uint8_t expected = static_cast<uint8_t>((rowPair * 2 + colGroup) * 4 + i);
-                const int x = colGroup * 4 + i;
-                const int y0 = rowPair * 2;
-                allMatch &= (dest.view().at(x, y0) == expected);
-                allMatch &= (dest.view().at(x, y0 + 1) == expected);
-            }
+    for (int y = 0; y < 16; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            const int r = y / 2, c = x / 2;
+            const uint8_t expected = (r == 0 && c < 4)
+                                         ? expectFirst[c]
+                                         : static_cast<uint8_t>(static_cast<int>(static_cast<int8_t>(rawCore[r * 8 + c])) + 128);
+            allMatch &= (dest.view().at(x, y) == expected);
         }
     }
     CHECK(allMatch);
+}
+
+void testUpsample2x2StoreMatchesLiveSecondary2Row() {
+    // Live-confirmed (main_menu_bg.bik frame0, idx3, secondary=2): core row0
+    // -> dest row0 [24,24,25,25,24,24,23,23,24,24,25,25,24,24,24,24], row1 == row0.
+    uint8_t core[64] = {};
+    const uint8_t row0[8] = {24, 25, 24, 23, 24, 25, 24, 24};
+    for (int c = 0; c < 8; ++c) core[c] = row0[c];
+    for (int c = 0; c < 8; ++c) core[8 + c] = static_cast<uint8_t>(100 + c);
+    OwnedPlane dest;
+    dest.resize(16, 16, PlanarYuvFrame::kUndecodedSentinel);
+    upsample2x2Store(dest.view(), 0, 0, core);
+    const uint8_t expect[16] = {24, 24, 25, 25, 24, 24, 23, 23, 24, 24, 25, 25, 24, 24, 24, 24};
+    bool ok = true;
+    for (int x = 0; x < 16; ++x) {
+        ok &= (dest.view().at(x, 0) == expect[x]);
+        ok &= (dest.view().at(x, 1) == expect[x]);
+        ok &= (dest.view().at(x, 2) == static_cast<uint8_t>(100 + x / 2));
+        ok &= (dest.view().at(x, 3) == static_cast<uint8_t>(100 + x / 2));
+    }
+    CHECK(ok);
 }
 
 void testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct() {
@@ -963,6 +980,7 @@ int main() {
     testGiantEngineFamilyIsOpenHook();
     testPrimary9BlockCopyReconstructed();
     testRawCopyDualRowDuplicateSub6();
+    testUpsample2x2StoreMatchesLiveSecondary2Row();
     testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct();
     testDcAcIdctEngine2ReadsDcLiteralFromDcArrayByIndexNotMainReader();
     testDecodeRowDcArrayChunkAlgorithm();

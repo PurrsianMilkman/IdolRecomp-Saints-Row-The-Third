@@ -94,7 +94,7 @@ Both sides now carry an inline conflict marker pointing at each other. Nobody pi
 | render-pipeline §22.5 / §23.6.2 / §23.x | live `rl_renderer` calls cited at vtable `+0x48`/`+0x54`/`+0x58`/`+0x5c`, inside the `+0x10..+0x7c` range §18.10/§20.8/§21 prove are `_purecall` traps |
 | render-pipeline §20.12.4 / §22.11 | `+0x68/+0x6c` vs `+0x60/+0x64`; two labels for vtable `+0x40` |
 | tables-animation l.145 / l.228 | `anim_blend_trees` sets `+0x2C` bit `0x80000000` vs `0x40000000` |
-| tables-animation / tables-traffic-ai | validator `FUN_004C8690` vs `0x004C8780` (one function or two) |
+| tables-animation / tables-traffic-ai | validator `0x004C8690` vs `0x004C8780` (one function or two) |
 | tables-customization | `Default` row 58 bytes vs `0x50`; store cap 255 vs 254 |
 | vpp-container l.186 | which structure `+0x164`/`+0x168` belong to |
 | save-format / tables-weapons-combat / tables-vehicle-world | `items_inventory` live byte at `+0x2C` vs `+0x30` |
@@ -174,7 +174,7 @@ reference to them in the specs was checked: about 220 HANDOFF references and 70 
   `536b06a`). Only the live resume note is §27.
 - **Load-bearing facts.** Six facts that were stated only in HANDOFF or WALLS are now in the specs:
   - vehicle-geometry §11.6: the "zero CreateVertexDeclaration calls" premise is refuted;
-  - render-pipeline §12.1: the `DAT_0351f8f8` slot refutation;
+  - render-pipeline §12.1: the global-at-`0x0351f8f8` slot refutation;
   - render-pipeline §22.2: the material-handle cache;
   - physics §4.4.6(h);
   - tables-animation §1.3;

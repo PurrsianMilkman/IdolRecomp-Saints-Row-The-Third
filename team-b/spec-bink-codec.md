@@ -1626,6 +1626,44 @@ secondary=3 (confirmed likewise). This is now a block-type-FAMILY-wide conventio
 new-content sub-cases specifically, distinct from the real 8x8 IDCT blocks used by primary cases 5/7
 (5.3b).
 
+**Upsample rule PINNED DOWN, 2026-10-12 [orchestrator-routed, for Team B's block-grid task]: plain
+2x2 nearest-neighbor block replication, NOT interpolated.** `dest[2r+i][2c+j] = core[r][c]` for
+`i,j ∈ {0,1}` — both horizontal AND vertical doubling of each source pixel into a 2x2 destination
+block. Verified against real ffmpeg-decoded pixels for idx3 (secondary=2, DC=199): published core
+row0 `[24,25,24,23,24,25,24,24]` matches real dest row 0 `[24,24,25,25,24,24,23,23,24,24,25,25,
+24,24,24,24]` exactly (`core[i]` at `dest[2i]`/`dest[2i+1]`); dest row 1 is identical to row 0
+(confirms vertical doubling, not previously nailed down); dest rows 2/3 are identical to each
+other but differ from rows 0/1 (consistent with core row 1 feeding them the same way).
+
+**Full footprint table, all primary/secondary cases (new column; mechanism/source-res columns
+reproduce already-published facts, not re-derived):**
+
+| Primary | Secondary | Mechanism | Source res | Write footprint | Upsampled? |
+|---|---|---|---|---|---|
+| 1 | 0 (giant1) | RLE+permutation | half-res 8x8 (by analogy — 0 real occurrences found in any sample, never independently measured) | 16x16 | Yes, assumed same 2x2 NN rule, not independently confirmed |
+| 1 | 1 or 4 | Flag-bit short-circuit, mark skip | N/A — no pixel write | N/A | N/A |
+| 1 | 2 | DC+AC dequant/IDCT | 8x8 (real DCT) | 16x16 | **Yes — CONFIRMED, 2x2 NN, exact (this pass)** |
+| 1 | 3 | DC/flat fill | N/A (direct broadcast) | 16x16 | No — native 16x16, nothing to upsample |
+| 1 | 5 (giant2) | TwoLiteralPattern | N/A (direct pattern write) | 16x16 | No — native 16x16, same as secondary=3 |
+| 1 | 6 | Literal/raw copy, dual-row duplication | raw bitstream bytes, 8x8-equivalent | **16x16, CONFIRMED same 2x2 NN as secondary=2/3/5 (this pass)** | **Yes — CONFIRMED, 2x2 NN, exact (this pass, see addendum below)** |
+| 5 / 7 | — | Real 8x8 IDCT (`0x100244c0` intra / `0x10024b50` inter), distinct from primary=1's whole family | 8x8 | **8x8, no upsample** — different block-type tier entirely | No |
+
+Sent to `team-b-fd`.
+
+**secondary=6 footprint/bias CLOSED, 2026-10-12 [orchestrator-routed follow-up to the table
+above]: confirmed live, real occurrence #1 of 61 in `main_menu_bg.bik` frame0, Y-plane block
+(row=0, col=224).** Same 2x2 nearest-neighbor upsample as secondary=2/3/5 (rows pair up exactly —
+`row0==row1`, `row2==row3`, etc. — and values within each row pair up too, confirming both axes
+doubled from an 8x8-equivalent source). **Also needs the same `(int8_t)+128` bias as secondary=3,
+NOT secondary=2's "no bias" rule** — makes sense structurally since secondary=6 copies/repacks raw
+literal bytes with zero dequant/IDCT in between, same as secondary=3's flat fill. Checked
+numerically against real ffmpeg pixels at the same location: raw byte 153→signed −103→+128=25
+matches exactly; 154→26, 158→30, 159→31 all match too, across the full 16x16 block, no exceptions.
+Rule: `pixel = (int8_t)raw_byte + 128`. secondary=0 remains a confirmed negative — scanned ~110
+frames across 5 files total (`main_menu_bg.bik`, `logo_amd_hd.bik`, `logo_thq_and_voli_hd.bik`,
+`kinzie_typing.bik`, `01_crawl.bik`), zero `(primary=1,secondary=0)` dispatch events anywhere.
+Script: `probe_sub6_live.py` in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
 #### secondary=2 — third DC+AC dequant/IDCT engine (`0x1001b2ff`-`0x1001b3d2`), CONFIRMED by live execution
 
 **Occurrence rate, corrected scan:** abundant and easy to find — 2,457 real occurrences in
@@ -1797,6 +1835,35 @@ alike.
 (`main_menu_bg.bik` frame 0, Y-plane block (0,1), fill byte `0x99`), every register value read live.
 Correction, this pass: output footprint is exactly 16x16/64 dwords, not an approximate "~40" count.]**
 Full detail/script: `scratchpad/bink_sub012346_grammars_2026-10-10/trace_sub3_idx1.py`.
+
+**ADDENDUM, 2026-10-12 [orchestrator-routed, after flat-fill promotion: idx1/idx2's fill byte
+`0x99` (153) doesn't match the real ffmpeg-decoded pixel value there (~24-25)]: the written byte
+is NOT the raw pixel value — the native read (`movzx`, unsigned) must be reinterpreted as a
+SIGNED int8 and biased by +128 before storing.** `pixel = (int8_t)fill + 128`. Confirmed exact:
+`0x99` as signed int8 = `-103`; `-103 + 128 = 25`. Checked against the real ffmpeg-decoded frame0
+Y plane at both idx1 `(0,16)` and idx2 `(0,32)`: both blocks are uniformly **25** across all 256
+pixels, exact match, no rounding slop. The disassembly's own `movzx` at `0x1001b3f8` only widens
+the byte unsigned — the sign-reinterpretation + bias is a separate step a reimplementation must
+add explicitly, likely the same residual-around-neutral-gray convention the secondary=2 DC/AC path
+already needs for its own DC value (not independently re-checked against secondary=2's own write
+site this pass, but a strong, structurally-motivated lead). Sent to `team-b-31`.
+
+**ANSWERED, 2026-10-12, same thread: secondary=2's own DC path needs NO such bias — it is already
+fully correct.** Re-verified against the real ffmpeg-decoded ground truth directly: idx0 `(0,0)`
+is uniformly 24, idx3 `(0,48)` and idx4 `(0,64)` both match their already-published core IDCT rows
+exactly after the documented 2× horizontal upsample (e.g. idx4's core row `[24,22,25,29,29,28,
+29,24]` upsamples to `[24,24,22,22,25,25,29,29,29,29,28,28,29,29,24,24]`, byte-for-byte identical
+to the real pixels) — matching §5.3v's own independent finding (DC=118, AC k=8=-1/k=16=-1 →
+dequant 6293/-102/-118 → IDCT → pixel(0,0)=24, both the real DLL and an independent Python
+re-derivation agree). No `+128` or any bias constant appears anywhere in the dequant
+(`sar(raw*quant,0xb)`) or final IDCT/rounding (`sar(sum+0x7f,8)`) chain (already exhaustively
+enumerated, §5.3j). **The two mechanisms are genuinely different, not two instances of one shared
+bias convention:** secondary=2's DC is used directly, unsigned, as input to the full dequant+IDCT
+chain, whose own arithmetic naturally produces correctly-scaled output with no further step;
+secondary=3's flat-fill byte bypasses dequant/IDCT entirely and writes straight to the pixel
+buffer, which is why IT needed the signed-reinterpret+128 step — there's no transform in between
+to absorb the level-shift on that path. If idx0/3/4 are still wrong in a given reimplementation,
+the bug is not a missing bias here.
 
 #### secondary=5 — TwoLiteralPattern — already DONE, cited only
 
@@ -3458,6 +3525,34 @@ already-documented chromaB entropy-pre-stage stall elsewhere in this document (`
 permanently stalling 4 bytes past its own bound from its 2nd chromaB call onward). ChromaB's own
 `(0,0)` 16×16 region is still pure `0xEE` sentinel.
 
+**CORRECTED, 2026-10-12 [orchestrator-routed, self-picked after the `ctx+0x2c` formula closure]:
+the "poisoned after its 2nd call" framing above is likely wrong — the real finding is ZERO calls,
+not one-then-stall.** Captured every completed call to `0x10019360` across the whole frame0 decode,
+grouped by descriptor pointer (constant per plane's whole run, same method as `0x100195b0`'s own
+multicall data): exactly 2 descriptor groups, 271 calls each (Y: N=10/CAP=752; chromaA:
+N=10/CAP=640). **No third descriptor ever appears — not a single call, not even an
+idempotency-guarded no-op** — contradicting the "1 real call then permanent poison from the 2nd
+call" framing. `0x1001a530` (the per-row orchestrator) does get entered with what looks like a
+3rd, distinct bitstream-cursor value separate from the Y/chromaA pair, so something runs for
+chromaB at the row level, but it never reaches the entropy-pre-stage call at all. Two live
+possibilities, NOT distinguished this pass: (a) this video's chromaB plane is genuinely fully
+skip-coded for frame 0 (no real content, by design, not a bug); (b) the test harness's own
+`call_bink_cb` setup (`FLAGS18`/`FLAGS1C`/`MB_COLS` args) doesn't correctly request/trigger
+3-plane decode — a harness limitation, not a real codec behavior. Flagged OPEN rather than guessed.
+Scripts: `probe_chromaB_stall_2026-10-12.py`, `probe_a530_detail2.py` in
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+**SETTLED, 2026-10-12 [orchestrator's own cheap ground-truth check]: verdict is (a), legitimate
+skip-coding, not a harness gap.** Decoded frame0 with the project's own ffmpeg build
+(`tools/ffmpeg_dl`) to raw `yuv420p` and inspected the real V (chroma-B) plane: the `(0,0)` 16×16
+block is pixel values 132-133 throughout (a 1-unit range across all 256 pixels) — effectively
+flat. The whole V plane is a slowly-varying near-uniform hue (range 123-187, mean ~135, local
+stdev ~1.6), typical of a menu-background video, and this block sits in a locally-flat region.
+This is consistent with the real encoder genuinely skip/flat-coding this block/plane rather than a
+`FLAGS18`/`FLAGS1C`/`MB_COLS` harness misconfiguration — closes the open question above in favor
+of (a). Not yet checked: whether OTHER chromaB blocks later in the frame carry real varying
+content (only `(0,0)` and the aggregate plane stats were checked this pass).
+
 - **Evidence:** live Unicorn capture against the unmodified DLL and `main_menu_bg.bik`, same
   harness family as §5.3v/§5.3w; dispatch-index→(plane,row,col) mapping independently confirmed
   by write-address enumeration (a full-frame dispatch survey script), not assumed from raster
@@ -3669,15 +3764,27 @@ for (; remaining > 0; remaining--) {
                                                           // +0x140 per-class LUT arrays are a
                                                           // separate struct, confirmed unrelated.
 
-    // --- nibble 2: GLOBAL tree, same single descriptor 0x10019360 itself reads ---
-    uint32_t A2 = ctx->A;                                // ctx + 0x20 (same field 0x10019360 Desc+0x20 uses)
-    uint8_t* lut2 = ctx->lut_ptr;                         // ctx + 0x24 (same field as Desc+0x24)
+    // --- nibble 2: CORRECTED 2026-10-12 (Team B's own per-symbol diff caught a real bug here --
+    // live capture confirmed ctx+0x20/+0x24 are NOT separate scalar fields at all, they're just
+    // more bytes of the SAME ctx+0x00..0xFF translate table nib1 reads (confirmed: the dword at
+    // ctx+0x20 decodes to the exact permutation-table byte values at that offset, not a sane
+    // max-code-length). The REAL per-class A_array/LUT-pointer arrays live at ctx+0x100 (16
+    // dwords) and ctx+0x140 (16 dwords) -- confirmed live, exact match to the already-published
+    // §5.3g A_array (4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4). FINAL, Team B-confirmed 2026-10-12 (full
+    // 650-byte output byte-for-byte match, bit cost exactly 3384): nib2 is NOT cur_class-indexed
+    // at all -- it always reads through class 0's own slot of these same arrays, unconditionally,
+    // regardless of the current cur_class. This is the function's own real "global" (class-
+    // independent) nature: physically co-located with the per-class array's class-0 entry, not a
+    // separate descriptor and not cur_class-indexed like nib1 is.
+    uint32_t A2 = ctx->A_array[0];                        // ctx + 0x100, ALWAYS class 0
+    uint8_t* lut2 = ctx->lut_ptr_array[0];                // ctx + 0x140, ALWAYS class 0
     uint32_t idx2 = peek_bits(br, A2);
     uint8_t packed2 = lut2[idx2];
     consume_bits(br, packed2 >> 4);                      // code_len2
-    uint8_t nib2 = ctx->translate16[packed2 & 0xF];       // ctx + 0x10 + raw_symbol2 (the SAME
-                                                            // 16-byte global translate table
-                                                            // 0x10019360's own Desc+0x10..0x1f uses)
+    uint8_t nib2 = ctx->translate16[0][packed2 & 0xF];    // ctx + 0 + raw_symbol2, ALWAYS class 0
+                                                            // (the per-class 16x16 table's class-0
+                                                            // row, same table nib1 reads but
+                                                            // unconditionally fixed to class 0)
 
     uint8_t combo = (nib1 << 4) | nib2;                   // 0x100197c0-0x100197c3
     int8_t out_byte;                                      // sign/bias transform, 0x100197c5-0x100197d9
@@ -3752,6 +3859,61 @@ unaffected by this correction — only the translate table's own base struct was
   row-by-row); whether `ctx`'s own `+0x00..0xFF` region has this same role in `0x100195b0`'s OTHER
   calls (only this one row/call was captured).
 
+**CORRECTION, 2026-10-12, a second real bug caught by Team B's own per-symbol diff against their
+own implementation — nib2's claimed "global tree at ctx+0x20/+0x24" was also wrong, same root
+cause (confusing a flat offset with a region that's actually something else).** Team B's own
+debug diff found their symbol-0 `packed2` had the WRONG CODE LENGTH (2 bits, not the published
+4) — not just a wrong translated value, meaning the tree itself was wrong, not just the lookup
+result. A fresh live capture (`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/
+probe_195b0_ctx_tree_2026-10-12.py`) confirms `ctx+0x20`/`ctx+0x24` are NOT separate scalar fields
+at all — they're simply more bytes of the SAME `ctx+0x00..0xFF` translate table documented above
+(the dword at `ctx+0x20` decodes to exactly the surrounding permutation-table bytes, not a
+plausible max-code-length value). **The real per-class arrays live at `ctx+0x100` (16 dwords,
+max-code-length per class) and `ctx+0x140` (16 dwords, LUT pointer per class)** — confirmed live,
+and the 16-value sequence read from `ctx+0x100` EXACTLY matches the already-published §5.3g
+`A_array` (`4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4`); class 0's own entry is `4`, matching Team B's own
+EXPECTED code length exactly, strongly confirming the fix. **Most likely correct formula for
+nib2 (not independently re-verified bit-for-bit against a full symbol trace this pass, but
+consistent with every piece of evidence gathered): class-indexed exactly like nib1, not a flat
+global field** — `A2 = ctx+0x100+cur_class*4`, `lut2 = *(ctx+0x140+cur_class*4)`, and the final
+translate step uses the SAME per-class 16×16 table nib1 reads (`ctx+cur_class*16+raw_symbol2`),
+not a fixed `ctx+0x10` row. Code block above corrected in place.
+
+- **Evidence:** live Unicorn capture of the real frame0/Y/row0 call, dumping `ctx+0x00..0x14F` in
+  full; the `ctx+0x100` sequence cross-checked byte-for-byte against §5.3g's independently
+  published `A_array`; `ctx+0x140` onward resolves to real pointers in the expected `0x1003bxxx`
+  LUT-table address range (matching the shape of descriptor A/B's own LUT pointers, though not
+  identical values — confirmed a DIFFERENT, dedicated array, not an alias of desc A/B).
+- **Confidence:** CONFIRMED for `ctx+0x20/+0x24` being garbage/mislabeled, and for the real
+  arrays' location and class-0 value matching `A_array`. PLAUSIBLE, not independently re-verified
+  this pass, for the exact class-indexed formula proposed above — Team B should re-test against
+  the full symbol trace before promoting to production.
+- **Unknowns:** none remaining — see the CLOSED note below, Team B's full byte-for-byte match
+  settles this.
+
+**ALGORITHM CLOSED, 2026-10-12 [Team B, independently confirmed]: full 650-byte §5.3aa output now
+byte-for-byte identical to the real fixture, bit cost exactly 3384.** Two fixes landed together:
+(1) the `ctx+0x28`-is-14-not-10 pre-loop width fix (above), which alone fixed byte 0 and the exact
+bit total; (2) **nib2 is NOT class-indexed at all — it always reads class 0's own slot,
+unconditionally** (code block corrected in place above). Found via symbol 1 (`cur_class`=1, own
+`A_array[1]`=6): nib2's own `code_len` there was still 4 (class 0's `A_array[0]` value), not 6 —
+proving nib2 ignores `cur_class` entirely and always targets slot 0. This is the function's real
+"global" nature: physically co-located with the per-class arrays' own class-0 entry, not a
+separate descriptor and not cur_class-indexed like nib1. With both fixes, Team B's full 650-byte
+decode matches the fixture exactly (first 64 bytes, last 8 bytes, total size all verified).
+
+**CONFIRMED, 2026-10-12, byte-for-byte: the class-indexed fix above is structurally correct —
+Team B's remaining mismatch is a bit-alignment/index issue, not a table-identity one.** Dumped
+the actual LUT content at `ctx+0x140[0]` (class 0's own LUT pointer target) live: a simple linear
+byte sequence, `0x40, 0x41, 0x42, ...` (index *i* → packed value `0x40+i`). Both Team B's own
+post-fix read AND the already-published trace's own read are each exactly one entry of this SAME
+table — just at different indices (Team B's `packed1`=entry 0, the published trace's
+`packed1`=entry 1; Team B's `packed2`=entry 1, the published trace's `packed2`=entry 9). Since
+every value in dispute, on both sides, is a genuine entry of the identical table, the per-class
+table identity/structure is settled — the remaining gap is that Team B's own `idx1`/`idx2 =
+peek_bits(br, A2)` computation is landing on a different index than the real decode, almost
+certainly from a bit-count/alignment discrepancy earlier in their own pipeline (not a wrong tree).
+
 **One additional one-time cost, NOT part of the per-symbol loop:** immediately after the leading
 magnitude is decoded and validated (§5.3s), and before the first loop iteration, the function reads
 exactly 1 extra bit (`0x10019656`-`0x10019689`) that, if set, transforms the magnitude itself via
@@ -3760,6 +3922,51 @@ firing in this real call — the bit was 0 here, magnitude stayed +650). This 1 
 cost (included automatically in the live-measured 3384-bit total) but is easy to miss or
 mis-model as part of the per-symbol loop if reconstructing from static reading alone — flagging it
 explicitly since Team B's own guesses may have folded it into (or omitted it from) the wrong place.
+
+**CORRECTED, 2026-10-12 [CONFIRMED, live measurement + independent fixture test]: the pre-loop
+cost is 15 bits total, not 10+1=11 — a real, previously-missing 4 bits, found while chasing
+Team B's idx1/idx2 per-symbol misalignment.** Direct live register-state capture (hooking the
+function's own entry and the first per-symbol loop-top at `0x10019690`, reading `edx`/`esi`/`edi`
+and the `[ebp-4]` cursor spill directly — the shared bitreader struct in memory is stale through
+this whole pre-loop section too, same trap as the per-symbol loop) measured the cursor advancing
+exactly 32 bits (one refill) between function entry and the loop's first iteration, with a
+bits_avail delta putting the real pre-loop cost at **15 bits**, not 11. Team B independently
+confirmed by extracting the fixture's own raw bits at the corrected position (entry `2871` + 15 =
+**2886**): `idx1=1`/`idx2=9` at `[2886,2890)`/`[2890,2894)` — an EXACT match to this section's own
+published symbol-0 trace. **The already-published 10-bit leading count and 1-bit sign probe
+(§5.3s above) are confirmed correct in isolation — there is a separate, as-yet-unidentified
+4-bit field consumed somewhere in the pre-loop sequence that this document has not yet located
+or characterized.** Not chased to the instruction level this pass (the live bit-count measurement
+settled the practical question — where symbol 0 really starts — without needing to pin down
+exactly which 4 bits they are or what they encode). Flagged as a genuine OPEN item for whoever
+wants the full pre-loop sequence named precisely.
+
+**CLOSED, 2026-10-12 [CONFIRMED via disassembly + live capture]: the missing 4 bits are fully
+explained — the leading magnitude is NOT a flat 10-bit field at all.** It's read through the
+exact same `ctx+0x28`/`ctx+0x2c` fixed-bound shift-chain magnitude-extraction idiom already
+documented for `0x1001a160`'s own value[0] (§5.3p/§5.3q) — `ctx+0x28` holds the real bit-width to
+read (loaded into `ebx` at `0x100195cb`, feeding `mov ecx,0x20; sub ecx,ebx; shr eax,cl`),
+`ctx+0x2c` is the upper-bound validation (`cmp eax,[ecx+0x2c]` at `0x10019625`). Live-captured for
+this exact call: **`ctx+0x28` = 14** (not 10), `ctx+0x2c` = 15872 (upper bound), decoded magnitude
+= 650 (matches the already-published value exactly). So the real pre-loop cost is **14-bit
+leading magnitude + 1-bit sign probe = 15 bits**, matching the live-measured total exactly — the
+original "10-bit" figure was simply the wrong assumed field width, not a missing field. §5.3s's
+own prose above should be read as "a WIDTH READ FROM `ctx+0x28`, 14 in this instance, not a fixed
+10" wherever it says "10-bit leading count."
+
+**CORRECTED, 2026-10-12 [orchestrator-routed, Team B's promotion attempt crashed on mm_p_03 —
+"bad allocation"]: `ctx+0x28`=14 is NOT a fixed constant for this call site — it is derived
+PER-PLANE from `ctx+0x2c` (the bound) and changes within a single video.** Live-captured all 75
+calls to `0x100195b0` across frame0 of `main_menu_bg.bik`: calls 0-57 (one plane) all have
+`ctx+0x28`=14 / `ctx+0x2c`=15872; calls 58-74 (the next plane) all have `ctx+0x28`=13 /
+`ctx+0x2c`=8192 — same function, same frame, different plane, different width. Across every one
+of the 75 calls, `preloop_bits_consumed` is exactly `ctx+0x28`+1 with no exceptions (the 1-bit sign
+probe is a real, constant, separate cost, never folded into the width). **A reimplementation that
+hardcodes width=14 (or any other flat value) will desync on any plane whose own bound differs from
+15872 — this is almost certainly why Team B's promoted decoder corrupted mm_p_03's video (different
+resolution/plane sizes → different bound → different real width), not a bounds-check gap in
+`cur_class`.** Both `ctx+0x28` and `ctx+0x2c` must be read live per call, never assumed. Script:
+`probe_195b0_multicall_2026-10-12.py` in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
 
 **Live per-symbol trace, first 20 of 650 symbols (full table of all 650 in
 `probe_195b0_curclass_trace_out.txt`), reproduces §5.3s's own published first-20-byte sequence
@@ -3826,6 +4033,46 @@ watches over each function's own output buffer, same method as §5.3p/§5.3z's b
 tracing) plus fresh static `capstone` disassembly of both function bodies in full (`0x10019d10`:
 183 instructions, exact count match to §5.3t's own prior dump, confirming same build; `0x10019f00`:
 218 instructions, full body read for the first time this pass).
+
+**ADDENDUM, 2026-10-12 [orchestrator-routed, Team B reported a 12-bit overrun in their own
+`0x10019d10` reimplementation: 2993 measured vs 2981 published]:** confirmed `0x10019d10` uses the
+identical `ctx+0x28`/`ctx+0x2c` fixed-bound shift-chain magnitude-extraction mechanism as
+`0x100195b0` (§5.3aa) — same instruction pattern at `0x10019d2b`/`0x10019d91` (`mov edx,[ebx+0x28]`
+… `cmp edi,[ebx+0x2c]`). Live-captured for this exact call: `ctx+0x28` = 12, `ctx+0x2c` = 2432,
+decoded magnitude = 528 (exact match to the word count this section already documents). Unlike
+`0x100195b0`, found NO extra 1-bit sign-probe anywhere in this function's own pre-loop sequence —
+it goes straight from the magnitude decode to the upper-bound check to the output-cursor pin, so
+the real pre-loop cost here is just the 12-bit width, no +1. Also checked: `ctx+0x20`
+(=6)/`ctx+0x24` (=0x1003beb0) read sensible, real values here — this function has its own
+dedicated global tree from the start (already established below: no class-carry, single shared
+tree for both nibbles), so the §5.3aa "nib2 reads garbage/wrong-class" bug class does not apply —
+there is no per-class aliasing to go wrong. Team B's reported 12-bit overrun numerically matches
+this exact width value; flagged to them as worth checking whether their implementation hardcodes
+the width instead of reading it live from `ctx+0x28`, or consumes this field twice. Not yet
+independently confirmed which of those it is (no access to Team B's own code this pass).
+
+**CLOSED, 2026-10-12 [orchestrator-routed]: the `ctx+0x28`/`ctx+0x2c` formula is now fully derived,
+no bitstream read involved.** A live memory-write watchpoint on the ctx struct's own `+0x2c` dword
+(static search of the obvious call chain had missed it) found the real writer at
+`0x1001a742`-`0x1001a757`, in the per-plane/per-table ctx-setup block (runs once before that
+plane's run of pre-stage calls, well before `0x100195b0`/`0x10019d10` are ever invoked):
+```
+mov edx, [ebp-0x218]      ; dim = this table's own axis count (pixel width for Y/chroma, MB-column
+                           ; count for 0x10019d10-style per-MB tables)
+shl edx, 6                 ; dim * 64
+shr edx, 3                 ; -> dim * 8
+add edx, 0x20f             ; + 527
+and edx, 0xfffffff0        ; round DOWN to a multiple of 16
+                            ; -> this value becomes ctx+0x2c
+```
+For even `dim` (always true for every case seen), this reduces exactly to **`bound = 8*dim + 512`**.
+Verified against all 3 known data points: `dim`=1920 (Y pixel width) → 15872; `dim`=960 (chroma
+pixel width) → 8192; `dim`=240 (`0x10019d10`'s MB-column count, `WIDTH/8`) → 2432 — all exact. A
+separate, earlier block in the same setup function (`0x1001a6fe`-`0x1001a73b`) independently
+computes the `ctx+0x28` width field via a direct `bsr`/bit-length operation on a sibling dim slot,
+but since **`width = bound.bit_length()` holds exactly for all 3 points**, a reimplementation only
+needs the one `bound` formula above and can derive `width` from it directly — no separate
+computation or bitstream read needed for either field.
 
 **`0x10019d10` — CONFIRMED, two real consumers, both already-documented engines.** A live
 memory-read watch armed on the buffer immediately after its first real call commits
@@ -4134,6 +4381,46 @@ map was built from) lives alongside them.
   exactly 4).
 
 ---
+
+### 5.3ad TEST VECTOR — `0x10019d10` full 528-byte output, frame 0/Y-plane/row 0's first call (2026-10-12, FINAL)
+
+**Source:** real `binkw32.dll` under the Unicorn harness (isolated DLL emulation, no game process).
+Read at the call's own return `0x10019ef6`. It must be read there and not at frame end, because the
+scratch buffer is reused by later calls. Script:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_19d10_full_2026-10-12.py`, output saved to
+`probe_19d10_full_out.txt` next to it. The first 8 bytes match the sequence already published in §5.3t.
+
+**Inputs at entry:** `ctx=0x303f5034`, `A=6` (so the LUT has 2^6 = 64 entries), `lut_ptr=0x1003beb0`,
+`out_base=0x303f9210`. Return `eax=0x64`.
+- `translate16` (`ctx+0x10`): `[0, 15, 8, 1, 3, 12, 14, 7, 2, 4, 5, 6, 9, 10, 11, 13]`
+- LUT bytes (all 64): `[16, 49, 16, 84, 16, 66, 16, 104, 16, 49, 16, 86, 16, 67, 16, 108, 16, 49, 16, 85, 16, 66, 16, 106, 16, 49, 16, 87, 16, 67, 16, 110, 16, 49, 16, 84, 16, 66, 16, 105, 16, 49, 16, 86, 16, 67, 16, 109, 16, 49, 16, 85, 16, 66, 16, 107, 16, 49, 16, 87, 16, 67, 16, 111]`
+
+**Output, 528 bytes (offset: bytes):**
+```
+0000: 0f 01 00 00 00 00 80 ff f3 e3 e3 f1 f0 80 00 00 00 80 80 81 50 c3 b8 fa 00 00 00 00 00 3f 7f ff
+0020: 10 00 80 e0 e0 e1 c1 c0 ff 00 00 00 00 bf cf e7 00 00 00 00 18 3c 7c fc 00 00 00 e0 f8 f8 fc fc
+0040: f1 f1 f9 f1 c0 f0 30 04 e0 c0 00 40 c0 86 f3 f8 c0 c0 c0 c0 c0 e0 b0 30 70 30 30 70 e0 00 00 00
+0060: 00 10 01 03 82 68 ee fc 00 00 00 00 03 c0 fe ff e0 c0 c0 80 83 c7 c7 e7 01 01 03 03 03 03 cf 7f
+0080: 00 00 c0 18 8c 13 01 88 00 00 00 10 00 00 00 31 ff 07 03 00 00 00 00 00 fd ff 0f 9f 00 c0 80 00
+00a0: 03 01 00 00 00 00 00 00 89 c9 03 80 90 32 62 42 f1 01 01 01 00 8e fe fe 01 81 7f 00 00 00 00 00
+00c0: 00 00 00 00 04 00 c0 ff ff ff e3 c0 c0 c0 60 30 1f 0f 07 03 03 01 01 c1 f8 fc fe ff 03 00 00 00
+00e0: 1f 0f 0f 07 07 07 03 1e 00 00 18 3f 3f 03 01 01 3f 1f 0c 00 00 00 00 00 30 60 40 00 00 00 3e 7f
+0100: ff c3 01 00 00 00 01 00 c2 e0 e4 44 0c 18 30 f0 00 00 00 00 00 07 0f 0f f8 fc 9c 01 03 02 8e fe
+0120: c0 00 00 80 20 3c db f3 be 9f 3f 10 07 00 00 00 3d 3c 38 38 30 00 00 00 f2 f8 fc f0 f8 90 80 00
+0140: 00 00 10 18 1c 0f 0f 03 1f 9e 8e 8e c7 c3 61 30 fb f3 f1 f1 f0 f0 80 00 00 01 21 1f 0f 0f 07 00
+0160: ff ff c0 00 00 00 00 c0 80 80 c0 c0 c0 8f 3f ff f8 00 00 c0 f0 f0 e0 e0 00 00 f8 fe ff ff 07 01
+0180: 10 08 ff ff 7f 7f 00 00 13 0e 00 00 00 00 00 00 df 10 ff 11 f0 ec 84 00 cd 06 23 b0 e6 93 07 7f
+01a0: 00 00 00 00 f0 f8 fc fc 86 8c 98 b8 b1 33 07 23 0f 07 07 07 06 1f c7 ec 38 38 30 10 00 00 00 01
+01c0: 00 00 00 00 00 00 10 19 00 00 00 00 00 00 01 01 78 38 18 18 30 e0 00 00 00 00 40 5c 0e 0b 7f 3f
+01e0: 60 40 00 00 00 00 00 00 20 64 64 c4 84 84 86 8e 18 3d 3f 3f 3e 00 00 00 f8 68 60 40 c0 80 00 00
+0200: 01 04 fc fc fc f0 00 00 00 00 01 01 01 01 03 4f
+```
+Single-line hex (for direct diffing):
+```
+0f010000000080fff3e3e3f1f08000000080808150c3b8fa00000000003f7fff100080e0e0e1c1c0ff00000000bfcfe700000000183c7cfc000000e0f8f8fcfcf1f1f9f1c0f03004e0c00040c086f3f8c0c0c0c0c0e0b03070303070e0000000001001038268eefc0000000003c0feffe0c0c08083c7c7e7010103030303cf7f0000c0188c1301880000001000000031ff07030000000000fdff0f9f00c08000030100000000000089c9038090326242f1010101008efefe01817f0000000000000000000400c0ffffffe3c0c0c060301f0f0703030101c1f8fcfeff030000001f0f0f070707031e0000183f3f0301013f1f0c00000000003060400000003e7fffc3010000000100c2e0e4440c1830f00000000000070f0ff8fc9c0103028efec0000080203cdbf3be9f3f10070000003d3c383830000000f2f8fcf0f8908000000010181c0f0f031f9e8e8ec7c36130fbf3f1f1f0f080000001211f0f0f0700ffffc000000000c08080c0c0c08f3ffff80000c0f0f0e0e00000f8feffff07011008ffff7f7f0000130e000000000000df10ff11f0ec8400cd0623b0e693077f00000000f0f8fcfc868c98b8b13307230f070707061fc7ec3838301000000001000000000000101900000000000001017838181830e000000000405c0e0b7f3f6040000000000000206464c48484868e183d3f3f3e000000f8686040c08000000104fcfcfcf00000000001010101034f
+```
+**Use:** byte-diff a reimplementation of `0x10019d10` against this. The first differing offset
+localizes the divergence. Nobody has diffed it against Team B's implementation yet.
 
 ## 6. The audio decode core (`0x1001e1d0`–`0x100260d4`)
 
@@ -4539,6 +4826,52 @@ is better understood as "codec-core utility region" rather than a strict video/a
 ---
 
 ## Changelog
+
+- **2026-10-12 — §5.3ab/§5.3aa CLOSED: `ctx+0x28`/`ctx+0x2c` formula fully derived, no bitstream
+  read** (SPEC TEAM, orchestrator-routed). Live memory-write watchpoint on ctx+0x2c found the real
+  writer at `0x1001a742`-`0x1001a757`: `bound = 8*dim + 512` where `dim` is the relevant axis count
+  (pixel width for Y/chroma planes, MB-column count for `0x10019d10`-style tables), verified exact
+  against all 3 known data points (1920→15872, 960→8192, 240→2432). `width(ctx+0x28)` =
+  `bound.bit_length()` exactly in all 3 cases, so no separate computation is needed. Sent to Team B.
+- **2026-10-12 — §5.3aa CORRECTED a fourth time: `ctx+0x28` width is per-plane, not a fixed 14**
+  (SPEC TEAM, orchestrator-routed after Team B's production promotion crashed on mm_p_03 with "bad
+  allocation"). Captured all 75 calls to `0x100195b0` in one frame0 decode: width/bound are
+  constant within a plane (14/15872 for one plane, 13/8192 for the next) but change plane-to-plane
+  in the same video; `preloop_bits_consumed` = width+1 always, no exceptions. A hardcoded width=14
+  will desync on any plane whose bound differs from 15872, which is the likely root cause of the
+  mm_p_03 crash, not a `cur_class` bounds-check gap. Both fields must be read live per call.
+- **2026-10-12 — §5.3ab: `0x10019d10` confirmed to use the same `ctx+0x28`/`ctx+0x2c` bound-field
+  mechanism as `0x100195b0`, live-captured for this call: `ctx+0x28`=12, `ctx+0x2c`=2432, decoded
+  magnitude=528 (exact match to the already-published word count). Unlike `0x100195b0`, no extra
+  1-bit sign-probe found in this function's own pre-loop sequence — pre-loop cost here is just the
+  12-bit width, no +1. `ctx+0x20`/`ctx+0x24` for this function are confirmed genuine, dedicated
+  tree fields (not aliased with any translate table) — this function has no class-carry at all
+  (already established, §5.3ab), so the §5.3aa nib2-always-class-0 bug class does not apply here.
+- **2026-10-12 — §5.3aa ALGORITHM FULLY CLOSED: Team B's full 650-byte decode now byte-for-byte
+  matches the real fixture, bit cost exactly 3384** (SPEC TEAM + Team B, joint). Final fix: nib2
+  is not cur_class-indexed at all, it always reads class 0's own slot unconditionally — found by
+  Team B via symbol-1 cross-check (cur_class=1's own A_array value is 6, but nib2's code_len was
+  still 4, the class-0 value). Combined with the already-fixed 14-bit pre-loop width, this closes
+  the multi-session §5.3aa bug chain (translate table, nib2 tree location, pre-loop width, nib2
+  class-indexing) entirely. Code block corrected in place. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-12 — §5.3aa CORRECTED a third time: pre-loop cost is 15 bits not 11, a 4-bit field
+  previously missed** (SPEC TEAM, self, direct harness work, no agent). Live register-state
+  capture at function entry vs. the per-symbol loop-top measured 15 bits, not 10(count)+1(sign-
+  probe)=11; Team B independently confirmed by testing bit 2886 (not 2882) against their fixture
+  — exact match. The missing 4-bit field itself not yet identified/characterized, flagged OPEN.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-12 — §5.3aa CORRECTED a second time: nib2's "global tree at ctx+0x20/+0x24" was also
+  wrong — found by Team B's own per-symbol diff against their implementation, closed by a live
+  capture** (SPEC TEAM, self, direct harness work, no agent). `ctx+0x20/+0x24` turned out to be
+  more bytes of the SAME translate table already corrected once (§5.3aa's first correction), not
+  separate scalar fields — the real per-class arrays live at `ctx+0x100`/`ctx+0x140`, confirmed
+  live and matching §5.3g's own `A_array` exactly (class 0 = 4, matching Team B's own expected
+  code length). Proposed class-indexed formula for nib2, mirroring nib1 — PLAUSIBLE, not
+  independently re-verified against a full symbol trace this pass, flagged for Team B to confirm
+  before production. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-11 — §5.3ac CORRECTED: the idx3 worked-example's own "Bits X-Y" range labels for Gate
   B's first node undercounted by not fully crediting the field width; case 2's pre-Gate-B setup

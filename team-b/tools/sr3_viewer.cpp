@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstring>
 #include <deque>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -18604,6 +18605,93 @@ std::string installZsceneTableFromArchives(const std::vector<std::string>& archi
 
 } // namespace missionzoneobj
 
+// --- Cache-directory archive-scan fallback (this task, fix/m05-zscene-
+// m13-systemlib, 2026-10-12): `tools/lua_host_run.cpp`'s own mission-drive
+// loop resolves archives it needs (e.g. continuous_explosions.xtbl's
+// installContinuousExplosionTableFromCache() above, same file) by scanning
+// EVERY file in the cache DIRECTORY, so it always finds `system_lib.lua`
+// (in `patch_compressed.vpp_pc`) and the real zscene/cutscene scene table
+// (in `cutscene_tables.vpp_pc`) regardless of what the caller happened to
+// name on the command line. `sr3_viewer.cpp`'s own `playtest` command instead
+// only ever looks at the archives the CALLER explicitly listed
+// (`cityArchivePaths`, parsed directly from argv) - so a user who does not
+// already know (or forgets to pass) `cutscene_tables.vpp_pc`/
+// `patch_compressed.vpp_pc` hits `zscene_is_loaded`'s OPEN per-name-map
+// fallback (missionzoneobj::installZsceneTableFromArchives's own doc
+// comment above) or `_GetAnyGlobalSilent is not a function` (system_lib.lua
+// never preloaded) even though the real data is sitting right next to the
+// archives they DID pass. Root cause for BOTH Task A and Task B blockers
+// is this one gap - this command's own caller-supplied-list requirement -
+// not a missing kind-gate (zsceneIsLoaded's fast path is already correct,
+// confirmed directly above) and not a missing preload call (preloadNamed's
+// own two-name block below already runs, it just never finds the archive).
+//
+// Fix: after parsing the caller's own `cityArchivePaths`, scan the
+// DIRECTORY that holds the first one (every real cache archive lives
+// together in one flat directory - same assumption lua_host_run.cpp's own
+// `fs::directory_iterator(cacheDir)` calls already make) and append any
+// sibling `.vpp_pc` file whose lower-cased name matches one this command's
+// own mission/Lua-preload path is known to need, skipping any name already
+// present (case-insensitive) in the caller's own list so an explicit
+// `--` archive is never shadowed or duplicated. Best-effort only: a
+// filesystem error (missing directory, permission) leaves the original
+// list untouched, same fallback convention installZsceneTableFromArchives's
+// own try/catch already uses.
+std::vector<std::string> expandArchivePathsWithCacheDirScan(std::vector<std::string> archivePaths) {
+    if (archivePaths.empty()) return archivePaths;
+    namespace fs = std::filesystem;
+    static const char* const kWantedNames[] = {
+        "cutscene_tables.vpp_pc",  // Task A: real zscene/cutscene scene table (Sec26.25)
+        "patch_compressed.vpp_pc", // lua_host_run.cpp's own kPreferredArchives order (first choice,
+                                   // kept as a fallback candidate even though system_lib.lua's real
+                                   // home turned out to be interface.vpp_pc - see below)
+        "misc_tables.vpp_pc",      // lua_host_run.cpp's own fallback for the same lookups
+        "interface.vpp_pc",        // CORRECTED (2026-10-12, 49-mission-sweep task): Task B's own
+                                   // premise ("system_lib.lua lives in patch_compressed.vpp_pc") was
+                                   // wrong - every real per-script census this project has produced
+                                   // (verdict_per_script.tsv, many results/ runs, e.g.
+                                   // results/verify_actionplay_mission_drive/verdict_per_script.tsv)
+                                   // shows system_lib.lua's real container is interface.vpp_pc, not
+                                   // patch_compressed.vpp_pc. Without this name, findScriptsByName()
+                                   // below never finds it via this command's own curated cache-dir
+                                   // scan (confirmed directly: 49-mission sweep's own m01 run hit
+                                   // "BLOCKING FINDING - no entry named system_lib.lua found" despite
+                                   // the scan already running, then game_lib.lua's own first helper
+                                   // call failed with "attempt to call a nil value" on
+                                   // _PrepareForDynamicGlobals/_DynamicGlobalsLoadComplete, both
+                                   // defined inside system_lib.lua itself per spec-lua-bindings.md
+                                   // Sec16.2's own load-order requirement).
+    };
+    std::error_code ec;
+    fs::path first(archivePaths.front());
+    fs::path cacheDir = first.parent_path();
+    if (cacheDir.empty() || !fs::is_directory(cacheDir, ec) || ec) return archivePaths;
+
+    auto toLowerStr = [](std::string s) {
+        for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        return s;
+    };
+    std::vector<std::string> haveLower;
+    haveLower.reserve(archivePaths.size());
+    for (const auto& p : archivePaths) haveLower.push_back(toLowerStr(fs::path(p).filename().string()));
+
+    for (const char* wanted : kWantedNames) {
+        const std::string wantedLower = toLowerStr(wanted);
+        if (std::find(haveLower.begin(), haveLower.end(), wantedLower) != haveLower.end()) continue; // already named
+        fs::directory_iterator it(cacheDir, ec);
+        if (ec) break;
+        for (; it != fs::directory_iterator(); it.increment(ec)) {
+            if (ec) break;
+            if (!it->is_regular_file(ec) || ec) continue;
+            if (toLowerStr(it->path().filename().string()) != wantedLower) continue;
+            archivePaths.push_back(it->path().string());
+            haveLower.push_back(wantedLower);
+            break;
+        }
+    }
+    return archivePaths;
+}
+
 // Real outcome of resolving `stem` against missionPackageTsvPath's rows,
 // then finding (findScriptsByName above) a `.lua` leaf whose name case-
 // insensitively equals that row's own mission_lua_entry_name.
@@ -18964,9 +19052,10 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--vehicle-spawn X Z] [--script-vehicle]\n"
                      "                           [--script-vehicle-drive-frames N] [--no-collision]\n"
                      "                           [--script-roadblock] [--script-fire]\n"
-                     "                           [--script-hud-prompt-response]\n"
+                     "                           [--script-hud-prompt-response] [--auto-answer-hud-prompts [N]]\n"
                      "                           [--mission=<stem>] [--mission-registration-list <path>]\n"
                      "                           [--mission-package-tsv <path>] [--mission-timeout=<seconds>]\n"
+                     "                           [--auto-objective [N]] [--auto-seat-mission-vehicle]\n"
                      "                           [--no-audio] [--sfx-archive <path>]\n"
                      "       Playtest v0 - the first genuinely interactive build. See this\n"
                      "       command's own doc comment (above runPlaytest() in this file) for the\n"
@@ -19039,6 +19128,21 @@ int runPlaytest(int argc, char** argv) {
                      "       on_trigger/on_death/etc dispatch already uses, reused here rather than\n"
                      "       invented separately) - the scripted stand-in for a real player pressing the\n"
                      "       prompted button, e.g. m05's M05_JUMP prompt / m05_jump_local.\n"
+                     "       --auto-answer-hud-prompts [N] (THIS TASK, hud-prompt-autoanswer-harness): a\n"
+                     "       --no-input-friendly generalization of --script-hud-prompt-response - same\n"
+                     "       underlying dispatch (any CURRENTLY showing hud_prompt is answered by spawning a\n"
+                     "       coroutine for its own registered callbackName, generic, not specific to M05_JUMP\n"
+                     "       or any other one prompt), but only after N frames of that SAME prompt request\n"
+                     "       having been showing (default 15, i.e. roughly half a second at the --no-input\n"
+                     "       fixed 1/30s step) rather than answering on the very tick it first appears. Lets\n"
+                     "       a scripted/automated --no-input run (e.g. a mission-drive verification harness,\n"
+                     "       see results/mission_drive_*.md) get PAST a real player-input-gated HUD-prompt\n"
+                     "       wait without a real button press, so that run can keep going and surface\n"
+                     "       whatever the mission's own NEXT stall point is, instead of tick-budget-stalling\n"
+                     "       forever on the prompt. Implies --script-hud-prompt-response's own dispatch\n"
+                     "       mechanism (do not pass both; --auto-answer-hud-prompts wins if both are given).\n"
+                     "       N is an optional trailing integer (e.g. --auto-answer-hud-prompts 30); omitted,\n"
+                     "       the CHOSEN default of 15 frames applies.\n"
                      "       PAUSE MENU (THIS TASK, spec-frontend-menu-runtime.md Sec7/Sec9 item 2): Esc\n"
                      "       opens/closes the real pause-menu-open binding (CBA_GAC_PAUSE_MENU/0x55 ->\n"
                      "       gate -> shared game-pause push (4,1) -> \"dialog_pause_show\") instead of\n"
@@ -19085,6 +19189,21 @@ int runPlaytest(int argc, char** argv) {
         std::fprintf(stderr, "need at least one city archive (sr3_city_0.vpp_pc)\n");
         return 2;
     }
+    // THIS TASK (fix/m05-zscene-m13-systemlib, 2026-10-12): scan the cache
+    // directory (same directory as the first archive the caller named) for
+    // cutscene_tables.vpp_pc/patch_compressed.vpp_pc/misc_tables.vpp_pc if
+    // not already named explicitly, so --mission's own zscene-table install
+    // and system_lib.lua/game_lib.lua preload below can find them without
+    // the caller having to know or guess the right archive - see
+    // expandArchivePathsWithCacheDirScan()'s own doc comment above. Kept as
+    // a SEPARATE list from `cityArchivePaths` itself (used below for the
+    // CityArchive/CityCell world-streaming population): adding
+    // patch_compressed.vpp_pc there would additionally feed it into that
+    // unrelated container-open code path, which this task's brief flags as
+    // having its own separate, pre-existing "bad allocation" warning when
+    // handed that specific archive - out of scope here, and this mission/
+    // Lua-preload lookup does not need the world-streaming side effect.
+    std::vector<std::string> luaPreloadArchivePaths = expandArchivePathsWithCacheDirScan(cityArchivePaths);
 
     bool headless = false;        // --headless: forces the window hidden (ctest use)
     bool noInput = false;         // --no-input: scripted fallback, see this function's doc comment
@@ -19138,6 +19257,54 @@ int runPlaytest(int argc, char** argv) {
     float spawnX = -1280.0f, spawnZ = -560.0f;
     bool spawnYOverrideGiven = false;  // --spawn-y, see its own doc comment below
     float spawnYOverride = 0.0f;
+    // --auto-objective[=N] (feature/auto-objective-harness, 2026-10-12):
+    // generalizes the manually-proven m07 spawn-at-barge technique (results/
+    // verify_m07_spawn_at_barge_20261012/: spawn the scripted player directly
+    // at a get_dist target's own real, zone-data-resolved position) into an
+    // automatic in-run teleport. After N consecutive get_dist(a,b) calls on
+    // the SAME unordered name pair (EngineState::recordGetDistCall(), set by
+    // every stub_get_dist call regardless of this flag), with --mission
+    // active, teleports the player (via the SAME pm.warp() already used for
+    // --spawn placement) to whichever of a/b is NOT "#PLAYER1#", using its
+    // resolved worldPosition - the SAME tryResolveWorldPositionFromZoneData()
+    // position stub_get_dist's own real-fallback chain already uses, never a
+    // fabricated one. Does nothing (logs why) if no get_dist stall has been
+    // recorded yet, if neither name is the player sentinel, or if the
+    // target's position never resolved known() - no invented fallback
+    // position, per this project's standing no-invented-fixes rule. Fires
+    // AT MOST ONCE per run (a one-shot stand-in, not a repeating homing
+    // assist). Default N=80: CHOSEN - roughly 2.7s at this harness's fixed
+    // 1/30s --no-input step, long enough that a single transient get_dist
+    // call (most calls are NOT part of a wait loop) won't trip it, short
+    // enough to resolve well inside the 300-frame runs this project's own
+    // mission-drive verification tasks already use (m07's own confirmed
+    // stall held for the full 300 frames; m09/m13 unconfirmed but presumed
+    // similar order of magnitude).
+    bool autoObjective = false;
+    int autoObjectiveFrames = 80;
+    // --auto-seat-mission-vehicle (THIS TASK, auto-objective-trigger-vehicle-
+    // seat, 2026-10-12): m05's own heli stall (results/verify_m05_direct_
+    // callback_stand_in_20261012.md - m05_jump_local's last line,
+    // `vehicle_exit(LOCAL_PLAYER)`, never returns because this synthetic
+    // mission-drive run never put the player in a vehicle, so stub_vehicle_
+    // exit_do's own seated test, CharacterState::stateEnum == 3, never
+    // passes) has NO generic detection this host can run - unlike the
+    // get_dist/on_trigger stalls above, nothing observable distinguishes "a
+    // script expects the player already seated in THIS vehicle" from any
+    // other yield. CHOSEN, scoped narrowly to m05 by name, exactly as this
+    // task's own brief allows: when this run drives --mission=m05, calls the
+    // REAL vehicle_enter_do Lua native (the SAME registered global
+    // stub_vehicle_enter_do - lua_spec_confirmed_stubs_b15_wave2_core_
+    // dispatchers.cpp - a mission script's own vehicle_enter_teleport wrapper
+    // calls) with LOCAL_PLAYER and "m05_heli_pierce" (the mission's own real
+    // vehicle name, confirmed via results/baseline_2026-10-11_tick3000's own
+    // verdict dump), instant=true - the exact code path that already writes
+    // CharacterState::stateEnum = 3 ("seated") synchronously on an accepted
+    // instant placement (see that stub's own 2026-10-09 FIXED note). No new
+    // state-writing mechanism: this just drives the existing native through
+    // the host exactly as a real script would, once, before the mission's
+    // own scheduler pass gets a chance to reach vehicle_exit.
+    bool autoSeatMissionVehicle = false;
     float farZ = 3000.0f;
     std::string animArchiveOverride;
     float mouseSensitivity = 1.0f;
@@ -19251,6 +19418,27 @@ int runPlaytest(int argc, char** argv) {
     // second/parallel mechanism. See the main loop's own
     // "SCRIPT-HUD-PROMPT-RESPONSE" block for the exact per-tick trigger.
     bool scriptHudPromptResponse = false;
+    // --auto-answer-hud-prompts [N] (THIS TASK, hud-prompt-autoanswer-harness):
+    // generalizes --script-hud-prompt-response above for scripted/automated
+    // --no-input runs (mission-drive verification harnesses) that need to get
+    // PAST a real player-input-gated HUD-prompt wait (e.g. m05.lua:1141's
+    // M05_JUMP) without a real button press, so the run can surface the
+    // mission's own NEXT real stall point instead of tick-budget-stalling on
+    // the prompt forever. Reuses the exact same dispatch mechanism (spawn a
+    // coroutine for the prompt's own registered callbackName via
+    // BareThreadTable::allocate(), the same idiom Sec1.14's confirmed
+    // on_trigger/on_death/etc dispatch and --script-hud-prompt-response both
+    // already use - no parallel path invented), generically for ANY currently
+    // showing hud_prompt, not hardcoded to M05_JUMP. The only real difference
+    // from --script-hud-prompt-response is the per-request delay below
+    // (hudPromptAutoAnswerDelayFrames): --script-hud-prompt-response answers
+    // on the very tick a request first appears (delay 0); this flag instead
+    // waits N frames of that SAME request showing first, matching a real
+    // player's own reaction time rather than an instant answer. If both flags
+    // are given, --auto-answer-hud-prompts's own delay wins (scriptHudPromptResponse
+    // stays true either way - same bool drives both).
+    bool autoAnswerHudPrompts = false;
+    int hudPromptAutoAnswerDelayFrames = 15; // CHOSEN default (~0.5s at the --no-input fixed 1/30s step)
     // --no-audio (THIS TASK, audio-playback): opts OUT of opening a real
     // speaker device even in an otherwise-interactive run. Independent of
     // this flag, --headless and --no-input NEVER open a device regardless -
@@ -19352,6 +19540,37 @@ int runPlaytest(int argc, char** argv) {
             scriptFire = true;
         } else if (arg == "--script-hud-prompt-response") {
             scriptHudPromptResponse = true;
+        } else if (arg == "--auto-answer-hud-prompts") {
+            scriptHudPromptResponse = true;
+            autoAnswerHudPrompts = true;
+            // Optional trailing N (frame-delay override) - only consume the
+            // next token if it looks like a plain non-negative integer, so a
+            // following positional/flag argument is never swallowed by mistake.
+            if (argi + 1 < argc) {
+                const std::string next = argv[argi + 1];
+                if (!next.empty() && next.rfind("--", 0) != 0 &&
+                    std::all_of(next.begin(), next.end(), [](unsigned char c) { return std::isdigit(c); })) {
+                    hudPromptAutoAnswerDelayFrames = std::atoi(argv[++argi]);
+                }
+            }
+        } else if (arg.rfind("--auto-objective=", 0) == 0) {
+            autoObjective = true;
+            autoObjectiveFrames = std::atoi(arg.substr(17).c_str()); // strlen("--auto-objective=") == 17
+        } else if (arg == "--auto-objective") {
+            autoObjective = true;
+            // Optional trailing N (frame-threshold override) - same "only
+            // consume the next token if it's a plain non-negative integer"
+            // convention --auto-answer-hud-prompts uses above, so a
+            // following positional/flag argument is never swallowed.
+            if (argi + 1 < argc) {
+                const std::string next = argv[argi + 1];
+                if (!next.empty() && next.rfind("--", 0) != 0 &&
+                    std::all_of(next.begin(), next.end(), [](unsigned char c) { return std::isdigit(c); })) {
+                    autoObjectiveFrames = std::atoi(argv[++argi]);
+                }
+            }
+        } else if (arg == "--auto-seat-mission-vehicle") {
+            autoSeatMissionVehicle = true;
         } else if (arg.rfind("--mission=", 0) == 0) {
             missionEnabled = true;
             missionStem = arg.substr(10);
@@ -20485,6 +20704,13 @@ int runPlaytest(int argc, char** argv) {
     // vector only ever grows - see HudPromptRequest's own doc comment) -
     // see the main loop's "SCRIPT-HUD-PROMPT-RESPONSE" block.
     size_t hudPromptRequestsRespondedCount = 0;
+    // --auto-answer-hud-prompts (THIS TASK): parallel to hudPromptReqs
+    // (EngineState::hudPromptRequests() only ever grows, same convention as
+    // above) - the `frames` value at the instant each request was FIRST
+    // observed here, so the delay below is measured from "first seen showing"
+    // rather than from tool startup. Grown lazily, one entry per newly-seen
+    // request, in the same per-tick block that drains hudPromptReqs.
+    std::vector<int> hudPromptFirstSeenFrame;
 
     // ===================== PAUSE MENU (THIS TASK) ==============================
     // spec-frontend-menu-runtime.md Sec7/Sec9 item 2 (HIGH CONFIDENCE, landed
@@ -20840,7 +21066,10 @@ int runPlaytest(int argc, char** argv) {
         // missionzoneobj::installZsceneTableFromArchives()'s own doc comment
         // for the full root-cause citation.
         {
-            std::string zsceneSummary = missionzoneobj::installZsceneTableFromArchives(cityArchivePaths, *hudEs);
+            // Uses luaPreloadArchivePaths (cache-directory-scan-expanded), not
+            // cityArchivePaths directly - see that variable's own doc comment
+            // above (fix/m05-zscene-m13-systemlib, Task A).
+            std::string zsceneSummary = missionzoneobj::installZsceneTableFromArchives(luaPreloadArchivePaths, *hudEs);
             std::printf("mission  : real zscene/cutscene table load: %s\n", zsceneSummary.c_str());
         }
 
@@ -20862,7 +21091,10 @@ int runPlaytest(int argc, char** argv) {
         // lua_host_run.cpp's own preloadNamed() uses) but NOT fatal here:
         // a mission that does not need them may still run.
         {
-            auto preloads = findScriptsByName(cityArchivePaths, {"system_lib.lua", "game_lib.lua"});
+            // Uses luaPreloadArchivePaths (cache-directory-scan-expanded), not
+            // cityArchivePaths directly - Task B (system_lib.lua archive-
+            // location gap), fix/m05-zscene-m13-systemlib.
+            auto preloads = findScriptsByName(luaPreloadArchivePaths, {"system_lib.lua", "game_lib.lua"});
             for (const char* name : {"system_lib.lua", "game_lib.lua"}) {
                 auto pit = preloads.find(name);
                 if (pit == preloads.end()) {
@@ -21758,6 +21990,9 @@ int runPlaytest(int argc, char** argv) {
     QueryPerformanceCounter(&prevTime);
     int frames = 0;
     int64_t nowMsAccum = 0;
+    bool autoObjectiveFired = false; // --auto-objective (get_dist stall): fires at most once per run
+    bool autoObjectiveTriggerFired = false; // --auto-objective (on_trigger stall): fires at most once per run, INDEPENDENTLY of the above
+    bool autoSeatMissionVehicleFired = false; // --auto-seat-mission-vehicle: fires at most once per run (frame 0 of mission drive)
     // TOD clock (originally 2026-10-08, sky/lighting/TOD task; slowed down
     // 2026-10-09, v0.3 polish task): a CHOSEN, slowly-advancing fraction-of-
     // day in [0,1), starting at 0.5 (noon) - the original task brief's own
@@ -23206,6 +23441,51 @@ int runPlaytest(int argc, char** argv) {
                             static_cast<double>(focusZ));
             }
 
+            // --auto-objective (feature/auto-objective-harness, 2026-10-12):
+            // one-shot teleport once the SAME get_dist(a,b) pair has been
+            // queried for >= autoObjectiveFrames consecutive calls - see this
+            // flag's own doc comment above its CLI declaration and
+            // EngineState::recordGetDistCall()'s doc comment for the full
+            // reasoning (generalizes the m07 spawn-at-barge diagnostic).
+            // Placed BEFORE the in-world-trigger overlap check just below so
+            // a teleport that lands inside a waited-on trigger volume this
+            // SAME frame is picked up by this frame's own overlap test,
+            // exactly like a real player who had just walked there.
+            if (autoObjective && !autoObjectiveFired) {
+                const sr3luahost::EngineState::GetDistStallInfo& stall = hudEs->getDistStallInfo();
+                if (stall.repeatCount >= static_cast<uint64_t>(autoObjectiveFrames)) {
+                    autoObjectiveFired = true; // fires at most once per run regardless of outcome below
+                    const bool aIsPlayer = (stall.nameA == "#PLAYER1#");
+                    const bool bIsPlayer = (stall.nameB == "#PLAYER1#");
+                    if (aIsPlayer == bIsPlayer) {
+                        // Neither name is the player sentinel, or (degenerate) both are -
+                        // no trackable target; honestly do nothing rather than guessing.
+                        std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') but neither name is "
+                                    "'#PLAYER1#' - no trackable target, not teleporting\n",
+                                    static_cast<unsigned long long>(stall.repeatCount), stall.nameA.c_str(), stall.nameB.c_str());
+                    } else {
+                        const std::string& targetName = aIsPlayer ? stall.nameB : stall.nameA;
+                        const sr3luahost::WorldPosition& targetPos = aIsPlayer ? stall.posB : stall.posA;
+                        const bool targetKnown = aIsPlayer ? stall.knownB : stall.knownA;
+                        if (!targetKnown) {
+                            std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') but target '%s' has "
+                                        "no resolved position (tryResolveWorldPositionFromZoneData() returned false) - "
+                                        "not inventing a fallback, not teleporting\n",
+                                        static_cast<unsigned long long>(stall.repeatCount), stall.nameA.c_str(),
+                                        stall.nameB.c_str(), targetName.c_str());
+                        } else {
+                            pm.warp(sr3player::Vec3{targetPos.x, targetPos.y, targetPos.z});
+                            hudEs->bridgeLiveCharacterPosition("#PLAYER1#", targetPos);
+                            std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') - teleported player "
+                                        "to '%s' at (%.2f, %.2f, %.2f) [CHOSEN test-harness stand-in, not real "
+                                        "navigation - see --auto-objective's own doc comment]\n",
+                                        static_cast<unsigned long long>(stall.repeatCount), stall.nameA.c_str(),
+                                        stall.nameB.c_str(), targetName.c_str(), targetPos.x, targetPos.y, targetPos.z);
+                        }
+                    }
+                }
+            }
+
             // IN-WORLD TRIGGERS (this task, 2026-10-10): the real per-frame
             // overlap test (spec-lua-api-behaviour.md Sec1.14) against the
             // live player's own just-updated position, firing registered
@@ -23301,6 +23581,13 @@ int runPlaytest(int argc, char** argv) {
                         g.radius = 3.0;
                     }
                     hudEs->registerTriggerGeometry(triggerName, g);
+                    // feature/auto-objective-trigger-vehicle-seat (2026-10-12):
+                    // record WHEN (registration order, not iteration order - an
+                    // unordered_map's own iteration order is not a "which
+                    // trigger is the mission waiting on first" signal) this
+                    // trigger's geometry became known, for the stall-teleport
+                    // block below.
+                    hudEs->noteTriggerRegistrationOrder(triggerName);
                     if (decoded) {
                         std::printf("mission  : in-world trigger '%s' geometry registered - REAL position (%.2f "
                                     "%.2f %.2f) and REAL shape '%s' (enum %d) from zone data\n",
@@ -23325,6 +23612,7 @@ int runPlaytest(int argc, char** argv) {
                     bool& wasInside = hudEs->triggerCurrentlyInside(triggerName);
                     if (nowInside == wasInside) continue; // no transition - the real poll's own "only on a transition" rule
                     wasInside = nowInside;
+                    if (nowInside) hudEs->triggerEverEntered(triggerName) = true; // feature/auto-objective-trigger-vehicle-seat
                     const std::string& cbName = nowInside ? hudEs->onTriggerCallbackValue(triggerName)
                                                            : hudEs->onTriggerExitCallbackValue(triggerName);
                     const char* edge = nowInside ? "ENTER" : "EXIT";
@@ -23370,6 +23658,55 @@ int runPlaytest(int argc, char** argv) {
                                     triggerName.c_str(), edge, cbName.c_str(), static_cast<unsigned>(spawned->id));
                     }
                 }
+
+                // --auto-objective (feature/auto-objective-trigger-vehicle-seat,
+                // 2026-10-12): the on_trigger analogue of the get_dist stall
+                // teleport above - a mission script waiting on a trigger
+                // ENTER that never fires (m13.lua's own m13_goto_a_trigger,
+                // results/verify_combined_with_seatedpose_20261010's own
+                // stall-point dump) makes no get_dist call at all, so it is
+                // invisible to that tracker. Reuses the SAME autoObjective
+                // flag/autoObjectiveFrames threshold (this task's own CHOSEN
+                // "keep it simple" call, per the brief) but fires
+                // INDEPENDENTLY (autoObjectiveTriggerFired, its own one-shot
+                // latch) - a single run could conceivably stall on BOTH
+                // shapes at different points, and each should get its own
+                // one-shot teleport. Candidate selection: the EARLIEST-
+                // registered trigger that has geometry but has never
+                // produced an ENTER yet (triggerRegistrationOrder()/
+                // triggerEverEntered()) - the trigger this harness has been
+                // "waiting on" the longest, matching a real player's own
+                // likely next destination better than an arbitrary pending
+                // trigger.
+                if (autoObjective && !autoObjectiveTriggerFired) {
+                    std::string pendingTrigger;
+                    for (const std::string& name : hudEs->triggerRegistrationOrder()) {
+                        if (!hudEs->triggerEverEntered(name)) { pendingTrigger = name; break; }
+                    }
+                    if (!pendingTrigger.empty()) {
+                        hudEs->recordTriggerWaitFrame(pendingTrigger);
+                        const sr3luahost::EngineState::TriggerWaitStallInfo& tstall = hudEs->triggerWaitStallInfo();
+                        if (tstall.framesWaiting >= static_cast<uint64_t>(autoObjectiveFrames)) {
+                            autoObjectiveTriggerFired = true; // fires at most once per run regardless of outcome below
+                            const sr3luahost::EngineState::TriggerVolumeGeometry* g = hudEs->triggerGeometry(pendingTrigger);
+                            if (!g || !g->positionKnown) {
+                                std::printf("auto-objective: stalled %llu frames waiting on trigger '%s' but its "
+                                            "geometry has no known real position - not teleporting\n",
+                                            static_cast<unsigned long long>(tstall.framesWaiting), pendingTrigger.c_str());
+                            } else {
+                                const sr3luahost::WorldPosition rep =
+                                    sr3luahost::EngineState::TriggerVolumeRepresentativePoint(*g);
+                                pm.warp(sr3player::Vec3{rep.x, rep.y, rep.z});
+                                hudEs->bridgeLiveCharacterPosition("#PLAYER1#", rep);
+                                std::printf("auto-objective: stalled %llu frames waiting on trigger '%s' - teleported "
+                                            "player INTO its volume at (%.2f, %.2f, %.2f) [CHOSEN test-harness "
+                                            "stand-in, not real navigation - see --auto-objective's own doc comment]\n",
+                                            static_cast<unsigned long long>(tstall.framesWaiting), pendingTrigger.c_str(),
+                                            rep.x, rep.y, rep.z);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -23381,6 +23718,25 @@ int runPlaytest(int argc, char** argv) {
         // BEFORE rendering begins. See this function's own doc comment
         // (above runPlaytest()) for the full rationale/citation.
         if (missionDriveActive) {
+            // --auto-seat-mission-vehicle (THIS TASK, 2026-10-12): see this
+            // flag's own doc comment above its CLI declaration for the full
+            // "why m05 specifically, why no generic detection" account.
+            // Fired once, on the very first mission-drive tick, BEFORE the
+            // scheduler pass below gets a chance to resume m05_jump_local
+            // into its own `vehicle_exit(LOCAL_PLAYER)` call - calling the
+            // REAL registered vehicle_enter_do native exactly as a mission
+            // script's own vehicle_enter_teleport wrapper would.
+            if (autoSeatMissionVehicle && !autoSeatMissionVehicleFired && missionStem == "m05") {
+                autoSeatMissionVehicleFired = true;
+                auto seatResult = hudHost->runChunk(
+                    hudGp, "vehicle_enter_do(LOCAL_PLAYER, 'm05_heli_pierce', true)",
+                    "playtest_auto_seat_mission_vehicle.lua");
+                std::printf("auto-seat: --auto-seat-mission-vehicle seated #PLAYER1# in 'm05_heli_pierce' via the "
+                            "real vehicle_enter_do native (loadOk=%d pcallOk=%d) [CHOSEN, m05-specific stand-in - "
+                            "see --auto-seat-mission-vehicle's own doc comment]\n",
+                            seatResult.loadOk ? 1 : 0, seatResult.pcallOk ? 1 : 0);
+            }
+
             // Wall-clock timeout (NEW this task, design-doc §6's own flagged
             // risk): accumulated against this loop's own real per-frame
             // `dt` (real wall-clock time in normal operation; the SAME
@@ -23440,33 +23796,69 @@ int runPlaytest(int argc, char** argv) {
                 }
 
                 // ===================== SCRIPT-HUD-PROMPT-RESPONSE (THIS TASK) =====================
-                // See --script-hud-prompt-response's own doc comment (flag
-                // declaration, above) for the full citation. Any hud_prompt
-                // request recorded THIS tick (or any prior tick not yet
-                // answered - hudPromptRequestsRespondedCount tracks the
-                // boundary) is answered immediately: spawn a coroutine for
-                // its own registered callback name via the SAME BareThreadTable
+                // See --script-hud-prompt-response's/--auto-answer-hud-prompts's
+                // own doc comments (flag declarations, above) for the full
+                // citation. Any hud_prompt request recorded THIS tick (or any
+                // prior tick not yet answered - hudPromptRequestsRespondedCount
+                // tracks the boundary) is answered once it has been showing for
+                // at least hudPromptAutoAnswerDelayFrames frames (0 for plain
+                // --script-hud-prompt-response - answers the very tick it first
+                // appears, same as before this task; the CHOSEN default 15 for
+                // --auto-answer-hud-prompts - waits, so a scripted/automated
+                // --no-input run's auto-answer looks like a delayed reaction
+                // rather than an instant one): spawn a coroutine for its own
+                // registered callback name via the SAME BareThreadTable
                 // mechanism the mission-start call above and lua_host_run's own
                 // --probe-autopilot already use. Spawn only, exactly like that
                 // precedent - the callback body does NOT run synchronously
                 // here; it runs on the NEXT tick's runScriptThreadSchedulerPass
                 // above, same decoupled-in-time shape Sec1.14 confirms for the
-                // real dispatcher.
+                // real dispatcher. Generic over ALL currently showing prompts,
+                // not hardcoded to any one promptId/callbackName (M05_JUMP
+                // included) - whichever prompt(s) are live get answered the
+                // same way.
                 if (scriptHudPromptResponse) {
                     auto& hudPromptReqs = hudEs->hudPromptRequests();
+                    // Record the first-seen frame for any newly-appended
+                    // request before checking delays below, so a request that
+                    // appears and is due to be answered in the SAME tick (e.g.
+                    // delay 0) is still handled this tick.
+                    while (hudPromptFirstSeenFrame.size() < hudPromptReqs.size()) {
+                        hudPromptFirstSeenFrame.push_back(frames);
+                    }
                     while (hudPromptRequestsRespondedCount < hudPromptReqs.size()) {
                         const auto& req = hudPromptReqs[hudPromptRequestsRespondedCount];
+                        const int firstSeenFrame = hudPromptFirstSeenFrame[hudPromptRequestsRespondedCount];
+                        if (frames - firstSeenFrame < hudPromptAutoAnswerDelayFrames) {
+                            // This request (and, since requests are answered in
+                            // the order they were recorded, every later one too)
+                            // isn't due yet - stop and re-check next tick.
+                            break;
+                        }
                         ++hudPromptRequestsRespondedCount;
                         if (req.arg3.empty()) continue; // no callback name to respond with
-                        std::printf("mission  : --script-hud-prompt-response: hud_prompt(\"%s\", \"%s\", \"%s\") "
-                                    "seen - spawning a coroutine for callback '%s'\n",
-                                    req.target.c_str(), req.arg2.c_str(), req.arg3.c_str(), req.arg3.c_str());
-                        auto* spawnedRec = hudHost->bareGlobals().threads().allocate(hudGp, req.arg3, /*nargs=*/0,
-                                                                                      /*hasParent=*/false);
-                        if (!spawnedRec) {
-                            std::printf("mission  : --script-hud-prompt-response: script-thread table full - "
-                                        "callback '%s' not spawned\n",
-                                        req.arg3.c_str());
+                        // CHOSEN stand-in (hud-prompt-direct-callback-standin task, 2026-10-12):
+                        // the real dispatch path that resolves hud_prompt's arg3 to a callback is
+                        // not yet traced (spec-lua-api-behaviour.md Sec13.3, 2026-10-12 update -
+                        // confirmed arg3 genuinely IS the callback name the engine calls, but via
+                        // a mechanism NOT inside hud_prompt's own native call chain). Measured
+                        // (results/verify_m05_hud_prompt_autoanswer_20261012.md): spawning a
+                        // coroutine for arg3 via BareThreadTable::allocate() did NOT advance m05
+                        // past m05.lua:1141. This directly calls the named global Lua function by
+                        // string lookup (Host::callGlobalFunctionByName()) instead - NOT how the
+                        // real engine does it, but produces the same observable effect (the
+                        // callback body actually running) for any script that only cares about the
+                        // callback having run.
+                        std::printf("mission  : %s: hud_prompt(\"%s\", \"%s\", \"%s\") seen %d frame(s) ago - "
+                                    "CHOSEN stand-in: calling global '%s' directly\n",
+                                    autoAnswerHudPrompts ? "--auto-answer-hud-prompts" : "--script-hud-prompt-response",
+                                    req.target.c_str(), req.arg2.c_str(), req.arg3.c_str(),
+                                    frames - firstSeenFrame, req.arg3.c_str());
+                        std::string callErr;
+                        bool called = hudHost->callGlobalFunctionByName(hudGp, req.arg3, callErr);
+                        if (!called) {
+                            std::printf("mission  : --script-hud-prompt-response: callback '%s' not called: %s\n",
+                                        req.arg3.c_str(), callErr.empty() ? "no such global function" : callErr.c_str());
                         }
                     }
                 }

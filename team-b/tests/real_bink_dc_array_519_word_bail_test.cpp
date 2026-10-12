@@ -107,8 +107,12 @@ int main() {
     CaseSelectorScratchSource caseSelectorA(br, kLumaWidthPixels);
     CaseSelectorScratchSource caseSelectorB(br, kLumaWidthPixels, caseSelectorLengthFieldBitWidthB,
                                              kDescriptorBSiblingTableIndex);
-    CHECK(caseSelectorA.beginBlockRow(&caseSelectorB) == CaseSelectorStatus::Ok);
-    consumeDcArrayPreStageGap(br, caseSelectorA.builtTable());  // UPDATED 2026-10-11, fix/bink-0x10019d10-real-decode: now 2-arg
+    SiblingTableBank siblingBank;
+    CHECK(caseSelectorA.beginBlockRow(&caseSelectorB, &siblingBank) == CaseSelectorStatus::Ok);
+    // UPDATED 2026-10-12, fix/flat-fill-perplane-width-promotion: now 4-arg
+    // (SiblingTableBank + blockCols, required by the now-production real
+    // flat-fill decode - see dc_prestage_sibling_gap.h's own updated comment).
+    consumeDcArrayPreStageGap(br, caseSelectorA.builtTable(), siblingBank, kLumaWidthPixels / 8);
     CHECK(br.bitsConsumedSoFar() == 9256);
 
     // blockCols for this row (240, Y-plane width 1920 / 8) passed as the

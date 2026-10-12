@@ -84,6 +84,18 @@ To address the "similar mission archives" part of this target's scope, the follo
 - **`sr3_city_0.vpp_pc` / `sr3_city_1.vpp_pc`** — large (1,033 and 1,516 entries) fully-raw archives holding **open-world city geometry, organized by map grid tile** (entries named by coordinate, e.g. `1024.str2_pc`/`1024.asm_pc`), not by mission or activity. A world-streaming system, not a mission-package one. **[CONFIRMED — empirical, name pattern and entry count checked.]** **[OPEN — desk review 2026-09-30: if every tile contributes a `.str2_pc`/`.asm_pc` pair, a top-level count is even; 1,033 is odd, so at least one entry of `sr3_city_0.vpp_pc` is not a coordinate-named pair member (a shared manifest such as `stream_grid.asm_pc` is a candidate, §6 item 4). Which entry it is, and whether "named by coordinate" holds for all other entries, is to be settled against real data.]**
 - **`cutscenes.vpp_pc` / `cutscene_sounds.vpp_pc`** — cinematic-camera/animation data and cutscene audio banks, organized by cutscene-shot name (e.g. `16_out.str2_pc`, `ct_kinzie_01.bnk_pc`) rather than by mission/activity name. Mission-adjacent (cutscenes obviously belong to specific missions) but a genuinely separate archive family with its own naming convention — not investigated further here, and already partially covered by `spec-fxo-format.md`'s and `spec-vpp-container.md`'s use of this same archive family for other worked examples.
 - **DLC archives (`dlc1/2/3.vpp_pc`)** — checked for an equivalent "named activity package" archive and found none; DLC mission-specific content instead appears as **flat, directly-named `.xtbl` files** at the archive's top level (e.g. `dlc1_rm_01.xtbl`, `dlc1_a_bm_nw_01.xtbl` — already noted in passing in `spec-vehicle-data.md`), not as nested named `.str2_pc` packages. **This means the "named activity package" pattern documented in this spec is specific to `sr3_city_missions.vpp_pc` and does not generalize to the DLC content — flagged as a real structural difference, not an oversight.** **[HIGH CONFIDENCE — inferred from a direct check of all three DLC archives' top-level entries; the DLC mission `.xtbl` files themselves were not individually opened/characterized this pass.]**
+  **[CORRECTED 2026-10-12, FINAL — the "no nested packages" claim is WRONG for `dlc2`/`dlc3`.** A raw
+  name scan of `dlc2.vpp_pc` finds the same per-mission package set the main game uses, for each of
+  `dlc2_m01..m03`: `dlc2_mNN.str2_pc`, `dlc2_mNN_modal.str2_pc`, `dlc2_mNN.bnk_pc`/`_media.bnk_pc`,
+  `dlc2_mNN_pc.cvbm_pc`/`.gvbm_pc` and `dlc2_mNN_tod_override.xtbl`. `dlc3.vpp_pc` follows the same
+  pattern for `dlc3_m01..m03`. So the mission script `dlcN_mNN.lua` sits inside
+  `dlcN_mNN_modal.str2_pc` inside `dlcN.vpp_pc`, the same `<code>_modal` → `<code>.lua` rule as
+  the `sr3_city_missions.vpp_pc` missions (`spec-lua-bindings.md` §14.5). **Port consequence:** a
+  mission runner must include `dlc2.vpp_pc`/`dlc3.vpp_pc` in its archive search set for the DLC
+  missions. Team B's 2026-10-12 sweep fails all six (`dlc2_m01..dlc3_m03`, exit 1, "entry
+  'dlcN_mNN.lua' (container 'dlcN_mNN_modal') not found in any of the 5 given") for that reason
+  alone. The `dlc1` "flat `.xtbl`" observation above still stands; dlc1 holds the `dlc1_mm_*`
+  activities, which already run.]**
 
 **Review status (2026-09-30): NEEDS-DATA: top-level counts 1,033 / 1,516 are not in Team B's figures and the odd count is unexplained; DLC top-level listing not re-run — desk review (not re-derived from the executable).**
 

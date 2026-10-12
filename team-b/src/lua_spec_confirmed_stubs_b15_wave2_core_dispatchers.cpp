@@ -453,10 +453,16 @@ int stub_vehicle_exit_do(lua_State* L) {
         // "cannot be synchronously represented" shape as the enter side's own
         // AI-order path (never completed either) - leaving +0x16d4 = 2 is the
         // honest, not-invented result for that branch.
-        if (arg2) {
-            c.stateEnum.set(0);
-            c.currentVehicleName.set(std::string());
-        }
+        // UPDATED 2026-10-12 (spec e8dc04d, Sec24.9a, m05 stall): Lua's
+        // vehicle_exit wrapper always passes arg 2 = false and then loops
+        // `while not vehicle_exit_check_done` - true only once +0x16d4 is 0
+        // or 1. With no per-tick occupancy dispatcher in this host, leaving
+        // +0x16d4 = 2 on the animated path wedged the thread forever
+        // (m05_jump_local). Sec24.9a's "Minimum" port recipe: treat the
+        // request as instant (3->2->0, occupancy cleared) within the call,
+        // for both instant and animated requests.
+        c.stateEnum.set(0);
+        c.currentVehicleName.set(std::string());
         applyVehicleExitFollowBackoff(c, name);
         lua_pushboolean(L, 1);
         return 1;

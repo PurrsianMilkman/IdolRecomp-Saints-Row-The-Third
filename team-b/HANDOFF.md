@@ -3,348 +3,253 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## RESUMED 2026-10-11 in "D:\IdolRecomp Saints Row The Third" (D:\Project Crreish is a junction to
-## it - old archived paths/scripts still resolve). Orchestrator across restarts: purrsian-52/a5/4a/
-## 5a/46/f2/8e/f5/eb/ea (same person/process, new session name each restart). Team A across restarts:
-## team-a-66/77/75/88/bf (same). Usage-pacer: ahead of plan most of this session (37-54% weekly vs
-## 20-33% planned) - stay disciplined: Sonnet-tier agents, 1 agent at a time (briefly violated once,
-## no harm resulted, corrected), reuse idle worktrees over fresh ones unless D: space is clearly
-## fine (it was reported at 67GB free as of the last check, up from "low" earlier).
-## 2026-10-12: user confirmed TWICE (via orchestrator relay) to keep the normal pace even when the
-## usage-pacer warns at "ahead of plan"/"critical" levels - only actually stop if the pacer itself
-## halts dispatch (e.g. at 95%), don't pause to ask on a warning alone. Noted per their own request.
+## RESUMED 2026-10-12 (context-guard rewrite at 75%). Orchestrator: purrsian-ea. Team A: team-a-bf.
+## Session identity: team-b (no new name assigned this tail). Usage-pacer: ahead of plan most of
+## today (55-58% weekly vs 34-36% planned) - **user confirmed TWICE to keep normal pace regardless,
+## only stop if the pacer itself halts dispatch (~95%)** - do not pause to ask on a warning alone.
+## D: space last reported 67GB free, not re-checked this tail.
 
-## STANDING RULES (full text `~/crreish-orchestration/AI-WORKFLOW-INSTRUCTIONS.md` - copy into
-## every dispatch prompt):
-## 1. REPORT STATES: "DONE" only when `git merge-base --is-ancestor <commit> main` is true.
-##    Otherwise "READY-TO-MERGE <branch>" or "PARKED <branch>: <reason>". Never plain "done".
-## 2. MERGE SMALL, MERGE SOON: merge each unit as soon as its own tests pass. Standing self-merge
-##    permission.
-## 3. REBASE BEFORE HANDOFF: update onto current main, re-run build+tests, resolve conflicts
-##    YOURSELF.
-## 4. NO SILENT PARKING: parked branches go in "## Parked branches" (own top-level section,
-##    search "PARKED-BRANCHES:BEGIN", OUTSIDE this resume block so a rewrite can't wipe it).
-## 5. CHECK THE BRANCH ITSELF: audits use merge-base/`git cherry` on the branch itself, never
-##    sibling inference.
-## 6. AUDIT: `sh ~/crreish-orchestration/branch_audit.sh` at the end of every unit.
-## 7. MERGE FROM YOUR OWN WORKTREE, NEVER THE SHARED CHECKOUT. The PRIMARY (non-worktree) checkout
-##    at `D:\IdolRecomp Saints Row The Third\TEAM B` holds `main` directly (fixed 2026-10-11 after
-##    it was accidentally stranded on a stale branch for hours, losing 4 real spec commits
-##    temporarily - see RULED OUT below). Merge from there via normal `git merge`/fast-forward, or
-##    from your own worktree if not on `main`. NEVER use `git update-ref` to force-move main out
-##    from under another worktree/checkout that holds it - this struck twice this session.
-## 8. REUSE IDLE WORKTREES: `git checkout -B <new-branch> main` inside an existing idle one
-##    (confirm idle via `git status` first - two agents collided reusing the same one once this
-##    session, self-corrected, no data lost) + incremental build, rather than a fresh worktree -
-##    D: space guidance may have relaxed (67GB free last check), confirm current state if unsure.
-## 9. RE TECHNIQUE items 10-13 (distilled 2026-10-11): (10) RAISE BUDGETS 10-100x BEFORE CALLING
-##    SOMETHING STUCK - 3+ false "stuck" verdicts this session were pure budget artifacts. (11)
-##    CHOOSE THE HARNESS THAT CAN EXERCISE THE PATH - `lua_host_run.exe`/mission-drive has NO
-##    spatial simulation at all (no player position, can't fire world-space triggers); use the
-##    in-world `sr3_viewer.exe --mission=X --spawn ... --spawn-y ...` recipe (commits
-##    9e52612/3a050d8 established the working pattern + full archive list) for anything spatial.
-##    (12) A FIX IS DONE WHEN GROUND-TRUTH NUMBERS MATCH, not when tests pass - bake every worked
-##    example into a permanent test. (13) PLATEAUS MEAN CHANGE METHOD after 2 stalled passes - ask
-##    Team A for a worked example or switch harness, don't repeat.
-## 10. CHECK THE BUILD'S EXIT CODE, NEVER `ctest` ALONE (real incident 2026-10-11): a compile error
-##     slipped through a "green" ctest because ctest silently ran STALE pre-existing binaries when
-##     the build step that should have produced new ones failed/was skipped with its exit code
-##     unchecked. Always: `cmake --build ... --config Release`, confirm exit code 0 explicitly,
-##     THEN `ctest`. Never trust green ctest without just-confirmed build success.
+## STANDING RULES (unchanged from prior resume notes, still binding - condensed):
+## 1. Report "DONE" only once `git merge-base --is-ancestor <sha> main` is true.
+## 2. Merge small, merge soon - standing self-merge permission once build (exit-0 CONFIRMED
+##    explicitly, separate step) + ctest pass clean. NEVER trust ctest alone - it can silently run
+##    stale binaries if the build step failed/was skipped (real incident, earlier this session).
+## 3. Merge from the PRIMARY (non-worktree) checkout at `D:\IdolRecomp Saints Row The Third\TEAM B`
+##    (holds `main` directly) or from your own worktree - NEVER `git update-ref` to force-move main.
+## 4. Reuse idle worktrees (`git status` first to confirm idle) over fresh ones.
+## 5. Team B NEVER disassembles - relay anything needing the real binary to Team A as a spec-sync
+##    question.
+## 6. No invented fixes - at a genuine dead end, document precisely in this file's own
+##    "## Known stopgaps" section (search "KNOWN-STOPGAPS:BEGIN") and relay to Team A/orchestrator,
+##    never guess further.
+## 7. 1 background agent at a time by convention this session (briefly ran 2 in parallel on
+##    unrelated files today, deliberately, per explicit orchestrator instruction - fine when files
+##    genuinely don't overlap).
 
-## KNOWN INTERMITTENT (2026-10-11): `real_playtest_mission_test` and `golden_scene_check`'s
-## `walk_demo` sub-check each failed once under full-suite parallel contention (`-j8`+) but passed
-## 100% on 6+ separate serial/isolated re-runs across this session (including a fresh independent
-## re-check). No root cause found despite trying. If either fails again: capture the full exit
-## output/log (`Testing/Temporary/LastTest.log`) BEFORE re-running.
+### (a) DONE THIS TAIL (2026-10-12, this session's own work - do not re-derive). All confirmed
+### merged to main via `git merge-base --is-ancestor`, in chronological order:
+- **Garage/wardrobe/weapon-inventory save-load round trips** (`39a42ea`, `1fdfc26`/`1fdfc26` via
+  `7864f78`, `fba8b90`/`6cab7f9`) - spec-save-format.md Sec9.2/Sec10.2-10.3, all round-trip tested
+  (checkpoint in-memory + real file write/read). No live vehicle handle modeled for garage (matches
+  real format - load always sets a fixed null-handle constant, binding happens later via the real
+  `garage_retrieve_vehicle` native, confirmed 2026-10-11).
+- **Parser-only save field writers** (`0ecd13e`/`aa798df`) - statistics (149 entries), region/
+  city-takeover records, activity progress+markers, active cheat ids: the `SaveSnapshot::build()`
+  writer side ALREADY existed for all 4 groups; only `SaveGameState`/bridge wiring was missing
+  (mirrors garage/wardrobe/weapon pattern, reusing `sr3save::` types directly since no live-handle
+  translation was needed for these 4).
+- **New-game auto-unlock + default outfit** (`45899a8`/`9748614`) - data-driven `Auto_Unlock` scan
+  (finds HomieSlot1 without hardcoding the name), outfit via the real
+  `pcr_apply_preset`/`pcr_add_default_clothing` stub pair, cash ($57) confirmed untouched.
+- **Shop/crib press-E entry** (`36470e8`/`1ea06a3`) - crib is a REAL confirmed chain (press E ->
+  `0x005b6870` -> interaction-array[8] "HUD_USE_CRIB" -> `0x005eee70` -> generic document-opener
+  on the `store_crib` object, per spec-store-runtime.md §2, commit `b8c17ec`). Shop remains a
+  labeled CHOSEN stand-in - its own trigger condition genuinely not found by Team A despite 3+
+  investigation passes (shop opens by HARDCODED NAME via `0x0083ECC0`, architecturally different
+  from crib's generic-object pattern - crib's breakthrough does NOT carry over).
+- **Weapon pickup** (`6177f73`/`2d58dbb`) - walk-over auto-pickup for non-heavy dropped weapons
+  (CHOSEN 1.5m proximity radius, labeled - real trigger condition genuinely not found, 3 passes,
+  parked; real drop-pool IS confirmed: NPC death -> `0x006fa9e0` writes position+10s lifetime into
+  a 20-entry ring buffer, base `0x014fdc68`, stride `0x18`; per-frame tick `0x006f9f50` does
+  physics/despawn only - no player-distance check anywhere in the ring buffer itself, confirming
+  the grant-matcher is a SEPARATE, still-unfound mechanism, likely a collision-callback vtable slot
+  on the dropped weapon's own object class) + press-E for heavy weapons (minigun idx17/flamethrower
+  idx14 by `Weapon_Class`, via interaction-array entry 0, real confirmed chain through
+  `0x009da510`/`0x00971b10`/kind-table `0x01309f10`/`0x00972a70`/+0x1b78 locator `0x005fe460`).
+  Both paths share one new `EngineState::giveEquipWeapon()` writer (no pre-existing clean-room
+  equivalent of `0x00B84330`/`0x00601380` found).
+- **v0.12 playtest cut shipped** (`776412f`/`ecb058b`) - packages everything above. Folder
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\v0.12_2026-10-12_saves-shop-weapons\`.
+  Build/test: 184/184 (0 skip, real cache resolved). Mirrored by orchestrator; v0.12 exe copied
+  into `TEAM B\playtest\` (old v0.11 preserved as `sr3_viewer_old_backup.exe`, md5-verified both
+  ways). HANDOFF/NOTES.txt honest about the one skipped feature screenshot.
+- **Bink flat-fill (`0x100195b0`/Sec5.3aa) decode algorithm fully CLOSED, exact match** (`990d84d`,
+  further hardened `b9eb062`) - see "LEARNED" below for the full fix detail and the subsequent
+  promotion-crash/revert/root-cause story; the ALGORITHM itself (not yet production-wired) is
+  committed and verified byte-for-byte against the golden fixture.
+- **`--auto-objective` harness extended to trigger waits + vehicle-seating** (`b94bf22`/`f0576d2`)
+  - new `TriggerWaitStallInfo`/`recordTriggerWaitFrame()`/`TriggerVolumeRepresentativePoint()` +
+  `--auto-seat-mission-vehicle` (m05-specific CHOSEN stand-in, calls the real
+  `vehicle_enter_do(LOCAL_PLAYER,'m05_heli_pierce',true)` native). 187/187 ctest. Unit-tested
+  correct but NOT verified live this pass - see RULED-OUT-turned-FIXED entry below
+  (`fade_out_block` was the blocker preventing live verification, now resolved as a timeout
+  artifact, not a real stall).
+- **`fade_out_block` (shared m05/m09/m13 stall) RESOLVED as a pure timeout artifact**
+  (`913f599`, same shape as m09's own earlier false alarm, commit `9e52612`) - the
+  `--mission-timeout=30` used by the auto-objective-extension task's own verification run was too
+  short: one-time texture-cache building alone measured ~38s real wall-clock before a single
+  mission-drive tick. Re-ran m05 and m13 DIRECTLY with `--mission-timeout=180` (plus the correct
+  `--hud <registration_list> <misc.vpp_pc>` flags the earlier run's command was missing) - BOTH
+  advance past `fade_out_block` within ~0.1s once given the budget, landing on genuinely
+  DIFFERENT, deeper, real blockers (see LEARNED below for both). No fix needed for the fade machine
+  itself - nothing was ever wrong with it.
+- **Defensive bounds checks added to the flat-fill attempt decoder** (`b9eb062`) - count capped at
+  65536, `cur_class` range-checked against the 16-entry table, both fail cleanly instead of
+  crashing. Added after the FIRST production-promotion attempt (uncommitted, reverted before
+  merge) hit a real `bad_alloc` crash in `real_playtest_mission_test`'s own in-game video (mm_p_03)
+  - root cause now understood (see LEARNED below), bounds check stays regardless as a safety net.
 
-### (a) DONE THIS SESSION (2026-10-11, this tail - do not re-derive). Grouped by subsystem:
+### (b) UPDATE 2026-10-12 late: BOTH agents below FINISHED and MERGED (539d4b9 via 24aa774,
+### 39d84c4 via 7c97dd7; is-ancestor verified). Also merged since: aaf525d flat-fill bias.
+### NEXT CANDIDATE (not started, paused on usage-pacer "critical"): wire spec syncs 8cc17a2/122c528
+### into frame_decoder.h - secondary=2/6 2x2 nearest-neighbour upsample to 16x16, secondary=6
+### pixel=(int8)raw+128. Needs an agent; ask before dispatching while pacer is critical.
+### DONE: sec2/sec6 upsample+bias MERGED a1ff86a (fix fb724c6). main_menu_bg frame0 15.0%->50.0% px,
+### 0/5->2/5 blocks. OPEN: sec6 byte count (chose 64; old 32) NOT yet delivered to Team A (team-a-86 unreachable) - relay via orchestrator; sec3 still writes 8x8
+### (spec says 16x16); per-dispatch grid advance unconfirmed. REGRESSION TO TRIAGE:
+### synthetic_luahost_wave2_w23_test stack overflow 0xC00000FD on fresh build (old Oct-10 exe passes),
+### not bink-related. Debug sr3_viewer.cpp build hits C1128 -> needs /bigobj (not yet in repo).
+### Team A FYI: hud_prompt arg3 callback RESOLVED (spec-lua-api-behaviour §13.3, interact entry 13).
+### Remaining queue: 0x10019d10 byte-diff (BLOCKED: dump location unknown - ask orchestrator), then
+### 49-mission sweep re-run. SWEEP RERUN INVALID (results/mission_sweep_49_20261012_rerun): first 6 ok,
+### then dlc2_m01 onward (43 missions) all exit 1 "Could not read .../Saints Row 3 CRREISH/packfile/characters.vpp_pc"
+### - CORRECTION: game files live at Saints Row 3 CRREISH\packfiles\pc\cache\ (never moved). Real cause
+### was "bad allocation" while a stray sr3_viewer (interrupted agent) ran concurrently; killed it, m05
+### now clean (~3 min/mission). Re-running into results/mission_sweep_49_20261012_rerun2 via scratchpad
+### sweep.sh. DONE: 49/49 IDENTICAL to baseline (same last mission line all 49; exit-1 set unchanged:
+### m04, mm_m1_5, mm_p_03, sh02, sh04). Driver must pass dlc1+dlc2+dlc3 archives. Dominant blocker is
+### still '_DynamicGlobalsLoadComplete' "attempt to call a nil value" (~35 missions) - top next target.
+### e8dc04d spec (vehicle_exit/pathfind/hud_prompt consume) MERGED d2a2d2d (fix d3a7ddb); gaps:
+### pathfindResult (0x00b2b140) OPEN, +0x2084 bit13 source unknown, guardian_angel exit untouched,
+### viewer's --auto-answer-hud-prompts not yet using the new consume API.
+### BIG: the "_DynamicGlobalsLoadComplete nil" blocker (~35 missions) was OUR DRIVER - system_lib.lua lives
+### in interface.vpp_pc, never passed. With it m05 reaches m05.lua:1153 (m05_parachute_in); m05_jump_local
+### "no such global". Full sweep re-running -> results/mission_sweep_49_20261012_iface.
+### 0x10019d10 byte-diff DONE (3f490ef): 528/528 differ from offset 0 - ours `56 86 55 15 11 65..`
+### (looks like packed 4-bit symbol pairs), real `0f 01 00 00 00 00 80 ff..` (bitmask-like); bits 2995
+### vs 2981. Whole algorithm shape differs, not an off-by-one. Relayed to Team A as spec-sync Q: is the
+### output really nibble-packed translate16 symbols, or a different (bit-plane?) construction; how
+### does the A=6 LUT @0x1003beb0 enter the per-symbol step; what does eax=0x64 mean.
+### (historical text follows)
 
-- **DONE: v0.12 release cut shipped** (garage/wardrobe/weapon save-load round trips, shop/crib press-E
-  entry, weapon pickup, new-game auto-unlock+default outfit, Bink DC-array 519-word fix - all already
-  merged to main before this cut; this cut packages them for playtest, no new code). Packages commits
-  39a42ea (garage/vehicle-ownership save round trip), 1fdfc26 (wardrobe owned-item save round trip),
-  fba8b90 (weapon-inventory save round trip), 9748614 (new-game Auto_Unlock + default outfit via
-  pcr_apply_preset/pcr_add_default_clothing), 1ea06a3/36470e8 (shop/crib press-E entry, crib via a
-  confirmed real chain, shop still a labeled CHOSEN stand-in - its own trigger condition genuinely not
-  found despite 3+ investigation passes), 2d58dbb/6177f73 (weapon pickup: walk-over auto-pickup for
-  non-heavy dropped weapons + press-E for heavy weapons), 7363dbc (Bink DC-array 519-word dispatch-bit
-  fix, moved pixel-match 0% -> 15%, 48/320 - video playback overall still not correct, said plainly).
-  Cutscene end-of-placement logic (cutscenePlayDo/cutscenePlayApplyEndPlacement) was directly re-checked
-  this task and confirmed correct as-is (only teleports when cutscene_play was given exactly 2
-  destinations) - no code change needed there. Mission status (m05/m07/m09/dlc2_m01/dlc2_m03 not
-  reaching a real finish) is carried forward UNCHANGED from v0.11's own notes - not personally
-  re-verified this cut, no mission-unblocking commit found between v0.11 and this cut's main either.
-  Dedicated worktree (`agent-v012release`, branch `release/v0.12-playtest-cut`, off main @ `9306a70`,
-  per branch-hygiene rule 7) used for the full clean build + ctest, never the shared root checkout.
-  Full Release build confirmed 0 errors via the build command's own exit code (rule 10); `ctest -C
-  Release` 184/184 passed, 0 failed, 0 skipped (higher AND fully unskipped vs v0.11's 171/176 with 5
-  skips - this run's CRREISH_GAME_CACHE_DIR resolved to a real install, so real-data/golden tests that
-  v0.11 had to skip actually ran). Folder: `v0.12_2026-10-12_saves-shop-weapons` on
-  `D:\IdolRecomp Saints Row The Third\playtest-builds\`. 2 screenshots personally viewed (frame-0 plain
-  launch, same byte size as v0.11's own screenshot.png - 1409530 bytes, confirming the default launch
-  view is unchanged; frame-499 near-field traffic/ped population at 48/48 each). A third shot
-  specifically demonstrating one of this cut's new features (shop/crib prompt, weapon pickup) was
-  looked for but not captured - no reliable scripted camera position/frame for any of those three was
-  set up in the time available, said honestly rather than forcing a misleading shot; NOTES.txt says so
-  explicitly. Per this task's own instruction, the orchestrator said they'll mirror this cut themselves
-  - did NOT run `mirror_build_history.sh`.
+**Agent `ab697c09cacc8cb62`** (branch `fix/flat-fill-perplane-width-promotion`): re-attempts the
+flat-fill production promotion using the NEW per-plane width formula (see LEARNED below) instead
+of the hardcoded 14 that crashed the first attempt. Also applies the same formula fix to
+`0x10019d10`'s own already-known 12-bit overrun (2993 vs 2981 - `dim=240` gives `bound=2432`,
+matching Sec5.3n's own already-published bound for that function exactly, strong confirmation
+it's the same bug). Must validate against BOTH `main_menu_bg.bik` AND `mm_p_03` (the video that
+crashed before) and get a full clean `ctest` pass (ESPECIALLY `real_playtest_mission_test` and
+`real_playtest_ground_pavement_collision_test`, the two slow 90-175s+ tests that caught the
+crash) before merging.
 
-**BINK VIDEO CODEC** (main_menu_bg.bik frame 0 Y-plane, 5 blocks idx0-4 in row 0, the project's
-main decode-correctness test vector):
-- AC-tree DC-literal source fixed (descriptor L is NOT a separate stream - it's `0x1001a160`'s own
-  DC-array output, decoded via a new `dc_delta_array.h`). Then the DC value[0]/value[1] boundary
-  bug fixed (value[0] = fixed-bound-path only, no phantom nibble; values[1+] = Sec5.3m chunk loop
-  seeded by value[0]). Then the 1757->9256 pre-stage bit-gap paid (4 real calls -
-  `0x100195b0`/`0x10019d10`/`0x10019f00`x2 - previously unmodelled, now bit-cost-correct via
-  `dc_prestage_sibling_gap.h`). Bit position at DC-decode entry now EXACTLY matches spec (9256).
-- AC-tree algorithm completely rewritten: Gate A (a previously entirely-missing 1-bit per-node
-  entropy-coding gate, read before every node dispatch - without it, tree shape was a pure
-  deterministic function of 6 seed bytes with ZERO bitstream influence, provably impossible for
-  real entropy coding) + Gate B (chained resolve-now-vs-defer, up to 4 unrolled 1-bit copies,
-  reached from case0/case2 only, case1 bypasses entirely) + level<=1 skips Phase-1 BFS entirely,
-  running Phase-2's mirror arms directly on the 6 seed bytes + the full bijective category(1-63)->
-  raster-k(1-63) permutation table (compiled-in quad-tree/Morton traversal, e.g. cat2->k8,
-  cat24->k16) applied at every coefficient write. Reproduces spec-bink-codec.md Sec5.3w's exact
-  17-bit golden trace for block(0,0) bit-for-bit (2 nonzero coeffs, k8=-1/k16=-1) via a new
-  permanent test. Dequant+IDCT independently confirmed bit-exact against Sec5.3v's own worked
-  example (6293/-102/-118 dequant, IDCT rows 24/25) - this stage was NEVER the bug.
-- Sec5.3x ground truth (idx1/2 flat-fill=153, idx3/4 core IDCT rows, chromaA shares luma dequant
-  exactly - no chroma-specific scaling exists in this codebase, confirmed by inspection) - all
-  individually verified correct in isolation via new golden tests.
-- Flat-fill (secondary=3) literal-byte source fixed: it is NOT a separate per-block cursor at all -
-  Sec5.3y found its buffer (`0x303f9bb0`) is physically distinct from the DC-array buffer (~5008
-  bytes apart, only the bound-check is shared, contradicting old Sec5.3i wording) - the agent's
-  first fix (an independent `FlatFillByteCursor`) was real/necessary but incomplete: Sec5.3z then
-  found that buffer IS `0x100195b0`'s own 650-byte tree-coded decode output (already specced in
-  Sec5.3s for an unrelated pre-stage "gap" call) - flat-fill blocks read SEQUENTIALLY further into
-  that SAME array, not from any separately-triggered decode. Implemented in
-  `flat_fill_prestage_array.h`. idx1/idx2 both now correctly decode to 153.
-  **THIS IS A LABELLED STOPGAP, NOT A GENERAL FIX - see "## Known stopgaps" top-level section
-  (search "KNOWN-STOPGAPS:BEGIN"). The two real LUT tables driving `0x100195b0`'s per-symbol
-  tree-lookup (`arg3+0x100`/`+0x140`) are not published anywhere in the specs - the implementation
-  hardcodes the ONE known worked example's bytes (64-byte prefix + 8-byte suffix) rather than a
-  real algorithm. Indices 64-641 honestly report unavailable. Do not treat this as closed.**
-- **ROOT CAUSE FOUND AND FIXED 2026-10-11 (fix/bink-dc-array-519-word-commit-run task, spec-bink-
-  codec.md Sec5.3n's "519 words" + "gap attributed call-by-call" findings): the diagnostic unit's
-  own -2355-bit shortfall (ours=11264 vs real DLL's 13619 at block(0,0)'s dispatch) was caused by
-  `decodeRowDcArray()` (dc_delta_array.h) stopping its chunk loop as soon as it produced
-  `blockCols` (240) words, when the real `0x1001a160` call's own leading-count field (read at call
-  entry, previously decoded and DISCARDED as "sanity10") pins the call's real total at 519 words
-  for this row - the function "terminates purely on remaining count reaching zero, no bitstream
-  sentinel, no fixed caller argument" (Sec5.3n). Two bugs fixed together: (1) the leading-count
-  field is now USED as the real loop bound instead of discarded; (2) a second, previously-unnoticed
-  bug in the SAME loop surfaced once (1) was fixed - each chunk was unconditionally pushing exactly
-  8 words, but the real call's own last chunk is PARTIAL (Sec5.3n's own live write-count breakdown:
-  "1 + 64x8 + 6 = 519" - a final 6-word chunk, not 8) - fixed by capping each chunk at
-  `realCount - words.size()`. Then wired the two no-op "bail" steps Sec5.3n traced immediately
-  after this call (a second `0x1001a160` call reading a zero leading-count, 10 bits; then
-  `0x10019af0` reading a zero leading-magnitude, 14 bits; 24 bits total; `dc_prestage_sibling_gap.h`'s
-  new `skipSecondDcArrayZeroCountBail()`/`skip0x10019af0ZeroMagnitudeBail()`, called from
-  frame_decoder.h right after the DC array decode, before the block-dispatch loop).
-  **RESULT, measured**: `real_bink_dc_array_519_word_bail_tests` (new permanent golden-trace test)
-  confirms exactly 519 words, exit bit 13563, and post-bail bit 13587 - landing on Sec5.3n's own
-  "real" figure, NOT the older Sec5.3y figure of 13619 (delta exactly -32 bits, matching Sec5.3n's
-  own prediction of "a systematic bit-counting convention difference... not a newly-discovered
-  bitstream consumer" almost exactly - strong circumstantial confirmation of that theory, though the
-  formula-level root cause of the 32-bit convention gap itself remains untraced per Sec5.3n).
-  **Block (0,0) pixel (0,0) is now 24 - an EXACT match to FFmpeg's independent ground truth** (was
-  41 before this fix). `bink_ffmpeg_pixel_compare` on the real fixture: 48/320 pixels match (15.0%,
-  up from 0/320), but still 0/5 blocks fully exact - idx1/idx2 (flat-fill 153 vs ffmpeg 24/25,
-  unrelated pre-existing gap, see the flat-fill stopgap note above) and idx3/idx4 (pixel(0,0) =
-  125/140 vs ffmpeg 25/25) remain wrong. **OPEN, not addressed by this task**: idx3/idx4 read the
-  SAME already-519-word DC array (indices 3/4, well within its bounds) and should inherit the now-
-  correct bit position via the uniform -32-bit convention offset that applies to the whole row
-  (unverified directly - `real_bink_bitpos_vs_5_3y_test` only reports the FIRST divergence and
-  stops at idx0, by design) - their remaining pixel mismatch is therefore likely a SEPARATE,
-  not-yet-root-caused gap (AC-tree coefficient values for these specific blocks, or something else
-  entirely) rather than a continuation of the 519-word bug this task fixes. Flagged for whoever
-  picks this up next, per this project's "no invented fixes" policy - relay to Team A as a spec-sync
-  question (idx3/idx4's own bit-by-bit AC-tree trace against the real DLL) rather than guessing
-  further; Team B does not disassemble.
+**Agent `a391ea97d2f8d711a`** (branch `fix/m05-zscene-m13-systemlib`): fixes (A) m05's
+`zscene_is_loaded('05_in')` - Team A confirmed `05_in` is Story-kind (kind 2, NOT Zscene/kind 1),
+same pattern as the already-closed `09_in` case (spec-lua-api-behaviour.md §26.25/§14.23,
+synced in commit `f75a829`) - the host's kind-gate should short-circuit to `true` immediately
+for any non-Zscene-kind cutscene name; check whether the implementation has this gate generically
+or only for the one `09_in` case, and also check for a case-sensitivity bug (`"05_in"` vs
+`"05_IN"` - lowercase is just archive filename casing, the real Lua constant/registered name are
+both uppercase). (B) m13's `system_lib.lua` archive-location gap - `sr3_viewer.cpp`'s `playtest`
+command requires a caller-supplied archive list (unlike `lua_host_run.cpp`'s whole-cache-directory
+scan) - make it locate `system_lib.lua` the same way `lua_host_run.cpp` does. A relay message with
+Team A's exact `05_in` finding was sent directly to this agent mid-task (SendMessage to its own
+agent id) so it shouldn't need to re-derive it.
 
-**TRAFFIC/AI RUNTIME**:
-- Overtake-gate steering: real §18.6b gate (12-step, not CHOSEN thresholds) + real steering-curve
-  mechanics (airborne early-out, sign negation, 2-segment piecewise-linear response) implemented.
-  Constants were CHOSEN (0.2/0.3) then CORRECTED to the real confirmed values: threshold=1.0,
-  slope=1.0 (ONE universal hardcoded constructor, `0x00aba420`, for every vehicle - no .xtbl read,
-  no per-vehicle variation). Since input is clamped to [0,1] before the curve runs, threshold=1.0
-  makes the curve a pure identity pass-through (output=|input|) - the above-threshold branch is
-  structurally dead code, confirmed safe (no div-by-zero reachable). 900-frame trace with real
-  constants: gate fires 31/48, displacement [6.20,45.67] (matches the pre-curve-fix CHOSEN
-  clamp(1-dot) stand-in's own numbers exactly - confirms the earlier deadzone-shaped curve from
-  wrong constants wasn't a real improvement).
-  **Self-caught incident**: the steering-constant commit (3fc6260) introduced a compile-time
-  divide-by-zero (MSVC C2124) in a TEST file (now-dead branch with threshold=1.0 literal) - this
-  slipped through my own ctest run as 100% green because ctest ran STALE binaries from a prior
-  successful build, not freshly-failed ones (root cause of new standing rule 10 above). Fixed by a
-  concurrent agent as a drive-by commit (493f568) - removed the now-dead test, corrected one stale
-  expected value. Verified clean on a fresh explicit build+test pass afterward.
-- Footstep audio (§11a.8, REVERSED twice): first found foot-plant triggers DON'T drive footstep
-  audio in the real game (consumers are vehicle sync/IK/camera shake) - v0.9's trigger-driven
-  footsteps kept as a labelled stand-in. Then REVERSED AGAIN: foot-plant triggers DO post the real
-  Wwise FOOTSTEP event (hash 0x6f394b77), culled by FootstepRange (squared compare,
-  audio_constants.xtbl), posted on a persistent per-entity "Human" voice with MOVEMENT_TYPE
-  (WALK/RUN) + MATERIAL_TYPE switches. MATERIAL_TYPE: 33-entry table indexed by locomotion-state.
-  Second switch group 0xc3e810da: 31-way mapping to 3 hash values
-  (0x25954450/0x8b4347f0/0x38aff350). **NOT YET IMPLEMENTED** - queued, low priority, never
-  dispatched this tail (got deprioritized behind mission/Bink work). Both set by hash ID, no names
-  needed - this closes what was previously an open "default material" stand-in question.
+**NEXT STEP for whoever resumes**: wait for both agents' SubagentHandback, independently verify
+each merge via `git merge-base --is-ancestor <sha> main` before relaying "done" to anyone (standing
+practice this whole session - every single merge claim has been independently re-checked, never
+taken on an agent's word alone). Relay results to purrsian-ea and team-a-bf. Then proceed to the
+49-mission sweep (queued, see PENDING below) with `--mission-timeout=180` per the orchestrator's
+own explicit instruction.
 
-**MISSION/LUA RUNTIME**:
-- m09/m13/m05 trigger-callback dispatch bug found+fixed: the real nargs=0 bug (every on_trigger
-  callback's `human` arg was unconditionally nil - LOCAL_PLAYER/REMOTE_PLAYER were never even
-  defined as Lua globals anywhere in this codebase) was fixed (nargs 0->1, push "#PLAYER1#"/
-  "#PLAYER2#" sentinels, register the two globals). Verified via a strengthened unit test. BUT:
-  the mission-drive-only harness (`lua_host_run.exe`, no spatial simulation) can't prove m09/m13
-  actually advance (they wait on real trigger-ENTER events needing physical player movement) -
-  m05 DID genuinely advance (confirmed: moved from a budget-starved `delay` stall to a real,
-  different, much-later stall point once given a 3000-tick budget instead of 20).
-  **Confirmed via the in-world `sr3_viewer.exe --spawn --spawn-y` recipe (RE TECHNIQUE item 11)**:
-  m09 DOES genuinely advance - on_boat_trigger's ENTER fires, `m09_player_on_boat_enter_cb` runs
-  to completion, `m09_start`'s own suspension point moved from `m09.lua:2099` to a NEW point,
-  `m09.lua:2181` inside `m09_find_girls` - **confirmed this is EXPECTED gameplay (per-crate
-  on_trigger with no identity gate, no QTE), not an engine bug** - a one-run check (spawn inside a
-  crate's own trigger volume) is QUEUED, low priority, NOT yet run.
-- Mission-drive tick-budget baseline RAISED from 20 to 3000 (RE TECHNIQUE item 10) and
-  re-baselined: of the 5 missions v0.11's own NOTES.txt called "non-finishing" (m05/m07/m09/
-  dlc2_m01/dlc2_m03), 3 (m07, dlc2_m01, dlc2_m03) RECLASSIFY as pure budget artifacts - they now
-  reach their own real (different, already-documented) OPEN engine-state blocker instead of
-  timing out, meaning they were never "stuck," just under-budgeted in every release through v0.11.
-  m05/m09/m13 remain genuinely stuck even at 3000 ticks - confirmed real waits on trigger-ENTER
-  events this static harness can't exercise, not budget artifacts. Full results committed:
-  `results/baseline_2026-10-11_tick3000/` (summary+mission-drive+open-state TSVs tracked; 2 huge
-  per-call detail TSVs left untracked/local-only). v0.11's own NOTES.txt NOT retroactively edited
-  (archived build = read-only history per user convention) - v0.12 will carry the corrected
-  picture.
-- m07's OPEN `get_char_vehicle_type` blocker (Sec21.24) RESOLVED+fixed: real mapping is
-  0=Automobile..5=Watercraft, 6=failure sentinel, same physical field (`VehicleState::flyingType`)
-  `get_vehicle_type` already used - the stub was reading a separate, never-wired placeholder field
-  under a stale "AI-mode gate" framing. Re-wired, dead field removed. m07 advanced to a NEW
-  blocker: `get_dist`'s own position-resolution OPEN state (Sec4.2).
-  Sec4.2 then RESOLVED: `get_dist`/`get_object_pos` read the object's LIVE, continuously-updated
-  `+0x40..+0x6c` transform (NOT a one-time zone-data spawn snapshot) - confirmed via a traffic-AI
-  steering-tick routine that reads+writes this exact field through the same generic
-  transform-setter vtable slot `teleport` uses. Real gap found: `get_dist`/`get_object_pos`
-  THEMSELVES were already correctly implemented (landed in an earlier task) - the actual missing
-  piece was `teleport` itself never writing the live worldPosition field it's supposed to share.
-  Fixed (commit b209dd3). m07's OWN stall point did NOT move after this fix though - precisely
-  diagnosed why: m07's `teleport_coop` call is gated behind `cutscene_play(...)`, which this
-  mission actually takes (teleport is never reached in m07's real path before the actual
-  blocking call, `get_dist_closest_player_to_object` inside `m07_get_to_the_barge`).
-- **cutscene_play's own end-of-cutscene player-placement mechanism**: exhaustively searched by
-  Team A (full 20-state cutscene machine disassembly, `.cte_xtbl` RestorePlayerPos reader, a
-  91-function manager-pointer xref sweep) - **genuinely NOT FOUND in the real binary, a real open
-  design question, not just unimplemented on our side.** Implemented a labelled CHOSEN stand-in
-  (commit 56a31f1): apply the ONE fully-confirmed branch (the `skip_all_cutscenes` immediate
-  commit via the same by-name resolver + async-teleport entry `teleport` already uses) UNIVERSALLY,
-  not just on skip. m07 result: the explicit `get_dist` OPEN-engine-state error is GONE (confirmed:
-  no `first_error` for m07 unlike every other still-OPEN mission in the same run,
-  `probed_world_position_reads=0`). m07 still doesn't FINISH though - now budget-exhausts on a
-  genuine distance/movement-wait loop (no player-navigation simulation in the static harness), a
-  different, deeper, out-of-scope gap. **Confirmed again via the in-world recipe**: m07 in-world
-  shows NO OPEN-state error either (same positive signal), still suspended at `m07.lua:1235` after
-  300 frames - the scripted --no-input player just doesn't walk to the barge dock, same pattern as
-  m09's crate-trigger finding. **QUEUED, not yet done**: a conclusive one-run check (--spawn AT the
-  barge destination + one-line get_dist log), low priority.
+### (c) LEARNED this tail (facts/numbers/formulas worth keeping):
 
-**STREET COLLISION / GROUND GAP**:
-- Real player+vehicle ground collision from the `0x2237` zone record's own embedded Havok
-  MOPP-wrapped extended-mesh shape implemented (reusing the EXISTING visible-geometry decode for
-  triangle data - no redundant second blob parse, confirmed the real engine builds its own Havok
-  shape from the "SAME vertex/u16-index arrays" already used for rendering). Wired into the
-  existing `ClmeshTriangleCollisionWorld`-equivalent infra, ahead of the heightmap/flat-plane
-  fallback chain, for both player and vehicle. VERIFIED on tile 0916 (a confirmed-good-origin real
-  flat-pavement tile): old heightmap sampler read a wrong -5.00m at a real-mesh-coverage point; new
-  mesh sampler reads the correct ~29.61m. Scripted walk+drive both settle onto and track the real
-  sloped surface. New permanent test. Commit `bd9ca82`.
-  **DOES NOT fix the default-spawn (tile 0915) sky-blue void** - personally screenshotted and
-  confirmed still visible on current main. Root cause confirmed via the diagnostic log itself:
-  tile 0915 is one of the 4 known-broken-origin tiles (0915/0914/0715/0716 - decode geometry at
-  world-origin-centred coords, not their real tile position) - "NO real 0x2237 collision-mesh
-  triangle resolved at spawn" is printed. The collision fix is real/correct for tiles with correct
-  origins; the wrong-origin-decode bug for those 4 specific tiles remains the real blocker for the
-  visible default-spawn gap. NOT currently being chased (no active unit).
+**Flat-fill (`0x100195b0`) algorithm, FULLY CLOSED** (spec-bink-codec.md §5.3aa, as of `f75a829`):
+- nib1: per-class tree (`bank.tables[curClass]`, i.e. `arg3+cur_class*4+0x100/+0x140`), translate
+  via `ctx+cur_class*16+raw_symbol1` (the 256-byte table, confirmed byte-for-byte live).
+- nib2: **FIXED class-0 table/translate, UNCONDITIONALLY, regardless of cur_class** (NOT
+  cur_class-indexed as first assumed - confirmed by symbol 1's own trace: cur_class=1's own
+  A-value is 6, but nib2's real code_len was still 4, exactly class 0's A-value). This is the
+  actual "global" (cur_class-independent) nature the function's own name always implied.
+- Leading-magnitude field is NOT a fixed width - Team A found via live memory-write watchpoint
+  (`0x1001a742-0x1001a757`): **`bound(ctx+0x2c) = 8*dim + 512`, `width(ctx+0x28) =
+  bound.bit_length()`**, where `dim` = the plane's own pixel-width (Y/chroma tables) or
+  macroblock-column count (the `0x10019d10`-style table). Confirmed against 3 data points:
+  dim=1920->bound=15872 (main_menu_bg Y plane, width=14 - the ONE hardcoded value the first
+  promotion attempt used, which only worked for THIS plane); dim=960->bound=8192 (chroma, width=13);
+  dim=240->bound=2432 (0x10019d10's own MB-column table, matches its already-published bound
+  exactly). The one-time sentinel/sign-probe bit is a REAL, SEPARATE, unconditional 1-bit cost on
+  top of width (confirmed: `preloop_bits_consumed == width+1` for all 75 real calls Team A
+  captured, no exceptions) - never folded into the width field itself.
+- With both fixes (nib2 fixed-class-0 + real 14-bit width for THIS specific call): bit cost
+  exactly 3384, full 650-byte output byte-for-byte identical to the golden fixture (first 64
+  bytes, last 8 bytes, total size all verified) - `real_bink_flat_fill_prestage_test`'s own
+  SECTION 2 now PASSES (was skipped all session until `990d84d`).
+- **First production-promotion attempt (uncommitted, reverted)**: hardcoding width=14 (right for
+  main_menu_bg's Y plane, THE ONLY plane/video validated) crashed `real_playtest_mission_test`'s
+  own in-game video (`mm_p_03`) with `bad_alloc` - because that video's own planes almost
+  certainly have a DIFFERENT real bound/width, and a flat 14 misreads garbage from them. Confirmed
+  via clean A/B isolation (`git stash`/`pop`, reproduced twice). Reverted cleanly before merging
+  (never hit main) - the algorithm fix itself (`990d84d`) stayed merged and correct throughout.
+  Defensive bounds checks added as a permanent safety net regardless (`b9eb062`).
 
-### (b) IN FLIGHT right now:
-**Agent `a9dd00967b485e642`** (background, dispatched this turn, branch
-`diag/bink-bitpos-vs-5.3y`): pure diagnostic (not expected to require a fix) - instrument this
-codebase's own real end-to-end Bink decoder to log its own bit-reader position at 3 points
-(dispatch/AC-entry/AC-exit) for idx0/3/4, diff against spec-bink-codec.md Sec5.3y's own
-ground-truth table (idx0: 13619/13619/13636; idx3: 13640/13640/13723; idx4: 13727/13727/13863),
-find the FIRST divergence point. If bit positions all match, fall back to comparing actual DECODED
-VALUES against Sec5.3v's ground truth (DC=118,k8=-1,k16=-1, dequant 6293/-102/-118, IDCT rows
-24/25) since the bug might be purely in per-symbol math despite isolated tests passing. **NEXT
-STEP for whoever picks this up: wait for this agent's SubagentHandback, verify its merge (if any)
-with an explicit build-exit-code-checked + ctest pass per standing rule 10, relay the divergence
-point to Team A precisely, then dispatch a targeted fix unit for whatever it finds.** If no agent
-notification has arrived yet when this resumes, check `git worktree list` for
-`diag/bink-bitpos-vs-5.3y` and `git log` on it to see if work exists even without a notification
-(the harness may have restarted mid-task).
+**`fade_out_block` (m05/m09/m13 shared stall) - now resolved as a timeout artifact, NOT a real
+stall** (same shape as m09's own earlier false alarm, `9e52612`): re-ran m05/m13 directly with
+`--mission-timeout=180` (the prior task's own run used only 30s, exhausted by ~38s of one-time
+texture-cache building before a single mission tick). Both now advance within ~0.1s to genuinely
+NEW, deeper, real blockers:
+- **m05**: errors in `zscene_is_loaded` for key `'05_in'` - Team A confirmed `05_in` is Story-kind
+  (kind 2, same pattern as the already-closed `09_in` case) - see IN FLIGHT above, fix dispatched.
+  Sits between `fade_out_block` and `m05_jump_local`'s own `vehicle_exit` call, so the
+  vehicle-seat fix (`--auto-seat-mission-vehicle`) is STILL unverified end-to-end even after this.
+- **m13**: errors on `_GetAnyGlobalSilent` not being a function - directly confirms the
+  already-flagged `system_lib.lua`-not-loaded archive gap IS the real next blocker, not
+  `m13_goto_a_trigger`'s own on_trigger wait - see IN FLIGHT above, fix dispatched. The
+  trigger-stall teleport is ALSO still unverified end-to-end even after this.
+- Re-run commands used: `sr3_viewer.exe playtest <characters> <misc_tables> <sr3_city_0>
+  <sr3_city_1> <sr3_city_missions> <misc> <dlc1> --headless --no-input --mission=<m05|m13>
+  --mission-timeout=180 --auto-objective --auto-seat-mission-vehicle --auto-answer-hud-prompts
+  --hud tools/lua_all_registered_1490_tagged.txt <misc.vpp_pc>` (all paths under
+  `D:\Project Crreish\Saints Row 3 CRREISH\packfiles\pc\cache\`) - the `--hud <reg_list> <misc>`
+  pair is REQUIRED (`--mission=<stem>` errors without a registration list) and was MISSING from
+  the prior task's own command, independent of the timeout issue.
 
-### (c) LEARNED this session (facts/numbers/addresses worth keeping, not already covered above):
-- Bink real asset path: `D:\IdolRecomp Saints Row The Third\Saints Row 3 CRREISH\videos\
-  main_menu_bg.bik` (old `D:\Project Crreish\...` junction still resolves). Golden fixture:
-  `tests/golden/bink_main_menu_bg/frame0_raw.bin` (gitignored, local-only, re-extractable via
-  `tools/bink_frameN_extract.cpp`). FFmpeg reference: `scratchpad_bink/
-  main_menu_bg_frame0_yuv420p.raw` (extracted via `ffmpeg -pix_fmt yuv420p -f rawvideo` - NEVER
-  `-pix_fmt gray`, that silently rescales tv-range to full-range and will mislead). Compare tool:
-  `tools/bink_ffmpeg_pixel_compare.exe <frame0_raw.bin> <yuv420p.raw> 1920 1080 0 1`.
-- Mission playtest real cache: `D:\IdolRecomp Saints Row The Third\Saints Row 3 CRREISH\packfiles\
-  pc\cache\`. In-world recipe needs `characters.vpp_pc misc_tables.vpp_pc sr3_city_0.vpp_pc
-  sr3_city_missions.vpp_pc cutscene_tables.vpp_pc misc.vpp_pc startup.vpp_pc interface.vpp_pc
-  interface_startup.vpp_pc --hud <tools/lua_all_registered_1490_tagged.txt> misc.vpp_pc
-  --mission=<X> --mission-package-tsv <tools/mission_package_per_container.tsv>` (sr3_city_missions
-  for game_lib.lua, interface+interface_startup for system_lib.lua - both needed or you get
-  "BLOCKING FINDING - no entry named X found"). m09's own boat-trigger box: position
-  (2488.54, [6.82,37.6], -4.16) - use `--spawn 2488.54 -4.16 --spawn-y <value in that Y range>
-  --script-forward-frames 0`.
-- Mission-drive single-mission speed-up trick: back up `tools/mission_package_per_container.tsv`,
-  filter to just the target mission's row(s), run `lua_host_run.exe ... --tick-budget=3000`,
-  restore the original file after (confirm `git status` shows no diff). NEVER run this filtered
-  probe concurrently with a separate `ctest` pass sharing the same checkout - corrupts that ctest
-  run's real-data tests (hit this once, self-corrected).
-- Default spawn is tile 0915, world coords (-1280,-560) = cityTileCentre(9,15). Known-broken-origin
-  tiles: 0915/0914/0715/0716. Known-good: 0916/0818/0912/1015/1016.
-- The `sr3_city~sawld` 0x2237 record (in `awld_compact.str2_pc`) is a large disc-shaped background/
-  horizon fallback plane with a hole cut out of its center (~1/18th the outer diameter) - NOT the
-  fix for the ground gap (confirmed via direct render+screenshot: default spawn sits well inside
-  the excluded hole region, not on the disc).
+**Chroma-B block(0,0) of main_menu_bg frame 0** (Team A, spec-bink-codec.md §5.3x, informational -
+no chroma decode wired into this project yet): legitimately skip-coded, FFmpeg's V plane there is
+flat at 132-133, the real decoder never calls the entropy pre-stage for chroma-B in this frame -
+whenever chroma-plane decode work starts, treat chroma-B as skip/copy for that row, not an error.
 
-### (d) RULED OUT this session:
-- The DC+128 Bink bug (separately tracked for primary cases 5/7) is UNRELATED to the
-  Case1SubType::DcAcIdctEngine2 (sub=2) bug chain this session worked on - measured on a path
-  (primary 5/7) this codebase has never executed; §5.3o/p's own live trace of block(0,0) found
-  zero offset of any kind, not +128. Same feeder function doesn't mean same bug.
-- Wrong-buffer/wrong-source hypothesis for BOTH the DC-literal and flat-fill cursors, for the
-  remaining idx0/3/4 end-to-end bug: DISCONFIRMED by Team A's own live trace against the
-  unmodified DLL - both cursors point at the right buffer, right offset, right content, in the
-  real binary. The bug is downstream of buffer identity (see IN FLIGHT above).
-- A primary-checkout git mishap this session (worth remembering the shape of, not the specifics):
-  the non-worktree checkout got stranded on a stale feature branch for several hours, during which
-  4 real spec-sync commits accumulated there uncommitted-to-main; an early recovery attempt
-  (cherry-picking just one of the 4 in isolation) wrongly concluded a merge conflict meant the
-  content was superseded and silently no-op'd it - it was NOT superseded, just out of order. Fixed
-  properly by merging the WHOLE stale branch (not cherry-picking), then detaching the worktree that
-  had been holding `main` and switching the primary checkout back onto `main` directly. All 4
-  commits recovered. This is the origin of standing rule 7's strengthened wording above.
+### (d) RULED OUT this tail:
+- `0x100195b0`'s nib2 being a genuinely separate "global tree"/descriptor at `ctx+0x20/+0x24` -
+  Team A's live search of `0x10018ca0`/`0x10019300`/`0x10019360` and the header-parsing region
+  found NO write site to `ctx+0x28/+0x2c` anywhere in that call chain (still technically an open
+  "where is it written" question, but irrelevant now that the VALUE is known via the bound formula
+  above rather than needing to trace its write site).
+- A `+1`-bit-before-the-per-symbol-loop hypothesis for the (now-closed) flat-fill bit-alignment
+  symptom - tested directly, made things worse (idx1 jumped to 8, not toward the expected 1) -
+  the real fix was the width/nib2 bugs above, not a simple off-by-one shift.
+- `std::vector<uint8_t> bytes(count,0)` with `count` from a bad 14-bit-assumed read was confirmed
+  (via A/B isolation) as the real `mm_p_03` crash cause, not a flaky parallel-ctest artifact - the
+  baseline (pre-promotion) passed the same test cleanly in isolation (175s), ruling out flakiness.
 
-### (e) User/orchestrator asks still pending or awaiting a decision:
-- No standing asks currently blocked on a human decision - everything in flight is normal
-  agent-dispatch-and-merge flow, continue autonomously per standing "don't wait, broad permission"
-  policy.
-- Two worktree-cleanup items still waiting on the USER's own explicit yes (not the
-  orchestrator's) per disk-space-discipline memory: (1) `fix/bink-prestage-len-correction`'s
-  worktree (`D:/Project Crreish/TEAM B/.claude/worktrees/agent-binklencorrection`, 339MB) - an
-  archive-not-delete recipe was proposed by a peer and explicitly REJECTED as insufficient
-  authorization (relayed permission isn't real permission) - still fully untouched, waiting. (2)
-  Two worktrees from the overtake-gate task (`agent-overtake-flag`, `agent-mainmerge-overtake` -
-  note: `agent-mainmerge-overtake` is now ALSO the worktree holding a lot of active merge work this
-  session, re-check its current use before assuming it's safe to remove).
-- Queued, not yet dispatched (in priority order, all low-to-medium, none blocking): (1) footstep
-  audio real implementation (range-cull + MOVEMENT_TYPE/MATERIAL_TYPE switches, full mapping
-  already known, see DONE section above); (2) m07 spawn-at-barge conclusive check (low priority);
-  (3) m09 spawn-inside-crate-trigger conclusive check (low priority).
+### (e) Pending / queued, not yet dispatched:
+- **49-mission sweep** (orchestrator's own explicit next step after (b) above lands): loop
+  `sr3_viewer.exe playtest --mission=<X> --auto-objective --auto-seat-mission-vehicle
+  --auto-answer-hud-prompts --mission-timeout=180` over all 49 missions, write the same
+  baseline-table format `lua_host_run.exe` uses elsewhere. NOT yet dispatched - waiting on (b)'s
+  two in-flight agents first (same files/mission list, avoid duplicate work).
+- Footstep audio real implementation (full mapping known, see body for detail) - low priority,
+  not touched this tail.
+- m09 spawn-inside-crate-trigger conclusive check - low priority, still queued, not touched.
+- Two worktree-cleanup items still waiting on the USER's own explicit yes (not orchestrator's):
+  `fix/bink-prestage-len-correction`'s worktree (339MB, archive-not-delete proposal already
+  REJECTED) and 2 worktrees from the overtake-gate task (`agent-overtake-flag`,
+  `agent-mainmerge-overtake` - the latter now ALSO holds active merge work, re-check before
+  assuming safe to remove).
+- No standing asks currently blocked on a human decision beyond the two worktree items above -
+  everything else is normal autonomous agent-dispatch-and-merge flow, continue per standing
+  "don't wait, broad permission" + "keep pace through usage-pacer warnings" policies.
+
+## PRIOR SESSION HISTORY BELOW (2026-10-11 and earlier) - condensed, see git log/this file's own
+## body for full detail if needed. Bink video: AC-tree Gate A/Gate B rewrite, dequant/IDCT verified
+## bit-exact, DC-array 519-word fix (pixel-match 0%->15%, block(0,0)=24 exact match). Traffic/AI:
+## real overtake-gate steering curve (threshold=1.0/slope=1.0, universal constant). Mission/Lua:
+## trigger-callback nargs=0 bug fixed; mission-drive tick-budget raised 20->3000 reclassified 3 of
+## 5 "stuck" missions as pure budget artifacts; m07's get_char_vehicle_type + get_dist position-
+## resolution bugs fixed, teleport's own live-worldPosition-write bug fixed. Street collision: real
+## Havok MOPP-mesh ground collision implemented for correct-origin tiles; 4 known-broken-origin
+## tiles (0915/0914/0715/0716, decode geometry at world-origin not real tile position) remain the
+## default-spawn sky-blue-void root cause, not yet fixed.
 <!-- CONTEXT-GUARD:RESUME-END -->
 
 <!-- KNOWN-STOPGAPS:BEGIN (deliberately OUTSIDE the context-guard resume block, same reasoning as
@@ -553,6 +458,286 @@ notification has arrived yet when this resumes, check `git worktree list` for
   either confirm/deny case 2's pre-Gate-B setup independently of case 0's, or reconcile Gate B's
   per-copy bit-position prose against a literal 1+level bit budget for idx3's first node - whichever
   is resolved first may explain the remaining pixel(0,0) mismatch directly.
+
+  **2026-10-12 - flat-fill (`0x100195b0`/Sec5.3aa) per-symbol diff against Team A's own published
+  trace, as requested ("log the same per symbol from ours and diff - the first differing symbol
+  pins the bug"). Found TWO things, one real fix applied, one genuine structural bug identified but
+  NOT fixed (needs Team A):**
+  1. **nib2's translate step was definitely wrong** (globalTable.table16 - always was, confirmed by
+     checking all 3 of Sec5.3aa's own published examples: raw2=9->nib2=9, raw2=10->nib2=10,
+     raw2=14->nib2=14 - nib2 == raw_symbol2 in every case, i.e. no translate happens for nib2 at
+     all). Changed to a direct passthrough (`nib2 = rawSymbol2`) - this is the LEAST-INVENTED fix
+     consistent with all 3 examples, not independently proven as the real mechanism (could also be
+     an identity-table row rather than "no translate step," indistinguishable from only 3 samples).
+  2. **Debug-instrumented a live run of `decode0x100195b0TreeDecodeAttempt()` for its own first 3
+     symbols and compared directly against Sec5.3aa's own trace row-by-row (not guessing from code
+     alone).** Found: THIS CODE's own symbol 0 `packed2` is `0x22` (code_len=2, raw=2) - the TRACE's
+     own symbol 0 `packed2` is `0x49` (code_len=4, raw=9). The CODE LENGTH itself differs (2 vs 4),
+     not just the translated value - meaning `globalTable` (descriptor A's own built table, passed
+     in from `caseSelectorA2.builtTable()`) is very likely the WRONG TREE INSTANCE entirely for
+     nib2's lookup, not a translate-table issue. **This is the exact same class of bug Team A found
+     and fixed for `0x10019d10` (Sec5.3ab Q2, 2026-10-11): that call builds its OWN global tree via
+     its own dedicated `0x10018ca0`-equivalent call, not a copy/alias of descriptor A or B's.**
+     `0x100195b0` almost certainly needs the same treatment - its own `ctx+0x20`/`+0x24` global-tree
+     fields are probably filled by a DEDICATED build-table call specific to this function, not
+     aliased to descriptor A. Symbol 0's `packed1` also mismatched (raw=0 here vs raw=1 in the
+     trace) - not treated as a second independent bug, more likely a cascading effect of the same
+     tree-identity/per-row-bit-position issue (nib1's own mechanism - per-class table, cur_class
+     indexing - was already independently confirmed correct in isolation elsewhere in this file).
+  Not pushed further per "no invented fixes" - item 2 needs a live trace identifying WHICH of the
+  23 pre-stage sibling calls builds `0x100195b0`'s own global tree (same method Team A used for
+  `0x10019d10`), which this project cannot do itself (never disassembles). Relay to Team A as the
+  concrete next spec-sync question. Still NOT promoted to production - `decode0x100195b0()`
+  (the real production path) remains on its unchanged hardcoded stopgap; idx1/idx2 unaffected.
+  Debug instrumentation was added, used, and fully removed before this commit - zero inert leftover.
+
+  **UPDATE 2026-10-12: Team A's live-capture fix applied (ctx+0x20/+0x24 aren't a separate
+  descriptor - just more of the ctx+0x00..0xFF table; nib2 reuses nib1's SAME per-class
+  `classTable`/translate table, not a fixed row). Applied, built, tested - still does NOT reproduce
+  the fixture.** Debug-instrumented symbol 0 again after the fix: this code's own packed1=0x40
+  (len=4,raw=0), packed2=0x41 (len=4,raw=1); the trace's own symbol 0 is packed1=0x41 (len=4,raw=1),
+  packed2=0x49 (len=4,raw=9). Notable: this code's SECOND read (packed2=0x41) now EXACTLY equals
+  the trace's FIRST read (packed1=0x41) - code_len AND raw value both match, not a coincidence of
+  code_len alone. Both reads now use the identical `classByte` width (4, correct per Sec5.3g's own
+  A_array for class 0), so the structural read-order/table-selection fix is likely right - the
+  remaining gap looks like it's in the LUT CONTENT itself: `bank.tables[0].lutA` (this project's
+  `SiblingTableBank`, captured from calls #3-18 of the 23-call pre-stage per row) may not be
+  byte-for-byte identical to `0x100195b0`'s OWN specific ctx+0x140[0] LUT pointer target, even
+  though both apparently agree on `classByte`'s own width (4). This is a NEW, more precise question
+  for Team A: is `SiblingTableBank`'s captured class-0 LUT content for THIS row genuinely the exact
+  same bytes as `0x100195b0`'s own ctx+0x140[0] pointer target, or a different (but same-width)
+  table from a different one of the 23 sibling calls? A direct byte-for-byte LUT content comparison
+  (not just the classByte width) would settle this. Still NOT promoted to production; idx1/idx2
+  unaffected; no regressions (184/184 ctest unchanged).
+
+  **RESOLVED 2026-10-12 - flat-fill (`0x100195b0`/Sec5.3aa) CLOSED, full exact match.** Two final
+  fixes, both found via direct verification (byte-level fixture extraction + live symbol-1 trace
+  comparison) after Team A's own live-register measurement caught an 11-vs-15-bit pre-loop
+  discrepancy:
+  1. **Leading-magnitude field width is 14 bits for this call, not 10.** Team A confirmed via
+     disassembly that `0x100195b0` uses the SAME `ctx+0x28`/`+0x2c` fixed-bound shift-chain as
+     `0x1001a160`'s own value[0], but the bound VALUE differs per call site (`0x1001a160`'s own
+     `ctx+0x28=10`, this call's own `ctx+0x28=14` - live-captured, `ctx+0x2c=15872`, decoded
+     magnitude 650 matches exactly). Added a SEPARATE constant
+     (`kFlatFillAttemptLeadingMagnitudeWidth=14`) used only by
+     `decode0x100195b0TreeDecodeAttempt()` - the production stopgap `decode0x100195b0()`'s own
+     `kFlatFillLeadingMagnitudeWidth=10` is UNTOUCHED (it never depended on the literal width being
+     correct, only on the measured-total-bits-skip approach, which remains correct and unchanged).
+  2. **nib2 is NOT cur_class-indexed at all - it always reads through class 0's own table/translate
+     row, unconditionally.** Confirmed by symbol 1's own trace: `cur_class=1` (whose own A-value is
+     6 per Sec5.3g's A_array), yet nib2's own code_len is still 4 - exactly class 0's A-value, not
+     class 1's. This IS the "global" (cur_class-independent) nature the section's own name always
+     implied - it's just physically co-located with the per-class arrays' own class-0 slot rather
+     than being a genuinely separate descriptor, which is why Team A's earlier cur_class-indexed fix
+     (reusing `classTable`/`curClass` for nib2) got close but not exact.
+  With both fixes applied: **bit cost exactly 3384, full 650-byte output byte-for-byte identical to
+  the golden fixture (first 64 bytes, last 8 bytes, and total size all verified)** -
+  `tests/real_bink_flat_fill_prestage_test.cpp`'s own SECTION 2 now PASSES (no longer skipped).
+  **NOT YET promoted to production** - `decode0x100195b0()`/`consumeDcArrayPreStageGap()`/
+  `frame_decoder.h` still use the old hardcoded-prefix/suffix stopgap, because promoting requires
+  threading a `SiblingTableBank` parameter through `consumeDcArrayPreStageGap()`'s own signature
+  (it currently only receives `globalTable`, not the per-row `SiblingTableBank` the fixed decoder
+  needs) - a mechanical but non-trivial plumbing change through `frame_decoder.h`'s own call site,
+  queued as the next concrete task rather than rushed. Once promoted, re-verify idx1/idx2 still read
+  153/153 and re-run the full main_menu_bg.bik blocks/pixels-matching comparison (current baseline:
+  0/5 blocks exact, 48/320=15.0% pixels matching) to see if flat-fill's own correctness moves it.
+
+  **PROMOTION ATTEMPTED 2026-10-12, REVERTED - genuine crash found, NOT a false alarm.** Did the
+  plumbing (threaded a per-row `SiblingTableBank` through `consumeDcArrayPreStageGap()` and
+  `frame_decoder.h`, updated 4 test call sites, switched `decode0x100195b0()`'s call to
+  `decode0x100195b0TreeDecodeAttempt()`). The one validated call (main_menu_bg.bik frame 0/row 0)
+  still worked perfectly after promotion (idx1/idx2 unaffected, all `real_bink_*` tests green, 15/15
+  bink-labelled tests pass). But the FULL ctest suite then showed a real regression:
+  `real_playtest_mission_test` sub-test B (a real in-game mission video, `mm_p_03`, under
+  `--mission-timeout=0.01`) crashes with `error: bad allocation` partway through its own real video
+  decode - confirmed NOT flaky by re-running 3x and by a clean A/B isolation (stashed the plumbing
+  changes, baseline passed cleanly in isolation; restored the changes, same crash reproduced in
+  isolation again). **This means the fixed decoder, while exactly correct for the ONE call this
+  entire thread validated against, hits a real crash on at least one OTHER row/block of a DIFFERENT
+  real video file this project has never tested against before** - most likely the new 14-bit
+  leading-magnitude width (`kFlatFillAttemptLeadingMagnitudeWidth=14`) producing an unexpectedly
+  large `count` for some other call's own real data, feeding `std::vector<uint8_t> bytes(count, 0)`
+  a bad size, OR a `bank.tables[curClass]`/`flatFillTranslateTable256()[curClass]` out-of-bounds
+  index if some other row's real `cur_class` sequence ever exceeds the per-class array's own 16-
+  entry bound (neither bounds-checked in the attempt decoder, since it was written purely to match
+  ONE already-known-good call). **Reverted the plumbing cleanly** (`git checkout --` back to the
+  committed `990d84d` state) - the algorithm fix itself (990d84d) is untouched and still correct/
+  merged; only the NOT-YET-SAFE production wiring was reverted, and was never committed in the first
+  place (caught before merging, not a regression on main). Before re-attempting promotion: add bounds
+  checks (clamp/reject an out-of-range `cur_class` or an implausible `count` rather than trusting
+  every call's real data blindly) and/or run the fixed decoder against a WIDER sample of real rows/
+  blocks/videos before wiring it into the shared production path, not just the one validated call.
+  **DEFENSIVE BOUNDS CHECKS ADDED (`b9eb062`)**: count capped at a generous sanity bound (65536),
+  `cur_class` range-checked against the 16-entry table - both fail cleanly instead of crashing.
+
+  **ROOT CAUSE FOUND 2026-10-12 (Team A, 75-call live capture across main_menu_bg.bik frame 0):
+  the 14-bit leading-magnitude width is NOT a fixed/hardcoded constant - it's derived PER-PLANE
+  from `ctx+0x2c`'s own bound value, which changes plane-to-plane within the SAME video** (calls
+  0-57: width=14/bound=15872; calls 58-74, a different plane: width=13/bound=8192 - both constant
+  across their own run of calls, confirming it's set once per plane, not per call). The one-time
+  sentinel/sign-probe bit is a real, SEPARATE, unconditional 1-bit cost on top of the width
+  (confirmed: `preloop_bits_consumed == width+1` for every single one of the 75 calls, no
+  exceptions) - NOT folded into the width, and NOT itself variable. **Hardcoding width=14 (as this
+  task's own fix does, `kFlatFillAttemptLeadingMagnitudeWidth`) will silently corrupt any plane/
+  video whose own real bound differs from 15872** - almost certainly the actual cause of the
+  `mm_p_03` crash (a different video, likely different plane dimensions, likely a different real
+  bound/width that a flat 14 misreads as garbage). The defensive bounds check above prevents the
+  CRASH, but does not fix the underlying CORRECTNESS gap for any plane/video other than the one
+  validated call (main_menu_bg.bik frame 0, first plane). **Still OPEN**: this project has no
+  clean-room source for ctx+0x2c's own bound value (or the width derived from it) beyond the one
+  hardcoded, validated constant - needs either (a) a formula relating the bound to already-known
+  per-plane quantities (pixel dimensions, block count, something this codebase already computes
+  per plane) so the width can be derived rather than hardcoded, or (b) Team A capturing this value
+  across enough real videos/planes to establish the formula empirically. Full per-call dump:
+  `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_multicall_2026-10-12.py`
+  (Team A's own script, not yet pulled into this repo's own clean-room data).
+
+  **UPDATE 2026-10-12: bound/width formula found (Team A, live memory-write watchpoint,
+  spec-bink-codec.md Sec5.3ab) - `bound(ctx+0x2c) = 8*dim + 512`, `width(ctx+0x28) =
+  bound.bit_length()`, where `dim` is the plane's own pixel-width (Y/chroma tables) or
+  macroblock-column count (the `0x10019d10`-style tables). Confirmed against all 3 known data
+  points (dim=1920->15872, dim=960->8192, dim=240->2432, the last one being `0x10019d10`'s own
+  case - its 12-bit overrun is now a strong candidate for the same hardcoded-width bug). Purely
+  derived from known setup-time quantities, no live bitstream read needed. QUEUED: re-attempt the
+  flat-fill promotion using this formula per-plane instead of the hardcoded 14, apply the same fix
+  to `0x10019d10`, validate against BOTH `main_menu_bg.bik` AND `mm_p_03`'s own video before
+  merging, then re-report blocks-out-of-5/pixel-match.
+
+  **PROMOTED 2026-10-12 (`fix/flat-fill-perplane-width-promotion` task) - flat-fill now SAFELY
+  wired into production, both crash cause and correctness gap closed together.**
+  `flat_fill_prestage_array.h`'s old hardcoded `kFlatFillAttemptLeadingMagnitudeWidth=14` constant
+  is replaced by `computeFlatFillLeadingMagnitudeWidth(int dim)` (`bound = 8*dim + 512`,
+  `width = sr3binkcodec::bitLength(bound)` - reusing entropy_prestage.h's own existing
+  `bitLength()` helper, the same one `caseSelectorLengthFieldBitWidth()`/`...B()` already use for
+  this exact sibling family, rather than a new `<bit>`/`std::bit_width` dependency - this project
+  targets C++17, which has no `<bit>` header anyway).
+  `decode0x100195b0TreeDecodeAttempt()` now takes `dim` (the plane's own pixel width,
+  `blockCols*8`) as an explicit parameter instead of reading the removed constant.
+  `dc_prestage_sibling_gap.h`'s `decode0x10019d10()` got the SAME formula (`dim=blockCols`, the
+  macroblock-column count per Team A's own confirmation) - its own leading-count field was reading
+  `kDcSiblingMagnitudeWidth=10` unconditionally before this task; `kDcSiblingMagnitudeWidth` itself
+  is untouched and still correct for the genuinely-fixed-width siblings in that file
+  (`0x1001a160`, `0x10019f00`).
+  `consumeDcArrayPreStageGap()` now takes a `SiblingTableBank` + `blockCols` and calls
+  `decode0x100195b0TreeDecodeAttempt()` (the real, golden-fixture-exact decode) instead of the old
+  `decode0x100195b0()` measured-total-skip stopgap - `frame_decoder.h`'s `decodePlaneRasterOrder()`
+  now captures a per-row `SiblingTableBank` via `beginBlockRow(caseSelectorB, &rowSiblingBank)` and
+  threads it + `blockCols` through. All 5 test call sites (`real_bink_dc_array_519_word_bail_test`,
+  `real_bink_dc_value0_boundary_test`, `real_bink_dc_prestage_gap_test` x2,
+  `real_bink_flat_fill_prestage_test`) updated to match the new signature.
+  **Verification, both steps run separately as this task's own standing rule requires:**
+  - Build: `cmake --build build --config Release` exit 0.
+  - `ctest -C Release`: 100% of 185 fast/real/golden-label tests pass (11 pre-existing Bink skips
+    unchanged - those need `tests/golden/bink_main_menu_bg/frame0_raw.bin`, a gitignored real-data
+    fixture not present in a fresh worktree by default; copying it in from the primary checkout
+    drops the Bink-specific skip count to 4, all pre-existing/unrelated to this task). The two
+    tests the prior reverted promotion attempt crashed, run SEPARATELY and explicitly (slow, ~190s
+    combined): `real_playtest_ground_pavement_collision_test` (21.21s) and
+    `real_playtest_mission_test` (169.15s, the one whose own `mm_p_03` sub-test B hit
+    `bad_alloc` before) - **BOTH PASS CLEANLY**, confirming the per-plane width formula (not just
+    the defensive bounds check from `b9eb062`) was the real fix for that crash, not merely a
+    band-aid around it.
+  - `real_bink_flat_fill_prestage_test` itself: NO LONGER SKIPPED (previously returned 77 because
+    the attempt decoder wasn't wired to the production path being exercised) - now PASSES outright,
+    both SECTION 1 (production `consumeDcArrayPreStageGap()`, now full 650-byte real content, not
+    just a 64-byte prefix + 8-byte suffix - the old "indices 64..641 honestly unavailable" check
+    was flipped to "now genuinely decoded, confirmed available" to match) and SECTION 2 (the
+    standalone attempt function) both report exact matches against the golden fixture (bit cost
+    3384, full 650 bytes, first-64/last-8 all MATCH).
+  - `real_bink_0x10019d10_real_decode_test`: still SKIPPED (returns 77) - the per-plane width fix
+    did NOT close this one. `decoded.size()` is still exactly 528 (the hard-asserted leading-count
+    check still passes unchanged), but first-byte/bit-cost content still mismatches (measured
+    `9250` cumulative bits vs expected `9236`, first byte `0x56` vs expected `0x0f`) - confirming
+    this function's own SEPARATE, already-documented bug (the "global tree" identity question -
+    whether `CaseSelectorScratchSource::builtTable()` really is `0x10019d10`'s own global tree) is
+    still open and NOT fixed by this task's width formula alone. `decode0x10019d10()` remains
+    un-wired from production either way (`consumeDcArrayPreStageGap()` still pays
+    `skip0x10019d10()`'s own measured-total model for that call), so this is a no-op for production
+    correctness, just an honest update to the test artifact's own call signature.
+  - `bink_ffmpeg_pixel_compare` re-run against `main_menu_bg.bik` frame 0
+    (`build/Release/bink_ffmpeg_pixel_compare.exe tests/golden/bink_main_menu_bg/frame0_raw.bin
+    <ffmpeg_yuv420p_oracle> 1920 1088 0 1`, same invocation shape as the prior task that first
+    produced the 0/5 blocks / 48/320 baseline): **UNCHANGED - still 0/5 blocks exact, 48/320
+    (15.0%) pixels matching.** This is NOT a sign the promotion did nothing: block (0,1)'s own
+    mismatch is idx1/idx2's own flat-fill value (153) vs ffmpeg's ground truth (24) - already
+    flagged elsewhere in this file as a SEPARATE, pre-existing discrepancy between this project's
+    own (now-confirmed byte-for-byte spec-exact) flat-fill decode and ffmpeg's own reference
+    decoder for THIS SPECIFIC block, not something this task's per-plane width formula was ever
+    going to change. The width formula fix's own real, confirmed effect is entirely about
+    CORRECTNESS-ACROSS-PLANES/VIDEOS (no more silent corruption on a different bound) and
+    CRASH-SAFETY (`mm_p_03` no longer `bad_alloc`s), not this specific ffmpeg block mismatch.
+  **Merged to main** (self-merge, standing permission) after the above all passed clean.
+
+  **m05/m13/m09's own shared `fade_out_block` stall, RESOLVED as a timeout artifact, same shape as
+  m09's own earlier false alarm (commit 9e52612).** The just-merged auto-objective-extension task's
+  own `--mission-timeout=30` run was too short: one-time texture-cache building alone measured
+  18.5s+19.2s=37.7s of real wall-clock time before a single mission-drive tick, exceeding the 30s
+  budget before the scheduler ever got a real pass. Re-ran both m05 and m13 directly with
+  `--mission-timeout=180` (plus the correct `--hud <registration_list> <misc.vpp_pc>` flags the
+  earlier run's own command was missing a registration list for) - BOTH advance past
+  `fade_out_block` within ~0.1s of real mission-drive time once given the budget, landing on
+  genuinely DIFFERENT, deeper, real blockers:
+  - **m05**: errors inside `zscene_is_loaded` - a zscene-table lookup for kind 1, key `'05_in'`,
+    which this project's own engine-state model leaves OPEN (spec-lua-api-behaviour.md
+    Sec26.25/Sec14.23, no spec gives its value). The vehicle-seat fix from the just-merged task is
+    still genuinely unverified end-to-end (this new blocker sits between `fade_out_block` and
+    `m05_jump_local`'s own `vehicle_exit` call) - unit-test coverage remains the only direct proof
+    for now.
+  - **m13**: errors on `_GetAnyGlobalSilent` not being a function - directly confirms the
+    already-flagged `system_lib.lua`-not-loaded archive gap (`sr3_viewer.cpp`'s own caller-supplied
+    archive list vs. `lua_host_run.cpp`'s whole-directory scan) is the REAL next blocker, not
+    `fade_out_block` and not `m13_goto_a_trigger`'s own on_trigger wait (the trigger-stall teleport
+    is therefore ALSO still unverified end-to-end - same caveat as m05 above).
+  Neither needs a code fix for `fade_out_block` itself (nothing was ever wrong with the fade
+  machine) - just a longer `--mission-timeout` for any future verification run against this
+  specific archive/texture-cache-cold-start combination. Next concrete steps: model
+  `zscene_is_loaded`'s own `'05_in'` entry for m05 (Team A spec-sync candidate), and resolve the
+  `system_lib.lua` archive-location gap for m13 (likely needs `patch_compressed.vpp_pc`, which
+  currently also hits a separate, pre-existing "bad allocation" streaming warning in
+  `sr3_viewer.cpp` - noted in the just-merged task's own results file, not fixed here).
+
+  **RESOLVED 2026-10-12 (fix/m05-zscene-m13-systemlib): both m05's `zscene_is_loaded` gap and
+  m13's `system_lib.lua` gap were the SAME root cause - `sr3_viewer.cpp`'s own `playtest` command
+  only ever looked at archives the caller explicitly named on argv, unlike `tools/lua_host_run.cpp`'s
+  own mission-drive loop, which scans the whole cache directory for what it needs.**
+  `EngineState::zsceneIsLoaded()`'s own Sec14.23 kind-gate (`if (!r.loadable) return true;`,
+  `src/lua_cutscene.cpp`) was ALREADY correct (confirmed directly, re-read byte for byte) - it had
+  simply never been given the real zscene/cutscene scene table (`cutscene_tables.vpp_pc`) to answer
+  from, because `missionzoneobj::installZsceneTableFromArchives()` (added 2026-10-10, already on
+  main) only ever searched the caller's own named `cityArchivePaths`, and no caller had named that
+  archive. Team A's spec-sync independently confirmed the same conclusion: real `05_in.cte_xtbl` is
+  `<CutsceneType>Story</CutsceneType>` (kind 2, non-Zscene), same shape as the already-closed `09_in`
+  case - the kind-gate returns `true` for it immediately once the table is installed, no new
+  engine-state model needed. Fix: a new `expandArchivePathsWithCacheDirScan()` helper (`tools/
+  sr3_viewer.cpp`) scans the DIRECTORY holding the caller's first given archive (every real cache
+  archive lives together in one flat directory) for `cutscene_tables.vpp_pc`/
+  `patch_compressed.vpp_pc`/`misc_tables.vpp_pc` whenever one of those is not already named
+  explicitly, same convention `lua_host_run.cpp`'s own `fs::directory_iterator(cacheDir)` scans
+  already use. Kept as a SEPARATE list (`luaPreloadArchivePaths`) from `cityArchivePaths` itself (the
+  one fed into the CityArchive/CityCell world-streaming population) so this fix does not
+  additionally resurface the separate, pre-existing "bad allocation" streaming warning that archive
+  triggers there - confirmed absent from both re-runs below. Both `zsceneIsLoaded()`'s kind-gate and
+  the preload-chain code (`findScriptsByName({"system_lib.lua","game_lib.lua"}, ...)`) now run over
+  `luaPreloadArchivePaths` instead.
+
+  **Re-run results (same `--mission-timeout=180`, same five caller-named archives as before, with
+  NEITHER `cutscene_tables.vpp_pc` NOR `patch_compressed.vpp_pc` passed manually)**:
+  - **m05**: no more `zscene_is_loaded` error. The real zscene/cutscene table load line reports
+    `installed from ...cutscene_tables.vpp_pc entries=109 kind0(Designer)=19 kind1(Zscene)=31
+    kind2(Story)=59 kindOpen=0`. The mission advances cleanly past `fade_out_block` through the full
+    30-frame run, ending suspended at `fade_in_block` with NO error - genuine further progress, not
+    just a different blocker.
+  - **m13**: `preloaded system_lib.lua` / `preloaded game_lib.lua` both print (found via the scan,
+    `patch_compressed.vpp_pc` never named on the command line) - no more `_GetAnyGlobalSilent is not
+    a function`, and no "bad allocation" warnings either (confirmed: that archive is never fed into
+    the world-streaming CityArchive loop by this fix). m13 now reaches a genuinely DEEPER, real
+    blocker: `m13_start` errors on `engine state weapon-definition name resolution (0x028dc4dc,
+    stride 0x7ec)['molotov'] is OPEN (spec-lua-api-behaviour.md Sec4.10/Sec4.11)` - a real,
+    pre-existing OPEN gap (same family already tracked for other missions' `['special-sonicgun']`/
+    `['pistol-gang']` cases), not this task's to fix.
+  New test: `tests/real_playtest_archive_scan_test.cpp` (real-data, SKIPPED without
+  `CRREISH_GAME_CACHE_DIR`/the two archives present) - proves both fixes hold WITHOUT the caller
+  naming either archive, asserting the OLD failure text never reappears for either mission.
 
 <!-- KNOWN-STOPGAPS:END -->
 
@@ -18157,3 +18342,56 @@ noise: the old texture reader read a record's size field as 16 bits, so it repor
 rewritten reader (§9.77) reports the true **174,760**. Every texture over 64 KB was being uploaded
 with a wrong/truncated mip chain; the difference is the correct lower mips now being sampled. CMake
 harness targets still pending. Also: `save_browser` updated (play time is seconds).
+
+**M05_JUMP hud_prompt auto-answer: CHOSEN direct-call stand-in added (`fix/hud-prompt-direct-callback-
+standin`, 2026-10-12, worktree `agent-hudpromptautoanswer`), m05.lua:1141 still stuck but root cause
+now narrowed.** Prior task's `--auto-answer-hud-prompts[=N]` (`results/
+verify_m05_hud_prompt_autoanswer_20261012.md`) spawned a coroutine for `hud_prompt`'s arg3 via
+`BareThreadTable::allocate()` and measured m05 NOT advancing past `m05.lua:1141`
+(`m05_parachute_in`'s own `while not M05_jumped do thread_yield() end`). Team A's 2026-10-12
+spec-sync (spec-lua-api-behaviour.md Sec13.3) then CONFIRMED arg3 genuinely IS the callback name the
+engine calls (`m05_jump_local`/`m05_jump_remote` - the only two places `M05_jumped` is ever set true,
+and the shipped mission really completes), just via a dispatch mechanism not inside `hud_prompt`'s own
+native chain (`0x00a4cff0`/`0x00a37210`/`0x00a370c0`, all opened, none of them call it) and not yet
+traced anywhere. Orchestrator + Team A signed off on a pragmatic CHOSEN stand-in: directly look up and
+call the named global Lua function when auto-answer fires, instead of spawning a deferred coroutine.
+**New `Host::callGlobalFunctionByName()` (`include/sr3luahost/host.h`/`src/lua_host.cpp`), used by both
+`tools/lua_host_run.cpp`'s `--auto-answer-hud-prompts[=N]` and `tools/sr3_viewer.cpp`'s
+`--auto-answer-hud-prompts`/`--script-hud-prompt-response`.** First attempt (bare `lua_getglobal`+
+`lua_pcall`, matching `Host::fireConfirmedHooks()`'s own existing idiom) measured to FAIL for
+`m05_jump_local` specifically with `"attempt to yield across metamethod/C-call boundary"` - the real
+callback body itself yields, so it cannot run inside an ordinary `lua_pcall` C-call frame. CORRECTED in
+the same pass to reuse the ALREADY-EXISTING `BareThreadTable::startThread()` (this project's own
+"allocate a root record for global `name` and run it AT ONCE" helper, same primitive the mission
+`_start` root entry uses) instead - calls the named global via `lua_resume` on a fresh coroutine, so a
+yield inside it is tolerated like any other script thread (left alive, resumed again by the normal
+per-tick `runScriptThreadSchedulerPass()` if it doesn't finish). No second call-by-name mechanism
+invented. **m05 re-run (`results/verify_m05_direct_callback_stand_in_20261012.md`, same real-cache
+invocation as the prior task): still does NOT advance past `m05.lua:1141`, but the finding is now
+qualitatively sharper** - `m05_jump_local` genuinely IS invoked this time (no call-by-name failure, no
+Lua error at all: `scheduler_thread_errors` stays 0), and its own spawned thread stays alive, resumed
+169 additional times across the 200-tick budget (`scheduler_resumes` 200->369) without ever completing
+- i.e. it is yielding repeatedly INSIDE its own 3-line body, not failing to be found or erroring out.
+Reading `m05_jump_local`'s real source directly (`m05.lua:1730-1734`, via this project's own
+clean-room `lua_source_dump` tool against the real game cache, not exe-derived):
+```lua
+function m05_jump_local()
+	hud_prompt_clear(LOCAL_PLAYER)
+	vehicle_exit(LOCAL_PLAYER)
+	M05_jumped = true
+end
+```
+`M05_jumped = true` is the LAST statement - if the thread never reaches it, `vehicle_exit(LOCAL_PLAYER)`
+(the one call between it and the already-harmless `hud_prompt_clear`) is the most likely place it keeps
+yielding, plausibly gated on a real seated/vehicle-occupancy precondition this synthetic tick-budget
+drive never independently establishes (no real "player actually sitting in the M05 heli" state exists
+outside an actual playthrough) - see this doc's own "Vehicle enter/exit `+0x16d4` synchronous-write fix
+merged" entry for the related, already-confirmed real `vehicle_exit_do`/`stateEnum` mechanism this would
+be gating on. **Genuine ambiguity, NOT resolved here per the standing "no invented fixes" policy and the
+"Team B never disassembles" rule** - flagged as a spec-sync question for Team A / a follow-up
+mission-blocker task: does `vehicle_exit` on a player with no live vehicle-occupancy state ever
+complete on its own, or does its real completion gate require actually being seated first (something a
+real m05 playthrough's earlier flow would have set up, but this synthetic run starting mid-mission does
+not)? Build: `cmake --build build --config Release` exit 0. Test: `ctest -C Release` **185/185 passed**
+(one test block added to the existing `synthetic_hud_prompt_autoanswer_test` binary, not a new target -
+registered-test count unchanged).

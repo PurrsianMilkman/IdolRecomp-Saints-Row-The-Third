@@ -552,13 +552,248 @@ relationship between `activity_types.xtbl`'s registry and this class cluster bey
 far"; `photo_op`'s own reward mechanism, if any; the shared base-class default handler
 `0x006a4220`'s own actual call site (virtual-dispatch, not found by static tracing).
 
-## 6. Clean-room check
+## 6. Per-activity rules — port recipe (2026-10-12, FINAL)
+
+**Scope and sources.** These eight activities are the "instanced" activity family. They are not the
+§1-§2 diversion singletons. Each playable instance is its own `_a_<tt>_<hood>_<nn>` zone (str2)
+carrying one `.xtbl` whose root element is `Activity`. The per-instance files were extracted to
+`scratchpad/ai/xtbl_scan/sr3_city_0/*_a_*_modal.str2_pc___a_*.xtbl` (DLC Genki escort:
+`scratchpad/ai/xtbl_scan/dlc1/dlc1.vpp_pc__dlc1_a_es_0N.xtbl`). Type codes: `if` Insurance Fraud,
+`dt` Trafficking, `sn` Snatch, `ha` Heli Assault, `mh` Mayhem, `es` Escort, `tm` Tank Mayhem, `rm`
+Professor Genki (`activity_types` row `Running Man`). **No `.lua` exists for any of the eight**: of
+the activity zones, only the two Guardian Angel zones (`_a_ga_*`) ship Lua. Every rule below is
+therefore either xtbl data (CONFIRMED, values read from the shipped files) or C++ (addresses given).
+
+### 6.1 Shared frame: levels, rewards, and the reward-grant path (closes §4's open item for this family)
+
+**Difficulty levels = instances, not `Level` rows.** Every instance file has exactly **one**
+`Levels/Level`. Difficulty is the instance number `_01`/`_02`/`_03`. Each type ships 2 hoods × 3
+instances = **6 instances**, except Tank Mayhem, which has 3 hoods × 3 = **9**. The DLC Genki
+escort has 2 instances. The engine reader supports up to **6 `Level` rows per instance** (see
+below), but the shipped data never uses more than 1. **[CONFIRMED, data]**
+
+**Uniform reward ladder (data):** `Cash_Award`/`Props_Award` (Props means respect) are
+`2000/200`, `4000/400`, `6000/600` for instances `_01/_02/_03` across `if`, `dt`, `sn`, `ha`,
+`mh`, `tm` and base `es`. Genki (`rm`) pays `1000/200`, `2000/400`, `3000/600`. The DLC Genki escort
+pays `4000/400` and `5000/500`. Only the `_01` instance of each hood carries `Reward` =
+`Activity_Unlock_<XX>` (an `unlockables.xtbl` row, e.g. `Activity_Unlock_IF` → `UNL_FRAUD`, category
+`Activities`, which unlocks the activity's replay/menu entry). The exceptions are `_A_SN_NW_01` →
+`Activity_Unlock_SN-K` (Snatch Kinzie variant), `_A_ES_SW01` → `Activity_Unlock_ES-T` (Escort
+Tiger variant), `_A_RM_DT_01` additionally `Reward2 = Homie_Pierce`, and `DLC1_A_ES_02` →
+`DLC_story02_vehicle_genki`. The "complete all instances" unlock is
+`activity_types.xtbl.Unlockables`: Escort → `Gang_NPC_Strippers`, Escort_Tiger →
+`Gang_NPC_Wrestlers`, Snatch → `Gang_NPC_Hos`, Snatch_Kinzie → `Gang_NPC_Cops`, Tank Mayhem →
+`Gang_NPC_NG`, Running Man → `Gang_NPC_Mascots`. Fraud's own `Unlockable` is `all_fraud`. Mayhem,
+Trafficking and Heli have none. **[CONFIRMED, data. OPEN: the code that tests "all instances done"
+before applying `Unlockables`.]**
+
+**Common instance reader, `0x0061c6e0` (CONFIRMED, decompiled).** This is the base-class
+`Activity`-record reader. It is reached from 12 per-type vtable data slots
+(`0x01129e68`…`0x011337b8`) plus 2 direct callers. It reads `Name` (hashed, `+0x194`), the flags
+`Explored_at_start` (bit0 of `+0x1d4`) and `End_Warp_Sidewalk` (bit2), `Start_Location`
+(`Disabled`/`Enabled`; when enabled it resolves object `activity_start_<zone>_<name>` into
+`+0x30`), the warp names (`+0x34`, `+0x74`, `+0xb4`, `+0xf4`, 64 bytes each), `Player_Outfit`
+(`+0x134`), `Cutscene` (`+0x19c`), `Start_function`/`Cleanup_function` (`+0x154`/`+0x174`), and
+`Disable_Trigger` (bit1). It then loops `Levels/Level`, **capped at 6**, with the count at `+0x1a0`.
+Per level *i* it reads `Reward` into `+0x1d8+8i` and `Reward2` into `+0x1dc+8i` (both resolved
+through the unlockables lookup `0x0071cc90`, sentinel = "none"), `Cash_Award` into `+0x1a4+4i`, and
+`Props_Award` into `+0x1bc+4i`. The per-run "level completed" bitmask is `+0x1d5`.
+
+**Reward grant, `0x0061bb50`. CONFIRMED (decompiled); this is the reachable answer to §4's open
+item for this family.** It is called only from `0x005e97a0`. Given the activity, it looks up the
+persistent per-activity save record via `0x006170c0` (keyed by the hashed name). For **every level
+*i* < count whose bit *i* is not yet set in the save record's byte `+8`**, it:
+
+1. sets bit *i* in the instance's `+0x1d5` and in the save record's byte `+9`, unless in a
+   co-op-client state (`0x0087ba20` check), which takes `0x006188b0(i)` instead;
+2. applies `Reward` and then `Reward2` (if not "none") via the unlock-apply routine `0x0071ccf0(id,1,0)`;
+3. telemetry `0x00bd2f10`;
+4. if a local player exists, grants **respect** through `0x009e2440(player, Props_Award, 0)`, then
+   a second `0x009e2440` call with `round(Props_Award × (scale − k))`. Here `scale` comes from the
+   same global respect-scale selector `0x007bdb70(0)` that `streaking` uses, and `k` is the constant
+   at `0x012a2d70` (HIGH CONFIDENCE 1.0, so the bonus is the difficulty/scale surplus). It then
+   grants **cash** `Cash_Award` via `0x00960210` and the shared money primitive `0x0094d920`;
+5. posts HUD hint args `0x5b` (cash) and `0x5c` (respect) through `0x00710cb0`. Unless the
+   `activity_types` record's flag byte (`0x014b2e2a + type×0x94`, bit3) is set, it also posts
+   hints `0x13`/`0x33` plus the record's own completion hint id (`0x014b2e0c + type×0x94`, if ≠ −1);
+6. increments the per-type completion counter at `0x014b2e38 + type×0x94` (record offset `+0x50`
+   of the `activity_types` registry, `spec-tables-progression.md` §10.12). The type index comes
+   from the instance's vtable slot `+8`.
+
+It then calls `0x0061af70` and `0x006d6d20` (teardown). **Port recipe:** on activity success, for
+each level row not already marked done in the save, grant `Props_Award` respect (scaled) and
+`Cash_Award` cash, apply `Reward`/`Reward2`, set the done bit, and bump the type's completion
+counter. Granting is idempotent per level via the save bitmask, so a replay pays nothing. This is a
+**teardown-time batch grant**, which matches the 2026-10-11 user observation in §4 (cash appears on
+return to free-roam). **OPEN:** what `0x005e97a0` gates on (success vs fail, and whether the call
+fires on the exit-to-free-roam transition); whether the §1-§2 diversion singletons ever reach this
+function (they are not `Activity` records, so probably not). §4's "10 OPEN diversion types"
+question is therefore unchanged.
+
+**Shared activity_types flags (data):** all eight carry `auto advance level`, `reset noteriety
+each level` and `fail on death`. All except Escort also carry `remove noteriety spawns`. Escort
+instead has `do initial warp`. Extra `Disable_flags` are `disable all stores` for all eight; Fraud
+adds `disable distant spawns` + `disable roadblocks`; Trafficking adds `disable crib`, `disable warp
+triggers` and `disable attack helis`; Tank Mayhem adds `disable roadblocks`. **Universal lose
+condition: player death.** Leaving the activity area or quitting also fails the run (OPEN: the
+area/abandon test was not located).
+
+### 6.2 Insurance Fraud (`_a_if_*`, per-type reader `0x00625630`)
+
+- **Win:** accumulate `Goal` dollars of fraud payout (co-op: `Coop_Goal`, always 2×) before
+  `Duration` seconds run out. **Lose:** timer expiry, or death.
+- **Levels:** DT `Goal`/`Duration`/`Max_Spots`/`Crazy_Hit_Chance` = 80000/210/2/.2,
+  200000/300/3/.3, 450000/420/4/.4. SW = 70000/225/2/.2, 200000/300/2/.3, 450000/420/3/.4.
+  Constant across all instances: `Crazy_Chance .725`, `Crazy_Min/Max_Speed 20/40`,
+  `Ring_Money_Percent 1.0`, `Bonus_Distance 9999`.
+- **Scoring:** the payout per hit is computed from `fraud_globals.xtbl`
+  (`spec-tables-diversions.md` §10). That table has a base `Damage_Multiplier` × `Money_Conversion`
+  with a `Min_Money` floor, and per-limb `Body_Multipliers` (Head/Chest/Groin/Arm/Leg). On top of
+  that sit the 11 combo categories: Vehicle, Airtime, Witness, Cop_Witness, Linear_Dist,
+  Civil_Vehicle, Crazy_Driver, Windshield, Surfing, Pinball and Cliff_Diver. Each is a
+  `Multiplier_Data{Minimum_X, Multiplier_Min, Multiplier_Max, Per_Multiplier}` tier (flat and/or
+  tiered grid). There are also `Luxury_Cars` and `On_Fire_Bonus` bonuses, and the Adrenaline grids.
+  Per instance, `Hoods/Hood/Bonus_Spots/Spot` adds zones (`Bonus_Center`, `Bonus_Radius` 50-75,
+  `Multiplier` 1.35-1.6, `Min/Max_Speed_Override`) that multiply payout inside the radius.
+  `Max_Spots` caps the active spots. "Crazy" traffic drivers (`Crazy_Chance`/`Crazy_Hit_Chance`,
+  speed 20-40) feed the Crazy_Driver category. A start car is spawned (`Start_Vehicle_Info`).
+- **OPEN:** the exact combination order (additive vs multiplicative stacking of categories), and
+  `fraud_globals`' three sub-readers (`0x0061f120`/`0x0061d280`/`0x0061d330`, still not
+  offset-mapped). The scoring code itself was not opened.
+
+### 6.3 Trafficking (`_a_dt_*`, `Deal_Use_Count` read at `0x0066ee10`, outside any defined function)
+
+- **Win:** drive the dealer (top-level `Dealer_Type`, e.g. `npc_Pierce`) in the activity car
+  (`Vehicle_Type`, `Vehicle_Health 25000`, speed override 60 mph) through `Deal_Use_Count` deals,
+  chosen from `Deals/Deal` (`Deal_Nav`, `Buyer_Spawn`, `Buyer_Type`), then reach `Ending_Nav`.
+  **Lose:** dealer or player death, or car destroyed (HIGH CONFIDENCE from `Vehicle_Health`; the
+  code was not traced). **No timer.**
+- **Levels:** `Police_Notoriety`/`Gang_Notoriety`/`Deal_Use_Count`/`Max_complications`. DT =
+  0/2/2/2, 1/3/3/2, 1/5/4/3. NE = 1/2/3/2, 1/4/4/2, 1/5/5/4. Co-op variants
+  `Coop_*_Notoriety`/`Coop_Notoriety_Vehicle_Count` are one step higher.
+  `Level_Complications` = `{buyer_flee .3, buyer_flee_shooting .4}` (chance per deal, at most
+  `Max_complications`). The loadout `Weapons` is Pistol, SMG (250 ammo), grenade ×4 and Shotgun.
+- **Scoring:** none. This is a pass/fail activity, and the reward is the §6.1 ladder only. Note
+  that the top-level `Cash_Award 2000`/`Props_Award 2000` siblings are **not read**: `0x0061c6e0`
+  reads the awards only inside `Level`.
+
+### 6.4 Snatch (`_a_sn_*`, `Ho_Win_Amount` read at `0x0065f6a3`, outside any defined function; text descriptor `0x00653fdd`)
+
+- **Win:** deliver `Ho_Win_Amount` rescued NPCs to the drop-off before `Duration` runs out
+  (co-op: `Coop_Duration`). Drop-off radii are `On_Foot_Dropoff_Dist 6`/`Vehicle_Dropoff_Dist 8`;
+  the pickup becomes "in range" at 60. **Lose:** timer expiry, or death.
+- **Levels (`Ho_Win_Amount`/`Duration`/`Coop_Duration`):** NE = 4/320/350, 5/400/440, 7/560/620.
+  NW (Kinzie variant) = 3/270/300, 5/270/240, 6/480/530.
+- **Complications:** `Recapture_Complication` (`Recapture_Chance`, `Cooldown 45`,
+  `Damage_Threshold 35`, `Total_Recaptures`) plus per-pickup `Standard_Pickup` vs `Ho_Rescue`
+  (pimps and thugs guard; `Reroute_Dist 30`). Notoriety bump is 1 for the gang
+  (`Notoriety_Type`), clamped to police 0-1 and gang 0-3.
+- **Scoring:** none beyond the count. Reward per §6.1.
+
+### 6.5 Heli Assault (`_a_ha_*`)
+
+- **Win:** complete `Objectives_Needed` (1 for every instance) objectives from the gunner seat.
+  The objective kind for the instance's level index comes from top-level
+  `Vehicles_destroy_objectives`, `Aircraft_destroy_objectives`, `Protect_target_objective`
+  (escort a vehicle, `Vehicle_hit_points 20000`, enemy cars every `Time_between_spawns` 12 s, or 10 s
+  in co-op, `Chance_of_rocket_launcher .15`) and `Scripted_gang_fight_objective`, keyed by
+  `Level_number`. **Lose:** death, the player heli destroyed (`Heli_Health_Multiplier 5.0`) or the
+  protected car destroyed. **Timer:** `Time_For_Level 300`, but `Use_Timer False` in all 6
+  instances, so it is untimed.
+- **Levels:** the rows are identical except for the award ladder. Difficulty lives in the
+  objective blocks (vehicle types, occupant counts). `Friendly_Fire_Mult .05`, spawn ring 96-160.
+- **Scoring:** none. Reward per §6.1. **OPEN:** no per-type reader located (`Objectives_Needed`
+  has no static string reference).
+
+### 6.6 Mayhem (`_a_mh_*`, `Destruction_Goal` read by `0x00667c40`, the only reference to that string, so HIGH CONFIDENCE shared with Tank Mayhem)
+
+- **Win:** reach `Destruction_Goal` dollars of property damage (co-op: `Destruction_Goal_Coop`)
+  within `Duration`. **Lose:** timer expiry, or death.
+- **Levels (`Goal`/`Coop`/`Duration`):** NW = 90000/200000/300, 200000/320000/240,
+  300000/500000/300. SW = 115000/225000/300, 200000/400000/300, 250000/550000/300.
+  `Notoriety_Settings`: police 0-2, gang 2-3. Unlimited-ammo loadout of Pistol, grenade, SMG and
+  Shotgun.
+- **Scoring (`Combo_Info`, data):** each destroyed object adds its destruction $ to a running
+  combo. The combo multiplier grows by `Human_Combo_Multiplier 0.01`, `Vehicle 0.04` and
+  `Mover 0.02` per kill of that class, capped at `Combo_Max_Multiplier 2.0`. The combo window decays
+  faster as the combo's $ grows: `Combo_Decay_Cutoffs` maps `Destruction_Value`
+  4000/8000/16000/25000/35000/50000 to `Decay_Mult` 2-7 (with matching HUD `Start_Text_Intensity`).
+  Warning beeps play at 50/20/0 % remaining (1500/1000/500 ms). When the combo expires, its $ ×
+  multiplier is banked toward the goal. `Completion_Mult 4.5` is HIGH CONFIDENCE a payout factor on
+  completion (Tank Mayhem has 0.0). **OPEN:** the exact banking formula and what `Completion_Mult`
+  multiplies, since the scoring code (`0x00667c40` cluster) was not opened.
+
+### 6.7 Tank Mayhem (`_a_tm_*`, same `0x00667c40` reader)
+
+- **Win/lose:** as Mayhem, driving `Tank = sp_tank01` inside `Activity_Center` (`Radius 700`).
+  Leaving the radius is HIGH CONFIDENCE a fail or warning (OPEN).
+- **Levels (`Goal`/`Coop`/`Duration`):** DT = 125000/225000/150, 350000/600000/120,
+  400000/850000/210. NE = 250000/500000/120, 500000/1000000/210, 600000/1200000/210.
+  NW = 150000/275000/240, 450000/800000/300, 350000/625000/400. Notoriety is police and gang 3-4.
+  `Repair_Node_Info`: 3 repair pickups (SP and MP).
+- **Scoring:** the Mayhem combo with `Vehicle_Combo_Multiplier 0.05`, cutoffs
+  5000/10000/20000/35000/50000/75000, and `Completion_Mult 0.0`. **Plus `High_Value_Targets`:**
+  `Crowd` and `Convoy` groups, whose members carry a fixed `Value` (5000 for targets, 1000 for
+  convoy guards) added on destruction. **OPEN:** same as Mayhem.
+
+### 6.8 Escort (`_a_es_*`; text descriptor `0x00685f1f`; `Satisfaction_Time` read by `0x0068a040`)
+
+- **Win:** fill the client's satisfaction by driving for `Satisfaction_Time` seconds of
+  accumulated "good" time (60/75/90 NE; 65/75/95 SW Tiger; 160/180 DLC Genki). Pursuing paparazzi
+  must not film too much: the `Footage_Limit` meter (co-op: `Coop_Footage_Limit`) fails the run when
+  it fills. **Lose:** footage limit reached, or death. Escort has no `remove noteriety spawns`.
+- **Complications (top level, data):** chased by `Enemies` (News van spawn 1.0; IRS and Spouse
+  .15, `Give_Up_Sec 30`), plus per-level client requests (`Stop`, `Crash`, `Air`, `Drive_By`,
+  `Drift`, `Near_Miss`, `Trip`, and the co-op button-mash/stick-rotate minigames). Each request has
+  `Level`/`Chance`/`Help`, `Time_Between_Complication` is 10 s (11 s in NE_03, 3 s in co-op), and
+  there are `Num_Complications` per level.
+- **Levels (`Num_Spawns`/`Satisfaction_Time`/`Combos_to_advance`/`Footage`/`Complications`):**
+  NE = 2/60/3/50/3, 3/75/5/60/4, 6/90/7/50/5. SW (Tiger, no complications) = 2/65/6/25/0,
+  3/75/8/20/0, 4/95/10/20/0. `Percent_penalty_for_wrong_move 1`. Escort constants are in
+  `spec-tables-traffic-ai.md` §19.
+- **Scoring:** none beyond the satisfaction meter. Reward per §6.1. **OPEN:** the satisfaction
+  fill rate and the footage-accumulation rate (code at the `0x0068a040` cluster, not opened).
+
+### 6.9 Professor Genki's Super Ethical Reality Climax (`_a_rm_*`, `Running Man`; `Required_cash` readers `0x006509a0` / `0x00651e70`)
+
+- **Win:** reach the exit door (`Level_Exit/End_exit`) holding at least `Required_cash` (co-op:
+  `Required_cash_coop`) before `Time_limit`. **Lose:** timer expiry, or death
+  (`Level_flags = clear_starting_inventory, infinite_ammo, no_health_regen`).
+- **Levels (`Time_limit`/`Required_cash`/`coop`):** DT = 180/1000/3000, 180/2000/4000,
+  240/3500/7000. SW = 180/2000/3500, 180/3000/6000, 210/4000/8000.
+- **Scoring (global `running_man_globals.xtbl`, data):**
+  - **Kill cash:** base 50 (civilian), 50 (gang), 500 (hunter). Bonuses are One_hit 15/15/75,
+    Melee 5/5/50, Headshot 20/20/25, Nutshot 25, Trap_Kill 30/30/0, Human_shield 0/0/24 and
+    Sword 5/5/15.
+  - **Targets:** Ethical +5 s/+$50. Unethical −$100/−10 s. Money +$100. Time +25 s.
+    Button +$100. Health +225 HP.
+  - **Trap evades:** electric +$70, fire +$50.
+  - **Combo:** the multiplier table maps 2…12 consecutive scores to ×1.5…×6.5 (step 0.5). The
+    combo timer is `Max_combo_ticks 2000` at `Base_decay_rate 100`, sped up ×1.1/1.25/1.5/2/5 past
+    combo values 200/400/600/800/1000.
+  - **Presents:** `Explosion_Timer 30000` ms, weapon drops, `Alternative_Cash_Amount 100`.
+  - **Events:** `Event_Multiplier 3`.
+  - **Trap damage:** spike 50, electric 50, fire 1 per tick.
+- **Reward:** §6.1 ladder (`1000/2000/3000` cash). `_A_RM_DT_01` also grants `Homie_Pierce`.
+  **OPEN:** whether the cash banked in-run is also paid out (HIGH CONFIDENCE not: it is the exit
+  gate currency).
+
+### 6.10 Open items for §6 (summary)
+
+The exact in-run scoring arithmetic for Fraud, Mayhem/Tank Mayhem and Escort (data semantics
+given, code not opened); the area-leave/abandon fail test; `0x005e97a0`'s success gate; the
+"all instances complete" → `activity_types.Unlockables` path; the meaning of the `k` constant at
+`0x012a2d70`.
+
+## 7. Clean-room check
 
 Plain hex addresses throughout. No Ghidra auto-names, no decompiler pseudocode, no
 `FUN_`/`DAT_`/`iVar`-style tokens used as if real identifiers. No leaked Volition/Havok/
 Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-12 — new §6 per-activity rules (FINAL); Clean-room check renumbered to §7; §4 reward-grant path CLOSED for the instanced activity family** (SPEC TEAM). The common `Activity` reader is `0x0061c6e0` (up to 6 levels; `Cash_Award`/`Props_Award`/`Reward`/`Reward2`). The teardown batch grant is `0x0061bb50` (caller `0x005e97a0`), which calls `0x009e2440` and `0x0094d920` once per not-yet-saved level. Rules for the 8 activities were taken from the per-instance `_a_*` xtbls and `running_man_globals.xtbl`.
 
 - **2026-10-11 — §4: user-observed ground truth narrows the reward-grant search for all 10 OPEN
   diversion types to activity teardown/exit-to-freeroam** (SPEC TEAM, self, note only, no new RE

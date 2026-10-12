@@ -135,15 +135,17 @@ int main() {
         // more - the fill byte itself must NOT have advanced `br`.
         CHECK(bitsAfter - bitsBefore == 8);
         CHECK(flatFillCursor.cursor() == 1);  // the cursor's OWN position did advance, by exactly 1 index
-        // Pixel value must be the SEPARATE array's byte (0x99), not
-        // anything read from `br`'s own bytes (0x00 past the dispatch
-        // nibbles).
-        CHECK(dest.at(0, 0) == 0x99);
-        CHECK(dest.at(7, 7) == 0x99);
+        // Pixel value must be the SEPARATE array's byte (0x99), biased per the
+        // DC-bias fix (2026-10-12, Team A confirmed): pixel = (int8_t)fill + 128,
+        // not the raw fill byte - see block_dispatch.h's FlatDcFill case body.
+        const uint8_t expectedPixel =
+            static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(0x99)) + 128);
+        CHECK(dest.at(0, 0) == expectedPixel);
+        CHECK(dest.at(7, 7) == expectedPixel);
         std::cout << "  Part 2 (FlatDcFill reads from the SEPARATE decoded array, `br` untouched beyond its "
                      "own dispatch nibbles): "
                   << (rec.outcome == BlockOutcome::Reconstructed && (bitsAfter - bitsBefore) == 8 &&
-                              dest.at(0, 0) == 0x99
+                              dest.at(0, 0) == expectedPixel
                           ? "OK"
                           : "FAILED")
                   << "\n";

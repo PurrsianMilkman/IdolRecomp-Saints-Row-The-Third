@@ -1895,6 +1895,16 @@ add_executable(sr3luahost_trigger_volume_overlap_tests tests/synthetic_trigger_v
 target_link_libraries(sr3luahost_trigger_volume_overlap_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_trigger_volume_overlap_test COMMAND sr3luahost_trigger_volume_overlap_tests)
 
+# hud-prompt-autoanswer-harness task (2026-10-12): delay-gated auto-answer
+# mechanism for a live hud_prompt(...) request (Sec13.3), added to both
+# tools/sr3_viewer.cpp's --auto-answer-hud-prompts and tools/lua_host_run.cpp's
+# --auto-answer-hud-prompts[=N] - see tests/synthetic_hud_prompt_autoanswer_
+# test.cpp's own top doc comment for why this is tested at the EngineState/
+# BareThreadTable mechanism level rather than by spawning either CLI tool.
+add_executable(sr3luahost_hud_prompt_autoanswer_tests tests/synthetic_hud_prompt_autoanswer_test.cpp)
+target_link_libraries(sr3luahost_hud_prompt_autoanswer_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_hud_prompt_autoanswer_test COMMAND sr3luahost_hud_prompt_autoanswer_tests)
+
 # Shop/crib walk-in "press E" entry stand-in (feature/shop-crib-press-e-entry,
 # 2026-10-11, spec-store-runtime.md Sec2): EngineState::registerShopCribTrigger()/
 # updateShopCribTriggerPrompt()/pressShopCribInteract(), built on the
@@ -2187,6 +2197,22 @@ add_test(NAME synthetic_menu_runtime_test COMMAND sr3menu_runtime_tests)
 add_executable(sr3luahost_batch1_sec1_4_core_tests tests/synthetic_luahost_batch1_sec1_4_core_test.cpp)
 target_link_libraries(sr3luahost_batch1_sec1_4_core_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_batch1_sec1_4_core_test COMMAND sr3luahost_batch1_sec1_4_core_tests)
+
+# feature/auto-objective-harness (2026-10-12): unit test for
+# EngineState::recordGetDistCall()/getDistStallInfo(), the generic get_dist
+# "same pair N times" stall tracker --auto-objective (tools/sr3_viewer.cpp)
+# reads to decide when/where to teleport the player.
+add_executable(sr3luahost_auto_objective_getdist_stall_tests tests/synthetic_auto_objective_getdist_stall_test.cpp)
+target_link_libraries(sr3luahost_auto_objective_getdist_stall_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_auto_objective_getdist_stall_test COMMAND sr3luahost_auto_objective_getdist_stall_tests)
+
+# feature/auto-objective-trigger-vehicle-seat (2026-10-12): the on_trigger-
+# stall and m05-vehicle-seat extensions to --auto-objective above - see
+# tests/synthetic_auto_objective_trigger_and_vehicle_seat_test.cpp's own doc
+# comment.
+add_executable(sr3luahost_auto_objective_trigger_and_vehicle_seat_tests tests/synthetic_auto_objective_trigger_and_vehicle_seat_test.cpp)
+target_link_libraries(sr3luahost_auto_objective_trigger_and_vehicle_seat_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_auto_objective_trigger_and_vehicle_seat_test COMMAND sr3luahost_auto_objective_trigger_and_vehicle_seat_tests)
 
 # Wave 1, Batch 5 (2026-10-08): spec-lua-api-behaviour.md Sec15 (25 names,
 # HUD-slot/customization/pause-menu gameplay cluster) + Sec16 (16 names,
@@ -2781,6 +2807,31 @@ if(WIN32)
     add_dependencies(real_playtest_mission_tests sr3_viewer)
     if(NOT CRREISH_VERIFY_BUILD)
         set_tests_properties(real_playtest_mission_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
+# Real-data integration test for the cache-directory archive-scan fallback
+# (fix/m05-zscene-m13-systemlib, 2026-10-12): tests/real_playtest_archive_
+# scan_test.cpp's own header comment has the full account. Proves
+# sr3_viewer.cpp's own playtest --mission=<stem> path now finds
+# cutscene_tables.vpp_pc (m05's zscene_is_loaded OPEN-state fix) and
+# patch_compressed.vpp_pc/system_lib.lua (m13's _GetAnyGlobalSilent fix) by
+# scanning the cache directory itself, WITHOUT the caller naming either
+# archive explicitly - same SKIP_RETURN_CODE 77 / CRREISH_GAME_CACHE_DIR
+# convention as real_playtest_mission_test above.
+if(WIN32)
+    add_executable(real_playtest_archive_scan_tests tests/real_playtest_archive_scan_test.cpp)
+    target_compile_definitions(real_playtest_archive_scan_tests PRIVATE
+        CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}"
+        CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
+    add_test(NAME real_playtest_archive_scan_test
+             COMMAND real_playtest_archive_scan_tests --bin-dir $<TARGET_FILE_DIR:sr3_viewer>)
+    set_tests_properties(real_playtest_archive_scan_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device")
+    add_dependencies(real_playtest_archive_scan_tests sr3_viewer)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_playtest_archive_scan_test PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 

@@ -180,6 +180,134 @@ on the main game process — requires explicit user go-ahead per `spec-save-form
 standing note); or a full line-by-line read of the one entry never fully exhausted by keyword grep
 alone, main-array index 7 (`0x009df560`, 361 lines).
 
+**Update 2026-10-12 — world-trigger activation mechanism RESOLVED (static, Ghidra decomp).** It is
+**not a virtual method**: trigger activation dispatches through a per-trigger-kind callback table,
+`kind_table[k]` at `0x026232a8 + 0x24·k` (k = trigger object `+0xA8`, = 0-based `<Trigger>` order
+in `triggers.xtbl`; filled by loader `0x0093E0C0`). Entry fields: `+0x00` effect, `+0x04` icon,
+`+0x08` foley, `+0x0C` icon type, `+0x10` use-message, **`+0x14` on-activate cb, `+0x18` on-exit/
+deactivate cb, `+0x1C` on-create/init cb**, `+0x20` flags-present, `+0x21` flags. Callbacks are
+registered by **`0x0093AFE0(kind, {activate, exit, init})`** (14 callers, from game-mode init
+`0x005D25F0` et al.) and invoked by **`0x0093B3C0`** (activate if arg≠0, else exit; kind 8 gets an
+extra player-state gate) / `0x0093B1C0` (`__thiscall` variant, called from `0x0072xxxx`). The init
+cb is called from the trigger's create method `0x0093E520` (itself a real vtable slot: sole
+reference is data at `0x01170938`). Registered kinds → activate cb:
+0 store ownership → `0x00A1FEB0` (exit `0x00A1FF10`; no direct push_screen — calls `0x00A1FE10`,
+then `0x00E0CFB0` on `0x00A353D0(arg)` and on trigger `+0x18`; not followed further);
+3 crib purchase → `0x006D47B0` (→ `0x006D2720(crib,1)`, then disables itself via `0x0093BDE0`);
+4 save vehicle → `0x005F0770` (→ `0x007B4750(0x33)`, UI-manager screen push by id 0x33);
+5 garage enter → `0x005FBD10` → `0x005FA820` → **`0x0080CC90`** (generic doc opener);
+6 warp `0x005FBDF0`; 8 multiplayer_crib → `0x00833FB0` → **`0x0080CC90`**; 9 `0x00A02DC0`;
+10 `0x005FBF60`; 11 `0x005FC230`/exit `0x00DB60A0`; 12/13 `0x006A6890`/`0x006A6EA0`;
+14 `0x006938C0`; 18 `0x00596A70`/`0x00596AB0`; 19 `0x009073E0`/`0x00907440`.
+**Consequence for this gap:** no trigger kind is "open shop X" — walk-in stores are NOT opened by a
+trigger-kind callback reaching `store_common`'s object `0x022CCE68` (none of the 14 does). Kind 0
+("store ownership") is the only store-named kind and it does not push a screen directly. So the
+store-open path still OPEN; remaining lead: follow `0x00A1FE10`/`0x00E0CFB0` (kind-0 activate) and
+the `0x007B4640` screen-id push (id 0x33 is the save-vehicle screen — the same id-based push may be
+how stores open; enumerate `0x007B4750` callers' ids, 31 callers starting `0x007ADCE0`).
+
+**Update 2026-10-12b — `0x007B4750` caller/id enumeration (static, Ghidra headless; scripts
+`tools/scratchpad/ScreenIds{,2,3}.java`, outputs `ScreenIds*_out.txt`).** Semantics:
+`0x007B4750(id)` (`__thiscall`, ECX = UI manager `0x012FCED8`) linearly scans the manager's
+registered-screen list (`+0x2C` count, `+0x30` ptrs) for a screen whose **`+0x30` field == id**, then
+calls push `0x007B4640(screen)` (rejects if already on stack; appends to stack `+0x14C`/`+0x148`).
+**There is no static id→name table:** screen ctor `0x007B5FF0(name)` sets `+0x30 = -1` and copies the
+name to `+0x34`; the id is written later at runtime registration. So ids cannot be mapped to names
+statically by table; mapping below is by caller context only.
+
+| id | caller (call site) | context |
+|---|---|---|
+| 3, 4 | `0x007ADCE0` (`..cf3`, `..cff`); also unfunctioned `0x007AED84`/`..D90` | paired push (pause/menu pair) |
+| 5 | unfunctioned `0x007ADA0E` (if arg==0) | — |
+| 9, 0xA | `0x007AF660` (`..69F`,`..6AB`), `0x007AF6C0` (`..6FE`,`..70A`), `0x007E1A97`/`..AA3` | paired push after `0x007B4990(-1)` |
+| 0x19 | `0x007E1A8F` (if `[0x0229CD98]==1`) | alt. of 9/0xA |
+| 0x1A | `0x0083BA10` | — |
+| 0x27 | unfunctioned `0x0083AE97` | — |
+| **0x28** | **`0x0080CC90`** (store/doc opener) | pushed first as host/background, then the doc itself |
+| 0x33 | `0x005F0770` (trigger kind 4 save vehicle), `0x00A02DC0` (trigger kind 9) | vehicle/garage screen |
+| 0x35/0x36/0x37/0x39 | `0x007C0130`/`0x007C0240`/`0x007C01C0`/`0x007C02D0` | dialog-box family (after `0x007BFD10`) |
+| 0x38 | `0x007BD890`/`0x007BD910`/`0x007BD980` (mode 3/4/5 in `[0x02282954]`) | — |
+| 0x3E | `0x006E8A10` | — |
+| 0x3F | `0x006EE130` | — |
+| 0x40 | `0x006C9400` | — |
+| 0x43 | `0x007C0D50` | — |
+| 0x44 | `0x0072D660` | — |
+| `this+0x30` | **`0x007B5FE0`** (= "push self by own id") | called from `0x0080CC90` |
+| runtime (read from stream) | `0x008B8B90` (`0x008810B0(&id,4)`; id 0x29 ⇒ loads "Planet_Saints") | network/replay-driven push |
+
+**Store mapping (the gap).** `store_clothing`/`store_crib`/`store_weapon` are static doc objects
+(`0x022CCD80`/`0x022CCEF8`/`0x022CE938`) built by static initializers at `0x00FFA770`/`0x00FFA7E0`/
+`0x00FFAB00` via ctor **`0x0080C880(name, peg, …)`** (store-doc class, vtable `0x0115D90C`, wraps base
+`0x007B5FF0`). `store_common` (`0x022CCE68`) and `store_crib_cash` (`0x022CCFD8`) use the plain base ctor
+`0x007B5FF0`. Each store opens through **`0x0080CC90`** (method on the store doc): push host id
+**0x28**, then `0x007B5FE0` pushes the store doc by its own runtime id. Callers of `0x0080CC90`
+(10): `0x005FA820` (trigger kind 5 garage), `0x00833FB0` (kind 8 mp crib), `0x005EEE70`, `0x00820CD0`,
+`0x0082F840`, `0x0082B0C0`, `0x008318F0`, and unfunctioned `0x0081280A`, `0x00815495`, `0x00833DE4` —
+the walk-in store entry points are among these (not yet individually named). `0x0083ECC0` only toggles
+`store_common`'s `safe_frame` (lookup by name `0x00E1F2F0("store_common")`), not a push.
+**Kind 0 follow-up:** `0x00A1FE10` is a lookup (`0x0087BA20` / `0x00A295A0` / `0x00E0CEF0`→`0x00E0CA80`
+on table `0x026E83F0`); `0x00E0CFB0` just calls `0x00DFE380`/`0x00DFE420` and bumps a counter. Neither
+calls `0x007B4750`/`0x007B4640`/`0x0080CC90` ⇒ store-ownership trigger does **not** open a screen.
+**Conclusion:** walk-in stores are not opened by a fixed screen id; they open via the store-doc method
+`0x0080CC90` (host 0x28 + self-id). Remaining step: identify which of the 10 `0x0080CC90` callers is the
+walk-in-store interaction (likely the unfunctioned `0x0081280A`/`0x00815495` in the store-doc code range).
+
+**Update 2026-10-12c — walk-in store open path RESOLVED (static; `tools/scratchpad/ScreenIds4-7.java`,
+functions created only in a read-only throwaway session).** Walk-in stores open through a
+**store-type callback table `0x0268D2DC[type]`**, filled by setter `0x00A00510(type, cb)`
+(`table[type] = cb`), and consumed by dispatcher **`0x00A03940(actor)`**: it reads the interaction target
+`actor+0x2098`, gets `type = *(*(target+0x88)+0x2C)`, skips if `0x00A00EB0(type)` is set or the slot is
+empty, shows `"STORE_NOT_AVAILABLE"` under a vehicle/state gate, and otherwise calls `table[type](target)`.
+`0x00A03940` is entered by a jump from `0x009DA56D`, next to `0x009DA580`, which is referenced from
+interact table entry `0x0111F2F0` (the `0x005B6870`/`0x0111F2D0` interact chain). So the player
+interacting with the store object is the entry point (link verified below: interact slot 6).
+Registered slots (each registered from the store doc's init vtable method, which is called from UI
+manager `0x007B4D70` and also writes the screen id into `+0x30`/`+0x10`):
+| type | open cb → `0x0080CC90` | store doc / screen id | registered by |
+|---|---|---|---|
+| 0 | `0x0082B0C0` | (unnamed doc) | `0x0082B110` ← `0x00822210` ← game-mode init `0x005D25F0` |
+| 1 | `0x00815490` | **store_weapon** (vtable `0x0115E764`), **id 0x2F** | init `0x00816140` |
+| 4 | `0x00812800` | **store_tattoo** "rustys_needle" (vtable `0x0115E3AC`), **id 0x30** | init `0x00812A20` |
+| 5 | `0x005FB330` | garage-type store | `0x005FC390` (also registers trigger kinds 5/6/10/11) |
+| 2 | `0x00833E00` (surgeon confirm dialog; its yes-callback `0x00833D50` calls `0x0080CC90`) | plastic surgeon | `0x00836460` (`PUSH 0x833E00; PUSH 2; CALL 0x00A00510`) ← `0x005D25F0` |
+**Slot 3 is never written statically:** no xrefs at all to `0x0268D2E0`..`0x0268D2EC`, and the five
+`0x00A00510` call sites use types 0/1/2/4/5. `0x00A00615` refers to `0x0268D2D8`, not the table, and
+`0x00A036B0` only writes `0x0268D2D0`. So store_clothing (ctor `0x0080C880`, vtable `0x0115DAF4`) does
+**not** open through this table. Its opener is presumably one of the unclassified `0x0080CC90` callers
+(`0x00820CD0`/`0x0082F840`, which have no code xrefs).
+**Classification of those two (`ScreenIds9.java`):** a byte scan of the whole image finds **no
+little-endian dword** `0x00820CD0` or `0x0082F840` anywhere: no vtable slot, no `0x00A00510`/`0x0093AFE0`
+registration, no interact-table (`0x0111F2D0..`) or Lua-table entry. Both are reached only by relative
+CALLs/JMPs in code Ghidra has not disassembled (not searched).
+`0x0082F840` gates on `[0x022CCD9E]`, the flags byte at `+0x1E` of the **store_clothing** object
+`0x022CCD80`. It builds a camera/position from the player (`0x009DA4E0` +0x40..+0x6C), so it is the
+clothing-store opener (camera setup, then `0x0080CC90`). Its entry point is still unknown.
+`0x00820CD0(arg)` is **vehicle customization** (`0x005F8410`/`0x005FC440`/`0x005F74D0` vehicle helpers,
+player vehicle at `+0x16C0`, `0x00820480`). Its entry point is also unknown; it is likely the slot-5
+garage callback `0x005FB330` or trigger kind 5's `0x005FA820` path (not verified).
+**Raw E8/E9 rel32 scan (2026-10-12h, `SaintsRowTheThird.exe`, all executable sections):**
+`0x00820CD0` is called from `0x005FC207` (garage code, next to `0x005FB330`) and `0x008132CA`.
+`0x0082F840` has **no** direct CALL/JMP and no dword reference, so it is almost certainly a label inside
+a larger function, not a real entry; its `0x0080CC90` call is at `0x0082F97D`. `0x0080CC90`
+has more direct callers than the 10 listed above. These JMP tail-calls were missed: `0x0080D354`,
+`0x0080D368`, `0x0080DFE5`, `0x00811D85`, `0x008127F5`, `0x00815485`, `0x0082B153`, `0x00831905`,
+`0x008322DC`. There is also a CALL at `0x0083404C`. **Correction (12i):** a hex dump shows
+`0x0082F840` IS a real function start: CC padding, then `55 8B EC 83 E4 F0` (push ebp; aligned
+frame). Its 4-byte address appears **nowhere** in the whole file, code included, so there is no
+imm32 push/mov either. With no direct call, no pointer, and no immediate, it is either **dead code in
+this build** or reached only by a computed address. Treat clothing-store opening as **unresolved
+statically**; it needs the dynamic pass. **OPEN:** classify the tail-call sites above.
+**Interact link verified:** interact table `0x0111F2D0` slot **6** (`0x0111F2E8`) = `0x009DA560`:
+`CALL 0x0059F9F0; CMP EAX,2; JNZ → return 0; JMP 0x00A03940`. Slot 8 (`0x0111F2F0`) = `0x009DA580`
+is the crib (`0x005EEE70`).
+Other `0x0080CC90` callers: `0x005EEE70` = crib, called from `0x009DA580` (interact-table entry
+`0x0111F2F0`); `0x00820CD0` and `0x0082F840` have no code xrefs (vtable/indirect, unclassified);
+`0x008318F0` is called from `0x00702770`/`0x00703040`, which are reached from `0x008BA11E`/`0x00A42DC2`/
+data `0x007041C4` (gameplay/mission path, not walk-in); `0x005FBF60` = trigger kind 10 activate.
+**Conclusion:** walk-in store = interact → `0x00A03940` → `table[store_type]` → store-doc cb → `0x0080CC90`
+(push 0x28 host + the store's own id, e.g. weapon 0x2F, tattoo 0x30). `store_common` is never pushed by
+id: it is the shared base layer (no `0x0080C880` ctor, no registered slot).
+
 **What gets configured per store type.** Currency/display is generic in the shared header
 (`Vdo_store_header:set_price`/`set_respect`/`set_level`/`enable_price_respect`,
 `vdo_store_header.lua:166-255`) — every store can show a cash price, a respect reward, OR a

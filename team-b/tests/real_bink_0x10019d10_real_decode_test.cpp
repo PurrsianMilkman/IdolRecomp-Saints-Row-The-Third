@@ -27,6 +27,7 @@
 // measured-total model).
 
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -121,7 +122,12 @@ int main() {
     CHECK(br.bitsConsumedSoFar() == 6255);  // Sec5.3r: 0x10019d10's own real call-site entry position
 
     std::cout << "\n--- decode0x10019d10() real per-symbol decode ---\n";
-    const std::vector<uint8_t> decoded = decode0x10019d10(br, caseSelectorA.builtTable());
+    // dim = blockCols (macroblock-column count, NOT pixel width) per
+    // spec-bink-codec.md Sec5.3ab's own confirmed formula - kLumaWidthPixels/8
+    // == 240 for this row, matching the already-documented 2432/12-bit bound
+    // for this exact call.
+    const int blockCols = kLumaWidthPixels / 8;
+    const std::vector<uint8_t> decoded = decode0x10019d10(br, caseSelectorA.builtTable(), blockCols);
 
     // CHECK (hard-asserted): leading-count-driven termination. Independent
     // of whether the per-symbol CONTENT is correct (see below), the loop
@@ -135,21 +141,36 @@ int main() {
     // REPORTED, NOT ASSERTED (same discipline as
     // real_bink_flat_fill_prestage_test.cpp's own SECTION 2): the first 8
     // real decoded bytes and the total bit cost.
-    static constexpr uint8_t kExpectedFirst8[8] = {0x0f, 0x01, 0x00, 0x00, 0x00, 0x00, 0x80, 0xff};
-    bool first8Ok = decoded.size() >= 8;
-    std::cout << "  first 8 bytes:";
-    for (size_t i = 0; i < 8 && i < decoded.size(); ++i) {
-        std::cout << " " << std::hex << (int)decoded[i] << std::dec;
-        if (decoded[i] != kExpectedFirst8[i]) first8Ok = false;
+    // Full 528-byte real output, spec-bink-codec.md Sec5.3ad (Team A Unicorn
+    // harness, read at the call's own return). Reported, not asserted.
+    static const char kExpectedHex[] =
+        "0f010000000080fff3e3e3f1f08000000080808150c3b8fa00000000003f7fff100080e0e0e1c1c0ff00000000bfcfe700000000183c7cfc000000e0f8f8fcfcf1f1f9f1c0f03004e0c00040c086f3f8c0c0c0c0c0e0b03070303070e0000000001001038268eefc0000000003c0feffe0c0c08083c7c7e7010103030303cf7f0000c0188c1301880000001000000031ff07030000000000fdff0f9f00c08000030100000000000089c9038090326242f1010101008efefe01817f0000000000000000000400c0ffffffe3c0c0c060301f0f0703030101c1f8fcfeff030000001f0f0f070707031e0000183f3f0301013f1f0c00000000003060400000003e7fffc3010000000100c2e0e4440c1830f00000000000070f0ff8fc9c0103028efec0000080203cdbf3be9f3f10070000003d3c383830000000f2f8fcf0f8908000000010181c0f0f031f9e8e8ec7c36130fbf3f1f1f0f080000001211f0f0f0700ffffc000000000c08080c0c0c08f3ffff80000c0f0f0e0e00000f8feffff07011008ffff7f7f0000130e000000000000df10ff11f0ec8400cd0623b0e693077f00000000f0f8fcfc868c98b8b13307230f070707061fc7ec3838301000000001000000000000101900000000000001017838181830e000000000405c0e0b7f3f6040000000000000206464c48484868e183d3f3f3e000000f8686040c08000000104fcfcfcf00000000001010101034f";
+    size_t firstDiff = SIZE_MAX, diffCount = 0;
+    for (size_t i = 0; i < 528; ++i) {
+        unsigned v = 0;
+        std::sscanf(kExpectedHex + 2 * i, "%2x", &v);
+        if (i >= decoded.size() || decoded[i] != (uint8_t)v) {
+            if (firstDiff == SIZE_MAX) firstDiff = i;
+            ++diffCount;
+        }
     }
-    std::cout << " (expected 0f,01,00,00,00,00,80,ff) -> " << (first8Ok ? "MATCH" : "MISMATCH") << "\n";
+    const bool first8Ok = firstDiff >= 8;
+    std::cout << "  Sec5.3ad 528-byte diff: " << diffCount << " byte(s) differ";
+    if (firstDiff != SIZE_MAX) {
+        std::cout << ", first at offset 0x" << std::hex << firstDiff << std::dec << " (got 0x" << std::hex
+                  << (firstDiff < decoded.size() ? (int)decoded[firstDiff] : -1) << std::dec << ")";
+        std::cout << "\n  got first 16:";
+        for (size_t i = 0; i < 16 && i < decoded.size(); ++i) std::cout << " " << std::hex << (int)decoded[i] << std::dec;
+    }
+    std::cout << " -> " << (diffCount == 0 ? "MATCH" : "MISMATCH") << "\n";
 
     const size_t bitsAfter19d10 = br.bitsConsumedSoFar();
     const bool bitCostOk = (bitsAfter19d10 == 9236);
     std::cout << "  cumulative bits after 0x10019d10: " << bitsAfter19d10
                << " (Sec5.3r: expected 9236 = 6255 + 2981) -> " << (bitCostOk ? "MATCH" : "MISMATCH") << "\n";
 
-    const bool contentMatches = first8Ok && bitCostOk;
+    const bool contentMatches = diffCount == 0 && bitCostOk;
+    (void)first8Ok;
     if (!contentMatches) {
         std::cout << "  KNOWN DISCREPANCY (see HANDOFF.md): decode0x10019d10()'s literal Sec5.3ab algorithm\n"
                       "  does not reproduce this golden fixture's own content/bit-cost. The leading-count-\n"

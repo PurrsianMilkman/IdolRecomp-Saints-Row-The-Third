@@ -163,6 +163,154 @@ confirmation of what §16419 could previously only state from the native side).
    trace, same deferral `spec-store-runtime.md` §11 items 3/5/6 already use for analogous
    VDO-wrapper objects.
 
+## City takeover economy — port recipe (2026-10-12, FINAL)
+
+Static disassembly only, read-only project. This section joins up material that already sits in
+`spec-save-format.md` §10.5/§12.4, `spec-tables-progression.md` (reward types 31/48/49/58/59,
+`Gameplay_Constants/Cribs`) and `spec-lua-api-behaviour.md` §31. New material is marked NEW.
+
+### T.1 Object model (three world-object lists on the world singleton `0x03171a64`)
+
+| List (count / index array) | Object | Fields that matter |
+|---|---|---|
+| `+0x198` / `+0x190` | **takeover region** (class string `city_takeover_region`, 154 of them, save entry 22) | `+0x3a` flags: bit `0x02` = owned (the saved bit), bit `0x01` = synced copy; `+0x3c` float **weight = zone property `city_takeover_area`**; `+0x44/+0x48` polygon `city_takeover_points` (8-byte points); `+0x4c` parent hood; `+0x50` = hood's district; `+0x58/+0x5c` **linked gameplay object handle = property `city_takeover_gameplay`** (a shop, crib, flashpoint or activity); `+0x40` byte `city_takeover_winding`. Loader `0x005e9640`, which also adds the region's area into the parent hood's `+0x60`. NEW |
+| `+0x114` / `+0x10c` | **hood** (neighbourhood zone) | zone properties read by `0x0084d120`: `hood_display_tag`, `hood_spawn_category`, `hood_alt_spawn_category`, `hood_flags`, `hood_island_type`, **`hood_income`** (float dollars, stored ×100 as an integer number of cents at `+0x58`), `hood_takeover_areas` (`+0x50`/`+0x54`), `hood_bsp_tree`; `+0x44` = parent district; `+0x60` = sum of the areas of its regions. NEW |
+| `+0x180` / `+0x178` | **shop** | `+0x88` → its `shop_names.xtbl` row; `+0x8c` → its hood (and `+0x44` of that is the district); `+0x92` bit 0 = owned; `+0x94` float = income scalar. NEW |
+| *(district)* | object at hood `+0x44` | recomputed lazily by `0x0084ccc0` while its dirty bit `+0x8c&1` is set: `+0x90` = sum of the areas of regions with bit `0x01`, **`+0x94` = sum of owned areas (bit `0x02`)**, `+0x98` = sum of all areas. Only regions that pass the region-kind gate and are not destroyed are counted. Zone property `district_income` exists (descriptor `0x01301acc`) but **the income routine never reads it** (OPEN: what consumes it). NEW |
+
+`shop_names.xtbl` (loader `0x00a00cf0`, rows `Shop_Names`, row stride `0x34`, reader `0x00a00b90`), NEW:
+`Name`, `Localized_Name`, `Ownership/Cost` → `+0x10` (dollars), **`Ownership/Income` → `+0x14`
+(dollars per payout)**, `Ownership/Discount` → `+0x18` and `Ownership/Total_Owner_Discount` → `+0x1c`
+(both stored scaled by a constant at `0x01117dc8`), `Ownership/Reward` → `+0x20`, `Use_Message`,
+`Minimap_Icon`, `Shop_Type`. At run time `+0x08` is the number of shops in the franchise and `+0x0c`
+the number owned (the discount tier in `spec-lua-api-behaviour.md` §62.2 compares them). The base
+copy of `shop_names.xtbl` is not in `tools/ai_base_xtbl/`, so the per-shop Income values are OPEN.
+
+### T.2 (a) Income per payout — `0x009ec4d0`, CONFIRMED (disassembly). NEW
+
+All money uses the engine's cents type: set-raw `0x00960160` clamps to ±2·10⁹; add `0x00960190`
+saturates the same way; set-dollars `0x009601d0` multiplies by 100 (dollar inputs beyond ±20,000,000
+saturate).
+
+```
+total_cents = 0
+for each hood H:
+    owned  = 0
+    denom  = H.area_sum                       // hood +0x60
+    for each region R of H (hood_takeover_areas) that is live and region-kind:
+        G = R.linked_gameplay_object
+        if G is live, not destroyed, and of the SHOP kind:
+            denom -= R.area                   // shop regions pay through the shop, not the hood
+        else if R.owned:
+            owned += R.area
+    if denom > 0.01:                          // constant 0x012a2dd0
+        total_cents += round( owned/denom * (H.income_cents / 100.0) ) * 100
+for each shop S with S.owned:
+    total_cents += round( S.income_scalar * S.row.Income ) * 100
+total_cents += player.weekly_payments_dollars * 100      // player +0x27ac, u16
+return total_cents
+```
+
+- Each hood's income is **pro-rated by the area fraction the player owns**, with whole-dollar rounding
+  per hood. There is no separate district multiplier and no bonus for owning 100% of anything. The only
+  multipliers are the per-shop scalar and the stronghold reward below.
+- **Shop scalar `+0x94`**: reward type 59 `Crib_Cash_Stronghold_Scalar` (`0x00a01730`) adds
+  `scalar` to `+0x94` of every shop whose hood's district equals the reward's `district`. In the base
+  `unlockables.xtbl` the `Income_*` rows use `scalar` 0.05 per district (Downtown, Northwest,
+  Southwest, …). The starting value of `+0x94` (presumably 1.0) was not traced (OPEN).
+- **Weekly_Payments** (reward 31, case `0x1f` of `0x0071f170`) adds `Amount` to player `+0x27ac`
+  (saved `0x4A6E`). It then **immediately credits the whole new income figure to the stash once**
+  (`0x005eeec0`).
+
+### T.3 (b) Payout timer and stash — `0x009ec800`, CONFIRMED (disassembly). NEW
+
+1. **Interval** = tweak `Cash_payout_interval_minutes` (registered by `0x010079b0` into
+   `0x0263b164`; base `tweak_table.xtbl` value **15**) × 60,000 ms. **Clock:** the engine millisecond
+   timer `0x01320d94`. This is real elapsed time (it wraps at 1.8·10⁹), *not* the in-game time of day.
+   The interval is not an in-game hour. Whether that counter stops while the game is paused was not
+   checked (OPEN; see `spec-player-runtime.md` "Timers").
+2. **Arming:** `0x009ec4b0`, called from `0x00708330` (the world start/load path), arms the timer for
+   one interval. **Tick:** `0x009ec800` is called once per gameplay frame from the main update
+   `0x00702a50`, on the branch that runs only when `0x00707490` returns false. When the timer has
+   expired it computes T.2, calls `0x005eeec0(income)` and re-arms the timer for one interval.
+3. **The cash goes to the crib stash, not the wallet.** `0x005eeec0` does
+   `stash = min(stash + income, cap)`. The stash is global `0x014a0fe4` (cents; saved as
+   `0x4F58`). `cap = round(Max_Stash[n] × limit_scalar)` dollars, where `n` is the number of owned
+   cribs (`0x014a0f80` on host or single player, `0x00b97320` on a co-op client) and `Max_Stash` is
+   `Gameplay_Constants/Cribs/Money_Storage` at `0x014a0f50`. Base values for n = 0…10:
+   **0, 5000, 15000, 30000, 50000, 75000, 105000, 140000, 180000, 225000, 500000**. If n ≥ 11 the cap
+   is 0. `limit_scalar` is `0x012ecb38`, a float that starts at 1.0. Reward type 58
+   `Crib_Cash_Limit_Scalar` adds to it (`0x005eeb30`). **Income beyond the cap is lost.**
+4. **"Stash nearly full" nag:** the cap is checked every frame. When the stash exceeds **75%** of it
+   (constant `0x012a2ed8` = 0.75), the latch `0x0263b174` is still 0, and `0x005ef440` finds a crib
+   (only on map `sr3_city`), nag row 15 `crib_stash` fires (`0x00705350(15, 0)`). The latch is never
+   reset, so this happens once per session.
+5. **Collection:** `crib_get_cash_stash` (from `store_crib_cash.lua:91`, the phone or crib "cash"
+   screen) moves the stash into player cash (`+0x1ca0`, cents) and sets the stash to 0
+   (`spec-lua-api-behaviour.md`, crib natives).
+
+### T.4 (c) District ownership. NEW except where cited
+
+- **What counts:** district % = owned region area ÷ all region area (`0x0084ce80` =
+  `+0x94/+0x98`, 0 when the total is 0.01 or less). Weights are the regions' `city_takeover_area`,
+  so regions do not count equally. The hood-level pause-map query does the same thing
+  (`spec-lua-api-behaviour.md` §31.2). The purchase screen's control/new/increase percentages use
+  `+0x90/+0x98` (§62.1/§62.2).
+- **Capture:** region "captured" is `0x005e8b30`. It sets `+0x3a` bits, marks the hood/district dirty
+  (`0x0084aeb0`), replicates opcode `0x45` sub-type `0x1d`, and recomputes statistics 58–61 (the four
+  takeovers-completed counters), 29 (neighborhoods controlled) and 69 (cash earned per day).
+  **`0x005e8fb0(gameplay id, flag)` captures every region whose `city_takeover_gameplay` equals that
+  id.** It is called by: shop purchase `0x00a03490` (after charging `Cost`, it also sets the shop
+  owned bit, raises the franchise owned count, raises stat 23 and recomputes stat 69 through
+  `0x00a01680`); crib unlock `0x005f1cc0`; flashpoint completion `0x006a75e0`/`0x008d8420`;
+  activity success `0x007be600`; and the network handler `0x005e9990`. A stronghold is captured
+  through its crib/mission object in the same way. **A property, flashpoint or activity therefore
+  adds exactly the area of the region(s) linked to it.**
+- **Auto-complete (reverse direction), `0x005e97a0`:** used by reward 49
+  `Auto_Complete_City_Takeover_All` (`0x0071e580`, every region) and by reward 48 (stag-map district
+  pick, §31.5/§31.6). If the region is not owned, it is captured. Then, by the linked object's kind,
+  the routine buys the shop for free (`0x00a01680`), completes the flashpoint (`0x008d81e0`), unlocks
+  the crib (`0x005f1cc0`, gated by `0x005eeb10`), or completes the linked activity-kind object
+  (`0x0061bb50`). It finishes with `0x008b85d0`, the co-op sync.
+- **Effects at 100%: none found in the engine.** No capture-path routine changes a gang owner,
+  spawn category or notoriety, or grants an unlock, when a district reaches 1.0. The only
+  consequences are the statistics above and the higher income from T.2. **OPEN:** any gang or
+  notoriety switch is either script-driven (the `on_district_changed` hook, `get_hood_owner`) or uses
+  `hood_owner`/`hood_alt_spawn_category` in a path not traced here.
+
+### T.5 (d) Reporting and display. NEW
+
+- `get_world_income_dollars` (`0x007db9c0`, UI registrar): returns T.2's total ÷ 100 (integer
+  division) as a Lua number. `pause_map.lua:392` shows it as "income per day".
+- `store_crib_cash_request_data` (reply handler `0x0080e0e0`, bound by `0x0080e3ab`) replies with
+  `{stash $, player cash $, income $ (T.2), transfer cap $}`. These match
+  `store_crib_cash_populate(cash_from_bank, player_cash, daily_cash, transfer_cap)`.
+- Statistic 69 "cash earned per day" (`0x00713785`) = T.2 ÷ 100 as a float. The `TUT_CASH_INCOME`
+  tutorial text (`0x0071784a`) formats the same value.
+- Every "per day" label refers to one payout. There is no game-day accumulation.
+
+### T.6 Port recipe
+
+1. Load the region, hood and shop objects with the zone properties in T.1. Build each hood's area
+   sum, and each district's sums, from the regions.
+2. Load the `Max_Stash` table, the `Cash_payout_interval_minutes` tweak (15) and the `Cost`/`Income`
+   values from `shop_names.xtbl`.
+3. Keep the state: the per-region owned bit (save entry 22), the stash (`0x4F58`), the weekly-payments
+   value (`0x4A6E`), the per-shop scalar (re-applied from unlockables), the limit scalar (1.0 plus the
+   reward-58 sums) and the owned-crib count.
+4. On purchase or completion of any linked object, capture all regions with that gameplay id and mark
+   their district dirty.
+5. Run a real-time timer of `interval × 60000` ms. On expiry, compute T.2, then
+   `stash = min(stash + income, cap)`, and re-arm.
+6. Fire the `crib_stash` nag once when the stash exceeds 75% of the cap. Move the stash into the
+   wallet only through `crib_get_cash_stash`.
+7. Expose T.2 ÷ 100 through `get_world_income_dollars` and the crib-cash reply. Expose district %
+   as owned area ÷ total area.
+
+**OPEN:** the per-shop `Income` values (base `shop_names.xtbl` was not extracted); the starting
+value of the shop scalar `+0x94`; whether the payout clock pauses with the game; any gang or
+notoriety change at 100% (script side); what consumes `district_income`.
+
 ## 8. Clean-room compliance note
 
 Plain hex addresses and real Lua identifiers (read directly from the extracted script source)
@@ -183,3 +331,8 @@ throughout. No Ghidra decompiler auto-names, no pseudocode, no leaked proprietar
   localization tag regardless of which shop. No new purchase-surface natives beyond the two
   already-documented purchase calls. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
   check 0 hits.
+- **2026-10-12 — new section "City takeover economy — port recipe (2026-10-12, FINAL)"** (SPEC TEAM).
+  It covers per-payout income computation (`0x009ec4d0`), the 15-minute real-time payout into the capped
+  crib stash (`0x009ec800`/`0x005eeec0`), region/hood/district/shop zone properties, the capture
+  paths (`0x005e8fb0`) and the display hooks. Scripts: `tools/scratchpad/Takeover2.java`,
+  `Takeover5.java`. Cleanroom self-check: strict regex 0 hits.

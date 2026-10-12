@@ -375,6 +375,42 @@ int main() {
     ok(host, gp, "assert(vehicle_pathfind_to_do('pf02', 'pftgtgood', false, false) == 0)");
 
     // ------------------------------------------------------------------
+    // Sec9.10a (spec e8dc04d) arrival condition: pure geometry (XZ only, Y
+    // ignored; 16.0 default, 4.0 tight, 2500.0 mode 2; <= inclusive).
+    CHECK(EngineState::vehiclePathfindArrived(WorldPosition{0, 0, 0}, WorldPosition{4, 500, 0}));       // d2 == 16
+    CHECK(!EngineState::vehiclePathfindArrived(WorldPosition{0, 0, 0}, WorldPosition{4.01, 0, 0}));
+    CHECK(EngineState::vehiclePathfindArrived(WorldPosition{0, 0, 0}, WorldPosition{2, 0, 0}, true));  // d2 == 4
+    CHECK(!EngineState::vehiclePathfindArrived(WorldPosition{0, 0, 0}, WorldPosition{3, 0, 0}, true));
+    CHECK(EngineState::vehiclePathfindArrived(WorldPosition{0, 0, 0}, WorldPosition{0, 0, 50}, false, true)); // 2500
+    // End to end: pending until the vehicle arrives; then 1 once, then 2 (consumed).
+    es.objectResolves().set("pf03", true);
+    es.objectResolves().set("pftgt03", true);
+    es.getOrCreateVehicle("pf03").seat0Occupied.set(true);
+    es.getOrCreateVehicle("pf03").worldPosition.set(WorldPosition{100, 0, 100});
+    es.getOrCreateCharacter("pftgt03").worldPosition.set(WorldPosition{0, 0, 0});
+    es.pathfindResult().set(42.0);
+    ok(host, gp, "assert(vehicle_pathfind_to_do('pf03', 'pftgt03', false, false) == 42)");
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 0);
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 0);
+    es.getOrCreateVehicle("pf03").worldPosition.set(WorldPosition{3, 77, 1});
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 1);
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 2);
+    // ABORT: target stops resolving -> done.
+    ok(host, gp, "assert(vehicle_pathfind_to_do('pf03', 'pftgt03', false, false) == 42)");
+    es.getOrCreateVehicle("pf03").worldPosition.set(WorldPosition{100, 0, 100});
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 0);
+    es.objectResolves().set("pftgt03", false);
+    CHECK(es.vehiclePathfindCheckDoneCode("pf03") == 1);
+    // No measurable positions (no motion model): recipe step 5, immediate completion.
+    es.objectResolves().set("pftgt03", true);
+    es.getOrCreateVehicle("pf04");
+    es.objectResolves().set("pf04", true);
+    es.getOrCreateVehicle("pf04").seat0Occupied.set(true);
+    ok(host, gp, "assert(vehicle_pathfind_to_do('pf04', 'pftgt03', false, false) == 42)");
+    CHECK(es.vehiclePathfindCheckDoneCode("pf04") == 1);
+    es.pathfindResult().set(0.0);
+
+    // ------------------------------------------------------------------
     // Sec30.5 vehicle_set_malfunctioning: VTOL-class-only gate (reused
     // VehicleState::flyingType); CONFIRMED asymmetric false-path (clears
     // +0xf8 bit 0x2 only).
