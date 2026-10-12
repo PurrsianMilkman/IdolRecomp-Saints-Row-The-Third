@@ -1063,7 +1063,7 @@ These reads fix the horizontal/vertical order of the dampening pairs that `spec-
 
 ### 4.7 Update `0x00577cb0` and the core `0x00575e30`
 
-**`0x00577cb0(step)`** (82 instructions; CONFIRMED): unless the local player has `+0x1d95` bit `0x10` (scope view), `0x00994f60(player)` holds, `0x00614d00()` is 5 or `0x013c9363` is set, set the base FOV `0x013c8a44` to the blended `base_fov`. Run the core — or, when the pre-update set `0x013c9388`, skip it once and clear the flag. Then a surface clamp: `0x0079a420` on the working position returns two heights; if the camera is below their sum + 0.75 and less than 25 below it, it is raised to that level (HYPOTHESIS: water surface). Then `0x0056ef10`, zero the look input, move the swing request to "last frame" and reset it to 1.0, and reset the swing rate to `default_swing_rate`.
+**`0x00577cb0(step)`** (82 instructions; CONFIRMED): unless the local player has `+0x1d95` bit `0x10` (scope view), `0x00994f60(player)` holds, `0x00614d00()` is 5 or `0x013c9363` is set, set the base FOV `0x013c8a44` to the blended `base_fov`. Run the core — or, when the pre-update set `0x013c9388`, skip it once and clear the flag. Then a surface clamp: `0x0079a420` on the working position returns two heights; if the camera is below their sum + 0.75 and less than 25 below it, it is raised to that level (**RESOLVED 2026-10-11, orchestrator-routed follow-up on the parked ground-missing bug** — see `spec-zone-data-format.md` §13.3's water-hypothesis note for full detail: `0x0079a420` first classifies the X/Y position against a single GLOBAL rectangular bounding box, `0x0223a7cc`-`0x0223a7d8` — not any per-tile `.czn_pc` record — then, only when near/inside that box, probes a downward ray from the position to 100 units below it via `0x0075dfc0` and returns the hit surface's position/height; outside the box it returns a fixed default. This is a generic anti-clip surface-raycast, not confirmed to be water-specific by this pass — the box is consistent with being the map's single ocean/water-plane boundary (one global region, not a per-tile water-volume lookup), but that identification remains HIGH CONFIDENCE, not proven; `0x0223a7cc`-`d8`'s own values and the box's real-world meaning were not read this pass). Then `0x0056ef10`, zero the look input, move the swing request to "last frame" and reset it to 1.0, and reset the swing rate to `default_swing_rate`.
 
 **The core `0x00575e30(step)`** (1558 instructions; CONFIRMED by full listing). T = the camera target; V = T when T is of vehicle class (descriptor `+6` bit `0x80`), else none; P = the local player.
 1. Without a valid T: return. Re-add last frame's lateral offset `0x013c8a60` to the working position and clear it (only intermediate reads see this; purpose OPEN 29). `0x005723e0`, `0x00920680(T)`.
@@ -1395,6 +1395,85 @@ Full detail, including the forward-probe's `−2.2` offset constant (axis/meanin
 **So the real open item is narrower than before: what Havok shape, if any, backs `0x2237`/`.gzn_pc`'s own pavement geometry for collision — not traced this pass.** Two bounds on the search space, both new this pass: (1) precedent exists in the same file format for a `.czn_pc` content kind embedding a raw Havok shape directly with no `.clmesh_pc` involved at all — `0x2250` ("Parking") is a thin wrapper around a real embedded Havok packfile (`hkpListShape` of `hkpBoxShape`s), `spec-zone-data-format.md` §13.4, CONFIRMED by RTTI — so the pattern is established, just not yet shown for `0x2237`. (2) The other live candidate, `0x2244` (Heightmap)'s already-documented runtime query chain, was traced this pass by direct xref/decompile to its real callers: the public "get height at world position" wrapper is `0x00b41670` (`if !0x00b412c0(&cell, pos) return -5.0; else return 0x00b41000(&cell)` — the `-5.0` failure sentinel exactly matches the already-documented population floor of real decoded height values, strong confirmation this is the live public entry point). **Independently re-verified this pass via the Ghidra query server: `0x00b41670` has 18 callers across 17 functions, and `0x00b412c0` has 9 callers across 6 functions — none fall inside the Havok character-proxy/controller address range (`0x0079xxxx`-`0x007axxxx`: the support query `0x0079d0b0`, controller motion `0x007a5b10`, the shape-cast wrappers).** Two opened by decompile this pass look like gameplay/effect consumers, not Havok narrowphase code: `0x00669bb0` (a nearby-offset height sampler keyed off the current player's own position, footstep/decal/effect-placement-shaped) and `0x005ebac0` (gates on the same per-character-kind capability table/bit `spec-player-runtime.md` §5.6.5 already ties to the controller's own slope-removal gate — a real link to the character-kind system, but not inside Havok cast code). **Net: no vertex/index-buffer construction and no Havok shape registration was found downstream of `0x2244`'s height data in this pass's budget — the remaining ~15 of 17 `0x00b41670` callers were not individually opened, so this is not an exhaustive negative, but it leans toward "`0x2244` is a scalar query API for gameplay/camera/effects," not a Havok collision feed.**
 
 **Bottom line:** the character proxy's support query itself needs no further work — it genuinely contacts whatever real Havok shape is registered in the broadphase. Which file registers that shape for bare open-world street pavement specifically remains OPEN, now narrower: `.clmesh_pc`/`.glmesh_pc` is ruled out (confirmed furniture/props only), `0x2244`'s own confirmed callers are ruled out (gameplay consumers, not Havok code, on the two opened), and the one remaining structurally-plausible path — `0x2237`'s own pavement content being wrapped into a Havok shape the same way `0x2250`/Parking's boxes are — was not traced this pass (its documented handler `0x00864c60` shows only material/texture-pool resolution in its own body, a clean negative for Havok content *inside that specific handler*, but its callers/siblings in the zone-dispatch chain were not individually checked for a separate collision-registration step). **Recommended next step: an xref census on the Havok broadphase-add call implicit in `0x00d54300`'s MOPP composite construction, checked against whether the zone-instantiate dispatcher (`0x00866580`/`0x008652d0`, `spec-zone-data-format.md` §11.1) or `0x2237`'s own handler chain ever reaches it directly, independent of the `.clmesh_pc`/Level-Mesh path.** Full detail: this pass's own hand-off, folded in here; no separate scratch file.
+
+**RESOLVED, 2026-10-11, following exactly the recommended next step above (SPEC TEAM, agent
+`a73e5e44581178516`, independently re-verified by direct Ghidra query before splicing): `0x2237`'s
+own handler (`0x00864c60`) directly builds its own Havok collision shape from the SAME record's
+data, with no dependency on `.clmesh_pc` at all.** Two call sites inside `0x00864c60` (one
+outside a mesh-reference loop, one inside a second per-sub-item loop — a given `0x2237` record can
+register more than one shape) run the identical 3-step chain:
+
+1. **`0x007a79f0`** parses a raw blob embedded in the `0x2237` record (align16, `u32 blobLen`,
+   align16, `blobLen` opaque bytes, align4, two 12-byte vec3s — an AABB min/max pair). **Confirmed
+   by direct xref query, independently of the agent's own report: `0x007a79f0` has exactly 2
+   callers in the entire binary — `0x00865219` inside `0x00864c60` (this chain) and `0x00749c14`
+   inside `0x00749ba0`, the already-documented `.clmesh_pc` collision-hull parser (§4.4.6) — the
+   identical blob-parse front end feeds both paths.**
+2. **`0x007a7a70`** builds the actual shape: calls `0x00d56010`, which constructs an object with
+   vtables `0x01246834`/`0x01246814` — **re-verified by direct decompile: the constructor writes
+   the address of the data at `0x01246834` into the new object's own vtable slot and the address
+   of the data at `0x01246814` into its offset-`0x10` slot — the EXACT same `hkpExtendedMeshShape`
+   vtables already RTTI-confirmed for `.clmesh_pc`'s own collision shape** (cited above in this
+   section). Then validates the record's own embedded MOPP blob (`0x0077a5b0`, checks the literal
+   `"MOPP"` magic) and, if valid, calls `0x00d54300` — the MOPP-wrapper constructor (vtables
+   `0x0124484c`/`hkpMoppBvTreeShape`, `0x01154174`/`hkpSingleShapeContainer`, storing the mesh
+   shape at `+0x34`). **Re-verified by direct xref query: `0x00d54300` has exactly 4 callers in
+   the whole binary — `0x00761ed0`, `0x00792580`, `0x007a7a70` (this chain), `0x008658c0` — a
+   small, fully-enumerated set, confirming this is a narrow, identifiable MOPP-wrap mechanism, not
+   a generic ubiquitous helper.**
+3. **`0x007a78a0`** wraps the resulting shape into a generic property-bearing object via the
+   shared base constructor `0x00757c00` with classId `0xc006c`, then sets property id `7` via
+   `0x00c21b20` — **re-verified by direct decompile: a local is set to the literal classId
+   `0xc006c` and passed to the base constructor, then the property setter is called with literal
+   property id `7` — exact match.** This is the IDENTICAL generic
+   physics-shape-attached-object wrapper (classId, base ctor, property-id-7 mechanism)
+   `spec-zone-data-format.md` §13.4 already documents for `0x2250`/Parking's own `hkpBoxShape` —
+   not merely analogous, the same shared code (`0x007a78a0`'s own callee list includes
+   `0x00c16840`, a world/registration-shaped call whose caller list also includes `0x00862bcb`
+   inside `0x00862ae0`, §13.4's own cited Parking-shape-construction delegate — the same
+   registration call point is shared between `0x2237`'s new shape and Parking's already-confirmed
+   one).
+
+**Net: street pavement's Havok collision shape is the SAME `.czn_pc` record (`0x2237`) that
+already supplies its visible geometry, independently self-contained — no `.clmesh_pc` dependency.
+This closes the open item.** One gap, honestly flagged, not closed this pass: this confirms the
+CODE PATH exists and runs whenever the record's MOPP-blob/mesh-blob fields are populated; it does
+NOT verify, against real shipped file bytes, that ordinary flat-slab pavement records (as opposed
+to some other `0x2237` sub-case, e.g. curved road meshes) actually populate those fields
+non-trivially. **Closed cheaply, same day, no agent, against real shipped bytes:** reused the
+already-landed extraction pipeline (`czn_u2_replay.collect_pairs`/`walk_top_level`,
+unmodified) to locate the literal `"MOPP"` magic inside the real `0x2237` record span of two
+known flat-pavement tiles — `sr3_city~s0916` (484,684-byte record; MOPP magic found at
+record-relative offset 247,156, with a substantial 237,503-byte preceding length field,
+consistent with a real populated mesh/MOPP-adjacent blob, not a near-empty stub) and
+`sr3_city~s1312` (the already-published `roads_crosswalk_01_d_co.tga` clean example;
+216,540-byte record; MOPP magic at offset 133,540, preceding length field 82,974 bytes — and
+identically reproduced across all 4 of its `^burn`/`^daedelus`/`^lockdown` mission-variant
+siblings). By contrast, the much smaller `~al` ("awld_compact"/Level-Always-Loaded) variants of
+the SAME tiles (92-10,812 bytes) carry NO `"MOPP"` magic at all — consistent with that sparse
+tier not carrying collision-bearing geometry, a sensible negative control. **This confirms the
+MOPP/mesh-blob fields are genuinely populated, at real tens-to-hundreds-of-KB scale, for real
+ordinary flat-pavement records — not merely a theoretically-reachable code path.** Not
+independently re-derived from the exact `0x0077a3e0` byte layout (align16/u32-len/align16/data)
+field-by-field — the preceding-length-field reading is HIGH CONFIDENCE from proximity and
+plausible magnitude, not a byte-level walk of every intervening field. Script:
+`scratchpad/havok_collision_pavement/dump_mopp_fields_2026-10-11.py` (sizes/offsets only, no
+bulk file content printed, per this project's own convention). Also not pursued this
+pass: the heightmap (`0x2244`) exhaustive-negative caller sweep above remains at its prior
+coverage (2 of 18 / partial of 9 opened) — unchanged, still technically not fully exhaustive, but
+now moot for THIS open item since a positive mechanism has been found elsewhere. **[CONFIRMED —
+RTTI-level vtable match for the shape classes (`0x01246834`/`0x01246814`,
+`0x0124484c`/`0x01154174`), re-verified by independent direct query (not taken on the agent's own
+word) for the two load-bearing uniqueness claims (`0x007a79f0`'s 2-caller xref,
+`0x00d54300`'s 4-caller xref) and the classId/property-id decompile match. HIGH CONFIDENCE not
+fully CONFIRMED: `0x00c16840` as genuine broadphase/world registration (its body was only
+partially read, not fully decompiled, by the dispatched pass). CONFIRMED, same day: real-file-
+bytes occupancy for ordinary flat pavement records (`sr3_city~s0916`/`sr3_city~s1312`, see
+above) — no longer OPEN.]** Full detail:
+`scratchpad/havok_collision_pavement/` (`func_0x00864c60.txt`, `func_0x007a7a70.txt`,
+`func_0x00c16840.txt`, `func_0x008658c0.txt`, `func_0x00865a20.txt`), independently re-verified in
+`scratchpad/verify_havok_pavement/` (`xref_0x007a79f0.txt`, `xref_0x00d54300.txt`,
+`func_0x00d56010.txt`, `func_0x007a78a0.txt`).
 
 **Gravity integration (the actual formula):**
 ```
@@ -4522,7 +4601,7 @@ predicate names, the melee-target handle fields, the generic mission-retry chain
 31. ~~**Sway amplitudes** `0x013c936c`/`0x013c9370` (§4.7 step 9): their writers were not traced (HYPOTHESIS: impacts and explosions).~~ **PARTIALLY RESOLVED 2026-10-10 — HYPOTHESIS REFUTED.** Their writers are `0x0056b470` (sets both to a fixed 0.3× scale of a caller-supplied magnitude) and `0x0056b4c0` (zeros both). `0x0056b470`'s only callers are a magnitude-shaping helper `0x009766f0` and the QTE routine `0x0060d960` (§3.3's always-run QTE hook); `0x0056b4c0`'s only callers are the vehicle-entry/interaction state machine `0x0060c3f0` and `0x0060d000`. `0x009766f0` in turn is reached from `0x00976900`, which reads/writes the same unidentified object's `+0x1650`/`+0x1654` progress-ratio fields that drive the look-speed/FOV keyframe interpolator left untraced by OPEN 27. No caller in either chain touches damage/impact/explosion code, refuting the "impacts and explosions" hypothesis outright. The sway amplitude is instead tied to QTE execution and vehicle-entry/interaction state, through the same unresolved per-object ramp system OPEN 27 already flagged — residual narrowed to identifying that ramp's owning object, now shown to be shared between the two items.
 32. **Look-at assist** (§4.7 step 12): who starts the timer `0x012e41a0` and sets the object `0x013c92e8`/`0x013c92ec`, and what the 20-pass refinement `0x0056e170` converges to, were not traced.
 33. ~~**Camera collision filter** `0x00566070` (407 instructions) and the skipped hit kinds 1, 4, 8 (§4.9): which objects block the camera is not tabulated.~~ **PARTIALLY RESOLVED 2026-10-10.** Full listing shows the filter resolves the candidate through the shared class-descriptor table `0x02cc9900` (indexed by the candidate's class byte `+0x34`) and, via three one-bit class-row tests (`0x00b71950` on byte `+6` bit `0x80`, `0x00b71970` on byte `+6` bit `0x20`, `0x005910f0` on byte `+7` bit `0x4` as fallback), decides whether the candidate is the local player's own vehicle (or tied to it) and should be excluded from blocking the camera. The first branch excludes the player's own vehicle outright except while entering/exiting it; the second excludes a rider-specific flag combination; the fallback excludes any candidate whose bounding volume overlaps the player's vehicle's own bounding volume. No literal comparison against the integers 1, 4, or 8 occurs anywhere in this function; the existing "kinds 1, 4, 8" label does not match any value tested here and could not be corroborated this pass — it may belong to the still-OPEN per-candidate kind test inside the shared sweep wrapper's own helper `0x0075c250` (`spec-physics-runtime.md` §8.8), not to this filter. Residual: re-point or retract the "kinds 1, 4, 8" label.
-34. **Small unknowns around the follow update:** the surface clamp `0x0079a420` (HYPOTHESIS: water surface), `0x0056ef10`, `0x0058b470` → `0x00a1f880` after the update, the shake `0x0057c930`, transition-blend type 1 `0x00580430`, the pitch return `0x0056bfe0` (uses `pitch_reset_time`), and the hill-tracking step `0x0057ad60`.
+34. **Small unknowns around the follow update:** the surface clamp `0x0079a420` (RESOLVED 2026-10-11 — a global-box-gated downward raycast, not water-specific; see the body text above and `spec-zone-data-format.md`'s own water-hypothesis Changelog entry; the global box's own real coordinates remain OPEN), `0x0056ef10`, `0x0058b470` → `0x00a1f880` after the update, the shake `0x0057c930`, transition-blend type 1 `0x00580430`, the pitch return `0x0056bfe0` (uses `pitch_reset_time`), and the hill-tracking step `0x0057ad60`.
 35. ~~**Controller motion `0x007a5b10`** (§5.6.5): the state logic between the support query and the final velocity set...~~ **RESOLVED 2026-10-07 (unit W-U2, full listing).** See §5.6.5: full gravity formula (quadratic terminal-velocity falloff), jump-launch formula (`v=√(2|g|h)`), the full state-bit catalog, the three-timer chain, the step-up/step-down/ledge-assist raycasts, and both other callers (`0x007a7413`/`0x007a750e`, confirmed to be internal continuation labels, both jump triggers). One residual non-blocking item: `controller+0x160`'s margin constant (5.0) and the step-assist raycast lengths' exact real-world units (frames vs. a fixed-point angle) are not pinned down.
 36. ~~**The custom proxy passes** (§5.6.4): ...and on which thread the listener callbacks run...~~ **RESOLVED 2026-10-07 (unit W-U2, full listing).** See §5.6.4's own deepened pass description and §5.6.4a: all 8 named functions read, the lock-step cycle fully traced, `0x0079de40` confirmed reached via the proxy's own primary-vtable slot `+0x14` (not a separate Havok method), and thread safety settled — both `MyCharacterListener` and the phantom-listener fan-out run on the game's persistent class-3 worker-pool thread that services that proxy's job, not guaranteed the main thread, not serialized against other proxies in the same pass.
 37. ~~**`turn angle` (`+0xaac`)** (§5.3): `0x00956970` chases a target computed inside the animation job `0x00994970` (call at `0x00994a3d`); whether that target is U2's `+0xa68` was not traced.~~ **PARTIALLY RESOLVED 2026-10-10.** `0x00956970(human, target)` (confirmed: a rate-limited follower of `+0xaac`) does NOT simply chase `+0xa68`. Its caller `0x00994970` sets the target to 0.0 unless `+0xcd2` ∈ {0, 3, 6} (character proxy or ragdoll/recovery), in which case the target is the return value of a large (~1065-instruction) facing-computation routine, `0x009b4360(human)`, which reads `+0xa68` directly (confirmed, two sites) as one input among several (fine aim, cover, boosted-state and camera-mode checks). For humans with any other `+0xcd2` value, there is no turn-angle chase at all that frame (target fixed at 0). Residual: `0x009b4360`'s other inputs (fine aim/cover/boost/camera contributions) were not individually traced.
@@ -4800,6 +4879,41 @@ consumer of `instance+0x13c`.
 ---
 
 ## Changelog
+
+- **2026-10-11 — the camera surface-clamp's `HYPOTHESIS: water surface` tag on `0x0079a420`
+  RESOLVED: a generic global-box-gated downward raycast, not water-specific** (SPEC TEAM, self,
+  direct query, no agent — orchestrator-routed follow-up on the parked ground-missing bug). Full
+  detail in `spec-zone-data-format.md`'s own 2026-10-11 water-hypothesis Changelog entry — not
+  reproduced here. Net for this section: the two citations of `0x0079a420` (§6.9-area body text,
+  §6.9-area open-items list) updated in place to drop the HYPOTHESIS tag and point at the real
+  mechanism. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — real-file-bytes occupancy check for the MOPP/mesh-blob fields, closing the one
+  honest gap the pavement-collision finding left open, same day, no agent** (SPEC TEAM, self,
+  direct extraction-pipeline reuse, routed from orchestrator `purrsian-f5`). Found the literal
+  `"MOPP"` magic inside two real flat-pavement `0x2237` records (`sr3_city~s0916`, 484,684-byte
+  record; `sr3_city~s1312`, 216,540-byte record, reproduced identically across its 4 mission-
+  variant siblings), each with a substantial (82,974-237,503 byte) preceding length field — real
+  populated data, not a near-empty stub. The much smaller `~al` sparse-tier variants of the same
+  tiles carry no MOPP magic at all, a sensible negative control. Confirms the collision code path
+  is genuinely exercised by real shipped pavement data, not merely theoretically reachable.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — ground-collision-shape source RESOLVED, closing the open item** (SPEC TEAM, agent
+  `a73e5e44581178516`, independently re-verified by direct Ghidra query before splicing).
+  `0x2237`'s own handler (`0x00864c60`) directly builds a Havok `hkpExtendedMeshShape`
+  (vtables `0x01246834`/`0x01246814`, re-verified by direct decompile — the same vtables already
+  RTTI-confirmed for `.clmesh_pc`'s own collision shape) wrapped in an `hkpMoppBvTreeShape`
+  (`0x00d54300`, re-verified by direct xref to have exactly 4 callers project-wide) from
+  vertex/index/AABB/MOPP-blob data embedded directly in the `0x2237` record, with no dependency on
+  `.clmesh_pc` at all — then registers it through the identical generic physics-shape-attached
+  wrapper (classId `0xc006c`, property id `7`, re-verified by direct decompile) that
+  `spec-zone-data-format.md` §13.4 already documents for `0x2250`/Parking's own `hkpBoxShape`,
+  via the same shared code, not merely an analogous pattern. One gap honestly left open: not
+  verified against real file bytes that ordinary flat-slab pavement records (vs. some other
+  `0x2237` sub-case) actually populate the MOPP/mesh-blob fields non-trivially — the code path is
+  confirmed to exist and run when they are populated. Full detail in §5.6's own "character proxy"
+  sub-passage, above. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-10 — ground-collision-shape source narrowed, not closed; corrects a stale cross-ref in
   `spec-terrain-format.md`** (SPEC TEAM, agent `ab81ded1165afbe66`). Confirmed `.clmesh_pc`'s Havok

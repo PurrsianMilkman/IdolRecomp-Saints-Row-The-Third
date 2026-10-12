@@ -4353,7 +4353,7 @@ new vehicle call site found this pass, `"Tank_Mayhem_Repair"`, is a one-shot cue
 engine loop, so it doesn't settle this). Full detail, complete address index:
 `scratchpad/audio_mixer_3d_sfx_positioning_2026-10-08.md`.
 
-### 11a.8 Footstep audio — CONFIRMED event name/switches (data), runtime dispatch OPEN (2026-10-10)
+### 11a.8 Footstep audio — CONFIRMED event name/switches (data); real runtime posting mechanism RESOLVED, `0x00999020` posts `FOOTSTEP` with a runtime-selected `MATERIAL_TYPE` switch (2026-10-10, resolved 2026-10-11)
 
 **Routed from Team B.** Question: the real Wwise HIRC event/id for player/NPC footsteps, whether it's
 anim-event-driven or a movement-code cadence timer, and whether/how it varies by ground material.
@@ -4442,28 +4442,168 @@ need a scan for code that reads an `Anim_file`/secondary-cache record's own `+0x
 fields by the record's own pointer, across every function that holds one — large search space, not
 attempted under this pass's budget.
 
-**Answering Team B's three questions directly:**
-1. **Fired from an anim event, not a cadence timer.** No cadence-timer-style poll was found in any
-   on-foot movement function (`0x005ab860`, `0x005ab930`, `0x005b2ca0`, `0x005b3e80`, `0x005aee30` — all
-   already fully read by `spec-player-runtime.md` §3; none call the audio hash/post path). The
-   data-authored mechanism is unambiguously anim-event-shaped (per-frame `Trigger`/`Sound` records
-   embedded in the `.animx`-backing `anim_files.xtbl` rows). **Which function actually consumes the
-   trigger at runtime and turns it into a live `PostEvent`/`SetSwitch` call was not located — OPEN**, per
-   the confirmed-negative above.
-2. **Yes, it varies by ground material — on data, for the fixed-context clip tier.** The classification
-   is the Wwise switch group `MATERIAL_TYPE` (3 shipped values: `CONCRETE`, `METAL_SOLID`, `FLESH`),
-   paired with `SHOE_TYPE`/`MOVEMENT_TYPE`. **Where it comes from, for that tier: nowhere at runtime** —
-   it's a static constant baked into the animation clip at content-authoring time, selected by the
-   person building that specific clip for that specific context (a vehicle floor, a particular NPC kit),
-   not read off a collision-material id, a per-zone tag, or any other runtime source. For the *generic*
-   open-world locomotion tier (ordinary walking/running/sprinting on arbitrary street/terrain), **no
-   baked material value exists at all** — those clips carry only the content-free `left-foot`/
-   `right-foot` marker, so if generic footsteps vary by real-time ground material in the shipped game,
-   that variation has to happen in a runtime consumer this pass could not find (see dispatch OPEN above)
-   — most plausibly by setting `MATERIAL_TYPE` from a ground raycast at the moment the trigger fires and
-   then posting `FOOTSTEP`, but no such code was located.
-3. **Partial material→switch table given above** (the 144-row fixed-context tier); **no table exists for
-   the generic tier** because no runtime material source was found for it.
+**The pointer-chasing consumer, done 2026-10-11 (SPEC TEAM, agent `a3c067c7758abaea8`, independently
+re-verified by direct xref/decompile before splicing): the consumer DOES exist and is real,
+callable code — but it is not an audio consumer for the generic locomotion tier, closing this
+caveat as a much more precise negative.** The `Anim_file` record's own `+0x3c` tier (the 144 baked
+`Sound`-pool `FOOTSTEP` rows) checks out clean — its persistent runtime array (`0x02ef2178`,
+stride `0x44`) is read by 31 real functions, individually inspected, none of which reads `+0x3c`
+off the record pointer; confirms that tier genuinely has no runtime consumer at all, even through
+the per-record pointer. The generic foot-plant-trigger tier is different: its own persistent
+record (`0x030f0c68`, stride `0x24`, built by `0x004ca2d0`→`0x004cad90`) IS read at runtime, by a
+real, generic `GetTriggerFired(animState, triggerHash, occurrenceIndex)` facility
+(`0x004b27b0`/`0x004bdec0`/`0x004c7090`/`0x004b4320`) — re-verified by direct decompile. The
+engine's trigger-name registration table (`0x0073d550`) resolves the literal strings
+`"left-foot"`/`"left-foot2"`/`"right-foot"`/`"right-foot2"` to 4 cached hash globals
+(`0x0153be40`/`0x0153be3c`/`0x0153be38`/`0x0153be34`); **re-verified by direct xref, every one of
+the 4 real readers of these globals was found and opened** (`0x0050c130`/`0x00552070` — vehicle
+entry/exit animation-state gating, matches the already-established vehicle-entry baked-clip
+finding; `0x00999020` — weapon aim-stance foot-plant IK blending, plus a Brute-NPC-only
+camera-shake call; `0x009a8d30` — melee-impact camera-shake).
+
+**CORRECTION, 2026-10-11 (SPEC TEAM, agent `ad14b91d5da2a1555`, independently re-verified by
+direct query before splicing): the "none of these 4 consumers reaches the Wwise event-post path"
+claim above was WRONG for `0x00999020` specifically.** The prior pass checked that function's
+camera-shake call (`0x0057bfd0`, confirmed to have no Wwise call inside it — true) but never read
+`0x00999020`'s own tail, past where that earlier pass stopped. **`0x00999020` IS the real
+footstep-posting mechanism for ordinary player/NPC locomotion**, found in its own later body:
+
+1. **Gating (same trigger facility already documented above, re-confirmed):** bails at
+   `0x00999724` if no `left-foot2`/`right-foot2` (or `left-foot`/`right-foot`) trigger fired this
+   call — so a real foot-plant edge is still required, just not AS the direct Wwise callback;
+   `0x00999020` itself is the real consumer, and §11a.8's own "which trigger consumer posts audio"
+   question was mis-answered by checking the wrong downstream call.
+2. **Distance cull, closes a separate open item:** `audio_constants.xtbl`'s `OnFootSettings/
+   FootstepRange` element (`tools/ao_xtbl/audio_constants.xtbl` lines 189-201, shipped value
+   `5.0`) is squared and stored at global `0x013bb470` by `0x00553580`/`0x005536a0` —
+   **re-verified by direct xref: exactly 2 uses project-wide, the one write (`0x005536cb`) and
+   one read, inside `0x00999020` itself (`0x00999109`)** — confirming this global exists
+   specifically to gate this function's own footstep logic, nothing else. Beyond 5m, the
+   footstep is skipped unless `0x0052a230()` (role not identified this pass, plausibly an
+   "is local player" or audibility check) overrides it.
+3. **Once gated through, unconditionally (not Brute-specific — the Brute-only block at
+   `0x009994fd`-`0x00999558` is a SEPARATE, additional camera-shake side effect on a different
+   entity flag, `+0x1ca8`):** lazily creates and caches (at entity `+0xce0`) a persistent
+   "Human"-category voice via the project's own already-documented emitter-create wrapper
+   (`0x0094c9e0`→`0x0045da50(&pos,"Human",0)`, §11a.1) — i.e. footsteps use a per-entity
+   persistent voice, not the one-shot pool. Sets an RTPC (`0x0045f2d0`, id `0xfdf31b1a`) and 3
+   Wwise switches via the confirmed `SetSwitch` wrapper `0x0045f5b0`, then posts the event via
+   `0x0045ea70`.
+
+**Re-verified by direct query and independently recomputed FNV-1 (project's own standing Wwise
+hash scheme), every one an EXACT bit-for-bit match, not taken on the agent's word:**
+`0x00999716`/`0x0099971c` push `0x6f394b77` into `0x0045ea70` — **`FNV1("FOOTSTEP") =
+0x6f394b77` exactly** — the identical literal `FOOTSTEP` event the 144 baked `anim_files.xtbl`
+rows already use, now confirmed posted directly from runtime locomotion code too, bypassing the
+Sound-xtbl pool entirely. `0x00999020` sets **three** switch groups (a 4th, `"Aim"`, is
+gameplay-state-driven, not material-related — selects `"Normal"` or `"Fine_Aim"` by an
+aim-stance check, hashed live via the confirmed `GetIDFromString` path): `0x40dc0461` =
+`FNV1("MOVEMENT_TYPE")` (value `0x7db16dbe`=`FNV1("WALK")` or `0x2a72b9a8`=`FNV1("RUN")`);
+`0x41654531` = `FNV1("MATERIAL_TYPE")`, the SAME group the 144 baked rows use; and a THIRD,
+previously-unnoticed group, `0xc3e810da` (plaintext not yet identified).
+
+**CORRECTION, 2026-10-11 (SPEC TEAM, agent `aa249198674bf2f1c`, independently re-verified by
+direct query before splicing — the original framing above, written the same day, conflated two
+separate mechanisms sharing one input index): `MATERIAL_TYPE`'s real runtime value is NOT the
+3 hashes originally reported, and is NOT produced by a 31-way jump table at all.** Both feeder
+functions are trivial and non-Havok, re-verified exactly: `0x009420c0(entity)` is a 3-instruction
+leaf returning `*(entity+0x1a74)` (a cached locomotion-state index, role not further pinned);
+`0x005539c0(index)` is a flat, bounds-checked (0..0x20) **33-entry static lookup table** at
+`0x012e2b18` (default `0x322a1bec` out of range) — re-verified, all 33 real values dumped
+directly, exact match. **This table's output IS the real `MATERIAL_TYPE` value** (the decompile's
+own 2nd local, pushed straight into `0x0045f5b0(0x41654531, <that local>, ...)` — re-verified
+exactly). The 3 previously-"unidentified MATERIAL_TYPE values" (`0x25954450`/`0x8b4347f0`/
+`0x38aff350`) are real, but belong to the THIRD group, `0xc3e810da` — re-verified exactly in the
+decompile (a separate local defaults to `0x25954450`, reassigned to the other two by a SEPARATE real 31-way
+jump table at `0x00999744`/pointer pair `0x0099973c` — re-verified, `0x0099973c`'s own 2 entries
+match exactly — gated on a height-delta/fall comparison against `1.2`, not a material test).
+**`entity+0x1a74`'s own index feeds BOTH the 33-entry table (→ real `MATERIAL_TYPE`) and the
+31-way jump table (→ group `0xc3e810da`) as two independent consumers of the same index — not
+one mechanism producing one group's value, as the original same-day framing said.**
+`0xc3e810da`'s own candidate semantic (HYPOTHESIS only, from the height/fall-comparison gating
+and the Brute-NPC-only branch at `+0x1ca8`): plausibly a landing-hardness/fall-height classifier,
+not a surface material at all. **Cross-corroborated from the shipped Wwise bank's own real
+bytes, independent of the code (agent-reported, structurally consistent with the code-side
+findings — not independently re-extracted byte-for-byte by this verification pass):** the
+FOOTSTEP event's real target Switch Container object (`0x31c0d5b0`, found by walking the real
+`.bnk_pc` HIRC chunk) contains literal `0xc3e810da` immediately followed by switch-value
+`0x25954450`, with `0x8b4347f0`/`0x38aff350` also present verbatim elsewhere in the same
+payload — and a SEPARATE, different kind-6 object in the same bank carries the literal
+`0x41654531` (`MATERIAL_TYPE`) followed by the exact same default constant `0x322a1bec` the
+33-entry table also uses at index 0/30/31 — the default value matching across two independently-
+derived sources (static table vs. real bank bytes) is strong corroboration both halves of this
+correction are right.
+
+**The real next step for `MATERIAL_TYPE` plaintext recovery: FNV-1 brute-force the 33-entry
+table's own values** (`0x322a1bec`, `0x494c975d`, `0x8fcd7364`, ... — full list in
+`scratchpad/footstep_switch/ptrs_0x012e2b18.txt`), not the 3 `0xc3e810da`-group hashes a prior
+same-day pass incorrectly chased — those 3 were never `MATERIAL_TYPE` candidates to begin with.
+
+**Net: ordinary player/NPC footsteps ARE driven by the SAME `left-foot`/`right-foot` family of
+anim triggers after all — the error was in which of the 4 real trigger-consumers to keep reading,
+not in the trigger-vs-other-mechanism framing.** `0x00999020` both blends foot-plant IK AND posts
+the real `FOOTSTEP` Wwise event, gated by distance, keyed by a runtime-selected `MATERIAL_TYPE`
+value (from the 33-entry table) plus a separate, newly-found `0xc3e810da` switch group. This
+closes the open item; the `MATERIAL_TYPE` plaintext-value and `0xc3e810da`-group-name questions
+are new, narrower OPEN items, not blocking Team B's implementation (the group hashes/mechanism
+are confirmed either way).
+
+**Genuine negative, same pass, worth keeping on record (ruled out, not the footstep mechanism):**
+`foley_collision.xtbl`/`foley_touch.xtbl` (loader `0x00561450`/`0x00561ab0`, consumers
+`0x00561370`/`0x005613b0`/`0x00561410`, reached from Havok contact-response
+`0x00762770`/`0x00763860`/`0x00929f60`/`0x009286a0`) is a real, velocity-gated generic
+collision-foley system (51 prop-impact rows + 8 pickup-touch rows, confirmed by reading the real
+decoded xtbl content) — genuinely useful for OTHER ambient-impact sounds, but confirmed to have
+zero footstep-related rows.
+
+**[CONFIRMED — disassembly for all addresses cited; independently re-verified by direct xref
+(`0x0153be40`'s exact 4-use/4-caller list; `0x013bb470`'s exact 2-use list) and direct decompile
+(`0x00999020`'s own call to `0x0045ea70` with literal `0x6f394b77`, and the 2 switch-group pushes)
+before splicing, not taken on the agent's word — including independently recomputing all 5 FNV-1
+hashes (`FOOTSTEP`/`MOVEMENT_TYPE`/`MATERIAL_TYPE`/`WALK`/`RUN`), all exact matches. OPEN: the 3
+unidentified runtime `MATERIAL_TYPE` value hashes and the 31-way selector's real meaning; identity
+of `0x0052a230` (distance-cull override) and `0x009420c0`/`0x005539c0` (selector inputs); which
+point the compared distance is measured from (entity position vs. listener/camera, not
+independently confirmed); whether `0x00999020`'s own single caller (`0x0099ebe0`, a per-frame loop
+over the active-character list `0x03171a64+0x1ec/0x1e4/0x58`) runs for both player and NPCs or
+NPCs only.]** Addresses: `0x004ae1e0`, `0x004ae7a0` (`0x02ef2178`), `0x004ca2d0`, `0x004cad90`,
+`0x004aded0` (`0x030f0c68`), `0x004b27b0`, `0x004bdec0`, `0x004c7090`, `0x004b4320`, `0x0073d550`,
+`0x0050c130`, `0x00552070`, `0x005246a0`, `0x00999020`, `0x009a8d30`, `0x0057bfd0`, `0x013bb470`,
+`0x0094c9e0`, `0x0045da50`, `0x0045f2d0`, `0x0045f5b0`, `0x0045ea70`, `0x0052a230`. Full detail:
+`scratchpad/footstep_rt/`, `scratchpad/footstep_wwise/`, independently re-verified in
+`scratchpad/verify_footstep/`, `scratchpad/verify_footstep_wwise/`.
+
+**Answering Team B's three questions directly (UPDATED 2026-10-11, superseding the "OPEN"
+answers below — the runtime consumer this section originally failed to find is `0x00999020`,
+see the correction above):**
+1. **Fired from an anim event — CONFIRMED, not OPEN.** `0x00999020` gates on exactly the same
+   `left-foot2`/`right-foot2` (or `left-foot`/`right-foot`) trigger facility this section already
+   documents; no separate cadence timer exists. The earlier "which function consumes the trigger
+   at runtime" question is answered: this same function both blends foot-plant IK AND posts the
+   Wwise event, which is why the first pass's check of its camera-shake callee alone missed it.
+2. **Yes, it varies by ground material, for BOTH tiers — the generic tier is NOT baked, it's
+   runtime-selected. CORRECTED same day:** the selection is NOT a 31-way jump table — it's a flat
+   33-entry static lookup table (`0x012e2b18`) indexed by a per-entity cached locomotion-state
+   field (`entity+0x1a74`, read by the 3-instruction leaf `0x009420c0`), via `0x005539c0`. Fixed-
+   context clip tier: unchanged, static `MATERIAL_TYPE` (`CONCRETE`/`METAL_SOLID`/`FLESH`) baked
+   at content-authoring time. Generic open-world locomotion tier: real runtime value = this
+   table's own entry for the current locomotion-state index (33 real values, not yet matched to
+   plaintext — a fresh FNV-1 brute-force should target THESE 33, not the 3 hashes originally
+   misattributed here, which belong to a separate, newly-found switch group `0xc3e810da`
+   instead). Not a ground raycast — the index is a cached per-entity field, not a physics query;
+   whether that field is itself ever set from a real ground/material source upstream was not
+   traced this pass (OPEN), but the footstep-side selection mechanism itself is now fully
+   characterized.
+3. **Fixed-context table unchanged (above). Generic tier: the switch GROUP and the real selection
+   mechanism (33-entry table) are now known; the table's 33 VALUES are not yet named** — see OPEN
+   item above.
+
+**Cross-reference, CHECKED AND REFUTED, 2026-10-11 (agent `aa249198674bf2f1c`, independently
+re-verified):** the plausible structural analogy below (a Havok-body-property tag, same
+convention as vehicle-wheel friction) does **NOT** hold for footstep material selection — both
+`0x009420c0` and `0x005539c0` were opened in full and confirmed to touch no Havok structure at
+all; the real source is a cached per-entity locomotion-state index into a flat static table, not
+a physics/contact query. Left below for the historical record of what was checked.
 
 **Cross-reference, not re-opened:** `spec-physics-runtime.md`'s already-confirmed finding that
 per-wheel vehicle-ground friction comes from **a custom Havok body property tagged on the struck body**
@@ -4878,6 +5018,56 @@ logic lives in an unreached per-station "song manager" update. Full detail:
 ---
 
 ## Changelog
+
+- **2026-10-11 — §11a.8's `MATERIAL_TYPE` runtime-value claim CORRECTED (same day, same section):
+  it's a flat 33-entry static table, not a 31-way jump table; the 3 hashes originally attributed
+  to `MATERIAL_TYPE` actually belong to a separate, newly-found switch group `0xc3e810da`** (SPEC
+  TEAM, agent `aa249198674bf2f1c`, independently re-verified by direct query before splicing —
+  routed from orchestrator `purrsian-f5`). `0x009420c0` (3-instruction leaf, `*(entity+0x1a74)`)
+  and `0x005539c0` (bounds-checked lookup into a 33-entry table at `0x012e2b18`, all 33 values
+  re-verified exact) feed the real `MATERIAL_TYPE` value; the real 31-way jump table
+  (`0x00999744`/`0x0099973c`, re-verified) is a SEPARATE consumer of the same index, producing
+  group `0xc3e810da`'s value instead — the 3 "unidentified" hashes belong there, cross-corroborated
+  from the real shipped `.bnk_pc`'s own Switch Container bytes (agent-reported, structurally
+  consistent, not independently re-extracted byte-for-byte). Also checked and REFUTED the
+  Havok-body-property structural analogy from vehicle-wheel friction — neither feeder function
+  touches Havok at all. Real next step for `MATERIAL_TYPE` plaintext: brute-force the 33 table
+  values, not the 3 `0xc3e810da` hashes. Cleanroom self-check: strict regex 0 hits, C-cast-
+  dereference check 0 hits.
+
+- **2026-10-11 — §11a.8's footstep posting mechanism RESOLVED: `0x00999020` posts the real
+  `FOOTSTEP` Wwise event, with a runtime-selected `MATERIAL_TYPE` switch — corrects a wrong
+  negative from the SAME prior pass** (SPEC TEAM, agent `ad14b91d5da2a1555`, independently
+  re-verified by direct xref/decompile and independently recomputed FNV-1 hashes before
+  splicing; routed from orchestrator `purrsian-f5`, starting from Wwise event hashes as
+  suggested). `0x00999020` — the SAME function already opened as "foot-plant IK blending, plus a
+  Brute-NPC-only camera-shake call" — also, later in its own body past where the prior pass
+  stopped reading, gates on a distance cull (`audio_constants.xtbl`'s `FootstepRange`, squared
+  into global `0x013bb470`, re-verified 2-use xref), creates/reuses a persistent per-entity
+  "Human" voice, sets an RTPC and 3 Wwise switches, and posts event `0x6f394b77` =
+  `FNV1("FOOTSTEP")` exactly. Switch groups `0x40dc0461`=`FNV1("MOVEMENT_TYPE")` and
+  `0x41654531`=`FNV1("MATERIAL_TYPE")` both exact matches; the `MATERIAL_TYPE` VALUE is selected
+  at runtime (31-way jump table), unlike the 144 baked-clip rows' author-time constant — 3 value
+  hashes remain unidentified (OPEN). Genuine negative also recorded: `foley_collision.xtbl`/
+  `foley_touch.xtbl` (prop-impact/pickup-touch foley) checked and confirmed to have zero
+  footstep-related rows — not the mechanism, but real and documented for future use. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §11a.8's footstep runtime-dispatch item REFINED: foot-plant triggers CONFIRMED
+  NOT the posting mechanism for ordinary locomotion; open item relabeled to "find the real
+  mechanism" per orchestrator correction (the shipped game does audibly play ordinary footsteps —
+  initial framing wrongly concluded "no audio exists")** (SPEC TEAM, agent `a3c067c7758abaea8`,
+  independently re-verified by direct xref/decompile before splicing; self-picked, gameplay-
+  feedback relevant; wording corrected same day per `purrsian-f5`). Closed the prior pass's own
+  named next step (the per-record-pointer caveat): found the real `GetTriggerFired` facility that
+  genuinely consumes the `"left-foot"`/`"right-foot"` anim triggers at runtime, opened all 4 of
+  its real callers, and confirmed none reaches the Wwise event-post path — the signal is fully
+  consumed by non-audio systems (vehicle-entry animation sync, foot-plant IK blending, camera
+  shake). Net: the 144 baked vehicle-entry/Brute-NPC clips and the foot-plant triggers are
+  confirmed NOT how ordinary footsteps get posted; the real mechanism (foley/surface-material
+  system on locomotion speed/gait phase, a vtable-dispatched caller, or Wwise-side) remains OPEN.
+  One structurally unclosable gap flagged (virtual/vtable-dispatched callers can't be xref'd).
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-09 — §11.11.4 gains the resolution of codebook slot 598** (SPEC TEAM, agent
   `a83f8946bc105956e`, bounded low-priority check per `purrsian-5b`'s item (b)). Slot 598's real,

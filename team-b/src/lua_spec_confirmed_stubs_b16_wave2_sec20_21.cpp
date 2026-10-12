@@ -1367,12 +1367,29 @@ int stub_inv_item_equip_slot(lua_State* L) {
 // (occupant name). Return: 1 number (0-5, or sentinel 6 on any failure).
 // CONFIRMED: resolves via objectResolves(); reuses CharacterState::
 // currentVehicleName (the cached vehicle-association, "trust a known
-// association" convention, Sec12.9); reads VehicleState::vehicleTypeCode
-// (abstracted 0x00ad2f80 EAX side-channel result), clamping deterministically.
+// association" convention, Sec12.9); reads VehicleState::flyingType
+// ((+0xbf4)+0x2c), clamping deterministically.
 // Resolver 0x00a281a0 - RE-CORRECTED (2026-10-08, direct disassembly of
 // its own body): a two-stage #PLAYER#-then-#FOLLOWER# wrapper, not
 // PLAYER-only as an earlier reading had it - wired here, follower-
 // sentinel-resolver pass, via resolveFollowerAwareObject().
+//
+// RE-WIRED 2026-10-11 (spec-lua-api-behaviour.md Sec21.24 RESOLVED, closing
+// the routed m07 mission-blocker): this native's real field is the vehicle's
+// static `Vehicle_Type` xtbl class enum at (vehicle+0xbf4)+0x2c - the SAME
+// physical field VehicleState::flyingType already models and already
+// populates from `_veh.xtbl` data (EngineState::loadZoneObjectsSection(),
+// via installVehicleTypeClassTable()/sr3vehicleinfo::ParseAllVehicles -
+// see that field's own doc comment, "vehicle flying-type enum
+// ((+0xbf4)+0x2c)"). The separate VehicleState::vehicleTypeCode field this
+// stub used to read was a distinct, NEVER-wired OPEN placeholder dating
+// from when this project had no mechanism joining a zone-placed vehicle
+// instance back to its real xtbl row - that mechanism now exists and
+// already feeds flyingType for every real zone-placed vehicle (including
+// m07's own), so reading flyingType here (not vehicleTypeCode) is what
+// actually resolves for real data instead of staying permanently OPEN.
+// vehicleTypeCode itself is now dead (no remaining reader) and left
+// removed from vehicle_state.h.
 int stub_get_char_vehicle_type(lua_State* L) {
     logCall(L, upLog(L), "get_char_vehicle_type", upStateTag(L));
     std::string occupant = argString(L, 1);
@@ -1383,7 +1400,7 @@ int stub_get_char_vehicle_type(lua_State* L) {
         CharacterState& c = st->getOrCreateCharacter(resolvedOccupant);
         if (c.currentVehicleName.known() && !c.currentVehicleName.get().empty()) {
             VehicleState& v = st->getOrCreateVehicle(c.currentVehicleName.get());
-            int32_t code = v.vehicleTypeCode.get(); // OPEN until set
+            int32_t code = v.flyingType.get(); // OPEN until set; (+0xbf4)+0x2c, the real xtbl Vehicle_Type class
             result = (code >= 0 && code <= 5) ? code : 6; // CONFIRMED deterministic clamp
         }
     }

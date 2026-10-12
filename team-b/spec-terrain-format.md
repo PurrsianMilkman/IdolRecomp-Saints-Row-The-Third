@@ -78,7 +78,7 @@ The paired GPU-side file (806 KB in this sample), with **its own distinct 4-byte
 
    **New cross-reference (2026-10-08):** whether `0x2237`'s own "roads, path deform meshes" description corresponds to any actually-rendered street/sidewalk pavement is now tracked as its own open question in `spec-zone-data-format.md` §13.2, which also REFUTES the separate `0x2238` "Sidewalks" content kind as a render-geometry candidate (it's a pedestrian AI path-graph) and answers a paired `~al`-zone-entry question. Not resolved here; see that section for the current state and the concrete next step (render a real `0x2237` record whose `.tga` pool names a road/sidewalk texture).
 
-   **RESOLVED 2026-10-08, same-day follow-up inside `spec-zone-data-format.md` §13.2 (flagged here 2026-10-10 — this item's own "decal/path-deform OVERLAY, not base ground" framing above predates and is superseded by it):** a population-wide decode (374 real road/sidewalk-textured `.czn_pc` tiles, their `0x2237` record's own Mesh sub-block channels) found real vertex positions for all 374/374, and 359/374 (96%) are genuinely flat, horizontal, tile-scale slabs (e.g. a real 31m×140m×0.55m slab). **`0x2237` is now confirmed to carry genuine base street-pavement geometry in a large real population subset, not merely a decal/path-deform overlay.** The corresponding Havok *collision* source for this same pavement (as opposed to its visible geometry) is still OPEN — see `spec-player-runtime.md`'s own "which file supplies the ground collision shape" item for the current state of that separate question.
+   **RESOLVED 2026-10-08, same-day follow-up inside `spec-zone-data-format.md` §13.2 (flagged here 2026-10-10 — this item's own "decal/path-deform OVERLAY, not base ground" framing above predates and is superseded by it):** a population-wide decode (374 real road/sidewalk-textured `.czn_pc` tiles, their `0x2237` record's own Mesh sub-block channels) found real vertex positions for all 374/374, and 359/374 (96%) are genuinely flat, horizontal, tile-scale slabs (e.g. a real 31m×140m×0.55m slab). **`0x2237` is now confirmed to carry genuine base street-pavement geometry in a large real population subset, not merely a decal/path-deform overlay.** The corresponding Havok *collision* source for this same pavement (as opposed to its visible geometry) is now RESOLVED too, 2026-10-11 — the same `0x2237` record self-containedly builds its own Havok shape, no `.clmesh_pc` dependency — see `spec-player-runtime.md` §5.6's own "character proxy" sub-passage for the full chain.
 
    **The `meshRefCount`-sized reference-record array, closed 2026-10-08 (dispatched by a live-playtest
    ground-mesh-origin bug report, Team B via `purrsian-04`).** `0x00864c60`'s per-mesh-reference loop
@@ -221,6 +221,11 @@ None of these gaps prevent locating and extracting a tile's terrain-related file
 **Review status (2026-09-30): DESK-PASS (the single-sample caveat is superseded by population-level work) — desk review (not re-derived from the executable).**
 
 ## Changelog
+
+- 2026-10-11: §5 item resolved — street pavement's Havok collision source (previously OPEN,
+  cross-referenced to `spec-player-runtime.md`) is now RESOLVED: `0x2237` self-containedly builds
+  its own collision shape. Cross-reference only, full chain in `spec-player-runtime.md` §5.6.
+  Cleanroom self-check: 0 hits.
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 3 cross-references into `spec-zone-data-format.md` (§6→§1 twice, §6.4→§9.4); marked §2's `SR3Z` trailer HYPOTHESIS resolved (`spec-ctorless-types.md` §5); named `team-b/HANDOFF.md` for the §9.130 citation.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).

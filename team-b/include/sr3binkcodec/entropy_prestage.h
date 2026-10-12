@@ -419,6 +419,29 @@ constexpr int kSiblingTableBuildsPerBlockRow = 23;
 // matches that pointer, the same method Sec5.3g used for A's call #1.
 constexpr int kDescriptorBSiblingTableIndex = 1;
 
+// `0x10019300`'s own 16-loop body (spec-bink-codec.md Sec5.3g, 2026-10-11
+// LUT-resolution update): calls #3-18 (0-indexed 2..17) of the SAME 23
+// per-row `0x10018ca0` table-builds this class already runs inside
+// beginBlockRow() are NOT a separate call sequence - they are
+// `0x100195b0`'s own two LUT tables (`arg3+0x100`=`A[16]`,
+// `arg3+0x140`=`LUT_ptr[16]`) plus their accompanying `table16[16][16]`
+// bank, rebuilt fresh every block-row. Previously beginBlockRow() ran these
+// 16 calls for their real bit cost but discarded every result outside
+// siblingTableIndex_ (0/1, descriptors A/B); this struct lets a caller
+// capture calls #3-18 too, so flat_fill_prestage_array.h's decode0x100195b0()
+// can reuse the SAME already-executed 0x10018ca0/build_table results
+// instead of re-invoking the table-builder a second time (which would
+// either double-consume bits or require guessing a second bit-cursor
+// position - neither correct; see decode0x100195b0()'s own citation).
+struct SiblingTableBank {
+    std::array<BuiltTable, 16> tables;
+    bool valid = false;  // true once beginBlockRow() has run the full 23-call
+                          // pass at least once without ranOutOfData() cutting
+                          // it short - false means "not yet captured", not
+                          // "captured as all-zero", so a consumer can tell
+                          // the difference and fall back honestly.
+};
+
 // Outcome of asking CaseSelectorScratchSource for the next dispatch byte,
 // or of its own beginBlockRow() call.
 enum class CaseSelectorStatus : uint8_t {
@@ -508,19 +531,30 @@ public:
     // A genuine SourceExhausted while running `sibling`'s own refill IS
     // propagated, since that means the real bitstream itself ran dry - a
     // hard stop for every subsequent read, A's or B's, not B-specific.
-    CaseSelectorStatus beginBlockRow(CaseSelectorScratchSource* sibling = nullptr) {
+    CaseSelectorStatus beginBlockRow(CaseSelectorScratchSource* sibling = nullptr,
+                                      SiblingTableBank* outSiblingBank = nullptr) {
         if (!caseSelectorTablesAvailable()) return CaseSelectorStatus::TablesNotLoaded;  // see this
                                                                                            // file's own top comment
         if (poisoned_) return CaseSelectorStatus::Poisoned;  // permanent, see refill()
         const bool siblingAlreadyPoisoned = (sibling != nullptr) && sibling->poisoned_;
         BuiltTable freshSelf;
         BuiltTable freshSibling;
+        // 0x10019300's own 16-loop, calls #3-18 (1-indexed) == 0-indexed 2..17
+        // of this SAME 23-call pass (see SiblingTableBank's own doc comment
+        // above) - captured alongside A's/B's own designated calls, not a
+        // second invocation of buildCaseSelectorTable().
+        constexpr int kSiblingBankFirstCall = 2;
+        constexpr int kSiblingBankLastCall = 17;
         for (int i = 0; i < kSiblingTableBuildsPerBlockRow; ++i) {
             BuiltTable built = buildCaseSelectorTable(br_);
             if (br_.ranOutOfData()) return CaseSelectorStatus::SourceExhausted;
             if (i == siblingTableIndex_) freshSelf = built;
             if (sibling != nullptr && i == sibling->siblingTableIndex_) freshSibling = built;
+            if (outSiblingBank != nullptr && i >= kSiblingBankFirstCall && i <= kSiblingBankLastCall) {
+                outSiblingBank->tables[static_cast<size_t>(i - kSiblingBankFirstCall)] = built;
+            }
         }
+        if (outSiblingBank != nullptr) outSiblingBank->valid = true;
         builtTable_ = freshSelf;
         haveTable_ = true;
         const CaseSelectorStatus selfStatus = (pos_ < buffer_.size()) ? CaseSelectorStatus::Ok
@@ -567,6 +601,19 @@ public:
         outByte = buffer_[pos_++];
         return CaseSelectorStatus::Ok;
     }
+
+    // This descriptor's own freshly-built table (desc+0x10/+0x20/+0x24) -
+    // exposed (2026-10-11, fix/flat-fill-real-tree-decode task) so
+    // flat_fill_prestage_array.h's decode0x100195b0TreeDecodeAttempt() can
+    // reuse descriptor A's own table as `0x100195b0`'s own "GLOBAL"
+    // nibble-2 tree (spec-bink-codec.md Sec5.3aa: "the SAME single
+    // descriptor 0x10019360 itself uses" - ctx+0x20/+0x24/+0x10 ==
+    // desc+0x20/+0x24/+0x10 by exact field-offset match, NOT a second
+    // independent table). A pure, additive accessor - does not change this
+    // class's own existing behavior for any pre-existing caller. Only
+    // meaningful after beginBlockRow() has run at least once this row
+    // (haveTable_ guards every other reader of builtTable_ the same way).
+    const BuiltTable& builtTable() const { return builtTable_; }
 
 private:
     // One real `0x10019360` call (spec-bink-codec.md Sec5.3g's own

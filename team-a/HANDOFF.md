@@ -456,6 +456,62 @@ Read this before starting new investigation — these are hard-won and cheap to 
 
 - **A spec's own "ignore this field / it is scratch" conclusion is a claim of absence and needs the same exhaustive-scan bar (found 2026-09-20).** `spec-vpp-container.md` recorded the exact loader accumulation that locates non-first mode-(a) entries, then discarded it as write-only because no reader of `+0x04` was found; every later pass read entries at the logical `+0x08` and concluded the problem was compression, through 3 static + 1 dynamic pass. Team B, reading the same spec, found the rule at once. **How to apply:** when a loader computes a value and no reader is found, TEST the value as the missing offset/size/flag before calling it scratch; when many passes fail the same way, re-read what the loader computes rather than adding decode variations (cf. the skinning-seam lesson: a search confined to one class of variation cannot find a defect of another class).
 
+### 5a. RE techniques that worked / failed — standing practice, distilled 2026-10-11 from this session + outside public decomp projects (`~/crreish-orchestration/AI-WORKFLOW-INSTRUCTIONS.md`, user-requested addition). **Every dispatch brief should carry the applicable ones; re-read before writing a new agent prompt.**
+
+1. **GOLDEN-TRACE WORKED EXAMPLES.** The Bink breakthroughs all came from capturing real per-stage
+   values in the Unicorn harness (bit position at entry/exit, raw bits, each output value). Every
+   codec/format spec section should end with one real worked example: input position → each
+   decision → outputs. Team B diffs stage by stage, not against prose alone.
+2. **TRACK STATE FROM LIVE REGISTERS mid-function**; memory/struct copies of bitreader-style state
+   are often written back only at function return, so reading the external struct mid-function
+   gives a stale value — read the live registers and compute position relative to an entry-time
+   baseline instead.
+3. **READ THE WHOLE FUNCTION before a negative.** The footstep-audio miss came from stopping at the
+   first callee instead of opening every one.
+4. **NEGATIVE-RESULT RULE** (already stated above as its own bullet, 2026-10-10/11): before writing
+   "X does not exist / never happens," check it against what the shipped game visibly does. If the
+   game visibly does X, the finding is "not via this path; mechanism elsewhere (OPEN)," never
+   "absent."
+5. **DATA FIRST.** Scanning real file bytes (magic numbers, full-population census, xtbl fields) is
+   cheaper and more decisive than code tracing — try the data angle before opening more functions.
+6. **XREF THE OBJECT, NOT JUST THE PRIMITIVE.** `base_jumping`'s reward-tier consumer was found by
+   xref-ing the type's own fixed singleton address after a primitive-call census came back empty.
+   When a census is empty, change the anchor rather than widening the same search.
+7. **SIBLING FAMILIES solve together.** Functions sharing a prologue/field shape (e.g. Bink's
+   `0x1001a160`/`0x100195b0`/`0x10019d10`) should be briefed as one unit: once one is understood,
+   use it as the template for the rest (similarity-first scheduling).
+8. **RECONCILE SPEC PASSES IN PLACE.** Sections written in different passes can end up contradicting
+   each other (§5.3m vs §5.3q). When a new pass touches a mechanism, re-read the older sections on
+   it and correct them in place rather than leaving the contradiction for a future reader to resolve.
+9. **FUNCTION-ID / BSIM (optional, ask the orchestrator/user first, never defaulted to):** fuzzy
+   matching against freely-licensed SDK builds (e.g. an official Wwise SDK) could name middleware
+   functions. Only from legitimately obtained, freely licensed SDKs — never a leaked SDK. Names
+   only, never copied code.
+10. **FINDING FORMAT (added 2026-10-11, `AI-WORKFLOW-INSTRUCTIONS.md`, adapted from a public RE
+    tool's evidence model) — every new spec finding ends with a short three-line block, IN THE
+    SPEC TEXT ITSELF (not just in the dispatch report), so Team B sees it where they read:**
+    ```
+    Evidence: the addresses/bytes/captures it rests on, and how they were re-verified
+              (disassembly, xref, live harness, file bytes).
+    Confidence: CONFIRMED (independently re-verified) / PLAUSIBLE / CHOSEN (Team B stand-in).
+    Unknowns: what this does NOT establish, plus the next concrete step.
+    ```
+    This makes overclaims (the footstep/diversion "absent" mistakes, §27.8's own worked example)
+    visible at review time instead of buried in prose. **Also: start every dispatched task from
+    one specific feature question ("what does X do when Y"), not "explore Z"** — every agent
+    brief from here on should open with a single concrete question, not an open-ended area.
+14. **WHEN AN ITEM IS RESOLVED, EDIT THE ORIGINAL "OPEN" LINE ITSELF — don't just add a new
+    paragraph below it.** Caused a real, repeated self-pick miss this session (twice: the
+    0xe/0x10-state branch in §18.6, the roadblock/notoriety item in §19.7) — a stale "genuinely
+    OPEN"/"still OPEN" phrase sat untouched while a later "CLOSED"/"RESOLVED" paragraph was added
+    right below it; a triage search or a fresh dispatch reading the OPEN line alone, without
+    scrolling further, wastes an agent re-deriving an already-closed answer. **How to apply:**
+    when closing an item, go back and edit the ORIGINAL open-marker text to say "CLOSED <date>,
+    see §x" (strike the old claim in place, standard project convention), not just append new
+    content after it. A one-time cleanup pass (triage grep for "OPEN"/"still open" markers that
+    have a later CLOSED/RESOLVED paragraph in the same section) is warranted after this session's
+    volume of closures — see HANDOFF's own resume note for whether that cleanup has been done yet.
+
 ## 6. Status at Time of Original Writing (2026-09-07)
 
 Both quick-fix corrections (§1a) and the Ghidra bookmarks/comments (§2a, the first 15) were complete and verified (Ghidra headless run confirmed all 15 addresses marked and the project save succeeded). That was the last piece of the peer's priority-shift request at the time. **Work continued afterward — see §7.**
@@ -2007,7 +2063,7 @@ slider values); whether normals are renormalised after accumulation was not trac
 
 ---
 
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+<!-- CONTEXT-GUARD:RESUME-BEGIN-ARCHIVED -->
 
 ## 27. ▶ RESUME HERE — 2026-10-09 (75th rewrite) — LIVE PLAY-TEST happened, game crashed during a save load, all 3 live-capture scripts FIXED+re-reviewed+reported; 2 major findings landed but NOT YET SPLICED.
 
@@ -2732,7 +2788,7 @@ Ghidra headless ONLY from PowerShell (`analyzeHeadless.bat`, `-noanalysis -readO
 
 *(Deeper history is preserved one level further back in §50 below (condensed), and further still in §49/§48/§47/§46/§44/§43/§42/§41.)*
 
-<!-- CONTEXT-GUARD:RESUME-END -->
+<!-- CONTEXT-GUARD:RESUME-END-ARCHIVED -->
 
 ## 53. Archive: pre-compaction full §27 intro + H-1/H-4/H-6/H-7 text, 28th rewrite (2026-10-07, superseded by the 29th-rewrite condensed restructure above — this was itself already a huge, mostly-stale accumulation of fully-landed-and-integrated work from earlier in the same 2026-10-07 session)
 
@@ -4464,7 +4520,7 @@ to purrsian-44; both specs synced.
 
 ## 41. Archive: pre-compaction full §27 text, fourteenth pass (2026-09-30, at ~76% context usage)
 
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+<!-- CONTEXT-GUARD:RESUME-BEGIN-ARCHIVED -->
 ### 41.27 Archived resume note (copy of the then-live §27; not the current resume note) — rewritten 2026-09-29 for the context guard, thirteenth pass (concrete, not narrative)
 
 **Read this section only. Full history/reasoning lives in the dated §7–§38 log below and in each spec own body — do not re-read those to resume, only to verify a specific claim. Full pre-compaction text of this section as it stood before THIS pass is archived verbatim in §38.**
@@ -4640,7 +4696,7 @@ Standing instruction from the user, received directly in this session: continue 
 - **When confirmed facts run out, defer rather than invent** (§27.8 in §36): stop and document the honest gap rather than propose an untraced mechanism; when a peer offers a reconciliation for something you published, reproduce their check yourself before writing anything.
 - **Never let the agent count sit at zero; report back regularly** (§27.9 in §36, received directly from the user): document as each task closes, keep the multi-agent-parallel pattern as the steady state. Does NOT mean dispatching a weak/under-scoped brief just to keep a counter non-zero — properly deriving a missing anchor is itself "something happening."
 
-<!-- CONTEXT-GUARD:RESUME-END -->
+<!-- CONTEXT-GUARD:RESUME-END-ARCHIVED -->
 
 ## 42. Archive: pre-compaction full §27 text, fifteenth pass (2026-09-30, at ~76% context usage)
 
@@ -6019,7 +6075,7 @@ restart/crash; currently `purrsian-52`).
 
 ### 46.2 (ARCHIVED — superseded by §47 below, which covers everything after item 10 above)
 
-## 47. ▶ RESUME HERE — 2026-10-11 (context-guard rewrite at 75%, replaces §46.2 onward as the live
+## 47. (ARCHIVED — superseded by §49 below) RESUME HERE — 2026-10-11 (context-guard rewrite at 75%, replaces §46.2 onward as the live
 note; §46.1 items 1-10 above are still accurate, do not re-derive). SPEC TEAM role unchanged: 1
 dispatched agent at a time (usage pacer active, weekly usage was 37-38% vs 20% planned), splice
 CONFIRMED findings into `spec-*.md` myself (never delegate the splice), run both cleanroom
@@ -6031,7 +6087,7 @@ every session restart.** Last known: orchestrator `purrsian-f5` (also seen as `p
 `purrsian-8e` earlier this session, same logical role); Team B peer `team-b-26` (also seen as
 `team-b-d0`, `team-b-86` earlier — same logical role, sometimes temporarily unreachable).
 
-<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+<!-- CONTEXT-GUARD:RESUME-BEGIN-ARCHIVED -->
 ### 47.1 DONE this session, after §46.1 item 10 — do not re-derive
 
 11. **Traffic AI overtake gate (`spec-ai-runtime.md` §18.6a/§18.6b), real thresholds found —
@@ -6135,14 +6191,214 @@ every session restart.** Last known: orchestrator `purrsian-f5` (also seen as `p
     living in `0x00a9b890` (tests `part+0xf0` bit `0x40` AND `part+0x10==0`) — but that check only
     returns a boolean, it does not itself call anything destruction-shaped.** 4 separate
     category/damage-type branches inside `0x00a8fd70` explicitly floor the result back to 1,
-    hard-protecting those categories from ever reaching literal zero through this path. **Named
-    next leads, highest priority first:** `0x00a9c5d0` (called right before `0x00a9f430`/
-    `0x00a9b890` in `0x00a9f4f0`, completely uncharacterized); `0x00a8f910` (the non-deferred tail
-    of `0x00a8fd70`, gets vehicle+damage-type+3 vectors but not the part pointer); the
-    deferred-queue batch consumer `0x00a8fd70` feeds when not in immediate-apply mode (a global
-    ring-buffer region, consumer not identified); `0x00a9e1d0`'s own two callers (`0x00a9eb60`; the
-    tiny thunk `0x00aa04e0`, single caller `0x00896183` not traced); `0x00a9c230`/`0x004d7f30`/
-    `0x009dd230`/`0x00979b30` (named earlier, still unopened).
+    hard-protecting those categories from ever reaching literal zero through this path.
+    **UPDATE 2026-10-11 (pass 3, agent `a9eaca0e76bb63940` + self, direct query):**
+    `0x00a9c5d0` opened and RULED OUT (nearest-part spatial query, no HP/destruction touch).
+    `0x00a8f910` opened and its signature CORRECTED: ECX is the part pointer (the earlier
+    "vehicle+damage-type+3 vectors but not the part pointer" guess was wrong); gates on
+    not-paused + `part+0x10==0`, calls `0x00a8f630` (floors protected parts back to 1 or applies
+    an 8-nearby-object knockback for unprotected ones), and sets a graduated half-damaged status
+    bit on HP-fraction `<0.5` (`part+0xf0 |= 0x8000000` or `part+0x6c=1`). The deferred-queue
+    consumer is now IDENTIFIED: `0x00a8fbd0` (iterates the `0x0271af40`/`0x0271af80` ring buffer,
+    lock-gated via `0x00853b10`, calls `0x00a8f910` per entry, dedup-checks against a 128-entry
+    history ring at `0x0271a940`). Confirmed `0x00a8fd70` has exactly 2 callers project-wide
+    (`0x00a9b890`, `0x00ab76f0`), both discard its return value — no return-value branch anywhere
+    in this chain drives a destruction decision.
+    **UPDATE 2026-10-11 (pass 4, agent `a95d910e53a8b3088` + self, direct query) — INVESTIGATION
+    NOW PARKED per skip-and-defer, agreed with orchestrator `purrsian-f5`.** Searched for readers
+    of `part+0xf0` bit `0x8000000` and `part+0x6c` (thorough raw-literal scan across `.text`,
+    every in-neighborhood hit individually dumped): found a SECOND SETTER, `0x00a8e670`
+    (independently re-verified), but NO READER of either anywhere in the binary. `0x00a8e670`
+    sets the bit only when a crush/pin geometry test (`0x0075c880`) passes, otherwise clears it
+    and sets `0x100000` instead — a one-frame transient flag whose reader was not located.
+    Coverage gaps left open (not closed): `0x00a8e670`'s 3 unopened callers (`0x00a8e8b0`,
+    `0x00a785e0`, `0x00a8eff0`) — the natural resume point if this is picked back up; and ~300
+    raw-literal hits outside the vehicle/part address neighborhood not individually opened.
+    **Decision: PARKED.** 4 passes / ~15 functions opened without finding the destruction-decision
+    site is a reasonable budget at current usage; Team B can already implement the part-damage
+    chain as specced. Do not re-open without new information or explicit instruction. Full detail:
+    `spec-vehicle-damage-runtime.md` §7 items 1-2 and Changelog entries 2026-10-11 (pass 3 and
+    pass 4).
+18. **Bink descriptor L's buffer SOURCE/cursor-START found, routed priority-swap from orchestrator
+    `purrsian-f5`, self + direct Unicorn write-watch, no agent.** `0x1001a160` itself writes
+    descriptor L's buffer live (not a separate pre-stage call) — caught the EXACT write
+    (`0x303f8620`, value `0x0076`, via `0x1001a307`) matching the already-documented DC-literal
+    read byte-for-byte. Input: the main per-row bitstream via an inline context-adaptive
+    sign/magnitude bit-predictor. Cursor start for block (0,0): literal offset 0 of the buffer
+    (confirmed via the context struct's `+0x30` field, read live before `0x1001a160`'s first call
+    this frame). Bonus: resolves §5.3o's own "suspicious 2-byte heap adjacency" OPEN item — it's
+    the SAME buffer as §5.3n's "delta-accumulation" work, not two adjacent mechanisms; that pass's
+    sample just started one word late. Spliced `spec-bink-codec.md` §5.3p + Changelog, synced,
+    reported.
+19. **m09/m05/m13 mission-blocker diagnosis, agent `aefe4dad8e54547d8` + self spot-checks.**
+    `0x00a29e40` ("fire named hook by object kind") is a fixed-priority 6-way type-tester chain —
+    only the last tester reaches the trigger/Lua-callback path, so an event resolving through an
+    earlier non-trigger tester never fires its callback even if some other native side effect is
+    observable. Its own caller remains genuinely unreachable by static analysis (0 project-wide
+    refs to its thunk). m09's `m09.lua:2099` stall: shared-trigger-name single-slot clobber theory
+    REFUTED (checked against the actual restart path, not just inferred). Remaining candidates,
+    neither closeable statically: the dispatch-chain hazard above, or a `human`-handle identity
+    mismatch in `m09_player_on_boat_enter_cb` — recommended Team B log/diff that handle. m13's
+    earliest stall: `m13.lua:2954`, identical identity-gated pattern to m09. m05: two early
+    candidates (`m05.lua:1140` hud_prompt-driven; `m05.lua:1152` on_trigger-driven but NOT
+    identity-gated). Spliced `spec-lua-api-behaviour.md` §1.14, synced, reported.
+20. **Ground-collision-shape source for street pavement, RESOLVED — self-picked, gameplay-
+    unblocking, agent `a73e5e44581178516` + self independent re-verification.** Closes
+    `spec-player-runtime.md`'s long-OPEN item (was "NARROWED not closed" as of item 4's archived
+    §46 text). `0x2237`'s own handler (`0x00864c60`) directly builds a Havok
+    `hkpExtendedMeshShape`/`hkpMoppBvTreeShape` from the SAME record's own data (vertex/index/AABB/
+    MOPP-blob), with NO dependency on `.clmesh_pc` — re-verified by direct xref/decompile (not
+    taken on the agent's word): `0x007a79f0`'s 2-caller uniqueness, `0x00d54300`'s 4-caller
+    uniqueness, the vtable addresses, and the classId/property-id match all confirmed exactly.
+    Registered through the identical generic physics-shape wrapper `0x2250`/Parking already uses
+    (shared code, not analogy). Spliced `spec-player-runtime.md` §5.6, new
+    `spec-zone-data-format.md` §13.6, `spec-terrain-format.md` §5, `spec-format-inventory.md` row
+    40 — synced (caught and fixed 2 decompiler-auto-name leaks, `in_ECX`/`PTR_FUN_`/`PTR_LAB_`
+    naming, on the first attempt), reported. **Follow-up same day, self, no agent, cheap:** the one
+    honestly-flagged gap (real-file-bytes occupancy of the MOPP/mesh-blob fields) is now CLOSED —
+    reused the existing extraction pipeline to find the literal `"MOPP"` magic, with a substantial
+    (83-237KB) preceding length field, inside two real flat-pavement `0x2237` records
+    (`sr3_city~s0916`, `sr3_city~s1312` + its 4 mission-variant siblings); the much smaller `~al`
+    sparse-tier variants of the same tiles carry no MOPP magic at all, a clean negative control.
+    Spliced into the same §5.6 passage, synced, reported.
+21. **Footstep audio runtime-dispatch item RESOLVED — self-picked, gameplay-feedback relevant,
+    agent `a3c067c7758abaea8` + self independent re-verification.** Closed the prior pass's own
+    named next step (per-record-pointer caveat on the `left-foot`/`right-foot` anim-trigger
+    consumer). Found and opened the real `GetTriggerFired` facility and all 4 of its real callers
+    (vehicle-entry/exit animation sync, foot-plant IK blending, camera shake) — re-verified by
+    direct xref (`0x0153be40`'s exact caller list) and decompile (`0x0057bfd0`'s callee list)
+    before splicing. None reaches the Wwise event-post path — but the shipped game DOES audibly
+    play ordinary footsteps, so **orchestrator corrected the framing same day**: foot-plant
+    triggers are confirmed NOT the posting mechanism, not "no audio exists." Open item relabeled:
+    find the real mechanism (foley/surface-material system on locomotion speed/gait phase,
+    vtable-dispatched caller, or Wwise-side). Spliced `spec-audio-runtime.md` §11a.8 (reworded per
+    correction), synced clean, reported. **SUPERSEDED same day, see item 25 below** — the "none
+    of these 4 consumers reaches Wwise" claim turned out to be wrong for one of them.
+22. **Bink descriptor-L / `0x1001a160` first-call bit-offset question, self, no agent, routed
+    priority-swap from `purrsian-f5`.** For frame 0/Y-plane/row 0's first call: absolute bit
+    offset at entry = **9256** (measured live via Unicorn, same function-entry-vs-prologue
+    hook-placement mistake caught and fixed as in item 18). **No evolving per-call "predictor
+    seed" found** — Team B's own premise corrected: the magnitude/sign decode is driven purely by
+    the shared bit-reader's live state plus 2 FIXED ctx constants (`ctx+0x28=10`, `ctx+0x2c=1504`,
+    confirmed unchanged across calls, never written by this function). First 8 decoded values
+    (118,199,212,51,25,118,119,26) exactly reproduce item 18's own independently-captured write
+    log for the same addresses. Call sits strictly AFTER the complete 23-call pre-stage + both
+    real descriptor A/B builds + their own expansions + the indirect-dispatch step — a 1757→9256
+    bit gap (7,499 bits) was measured but not individually attributed. Spliced
+    `spec-bink-codec.md` §5.3q, synced clean, reported. **Follow-up same day, self, no agent:**
+    the 7,499-bit gap is now fully attributed, call by call — exactly 4 real calls found by direct
+    disassembly of `0x1001a530`: desc B's own expansion=1114 bits, indirect call →
+    `0x100195b0`=3384 bits, `0x10019d10`=2981 bits, `0x10019f00`×2=10+10 bits — sum reconciles
+    exactly to 7,499, zero bits unaccounted for. All 3 named functions structurally confirmed as
+    siblings of `0x1001a160`'s own descriptor-fill family (same idle-check prologue, same
+    `+0x28`/`+0x2c` bound-field shape). Spliced `spec-bink-codec.md` §5.3r, synced clean, reported.
+23. **`0x100195b0`'s own output grammar worked example, self, no agent, routed from
+    `purrsian-f5`.** For frame 0/Y-plane/row 0's first call: a signed byte stream, tree-coded
+    (two LUT tables, bit-accumulator-indexed), with a leading magnitude (650) gating a fast-fill
+    shortcut for long runs. Output buffer base = idle-check struct's own `+0x30` field
+    (`0x303f9bb0`), the SAME convention `0x1001a160` uses — confirmed project-wide across a
+    second independent function. **First function in this family found with real persistent
+    adaptive state across calls** (`arg3+0x180`, written back every return), unlike
+    `0x1001a160`'s own fixed bounds. First 64 real output bytes captured live, tight low-variance
+    band (-105..-97) — consistent with a residual/delta array, not literal pixel/coefficient
+    data. Spliced `spec-bink-codec.md` §5.3s, synced clean, reported. **Follow-up same day, self,
+    no agent:** loop-termination SETTLED by running the call to completion rather than guessing
+    — exactly 650 bytes written, bit cost at `ret` exactly 3384, an exact match to item 22's own
+    independent measurement. Count-driven, confirmed.
+24. **`0x10019d10`'s own output grammar worked example, self, no agent, routed from
+    `purrsian-f5`.** For frame 0/Y-plane/row 0's first call: nibble-packed bytes (two separate
+    4-bit tree-lookups per output byte), via an EXPLICIT decrement-to-zero loop — genuinely
+    count-driven by construction, unlike item 23's own stack-slot-reuse ambiguity. Leading
+    magnitude 528, output base `0x303f9210`, 528 bytes written exactly, bit cost at `ret` exactly
+    2981 — an exact match to item 22's own measurement. Flagged a numeric coincidence (528 ==
+    this row's own already-documented real LEN value, item 11-era §5.3g finding) for future
+    investigation, not claimed as a mechanism. Spliced `spec-bink-codec.md` §5.3t, synced clean,
+    reported.
+25. **Footstep posting mechanism RESOLVED, correcting item 21's own wrong negative — agent
+    `ad14b91d5da2a1555`, self independent re-verification, routed from `purrsian-f5` (start from
+    Wwise event hashes).** `0x00999020` (the SAME function item 21 already opened for IK blending)
+    also posts the real Wwise `FOOTSTEP` event later in its own body — item 21's negative only
+    checked its camera-shake callee, never its own tail. Gates on the same trigger facility + a
+    distance cull (`0x013bb470`, re-verified exact 2-use xref), creates/reuses a persistent
+    per-entity voice, sets an RTPC + 3 switches, posts event `0x6f394b77` — **independently
+    recomputed FNV1("FOOTSTEP") = 0x6f394b77 exactly**, plus `FNV1("MOVEMENT_TYPE")`=`0x40dc0461`,
+    `FNV1("MATERIAL_TYPE")`=`0x41654531`, `FNV1("WALK")`=`0x7db16dbe`, `FNV1("RUN")`=`0x2a72b9a8`,
+    all exact matches, all independently recomputed myself before trusting. `MATERIAL_TYPE`'s
+    VALUE is runtime-selected (31-way jump table) for generic locomotion, unlike the 144 baked
+    clips' author-time constant — 3 value hashes remain unidentified (OPEN). Genuine negative also
+    recorded: `foley_collision.xtbl`/`foley_touch.xtbl` (prop-impact/pickup-touch) checked, zero
+    footstep rows — real system, not this mechanism. Spliced `spec-audio-runtime.md` §11a.8
+    (major correction, not just an addendum), synced (caught/fixed one `local_a8` auto-name leak
+    first attempt), reported. **SUPERSEDED same day, see item 26 — the "31-way jump table"/"3
+    value hashes" part of this item was itself wrong.**
+26. **`MATERIAL_TYPE` runtime-value claim CORRECTED, same day, same section — agent
+    `aa249198674bf2f1c`, self independent re-verification, routed from `purrsian-f5` (read the
+    .bnk switch container + trace the selector).** It's a flat 33-entry static table
+    (`0x012e2b18`, re-verified all 33 values exact), not a 31-way jump table. The real 31-way
+    jump table (`0x00999744`/`0x0099973c`, re-verified) is a SEPARATE consumer of the same
+    per-entity index (`entity+0x1a74`, read by `0x009420c0`) — it feeds a THIRD, previously-
+    unnoticed switch group, `0xc3e810da`, not `MATERIAL_TYPE`. The 3 "unidentified" hashes from
+    item 25 belong there, cross-corroborated from the real shipped `.bnk_pc`'s own Switch
+    Container bytes (agent-reported, structurally consistent with the code-side findings — the
+    same default constant `0x322a1bec` independently shows up in both the static table AND the
+    real bank bytes). Also checked and REFUTED the vehicle-wheel-friction Havok-body-property
+    analogy — neither `0x009420c0` nor `0x005539c0` touches Havok at all. Real next step for
+    `MATERIAL_TYPE` plaintext: brute-force the 33 table values, not the 3 `0xc3e810da` hashes.
+    Spliced `spec-audio-runtime.md` §11a.8, synced (caught/fixed one `FUN_` auto-name leak first
+    attempt), reported. Orchestrator then said: skip the plaintext brute-force (Wwise sets
+    switches by ID, names are cosmetic) — self-pick next.
+27. **Vehicle collision damage formula vs. closing speed, self-picked (collision), agent
+    `aa3d9171a8c8b6f24` + self independent re-verification.** Closed `spec-physics-runtime.md`
+    §11's own "single most valuable remaining link." VERDICT: the Havok contact listener's
+    closing-speed scalar IS stored byte-exact in the deferred record (`record+0x2C`, re-verified
+    mechanism) but is NOT what `0x00763400` scales damage by — both real vehicle-damage handlers
+    instead compute a geometry×material "impact magnitude" via `0x00762ab0` (re-verified
+    zero-callee pure arithmetic, no fresh velocity query). Full `0x00763400` damage formula
+    traced and address-pinned; all 3 scale constants independently decoded and confirmed exact
+    (`0.0055`/`0.0825`/`0.0275`), plus vtable `+0x60`, instance `+0x1588`, the `0xf4240` sentinel,
+    all re-verified. Net for Team B: collision damage does NOT scale linearly with raw closing
+    velocity — it scales with the geometry/material term instead. Spliced
+    `spec-physics-runtime.md` §11 (caught/fixed one `FUN_` auto-name leak first attempt), synced
+    clean, reported.
+28. **URGENT, routed from `purrsian-f5`/Team B report: the §5.3m vs §5.3q Bink contradiction
+    RESOLVED, self, no agent.** Live per-symbol trace (first 8 values of `0x1001a160`'s first
+    call, frame 0/Y/row 0) proved both sections are correct, each for a DIFFERENT value — §5.3q's
+    own text (which I wrote) had wrongly generalized a finding true only for value[0] to "the
+    first 8 values." value[0]=118 via the fixed-bound path (no nibble); values[1-7]
+    (199,212,51,25,118,119,26) via §5.3m's chunk loop (one 4-bit class nibble per up-to-8-value
+    chunk, here nibble=8, `new=prev±magnitude`). All 8 formulas reconcile exactly, zero
+    discrepancies. Had to track bit position from LIVE REGISTERS, not memory — the external
+    bit-reader struct is stale mid-function (caught before trusting numbers). Offered Team B a
+    concrete hypothesis: their divergence is likely applying the wrong mechanism exactly at the
+    value[0]/value[1] boundary. Spliced `spec-bink-codec.md` new §5.3u + corrected §5.3q's own
+    text in place, synced clean, reported.
+29. **Diversion reward-mechanism classification, self-picked (`spec-activity-runtime.md`'s own
+    "single largest OPEN item"), agent `aa0589748b08aa6dc` + self independent re-verification.**
+    10 of 11 previously-"ambiguous" diversion types confirmed to have no call to either reward
+    primitive (`0x009e2440`/`0x0094d920`) in their own score/notify or tick chain (7 `stunt_*`
+    types + `stunt_wheels`/`exploration_diversion`/`mugging_diversion`) — spot-re-verified 2 by
+    direct query, exact match. **Wording corrected same day, orchestrator: this is NOT
+    "reward-less" (same class of overclaim as the footstep-audio item) — the shipped game
+    visibly pays these (mugging cash, stunt/exploration respect pops), so the real grant path is
+    a DIFFERENT mechanism and remains OPEN, just ruled out as this direct-call shape.** Found a
+    2nd constructor shape ("Shape A," no `Init` call, reached from the startup driver) and
+    resolved more of the per-type mega-table's layout (index 8=tick, 14=name getter). 2 remain
+    genuinely ambiguous, for different reasons: `base_jumping` has a richer 10-tier reward array
+    with no located consumer function; `photo_op` has no `Max_Respect`/`Max_Cash`-shaped fields
+    at all, so the whole classification method doesn't apply to it. Net project-wide: 9 with no
+    direct primitive call (real path OPEN), 2 confirmed direct-grant, 2 unresolved. Spliced
+    `spec-activity-runtime.md` §4/§5 (relabeled table + prose), synced clean, reported.
+30. **m09's new stall (after Team B's trigger fix unblocked `m09.lua:2099`) at `m09.lua:2181` in
+    `m09_find_girls`, self, no agent, routed from `purrsian-f5`.** Same already-documented
+    `on_trigger` facility, a new per-crate instance
+    (`m09_set_crate_trigger`→`m09_trigger_crate_cb`→`m09_crate_door_open`, gating
+    `m09_num_crates_left`); confirmed no QTE gate is active for any real crate this mission
+    (`qte=""` across every crate record). Unlike `m09.lua:2099`'s own callback,
+    `m09_trigger_crate_cb` is NOT identity-gated — treats any non-`LOCAL_PLAYER` entering object
+    as "remote" unconditionally — narrowing the live cause toward the `0x00a29e40` dispatch-chain
+    hazard rather than an identity mismatch. Recommended Team B check: is
+    `m09_trigger_crate_cb` ever invoked at all on crate-trigger entry. Spliced
+    `spec-lua-api-behaviour.md` §1.14, synced clean, reported.
 
 ### 47.2 Cleanroom leaks caught by `sync_to_teamb.sh`'s own gate this session (the discipline
 working as designed — pattern to watch for: decompiler auto-names slipping into freshly-written
@@ -6156,10 +6412,11 @@ splice. Every one caught before sync completed, none reached Team B.
 
 ### 47.3 IN FLIGHT right now
 
-Nothing — all dispatched agents this session have reported and been spliced/synced. Next action
-on resume: self-pick a new bounded item (continue chasing `0x00a9c5d0` for the vehicle-destruction
-thread is the most natural next pick, or follow the orchestrator's next instruction if one has
-arrived), 1 agent at a time per the active usage pacer.
+Nothing — all dispatched agents this session have reported and been spliced/synced (through item
+30 below). Orchestrator (`purrsian-f5`) says the m09/m05/m13 identity-handle test is queued with
+Team B inside their own engine; m09.lua:2181 (item 30) is also done and reported. Next action on
+resume: self-pick, 1 agent at a time, preferring gameplay-unblocking items — or follow the
+orchestrator's next instruction if one has arrived.
 
 ### 47.4 Pending on the user/orchestrator specifically
 
@@ -6167,6 +6424,457 @@ arrived), 1 agent at a time per the active usage pacer.
 (§47.1 item 14), orchestrator says they've asked the user, not yet granted as of this note. Do not
 propose or attempt any game-side hook/capture without that explicit go-ahead; Bink Unicorn work is
 unrelated and never needed this approval (isolated DLL emulation, never touches the game).
+
+The live orchestrator peer is `purrsian-f5` (verify via `ListAgents` on resume — names rotate).
+
+## 49. ▶ RESUME HERE — 2026-10-11 (2nd context-guard rewrite, now at 75.1%; replaces the first
+§49 note below as the live one — that note's own items 1-30 are archived, still accurate, not
+reproduced here). **SESSION RESTART happened mid-session (full context preserved on my end
+regardless).** Orchestrator now `purrsian-eb`, Team B now `team-b-67` — **verify both via
+`ListAgents` before messaging, names rotate every restart.** Usage pacer is ACTIVE: weekly usage
+ran ahead of plan — **1 dispatched agent max at a time, Sonnet first, prefer direct file/grep
+reads over agent dispatch wherever possible, don't re-read files already seen.** Standing SPEC
+TEAM role unchanged otherwise: splice CONFIRMED findings into `spec-*.md` myself (never delegate
+the splice), run the cleanroom self-check via `bash tools/sync_to_teamb.sh` (confirm "N file(s)
+synced... exit 0", check for a REFUSED line every time), report to the live orchestrator/Team B
+peer by name. **New standing practice, added this session, applies to every finding and every
+dispatch brief from now on:** every spec finding ends with a 3-line Evidence/Confidence
+(CONFIRMED/PLAUSIBLE/CHOSEN)/Unknowns block (HANDOFF §5a item 10); start every dispatch from one
+specific feature question, not "explore Z"; when an item is resolved, edit the ORIGINAL "OPEN"
+line in place rather than just appending below it (§5a item 14 — this session hit the stale-
+marker trap twice before that rule was added).
+
+<!-- CONTEXT-GUARD:RESUME-BEGIN -->
+### 53. ▶ RESUME HERE — 2026-10-11, replaces §52 as the live note (§52/§51/§50 below are DONE, kept for detail)
+
+**Peer naming, live as of this rewrite (verify via `ListAgents` on resume — names rotate on
+restart):** orchestrator `purrsian-ea`, Team B `team-b-31`. Usage pacer CRITICAL again this
+session (54% weekly vs 33% planned) — holding on shop specifically; orchestrator is asking the
+user about both usage and what the shop prompt actually says on-screen (may unblock the search
+cheaply once the user answers, since the exact on-screen text should match one of the message-
+table strings already catalogued below).
+
+**CLOSED since §52: the crib-entry walk-in chain, full stop.** User-observed ground truth
+reframed the whole investigation (press-E prompt, not trigger-volume-entry — see
+`spec-store-runtime.md` §2's own "REFRAMED" note for the full pivot). Found the real on-press
+dispatcher (`0x005b6870`, direct 22-entry bit-walk of `0x0111f2d0`, no two-stage scan), dumped all
+22 entries, then cross-referenced an EARLIER (2026-10-09) scratchpad investigation
+(`scratchpad/watercraft_prompt_table_open97_2026-10-09.md`,
+`scratchpad/fourth_prompt_table_0x0111f4e0_2026-10-09.md`) that had already found a parallel,
+same-indexed UI-prompt-TEXT table at `0x0111f488` — reading its remaining unnamed slots found
+slot 8 = literally `"HUD_USE_CRIB"`. Traced action entry 8 (`0x009da580`) in full: →
+`0x005eee70` → `0x0080cc90(this=0x022ccef8, the known "store_crib" static object)` →
+`0x007b5fe0(this)`. Spliced into `spec-store-runtime.md` §2 and `spec-save-format.md` §10.5,
+synced clean, relayed to Team B (who are wiring crib through this real chain now, replacing their
+stand-in). Also found (bonus, unplanned): action entry 0 is actually a weapon pickup/exchange
+action (resolves a per-kind handler table at `0x01309f10`, one kind writes the player's known
+`+0x1b78` weapon-inventory sub-object) — spliced into `spec-weapons-runtime.md` §5.1.
+
+**STILL OPEN: shop's own entry — now a solid negative across EVERY lead tried, 2 dispatched agents
+plus direct work.** User later clarified the real on-screen prompt is icon-only, no text at all
+(unlike crib's `"HUD_USE_CRIB"`) — explains why no `HUD_` string ever matched, but a second
+dispatched agent, re-checking with that exact clue in hand, still found nothing: the one
+never-opened table (`0x0111f380`, walked by `0x005b6950`) has only 2/22 populated slots, both
+confirmed weapon-pickup/melee-takedown related, not store; the 8 previously-shallow main-array
+entries (1,2,3,4,5,7,11,13) were all re-traced to actual disassembly (not just a glance) and match
+their earlier provisional categories (vehicle seat/getter, weapon pickup, watercraft timer,
+diversion, phone, parachute) — none reaches `0x0083ECC0` or references `"store_common"`/
+`"safe_frame"`. **Every slot of every known 22-entry table in this family (`0x0111f2d0`,
+`0x0111f328`, `0x0111f380`, `0x0111f3d8`, `0x0111f430`, `0x0111f488`, `0x0111f4e0`) has now been
+read at least once.** Two real possibilities remain, neither chased yet: (a) shop's trigger uses a
+genuinely different mechanism outside this whole press-E action-array family (a separate
+walk-in/collision-volume callback, going straight to `0x0083ECC0` without the generic `0x005b6870`
+dispatch crib uses — plausible since `0x0083ECC0` is store_common-specific by hardcoded name,
+unlike crib's generic-object opener) — a fresh angle, not a re-search of what's already been
+exhausted; or (b) one un-fully-exhausted entry, `0x009df560` (main-array index 7, 361 lines,
+checked by keyword grep only, never read line by line) still has a small chance of being it.
+**Correction before anyone re-tries (a) naively:** `xref 0x0083ECC0` was ALREADY run, early in this
+whole investigation — its only two callers are `0x0083EE80` (the pause_map object's own vtable
+slot 4) and `0x0083EDF0` (a plain callback field on the same object), and BOTH were already traced
+to a confirmed dead end (`0x007b4d70`, a one-shot UI-boot registration routine, never reached from
+gameplay/player-input code — see `spec-store-runtime.md` §2's own "PARKED"/dead-end note). So
+`0x0083ECC0` itself is NOT the way in from player input at all — crib's own answer proves the real
+entry point is a DIFFERENT, generic opener (`0x0080cc90`/`0x007b5fe0`) operating on a named static
+object, not `0x0083ECC0`. The right next move for shop is almost certainly: find `store_common`'s
+OWN static object address (the same way `0x022ccef8` was found for `"store_crib"` — check what
+writes the `"store_common"` string pointer near its own registration call site, analogous to
+`0x00ffa801`'s write for crib), then search for what calls `0x0080cc90` (or `0x007b5fe0` directly)
+with THAT object as `this`. This sidesteps `0x0083ECC0` and the whole press-E array family
+entirely, going straight from the object's identity to its opener, the same way crib's answer was
+actually found — not a re-search of anything already exhausted.
+
+**UPDATE, same session, this lead also tried and ALSO a dead end — shop's architecture is
+genuinely different from crib's, confirmed:** found `store_common`'s own static object
+(`0x022cce68`, via its registration constructor `0x00ffa7b0`, same method used for crib). Its
+full xref list (6 uses, 4 functions) has only the already-known constructor/destructor/UI-boot-
+registration triple — no `this=0x22cce68; call opener` pattern anywhere, unlike crib's
+`0x0080cc90(this=0x022ccef8)` call. **Conclusion: `store_common` does NOT use the generic-object-
+opener pattern at all — it is architecturally hardcoded-by-name (`0x0083ECC0`'s own literal
+`"store_common"` push), and crib's answer does not generalize.** This means shop really is stuck
+at the SAME dead end that predates crib's breakthrough: `0x0083EE80`/`0x0083EDF0` (0x0083ECC0's
+only 2 callers), both confirmed unreachable from player input. **Shop is now a genuine, deep
+negative result after exhausting every static angle tried this session** (both 22-entry-array
+families in full, the object-identity angle, string search, 2 dispatched agents). Remaining
+options, neither attempted: a live capture (hook `0x0083ECC0` or its 2 callers, walk into a real
+shop in-game, see what actually calls it — same class of approach as the Bink live-trace work,
+but on the main exe/game process, which per `spec-save-format.md` §49.4's standing note requires
+explicit user/orchestrator go-ahead before attempting); or reading `0x009df560` (main-array index
+7) line-by-line rather than by keyword grep, the one entry never fully exhausted. Recommend
+reporting this as closed-for-now rather than spending further static-search effort.
+
+**Since §50 was written, all of §50's own open items landed:**
+- §50.2's Bink `0x100195b0` translate-table bug: fixed, spliced into `spec-bink-codec.md` §5.3aa
+  in place, synced clean, relayed to Team B and orchestrator. Team B dispatched a fix agent;
+  their fix-landing report (fixture match + pixel numbers) has **not arrived yet** — when it does,
+  independently re-verify before trusting.
+- §50.1's crib/safehouse synthesis: written up in `spec-save-format.md` §10.5, synced, relayed.
+- Orchestrator's follow-up 3-part task (crib UI trigger / kinds 12-14 / crib autosave / self-pick):
+  **part 1 done** — kinds 12-14 CONFIRMED as jump-collection/barnstorming/garage-mechanic via a
+  located `tools/as_base_xtbl/triggers.xtbl` (crib hypothesis DISPROVEN, overturning the
+  orchestrator's own guess); spliced into `spec-save-format.md` §9.4/§10.5 in place, synced clean.
+  **Part 2 (crib autosave + kind-3 "crib purchase" owned-state branch) tried cheaply, genuinely
+  OPEN**: the xtbl field values aren't compiled into the exe as strings (runtime-loaded data), so
+  there's no cheap xref path — the real handler is a virtual `use_activated` method on the
+  trigger-volume class (already named, not yet resolved, in `spec-save-format.md` §9.4's own
+  class-flag note). Reported the negative; did not force it. **Part 3 (self-pick) not started —
+  paused per orchestrator, conserving usage while Team B is down.**
+
+**NEXT ITEM on resume (orchestrator-approved, do NOT dispatch solo — wait for the go-ahead/Team B
+being back, this is explicitly deferred, not just low-priority):** the trigger-volume class's
+activation vtable — i.e. what virtual method fires when the player walks into/activates a world
+trigger, and how it resolves to a `push_screen` call. This is high value: it's the SAME unresolved
+mechanism blocking both the crib-entry question above AND every walk-in store's own open gap
+(`spec-store-runtime.md` §2: "no Lua file ever calls `push_screen("store_common"|"store_weapon"|
+...)`" — already flagged OPEN by an earlier pass, independently reconfirmed this session). Real
+vtable/indirect-call resolution, worth exactly 1 dispatched agent per the orchestrator — not a
+grep job. Do this next once Team B is back and usage allows.
+
+### 50. (DONE, kept for detail — superseded by §51 above) RESUME HERE — 2026-10-11, context-guard rewrite at 75.1%, replaces §49 as the live note
+
+**Peer naming, live as of this rewrite (verify via `ListAgents` on resume — names rotate on
+restart):** orchestrator `purrsian-eb`, Team B `team-b-67`. Usage pacer active all session: 1
+dispatched agent max at a time, Sonnet first, prefer direct harness query/file reads over agent
+dispatch, pick targets from Team B's real asks/CHOSEN-stand-ins over the specs' own OPEN lists
+(proven unreliable this session — multiple stale-marker misses).
+
+### 50.1 DONE since §49 (headline only; §49's own items 1-30, pre-restart, are superseded/condensed
+below where still relevant — do not re-derive any of this)
+
+**Bink chain continued and apparently closed its main thread, THEN Team B found a real bug in
+one of my own findings — see 50.2, IN FLIGHT, for the live debugging session on that right now.**
+
+- **56-bit gap CLOSED** (§5.3n): NOT two `0x10019f00` calls (orchestrator's own guess, disconfirmed
+  by direct static disasm) — real sequence is a second `0x1001a160` call (10-bit zero-count bail)
+  + `0x10019af0` (14-bit zero-magnitude bail) = 24 bits, landing at bit 13587. Residual 32-bit gap
+  vs. §5.3y's published 13619 is PLAUSIBLY a cross-script bit-counting convention mismatch
+  (Team B confirmed their own DC-array fix lands exactly on 13587, matching).
+- **`0x100195b0`'s own per-symbol tree-decode body closed** (new §5.3aa) — **THIS IS THE FINDING
+  TEAM B JUST FOUND A BUG IN, see 50.2.** Two nibble-tree lookups per byte, `cur_class[i+1] =
+  nib1[i]` exactly (0/650 mismatches), a 16×16 translate table — **originally published as living
+  at `arg3+0x00..0xFF`, NOW KNOWN WRONG, see 50.2: it's actually at `arg1+0x00..0xFF`** (arg1 =
+  the idle-check/output-descriptor struct, not arg3). The rest of §5.3aa (two-nibble structure,
+  `cur_class` update rule, no-class-carry finding for `0x10019d10`) is NOT in question, only the
+  translate-table's own base address.
+- **`0x10019d10`/`0x10019f00` surveyed** (new §5.3ab): `0x10019d10` has two real consumers —
+  giant2/secondary=5's control-byte stream and primary case 8's nibble-selector stream, both
+  already-documented engines in §5.3a — and NO class-carry (confirmed, full body read, no `+0x180`
+  write anywhere). `0x10019f00` is a genuinely third mechanism: per-byte 1-bit mode selector
+  (single-lookup-plus-trailing-sign-bit, or nibble-plus-bulk-fill-and-bail via the same
+  `0x10001eb0` helper). Its own consumer: honest negative, one real instance checked, nothing
+  reads it back.
+- **idx3/idx4 AC-tree Gate A/Gate B full bit trace** (new §5.3ac, via 1 dispatched agent,
+  independently re-verified by me — reran the call-identity cross-check script myself and
+  reproduced the exact numbers): both bit counts (83/136) and both full coefficient lists (20/30
+  nonzero values) reproduce the published ground truth exactly — the first real trace of Phase 1's
+  BFS loop and Gate B's defer mechanism (block 0,0's own §5.3w example never exercised them).
+  Found Gate B's resolve-write index register differs between copy 1 (`ebx`) vs copies 2-4 (`edi`).
+  Corrected §5.3j Part 2's wrong "14,840 bytes" claim to the real 2,552 (verified by direct
+  arithmetic: `0x100258a8-0x10024eb0`).
+
+**Non-video batches, all direct-query/no-agent unless noted, all synced clean:**
+- **Unlockables/wardrobe defaults CLOSED** (`spec-frontend-menu-runtime.md` §9 item 1): the base
+  game's only `Auto_Unlock` row is `HomieSlot1` (file-verified), matching the save format's own
+  "exactly 1 active bit at new game" finding. Wardrobe default comes from `store_character.lua`'s
+  lineup-to-customization handler calling `pcr_add_default_clothing()` — the new-game
+  character-creation preset screen, not a separate xtbl default.
+- **HUD-array reader angle CLOSED, clean negative** (`spec-activity-runtime.md`): the 4
+  previously-unopened readers of the 15-slot HUD notification array are all slot-pool lifecycle
+  management (alloc/stamp/release) — no reward-primitive call anywhere. Closes that lead for good;
+  the real grant mechanism for the 10 "no direct call" diversion types stays genuinely unlocated.
+- **dlc2_m03 tutorial dispatcher byte** (`spec-lua-api-behaviour.md` §6.19 step 6, `0x014f3d34`):
+  one fresh static pass, narrowed (not tutorial-owned, a "player busy" flag+handle pair, reached
+  via an unresolved indirect thunk) then PARKED per instruction — didn't resolve, not forced.
+- **`photo_op` CLOSED** — the last unresolved diversion type. NOT a diversion-class instance at
+  all: its `.xtbl` loader is a one-time global-config load (not a per-row record), feeding a
+  camera-prop "take a photo with a Saint-loved/hated NPC" flavor interaction. Confirmed
+  reward-less, same bucket as Barnstorming. **Diversion-reward investigation now has 0 unresolved
+  types** (10 no-direct-call/OPEN, 2 direct-grant, 2 confirmed reward-less).
+- **m05's stall at `m05.lua:1141` diagnosed** (confirmed genuine — survives Team B's 3000-tick
+  budget): waits on an actual HUD button-prompt press for "M05_JUMP," not a parachute state/
+  animation/vehicle-exit. Traced registration into the same `0x00a1fcc0` string-intern table the
+  `on_trigger` mechanism uses; exact final "button pressed → resolve → spawn coroutine" reader
+  needs a live capture (same class of gap as an existing `on_trigger` question). Team B confirmed
+  this is a harness limitation on their end (no real input synthesis), not a game-logic bug.
+- **Save/load playability audited with Team B, biggest gap specced**: garage/vehicle-ownership
+  (`spec-save-format.md` §9.2) is the priority — fully field-mapped already, genuinely
+  implementation-ready. **Garage vehicle BINDING mechanism then separately CONFIRMED** (upgraded
+  from HIGH CONFIDENCE): the Lua native `garage_retrieve_vehicle` is the real trigger (found via
+  its own native-registration table); a flag-gated step then constructs the vehicle + reapplies
+  saved customization, firing `"garage_vehicle_load_completed"`. Mission-checkpoint restore is a
+  legitimate second trigger. **Phone vehicle-delivery checked and confirmed SEPARATE** (orchestrator
+  caught me needing to verify this, not just assume it): `cellphone_choose_vehicle` shares zero
+  code with the garage module — pure cash transaction over a different vehicle-definition array.
+- **Notoriety save-vs-recompute synthesized** (`spec-ai-runtime.md` §19.1, pure synthesis, no new
+  RE — connected two already-published sections): only the 4 per-track decay-rate multipliers are
+  saved; the actual level/fraction/timers/bound-stacks/suppressed-flags all reset every session.
+- **Weapon inventory slot array found** (`spec-weapons-runtime.md` §5.1): lives at player-record
+  `+0x1b78` (CORRECTING the old text's wrong "weapon-definition sub-object" framing) — no flat
+  array, reached via locator-method calls. Real writer is `0x00B84330` (shared "give/equip weapon,"
+  called by `inv_weapon_add_temporary` AND a dozen+ other gameplay sites), which calls `0x00601380`
+  — the actual slot create/bind call — to get a writable slot then populate ammo/flags/clip.
+  **Honest gaps, orchestrator-corrected once (see 49.1b-style note below):** no world-pickup
+  mechanism was *found*, but I originally wrote "doesn't exist" — WRONG per the negative-result
+  rule (the shipped game visibly has pickups); corrected in place to "pickup path OPEN, doesn't go
+  through this bit." Also checked the `items_inventory` table directly for its slot writer — came
+  up empty quickly (5 touching functions, all load-time) — real per-player slot writer still OPEN.
+- **Crib/safehouse runtime — IN FLIGHT, interrupted by the Team B bug report (50.2), not yet
+  delivered.** Found almost everything already published and mature: `spec-store-runtime.md` §10
+  fully documents the interior menu (`store_crib.lua`: wardrobe swap, garage access per vehicle
+  type, weapon cache, gang/stronghold customization, exit-confirm popup, zero purchase natives of
+  its own). `spec-save-format.md` §10.5 (Entry 9) ALREADY fully documents per-crib save data: 10
+  fixed-handle 24-byte records (locked flag, level fields A/B), a crib money-stash float, an
+  11-entry Max_Stash config — exhaustively empirically validated across 16 real snapshots already.
+  Crib OWNERSHIP separately persists via the generic unlockables Set A/B/C bits (slots 51-58,
+  already documented). **Not yet found/not yet written up:** whether walking into an ALREADY-OWNED
+  crib (not the purchase flow) triggers an autosave — no autosave call found in `store_crib.lua`
+  itself; the real world-trigger-volume mechanism that opens the crib UI (no Lua file in the
+  extracted corpus calls `push_screen("store_crib")` — must be a native/engine-side call, possibly
+  one of the 3 still-unidentified trigger kinds 12-14 from `spec-save-format.md` §9.4). **Next
+  action on resume: finish this — write up the synthesis (menu mechanics + save-format cross-ref,
+  both already fully known) into a short connecting note, likely in `spec-save-format.md` §10.5 or
+  `spec-store-runtime.md` §10, flag the two open sub-questions honestly, sync, report to
+  `purrsian-eb`.** This was the second item of the batch that also included weapon-inventory above.
+
+### 50.2 IN FLIGHT RIGHT NOW — Team B found a real bug in my own §5.3aa finding; mid-live-capture fixing it
+
+**What happened:** Team B implemented §5.3aa's `0x100195b0` algorithm literally and field-for-field
+but it does NOT reproduce the golden fixture (first byte 134 vs expected 153, total bit cost 3561
+vs expected 3384). Their own bounded diagnostic (bit-offset scan, swapped tree roles, tried
+descriptor B instead of A, tried `cur_class` from nib2/raw-symbol1, reversed nibble order) found
+NONE of those reproduce it — but independently reconfirmed the per-class `classByte` sequence
+`(4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4)` matches §5.3g's own `A_array` exactly, so the per-class bank
+identity is right. They asked me directly: **is the 16×16 translate table at `arg3+0x00..0xFF`
+really distinct from the `+0x100`/`+0x140` per-class banks, or could it be aliased with something
+already captured under a different name?**
+
+**ANSWER FOUND, confirmed live, NOT YET SPLICED/REPORTED — do this first on resume:**
+§5.3aa's own published claim that the translate table lives at **`arg3+0x00..0xFF`** is **WRONG**.
+Live capture (`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_translate_addr_2026-10-11.py`,
+rerun successfully this session) proves the real translate-read address is **`arg1 + class*16 +
+raw_symbol`** — i.e. on **arg1** (the idle-check/output-descriptor struct — the SAME struct whose
+`+0x30` field is `SCRATCH_BASE`/output-buffer-base, `+0x180` is `cur_class`, etc.), **NOT arg3**
+(the per-class LUT-bank struct with `+0x100`/`+0x140`). Confirmed two independent ways in the live
+capture: (1) the resolved address for iteration 0 (class=0, symbol=1) is exactly
+`arg1_value+1` where `arg1_value` was independently read from the stack at the call site; (2) for
+every steady-state iteration (class=1, symbol=0) the address is exactly `arg1_value+0x10`, and a
+snapshot of `arg1+0x00..0xFF` taken AT THAT EXACT MOMENT (not at emulation end — an earlier
+snapshot attempt failed because this is a reused per-row scratch region that gets overwritten
+later in the same run, a trap worth remembering) gives real, sensible varied-nibble data (not the
+identity-sequence-plus-pointers garbage an end-of-run dump showed). **Full byte table for this
+exact row already captured in the script's own stdout/`probe_195b0_translate_addr_out.txt`** (16
+rows × 16 bytes, real varied nibble values 0x0-0xf, nothing like the all-zero or pointer-garbage
+dumps from the two earlier wrong attempts).
+
+**Next action on resume, in order:**
+1. Re-run `probe_195b0_translate_addr_2026-10-11.py` once more (or read its already-written `.txt`
+   output) to get the clean final byte table + confirm a handful more iterations' addr/value pairs
+   line up with that table (I was mid-way through re-verifying this when the context-guard fired —
+   the script was JUST fixed to snapshot at the right moment, output not yet re-examined this
+   pass).
+2. Splice the correction into `spec-bink-codec.md` §5.3aa **in place** (edit the wrong `arg3+0x00..
+   0xFF` claim to say `arg1+0x00..0xFF`, per the standing item-14 practice — don't just append)
+   plus the new §5.3ab if any of its own text also inherited the same `arg3` mislabeling (check —
+   it may not, since §5.3ab is about different functions). Add a Changelog entry describing this
+   as a correction, crediting Team B's own diagnostic for narrowing it down (their classByte
+   reconfirmation + elimination of the other 5 hypotheses is what made this findable).
+3. Run `bash tools/sync_to_teamb.sh`, confirm clean (check for a REFUSED line — this correction's
+   prose will likely use `arg1`/`arg3` register-ish language, watch for any decompiler-style
+   leak the same way 3 earlier splices this session needed a fix-and-resync).
+4. Relay to `team-b-67` by name (verify live via `ListAgents` first — re-send the exact corrected
+   formula, `arg1 + class*16 + raw_symbol`, and the fresh byte table) and to `purrsian-eb`.
+5. Then return to item 2 of the batch above (crib/safehouse write-up, §50.1's own last bullet) if
+   nothing newer has been routed, since that was interrupted mid-synthesis by this bug report.
+
+### 49.1b Cleanroom leaks this session (ongoing pattern, watch for this specifically)
+
+Decompiler-style tokens (`param_1+0x40`, `FUN_0xaddr(...)` pseudocode, C-cast-dereference syntax,
+AND — new this half of the session — literally typing `thunk_FUN_005fec20`-style tool-output
+names into prose) have leaked into first-draft splices repeatedly, always caught by the sync
+gate's REFUSED line before reaching Team B, always fixed by rewording to plain English/hex before
+resyncing. **This session's running total of caught-and-fixed leaks is now well past 10 — never
+assume a splice is clean on the first sync attempt; always check the tail for a REFUSED line.**
+Also: `spec-weapons-runtime.md` and `spec-bink-codec.md` explicitly forbid `FUN_`/`DAT_`/`LAB_`
+naming even as "this project's own convention" (unlike `spec-frontend-menu-runtime.md`, which
+explicitly allows Ghidra auto-names for the main exe) — check each file's own §-numbered
+"Clean-room check"/"compliance note" section if unsure which convention applies before splicing.
+
+**Separately, a real overclaim the orchestrator caught and I had to correct in place (keep this
+front of mind):** I wrote "no world-pickup mechanism exists" for weapons when I meant "none was
+*found* in this specific search" — the shipped game visibly has pickups. The negative-result rule
+means ruling something out requires actually searching it, not just not finding it in one pass's
+scope. Re-worded in place both times this pattern recurred this session.
+
+### 49.1-old Items 11-30 (pre-restart, §49 itself, condensed further — see git history / synced
+spec files for full detail, not reproduced again here to save space)
+
+Bink AC-tree Gate A/B mechanism pinned; category→k permutation resolved (compiler-unrolled movs,
+not a table); descriptor-L cursor-separation bug found+fixed; the critical §5.3s cross-reference
+(flat-fill IS `0x100195b0`'s own decode output); `0x1001a160`'s 519-word pinning; traffic-AI §18
+arc fully closed; cutscene_play/m07 PARKED (3-pass exhaustive negative); weapon-inventory conflict
+resolved (base-pointer offset, not a real disagreement); footstep audio real posting mechanism
+found (`0x00999020`); vehicle collision damage formula doesn't use the Havok closing-speed scalar;
+m09/m05/m13 mission-blocker diagnosis (`0x00a29e40`'s dispatch-chain hazard).
+
+### 49.4 Pending on the user/orchestrator specifically
+
+**The ground-missing live-playtest bug's live-capture go-ahead** — static analysis exhausted,
+orchestrator says they've asked the user, not yet granted as of this note. Do not propose or
+attempt any game-side hook/capture without that explicit go-ahead; Bink Unicorn work is unrelated
+and never needed this approval (isolated DLL emulation, never touches the game).
+<!-- CONTEXT-GUARD:RESUME-END -->
+
+<!-- SUPERSEDED-BELOW -->
+### 49.1 DONE this session (huge volume — headline items only, each already fully spliced+synced+reported, do not re-derive)
+
+- **Full traffic-AI §18 arc closed** (`spec-ai-runtime.md`): lane following, junction branch
+  choice (originPos always live-vehicle-sourced; destPos either live-object or scripted/network),
+  the Havok driver-input write site, the BSP-tree pool identity (confirmed: city district/"hood"
+  gang-territory boundary volumes, via raw RTTI strings `.?AVdistrict@@`/`.?AVhood@@`), the GPS
+  waypoint module (`0x007d1450`-`0x007d8be0`) reusing traffic lookahead machinery, and the
+  steering-curve threshold/slope (real values **1.0/1.0**, a structural no-op since the consumer
+  clamps input to `[0,1]` first — NOT Team B's old 0.2/0.3 placeholder; picked straight from
+  Team B's own CHOSEN-stand-in list, confirmed via the ONLY construction site in the binary,
+  `0x00aba420`, unconditional from `0x00abde60`).
+- **Diversion-reward investigation closed**: `base_jumping`'s tier consumer found
+  (`0x00695d50`); `0x00bda0e0` opened in full, confirmed pure telemetry (not a grant path) —
+  closed, except one unchased lead (xref the shared HUD-array's readers beyond one field-copy
+  worker) if anyone picks it up again.
+  - **Water-vs-missing-ground hypothesis tested and closed, clean negative**: real per-tile
+    `0x2247`/`0x2249` census shows no correlation with the broken/good tile split; `0x0079a420`
+    (the old "HYPOTHESIS: water surface" tag) resolved as a generic global-box-gated downward
+    raycast, not water-specific. The parked ground-missing bug stays PARKED — still needs the
+    user's own live-capture go-ahead, not granted.
+- **cutscene_play/m07 end-position investigation**: 3-pass exhaustive search (state machine, the
+  `.cte_xtbl` `RestorePlayerPos` field — confirmed a SEPARATE "snapshot current position" write
+  that overwrites the destination at the same bytes when set — and `0x006db140`) found NO
+  consumer anywhere searched. Real `m07.lua` checked directly (readable source,
+  `scratchpad/lua_dumps/m07.lua`) — the mission trusts `cutscene_play`'s destination mechanism
+  without a redundant teleport, so per the negative-result rule this is "an unfound consumer,"
+  not a shipped bug. **PARKED** by the orchestrator with one new lead recorded, not chased: the
+  player may be placed via the `.csc_pc` camera-script/actor-track system's own final-animation-
+  frame transform, not the cutscene manager's destination bytes at all.
+- **Weapon-inventory validity-bit cross-spec conflict resolved**: not a real disagreement, a
+  base-pointer-offset difference (`spec-save-format.md`'s old `+0x2C` and
+  `spec-tables-weapons-combat.md`'s `+0x30` were the SAME bit, measured from two different base
+  pointers 4 bytes apart). Fixed both files in place.
+- **One-time stale-OPEN-marker cleanup pass** done across the most-edited files — found and fixed
+  2 real stale markers (`spec-vehicle-damage-runtime.md` §8, `spec-ai-runtime.md` §17.7) where a
+  later CLOSED/RESOLVED paragraph already existed in the same section but the original OPEN line
+  was never updated. `spec-lua-api-behaviour.md` (17,529 lines, ~991 OPEN hits) NOT covered —
+  flagged as needing its own dedicated pass if ever wanted.
+- **THE BIG ONE — Bink video decode, a long multi-agent chain, now the top priority thread:**
+  1. AC-tree decoder's real per-node bit mechanism pinned: Gate A (every iteration, every
+     nonzero-tag node, 1 bit, decides if anything happens) + Gate B (case 0/2 only, up to 4
+     unrolled copies, resolve-now-vs-defer) — resolves Team B's top blocker (94 bits/14 spurious
+     coefficients vs. real 17 bits/2 coefficients). `spec-bink-codec.md` §5.3j Part 2 corrected
+     in place, new §5.3w has the full 17-bit worked trace for block (0,0).
+  2. Category-index→raster-k coefficient-placement mapping resolved: NOT a table, a fixed
+     32-`mov`-pair sequence at literal immediate offsets in the write-out block
+     (`0x10025777`-`0x1002589c`) — full bijective category(1-63)→k(1-63) permutation now in
+     §5.3w (a quad-tree/Morton-style traversal).
+  3. First-row capture (Y dispatch idx1-4 + chroma block(0,0)): idx1/2 are secondary=3 flat-fill
+     (NOT secondary=2 — engine choice is content-dependent); chroma dequant confirmed identical
+     to luma. New §5.3x.
+  4. Row-0 bit-position/stream-source trace: main bitstream/AC-tree sharing is clean (no
+     anomaly), BUT found `spec-bink-codec.md` §5.3i's "descriptor L, one shared literal cursor"
+     claim was WRONG — DC-literal (`0x1001b328`) and flat-fill (`0x1001b3f8`) use physically
+     different cursor addresses, ~5,008 bytes apart, though the bound-check variable really is
+     shared. §5.3i corrected in place, new §5.3y.
+  5. **Root-cause breakthrough, caught by Team B reading the spec against itself**: flat-fill's
+     own cursor buffer (`0x303f9bb0`) is the EXACT SAME array `§5.3s` already documents as
+     `0x100195b0`'s own 650-byte persistent tree-coded decode output. Team B had modeled
+     `0x100195b0` as a bit-cost-only skip since nothing consumed its real output when first
+     characterized — now confirmed flat-fill blocks DO need that real content, consumed
+     sequentially. New §5.3z.
+  6. The two LUT tables `0x100195b0` reads (`arg3+0x100`/`arg3+0x140`, left unspecified by §5.3s)
+     resolved: built per-row from the bitstream by `0x10019300`, confirmed via a LIVE POINTER
+     MATCH to be a previously-untraced consumer of §5.3g's own already-documented 23-call
+     table-build pre-stage (calls #3-18's 16-loop body) — same already-published `build_table`
+     algorithm, no new mechanic. Closes §5.3g's own long-standing OPEN item. §5.3g corrected in
+     place with the full implementer recipe.
+  7. `0x1001a160`'s first call (frame 0/Y/row 0, feeds block(0,0)) exact word count PINNED: 519,
+     confirmed two independent ways exactly (leading decoded magnitude at entry; live write
+     count). Same leading-count-pins-length idiom as `0x100195b0`/650 and `0x10019d10`/528. Exit
+     bit measured honestly at 13563 — **56 bits short** of the real dispatch-read's own 13619,
+     flagged openly rather than forced to match. New material in §5.3n.
+  8. **IN FLIGHT RIGHT NOW** (agent `ac836bd1af667b8a2`, dispatched just before this rewrite,
+     1-agent cap respected): tracing exactly what consumes that 56-bit gap between
+     `0x1001a160`'s return (13563) and the real dispatch-read (13619) — orchestrator's own
+     hypothesis is two 10-bit `0x10019f00` calls plus a few bits, matching §5.3r's own prior
+     "gap attributed call by call" shape, but NOT yet confirmed. **Next action on resume: wait
+     for/process this agent's report, independently re-verify the raw capture numbers (check
+     `scratchpad/` for its output dir), splice into §5.3n in place (don't just append — follow
+     the new item-14 practice), sync, relay to `team-b-67` AND `purrsian-eb` by name (verify
+     live via `ListAgents` first), then self-pick the next item — 1 agent max, prefer whatever
+     Team B's CHOSEN-stand-in list or the just-landed fix's own next question surfaces over the
+     specs' own OPEN lists (those have proven unreliable this session).**
+
+### 49.1b Cleanroom leaks this session (ongoing pattern, watch for this specifically)
+
+Decompiler-style tokens (`param_1+0x40`, `FUN_0xaddr(...)` pseudocode, C-cast-dereference syntax)
+have leaked into first-draft splices multiple times — always caught by the sync gate's REFUSED
+line before reaching Team B, always fixed by rewording to plain English/hex before resyncing.
+Keep checking every `sync_to_teamb.sh` run's tail for a REFUSED line before trusting a splice is
+done; never assume clean on the first try.
+Items 11-17: same batch, condensed in §47.1. Item 18: Bink descriptor L's buffer source is
+`0x1001a160` itself (§5.3p). Item 19: m09/m05/m13 mission-blocker diagnosis — `0x00a29e40`'s
+6-way type-tester dispatch chain hazard, m09's clobber theory refuted. Item 20: ground-collision
+Havok shape for street pavement RESOLVED — `0x2237`'s own handler self-builds its shape, no
+`.clmesh_pc` dependency (`spec-player-runtime.md` §5.6). Item 21/25/26: footstep audio — the real
+posting mechanism is `0x00999020` (posts Wwise `FOOTSTEP`, confirmed via independently-recomputed
+FNV-1 hashes); `MATERIAL_TYPE`'s real runtime value is a 33-entry static table at `0x012e2b18`,
+NOT the 31-way jump table originally (wrongly) attributed to it — that jump table feeds a
+separate, new switch group `0xc3e810da` instead. Item 22/23/24/28: Bink `0x1001a160`'s own
+per-symbol DC-decode mechanism fully reconciled — value[0] uses a fixed-bound path (no class
+nibble); values[1+] use §5.3m's chunk loop (one 4-bit class nibble per up-to-8-value chunk,
+predictor-accumulated). This resolved an apparent §5.3m/§5.3q contradiction that was actually my
+own §5.3q text wrongly generalizing value[0]'s mechanism to the whole stream. Item 27: vehicle
+collision damage formula (`0x00763400`) does NOT use the Havok closing-speed scalar despite it
+being stored byte-exact in the deferred record — uses a geometry×material term instead
+(`0x00762ab0`). Item 29: 10 of 11 "ambiguous" diversion types confirmed to have no call to either
+reward primitive in their own chain — **wording corrected same day (orchestrator): this means
+"reward path elsewhere, OPEN," NOT "reward-less"** — the shipped game visibly pays these
+(mugging cash, stunt/exploration respect pops). Same mistake, same correction, as the footstep
+item (21/25/26) — **watch for this pattern: "no call to primitive X found" is NOT evidence of
+"doesn't happen," only "doesn't happen via X specifically."** Item 30: m09.lua:2181 new stall —
+same `on_trigger` facility, not identity-gated this time (narrows toward the dispatch-chain
+hazard, not identity mismatch).
+
+### 49.3 Cleanroom leaks caught by `sync_to_teamb.sh`'s own gate this session (ongoing pattern)
+
+7+ real leaks caught and fixed before any reached Team B this session: `pcVar1`, two rounds of
+`DAT_02a5a004`-style, `iVar3`×6, a raw C-cast-dereference, `iVar7`, `in_ECX`/`PTR_FUN_`/`PTR_LAB_`
+(item 20), `local_a8` (item 21/25/26 footstep splice), `FUN_` prefix leaks (items 26/27/28, three
+separate times — **watch for this specifically: writing `FUN_0xaddr(...)` as pseudo-code in a
+splice is the single most repeated leak pattern this session, always catch it before trusting a
+sync run**).
+
+### 49.4 Pending on the user/orchestrator specifically
+
+**The ground-missing live-playtest bug's live-capture go-ahead** — static analysis is exhausted,
+orchestrator says they've asked the user, not yet granted as of this note. Do not propose or
+attempt any game-side hook/capture without that explicit go-ahead; Bink Unicorn work is unrelated
+and never needed this approval (isolated DLL emulation, never touches the game).
 
 The live orchestrator peer is `purrsian-f5` (verify via `ListAgents` on resume — names rotate).
 <!-- CONTEXT-GUARD:RESUME-END -->

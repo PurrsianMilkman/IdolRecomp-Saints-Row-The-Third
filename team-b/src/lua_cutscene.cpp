@@ -288,6 +288,13 @@ void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::strin
         cutscenePlayDestination1_.clear();
         cutscenePlayDestination2_.clear();
     }
+    // CHOSEN (see cutscenePlayPlacementApplied_'s own doc comment,
+    // engine_state.h): every fresh destination write - even one belonging
+    // to a call that is about to be refused below, same "written even when
+    // refused" quirk the destinations themselves already follow - is a
+    // fresh placement opportunity, so the "already applied" latch resets
+    // here, before the refusal check.
+    cutscenePlayPlacementApplied_ = false;
     // "the cutscene start itself was refused (e.g. another cutscene is
     // already running)" - this host has no native in its real-hit scope
     // that ever ends a cutscene, so cutscenePlayInProgress_ is a one-way
@@ -313,6 +320,41 @@ void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::strin
     // stub_fade_out/stub_fade_in in lua_spec_confirmed_stubs.cpp).
     screenFadeRequest(true, 500, nullptr, 0);
     cutscenePlayInProgress_ = true;
+    // REAL (Sec57.2a's 2026-10-11 note): on the skip_all_cutscenes branch,
+    // the destination commit happens IMMEDIATELY, via the real player-class
+    // async-teleport entry point - not deferred to any later "done" check.
+    // See cutscenePlayApplyEndPlacement()'s own doc comment (engine_state.h)
+    // for why this host applies the SAME mechanism here too.
+    if (zsceneSkipAllCutscenes_.get()) {
+        cutscenePlayApplyEndPlacement();
+    }
+}
+
+// cutscenePlayApplyEndPlacement(): see the full CHOSEN-stand-in rationale on
+// its own declaration in engine_state.h. Idempotent per destination write
+// (cutscenePlayPlacementApplied_); resolves each of the (up to) two
+// destination names through the SAME real-position source teleport's own
+// stub uses (tryResolveWorldPositionFromZoneData(), the real .czn_pc data
+// get_dist/get_object_pos also read), then commits via the SAME live
+// worldPosition bridge (bridgeLiveCharacterPosition()) - never fabricating
+// a position for a destination name this host cannot actually resolve.
+void EngineState::cutscenePlayApplyEndPlacement() {
+    if (cutscenePlayPlacementApplied_) return;
+    cutscenePlayPlacementApplied_ = true;
+    // Arg 3's own documented shape: exactly 2 destination names, local
+    // player first then co-op partner (Sec57.2a) - this project's own
+    // established "#PLAYER1#"/"#PLAYER2#" sentinel pair names them.
+    static const char* const kPlayerSentinels[2] = {"#PLAYER1#", "#PLAYER2#"};
+    const std::string* const destinations[2] = {&cutscenePlayDestination1_, &cutscenePlayDestination2_};
+    for (int i = 0; i < 2; ++i) {
+        const std::string& dest = *destinations[i];
+        if (dest.empty()) continue; // dropped destination (Sec57.2: not exactly 2 entries at the ORIGINAL call) or no entry for this slot
+        CharacterState& destChar = getOrCreateCharacter(dest);
+        tryResolveWorldPositionFromZoneData(dest, destChar.worldPosition);
+        if (destChar.worldPosition.known()) {
+            bridgeLiveCharacterPosition(kPlayerSentinels[i], destChar.worldPosition.get());
+        }
+    }
 }
 
 // cutsceneCameraScriptStep / sampleCutsceneCamera: see the doc comments on

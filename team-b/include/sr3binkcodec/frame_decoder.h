@@ -111,12 +111,38 @@
 // task did not touch) - see tests/real_bink_test_vector_validation_test.cpp's
 // own STAGE 1 output for the real block-for-block result this now produces.
 //
-// Primary cases 5/7 (the only ones carrying DC/AC coefficients) are STILL
-// OpenHook for an entirely separate, still-open reason (the DC "+128" bug,
-// spec-bink-codec.md Sec5.3d/Sec5.3e - explicitly out of scope for both the
+// Primary cases 5/7 (the only TOP-LEVEL dispatch values carrying DC/AC
+// coefficients) are STILL OpenHook for an entirely separate, still-open
+// reason (the DC "+128" bug, spec-bink-codec.md Sec5.3d/Sec5.3e/Sec5.3f/
+// Sec5.3k/Sec5.3l/Sec5.3m/Sec5.3n - explicitly out of scope for both the
 // entropy pre-stage task and this one), so this decoder's own trace still
 // stops at the first case-5/7 block it reaches - see that test's own report
 // for the real reconstructed-block count this now achieves.
+//
+// DC+128 BUG vs. Case1SubType::DcAcIdctEngine2 (sub=2) - INVESTIGATED and
+// REFUTED as the same bug, 2026-10-11 (fix/bink-dc-array-indexing task): the
+// orchestrator raised the hypothesis that this "+128" bug and the
+// descriptor-L/DC-array-sourcing bug block_dispatch.h's DcAcIdctEngine2 case
+// fixes might be the SAME underlying issue. They are not, on two
+// independent grounds: (1) spec-bink-codec.md's own case table (line ~714)
+// names sub=2's engine "a THIRD DC+AC dequant/IDCT engine... sibling of case
+// 5/7's 0x100244c0/0x10024b50 IDCT pair - reached only from this
+// sub-dispatch slot" - i.e. a structurally distinct engine, not the same
+// code the +128 measurement (Sec5.3d, a real 16,045/32,400-block byte-for-
+// byte FFmpeg diff) was taken against. Primary 5/7 remain fully unimplemented
+// (OpenHook) in this codebase - the +128 bug was measured against a
+// dispatch path this project has never executed. (2) Sec5.3o/Sec5.3p's own
+// live trace of block (0,0) (which DOES go through sub=2) found its real DC
+// literal (118) decodes to pixel 24 with ZERO error/offset of any kind, not
+// a +128-shifted wrong value - directly contradicting "every sub=2 DC is
+// off by +128". Both mechanisms DO happen to share a common root component
+// (`0x1001a160`, per Sec5.3p - it feeds both descriptor L's array here AND,
+// per Sec5.3d/f, "case 5/7's own 16-bit DC literal" on the other, unimplemented
+// path), but sharing a feeder function is not the same claim as sharing a
+// bug - the +128 OFFSET itself was never measured on sub=2's own output in
+// this codebase, and this task's own empirical re-run (see this task's own
+// HANDOFF.md entry) found no +128 relationship between this file's post-fix
+// DC-array-sourced pixel value and FFmpeg's ground truth either.
 
 #include <cstdint>
 #include <optional>
@@ -125,7 +151,10 @@
 
 #include "sr3binkcodec/bitstream_reader.h"
 #include "sr3binkcodec/block_dispatch.h"
+#include "sr3binkcodec/dc_delta_array.h"
+#include "sr3binkcodec/dc_prestage_sibling_gap.h"
 #include "sr3binkcodec/entropy_prestage.h"
+#include "sr3binkcodec/flat_fill_prestage_array.h"  // supersedes flat_fill_cursor.h (2026-10-11, Sec5.3z, fix/bink-flat-fill-real-decode)
 #include "sr3binkcodec/planar_buffer.h"
 
 namespace sr3binkcodec {
@@ -302,7 +331,23 @@ struct DecodeTrace {
 // desyncing the shared bit cursor from the very first row.
 inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockCols,
                                            int blockRows, CaseSelectorScratchSource* caseSelector = nullptr,
-                                           CaseSelectorScratchSource* caseSelectorB = nullptr) {
+                                           CaseSelectorScratchSource* caseSelectorB = nullptr,
+                                           bool decodeDcArray = false) {
+    // FLAT-FILL PRESTAGE ARRAY/CURSOR, PER ROW (2026-10-11, spec-bink-codec.md
+    // Sec5.3y/Sec5.3z, fix/bink-flat-fill-real-decode task - SUPERSEDES the
+    // fix/bink-dc-literal-fillbyte-separate-cursors task's own "FLAT-FILL
+    // BYTE CURSOR" note that used to live here): Case1SubType::FlatDcFill's
+    // fill byte costs ZERO bits of the MAIN per-row bit-reader `br` (Sec
+    // 5.3y), but it is NOT sourced from a raw-byte offset into `br`'s own
+    // undecoded buffer either (that was Sec5.3z's own named root cause for
+    // this task) - it is read sequentially out of `0x100195b0`'s own real
+    // decoded output array, captured per row by consumeDcArrayPreStageGap()
+    // below (see that call's own "UPDATE" comment and
+    // flat_fill_prestage_array.h's top comment for the full citation and the
+    // genuine remaining LUT-content gap). `decodeDcArray=false` (every
+    // synthetic/hand-built-nibble test) skips all of this and keeps the
+    // legacy `br.readAlignedByte()` fallback in block_dispatch.h unperturbed,
+    // exactly like the DC array's own gating.
     DecodeTrace trace;
     trace.blockCols = blockCols;
     trace.blockRows = blockRows;
@@ -342,8 +387,127 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
                 return trace;
             }
         }
+        // DC-ARRAY PRE-STAGE SIBLING GAP (2026-10-11, fix/bink-dc-decode-
+        // prestage-bitpos task, spec-bink-codec.md Sec5.3q/Sec5.3r/Sec5.3s/
+        // Sec5.3t): BEFORE the DC delta array decode below, pay the bit
+        // cost of the 4 real calls Sec5.3r found between descriptor B's own
+        // real build (already paid above, inside beginBlockRow()) and
+        // `0x1001a160`'s own call site - without this, `br`'s own bit
+        // position entering decodeRowDcArray() is off by 6,385 bits (the
+        // 1757->9256 gap minus descriptor B's own 1114-bit expansion,
+        // already paid). See dc_prestage_sibling_gap.h's own top comment
+        // for exactly what is/isn't a general (vs. measured-total,
+        // test-vector-specific) model here, and for the OPEN item this
+        // relays to Team A. `decodeDcArray=false` callers (every synthetic/
+        // hand-built-nibble test) skip this too, same gating as the DC
+        // array decode itself below.
+        //
+        // UPDATE (2026-10-11, fix/bink-flat-fill-real-decode task, Sec5.3z):
+        // this call's return value is now the row's real FlatFillPrestageArray
+        // (`0x100195b0`'s own decoded output, see flat_fill_prestage_array.h) -
+        // captured here instead of discarded, since Case1SubType::FlatDcFill
+        // blocks later in this same row read it sequentially (see the
+        // "FLAT-FILL PRESTAGE CURSOR, PER ROW" note below, which replaces
+        // this function's own former "FLAT-FILL BYTE CURSOR, PER ROW" note).
+        // UPDATE (2026-10-11, fix/bink-0x10019d10-real-decode task, Sec5.3ab):
+        // consumeDcArrayPreStageGap() now ALSO returns `0x10019d10`'s own
+        // real decoded giant2-control-byte array (DcArrayPreStageGapResult,
+        // dc_prestage_sibling_gap.h), captured here the same way
+        // rowFlatFillArray already was by the fix/bink-flat-fill-real-decode
+        // task - consumed sequentially by Case1SubType::TwoLiteralPattern
+        // below (see the "SIBLING 0x10019d10 CURSOR, PER ROW" note). Needs
+        // descriptor A's own real BuiltTable (`caseSelector->builtTable()`),
+        // which is only valid after a real beginBlockRow() this row - every
+        // `decodeDcArray=true` call site also passes a real `caseSelector`
+        // (confirmed: decodeLumaPlane() below is the only one), so this is
+        // safe without an extra null-table fallback branch.
+        DcArrayPreStageGapResult rowPreStageGap =
+            decodeDcArray ? consumeDcArrayPreStageGap(br, caseSelector->builtTable()) : DcArrayPreStageGapResult{};
+        FlatFillPrestageArray& rowFlatFillArray = rowPreStageGap.flatFillArray;
+        // DC DELTA ARRAY ROW DECODE (2026-10-11, fix/bink-dc-array-indexing
+        // task, spec-bink-codec.md Sec5.3p/Sec5.3m): run the FULL per-row
+        // DC-delta-accumulation decode (dc_delta_array.h, `0x1001a160`)
+        // ONCE per row, consuming REAL bits from `br` - the SAME shared
+        // per-row bitstream the AC-tree decode/dispatch nibbles consume
+        // (Sec5.3p: "the main per-row compressed bitstream... not a
+        // separately pre-decompressed buffer") - AFTER
+        // caseSelector->beginBlockRow() above (so this row's own table-
+        // build cost is already accounted for) and BEFORE the col loop
+        // below, per this task's own explicit instruction ("the buffer
+        // fill... must happen for the WHOLE ROW before any block in that
+        // row reads from it", NOT interleaved block-by-block). Produces
+        // `blockCols` words, one per block-column (Sec5.3p: "the cursor for
+        // block (0,0) starts at the buffer's own base, offset 0"), THEN
+        // each block in this row reads its own column's word by plain array
+        // index (block_dispatch.h's DcAcIdctEngine2 case) - SUPERSEDES the
+        // retracted descriptor_l_cursor.h "separate zero-bit-cost byte
+        // cursor" model entirely. `decodeDcArray=false` (every synthetic/
+        // hand-built-nibble test, unaffected by this task) skips this
+        // entirely and keeps the legacy br.readAlignedByte() fallback in
+        // block_dispatch.h unperturbed.
+        DcDeltaArray rowDcArray =
+            decodeDcArray ? decodeRowDcArray(br, blockCols) : DcDeltaArray(std::vector<uint16_t>{});
+        const DcDeltaArray* dcArrayPtr = decodeDcArray ? &rowDcArray : nullptr;
+
+        // DC-ARRAY-TO-DISPATCH BAIL SEQUENCE (2026-10-11, fix/bink-dc-array-
+        // 519-word-commit-run task, spec-bink-codec.md Sec5.3n's "gap
+        // attributed call-by-call" follow-up): immediately after the first
+        // `0x1001a160` call's own real word-count-driven decode above
+        // returns, the real decoder pays two more no-op bail calls before
+        // block (0,0)'s own dispatch-read - a second `0x1001a160` call that
+        // decodes a leading count of 0 (10 bits, no array write), then
+        // `0x10019af0` which decodes a leading magnitude of 0 (14 bits, no
+        // array write). Sum 24 bits, landing the real dispatch-read at
+        // Sec5.3n's own measured 13587 (not 13619 - see dc_prestage_sibling_
+        // gap.h's own comment on both functions for the 32-bit residual
+        // against the OLDER Sec5.3y figure, attributed there to a cross-
+        // script bit-counting convention difference, not a missed
+        // consumer). Gated by `decodeDcArray`, same as the array decode
+        // itself - every synthetic/hand-built-nibble test (decodeDcArray=
+        // false) is unaffected.
+        if (decodeDcArray) {
+            skipSecondDcArrayZeroCountBail(br);
+            skip0x10019af0ZeroMagnitudeBail(br);
+        }
+
+        // FLAT-FILL PRESTAGE CURSOR, PER ROW (2026-10-11, spec-bink-codec.md
+        // Sec5.3z, fix/bink-flat-fill-real-decode task - SUPERSEDES this
+        // function's former "FLAT-FILL BYTE CURSOR, PER ROW" note and its
+        // `FlatFillByteCursor(br.rawData(), ...)` construction entirely):
+        // `rowFlatFillArray` above IS `0x100195b0`'s own real decoded
+        // output for this row (captured, not discarded, by
+        // consumeDcArrayPreStageGap() above) - this cursor just walks it
+        // sequentially, index 0 first, exactly matching idx1/idx2's own
+        // real dispatch order (Sec5.3z: "flat-fill blocks... reading
+        // sequentially further into the SAME 650-byte array"). No
+        // byte-alignment anchor into `br`'s own raw buffer is needed or
+        // used any more - the prior anchor-into-raw-bytes model was Sec
+        // 5.3z's own named root cause, now replaced.
+        FlatFillPrestageCursor rowFlatFillCursor(&rowFlatFillArray, 0);
+        FlatFillPrestageCursor* flatFillCursorPtr = decodeDcArray ? &rowFlatFillCursor : nullptr;
+
+        // SIBLING 0x10019d10 CURSOR, PER ROW (2026-10-11, spec-bink-codec.md
+        // Sec5.3ab, fix/bink-0x10019d10-real-decode task) - KNOWN
+        // DISCREPANCY, NOT WIRED (see dc_prestage_sibling_gap.h's own
+        // consumeDcArrayPreStageGap() comment and HANDOFF.md): Sec5.3ab
+        // names `0x10019d10`'s own decoded array as giant2/secondary=5's
+        // (TwoLiteralPattern) real control-byte stream, and the intent was
+        // to wire it here exactly like rowFlatFillCursor above - but
+        // decode0x10019d10() does not reproduce the golden fixture, so
+        // `rowPreStageGap.sibling19d10Array` is always EMPTY in the real
+        // per-row pipeline right now. Deliberately always nullptr (never
+        // constructed from the empty/unverified array) so
+        // Case1SubType::TwoLiteralPattern keeps its PRIOR, already-passing
+        // `br.readAlignedByte()` fallback unperturbed - wiring an empty or
+        // unverified array in here would regress every currently-passing
+        // real-data test that exercises secondary=5 (183 real occurrences
+        // in main_menu_bg.bik's own Y-plane per block_dispatch.h's own top
+        // comment), which this task's own "no regressions" requirement
+        // forbids.
+        Sibling19d10Cursor* sibling19d10CursorPtr = nullptr;
         for (int col = 0; col < blockCols; ++col) {
-            BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector, caseSelectorB);
+            BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector, caseSelectorB, dcArrayPtr,
+                                              flatFillCursorPtr, sibling19d10CursorPtr);
             trace.blocks.push_back(rec);
             if (rec.outcome != BlockOutcome::Reconstructed) {
                 switch (rec.outcome) {
@@ -447,7 +611,16 @@ inline DecodeTrace decodeLumaPlane(BitstreamReader& br, PlanarYuvFrame& frame, c
     CaseSelectorScratchSource caseSelectorA(br, frame.dims().lumaWidth);
     CaseSelectorScratchSource caseSelectorB(br, frame.dims().lumaWidth, caseSelectorLengthFieldBitWidthB,
                                              kDescriptorBSiblingTableIndex);
-    return decodePlaneRasterOrder(br, dest, prevLuma, cols, rows, &caseSelectorA, &caseSelectorB);
+    // DC delta array (dc_delta_array.h, spec-bink-codec.md Sec5.3m/Sec5.3p,
+    // 2026-10-11 fix/bink-dc-array-indexing task - SUPERSEDES the retracted
+    // descriptor_l_cursor.h "separate cursor" model): see
+    // decodePlaneRasterOrder()'s own "DC DELTA ARRAY ROW DECODE" note for
+    // exactly when/how each row's array is decoded, and dc_delta_array.h's
+    // top comment for what its algorithm/granularity/seed choices do and do
+    // NOT claim. `decodeDcArray=true` here - this is the one real-data
+    // entry point this task's own DC-literal fix targets.
+    return decodePlaneRasterOrder(br, dest, prevLuma, cols, rows, &caseSelectorA, &caseSelectorB,
+                                   /*decodeDcArray=*/true);
 }
 
 // Builds an explicit per-pixel "was this byte actually written by a

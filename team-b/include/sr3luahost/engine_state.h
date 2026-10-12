@@ -107,6 +107,15 @@
 // the per-level records directly via respectLevelTable().
 #include "sr3tables_progression/tables_world.h"   // sr3tables_progression::RespectLevel
 
+// Same header-only footing as tables_world.h just above: only the
+// Unlockable/UnlockableAutoUnlock struct/enum DEFINITIONS are used here
+// (plain data: std::string, enum, optional, vector - no out-of-line symbol
+// this header calls), so grantNewGameAutoUnlocks() below adds no new link
+// dependency on sr3tables_progression - callers that want to parse a real
+// unlockables.xtbl still go through ParseUnlockablesTable() themselves and
+// hand the result in.
+#include "sr3tables_progression/tables_core.h"    // sr3tables_progression::Unlockable, UnlockableAutoUnlock
+
 namespace sr3vintdoc {
 struct Document; // include/sr3vintdoc/vint_doc.h - EngineState::loadVintDocument
 }
@@ -3380,6 +3389,37 @@ public:
     // 57.00)").
     static constexpr double kNewGameStartingCashCents = 5700.0;
 
+    // New-game-with-no-save auto-granted unlocks (spec-frontend-menu-
+    // runtime.md Sec9 item 1, CLOSED 2026-10-11): the real base
+    // unlockables.xtbl has exactly ONE row with <Auto_Unlock> set at all
+    // (HomieSlot1, Category=Homies) - the same population spec-save-
+    // format.md Sec10.6's own empirical finding gives for the new-game
+    // save's state set A (purchased/active): exactly 1 bit. HIGH
+    // CONFIDENCE, not disassembly-confirmed end-to-end (the exact runtime
+    // function that reads the parsed <Auto_Unlock> enum at +0xF4 and sets
+    // the +0xE0/+0xE1 state bits accordingly was not located this pass -
+    // see the spec's own "Unknowns" note). Team B's CHOSEN application
+    // point (same status as kNewGameStartingCashCents just above): scans
+    // the CALLER-SUPPLIED parsed unlockables table for every row with
+    // autoUnlock != None and marks each one purchased, by name (no
+    // confirmed hash-to-bit-index mapping exists to do otherwise) - this
+    // is deliberately data-driven, NOT a hardcoded "HomieSlot1" string, so
+    // it stays correct if the shipped unlockables.xtbl data ever changes.
+    std::unordered_set<std::string>& newGamePurchasedUnlocks() { return newGamePurchasedUnlocks_; }
+    const std::unordered_set<std::string>& newGamePurchasedUnlocks() const { return newGamePurchasedUnlocks_; }
+    // Returns the set of unlock names just granted (for callers/tests that
+    // want the data-driven result without re-scanning the table
+    // themselves). Additive - does not clear any previously-granted name.
+    const std::unordered_set<std::string>& grantNewGameAutoUnlocks(
+        const std::vector<sr3tables_progression::Unlockable>& unlockables) {
+        for (const auto& u : unlockables) {
+            if (u.autoUnlock != sr3tables_progression::UnlockableAutoUnlock::None) {
+                newGamePurchasedUnlocks_.insert(u.name);
+            }
+        }
+        return newGamePurchasedUnlocks_;
+    }
+
     // skydive_move_to_do (Sec39.1): "the target resolves through the
     // generic third-tier resolver with NO guard on failure: an absent/
     // unresolved name leaves the target pointer at literal zero, and the
@@ -3865,9 +3905,59 @@ public:
     // "reports done prematurely" bug rather than a simplification of it
     // (same "minimum correct model" precedent as Sec35.6's scripted-
     // request pool).
-    bool cutscenePlayCheckDone() const {
-        return !(cutsceneManager_.present.known() && cutsceneManager_.present.get());
+    //
+    // No longer purely a query (2026-10-11, the m07 end-of-cutscene-
+    // placement task): when the done-check reports true, it now also fires
+    // cutscenePlayApplyEndPlacement() below (idempotent per destination
+    // write - see cutscenePlayPlacementApplied_'s own doc comment) -
+    // non-const for exactly this reason.
+    bool cutscenePlayCheckDone() {
+        const bool done = !(cutsceneManager_.present.known() && cutsceneManager_.present.get());
+        if (done) cutscenePlayApplyEndPlacement();
+        return done;
     }
+
+    // cutscenePlayApplyEndPlacement() - CHOSEN stand-in, spec-lua-api-
+    // behaviour.md Sec57.2a's 2026-10-11 "new finding" note (three-pass
+    // investigation, orchestrator-routed for `m07`): the real engine's
+    // non-skip ("a manager exists") branch writes `cutscene_play`'s two
+    // resolved destinations into the cutscene manager's own fields
+    // (`+0x35f0`-`+0x362c` local, `+0x3630`-`+0x367c` partner), but an
+    // exhaustive 3-pass search (the full 20-state cutscene state machine,
+    // the `.cte_xtbl` RestorePlayerPos reader, and a 91-function xref sweep
+    // of the manager-pointer global) found NO consumer anywhere that reads
+    // those bytes back and commits them to the player. Per this project's
+    // own negative-result rule, that is read as "there is a consumer we
+    // have not found yet," not "shipped missions never actually get
+    // placed" - `m07.lua`'s own `cutscene_play` call sites never follow up
+    // with a redundant `teleport_coop`, showing the shipped SCRIPT trusts
+    // the engine to place the player by itself.
+    //
+    // This host has no manager allocation at all (cutscenePlayCheckDone()'s
+    // own doc comment above), so it can never observe which of the two real
+    // branches "really" applies - but the ONE branch that IS fully, End-to-
+    // end disassembly-confirmed is the `skip_all_cutscenes` one: it resolves
+    // both destination names through the SAME by-name resolver (`0x005982e0`)
+    // `teleport` itself uses, then commits via the SAME real player-class
+    // async-teleport entry point (`0x009e2220`, the generic vtable `+0x40`
+    // transform-setter) `teleport`'s own stub now drives (see stub_teleport,
+    // lua_spec_confirmed_stubs_b08_batch1_core.cpp, commit b209dd3). CHOSEN
+    // here: apply that SAME proven mechanism universally - on cutscene
+    // completion (cutscenePlayCheckDone() reporting true) exactly as on an
+    // explicit skip - rather than block indefinitely on an unresolved real
+    // consumer, or invent a different, unproven one. This is NOT a claim
+    // that the real non-skip path works this way; it is the most
+    // architecturally defensible stand-in available (same destination
+    // names, same resolver, same commit primitive already proven correct
+    // for the skip case), used here for BOTH players: the local player
+    // (`cutscenePlayDestination1()`, "#PLAYER1#") and the co-op partner
+    // (`cutscenePlayDestination2()`, "#PLAYER2#") - matching arg 3's own
+    // documented "exactly two destination names" shape (local + partner).
+    // Position-only (no orientation commit): this host has never modeled
+    // an orientation field for any character - the SAME scope limit
+    // stub_teleport's own real position write (b209dd3) already accepted
+    // for its identical `+0x4c` orientation half.
+    void cutscenePlayApplyEndPlacement();
 
     // --- cutscene_play_do's real camera-script pipeline (spec-lua-api-
     // behaviour.md Sec57.2a / spec-cutscene-camera-format.md Sec10.6 item 7,
@@ -5533,6 +5623,385 @@ public:
     static std::string triggerContainsObjectKey(const std::string& triggerName, const std::string& objectName) {
         return triggerName + "\x1f" + objectName;
     }
+
+    // Shop/crib walk-in entry -> "press E" prompt -> document open.
+    //
+    // UPDATED 2026-10-11 (commit b8c17ec, same day as this task): the CRIB
+    // half of this is NO LONGER a stand-in - spec-store-runtime.md Sec2's
+    // "CLOSED, 2026-10-11" paragraph gives the full, every-hop-confirmed
+    // chain: press `0x52` -> `0x005b6870` (the real 22-entry bit-walk) ->
+    // `0x0111f2d0[8]` (`0x009da580`, prompt text `"HUD_USE_CRIB"`) ->
+    // `0x005eee70` -> `0x0080cc90(this=0x022ccef8)` - the already-named
+    // "store_crib" static object - -> `0x007b5fe0(this)`, the GENERIC
+    // per-object document-open call (the structural equivalent, for an
+    // arbitrary document object, of what `0x0083ECC0` does by hardcoded name
+    // specifically for `store_common`). SHOP's own entry was explicitly NOT
+    // separately identified that pass (no `"HUD_USE_STORE"`-named slot found
+    // among the ones sampled) - it almost certainly goes through the exact
+    // same `0x0080cc90`/`0x007b5fe0` generic-open pattern on the
+    // `store_common` static object instead, from a different, still
+    // unidentified array index (spec-store-runtime.md Sec2's own "cheap,
+    // bounded follow-up" framing) - so SHOP entry remains the CHOSEN
+    // stand-in this file originally landed, labeled per this project's
+    // established "CHOSEN, static search exhausted" convention (HANDOFF.md):
+    // TODO: real native trigger condition (which array index) unresolved for
+    // SHOP specifically, see spec-store-runtime.md Sec2.
+    //
+    // What neither half of this models (both before and after the above
+    // update) is the interaction-prompt table-walk/bit-availability
+    // machinery itself (`0x005b6870`'s own 22-entry bit-walk, or what sets
+    // bit 8/whichever shop bit in the player's `+0x2084` context word) -
+    // this project has no C++ implementation of that engine-side table at
+    // all (it is not Lua-bound). Instead, for BOTH shop and crib, this
+    // reuses the SAME two EXISTING generic mechanisms end to end: the
+    // trigger-volume overlap/geometry machinery just above
+    // (registerTriggerGeometry()/triggerGeometryMap()/
+    // TriggerVolumeContainsPoint(), already wired into tools/sr3_viewer.cpp's
+    // own per-frame trigger poll) for "is the player inside" (standing in,
+    // for both cases alike, for the still-unmodeled "+0x2084 bit N is set"
+    // condition - CHOSEN for both, this part did not change with b8c17ec),
+    // and recordHudPrompt() (Sec13.3's hud_prompt native, stub_hud_prompt in
+    // src/lua_spec_confirmed_stubs_b11_batch4_flags_combat.cpp) for "show the
+    // press-E prompt" - the SAME HUD-prompt-show call the vehicle-enter
+    // prompt documentation (spec-player-runtime.md Sec13.1) describes this
+    // engine using for its own "press E to enter a vehicle" case, reused
+    // here rather than inventing a second prompt-show path. What DID change
+    // with b8c17ec is which document name the press actually opens, and
+    // whether that open-target attribution is REAL or CHOSEN - see
+    // ShopCribTriggerKind and pressShopCribInteract() below.
+    //
+    // Deliberately does NOT encode on-disk trigger "kind" (spec-save-
+    // format.md Sec9.4: kind 3 = "crib purchase," for an UNOWNED crib only -
+    // the owned-crib entry kind is itself still unidentified per that
+    // section's own note) - a caller marks any trigger name it already knows
+    // is a walk-in shop or crib door via registerShopCribTrigger(),
+    // independent of which on-disk kind index (if any) it would carry; the
+    // kind this struct DOES care about is shop-vs-crib, because (post-
+    // b8c17ec) that now selects a genuinely different, differently-sourced
+    // open-target document name.
+    enum class ShopCribTriggerKind {
+        kShop = 0, // opens "store_common" - CHOSEN target+trigger-index (see above)
+        kCrib = 1, // opens "store_crib" - REAL confirmed target+chain (b8c17ec)
+    };
+    void registerShopCribTrigger(const std::string& triggerName, ShopCribTriggerKind kind = ShopCribTriggerKind::kShop) {
+        shopCribTrigger_[triggerName] = kind;
+    }
+    bool isShopCribTrigger(const std::string& triggerName) const {
+        return shopCribTrigger_.count(triggerName) != 0;
+    }
+    std::optional<ShopCribTriggerKind> shopCribTriggerKind(const std::string& triggerName) const {
+        auto it = shopCribTrigger_.find(triggerName);
+        if (it == shopCribTrigger_.end()) return std::nullopt;
+        return it->second;
+    }
+    const std::unordered_map<std::string, ShopCribTriggerKind>& shopCribTriggerMap() const { return shopCribTrigger_; }
+
+    // Per-frame-equivalent update, given the player's current world
+    // position: finds whether the player is now inside ANY registered
+    // shop/crib trigger (first match wins - this project does not model
+    // overlapping shop/crib volumes) and shows/clears the "press E" prompt
+    // on a TRANSITION only, matching this project's own pre-existing
+    // trigger-poll "only re-fire on enter/exit, never every frame while
+    // inside" convention (triggerCurrentlyInside()'s own doc comment,
+    // Sec1.14). Returns the name of the trigger now active, or an empty
+    // string if the player is not inside any shop/crib trigger - mirrors
+    // activeShopCribTrigger() below, exposed as a return value purely so a
+    // caller/test does not need a second call to observe the transition.
+    const std::string& updateShopCribTriggerPrompt(double playerX, double playerY, double playerZ) {
+        std::string nowInside;
+        for (const auto& kv : shopCribTrigger_) {
+            const TriggerVolumeGeometry* g = triggerGeometry(kv.first);
+            if (!g) continue;
+            if (TriggerVolumeContainsPoint(*g, playerX, playerY, playerZ)) {
+                nowInside = kv.first;
+                break;
+            }
+        }
+        if (nowInside != activeShopCribTrigger_) {
+            activeShopCribTrigger_ = nowInside;
+            if (!activeShopCribTrigger_.empty()) {
+                // Reuses hud_prompt's own existing request shape (target,
+                // arg2, arg3). arg2 is this stand-in's own open-target
+                // document name (see pressShopCribInteract() below for which
+                // one is REAL vs CHOSEN); the real prompt's own icon/text
+                // argument shape (e.g. the real "HUD_USE_CRIB" string
+                // confirmed by b8c17ec for the crib case specifically) is
+                // not reproduced here - CHOSEN for both cases.
+                recordHudPrompt(activeShopCribTrigger_, openTargetForTrigger(activeShopCribTrigger_), "press_e_enter");
+            } else {
+                recordHudPromptDefaultReset();
+            }
+        }
+        return activeShopCribTrigger_;
+    }
+    bool shopCribPromptShowing() const { return !activeShopCribTrigger_.empty(); }
+    const std::string& activeShopCribTrigger() const { return activeShopCribTrigger_; }
+
+    // Press-E while the prompt is showing -> opens the matching document.
+    // For a kCrib trigger this is now the REAL confirmed open-target
+    // ("store_crib", via the full b8c17ec chain documented above) - for a
+    // kShop trigger it remains this project's own CHOSEN stand-in (target
+    // "store_common" is itself the one REAL, confirmed-by-disassembly piece
+    // for shop, per spec-store-runtime.md Sec1 - only the trigger-index/
+    // call-path THAT REACHES it is still unidentified for shop specifically).
+    // No-op (returns false) if no shop/crib prompt is currently showing -
+    // matches this engine's own "a button press only does something if its
+    // matching prompt is live" shape (the vehicle-enter prompt is the same
+    // shape, spec-player-runtime.md Sec13.1). On success, increments
+    // uiScreenStackDepth() (the existing generic screen-stack-push signal
+    // this project's pop_screen counterpart, popScreenCount()/
+    // uiScreenStackDepth(), already uses) AND a dedicated
+    // documentOpenCount()/lastDocumentOpened()/lastDocumentOpenTrigger()
+    // triple, so a test/caller can observe "a screen opened" both generically
+    // and specifically-attributed, including WHICH document name opened.
+    bool pressShopCribInteract() {
+        if (activeShopCribTrigger_.empty()) return false;
+        ++documentOpenCount_;
+        lastDocumentOpenTrigger_ = activeShopCribTrigger_;
+        lastDocumentOpened_ = openTargetForTrigger(activeShopCribTrigger_);
+        ++uiScreenStackDepth();
+        return true;
+    }
+    uint64_t documentOpenCount() const { return documentOpenCount_; }
+    const std::string& lastDocumentOpened() const { return lastDocumentOpened_; }
+    const std::string& lastDocumentOpenTrigger() const { return lastDocumentOpenTrigger_; }
+
+    // "store_common" for a kShop trigger, "store_crib" for a kCrib trigger -
+    // see the ShopCribTriggerKind doc comment above for which is REAL vs
+    // CHOSEN. Falls back to "store_common" for an unregistered name (should
+    // never happen given this is only ever called with a key already present
+    // in shopCribTrigger_; never throws regardless).
+    std::string openTargetForTrigger(const std::string& triggerName) const {
+        auto it = shopCribTrigger_.find(triggerName);
+        if (it != shopCribTrigger_.end() && it->second == ShopCribTriggerKind::kCrib) return "store_crib";
+        return "store_common";
+    }
+
+    // Weapon pickup (spec-weapons-runtime.md Sec5.1) -----------------------
+    //
+    // Two confirmed-shape paths, both funnelling through ONE shared give/
+    // equip writer rather than duplicating weapon-grant logic:
+    //
+    //   1. Walk-over auto-pickup for ordinary (non-heavy) enemy-dropped
+    //      weapons - registerWeaponDrop()/updateWeaponDropPickup() below.
+    //      The REAL write side is CONFIRMED (0x00B84330 -> 0x00601380,
+    //      Sec5.1's "real write path, traced end-to-end" paragraph) and the
+    //      BEHAVIOUR is user-confirmed (walking over a dropped weapon picks
+    //      it up automatically, except heavy pickup-only weapons). What is
+    //      NOT confirmed is the real per-frame proximity TRIGGER condition
+    //      itself: Sec5.1 names `0x0064c580`/`0x0064bef0` as the strongest
+    //      candidate grant functions (position-match scan against a
+    //      REGISTERED-SLOT array, no button press), but flags them as more
+    //      likely a fixed "weapon cache station" design than the literal
+    //      "walk over an NPC-dropped gun" case, and the actual per-frame
+    //      dispatcher that fires them was not found at all (reached only
+    //      via DATA table slots, zero direct-call xrefs - Sec5.1's own
+    //      2026-10-11 changelog entry). So the exact radius/shape used here
+    //      is CHOSEN, static search exhausted (same HANDOFF.md framing as
+    //      this project's shop-entry stand-in, commit 36470e8) - see
+    //      kWeaponDropPickupRadius below for the precise label.
+    //
+    //   2. Press-E pickup for heavy/"pickup-only" weapons (minigun,
+    //      flamethrower, similar) - registerHeavyWeaponPickupTrigger()/
+    //      updateHeavyWeaponPickupPrompt()/pressHeavyWeaponPickupInteract()
+    //      below. Reuses the EXACT SAME two generic mechanisms the shop/
+    //      crib unit above established (TriggerVolumeGeometry/
+    //      TriggerVolumeContainsPoint for "is the player inside," and
+    //      recordHudPrompt()/recordHudPromptDefaultReset() for "show the
+    //      press-E prompt"), wired to interaction-array entry 0 instead of
+    //      entry 8 (Sec5.1's 2026-10-11 "pickup-only interaction-prompt
+    //      path" update: `0x0111f2d0[0]` -> `0x009da510` -> `0x00971b10` ->
+    //      per-kind handler table `0x01309f10` -> kind handler
+    //      `0x00972a70`, which calls the already-confirmed `+0x1b78`
+    //      weapon-inventory locator `0x005fe460` directly - a genuine
+    //      "pick up/exchange a weapon via interact prompt" action,
+    //      independent of 0x00B84330's own callers). Same posture as
+    //      shop/crib's own trigger-volume stand-in: the real `+0x18e0`
+    //      per-"kind" table lookup and bit-availability machinery are NOT
+    //      modelled (this project has no C++ model of that engine-side
+    //      table at all), but the GRANT itself, once triggered, calls the
+    //      real confirmed give/equip writer below - not invented.
+    //
+    // Both paths' weapon-definition/ammo values are caller-supplied (this
+    // project has no xtbl-backed weapon-definition resolver wired to this
+    // unit) - same "caller already knows what it wants to grant, this
+    // project only models the grant mechanism" boundary as
+    // registerShopCribTrigger()'s own open-target handling above.
+
+    // Heavy/"pickup-only" weapon classification. The spec's own `+0x10`
+    // flags-dword bits documented so far (0x200000 "has secondary ammo,"
+    // 0x80000000 "runtime unlocked," Sec5.1/Sec26.7) do NOT include any bit
+    // identified as "pickup-only" - the user's own ground truth (Sec5.1,
+    // 2026-10-11) names exactly two examples ("minigun, flamethrower and
+    // similar") with no further enumeration. CHOSEN, static search
+    // exhausted: classify by Weapon_Class enum value (spec-tables-weapons-
+    // combat.md's own 23-entry table) against literally the two named
+    // examples only - "flamethrower" (index 14) and "minigun" (index 17).
+    // No other Weapon_Class value is treated as heavy/pickup-only here; a
+    // future pass with a more specific spec item (e.g. a real confirmed
+    // flag bit, or the real `+0x18e0` kind value Sec5.1's own 2026-10-11
+    // update says is "plausibly" this class) should replace this enum-value
+    // check rather than silently growing this list by guesswork.
+    static constexpr int kHeavyPickupOnlyWeaponClassFlamethrower = 14;
+    static constexpr int kHeavyPickupOnlyWeaponClassMinigun = 17;
+    static bool IsHeavyPickupOnlyWeaponClass(int weaponClass) {
+        return weaponClass == kHeavyPickupOnlyWeaponClassFlamethrower ||
+               weaponClass == kHeavyPickupOnlyWeaponClassMinigun;
+    }
+
+    // The shared give/equip writer BOTH pickup paths call - models
+    // Sec5.1's REAL confirmed write path: `0x00B84330` resolves/binds the
+    // target's slot via `0x00601380` (the slot create/bind call), then
+    // writes flags (+0x1a0/+0x1a1), primary ammo (+0x1a4), rounds-in-clip
+    // (+0x1ac - the SAME field Sec6's already-closed item names as the live
+    // clip counter), and optional secondary ammo (+0x1b0/+0x1b4) onto the
+    // resolved per-CHARACTER (+0x1b78) slot record. This project's closest
+    // existing live model of that `+0x1b78` slot record is
+    // SaveGameState::weaponInventory's WeaponInventoryItem (save_game_
+    // state.h - spec-save-format.md Sec10.3's own 4-ammo-field/2-flag-byte
+    // shape for the SAME save-format span `0x008DCC00` separately fills,
+    // Sec5.1's own cross-reference), already noted there as "a future
+    // weapon-pickup native appends to it directly" - reused here rather
+    // than inventing a second, parallel slot representation. Does NOT model
+    // the vehicle-mount ammo cap (+0x2c4) - gated on session/global flags
+    // this project does not track, out of scope for a pickup writer.
+    void giveEquipWeapon(uint32_t weaponDefId, int32_t primaryAmmo, int32_t roundsInClip,
+                          int32_t secondaryAmmo = 0, uint8_t flag0 = 0, uint8_t flag1 = 0) {
+        auto& inv = saveGame_.weaponInventory;
+        auto it = std::find_if(inv.begin(), inv.end(),
+                                [&](const WeaponInventoryItem& w) { return w.weaponDefId == weaponDefId; });
+        if (it == inv.end()) {
+            inv.push_back(WeaponInventoryItem{});
+            it = inv.end() - 1;
+        }
+        it->weaponDefId = weaponDefId;
+        it->ammo[0] = primaryAmmo;
+        it->ammo[1] = roundsInClip;
+        it->ammo[2] = secondaryAmmo;
+        it->flag0 = flag0;
+        it->flag1 = flag1;
+        ++weaponGiveEquipCount_;
+        lastWeaponGiveEquipId_ = weaponDefId;
+    }
+    uint64_t weaponGiveEquipCount() const { return weaponGiveEquipCount_; }
+    uint32_t lastWeaponGiveEquipId() const { return lastWeaponGiveEquipId_; }
+    bool hasWeapon(uint32_t weaponDefId) const { return weaponSlot(weaponDefId) != nullptr; }
+    const WeaponInventoryItem* weaponSlot(uint32_t weaponDefId) const {
+        const auto& inv = saveGame_.weaponInventory;
+        auto it = std::find_if(inv.begin(), inv.end(),
+                                [&](const WeaponInventoryItem& w) { return w.weaponDefId == weaponDefId; });
+        return it == inv.end() ? nullptr : &*it;
+    }
+
+    // --- Path 1: walk-over auto-pickup for non-heavy dropped weapons ------
+
+    // CHOSEN proximity radius, static search exhausted (see this unit's own
+    // top doc comment for why: the real per-frame dispatcher that would
+    // confirm an exact condition was not found by any static pass, Sec5.1).
+    // A flat 1.5-metre sphere around the drop's registered position.
+    static constexpr double kWeaponDropPickupRadius = 1.5;
+
+    struct WeaponDropRegistration {
+        double x = 0, y = 0, z = 0;
+        uint32_t weaponDefId = 0;
+        int32_t primaryAmmo = 0;
+        int32_t roundsInClip = 0;
+        int weaponClass = 0;
+        bool consumed = false;
+    };
+    void registerWeaponDrop(const std::string& dropName, double x, double y, double z,
+                             uint32_t weaponDefId, int weaponClass, int32_t primaryAmmo, int32_t roundsInClip) {
+        weaponDrops_[dropName] = WeaponDropRegistration{x, y, z, weaponDefId, primaryAmmo, roundsInClip,
+                                                          weaponClass, false};
+    }
+    // Per-frame-equivalent update, given the player's current world
+    // position: grants (via giveEquipWeapon(), the ONE shared writer) every
+    // registered, not-yet-consumed drop within kWeaponDropPickupRadius
+    // whose weapon class is NOT heavy/pickup-only, then marks it consumed
+    // (one-shot - a real dropped weapon does not respawn after pickup).
+    // Heavy/pickup-only drops are deliberately skipped here - per the
+    // user's own confirmed behaviour, they are only ever granted through
+    // the press-E path below, never by walking over them.
+    void updateWeaponDropPickup(double playerX, double playerY, double playerZ) {
+        for (auto& kv : weaponDrops_) {
+            WeaponDropRegistration& drop = kv.second;
+            if (drop.consumed) continue;
+            if (IsHeavyPickupOnlyWeaponClass(drop.weaponClass)) continue;
+            const double dx = playerX - drop.x, dy = playerY - drop.y, dz = playerZ - drop.z;
+            if ((dx * dx + dy * dy + dz * dz) <= kWeaponDropPickupRadius * kWeaponDropPickupRadius) {
+                giveEquipWeapon(drop.weaponDefId, drop.primaryAmmo, drop.roundsInClip);
+                drop.consumed = true;
+                ++weaponDropAutoPickupCount_;
+            }
+        }
+    }
+    bool isWeaponDropConsumed(const std::string& dropName) const {
+        auto it = weaponDrops_.find(dropName);
+        return it != weaponDrops_.end() && it->second.consumed;
+    }
+    uint64_t weaponDropAutoPickupCount() const { return weaponDropAutoPickupCount_; }
+
+    // --- Path 2: press-E pickup for heavy/pickup-only weapons --------------
+
+    struct HeavyWeaponPickupTrigger {
+        uint32_t weaponDefId = 0;
+        int32_t primaryAmmo = 0;
+        int32_t roundsInClip = 0;
+    };
+    void registerHeavyWeaponPickupTrigger(const std::string& triggerName, uint32_t weaponDefId,
+                                           int32_t primaryAmmo, int32_t roundsInClip) {
+        heavyWeaponPickupTrigger_[triggerName] = HeavyWeaponPickupTrigger{weaponDefId, primaryAmmo, roundsInClip};
+    }
+    // Same transition-only enter/exit shape as updateShopCribTriggerPrompt()
+    // above (triggerCurrentlyInside()'s own "only re-fire on enter/exit"
+    // convention, Sec1.14) - reuses the SAME registerTriggerGeometry()/
+    // triggerGeometry()/TriggerVolumeContainsPoint() machinery, just over a
+    // separate trigger-name map so a shop/crib trigger and a heavy-weapon
+    // pickup trigger never collide on the same registered name.
+    const std::string& updateHeavyWeaponPickupPrompt(double playerX, double playerY, double playerZ) {
+        std::string nowInside;
+        for (const auto& kv : heavyWeaponPickupTrigger_) {
+            const TriggerVolumeGeometry* g = triggerGeometry(kv.first);
+            if (!g) continue;
+            if (TriggerVolumeContainsPoint(*g, playerX, playerY, playerZ)) {
+                nowInside = kv.first;
+                break;
+            }
+        }
+        if (nowInside != activeHeavyWeaponPickupTrigger_) {
+            activeHeavyWeaponPickupTrigger_ = nowInside;
+            if (!activeHeavyWeaponPickupTrigger_.empty()) {
+                // arg2/arg3 are this stand-in's own CHOSEN prompt-shape
+                // values (same footing as updateShopCribTriggerPrompt()'s
+                // own "press_e_enter" literal above) - the real prompt-text
+                // id for this specific interaction-array entry 0 kind was
+                // not independently confirmed this pass.
+                recordHudPrompt(activeHeavyWeaponPickupTrigger_, "weapon_pickup", "press_e_pickup");
+            } else {
+                recordHudPromptDefaultReset();
+            }
+        }
+        return activeHeavyWeaponPickupTrigger_;
+    }
+    bool heavyWeaponPickupPromptShowing() const { return !activeHeavyWeaponPickupTrigger_.empty(); }
+    const std::string& activeHeavyWeaponPickupTrigger() const { return activeHeavyWeaponPickupTrigger_; }
+
+    // Press-E while the heavy-weapon prompt is showing - grants the
+    // registered weapon via giveEquipWeapon(), the SAME shared writer
+    // updateWeaponDropPickup() above calls, proving both paths converge on
+    // one write path rather than two divergent ones. No-op (returns false)
+    // if no heavy-weapon pickup prompt is currently showing, matching
+    // pressShopCribInteract()'s own "a button press only does something if
+    // its matching prompt is live" shape.
+    bool pressHeavyWeaponPickupInteract() {
+        if (activeHeavyWeaponPickupTrigger_.empty()) return false;
+        auto it = heavyWeaponPickupTrigger_.find(activeHeavyWeaponPickupTrigger_);
+        if (it == heavyWeaponPickupTrigger_.end()) return false;
+        giveEquipWeapon(it->second.weaponDefId, it->second.primaryAmmo, it->second.roundsInClip);
+        ++heavyWeaponPickupInteractCount_;
+        return true;
+    }
+    uint64_t heavyWeaponPickupInteractCount() const { return heavyWeaponPickupInteractCount_; }
 
     // ai_do_scripted_move (Sec3.11): see CharacterState's own new
     // pendingScriptedMoveFlags/pendingScriptedMoveDestination/
@@ -8687,6 +9156,45 @@ public:
     // PcuClothingState::addDefaultClothingSlot10RefreshCount's own doc
     // comment) already correctly named.
     uint64_t& pcrAddDefaultClothingWipeCount() { return pcrAddDefaultClothingWipeCount_; }
+
+    // New-game default outfit (spec-frontend-menu-runtime.md Sec9 item 1,
+    // CLOSED 2026-10-11): CONFIRMED the real script path is
+    // store_character.lua's store_character_lineup_to_customization() -
+    // the character-creation/preset-selection screen's own transition
+    // handler - which applies the player's chosen creation preset via
+    // pcr_apply_preset(preset_name, "figure", regional_preset_name, false)
+    // and immediately calls pcr_add_default_clothing() with the script's
+    // own comment: "We want the character to have clothes on at the top
+    // menu, and we need to change to preset clothing." This is NOT a
+    // separate xtbl-level "default outfit" field - no such field exists
+    // anywhere in this project's unlockables/player_presets models either
+    // (confirmed clean negative), so there is no competing path to remove
+    // here. Team B's CHOSEN application point for "new game, no save
+    // present" (same status as kNewGameStartingCashCents/
+    // grantNewGameAutoUnlocks above): mirrors that exact script call pair
+    // against the SAME pcr_apply_preset/pcr_add_default_clothing state the
+    // stubs already use (lua_spec_confirmed_stubs_b24_wave2_pcu_pcr.cpp),
+    // so a fresh game's outfit is always driven by whichever character-
+    // creation preset the player picked, never an xtbl default.
+    // Lower-folds presetName the SAME plain-ASCII way
+    // stub_pcr_apply_preset's own toLowerAsciiB24 does (AsciiLowerFold,
+    // zone_object_resolver.h, already included above), so this resolves
+    // against the identical presetResolves() keys tests already populate.
+    // The script calls pcr_add_default_clothing() unconditionally right
+    // after pcr_apply_preset() - it never checks a return value (there
+    // isn't one) - so the wipe/re-add step below is NOT gated on whether
+    // the preset itself resolved; only the returned bool (for test/caller
+    // visibility) reflects that.
+    bool applyNewGameDefaultOutfit(const std::string& presetName) {
+        const std::string key = AsciiLowerFold(presetName);
+        const bool presetResolved = pcrPreset_.presetResolves.known(key) && pcrPreset_.presetResolves.get(key);
+        if (presetResolved) ++pcrPreset_.appliedCount;
+        ++pcuClothing_.addDefaultClothingSlot10RefreshCount; // CONFIRMED real effect ("refreshes worn slot 10")
+        pcuInventory_.ownedItemCount = 0; // CONFIRMED-destructive wipe - FAITHFUL (Sec43.3), same target stub_pcr_add_default_clothing uses
+        ++pcrAddDefaultClothingWipeCount_;
+        return presetResolved;
+    }
+
     // pcr_strip_clothing (Sec26.2) / pcr_restore_clothing (Sec23.2): plain
     // call counters - both functions' own deep internals (the "mark dirty
     // vs. clear" OPEN question, Sec26.2; the full re-sync chain, Sec23.2)
@@ -10913,6 +11421,9 @@ private:
     // application point, real write-site still OPEN.
     double playerCash_ = kNewGameStartingCashCents;
     std::vector<PurchaseRecord> purchaseLedger_;
+    // grantNewGameAutoUnlocks()'s own backing store - see that method's doc
+    // comment near kNewGameStartingCashCents above.
+    std::unordered_set<std::string> newGamePurchasedUnlocks_;
     int skydiveMoveToNullTargetGuardCount_ = 0; // Sec39.1 - test-observable only, not a real engine field
     SaveSystemUi saveSystemUi_;
     StorePreviewGuards storePreviewGuards_;
@@ -10952,6 +11463,15 @@ private:
     std::string cutscenePlayDestination1_;             // Sec57.2, "" = none/dropped
     std::string cutscenePlayDestination2_;
     bool cutscenePlayInProgress_ = false;              // host bookkeeping stand-in, not a direct spec field
+    // CHOSEN (Sec57.2a's 2026-10-11 "new finding" note, see
+    // cutscenePlayApplyEndPlacement()'s own doc comment above): true once
+    // the current cutscene_play start's own destinations have actually been
+    // applied to the player(s) - reset to false on every fresh destination
+    // write (cutscenePlayDo(), even a refused one - same "written even when
+    // refused" quirk the destination fields themselves already follow) so a
+    // later cutscenePlayCheckDone() poll or an immediate skip-branch commit
+    // each get exactly one placement per destination write, never a repeat.
+    bool cutscenePlayPlacementApplied_ = false;
 
     // --- Native-implementation batch 2026-10-07 - see each public
     // accessor's own doc comment above for citation/reasoning. ---
@@ -11021,6 +11541,26 @@ private:
     // triggerCurrentlyInside()'s own doc comments above.
     std::unordered_map<std::string, TriggerVolumeGeometry> triggerGeometry_;
     std::unordered_map<std::string, bool> triggerInsideState_;
+    // Shop/crib walk-in press-E entry - see registerShopCribTrigger()'s own
+    // doc comment above for the full reasoning (crib's own open-target/chain
+    // is REAL confirmed as of commit b8c17ec; shop's remains CHOSEN).
+    std::unordered_map<std::string, ShopCribTriggerKind> shopCribTrigger_;
+    std::string activeShopCribTrigger_;
+    uint64_t documentOpenCount_ = 0;
+    std::string lastDocumentOpened_;
+    std::string lastDocumentOpenTrigger_;
+    // Weapon pickup (Sec5.1) - see the doc comment above
+    // giveEquipWeapon()/registerWeaponDrop()/registerHeavyWeaponPickupTrigger()
+    // for the full reasoning (shared give/equip writer is REAL confirmed;
+    // the auto-pickup proximity radius and the press-E prompt text are both
+    // CHOSEN stand-ins, same posture as the shop-entry trigger above).
+    uint64_t weaponGiveEquipCount_ = 0;
+    uint32_t lastWeaponGiveEquipId_ = 0;
+    std::unordered_map<std::string, WeaponDropRegistration> weaponDrops_;
+    uint64_t weaponDropAutoPickupCount_ = 0;
+    std::unordered_map<std::string, HeavyWeaponPickupTrigger> heavyWeaponPickupTrigger_;
+    std::string activeHeavyWeaponPickupTrigger_;
+    uint64_t heavyWeaponPickupInteractCount_ = 0;
     std::unordered_map<std::string, bool> spawnRegionEnabled_;
     std::unordered_map<int64_t, ObjectiveTextSlot> objectiveTextSlots_;
     ConversationPlay conversationPlay_;

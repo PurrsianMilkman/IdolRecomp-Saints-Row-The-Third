@@ -189,6 +189,26 @@ public:
     // no longer meaningful (bitstream exhausted/overrun), not a real value.
     bool ranOutOfData() const { return ranOutOfData_; }
 
+    // Raw-buffer accessors, added 2026-10-11 (fix/bink-dc-literal-descriptor-l
+    // task, spec-bink-codec.md Sec5.3i/Sec5.3o) to support that task's own
+    // DescriptorLCursor (descriptor_l_cursor.h) - a SEPARATE, independent
+    // byte cursor anchored against this reader's own underlying buffer
+    // without going through readBits()/readAlignedByte() at all. RETRACTED/
+    // SUPERSEDED 2026-10-11 (fix/bink-dc-array-indexing task, spec-bink-
+    // codec.md Sec5.3p): descriptor L is not a separate byte-cursor stream
+    // after all (see dc_delta_array.h) - these two accessors have no
+    // remaining production caller, kept only because removing them is not
+    // this task's own scope and no spec fact makes them wrong, just unused.
+    const uint8_t* rawData() const { return data_; }
+    size_t rawSize() const { return size_; }
+
+    // The byte offset of the next not-yet-consumed byte, valid only when
+    // currently byte-aligned (bitsBuffered_ a multiple of 8 - call
+    // alignToByte() first if not). Added for the same now-superseded task
+    // as rawData()/rawSize() above (see that note) - also currently
+    // unused in production, kept as a general-purpose diagnostic accessor.
+    size_t alignedByteOffset() const { return sourcePos_ - static_cast<size_t>(bitsBuffered_) / 8; }
+
 private:
     uint32_t nextDwordLE() {
         uint32_t v = 0;

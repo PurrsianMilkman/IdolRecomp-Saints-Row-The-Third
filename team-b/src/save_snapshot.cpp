@@ -187,6 +187,65 @@ SaveSnapshot SaveSnapshot::parse(ByteView bytes) {
         }
     }
 
+    // garage: u32 count at 0xB760, 0x70-byte records from 0xB764, next-id at 0xF9E4
+    s.garageRecordCount_ = bytes.readU32LE(kOffsetGarageCount);
+    if (s.garageRecordCount_ <= kGarageCapacity) {
+        for (uint32_t i = 0; i < s.garageRecordCount_; ++i) {
+            size_t o = kOffsetGarageArray + i * kGarageRecordStride;
+            GarageRecord r;
+            r.recordId = bytes.readU32LE(o);
+            r.blobLength = bytes.readU32LE(o + 4);
+            r.unknownFlag = bitsToFloat(bytes.readU32LE(o + 8));
+            r.vehicleTypeIndex = bytes.readU16LE(o + 0xC);
+            r.enumE = bytes.readU16LE(o + 0xE);
+            r.enum10 = bytes.readU16LE(o + 0x10);
+            r.byte12 = bytes.at(o + 0x12);
+            for (size_t k = 0; k < 32; ++k) r.optionSet[k] = bytes.at(o + 0x13 + k);
+            for (size_t k = 0; k < 57; ++k) r.blob[k] = bytes.at(o + 0x33 + k);
+            r.stateFlags = bytes.at(o + 0x6C);
+            s.garageRecords_.push_back(r);
+        }
+    }
+    s.garageNextId_ = bytes.readU32LE(kOffsetGarageNextId);
+
+    // wardrobe: u32 count at 0x4F6C, 8-byte records from 0x4F70 (Sec10.1/10.2/10.3)
+    s.wardrobeItemCount_ = bytes.readU32LE(kOffsetWardrobeCount);
+    if (s.wardrobeItemCount_ <= kWardrobeCapacity) {
+        for (uint32_t i = 0; i < s.wardrobeItemCount_; ++i) {
+            size_t o = kOffsetWardrobeArray + i * kWardrobeRecordStride;
+            WardrobeItemRecord r;
+            r.itemId = bytes.readU32LE(o);
+            r.colour0 = bytes.at(o + 4);
+            r.colour1 = bytes.at(o + 5);
+            r.colour2 = bytes.at(o + 6);
+            uint8_t packed = bytes.at(o + 7);
+            r.wearOption = packed & 0x0Fu;
+            r.flag = (packed & 0x10u) != 0;
+            r.spareBits = (packed >> 5) & 0x07u;
+            s.wardrobeItems_.push_back(r);
+        }
+    }
+
+    // weapon inventory: u32 count at 0x4A74, 28-byte records from 0x4A78 (Sec10.3)
+    s.weaponInventoryCount_ = bytes.readU32LE(kOffsetWeaponInventoryCount);
+    if (s.weaponInventoryCount_ <= kWeaponInventoryCapacity) {
+        for (uint32_t i = 0; i < s.weaponInventoryCount_; ++i) {
+            size_t o = kOffsetWeaponInventoryArray + i * kWeaponInventoryRecordStride;
+            WeaponInventoryRecord r;
+            r.weaponDefId = bytes.readU32LE(o);
+            r.unused = bytes.readU32LE(o + 0x04);
+            r.ammo[0] = static_cast<int32_t>(bytes.readU32LE(o + 0x08));
+            r.ammo[1] = static_cast<int32_t>(bytes.readU32LE(o + 0x0C));
+            r.ammo[2] = static_cast<int32_t>(bytes.readU32LE(o + 0x10));
+            r.ammo[3] = static_cast<int32_t>(bytes.readU32LE(o + 0x14));
+            r.flag0 = bytes.at(o + 0x18);
+            r.flag1 = bytes.at(o + 0x19);
+            r.pad[0] = bytes.at(o + 0x1A);
+            r.pad[1] = bytes.at(o + 0x1B);
+            s.weaponInventory_.push_back(r);
+        }
+    }
+
     // region records: u32 count at 0x113B8, 16-byte records from 0x113C0
     s.regionRecordCount_ = bytes.readU32LE(kOffsetRegionCount);
     if (s.regionRecordCount_ <= kRegionRecordCapacity) {
@@ -280,6 +339,70 @@ std::vector<uint8_t> SaveSnapshot::build(const SaveSnapshotFields& f, bool compu
         putU32LE(b, o + 4, r.handleHi);
         putU32LE(b, o + 8, r.group);
         putU32LE(b, o + 12, r.reserved);
+    }
+
+    if (f.garageRecords.size() > kGarageCapacity) {
+        throw FormatError("SaveSnapshotFields::garageRecords has " + std::to_string(f.garageRecords.size()) +
+                           " entries, over the real " + std::to_string(kGarageCapacity) +
+                           "-record capacity (Sec9.2)");
+    }
+    putU32LE(b, kOffsetGarageCount, static_cast<uint32_t>(f.garageRecords.size()));
+    for (size_t i = 0; i < f.garageRecords.size(); ++i) {
+        size_t o = kOffsetGarageArray + i * kGarageRecordStride;
+        const GarageRecord& r = f.garageRecords[i];
+        putU32LE(b, o, r.recordId);
+        putU32LE(b, o + 4, r.blobLength);
+        putU32LE(b, o + 8, floatToBits(r.unknownFlag));
+        b[o + 0xC] = static_cast<uint8_t>(r.vehicleTypeIndex & 0xFF);
+        b[o + 0xD] = static_cast<uint8_t>((r.vehicleTypeIndex >> 8) & 0xFF);
+        b[o + 0xE] = static_cast<uint8_t>(r.enumE & 0xFF);
+        b[o + 0xF] = static_cast<uint8_t>((r.enumE >> 8) & 0xFF);
+        b[o + 0x10] = static_cast<uint8_t>(r.enum10 & 0xFF);
+        b[o + 0x11] = static_cast<uint8_t>((r.enum10 >> 8) & 0xFF);
+        b[o + 0x12] = r.byte12;
+        for (size_t k = 0; k < 32; ++k) b[o + 0x13 + k] = r.optionSet[k];
+        for (size_t k = 0; k < 57; ++k) b[o + 0x33 + k] = r.blob[k];
+        b[o + 0x6C] = r.stateFlags;
+        // +0x6D..+0x6F left zero (real pad, Sec9.2)
+    }
+    putU32LE(b, kOffsetGarageNextId, f.garageNextId);
+
+    if (f.wardrobeItems.size() > kWardrobeCapacity) {
+        throw FormatError("SaveSnapshotFields::wardrobeItems has " + std::to_string(f.wardrobeItems.size()) +
+                           " entries, over the real " + std::to_string(kWardrobeCapacity) +
+                           "-record capacity (Sec10.1/10.2/10.3)");
+    }
+    putU32LE(b, kOffsetWardrobeCount, static_cast<uint32_t>(f.wardrobeItems.size()));
+    for (size_t i = 0; i < f.wardrobeItems.size(); ++i) {
+        size_t o = kOffsetWardrobeArray + i * kWardrobeRecordStride;
+        const WardrobeItemRecord& r = f.wardrobeItems[i];
+        putU32LE(b, o, r.itemId);
+        b[o + 4] = r.colour0;
+        b[o + 5] = r.colour1;
+        b[o + 6] = r.colour2;
+        uint8_t packed = static_cast<uint8_t>((r.wearOption & 0x0Fu) | (r.flag ? 0x10u : 0u) | ((r.spareBits & 0x07u) << 5));
+        b[o + 7] = packed;
+    }
+
+    if (f.weaponInventory.size() > kWeaponInventoryCapacity) {
+        throw FormatError("SaveSnapshotFields::weaponInventory has " + std::to_string(f.weaponInventory.size()) +
+                           " entries, over the real " + std::to_string(kWeaponInventoryCapacity) +
+                           "-record capacity (Sec10.3)");
+    }
+    putU32LE(b, kOffsetWeaponInventoryCount, static_cast<uint32_t>(f.weaponInventory.size()));
+    for (size_t i = 0; i < f.weaponInventory.size(); ++i) {
+        size_t o = kOffsetWeaponInventoryArray + i * kWeaponInventoryRecordStride;
+        const WeaponInventoryRecord& r = f.weaponInventory[i];
+        putU32LE(b, o, r.weaponDefId);
+        putU32LE(b, o + 0x04, r.unused);
+        putU32LE(b, o + 0x08, static_cast<uint32_t>(r.ammo[0]));
+        putU32LE(b, o + 0x0C, static_cast<uint32_t>(r.ammo[1]));
+        putU32LE(b, o + 0x10, static_cast<uint32_t>(r.ammo[2]));
+        putU32LE(b, o + 0x14, static_cast<uint32_t>(r.ammo[3]));
+        b[o + 0x18] = r.flag0;
+        b[o + 0x19] = r.flag1;
+        b[o + 0x1A] = r.pad[0];
+        b[o + 0x1B] = r.pad[1];
     }
 
     if (f.regionRecords.size() > kRegionRecordCapacity) {

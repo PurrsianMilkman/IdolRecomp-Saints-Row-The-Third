@@ -55,10 +55,130 @@ of which is a walk-in free-roam shop). Every VINT document in this engine appear
 `<docname>_init()` called automatically by the engine when that document is pushed (the same
 convention `cell_phone_init`/`cell_missions_init` etc. rely on) — so `store_common` and the
 specific per-type document are both pushed, and both auto-init, from a native/world-trigger call
-site this pass did not trace. **OPEN, same shape as the already-OPEN phone-menu top-level open** —
-worth a future pass specifically hunting the world-space "walk into shop" trigger → `push_screen`
-call chain, likely NOT through the same CBA input-action table the phone-open search already
-exhausted (a shop trigger is a world-collision event, not a button press).
+site this pass did not trace.
+
+**Update 2026-10-11 [CONFIRMED via disassembly, 1 dispatched agent, independently reviewed]: the
+native call path that opens `store_common` is found, and it is a PARALLEL, non-Lua UI-open
+mechanism — `push_screen` is not involved at all.** The function at `0x0083ECC0` opens the
+`store_common` screen directly: it resolves a `store_common` document handle, resolves a
+`safe_frame` interface from it, and calls through that interface's own vtable slot at `+0x3C`
+(an "open/show"-shaped call) — entirely in native code, never touching the Lua `push_screen`
+native (separately confirmed as a real, different, Lua-bound native at `0x00844870`, registered
+via `0x00845aa0`). `0x0083ECC0` has exactly two callers, both of them data-referenced function-
+pointer slots — `0x0083EE80` (gated by a flag check and two condition-lookup calls through the
+same generic rule-table function used by hundreds of unrelated call sites, constant `0x39`,
+meaning not yet traced) and `0x0083EDF0` (unconditional, writes a timer value to a global).
+**Re-verified and RE-CONFIRMED, 2026-10-11 (the interim PLAUSIBLE downgrade is resolved).** Direct
+disassembly of `0x0083ECC0` itself shows a hardcoded `PUSH 0x115dba4` (the literal `"store_common"`
+string) at `0x0083ed69`, immediately followed by the doc-handle resolve and `safe_frame` vtable
+call already described — this was never in real doubt; the attribution is solid. **The "table"
+doubt was a byte-offset misreading, now corrected:** `0x01161850` is not the start of a
+multi-record array — it's simply byte offset `+0x18` *into* the `"cell_menu_main_trans_to_
+pause_map"` string (which actually starts at `0x01161838`; the dword at `0x01161850` is just the
+ASCII substring `"paus"` from the middle of that name). What follows the string is a **per-instance
+C++ vtable for ONE global object** (at `0x02317328`, constructed at `0x00ffb015`), and
+`0x0083EE80` is simply **virtual-method slot 4 of that single "pause_map" object's own vtable**
+(`0x01161870`) — overridden for this specific instance to open `store_common` after its gating
+checks pass. There is no array of records and no second "store_common-owned" table at all; the
+pause_map-named object's own slot 4 happens to route into opening `store_common` (plausible,
+unconfirmed, reason why: closing the pause menu while inside a store returns to it — not traced).
+`0x0083EDF0` is registered separately, as a plain callback value (not a vtable pointer) at
+`0x023173ac` (84 bytes past the same object, same bss region), by a distinct static initializer at
+`0x00ffb068`.
+
+**Still OPEN, now with one dead end ruled out and one new lead:** what actually performs the
+indirect/virtual call through either slot, i.e. what triggers "pause_map object, slot 4" or "the
+callback at `+0x84`" to fire on player entry. `0x02317328`'s own two write sites were both checked
+and are ordinary static C++ construction/destruction (`0x00ffb015` sets the vtable pointer;
+`0x01018850` is the destructor, resetting it via `_atexit`, using the same generic "scalar
+deleting destructor" boilerplate shared by 62+ unrelated global objects in the binary) — **ruled
+out** as a live "currently active screen" pointer being repointed by gameplay code. Because both
+call targets are reached only through indirect/virtual dispatch, no fixed-address instruction
+anywhere references `0x0083EE80`'s own vtable slot address directly (confirmed: zero xrefs to
+`0x01161870`) — an inherent limitation of virtual dispatch for static address search, not a gap in
+the search itself. The `0x007b4d70` lead (which used `0x02317328`'s address in an array-index-
+looking way) was followed up and is **also a dead end, confirmed**: it's a one-shot UI-subsystem
+startup routine (reached only once, from the interface-boot sequence `0x005d390b` →
+`0x005d2400` → `0x007b4d70`, which loads `"interface_startup.vpp"`/`.peg` files and sets a
+completion flag — never from gameplay code) that registers ~100 global singleton UI objects into a
+flat array by calling each one's own init routine and de-duplicating by name string; `0x02317328`
+is simply one of those ~100 entries, with no special handling. No trigger-volume/collision-enter
+code referencing `0x02317328`, `0x0083EE80`, or `0x0083EDF0` was found anywhere in this pass.
+
+**REFRAMED, 2026-10-11 — user-observed ground truth corrects the whole premise of the last two
+paragraphs: shops (and cribs — the user confirmed crib entry uses the exact same mechanism) open
+on a "press E" interact PROMPT, not on volume entry itself.** The player walks in, a HUD prompt
+appears, and pressing the button opens the menu — i.e. this is the generic engine-wide
+interaction-prompt system (`spec-player-runtime.md`'s `+0x2084` bitmask + three 22-entry function
+arrays at `0x0111f2d0`/`0x0111f3d8`/`0x0111f430`, walked by `0x005ac340`/`0x005ac390` — the SAME
+system that drives the "press E to enter a vehicle" prompt, entry 15 of `0x0111f2d0`), not a raw
+collision/trigger-enter dispatch. This reframes the dead end above: the real question was never
+"what fires on trigger-volume entry" but "which entry of this interaction-prompt system handles a
+usable world trigger, and where does IT lead." **In-progress re-trace (this session, same day):**
+entry 0 of the CAN-SHOW condition array (`0x0111f3d8` → `0x009e4600`) operates on an object with
+fields `+0x33`/`+0x34` matching the trigger-volume class exactly (the same fields the already-
+confirmed enable/disable functions `0x0093D320`/`0x0093BDE0` use), resolved from a handle pair at
+the player object's own `+0x18f0`/`+0x18f4` — strongly suggesting this IS the "is player near a
+usable world trigger" check. **Update, same day: the REAL on-press handler identified and fully
+dumped — it is `0x005b6870`, not `0x005ac390`.** `0x005b6870` is what fires on the actual
+press-edge of the interact button (CBA action `0x52`, confirmed via `0x005bae10`'s own role per
+`spec-player-runtime.md`'s own scoping note) — it walks the ACTION array `0x0111f2d0` directly,
+bit by bit (0-21), calling whichever entry's bit is set in `+0x2084`, with no two-stage scan at
+all (`0x005ac390`'s two-stage C-then-B scan turns out to fire on a DIFFERENT input-state branch of
+the same caller, `0x005b6af0`, not on ordinary press-edge). All 22 slots of `0x0111f2d0` were
+dumped directly (`0x009da510`, `0x009e64a0`, `0x00a38cd0`, `0x009dc8e0`, `0x009dcc60`,
+`0x009da5b0`, `0x009da560`, `0x009df560`, `0x009da580`, `0x009da800`, `0x00695650`, `0x009da4f0`,
+`0x009da790`, `0x009da810`, null, `0x009e5e80`[vehicle], null, `0x009dc900`, null, null,
+`0x006948c0`, null). **Entry 0 (`0x009da510`) was checked in full depth and is NOT the store/crib
+action** — it resolves a per-"kind" handler table (`0x01309f10`, indexed by the interactable
+object's own `+0x18e0` field) and one such kind's handler turns out to be a WEAPON PICKUP/exchange
+action (writes the already-confirmed `+0x1b78` weapon-inventory sub-object — now spliced into
+`spec-weapons-runtime.md` §5.1 instead).
+
+**CLOSED, 2026-10-11 [CONFIRMED by full disassembly, every hop]: entry 8 (`0x009da580`) is the
+crib-use action, found via a parallel same-indexed MESSAGE table discovered in earlier (2026-10-09)
+project scratchpad work (`scratchpad/watercraft_prompt_table_open97_2026-10-09.md`,
+`scratchpad/fourth_prompt_table_0x0111f4e0_2026-10-09.md`) that this pass had not cross-referenced
+until now.** That earlier work had already found a second 22-slot table, same `+0x2084` bit
+indexing, at `0x0111f488` (contiguous after `0x0111f430`) holding per-slot UI PROMPT-TEXT builders
+— e.g. slot 9 = the surfing-diversion prompt, slot 10 = the base-jumping prompt, slot 15 = the
+watercraft-enter prompt, all consistent with this session's own action-array contents at the SAME
+indices (9, 10, 15) confirming the two tables share one index space. Reading the remaining
+unnamed slots of that table this pass found **slot 8's prompt text is literally `"HUD_USE_CRIB"` /
+`"(LOCALIZE)access your crib"`** (function `0x005b7c00`). The matching action entry, `0x0111f2d0`
+index 8 (`0x009da580`), was then traced in full: a game-mode check → a busy-state check
+(`0x009b9160`) → `0x005eee70` → a cluster of flag checks → **`0x0080cc90(this = 0x022ccef8)`**.
+`0x022ccef8` is independently confirmed (via its own full xref list) to be the exact "store_crib"
+static object this project already found and named months ago — written with the string pointer
+`0x115dc1c` at `0x00ffa801`, constructed via the registration call at `0x00ffa7f2`, destructed via
+`0x01018590` (the `atexit`-registered destructor already noted in `spec-save-format.md`/HANDOFF's
+own prior investigation of this object). `0x0080cc90` itself is a GENERIC "open this document"
+gate function (10 distinct document-object callers, not crib-specific) — checks a rule-table
+condition (`0x007b3ba0`/`0x007b3c50`, code `0x28`) then calls `0x007b5fe0(this)`, the generic
+per-object open call (the structural equivalent, for an arbitrary document object, of what
+`0x0083ECC0` does by hardcoded name specifically for `store_common`). **Full confirmed chain:**
+press `0x52` → `0x005b6870` (bit-walk) → `0x0111f2d0[8]` = `0x009da580` → `0x005eee70` →
+`0x0080cc90(this=0x022ccef8 "store_crib")` → `0x007b5fe0(this)` → crib screen opens.
+**Shop's own entry: genuine negative result after exhausting every static angle tried, 2
+dispatched agents plus direct follow-up.** User clarified the real on-screen store prompt is
+icon-only (no text) — explains why no `HUD_` string match was ever found, but a dedicated re-check
+with that clue still found nothing: the one remaining never-opened table (`0x0111f380`, walked by
+`0x005b6950`) has only 2/22 populated slots, both weapon-pickup/melee-takedown related; every
+previously-shallow main-array entry was re-traced to actual disassembly and matches its earlier
+category (vehicle, weapon, watercraft, diversion, phone, parachute); and the "find `store_common`'s
+own static object, look for a generic-opener call on it" approach that closed crib was tried too —
+`store_common`'s object (`0x022cce68`, found via its own registration constructor `0x00ffa7b0`)
+has only the already-known constructor/destructor/UI-boot-registration references, no
+`0x0080cc90`-style call. **This is architecturally real, not just unfound: `store_common` does
+NOT use the generic-object-opener pattern crib does — it's hardcoded by literal name (`0x0083ECC0`'s
+own `PUSH "store_common"`), so crib's breakthrough method doesn't generalize to it.** Shop is back
+at the pre-crib dead end: `0x0083ECC0`'s only 2 callers (`0x0083EE80`/`0x0083EDF0`) were already
+confirmed unreachable from player input (a one-shot UI-boot routine, `0x007b4d70`). Every static
+angle tried this session is now exhausted; closing this for now rather than continuing to search.
+Remaining options, neither attempted: a live capture (same class of approach as the Bink work, but
+on the main game process — requires explicit user go-ahead per `spec-save-format.md` §49.4's
+standing note); or a full line-by-line read of the one entry never fully exhausted by keyword grep
+alone, main-array index 7 (`0x009df560`, 361 lines).
 
 **What gets configured per store type.** Currency/display is generic in the shared header
 (`Vdo_store_header:set_price`/`set_respect`/`set_level`/`enable_price_respect`,
@@ -1297,6 +1417,85 @@ shipped, extracted script source) throughout. No Ghidra decompiler auto-names
 material.
 
 ## Changelog
+
+- **2026-10-11 — §2: shop's own press-E entry — genuine negative result, every static angle now
+  exhausted** (SPEC TEAM, 2 dispatched agents across this session plus direct follow-up).
+  Re-checked with the user's "icon-only prompt" clue: the last never-opened table (`0x0111f380`)
+  and all previously-shallow array entries, all ruled out via real disassembly. Tried the method
+  that closed crib (find the object, look for a generic-opener call on it) on `store_common`'s own
+  object (`0x022cce68`) — also empty. Confirmed architecturally real: `store_common` is opened by
+  hardcoded name (`0x0083ECC0`), not the generic-object pattern crib uses, so crib's method doesn't
+  generalize. Shop is back at the pre-crib dead end (`0x0083EE80`/`0x0083EDF0`, already confirmed
+  unreachable from player input). Closing for now; remaining options need a live capture or a
+  full line-by-line read of one never-fully-exhausted entry. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §2: CRIB-USE ACTION CLOSED — entry 8 of `0x0111f2d0` opens the "store_crib"
+  static object via a generic document-open call, full chain confirmed by disassembly** (SPEC
+  TEAM, self, direct query, no agent). Cross-referenced an existing parallel same-indexed
+  prompt-text table this pass hadn't checked yet (`scratchpad/watercraft_prompt_table_open97_2026-
+  10-09.md`), found slot 8's text is `"HUD_USE_CRIB"`, traced the matching action entry
+  (`0x009da580`) through `0x005eee70` to `0x0080cc90(this=0x022ccef8)` — the already-known
+  "store_crib" static object — then to the generic opener `0x007b5fe0`. Shop's own entry not
+  separately found this pass, but the mechanism (same generic opener, different object) is now
+  established as a cheap follow-up rather than a fresh investigation. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §2: the real on-press interact handler identified (`0x005b6870`, a direct
+  22-entry bit-walk, not the two-stage scanner); full action array dumped; entry 0 ruled out as a
+  weapon-pickup action instead, store/crib entry still among the other 14 unopened slots** (SPEC
+  TEAM, self, direct query, no agent). Dumped all 22 entries of `0x0111f2d0` directly. Entry 0
+  (`0x009da510`) traced to full depth — resolves a per-kind handler table at `0x01309f10` and one
+  kind's handler writes the player's `+0x1b78` weapon-inventory sub-object, a genuine weapon
+  pickup/exchange action (spliced separately into `spec-weapons-runtime.md` §5.1). Real progress,
+  not yet closed — narrowed from "which array/function" to "which of ~14 remaining nonzero slots."
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §2: walk-in-chain REFRAMED by user-observed ground truth (shops AND cribs open on
+  a "press E" prompt, not on volume entry) — unparked, in-progress re-trace found a promising
+  matching object, not yet closed** (SPEC TEAM, self, direct query, no agent this entry). Entry 0
+  of the engine's generic interaction-prompt condition array (`0x0111f3d8` → `0x009e4600`,
+  `spec-player-runtime.md`'s `+0x2084` system — the same one driving the "press E to enter a
+  vehicle" prompt) operates on an object with fields matching the trigger-volume class exactly,
+  resolved from the player object's own `+0x18f0`/`+0x18f4` handle pair. The matching ACTION-array
+  entry (which should lead to `0x0083ECC0`) is not yet pinned down — the press-dispatcher
+  (`0x005ac390`) does a two-stage forward-scan across two different arrays, not a simple
+  same-index pairing. Progress, not a closed chain.
+
+- **2026-10-11 — §2: the walk-in-store/crib entry-trigger chain PARKED, dead end confirmed on its
+  last remaining lead** (SPEC TEAM, 1 dispatched agent, orchestrator decision). `0x007b4d70`
+  (previous pass's one open lead) is a one-shot UI-subsystem startup routine, reached only from
+  the interface-boot sequence, never from gameplay code — it registers ~100 global UI singletons
+  into a flat array, with the pause_map object as just one unremarkable entry. No trigger-
+  volume/collision-enter code referencing the object or either callback slot was found. The
+  mechanism-level answer (`0x0083ECC0` → `safe_frame`+0x3C opens `store_common`) stays CONFIRMED;
+  only its OWN triggering condition is parked, OPEN, with a recipe recorded above for whoever
+  picks it up (likely needs a live capture, not more static search). Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §2: "screen-definition table" doubt RESOLVED (1 dispatched agent) — the
+  0x01161850 address was a byte-offset misreading, not a multi-record array; `0x0083ECC0`-opens-
+  `store_common` RE-CONFIRMED by direct disassembly** (SPEC TEAM, orchestrator-routed, follows the
+  same-day PLAUSIBLE downgrade below). `0x01161850` is offset `+0x18` into the
+  `"cell_menu_main_trans_to_pause_map"` string (which starts at `0x01161838`); what follows is a
+  per-instance C++ vtable for one global object, and `0x0083EE80` is simply that object's own
+  virtual slot 4. `0x0083EDF0` is a separate plain-callback field 84 bytes past the same object.
+  Ruled out `0x02317328` (the object itself) as a live "active screen" pointer — its only two
+  writers are ordinary static ctor/dtor. New lead for the still-OPEN "what fires these slots on
+  player entry" question: the function at `0x007b4d70`, which indexes using the object's address
+  rather than treating it as a plain `this` pointer — not yet fully dumped/analyzed. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §2: the native `store_common`-opening call path CONFIRMED, resolving the
+  "who calls push_screen on a walk-in store" question — but it turns out `push_screen` is never
+  involved** (SPEC TEAM, 1 dispatched agent, reviewed, orchestrator-routed). `0x0083ECC0` opens
+  `store_common` directly via a `safe_frame` doc-system interface call (vtable slot `+0x3C`),
+  entirely in native code — a parallel mechanism to the separately-confirmed real Lua `push_screen`
+  native (`0x00844870`). Its two callers are both lifecycle-callback slots inside screen-definition
+  tables, not directly-called functions, so the gap is narrowed one hop further back: what fires
+  those two callback slots on player entry is still OPEN (see `spec-save-format.md` §9.4's own
+  update for the trigger-volume side of the same investigation). Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-10 — correction to the §10.3/§11-item-4 `building_purchase.lua` claim, plus
   `building_purchase.lua` now fully traced in its own new file** (SPEC TEAM). The §10 splice's own

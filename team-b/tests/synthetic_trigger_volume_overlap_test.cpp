@@ -154,11 +154,23 @@ int main() {
         es.registerOnTriggerCallback("on_boat_trigger", "m09_player_on_boat_enter_cb");
         es.registerOnTriggerExitCallback("on_boat_trigger", "m09_player_on_boat_exit_cb");
 
-        auto r1 = host.runChunk(L, "ENTER_RAN = false\nfunction m09_player_on_boat_enter_cb() ENTER_RAN = true end\n",
-                                 "trigger_test.lua");
+        // 2026-10-11 (m09/m13/m05 trigger-stall task): both callbacks now
+        // read their own real first parameter ("human") and compare it
+        // against LOCAL_PLAYER, matching every real mission script's own
+        // identity-gated on_trigger callback shape (m09_player_on_boat_enter_cb
+        // et al) - this is the regression coverage for the nargs=0 bug fixed
+        // in tools/sr3_viewer.cpp's own identical dispatch pattern below.
+        auto r1 = host.runChunk(
+            L,
+            "ENTER_RAN = false\nfunction m09_player_on_boat_enter_cb(human) if human == LOCAL_PLAYER then "
+            "ENTER_RAN = true end end\n",
+            "trigger_test.lua");
         CHECK(r1.loadOk && r1.pcallOk);
-        auto r2 = host.runChunk(L, "EXIT_RAN = false\nfunction m09_player_on_boat_exit_cb() EXIT_RAN = true end\n",
-                                 "trigger_test.lua");
+        auto r2 = host.runChunk(
+            L,
+            "EXIT_RAN = false\nfunction m09_player_on_boat_exit_cb(human) if human == LOCAL_PLAYER then "
+            "EXIT_RAN = true end end\n",
+            "trigger_test.lua");
         CHECK(r2.loadOk && r2.pcallOk);
 
         auto driveOneFrame = [&](double x, double y, double z) {
@@ -173,7 +185,15 @@ int main() {
                 transitioned = true;
                 entered = nowInside;
                 const std::string& cb = nowInside ? es.onTriggerCallbackValue(name) : es.onTriggerExitCallbackValue(name);
-                if (!cb.empty()) threads.allocate(L, cb, 0, false);
+                // 2026-10-11 fix (m09/m13/m05 trigger-stall task): push the
+                // "human" argument every real on_trigger/on_trigger_exit
+                // callback declares - mirrors the exact fix applied to
+                // tools/sr3_viewer.cpp's own identical dispatch (same
+                // "#PLAYER1#" sentinel, nargs=1 instead of the old nargs=0).
+                if (!cb.empty()) {
+                    lua_pushstring(L, "#PLAYER1#");
+                    threads.allocate(L, cb, 1, false);
+                }
             }
             return std::make_pair(transitioned, entered);
         };

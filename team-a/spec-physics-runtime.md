@@ -2357,14 +2357,81 @@ contrast: `spec-vehicle-damage-runtime.md` §6a's vehicle-crush-kills-occupant m
 (`0x00b19ad0`) is NOT part of this Havok-contact pipeline at all — it runs on an ordinary per-frame
 bounding-box-overlap test, no Havok event involved.
 
-**Genuinely OPEN:** `0x00763400`'s own exact damage formula and whether its time/speed term traces
-byte-exactly to the Havok contact event's own closing-speed scalar (the single most valuable
-remaining link, to close "impact speed → damage amount" exactly rather than by architecture alone);
-the identity of object types `0x3a` and `5` (type 5 is also the hardcoded `(5,7)` special case in
-the add/remove listener methods above — appearing twice independently, HYPOTHESIS character/ped, not
-confirmed); restitution/friction coefficient sourcing; the second deferred queue's own resolver/
-consumer roles; whether per-part `hkpBoxShape`s combine into one compound chassis shape. Full detail,
-complete 40+-entry address index: `scratchpad/vehicle_world_collision_response_2026-10-08.md`.
+**RESOLVED, 2026-10-11 (SPEC TEAM, agent `aa3d9171a8c8b6f24`, independently re-verified by direct
+query before splicing): `0x00763400`'s full damage formula traced, and the closing-speed question
+settled — VERDICT: a DIFFERENT, independently-derived quantity, NOT a byte-exact carry-through of
+the Havok contact listener's own closing-speed scalar.**
+
+**The closing-speed scalar IS stored, byte-exact, in the deferred record** —
+`0x00769040`'s own closing-speed computation (relative velocity projected onto the contact
+normal) is passed into the enqueue function `0x00768140`, which writes it literally (both the
+SIMD-blend and scalar write paths were traced) into the deferred record at **absolute offset
+`+0x2C`** (for the first contact point; `+0x2C + N*0xA0` for additional ones). The drain function
+`0x007699a0` then passes the FULL RECORD POINTER (not individual fields) to the registered
+type-pair handler.
+
+**But the two real vehicle-damage handlers (`0x007642f0` vehicle-vs-vehicle, `0x00764bf0`
+vehicle-vs-world/unresolved — both traced in full) never read `record+0x2C` at all.** Both
+instead build their own "impact magnitude" via `0x00762ab0` — **re-verified by direct query: a
+pure-arithmetic, zero-callee function**, confirming it makes no fresh Havok velocity query. It
+reads only the record's stored **contact normal/position** fields plus a per-object
+material/restitution-property lookup (`0x00757cc0`→`0x00762c60`, "bounciness," not velocity) and
+computes `ABS(-matCoeffB·dot(normal,pos) + dot(other,normal)·matCoeffA)` — a geometry× material
+term, not a kinematic speed term. **The closing-speed field stored at `record+0x2C` is
+effectively dead data for this consumer** — correlated with the real contact event (same
+position/normal), but not the literal quantity `0x00763400` scales damage by.
+
+**`0x00763400`'s own full formula, address-pinned, re-verified exactly (constants decoded and
+confirmed: `0x01153c18`=`0.0055`, `0x01153c14`=`0.0825`, `0x01153c10`=`0.0275`, all three exact
+float matches):**
+```
+if (objA == 0) return;
+scale = 0.0055                                    // default material scale
+if (objB == 0) {                                   // single-vehicle (vs. world) case only
+    speedState = HavokSpeedQuery(objA)              // 0x00abaf10
+    if (all 4 lanes of speedState > 5.0) {
+        if (SpecialSurfaceTestA())      scale = 0.0825   // 0x00ad3160
+        else if (SpecialSurfaceTestB()) scale = 0.0275   // 0x00ad31a0
+    }
+}
+damage = round_to_int(scale * impactMagnitude)       // impactMagnitude = the 0x00762ab0 term above
+if (damage == 0) return;
+... capability-flag gate (0x008addb0), extent-vs-threshold clamp (0x00ad3fb0/0x004aac40/0x004f4e60) —
+    if the clamp FAILS: damage = round_to_int(impactMagnitude * tunable_0x0168d924)   // override scale
+if (objB is itself a vehicle) {
+    bbox = objB.vtable[+0x60]()                      // cached per-instance AABB getter, re-confirmed
+    dist = |storedPos - bbox_point| * 0xe0000000-as-double-const   // re-confirmed at 0x01153c00
+    damage = round_to_int(objB[+0x1588] * damage)     // per-vehicle-instance scalar, re-confirmed
+}
+if (SentinelOverrideTest(objA)) damage = 1000000      // literal 0xf4240 sentinel, re-confirmed
+0x00a9f4f0(objA, objB, flagByte, classCode, damage, ...)   // the already-documented damage-apply dispatcher
+```
+
+**Net for Team B: vehicle collision damage is driven by a geometry+material "impact magnitude"
+(contact position/normal × restitution coefficient), NOT by the Havok contact event's own
+closing-speed scalar** — despite that scalar being computed and even stored in the deferred
+record, it's unused by this path. Implementations should NOT expect collision damage to scale
+linearly with raw closing velocity the way the architecture alone might suggest; it scales with
+this material/geometry term instead, modulated by vehicle size/instance-scalar and a few
+surface-based scale overrides for the solo vs-world case specifically.
+
+**Residual OPEN, honestly incomplete:** `0x007663e0` (the `(7,5)` handler) not independently
+re-verified — very likely the same `0x00762ab0`→`0x00763400` shape by structural analogy, not
+confirmed. Exact semantics of the capability-flag gate (`0x008addb0`) and the `0x01153bc0`/
+`0x01153bc4` mass-like globals not chased (not needed for the closing-speed question). The exact
+Havok query inside `0x00abaf10` (used only in the solo/vs-world speed-threshold gate, HIGH
+CONFIDENCE a body speed/velocity query, not independently confirmed by decompile) — the identity
+of object types `0x3a` and `5` (type 5 is also the hardcoded `(5,7)` special case in the add/
+remove listener methods above — appearing twice independently, HYPOTHESIS character/ped, not
+confirmed); restitution/friction coefficient sourcing beyond the material-property lookup above;
+the second deferred queue's own resolver/consumer roles; whether per-part `hkpBoxShape`s combine
+into one compound chassis shape. **[CONFIRMED — disassembly, re-verified independently (not taken
+on the agent's word): the 3 scale constants' exact float values, the `+0x2C` deferred-record
+offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60`, instance
+`+0x1588`, the `0xf4240` sentinel, and the `0x00a9f4f0` final dispatch.]** Full detail:
+`scratchpad/closing_speed_trace_2026-10-11/`, independently re-verified in
+`scratchpad/verify_closing_speed/`. Original full address index:
+`scratchpad/vehicle_world_collision_response_2026-10-08.md`.
 
 ## 11. OPEN items
 
@@ -2571,6 +2638,16 @@ complete 40+-entry address index: `scratchpad/vehicle_world_collision_response_2
 ---
 
 ## Changelog
+
+- **2026-10-11 — §11's own "most valuable remaining link" RESOLVED: vehicle collision damage is
+  NOT driven by the Havok contact listener's closing-speed scalar** (SPEC TEAM, agent
+  `aa3d9171a8c8b6f24`, independently re-verified by direct query before splicing; self-picked,
+  collision/gameplay-feedback relevant). The closing-speed scalar IS stored byte-exact in the
+  deferred record (`record+0x2C`, confirmed) but is unused by both real vehicle-damage handlers —
+  they instead compute a geometry×material "impact magnitude" (contact position/normal ×
+  restitution coefficient, `0x00762ab0`, re-verified zero-callee pure arithmetic). Full damage
+  formula for `0x00763400` traced and address-pinned, all cited constants independently decoded
+  and confirmed exact. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-09 — new §10.10: vehicle-info-table → Havok component construction, wired end-to-end for
   mass/torque/gear-ratios/steering/grip** (SPEC TEAM, agent `a66162f2f793945e7`, wave 6 item 5). All 5

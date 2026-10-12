@@ -812,16 +812,18 @@ struct VehicleState {
     OpenValue<double> animProgressFraction{"vehicle_anim_finished's own computed progress fraction (0x00a76030)",
                                            "spec-lua-api-behaviour.md Sec21.12"};
 
-    // get_char_vehicle_type (Sec21.24): the real chain (occupant's cached-
-    // vehicle-association identity key -> 0x004dcf00 -> vehicle's own +0xbf4
-    // non-null gate -> an AI-mode gate 0x00ad2f80 whose result arrives via
-    // an IMPLICIT EAX side-channel, per the spec's own hidden-argument
-    // finding) has no other in-scope reader past the final 0-5 type code -
-    // abstracted to ONE field, holding the ALREADY-CLAMPED 0-5 value
-    // directly (the clamp-to-6-on-anything-else step itself IS modeled in
-    // the stub, deterministically, since it needs no further OPEN data).
-    OpenValue<int32_t> vehicleTypeCode{"get_char_vehicle_type's own resolved vehicle-type code (0x00ad2f80 EAX side-channel)",
-                                       "spec-lua-api-behaviour.md Sec21.24"};
+    // get_char_vehicle_type (Sec21.24): REMOVED 2026-10-11 (Sec21.24
+    // RESOLVED, closing the routed m07 mission-blocker). This field used to
+    // abstract 0x00ad2f80's EAX-side-channel result as a standalone,
+    // never-wired OPEN placeholder under an "AI-mode gate" framing that the
+    // spec has since corrected: 0x00ad2f80 is a plain 8-byte getter reading
+    // (vehicle+0xbf4)+0x2c, the vehicle's own static `Vehicle_Type` xtbl
+    // class enum - the EXACT SAME physical field `flyingType` above already
+    // models and already populates from real `_veh.xtbl` data
+    // (EngineState::loadZoneObjectsSection()). stub_get_char_vehicle_type
+    // (src/lua_spec_confirmed_stubs_b16_wave2_sec20_21.cpp) now reads
+    // flyingType directly instead of carrying a redundant, permanently-OPEN
+    // duplicate field.
 
     // vehicle_skydiving_move_to_do (Sec21.29): the real dispatch target
     // (0x00ac0f60) was not independently decompiled this pass (OPEN, per

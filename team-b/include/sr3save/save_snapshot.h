@@ -91,10 +91,23 @@ constexpr size_t kOffsetActivityMarkerBits = 0x2E98; // 64-bit set, 60 bits used
 constexpr size_t kOffsetStatistics = 0x3340;     // 149 x (value, denominator-stat id): statistic ids 68..216 (Sec12.6.1, CONFIRMED)
 constexpr uint32_t kFirstSnapshotStatId = 68;
 constexpr size_t kSnapshotStatCount = 149;
+constexpr size_t kOffsetGarageCount = 0xB760;    // u32 count, Sec9.2 entry 5
+constexpr size_t kOffsetGarageArray = 0xB764;    // 0x70-byte records from here
+constexpr size_t kGarageRecordStride = 0x70;
+constexpr size_t kGarageCapacity = 152;          // cap 0x98, Sec9.2
+constexpr size_t kOffsetGarageNextId = 0xF9E4;   // u32 next record id (Sec9.2)
+constexpr size_t kOffsetWardrobeCount = 0x4F6C;  // u32 count, Sec10.1/10.2/10.3
+constexpr size_t kOffsetWardrobeArray = 0x4F70;  // 8-byte records from here
+constexpr size_t kWardrobeRecordStride = 8;
+constexpr size_t kWardrobeCapacity = 2048;       // span size 16384/8 = 2048 (0x4F6C-0x8F6F)
 constexpr size_t kOffsetRespectTotal = 0x4418;   // total respect (Sec10.3, CONFIRMED)
 constexpr size_t kOffsetRespectInLevel = 0x441C; // respect accumulated inside the current level
 constexpr size_t kOffsetPlayerLevel = 0x4420;    // player level 0..50
 constexpr size_t kOffsetCash = 0x4A70;           // cash on hand x100, clamped to 2,000,000,000 (Sec10.3)
+constexpr size_t kOffsetWeaponInventoryCount = 0x4A74; // u32 count, Sec10.3's own span table row
+constexpr size_t kOffsetWeaponInventoryArray = 0x4A78; // 28-byte records from here
+constexpr size_t kWeaponInventoryRecordStride = 0x1C;  // 28
+constexpr size_t kWeaponInventoryCapacity = 12;        // up to 8 primary + 4 secondary slots
 constexpr size_t kOffsetRegionCount = 0x113B8;   // u32 count (154 in 16/16)
 constexpr size_t kOffsetRegionArray = 0x113C0;   // 16-byte records; the array starts HERE, not at 0x113C8 (Sec6.5)
 constexpr size_t kRegionRecordStride = 16;
@@ -127,6 +140,68 @@ struct CollectibleRecord {
     uint32_t handleHi = 0;
     uint32_t group = 0;
     uint32_t reserved = 0;
+};
+
+// One of the garage's up to 152 owned-vehicle records (Sec9.2, entry 5).
+// NOTE: this does NOT include a live vehicle handle - the real load routine
+// always sets a fixed null-handle constant on load (binding to a live
+// vehicle happens later, via the player's own use of the garage_retrieve_
+// vehicle native or a mission-checkpoint restore, CONFIRMED 2026-10-11,
+// Sec9.2) - so there is nothing to round-trip there. The 57-byte
+// customization blob (+0x33) is a bit-packed buffer this project does not
+// decode; it is carried through as opaque bytes so a round-trip preserves
+// it exactly without needing to understand its internal bit layout.
+struct GarageRecord {
+    uint32_t recordId = 0;        // +0x00, strictly ascending within the list
+    uint32_t blobLength = 0;      // +0x04, length in bytes of the blob below (0..57)
+    float unknownFlag = 0.0f;     // +0x08, 0.0 or 500.0 in every real record; meaning OPEN
+    uint16_t vehicleTypeIndex = 0; // +0x0C, 0..103 (base), 111..119 (DLC)
+    uint16_t enumE = 0;           // +0x0E, small enum 0..5
+    uint16_t enum10 = 0;          // +0x10, small enum 0..8
+    uint8_t byte12 = 0xFF;        // +0x12, 0xFF or 1..10; meaning OPEN
+    std::array<uint8_t, 32> optionSet{}; // +0x13, 256-bit customization option set
+    std::array<uint8_t, 57> blob{};      // +0x33, opaque customization blob (only blobLength bytes valid)
+    uint8_t stateFlags = 0;       // +0x6C, state flags copied from live vehicle state
+    // +0x6D..+0x6F: zero pad, not modeled (always written 0)
+};
+
+// One of the wardrobe's up to 2048 owned-item records (Sec10.1/10.2's own
+// "Owned-item record" row, block at 0x4F6C): a u32 item id (the engine's
+// own name-hash, opaque to this project - round-tripped raw, never
+// interpreted), 3 colour-slot indices (0xFF = none), and a packed final
+// byte: a 4-bit wear-option/variant index, a 1-bit flag, and 3 spare bits
+// (0 in every real sample checked so far, per Sec10.2 - still round-tripped
+// rather than hardcoded, in case a real save ever sets them). Simpler than
+// GarageRecord: no bit-packed sub-byte customization blob, just 4 clean
+// byte-aligned sub-fields in the last byte.
+struct WardrobeItemRecord {
+    uint32_t itemId = 0;      // +0x00, engine name-hash, opaque
+    uint8_t colour0 = 0xFF;   // +0x04, 0xFF = none
+    uint8_t colour1 = 0xFF;   // +0x05, 0xFF = none
+    uint8_t colour2 = 0xFF;   // +0x06, 0xFF = none
+    uint8_t wearOption = 0;   // +0x07 bits 0-3, 0..15
+    bool flag = false;        // +0x07 bit 4
+    uint8_t spareBits = 0;    // +0x07 bits 5-7, 0..7, always 0 in every real sample
+};
+
+// One of the weapon inventory's up to 12 owned-weapon records (Sec10.3's
+// own span table row for 0x4A74/0x4A78-0x4BC7): a u32 weapon-definition id
+// (the engine's own name-hash, opaque to this project, round-tripped raw),
+// an unused u32 (always 0 in every real sample, still round-tripped rather
+// than hardcoded), four signed "ammo-shaped" i32s (individual meaning -
+// loaded/reserve/capacity split - OPEN/unresolved, round-tripped raw as a
+// fixed-size array), two single-byte flags (0 or 1 in all samples), and 2
+// bytes of pad (always 0 in every real sample, still round-tripped).
+// Simpler than GarageRecord: no bit-packed sub-byte customization blob,
+// just clean byte-aligned sub-fields, same shape style as
+// WardrobeItemRecord.
+struct WeaponInventoryRecord {
+    uint32_t weaponDefId = 0;          // +0x00, engine name-hash, opaque
+    uint32_t unused = 0;               // +0x04, always 0 in every real sample
+    std::array<int32_t, 4> ammo{};     // +0x08, +0x0C, +0x10, +0x14; meaning OPEN
+    uint8_t flag0 = 0;                 // +0x18, 0 or 1
+    uint8_t flag1 = 0;                 // +0x19, 0 or 1
+    std::array<uint8_t, 2> pad{};      // +0x1A, +0x1B; always 0 in every real sample
 };
 
 // One of the 60 used activity progress records (Sec9.3a).
@@ -196,6 +271,10 @@ struct SaveSnapshotFields {
     uint32_t respectTotal = 0, respectInLevel = 0, playerLevel = 0; // 0x4418/0x441C/0x4420, Sec10.3
     int32_t cashRaw = 0;                               // 0x4A70, cash on hand x100, clamped +-2,000,000,000 (Sec10.3)
     std::vector<CollectibleRecord> collectibles;       // 0x3FC, Sec10.3; must fit kCollectibleCapacity (80)
+    std::vector<GarageRecord> garageRecords;           // 0xB760, Sec9.2; must fit kGarageCapacity (152)
+    uint32_t garageNextId = 1;                         // 0xF9E4, Sec9.2: next record id (starts at 1 on new game)
+    std::vector<WardrobeItemRecord> wardrobeItems;     // 0x4F6C, Sec10.1/10.2/10.3; must fit kWardrobeCapacity (2048)
+    std::vector<WeaponInventoryRecord> weaponInventory; // 0x4A74/0x4A78, Sec10.3; must fit kWeaponInventoryCapacity (12)
     std::vector<RegionRecord> regionRecords;           // 0x113B8/0x113C0, Sec12.4.1; must fit kRegionRecordCapacity (156)
     std::vector<ActivityRecord> activityRecords;       // 0x2B90, Sec9.3a; must fit kActivityTableCapacity (64)
     uint64_t activityMarkerFlags = 0;                  // 0x2E98, Sec9.3b
@@ -298,6 +377,28 @@ public:
     bool collectiblesInBounds() const { return collectibleCount_ <= kCollectibleCapacity; }
     const std::vector<CollectibleRecord>& collectibles() const { return collectibles_; }
 
+    // 0xB760: the garage's owned-vehicle records (Sec9.2). Empty (and garageRecordsInBounds()
+    // false) if the stored count exceeds the 152-record capacity.
+    uint32_t garageRecordCount() const { return garageRecordCount_; }
+    bool garageRecordsInBounds() const { return garageRecordCount_ <= kGarageCapacity; }
+    const std::vector<GarageRecord>& garageRecords() const { return garageRecords_; }
+    // 0xF9E4: next record id to assign (1 + the largest id seen, Sec9.2).
+    uint32_t garageNextId() const { return garageNextId_; }
+
+    // 0x4F6C: the wardrobe's owned-item records (Sec10.1/10.2/10.3). Empty
+    // (and wardrobeItemsInBounds() false) if the stored count exceeds the
+    // 2048-record capacity.
+    uint32_t wardrobeItemCount() const { return wardrobeItemCount_; }
+    bool wardrobeItemsInBounds() const { return wardrobeItemCount_ <= kWardrobeCapacity; }
+    const std::vector<WardrobeItemRecord>& wardrobeItems() const { return wardrobeItems_; }
+
+    // 0x4A74/0x4A78: the weapon inventory's owned-weapon records (Sec10.3's
+    // own span table row). Empty (and weaponInventoryInBounds() false) if
+    // the stored count exceeds the 12-record capacity.
+    uint32_t weaponInventoryCount() const { return weaponInventoryCount_; }
+    bool weaponInventoryInBounds() const { return weaponInventoryCount_ <= kWeaponInventoryCapacity; }
+    const std::vector<WeaponInventoryRecord>& weaponInventory() const { return weaponInventory_; }
+
     // 0x113B8 / 0x113C0: the region records (154 in 16/16). regionRecords() is empty
     // when the claimed count does not fit in the room before 0x11D80 (degrades
     // gracefully rather than treating the unverified count as a format violation).
@@ -359,6 +460,13 @@ private:
     int32_t cashRaw_ = 0;
     uint32_t collectibleCount_ = 0;
     std::vector<CollectibleRecord> collectibles_;
+    uint32_t garageRecordCount_ = 0;
+    std::vector<GarageRecord> garageRecords_;
+    uint32_t garageNextId_ = 0;
+    uint32_t wardrobeItemCount_ = 0;
+    std::vector<WardrobeItemRecord> wardrobeItems_;
+    uint32_t weaponInventoryCount_ = 0;
+    std::vector<WeaponInventoryRecord> weaponInventory_;
     uint32_t regionRecordCount_ = 0;
     std::vector<RegionRecord> regionRecords_;
     std::vector<uint8_t> regionRecordsRaw_;

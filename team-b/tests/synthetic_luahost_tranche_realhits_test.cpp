@@ -186,6 +186,66 @@ int main() {
         CHECK(es2.cutscenePlayInProgress()); // the start itself still succeeds; only the destinations are dropped
     }
 
+    // ------------------------------------------------------------------
+    // cutscene_play end-of-cutscene placement CHOSEN stand-in (2026-10-11,
+    // spec-lua-api-behaviour.md Sec57.2a's "new finding" note): the real
+    // non-skip consumer that commits the destination to the player is
+    // genuinely unresolved after an exhaustive 3-pass search, so this host
+    // applies the SAME destination-commit mechanism the skip_all_cutscenes
+    // branch already proves correct (teleport's own by-name resolve +
+    // bridgeLiveCharacterPosition) universally, on cutscene_play_check_done
+    // reporting "done." Same "simulate a real .czn_pc-resolved destination"
+    // convention as stub_teleport's own test
+    // (synthetic_luahost_batch1_sec1_4_core_test.cpp): set the destination's
+    // worldPosition directly (tryResolveWorldPositionFromZoneData is a
+    // no-op once v.known() is already true).
+    {
+        Host host3(batchFixtureNames());
+        lua_State* gp3 = host3.gameplayState();
+        EngineState& es3 = host3.engineState();
+        es3.zsceneLoadable().set("p_z10", true);
+        es3.getOrCreateCharacter("dest_local").worldPosition.set(WorldPosition{1.0, 2.0, 3.0});
+        es3.getOrCreateCharacter("dest_partner").worldPosition.set(WorldPosition{4.0, 5.0, 6.0});
+        CHECK(!es3.getOrCreateCharacter("#PLAYER1#").worldPosition.known());
+        CHECK(!es3.getOrCreateCharacter("#PLAYER2#").worldPosition.known());
+        ok(host3, gp3, "cutscene_play_do('p_z10', nil, {'dest_local', 'dest_partner'})");
+        // Not yet applied: cutscene_play_do alone (no skip_all_cutscenes)
+        // does not commit placement by itself.
+        CHECK(!es3.getOrCreateCharacter("#PLAYER1#").worldPosition.known());
+        ok(host3, gp3, "assert(cutscene_play_check_done() == true)"); // fires the placement as a side effect
+        CHECK(es3.getOrCreateCharacter("#PLAYER1#").worldPosition.known());
+        const WorldPosition& p1 = es3.getOrCreateCharacter("#PLAYER1#").worldPosition.get();
+        CHECK(p1.x == 1.0 && p1.y == 2.0 && p1.z == 3.0);
+        const WorldPosition& p2 = es3.getOrCreateCharacter("#PLAYER2#").worldPosition.get();
+        CHECK(p2.x == 4.0 && p2.y == 5.0 && p2.z == 6.0);
+        // Idempotent: a repeat check_done call does not re-run the
+        // (already-applied) placement again - not directly observable from
+        // the position alone, so just re-check it is still correct and the
+        // call itself still succeeds.
+        ok(host3, gp3, "assert(cutscene_play_check_done() == true)");
+        CHECK(p1.x == 1.0 && p1.y == 2.0 && p1.z == 3.0);
+    }
+
+    // The skip_all_cutscenes branch commits the SAME destinations
+    // IMMEDIATELY, inside cutscene_play_do itself - matching the real
+    // engine's own skip-branch behaviour, never deferred to a later
+    // check_done poll.
+    {
+        Host host4(batchFixtureNames());
+        lua_State* gp4 = host4.gameplayState();
+        EngineState& es4 = host4.engineState();
+        es4.zsceneLoadable().set("p_z11", true);
+        es4.zsceneSkipAllCutscenes().set(true);
+        es4.getOrCreateCharacter("dest_local2").worldPosition.set(WorldPosition{7.0, 8.0, 9.0});
+        ok(host4, gp4, "cutscene_play_do('p_z11', nil, {'dest_local2', 'dest_partner2'})");
+        CHECK(es4.getOrCreateCharacter("#PLAYER1#").worldPosition.known());
+        const WorldPosition& p1b = es4.getOrCreateCharacter("#PLAYER1#").worldPosition.get();
+        CHECK(p1b.x == 7.0 && p1b.y == 8.0 && p1b.z == 9.0);
+        // Partner destination has no known real position in this fixture:
+        // honestly left OPEN, not fabricated.
+        CHECK(!es4.getOrCreateCharacter("#PLAYER2#").worldPosition.known());
+    }
+
     if (g_failures == 0)
         std::cout << "ranking tranches 15/17/20/22/23 real-hit batch (2026-10-03, 8 functions): "
                      "all checks passed\n";

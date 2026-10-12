@@ -589,7 +589,15 @@ The S/C extents of §6.4 for these entries are now literal and each joins its ne
 
 Load (`0x00B96A20`): empty the list (`0x005F8CD0`), restore the id counter (`0x005F6090`), then construct one node per record (`0x005F7880`), copying the record back field by field; each rebuilt node's handle is set to a fixed null-handle constant (binding to the live vehicle happens later, in code not followed here).
 
-**Still open as of 2026-10-08 — a follow-up pass looked for the binding step and did not find it.** No further callers of the node-creation helpers (`0x005F7880`/`0x005F7990`) beyond this load routine itself, and no cross-spec document (`spec-tables-vehicle-world.md`, `spec-player-runtime.md`) documents a garage-to-world vehicle-spawn connection either — both checked directly, zero hits. Net reading (HIGH CONFIDENCE, not independently proven): the save restores vehicle *ownership* as a list of null-bound records; the in-world vehicle object is most plausibly spawned on demand later (e.g. retrieving it from a garage location), not automatically as part of load — consistent with there being no vehicle *position* field anywhere in the save format. Recorded so a future pass doesn't repeat the same two dead-end cross-spec greps. Full detail: `scratchpad/save_load_gameplay_runtime_2026-10-08.md`.
+~~**Still open as of 2026-10-08 — a follow-up pass looked for the binding step and did not find it.**~~ No further callers of the node-creation helpers (`0x005F7880`/`0x005F7990`) beyond this load routine itself, and no cross-spec document (`spec-tables-vehicle-world.md`, `spec-player-runtime.md`) documents a garage-to-world vehicle-spawn connection either — both checked directly, zero hits. The reasoning that follows was right in shape but the binding step itself is **CONFIRMED 2026-10-11, orchestrator-routed, direct harness query, no agent dispatched** — see below.
+
+**Binding step CONFIRMED 2026-10-11: the null-handle record is bound to a real live vehicle by the player's own use of the Lua-exposed `garage_retrieve_vehicle` native, NOT automatically on load.** Found by searching for callers of a vehicle-spawn-request helper (`0x005F8D00`, which validates the garage handle, locates a nearby vehicle-spawn marker via the same generic world-position/type-check pair every other diversion/trigger lookup in this project uses, and schedules the spawn) — one of its 5 call sites (`0x005FA570`) is reached only via a DATA reference from a Lua native-registration table at `0x005FC500`, which pairs it with the literal string **`"garage_retrieve_vehicle"`** (the same table also registers `garage_remove_vehicle`/`garage_repair_vehicle`/`garage_preview_vehicle`/`garage_can_delete`/`garage_can_customize`/`garage_get_repair_cost`/`garage_clear_new`/`garage_vehicle_load_pending`/`garage_back_to_customize`/`garage_get_garage_type` — the full garage-UI native family). The spawn-request helper sets a one-shot state flag (`0x014A1CE8 = 1`); a separate function (`0x005F84B0`) — gated on exactly that flag — then does the real work: resolves the same spawn marker again, calls the actual vehicle constructor (`0x00AA3F90`), applies the record's saved customization state (`0x00A98A20`/`0x00A87880`/`0x00A87780`), and finally fires the Lua event **`"garage_vehicle_load_completed"`** (via `0x005F8320`) once the live object exists. **A second, legitimate binding trigger also calls the same spawn-request helper: mission-checkpoint restoration** (`0x006D3780`, identified by its own literal strings `"checkpoint script vehicle"`/`"checkpoint system"`/`"mission start"`) — a checkpoint can request a specific "checkpoint script vehicle" be respawned from a garage-style record the same way. **No "phone call-in" mechanism reaching this binding path was found — specifically checked, not just absent from this search**: the cellphone's own garage/vehicle-delivery feature (`spec-cellphone-menu-runtime.md` §5, `cell_phone_garage_button_a`→`cellphone_choose_vehicle`, native `0x0083D5E0`) was opened in full and shares ZERO callees with the garage module's address range — it only validates a separate per-vehicle-definition "delivery eligible" flag (via a plain bounds-checked array getter, `0x007E5B40`) and charges the repair-cost fee through the generic cash-adjust primitive (`0x0094A800`); it never calls `0x005F8D00`, `garage_retrieve_vehicle`, or any other member of the garage-UI native family. The phone's "vehicle delivery" is a structurally separate cash-transaction feature over a different vehicle-definition/delivery-state array, not a second UI front-end onto this binding path. **No automatic spawn-on-load path exists** — the load routine itself (`0x00B96A20`) only ever sets the record's handle to the fixed null constant, confirming the original HIGH-CONFIDENCE reading was correct in substance.
+
+- **Evidence:** full disassembly of `0x005F8D00` (the spawn-request helper, all 5 of its real call sites enumerated), `0x005FA570` (confirmed as `garage_retrieve_vehicle` via its own registration table's literal string), `0x005F84B0` (the flag-gated spawn/customize step), `0x005F8320` (the completion-event firer), `0x006D3780` (the mission-checkpoint caller, identified by its own literal strings), and `0x0083D5E0` (`cellphone_choose_vehicle`, opened in full to check the phone-delivery hypothesis directly) — all via direct Ghidra query.
+- **Confidence:** CONFIRMED for the full chain (`garage_retrieve_vehicle` native → spawn-request validation → flag-gated spawn/customize → `garage_vehicle_load_completed` event), for the mission-checkpoint-restore secondary trigger, and for the phone-delivery feature's structural independence from this binding path. CONFIRMED (by direct re-check) that no automatic on-load binding exists.
+- **Unknowns:** the other 3 of the spawn-request helper's 5 call sites (`0x0090D4C0`, `0x005F99A0`, `0x005FA2E0`) were found but not individually identified by name — `0x0090D4C0` is a large (1030-instruction) function with no literal strings of its own, touching vehicle-customization and cheat-table addresses, plausibly another garage/store menu entry point rather than a qualitatively different trigger, but not confirmed; the exact UI flow a player takes to reach `garage_retrieve_vehicle` (crib garage vs. a phone app vs. elsewhere) was not traced on the Lua/UI side, only the native itself.
+
+Full detail: `scratchpad/save_load_gameplay_runtime_2026-10-08.md`, `scratchpad/q_garage/`, `scratchpad/q_garage2/`.
 
 **Record layout** (`rec = 0xB764 + 0x70·i`):
 
@@ -641,13 +649,47 @@ Empirical: **the 113 handles are identical and in the same order in all 16 snaps
 
 ### 9.4 Entry 8 — trigger objects, kinds 12–14 (`0xFC60`–`0x10C07`)
 
+**Kind identity [CONFIRMED, 2026-10-11] — crib hypothesis DISPROVEN.** An extracted `triggers.xtbl`
+(`tools/as_base_xtbl/triggers.xtbl`) carries the exact `<Trigger>` table the `0x0093E0C0` loader
+reads (same `Name`/`Effect`/`Icon`/`IconType`/`Foley`/`UseMessage`/`Flags` fields, loaded in table
+order into the array the object's `+0xA8` kind field indexes). 0-indexed by table order: **kind 12
+= "jump collection", kind 13 = "barnstorming", kind 14 = "garage mechanic"** — stunt-jump,
+barnstorming-checkpoint and garage-mechanic-access world markers, not crib doors. This is far more
+consistent with the empirical count (113 objects — plausible for jump/barnstorming/garage markers
+scattered citywide; Steelport has well under 113 cribs) than the crib hypothesis ever was. The
+crib interaction itself is a **separate** trigger kind in the same table: **kind 3, "crib purchase"**
+(`Effect=VFX_ForSaleIcon`, `Flags=ignore_vehicles`) — this fires the for-sale icon/purchase flow for
+an *unowned* crib; what fires for an *owned* crib (plain entry, no purchase) is still unidentified,
+but it is now known to be a different, uninvestigated kind index, not 12/13/14. The "data container
+this project cannot read" framing in the old OPEN note below is superseded — the container was
+simply not yet located in the extracted corpus.
+
+**Update 2026-10-11 [1 dispatched agent, reviewed]: the "activation vtable" framing for this class
+was WRONG, and is now corrected.** The trigger-volume object does NOT dispatch enable/disable/
+create-shape through a per-instance C++ vtable — `0x0093D320` (enable), `0x0093BDE0` (disable) and
+`0x0093B190` (one-way flag set) are all called **directly** (non-virtual) from hundreds of call
+sites, including the save/load routine; call sites devirtualize because the concrete type is
+already statically known, not because there's no polymorphism to resolve. No vtable-pointer write
+was found on this object in the functions checked. Separately, the xtbl-named flag `use_activated`
+IS real and confirmed in the binary (registered by name at `0x0093D160`, a small 5-slot-vtable
+generic "named-flag-bag" helper class, bit value `0x40`) — **but it is NOT sourced from
+`triggers.xtbl` as currently extracted** (that file's own `<Flag>` schema only has `check_npcs`/
+`continuous_activation`/`ignore_vehicles`/`ignore_on_foot`/`disabled_for_demo` — no
+`use_activated`/`enabled_on_create`). Those two names come from a separate, as-yet-unidentified
+source table via the same generic registration call. **Still genuinely OPEN:** the array of
+per-trigger-kind flag-bag instances and the function that reads a trigger-volume's `+0xA8` kind
+index against it; no function reading `+0xA8` at all was found in the enable/disable/shape cluster
+checked. See `spec-store-runtime.md` §2's own update for the (separately confirmed) native call
+path that actually opens a walk-in store's screen — likely the same unresolved "what triggers it"
+gap applies to crib entry, one hop further back than originally framed.
+
 **Source [CONFIRMED — disassembly].** The save routine walks the manager's list at `+0xD0` (count `+0xD8`) and, for every object whose kind field (`+0xA8`) is **12, 13 or 14**, appends a 16-byte record at `0xFC68 + 0x10·count`, then increments the count at `0xFC60`. **There is no capacity check in the save routine**: 250 is only the size the following span leaves. *[desk review 2026-09-30: the 4 bytes `0xFC64`–`0xFC67` lie between the count and the first record (`0xFC68 + 250 × 16 = 0x10C08`).]* Record: **{handle id, handle second word, `u8` flags, 7 × 0}** where flags bit 0 = **NOT** (object byte `+0xE4` bit 0, the "enabled" state) and bit 1 = **object byte `+0x7B` bit 0** (the same one-way flag entry 6 samples for activity markers, §9.3b). Load (`0x00B9A9C0`): resolve the handle; require the marker/trigger class flag and a live object; if bit 1 → set the flag (`0x0093B190`); if bit 0 == 0 → enable (`0x0093D320`, argument 3) else disable (`0x0093BDE0`, argument 3).
 
-**What the objects are [HIGH CONFIDENCE].** The routines that use this list and its methods sit in the address neighbourhood of the world-trigger code: a trigger-table loader (`0x0093E0C0`; per-trigger-kind fields effect, icon type, foley, use-message and flags `check_npcs` / `continuous_activation` / `ignore_vehicles` / `ignore_on_foot` / `disabled_for_demo`), a trigger-volume class name and a flags parser (`enabled_on_create`, `use_activated`, …); other users of the list are a nearest-object-to-position search (positions at object `+0x40..+0x48`, optionally requiring the enabled bit) and a collect-by-kind routine. Which *trigger kinds* 12, 13, 14 are (and hence why exactly 113 objects) is **OPEN**: the table naming the kinds is in a data container this project cannot read.
+**What the objects are [HIGH CONFIDENCE].** The routines that use this list and its methods sit in the address neighbourhood of the world-trigger code: a trigger-table loader (`0x0093E0C0`; per-trigger-kind fields effect, icon type, foley, use-message and flags `check_npcs` / `continuous_activation` / `ignore_vehicles` / `ignore_on_foot` / `disabled_for_demo`), a trigger-volume class name and a flags parser (`enabled_on_create`, `use_activated`, …); other users of the list are a nearest-object-to-position search (positions at object `+0x40..+0x48`, optionally requiring the enabled bit) and a collect-by-kind routine. Which *trigger kinds* 12, 13, 14 are is now **CONFIRMED** (see correction note above): jump collection, barnstorming and garage mechanic, respectively — not crib-related. The 113-object count is consistent with citywide collectible/checkpoint/garage markers.
 
 Empirical: count 113 in 16/16 (cap 250, never near); the 113 handles are identical and ordered identically in 16/16 and **disjoint from entry 6's 113 handles** (so the equal counts are a coincidence or a common census, not the same objects); every handle's second word has high half `0x0199`; flag values ∈ {0, 2}; **bit 0 is never set** (all triggers enabled); bit 1 count **0** (new game), **2** (39,688–114,279 s) and **3** (129,822–133,194 s) in the date-ordered 2026 series; the three other-profile snapshots hold 6, 5 and 14 (14 in the level-50 save).
 
-**Review status (2026-09-30), §9.4: DESK-PASS, text fixes applied — desk review (not re-derived from the executable).**
+**Review status (2026-09-30), §9.4: DESK-PASS, text fixes applied — desk review (not re-derived from the executable). Superseded in part 2026-10-11: kind identity now CONFIRMED via extracted `triggers.xtbl`, see correction note above.**
 
 ### 9.5 Entry 14 — active cheat entries (`0x0CC`–`0x3EF`)
 
@@ -734,14 +776,14 @@ A second convention: several runtime values that default to −1 are stored **+1
 | `0x4420` | `u32` | **Player level** (`+0x1ED8`; 0..50 in samples). | Same. | **CONFIRMED — disassembly** |
 | `0x4424` | `u32` | Player-record `+0xF8` (setter `0x00942290`). **0 in 16/16.** | — | **OPEN** |
 | `0x4A70` | `u32` | **Cash on hand, ×100** (clamped to ±2,000,000,000 on load and store). | §10.1. Empirical range 3,811 … 1,994,646,800 raw; new game 5,700 (= 57.00). | **CONFIRMED — disassembly** (upgrades §6.5) |
-| `0x4A74` + `0x4A78`–`0x4BC7` | `u32` count (≤ 12) + up to 12 × 28-byte records | **Weapon inventory.** Record: `u32` weapon-definition id (+0), `u32` unused 0 (+4), four ammo-shaped `i32` (+8, +0xC, +0x10, +0x14), byte (+0x18) and byte (+0x19) 0/1 flags, pad. Order: up to 8 primary inventory slots, then up to 4 secondary slots. | Filler `0x008DCC00` walks the player's inventory slots (8, then 4), keeps entries whose definition passes an availability test (`0x0045B3A0`), and reads ammo through two ammo getters (`0x009BFFC0`, `0x009BFF20`); loader `0x008DCEC0` finds the matching record by id in a 52-byte-stride table at `0x0250ADC0` (bit 0 of the byte at +0x2C = valid) **[Conflict: `spec-tables-weapons-combat.md` §1.6 places this table's live bit in byte `+0x30`; not re-checked which is right — see the matching marker there.]** **[desk review 2026-09-30 — cross-spec evidence: `spec-tables-vehicle-world.md` §15.1 (the items_inventory loader, "read to its end") lays out the 52-byte record with `+0x2C` = `Use_Script` (`s32`, 0 when absent) and `+0x30` = a flags byte whose bit 0 is the live bit, and `spec-tables-weapons-combat.md` §1.6 cites the live bit at `+0x30`; a valid bit inside an `s32` that is 0 for most rows would not work, so the lean is `+0x30`. Still OPEN — to be settled against the executable (loader `0x008DCEC0`).]** and re-creates the inventory item. The weapon-definition table (`0x028DC4DC`, 0x7EC-byte stride, referenced by the `0x4F5C` bit set, §10.6) is built from a weapons data table (strings: weapon, weapon-class, inventory-slot, spread, fire-cone, overheat…). **Identity CONFIRMED by name: 16 of the 19 distinct ids resolve to weapon names (§10.2); slot 0 is the melee weapon (`dildo_bat`, zero ammo), the new-game save holds two weapons.** Empirical: count 2 (new game) … 11; 19 distinct ids over 16 saves; +4 and +0x1A/+0x1B always 0; +0x18/+0x19 ∈ {0,1}; ammo-shaped values grow with progress (e.g. 98 → 438 → 1,750 → 4,810 in successive saves for one slot). The meaning of each of the four integers (loaded/reserve/capacity split) was **not** separated. | **CONFIRMED — disassembly + empirical** (identity) / **OPEN** (individual ammo fields) |
+| `0x4A74` + `0x4A78`–`0x4BC7` | `u32` count (≤ 12) + up to 12 × 28-byte records | **Weapon inventory.** Record: `u32` weapon-definition id (+0), `u32` unused 0 (+4), four ammo-shaped `i32` (+8, +0xC, +0x10, +0x14), byte (+0x18) and byte (+0x19) 0/1 flags, pad. Order: up to 8 primary inventory slots, then up to 4 secondary slots. | Filler `0x008DCC00` walks the player's inventory slots (8, then 4), keeps entries whose definition passes an availability test (`0x0045B3A0`), and reads ammo through two ammo getters (`0x009BFFC0`, `0x009BFF20`); loader `0x008DCEC0` finds the matching record by id in a 52-byte-stride table at `0x0250ADC0` (bit 0 of the byte at TRUE record `+0x30` = valid) **[RESOLVED 2026-10-11, orchestrator-routed self-pick (SPEC TEAM, agent `adade525008ef6ce0`, independently re-verified by direct query before splicing — the exact `TEST byte ptr [EAX+0x2c],BL` instruction at `0x008dcf10` matched exactly): the conflict was a base-pointer mismatch, not two real claims. `0x008DCEC0`'s own scanning pointer is seeded to the table base PLUS 4 (`0x0250ADC4`, pointing at each row's id field, not row byte 0), so its own literal `[EAX+0x2c]` read is TRUE record offset `0x2c+0x4=0x30` — the exact same bit `spec-tables-weapons-combat.md` §1.6 and `spec-tables-vehicle-world.md` §15.1 already correctly place at `+0x30`. `spec-tables-vehicle-world.md` §15.1's own `+0x2c`=`Use_Script` reading is untouched by this loader (never read here) and stands as its own separate field. CONFIRMED: there is one live bit, at true `+0x30`; this section's own prior `+0x2C` phrasing measured the same bit from the loader's own offset-by-4 scanning pointer rather than the record's true base.]** and re-creates the inventory item. The weapon-definition table (`0x028DC4DC`, 0x7EC-byte stride, referenced by the `0x4F5C` bit set, §10.6) is built from a weapons data table (strings: weapon, weapon-class, inventory-slot, spread, fire-cone, overheat…). **Identity CONFIRMED by name: 16 of the 19 distinct ids resolve to weapon names (§10.2); slot 0 is the melee weapon (`dildo_bat`, zero ammo), the new-game save holds two weapons.** Empirical: count 2 (new game) … 11; 19 distinct ids over 16 saves; +4 and +0x1A/+0x1B always 0; +0x18/+0x19 ∈ {0,1}; ammo-shaped values grow with progress (e.g. 98 → 438 → 1,750 → 4,810 in successive saves for one slot). The meaning of each of the four integers (loaded/reserve/capacity split) was **not** separated. | **CONFIRMED — disassembly + empirical** (identity) / **OPEN** (individual ammo fields) |
 | `0x4D58` | `u16` | **Cellphone "call received" bit set** (bit *n* = call *n* has been received). | Player-record `+0x27A0`; the only three code paths that set, test and clear a bit of it are the script bindings whose registered names are `cellphone_receive_call`, `cellphone_has_received_call` and `cellphone_reset_call` (`0x00A43030`, `0x00A42FF0`, `0x00A43060`). **0 in 16/16.** | **CONFIRMED — disassembly** |
 | `0x4D5C` | `u32` | Literal 0 written by the routine; no reader. | — | **CONFIRMED — disassembly** |
 | `0x4F6C` + `0x4F70`–`0x8F6F` | `u32` count (≤ 2,048; max seen 525) + 8-byte **owned-item records** (§10.2) | **The wardrobe: every (clothing item, colour choice) the player owns, for items in the initial part of the item registry** (that part includes items whose names carry a `dlc` marker). The same item id repeats once per colour combination (525 entries carry 76 distinct ids in the late saves). | Source list: the player record's 24-byte wardrobe entries `{item, wear option, wear-option index, flag, three colour choices}` (append routine `0x009DAC20`, raw append `0x009DAD20`); helper `0x00823C90` packs the initial-registry entries (selector 0), loader `0x00823D30`. Matches the customization data model (`spec-customization-data.md` §2.1: per-item wear options, three colour slots, `Is_DLC`). Empirical (§10.2 gates, 16/16). The flag is set to 1 when an item is added and cleared by a later lookup pair (`0x009DAEF0`/`0x009DAEFF`) — consistent with a **"new / not yet seen" marker (HYPOTHESIS)**. | **CONFIRMED — disassembly** (structure) / **HIGH CONFIDENCE** (meaning) |
 | `0x8F70`–`0x9097` + `0x9098` | 74 × `u32` + count byte (≤ 74; 74 = cap reached in 6 samples) | **Owned outfit ids (preset and custom).** Each `u32` is the id stored in the outfit registry entry; unresolvable ids are kept as raw ids. | Source list `0x0262E9F8` (`{outfit pointer, id}`, cap 128 at runtime, 74 saved); filler `0x00822C60`; loader `0x00822CF0` (`0x009DAFD0` appends and also re-adds each of the outfit's items to the wardrobe). Matches `customization_outfits.xtbl` (`spec-customization-data.md` §2.2). | **HIGH CONFIDENCE** |
 | `0x909C`–`0xB31B` + `0xB31C` | 32 × `0x114`-byte records + `u32` count (≤ 32; max seen 4) | **User-saved outfits.** Record: NUL-terminated UTF-16LE **name** at +0 (16 wide characters, the last two bytes always 0), 19 × 8-byte **outfit item entries** (§10.2) at +0x20, `u32` **item count** at +0xB8 (≤ 19), an 8-byte value at +0xBC and a `u32` at +0xC4 (both vary between outfits, meaning **OPEN**), and 19 × `u32` at +0xC8 that are **1 for each used item slot** and 0 otherwise (purpose OPEN — a per-item weight/enable). | Filler `0x00824170` walks a circular list of user-outfit nodes; loader `0x00824300` rebuilds each outfit and registers it with the player (`0x009DAFD0`). **Real data: five player-named outfits (names are player-typed text from the owner's save and are not reproduced here); item counts 7, 11, 8, 4, 8 match the used slots exactly; 73/82 outfit items are in the owner's wardrobe.** | **CONFIRMED — disassembly + empirical** (structure, names, counts) |
 
-**Review status (2026-09-30), §10.3: NEEDS-EXE: the weapon-inventory table's live bit, `+0x2C` vs `+0x30` (loader `0x008DCEC0`; cross-spec lean `+0x30`); rest desk pass — desk review (not re-derived from the executable).**
+**Review status (2026-09-30), §10.3: NEEDS-EXE: the weapon-inventory table's live bit, `+0x2C` vs `+0x30` (loader `0x008DCEC0`; cross-spec lean `+0x30`); rest desk pass — desk review (not re-derived from the executable).** **RESOLVED 2026-10-11 — disassembly (loader `0x008DCEC0` itself, not just its own resolver): true `+0x30`; see the resolved note in the table row above.**
 
 ### 10.4 The 0x2254-byte character record (entry 1, `0x900`) and its tail
 
@@ -775,6 +817,80 @@ Filled by `0x00B98F00` from the player record and its customization sub-object (
 Notes on the record semantics (all **CONFIRMED — disassembly** unless stated): the initialiser copies the "initially locked" property bit into a second flag bit that is the *current* locked state, counts a crib as owned (`0x014A0F80`) when that bit is clear, and sets `+0x140` to 0 for owned cribs (default −1 → saved 0). The crib's `+0x144` field selects the **active interior/level set**: the routines that switch levels (`0x005F1450`, `0x005F0BD0`, `0x005F0CD0`, `0x005F0D80`) filter the crib's interior, respawn, misc-trigger and unlockable arrays on `level == +0x144`. **Data:** the new-game save has 10/10 cribs locked (locked=1, A=B=0); a level-22 save has 2 unlocked (A=1, B=0); the late saves have 7 unlocked (A=1, B=0); the fullest save has all 10 unlocked with one crib at A=B=3 and two at A=B=1. Every record satisfies *locked ⇒ A=B=0* and *unlocked ⇒ A ≥ 1* (16/16). **The alternate serializer** (used when the session-state condition of §6.3 holds) writes the same block from a *stash* of globals instead (`0x0290F278` byte, `0x0290F180` count, `0x0290F188` 24-byte entries) and its alternate loader restores those globals and the stash — i.e. in a co-op session the block comes from the session's stashed copy, not from the live crib objects.
 
 **Review status (2026-09-30), §10.5: NEEDS-DATA: the crib-stash tally covers 15 of 16 saves — desk review (not re-derived from the executable).**
+
+**What entering an owned crib actually does, and the two sub-questions still genuinely open —
+synthesized 2026-10-11, orchestrator-routed, no new RE needed for the parts already published
+elsewhere (connecting this section to `spec-store-runtime.md` §10 for the first time).**
+`spec-store-runtime.md` §10 already fully document-traces `store_crib.lua`, the crib's interior
+menu: on entry it posts audio event `"Enter_Crib"`, sets background type `BG_TYPE_STRONGHOLD`, and
+builds a single flat, gate-evaluated top menu offering (per §10.2 there): wardrobe swap
+(`push_screen("store_clothing")`, unconditional), up to 4 garage rows (gated by
+`crib_is_garage_disabled()` then per-vehicle-type by `crib_has_garage_with_vehicles_of_type`),
+weapon cache (`push_screen("store_weapon")`, unconditional), gang customization (gated by
+`store_gang_is_unlocked()`), and stronghold customization (gated by `crib_is_stronghold()`), plus
+an always-last exit row. **`store_crib.lua` itself has ZERO cash-charging natives and ZERO
+autosave calls** (confirmed by grep, per that section's own §10.3) — this interior menu is purely
+a navigation hub into the five sub-stores/sub-screens, which each have their own purchase and (for
+cash-charging ones) their own record-and-replicate behavior already documented per-store.
+
+**Open sub-question 1, not resolved this pass: does simply walking into an already-owned crib
+(not buying one — that flow is `spec-building-purchase-runtime.md`, a different file, and its own
+autosave behavior is separately noted there) trigger an autosave?** No autosave call exists
+anywhere in `store_crib.lua` itself — if a save-point effect exists on crib entry, it must fire
+from the WORLD-TRIGGER side (the thing that opens the crib UI in the first place), not from the
+menu document. `spec-save-format.md` §15.2 (`mission_autosave`/`game_autosave`) documents the
+general autosave mechanism already; whether anything crib-specific calls into it was not checked
+this pass.
+
+**Open sub-question 2, not resolved this pass: what is the actual real-world trigger that opens
+`store_crib.lua` when the player walks into their house?** No file in the extracted Lua corpus
+calls `push_screen("store_crib")` — confirmed by a direct grep of every `scratchpad/ui_lua_dumps/`
+and `scratchpad/lua_dumps/` file for that literal string, zero hits. This means the real entry
+trigger is a native/engine-side call, not a Lua world-trigger callback of the kind this project has
+traced for other interactions. **Update 2026-10-11: the §9.4 kinds-12/13/14 candidate is now
+DISPROVEN** — `tools/as_base_xtbl/triggers.xtbl` (located and read directly this pass) shows kinds
+12/13/14 are "jump collection"/"barnstorming"/"garage mechanic", unrelated to cribs. The same table
+does carry a genuinely crib-specific entry, kind 3, **"crib purchase"** (`Effect=VFX_ForSaleIcon`),
+but that fires the for-sale icon/purchase flow for an *unowned* crib door, not plain entry into an
+*owned* one — so it only partially answers this question. Which kind (if any in this same table)
+fires on walking into an *owned* crib remains OPEN; the natural next step is to check the other
+~16 kinds in the table (indices 0,1,2,4-11,15-19) against the crib-entry behavior, or to check
+whether "crib purchase" itself is reused post-ownership with a different effect/flag state rather
+than a separate kind existing at all.
+
+**What persists per crib, restated plainly for Team B's own save-batch work (nothing new — a
+pointer-level summary of the already-exhaustive table above plus §10.6's cross-reference):** 10
+fixed-handle 24-byte records (locked flag; level fields A/B, both 0 when locked, A the highest
+level ever reached, B the currently-active level), one crib-stash cash float (shared across all
+owned cribs, capped by the 11-entry `Max_Stash` config scaled by an unlockable-driven multiplier),
+plus — in the UNLOCKABLES block, not this one — one Set-A/B/C bit triple per crib (slots 51-58,
+`Crib_3Count`/`Crib_Angels`/`Crib_Nuke`/`Crib_Kinzie`/`Crib_BDSM`/`Crib_SaintsHQ`/
+`Crib_Shaundis_Ex`/`Crib_Zimos`) tracking crib OWNERSHIP itself as a purchase, same mechanism every
+other purchasable unlockable uses (`spec-lua-api-behaviour.md` §26.7's own convergence point,
+`0x005ee630`-family — not independently re-checked for cribs specifically, but structurally the
+same system, consistent with the cross-check already in §10.6 above showing the two counts track
+each other in 12/16 samples). **There is no separate "crib definitions" xtbl** — cribs are rows of
+the same `unlockables.xtbl` the weapon/vehicle/homie unlockables use, `Type` = `Crib`/`Crib_Ammo`
+(confirmed by file read, `tools/ai_base_xtbl/unlockables.xtbl`, per `spec-tables-progression.md`
+§4.2's own `Type` element list).
+
+- **Evidence:** `spec-store-runtime.md` §10's own already-complete document trace (not re-derived);
+  a direct grep of the full extracted Lua corpus for `push_screen("store_crib")` (zero hits) and
+  for `autosave` inside `store_crib.lua` specifically (zero hits); a direct read of the real
+  `unlockables.xtbl` file confirming `Crib`/`Crib_Ammo` as real `Type` values.
+- **Confidence:** CONFIRMED for the menu-mechanics summary (already independently established)
+  and for both "zero hits" greps. OPEN, honestly, for both sub-questions above — neither was
+  resolved, both are flagged as genuine gaps rather than assumed either way.
+- **Unknowns:** whether crib entry autosaves; whether crib ownership's unlockable-bit mechanism
+  was independently re-verified to go through `0x005ee630` specifically for the `Crib`/`Crib_Ammo`
+  type case (assumed by structural analogy, not traced). **CLOSED, 2026-10-11: what opens the crib
+  UI for an owned crib.** Trigger kinds 12-14 (§9.4) and "crib purchase" (unowned/for-sale flow)
+  were both dead ends as noted above — the real mechanism is not the trigger-volume kind system at
+  all. It's the engine's generic "press E" interaction-prompt system (`spec-player-runtime.md`'s
+  `+0x2084` bitmask): action-array entry 8 of `0x0111f2d0` (full chain confirmed via disassembly,
+  `spec-store-runtime.md` §2) calls `0x0080cc90` on the already-known "store_crib" static object
+  (`0x022ccef8`), which calls the generic document-open function `0x007b5fe0`. No autosave call
+  was found anywhere in this chain (consistent with the still-open autosave question above).
 
 ### 10.6 Entry 13 — unlockables ("upgrades") state and the modifier scalars they leave behind
 
@@ -1465,6 +1581,80 @@ from a single getter (`0x009DA4E0`→`0x005EF440`).
 Full detail, address index: `scratchpad/save_game_write_path_2026-10-08.md`.
 
 ## Changelog
+
+- **2026-10-11 — §10.5: CLOSED — what opens the crib UI for an owned crib** (SPEC TEAM, self,
+  direct query, no agent). Real mechanism confirmed: the generic "press E" interaction-prompt
+  system, action-array entry 8, calling `0x0080cc90` on the known "store_crib" static object
+  (`0x022ccef8`) then the generic opener `0x007b5fe0` — full chain in `spec-store-runtime.md` §2.
+  Not the trigger-volume kind system (§9.4/kinds 12-14, "crib purchase") at all — both of those
+  earlier leads are now understood as genuine dead ends for THIS specific question, not just
+  unconfirmed. No autosave call found anywhere in the chain. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §9.4: "activation vtable" framing for the trigger-volume class CORRECTED to
+  no-vtable/direct-call; `use_activated` flag confirmed real but NOT sourced from `triggers.xtbl`
+  as extracted** (SPEC TEAM, 1 dispatched agent, reviewed, orchestrator-routed). Enable/disable/
+  create-shape (`0x0093D320`/`0x0093BDE0`/`0x0093B190`) are all direct (non-virtual) calls, not
+  vtable dispatch — call sites devirtualize on a statically-known type, no vtable-pointer write
+  found on this object. The xtbl-named flags `use_activated`/`enabled_on_create` are confirmed
+  registered in the binary (`0x0093D160`) but come from a separate, unidentified source table —
+  the real `triggers.xtbl` only has `check_npcs`/`continuous_activation`/`ignore_vehicles`/
+  `ignore_on_foot`/`disabled_for_demo`. Still OPEN: the per-kind flag-bag array and the function
+  reading the trigger's `+0xA8` kind index against it — none found in the cluster checked.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §9.4/§10.5: trigger kinds 12-14 CONFIRMED (jump collection/barnstorming/garage
+  mechanic), crib-UI-trigger hypothesis for those kinds DISPROVEN** (SPEC TEAM, self, orchestrator
+  continuation). Located an extracted `triggers.xtbl` (`tools/as_base_xtbl/triggers.xtbl`) matching
+  the `0x0093E0C0` loader's own field layout; read it directly instead of further disassembly.
+  0-indexed by table order, kinds 12/13/14 = "jump collection"/"barnstorming"/"garage mechanic" —
+  not crib-related, consistent with the empirical 113-object count (citywide collectible/checkpoint
+  markers, not the ~15-17 cribs in the game). The table does contain a genuinely crib-related kind,
+  **kind 3 "crib purchase"** (`Effect=VFX_ForSaleIcon`), but it is the for-sale/unowned-door flow,
+  not plain entry into an owned crib — so §10.5's "what opens the crib UI" open question is
+  narrowed, not fully closed: the owned-entry trigger kind is still unidentified (candidates:
+  indices 0,1,2,4-11,15-19 of the same table, or "crib purchase" reused with a different
+  effect/flag state post-ownership — not checked this pass). Edited §9.4's own "OPEN" line and
+  §10.5's two correction blocks in place rather than appending below them. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §10.5: crib/safehouse runtime synthesized with `spec-store-runtime.md` §10 for
+  the first time, orchestrator-routed, mostly no new RE** (SPEC TEAM, self). Connected the
+  already-complete interior-menu trace (wardrobe/garage/weapon/gang/stronghold access, zero
+  purchase natives of its own) to this section's own already-exhaustive per-crib save data.
+  Flagged two genuine open gaps rather than guessing: whether crib entry autosaves (no autosave
+  call in `store_crib.lua` itself) and what native/trigger-kind actually opens the crib UI (no
+  Lua file calls `push_screen("store_crib")`, confirmed by grep — trigger kinds 12-14 from §9.4
+  are a plausible, unconfirmed candidate). Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §9.2 garage binding step CONFIRMED (upgraded from HIGH CONFIDENCE), orchestrator-
+  routed** (SPEC TEAM, self, direct harness query, no agent dispatched). The null-handle garage
+  record is bound to a real live vehicle by the player's own use of the Lua-exposed
+  `garage_retrieve_vehicle` native (found via its own native-registration table), which validates
+  a nearby spawn marker, sets a one-shot flag, and a flag-gated step then constructs the vehicle
+  and applies its saved customization, firing a `"garage_vehicle_load_completed"` Lua event when
+  done. A second trigger, mission-checkpoint restoration, calls the same spawn-request path for a
+  "checkpoint script vehicle." No automatic on-load binding and no phone-call-in mechanism exist —
+  both ruled out directly, the latter re-checked same day against the cellphone's own "vehicle
+  delivery" feature (`cellphone_choose_vehicle`, opened in full) at the orchestrator's own request:
+  it shares zero code with the garage module, confirming it's a separate cash-only mechanism, not
+  a second front-end onto this binding path. Edited the old "Still open" marker in place rather
+  than appending below it. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
+
+- **2026-10-11 — §10.3's weapon-inventory live-bit conflict RESOLVED: a base-pointer offset
+  difference, not a disagreement** (SPEC TEAM, agent `adade525008ef6ce0`, independently
+  re-verified by direct query before splicing — `0x008dcec0`'s exact `TEST byte ptr
+  [EAX+0x2c],BL` instruction at `0x008dcf10` matched exactly, with `EAX` confirmed seeded to
+  table base + 4). The true record-relative live bit is `+0x30` bit 0 — the same bit
+  `spec-tables-weapons-combat.md` §1.6/`spec-tables-vehicle-world.md` §15.1 already state; this
+  section's own prior `+0x2C` phrasing measured the same bit from `0x008dcec0`'s own scanning
+  pointer (seeded 4 bytes into the row, at the id field) rather than the row's true base —
+  `spec-tables-vehicle-world.md` §15.1 had already independently reached this same diagnosis on
+  2026-10-01, now reconfirmed from the OTHER half of the conflict (the save-format loader
+  itself, not just the resolver). Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
 
 - **2026-10-08 — new §16 "Write/Read Symmetry," dispatched for Team B (who already have read/apply
   working)** (SPEC TEAM, agent `a01d57e61cae518f0`). Both drivers independently re-confirmed to walk

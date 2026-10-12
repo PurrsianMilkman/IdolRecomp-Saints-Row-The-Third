@@ -19,6 +19,17 @@
 // the header's own file header item 5a for the full CONFIRMED-vs-CHOSEN
 // breakdown of the new gate.
 //
+// REWRITTEN AGAIN 2026-10-11 (overtake-gate-18.6b task): the overtake-gate
+// tests now exercise Sec18.6b's REAL 12-step gate (forward-divergence,
+// closing-distance floor, approximated pass-point bound) instead of the
+// first pass's three fully-CHOSEN distance/alignment/closing-speed
+// thresholds - see testStepLaneFollowGateForwardDivergenceBlocksSameDirection/
+// GateClosingDistanceFloor/GatePassPointBound below. The steer-MAGNITUDE
+// tests (testStepLaneFollowMagnitude*) are new - the first pass's "full-lock
+// +-1.0, never proportional" reading of Sec18.6 step 3 is now a CHOSEN
+// proportional stand-in instead (file header item 5), fixing a live-observed
+// regression; see that section's own doc comment for why.
+//
 // Fixtures go through sr3zone::TrafficGraph::parseAt() (via
 // BuildLaneGraphFixture() below) rather than constructing
 // sr3zone::TrafficRecord field-by-field - unchanged convention from the
@@ -345,7 +356,16 @@ void testStepLaneFollowReportsStuckWhenNeverStarted() {
 // kAlignmentDistanceThreshold) must report aligned==true and a driving
 // throttle; steer magnitude must be exactly 1.0 in either direction, never
 // a proportional in-between value.
-void testStepLaneFollowFullLockSteerAndAlignmentGate() {
+// RENAMED/REVISED 2026-10-11 (overtake-gate-18.6b task): the first merge's
+// own "CONFIRMED full-lock magnitude, never proportional" reading of Sec18.6
+// step 3 is what produced a live-observed regression (file header item 5,
+// "STEERING MAGNITUDE, CHOSEN FIX") once combined with a sign that
+// structurally never gets rewritten for same-direction-only traffic. This
+// file now scales the +-1.0 sign by the heading-to-target alignment dot -
+// a fully-aligned vehicle (this fixture) must steer ~0.0, not lock to
+// +-1.0. (The old assertion, kept here in spirit via the throttle/aligned
+// checks, is superseded by testStepLaneFollowMagnitude* below.)
+void testStepLaneFollowAlignedThrottlesAndSteersNearZero() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},  // target 4 units straight ahead - within the 5.0-unit gate
     };
@@ -359,7 +379,7 @@ void testStepLaneFollowFullLockSteerAndAlignmentGate() {
     CHECK(!cmd.stuck);
     CHECK(cmd.aligned);
     CHECK(cmd.throttle > 0.0);
-    CHECK(cmd.steer == 1.0 || cmd.steer == -1.0);  // CONFIRMED full-lock magnitude, never proportional
+    CHECK(std::fabs(cmd.steer) < 1e-9);  // CHOSEN proportional magnitude fix - see file header item 5
     CHECK(cmd.brake == 0.0);
 }
 
@@ -405,10 +425,9 @@ void testStepLaneFollowCachedQueryThrottle() {
     CHECK(!second.requeried);      // well inside the re-query distance threshold - cache still fresh
 }
 
-// Sec18.6a overtake-gate task (2026-10-10): with no overtakeCandidate given
-// at all, the gate can never pass - state.passSideFlag must stay at its
-// CHOSEN default (false, file header item 5a) across repeated ticks, and
-// steer must follow the CHOSEN false->+1.0 mapping.
+// overtake-gate-18.6b task (2026-10-11): with no overtakeCandidate given at
+// all, the gate can never pass - state.passSideFlag must stay at its CHOSEN
+// default (false, file header item 5a) across repeated ticks.
 void testStepLaneFollowDefaultPassSideFlagWithNoCandidate() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
@@ -421,18 +440,82 @@ void testStepLaneFollowDefaultPassSideFlagWithNoCandidate() {
     CHECK(!state.passSideFlag);  // CHOSEN default
     LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0);
     CHECK(!state.passSideFlag);  // no candidate -> gate never ran -> unchanged
-    CHECK(cmd.steer == 1.0);     // false -> +1.0, file header item 5a mapping
+    CHECK(!cmd.overtakeGateFired);
 
     // A second tick, still no candidate - flag must still be untouched.
     LaneFollowCommand second = StepLaneFollow(graph, state, 0.1, 0.0, 0.0);
     CHECK(!state.passSideFlag);
-    CHECK(second.steer == 1.0);
+    CHECK(!second.overtakeGateFired);
 }
 
-// A candidate that passes all three gate components (close, ahead, and this
-// vehicle moving fast enough to count as "closing") must flip
-// state.passSideFlag to match Sec18.6a's own dot-product sign test, and the
-// steer sign must follow it.
+// Step (a)/3 (Sec18.6b, PORTED VERBATIM): a same-direction candidate
+// (headingRad == self's own heading) can NEVER pass the forward-divergence
+// test, no matter how close/fast - the gate's documented root cause of
+// "never fires" against an all-same-direction population.
+void testStepLaneFollowGateForwardDivergenceBlocksSameDirection() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Self heading 0 (facing +X). Candidate at (8,0,-1), ALSO heading 0
+    // (same direction) - otherwise an easy pass on closing-distance/bound.
+    OvertakeCandidate sameDirection{8.0, -1.0, /*headingRad=*/0.0, /*speedMs=*/0.0};
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
+                                            /*vehicleSpeedMs=*/0.0, sameDirection);
+    CHECK(!cmd.overtakeGateFired);
+    CHECK(!state.passSideFlag);  // untouched - still CHOSEN default
+}
+
+// Step (c)/6-7 (Sec18.6b, PORTED VERBATIM): an oncoming candidate too CLOSE
+// to satisfy the 3.0-unit speed-extrapolated closing-distance floor must
+// still fail the gate even though forward-divergence passes.
+void testStepLaneFollowGateClosingDistanceFloor() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Oncoming (heading pi, facing -X) but only 2 units ahead - both
+    // stationary (speedMs=0), so closingProjection == 2.0 < 3.0 floor.
+    OvertakeCandidate tooClose{2.0, 0.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
+                                            /*vehicleSpeedMs=*/0.0, tooClose);
+    CHECK(!cmd.overtakeGateFired);
+    CHECK(!state.passSideFlag);
+}
+
+// Steps (d)+(e)/9-10 (Sec18.6b, APPROXIMATED combined pass-point bound): an
+// oncoming candidate that clears the closing-distance floor but is far
+// beyond the 81.0 (9^2) squared-distance bound on the predicted pass point
+// must still fail the gate.
+void testStepLaneFollowGatePassPointBound() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Oncoming, both stationary, 50 units ahead: closingProjection == 50.0
+    // (passes the 3.0 floor) but predictedDistSq == 2500.0 >> 81.0.
+    OvertakeCandidate tooFar{50.0, 0.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
+                                            /*vehicleSpeedMs=*/0.0, tooFar);
+    CHECK(!cmd.overtakeGateFired);
+    CHECK(!state.passSideFlag);
+}
+
+// A candidate that passes ALL ported/approximated gate steps (oncoming,
+// closing distance >= 3.0, within the 81.0 pass-point bound) must flip
+// state.passSideFlag to match Sec18.6a's own dot-product sign test.
 void testStepLaneFollowOvertakeGatePassesAndSetsFlag() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
@@ -442,34 +525,34 @@ void testStepLaneFollowOvertakeGatePassesAndSetsFlag() {
     TrafficLaneGraph graph(rec);
 
     LaneFollowState state = LaneFollowState::Begin(graph, 0);
-    // Heading 0 (facing +X). Candidate at (4, 0, 1): close (dist ~4.12,
-    // under kOvertakeGateMaxDistance), and within kOvertakeGateAlignmentCosine
-    // of straight ahead (aheadDot = 4/4.12 = 0.97 >= cos(20deg)) - the gate
-    // passes. Lateral axis (heading rotated +90deg) is (0,1) in (x,z);
-    // sideDot = 1*1 = 1 >= 0, so the real write (sideDot < 0.0) should
-    // leave passSideFlag FALSE.
-    OvertakeCandidate sameSide{4.0, 1.0};
+    // Heading 0 (facing +X, fwd=(1,0)). Oncoming candidate (heading pi) at
+    // (8,0,1): closingProjection == 8.0 (>=3.0), predictedDistSq ==
+    // 65.0 (<=81.0) - gate passes. Lateral axis (heading rotated +90deg) is
+    // (0,1) in (x,z); sideDot = 1*1 = 1 >= 0, so the real write
+    // (sideDot < 0.0) leaves passSideFlag FALSE.
+    OvertakeCandidate sameSide{8.0, 1.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
     LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
-                                            /*vehicleSpeedMs=*/5.0, sameSide);
+                                            /*vehicleSpeedMs=*/0.0, sameSide);
     CHECK(!cmd.stuck);
+    CHECK(cmd.overtakeGateFired);
     CHECK(!state.passSideFlag);
-    CHECK(cmd.steer == 1.0);
 
-    // A candidate offset to -Z instead (4, 0, -1): sideDot = 1*(-1) = -1 < 0,
-    // flips the flag true, and steer must follow it to -1.0.
+    // A candidate offset to -Z instead (8, 0, -1): sideDot = 1*(-1) = -1 < 0,
+    // flips the flag true.
     LaneFollowState state2 = LaneFollowState::Begin(graph, 0);
-    OvertakeCandidate otherSide{4.0, -1.0};
+    OvertakeCandidate otherSide{8.0, -1.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
     LaneFollowCommand cmd2 = StepLaneFollow(graph, state2, 0.0, 0.0, /*heading=*/0.0, LaneFollowConfig{},
-                                             /*vehicleSpeedMs=*/5.0, otherSide);
+                                             /*vehicleSpeedMs=*/0.0, otherSide);
     CHECK(!cmd2.stuck);
+    CHECK(cmd2.overtakeGateFired);
     CHECK(state2.passSideFlag);
-    CHECK(cmd2.steer == -1.0);
 }
 
-// If the gate FAILS (candidate too far away), the flag must keep whatever
-// value it was last set to - NOT reset to the CHOSEN default and NOT get
-// overwritten by the far candidate's own dot-product sign. Sec18.6a's own
-// text: "there is no clear-every-frame... path."
+// If the gate FAILS (candidate same-direction, too close, or too far), the
+// flag must keep whatever value it was last set to - NOT reset to the
+// CHOSEN default and NOT get overwritten by the failing candidate's own
+// dot-product sign. Sec18.6a's own text: "there is no clear-every-frame...
+// path" (unchanged by this task - only the gate steps themselves changed).
 void testStepLaneFollowOvertakeGateFailureKeepsLastValue() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
@@ -479,27 +562,141 @@ void testStepLaneFollowOvertakeGateFailureKeepsLastValue() {
     TrafficLaneGraph graph(rec);
 
     LaneFollowState state = LaneFollowState::Begin(graph, 0);
-    // First, pass the gate with an "otherSide" candidate to set the flag true.
-    OvertakeCandidate otherSide{4.0, -1.0};
-    StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/5.0, otherSide);
+    // First, pass the gate with an "otherSide" oncoming candidate to set the
+    // flag true.
+    OvertakeCandidate otherSide{8.0, -1.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
+    StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/0.0, otherSide);
     CHECK(state.passSideFlag);
 
-    // Now a candidate far outside kOvertakeGateMaxDistance, on the OPPOSITE
-    // side (sideDot > 0, which would set the flag FALSE if the gate ran) -
-    // the gate's own distance test must fail, so the flag must stay true.
-    OvertakeCandidate farAway{1000.0, 1000.0};
-    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/5.0,
-                                            farAway);
+    // Now a candidate far outside the pass-point bound, on the OPPOSITE side
+    // (sideDot > 0, which would set the flag FALSE if the gate ran) - the
+    // gate's own bound test must fail, so the flag must stay true.
+    OvertakeCandidate farAway{1000.0, 1000.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
+    LaneFollowCommand cmd =
+        StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/0.0, farAway);
+    CHECK(!cmd.overtakeGateFired);
     CHECK(state.passSideFlag);  // untouched by the failed-gate tick
-    CHECK(cmd.steer == -1.0);
 
-    // Also: a nearby, ahead candidate but with this vehicle's own speed
-    // below the closing-speed gate - must also fail to overwrite.
-    OvertakeCandidate nearSameSide{4.0, 1.0};  // would set FALSE if the gate ran
-    LaneFollowCommand cmd2 = StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/0.0,
-                                             nearSameSide);
-    CHECK(state.passSideFlag);  // closing-speed gate failed - still untouched
-    CHECK(cmd2.steer == -1.0);
+    // Also: a close, oncoming candidate but same-direction-blocked is not
+    // applicable here (headingRad already pi) - instead exercise the
+    // closing-distance floor failing on its own: same side, too close.
+    OvertakeCandidate nearSameSide{1.0, 1.0, /*headingRad=*/kLaneFollowPi, /*speedMs=*/0.0};
+    LaneFollowCommand cmd2 =
+        StepLaneFollow(graph, state, 0.0, 0.0, 0.0, LaneFollowConfig{}, /*vehicleSpeedMs=*/0.0, nearSameSide);
+    CHECK(!cmd2.overtakeGateFired);
+    CHECK(state.passSideFlag);  // closing-distance gate failed - still untouched
+}
+
+// STEERING MAGNITUDE, CHOSEN FIX (file header item 5): when the vehicle's
+// heading is already aimed directly at its own lookahead target (dot==1.0),
+// the steer magnitude must be ~0.0 regardless of state.passSideFlag - this
+// is the direct fix for the live-observed full-lock regression (a
+// perfectly-aligned vehicle should drive straight, not lock to +-1.0).
+void testStepLaneFollowMagnitudeNearZeroWhenAligned() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    // Dead-end single segment - WalkLookahead() returns (4,0,0) as the
+    // target. Heading 0 points EXACTLY at it (dot == 1.0).
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/0.0);
+    CHECK(std::fabs(cmd.steer) < 1e-9);
+}
+
+// The opposite extreme: heading pointed directly AWAY from the lookahead
+// target (dot == -1.0, clamped) must still yield the full +-1.0 magnitude -
+// steer should follow state.passSideFlag's own CHOSEN false->+1.0 mapping.
+void testStepLaneFollowMagnitudeFullWhenMisaligned() {
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    LaneFollowCommand cmd = StepLaneFollow(graph, state, 0.0, 0.0, /*heading=*/kLaneFollowPi);
+    CHECK(!state.passSideFlag);  // CHOSEN default, no candidate given
+    CHECK(std::fabs(cmd.steer - 1.0) < 1e-9);
+}
+
+// Sec18.6's own "Secondary item" curve (RESOLVED 2026-10-11, overtake-
+// gate-18.6b task) - traffic_lane_detail::ApplySteeringCurve(), exercised
+// directly as a pure function rather than through StepLaneFollow(). Uses
+// this file's own kSteerCurveThreshold (0.2)/kSteerCurveSlope (0.3) CHOSEN
+// values throughout - see that constant's own doc comment for why they're
+// CHOSEN, not confirmed.
+
+// Below the breakpoint: output = slope * |x| (simple linear response),
+// well short of the clamp-to-1.0 ceiling. UPDATED 2026-10-11 (drive-by,
+// see the removed above-threshold test's own comment just below): with
+// the real, CONFIRMED threshold/slope = 1.0/1.0 (commit 3fc6260,
+// superseding this test's own older 0.2/0.3 CHOSEN placeholder values),
+// slope=1.0 makes this branch a pure magnitude pass-through.
+void testApplySteeringCurveBelowThresholdIsLinear() {
+    const double out = traffic_lane_detail::ApplySteeringCurve(0.1, kSteerCurveThreshold, kSteerCurveSlope,
+                                                                 /*airborne=*/false);
+    // step 2 negates first: x = -0.1, sign = -1, mag = 0.1 (<=1.0 threshold)
+    // -> magnitude = 1.0*0.1 = 0.1, sign reapplied -> -0.1.
+    CHECK(std::fabs(out - (-0.1)) < 1e-9);
+}
+
+// REMOVED 2026-10-11 (drive-by fix, unrelated to this session's own
+// cutscene_play task - found only because it broke the full-suite build
+// this task's own merge gate requires): this test exercised the
+// above-threshold "second slope" branch of ApplySteeringCurve() with
+// kSteerCurveThreshold/kSteerCurveSlope = 0.2/0.3 - stale values from
+// before the overtake-gate-18.6b task (commit 3fc6260) replaced them with
+// the real, CONFIRMED hardcoded identity constants 1.0/1.0. With
+// threshold=1.0, the production code's own doc comment (traffic_lane_
+// follower.h, right above kSteerCurveThreshold) already states the
+// above-threshold branch is now "structurally unreachable" (no clamped
+// input can exceed 1.0) - and this test's own `secondSlope = (1.0 -
+// slope*threshold)/(1.0-threshold)` literally divides by the now-zero
+// `(1.0-threshold)`, which MSVC rejects as a hard compile error (C2124),
+// not a runtime result, blocking the entire build. Deleting rather than
+// inventing a new non-zero threshold to keep the test alive - the branch
+// this test existed to cover is real dead code now per the production
+// comment itself, so there's nothing left to correctly assert.
+
+// Exactly +-1.0 at |x|=1.0, by construction of the second slope - the
+// property Sec18.6's own text calls out explicitly ("so the curve lands
+// exactly at +-1.0 when |input|=1.0").
+void testApplySteeringCurveReachesExactlyOneAtInputMagnitudeOne() {
+    const double outPos = traffic_lane_detail::ApplySteeringCurve(1.0, kSteerCurveThreshold, kSteerCurveSlope, false);
+    const double outNeg = traffic_lane_detail::ApplySteeringCurve(-1.0, kSteerCurveThreshold, kSteerCurveSlope, false);
+    CHECK(std::fabs(outPos - (-1.0)) < 1e-9);  // negated internally -> sign flips
+    CHECK(std::fabs(outNeg - 1.0) < 1e-9);
+    // Values beyond +-1.0 must clamp, not overshoot - step 3's own clamp.
+    const double outOver = traffic_lane_detail::ApplySteeringCurve(5.0, kSteerCurveThreshold, kSteerCurveSlope, false);
+    CHECK(std::fabs(outOver - (-1.0)) < 1e-9);
+}
+
+// Step 2's own confirmed sign negation: a positive input produces a
+// negative-signed output (before any further composition by the caller) -
+// the stored convention inside the real function is inverted relative to
+// its caller's own sign, per Sec18.6's own text.
+void testApplySteeringCurveNegatesSignInternally() {
+    const double outPos = traffic_lane_detail::ApplySteeringCurve(0.5, kSteerCurveThreshold, kSteerCurveSlope, false);
+    const double outNeg = traffic_lane_detail::ApplySteeringCurve(-0.5, kSteerCurveThreshold, kSteerCurveSlope, false);
+    CHECK(outPos < 0.0);
+    CHECK(outNeg > 0.0);
+    CHECK(std::fabs(outPos + outNeg) < 1e-9);  // odd-symmetric about 0
+}
+
+// Step 1's own confirmed airborne early-out: CHOSEN bypass in this file
+// (no grounded/airborne field on NearFieldVehicle) still has to be callable
+// with airborne=true and behave per the real mechanic's own "writes
+// nothing" - this pure-function port returns 0.0 (nothing to leave
+// unwritten in a stateless signature), never falling through to the curve.
+void testApplySteeringCurveAirborneEarlyOutWritesNothing() {
+    const double out = traffic_lane_detail::ApplySteeringCurve(1.0, kSteerCurveThreshold, kSteerCurveSlope,
+                                                                 /*airborne=*/true);
+    CHECK(out == 0.0);
 }
 
 void run(const char* name, void (*fn)()) {
@@ -525,14 +722,26 @@ int main() {
     run("testWalkLookaheadHopsJunctionAndTracksAdvancedFlag", testWalkLookaheadHopsJunctionAndTracksAdvancedFlag);
     run("testWalkLookaheadReportsDeadEndShortOfLookahead", testWalkLookaheadReportsDeadEndShortOfLookahead);
     run("testStepLaneFollowReportsStuckWhenNeverStarted", testStepLaneFollowReportsStuckWhenNeverStarted);
-    run("testStepLaneFollowFullLockSteerAndAlignmentGate", testStepLaneFollowFullLockSteerAndAlignmentGate);
+    run("testStepLaneFollowAlignedThrottlesAndSteersNearZero", testStepLaneFollowAlignedThrottlesAndSteersNearZero);
     run("testStepLaneFollowThrottleZeroWhenMisaligned", testStepLaneFollowThrottleZeroWhenMisaligned);
     run("testStepLaneFollowCachedQueryThrottle", testStepLaneFollowCachedQueryThrottle);
     run("testStepLaneFollowDefaultPassSideFlagWithNoCandidate",
         testStepLaneFollowDefaultPassSideFlagWithNoCandidate);
+    run("testStepLaneFollowGateForwardDivergenceBlocksSameDirection",
+        testStepLaneFollowGateForwardDivergenceBlocksSameDirection);
+    run("testStepLaneFollowGateClosingDistanceFloor", testStepLaneFollowGateClosingDistanceFloor);
+    run("testStepLaneFollowGatePassPointBound", testStepLaneFollowGatePassPointBound);
     run("testStepLaneFollowOvertakeGatePassesAndSetsFlag", testStepLaneFollowOvertakeGatePassesAndSetsFlag);
     run("testStepLaneFollowOvertakeGateFailureKeepsLastValue",
         testStepLaneFollowOvertakeGateFailureKeepsLastValue);
+    run("testStepLaneFollowMagnitudeNearZeroWhenAligned", testStepLaneFollowMagnitudeNearZeroWhenAligned);
+    run("testStepLaneFollowMagnitudeFullWhenMisaligned", testStepLaneFollowMagnitudeFullWhenMisaligned);
+    run("testApplySteeringCurveBelowThresholdIsLinear", testApplySteeringCurveBelowThresholdIsLinear);
+    run("testApplySteeringCurveReachesExactlyOneAtInputMagnitudeOne",
+        testApplySteeringCurveReachesExactlyOneAtInputMagnitudeOne);
+    run("testApplySteeringCurveNegatesSignInternally", testApplySteeringCurveNegatesSignInternally);
+    run("testApplySteeringCurveAirborneEarlyOutWritesNothing",
+        testApplySteeringCurveAirborneEarlyOutWritesNothing);
 
     if (g_failures != 0) {
         std::cerr << g_failures << " check(s) failed.\n";

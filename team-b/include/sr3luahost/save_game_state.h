@@ -33,6 +33,7 @@
 // save/load cycle would be testing behavior the real game does not have.
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -52,6 +53,54 @@ struct CollectedCollectible {
     uint32_t handleLo = 0;
     uint32_t handleHi = 0;
     uint32_t group = 0; // 0..3
+};
+
+// One garage-owned vehicle record (mirrors sr3save::GarageRecord 1:1,
+// spec-save-format.md Sec9.2, entry 5, offset 0xB760). No live vehicle
+// handle field here either, matching the real format: the load routine
+// always rebinds to a fixed null-handle constant, never round-trips a live
+// handle (CONFIRMED 2026-10-11 - see GarageRecord's own top comment).
+struct GarageVehicleRecord {
+    uint32_t recordId = 0;
+    uint32_t blobLength = 0;
+    float unknownFlag = 0.0f;
+    uint16_t vehicleTypeIndex = 0;
+    uint16_t enumE = 0;
+    uint16_t enum10 = 0;
+    uint8_t byte12 = 0xFF;
+    std::array<uint8_t, 32> optionSet{};
+    std::array<uint8_t, 57> blob{};
+    uint8_t stateFlags = 0;
+};
+
+// One wardrobe owned-item record (mirrors sr3save::WardrobeItemRecord 1:1,
+// spec-save-format.md Sec10.1/10.2/10.3, offset 0x4F6C): an item id (opaque
+// name-hash), 3 colour-slot indices (0xFF = none, matching the real
+// format's own convention), a 4-bit wear-option/variant index, a 1-bit
+// flag, and 3 spare bits (0 in every real sample, round-tripped anyway).
+struct WardrobeOwnedItem {
+    uint32_t itemId = 0;
+    uint8_t colour0 = 0xFF;
+    uint8_t colour1 = 0xFF;
+    uint8_t colour2 = 0xFF;
+    uint8_t wearOption = 0;
+    bool flag = false;
+    uint8_t spareBits = 0;
+};
+
+// One weapon inventory owned-weapon record (mirrors
+// sr3save::WeaponInventoryRecord 1:1, spec-save-format.md Sec10.3's own
+// span table row, offset 0x4A74/0x4A78): a weapon-definition id (opaque
+// name-hash), an unused dword, four signed "ammo-shaped" values (meaning
+// OPEN), two single-byte flags, and 2 pad bytes (0 in every real sample,
+// round-tripped anyway).
+struct WeaponInventoryItem {
+    uint32_t weaponDefId = 0;
+    uint32_t unused = 0;
+    std::array<int32_t, 4> ammo{};
+    uint8_t flag0 = 0;
+    uint8_t flag1 = 0;
+    std::array<uint8_t, 2> pad{};
 };
 
 // The live, mutable subset of a real save snapshot's player-state fields
@@ -83,6 +132,24 @@ struct SaveGameState {
     // in-scope native in this project currently produces one; a test (or a
     // future collectible-pickup native) appends to it directly.
     std::vector<CollectedCollectible> collectibles;
+
+    // 0xB760 (Sec9.2): the garage's owned-vehicle records. Starts empty -
+    // no in-scope native currently produces one; a test (or a future
+    // garage/vehicle-purchase native) appends to it directly. Default
+    // next-id 1 matches the real new-game save (Sec9.2: counter initialised
+    // to 1 at boot).
+    std::vector<GarageVehicleRecord> garageVehicles;
+    uint32_t garageNextId = 1;
+
+    // 0x4F6C (Sec10.1/10.2/10.3): the wardrobe's owned-item records. Starts
+    // empty - no in-scope native currently produces one; a test (or a
+    // future wardrobe-purchase native) appends to it directly.
+    std::vector<WardrobeOwnedItem> wardrobeItems;
+
+    // 0x4A74/0x4A78 (Sec10.3): the weapon inventory's owned-weapon records.
+    // Starts empty - no in-scope native currently produces one; a test (or
+    // a future weapon-pickup native) appends to it directly.
+    std::vector<WeaponInventoryItem> weaponInventory;
 
     // 0x084 (Sec12.10.1): index of the active mission in a 50-slot table,
     // 0x7F = none. This project's own task brief is explicit that this

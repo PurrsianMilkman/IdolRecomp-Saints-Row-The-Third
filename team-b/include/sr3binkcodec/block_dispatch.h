@@ -400,8 +400,11 @@
 
 #include "sr3binkcodec/ac_tree_decoder.h"
 #include "sr3binkcodec/bitstream_reader.h"
+#include "sr3binkcodec/dc_delta_array.h"
+#include "sr3binkcodec/dc_prestage_sibling_gap.h"  // Sibling19d10Cursor - giant2/secondary=5's real control-byte stream (Sec5.3ab)
 #include "sr3binkcodec/entropy_prestage.h"
 #include "sr3binkcodec/entropy_prestage_tables.h"
+#include "sr3binkcodec/flat_fill_prestage_array.h"  // FlatFillPrestageCursor - supersedes flat_fill_cursor.h (2026-10-11, Sec5.3z, fix/bink-flat-fill-real-decode)
 #include "sr3binkcodec/idct_butterfly.h"
 #include "sr3binkcodec/planar_buffer.h"
 #include "sr3luahost/open_state.h"
@@ -540,6 +543,33 @@ struct BlockRecord {
     // inspect how far the real grammar got. std::nullopt for every other
     // case/outcome.
     std::optional<uint16_t> dcLiteral;
+
+    // Diagnostic bit-position instrumentation (2026-10-11, diag/bink-bitpos-
+    // vs-5.3y task, spec-bink-codec.md Sec5.3y): the shared main bit-reader
+    // `br`'s own bitsConsumedSoFar() at the three measurement points Sec5.3y's
+    // own live-captured table uses - "the block-type dispatch read, the
+    // AC-tree entry, and the AC-tree exit". Added purely for measurement
+    // (this task is diagnostic-only, no fix implied); negligible cost
+    // (one size_t read per block, two more for DcAcIdctEngine2 specifically).
+    // `dispatchBitPos` is ALWAYS set (the position `br` is at when this
+    // block's own decodeOneBlock() call begins, before anything - including
+    // the entropy-pre-stage-backed dispatch byte, which costs 0 bits of
+    // `br` itself per Sec5.3y Finding 1 - touches it). `acEntryBitPos`/
+    // `acExitBitPos` are set only for Case1SubType::DcAcIdctEngine2 (the only
+    // case that calls decodeAcCoefficientTree()), std::nullopt otherwise.
+    std::optional<size_t> dispatchBitPos;
+    std::optional<size_t> acEntryBitPos;
+    std::optional<size_t> acExitBitPos;
+
+    // fix/bink-actree-phase1-gateb task (2026-10-11): the raw resolved AC
+    // coefficient array decodeAcCoefficientTree() produced for this block
+    // (already through the category->raster-k permutation, k-indexed,
+    // k=0/DC never written here - same convention AcTreeDecodeResult::coeffs
+    // itself uses), kept for direct golden-trace comparison against
+    // spec-bink-codec.md Sec5.3ac's own published coefficient lists. Set
+    // only for Case1SubType::DcAcIdctEngine2, std::nullopt otherwise - same
+    // gating as acEntryBitPos/acExitBitPos above.
+    std::optional<std::array<int16_t, 64>> acCoeffs;
 };
 
 // 8x8 pixels, 1 byte/pixel - the one block size spec-bink-codec.md Sec5.6
@@ -733,8 +763,25 @@ constexpr uint32_t kTwoLiteralBlendTable2[4] = {0xFFFFFFFFu, 0xFFFF0000u, 0x0000
 // golden fixture this project's existing tests use hits this case today -
 // see this task's own report - so this gap does not affect any current
 // regression.)
+// `controlCursor` (2026-10-11, spec-bink-codec.md Sec5.3ab, fix/bink-
+// 0x10019d10-real-decode task): an OPTIONAL hook for giant2/secondary=5's
+// own real control-byte stream (dc_prestage_sibling_gap.h's
+// Sibling19d10Cursor, `0x10019d10`'s own decoded output). Sec5.3ab's own
+// live memory-read watch found the 8 control bytes this case body consumes
+// are NOT a fresh, independent read off the main per-row bitstream `br` -
+// they are `0x10019d10`'s own 528-byte decoded array, read sequentially,
+// the SAME relationship flat_fill_prestage_array.h's FlatFillPrestageCursor
+// already established for Case1SubType::FlatDcFill's own fill byte. NOT
+// ACTUALLY WIRED YET, though: this project's own decode0x10019d10()
+// (dc_prestage_sibling_gap.h) does not reproduce the golden fixture (see
+// that file's own top comment / HANDOFF.md), so every real call site below
+// still passes `nullptr` here, keeping the PRIOR `br.readAlignedByte()`
+// fallback as the actual production behaviour, unchanged by this task -
+// this parameter exists so a future pass with a real, verified
+// `0x10019d10` decode can wire it in without touching this function's own
+// signature again.
 inline bool twoLiteralPattern16x16(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol, uint8_t literal1,
-                                    uint8_t literal2) {
+                                    uint8_t literal2, Sibling19d10Cursor* controlCursor = nullptr) {
     const int x0 = blockCol * kBlockSize;
     const int y0 = blockRow * kBlockSize;
     const uint32_t literal1Broadcast = static_cast<uint32_t>(literal1) * 0x01010101u;
@@ -744,8 +791,14 @@ inline bool twoLiteralPattern16x16(BitstreamReader& br, PlaneView dest, int bloc
     constexpr int kFieldsPerByte = 4;
     constexpr int kPixelsPerField = 4;
     for (int rowPair = 0; rowPair < kRowPairs; ++rowPair) {
-        const uint8_t controlByte = br.readAlignedByte();
-        if (br.ranOutOfData()) return false;
+        uint8_t controlByte = 0;
+        if (controlCursor != nullptr) {
+            if (!controlCursor->hasAtLeast(1)) return false;
+            controlByte = controlCursor->readByte();
+        } else {
+            controlByte = br.readAlignedByte();
+            if (br.ranOutOfData()) return false;
+        }
         const int y = y0 + rowPair * 2;
         for (int field = 0; field < kFieldsPerByte; ++field) {
             const uint32_t idx = (controlByte >> (field * 2)) & 3u;
@@ -785,12 +838,43 @@ inline bool twoLiteralPattern16x16(BitstreamReader& br, PlaneView dest, int bloc
 // (see this file's own top comment, "DESCRIPTOR B / CASE-1 SUB-DISPATCH
 // WIRING"). Only consulted when `rec.primary == SubDispatch`; every other
 // primary value never touches it.
+//
+// `dcArray`: the row's own DC delta-accumulation array (dc_delta_array.h,
+// spec-bink-codec.md Sec5.3m/Sec5.3p, 2026-10-11 fix/bink-dc-array-indexing
+// task - SUPERSEDES the retracted descriptor_l_cursor.h "separate byte
+// cursor" model) - consulted only by Case1SubType::DcAcIdctEngine2's own
+// DC-literal read below, indexed by `blockCol` (Sec5.3p: "the cursor for
+// block (0,0) starts at the buffer's own base, offset 0" - i.e. column 0
+// reads array index 0, column 1 reads index 1, etc., one word per
+// block-column of the row). nullptr for any existing caller/test that
+// hasn't wired this array at all (every synthetic/hand-built-nibble test
+// that constructs its own raw case body input directly) - that path keeps
+// the PRIOR `br.readAlignedByte()` behaviour unchanged, unaffected by this
+// task.
+// `flatFillCursor`: Case1SubType::FlatDcFill's own independent, zero-main-
+// bitstream-cost cursor (flat_fill_prestage_array.h, spec-bink-codec.md
+// Sec5.3y/Sec5.3z, 2026-10-11 fix/bink-flat-fill-real-decode task -
+// SUPERSEDES the now-deleted flat_fill_cursor.h's FlatFillByteCursor) -
+// zero main-bitstream cost from `br`'s own perspective per Sec5.3y, but
+// NOT a separate independently-sourced buffer - Sec5.3z found it is read
+// SEQUENTIALLY out of `0x100195b0`'s own real decoded output array (see
+// flat_fill_prestage_array.h's own top comment for the full citation and
+// the genuine remaining LUT-content gap). `nullptr` (every existing
+// synthetic/hand-built-nibble test, unaffected by this task) keeps the
+// PRIOR `br.readAlignedByte()` fallback behaviour unchanged - see
+// Case1SubType::FlatDcFill's own case body below for exactly why that prior
+// behaviour was a real, concretely-evidenced bug for the real-data path
+// (not merely a structural nicety).
 inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockRow,
                                    int blockCol, CaseSelectorScratchSource* caseSelector = nullptr,
-                                   CaseSelectorScratchSource* caseSelectorB = nullptr) {
+                                   CaseSelectorScratchSource* caseSelectorB = nullptr,
+                                   const DcDeltaArray* dcArray = nullptr,
+                                   FlatFillPrestageCursor* flatFillCursor = nullptr,
+                                   Sibling19d10Cursor* twoLiteralControlCursor = nullptr) {
     BlockRecord rec;
     rec.blockRow = blockRow;
     rec.blockCol = blockCol;
+    rec.dispatchBitPos = br.bitsConsumedSoFar();  // diag/bink-bitpos-vs-5.3y, Sec5.3y's own "dispatch bitpos" point
 
     uint32_t primaryRaw = 0;
     if (caseSelector != nullptr) {
@@ -887,10 +971,43 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         case Case1SubType::FlatDcFill: {
-            const uint8_t literal = br.readAlignedByte();  // CONFIRMED: "reads one literal byte"
-            if (br.ranOutOfData()) {
-                rec.outcome = BlockOutcome::SourceExhausted;
-                return rec;
+            // FIX (2026-10-11, spec-bink-codec.md Sec5.3y/Sec5.3z,
+            // fix/bink-flat-fill-real-decode task, SUPERSEDES the
+            // fix/bink-dc-literal-fillbyte-separate-cursors task's own
+            // FlatFillByteCursor): the fill byte is CONFIRMED "one literal
+            // byte" (Sec5.3i), Sec5.3y's own live bit-position trace proves
+            // it must cost ZERO bits of the MAIN per-row bit-reader `br`
+            // (idx1/idx2, both secondary=3, show the IDENTICAL dispatch bit
+            // position), and Sec5.3z further found the byte comes from
+            // `0x100195b0`'s own real decoded output array (read
+            // SEQUENTIALLY, one byte per FlatDcFill dispatch), not from a
+            // raw-byte offset into `br`'s own undecoded buffer (the prior
+            // FlatFillByteCursor's own wrong anchor choice, now deleted).
+            // `flatFillCursor` (flat_fill_prestage_array.h's
+            // FlatFillPrestageCursor) wraps that real decoded array - see
+            // that file's own top comment for exactly what is/is not
+            // confirmed about array content (indices 64-641 of the 650-byte
+            // array are NOT confirmed - the LUT table content needed to
+            // decode them is a genuine, named spec gap). `flatFillCursor ==
+            // nullptr` (every existing synthetic/hand-built-nibble test)
+            // keeps the exact prior fallback (`br.readAlignedByte()`) for
+            // backward compatibility only - that path is now known-wrong
+            // for any REAL decode, kept solely so hand-built tests that
+            // construct their own raw case-body byte stream on purpose keep
+            // working unchanged.
+            uint8_t literal = 0;
+            if (flatFillCursor != nullptr) {
+                if (!flatFillCursor->hasAtLeast(1)) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
+                literal = flatFillCursor->readByte();
+            } else {
+                literal = br.readAlignedByte();
+                if (br.ranOutOfData()) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
             }
             fillBlock8x8(dest, blockRow, blockCol, literal);
             rec.outcome = BlockOutcome::Reconstructed;
@@ -908,7 +1025,8 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
             }
-            const bool ok = twoLiteralPattern16x16(br, dest, blockRow, blockCol, literal1, literal2);
+            const bool ok =
+                twoLiteralPattern16x16(br, dest, blockRow, blockCol, literal1, literal2, twoLiteralControlCursor);
             if (!ok) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
@@ -964,16 +1082,52 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // kIntraQuantCompiled (this sub-case reads new intra content,
             // not a motion-compensated residual - no reference-byte-add
             // step is traced anywhere in Sec5.3i/Sec5.3j for sub=2).
-            const uint8_t lo = br.readAlignedByte();
-            const uint8_t hi = br.readAlignedByte();
-            if (br.ranOutOfData()) {
-                rec.outcome = BlockOutcome::SourceExhausted;
-                return rec;
+            //
+            // FIX (2026-10-11, fix/bink-dc-array-indexing task, spec-bink-
+            // codec.md Sec5.3p): "descriptor L" is NOT a separate byte-
+            // cursor stream (the now-RETRACTED Sec5.3o/Sec5.3i model this
+            // file used before this task, descriptor_l_cursor.h) - it IS
+            // `0x1001a160`'s own per-row DC-delta-accumulation array
+            // (dc_delta_array.h), read here by a plain ARRAY INDEX
+            // (`blockCol` - Sec5.3p: "the cursor for block (0,0) starts at
+            // the buffer's own base, offset 0", i.e. column 0 -> index 0,
+            // column 1 -> index 1, one word per block-column of the row),
+            // word-granular, not bit-granular, with NO interaction with
+            // `br`'s own bit-accumulator at the point of THIS read (the
+            // array itself was already fully decoded for the whole row
+            // before any block's dispatch ran - see frame_decoder.h's own
+            // "DC DELTA ARRAY ROW DECODE" note - so by the time any block
+            // reaches this line, `dcArray` is a plain already-decoded
+            // lookup table, not a live stream). `dcArray == nullptr` (every
+            // synthetic/hand-built-nibble test, unaffected by this task)
+            // keeps the exact prior fallback behaviour (`br.readAlignedByte()`
+            // x2) for backward compatibility - see dc_delta_array.h's own
+            // top comment for what is and is NOT confirmed about this
+            // array's real decode algorithm (CONFIRMED per-chunk mechanics,
+            // Sec5.3m; DERIVED row-granularity/predictor-seed choices,
+            // flagged there, not invented silently).
+            uint16_t dcLiteral = 0;
+            if (dcArray != nullptr) {
+                if (!dcArray->hasIndex(static_cast<size_t>(blockCol))) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
+                dcLiteral = dcArray->wordAt(static_cast<size_t>(blockCol));
+            } else {
+                const uint8_t lo = br.readAlignedByte();
+                const uint8_t hi = br.readAlignedByte();
+                if (br.ranOutOfData()) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
+                dcLiteral = static_cast<uint16_t>(lo | (static_cast<uint16_t>(hi) << 8));
             }
-            const uint16_t dcLiteral = static_cast<uint16_t>(lo | (static_cast<uint16_t>(hi) << 8));
             rec.dcLiteral = dcLiteral;
 
+            rec.acEntryBitPos = br.bitsConsumedSoFar();  // diag/bink-bitpos-vs-5.3y, Sec5.3y's own "AC-entry bitpos"
             const AcTreeDecodeResult ac = decodeAcCoefficientTree(br);
+            rec.acExitBitPos = br.bitsConsumedSoFar();  // diag/bink-bitpos-vs-5.3y, Sec5.3y's own "AC-exit bitpos"
+            rec.acCoeffs = ac.coeffs;  // fix/bink-actree-phase1-gateb task
             if (br.ranOutOfData()) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
@@ -1017,8 +1171,11 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
 // stops.
 inline BlockRecord decodeOneBlockStrict(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockRow,
                                          int blockCol, CaseSelectorScratchSource* caseSelector = nullptr,
-                                         CaseSelectorScratchSource* caseSelectorB = nullptr) {
-    BlockRecord rec = decodeOneBlock(br, dest, prev, blockRow, blockCol, caseSelector, caseSelectorB);
+                                         CaseSelectorScratchSource* caseSelectorB = nullptr,
+                                         const DcDeltaArray* dcArray = nullptr,
+                                         FlatFillPrestageCursor* flatFillCursor = nullptr) {
+    BlockRecord rec =
+        decodeOneBlock(br, dest, prev, blockRow, blockCol, caseSelector, caseSelectorB, dcArray, flatFillCursor);
     if (rec.outcome == BlockOutcome::OpenHook) {
         std::string which = "primary=" + std::to_string(static_cast<int>(rec.primary));
         if (rec.sub) which += " sub=" + std::to_string(static_cast<int>(*rec.sub));

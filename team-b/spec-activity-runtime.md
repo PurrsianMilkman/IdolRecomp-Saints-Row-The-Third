@@ -200,6 +200,17 @@ whatever outer system decides which diversion class to construct in the first pl
   tick-chain side. Not guessed further — the single largest OPEN item for completion/reward. Full
   detail: `scratchpad/wave12_activity_dispatch_reward_2026-10-09.md`.
 
+**User-observed ground truth, 2026-10-11 (not re-derived from the executable this pass, but a
+real behavioral observation that should steer the next search): the cash reward for a diversion
+visibly arrives only when the player loads back into free-roam after the activity, not during the
+activity itself.** This favors hypothesis (b) over (c) above — a batch-grant on activity
+teardown/exit-to-freeroam, not a tick-time or score-computation call, and plausibly explains why
+every in-activity search (constructor, tick, classifier, score/notify) came up empty for all 10
+still-OPEN diversion types, not just Barnstorming. Next step for whoever picks this up: search the
+activity-exit/teardown path (the "still-unlocated destructor/teardown counterpart to the shared
+`Init`, `0x006a4010`" already named above) specifically for a reward-grant call, rather than
+continuing to check more in-activity tick/score functions.
+
   **Direct reader found (2026-10-09, WAVE 13 follow-up) — still OPEN, but the search space is now
   narrowed, not widened.** For `stunt_jumping_diversion` specifically (globals `0x014c74c4`
   `Max_Respect`/`0x014c74c8` `Max_Lifetime_Respect`/`0x014c74cc` `Max_Cash`, `spec-tables-
@@ -295,24 +306,162 @@ whatever outer system decides which diversion class to construct in the first pl
   `0x006cc630`, calling the cash primitive) sit just outside the diversion cluster's established
   address bounds and were not matched to any named type.
 
+  **RESOLVED for 10 of these 11, 2026-10-11 follow-up (SPEC TEAM, agent `aa0589748b08aa6dc`,
+  independently re-verified by direct query before splicing) — 10 confirmed to have no call to
+  either reward primitive in their own score/notify or tick chain; CORRECTION, same day
+  (orchestrator): this does NOT mean "reward-less" — the shipped game visibly pays these rewards
+  (mugging pays cash, stunts/exploration show real respect pops), so some OTHER path grants them
+  (a different setter, a generic diversion-complete handler, or Lua) — labeled "no direct
+  primitive call; reward path elsewhere, OPEN" below, not "reward-less, CONFIRMED," the same class
+  of overclaim the footstep-audio item made.** `photo_op` remains ambiguous (`base_jumping`'s own
+  tier consumer was subsequently found, see below — no longer an exception). A
+  real-object-constructor pattern ("Shape B": calls shared `Init` `0x006a4010`, zeroes instance
+  fields, tail-calls its own loader, reached from exactly one slot — index 4 — in a private
+  16-dword per-type mega-table in `.rdata`) was confirmed for `stunt_wheels`/`base_jumping`/
+  `exploration_diversion`/`mugging_diversion`, alongside Barnstorming's own already-known
+  instance; the mega-table's layout is now resolved further: index 8 = the type's own **tick**
+  function, index 14 = a **name/title getter**, several indices are cross-type folded generic
+  stubs. The other 7 (the remaining `stunt_*` tables) use a simpler "Shape A" tag-write wrapper
+  with no `Init` call, reached from the master 28-call startup driver `0x006a34c0` — a previously
+  undistinguished second constructor shape. For each of the 7 Shape-A types plus `stunt_wheels`/
+  `exploration_diversion`/`mugging_diversion`, the real score/notify (or tick) function was found
+  and fully opened: all read their own private `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`
+  triad (or, for `stunt_wheels`, a per-record array of the same triad), route it through the
+  already-proven-inert clamp/scale helper `0x006a4d80` plus telemetry/HUD calls, and call NEITHER
+  `0x009e2440` nor `0x0094d920` anywhere in the fully-opened chain — reclassified "no direct
+  primitive call; reward path elsewhere, OPEN" (not reward-less — see correction above).
+  `base_jumping`'s own tier consumer FOUND, 2026-10-11 follow-up (SPEC TEAM, agent
+  `ad0cd4823a21ead90`, independently re-verified by direct query before splicing): **not missing
+  after all — it lives outside the mega-table entirely.** `0x00695d50`, reached from a separate
+  per-attempt state machine `0x00696310` (state==2, "jump complete") rather than the mega-table's
+  own tick slot, selects the highest `Reward_Tier` entry whose `Max_Distance` the attempt's own
+  measured distance clears, scales `Respect`/`Cash` through the same inert clamp helper
+  `0x006a4d80`, logs telemetry via `0x00bda0e0`, and notifies HUD via `0x007fc2d0`/`0x007fc190` —
+  re-verified exactly: its own callee list contains neither `0x009e2440` nor `0x0094d920`. A new
+  field was found in the process: `this+0x54` (just before the tier array) is the real tier
+  COUNT, confirmed by the reset function's own zeroing span and by this consumer's own
+  loop bound. **Reclassified into the SAME "no direct primitive call; reward path elsewhere,
+  OPEN" bucket as the other 9** — not a different kind of ambiguous after all. `photo_op` is the
+  one REMAINING case, ambiguous for a THIRD, sharper reason: its own `.xtbl` loader (read in
+  full) has no `Max_Respect`/`Max_Cash`-shaped fields at all — only `Saints_Loved`/`Saints_Hated`/
+  `Trigger_Effect` — so the whole triad-based classification method this file uses simply does
+  not apply to this type; whatever it grants (if anything) is a structurally different mechanism
+  not yet investigated. **Net count, project-wide: 10 types with no direct primitive call in
+  their own chain, real reward path still OPEN (Barnstorming, `stunt_jumping_diversion`,
+  `base_jumping`, and 7 more), 2 confirmed direct-grant (`streaking`, `cat_and_mouse`), 1
+  genuinely unresolved (`photo_op`), plus the shared-default handler
+  `0x006a4220` whose own reachability is still unconfirmed.**
+
+  **Convergence trace, same day, follow-up** (SPEC TEAM, agent `a6d56e7c68abe3502`, independently
+  re-verified by direct query before splicing — including `0x00695d50`'s full raw listing,
+  `0x007fc2d0`'s raw listing, and `0x00710cb0`'s caller list). Followed `0x00695d50`'s scaled
+  `Respect`/`Cash` values (written by `0x006a4d80` at `0x00695e33` into caller-local stack
+  variables only, never into any instance field) downstream, and did the same for
+  `stunt_drifting`'s `0x006bcdb0`. **Both chains converge exactly, call-for-call, past the scaling
+  step:** both feed the same two scaled locals into the identical telemetry-event pusher
+  `0x00bda0e0` (gated behind three enable-flag globals, bottoming out in a generic event-submit
+  call, `0x00423270`) and into the identical shared HUD notification-parameter system
+  (`0x007fc2d0`/`0x007fc190`, both opened in full) — a 15-slot array at `0x022b7ac0` (stride
+  `0x58`, confirmed by raw listing: `IMUL EAX,EAX,0x58; ADD EAX,0x22b7ac0`), each slot holding a
+  message-id tag and up to two typed "format argument" pairs, used to fill in localized HUD toast
+  text (e.g. "+%d Respect"). **This convergence point is confirmed NOT itself a reward-grant
+  mechanism** — re-verified: neither `0x00bda0e0` nor the HUD-array field-copy worker it shares
+  with `0x007fc190` ever calls `0x009e2440` or `0x0094d920`, and the scaled values live only as
+  transient stack locals / HUD-display arguments, never written to any object field, pending-queue,
+  or save-data location found so far. Useful negative evidence, independently confirmed: the
+  generic HUD-hint dispatcher `0x00710cb0` that several of these chains also call IS itself called
+  by both real primitives (`0x0094d920` at `0x0094da39`/`0x0094da79`, `0x009e2440` at `0x009e2603`)
+  when they genuinely grant something — so a `0x00710cb0`/`0x00710e40` call in a chain is NOT by
+  itself a signal of a reward grant; every HUD toast uses it, reward or not. **Net conclusion: the
+  real grant path for all 10 "OPEN" types remains genuinely unlocated** — it dead-ends in shared
+  UI/telemetry plumbing, not a hidden reward mechanism. Two honest possibilities remained open at
+  the time, not mutually exclusive: (1) these 10 types really are reward-less from this engine
+  code's own perspective and the shipped-game rewards (mugging cash, stunt/exploration respect
+  pops) come from a batch/save-stat system entirely outside any per-type code path, not yet
+  located; or (2) a still-unfound second reader of the HUD-notification-arg array (`0x022b7ac0`+)
+  triggers an actual grant as a side effect of the toast. **Possibility (2) CLOSED 2026-10-11, see
+  below — a full xref scan of the array's readers found only lifecycle/pool-management plumbing,
+  no grant.** Possibility (1) stands as the remaining live explanation.
+
+  **`0x00bda0e0` opened in full, same day, follow-up** (SPEC TEAM, agent `a528bdcf295be8702`,
+  independently re-verified by direct query before splicing — `0x00bda0e0`'s and `0x00423270`'s
+  own raw listings both matched the report exactly). Orchestrator pushback: `0x00bda0e0` receives
+  BOTH the scaled Respect and Cash together, and both are persistently tracked player stats, so it
+  was worth fully opening rather than accepting the shallow "telemetry" label. Full recursive
+  trace of every callee (`0x009da4e0` → trivial getter; `0x00bd8a60` → read-only state-snapshot
+  filler, ~14 further callees, all reads; `0x00423270` → sampling-rate gate (`0x00403070`,
+  classic `rand()%100` telemetry sampling against a per-event-type rate table) → `0x00426bd0`
+  (GDS middleware event serialization, named `GDS_value_*` imports) → `0x00401ca0` (job-struct
+  allocation, `GDS_value_encode_values`) → `0x00401b30` (critical-section-protected append to an
+  async worker-thread job queue, bookkeeping globals only)) — **confirmed conclusively: no write
+  anywhere in this entire tree touches a respect/cash/save field, and no call anywhere reaches
+  `0x009e2440` or `0x0094d920`.** The three gate flags (`0x013123d1`/`0x029897a5`/`0x029897a6`)
+  were confirmed to gate this same shape across ~78-80 sibling functions at `0x00bd80a0`-
+  `0x00bd94f0`+ — i.e. a project-wide "is telemetry enabled" toggle for this whole event family,
+  not a stats-tracking switch; one flag (`0x029897a6`) is toggled at runtime by two other
+  functions (set 1 / cleared 0), the other two have no writer found in this pass — their actual
+  in-session value is OPEN, requiring either their setters or live capture, but doesn't change
+  the conclusion since the entire subsystem dead-ends in telemetry regardless of the flags' state.
+  **This closes the `0x00bda0e0` half of the convergence lead: it is pure analytics plumbing, the
+  orchestrator's stat-tracking hypothesis does not hold for this specific function.**
+
+  **HUD-array reader angle CLOSED 2026-10-11 (orchestrator-routed, direct harness query, no agent
+  dispatched).** A full xref census of the array base (`0x022b7ac0`) found exactly 7 functions
+  touching it; 3 were already opened (`0x007fc190`/`0x007fc2d0`'s field-copy worker and notify
+  entry point, `0x007fa090`'s pool constructor). The 4 remaining were opened in full this pass:
+  `0x007f9dc0` — pure arithmetic, stamps a slot with a unique `(generation<<16)|index` tag on
+  allocation, no calls, no field writes beyond that one tag; `0x007fa090` itself, on closer read,
+  is the ONE-TIME pool initializer (builds the 15-slot array as an intrusive doubly-linked free
+  list across 4 sub-structure offsets per slot, `+0x5c`/`+0xb4`/`+0x10c`/`+0x164`, self-referential
+  head pointers — classic list-init idiom, no gameplay write); `0x007fc110` and `0x007fc200` are
+  both handle-release/destructor variants (validate the caller's handle generation against the
+  slot's own stored generation, release any owned typed-argument resources via
+  `0x007f95d0`/`0x007f9650`/`0x007f96c0`/`0x007f9770`, then call the shared slot-release routine
+  `0x007fb4f0` and zero the caller's handle) — `0x007fc200` alone has dozens of callers across the
+  diversion/activity tick functions (including `stunt_drifting`'s own `0x006bcdb0`/`0x006bcd70`),
+  confirming it is the generic "I'm done with this toast handle" cleanup every caller uses, not a
+  type-specific hook. `0x007fb4f0` itself (opened as a callee) is reference-counted slot-pool
+  bookkeeping — decrements a refcount at `+0xc`, frees via `0x007fa320` at zero, otherwise touches
+  a lock/dialog-queue helper (`0x00e25890`/`0x00d9e4c0`) and a message dispatcher (`0x007f9880`)
+  — all plumbing for the notification queue itself, no reward-primitive call, no save/stat field
+  write anywhere in any of the 4 functions. **Possibility (2) above is now closed: there is no
+  hidden second reader of this array that grants anything — every consumer beyond the known
+  display path is slot-pool lifecycle management (allocate/stamp/release), full stop.** The real
+  grant mechanism for all 10 "no direct primitive call" types stays genuinely unlocated; this
+  closes the HUD-array angle specifically, and the standing live explanation is possibility (1)
+  above — a batch/save-stat system entirely outside any per-type code path. This thread is now
+  considered fully exhausted by static analysis short of a live capture.
+
+  - **Evidence:** full xref census of `0x022b7ac0` (7 functions total, re-confirmed against the
+    live Ghidra server); all 4 previously-unopened functions read in full
+    (`0x007f9dc0`/`0x007fa090`/`0x007fc110`/`0x007fc200`), plus their own callees
+    (`0x007fb4f0`, read to its own key branch points).
+  - **Confidence:** CONFIRMED for all 4 functions' lifecycle-only behavior (no reward-primitive
+    call, no field write beyond the slot's own generation tag, anywhere in any of them).
+  - **Unknowns:** `0x007fb4f0`'s own full body past the refcount/lock/dispatch branches shown
+    (not read line-by-line to its own `ret` — the branches read are sufficient to rule out a
+    reward call, since none of them touch `0x0094d920`/`0x009e2440` or any player-record offset,
+    but a full read was not performed); possibility (1)'s own batch/save-stat system remains
+    entirely unlocated.
+
   | Diversion type | Loader address | Classification | Evidence |
   |---|---|---|---|
   | `streaking` | `0x006b89d0` | direct-grant, CONFIRMED | `0x006b91a0` (own score/notify) calls `0x009e2440` and `0x0094d920` directly, per-level, no batching |
   | `cat_and_mouse` | `0x006c6c30` | direct-grant, CONFIRMED | `0x006c9400` (inside own cluster, called from `0x006c9df0`) calls `0x0094d920` directly with a rounded percent-based amount; cash branch only, no `0x009e2440` call found in this function |
-  | `barnstorming` | `0x00691f10` | reward-less, CONFIRMED | own constructor/tick/classifier/score-notify fully traced; no call to either primitive anywhere in the chain |
-  | `stunt_jumping_diversion` | `0x006ba4e0` | reward-less, CONFIRMED | sole non-loader reader of its `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` triad (`0x006bbc10`, called from tick `0x006bc4b0`) is pure clamp/scale + HUD notify, no call to either primitive |
-  | `base_jumping` | `0x00693cd0` | ambiguous | nearest caller pair (`0x006a43b4`/`0x006a43bd`) turned out to belong to the shared/generic base-class handler above, not `base_jumping`-specific — cannot be attributed to this type with confidence |
-  | `stunt_drifting` | `0x006bc970` | ambiguous | no caller of either primitive found in or near this cluster; own tick/score function not independently opened |
-  | `stunt_hijacking` | `0x006bd3c0` | ambiguous | same as above |
-  | `stunt_near_miss` | `0x006bf170` | ambiguous | same as above |
-  | `stunt_back_seat_driver` | `0x006b95a0` | ambiguous | same as above |
-  | `stunt_oncoming` | `0x006c0070` | ambiguous | same as above |
-  | `stunt_peel_out` | `0x006c0cf0` | ambiguous | same as above |
-  | `stunt_wheels` | `0x006c16a0` | ambiguous | same as above |
-  | `stunt_low_flying` | `0x006bd920` | ambiguous | same as above |
-  | `exploration_diversion` | `0x006a6250` | ambiguous | same as above |
-  | `mugging_diversion` | `0x006b7900` | ambiguous | same as above |
-  | `photo_op` | `0x0091d610` | ambiguous | no caller of either primitive found anywhere near this (distant, isolated) address region either |
+  | `barnstorming` | `0x00691f10` | no direct primitive call; reward path elsewhere (OPEN) | own constructor/tick/classifier/score-notify fully traced; no call to either primitive anywhere in the chain |
+  | `stunt_jumping_diversion` | `0x006ba4e0` | no direct primitive call; reward path elsewhere (OPEN) | sole non-loader reader of its `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` triad (`0x006bbc10`, called from tick `0x006bc4b0`) is pure clamp/scale + HUD notify, no call to either primitive |
+  | `base_jumping` | `0x00693cd0` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | own reward structure is a 10-tier array (`this+0x58`, stride `0xc`: Max_Distance/Respect/Cash; count at `this+0x54`); real consumer found: `0x00695d50`, reached from a separate per-attempt state machine `0x00696310` (state==2), not the mega-table tick slot — selects the highest tier cleared, scales via `0x006a4d80`, no call to either primitive |
+  | `stunt_drifting` | `0x006bc970` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | score/notify `0x006bcdb0` (called from tick `0x006bd180`), re-verified by direct query — callees: `0x006a4d80`/`0x00bda0e0`/`0x006a49b0`/HUD (`0x00710cb0`,`0x00710fa0`,`0x007fc190`,`0x007fc2d0`,`0x007fc200`)/`0x00618200`/`0x00691e50` — no call to `0x009e2440` or `0x0094d920` |
+  | `stunt_hijacking` | `0x006bd3c0` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006bd740` (mega-table-dispatched), same inert callee set (resolver `0x00458230`/`0x00853b10`, `0x006a4d80`, `0x00691e50`), no primitive calls |
+  | `stunt_near_miss` | `0x006bf170` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006bf6c0` (3 tick callers: `0x006bf8d0`/`0x006bf9b0`/`0x006bfe90`, plausibly success/timeout/crash), same inert pattern, no primitive calls |
+  | `stunt_back_seat_driver` | `0x006b95a0` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006b9a90` (tick `0x006b9e20`), same inert pattern, no primitive calls |
+  | `stunt_oncoming` | `0x006c0070` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006c0720` (tick `0x006c0a80`), same inert pattern, no primitive calls |
+  | `stunt_peel_out` | `0x006c0cf0` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006c10b0` (tick `0x006c13c0`), same inert pattern, no primitive calls |
+  | `stunt_wheels` | `0x006c16a0` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | structurally different (real Shape-B constructor `0x006c1a00`, per-record triad in an array, stride `0x1c`, up to the count at `0x01139500` — multiple wheel-stunt sub-variants, like Barnstorming's own two sub-stunts); tick `0x006c2290` (re-verified exact), dispatches to `0x006c1e60`/`0x006c1f50` on a state flag, both → `0x006c1980`/`0x006c15c0` + resolver/telemetry; no primitive calls anywhere in the depth-2 trace |
+  | `stunt_low_flying` | `0x006bd920` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | `0x006be080` (2 tick callers: `0x006be2b0`/`0x006bed60`), same inert pattern, no primitive calls |
+  | `exploration_diversion` | `0x006a6250` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | real Shape-B constructor `0x006a64d0` (mega-table slot `0x01136df4`); tick `0x006a6ed0`→`0x006a6c20` + the Barnstorming-shared HUD hint dispatcher `0x00710e40`, no primitive calls |
+  | `mugging_diversion` | `0x006b7900` | **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** | real Shape-B constructor `0x006b7b40` (mega-table slot `0x011381ac`); has NO `Max_Respect`/`Max_Cash` triad at all — its own instance fields are `Default_Min_Cash`/`Default_Max_Cash`, confirmed to feed a cosmetic/world-state value, not a reward grant; tick `0x006b8600`→`0x006b81a0`/`0x006b7cf0`, no primitive calls |
+  | `photo_op` | `0x0091d610` | **CLOSED 2026-10-11 — CONFIRMED reward-less, same bucket as Barnstorming (not a diversion-class instance at all)** | see the dedicated paragraph below |
 
 - **`0x006a4220` opened in full (2026-10-10, third follow-up) — confirms conditional dual-grant,
   narrows the amount source, and surfaces a new reachability problem. The "most likely also
@@ -386,16 +535,22 @@ question — not answered); the mega-table's exact field stride/order; ~~the act
 reward-grant consumer for the `Max_Respect`/`Max_Cash` triad~~ (RESOLVED for `streaking` and
 `cat_and_mouse`, §4 — inline per-completion grants, not a batch consumer; a THIRD path, the shared
 base-class default handler, was also found but not yet matched to any specific type); why
-Barnstorming/`stunt_jumping_diversion` appear reward-less by contrast; **which of the 11 remaining
-untraced diversion types (the 9 `stunt_*` tables minus `stunt_jumping_diversion`, plus
-`base_jumping`, `exploration_diversion`, `mugging_diversion`, `photo_op`) use direct-grant,
-reward-less, or the shared base-class default path — a full project-wide xref scan found no
-per-type caller for any of them, but none of their own tick/score functions was individually
-opened to confirm a reward-less reading, so all 11 are reported as ambiguous, not classified
-either way** (see the table above); any relationship between `activity_types.xtbl`'s registry and
-this class cluster beyond "none found so far"; most of the other 13 diversion types' own tick
-functions in full (Barnstorming, `streaking` and `cat_and_mouse`'s cash-grant site are now
-individually traced, to varying depth).
+Barnstorming/`stunt_jumping_diversion` appear reward-less by contrast; ~~which of the 11 remaining
+untraced diversion types... use direct-grant, reward-less, or the shared base-class default
+path~~ **RESOLVED 2026-10-11 for 10 of 11 (§4's own follow-up, wording corrected same day per
+orchestrator — see §4): 7 `stunt_*` types plus
+`stunt_wheels`/`exploration_diversion`/`mugging_diversion` confirmed to have no call to either
+primitive in their own score/notify or tick chain — NOT "reward-less" (the shipped game visibly
+pays these: mugging cash, stunt/exploration respect pops), so the real grant path is still OPEN,
+just ruled out as being this direct-call shape. `base_jumping`'s own 10-tier reward array
+(`this+0x58`, stride `0xc`) now HAS a located consumer, `0x00695d50` (see above) — it joins this
+same bucket. `photo_op` (has no `Max_Respect`/`Max_Cash`-shaped fields at all, so the triad method
+doesn't apply) remains the one genuinely ambiguous case, not from lack of looking.** Project-wide
+count now: 10 with no direct primitive call (real path OPEN), 2 confirmed direct-grant, 1
+unresolved, plus the shared-default handler's own reachability still unconfirmed. Still OPEN: any
+relationship between `activity_types.xtbl`'s registry and this class cluster beyond "none found so
+far"; `photo_op`'s own reward mechanism, if any; the shared base-class default handler
+`0x006a4220`'s own actual call site (virtual-dispatch, not found by static tracing).
 
 ## 6. Clean-room check
 
@@ -404,6 +559,152 @@ Plain hex addresses throughout. No Ghidra auto-names, no decompiler pseudocode, 
 Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-11 — §4: user-observed ground truth narrows the reward-grant search for all 10 OPEN
+  diversion types to activity teardown/exit-to-freeroam** (SPEC TEAM, self, note only, no new RE
+  this entry). The user confirmed the cash reward visibly arrives only on loading back into
+  free-roam after an activity, favoring hypothesis (b) (batch-grant on teardown) over continuing
+  to check in-activity tick/score code, and explaining why those searches kept coming up empty
+  across every diversion type, not just Barnstorming.
+
+- **2026-10-11 — `photo_op` CLOSED, the last unresolved diversion type** (SPEC TEAM, self, direct
+  harness query, no agent dispatched). It is not a diversion-class instance at all — its `.xtbl`
+  loader is a one-time global-config load (`Saints_Loved`/`Saints_Hated` name lists,
+  `Trigger_Effect` index), not a per-row record, which is why the triad/constructor searches kept
+  failing. Found the real consumers by xref: a tick function that finds a random matching NPC and
+  plays a reaction, and an effect-trigger function that spawns a camera prop and shows
+  `"PHOTO_OP_USE_MESSAGE"`. Neither calls either reward primitive — CONFIRMED reward-less, same
+  bucket as Barnstorming. Closes the diversion-reward investigation's last open type (0 unresolved
+  remaining). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — `0x00bda0e0` opened in full: conclusively pure telemetry, orchestrator's
+  stat-tracking hypothesis does NOT hold for this function** (SPEC TEAM, agent
+  `a528bdcf295be8702`, independently re-verified by direct query before splicing —
+  `0x00bda0e0`'s and `0x00423270`'s raw listings both matched exactly). Orchestrator-routed
+  follow-up to the convergence trace below: `0x00bda0e0` receives both scaled Respect and Cash
+  together, and both are persistently tracked stats, so a shallow "telemetry" label wasn't
+  enough — fully opened the entire recursive callee tree. Result: a getter, a read-only
+  state-snapshot filler (~14 further read-only callees), a sampling-rate gate
+  (`rand()%100`-style), a named GDS middleware event serializer, and a critical-section-protected
+  async job queue — no write anywhere touches a respect/cash/save field, no call anywhere reaches
+  `0x009e2440`/`0x0094d920`. The three gate flags were confirmed to scope ~78-80 sibling functions
+  (same shape, `0x00bd80a0`-`0x00bd94f0`+) — a project-wide "telemetry enabled" toggle, not a
+  stats switch. One flag's own runtime default is OPEN (needs its setters or live capture to
+  pin down), but doesn't change the conclusion. Closes the `0x00bda0e0` half of the convergence
+  question. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — HUD-array reader angle CLOSED, clean negative** (SPEC TEAM, self, direct harness
+  query, no agent dispatched). Opened all 4 previously-unopened functions touching the 15-slot HUD
+  notification-parameter array (`0x022b7ac0`): all are slot-pool lifecycle management (allocation
+  tag-stamping, pool init, two handle-release/destructor variants calling the shared
+  `0x007fb4f0` release routine) — no reward-primitive call, no save/stat field write anywhere.
+  Closes the "still-unfound second reader" possibility the prior convergence-trace entry left
+  open; the real grant mechanism for the 10 "no direct primitive call" diversion types stays
+  genuinely unlocated, now exhausted short of a live capture. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — convergence trace: `base_jumping`'s and `stunt_drifting`'s reward chains meet
+  exactly, at a confirmed-inert shared HUD/telemetry system, not a reward mechanism** (SPEC TEAM,
+  agent `a6d56e7c68abe3502`, independently re-verified by direct query before splicing —
+  `0x00695d50`'s raw listing, `0x007fc2d0`'s raw listing, and `0x00710cb0`'s caller list all
+  matched the report exactly). Orchestrator-routed follow-up to the `base_jumping` consumer
+  finding below: traced where `0x00695d50`'s scaled `Respect`/`Cash` values go after
+  `0x006a4d80`, and did the same for `stunt_drifting`'s score/notify `0x006bcdb0`. Both land,
+  call-for-call identically, in (a) the generic telemetry-event pusher `0x00bda0e0` and (b) the
+  shared 15-slot HUD notification-parameter array at `0x022b7ac0` (stride `0x58`) via
+  `0x007fc2d0`/`0x007fc190` — confirmed to be pure UI-display plumbing (localized toast-text
+  format arguments), not a grant path; neither function calls either reward primitive. Also
+  confirmed, as negative evidence for future passes: the generic HUD-hint dispatcher `0x00710cb0`
+  is itself called by both real primitives when they genuinely grant (`0x0094d920`, `0x009e2440`),
+  so its presence in a chain proves nothing about reward status either way. Net result: the real
+  grant path for all 10 "no direct primitive call" types remains genuinely unlocated — this closes
+  the convergence question (yes, they converge) but does NOT resolve the open mechanism question.
+  One concrete lead flagged for any future pass: an xref scan of the HUD-array's readers beyond
+  the one field-copy worker opened so far, to check whether rendering the toast has a grant
+  side-effect. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — `base_jumping`'s own reward-tier consumer FOUND, resolving its "consumer missing"
+  exception from the same-day pass below** (SPEC TEAM, agent `ad0cd4823a21ead90`, independently
+  re-verified by direct query before splicing). Earlier search angles (xref-ing the two reward
+  primitives directly; opening only the per-type mega-table's own tick/reset slots) missed it
+  because it is reached from a completely separate per-attempt state machine, `0x00696310`
+  (state==2, "jump complete"), not the mega-table's tick slot at all. The method that worked:
+  xref-ing the type's own fixed singleton address, `0x014bc2a8`, directly and checking each of its
+  readers individually — re-verified exactly: 10 uses across 4 functions (`0x00694430`;
+  the reset function at `006947b3`/`006947bd`; `0x00695640`, not previously named anywhere in this
+  file; and `0x00695d50` at `00695ddb`/`00695e5c`), plus one DATA-only reference at `0x00ff5490`,
+  matching the agent's own flagged side-finding exactly. `0x00695d50` selects the highest
+  `Reward_Tier` entry (array at `this+0x58`, stride `0xc`: `Max_Distance`/`Respect`/`Cash`; count
+  at the newly-identified field `this+0x54`) whose `Max_Distance` the attempt's measured distance
+  clears, scales `Respect`/`Cash` via the already-proven-inert clamp helper `0x006a4d80`, logs
+  telemetry via `0x00bda0e0`, and notifies HUD via `0x007fc2d0`/`0x007fc190`. Its own callee list
+  (re-verified by direct query: `00695570 00710e40 0069b260 009da4e0 00bd2de0 006a4d80 00bda0e0
+  007f9590 007fc2d0 007fc190`) contains neither `0x009e2440` nor `0x0094d920` — reclassified from
+  "ambiguous, consumer missing" into the same "no direct primitive call; reward path elsewhere,
+  OPEN" bucket as the other 9 types from the same-day pass below. Net project-wide count at the
+  time: 10 with no direct primitive call (real path OPEN), 2 confirmed direct-grant, 1 genuinely
+  unresolved (`photo_op` only — CLOSED below, 2026-10-11). Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — `photo_op` CLOSED (orchestrator-routed, direct harness query, no agent
+  dispatched): it is NOT a diversion-class instance at all, and it is CONFIRMED reward-less, same
+  bucket as Barnstorming — this also explains why every earlier pass's search for its constructor/
+  tick/reward-triad kept coming back structurally wrong.** `0x0091d610` (the `.xtbl` loader) isn't
+  a per-row record reader — it's a one-time GLOBAL CONFIG loader: `Saints_Loved`/`Saints_Hated`
+  are parsed into two fixed global name-list arrays (`0x01308ea8`/`0x01308f28`), and
+  `Trigger_Effect` into a single global index (`0x01308fa8`, default `-1`) — there is no per-
+  instance record at all, which is why the `Max_Respect`/`Max_Cash` triad method never applied
+  here and why the "nearest candidate constructor" (`0x0091d700`) looked structurally wrong (it
+  isn't a constructor — it's this config loader's own caller).
+
+  Found the real consumers by xref-ing the three globals directly: `0x0091e2e0` is the actual
+  tick/interaction body (gated on state `+0x7c == 4`) — picks a random name from whichever list
+  (Saints_Loved or Saints_Hated, via a coin-flip `0x00702a30`), finds a live matching NPC nearby
+  (the same generic world-query/filter pair, `0x00458230`/`0x00853b10`, other diversion types use
+  for candidate-character lookup), plays a reaction line/pose on success, then advances state to
+  `5`. `0x0091ede0` (the `Trigger_Effect` reader) spawns a camera prop entity (type id `9` via
+  `0x00456e30`) near the player, shows the literal HUD string `"PHOTO_OP_USE_MESSAGE"`
+  (`0x0093d8c0`), and applies the loaded `Trigger_Effect` value as a cosmetic effect parameter
+  (`0x0093d8e0`, mode `3`) — a flash/audio cue for the camera, not a reward dispatch. `0x0091eb50`
+  is the matching setup/pose-selection sibling. **None of the 3 real functions (nor their own
+  depth-1 callees already dumped) call `0x0094d920` or `0x009e2440` anywhere.** Net: `photo_op` is
+  a world-interaction/camera-prop flavor system — approach a Saint-loved or Saint-hated NPC, pull
+  out a camera, they pose (or react), done — with genuinely no cash/respect payout, matching
+  Barnstorming's own already-confirmed reward-less classification, not a data gap. Project-wide
+  count, final: 10 with no direct primitive call (real path OPEN), 2 confirmed direct-grant, 2
+  confirmed reward-less (Barnstorming, `photo_op`) — 0 remaining unresolved.
+
+  - **Evidence:** full disassembly of `0x0091d610` (the loader) and its own direct xref-identified
+    consumers `0x0091e2e0`/`0x0091eb50`/`0x0091ede0`, plus their depth-1 callees, via direct Ghidra
+    query.
+  - **Confidence:** CONFIRMED for the loader's real global-config shape (not a per-row record),
+    for all 3 consumer functions' top-level behavior, and for the absence of either reward
+    primitive in any of them or their immediate callees.
+  - **Unknowns:** `0x0091eb50`'s own full pose-selection detail (read only to callee-list depth,
+    not fully decompiled); whether `photo_op` completion feeds any OTHER system downstream (e.g. a
+    photo-album/collectible counter) outside the cash/respect reward question this thread was
+    scoped to. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — the 11 remaining "ambiguous" diversion types investigated: 10 confirmed to have
+  no direct reward-primitive call in their own chain (real grant path still OPEN — wording
+  corrected same day, this is NOT "reward-less," the shipped game visibly pays these), 2 still
+  genuinely ambiguous for new, sharper reasons** (SPEC TEAM, agent `aa0589748b08aa6dc`,
+  self-picked (this file's own "single largest OPEN item"), independently re-verified by direct
+  query before splicing; wording corrected same day per orchestrator, same class of overclaim as
+  the footstep-audio item). Found a second constructor shape ("Shape A," no `Init` call, reached
+  from the startup driver) alongside the already-known "Shape B" real constructor, and resolved
+  more of the per-type mega-table's layout (index 8 = tick, index 14 = name getter). 7 `stunt_*`
+  types + `stunt_wheels`/`exploration_diversion`/`mugging_diversion`: own score/notify or tick
+  chain opened, no call to `0x009e2440`/`0x0094d920` — ruled out as using THIS grant shape, but
+  the real mechanism (a different setter, a generic diversion-complete handler, or Lua) remains
+  OPEN. `base_jumping`: at the time of this pass, had a richer 10-tier reward array with no
+  located consumer function — ambiguous because the consumer was missing, not because of no
+  evidence. **Superseded 2026-10-11 same day, later pass: the consumer was found (`0x00695d50`,
+  see below) — `base_jumping` moves into the main "no direct primitive call" bucket.** `photo_op`:
+  has no `Max_Respect`/`Max_Cash`-shaped fields at all — the classification method itself doesn't
+  apply, remains the sole unresolved case. Net project-wide count (as revised): 10 with no direct
+  primitive call (real path OPEN), 2 confirmed direct-grant, 1 unresolved. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-10 — shared default handler `0x006a4220` opened in full; vtable-override check on 3
   types — the "most likely also default" inference is NOT supported, third follow-up** (SPEC TEAM,

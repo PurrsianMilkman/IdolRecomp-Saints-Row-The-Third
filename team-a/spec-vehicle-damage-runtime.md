@@ -281,14 +281,81 @@ string). A new, previously undocumented flag bit was also found: on a successful
    `0x00a9b890`'s own zero-check likewise only returns a boolean, it does not branch into a
    notify/spawn-wreck/explosion call either. That boolean flows back into `0x00a9f4f0`'s own
    local, passed into the already-fully-documented `0x00a9dd40`, confirmed in the prior pass to
-   use it only for camera-shake/rumble feedback scaling, not destruction. **Named next steps,
-   highest-priority first:** `0x00a9c5d0` (called in `0x00a9f4f0` immediately before `0x00a9f430`/
-   `0x00a9b890`, in the same branch, completely uncharacterized); `0x00a8f910` (the non-deferred
-   tail of `0x00a8fd70`, receives vehicle+damage-type+3 vectors but not the part pointer —
-   plausibly a post-decrement notify/finalize step); the deferred-queue consumer of `0x00a8fd70`'s
-   global ring buffer (batch-processing mechanism, consumer not identified); `0x00a9e1d0`'s own two
-   callers (`0x00a9eb60`; the tiny thunk `0x00aa04e0`, whose own single caller `0x00896183` was not
-   traced); and `0x00a9c230`/`0x004d7f30`/`0x009dd230`/`0x00979b30` (named earlier, still unopened).
+   use it only for camera-shake/rumble feedback scaling, not destruction.
+
+   **`0x00a9c5d0` opened in full, 2026-10-11, and RULED OUT** — it is a nearest-part spatial
+   query: walks the part list (skipping entries with `+0xf0` bits `0xe00000` set), computes a
+   bounding-box-clamped squared distance to an input position vector via `0x00a8c0d0` (unopened
+   leaf), tracks the closest match, applies a small gated distance bias, and fills an output array
+   with qualifying part pointers, writing the single closest one to its own out-param. No HP field
+   touched, no zero-check, no destruction-shaped call — this is the "find the part(s) nearest the
+   hit position" step feeding which parts get damaged, not a decision site.
+
+   **`0x00a8f910` opened in full, 2026-10-11 — closer to the decision but still a dead end as
+   traced, correcting the prior guess about its own signature.** It is a thiscall-style method on
+   the PART object itself (`ECX` = part pointer, not "vehicle+damage-type+3 vectors without the
+   part pointer" as previously guessed — all its field accesses, `+0x10`/`+0xc`/`+0xf0`/`+0x80`/
+   `+0x6c`, are part-object fields). `0x00a8fd70` calls it at `0x00a90355`, but ONLY on the
+   immediate-apply branch (gated by a mode check, `0x00755310`-family) — on the deferred branch it
+   instead queues into the global ring buffer and never calls `0x00a8f910` at all that tick.
+   `0x00a8f910`'s own body: if not paused and `part+0x10 == 0`, calls `0x00a8f630` (also opened)
+   and returns its result. `0x00a8f630` is destruction-adjacent: for protected categories it
+   floors `part+0x10` back to `1` and signals "not a real death"; for unprotected parts it instead
+   resolves up to 8 nearby linked objects via the standard handle-table lookup and applies a
+   scaled knockback impulse to each (a genuine "part just broke, push nearby things away" side
+   effect) and signals "real zero." Separately, gated on HP FRACTION `< 0.5` (half health, not
+   zero — a different, weaker condition), `0x00a8f910` sets a graduated "half-damaged" status bit
+   (`part+0xf0 |= 0x8000000`, or `part+0x6c = 1` for one physics-object type) — not a
+   full-destruction flag. **However: `0x00a8fd70` has exactly two callers in the whole binary
+   (`0x00a9b890`, already documented, and `0x00ab76f0`, a fixed "kneecapper" damage-type wrapper
+   ruled out separately below), and BOTH discard `0x00a8fd70`'s return value** — `0x00a9b890`
+   overwrites `EAX` immediately by re-reading the part's own fields directly, never touching the
+   call's actual return value; `0x00ab76f0` never tests it either. **The HP==0 signal
+   `0x00a8f910` computes is never consumed by a return-value branch through EITHER of
+   `0x00a8fd70`'s two callers** — if a destruction decision is driven by this chain at all, it
+   must be via the status-bit side effects above (readers unidentified) or
+   `0x00a8f630`'s impulse side effect itself, not a branch on the call's result.
+
+   **Correction to the above, independently found and re-verified against the live Ghidra server
+   myself before trusting it: `0x00a8f910` actually has a SECOND caller the prior pass's own xref
+   read missed, `0x00a8fbd0`** (not `0x00ab76f0`, which is a real, separate, unrelated caller of
+   `0x00a8fd70` itself — a fixed "kneecapper" damage-type wrapper, correctly ruled out). Opening
+   `0x00a8fbd0` in full: it iterates a count at `0x0271af40` over array entries at `0x0271af80`
+   (stride-0x40 records) calling `0x00a8f910` once per entry, with a lock-check gate
+   (`0x00853b10`) — **these are exactly the same addresses already flagged as "the deferred-queue
+   consumer of `0x00a8fd70`'s global ring buffer," unidentified until now.** `0x00a8fbd0` IS that
+   consumer: for each queued part-damage event it calls `0x00a8f910`, then does a position/handle
+   dedup check against a 128-entry history ring buffer (capped `0x80` entries at `0x0271a940`) to
+   avoid double-recording the same event, before advancing. The branch immediately after the
+   `0x00a8f910` call (`JZ 0x00a8fc3b`) does NOT test the call's own return value — `EAX` is
+   reloaded from the queue entry's own fields first — so this specific branch isn't the
+   destruction decision either, but the deferred-queue consumer's own identity is now CLOSED.
+   **Pass 4 (2026-10-11, agent `a95d910e53a8b3088` + self, direct query): the `part+0xf0` bit
+   `0x8000000`/`part+0x6c` reader lead is now PARKED, no reader found.** A thorough search (raw
+   literal-scan across `.text` for `0x08000000` and several plausible combined-mask variants,
+   filtered to the vehicle/part address neighborhood `0x00a80000`-`0x00ae0000`, every in-neighborhood
+   hit individually dumped and checked) found a **second setter** of the same bit —
+   `0x00a8e670` (independently re-verified by direct query, body confirmed) — but no reader
+   anywhere. `0x00a8e670` gates on `part+0xf0` bit `0x4` set, bits `0x300000` clear, and the part's
+   type-enum (`*(part+0x80)+0x44`) not in `{0xb,0xc,0xd,0x19,7,0x1a}`; when called with its 3rd
+   argument (an activation flag) set, it runs a crush/pin geometry test (`0x0075c880`) and sets
+   `part+0xf0 |= 0x8000000` only
+   if that test passes (`0x00a8e7d8`), otherwise — and on every call where the flag is clear — it
+   *clears* `0x8000000` and sets `0x100000` instead (`0x00a8e856`-`0x00a8e86e`), then runs the same
+   HP-fraction-`<0.5` check item 1 already documents via `0x00a88eb0`. This reads as a one-frame
+   transient flag (set, then cleared almost immediately), which is the right shape for a destruction
+   trigger, but its actual reader was not found. `part+0x6c` likewise has only the two known writer
+   sites (both inside/inlined from `0x00a8f910`), no reader found anywhere. **Confirmed coverage
+   gaps, left open rather than closed:** `0x00a8e670`'s three other callers (`0x00a8e8b0`,
+   `0x00a785e0`, `0x00a8eff0`) were not dumped; roughly 300 raw-literal hits for `0x08000000` outside
+   the `0x00a80000`-`0x00ae0000` neighborhood were not individually opened. **Decision: PARKED per
+   skip-and-defer** — this investigation has now run 4 passes / ~15 functions opened without finding
+   the destruction-decision site; Team B can already implement the part-damage chain as specced.
+   If resumed later, start with `0x00a8e670`'s 3 unopened callers.
+   Remaining unopened names, lower priority: `0x00b19510`/`0x0045beb0`/`0x00aaebf0`/`0x00a9b910`
+   (named earlier); `0x00a9e1d0`'s own two callers (`0x00a9eb60`; the tiny thunk `0x00aa04e0`, whose
+   own single caller `0x00896183` was not traced); and `0x00a9c230`/`0x004d7f30`/`0x009dd230`/
+   `0x00979b30` (named earlier, still unopened).
 
 2. **`0x00a9f4f0`'s complex (multi-part) damage-distribution path — item 1's decision confirmed to
    live somewhere past `0x00a9b890`'s part-level HP-zero check, not in any function opened so far.**
@@ -297,11 +364,21 @@ string). A new, previously undocumented flag bit was also found: on a successful
    vehicle's own `+0x1564`/`+0x155c`/`+0x1560` triple** — clamped by `0x00a8fd70` using the same
    bounded-accumulator shape as `0x00a9c1f0`, with the only confirmed zero-check anywhere in this
    whole investigation sitting in `0x00a9b890` immediately after. That check produces a boolean,
-   not a call — so the actual "begin destruction" action is now narrowed to either: (a) something
-   downstream of `0x00a9b890`'s boolean inside `0x00a9f4f0`'s own still-unopened calls (`0x00a9c5d0`,
-   `0x00b19510`, `0x0045beb0`, `0x00aaebf0`, `0x00a9b910`); (b) the deferred-queue batch consumer
-   `0x00a8fd70` feeds when not in immediate-apply mode; or (c) `0x00a8f910` (the immediate-apply
-   tail). None of these candidates has been opened yet. The four original dispatch functions'
+   not a call — so the actual "begin destruction" action is now narrowed further. **`0x00a9c5d0`
+   and `0x00a8f910` are now both opened and ruled out** (see item 1 above: the former is a
+   nearest-part spatial query, the latter's HP==0 signal is never consumed by a return-value
+   branch through either of its own two callers). **The deferred-queue consumer is now also
+   identified: `0x00a8fbd0`** — confirmed to operate on the exact ring-buffer addresses
+   (`0x0271af40`/`0x0271af80`) already flagged as that unidentified consumer, but its own branch
+   after calling `0x00a8f910` does not test the call's return value either, so it doesn't close
+   the decision question. **Pass 4 update:** the `part+0xf0`/`part+0x6c` reader lead is now PARKED
+   (see item 1's pass-4 note above) — no reader found despite a thorough scan, though a second
+   setter (`0x00a8e670`) turned up with 3 unopened callers as the natural resume point if this is
+   picked back up. This investigation is PARKED overall per skip-and-defer (4 passes / ~15
+   functions opened, decision site not found); Team B can already implement the part-damage chain
+   as specced. If resumed, remaining candidates are: `0x00a8e670`'s 3 unopened callers
+   (`0x00a8e8b0`, `0x00a785e0`, `0x00a8eff0`); or `0x00a9f4f0`'s own remaining still-unopened calls
+   (`0x00b19510`, `0x0045beb0`, `0x00aaebf0`, `0x00a9b910`). The four original dispatch functions'
    roles, below, are unchanged from the prior pass — none reads HP, none writes HP, none branches
    on a zero/threshold check:
    - **`0x00a9c6f0`** — event/notification dispatch only (builds and fires an event-code-`0x42`
@@ -400,8 +477,10 @@ shader-driven fine detail, cross-referenced from the data side, not independentl
 
 **OPEN:** the literal HP-reached-zero decision instruction; `0x00a9f4f0`'s complex multi-part damage
 path; the `+0x16c8` bit `0x1` tension against `vehicle_is_destroyed`; two undocumented Lua natives' exact
-bit identities; a dozen named-not-opened leaf calls; whether a progressive HP-ratio-driven smoke/fire
-mechanic exists anywhere unreached; `vehicle.xtbl`'s own `Death_Explosion`-equivalent field, unreconciled.
+bit identities; ~~a dozen named-not-opened leaf calls~~ **CLOSED 2026-10-10, see §7 item 5: all 13
+leaf calls triaged, none load-bearing for HP/destruction logic**; whether a progressive HP-ratio-driven
+smoke/fire mechanic exists anywhere unreached; `vehicle.xtbl`'s own `Death_Explosion`-equivalent field,
+unreconciled.
 
 ## 9. Clean-room check
 
@@ -409,6 +488,45 @@ Plain hex addresses throughout; no Ghidra decompiler output quoted. No `FUN_`/`D
 real identifiers. No leaked Volition/Havok/Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-11 — §7 items 1-2, pass 4: `part+0xf0` bit `0x8000000`/`part+0x6c` reader search —
+  PARKED, destruction-decision investigation PARKED overall per skip-and-defer** (SPEC TEAM, agent
+  `a95d910e53a8b3088` plus self, direct query). Thorough raw-literal scan across `.text` for
+  `0x08000000` (plus several combined-mask variants), filtered to the vehicle/part address
+  neighborhood and every in-neighborhood hit individually dumped, found a second setter of the
+  bit — `0x00a8e670` (independently re-verified) — but no reader of either `part+0xf0` bit
+  `0x8000000` or `part+0x6c` anywhere in the binary. `0x00a8e670` runs a crush/pin geometry test
+  (`0x0075c880`) and sets the bit only if it passes; otherwise it clears the bit and sets `0x100000`
+  instead, suggesting a one-frame transient flag whose reader was not located. Confirmed coverage
+  gaps left open: `0x00a8e670`'s 3 other callers (`0x00a8e8b0`, `0x00a785e0`, `0x00a8eff0`) not
+  dumped; ~300 raw-literal hits outside the vehicle/part neighborhood not individually opened.
+  Decision, agreed with orchestrator `purrsian-f5`: PARK this investigation — 4 passes / ~15
+  functions opened without finding the destruction-decision site is a reasonable budget at current
+  usage levels; Team B can already implement the part-damage chain as specced. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §7 items 1-2: `0x00a9c5d0` ruled out, `0x00a8f910` signature corrected, deferred-queue
+  consumer identified as `0x00a8fbd0`** (SPEC TEAM, agent `a9eaca0e76bb63940` plus self, direct query).
+  `0x00a9c5d0` is a nearest-part spatial query (fills a 92-entry output array via `0x00a8c0d0`, no
+  HP/destruction touch) — ruled out as a destruction-decision candidate. `0x00a8f910`'s signature
+  corrected: ECX is the part pointer (not "vehicle+damage-type+3 vectors without the part pointer" as
+  a prior pass guessed); it gates on not-paused + `part+0x10==0`, calls `0x00a8f630` (floors protected
+  parts back to 1, or applies an 8-nearby-object knockback impulse for unprotected ones), and separately
+  sets a graduated half-damaged status bit on HP-fraction `<0.5` (`part+0xf0 |= 0x8000000` or
+  `part+0x6c=1`, depending on physics-object type). `0x00a8fd70` has exactly two callers in the whole
+  binary (`0x00a9b890`, documented below, and `0x00ab76f0`, a fixed "kneecapper" damage-type wrapper,
+  ruled out separately) — both discard `0x00a8fd70`'s return value, so no return-value branch anywhere
+  in this chain drives a destruction decision. Independently re-verified the agent's `0x00a8f910` claims
+  by direct query (`scratchpad/verify_a8f910/func_0x00a8f910.txt`) before splicing — this surfaced a gap
+  the agent's own report missed: `0x00a8f910` has a *second* caller, `0x00a8fbd0`, beyond the one the
+  agent analyzed. Opened `0x00a8fbd0` directly (not via agent; `scratchpad/verify_a8fbd0/func_0x00a8fbd0.txt`)
+  and confirmed it is the previously-"unidentified" deferred-queue batch consumer flagged by multiple
+  prior passes: it iterates the `0x0271af40` count over the `0x0271af80` array, lock-gated via
+  `0x00853b10`, calls `0x00a8f910` per entry, and its own post-call branch tests a reloaded
+  position-vector pair (not the call's return value) before a dedup check against a 128-entry history
+  ring buffer at `0x0271a940`. Destruction-decision site still not found after 3 passes/~13 functions
+  opened; new highest-priority lead is the still-unopened readers of the `part+0xf0` bit `0x8000000` /
+  `part+0x6c` status bits. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-08 — §7 item 8: the vehicle collision→damage bridge found and named, cross-reference to
   new `spec-physics-runtime.md` §10a** (SPEC TEAM, agent `af81321adb1820dad`). `0x00763400`

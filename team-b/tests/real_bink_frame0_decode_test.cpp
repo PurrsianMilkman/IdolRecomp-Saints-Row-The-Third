@@ -167,13 +167,33 @@ bool runFixture(const std::string& label, const std::string& path, const char* e
 
     // Structural sanity, true regardless of exactly which block type the
     // real decode happens to hit first: at least one block was attempted,
-    // and every attempted block's outcome is one of the four known enum
-    // values (trivially true by construction, asserted anyway as a
-    // regression anchor against a future refactor).
+    // and every attempted block's outcome is one of the known enum values
+    // (trivially true by construction, asserted anyway as a regression
+    // anchor against a future refactor).
+    //
+    // UPDATED 2026-10-11 (fix/bink-dc-array-indexing task): added
+    // BlockOutcome::CaseSelectorPoisoned and BlockOutcome::PreStageOpen to
+    // this allow-list. Both are pre-existing, already-modelled real decode
+    // outcomes (entropy_prestage.h's CaseSelectorStatus::Poisoned is a
+    // CONFIRMED permanent decode state per spec-bink-codec.md Sec5.3g, and
+    // tests/real_bink_test_vector_validation_test.cpp already treats it as
+    // an ordinary possible trace stop) - this test's own allow-list had
+    // simply never needed them because neither real fixture here had ever
+    // produced them before. This task's own per-row DC delta-array decode
+    // (dc_delta_array.h) now consumes real bits from `br` on EVERY row for
+    // EVERY file decoded via decodeLumaPlane() (not just main_menu_bg.bik -
+    // Sec5.3p's own finding is that `0x1001a160` genuinely does this in the
+    // real binkw32.dll too), which shifts this fixture's (logo_amd_hd.bik)
+    // own per-row bit alignment enough that its trace now legitimately hits
+    // CaseSelectorPoisoned instead of the pre-fix run's OpenHook stop - a
+    // real behaviour change from a real production-path fix, not a new
+    // failure mode this project invented, so the allow-list is widened to
+    // match rather than the test weakened to ignore it.
     CHECK(!trace.blocks.empty());
     for (const auto& b : trace.blocks) {
         CHECK(b.outcome == BlockOutcome::Reconstructed || b.outcome == BlockOutcome::OpenHook ||
-              b.outcome == BlockOutcome::OutOfRangeDispatch || b.outcome == BlockOutcome::SourceExhausted);
+              b.outcome == BlockOutcome::OutOfRangeDispatch || b.outcome == BlockOutcome::SourceExhausted ||
+              b.outcome == BlockOutcome::CaseSelectorPoisoned || b.outcome == BlockOutcome::PreStageOpen);
     }
 
     // NOT asserted, reported only (same "no invented fixes" convention the

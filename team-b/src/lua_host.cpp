@@ -51,6 +51,27 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
         bareGlobalCount_ = bareGameplay.size() + bareUi.size();
     }
 
+    // LOCAL_PLAYER/REMOTE_PLAYER (2026-10-11, m09/m13/m05 trigger-stall task):
+    // CHOSEN, reimplementation-side only - NOT a spec-confirmed engine global,
+    // no disassembly citation exists or was sought (Sec1.14 explicitly frames
+    // this as a port-side handle-plumbing question, not something further
+    // disassembly can settle). Grepped exhaustively for any existing
+    // assignment of either name anywhere in this engine's own C++ before
+    // adding this: none found. Several real mission scripts (m07, m09, m13)
+    // compare a trigger/vehicle callback's own first argument against these
+    // two names, so they need SOME real, non-nil value to be comparable
+    // against at all. Set to this project's one existing player-identity
+    // sentinel convention, "#PLAYER1#"/"#PLAYER2#" (already used elsewhere in
+    // EngineState, e.g. teleport_check_done/turn_to_check_done's own
+    // "#PLAYER1#" literal - see that stub's own doc comment), into the
+    // gameplay state only (on_trigger and its sibling mission-callback
+    // natives are gameplay-tagged). This does not model split-screen/remote
+    // identity, only gives the identity comparison a real value to compare.
+    lua_pushstring(gameplay_, "#PLAYER1#");
+    lua_setglobal(gameplay_, "LOCAL_PLAYER");
+    lua_pushstring(gameplay_, "#PLAYER2#");
+    lua_setglobal(gameplay_, "REMOTE_PLAYER");
+
     // thread_close: the pre-spec ThreadScheduler scaffold's version, kept into
     // both states. It is neither one of the 24 bare globals nor in the
     // registration list, so whether the engine provides it is OPEN (see

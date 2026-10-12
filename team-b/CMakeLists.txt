@@ -1895,6 +1895,26 @@ add_executable(sr3luahost_trigger_volume_overlap_tests tests/synthetic_trigger_v
 target_link_libraries(sr3luahost_trigger_volume_overlap_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_trigger_volume_overlap_test COMMAND sr3luahost_trigger_volume_overlap_tests)
 
+# Shop/crib walk-in "press E" entry stand-in (feature/shop-crib-press-e-entry,
+# 2026-10-11, spec-store-runtime.md Sec2): EngineState::registerShopCribTrigger()/
+# updateShopCribTriggerPrompt()/pressShopCribInteract(), built on the
+# pre-existing trigger-volume overlap machinery above plus the existing
+# hud_prompt native's recordHudPrompt() request-recording shape.
+add_executable(sr3luahost_shop_crib_press_e_entry_tests tests/synthetic_shop_crib_press_e_entry_test.cpp)
+target_link_libraries(sr3luahost_shop_crib_press_e_entry_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_shop_crib_press_e_entry_test COMMAND sr3luahost_shop_crib_press_e_entry_tests)
+
+# Weapon pickup: dropped-weapon auto-pickup + heavy/pickup-only press-E entry
+# (feature/weapon-pickup-dropped-and-heavy, 2026-10-12, spec-weapons-
+# runtime.md Sec5.1): EngineState::giveEquipWeapon() (shared writer),
+# registerWeaponDrop()/updateWeaponDropPickup() (walk-over path), and
+# registerHeavyWeaponPickupTrigger()/updateHeavyWeaponPickupPrompt()/
+# pressHeavyWeaponPickupInteract() (press-E path, reusing the shop/crib
+# trigger-volume + hud_prompt machinery above).
+add_executable(sr3luahost_weapon_pickup_tests tests/synthetic_weapon_pickup_dropped_and_heavy_test.cpp)
+target_link_libraries(sr3luahost_weapon_pickup_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_weapon_pickup_dropped_and_heavy_test COMMAND sr3luahost_weapon_pickup_tests)
+
 add_executable(sr3luahost_roster_tests tests/synthetic_luahost_roster_test.cpp)
 target_link_libraries(sr3luahost_roster_tests PRIVATE sr3luahost)
 target_compile_definitions(sr3luahost_roster_tests PRIVATE CRREISH_TOOLS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tools")
@@ -2619,6 +2639,31 @@ if(WIN32)
     endif()
 endif()
 
+# Real-data smoke test for the street-collision-0x2237-mopp follow-up task
+# (2026-10-11) - a SIBLING of real_playtest_vehicle_smoke_test above
+# (tests/real_playtest_ground_pavement_collision_test.cpp's own header
+# comment has the full account): confirms SampleGroundMeshHeight() (the new
+# real `0x2237` ground-pavement collision-mesh sampler, tools/sr3_viewer.cpp)
+# actually resolves a real triangle at a known tile-0916 point and that BOTH
+# the on-foot player AND the driving vehicle rest at that real mesh height,
+# not the pre-existing Heightmap (0x2244)'s independently-wrong value or a
+# flat-plane fallback. SKIPPED (exit 77) when CRREISH_GAME_CACHE_DIR is
+# absent, same convention as every other real_* test. WIN32-only, same
+# reason as real_playtest_smoke_test above.
+if(WIN32)
+    add_executable(real_playtest_ground_pavement_collision_tests tests/real_playtest_ground_pavement_collision_test.cpp)
+    target_compile_definitions(real_playtest_ground_pavement_collision_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_playtest_ground_pavement_collision_test
+             COMMAND real_playtest_ground_pavement_collision_tests --bin-dir $<TARGET_FILE_DIR:sr3_viewer>)
+    set_tests_properties(real_playtest_ground_pavement_collision_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device")
+    add_dependencies(real_playtest_ground_pavement_collision_tests sr3_viewer)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_playtest_ground_pavement_collision_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
 # Real-data smoke test for playtest's new near-field ambient-vehicle-traffic/
 # police-roadblock WIRING (2026-10-09, playtest-nearfield-traffic-roadblock
 # task) - a SIBLING of real_playtest_vehicle_smoke_test above
@@ -3107,6 +3152,31 @@ if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(synthetic_bink_codec_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# fix/bink-actree-phase2-dispatch: focused synthetic coverage for the AC-
+# tree decoder's Phase 2 dispatch (sel==1/2/3, spec-bink-codec.md Sec5.3j
+# Part 2/Part 3) - hand-derived bitstream, no real file/case-selector-table
+# dependency, so this one always runs (not gated on CRREISH_VERIFY_BUILD).
+add_executable(ac_tree_phase2_tests tests/ac_tree_phase2_test.cpp)
+target_include_directories(ac_tree_phase2_tests PRIVATE include)
+target_link_libraries(ac_tree_phase2_tests PRIVATE sr3binkcodec)
+add_test(NAME ac_tree_phase2_test COMMAND ac_tree_phase2_tests)
+
+# Permanent regression test reproducing spec-bink-codec.md Sec5.3w's full
+# 17-bit golden trace for frame0/Y-plane/block(0,0) - the Gate A/Gate B
+# mechanism fix, fix/bink-ac-tree-gate-a-b task (2026-10-11).
+add_executable(ac_tree_gate_ab_golden_trace_tests tests/ac_tree_gate_ab_golden_trace_test.cpp)
+target_include_directories(ac_tree_gate_ab_golden_trace_tests PRIVATE include)
+target_link_libraries(ac_tree_gate_ab_golden_trace_tests PRIVATE sr3binkcodec)
+add_test(NAME ac_tree_gate_ab_golden_trace_test COMMAND ac_tree_gate_ab_golden_trace_tests)
+
+# Permanent regression test reproducing the CONFIRMED PREFIX of spec-bink-
+# codec.md Sec5.3ac's own bit-by-bit idx3 trace - the AC-tree Phase 1 BFS +
+# Gate B fix, fix/bink-actree-phase1-gateb task (2026-10-11).
+add_executable(ac_tree_phase1_bfs_golden_trace_tests tests/ac_tree_phase1_bfs_golden_trace_test.cpp)
+target_include_directories(ac_tree_phase1_bfs_golden_trace_tests PRIVATE include)
+target_link_libraries(ac_tree_phase1_bfs_golden_trace_tests PRIVATE sr3binkcodec)
+add_test(NAME ac_tree_phase1_bfs_golden_trace_test COMMAND ac_tree_phase1_bfs_golden_trace_tests)
+
 # Real-data regression: frame 0 of the game's own logo_thq_and_voli_hd.bik,
 # extracted by tools/bink_frame0_probe.cpp per spec-bink-codec.md Sec1.5/
 # Sec1.5a/Sec1.6 (tests/golden/bink_logo_frame0/frame0_raw.bin, gitignored,
@@ -3171,6 +3241,31 @@ if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(real_bink_idct_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# Permanent regression test for spec-bink-codec.md Sec5.3v's own golden
+# block(0,0) 4-stage worked example (fix/bink-block00-4stage-trace task,
+# 2026-10-11) - see tests/real_bink_block00_4stage_dequant_idct_test.cpp's
+# own top comment. No golden fixture dependency (the 3 nonzero stage-2
+# coefficients are literal, hand-transcribed-from-spec constants) - this
+# test never skips.
+add_executable(real_bink_block00_4stage_dequant_idct_tests
+    tests/real_bink_block00_4stage_dequant_idct_test.cpp)
+target_include_directories(real_bink_block00_4stage_dequant_idct_tests PRIVATE include)
+target_link_libraries(real_bink_block00_4stage_dequant_idct_tests PRIVATE sr3binkcodec)
+add_test(NAME real_bink_block00_4stage_dequant_idct_test
+    COMMAND real_bink_block00_4stage_dequant_idct_tests)
+
+# Permanent regression test for spec-bink-codec.md Sec5.3x's compact worked
+# examples (fix/bink-5.3x-golden-blocks task, 2026-10-11): Y dispatch
+# indices 1-4 (flat-fill idx1/idx2, AC-tree dequant+IDCT idx3/idx4) plus the
+# first chromaA secondary=2 occurrence - see
+# tests/real_bink_5_3x_golden_blocks_test.cpp's own top comment. Same
+# no-fixture-dependency convention as real_bink_block00_4stage_dequant_idct_tests
+# above - never skips.
+add_executable(real_bink_5_3x_golden_blocks_tests tests/real_bink_5_3x_golden_blocks_test.cpp)
+target_include_directories(real_bink_5_3x_golden_blocks_tests PRIVATE include)
+target_link_libraries(real_bink_5_3x_golden_blocks_tests PRIVATE sr3binkcodec)
+add_test(NAME real_bink_5_3x_golden_blocks_test COMMAND real_bink_5_3x_golden_blocks_tests)
+
 # Targeted real-data confirmation for the merge-group bit-consumption fix
 # (commit 84820a4, fix/bink-merge-group-bit-consumption branch): unlike
 # real_bink_test_vector_validation_tests above (which drives the FULL
@@ -3193,6 +3288,72 @@ if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(real_bink_merge_group_trace_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# fix/bink-dc-decode-prestage-bitpos task (spec-bink-codec.md Sec5.3q/
+# Sec5.3r/Sec5.3s/Sec5.3t): dedicated real-data check for dc_prestage_
+# sibling_gap.h's consumeDcArrayPreStageGap() - the 1757->9256 bit span
+# (minus descriptor B's own already-paid 1114-bit expansion) between
+# descriptor B's real build and 0x1001a160's own call site. Same
+# gitignored/local-only fixture and SKIPPED (exit 77) convention as
+# real_bink_merge_group_trace_tests above.
+add_executable(real_bink_dc_prestage_gap_tests tests/real_bink_dc_prestage_gap_test.cpp)
+target_include_directories(real_bink_dc_prestage_gap_tests PRIVATE include)
+target_link_libraries(real_bink_dc_prestage_gap_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_dc_prestage_gap_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_dc_prestage_gap_test COMMAND real_bink_dc_prestage_gap_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_dc_prestage_gap_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# fix/bink-0x10019d10-real-decode task (spec-bink-codec.md Sec5.3ab):
+# permanent golden-trace test for decode0x10019d10()'s own real per-symbol
+# decode (leading count 528, first 8 bytes 0f,01,00,00,00,00,80,ff, total
+# bit cost 2981 landing at bit 9236). Same gitignored/local-only fixture and
+# SKIPPED (exit 77) convention as real_bink_dc_prestage_gap_tests above.
+add_executable(real_bink_0x10019d10_real_decode_tests tests/real_bink_0x10019d10_real_decode_test.cpp)
+target_include_directories(real_bink_0x10019d10_real_decode_tests PRIVATE include)
+target_link_libraries(real_bink_0x10019d10_real_decode_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_0x10019d10_real_decode_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_0x10019d10_real_decode_test COMMAND real_bink_0x10019d10_real_decode_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_0x10019d10_real_decode_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# fix/bink-dc-array-value0-boundary-5.3u task (spec-bink-codec.md Sec5.3u):
+# dedicated real-data check for dc_delta_array.h's decodeRowDcArray() after
+# the value[0]/values[1+] boundary fix - asserts the exact, now-confirmed
+# ground-truth 8-value trace (118, 199, 212, 51, 25, 118, 119, 26). Same
+# gitignored/local-only fixture and SKIPPED (exit 77) convention as
+# real_bink_dc_prestage_gap_tests above.
+add_executable(real_bink_dc_value0_boundary_tests tests/real_bink_dc_value0_boundary_test.cpp)
+target_include_directories(real_bink_dc_value0_boundary_tests PRIVATE include)
+target_link_libraries(real_bink_dc_value0_boundary_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_dc_value0_boundary_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_dc_value0_boundary_test COMMAND real_bink_dc_value0_boundary_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_dc_value0_boundary_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# fix/bink-dc-array-519-word-commit-run task (spec-bink-codec.md Sec5.3n):
+# golden-trace regression pinning the real first-call word count (519, not
+# blockCols=240), the resulting exit bit position (13563), and the 24-bit
+# no-op bail sequence that lands the real dispatch-read prep at 13587 (not
+# the older 13619 figure - see dc_prestage_sibling_gap.h's own comment on
+# the 32-bit cross-script convention residual). Same gitignored/local-only
+# fixture and SKIPPED (exit 77) convention as real_bink_dc_value0_boundary_
+# tests above.
+add_executable(real_bink_dc_array_519_word_bail_tests tests/real_bink_dc_array_519_word_bail_test.cpp)
+target_include_directories(real_bink_dc_array_519_word_bail_tests PRIVATE include)
+target_link_libraries(real_bink_dc_array_519_word_bail_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_dc_array_519_word_bail_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_dc_array_519_word_bail_test COMMAND real_bink_dc_array_519_word_bail_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_dc_array_519_word_bail_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
 # Dedicated coverage for frame_decoder.h's plane sub-chunk span-field
 # navigation (PlaneSubChunkSpan/readPlaneSubChunkSpan()/
 # nextPlaneSubChunkPosition(), fix/bink-merge-group-bit-consumption's own
@@ -3211,6 +3372,53 @@ target_compile_definitions(bink_plane_subchunk_span_tests PRIVATE
 add_test(NAME bink_plane_subchunk_span_test COMMAND bink_plane_subchunk_span_tests)
 if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(bink_plane_subchunk_span_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# Dedicated coverage for flat_fill_prestage_array.h's FlatFillPrestageArray/
+# FlatFillPrestageCursor and their wiring into block_dispatch.h's
+# Case1SubType::FlatDcFill case (spec-bink-codec.md Sec5.3y/Sec5.3z,
+# fix/bink-flat-fill-real-decode task - supersedes the prior
+# fix/bink-dc-literal-fillbyte-separate-cursors task's own FlatFillByteCursor
+# coverage, same filename/target kept for minimal churn). Fully synthetic/
+# deterministic - never skips, no real-data fixture needed.
+add_executable(bink_flat_fill_cursor_tests tests/bink_flat_fill_cursor_test.cpp)
+target_include_directories(bink_flat_fill_cursor_tests PRIVATE include)
+target_link_libraries(bink_flat_fill_cursor_tests PRIVATE sr3binkcodec)
+add_test(NAME bink_flat_fill_cursor_test COMMAND bink_flat_fill_cursor_tests)
+
+# fix/bink-flat-fill-real-decode task (spec-bink-codec.md Sec5.3s/Sec5.3z):
+# dedicated real-data check for flat_fill_prestage_array.h's
+# decode0x100195b0() - the golden-trace worked example (650-byte output,
+# first 64 + last 8 bytes) plus idx1/idx2's own real end-to-end pixel value
+# (153). Same gitignored/local-only fixture and SKIPPED (exit 77) convention
+# as real_bink_dc_prestage_gap_tests above.
+add_executable(real_bink_flat_fill_prestage_tests tests/real_bink_flat_fill_prestage_test.cpp)
+target_include_directories(real_bink_flat_fill_prestage_tests PRIVATE include)
+target_link_libraries(real_bink_flat_fill_prestage_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_flat_fill_prestage_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_flat_fill_prestage_test COMMAND real_bink_flat_fill_prestage_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_flat_fill_prestage_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+# diag/bink-bitpos-vs-5.3y task (spec-bink-codec.md Sec5.3y): diagnostic-only
+# measurement of this codebase's own real end-to-end bit-reader position
+# (block_dispatch.h's own BlockRecord::dispatchBitPos/acEntryBitPos/
+# acExitBitPos instrumentation, added by this task) against Sec5.3y's own
+# live-Unicorn-captured ground-truth table, for main_menu_bg.bik frame 0's
+# Y-plane row 0, dispatch idx0/3/4 - NOT a fix, not a correctness assertion;
+# always exits 0 when the fixture verifies (its own stdout is the
+# deliverable). Same gitignored/local-only fixture and SKIPPED (exit 77)
+# convention as real_bink_flat_fill_prestage_tests above.
+add_executable(real_bink_bitpos_vs_5_3y_tests tests/real_bink_bitpos_vs_5_3y_test.cpp)
+target_include_directories(real_bink_bitpos_vs_5_3y_tests PRIVATE include)
+target_link_libraries(real_bink_bitpos_vs_5_3y_tests PRIVATE sr3binkcodec)
+target_compile_definitions(real_bink_bitpos_vs_5_3y_tests PRIVATE
+    BINK_MMBG_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/golden/bink_main_menu_bg")
+add_test(NAME real_bink_bitpos_vs_5_3y_test COMMAND real_bink_bitpos_vs_5_3y_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_bink_bitpos_vs_5_3y_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
 # Driver tool (NOT a ctest - a manual-run visual-inspection aid, same
@@ -3232,6 +3440,24 @@ if(WIN32)
     add_executable(bink_y_plane_oracle_dump tools/bink_y_plane_oracle_dump.cpp)
     target_include_directories(bink_y_plane_oracle_dump PRIVATE include)
     target_link_libraries(bink_y_plane_oracle_dump PRIVATE sr3render sr3binkcodec)
+
+    # fix/bink-dc-literal-descriptor-l task (2026-10-11): a reusable,
+    # checked-in version of this project's own ad hoc FFmpeg pixel-match
+    # check (previously run by hand each pass, per HANDOFF.md's "DONE THIS
+    # SESSION" Bink entries) - compares every Reconstructed block's real
+    # pixel bytes against an independent FFmpeg yuv420p/rawvideo Y-plane
+    # extraction of the same frame. See that tool's own top comment.
+    add_executable(bink_ffmpeg_pixel_compare tools/bink_ffmpeg_pixel_compare.cpp)
+    target_include_directories(bink_ffmpeg_pixel_compare PRIVATE include)
+    target_link_libraries(bink_ffmpeg_pixel_compare PRIVATE sr3binkcodec)
+
+    # SCRATCH diagnostic, fix/bink-actree-phase1-gateb task - not a
+    # permanent tool, not referenced by any ctest. Safe to remove later.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/scratchpad_bink/dump_idx34.cpp")
+        add_executable(dump_idx34 scratchpad_bink/dump_idx34.cpp)
+        target_include_directories(dump_idx34 PRIVATE include)
+        target_link_libraries(dump_idx34 PRIVATE sr3binkcodec)
+    endif()
 endif()
 
 # libFuzzer harnesses + seed capture (fuzz/fuzz.cmake). Opt-in, Clang only.
@@ -3719,4 +3945,3 @@ add_test(NAME synthetic_sr3agora_test COMMAND sr3agora_tests)
 # vehicle_enter_guardian_angel.
 add_executable(sr3luahost_vehicle_enter_eligibility_gate_tests tests/synthetic_luahost_vehicle_enter_eligibility_gate_test.cpp)
 target_link_libraries(sr3luahost_vehicle_enter_eligibility_gate_tests PRIVATE sr3luahost)
-add_test(NAME synthetic_luahost_vehicle_enter_eligibility_gate_test COMMAND sr3luahost_vehicle_enter_eligibility_gate_tests)

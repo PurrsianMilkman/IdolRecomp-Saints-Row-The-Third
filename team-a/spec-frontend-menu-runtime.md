@@ -471,8 +471,8 @@ primitive `0x007b4750`.
      for the literal `0x1644` (5700 decimal) and for any write to the confirmed live cash field at
      player-record `+0x1ca0` (the same field §10.1/§10.3 of `spec-save-format.md` names at save
      offset `0x4A70` ÷100, clamped ±2,000,000,000 by `0x00960160`): **none found.**
-   - **Still OPEN:** the actual write site of the 5700 default (and the unlockables/wardrobe
-     defaults, not reached this pass at all). HYPOTHESIS, not confirmed: since this engine routes
+   - **Still OPEN (cash only — see below, CLOSED 2026-10-11, for unlockables/wardrobe):** the
+     actual write site of the 5700 default. HYPOTHESIS, not confirmed: since this engine routes
      essentially every other cash change (purchases, rewards, cheats) through one shared
      `cash_adjust`-tagged setter (`0x0094d920` family) rather than a raw field write, the starting
      5700 may likewise be granted by an intro-mission/tutorial Lua script call into that same
@@ -558,15 +558,79 @@ primitive `0x007b4750`.
 
    **Bottom line for Team B after THREE independent search angles (data: Lua scripts + xtbl tables;
    engine: both cash-setter layers' full caller lists + the constructor chain; and now the complete
-   fresh-game world-start bring-up sequence) all coming up empty: the $57.00 new-game starting cash,
-   and very likely the unlockables/wardrobe defaults too, are most likely not "granted" by any
-   script call, data-table default, or any of this function's own sub-steps that Team B can
-   discover and replicate.** Recommended path, now on a broader evidentiary base: **hardcode
-   $57.00 (raw 5700, ×100 scale) as the new-game starting cash constant** rather than continuing to
-   search for a "real" data source. No further candidate call site was surfaced by this pass to
-   keep looking — this question is now considered exhausted by static analysis short of a
-   whole-binary constant scan (tooling this project's Ghidra server doesn't support) or a live
-   capture.
+   fresh-game world-start bring-up sequence) all coming up empty: the $57.00 new-game starting cash
+   is most likely not "granted" by any script call, data-table default, or any of this function's
+   own sub-steps that Team B can discover and replicate.** Recommended path, now on a broader
+   evidentiary base: **hardcode $57.00 (raw 5700, ×100 scale) as the new-game starting cash
+   constant** rather than continuing to search for a "real" data source. No further candidate call
+   site was surfaced by this pass to keep looking — this question is now considered exhausted by
+   static analysis short of a whole-binary constant scan (tooling this project's Ghidra server
+   doesn't support) or a live capture. **Correction: the "very likely the unlockables/wardrobe
+   defaults too" extrapolation above was wrong for wardrobe — see below, CLOSED 2026-10-11 — real
+   script call sites exist for wardrobe; only the cash default itself stays genuinely ungranted by
+   any discoverable source.**
+
+   **Unlockables (`Auto_Unlock`) and wardrobe defaults — CLOSED 2026-10-11 (orchestrator-routed
+   self-pick, direct harness query + direct file reads, no agent dispatched).**
+
+   *Auto_Unlock.* The unlockables row-reader (`0x0071E5E0`, read in full) zeroes the state bytes
+   `+0xE0`/`+0xE1`/`+0xE2` (`spec-tables-progression.md` §4.3) unconditionally at parse time
+   (`EBX=0` from `XOR EBX,EBX` at entry, written through at `0x0071e637`-`0x0071e643`) and writes
+   the parsed `Auto_Unlock` enum to `+0xF4` separately (`0x0071e64f`/`0x0071e81d`) — **confirmed by
+   direct disassembly: the loader itself never conditionally sets the "unlocked" state bit from
+   `Auto_Unlock`'s value; that application happens in a separate, not-yet-located runtime step.**
+   However, a direct read of the real base `unlockables.xtbl`
+   (`tools/ai_base_xtbl/unlockables.xtbl`) shows exactly ONE row with `Auto_Unlock` set at all
+   (`Silently`, matching `spec-tables-progression.md`'s own "only `Silently`... 1 [row]" count) —
+   and that row is **`HomieSlot1`** (`Category=Homies`, `Is_DLC=Sometimes`), the same name
+   `spec-save-format.md`'s own save-id table already resolves at save slot 103. This lines up
+   exactly with `spec-save-format.md` §10.6's own empirical finding that the new-game save's state
+   set A (purchased/active) has population **exactly 1**. **HIGH CONFIDENCE, not disassembly-
+   confirmed end-to-end: the single Auto_Unlock row and the single new-game active bit are the same
+   unlockable** (`HomieSlot1` — the player's first homie-follower slot is silently active from the
+   very first save) — the runtime function that actually reads `+0xF4` and sets `+0xE0`/`+0xE1`
+   accordingly was not located this pass (checked: not in the row reader itself; a precise address
+   search would need either an xref census keyed on a non-fixed per-record offset, not attempted
+   with current tooling, or a live capture of a fresh-game boot).
+
+   *Wardrobe defaults.* `pcr_add_default_clothing` (`0x008306a0`) — already fully characterized
+   behaviorally in `spec-lua-api-behaviour.md` §43.1 (empties the owned-clothing inventory, then
+   re-adds only the default garments for the player's gender/ethnicity) but previously marked OPEN
+   for "whether any shipped script calls it on an established character." A direct project-wide
+   grep of the real Lua corpus (`scratchpad/ui_lua_dumps/*.lua`) finds exactly **one** real call
+   site: `store_character.lua`'s `store_character_lineup_to_customization()` — the character
+   "lineup" screen's own transition handler, which applies the player's chosen preset
+   (`pcr_apply_preset(preset_name, "figure", regional_preset_name, false)`) and immediately calls
+   `pcr_add_default_clothing()` with the script's own comment: *"We want the character to have
+   clothes on at the top menu, and we need to change to preset clothing."* This is the character-
+   creation/preset-selection screen shown at new-game start (not the in-game plastic surgeon —
+   the sibling function `store_character_creation_strip_clothes()` explicitly gates on
+   `pcr_is_plastic_surgeon() == false`, confirming the creation-flow scripts distinguish the two
+   contexts). **CONFIRMED (one real call site, in the expected new-character-creation context) —
+   this closes the wardrobe-default half of this item: the default outfit is applied by this one
+   script call, driven by whichever lineup preset the player picked, not by a separate xtbl default
+   or a hardcoded engine step.** Only ONE call site was found in this pass's accessible corpus — an
+   earlier note in `spec-lua-api-behaviour.md` §43.1/§43.2 cites "Team B reports 2 call sites in 2
+   scripts"; this pass's own grep does not reproduce the second one, flagged honestly rather than
+   assumed to exist.
+
+   - **Evidence:** direct disassembly of the unlockables row reader (`0x0071E5E0`, full body, via
+     the Ghidra query server); a direct read of the real base `unlockables.xtbl` file on disk
+     (`tools/ai_base_xtbl/unlockables.xtbl`) for the `Auto_Unlock` row census; a project-wide grep
+     of the real extracted Lua corpus for `pcr_add_default_clothing` call sites, with the matching
+     function's own surrounding context read for confirmation.
+   - **Confidence:** CONFIRMED for the loader's own zero-init behavior (no conditional state-bit
+     write from `Auto_Unlock` inside `0x0071E5E0`) and for the one real `pcr_add_default_clothing`
+     call site and its new-character-creation context. HIGH CONFIDENCE, not disassembly-end-to-end,
+     for `HomieSlot1` being the specific unlockable behind the new-game set-A bit (strong
+     correlation: unique `Auto_Unlock` row count matches unique new-game active-bit count exactly,
+     but the connecting runtime function was not found).
+   - **Unknowns:** the exact runtime function that reads `Auto_Unlock` (`+0xF4`) and applies it to
+     the state bits — not located; whether a second `pcr_add_default_clothing` call site exists
+     outside this pass's accessible Lua corpus (DLC scripts or otherwise), per the earlier "2 call
+     sites in 2 scripts" note this pass could not reproduce; whether `pcr_add_default_clothing`'s
+     own gender/ethnicity default-garment table has its own separate xtbl source (not traced this
+     pass — `spec-lua-api-behaviour.md` §43.1 already covers the native's own internal mechanism).
 2. ~~The literal pause-menu-open input binding~~ **RESOLVED (HIGH CONFIDENCE) 2026-10-10 — pivoted
    to the input side after the screen-push side was exhausted (see the trail below), and landed
    it.** The pause-menu-open binding is keyed off the CBA action table's `0x55` (85) entry
@@ -638,6 +702,19 @@ executable's own data sections, not sourced externally.
 ---
 
 ## Changelog
+
+- **2026-10-11 — §9 item 1: unlockables (`Auto_Unlock`) and wardrobe defaults CLOSED** (SPEC TEAM,
+  self, direct Ghidra query + direct file reads, no agent dispatched). The unlockables row reader
+  (`0x0071E5E0`) zeroes the state bits unconditionally and never applies `Auto_Unlock` itself — but
+  the real base `unlockables.xtbl`'s only `Auto_Unlock` row (`HomieSlot1`, `Silently`) matches the
+  save format's own empirical "exactly 1 active bit at new game" finding (HIGH CONFIDENCE link, not
+  disassembly-confirmed end-to-end). Wardrobe: found the one real `pcr_add_default_clothing()` call
+  site in the accessible Lua corpus, `store_character.lua`'s lineup-to-customization handler —
+  confirms the default outfit comes from the new-game character-creation preset screen, not a
+  separate xtbl default. Corrected the stale "very likely… not granted" extrapolation for wardrobe
+  in place; left the cash-default conclusion (hardcode $57.00) untouched, since that part is still
+  genuinely unresolved. Cleanroom: no leaked source, Ghidra auto-names used only per this file's own
+  established main-exe convention.
 
 - **2026-10-10 — §7/§9: pause-menu-open input binding LANDED (HIGH CONFIDENCE), via the button-map
   route; phone's own binding still OPEN, clean negative** (SPEC TEAM, agent `adacb57c01da892c6`).

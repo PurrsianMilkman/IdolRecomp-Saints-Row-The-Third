@@ -932,6 +932,167 @@ walk-in-store action type, but no native handler traced reads `+0xe8` as a docum
 whether that string is consumed as-authored by some handler not covered this pass, or is instead
 rehashed/reinterpreted per action-type before any native handler sees it, is OPEN.
 
+**Follow-up, 2026-10-11 — mission-blocker routed question (Team B stalls on m09/m05/m13): the
+"fire named hook by object kind" dispatcher and its own missing caller, confirmed by re-check;
+real-game-only diagnosis for the specific m09 symptom** (SPEC TEAM, agent `aefe4dad8e54547d8`,
+independently re-verified). Re-confirmed, by fresh disassembly + xref query, everything this
+section already established about the trigger-enter dispatch chain: the per-frame poll
+`0x00940c90` maintains a capped "currently inside" active set (add `0x0093c0a0`/remove
+`0x0093c110`); `0x00a29e40` ("fire named hook by object kind," full body `00a29e40`-`00a2a116`,
+dumped in full this pass — not previously saved to a scratchpad file) resolves a generic object
+handle through a **fixed-priority chain of 6 type testers**
+(`0x00971cf0`→`0x00a27100`→`0x00679ac0`→`0x006fc2b0`→`0x00a270e0`→`0x00807930`), each gating a
+*different* hook-field read on a *different* object kind; only the LAST tester (`0x00807930`,
+trigger) reaches the already-documented `+0xf8`/`+0x7c`/`+0x84` trigger-callback path via
+`0x00a1fe10`. **Structural hazard, newly characterized (not previously called out): because this
+is a priority-ordered chain, not a direct trigger-only dispatch, any event whose "candidate
+object" satisfies an EARLIER tester (vehicle/mesh-mover/door/etc. — the 5 non-trigger testers'
+own precise object-kind semantics were not individually decompiled this pass, inferred from
+field-offset shape only) never reaches the trigger branch at all, even though some other native
+side effect (e.g. an audio post via `0x0045d990`, or the opcode-`0x2e` broadcast `0x0093dcd0`)
+could still fire and be externally observable as "something happened."** This is a plausible,
+general explanation for a "trigger fires but its Lua callback doesn't run" symptom class, though
+it cannot be confirmed as THE cause for any specific stall without a live capture. `0x00a1fe10`
+itself resolves the packed callback id through the 350-slot intern table (`0x026e83e8`) and
+**spawns a new coroutine** (`0x00e0ca80`→`0x00e0c720`) rather than calling Lua synchronously — the
+callback runs later, when scheduler `0x00e0cba0` next resumes it (~33Hz pump); this is why no
+direct `lua_call` is ever found at the fire site. **`0x00a29e40`'s own caller remains OPEN,
+re-confirmed static-analysis-exhausted this pass**: `xref 0x00a29e40` → exactly 1 reference, its
+own thunk `0x00a2a1c0`; `xref 0x00a2a1c0` → 0 references anywhere in the image. Whatever feeds
+this dispatcher its candidate object is reached only via a mechanism this binary's own static
+structure doesn't expose (virtual dispatch through a table not resolved statically, most likely) —
+a live-capture-only question, not resolvable by further disassembly. Full detail:
+`scratchpad/handoff_trigger_dispatch_2026-10-11/func_0x00a29e40.txt`,
+`xref_0x00a29e40.txt`/`xref_0x00a2a1c0.txt`.
+
+**m09's specific stall (`m09.lua:2099`, `m09_go_to_boat`'s `while not M09_local_on_boat or not
+M09_remote_on_boat do thread_yield() end`): the shared-trigger-name single-slot clobber hypothesis
+is REFUTED, checked against m09's actual control flow including its restart path, not just the
+same-script case.** `M09_trigger.player_on_boat_trigger` and `M09_trigger.on_boat_trigger`
+(`m09.lua:1258`-`1270`) both resolve to the same underlying trigger name `"on_boat_trigger"`, and
+§1.2 already establishes that trigger name has exactly one enter-callback slot — a real
+collision hazard in the abstract. But independently re-read directly against `m09.lua`'s own
+control flow (not inferred): the enemy/NPC-entry registration onto the same name is reached from
+exactly 2 places — `m09.lua:1881` (strictly AFTER `m09_go_to_boat()` returns, in the normal
+top-to-bottom "start" checkpoint flow, same thread — confirmed no concurrency is possible) and
+`m09.lua:3343` (inside `m09_initialize_checkpoint`'s `defend_girls` branch, reached ONLY when the
+mission is launched directly at the `defend_girls` checkpoint — confirmed by `m09_run`'s own
+sequential `if current_checkpoint == X` dispatch structure, `m09.lua:1855`-onward, which never
+revisits an earlier checkpoint's block once a later one's condition is matched: restarting at
+`defend_girls` skips the `start` block entirely, so `m09_go_to_boat()` is never called on that
+path either). **No script-reachable path puts the enemy-entry registration live while
+`m09_go_to_boat`'s own wait loop is still blocked.** Given the dispatch-chain hazard documented
+above, the most plausible remaining explanations for "the boat trigger now fires but the mission
+stays stuck" are: (a) the priority-ordered type-sniffing chain resolves Team B's firing event
+through a non-trigger branch, so the Lua callback is never invoked despite an observable
+side-effect; or (b) the trigger branch IS taken and `m09_player_on_boat_enter_cb`
+(`m09.lua:4216`-`4224`) does run, but the `human` handle Team B's engine passes in does not compare
+equal to their own `LOCAL_PLAYER`/`REMOTE_PLAYER` (the callback only sets the flag on an exact
+identity match) — a reimplementation-side handle-plumbing question, not something further
+disassembly of the original binary can settle. Recommended for Team B: log the raw `human`
+argument reaching `m09_player_on_boat_enter_cb` and diff it against their own `LOCAL_PLAYER`
+handle at the moment their engine reports the trigger firing.
+
+**m05/m13's own earliest engine-callback-dependent stalls in their main top-level sequence** (same
+identity-gated-callback bug class as m09, confirmed by direct reading of each script, not
+inference): **m13**, rank 1 by a wide margin: `m13.lua:2954`
+(`while not M13_trigger_reached do thread_yield() end`, inside `m13_goto_a_trigger`, reached from
+`m13_run`'s `START` checkpoint's first real action, `m13_destroy_banner`→`m13_goto_a_trigger`).
+Set up via `on_trigger("m13_trigger_cback", trigger)` at `m13.lua:2982`; callback
+`m13_trigger_cback` (`m13.lua:3059`-`3063`) sets `M13_trigger_reached = true` only
+`if human == LOCAL_PLAYER or human == REMOTE_PLAYER` — the identical identity-gated-flag pattern
+as m09. Two later, downstream-only candidates in the same function also exist
+(`m13.lua:1897`/`on_take_damage`; `m13.lua:1911`/`on_mover_destroyed`) but rank 1 is strictly
+earlier and the closest analog to m09's own bug. **m05**, two close candidates: rank 1,
+`m05.lua:1140` (`while not M05_jumped do thread_yield() end`) — set by `hud_prompt`-registered
+callbacks (`m05.lua:1125`/`1128`→`1730`-`1741`), a DIFFERENT native mechanism from the `on_trigger`
+pattern (no identity gate needed, the prompt is already player-specific), so not the same bug
+class. **Confirmed genuine, 2026-10-11 (orchestrator-routed, direct harness query, no agent
+  dispatched): Team B's own harness survives a 3000-tick budget here without the condition ever
+  flipping, so this is a real stall, not a false-positive rank.** `m05_parachute_in` does NOT wait
+  on a parachute/skydive state field or an animation-completion flag, and `vehicle_exit()`
+  (`m05.lua:1732`/`1739`) is a RESULT the callback itself calls, not something the loop waits on —
+  it waits purely on the HUD button-prompt ("M05_JUMP") actually being pressed. Traced the full
+  registration chain: `hud_prompt`'s own native (`0x00a4cff0`, §13.3) delegates to `0x00a37210`,
+  which calls the previously-undecompiled `0x00a370c0` (opened in full this pass) — for the LOCAL
+  player, it interns the callback-name string (`"m05_jump_local"`) via the same 350-slot
+  string-intern table `0x00a1fcc0` already confirmed elsewhere in this document for the
+  `on_trigger`-style named-hook mechanism (above), then stores the resulting packed id into the
+  global HUD-prompt-manager singleton `0x026e9528` at slot 9 (`+0x24`, local player) or slot 10
+  (`+0x28`, remote), and separately caches the prompt-text id into `0x02703cac` (the same
+  "current default prompt" global `0x00a36e60` resets on failure, §13.3). **This is structurally
+  the exact same decoupled, no-synchronous-caller dispatch shape already fully confirmed above for
+  `on_trigger`'s own named-hook mechanism** (intern via `0x00a1fcc0`-family, resolve-and-spawn a
+  fresh Lua coroutine via `0x00e0ca80`→`0x00e0c720`, resumed later by the independent `0x00e0cba0`
+  scheduler) — HIGH CONFIDENCE this is the same family by structural analogy (identical
+  string-intern table, identical "store an id now, dispatch happens elsewhere/later" shape), not
+  independently re-traced end-to-end: the specific function that reads prompt-manager slot 9/10 on
+  a real button press and performs the resolve-and-spawn step was not located this pass (the same
+  class of "no plain `CALL`, no literal pointer, decoupled in time" problem the `on_trigger` case
+  above already found needs a live capture to close, not static analysis). **Actionable answer for
+  Team B regardless of that last hop:** the stall is satisfied by an actual HUD-prompt button-press
+  input event for "M05_JUMP," not by setting any parachute/animation/vehicle-exit state directly —
+  if their harness doesn't synthesize that input (or doesn't drive whatever decoupled coroutine
+  scheduler would resume the resulting callback), `M05_jumped` can never flip no matter how many
+  ticks it waits. A live capture hooking `0x00a370c0`'s own two write sites (`0x02703cac` and
+  prompt-manager slot 9/10) alongside an actual button press would close the remaining gap.
+
+  rank 2, 12 lines later, `m05.lua:1152` (`while not M05_goal_reached do thread_yield() end`,
+`on_trigger("m05_land_trigger_reached", M05_triggers.land)` at `m05.lua:1147`) — exact `on_trigger`
+pattern match, but this callback (`m05.lua:1852`-`1874`) sets `M05_goal_reached` UNCONDITIONALLY
+(no identity check), so it is exposed only to failure mode (a) above (dispatch never reaching the
+trigger branch), not the identity-mismatch mode (b). The same `on_trigger`/unconditional-set
+pattern repeats further downstream at `m05.lua:1248`/`1249` and `m05.lua:1324`/`1325` — the next
+candidates to check if the live stall is confirmed to be past the parachute sequence.
+
+**[CONFIRMED — disassembly re-check of the full dispatch chain (`0x00a29e40` body, `0x00a29e40`'s
+own zero-caller xref result); direct reading of `m09.lua`/`m05.lua`/`m13.lua`'s actual control
+flow for the clobber-refutation and the m05/m13 candidate rankings, independently re-verified
+(checkpoint-dispatch sequencing in `m09.lua:1855`-`1888`/`3283`-`3358` spot-checked directly, not
+taken on the agent's word; `m13.lua:2947`-`2983` spot-checked directly and matches exactly).
+HONESTLY OPEN, not resolvable by further static analysis: who calls `0x00a29e40`; whether the
+dispatch-chain hazard or the identity-mismatch hypothesis is the REAL cause of any of these 3
+stalls (both require a live capture to confirm); the 5 non-trigger type-testers' exact object-kind
+semantics (inferred from field-offset shape only).]**
+
+**Follow-up, 2026-10-11 — m09's NEW stall after Team B's trigger fix let it advance past
+`m09.lua:2099`: `m09.lua:2181` in `m09_find_girls`, self, direct read, no agent — the SAME
+already-fully-characterized `on_trigger` facility, a new per-crate instance, not a new
+mechanism.** The wait: `while m09_num_crates_left(crate_set) ~= 0 and M09_found_girl_crates <
+num_girl_crates do thread_yield() end` (`m09.lua:2180`-`2182`). `m09_num_crates_left` (`m09.lua:
+3901`-`3909`) counts crates whose own `crate.opened` field is still `false`. That field is set
+true **only** inside `m09_crate_door_open` (`m09.lua:3731`-`3853`), reached **only** from
+`m09_trigger_crate_cb` (`m09.lua:4610`-`4633`) — registered per crate by `m09_set_crate_trigger`
+(`m09.lua:3703`-`3713`) via the identical native call already fully documented in §1.14:
+`on_trigger("m09_trigger_crate_cb", crate.trigger)`. **Confirmed no QTE gate is active for any
+real crate in this mission** — every crate record's own `qte` field is the empty string (the
+QTE-based open path, `m09_crate_door_open_local_cb`/`_remote_cb`, is dead code for this mission,
+commented out at the data level) — so the sole engine dependency is plain trigger-enter, exactly
+the same mechanism as `m09.lua:2099`'s own stall, just applied to a different set of trigger
+names (one per crate) instead of the single boat trigger.
+
+**`m09_trigger_crate_cb` is NOT identity-gated the way `m09_player_on_boat_enter_cb` (§1.14's own
+m09:2099 analysis) is** — it tests `player == LOCAL_PLAYER` only to choose which of
+`M09_local_crate`/`M09_remote_crate` to set, but takes the "remote" branch unconditionally for
+ANY non-`LOCAL_PLAYER` entering object, with no `REMOTE_PLAYER`-equality check at all. So failure
+mode (b) from the m09:2099 analysis (a `human`-handle identity mismatch) is LESS LIKELY here —
+almost any entering object would satisfy this callback's own logic and call
+`m09_crate_door_open(crate, true, ...)`. **This narrows the live cause for THIS specific stall
+toward failure mode (a): the `0x00a29e40` dispatch-chain hazard** (an event whose object resolves
+through one of the 5 earlier, non-trigger type-testers never reaches the trigger branch at all,
+regardless of identity) — consistent with the same fix that unblocked `m09.lua:2099` not
+necessarily generalizing to every trigger in this mission if the hazard is itself
+object-kind-dependent (e.g. triggers near a physics prop/door vs. a bare player-only region).
+**Recommended for Team B: if the same per-trigger dispatch fix already applied for the boat
+trigger doesn't also unblock the crate triggers, log whether `m09_trigger_crate_cb` is ever
+invoked at all when a player enters a crate's trigger volume** — that would directly confirm or
+rule out mode (a) for this specific case, cheaper than re-chasing the identity angle which this
+callback's own logic makes unlikely. **[CONFIRMED — direct reading of `m09.lua`'s own control
+flow (`m09_set_crate_trigger`/`m09_trigger_crate_cb`/`m09_crate_door_open`/`m09_num_crates_left`,
+all read in full) and the `qte=""` data fields across every crate record in the mission's own
+crate-set tables (`m09.lua:1512`-~1750). Reuses, does not re-derive, this section's own already-
+confirmed `on_trigger`/`0x00a29e40` dispatch-chain characterization above.]**
+
 ## 2. Platform/audio/input/UI-utility cluster — 10 functions, ranked by real script-call count (peer census)
 
 **Review status summary (2026-09-30):** adversarial desk review of the 13 units of §2 (scope note, primitive note, 2.1-2.11): 3 DESK-PASS (primitive note, 2.1, 2.6), 4 DESK-PASS with text fixes applied (scope note, 2.8, 2.9, 2.11), 6 NEEDS-EXE (2.2, 2.3, 2.4, 2.5, 2.7, 2.10; text fixes also applied in 2.3, 2.5 and 2.7). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job files `team-a/ghidra/jobs/review-bindings-lua1-2.json`) is read.
@@ -2858,6 +3019,34 @@ branches.]**
 
 **Review status (2026-10-03): stale line struck — CLEARED for implementation.** The 2026-09-30 line above predates the correction already applied in place in this section's own body: that correction is sourced from `0x004dcf00`'s own body being fully decompiled (§18.31 item 1) and from `get_object_pos`'s independent, direct-disassembly trace through the same resolver (§20.24, itself `[CONFIRMED — disassembly]`), both later, deeper-tranche passes than the original 2026-09-30 desk review. The body above (argument shape, control flow, the distance formula, and the vehicle-transform correction) is CONFIRMED by disassembly, not merely checked against other specs; only `0x00a455a0`'s own call graph past its first two branches remains untraced (already flagged in place as OPEN, not a blocker).
 
+**RECONCILED 2026-10-11, mission-blocker follow-up for `m07` (SPEC TEAM, agent `a20cd096e258e9df4`,
+independently re-verified by direct query before splicing).** The "call graph past its first two
+branches remains untraced" note above is now stale — §20.24's own later, deeper pass already fully
+traces `0x00a455a0`'s complete cascade (the generic resolver `0x00a280c0`, the `0x004dcf00`
+cached-vehicle path, AND a third path this section never reached: the `0x00734e90` by-name
+resolver plus three descriptor-bit sub-branches). Every path in that cascade bottoms out reading
+the SAME `+0x40`..`+0x6c` 44-byte position+orientation block off some resolved object handle — the
+exact field `get_dist` computes its distance from. **New finding, closing the real question behind
+this mission-blocker: `+0x40`..`+0x6c` is confirmed to be the object's LIVE, continuously-updated
+runtime transform, not a one-time spawn-time snapshot.** Independently confirmed via
+`0x00b2ed40` (a traffic-AI snap-correct routine on the per-entity steering tick `spec-ai-runtime.md`
+§18.5 already documents as continuously running): it reads the acting entity's own current
+position directly off `this+0x40`/`+0x44`/`+0x48`, computes a blended correction, and commits it
+back by calling the object's own vtable slot `+0x40` — confirmed by raw disassembly at
+`0x00b2effb`-`0x00b2f00e` (`MOV EAX,[ESI]; MOV EAX,[EAX+0x40]; ...; CALL EAX`, this=ESI, args =
+orientation, blended position, flag `1`) — the SAME generic transform-setter vtable slot
+`spec-player-runtime.md` §6.9/§7.5/§11.5.1 already name for `teleport`/vehicle-seat-exit placement,
+and the one the checkpoint-save routine reads as the player/vehicle's "current position right
+now" at save time. This is a categorically DIFFERENT location from the zone-data (`.czn_pc`)
+placement record's own position field (`spec-zone-data-format.md` §11, the Objects `0x2234`
+section's property id `3367956165`, kind 2/12-byte or kind 3/28-byte, on-disk and authored once) —
+that record is read once at load/spawn to seed the runtime object; `+0x40`..`+0x6c` is the live
+field everything that moves the object (physics, AI steering, `teleport`, the player themselves)
+reads and writes continuously afterward. (The specific spawn-time copy instruction linking the two
+was not independently confirmed this pass — plausible, expected, but flagged as unconfirmed rather
+than asserted.) **For `get_dist`/`get_object_pos`: both return the character's CURRENT position,
+never a stale spawn-time value — this closes Team B's `m07` question.**
+
 ### 4.3 `teleport` (`0x00a60e30`) — 181 calls / 33 scripts
 
 **Arguments:** 2 mandatory strings (arg 1 — the target to move; arg 2 — a destination reference) +
@@ -3877,7 +4066,21 @@ step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
    `10`=`0x00707840`. Full detail: `scratchpad/dlc2_m03_0x00706ab0_2026-10-10.md`.]**
 6. If the byte `0x014f3d34` is non-zero, continue only for A = 188 or 196 ≤ A ≤ 201. If it is zero,
    continue when the descriptor has bit `0x08`, or otherwise only when no mission object is live
-   (`0x006d2910` returns −1). **[OPEN — what the `0x014f3d34` mode is.]**
+   (`0x006d2910` returns −1). **[NARROWED, not resolved, 2026-10-11 — orchestrator-routed, one
+   fresh static pass (dlc2_m03), then parked per instruction: `0x014f3d34` is NOT tutorial-owned
+   (same mislabeling shape step 2 above already found for `0x029443bc`) — it's a widely-shared
+   "mode active" flag paired with a companion handle/object pointer at `0x014f3d2c` (every setter
+   of the byte also writes the pointer: zero on entry, or a live register value on others), read
+   by ~20 functions across a ~0x8000-byte cluster (`0x006e4500`-`0x006eca10`). Its main consumer
+   (`0x006e6330`) itself calls BOTH the mission-liveness accessor `0x006d2910` this very dispatcher
+   step already names AND the player-record getter `0x009da4e0` — consistent with a "player is
+   busy with some scripted action, here's a handle to it" state, not a tutorial or UI-mode flag.
+   One setter (`0x006e6610`) is reached only through an unreferenced thunk-table slot
+   (`0x008ba165`, a bare `JMP`, itself not found via code-xref — reached indirectly, likely a
+   computed jump table this pass's tooling can't resolve) rather than a direct call, which is why
+   a name wasn't recoverable this pass. Parked here, per instruction, rather than chased further —
+   the dispatcher-level answer stands regardless: step 6 is irrelevant to `tutorial_start` unless
+   this still-unnamed mode is active, same shape as steps 1/2/5 above.]**
 7. A = 76 and the byte `0x0141250d` is zero → A becomes 73. **[OPEN — meaning.]**
 8. A ≥ 189 → set state 1 (through `0x00716170`, itself gated on `0x0151d5a6` being zero).
 9. F true, `0x0151d5a6` zero and state 0 → set state 1.
@@ -10083,7 +10286,18 @@ Every successful path converts the id byte to a name string via 0x0094f3c0 → 0
 
 **Body (the position half):** resolves via a rich cascade inside 0x00a455a0: (1) the generic resolver 0x00a280c0 — reads a 44-byte position+orientation transform block directly at the resolved handle's own +0x40..+0x6c. (2) Else, if given a non-null name, the already-established "genuinely new" by-name resolver 0x00734e90 (§10.5/§12.23/§14.31/§17.4's own citation) + liveness: depending on which of several descriptor bits the resolved kind carries (row-offset +0xb any of bits 0-3, or +0xa bit 0x80, or +7 bit 0x2), it either (2a) — when +0xa bit 0x8 is ALSO set — goes through a capability gate (vtable +0x68) and producer (vtable +0x70), then 0x004e43f0→0x009b9160→0x009b9130→**the already-documented shared underlying-table resolver 0x004dcf00** (§18.31's own cross-reference #1) to reach a final object and read ITS +0x40..+0x6c block (falling back to the intermediate object's own +0x40..+0x6c if the 0x009b9160 check fails); or (2b) — when +0xb bit 0x1 is set instead — calls a zero-visible-argument fixed-transform helper (0x008034f0) combined with a further fixed constant block (0x01321400..0x01321420); or (2c) — neither bit — reads the 0x00734e90-resolved object's OWN +0x40..+0x6c block directly.
 
-**Side effects/subsystem:** none (pure query). A rich, multi-path position resolver reusing two already-documented cross-cutting resolvers (0x00734e90 and 0x004dcf00) in the SAME function for the first time this document has observed. **[CONFIRMED — disassembly for the top-level cascade and the always-3-fallback-values finding; HIGH CONFIDENCE — inferred for the semantic roles of the three descriptor-bit sub-branches; OPEN — 0x008034f0's own body.]**
+**Side effects/subsystem:** none (pure query). A rich, multi-path position resolver reusing two already-documented cross-cutting resolvers (0x00734e90 and 0x004dcf00) in the SAME function for the first time this document has observed. **[CONFIRMED — disassembly for the top-level cascade and the always-3-fallback-values finding; HIGH CONFIDENCE — inferred for the semantic roles of the three descriptor-bit sub-branches.]**
+
+**`0x008034f0` RESOLVED, 2026-10-11 (SPEC TEAM, agent `a20cd096e258e9df4`, independently
+re-verified by direct query before splicing — exact match, 11 instructions, body
+`0x008034f0`-`0x0080351b`).** A tiny thiscall(this, `float3* out`) position accessor for the
+case-2b sub-branch: if the object has an attachment/parent handle at `this+0xc0`, returns the
+PARENT's own live `+0x40` position (the same generic position-field convention used everywhere
+else in this document); otherwise returns a fixed local position cached at `this+0xcc` on the
+object itself. Explains why case 2b was found "combined with a further fixed constant block
+`0x01321400`..`0x01321420`" — that block is almost certainly the fixed default orientation
+constant `spec-player-runtime.md` §6.9 already names for the same role, paired here with this
+position-only accessor since case 2b has no live orientation source of its own.
 
 ### 20.25 `dlc_achievement_counter_get` (0x00a47570)
 
@@ -10467,9 +10681,52 @@ Fourth part of the fresh four-part "ranks 351-450" tranche's own gameplay side (
 
 **Return:** 1 number — a vehicle-type code 0–5, or the fixed sentinel 6.0 on any failure (unresolved occupant, no vehicle, etc.).
 
-**Body:** resolves via 0x00a281a0. Fetches the occupant's own 8-byte identity key via 0x009b9130 (§17.4's own citation), then resolves it to a live vehicle object via 0x004dcf00(key, 0) — **the SAME helper item 21.11's own delegates and `radio_block` (§12.20) use, here in a third, 2-argument shape**, itself confirmed to read the occupant's cached vehicle-association identity pair at +0x16c0/+0x16c4 (§12.9/§12.20). If a vehicle results and its own +0xbf4 field is non-null: calls the already-documented AI-mode gate 0x00ad2f80 — **confirmed via raw disassembly that this call passes the vehicle as an explicit (not hidden) argument, though the decompiled pseudocode shows zero arguments** — a hidden-argument correction; then reads the vehicle-type result out of an IMPLICIT EAX-register value (left there as a side effect of the preceding call, not an explicit parameter — described here in plain English per this document's own citation convention, not as a named decompiler variable) via a small jump-table clamp, 0x00a4a9d0, which maps EAX values 0–5 to themselves and any other value to the fixed sentinel 6. Pushed via `lua_pushnumber`.
+**Body:** resolves via 0x00a281a0. Fetches the occupant's own 8-byte identity key via 0x009b9130 (§17.4's own citation), then resolves it to a live vehicle object via 0x004dcf00(key, 0) — **the SAME helper item 21.11's own delegates and `radio_block` (§12.20) use, here in a third, 2-argument shape**, itself confirmed to read the occupant's cached vehicle-association identity pair at +0x16c0/+0x16c4 (§12.9/§12.20). If a vehicle results and its own +0xbf4 field is non-null: calls `0x00ad2f80` — **confirmed via raw disassembly that this call passes the vehicle as an explicit (not hidden) argument, though the decompiled pseudocode shows zero arguments** — a hidden-argument correction; then reads the vehicle-type result out of an IMPLICIT EAX-register value (left there as a side effect of the preceding call, not an explicit parameter — described here in plain English per this document's own citation convention, not as a named decompiler variable) via a small jump-table clamp, 0x00a4a9d0, which maps EAX values 0–5 to themselves and any other value to the fixed sentinel 6. Pushed via `lua_pushnumber`.
 
-**Side effects / subsystem:** none (pure query). **[CONFIRMED — disassembly for the full chain including the hidden-argument correction and the EAX-side-channel result; OPEN — the real-world identity of vehicle-type codes 0–5, and 0x00ad2f80's own full body beyond what §17.4/§17.27 already establish for it.]**
+**`0x00ad2f80` itself, RESOLVED 2026-10-11 (SPEC TEAM, agent `a68dc10db628562d7`, independently
+re-verified by direct query before splicing — routed mission-blocker, Team B's own m07 regression
+baseline): a plain 8-byte getter, NOT an AI-mode gate as earlier text here implied.** Re-verified
+exactly: `MOV EAX,[ESP+4]; TEST EAX,EAX; JNZ +6; OR EAX,0xffffffff; RET; MOV EAX,[EAX+0xbf4]; MOV
+EAX,[EAX+0x2c]; RET` — null vehicle → sentinel `-1`; otherwise `*(vehicle+0xbf4)+0x2c`, the
+vehicle's own cached xtbl-descriptor pointer dereferenced to its `Vehicle_Type` class enum field.
+
+**The real-world mapping for codes 0-5, CONFIRMED by THREE independent, mutually-agreeing
+sources (not a single inference chain):**
+
+| Code | Vehicle type |
+|---|---|
+| 0 | Automobile |
+| 1 | Motorcycle |
+| 2 | Airplane |
+| 3 | Helicopter |
+| 4 | Vtol |
+| 5 | Watercraft |
+| 6 | failure/no-vehicle sentinel (not a real class) |
+
+1. **`spec-vehicle-data.md` §7, already CONFIRMED by disassembly of the `_veh.xtbl` loader
+   itself**: "a class enum `u32` at entry `+0x2C` (`0` Automobile, `1` Motorcycle, `2` Airplane,
+   `3` Helicopter, `4` Vtol, `5` Watercraft — tested in that order, first child present wins)" —
+   the same file independently confirms `vehicle+0xbf4` is the running instance's own cached
+   pointer into exactly this descriptor table.
+2. **`0x00573110`** (the vehicle camera-submode chooser) branches on this exact field via a real
+   jump table: class 2→airplane camera, 3 and 4→the SAME helicopter-style camera target
+   (deliberately merged), 5→watercraft camera, default (0/1)→car.
+3. **`0x00b0bc10`** (the vehicle-entry camera hand-off, `spec-player-runtime.md` §8.6) — a
+   SEPARATE function, different purpose, same field, same jump-table shape — re-verified by
+   direct query: raw bytes at `0x00b0c104` read `0x00b0bd05`/`0x00b0bcee`/`0x00b0bcee`/
+   `0x00b0bcd8` for classes 2/3/4/5 respectively — slots 1 and 2 (classes 3/4, Helicopter/Vtol)
+   share the IDENTICAL target address, independently reproducing the same deliberate merge
+   `0x00573110` shows.
+
+Both camera dispatchers agree exactly with each other and with the xtbl loader's own enum — three
+independent angles, not one chain of inference. Neither camera table distinguishes classes 0 vs.
+1 (both hit the same default case), so that specific ordering rests on the xtbl loader's own
+disassembly alone (point 1), which is itself CONFIRMED, not inferred.
+
+**Side effects / subsystem:** none (pure query). **[CONFIRMED — disassembly for the full chain
+including the hidden-argument correction, the EAX-side-channel result, `0x00ad2f80`'s own body,
+and the real-world 0-5 mapping via 3 independent sources, all re-verified by direct query before
+splicing, not taken on the agent's word.]**
 
 ### 21.25 `drug_effect_clear_override_values` (0x00a47480)
 
@@ -10970,25 +11227,40 @@ previous/requested-mode fields. Full detail: `scratchpad/ai_state_byte_0x501_202
 
 **Return:** 1 number, via `lua_pushnumber`.
 
-**Body — a naming/semantics clarification, not independently verified against how script authors actually use the return value.** If the vehicle resolves AND its own +0xbf4 AI-mode sub-object pointer is non-null: reads the AI-mode field via 0x00ad2f80 — **the SAME accessor this document's §17.4/§17.17/§17.27 already establish for the vehicle's cached AI-mode enum (+0xbf4→+0x2c)** — then clamps it into the range 0-6 via a genuinely register-passed helper, 0x00a4a9d0: raw disassembly confirms this helper takes NO stack argument at all; it operates directly on whatever value is already sitting in the EAX register from the immediately-preceding call (no intervening instruction touches EAX between the two calls) — a real, confirmed register-passed calling convention, not a decompiler artifact, since the decompiler correctly modelled it as reading that register rather than dropping a real stack push. Values 0-5 pass through unchanged; anything else clamps to 6. If unresolved, or the vehicle has no AI-mode context at all, pushes a fixed fallback constant, byte-confirmed this pass to be 0.0 (0x01115250).
+**Body — CORRECTED 2026-10-11 (see below): this is the vehicle's static `Vehicle_Type` xtbl
+class, NOT an AI-mode enum, despite the field/accessor being shared with AI-mode-adjacent code
+elsewhere.** If the vehicle resolves AND its own `+0xbf4` cached xtbl-descriptor pointer is
+non-null: reads the class field via `0x00ad2f80` — a plain 8-byte getter, re-verified by direct
+disassembly: reads the dword at `vehicle+0xbf4`, then the dword at that pointer's own `+0x2c`
+offset — no jump table, no mode computation, null-vehicle
+sentinel `-1` — then clamps it into the range 0-6 via a genuinely register-passed helper,
+`0x00a4a9d0`: raw disassembly confirms this helper takes NO stack argument at all; it operates
+directly on whatever value is already sitting in the EAX register from the immediately-preceding
+call (no intervening instruction touches EAX between the two calls) — a real, confirmed
+register-passed calling convention, not a decompiler artifact. Values 0-5 pass through unchanged;
+anything else clamps to 6. If unresolved, or the vehicle has no class context at all, pushes a
+fixed fallback constant, byte-confirmed this pass to be 0.0 (`0x01115250`).
 
-**Side effects/subsystem: none (pure query). Despite its Lua-facing name, this function actually returns the vehicle's current AI-MODE enum (clamped 0-6), the SAME field/accessor this document's §17 cluster already documents for chase/flying/helicopter-approach modes — not an independent "vehicle class/type" concept.** **[CONFIRMED — disassembly for the resolve chain, the field/accessor identity, the register-passed clamp helper, and the byte-confirmed fallback value.]**
+**Side effects/subsystem: none (pure query). This function returns the vehicle's static
+`Vehicle_Type` class (clamped 0-6), the SAME field/accessor §21.24 (`get_char_vehicle_type`)
+documents — NOT an AI-mode enum, despite this section's own prior text asserting that.**
+**[CONFIRMED — disassembly for the resolve chain, the field/accessor identity, the register-
+passed clamp helper, and the byte-confirmed fallback value. CORRECTED 2026-10-11: the "AI-mode"
+label is wrong — see §21.24 for the full, independently triple-cross-validated 0-5 mapping
+(0=Automobile, 1=Motorcycle, 2=Airplane, 3=Helicopter, 4=Vtol, 5=Watercraft, 6=failure
+sentinel).]**
 
-**[2026-10-07 cross-check, flagged for reconciliation — not resolved here.]** Independent, from-scratch
-disassembly of `spec-ai-runtime.md` §11.3 part F's action 39 (`0x00549080`) and its three candidate-search
-callees (`0x0051cc80`/`0x0051cd70`/`0x0051ce60`) finds the SAME field (`+0xbf4`→`+0x2c`, read by this
-section's own `0x00ad2f80`) used as a value that is STABLE enough to select, once, which of three
-structurally different "search the entire global vehicle list" functions should run — and each of
-those three functions then re-filters every OTHER vehicle in that list by the exact same value into the
-exact same three groups ({5}, {2,3,4}, {0,1}). That pattern is consistent with a category fixed once
-per vehicle (one value per `Vehicle_Type` xtbl tag — there are exactly six tags, matching this field's
-0–5 range exactly), and is a poor fit for a value that changes from frame to frame as a vehicle's AI
-switches between chase/flying/helicopter-approach behaviour. This does not re-derive this section's own
-"chase/flying/helicopter-approach mode" call sites (out of that task's own scope), so it is not a full
-refutation of the "AI-mode enum" reading above — but it is a second, independently-gathered,
-structurally-grounded data point in favour of the "vehicle-class" reading `spec-ai-runtime.md` §11.3 and
-`spec-player-runtime.md` §13.4 already use for this same field. This specific question is left OPEN for
-reconciliation, not silently overridden by this note.
+**RESOLVED, 2026-10-11 (closes the 2026-10-07 cross-check below): the cross-check's own suspicion
+was correct.** `spec-ai-runtime.md` §11.3 part F's own three-group split ({5}, {2,3,4}, {0,1})
+exactly matches the real `Vehicle_Type` taxonomy's own natural groupings (Watercraft alone;
+Airplane/Helicopter/Vtol as "flight-capable"; Automobile/Motorcycle as "ground-mount"), now
+independently confirmed by two separate real jump tables (§21.24's own evidence,
+`0x00573110`/`0x00b0bc10`, both camera-dispatch code keyed on this exact field, both re-verified
+by direct query: jump-table bytes at `0x00b0c104` read `0x00b0bd05`/`0x00b0bcee`/`0x00b0bcee`/
+`0x00b0bcd8` for classes 2/3/4/5 — note classes 3 and 4 share the identical target, confirming
+Helicopter/Vtol are deliberately merged into one camera-handling case). The original "AI-mode"
+framing above was simply wrong; the field is a static per-vehicle class, read here and by §21.24
+and by the AI-runtime action-39 candidate search alike.
 
 ### 22.20 `dlc_gis_film_grain_load` (0x00a47860)
 
@@ -12032,6 +12304,49 @@ family `cash_add` (§18.1) uses with reason `13`. For a resolved item whose name
 on the weapon record, gated by an unrelated global flag. **CONFIRMED — disassembly of both
 `0x008172d0` and `0x00816f00` in full: this native does charge the player's cash on a real
 purchase, via `0x00816f00`'s own internal mode-0 branch, not via the grant call.**
+
+**`0x005ee630`'s own exact field, and its second, independently-important caller, pinned 2026-10-11
+(orchestrator-routed: "what triggers a weapon pickup or store purchase to write the inventory
+record Team B is about to save, so save/load and gameplay agree").** Full read of `0x005ee630`
+(6 instructions, `0x005ee630`-`0x005ee648`): if the passed-in record pointer is non-null and a
+global enable flag (`0x012ecb34`, default `1`, with its own enable/disable/toggle setters at
+`0x005ee6a0`/`0x005ee6e0`/`0x005ee6f0`, not traced further) is non-zero, it ORs `0x80000000` into
+the dword at the record's own `+0x10` — the "ownership bit" is literally the weapon-definition
+record's own top bit at `+0x10`. A
+full xref of `0x005ee630` finds exactly **6 call sites in 5 functions** — this native's own
+(`store_weapon_purchase_weapon`), 3 calls inside the shared inventory-apply cluster
+(`0x00601380`/`0x00602020`/`0x00603230`×2, not individually opened this pass), and, critically,
+**the generic unlockable-type "apply effect" dispatcher, `0x0071f170`** — the SAME function
+`spec-tables-progression.md` §4.4 already names as the one apply routine shared by all 61
+unlockable `Type` cases (keyed by a 0-60 jump table at `0x0071f8d4`), and the SAME function
+`spec-save-format.md` §10.6 already describes as what re-applies a persisted "purchased/active"
+unlockable when a save is loaded (the `+0x12F5C98`-table "re-apply" byte gate, `0x0071f181`,
+checked right at this dispatcher's own entry). **This is the convergence point: a weapon granted
+through an `unlockables.xtbl` row (its `Type` resolving to the weapon-grant case, one of the 61)
+and a weapon bought directly through the store both set the exact same bit through the exact same
+primitive — and that is also the bit the save-load re-apply path flips back on, which is how
+gameplay and the persisted unlockables state stay in agreement across a save round-trip.**
+**Corrected 2026-10-11, orchestrator-caught overclaim: "no world pickup mechanism exists" fails
+the negative-result rule — the shipped game visibly has enemies drop weapons and world weapon/
+ammo pickups. Reworded: pickups do NOT go through `0x005ee630`'s ownership bit (that primitive's
+only 6 call sites, enumerated above, are store purchase and the unlockable-apply dispatcher —
+checked exhaustively, not merely unsearched); the real world-pickup path is OPEN, not traced this
+pass.** The step AFTER this ownership bit is set, that actually creates/updates the
+per-slot `items_inventory` record (`spec-tables-weapons-combat.md` §1.6, the thing
+`spec-save-format.md` §10.3's own weapon-inventory rows are built from) was not located either:
+`+0x10`'s ownership bit lives on the weapon-DEFINITION table, a different table from
+`items_inventory` (different base, different stride), so there is at least one more hop between
+"ownership granted" and "a save-serializable inventory slot exists" that this pass did not find.
+**Checked directly, same day, orchestrator-routed ("find the items_inventory slot writer"): it
+did not come up quick, reported honestly rather than forced.** `items_inventory`'s own base
+address has exactly 5 touching functions project-wide, all load-time (the loader and its two
+sub-helpers, the live-bit reader, and the save-format's own loader) — no runtime writer exists
+anywhere in that set, so `items_inventory` is a static load-time catalog, not a per-player
+ownership record. The save filler's own cited "availability test," `0x0045B3A0`, was also opened
+directly: it is a generic per-class-id flag-pair checker called from dozens of unrelated
+subsystems, not weapon-specific and not a reader of the `+0x10` ownership bit either. **The real
+per-player inventory-slot array that `0x008DCC00` walks (8 primary + 4 secondary slots) remains
+unlocated, and so does the world weapon/ammo pickup path — both stay OPEN.**
 
 ### 26.8 `store_dlc_make_purchase` (0x007c5b30) — 311-entry UI-wrapper table, wrapper 0x007c5ba0
 
@@ -16212,6 +16527,117 @@ branch still fires and overwrites that OTHER, currently-running cutscene's own e
 destinations. This is the exact mechanism behind the bug already described above, now pinned to its two
 concrete manager-offset writes.
 
+**New finding, 2026-10-11, orchestrator-routed for `m07`, three-pass investigation: the
+destination position is a by-name-resolved navpoint/trigger object, NOT baked cutscene animation
+data — but no code anywhere exhaustively searched so far reads it back and applies it to the
+player for a cutscene that plays through normally.** Both loaders (`0x00723ea0`/`0x007235c0`)
+resolve their destination name through `0x005982e0` — the SAME third-tier by-name resolver
+already documented elsewhere in this project for `teleport`'s own destination argument,
+`door_open`, `effect_play`, and `helicopter_shoot_navpoint` (all resolving a navpoint/trigger/
+object NAME against the shared multi-kind name-registry singleton `0x02442750`) — reading the
+resolved object's own `+0x40` position/`+0x4c` orientation fields. Only on the
+`skip_all_cutscenes` branch does this actually commit to the player: that branch calls
+`0x009e2220`, the same player-class async-teleport entry point `teleport`'s own body uses, which
+drives the generic vtable `+0x40` transform-setter (the mechanism `spec-ai-runtime.md`
+§18.6/`spec-player-runtime.md` already confirm elsewhere). On the normal "a manager exists"
+branch — i.e. whenever the cutscene actually plays — the destination is written into the
+manager's own fields (`+0x35f0`-`+0x362c` local, `+0x3630`-`+0x367c` partner).
+
+**Real mission-script evidence (`scratchpad/lua_dumps/m07.lua`, read directly — mission `.lua`
+IS readable project-wide, unlike mission `.asm_pc`/`_modal` bytecode containers; the file reads
+as source) shows the mission script TRUSTS this destination mechanism**: 4 of `m07.lua`'s own
+`cutscene_play` call sites for the player (lines 755, 1385, 1718, 1905, 2209) never call a
+redundant `teleport_coop` for the player afterward; only the `else` fallback branches (no real
+cutscene authored, just `bink_play`/a fade) explicitly call `teleport_coop` with the identical
+destination names, with a developer comment at line 759 explaining why ("the mission was not
+teleporting the players properly when played in sequence" — specifically about the bink-only
+path, which has no engine cutscene destination mechanism at all). Per this project's
+negative-result rule: shipped missions are played start to finish, so the correct reading is
+**"there is a consumer we have not found yet," not "this is a shipped latent bug."**
+
+**Three-pass search for that consumer, all negative so far — reported honestly rather than
+forced:**
+1. A full read of all 20 states of the cutscene state machine (`0x0072d660`), including the
+   teardown states (`0xd`-`0x13`, which free the manager back to its pool): no instruction
+   anywhere references `+0x35f0`-`+0x367c` as a read, and no further call to `0x009e2220` or any
+   teleport-shaped primitive. (One single-byte read at manager `+0x3630`, `0x0072d93e`, gates an
+   unrelated string-handling call, `0x007229b0` — independently opened to confirm it does
+   string-length-delta arithmetic and a session-replication call, not a position read; the
+   `+0x3640`/`+0x3650` pointers it receives are reused as string buffers at that point in the
+   manager's lifetime, not position floats.)
+2. The `.cte_xtbl` reader `0x00736ec0`'s own `RestorePlayerPos` field handling was traced in
+   full and reconciled against `spec-xtbl-format.md`'s pre-existing note on the same bytes
+   (§6.3): it is a genuine "snapshot the player's CURRENT position" write (via
+   `0x009da4e0`→`+0x40`→`0x00da38e0`, and a separate `+0x4c` orientation copy via `0x004add90`)
+   into the exact same `+0x35f0`-`+0x362c` bytes — NOT the destination. It runs strictly LATER
+   in the cutscene lifecycle (state 7, reached via `0x0072bff0`→`0x00737290`→`0x00737230`→
+   `0x00daca90`) than the destination write (state ≤2, including a previously-undocumented
+   re-entry at state 2's own `0x0072d7ca` that re-applies a parked destination once a deferred
+   zscene becomes resident) — so whenever a scene sets `RestorePlayerPos=true`, the snapshot
+   unconditionally overwrites the destination at those bytes. It does NOT touch the partner's
+   `+0x3630`-`+0x367c` range at all. The `RestorePlayerPos` bool itself is never stored on the
+   manager (only a local stack temporary inside `0x00736ec0`), so no later code can gate on "was
+   it set" as a manager field. A full, non-capped xref of the manager-pointer global
+   (`0x0153b528`) confirms it is referenced by exactly 91 functions, every one confined to
+   address range `0x00720000`-`0x0072dxxx` — i.e. a consumer, if one exists in this module, must
+   be one of those 91 functions.
+3. Of those 91, the one not fully read by pass 2 — `0x006db140`, a per-frame 9-state (8 real
+   bodies + 1 empty slot) mission/game-flow dispatcher ticked alongside the cutscene state
+   machine, found to write into the SAME destination loaders via its own "mission start" navpoint
+   resolution (confirming the mechanism is real-world load-bearing, used by core game flow, not
+   just a hypothetical Lua call shape) — was opened in full, including every direct callee. Zero
+   references anywhere to `+0x35f0`-`+0x367c` as a read source, zero calls to `0x009e2220`, zero
+   instances of the vtable-`+0x40` setter call shape. This function's own writes into the
+   destination loaders (states 3/5) are fed from a local stack buffer populated from an
+   unrelated object's own position, never from the manager's destination fields as a source — so
+   this is architecturally another writer, not the missing reader.
+
+**Net, honest state: no consumer has been found in the cutscene state machine itself, in the
+`.cte_xtbl` RestorePlayerPos reader, or in the one other function (`0x006db140`) known to write
+the same destination loaders.** The two live explanations, per the negative-result rule, are (a)
+a still-missing consumer entirely outside everywhere searched so far — most likely a
+mission-script-level `teleport("#PLAYER#", "<same destination name>")` call reached after
+`cutscene_play_check_done` reports true, architecturally consistent with `teleport` resolving
+through the identical `0x005982e0` family and definitely committing via the vtable `+0x40`
+setter, but not directly observed in `m07.lua`'s own text for the cutscene_play path itself
+(`m07.lua` relies on it implicitly rather than calling it explicitly); or (b) a genuinely
+unresolved design question about what `RestorePlayerPos=true` scenes are supposed to do if
+nothing ever reads the snapshot back.
+
+- **Evidence:** full-body disassembly of `0x0072d660` (all 20 states), `0x00736ec0`'s
+  `RestorePlayerPos` branch, `0x006db140` (all 9 states + direct callees), a full non-capped
+  xref of the manager-pointer global `0x0153b528` (91 functions, one address range), and direct
+  reading of `scratchpad/lua_dumps/m07.lua`'s real shipped script text (4 `cutscene_play` call
+  sites for the player, none followed by a redundant teleport, vs. every fallback branch calling
+  one explicitly).
+- **Confidence:** CONFIRMED (full-body reads, not sampled, cross-verified independently before
+  splicing) for: the by-name destination resolution; the skip-path vtable-`+0x40` commit; the
+  RestorePlayerPos-overwrites-destination sequencing; the absence of a read-back in all three
+  searched locations; the real m07.lua script shape. PLAUSIBLE for the mission-script
+  `teleport()` fallback explanation (architecturally consistent, not observed in this specific
+  script's own cutscene_play call sites).
+- **Unknowns:** whether a consumer exists at call-depth 2+ inside `0x006db140`'s own callees'
+  callees (not expanded); whether any function entirely outside both the 91-function cutscene
+  module and `0x006db140`'s call tree reads these offsets (not exhaustively ruled out
+  project-wide); the real mission-script call-site shape for any `teleport()` fallback (no
+  mission Lua bytecode disassembled for the specific cutscene_play-adjacent call sites, beyond
+  the direct text read done here); what a `RestorePlayerPos=true` scene is actually supposed to
+  accomplish if the snapshot is genuinely never consumed. **User-observed ground truth, 2026-10-11
+  (not re-derived from the executable, but a real behavioral confirmation): where the player ends
+  up after a cutscene genuinely "depends on mission"** — consistent with destinations being an
+  OPTIONAL, per-call argument to `cutscene_play` rather than a fixed engine behavior, and a useful
+  constraint for any stand-in implementation: it should only move the player when a destination
+  was actually given for that specific call, not unconditionally reposition on every cutscene end.
+  **New lead, not yet chased (2026-10-11,
+  orchestrator): the player may be placed as an actor WITHIN the cutscene's own animation data,
+  with the end transform coming from the scene's final animation frame and pushed through the
+  character/anim system (not through the cutscene manager's destination bytes at all) — this
+  would cleanly explain why nothing reads `+0x35f0`-`+0x367c` back. Worth checking the `.csc_pc`
+  camera-script/actor-track consumer (`0x00737290`'s own downstream chain, §10.6/§10.9 of
+  `spec-cutscene-camera-format.md`) for a player-actor binding and a final-frame transform
+  commit, if this thread is picked up again.** PARKED for now — Team B has a labelled CHOSEN
+  stand-in covering gameplay in the meantime.
+
 **The Bink pre-rendered-FMV subsystem remains structurally separate, and its connection to this pipeline
 is still genuinely OPEN** — see `spec-bink-boundary.md`'s own OPEN item 4/§6.4 and `spec-lua-bindings.md`
 §8.7. The per-cutscene `.cte_xtbl` schema gives every scene-table entry both a `CutsceneType`/kind field
@@ -17107,3 +17533,142 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   `a6b4f2310e085a60a`). Traced via the Ghidra query server from `building_purchase.lua`'s two
   dataresponder requests; full file-level trace in new file `spec-building-purchase-runtime.md`.
   Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §1.14 follow-up: mission-blocker diagnosis for Team B's m09/m05/m13 stalls (SPEC
+  TEAM, agent `aefe4dad8e54547d8`, independently re-verified). Re-confirmed and fully documented
+  `0x00a29e40`'s own body ("fire named hook by object kind," a fixed-priority 6-way type-tester
+  chain, only the last of which — trigger — reaches the Lua callback path), newly flagging a
+  structural hazard: an event whose object satisfies an earlier, non-trigger tester never reaches
+  the trigger branch at all, even if some other native side effect fires. `0x00a29e40`'s own
+  caller remains OPEN (re-confirmed 0 project-wide references to its own thunk, static-analysis-
+  exhausted). For m09's `m09.lua:2099` stall: refuted the shared-trigger-name single-slot clobber
+  hypothesis against the actual script control flow, including the restart path (`m09.lua:3343`'s
+  competing registration is checkpoint-exclusive with `m09_go_to_boat`, confirmed by direct read of
+  `m09_run`'s sequential checkpoint dispatch, independently spot-checked). Identified m13's own
+  earliest engine-callback-dependent stall (`m13.lua:2954`, identical identity-gated `on_trigger`
+  pattern to m09, independently spot-checked) and m05's two earliest candidates (`m05.lua:1140`,
+  `hud_prompt`-driven; `m05.lua:1152`, `on_trigger`-driven but NOT identity-gated, unlike m09/m13).
+  Full detail and the mission-blocker candidate rankings: §1.14's own new follow-up paragraphs
+  above. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §1.14 follow-up: m09's new stall (after Team B's trigger fix unblocked
+  `m09.lua:2099`) at `m09.lua:2181` in `m09_find_girls` (SPEC TEAM, self, direct read, no agent,
+  routed from orchestrator `purrsian-f5`). Same already-documented `on_trigger` facility, a new
+  per-crate instance (`m09_set_crate_trigger`→`m09_trigger_crate_cb`→`m09_crate_door_open`,
+  gating `m09_num_crates_left`), confirmed no QTE gate is active for any real crate this mission
+  (`qte=""` across every crate record). Unlike `m09.lua:2099`'s own callback, `m09_trigger_crate_cb`
+  is NOT identity-gated — it treats any non-`LOCAL_PLAYER` entering object as "remote"
+  unconditionally — narrowing the live cause toward the `0x00a29e40` dispatch-chain hazard rather
+  than an identity mismatch. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
+
+- 2026-10-11 — §21.24 (`get_char_vehicle_type`) RESOLVED, closing a routed m07 mission-blocker:
+  the 0-5 return value is the vehicle's static `Vehicle_Type` xtbl class (0=Automobile,
+  1=Motorcycle, 2=Airplane, 3=Helicopter, 4=Vtol, 5=Watercraft, 6=failure sentinel), confirmed by
+  3 independent sources (the already-CONFIRMED `_veh.xtbl` loader disassembly plus 2 separate
+  real camera-dispatch jump tables, `0x00573110`/`0x00b0bc10`, both re-verified by direct query)
+  (SPEC TEAM, agent `a68dc10db628562d7`, independently re-verified before splicing). `0x00ad2f80`
+  re-confirmed as a plain 8-byte getter, not an AI-mode gate. **§22.19 (`get_vehicle_type`)
+  corrected in place to match** — its own prior "AI-mode enum" framing was wrong; this closes
+  that section's own 2026-10-07 cross-check as resolved in favor of the vehicle-class reading.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §4.2 (`get_dist`)'s stale OPEN note RECONCILED against §20.24's later, deeper
+  `0x00a455a0` cascade trace, closing a routed m07 mission-blocker; new finding: the `+0x40`..
+  `+0x6c` position/orientation block every path in that cascade reads is confirmed LIVE and
+  continuously updated, not a one-time spawn snapshot (SPEC TEAM, agent `a20cd096e258e9df4`,
+  independently re-verified by direct query before splicing — `0x00b2ed40`'s vtable-`+0x40` call
+  site and `0x008034f0`'s full body both matched the report exactly). Confirmed via
+  `0x00b2ed40` (a traffic-AI per-entity steering-tick routine): it reads an entity's current
+  `+0x40`/`+0x44`/`+0x48` position, blends a correction, and commits it back through the
+  object's own vtable slot `+0x40` — the same generic transform-setter slot `teleport`/vehicle-
+  seat-exit placement and the checkpoint-save routine already use elsewhere in this document.
+  Contrasted explicitly with the zone-data (`.czn_pc`) placement record's own position field
+  (`spec-zone-data-format.md` §11, property id `3367956165`) — a different, on-disk,
+  authored-once location read only at load/spawn to seed the runtime object; the spawn-time copy
+  link between the two was not independently confirmed this pass (plausible but unconfirmed, not
+  asserted). Also resolved §20.24's last OPEN item, `0x008034f0` (an 11-instruction
+  thiscall position accessor for case-2b: parent's own `+0x40` if attached, else a fixed local
+  `+0xcc` field). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — user-observed ground truth confirms destinations are an optional, per-call
+  `cutscene_play` argument (SPEC TEAM, self, note only, no new RE this entry). The user confirmed
+  where the player ends up after a cutscene "depends on mission," matching this section's own
+  by-name-destination-resolution finding and giving a concrete constraint for any stand-in: only
+  reposition the player when a destination was actually given for that call.
+
+- 2026-10-11 — `cutscene_play`'s end-of-cutscene destination mechanism fully traced,
+  orchestrator-routed for `m07` (SPEC TEAM, agent `a7372f228851bb362`, independently re-verified
+  by direct query before splicing — the `skip_all_cutscenes` teleport call sequence and the
+  manager-offset read/write census both matched exactly, including opening `0x007229b0` to
+  confirm the one apparent exception is unrelated string handling). The destination is a
+  by-name-resolved navpoint/trigger object (same `0x005982e0` resolver family `teleport` uses),
+  not baked cutscene data. For a cutscene that plays through normally (not skipped), the stored
+  destination is written into the manager but NEVER read back anywhere in the 20-state machine —
+  only the `skip_all_cutscenes` shortcut actually commits it to the player via the vtable `+0x40`
+  setter. Most likely real completion (PLAUSIBLE, not observed): a mission-script-level
+  `teleport()` call after `cutscene_play_check_done`. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- 2026-10-11 — two same-day follow-up passes on the above, widening the search and reconciling
+  against `spec-xtbl-format.md`'s own `RestorePlayerPos` note — still an honest negative, now
+  exhaustive within the searched scope (SPEC TEAM, agents `afa3d305604f8e25c` and
+  `af1a0011ce6c4b047`, independently re-verified by direct query before splicing — the
+  `0x00736ec0` write instructions and the zero-hits grep across `0x006db140`'s full dump both
+  matched exactly). Pass 2: `RestorePlayerPos` is confirmed to be a separate "snapshot the
+  player's current position" write into the SAME `+0x35f0`-`+0x362c` bytes, running strictly
+  later in the lifecycle than the destination write — so it overwrites the destination whenever
+  set; a full non-capped xref of the manager-pointer global confirms exactly 91 functions touch
+  it, all in one address range. Pass 3: opened the one of those 91 not previously fully read,
+  `0x006db140` (a per-frame mission-flow dispatcher, itself a writer into the same destination
+  loaders) — zero read-back found there either. Real `m07.lua` script text was also checked
+  directly: the mission script never calls a redundant teleport after `cutscene_play` for the
+  player, only in its no-real-cutscene fallback branches — confirming (per the negative-result
+  rule) this is "an unfound consumer," not a shipped bug, pending further search. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §6.19 dispatcher step 6 (`0x014f3d34`): NARROWED, not resolved, orchestrator-routed
+  fresh static pass (dlc2_m03), then parked per instruction (SPEC TEAM, self, direct harness
+  query, no agent dispatched). Confirmed this byte is NOT tutorial-owned — same mislabeling shape
+  already found at step 2 for `0x029443bc`. It's a widely-shared "mode active" flag paired with a
+  companion handle at `0x014f3d2c`, read by ~20 functions; its main consumer calls both the
+  mission-liveness accessor (`0x006d2910`, already named by this dispatcher step) and the
+  player-record getter (`0x009da4e0`), suggesting a "player busy with a scripted action" state,
+  not a UI mode. One setter is reached only through an unresolved indirect thunk-table slot, which
+  is why a name wasn't recoverable this pass. Parked — the dispatcher-level conclusion is
+  unaffected either way (step 6 stays irrelevant to `tutorial_start` unless this mode is active).
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — m05's real stall at `m05.lua:1141` (`m05_parachute_in`) diagnosed, orchestrator-
+  routed (SPEC TEAM, self, direct harness query, no agent dispatched). Opened the previously-
+  undecompiled `0x00a370c0` (the `hud_prompt` native's own registration delegate): confirmed the
+  wait is on an actual HUD button-prompt press for "M05_JUMP," not a parachute/skydive state, an
+  animation, or `vehicle_exit` (the latter is a result the callback calls, not what's waited on).
+  Traced the callback-name interning into the same `0x00a1fcc0` string-intern table already
+  confirmed for the `on_trigger` named-hook mechanism above, stored into HUD-prompt-manager
+  singleton `0x026e9528` slot 9 (local)/10 (remote) — structurally the same decoupled coroutine-
+  spawn dispatch shape (HIGH CONFIDENCE by analogy, not independently re-traced end to end; the
+  exact slot-9/10 reader needs a live capture, same class of gap the `on_trigger` case already
+  has). Spliced into the existing m05/m13 stall-ranking paragraph in place. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §26.7's weapon-grant primitive (`0x005ee630`) pinned exactly, and its second caller
+  found: the generic unlockable-type apply dispatcher `0x0071f170`, orchestrator-routed ("what
+  triggers a weapon pickup or store purchase to write the inventory record") (SPEC TEAM, self,
+  direct harness query, no agent dispatched). The "ownership bit" is bit `0x80000000` of the
+  weapon-definition record's own `+0x10` dword, set when a global enable flag is non-zero. Full
+  xref: 6 call sites in 5 functions — the store
+  native itself, 3 inside the shared inventory-apply cluster, and `0x0071f170`, the SAME apply
+  routine `spec-tables-progression.md` §4.4 and `spec-save-format.md` §10.6 already name as the
+  one shared handler for all 61 unlockable types AND the save-load re-apply step — a real
+  convergence: store purchases and unlockable grants (real-time or re-applied on load) set the
+  exact same bit through the exact same function, which is how save/load and gameplay stay in
+  agreement. Corrected same day (orchestrator-caught overclaim): world weapon/ammo pickups do
+  exist in the shipped game and do NOT go through this ownership bit (this primitive's 6 call
+  sites are exhaustively store-purchase and the unlockable dispatcher only) — the real pickup path
+  is OPEN, not disproven. Checked for the `items_inventory` slot writer directly (same ask): came
+  up empty quickly rather than slowly — `items_inventory`'s 5 touching functions are all
+  load-time, no runtime writer; the save filler's own "availability test" is a generic
+  per-class-id flag checker, not weapon-specific. The real per-player inventory-slot array and the
+  world-pickup path both stay OPEN. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.

@@ -310,11 +310,16 @@ int stub_ingame_effect_remove_trigger(lua_State* L) {
 
 // get_vehicle_type (Sec22.19, 0x00a4b050). 1 mandatory string (vehicle
 // reference), resolved via the shared flat objectResolves() stand-in.
-// Return 1 number. CONFIRMED: despite its name, returns the vehicle's
-// current AI-MODE enum clamped 0-6 - the SAME field/accessor this project's
-// VehicleState::flyingType already models (Sec30.5/Sec33.1) - reused
-// directly, no new field. Byte-confirmed fallback 0.0 if unresolved or no
-// AI-mode context.
+// Return 1 number. CORRECTED 2026-10-11 (Sec22.19/Sec21.24, spec sync): this
+// is the vehicle's static `Vehicle_Type` xtbl class (0=Automobile,
+// 1=Motorcycle, 2=Airplane, 3=Helicopter, 4=Vtol, 5=Watercraft, 6=failure
+// sentinel), NOT an AI-mode enum as this comment used to claim - the
+// field/accessor (0x00ad2f80, (vehicle+0xbf4)+0x2c) is the SAME one
+// get_char_vehicle_type (Sec21.24) reads, confirmed by 3 independent
+// sources. The implementation below was already correct (it already reused
+// VehicleState::flyingType with the same 0-6 clamp) - only this doc comment
+// was wrong; no code change needed here. Byte-confirmed fallback 0.0 if
+// unresolved or no class context.
 int stub_get_vehicle_type(lua_State* L) {
     logCall(L, upLog(L), "get_vehicle_type", upStateTag(L));
     std::string name = argString(L, 1);

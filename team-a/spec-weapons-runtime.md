@@ -609,7 +609,7 @@ this pass; whether to pursue it is a scope decision, not a static-analysis one. 
 ### 5.1 The per-character, per-weapon inventory-slot mechanism
 
 Already CONFIRMED in `spec-lua-api-behaviour.md` §4.10/§4.11: a per-target, per-weapon ammo/flags slot
-record, located through a weapon-definition `+0x1b78` sub-object via two locator-function pairs —
+record, located through a `+0x1b78` sub-object via two locator-function pairs —
 primary `0x008dc820`+`0x005fed90`, secondary `0x008dc690`+`0x005ff110`. Independently confirmed from the
 non-Lua side: a fresh whole-binary census of `0x008dc820`'s callers finds **9 sites** — three inside the
 already-documented Lua apply routines' neighbourhood, one inside `inv_weapon_remove_temporary`'s own
@@ -618,6 +618,162 @@ from any Lua native — core, non-scripted gameplay code independently reaching 
 `0x005ff110` is confirmed a 1-instruction thunk (`jmp 0x005fec20`) — the "secondary locator" is literally
 the same function already named elsewhere as "a further weapon-select dispatch" for `inv_item_equip`,
 another cross-confirmation this is shared, general-purpose code.
+
+**`+0x1b78`'s own base and the real write-side setter, both pinned 2026-10-11 (orchestrator-routed:
+"the per-player weapon inventory slot array that `0x008DCC00` walks — where it lives, its stride,
+and who writes it at runtime").** **Correction: `+0x1b78` is on the CHARACTER/PLAYER record, not a
+weapon-definition sub-object** — confirmed independently at two call sites read in full this pass:
+`spec-save-format.md`'s own weapon-inventory filler `0x008DCC00` (whose own `LEA` instruction adds
+`0x1b78` to the character argument it was called with) and the shared "give/equip weapon" apply
+function `0x00B84330` (which adds the same `0x1b78` offset to its own first argument, likewise a
+resolved character — the same argument position `inv_weapon_add_temporary` passes its own resolved
+target into). **There is
+no flat, fixed-stride slot array to cite an offset/stride for** — the two locator-function pairs are
+genuine accessor METHODS on this sub-object (primary slots 0-7, secondary 0-3, matching
+`0x008DCC00`'s own two loop bounds), not direct array indexing; whatever internal representation
+`+0x1b78`'s own sub-object uses was not reverse-engineered past the locator calls themselves.
+
+**The real write path, traced end-to-end via `0x00B84330` (one of `0x008dc820`'s 9 callers, called
+by `inv_weapon_add_temporary` AND by over a dozen unrelated gameplay call sites project-wide —
+confirmed the shared, general-purpose "give/equip a weapon instance" primitive, not Lua-specific):**
+it resolves the target's existing slot for that weapon's category via the SAME locator pair
+(`0x008dc690`/`0x008dc820` → `0x005fec20`/`0x005fed90`), then calls `0x00601380`, passing
+the weapon definition's own class-id field (read from its `+0x5c` sub-record) and a flags byte —
+already named in §5.2 below as a "setter" but not previously traced to its real role — which is
+the actual slot CREATE/BIND call: it returns a pointer to the
+newly-activated slot record, and `0x00B84330` then writes that slot's full runtime state directly:
+flag bits at `+0x1a0`/`+0x1a1`, primary ammo at `+0x1a4` (scaled via `0x00B81C30`), rounds-in-clip at
+`+0x1ac` (the SAME field §6's own closed item already names as the live clip counter), secondary
+ammo at `+0x1b0`/`+0x1b4` when the weapon definition's own `+0x10` bit `0x200000` is set (a
+DIFFERENT bit from `0x005ee630`'s ownership bit `0x80000000`, §26.7 cross-file — both live on the
+same weapon-definition `+0x10` dword but mean different things), and a vehicle-mount ammo cap at
+`+0x2c4` (either the scaled value or `0x7fffffff` for "unlimited," gated on a small cluster of
+global/session flags plus a per-weapon `+0x1a0` bit `0x40`). **This closes the write side for every
+caller of `0x00B84330`: store purchase (`store_weapon_purchase_weapon`, via the unlockable-apply
+convergence already documented in `spec-lua-api-behaviour.md` §26.7), `inv_weapon_add_temporary`,
+and whichever of the other dozen+ call sites turn out to be the real world-pickup trigger — not
+independently identified by name this pass, but now known to funnel through this exact function and
+`0x00601380`'s own slot-bind call, which is the concrete thing to hook for a live capture or a
+closer per-caller read.**
+
+- **Evidence:** full disassembly of `0x008DCC00` and `0x00B84330` (both read to completion this
+  pass), direct Ghidra query; the `+0x1ac` clip-counter cross-reference to §6's own already-closed
+  item is a textual match, not re-derived.
+- **Confidence:** CONFIRMED for `+0x1b78`'s own base (character, not weapon-definition — a real
+  correction to this section's prior wording), for the locator-method (not flat-array) shape, and
+  for `0x00601380`'s role as the real slot create/bind call with the full field list it populates.
+  HIGH CONFIDENCE, not individually re-derived, that `0x00B84330`'s other ~12 call sites include the
+  real world-pickup trigger (none were opened/named individually this pass).
+- **Unknowns:** which SPECIFIC one of `0x00B84330`'s dozen+ callers is the world-pickup trigger (if
+  any is — AI weapon-equip and scripted mission grants are equally plausible candidates sharing the
+  same list). **User-observed ground truth, 2026-10-11 (not re-derived from the executable, but a
+  real behavioral narrowing): walking over a dropped weapon picks it up automatically, EXCEPT
+  "pickup-only" heavy weapons (minigun, flamethrower and similar), which are a separate class** —
+  so the real search should be for an auto-pickup PROXIMITY path (a collision/overlap check, not a
+  button-press interaction) that reaches `0x00B84330`, and whoever picks this up should expect TWO
+  distinct call sites/paths, not one: an automatic proximity-triggered grant for ordinary dropped
+  weapons, and a separate, likely interaction-prompt-gated path for the "pickup-only" heavy-weapon
+  class specifically (plausibly the same generic interaction-prompt system named in
+  `spec-player-runtime.md` `+0x2084`, given that system is also the real mechanism for "press E"
+  world-object interactions generally — not independently confirmed for weapon pickups this pass).
+
+**Update 2026-10-11 [CONFIRMED via disassembly, direct query, no agent]: the "pickup-only"
+interaction-prompt path above is real, found while tracing the unrelated walk-in-store chain.**
+The generic interact-prompt system's action array entry 0 (`0x0111f2d0` → `0x009da510` →
+`0x00971b10`) resolves a per-"kind" handler table (`0x01309f10`, 8-byte stride, indexed by a field
+at the resolved interactable object's `+0x18e0`) — one such kind's second-slot handler
+(`0x00972a70`) directly calls the already-confirmed `+0x1b78` weapon-inventory sub-object locator
+(`0x005fe460`) on the resolved object, cross-writing handle pairs between the player and the
+world object at `+0x18f0`/`+0x18f4` first — a genuine "pick up/exchange a weapon via interact
+prompt" action, independent of `0x00B84330`'s own dozen+ callers. Not yet determined which exact
+`+0x18e0` kind value this corresponds to (plausibly the heavy/"pickup-only" weapon class per the
+user's own observation above), nor whether it ultimately also funnels through `0x00B84330` or is
+a separate write path entirely — worth a follow-up check, not chased further this pass since it
+surfaced as a side effect of a different investigation.
+
+**Update 2026-10-11 [1 dispatched agent, HIGH CONFIDENCE but not fully closed]: a real
+proximity/collision-triggered weapon-grant path found, but not confirmed to be the generic
+"walk over any dropped gun" case specifically.** Enumerated `0x00B84330`'s full 16-site caller
+list and ruled out 7 as scripted/data-driven (xtbl config-tree parsing, Lua-native script
+wrappers, hardcoded mission-cutscene grants, "give full loadout" cheat code, random-weapon-vending
+helper) — none has any spatial/collision check. The strongest candidate: `0x0064c580` (reached via
+`0x00614ec0`'s thin forward to `0x00B84330`) — takes a colliding object and a world object,
+checks the colliding object's own type-flag byte, then linearly scans an array on the callee
+object (`+0x16b8`, count `+0x16a8`, stride `0x30`) matching the colliding object's position
+fields against registered slots; on a hit, plays a pickup sound/VFX and either unlocks a "weapon
+cache" first-time bonus or grants a random weapon from a pool via `0x00614ec0`→`0x00B84330`. **No
+button-press/CBA-action read anywhere in this function** — the entire gate is the position-match
+scan, architecturally exactly what a proximity pickup should look like. A sibling,
+`0x0064bef0`, grants an entire array of weapons to each present co-op player with the same
+no-button-press shape. **Both are virtual methods on a single shared object class — CORRECTED,
+2026-10-11: not two separate 0x64-byte-apart tables as first described, but two slots (index 2 and
+index 27) of ONE 16-entry vtable spanning `0x0112eb60`-`0x0112ebd0`, mapped in full this pass.**
+The other 14 slots were individually checked: none writes to `+0x16a8`/`+0x16b8` — they're all
+either generic collision-enter/exit stubs (same type-gate shape) or read-only enumeration/cleanup
+loops (e.g. `0x006494d0`, a teardown method resetting per-player effects then iterating the same
+slot array). **So registration of a new drop into this array is NOT done through this class's own
+vtable at all** — confirmed negative, every slot checked.
+
+**Update 2026-10-12 [1 dispatched agent, real progress, still not fully closed]: traced forward
+from NPC death-handling instead of backward from the pickup object — found a real, confirmed
+"spawn an item on death" mechanism, but it's GRENADE-specific, not the generic held-weapon drop.**
+The death finalizer `0x00952760` (already known to this project) gates a drop behind the
+Lua-exposed `npc_dont_drop_weapon_on_death` flag (character `+0x1e00` bit `0x20`, confirmed read
+at `0x00952feb`) plus several other checks (weapon-class "no auto-drop" flag, killer-class flag, a
+config global, a probability gate), then — if all pass — picks a weapon-definition handle from a
+**7-entry, GRENADE-TYPE-ONLY pool** (`"?grenade"`/`"molotov"`/`"grenade_electric"`/`"flashbang"`,
+resolved by name via `0x00b81220`, indexed by the character's own `+0x1ca8` type byte) and spawns
+an instance via the generic weapon/item constructor `0x00b84ec0` (shared with 13 other callers,
+including this doc's own `0x00601380`). **This is a parallel "sometimes also drop a grenade"
+bonus system, not the generic gun-drop mechanic** — nothing in this chain reads the dying
+character's own actual held/equipped weapon-definition, and no write to `+0x16a8`/`+0x16b8` was
+found anywhere in it.
+
+**CLOSED, 2026-10-12 [CONFIRMED via disassembly, direct work, no agent]: `0x006fa9e0` is the real
+held-weapon world-drop registration — found, traced in full.** `0x00456380` turned out to be a
+generic, widely-shared release/cleanup helper (30+ unrelated callers project-wide) — a dead end,
+not drop-specific. `0x006fa9e0(EBX)` (where `EBX` = the character's real held-weapon handle) is
+gated on a feature-flag bit (`0x014f71e8` bit `0x8000`) plus two liveness/type checks on `EBX`
+(`0x0096f4f0`, `0x008addb0`), then writes into a **GLOBAL capped ring buffer of recently-dropped
+weapons** — base `0x014fdc68`, running count at `0x014f71e4`, 24-byte (`0x18`) stride, capacity 20
+entries (`0x1e0`/`0x18`). If the buffer is full, it evicts the single OLDEST entry first (a linear
+scan for the minimum lifetime-remaining value, then a shift-down). The new/reused slot is written
+with: **the item's own position pair (`EBX+8`/`EBX+0xc`, the exact same fields the pickup-matcher
+`0x0064c580` compares against)**, and a fixed **lifetime/despawn value of `0x2710` (10000 — almost
+certainly a 10-second countdown in milliseconds)**. After the write: `0x00d9fc60()` (role not
+traced, likely a VFX/physics spawn for the dropped item's visual world representation), the
+global count increments, and `0x00759d80(EBX, 0x80002, 0)` runs last (plausibly the actual
+detach-from-character/release-into-world step, flag combo not decoded). **This is a DIFFERENT
+array from the pickup-matcher's own per-manager `+0x16a8`/`+0x16b8` list** (24-byte stride here
+vs. 48-byte/`0x30` there, a plain global here vs. a per-object field there) — these are two
+PARALLEL systems: fixed "weapon cache station" world objects (`0x0064c580`'s own array) and this
+newly-found global "recently dropped weapons" ring buffer.
+
+**CONFIRMED, 2026-10-12 [direct work, no agent]: the ring buffer's only reader is NOT the pickup
+grant — it's purely physics/despawn, a real and complete negative, re-framing where the actual
+pickup logic must live.** `xref` on both globals (`0x014fdc68`, `0x014f71e4`) found exactly two
+touching functions project-wide: the writer `0x006fa9e0` above, and one reader, `0x006f9f50`
+(called once per frame from `0x006fb5d0`). Read in full: for every live entry, it re-resolves the
+item's own handle (`0x00458230`), ticks down the `0x2710` lifetime by scaled delta-time, and on
+expiry (or an invalid/dead handle) despawns the object (`0x00853ea0`/`0x0094fb60`) and removes the
+slot (shift-down, same pattern as the writer's eviction). For entries still alive, it runs real
+physics integration — gravity, velocity, a speed clamp/normalize, then `0x0077bb30` to move the
+object in the world (bounce/settle-on-ground simulation for a dropped gun). **There is no
+player-distance/overlap check anywhere in this function, and no call to `0x00614ec0` or
+`0x00B84330`.** So this global ring buffer is confirmed to be purely a "track dropped items for
+physics + despawn timing" list — NOT the thing a walk-over pickup check reads.
+
+**PARKED, 2026-10-12 (orchestrator decision, 3 passes already spent on this chain — diminishing
+returns): the walk-over grant matcher itself is not pursued further for now.** Drop-side (write +
+physics/despawn) is fully confirmed and ready to use. Recipe for whoever resumes: **the real
+auto-pickup collision handler must live on the dropped weapon's own object class** (the same
+handle `0x00458230` resolves in both functions above), most likely an analogous collision-callback
+vtable slot to `0x0064c580`'s own (the cache-station class, §5.1 above — same vtable-mapping
+method: find the class's own vtable base, dump every slot, look for one with a position-match
+scan against the player and a call into `0x00614ec0`/`0x00B84330`). Team B's own walk-over trigger
+stays a labeled stand-in in the meantime.
+`+0x1b78`'s own internal sub-object layout past the two locator calls; `0x00601380`'s
+  own full body (only its role as called from here was traced, not its own internals).
 
 ### 5.2 `0x00816430` — a concrete, newly-traced gameplay (non-Lua) consumer
 
@@ -836,6 +992,75 @@ plain disassembly/offset terms, independently). No `FUN_`/`DAT_`/`LAB_` names us
 No leaked Volition/Havok/Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-12 — §5.1: confirmed negative — the drop ring buffer's only reader is pure
+  physics/despawn, not the pickup grant** (SPEC TEAM, self, direct work, no agent). `xref` on both
+  globals found exactly 2 touching functions: the writer (above) and one per-frame reader,
+  `0x006f9f50` — read in full, it's lifetime countdown + gravity/bounce physics + despawn, no
+  distance check, no call to `0x00614ec0`/`0x00B84330` anywhere. Re-frames the remaining gap: the
+  real auto-pickup collision handler must live on the dropped weapon's own object class, not on
+  this tracking list. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-12 — §5.1: CLOSED — `0x006fa9e0` is the real held-weapon world-drop registration, a
+  global 20-entry capped ring buffer with position + 10-second lifetime per slot** (SPEC TEAM,
+  self, direct work, no agent — opened the orchestrator's 2 flagged candidates directly).
+  `0x00456380` is a generic, unrelated 30+-caller release helper, dead end. `0x006fa9e0` writes
+  the held weapon's position and a `0x2710` (10000ms) lifetime into a global array at
+  `0x014fdc68`/count `0x014f71e4` (stride `0x18`, cap 20, oldest-eviction on overflow) — a
+  DIFFERENT array from the pickup-matcher's own per-object `+0x16a8`/`+0x16b8` list (stride
+  `0x30`). These are two parallel systems: fixed cache stations vs. this new "recent drops" global
+  ring buffer. Still open: what reads this global list to actually grant the weapon on walk-over —
+  a structurally-parallel-but-unfound matcher, the natural next step. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-12 — §5.1: ruled out the pickup object's own vtable as the drop-registration writer
+  (16/16 slots checked, direct work, no agent); forward trace from NPC death found a real but
+  grenade-specific drop system, not the generic held-weapon case** (SPEC TEAM, self + 1 dispatched
+  agent). Mapped the pickup-manager's full vtable (`0x0112eb60`-`0x0112ebd0`) — confirmed negative,
+  nothing writes `+0x16a8`/`+0x16b8`. Forward from the death finalizer `0x00952760`: found the
+  `npc_dont_drop_weapon_on_death` flag's real gate, and a confirmed grenade-pool spawn mechanism,
+  but it doesn't touch the character's actual held weapon or the slot array. Flagged
+  `0x006fa9e0(EBX)`/`0x00456380(…, EBX)` — called on the real held-weapon handle, not traced — as
+  the strongest remaining lead. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
+
+- **2026-10-11 — §5.1: a real proximity-triggered weapon-grant path found (`0x0064c580`/
+  `0x0064bef0`), HIGH CONFIDENCE but not confirmed as the generic walk-over-dropped-gun case
+  specifically — more likely a fixed "weapon cache station" object class** (SPEC TEAM, 1
+  dispatched agent). Enumerated `0x00B84330`'s full 16-caller list, ruled out 7 as
+  scripted/data-driven. The real candidate has no button-press gate at all (position-match scan
+  against a registered-slot array), but its design (scanning a small fixed list, not a generic
+  per-object weapon-definition reference) suggests cache stations rather than NPC-dropped guns.
+  The actual per-frame overlap dispatcher was not located (reached only via DATA table slots,
+  zero direct-call xrefs). Open question for a future pass, not forced.
+
+- **2026-10-11 — §5.1: a real weapon pickup/exchange action CONFIRMED in the generic
+  interaction-prompt system, found as a side effect of the walk-in-store chain trace** (SPEC TEAM,
+  self, direct query, no agent). The interact-prompt action array entry 0 resolves a per-kind
+  handler table whose kind handler at `0x00972a70` writes the already-confirmed `+0x1b78`
+  weapon-inventory locator — independent of `0x00B84330`'s own dozen+ callers. Not yet determined
+  which `+0x18e0` kind value this is or whether it funnels into `0x00B84330` eventually.
+
+- **2026-10-11 — §5.1: user-observed ground truth narrows the world-pickup search to an
+  auto-proximity path, plus a separate "pickup-only" heavy-weapon class** (SPEC TEAM, self, note
+  only, no new RE this entry). The user confirmed dropped weapons are picked up automatically by
+  walking over them, except heavy "pickup-only" weapons (minigun, flamethrower, similar), which
+  are their own class — narrows the dozen+ unidentified `0x00B84330` callers to expect TWO
+  distinct paths (an auto-proximity grant, and a separate interaction-prompt-gated one for the
+  heavy-weapon class), not a single uniform trigger.
+
+- **2026-10-11 — §5.1: the per-player inventory sub-object's own base pinned (player-record
+  `+0x1b78`, correcting "weapon-definition sub-object"), and the real write-side setter traced
+  end-to-end, orchestrator-routed** (SPEC TEAM, self, direct harness query, no agent dispatched).
+  Full read of `0x008DCC00` (the save-format filler) and `0x00B84330` (the shared "give/equip
+  weapon" apply function, called by `inv_weapon_add_temporary` and a dozen+ unrelated gameplay
+  sites): both confirm `+0x1b78` on the CHARACTER record, reached only via locator-method calls
+  (no flat array/stride to cite). The real slot create/bind call is `0x00601380`, which
+  `0x00B84330` uses to get a writable slot record and then populates flags, primary/secondary
+  ammo, rounds-in-clip (`+0x1ac`, cross-referencing §6's already-closed item), and a vehicle-mount
+  ammo cap. Closes the write side for every `0x00B84330` caller at once, though the specific
+  world-pickup trigger among its dozen+ callers was not individually identified. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-09 — §4.4 extended: full backward caller census of the damage sink re-derived, statically
   exhausted, gap still NOT closed** (SPEC TEAM, agent `a4a54eda95f4932b7`, wave-7 item 1). A fresh,

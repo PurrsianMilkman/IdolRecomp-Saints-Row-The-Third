@@ -119,6 +119,58 @@ int main() {
         es.saveGame().levelName = "sr3_city";
         es.saveGame().collectibles = {{0xAAA00000u, 0xBBB00000u, 0u}, {0xAAA00001u, 0xBBB00001u, 2u}};
         es.playerCash() = 1154391.0; // dollars - matches a real sample's "cash on hand" magnitude (Sec3)
+        es.saveGame().garageNextId = 42;
+        {
+            GarageVehicleRecord gv;
+            gv.recordId = 18;
+            gv.blobLength = 4;
+            gv.unknownFlag = 500.0f;
+            gv.vehicleTypeIndex = 37;
+            gv.enumE = 2;
+            gv.enum10 = 3;
+            gv.byte12 = 5;
+            gv.optionSet[0] = 0xAB;
+            gv.optionSet[31] = 0xCD;
+            gv.blob[0] = 0x0B; gv.blob[1] = 0xB0; gv.blob[2] = 0x55; gv.blob[3] = 0x0A; // Sec9.2's own 0x0A55B00B header
+            gv.stateFlags = 0x41;
+            es.saveGame().garageVehicles = {gv};
+        }
+        {
+            WardrobeOwnedItem w0; // colour-0xFF-means-none convention, defaults otherwise
+            w0.itemId = 0x12345678u;
+            w0.colour0 = 0xFF; w0.colour1 = 0xFF; w0.colour2 = 0xFF;
+            w0.wearOption = 0;
+            w0.flag = false;
+            w0.spareBits = 0;
+            WardrobeOwnedItem w1; // nonzero wear-option, real colours
+            w1.itemId = 0xABCDEF01u;
+            w1.colour0 = 3; w1.colour1 = 7; w1.colour2 = 0xFF;
+            w1.wearOption = 9;
+            w1.flag = false;
+            w1.spareBits = 0;
+            WardrobeOwnedItem w2; // flag bit set
+            w2.itemId = 0x0F0F0F0Fu;
+            w2.colour0 = 0xFF; w2.colour1 = 1; w2.colour2 = 2;
+            w2.wearOption = 15;
+            w2.flag = true;
+            w2.spareBits = 0;
+            es.saveGame().wardrobeItems = {w0, w1, w2};
+        }
+        {
+            WeaponInventoryItem wi0;
+            wi0.weaponDefId = 0x1A2B3C4Du;
+            wi0.unused = 0;
+            wi0.ammo = {30, 90, 0, 0};
+            wi0.flag0 = 1;
+            wi0.flag1 = 0;
+            WeaponInventoryItem wi1;
+            wi1.weaponDefId = 0x5E6F7081u;
+            wi1.unused = 0;
+            wi1.ammo = {-1, 8, 16, 2};
+            wi1.flag0 = 0;
+            wi1.flag1 = 1;
+            es.saveGame().weaponInventory = {wi0, wi1};
+        }
 
         ok(host, gp, "mission_set_checkpoint('cp1')");
         CHECK(es.missionCheckpoint().setCount == 1);
@@ -149,6 +201,10 @@ int main() {
         es.saveGame().levelName = "some_other_zone";
         es.saveGame().collectibles.clear();
         es.playerCash() = 1.0;
+        es.saveGame().garageNextId = 1;
+        es.saveGame().garageVehicles.clear();
+        es.saveGame().wardrobeItems.clear();
+        es.saveGame().weaponInventory.clear();
 
         // Loading the checkpoint back must recover the ORIGINAL (pre-
         // mutation) values, not the current ones - the real proof of a
@@ -166,6 +222,55 @@ int main() {
         CHECK(es.saveGame().collectibles.size() == 2);
         CHECK(es.saveGame().collectibles[1].group == 2 && es.saveGame().collectibles[1].handleHi == 0xBBB00001u);
         CHECK(es.playerCash() == 1154391.0);
+        CHECK(es.saveGame().garageNextId == 42);
+        CHECK(es.saveGame().garageVehicles.size() == 1);
+        {
+            const GarageVehicleRecord& gv = es.saveGame().garageVehicles[0];
+            CHECK(gv.recordId == 18);
+            CHECK(gv.blobLength == 4);
+            CHECK(gv.unknownFlag == 500.0f);
+            CHECK(gv.vehicleTypeIndex == 37);
+            CHECK(gv.enumE == 2);
+            CHECK(gv.enum10 == 3);
+            CHECK(gv.byte12 == 5);
+            CHECK(gv.optionSet[0] == 0xAB && gv.optionSet[31] == 0xCD);
+            CHECK(gv.blob[0] == 0x0B && gv.blob[1] == 0xB0 && gv.blob[2] == 0x55 && gv.blob[3] == 0x0A);
+            CHECK(gv.stateFlags == 0x41);
+        }
+        CHECK(es.saveGame().wardrobeItems.size() == 3);
+        {
+            const WardrobeOwnedItem& w0 = es.saveGame().wardrobeItems[0];
+            CHECK(w0.itemId == 0x12345678u);
+            CHECK(w0.colour0 == 0xFF && w0.colour1 == 0xFF && w0.colour2 == 0xFF);
+            CHECK(w0.wearOption == 0);
+            CHECK(!w0.flag);
+            CHECK(w0.spareBits == 0);
+            const WardrobeOwnedItem& w1 = es.saveGame().wardrobeItems[1];
+            CHECK(w1.itemId == 0xABCDEF01u);
+            CHECK(w1.colour0 == 3 && w1.colour1 == 7 && w1.colour2 == 0xFF);
+            CHECK(w1.wearOption == 9);
+            CHECK(!w1.flag);
+            const WardrobeOwnedItem& w2 = es.saveGame().wardrobeItems[2];
+            CHECK(w2.itemId == 0x0F0F0F0Fu);
+            CHECK(w2.colour0 == 0xFF && w2.colour1 == 1 && w2.colour2 == 2);
+            CHECK(w2.wearOption == 15);
+            CHECK(w2.flag);
+        }
+        CHECK(es.saveGame().weaponInventory.size() == 2);
+        {
+            const WeaponInventoryItem& wi0 = es.saveGame().weaponInventory[0];
+            CHECK(wi0.weaponDefId == 0x1A2B3C4Du);
+            CHECK(wi0.unused == 0);
+            CHECK(wi0.ammo[0] == 30 && wi0.ammo[1] == 90 && wi0.ammo[2] == 0 && wi0.ammo[3] == 0);
+            CHECK(wi0.flag0 == 1);
+            CHECK(wi0.flag1 == 0);
+            const WeaponInventoryItem& wi1 = es.saveGame().weaponInventory[1];
+            CHECK(wi1.weaponDefId == 0x5E6F7081u);
+            CHECK(wi1.unused == 0);
+            CHECK(wi1.ammo[0] == -1 && wi1.ammo[1] == 8 && wi1.ammo[2] == 16 && wi1.ammo[3] == 2);
+            CHECK(wi1.flag0 == 0);
+            CHECK(wi1.flag1 == 1);
+        }
 
         // applyCheckpointSnapshot() on a fresh EngineState with no
         // checkpoint ever set reports false rather than fabricating state.
@@ -202,6 +307,38 @@ int main() {
         es.saveGame().barnstormsFound = 5;
         es.saveGame().collectibles = {{0x1111u, 0x2222u, 3u}};
         es.playerCash() = 987654.0;
+        es.saveGame().garageNextId = 9;
+        {
+            GarageVehicleRecord gv;
+            gv.recordId = 3;
+            gv.vehicleTypeIndex = 12;
+            gv.stateFlags = 0x40;
+            es.saveGame().garageVehicles = {gv};
+        }
+        {
+            WardrobeOwnedItem w0;
+            w0.itemId = 0x55AA55AAu;
+            w0.colour0 = 0xFF; w0.colour1 = 0xFF; w0.colour2 = 0xFF;
+            WardrobeOwnedItem w1;
+            w1.itemId = 0x77u;
+            w1.colour0 = 2; w1.colour1 = 0xFF; w1.colour2 = 4;
+            w1.wearOption = 5;
+            w1.flag = true;
+            es.saveGame().wardrobeItems = {w0, w1};
+        }
+        {
+            WeaponInventoryItem wi0;
+            wi0.weaponDefId = 0x0BADF00Du;
+            wi0.ammo = {12, 48, 1, 0};
+            wi0.flag0 = 0;
+            wi0.flag1 = 0;
+            WeaponInventoryItem wi1;
+            wi1.weaponDefId = 0xCAFEBABEu;
+            wi1.ammo = {7, -5, 99, 3};
+            wi1.flag0 = 1;
+            wi1.flag1 = 1;
+            es.saveGame().weaponInventory = {wi0, wi1};
+        }
 
         CHECK(es.autosaveFileWriteCount() == 0);
         ok(host, ui, "game_autosave()");
@@ -227,6 +364,27 @@ int main() {
             CHECK(fromDisk.versionSupported());
             CHECK(fromDisk.respectTotal() == 40000 && fromDisk.playerLevel() == 15);
             CHECK(fromDisk.cashDiv100() == 987654);
+            CHECK(fromDisk.garageNextId() == 9);
+            CHECK(fromDisk.garageRecords().size() == 1);
+            CHECK(fromDisk.garageRecords()[0].recordId == 3 && fromDisk.garageRecords()[0].vehicleTypeIndex == 12);
+            CHECK(fromDisk.wardrobeItems().size() == 2);
+            CHECK(fromDisk.wardrobeItems()[0].itemId == 0x55AA55AAu);
+            CHECK(fromDisk.wardrobeItems()[0].colour0 == 0xFF && fromDisk.wardrobeItems()[0].colour1 == 0xFF &&
+                  fromDisk.wardrobeItems()[0].colour2 == 0xFF);
+            CHECK(fromDisk.wardrobeItems()[1].itemId == 0x77u);
+            CHECK(fromDisk.wardrobeItems()[1].colour0 == 2 && fromDisk.wardrobeItems()[1].colour1 == 0xFF &&
+                  fromDisk.wardrobeItems()[1].colour2 == 4);
+            CHECK(fromDisk.wardrobeItems()[1].wearOption == 5);
+            CHECK(fromDisk.wardrobeItems()[1].flag);
+            CHECK(fromDisk.weaponInventory().size() == 2);
+            CHECK(fromDisk.weaponInventory()[0].weaponDefId == 0x0BADF00Du);
+            CHECK(fromDisk.weaponInventory()[0].ammo[0] == 12 && fromDisk.weaponInventory()[0].ammo[1] == 48 &&
+                  fromDisk.weaponInventory()[0].ammo[2] == 1 && fromDisk.weaponInventory()[0].ammo[3] == 0);
+            CHECK(fromDisk.weaponInventory()[0].flag0 == 0 && fromDisk.weaponInventory()[0].flag1 == 0);
+            CHECK(fromDisk.weaponInventory()[1].weaponDefId == 0xCAFEBABEu);
+            CHECK(fromDisk.weaponInventory()[1].ammo[0] == 7 && fromDisk.weaponInventory()[1].ammo[1] == -5 &&
+                  fromDisk.weaponInventory()[1].ammo[2] == 99 && fromDisk.weaponInventory()[1].ammo[3] == 3);
+            CHECK(fromDisk.weaponInventory()[1].flag0 == 1 && fromDisk.weaponInventory()[1].flag1 == 1);
         }
 
         // The world keeps playing after the autosave...
@@ -237,6 +395,10 @@ int main() {
         es.saveGame().barnstormsFound = 0;
         es.saveGame().collectibles.clear();
         es.playerCash() = 0.0;
+        es.saveGame().garageNextId = 1;
+        es.saveGame().garageVehicles.clear();
+        es.saveGame().wardrobeItems.clear();
+        es.saveGame().weaponInventory.clear();
 
         // ...and loading the autosave file back recovers what was there
         // AT SAVE TIME, not the current (mutated) state - the file-based
@@ -251,6 +413,26 @@ int main() {
         CHECK(es.saveGame().barnstormsFound == 5);
         CHECK(es.saveGame().collectibles.size() == 1 && es.saveGame().collectibles[0].group == 3);
         CHECK(es.playerCash() == 987654.0);
+        CHECK(es.saveGame().garageNextId == 9);
+        CHECK(es.saveGame().garageVehicles.size() == 1 && es.saveGame().garageVehicles[0].recordId == 3);
+        CHECK(es.saveGame().wardrobeItems.size() == 2);
+        CHECK(es.saveGame().wardrobeItems[0].itemId == 0x55AA55AAu);
+        CHECK(es.saveGame().wardrobeItems[0].colour0 == 0xFF && es.saveGame().wardrobeItems[0].colour1 == 0xFF &&
+              es.saveGame().wardrobeItems[0].colour2 == 0xFF);
+        CHECK(es.saveGame().wardrobeItems[1].itemId == 0x77u);
+        CHECK(es.saveGame().wardrobeItems[1].colour0 == 2 && es.saveGame().wardrobeItems[1].colour1 == 0xFF &&
+              es.saveGame().wardrobeItems[1].colour2 == 4);
+        CHECK(es.saveGame().wardrobeItems[1].wearOption == 5);
+        CHECK(es.saveGame().wardrobeItems[1].flag);
+        CHECK(es.saveGame().weaponInventory.size() == 2);
+        CHECK(es.saveGame().weaponInventory[0].weaponDefId == 0x0BADF00Du);
+        CHECK(es.saveGame().weaponInventory[0].ammo[0] == 12 && es.saveGame().weaponInventory[0].ammo[1] == 48 &&
+              es.saveGame().weaponInventory[0].ammo[2] == 1 && es.saveGame().weaponInventory[0].ammo[3] == 0);
+        CHECK(es.saveGame().weaponInventory[0].flag0 == 0 && es.saveGame().weaponInventory[0].flag1 == 0);
+        CHECK(es.saveGame().weaponInventory[1].weaponDefId == 0xCAFEBABEu);
+        CHECK(es.saveGame().weaponInventory[1].ammo[0] == 7 && es.saveGame().weaponInventory[1].ammo[1] == -5 &&
+              es.saveGame().weaponInventory[1].ammo[2] == 99 && es.saveGame().weaponInventory[1].ammo[3] == 3);
+        CHECK(es.saveGame().weaponInventory[1].flag0 == 1 && es.saveGame().weaponInventory[1].flag1 == 1);
 
         std::error_code ec;
         fs::remove_all(sandbox, ec); // this test's own scratch output, not a project artifact

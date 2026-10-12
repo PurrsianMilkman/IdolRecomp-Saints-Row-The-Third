@@ -89,6 +89,45 @@ sr3save::SaveSnapshotFields buildSaveSnapshotFields(EngineState& st) {
     for (const CollectedCollectible& c : sg.collectibles) {
         f.collectibles.push_back({c.handleLo, c.handleHi, c.group, 0});
     }
+    f.garageRecords.reserve(sg.garageVehicles.size());
+    for (const GarageVehicleRecord& g : sg.garageVehicles) {
+        sr3save::GarageRecord r;
+        r.recordId = g.recordId;
+        r.blobLength = g.blobLength;
+        r.unknownFlag = g.unknownFlag;
+        r.vehicleTypeIndex = g.vehicleTypeIndex;
+        r.enumE = g.enumE;
+        r.enum10 = g.enum10;
+        r.byte12 = g.byte12;
+        r.optionSet = g.optionSet;
+        r.blob = g.blob;
+        r.stateFlags = g.stateFlags;
+        f.garageRecords.push_back(r);
+    }
+    f.garageNextId = sg.garageNextId;
+    f.wardrobeItems.reserve(sg.wardrobeItems.size());
+    for (const WardrobeOwnedItem& w : sg.wardrobeItems) {
+        sr3save::WardrobeItemRecord r;
+        r.itemId = w.itemId;
+        r.colour0 = w.colour0;
+        r.colour1 = w.colour1;
+        r.colour2 = w.colour2;
+        r.wearOption = w.wearOption;
+        r.flag = w.flag;
+        r.spareBits = w.spareBits;
+        f.wardrobeItems.push_back(r);
+    }
+    f.weaponInventory.reserve(sg.weaponInventory.size());
+    for (const WeaponInventoryItem& w : sg.weaponInventory) {
+        sr3save::WeaponInventoryRecord r;
+        r.weaponDefId = w.weaponDefId;
+        r.unused = w.unused;
+        r.ammo = w.ammo;
+        r.flag0 = w.flag0;
+        r.flag1 = w.flag1;
+        r.pad = w.pad;
+        f.weaponInventory.push_back(r);
+    }
     formatSaveTimeDate(f.saveTime, f.saveDate);
     return f;
 }
@@ -106,6 +145,48 @@ void applySaveSnapshotFields(const sr3save::SaveSnapshot& snap, EngineState& st)
     sg.collectibles.reserve(snap.collectibles().size());
     for (const sr3save::CollectibleRecord& c : snap.collectibles()) {
         sg.collectibles.push_back({c.handleLo, c.handleHi, c.group});
+    }
+    sg.garageVehicles.clear();
+    sg.garageVehicles.reserve(snap.garageRecords().size());
+    for (const sr3save::GarageRecord& g : snap.garageRecords()) {
+        GarageVehicleRecord r;
+        r.recordId = g.recordId;
+        r.blobLength = g.blobLength;
+        r.unknownFlag = g.unknownFlag;
+        r.vehicleTypeIndex = g.vehicleTypeIndex;
+        r.enumE = g.enumE;
+        r.enum10 = g.enum10;
+        r.byte12 = g.byte12;
+        r.optionSet = g.optionSet;
+        r.blob = g.blob;
+        r.stateFlags = g.stateFlags;
+        sg.garageVehicles.push_back(r);
+    }
+    sg.garageNextId = snap.garageNextId();
+    sg.wardrobeItems.clear();
+    sg.wardrobeItems.reserve(snap.wardrobeItems().size());
+    for (const sr3save::WardrobeItemRecord& w : snap.wardrobeItems()) {
+        WardrobeOwnedItem r;
+        r.itemId = w.itemId;
+        r.colour0 = w.colour0;
+        r.colour1 = w.colour1;
+        r.colour2 = w.colour2;
+        r.wearOption = w.wearOption;
+        r.flag = w.flag;
+        r.spareBits = w.spareBits;
+        sg.wardrobeItems.push_back(r);
+    }
+    sg.weaponInventory.clear();
+    sg.weaponInventory.reserve(snap.weaponInventory().size());
+    for (const sr3save::WeaponInventoryRecord& w : snap.weaponInventory()) {
+        WeaponInventoryItem r;
+        r.weaponDefId = w.weaponDefId;
+        r.unused = w.unused;
+        r.ammo = w.ammo;
+        r.flag0 = w.flag0;
+        r.flag1 = w.flag1;
+        r.pad = w.pad;
+        sg.weaponInventory.push_back(r);
     }
     // Sec15's own task brief: display-only on load, round-tripped as inert
     // data - never used to resume a mission.

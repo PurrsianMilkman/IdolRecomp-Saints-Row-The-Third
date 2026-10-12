@@ -392,6 +392,36 @@ int main() {
         TeleportRequest& r2 = es.teleportRequests().at("#PLAYER#");
         CHECK(r2.tookPlayerPath == true);
         CHECK(r2.exitVehiclesArg3 == true);
+
+        // REAL position write (2026-10-11 spec sync, §4.2's own "RECONCILED
+        // ... mission-blocker follow-up for `m07`" note): once the
+        // destination's own real position is known, teleport must write
+        // mover.worldPosition = dest.worldPosition + (arg5,arg6,arg7) into
+        // the SAME live field get_dist/get_object_pos read - the real
+        // engine's `0x00a60e30` commits via the mover's own vtable slot
+        // `+0x40`, the exact field those two natives resolve through
+        // `0x00a455a0`. "Dest1" has no real zone-data record in this
+        // fixture, so simulate "the destination's own real position is
+        // already known" the same way a genuine `.czn_pc`-resolved
+        // destination would appear to this stub: set it directly via the
+        // same OpenValue this stub itself reads (tryResolveWorldPositionFromZoneData
+        // is a no-op once v.known() is already true).
+        es.getOrCreateCharacter("Dest1").worldPosition.set(WorldPosition{10.0, 20.0, 30.0});
+        ok(host, gp, "teleport('Mover1', 'Dest1', false, true, 1.0, 2.0, 3.0)");
+        const WorldPosition& moverPos = es.getOrCreateCharacter("Mover1").worldPosition.get();
+        CHECK(moverPos.x == 11.0 && moverPos.y == 22.0 && moverPos.z == 33.0);
+        CHECK(es.isLiveObject("Mover1"));
+        CHECK(es.liveObjectKind("Mover1") == EngineState::LiveObjectKind::kCharacter);
+
+        // Destination resolves (objectResolves()==true) but its own real
+        // position is NOT yet known (the common real-mission case, e.g. a
+        // navpoint with no zone-data record reachable in this harness) ->
+        // honestly leaves the mover's own worldPosition OPEN rather than
+        // fabricating 0,0,0.
+        es.objectResolves().set("DestNoPos", true);
+        es.objectResolves().set("Mover2", true);
+        ok(host, gp, "teleport('Mover2', 'DestNoPos')");
+        CHECK(!es.getOrCreateCharacter("Mover2").worldPosition.known());
     }
 
     // --- release_to_world (§4.4) --------------------------------------------

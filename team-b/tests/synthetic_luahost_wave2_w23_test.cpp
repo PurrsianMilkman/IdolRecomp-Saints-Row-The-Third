@@ -467,6 +467,48 @@ int main() {
         CHECK(es.changeMissionEnemyTeamNotifyCount == 1);
     }
 
+    // get_char_vehicle_type (Sec21.24): RE-WIRED 2026-10-11 - reads
+    // VehicleState::flyingType ((+0xbf4)+0x2c), the SAME real xtbl
+    // Vehicle_Type class field EngineState::loadZoneObjectsSection()
+    // already populates for every real zone-placed vehicle, NOT the
+    // separate never-wired vehicleTypeCode placeholder this native used to
+    // read (removed). Covers: unresolved occupant -> sentinel 6; resolved
+    // occupant with no cached vehicle association -> sentinel 6; resolved
+    // occupant in a vehicle whose real xtbl class is known (0-5) -> that
+    // exact code; and an out-of-range flyingType value clamping to 6.
+    {
+        Host host(fixtureNames());
+        lua_State* gp = host.gameplayState();
+        EngineState& es = host.engineState();
+
+        // Unresolved occupant -> sentinel 6.
+        es.objectResolves().set("NoSuchOccupant999", false);
+        ok(host, gp, "assert(get_char_vehicle_type('NoSuchOccupant999') == 6)");
+
+        // Resolved occupant, but no cached vehicle association -> sentinel 6.
+        es.objectResolves().set("Driver1", true);
+        ok(host, gp, "assert(get_char_vehicle_type('Driver1') == 6)");
+
+        // Occupant's cached vehicle has a real xtbl class (e.g. 3 =
+        // Helicopter, the SAME code m07's own heli-adjacent flow resolves
+        // via the identical flyingType field) -> returned directly.
+        es.getOrCreateCharacter("Driver1").currentVehicleName.set("HeliA");
+        es.getOrCreateVehicle("HeliA").flyingType.set(3);
+        ok(host, gp, "assert(get_char_vehicle_type('Driver1') == 3)");
+
+        // Automobile (class 0) round-trips too, not just the non-zero
+        // classes - guards against an accidental "0 looks like OPEN/unset"
+        // regression.
+        es.getOrCreateCharacter("Driver1").currentVehicleName.set("Car1");
+        es.getOrCreateVehicle("Car1").flyingType.set(0);
+        ok(host, gp, "assert(get_char_vehicle_type('Driver1') == 0)");
+
+        // Out-of-range class value clamps to the sentinel.
+        es.getOrCreateCharacter("Driver1").currentVehicleName.set("Weird1");
+        es.getOrCreateVehicle("Weird1").flyingType.set(42);
+        ok(host, gp, "assert(get_char_vehicle_type('Driver1') == 6)");
+    }
+
     // drug_effect_clear_override_values (Sec21.25): reuses the SAME
     // channel-0 fields drug_effect_set_override_values (Sec14.19) writes.
     {

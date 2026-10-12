@@ -16,6 +16,7 @@
 
 #include "sr3binkcodec/bitstream_reader.h"
 #include "sr3binkcodec/block_dispatch.h"
+#include "sr3binkcodec/dc_delta_array.h"
 #include "sr3binkcodec/entropy_prestage.h"
 #include "sr3binkcodec/frame_decoder.h"
 #include "sr3binkcodec/planar_buffer.h"
@@ -433,6 +434,132 @@ void testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct() {
     CHECK(same);
 }
 
+void testDcAcIdctEngine2ReadsDcLiteralFromDcArrayByIndexNotMainReader() {
+    // fix/bink-dc-array-indexing task (2026-10-11), spec-bink-codec.md
+    // Sec5.3p: "descriptor L" is NOT a separate byte-cursor stream (the
+    // RETRACTED model the superseded descriptor_l_cursor.h implemented,
+    // tested here before this task) - it IS `0x1001a160`'s own per-row DC
+    // delta-accumulation array, already fully decoded for the whole row
+    // BEFORE any block reads from it, consumed by a plain ARRAY INDEX
+    // (`blockCol`). This test proves that split: `br` holds ONLY the
+    // dispatch nibbles + a zero-padded tail for the AC tree decode (NOT any
+    // DC literal bytes - unlike testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct()
+    // above, which exercises the legacy/no-dcArray fallback path that still
+    // reads DC off `br` directly), while a COMPLETELY SEPARATE, already-
+    // decoded DcDeltaArray supplies the real 0x024C DC literal at index 0
+    // (column 0 -> index 0, Sec5.3p's own "cursor starts at offset 0").
+    // If the DC read were still wired to `br` (the bug the PRIOR task
+    // fixed) or to a byte-cursor instead of an array index (this task's own
+    // fix), this test's own dcLiteral would come out wrong/zero instead of
+    // the array's real 0x024C value at index `blockCol`=0.
+    uint32_t subRaw = 5;
+    BitPacker packer;
+    packer.appendBits(1u, 4);
+    packer.appendBits(subRaw, 4);
+    // No DC literal bytes here - `br` only carries the dispatch nibbles
+    // plus whatever zero-padded tail the AC tree decode/quant nibble read
+    // past them (BitPacker::bytes() below pads to 64 bytes).
+    std::vector<uint8_t> dispatchBits = packer.bytes(64);
+    BitstreamReader br(dispatchBits.data(), dispatchBits.size());
+
+    // A hand-built, already-decoded row array - column 0 (this block's own
+    // blockCol) holds the real DC literal 0x024C; later indices are
+    // deliberately different values so an off-by-one index bug would be
+    // caught.
+    const DcDeltaArray rowArray(std::vector<uint16_t>{0x024C, 0x1111, 0x2222});
+
+    OwnedPlane dest;
+    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, /*blockCol=*/0, nullptr, nullptr, &rowArray);
+    CHECK(rec.outcome == BlockOutcome::Reconstructed);
+    CHECK(rec.sub.has_value() && *rec.sub == Case1SubType::DcAcIdctEngine2);
+    CHECK(rec.dcLiteral.has_value());
+    CHECK(*rec.dcLiteral == 0x024C);  // from rowArray[0], NOT from `br`'s own (DC-literal-less) bytes
+
+    // Index-by-column: the SAME array, read at blockCol=1, must return the
+    // SECOND word, not re-derive/re-read the first.
+    BitPacker packer2;
+    packer2.appendBits(1u, 4);
+    packer2.appendBits(subRaw, 4);
+    std::vector<uint8_t> dispatchBits2 = packer2.bytes(64);
+    BitstreamReader br2(dispatchBits2.data(), dispatchBits2.size());
+    OwnedPlane dest2;
+    dest2.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec2 = decodeOneBlock(br2, dest2.view(), nullptr, 0, /*blockCol=*/1, nullptr, nullptr, &rowArray);
+    CHECK(rec2.outcome == BlockOutcome::Reconstructed);
+    CHECK(rec2.dcLiteral.has_value());
+    CHECK(*rec2.dcLiteral == 0x1111);
+
+    // Bound check: a block whose column index falls past the array's own
+    // decoded word count must report SourceExhausted, not silently read OOB
+    // or wrap (dc_delta_array.h's hasIndex()).
+    BitPacker packer3;
+    packer3.appendBits(1u, 4);
+    packer3.appendBits(subRaw, 4);
+    std::vector<uint8_t> dispatchBits3 = packer3.bytes(64);
+    BitstreamReader br3(dispatchBits3.data(), dispatchBits3.size());
+    OwnedPlane dest3;
+    dest3.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    BlockRecord rec3 = decodeOneBlock(br3, dest3.view(), nullptr, 0, /*blockCol=*/3, nullptr, nullptr, &rowArray);
+    CHECK(rec3.outcome == BlockOutcome::SourceExhausted);
+}
+
+void testDecodeRowDcArrayChunkAlgorithm() {
+    // UPDATED 2026-10-11 (fix/bink-dc-array-value0-boundary-5.3u task,
+    // spec-bink-codec.md Sec5.3u): the PRIOR version of this test hand-built
+    // a bitstream where value[0] itself went through the chunk loop's own
+    // nibble=0 flat-fill - that was the exact bug Sec5.3u's own live trace
+    // found (value[0] must NOT read a class nibble at all). This test is
+    // now rewritten to match the corrected, resolved algorithm: value[0] is
+    // the FIXED-bound path (a 10-bit field - dc_prestage_sibling_gap.h's
+    // kDcSiblingMagnitudeWidth, the real algorithm's own overflow-sanity
+    // field, value not otherwise checked here - followed by an 11-bit
+    // direct value, dc_delta_array.h's kDcValue0FieldWidth), and only
+    // values[1+] go through Sec5.3m's own confirmed per-chunk algorithm,
+    // address-exact: a 4-bit class nibble, then (nibble!=0) up to 8 values
+    // of [nibble-bit magnitude, +1 sign bit if magnitude!=0], DPCM-
+    // accumulated onto a running "previous committed value" that starts at
+    // value[0] itself (Sec5.3u item 3) - or (nibble==0) a flat-fill of the
+    // unchanged previous value, no further bitstream consumption. Hand-
+    // built here bit-for-bit, deterministically - not a claim about any one
+    // real file's own actual chunk content (the real worked example is
+    // tests/real_bink_dc_value0_boundary_test.cpp, against real data).
+    BitPacker packer;
+    // Leading count (2026-10-11, fix/bink-dc-array-519-word-commit-run task,
+    // spec-bink-codec.md Sec5.3n): a 10-bit field that IS the call's own
+    // real word count directly (no longer discarded as "sanity" - Sec5.3n's
+    // own leading-count idiom) - set to 12 to match this test's own 12-word
+    // expectation below. Then value[0]: fixed-bound path, 11-bit direct
+    // value = 50.
+    packer.appendBits(12u, kDcSiblingMagnitudeWidth);
+    packer.appendBits(50u, kDcValue0FieldWidth);
+    // Chunk 1 (values[1..8]): nibble=0 -> flat-fill all 8 words with prev
+    // (seeded at value[0]=50).
+    packer.appendBits(0u, 4);
+    // Chunk 2 (values[9..]): nibble=7 (7-bit magnitude), one real value:
+    // magnitude=118, sign=0 (positive) -> prev becomes 50+118=168 for word
+    // index 9.
+    packer.appendBits(7u, 4);
+    packer.appendBits(118u, 7);
+    packer.appendBits(0u, 1);  // sign bit: not negated
+    // Second value of chunk 2: magnitude=0 -> delta=0, sign bit skipped
+    // entirely (Sec5.3m) -> prev stays 168 for word index 10.
+    packer.appendBits(0u, 7);
+    // Third value: magnitude=20, sign=1 (negate) -> prev becomes 168-20=148.
+    packer.appendBits(20u, 7);
+    packer.appendBits(1u, 1);
+    std::vector<uint8_t> bits = packer.bytes(64);
+    BitstreamReader br(bits.data(), bits.size());
+
+    DcDeltaArray arr = decodeRowDcArray(br, /*minCount=*/12);
+    CHECK(arr.size() >= 12);
+    CHECK(arr.wordAt(0) == 50);  // value[0], fixed-bound, direct
+    for (int i = 1; i <= 8; ++i) CHECK(arr.wordAt(static_cast<size_t>(i)) == 50);  // chunk 1's flat-fill
+    CHECK(arr.wordAt(9) == 168);
+    CHECK(arr.wordAt(10) == 168);  // magnitude==0 -> unchanged accumulator
+    CHECK(arr.wordAt(11) == 148);  // 168 - 20, negated delta
+}
+
 void testGiant1RleUpsample0IsOpenHookWithNoDcLiteral() {
     // sub = 3 - 3 = 0 -> Giant1RleUpsample0. Unlike DcAcIdctEngine2 above,
     // this sub-case reads nothing at all (no confirmed field width exists
@@ -837,6 +964,8 @@ int main() {
     testPrimary9BlockCopyReconstructed();
     testRawCopyDualRowDuplicateSub6();
     testDcAcIdctEngine2ProducesPixelsViaAcTreeAndIdct();
+    testDcAcIdctEngine2ReadsDcLiteralFromDcArrayByIndexNotMainReader();
+    testDecodeRowDcArrayChunkAlgorithm();
     testGiant1RleUpsample0IsOpenHookWithNoDcLiteral();
     testOutOfRangeDispatchDetected();
     testRasterOrderStopsAtFirstOpenHook();

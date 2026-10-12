@@ -3,261 +3,608 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
-## RESUMED 2026-10-10 in "D:\IdolRecomp Saints Row The Third" (renamed/moved from "D:\Project Crreish",
-## which is now a junction to it - old archived paths/scripts still resolve). Orchestrator: purrsian-52
-## (continuity of purrsian-a5/4a/5a naming across restarts - same person/process, just a new session each
-## time it reconnects). Usage-pacer: was ahead of plan earlier this session, not re-checked recently.
+## RESUMED 2026-10-11 in "D:\IdolRecomp Saints Row The Third" (D:\Project Crreish is a junction to
+## it - old archived paths/scripts still resolve). Orchestrator across restarts: purrsian-52/a5/4a/
+## 5a/46/f2/8e/f5/eb/ea (same person/process, new session name each restart). Team A across restarts:
+## team-a-66/77/75/88/bf (same). Usage-pacer: ahead of plan most of this session (37-54% weekly vs
+## 20-33% planned) - stay disciplined: Sonnet-tier agents, 1 agent at a time (briefly violated once,
+## no harm resulted, corrected), reuse idle worktrees over fresh ones unless D: space is clearly
+## fine (it was reported at 67GB free as of the last check, up from "low" earlier).
+## 2026-10-12: user confirmed TWICE (via orchestrator relay) to keep the normal pace even when the
+## usage-pacer warns at "ahead of plan"/"critical" levels - only actually stop if the pacer itself
+## halts dispatch (e.g. at 95%), don't pause to ask on a warning alone. Noted per their own request.
 
-## STANDING RULE 2026-10-10, "Branch hygiene: done means ON MAIN" (user-requested; full text
-## `~/crreish-orchestration/AI-WORKFLOW-INSTRUCTIONS.md`, verified directly - copy into every dispatch):
-## 1. REPORT STATES: "DONE" only when `git merge-base --is-ancestor <commit> main` is true. Otherwise
-##    "READY-TO-MERGE <branch>" or "PARKED <branch>: <reason>". Never plain "done".
-## 2. MERGE SMALL, MERGE SOON: merge each unit as soon as its own tests pass. Standing permission to merge
-##    (both: I merge agents' branches myself from the main checkout, AND well-tested small units may
-##    self-merge - both patterns used successfully this session).
-## 3. REBASE BEFORE HANDOFF: update onto current main, re-run build+tests, resolve conflicts YOURSELF.
-## 4. NO SILENT PARKING: a stopped branch gets a line in HANDOFF's "## Parked branches" section (its OWN
-##    top-level section, deliberately OUTSIDE this resume block so a resume-note rewrite can't wipe it -
-##    search "PARKED-BRANCHES:BEGIN" to find it, further down this file after RESUME-END).
-## 5. CHECK THE BRANCH ITSELF: audits use merge-base/`git cherry` on the branch itself, never inference
-##    from siblings (the mistake that caused the whole incident - see LEARNED below).
+## STANDING RULES (full text `~/crreish-orchestration/AI-WORKFLOW-INSTRUCTIONS.md` - copy into
+## every dispatch prompt):
+## 1. REPORT STATES: "DONE" only when `git merge-base --is-ancestor <commit> main` is true.
+##    Otherwise "READY-TO-MERGE <branch>" or "PARKED <branch>: <reason>". Never plain "done".
+## 2. MERGE SMALL, MERGE SOON: merge each unit as soon as its own tests pass. Standing self-merge
+##    permission.
+## 3. REBASE BEFORE HANDOFF: update onto current main, re-run build+tests, resolve conflicts
+##    YOURSELF.
+## 4. NO SILENT PARKING: parked branches go in "## Parked branches" (own top-level section,
+##    search "PARKED-BRANCHES:BEGIN", OUTSIDE this resume block so a rewrite can't wipe it).
+## 5. CHECK THE BRANCH ITSELF: audits use merge-base/`git cherry` on the branch itself, never
+##    sibling inference.
 ## 6. AUDIT: `sh ~/crreish-orchestration/branch_audit.sh` at the end of every unit.
-## 7. MERGE FROM YOUR OWN WORKTREE, NEVER THE SHARED CHECKOUT (added 2026-10-10, after a real incident):
-##    a concurrent agent's `git merge` in the shared main checkout landed on another agent's
-##    checked-out branch instead of main, because that checkout's HEAD had been moved by a different
-##    agent between the check and the merge. Caught and cleanly fixed that time, but every agent must
-##    run its own merge-into-main from a dedicated worktree it alone controls, not the shared root
-##    checkout, to prevent this race outright.
+## 7. MERGE FROM YOUR OWN WORKTREE, NEVER THE SHARED CHECKOUT. The PRIMARY (non-worktree) checkout
+##    at `D:\IdolRecomp Saints Row The Third\TEAM B` holds `main` directly (fixed 2026-10-11 after
+##    it was accidentally stranded on a stale branch for hours, losing 4 real spec commits
+##    temporarily - see RULED OUT below). Merge from there via normal `git merge`/fast-forward, or
+##    from your own worktree if not on `main`. NEVER use `git update-ref` to force-move main out
+##    from under another worktree/checkout that holds it - this struck twice this session.
+## 8. REUSE IDLE WORKTREES: `git checkout -B <new-branch> main` inside an existing idle one
+##    (confirm idle via `git status` first - two agents collided reusing the same one once this
+##    session, self-corrected, no data lost) + incremental build, rather than a fresh worktree -
+##    D: space guidance may have relaxed (67GB free last check), confirm current state if unsure.
+## 9. RE TECHNIQUE items 10-13 (distilled 2026-10-11): (10) RAISE BUDGETS 10-100x BEFORE CALLING
+##    SOMETHING STUCK - 3+ false "stuck" verdicts this session were pure budget artifacts. (11)
+##    CHOOSE THE HARNESS THAT CAN EXERCISE THE PATH - `lua_host_run.exe`/mission-drive has NO
+##    spatial simulation at all (no player position, can't fire world-space triggers); use the
+##    in-world `sr3_viewer.exe --mission=X --spawn ... --spawn-y ...` recipe (commits
+##    9e52612/3a050d8 established the working pattern + full archive list) for anything spatial.
+##    (12) A FIX IS DONE WHEN GROUND-TRUTH NUMBERS MATCH, not when tests pass - bake every worked
+##    example into a permanent test. (13) PLATEAUS MEAN CHANGE METHOD after 2 stalled passes - ask
+##    Team A for a worked example or switch harness, don't repeat.
+## 10. CHECK THE BUILD'S EXIT CODE, NEVER `ctest` ALONE (real incident 2026-10-11): a compile error
+##     slipped through a "green" ctest because ctest silently ran STALE pre-existing binaries when
+##     the build step that should have produced new ones failed/was skipped with its exit code
+##     unchecked. Always: `cmake --build ... --config Release`, confirm exit code 0 explicitly,
+##     THEN `ctest`. Never trust green ctest without just-confirmed build success.
 
-### (a) DONE THIS SESSION - do not re-derive, all verified+merged+ctest-clean at 165/169 (0 failed, 4
-### pre-existing Bink skips) unless noted otherwise:
-- **DONE AND MERGED: Bink IDCT butterfly + AC-coefficient tree decoder** (agent `ad8c2d9a0aac24f70`,
-  merge `be0a160` of `feature/bink-idct-actree-5.3j` into main). Implements spec-bink-codec.md Sec5.3j:
-  `idct_butterfly.h` (the shared 8-point butterfly, column pass + row pass + final descale) and
-  `ac_tree_decoder.h` (`0x10024eb0`'s front/tail BFS tree decoder), wired into `Case1SubType::
-  DcAcIdctEngine2` (primary=1/sub=2) in `block_dispatch.h` - closes that OpenHook to Reconstructed.
-  **Verified (a)/(b)/(c) against the actual spec text, not just the relayed summary** - all three held up:
-  (a) every intermediate `>>0xb` shift is a plain truncating `sar`, the ONLY rounding anywhere is the
-  final per-pixel descale `(sum+0x7f)>>8` (not `+0x80` - exact ties round down); (b) the AC-tree loop
-  really does terminate on front==tail && level==1, no fixed coefficient count; (c) two genuinely
-  distinct sign-recovery mechanisms exist (general multi-bit masked/bias_mask test; single-extra-bit
-  `and/neg/or` shortcut), implemented both, not conflated.
-  **IDCT (Part 1) is bit-exact VERIFIED, independently, against real data**: extracted
-  `dc_ac_coeffs_frame0_block0.bin`/`postidct_block_frame0_row0_col80_VERIFIED.bin` (the exact FFmpeg-
-  matched worked example Sec5.3j itself cites) via `tools/bink_test_vector_extract.cpp`, fed them through
-  `idctBlock8x8()` cold (new `tests/real_bink_idct_test.cpp`, no DLL/Unicorn re-execution) - bit-exact
-  match, all 64 bytes, every run.
-  **AC tree decoder (Part 2) is NOT bit-exact verified - Sec5.3j itself has no live worked example for
-  this part, and this task's own honest real-data check shows it does NOT currently decode real content
-  correctly**: ran the full real entropy pre-stage against `main_menu_bg.bik` frame 0 - decode now gets
-  5 blocks further than before (3x sub=2, 2x sub=3 Reconstructed, up from 0) before stopping at an
-  unrelated pre-existing OpenHook (primary=5/IntraIdct5, Sec5.3j doesn't cover this family) - but the
-  reconstructed pixel bytes do NOT match an independent FFmpeg raw-YUV extraction of the same frame
-  (`ffmpeg -pix_fmt yuv420p -f rawvideo`, NOT `-pix_fmt gray` - that one silently rescales tv-range to
-  full-range and will mislead anyone re-checking this). Root cause, documented in `ac_tree_decoder.h`'s
-  own top comment: several interpretive judgment calls were REQUIRED beyond what Sec5.3j gives literally
-  (which of the two sign mechanisms maps to which of the tree's two terminal-leaf dispatch cases; the
-  extra-bits field width) - flagged explicitly as unverified guesses, not presented as fact. **Primary
-  case 3 was NOT touched** - confirmed directly against Sec5.3j's own text that its scope is the IDCT +
-  `0x10024eb0` only; case 3's RLE/literal token format is a separate, still-open gap, same as before.
-  Golden fixtures regenerated for this task (`tests/golden/bink_main_menu_bg/{frame0_raw.bin,
-  frame1_raw.bin,vectors/*}`, `tests/golden/bink_logo_frame0/`, `tests/golden/bink_logo_amd_hd_frame0/`),
-  all gitignored/local-only per existing convention, re-extractable via `tools/bink_frameN_extract.cpp`
-  + `tools/bink_test_vector_extract.cpp` against the real assets at `D:\Project Crreish\Saints Row 3
-  CRREISH\videos\*.bik`. Full ctest **170/170 passed, 0 skipped** (the 4 previously-skipped Bink tests
-  now run for real with the golden fixtures present) - rebased onto main twice (tip moved both times)
-  before merging, no conflicts either time. `sh ~/crreish-orchestration/branch_audit.sh`: this branch is
-  EQUIVALENT (content now on main); 3 pre-existing unrelated ORPHAN branches
-  (`feature/bink-pixel-accuracy-oracle`, `fix/bink-prestage-len-correction`,
-  `fix/ground-tile-origin-translation`) untouched, already documented in Parked branches. **Worktree
-  `agent-binkidct` left in place (not deleted, per disk-space discipline) - flag for batch cleanup if
-  disk space is ever reviewed.** Relayed to purrsian-52 (honest account of bit-exact IDCT vs. not-yet-
-  correct AC-tree).
-  **2026-10-10 follow-up: AC-tree (Part 2) judgment calls sent to Team A (team-a-66) for a Sec5.3j worked
-  example** - exact file:line citations (`ac_tree_decoder.h` lines 29-41 for the sign-mechanism-to-leaf
-  mapping, lines 42-58 for the extra-bits field width) relayed directly, not paraphrased.
-  **RESOLVED+MERGED 2026-10-10 (`fix/bink-actree-sign-mechanism-5.3j-part3`, per spec-bink-codec.md
-  Sec5.3j Part 3 + its same-day follow-up splice closing Part 3's own remaining OPEN item)** - the
-  park above is LIFTED, both prior judgment calls are gone:
-  - Sign-mechanism-to-leaf mapping: Phase-1 `case 2` AND `case 3` BOTH resolve immediately via
-    mechanism 1 (general multi-bit read) - `case 3` was previously, incorrectly, wired to mechanism 2
-    (the single-extra-bit shortcut); that is now removed from `case 3` and replaced with the same
-    mechanism-1 code `case 2` already had. Mechanism 2 has exactly two real homes, both inside a
-    structurally separate "Phase 2" dispatch (`sel==2`'s gated sub-branch, `sel==3` unconditionally) -
-    confirmed NOT reachable from this file's own Phase-1 case 2/3, so mechanism 2's code was deleted
-    from this file entirely rather than left mis-attached to `case 3`.
-  - Extra-bits width/sign-test operand (the "tautology" judgment call): CONFIRMED exactly as this
-    file's `case 2` already had it - read `level` raw bits into their own untouched snapshot, magnitude
-    `(raw & (bias_mask-1)) | bias_mask`, sign from the ORIGINAL pre-mask raw's own `bias_mask` bit. No
-    change needed here beyond applying the same code to `case 3`.
-  - **Genuinely still OPEN, not invented a fix for**: Phase 2 itself (its own `front2` worklist, its
-    own 4-case dispatch table, and the tag-level mechanics of exactly which worklist entries get
-    routed through it rather than fully resolving within Phase 1's own single-pass queue) is NOT
-    modeled anywhere in `ac_tree_decoder.h` - the spec gives Phase 2's internal BEHAVIOR per `sel`
-    value but not its entry/seed mechanics relative to Phase 1's own front/tail array. Flagged
-    explicitly in the file's own top comment; whether main_menu_bg.bik's real frame 0 ever needs Phase
-    2 remains unmeasured (see the FFmpeg check below).
-  - **Verification**: full ctest suite, 170/170 passed (0 failed; 3 pre-existing Bink `real_*` tests
-    skipped locally - their golden fixtures are gitignored and not present in this checkout, unrelated
-    to this change). `synthetic_bink_codec_test`/`sr3binkcodec_tests.exe` (the test that actually
-    exercises `DcAcIdctEngine2`'s AC-tree+IDCT path) passed directly. Re-ran the real-data check against
-    `main_menu_bg.bik` frame 0 (re-extracted via `tools/bink_frameN_extract.cpp`, D10=0, 1920x1080) vs.
-    an independent FFmpeg `yuv420p`/rawvideo extraction (NOT `-pix_fmt gray`, per this project's own
-    standing caveat about tv-range rescaling) of the same frame: **5 blocks reconstructed structurally
-    (3x primary=1/sub=2 DcAcIdctEngine2, 2x primary=1/sub=3 FlatDcFill), 0/5 exact block match, 0/320
-    pixels matching (0.00%), both BEFORE and AFTER this fix** - confirmed by temporarily stashing the
-    fix and re-running the identical comparison (same 0/5, different wrong byte values pre- vs.
-    post-fix, so this is NOT a regression). The AC-tree sign-mechanism fix is itself now spec-CONFIRMED
-    correct per Part 3's direct re-disassembly, but full pixel-exactness for this block family is
-    gated on other, separately-flagged, still-open gaps (the DC/quant/entropy-prestage alignment this
-    exact family's own code comments already call out, Phase 2 per above, chroma, etc.) - NOT
-    something this task's narrow scope (the two Part-3-resolved judgment calls) could or should fix by
-    itself. Merged to main after clean build+ctest (see merge commit for details); branch
-    `fix/bink-actree-sign-mechanism-5.3j-part3` is EQUIVALENT to main post-merge.
-- Post-crash recovery: vorbis packet+codebook fix merged+493/493 independently oracle-verified against
-  vgmstream-cli (SHA-256 `6c4a8a38...22dc6c` verified); inv-slot/conversation/local-player fix merged;
-  pause-menu binding merged; 25-branch orphaned-branch audit done, most DONE items merged (hex-rename,
-  respect-progression, vehicle-handling, mission-fail-success, near-field-ped-spawner, objective-text HUD,
-  tower-diag tooling, unified-registry no-op).
-- Folder move/rename handled cleanly (paused, verified clean, resumed in new location).
-- v0.6 through v0.9 all shipped to `D:\IdolRecomp Saints Row The Third\playtest-builds\` + mirrored to G:,
-  all relayed+confirmed verified+pushed by purrsian-52.
-- Weapons: LMB fires Brad's real weapon (weapons.xtbl) through the already-merged hitscan dispatch into a
-  NOW-real `IWeaponDamageSink` (closed the one missing link) -> real damage/death. Ped flee movement:
-  shot peds actually flee via the real sidewalk/wander graph (CHOSEN flee-dest/speed, labelled).
-  Ambient-ped general idle/wander tick: EVERY near-field ped now moves (not just Flee case) - this was a
-  genuinely new capability, ambient peds were NEVER ticked at all before this session.
-  Audio playback: first-ever audible output (XAudio2), footstep timing now driven by REAL foot-plant anim
-  triggers (not a cadence guess) after purrsian-52's mid-flight correction; exact footstep CLIP is still
-  an honest arbitrary placeholder (real identity resolved+logged but media-resolution needs the
-  Event->Action->SwitchContainer HIRC layout, not yet reverse-engineered).
-- m09 in-world mission progress: real screen-fade tick was ALREADY wired (stale HANDOFF claim corrected);
-  real `on_boat_trigger` ENTER dispatch proven firing end-to-end for the first time via new `--spawn-y`
-  test flag; new permanent diagnostic reports every suspended mission thread's real file:line on session
-  end. m09's real current blocker: suspended at `m09.lua:2099` inside `m09_go_to_boat`.
-- Branch-hygiene incident+fix: `fix/bink-descriptor-b-case1-selector` was wrongly classified "stale" by an
-  EARLIER audit that checked its 2 siblings, not its own content - it was real (took logo Bink files to
-  312/313 and 600/601 blocks). User added the standing rule above as a result. Full triage done on all
-  ORPHANs from `branch_audit.sh`: 7 branches retired (SHAs recorded in the triage table further down this
-  file - search "Branch-hygiene triage"), 4 parked with reasons (3 Bink-area behind active work, 1
-  confirmed-rejected ground-tile hypothesis kept for reference), vorbis-488 Kraft-inequality investigation
-  merged (real, pure diagnostic, Team A question relayed).
-- Bink codec, 3 real merges this session: (1) Sec5.3i secondary-grammar (all 7 secondary cases for
-  primary case 1, correctly documented/partially implemented, caught 2 wrong relayed claims - no donor
-  for sub=0, no IDCT/tree-decoder/quant primitives existed anywhere). (2) descriptor-B fix + quant-table
-  primitive (real scratch-buffer read for the secondary-dispatch value, closes the Sec5.3i-found blocker;
-  transitively also closed d10plus-audio-chunk-skip which was never actually merged despite being listed
-  CLOSED; caught a 3rd wrong relayed claim - case 3 is not case-1/sub=2's donor, both unimplemented).
-  Confirmed via real fixtures: `logo_thq_and_voli_hd.bik` 312/313 blocks, `logo_amd_hd.bik` 600/601.
-  `main_menu_bg.bik` now correctly dispatches `primary=1/sub=2` via the real descriptor-B path but still
-  stops at the first block (IDCT/AC-tree genuinely unimplemented at that point).
-- New-game starting cash: `kNewGameStartingCashCents = 5700.0` (spec-frontend-menu-runtime.md Sec9, real
-  write-site confirmed OPEN by Team A after 3 traced candidate paths, explicitly recommended hardcoding).
-  Self-merged by its own agent under the new rule, independently re-verified by me.
-- Real traffic lane-following (spec-ai-runtime.md Sec18.1/18.2/18.5/18.6): replaces the old uniform-random
-  stand-in; ambient vehicles were POSITION-ONLY with a cosmetic heading before this (no real driving at
-  all). Caught a wrong relayed claim: steering SIGN is not from the dot product as summarized - real
-  source is an unmodelled per-entity "lane-side status bit" (+0xe09 bit 2), uses a labelled cross-product
-  stand-in instead. Live-verified 900 frames: real lane-following + correct junction choice + clean
-  frozen report at a genuine dead end.
-- **Traffic steering-sign fix, real overtake-gate model (spec-ai-runtime.md Sec18.6a)**: replaces the
-  cross-product stand-in above with the real mechanism Team A specced - `+0xe09` bit 2 is a DYNAMIC
-  "which side to pass the other vehicle on" flag, written only while drive-state `+0xc69==0xe` holds AND
-  an overtake gate (distance/alignment/closing-speed vs. a 2nd vehicle) passes; otherwise keeps its last
-  value. `LaneFollowState::passSideFlag` (CHOSEN default false - Sec18.6a gives no true initial value),
-  `OvertakeCandidate` (the spec's own unresolved "2nd record"), and the gate itself (CHOSEN concrete
-  thresholds, Sec18.6a's own magnitude helpers were never opened) added to
-  `sr3airuntime/traffic_lane_follower.h`. 2nd-vehicle identity: nearest near-field vehicle ahead
-  (purrsian-52's own directed stand-in), resolved via a new, reusable `ResolveNearestNearFieldVehicleAhead()`
-  helper in `tools/sr3_viewer.cpp` - factored out (not inlined) after a relayed note about Sec18.6's own
-  separate `0xe`/`0x10`-state steering-WRITE path (`0x00b2bbc0`) also resolving a "2nd vehicle"
-  (`entity+0xcc0/+0xcc4`); verified against the actual spec text myself (not just the relay) - the two
-  "2nd records" are NOT proven to be the same engine object by either spec section, so only the CODE-level
-  resolution helper is shared, not a claim the two are the same thing. **Honest live-verification result
-  (900 real playtest frames, same fixture as the original merge): the overtake gate never once fires for
-  any of the 48 live near-field vehicles across the whole run (zero -1.0 steer ticks observed) - cmd.steer
-  is constantly +1.0 (the CHOSEN default). Per-vehicle net displacement narrows sharply vs. the pre-fix
-  baseline (7-14 world units now vs. 7-56 before, same run) - junction-bunching does NOT visibly improve,
-  and individual lane-tracking is most plausibly LESS effective in this small synthetic population, because
-  the old (conceptually wrong) cross-product was incidentally tracking each vehicle's own real lookahead
-  target, and this codebase has no general-purpose lane-correction term independent of the overtake flag.**
-  Reported as observed, not assumed - no invented fix applied. Full ctest 165/170 (170 total, 5 pre-existing
-  Bink skips), 0 failed, no regressions. Self-merged (commit `0a1ed63`) per standing permission; merge had
-  to be redone in a dedicated worktree after an accidental first attempt landed on another agent's
-  concurrently-checked-out branch in the shared root checkout (caught and fully reverted before any damage -
-  the other agent's own uncommitted `ac_tree_decoder.h` work was never touched).
+## KNOWN INTERMITTENT (2026-10-11): `real_playtest_mission_test` and `golden_scene_check`'s
+## `walk_demo` sub-check each failed once under full-suite parallel contention (`-j8`+) but passed
+## 100% on 6+ separate serial/isolated re-runs across this session (including a fresh independent
+## re-check). No root cause found despite trying. If either fails again: capture the full exit
+## output/log (`Testing/Temporary/LastTest.log`) BEFORE re-running.
 
-### (b) IN FLIGHT RIGHT NOW
-- (Bink IDCT + AC-tree decoder, agent `ad8c2d9a0aac24f70` - DONE AND MERGED, see (a) DONE THIS SESSION
-  below for the full report. Moved out of IN FLIGHT.)
-- (Traffic steering-sign fix, agent `a72418d48c265a1c8` - DONE AND MERGED, see (a) DONE THIS SESSION
-  below for the full report. Moved out of IN FLIGHT.)
-- **DONE: v0.10 release cut shipped** (per purrsian-52's explicit request: lane-following traffic + $57
-  starting cash + m09 progress + Bink descriptor-B fix). Folder:
-  `v0.10_2026-10-10_traffic-lane-following-starting-cash` on
-  `D:\IdolRecomp Saints Row The Third\playtest-builds\`. purrsian-52 said they'll verify+mirror to G:
-  themselves this cut - did NOT run `mirror_build_history.sh`. 3 screenshots personally viewed (plain
-  launch; HUD confirming "MONEY $57" - the starting-cash fix, real and working; traffic near a junction -
-  honestly noted in NOTES.txt that cars can look a bit bunched up at intersections before sorting out,
-  the underlying lane-following mechanism itself IS verified correct via the merge's own live frame-trace
-  though). Read-only + swapped into `TEAM B\playtest\`. **NOT yet relayed to purrsian-52 - DO THIS NEXT**
-  (they explicitly want the folder name for their own verify+mirror step).
+### (a) DONE THIS SESSION (2026-10-11, this tail - do not re-derive). Grouped by subsystem:
 
-### (c) LEARNED - facts/numbers/paths/addresses, don't re-derive:
-- Real archive cache path (current, post-move): `D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/
-  packfiles/pc/cache`. Playtest builds: `D:\IdolRecomp Saints Row The Third\playtest-builds\`. Live
-  playtest swap target: `D:\IdolRecomp Saints Row The Third\TEAM B\playtest\` (has `sr3_viewer.exe`,
-  `run_playtest.bat`, `lua_all_registered_1490_tagged.txt`, plus a never-touched
-  `sr3_viewer_old_backup.exe`).
-- `--spawn-y <Y>` (new this session): test-only flag bypassing the ground-Y fallback (which resolves to
-  0.0 over water/dock areas like `on_boat_trigger`'s footprint) - combine with `--spawn X Z
-  --script-forward-frames 0` to deterministically place the player inside a specific real trigger volume.
-- `--script-fire` triggers a deterministic LMB fire at frame 60 against the nearest live ped under
-  `--no-input`, aim = real camera-forward ray.
-- vgmstream-cli r2117 (official GitHub release `vgmstream-win64.zip`) SHA-256 `6c4a8a3813864fefed081bbd
-  337dbc0ad93bf88e0b92f5db98d7ab258b22dc6c` - already downloaded+verified once this session if still
-  present in scratchpad, otherwise re-download+re-verify before reuse.
-- FFmpeg is available on this machine: `.claude/worktrees/agent-afcad4c7b0433667/tools/ffmpeg_dl/bin/
-  ffmpeg.exe` (found pre-downloaded by an earlier Bink task) - for the next whole-frame Bink pixel
-  comparison once decode completes.
-- m09's real next blocker: `m09_start` suspended at `m09.lua:2099` inside `m09_go_to_boat`.
-- Several stale PRE-MOVE worktrees (pointing at the old `D:\Project Crreish\...` path) block `git branch
-  -D` until removed with `git worktree remove ... --force` first - hit this retiring 3 of the 7 branches,
-  may recur for other old worktrees not yet touched.
+- **DONE: v0.12 release cut shipped** (garage/wardrobe/weapon save-load round trips, shop/crib press-E
+  entry, weapon pickup, new-game auto-unlock+default outfit, Bink DC-array 519-word fix - all already
+  merged to main before this cut; this cut packages them for playtest, no new code). Packages commits
+  39a42ea (garage/vehicle-ownership save round trip), 1fdfc26 (wardrobe owned-item save round trip),
+  fba8b90 (weapon-inventory save round trip), 9748614 (new-game Auto_Unlock + default outfit via
+  pcr_apply_preset/pcr_add_default_clothing), 1ea06a3/36470e8 (shop/crib press-E entry, crib via a
+  confirmed real chain, shop still a labeled CHOSEN stand-in - its own trigger condition genuinely not
+  found despite 3+ investigation passes), 2d58dbb/6177f73 (weapon pickup: walk-over auto-pickup for
+  non-heavy dropped weapons + press-E for heavy weapons), 7363dbc (Bink DC-array 519-word dispatch-bit
+  fix, moved pixel-match 0% -> 15%, 48/320 - video playback overall still not correct, said plainly).
+  Cutscene end-of-placement logic (cutscenePlayDo/cutscenePlayApplyEndPlacement) was directly re-checked
+  this task and confirmed correct as-is (only teleports when cutscene_play was given exactly 2
+  destinations) - no code change needed there. Mission status (m05/m07/m09/dlc2_m01/dlc2_m03 not
+  reaching a real finish) is carried forward UNCHANGED from v0.11's own notes - not personally
+  re-verified this cut, no mission-unblocking commit found between v0.11 and this cut's main either.
+  Dedicated worktree (`agent-v012release`, branch `release/v0.12-playtest-cut`, off main @ `9306a70`,
+  per branch-hygiene rule 7) used for the full clean build + ctest, never the shared root checkout.
+  Full Release build confirmed 0 errors via the build command's own exit code (rule 10); `ctest -C
+  Release` 184/184 passed, 0 failed, 0 skipped (higher AND fully unskipped vs v0.11's 171/176 with 5
+  skips - this run's CRREISH_GAME_CACHE_DIR resolved to a real install, so real-data/golden tests that
+  v0.11 had to skip actually ran). Folder: `v0.12_2026-10-12_saves-shop-weapons` on
+  `D:\IdolRecomp Saints Row The Third\playtest-builds\`. 2 screenshots personally viewed (frame-0 plain
+  launch, same byte size as v0.11's own screenshot.png - 1409530 bytes, confirming the default launch
+  view is unchanged; frame-499 near-field traffic/ped population at 48/48 each). A third shot
+  specifically demonstrating one of this cut's new features (shop/crib prompt, weapon pickup) was
+  looked for but not captured - no reliable scripted camera position/frame for any of those three was
+  set up in the time available, said honestly rather than forcing a misleading shot; NOTES.txt says so
+  explicitly. Per this task's own instruction, the orchestrator said they'll mirror this cut themselves
+  - did NOT run `mirror_build_history.sh`.
 
-### (d) RULED OUT / confirmed-wrong, don't retry:
-- 3 separate relayed-claim errors caught and corrected this session in the Bink thread alone (see (a)
-  above) - this is now a WELL-ESTABLISHED pattern for this specific thread (Bink spec summaries from the
-  orchestrator have been wrong 3 times in a row on specific technical details, though right on the overall
-  shape) - verify Bink claims against the actual spec text every single time, don't shortcut it.
-  Separately, the traffic lane-following steering-sign claim was also wrong (4th instance, different
-  subsystem) - the pattern may be broader than just Bink; treat ALL technical specifics in relayed task
-  summaries as needing direct verification, not just Bink ones.
-- `fix/ground-tile-origin-translation` is a confirmed-REJECTED hypothesis (self-labelled by its own commit
-  message) - do not revisit unless new evidence emerges; kept (parked, not deleted) only as a documented
-  negative result for whoever next investigates the known ground-gap-under-feet visual issue.
-- IDCT/AC-tree/quant primitives did NOT exist anywhere in this codebase before this session (confirmed by
-  direct grep, not assumption) - primary case 3 and primary cases 5/7 (falsely claimed as "donors" in 2
-  separate relayed summaries) are ALL still unimplemented OpenHooks as of the descriptor-B merge.
-  Sec5.3j's own IDCT (Part 1) is now implemented AND merged, bit-exact verified (see (a) DONE THIS
-  SESSION, "Bink IDCT butterfly + AC-coefficient tree decoder") - but primary case 3 and primary 5/7 are
-  STILL unimplemented OpenHooks (Sec5.3j's own scope never covered them - confirmed directly, not
-  assumed), and the AC-tree decoder (Part 2) that DOES feed case 1/sub=2 is implemented but NOT
-  bit-exact-verified (no live worked example exists for it, and this session's own real-data check shows
-  it currently decodes real content WRONG) - do not treat primary=1/sub=2 as "fully closed" the way the
-  IDCT itself is.
+**BINK VIDEO CODEC** (main_menu_bg.bik frame 0 Y-plane, 5 blocks idx0-4 in row 0, the project's
+main decode-correctness test vector):
+- AC-tree DC-literal source fixed (descriptor L is NOT a separate stream - it's `0x1001a160`'s own
+  DC-array output, decoded via a new `dc_delta_array.h`). Then the DC value[0]/value[1] boundary
+  bug fixed (value[0] = fixed-bound-path only, no phantom nibble; values[1+] = Sec5.3m chunk loop
+  seeded by value[0]). Then the 1757->9256 pre-stage bit-gap paid (4 real calls -
+  `0x100195b0`/`0x10019d10`/`0x10019f00`x2 - previously unmodelled, now bit-cost-correct via
+  `dc_prestage_sibling_gap.h`). Bit position at DC-decode entry now EXACTLY matches spec (9256).
+- AC-tree algorithm completely rewritten: Gate A (a previously entirely-missing 1-bit per-node
+  entropy-coding gate, read before every node dispatch - without it, tree shape was a pure
+  deterministic function of 6 seed bytes with ZERO bitstream influence, provably impossible for
+  real entropy coding) + Gate B (chained resolve-now-vs-defer, up to 4 unrolled 1-bit copies,
+  reached from case0/case2 only, case1 bypasses entirely) + level<=1 skips Phase-1 BFS entirely,
+  running Phase-2's mirror arms directly on the 6 seed bytes + the full bijective category(1-63)->
+  raster-k(1-63) permutation table (compiled-in quad-tree/Morton traversal, e.g. cat2->k8,
+  cat24->k16) applied at every coefficient write. Reproduces spec-bink-codec.md Sec5.3w's exact
+  17-bit golden trace for block(0,0) bit-for-bit (2 nonzero coeffs, k8=-1/k16=-1) via a new
+  permanent test. Dequant+IDCT independently confirmed bit-exact against Sec5.3v's own worked
+  example (6293/-102/-118 dequant, IDCT rows 24/25) - this stage was NEVER the bug.
+- Sec5.3x ground truth (idx1/2 flat-fill=153, idx3/4 core IDCT rows, chromaA shares luma dequant
+  exactly - no chroma-specific scaling exists in this codebase, confirmed by inspection) - all
+  individually verified correct in isolation via new golden tests.
+- Flat-fill (secondary=3) literal-byte source fixed: it is NOT a separate per-block cursor at all -
+  Sec5.3y found its buffer (`0x303f9bb0`) is physically distinct from the DC-array buffer (~5008
+  bytes apart, only the bound-check is shared, contradicting old Sec5.3i wording) - the agent's
+  first fix (an independent `FlatFillByteCursor`) was real/necessary but incomplete: Sec5.3z then
+  found that buffer IS `0x100195b0`'s own 650-byte tree-coded decode output (already specced in
+  Sec5.3s for an unrelated pre-stage "gap" call) - flat-fill blocks read SEQUENTIALLY further into
+  that SAME array, not from any separately-triggered decode. Implemented in
+  `flat_fill_prestage_array.h`. idx1/idx2 both now correctly decode to 153.
+  **THIS IS A LABELLED STOPGAP, NOT A GENERAL FIX - see "## Known stopgaps" top-level section
+  (search "KNOWN-STOPGAPS:BEGIN"). The two real LUT tables driving `0x100195b0`'s per-symbol
+  tree-lookup (`arg3+0x100`/`+0x140`) are not published anywhere in the specs - the implementation
+  hardcodes the ONE known worked example's bytes (64-byte prefix + 8-byte suffix) rather than a
+  real algorithm. Indices 64-641 honestly report unavailable. Do not treat this as closed.**
+- **ROOT CAUSE FOUND AND FIXED 2026-10-11 (fix/bink-dc-array-519-word-commit-run task, spec-bink-
+  codec.md Sec5.3n's "519 words" + "gap attributed call-by-call" findings): the diagnostic unit's
+  own -2355-bit shortfall (ours=11264 vs real DLL's 13619 at block(0,0)'s dispatch) was caused by
+  `decodeRowDcArray()` (dc_delta_array.h) stopping its chunk loop as soon as it produced
+  `blockCols` (240) words, when the real `0x1001a160` call's own leading-count field (read at call
+  entry, previously decoded and DISCARDED as "sanity10") pins the call's real total at 519 words
+  for this row - the function "terminates purely on remaining count reaching zero, no bitstream
+  sentinel, no fixed caller argument" (Sec5.3n). Two bugs fixed together: (1) the leading-count
+  field is now USED as the real loop bound instead of discarded; (2) a second, previously-unnoticed
+  bug in the SAME loop surfaced once (1) was fixed - each chunk was unconditionally pushing exactly
+  8 words, but the real call's own last chunk is PARTIAL (Sec5.3n's own live write-count breakdown:
+  "1 + 64x8 + 6 = 519" - a final 6-word chunk, not 8) - fixed by capping each chunk at
+  `realCount - words.size()`. Then wired the two no-op "bail" steps Sec5.3n traced immediately
+  after this call (a second `0x1001a160` call reading a zero leading-count, 10 bits; then
+  `0x10019af0` reading a zero leading-magnitude, 14 bits; 24 bits total; `dc_prestage_sibling_gap.h`'s
+  new `skipSecondDcArrayZeroCountBail()`/`skip0x10019af0ZeroMagnitudeBail()`, called from
+  frame_decoder.h right after the DC array decode, before the block-dispatch loop).
+  **RESULT, measured**: `real_bink_dc_array_519_word_bail_tests` (new permanent golden-trace test)
+  confirms exactly 519 words, exit bit 13563, and post-bail bit 13587 - landing on Sec5.3n's own
+  "real" figure, NOT the older Sec5.3y figure of 13619 (delta exactly -32 bits, matching Sec5.3n's
+  own prediction of "a systematic bit-counting convention difference... not a newly-discovered
+  bitstream consumer" almost exactly - strong circumstantial confirmation of that theory, though the
+  formula-level root cause of the 32-bit convention gap itself remains untraced per Sec5.3n).
+  **Block (0,0) pixel (0,0) is now 24 - an EXACT match to FFmpeg's independent ground truth** (was
+  41 before this fix). `bink_ffmpeg_pixel_compare` on the real fixture: 48/320 pixels match (15.0%,
+  up from 0/320), but still 0/5 blocks fully exact - idx1/idx2 (flat-fill 153 vs ffmpeg 24/25,
+  unrelated pre-existing gap, see the flat-fill stopgap note above) and idx3/idx4 (pixel(0,0) =
+  125/140 vs ffmpeg 25/25) remain wrong. **OPEN, not addressed by this task**: idx3/idx4 read the
+  SAME already-519-word DC array (indices 3/4, well within its bounds) and should inherit the now-
+  correct bit position via the uniform -32-bit convention offset that applies to the whole row
+  (unverified directly - `real_bink_bitpos_vs_5_3y_test` only reports the FIRST divergence and
+  stops at idx0, by design) - their remaining pixel mismatch is therefore likely a SEPARATE,
+  not-yet-root-caused gap (AC-tree coefficient values for these specific blocks, or something else
+  entirely) rather than a continuation of the 519-word bug this task fixes. Flagged for whoever
+  picks this up next, per this project's "no invented fixes" policy - relay to Team A as a spec-sync
+  question (idx3/idx4's own bit-by-bit AC-tree trace against the real DLL) rather than guessing
+  further; Team B does not disassemble.
+
+**TRAFFIC/AI RUNTIME**:
+- Overtake-gate steering: real §18.6b gate (12-step, not CHOSEN thresholds) + real steering-curve
+  mechanics (airborne early-out, sign negation, 2-segment piecewise-linear response) implemented.
+  Constants were CHOSEN (0.2/0.3) then CORRECTED to the real confirmed values: threshold=1.0,
+  slope=1.0 (ONE universal hardcoded constructor, `0x00aba420`, for every vehicle - no .xtbl read,
+  no per-vehicle variation). Since input is clamped to [0,1] before the curve runs, threshold=1.0
+  makes the curve a pure identity pass-through (output=|input|) - the above-threshold branch is
+  structurally dead code, confirmed safe (no div-by-zero reachable). 900-frame trace with real
+  constants: gate fires 31/48, displacement [6.20,45.67] (matches the pre-curve-fix CHOSEN
+  clamp(1-dot) stand-in's own numbers exactly - confirms the earlier deadzone-shaped curve from
+  wrong constants wasn't a real improvement).
+  **Self-caught incident**: the steering-constant commit (3fc6260) introduced a compile-time
+  divide-by-zero (MSVC C2124) in a TEST file (now-dead branch with threshold=1.0 literal) - this
+  slipped through my own ctest run as 100% green because ctest ran STALE binaries from a prior
+  successful build, not freshly-failed ones (root cause of new standing rule 10 above). Fixed by a
+  concurrent agent as a drive-by commit (493f568) - removed the now-dead test, corrected one stale
+  expected value. Verified clean on a fresh explicit build+test pass afterward.
+- Footstep audio (§11a.8, REVERSED twice): first found foot-plant triggers DON'T drive footstep
+  audio in the real game (consumers are vehicle sync/IK/camera shake) - v0.9's trigger-driven
+  footsteps kept as a labelled stand-in. Then REVERSED AGAIN: foot-plant triggers DO post the real
+  Wwise FOOTSTEP event (hash 0x6f394b77), culled by FootstepRange (squared compare,
+  audio_constants.xtbl), posted on a persistent per-entity "Human" voice with MOVEMENT_TYPE
+  (WALK/RUN) + MATERIAL_TYPE switches. MATERIAL_TYPE: 33-entry table indexed by locomotion-state.
+  Second switch group 0xc3e810da: 31-way mapping to 3 hash values
+  (0x25954450/0x8b4347f0/0x38aff350). **NOT YET IMPLEMENTED** - queued, low priority, never
+  dispatched this tail (got deprioritized behind mission/Bink work). Both set by hash ID, no names
+  needed - this closes what was previously an open "default material" stand-in question.
+
+**MISSION/LUA RUNTIME**:
+- m09/m13/m05 trigger-callback dispatch bug found+fixed: the real nargs=0 bug (every on_trigger
+  callback's `human` arg was unconditionally nil - LOCAL_PLAYER/REMOTE_PLAYER were never even
+  defined as Lua globals anywhere in this codebase) was fixed (nargs 0->1, push "#PLAYER1#"/
+  "#PLAYER2#" sentinels, register the two globals). Verified via a strengthened unit test. BUT:
+  the mission-drive-only harness (`lua_host_run.exe`, no spatial simulation) can't prove m09/m13
+  actually advance (they wait on real trigger-ENTER events needing physical player movement) -
+  m05 DID genuinely advance (confirmed: moved from a budget-starved `delay` stall to a real,
+  different, much-later stall point once given a 3000-tick budget instead of 20).
+  **Confirmed via the in-world `sr3_viewer.exe --spawn --spawn-y` recipe (RE TECHNIQUE item 11)**:
+  m09 DOES genuinely advance - on_boat_trigger's ENTER fires, `m09_player_on_boat_enter_cb` runs
+  to completion, `m09_start`'s own suspension point moved from `m09.lua:2099` to a NEW point,
+  `m09.lua:2181` inside `m09_find_girls` - **confirmed this is EXPECTED gameplay (per-crate
+  on_trigger with no identity gate, no QTE), not an engine bug** - a one-run check (spawn inside a
+  crate's own trigger volume) is QUEUED, low priority, NOT yet run.
+- Mission-drive tick-budget baseline RAISED from 20 to 3000 (RE TECHNIQUE item 10) and
+  re-baselined: of the 5 missions v0.11's own NOTES.txt called "non-finishing" (m05/m07/m09/
+  dlc2_m01/dlc2_m03), 3 (m07, dlc2_m01, dlc2_m03) RECLASSIFY as pure budget artifacts - they now
+  reach their own real (different, already-documented) OPEN engine-state blocker instead of
+  timing out, meaning they were never "stuck," just under-budgeted in every release through v0.11.
+  m05/m09/m13 remain genuinely stuck even at 3000 ticks - confirmed real waits on trigger-ENTER
+  events this static harness can't exercise, not budget artifacts. Full results committed:
+  `results/baseline_2026-10-11_tick3000/` (summary+mission-drive+open-state TSVs tracked; 2 huge
+  per-call detail TSVs left untracked/local-only). v0.11's own NOTES.txt NOT retroactively edited
+  (archived build = read-only history per user convention) - v0.12 will carry the corrected
+  picture.
+- m07's OPEN `get_char_vehicle_type` blocker (Sec21.24) RESOLVED+fixed: real mapping is
+  0=Automobile..5=Watercraft, 6=failure sentinel, same physical field (`VehicleState::flyingType`)
+  `get_vehicle_type` already used - the stub was reading a separate, never-wired placeholder field
+  under a stale "AI-mode gate" framing. Re-wired, dead field removed. m07 advanced to a NEW
+  blocker: `get_dist`'s own position-resolution OPEN state (Sec4.2).
+  Sec4.2 then RESOLVED: `get_dist`/`get_object_pos` read the object's LIVE, continuously-updated
+  `+0x40..+0x6c` transform (NOT a one-time zone-data spawn snapshot) - confirmed via a traffic-AI
+  steering-tick routine that reads+writes this exact field through the same generic
+  transform-setter vtable slot `teleport` uses. Real gap found: `get_dist`/`get_object_pos`
+  THEMSELVES were already correctly implemented (landed in an earlier task) - the actual missing
+  piece was `teleport` itself never writing the live worldPosition field it's supposed to share.
+  Fixed (commit b209dd3). m07's OWN stall point did NOT move after this fix though - precisely
+  diagnosed why: m07's `teleport_coop` call is gated behind `cutscene_play(...)`, which this
+  mission actually takes (teleport is never reached in m07's real path before the actual
+  blocking call, `get_dist_closest_player_to_object` inside `m07_get_to_the_barge`).
+- **cutscene_play's own end-of-cutscene player-placement mechanism**: exhaustively searched by
+  Team A (full 20-state cutscene machine disassembly, `.cte_xtbl` RestorePlayerPos reader, a
+  91-function manager-pointer xref sweep) - **genuinely NOT FOUND in the real binary, a real open
+  design question, not just unimplemented on our side.** Implemented a labelled CHOSEN stand-in
+  (commit 56a31f1): apply the ONE fully-confirmed branch (the `skip_all_cutscenes` immediate
+  commit via the same by-name resolver + async-teleport entry `teleport` already uses) UNIVERSALLY,
+  not just on skip. m07 result: the explicit `get_dist` OPEN-engine-state error is GONE (confirmed:
+  no `first_error` for m07 unlike every other still-OPEN mission in the same run,
+  `probed_world_position_reads=0`). m07 still doesn't FINISH though - now budget-exhausts on a
+  genuine distance/movement-wait loop (no player-navigation simulation in the static harness), a
+  different, deeper, out-of-scope gap. **Confirmed again via the in-world recipe**: m07 in-world
+  shows NO OPEN-state error either (same positive signal), still suspended at `m07.lua:1235` after
+  300 frames - the scripted --no-input player just doesn't walk to the barge dock, same pattern as
+  m09's crate-trigger finding. **QUEUED, not yet done**: a conclusive one-run check (--spawn AT the
+  barge destination + one-line get_dist log), low priority.
+
+**STREET COLLISION / GROUND GAP**:
+- Real player+vehicle ground collision from the `0x2237` zone record's own embedded Havok
+  MOPP-wrapped extended-mesh shape implemented (reusing the EXISTING visible-geometry decode for
+  triangle data - no redundant second blob parse, confirmed the real engine builds its own Havok
+  shape from the "SAME vertex/u16-index arrays" already used for rendering). Wired into the
+  existing `ClmeshTriangleCollisionWorld`-equivalent infra, ahead of the heightmap/flat-plane
+  fallback chain, for both player and vehicle. VERIFIED on tile 0916 (a confirmed-good-origin real
+  flat-pavement tile): old heightmap sampler read a wrong -5.00m at a real-mesh-coverage point; new
+  mesh sampler reads the correct ~29.61m. Scripted walk+drive both settle onto and track the real
+  sloped surface. New permanent test. Commit `bd9ca82`.
+  **DOES NOT fix the default-spawn (tile 0915) sky-blue void** - personally screenshotted and
+  confirmed still visible on current main. Root cause confirmed via the diagnostic log itself:
+  tile 0915 is one of the 4 known-broken-origin tiles (0915/0914/0715/0716 - decode geometry at
+  world-origin-centred coords, not their real tile position) - "NO real 0x2237 collision-mesh
+  triangle resolved at spawn" is printed. The collision fix is real/correct for tiles with correct
+  origins; the wrong-origin-decode bug for those 4 specific tiles remains the real blocker for the
+  visible default-spawn gap. NOT currently being chased (no active unit).
+
+### (b) IN FLIGHT right now:
+**Agent `a9dd00967b485e642`** (background, dispatched this turn, branch
+`diag/bink-bitpos-vs-5.3y`): pure diagnostic (not expected to require a fix) - instrument this
+codebase's own real end-to-end Bink decoder to log its own bit-reader position at 3 points
+(dispatch/AC-entry/AC-exit) for idx0/3/4, diff against spec-bink-codec.md Sec5.3y's own
+ground-truth table (idx0: 13619/13619/13636; idx3: 13640/13640/13723; idx4: 13727/13727/13863),
+find the FIRST divergence point. If bit positions all match, fall back to comparing actual DECODED
+VALUES against Sec5.3v's ground truth (DC=118,k8=-1,k16=-1, dequant 6293/-102/-118, IDCT rows
+24/25) since the bug might be purely in per-symbol math despite isolated tests passing. **NEXT
+STEP for whoever picks this up: wait for this agent's SubagentHandback, verify its merge (if any)
+with an explicit build-exit-code-checked + ctest pass per standing rule 10, relay the divergence
+point to Team A precisely, then dispatch a targeted fix unit for whatever it finds.** If no agent
+notification has arrived yet when this resumes, check `git worktree list` for
+`diag/bink-bitpos-vs-5.3y` and `git log` on it to see if work exists even without a notification
+(the harness may have restarted mid-task).
+
+### (c) LEARNED this session (facts/numbers/addresses worth keeping, not already covered above):
+- Bink real asset path: `D:\IdolRecomp Saints Row The Third\Saints Row 3 CRREISH\videos\
+  main_menu_bg.bik` (old `D:\Project Crreish\...` junction still resolves). Golden fixture:
+  `tests/golden/bink_main_menu_bg/frame0_raw.bin` (gitignored, local-only, re-extractable via
+  `tools/bink_frameN_extract.cpp`). FFmpeg reference: `scratchpad_bink/
+  main_menu_bg_frame0_yuv420p.raw` (extracted via `ffmpeg -pix_fmt yuv420p -f rawvideo` - NEVER
+  `-pix_fmt gray`, that silently rescales tv-range to full-range and will mislead). Compare tool:
+  `tools/bink_ffmpeg_pixel_compare.exe <frame0_raw.bin> <yuv420p.raw> 1920 1080 0 1`.
+- Mission playtest real cache: `D:\IdolRecomp Saints Row The Third\Saints Row 3 CRREISH\packfiles\
+  pc\cache\`. In-world recipe needs `characters.vpp_pc misc_tables.vpp_pc sr3_city_0.vpp_pc
+  sr3_city_missions.vpp_pc cutscene_tables.vpp_pc misc.vpp_pc startup.vpp_pc interface.vpp_pc
+  interface_startup.vpp_pc --hud <tools/lua_all_registered_1490_tagged.txt> misc.vpp_pc
+  --mission=<X> --mission-package-tsv <tools/mission_package_per_container.tsv>` (sr3_city_missions
+  for game_lib.lua, interface+interface_startup for system_lib.lua - both needed or you get
+  "BLOCKING FINDING - no entry named X found"). m09's own boat-trigger box: position
+  (2488.54, [6.82,37.6], -4.16) - use `--spawn 2488.54 -4.16 --spawn-y <value in that Y range>
+  --script-forward-frames 0`.
+- Mission-drive single-mission speed-up trick: back up `tools/mission_package_per_container.tsv`,
+  filter to just the target mission's row(s), run `lua_host_run.exe ... --tick-budget=3000`,
+  restore the original file after (confirm `git status` shows no diff). NEVER run this filtered
+  probe concurrently with a separate `ctest` pass sharing the same checkout - corrupts that ctest
+  run's real-data tests (hit this once, self-corrected).
+- Default spawn is tile 0915, world coords (-1280,-560) = cityTileCentre(9,15). Known-broken-origin
+  tiles: 0915/0914/0715/0716. Known-good: 0916/0818/0912/1015/1016.
+- The `sr3_city~sawld` 0x2237 record (in `awld_compact.str2_pc`) is a large disc-shaped background/
+  horizon fallback plane with a hole cut out of its center (~1/18th the outer diameter) - NOT the
+  fix for the ground gap (confirmed via direct render+screenshot: default spawn sits well inside
+  the excluded hole region, not on the disc).
+
+### (d) RULED OUT this session:
+- The DC+128 Bink bug (separately tracked for primary cases 5/7) is UNRELATED to the
+  Case1SubType::DcAcIdctEngine2 (sub=2) bug chain this session worked on - measured on a path
+  (primary 5/7) this codebase has never executed; §5.3o/p's own live trace of block(0,0) found
+  zero offset of any kind, not +128. Same feeder function doesn't mean same bug.
+- Wrong-buffer/wrong-source hypothesis for BOTH the DC-literal and flat-fill cursors, for the
+  remaining idx0/3/4 end-to-end bug: DISCONFIRMED by Team A's own live trace against the
+  unmodified DLL - both cursors point at the right buffer, right offset, right content, in the
+  real binary. The bug is downstream of buffer identity (see IN FLIGHT above).
+- A primary-checkout git mishap this session (worth remembering the shape of, not the specifics):
+  the non-worktree checkout got stranded on a stale feature branch for several hours, during which
+  4 real spec-sync commits accumulated there uncommitted-to-main; an early recovery attempt
+  (cherry-picking just one of the 4 in isolation) wrongly concluded a merge conflict meant the
+  content was superseded and silently no-op'd it - it was NOT superseded, just out of order. Fixed
+  properly by merging the WHOLE stale branch (not cherry-picking), then detaching the worktree that
+  had been holding `main` and switching the primary checkout back onto `main` directly. All 4
+  commits recovered. This is the origin of standing rule 7's strengthened wording above.
 
 ### (e) User/orchestrator asks still pending or awaiting a decision:
 - No standing asks currently blocked on a human decision - everything in flight is normal
-  agent-dispatch-and-merge flow, continue autonomously per standing "don't wait, broad permission" policy.
-
+  agent-dispatch-and-merge flow, continue autonomously per standing "don't wait, broad permission"
+  policy.
+- Two worktree-cleanup items still waiting on the USER's own explicit yes (not the
+  orchestrator's) per disk-space-discipline memory: (1) `fix/bink-prestage-len-correction`'s
+  worktree (`D:/Project Crreish/TEAM B/.claude/worktrees/agent-binklencorrection`, 339MB) - an
+  archive-not-delete recipe was proposed by a peer and explicitly REJECTED as insufficient
+  authorization (relayed permission isn't real permission) - still fully untouched, waiting. (2)
+  Two worktrees from the overtake-gate task (`agent-overtake-flag`, `agent-mainmerge-overtake` -
+  note: `agent-mainmerge-overtake` is now ALSO the worktree holding a lot of active merge work this
+  session, re-check its current use before assuming it's safe to remove).
+- Queued, not yet dispatched (in priority order, all low-to-medium, none blocking): (1) footstep
+  audio real implementation (range-cull + MOVEMENT_TYPE/MATERIAL_TYPE switches, full mapping
+  already known, see DONE section above); (2) m07 spawn-at-barge conclusive check (low priority);
+  (3) m09 spawn-inside-crate-trigger conclusive check (low priority).
 <!-- CONTEXT-GUARD:RESUME-END -->
+
+<!-- KNOWN-STOPGAPS:BEGIN (deliberately OUTSIDE the context-guard resume block, same reasoning as
+     Parked branches below - a resume-note rewrite must never silently drop this. Items here are
+     real code that PASSES its own tests but is not a genuine/general implementation - do not let
+     a passing test suite alone imply one of these is "done". Remove an entry only when it's been
+     replaced with a real decode/implementation, not when its own narrow test still passes.) -->
+## Known stopgaps (real code, narrowly correct, not a general fix - do not let this drift into "done")
+- `include/sr3binkcodec/flat_fill_prestage_array.h` (2026-10-11, `fix/bink-flat-fill-real-decode`,
+  commit `2e1be4f`) - hardcodes the known byte values from spec-bink-codec.md Sec5.3s's ONE
+  published worked example (a 64-byte confirmed prefix + 8-byte confirmed suffix of the real
+  650-byte `0x100195b0` output stream) instead of implementing the real two-LUT tree-lookup
+  algorithm. Makes the one validated golden-fixture call (`main_menu_bg.bik` frame 0, idx1/idx2)
+  pass, but does NOT generalize to any other Bink content, frame, or array index beyond the
+  confirmed prefix/suffix (indices 64-641 honestly return unavailable, not fabricated). STILL
+  OPEN after a dedicated follow-up attempt (2026-10-11, `fix/bink-flat-fill-general-decode` task,
+  parked - see below) - not silently closed by this entry's own wording.
+  **PARTIAL PROGRESS, merged separately (`entropy_prestage.h`'s new `SiblingTableBank`,
+  2026-10-11): the 16-table rebuild itself (the "0x10019300" loop Sec5.3g's LUT-resolution update
+  named - calls #3-18, 0-indexed 2..17, of the SAME 23-call per-row `0x10018ca0` pass
+  `CaseSelectorScratchSource::beginBlockRow()` already runs) is now REAL and CONFIRMED: captured
+  via a new optional `SiblingTableBank* outSiblingBank` out-param on `beginBlockRow()`, reusing the
+  EXISTING `buildCaseSelectorTable()`/`build_table` function (no re-implementation, no second
+  bit-cursor), and independently verified by live run against the real `main_menu_bg.bik` golden
+  fixture: the captured 16 `classByte` values reproduce Sec5.3g's own published `A_array =
+  (4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4)` EXACTLY. This part is genuinely done and safe to build on -
+  it does not by itself change any decode output (nothing consumed it yet after this task's own
+  revert, see below).**
+  **ATTEMPTED AND FAILED, 2026-10-11 (same task) - documented so a future pass does not repeat the
+  same ground: the per-symbol tree-decode BODY of `0x100195b0` (how a decoded Huffman symbol
+  becomes an actual output byte, and how/whether `cur_class` updates within one call) remains
+  genuinely unresolved - spec-bink-codec.md Sec5.3g itself flags this exact gap as still OPEN
+  ("the semantic meaning of 'class'... and table16's own role in 0x100195b0's third tree level -
+  traced to the instruction, not semantically interpreted"). Four concrete hypotheses were
+  implemented against the real `SiblingTableBank` above and tested against the golden fixture
+  (main_menu_bg.bik frame 0/Y/row 0, expects: leading magnitude 650, body bit cost 3374, first-64
+  prefix starting `153 x9`, last-8 suffix `154,157,158,158,157,154,153,153`) - ALL FOUR FAILED
+  both the byte-content check and the bit-exact total check:
+    1. Two 4-bit tree-decode steps per output byte (high nibble, low nibble), `cur_class` =
+       translated symbol value after EVERY step (both nibbles): body cost 3474 bits (vs 3384
+       real, +90/+2.7%) - closest of the 4, but first byte decoded as 2, not 153.
+    2. Same as (1) but `cur_class` = the PRE-translation raw symbol instead of the translated
+       value: body cost 4272 bits (vs 3384, +26%) - worse.
+    3. Single decode step per output byte, step value `v` split literal(`v<0xC`, zigzag-decoded
+       signed delta added to a running DPCM predictor)/run-length(`v>=0xC`, bulk-repeat the last
+       byte `kRunLength[v-0xC]` times via the SAME grammar `CaseSelectorScratchSource::refill()`
+       already uses for the unrelated case-selector byte stream), `cur_class` updated every step:
+       body cost 1090 bits (vs 3384, -68%) - the RLE path triggers far too often under this
+       mapping, nowhere close.
+    4. Same as (1)'s two-nibble-per-byte shape, but `cur_class` held FIXED for both nibbles of one
+       byte (updated only once per byte, from the low nibble): body cost 3559 bits (vs 3384,
+       +5%) - worse than (1).
+  All 4 were observed to collapse into a small 2-3-class oscillation within the first ~10 steps
+  regardless of variant, which is itself suspicious (the real data's own long `153`-byte run
+  implies either a much "stickier" class or a bulk-copy path none of these 4 variants reach
+  correctly). **Conclusion: the per-symbol algorithm needs a real instruction-level trace of
+  `0x100195b0`'s own tree-decode loop (not inferable from the structural shape already published) -
+  relay to Team A as a concrete next spec-sync question, same as this file's own prior entry
+  already asked for the LUT table contents.** This task reverted
+  `flat_fill_prestage_array.h`/`dc_prestage_sibling_gap.h`/`frame_decoder.h`/both flat-fill test
+  files back to their pre-task (hardcoded-array) state after confirming the 4 hypotheses above
+  failed - per this project's "no invented fixes" rule, a wrong decode is strictly worse than the
+  existing honest stopgap, not a replacement for it. Only `entropy_prestage.h`'s
+  `SiblingTableBank` addition (described above) is new/kept.
+  **KNOWN DISCREPANCY, 2026-10-11 (follow-up task `fix/flat-fill-real-tree-decode`, after Team A's
+  own new spec-bink-codec.md Sec5.3aa delivery gave the FULL instruction-exact algorithm the 4
+  attempts above were missing): Sec5.3aa's own literal pseudocode was implemented
+  field-for-field - two nibble-tree lookups per output byte (nibble 1 via `SiblingTableBank`'s
+  per-class bank, already confirmed correct above; nibble 2 via descriptor A's own `BuiltTable`,
+  exposed by a new `CaseSelectorScratchSource::builtTable()` getter; `cur_class = nib1` update
+  rule; a one-time pre-loop sentinel bit) - and it STILL does not reproduce the golden fixture.
+  Measured: first output byte = 134 (expected 153/-103), total bit cost for the one validated call
+  = 3561 (expected 3384). A bounded diagnostic pass (NOT a 5th invented hypothesis about the
+  algorithm's overall shape - just checking for a trivial indexing/off-by-one bug in an otherwise
+  literal transcription) tried: bit-offset shifts -8..+8 relative to the sentinel-bit-adjusted
+  loop entry; swapping which tree is "per-class" vs "global" (nibble1<->nibble2 source); using
+  descriptor B's own `BuiltTable` instead of A's for the global tree; `cur_class` updated from
+  nib2 or from the untranslated raw symbol1 instead of nib1; and nibble-order reversal in the
+  final combo byte - NONE reproduced even the first byte, let alone the full 20-byte published
+  sequence. One thing IS independently re-confirmed by this pass: the per-class `classByte`
+  sequence `SiblingTableBank` captures for this call (4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4) matches
+  Sec5.3g's own published `A_array` for `0x100195b0` EXACTLY, and the qualitative long-run
+  "class locks at 1, cheap 1-bit code" behavior Sec5.3aa's own trace describes DOES emerge once
+  `cur_class` reaches 1 in this implementation (table16[0]==1 for the captured class-1 table) -
+  so the per-class bank's own identity/alignment is right; the divergence is specifically in how
+  nibble1/nibble2 combine into the final byte and/or in exactly which 256-byte region is the real
+  "arg3+0x00..0xFF translate table" Sec5.3aa names as "NOT previously named" (this task's own
+  working assumption - reusing `SiblingTableBank`'s existing per-class `table16` field for that
+  role, since it is structurally the same 16-class x16-byte shape - may simply be wrong; the real
+  translate table may be a genuinely separate, still-uncaptured region Team A's own trace did not
+  map to any already-known field). **Per this task's own explicit instruction, this was NOT
+  pushed into a 5th invented-from-scratch hypothesis: the literal spec algorithm is implemented
+  and kept (new function `decode0x100195b0TreeDecodeAttempt()` + `FlatFillTreeDecodeAttemptState`,
+  `flat_fill_prestage_array.h`), independently tested (`tests/real_bink_flat_fill_prestage_test.cpp`
+  Section 2 - reports the mismatch, SKIPs rather than false-passing or hard-failing), but
+  deliberately NOT wired into `decode0x100195b0()`/`consumeDcArrayPreStageGap()`/
+  `frame_decoder.h`'s own production path, which remains UNCHANGED from the prior entry above
+  (same hardcoded-prefix/suffix stopgap) - swapping in the new attempt would desync the shared
+  per-row bit cursor (3561 vs 3384 bits) for every downstream consumer in the row, a regression
+  across multiple already-passing tests, not just this task's own new one.** Relay to Team A as a
+  concrete next spec-sync question: either an independent re-verification of the "arg3+0x00..0xFF
+  translate table == SiblingTableBank's own per-class table16" identity (the one unconfirmed
+  assumption this task's implementation rests on), or a fresh live per-symbol trace that dumps the
+  ACTUAL `arg3+0x00` byte region's raw contents address-for-address (not just the qualitative
+  "16-class x16-symbol" shape already given) so Team B can transcribe it directly instead of
+  inferring it from a structurally-similar-looking existing table.
+  **UPDATE, 2026-10-11 (follow-up task `fix/flat-fill-translate-table-address`, after Team A's own
+  Sec5.3aa in-place correction: the translate table is at `ctx(arg1)+0x00..0xFF`, NOT `arg3`, with
+  a full live-captured 16x16 byte table published): the exact address correction was applied
+  verbatim - `decode0x100195b0TreeDecodeAttempt()` now reads nibble 1's translate value from a new
+  `flatFillTranslateTable256()` (the published 16x16 table, transcribed byte-for-byte,
+  `flat_fill_prestage_array.h`), not from `SiblingTableBank`'s own per-class `table16` field. **This
+  did NOT close the gap: the measured output is bit-for-bit IDENTICAL to the pre-correction
+  measurement above (first byte still 134, total bit cost still 3561) across the entire 650-symbol
+  run.** This is itself a genuine, narrow finding, not a re-statement of the prior one: since the
+  translate-table SOURCE genuinely changed, an identical final result over 650 symbols means either
+  (a) the old (`SiblingTableBank::table16`) and new (`flatFillTranslateTable256()`) tables coincide
+  for every class this one validated call actually visits (spot-checked equal at class
+  0/class 1/index 0 - not checked exhaustively), making this one call unable to discriminate
+  between the two hypotheses, or (b) the translate-table address was never the sole cause of the
+  divergence and a second, still-unidentified discrepancy exists elsewhere in the literal
+  transcription (sentinel-bit placement, nibble1/nibble2 tree-source assignment, or the sign/bias/
+  combo-byte formula) - Team B's own bounded diagnostic pass (bit-offset shifts, tree-swap,
+  cur_class-source swap, nibble-order reversal, plus a 1-bit sentinel-timing probe this task added)
+  re-tried every one of those variants against the NOW-corrected table and still found no match.
+  Per this project's "no invented fixes" policy, NOT pushed into a 6th invented-from-scratch
+  hypothesis. **NOT promoted to production** - `decode0x100195b0()`/`consumeDcArrayPreStageGap()`/
+  `frame_decoder.h` remain UNCHANGED (same hardcoded-prefix/suffix stopgap), since the corrected
+  attempt still fails this task's own stated verification criterion (exact 650-byte/3384-bit golden
+  fixture match). Relay to Team A as the concrete next spec-sync question: a fresh live per-symbol
+  trace against a build with the NOW-corrected `ctx`-based translate table specifically, to confirm
+  or deny whether the table-address fix alone should have closed the gap (hypothesis (a) above - the
+  two tables may simply coincide for this call) or whether a second, independent discrepancy exists
+  in this transcription (hypothesis (b)) that an address-only correction could never have fixed.
+
+- `include/sr3binkcodec/dc_prestage_sibling_gap.h`'s `decode0x10019d10()` (2026-10-11,
+  `fix/bink-0x10019d10-real-decode`, spec-bink-codec.md Sec5.3ab): Sec5.3ab gives a full-body-read
+  per-symbol decode shape for `0x10019d10` that is STRUCTURALLY SIMPLER than `0x100195b0`'s own
+  Sec5.3aa shape (no class-carry at all, a single shared global tree read twice per byte,
+  low-nibble-then-high-nibble, no translate-table step, no sign/bias transform) - implemented
+  field-for-field, reusing `CaseSelectorScratchSource::builtTable()` (descriptor A's own real
+  per-row tree) as the "global tree," the SAME reuse `flat_fill_prestage_array.h`'s own
+  `decode0x100195b0TreeDecodeAttempt()` already makes for ITS nibble-2 lookup. **It does NOT
+  reproduce the golden fixture either** (main_menu_bg.bik frame 0, Y-plane, row 0, the same call
+  Sec5.3t's own worked example cites): measured first byte `0x65` (expected `0x0f`/15), measured
+  total bit cost `2993` (expected `2981`, a 12-bit overshoot across 528 bytes/1056 nibble lookups).
+  A bounded diagnostic pass (same posture as the `0x100195b0` entry above - checking for a trivial
+  wiring bug, NOT inventing a new algorithm shape) tried: swapping the final nibble-combine order
+  (`(hi<<4)|lo` vs `(lo<<4)|hi`) and swapping which descriptor's `BuiltTable` is "the global tree"
+  (A vs. B) - 4 combinations total, NONE reproduced the fixture's first byte, and all 4 landed at
+  the SAME wrong total bit cost (2993), meaning the mismatch is not in the combine/table-source
+  choice but in something more fundamental this bounded pass did not resolve - most likely the
+  SAME open question the `0x100195b0` entry above already names: whether
+  `CaseSelectorScratchSource::builtTable()` really IS the same "global tree" `0x10019360` itself
+  uses for this purpose, or a distinct, still-uncaptured tree instance. One thing IS independently
+  confirmed correct: the leading-count-driven termination (the loop runs until EXACTLY the real
+  leading count, 528 for this call, with no early stop or overrun) - this part has no live
+  per-symbol table dependency and is verified by
+  `tests/real_bink_0x10019d10_real_decode_test.cpp`'s own hard-asserted check. Per this project's
+  "no invented fixes" policy, `decode0x10019d10()` is kept as an independently callable/tested
+  ARTIFACT of this task's own investigation (same posture as `decode0x100195b0TreeDecodeAttempt()`
+  above) but is NOT wired into `consumeDcArrayPreStageGap()`'s own production path, which still
+  pays `skip0x10019d10()`'s own prior measured-total model (2981 bits, hardcoded) unchanged - and
+  is therefore also NOT wired into `block_dispatch.h`'s `twoLiteralPattern16x16()` as giant2/
+  secondary=5's own control-byte source (that function gained an optional `controlCursor` parameter
+  for a future pass, but every real call site still passes `nullptr`, keeping the PRIOR
+  `br.readAlignedByte()` fallback as the actual production behaviour). Swapping either in now would
+  desync the shared per-row bit cursor / overwrite a currently-correct-for-its-own-scope read path,
+  a regression across already-passing real-data tests (secondary=5 has 183 real occurrences in
+  main_menu_bg.bik's own Y-plane). **Primary case 8 (the OTHER named consumer, Sec5.3ab) was
+  checked and found to not be implemented at all in this codebase (`block_dispatch.h` still lists
+  it as an OPEN hook - "the control-nibble-to-pixel spatial mapping was never given") - wiring it
+  up would mean inventing that spatial mapping on top of an already-unresolved decoder, so this
+  task did not touch it, per its own explicit instruction to report rather than invent.** Relay to
+  Team A as a concrete next spec-sync question: either an independent re-verification that
+  `CaseSelectorScratchSource::builtTable()`'s own captured tree really is `0x10019d10`'s "global
+  tree" (the same open question the `0x100195b0`/Sec5.3aa entry above already raised, now hit a
+  second time by a structurally simpler function), or a fresh live per-symbol trace of
+  `0x10019d10`'s own first few real tree-lookup decisions (classByte-width peek value, matched LUT
+  entry, resulting code_len/raw_symbol) so Team B can cross-check this implementation's own
+  intermediate values directly instead of only the final byte/bit-cost totals.
+
+  **`fix/bink-actree-phase1-gateb` (2026-10-11), AC-tree Phase 1 BFS / Gate B rewrite per
+  spec-bink-codec.md Sec5.3ac (the first live bit-by-bit trace of Phase 1's real A>1 BFS loop and
+  Gate B's defer mechanism, for dispatch idx3/idx4):** rewrote the prior A>1 case-dispatch (which
+  used a different, now-confirmed-wrong skeleton: case0 push-one-child, case1 resolve+split,
+  case2/case3 both terminal via mechanism1) to match Sec5.3ac's real structure - case 0 AND case 2
+  both now fall into Gate B's shared 4-copy chain, case 3 keeps its own unconditional mechanism-1
+  resolve (confirmed by idx3's "three case-3 resolutions in a row"), and Gate B's deferred entries
+  are merged into the Phase-1 tags array as sel==3 nodes only after Phase 1's own BFS fully
+  completes, so Phase 2's existing sel==3 arm resolves them (per Sec5.3ac: "Phase 2 resolves them
+  via its own sel==3 arm"). **Did NOT close idx3/idx4**: direct `bink_ffmpeg_pixel_compare` run
+  against the real `main_menu_bg.bik` fixture shows idx3 pixel(0,0) moved from 125 to 171 (still
+  wrong, ffmpeg ground truth is 25) and idx4 from 140 to 199 (still wrong, ground truth 25) - the
+  rewrite changed the code path being exercised but did not reproduce the spec's own published
+  83-bit/20-coefficient (idx3) or 136-bit/30-coefficient (idx4) targets. Overall blocks/pixels-
+  matching unchanged from baseline (0/5 blocks exact, 48/320=15.0% pixels) - no regression, but no
+  improvement either. Two open tensions flagged honestly in the code's own comments, not resolved:
+  (1) case 2's own pre-Gate-B setup was a JUDGMENT CALL (treated identically to case 0 - no trace
+  excerpt independently confirms this), and (2) Gate B's per-copy bit-position labels in the prose,
+  read strictly, appear tighter than a literal 1(gate-bit)+level(field-width) budget would allow
+  for idx3's first node - Team B does not have access to Team A's own raw per-instruction event log
+  to resolve this directly. All existing tests still pass (new `ac_tree_phase1_bfs_golden_trace_test`
+  only exercises a synthetic constructed stream's first 19 of idx3's 83 bits, not the full real
+  decode, so it does not catch this gap). Relay to Team A as the concrete next spec-sync question:
+  either confirm/deny case 2's pre-Gate-B setup independently of case 0's, or reconcile Gate B's
+  per-copy bit-position prose against a literal 1+level bit budget for idx3's first node - whichever
+  is resolved first may explain the remaining pixel(0,0) mismatch directly.
+
+<!-- KNOWN-STOPGAPS:END -->
 
 <!-- PARKED-BRANCHES:BEGIN (deliberately OUTSIDE the context-guard resume block, per purrsian-52's
      2026-10-10 request, so a resume-note rewrite can never silently wipe this section again - a prior
      rewrite did exactly that and it had to be restored from an hourly branch_audit.sh catch. Keep this
      section current directly; do not fold it into the resume note above.) -->
 ## Parked branches (per the standing branch-hygiene rule's "no silent parking" requirement)
+- `fix/m09-m13-m05-trigger-stall` - PARKED 2026-10-11, NOT merged, worktree
+  `.claude/worktrees/agent-m09m13m05-triggerstall`. Root-caused and fixed one concrete,
+  independently-verified bug common to all three missions' stalls: this port's own trigger
+  ENTER/EXIT dispatch (`tools/sr3_viewer.cpp`'s `--mission` per-frame block, around the
+  `BareThreadTable::allocate(hudGp, cbName, /*nargs=*/0, ...)` call) spawned every
+  `on_trigger`/`on_trigger_exit` Lua callback coroutine with ZERO arguments, even though every
+  real mission callback in scope (`m09_player_on_boat_enter_cb`, `m13_trigger_cback`, m05's
+  land-trigger callback) declares a first "human" parameter - so that parameter was
+  unconditionally `nil` inside every one of these callbacks, independent of and prior to
+  either of spec-lua-api-behaviour.md §1.14's two real-engine hypotheses (identity-mismatch /
+  dispatch-chain-interception - this port has no 6-way type-tester chain to misroute through
+  in the first place, so only the identity-mismatch shape is even reachable here). Fixed by
+  pushing this project's existing `"#PLAYER1#"` player-identity sentinel as that argument
+  (nargs=1) and by registering `LOCAL_PLAYER`/`REMOTE_PLAYER` as the matching Lua globals
+  (`"#PLAYER1#"`/`"#PLAYER2#"`) in the gameplay state (`src/lua_host.cpp`) - CHOSEN,
+  reimplementation-side only, no disassembly citation (none exists; §1.14 explicitly frames
+  this as a port-side question). Mirrored the same fix into
+  `tests/synthetic_trigger_volume_overlap_test.cpp`'s own identical dispatch pattern and
+  strengthened its callbacks to actually check `human == LOCAL_PLAYER`, closing the gap that
+  let the old nargs=0 bug ship uncaught.
+  **NOT verified end-to-end against the real game**: a Release build was started (CMake
+  `vs2022` preset, `cmake --build build_preset_vs2022 --config Release`) specifically to re-run
+  the existing `--mission=m09 --spawn-y <Y>` playtest harness (HANDOFF's own existing entry,
+  "real `on_boat_trigger` ENTER dispatch proven firing end-to-end... via new `--spawn-y` test
+  flag") and confirm the stall point actually moves past `m09.lua:2099`, and to do the
+  analogous thing for m13/m05 and run the full `ctest -C Release` suite - but the build did not
+  finish observably inside this task's session (log stopped mid-link with no further process
+  activity visible, status unclear - possibly just slow, possibly interrupted by an unrelated
+  environment/worktree change mid-session) and no SubagentHandback-safe time remained to
+  diagnose or restart it. **So the one concrete bug found and fixed here is NOT yet confirmed
+  to actually unstick m09/m13/m05's real stall lines, and the full test suite has NOT been
+  re-run clean** - do not treat this as done. Also genuinely OPEN, not attempted this session
+  due to the above: whether m05's specific rank-2 stall (`m05.lua:1152`, unconditional-set
+  callback, no identity gate possible per spec's own analysis) is actually fixed by the same
+  nargs change alone, or needs something else; m13's own two campaigns beyond the `on_trigger`
+  dispatch; and the `LOCAL_PLAYER`/`REMOTE_PLAYER`-as-globals choice has not been checked
+  against the real mission scripts' own top-of-file definitions (those `.lua` files are not
+  present in this git worktree at all - they are loaded at runtime from the real shipped game
+  archives via `--mission=<stem>`, so this choice was made without being able to read m09.lua/
+  m13.lua/m05.lua's own actual LOCAL_PLAYER/REMOTE_PLAYER handling directly). **Next step for
+  whoever resumes this branch**: re-run/finish the Release build, run
+  `playtest/run_playtest.bat --mission=m09 --spawn-y <Y> ...` (same invocation as the existing
+  HANDOFF entry above) and the analogous m13/m05 invocations, confirm each stall line actually
+  advances, then `ctest -C Release` the full suite before merging.
 - `feature/bink-pixel-accuracy-oracle` - MERGED into main 2026-10-10 (commit `c51c94a`), after the
   `feature/bink-idct-actree-5.3j`/Sec5.3j IDCT+AC-tree work had already landed. Re-checked by hand, not
   assumed: its real content (the TwoLiteralPattern primary=1/sub=5 full grammar - 2 literal bytes + 8

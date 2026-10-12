@@ -38,6 +38,7 @@
 #include "sr3luahost/host.h"
 #include "sr3luahost/menu_runtime.h"
 #include "sr3luahost/save_game_bridge.h"
+#include "sr3tables_progression/tables_core.h"
 
 using namespace sr3luahost;
 namespace fs = std::filesystem;
@@ -431,6 +432,82 @@ int main() {
         es.screenFadeHostFrame(1);
         CHECK(es.gamePauseDepth().depth == 0);
         CHECK(!threads.isExempt(L));
+    }
+
+    // ========================================================================
+    // 7. §9 item 1: new-game unlock/outfit/cash wiring (spec-frontend-menu-
+    //    runtime.md Sec9 item 1, CLOSED 2026-10-11) - the data-driven
+    //    Auto_Unlock scan grants exactly the rows the real unlockables.xtbl
+    //    marks (today exactly one, HomieSlot1, matching spec-save-format.md
+    //    Sec10.6's own "new-game save's state set A has population exactly
+    //    1" finding), the default outfit comes from whichever character-
+    //    creation preset resolves (mirroring store_character.lua's
+    //    pcr_apply_preset + pcr_add_default_clothing call pair, NOT a
+    //    separate xtbl field - none exists in this project's models), and
+    //    starting cash ($57.00 / 5700 raw, kNewGameStartingCashCents) is
+    //    untouched by either.
+    // ========================================================================
+    {
+        Host host({});
+        EngineState& es = host.engineState();
+
+        // A synthetic unlockables table standing in for the real
+        // unlockables.xtbl census (spec: exactly ONE row has <Auto_Unlock>
+        // set, named HomieSlot1) - this test does not itself parse the real
+        // xtbl file; it proves the SCAN is data-driven (keyed off autoUnlock
+        // != None, never a hardcoded "HomieSlot1" string) against a table
+        // where only one of several rows carries the flag.
+        using sr3tables_progression::Unlockable;
+        using sr3tables_progression::UnlockableAutoUnlock;
+        std::vector<Unlockable> table(4);
+        table[0].name = "HomieSlot1";
+        table[0].autoUnlock = UnlockableAutoUnlock::Silently;
+        table[1].name = "Reward_Vehicle_Bundle";
+        table[1].autoUnlock = UnlockableAutoUnlock::None;
+        table[2].name = "Some_Other_Reward";
+        table[2].autoUnlock = UnlockableAutoUnlock::None;
+        table[3].name = "Plain"; // autoUnlock defaults to None
+
+        double cashBefore = es.playerCash();
+        const auto& granted = es.grantNewGameAutoUnlocks(table);
+        CHECK(granted.size() == 1);
+        CHECK(granted.count("HomieSlot1") == 1);
+        CHECK(es.newGamePurchasedUnlocks().size() == 1);
+        CHECK(es.playerCash() == cashBefore);  // granting unlocks must not touch cash
+
+        // Default outfit: driven by the selected character-creation preset,
+        // mirroring store_character.lua's store_character_lineup_to_
+        // customization() (pcr_apply_preset then pcr_add_default_clothing).
+        es.pcrPreset().presetResolves.set("default_male", true);
+        uint64_t appliedBefore = es.pcrPreset().appliedCount;
+        uint64_t wipeBefore = es.pcrAddDefaultClothingWipeCount();
+        es.pcuInventory().ownedItemCount = 7;  // simulate a dirty inventory before the wipe
+        bool resolved = es.applyNewGameDefaultOutfit("Default_Male");  // mixed case - CASE-FOLDED match
+        CHECK(resolved);
+        CHECK(es.pcrPreset().appliedCount == appliedBefore + 1);
+        CHECK(es.pcrAddDefaultClothingWipeCount() == wipeBefore + 1);
+        CHECK(es.pcuInventory().ownedItemCount == 0);
+        CHECK(es.playerCash() == cashBefore);  // applying the outfit must not touch cash either
+
+        // An UNRESOLVED preset: pcr_apply_preset "returns silently" (no
+        // appliedCount bump), but the script calls pcr_add_default_clothing()
+        // unconditionally right after it (no return value to check), so the
+        // destructive wipe still happens even though the preset itself never
+        // resolved.
+        uint64_t appliedBefore2 = es.pcrPreset().appliedCount;
+        uint64_t wipeBefore2 = es.pcrAddDefaultClothingWipeCount();
+        es.pcuInventory().ownedItemCount = 3;
+        bool resolved2 = es.applyNewGameDefaultOutfit("totally_unknown_preset");
+        CHECK(!resolved2);
+        CHECK(es.pcrPreset().appliedCount == appliedBefore2);               // unchanged - preset did not resolve
+        CHECK(es.pcrAddDefaultClothingWipeCount() == wipeBefore2 + 1);      // wipe still ran
+        CHECK(es.pcuInventory().ownedItemCount == 0);
+
+        // Starting cash itself (§9 item 1's 3rd piece): untouched by either
+        // of the above, still the existing $57.00 (5700 raw) default - this
+        // test does not change that constant, only confirms it.
+        CHECK(es.playerCash() == EngineState::kNewGameStartingCashCents);
+        CHECK(EngineState::kNewGameStartingCashCents == 5700.0);
     }
 
     if (g_failures == 0) {

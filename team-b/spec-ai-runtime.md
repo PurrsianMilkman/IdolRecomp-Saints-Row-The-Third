@@ -4442,9 +4442,16 @@ registration block, the 8-slot bound of the `os_*` arrays, the hardcoded-constan
 `0x00917d10`'s own pool identities (not pinned down); the countdown-timer pair as generic shared engine
 utilities (not individually read).
 
-**OPEN:** the near-field vehicle population's own spawn-candidate algorithm and despawn-schedule tick
-(§17.4c); the distant-to-near promotion/demotion boundary (§17.3); the `0x0130F4D8` field-identity
-cross-check (§17.2); `0x00b903f0`'s own role; the two extra `0x0072d660` call sites into `0x00b92e70`.
+**OPEN:** ~~the near-field vehicle population's own spawn-candidate algorithm and despawn-schedule
+tick (§17.4c); the distant-to-near promotion/demotion boundary (§17.3)~~ **CLOSED, same file,
+§17.4c (2026-10-08, this stale marker self-corrected 2026-10-11): the despawn-schedule tick is
+`0x0090eaf0` (applies `vehicle_despawn.xtbl`'s thresholds), the spawn side is a 3-candidate-slot
+buffer via the shared `0x00dab660` uniform-random-pick, and the promotion/demotion boundary is an
+honest NEGATIVE result — no object-continuity hand-off found between the distant/near-field
+tiers, each maintaining its own population band independently.** Still genuinely open: the
+`0x0130F4D8` field-identity cross-check (§17.2); `0x00b903f0`'s own role (§17.5's own
+"plausibly zone-unload" is HIGH CONFIDENCE, not confirmed); the two extra `0x0072d660` call
+sites into `0x00b92e70`.
 
 **[CONFIRMED/HIGH/OPEN as marked above.]** Full detail, every address, and the complete raw disassembly/
 decompile evidence: `scratchpad/ambient_population_spawn_despawn_2026-10-08.md` (raw Ghidra query output
@@ -4662,6 +4669,55 @@ themselves live-vehicle-sourced requires opening their own callers (`0x00b25620`
 `0x00b20390` — not attempted); **one (`0x00b20aae`/`0x00b20920`) is load-time/infrequent graph
 construction, not a steering read**; **two (`0x00b45aa2`, `0x007d41a1`) remain fully unopened.**
 
+**RESOLVED 2026-10-11 (SPEC TEAM, agent `ad580496a8ccbfc32`, independently re-verified by direct
+query before splicing — `0x00b1ce80`'s call site inside `0x00b25620` and `0x007d39b0`'s global
+singleton selection both matched exactly). Opened all of this section's own remaining callers:
+`0x00b25620`, `0x007e3380`, `0x00b20390` (plus one further hop, `0x00b20c20`→`0x00b2b630`), and
+the 2 still-fully-unopened `0x00b1cc60` callers, `0x00b45aa2` and `0x007d41a1`.**
+
+- **`0x00b1ce80`'s `originPos` is CONFIRMED live-vehicle-sourced in both of its callers.** In
+  `0x00b25620`, the call passes its own first argument's `+0x40` offset as `originPos` (confirmed
+  by raw disassembly) — that first argument is the per-entity traffic record, confirmed by the
+  same function's own later reads of its `+0x8`/`+0xc` (the vehicle-handle pair §18.6 already
+  established) and `+0xc68` (the drive-state sub-record), ending in the same commit call to
+  `0x0051ddd0` on that same entity pointer. In `0x007e3380`, the call passes its own first
+  argument's `+0x40` offset the same way — again the per-entity record. `0x00b1ce80`'s `destPos`
+  is **NOT uniformly live-vehicle-sourced** — it genuinely varies by caller: in `0x00b25620`, the
+  `destPos` argument is passed through opaquely from `0x00b25620`'s own sole caller, `0x00b2d4d0`,
+  which reads a handle and 3 floats off a byte-stream deserializer — an externally-supplied
+  (scripted/network-command) literal destination point, NOT a live object's position. In
+  `0x007e3380`, the `destPos` argument is the `+0x40` offset of a pointer returned by a
+  no-argument singleton accessor, `0x009da4e0` — the same `+0x40` live-position convention, on a
+  different object whose exact identity (player? a lead/target vehicle? a cached route-request
+  target?) was not resolved this pass (would need `0x009da4e0`'s own body opened).
+- **`0x00b1e5e0`'s `originPos` is CONFIRMED live-vehicle-sourced, one hop further removed.** Its
+  sole caller, `0x00b20390`, loops over a caller-supplied candidate-position array (not itself a
+  raw entity field at this layer) — but that array is built one hop further up, in `0x00b2b630`
+  (reached via `0x00b20c20`), which IS a direct thiscall on the per-entity traffic record: it
+  reads that record's own `+0x40` (position) and `+0x64`/`+0x68`/`+0x6c` (the same orientation row
+  §18.6 already established), tests its `+0xc6e` bit `0x20`, writes through its `+0xc68`, and
+  ends with the same commit call to `0x0051ddd0` on that same record — so the candidate array
+  `0x00b1e5e0` searches is ultimately seeded from the live entity's own position/orientation, not
+  a static junction record.
+- **`0x00b45aa2` (inside `0x00b45840`) belongs to the same live-entity family.** `0x00b45840` is
+  itself a thiscall on the per-entity record; it computes `entity+0xc68+0x53c` = `entity+0x11a4`
+  and checks it via `0x00a1ef50` — the exact same gate §18.6 already names for the state
+  `0xe`/`0x10` branch — then reads `entity+0x40` directly to anchor a search box before reaching
+  `0x00b1cc60`.
+- **`0x007d41a1` (inside `0x007d39b0`) is a DIFFERENT consumer entirely — RESOLVED 2026-10-11,
+  item (b) below: it's the already-documented GPS waypoint-navigation module, not a traffic or
+  camera system.** Confirmed by direct disassembly: `0x007d39b0` selects between two global
+  singleton addresses, `0x0012fdff0`/`0x0012feb20`, and reaches `0x00b1cc60` fed from that
+  singleton's own fields, not any per-entity `+0x40` field. Full resolution below item (b).
+
+**Net answer, closing §18.4(a) for this entire cluster: the junction/branch-choice decision chain
+is live-vehicle-sourced on its origin side everywhere traced; its destination side can be EITHER
+a live object's position OR an externally-supplied scripted/network point, depending on caller —
+both are real, confirmed mechanisms, not a single uniform answer.** Remaining open threads if
+picked up again: `0x009da4e0`'s own return-object identity; whether `0x00b2b630`'s other call
+sites are all per-tick traffic callers; the exact semantics of the `0x0012fdff0`/`0x0012feb20`
+singletons `0x007d39b0` operates on.
+
 ### 18.6 The Havok driver-input write site — RESOLVED: traced from `0x00b4d070` through the shared vehicle-command dispatcher to the exact `0x00ae30c0`-matching fields (2026-10-10, continuation)
 
 **CONFIRMED — `0x00b4ceb0` itself never reaches a steering/throttle write; it is purely the
@@ -4823,10 +4879,13 @@ position/velocity rather than sending any steering/throttle command — no `0x00
 call appears anywhere in `0x00b2ed40`'s body. Its own callees (`0x00b1f4d0`/`0x00b2ec20`/
 `0x00da0800`/`0x00da57b0`/`0x00ab98a0`/`0x00c150c0`) were not opened.
 
-**OPEN:** the second handle pair's exact role (`entity+0xcc0`/`+0xcc4`); `0x00ad2f80`'s 0-5
-vehicle-type/variant selector semantics (not decompiled); the exact geometric roles of the two
-3-vectors dot-producted in `0x00b47490` (heading vs. target-direction) are HIGH CONFIDENCE from
-context, not independently proven (`0x00abaf10` not opened).
+**OPEN:** the second handle pair's exact role (`entity+0xcc0`/`+0xcc4`); the exact geometric roles
+of the two 3-vectors dot-producted in `0x00b47490` (heading vs. target-direction) are HIGH
+CONFIDENCE from context, not independently proven (`0x00abaf10` not opened). `0x00ad2f80`'s 0-5
+vehicle-type/variant selector semantics are RESOLVED, 2026-10-11 — see
+`spec-lua-api-behaviour.md` §21.24/§22.19: a plain 8-byte getter for the vehicle's static
+`Vehicle_Type` xtbl class (0=Automobile, 1=Motorcycle, 2=Airplane, 3=Helicopter, 4=Vtol,
+5=Watercraft, 6=failure sentinel), not an AI-mode gate.
 
 ### 18.6a The lane-side bit itself (`+0xe09` bit 2): setter found — CONFIRMED, dynamically recomputed under an overtake/pass-side gate (2026-10-10)
 
@@ -5037,10 +5096,51 @@ server before splicing. **CONFIRMED by direct disassembly:**
 steering magnitude — a 2-float `{threshold, slope}` response-shaper, not a lookup table.** The
 `±1.0` sign from `0x00b47490`/`0x00b2bbc0` is the curve's x-input (after an internal negation);
 the curve's own two parameters determine how sharply steering ramps in near zero vs. how it
-behaves past the breakpoint. **OPEN, not resolved this pass:** who populates the `this+0x20`
-pointer and the two curve fields (a config/tuning table load, not traced), and whether other
-fields exist on that same struct beyond `+0x08`/`+0x0c` (only these two are read by this
-function).
+behaves past the breakpoint.
+
+**RESOLVED 2026-10-11, Team B-routed (SPEC TEAM, agent `ab93c2359d407d0c6`, independently
+re-verified by direct query before splicing — the ctor's `MOV dword ptr [ESI],0x1182760` vtable
+write and both `MOVSS` reads of the constant `0x01117a4c` into `+0x8`/`+0xc` matched exactly):
+`this+0x20` is populated by a single, universal, hardcoded constructor,
+`0x00aba420`, called unconditionally from the driverInput group constructor `0x00abde60` on
+EVERY branch of that constructor's own vehicle-class size selector (`0x600`/`0xa40`/`0x580`
+bytes) — i.e. the curve sub-object's own construction is identical for every vehicle, player and
+ambient traffic alike; there is no per-vehicle-type variation and no `.xtbl` read. A fresh
+24-byte (`0x18`) object is allocated, base-initialized via the generic Havok reference-counted-
+object constructor `0x00c55b00` (vtable `0x011a04d8`), then overwritten with: `+0x00` vtable =
+`0x01182760` (whose own slot `+0xc` is `0x00ae30c0`, the exact Havok driver-input override §18.3
+already names); **`+0x08` threshold = 1.0 and `+0x0c` slope = 1.0, both the literal constant at
+`0x01117a4c`**; `+0x10` = 0.0 (float, role not identified — no reader found); `+0x14` = 1
+(byte/bool, role not identified — no reader found). Confirmed as the ONLY construction site in
+the whole binary (exactly 1 xref on the vtable-pointer write). This independently corroborates,
+and pins the exact numbers for, `spec-physics-runtime.md`'s own pre-existing line ~2136 note on
+the same constructor ("hardcoded 1.0/1.0/0.0/true defaults, no xtbl read").
+
+**Consequence for the curve math, since `0x00ae5290` always clamps its input to `[0,1]` before
+evaluating the curve: with threshold = 1.0, `|input| <= threshold` is always true, so the
+above-threshold branch is structurally dead for these real constants — the curve degenerates to
+a pure identity pass-through** (`output = slope × |input| = |input|`, sign reapplied at the end).
+There is no deadzone and no ramp for ordinary ambient-traffic/player steering: input passes
+through unshaped. **Team B's own placeholder values (`kSteerCurveThreshold=0.2`,
+`kSteerCurveSlope=0.3`) should be replaced with `threshold=1.0`/`slope=1.0` — i.e. drop the curve
+shaping entirely and pass steering input straight through.**
+
+- **Evidence:** direct disassembly of `0x00abde60` (driverInput group ctor, size-switch, the
+  unconditional `0x00aba420` call on every branch), `0x00aba420` (the curve-struct ctor itself —
+  allocation size, vtable write, both float writes from the shared constant), `0x00c55b00`
+  (base-object pre-init), and a re-confirmation of `0x00ae5290`'s own consumer-side read
+  (`[ESI+0x20]` then `[EAX+8]`/`[EAX+0xc]`, matching §18.6b exactly); a full xref on the
+  vtable-pointer write `0x01182760` confirming exactly one construction site project-wide.
+- **Confidence:** CONFIRMED (construction site, unconditional call path on every vehicle-class
+  branch, both numeric values, single-source-of-truth/no-`.xtbl`-read claim). PLAUSIBLE (not
+  independently traced through a live gameplay capture) for the identity-pass-through
+  consequence, since it follows arithmetically from the confirmed constants rather than being
+  observed directly.
+- **Unknowns:** the semantic role of the struct's `+0x10`/`+0x14` fields (written by the
+  constructor, no reader found); an exhaustive whole-binary search for a hypothetical later
+  "tuning" write that pokes an already-constructed struct's `+0x08`/`+0x0c` directly (bypassing
+  the vtable-write uniqueness signal used here) was not performed — judged unlikely given the
+  independent `spec-physics-runtime.md` corroboration, but not formally excluded.
 
 **OPEN:** the vtable target of `0x00a78d30` (confirms/refutes "speed" framing); `0x00dab5e0`'s own
 body (step 11's helper); whether `leadHandle`'s resolution source and the main gate's own second-record
@@ -5055,21 +5155,83 @@ masked, lookahead-bounded forward graph-walk, §18.1); the junction kind-flag se
 query layer (confirmed at `0x00b4c710`, gated by a cached-target/distance throttle), and a genuine
 goal/nearest-distance cost comparison does exist one layer above `0x00b1cc60` (confirmed at
 `0x00b1ce80` and `0x00b1e5e0`) — resolving §18.2's own "does a cost-based choice exist" question in
-the affirmative, just one hop higher than originally searched. Still OPEN, narrower: whether
-`0x00b1ce80`/`0x00b1e5e0`'s own `originPos`/`destPos` parameters are themselves live-vehicle-sourced
-(their callers, `0x00b25620`/`0x007e3380`/`0x00b20390`, not opened); 2 of the original 8 callers
-(`0x00b45aa2`, `0x007d41a1`) never opened. (b) unchanged, still OPEN: the exact purpose of
-`0x0084b170` (a 3-float-vs-reference-position boolean test against the `0x007d1040`/`0x007d3830`
-corner-curve point pool — plausibly a "has the vehicle passed this curve sample" progress test, not
-independently confirmed). **(c) RESOLVED, §18.6/§18.3:** the literal Havok driver-input write site is
+the affirmative, just one hop higher than originally searched. **(a) now FULLY RESOLVED, 2026-10-11
+(§18.5's own follow-up above):** `0x00b1ce80`/`0x00b1e5e0`'s `originPos` is confirmed
+live-vehicle-sourced in every traced path (`0x00b25620`, `0x007e3380`, and — one hop further up —
+`0x00b1e5e0`'s caller chain via `0x00b2b630`); `destPos` is NOT uniform — confirmed to be either
+another live object's position (via an unresolved singleton accessor, `0x009da4e0`) or a literal
+externally-supplied scripted/network destination (via `0x00b25620`'s own caller `0x00b2d4d0`'s
+byte-stream deserializer) depending on the call path — both are genuine, confirmed mechanisms. Of
+the 2 originally-unopened `0x00b1cc60` callers, `0x00b45aa2` joins the same live-entity family;
+`0x007d41a1` is a DIFFERENT consumer (a corner-curve point-pool system keyed on one of two global
+singletons, `0x0012fdff0`/`0x0012feb20`), sharpening item (b) below rather than belonging to this
+item. **(b) RESOLVED, 2026-10-11 (SPEC TEAM, agent `a0bad2c44b64da2b0`, independently re-verified
+by direct query before splicing — `0x007d1040`/`0x007d3830`'s own reads of `0x02705fe0`, the BSP
+pool addresses `0x0242dd90`/`0x0242ddcc` inside `0x0084b170`, and the GPS-module address range of
+every `0x0012fdff0`/`0x0012feb20` xref site all matched exactly): the "corner-curve point pool"
+framing was a misreading — there is no separate pool.** `0x007d1040`/`0x007d3830` are plain
+accessors on the ALREADY-DOCUMENTED Traffic zone-data singleton `0x02705fe0` (`spec-zone-data-
+format.md` §13.2) — the same global every other `0x18` traffic function reads; `0x007d1040`
+computes a node-sequence distance, `0x007d3830` interpolates a position along a road segment
+(endpoints directly, or via a quantized int16-triple sub-sample table for intra-segment curve
+shape, scaled by the constant `0x0115a220` — this resolves §18.4's own long-standing open note
+about that constant's value and about whose point pool this object is). `0x0084b170`'s "has the
+vehicle passed this curve sample" hypothesis is **REFUTED**: it's a generic 2-point segment query
+walked recursively through a global BSP-tree pool (`0x0242dd90`/`0x0242ddcc`, via `0x00dcdb00`→
+`0x00dcd410`'s classic plane-classify-and-split BSP clipper) — a line/volume intersection test,
+not a progress parameter; also called from the already-CONFIRMED ordinary lane-follower
+`0x00b1be40` (§18.1), so it's shared generic infrastructure, not curve-specific. The 2 singletons
+`0x0012fdff0`/`0x0012feb20` are per-player-slot records of the already-documented GPS
+waypoint-navigation module (`spec-hud-runtime.md`'s "Waypoint/GPS" section, `0x007d1450`-
+`0x007d8be0`) — confirmed by the identical 22-function xref set for both addresses, confined
+entirely to that module's own address range, and by the module's master tick calling `0x007d39b0`
+exactly twice per frame (once per player slot). **So `0x007d41a1` is the GPS route pathfinder
+reusing the ordinary traffic lookahead machinery (`0x00b1cc60`/`0x02705fe0`) to route the GPS
+line along the real street graph — not a traffic, camera, or cutscene consumer.** The GPS
+player-slot question is already answered elsewhere in this project, found by reconciling against
+it just now: `spec-hud-runtime.md`'s own already-CONFIRMED text (its own "Waypoint/GPS route
+target" finding) states plainly that `0x0012fdff0` is for the local player and `0x0012feb20` for
+a co-op partner, "selected by a 2-way selector, not an array index" — exactly the local-vs-remote
+split this section's own earlier pass had only guessed at. No longer open.
+
+**BSP pool identity RESOLVED, 2026-10-11, same-day follow-up (SPEC TEAM, agent
+`ae950690639a4fa3f`, independently re-verified by direct query before splicing — the
+`hood_display_tag`/`hood_owner`/.../`hood_bsp_tree` field-name strings and the `.?AVdistrict@@`/
+`.?AVhood@@` RTTI tags at `0x01301adc`/`0x01301b1c` both matched exactly via raw-memory `ptrs`
+read, the strongest evidence in the report).** CONFIRMED, not just high-confidence: each BSP pool
+entry is a named city **district/"hood" (gang-territory) boundary volume** — the same concept
+`spec-cellphone-menu-runtime.md`'s already-documented pause-map district-control meter and
+`"STAG"` gang-territory-takeover sub-mode reference by name — not a visibility/occlusion volume,
+water volume, exclusion zone, or Havok collision shape. Of the 4 registration functions: only
+`0x0084d120` is a real constructor (reached via a data-pointer dispatch slot, `0x01164304`, like
+other content-kind object constructors in this project) — it reads 9 named fields through a
+generic key-value accessor (`hood_display_tag`/`hood_owner`/`hood_spawn_category`/
+`hood_alt_spawn_category`/`hood_flags`/`hood_island_type`/`hood_income`/`hood_takeover_areas`/
+`hood_bsp_tree`) from a SEPARATE named "hood definition" table — not any `.czn_pc` content-kind id
+(not `0x2247`/`0x2249`/`0x2243`/`0x2246`) — builds the BSP tree from the `hood_bsp_tree` field via
+the same shared primitive (`0x00dcd3d0`) Interior Triggers/Water Volumes use, and inserts the
+record into the pool only if `hood_island_type==0` (islands excluded) and the pool (cap 15) isn't
+full. `0x0084af30` is actually the pool RESET (not a registrar); `0x0084b0c0` is a
+single-point "which hood contains this point" query (same BSP family as `0x0084b170`); `0x0084b110`
+is the segment-test sibling of `0x0084b170` without the detailed recursive-walk output. The reuse
+by traffic lane-following and the GPS module is explained: both plausibly need "which district is
+the vehicle/route in" (per-district spawn category; route narration crossing district boundaries).
+Genuinely still open, minor: the hood definition table's own file format/location; `hood_flags`
+bits `0x40`/`0x4`'s exact meaning; `0x0084af30`'s sole caller `0x00707c80` (likely a level-load/
+teardown routine, not confirmed). **(c) RESOLVED, §18.6/§18.3:** the literal Havok driver-input write site is
 now CONFIRMED end-to-end — `0x00b4d070` (state `0xd`) → `0x00b47490` (heading-dot-product steering
 sign) → the shared vehicle-command dispatcher `0x00a929e0`/`0x00a92640` → `0x00ae5290`/`0x00ae8fd0`,
 writing `driverInput+0x130`/`+0x128`/`+0x12c`/`+0xb0` on the SAME `0x00ae30c0`-shaped instance layout.
 **This closes the full §18 arc the orchestrator asked to finish** — the decision (§18.1/§18.2/§18.5)
 and the write (§18.3/§18.6) are now both traced. New, narrower opens surfaced by closing this:
-whether `0x00b4d070`'s `0xe`/`0x10`-state branch (`0x00b2bbc0`) is a second, parallel write path; the
-`0x00ad2f80` vehicle-type/variant selector's exact semantics; the precise vector roles inside
-`0x00b47490`'s heading dot-product (`0x00abaf10` not opened).
+whether `0x00b4d070`'s `0xe`/`0x10`-state branch (`0x00b2bbc0`) is a second, parallel write path
+— **CORRECTION 2026-10-11: already RESOLVED, §18.6 above (2026-10-10) — self-correcting my own
+momentary miss here (checked this item before reading far enough forward in this same section).
+`0x00b2bbc0` reaches the SAME write site as the state-`0xd` path (one hop shorter); its own
+brake-bailout sub-case additionally calls `0x00b2ed40` (live position-snap via vtable `+0x40`),
+documented in §18.6's own text at line ~4814-4824 as a SEPARATE, already-fully-traced effect, not
+an open question. Nothing new to add — struck here to avoid duplicating §18.6.**; the precise
+vector roles inside `0x00b47490`'s heading dot-product (`0x00abaf10` not opened).
 
 Not individually decoded/traced in either pass: the segment-entry fields the main graph fixup leaves
 alone (`spec-zone-data-format.md` §13.2); the `0x00a69330` tail-jump target; the record `+0x70`
@@ -5123,6 +5285,28 @@ actual level change — calls the shared dispatcher `0x00606b80` (§19.4). `noto
 stacks, re-arms the same 500ms decay-timer slot, prunes a small 800-byte "active notoriety alert/spawn
 record" registry (`0x014A4C50`, stride `0x14`, keyed by a per-level "heat code" at `0x011286C4`) of
 entries belonging to the reset track, and also calls `0x00606b80` on change.
+
+**What the save stores versus what's recomputed — synthesized 2026-10-11, orchestrator-routed,
+no new RE needed: every fact below was already independently established in this section and in
+`spec-save-format.md`; this is the first place the two are connected directly.** `spec-save-format.md`
+§10.6 (`0x4A24`-`0x4A33`) stores exactly **4 `float32` decay-rate MULTIPLIERS**, one per track,
+default `1.0`, set by an unlockable of type 10 (`category := 1.0 + amount`) — a persistent,
+purchase-driven buff to how fast notoriety decays, entirely separate from this section's own live
+record. **Nothing else about live notoriety state is saved.** The actual per-track `{level,
+fraction}` pair (`0x014A4F70`, §19.1 above), the decay-interval countdown timer (`+0x10`), the
+min/max bound stacks (`+0x1c`/`+0x34`, `+0x28`/`+0x40`), the gain/decay-suppressed flags
+(`0x014A4C0D`/`0x014A4C0F`), and the "active notoriety alert/spawn record" registry
+(`0x014A4C50`) are all recomputed/reset every session — confirmed by their total absence anywhere
+in `spec-save-format.md`'s own near-complete field map (99.5% of the save file attributed, per
+Team B's own audit), not merely unsearched. Practically: a loaded save always starts at zero
+notoriety on every track, regardless of how "hot" the player was when they saved — the only thing
+that survives is the decay-SPEED buff, if purchased. **Two related but structurally separate
+pieces of saved data, for completeness, not part of the 4-track system above:** the 5
+"time-at-maximum-notoriety" lifetime stat counters (`spec-save-format.md` line ~369, stat ids
+13-17, pure play-time tracking, not live state) and a single boolean "STAG notoriety" script
+variable (`spec-save-format.md` line ~1240, bit 2 of the generic session-toggle byte at
+`0x014FF6BB`) — a mission/script-level flag whose setter also updates the *lockdown-notoriety*
+record's own flag, unrelated to the per-track level/fraction mechanism.
 
 ### 19.2 What raises it: a crime-report consumer, confirming `Check_Detection` is real
 
@@ -5808,6 +5992,16 @@ fully absorbed into §20.1 above.
 
 ## Changelog
 
+- **2026-10-11 — §19.1: "what the save stores vs. what's recomputed" for notoriety, orchestrator-
+  routed, synthesis only (no new RE)** (SPEC TEAM, self). Connected this section's own live-record
+  field map directly to `spec-save-format.md` §10.6's already-published weapon/notoriety scalar
+  rows: only the 4 per-track decay-rate multipliers are saved; the actual level/fraction, decay
+  timer, bound stacks, suppressed-flags, and alert-registry all reset every session, confirmed by
+  their absence from the save format's own near-complete field map. Also cross-referenced two
+  related-but-separate saved items (the 5 time-at-max-notoriety stats, the "STAG notoriety" script
+  toggle) to avoid future confusion with the 4-track system. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
 - **2026-10-09 — §19.7's spawn-production gap CLOSED: who calls the roadblock allocator, and whether it's
   notoriety-gated** (SPEC TEAM, agent `a4fa47508ae3a24bd`, re-run after infrastructure loss — report
   found complete in scratch, spliced from the finished file). Answer: both — of 6 named call paths
@@ -6222,3 +6416,69 @@ fully absorbed into §20.1 above.
   `{threshold at +0x08, slope at +0x0c}` piecewise-linear response shaper read off the struct at
   `this+0x20`, plus a previously-undocumented airborne-gated early-out and an internal sign
   negation. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §18.4(a) FULLY RESOLVED: the junction cost-comparison functions'
+  `originPos`/`destPos` inputs are now traced to their source for every remaining caller (SPEC
+  TEAM, agent `ad580496a8ccbfc32`, independently re-verified by direct query before splicing —
+  `0x00b1ce80`'s call site inside `0x00b25620` and `0x007d39b0`'s global-singleton selection both
+  matched exactly). `originPos` confirmed live-vehicle-sourced everywhere in the traffic-decision
+  family (`0x00b25620`, `0x007e3380`, and `0x00b1e5e0`'s caller chain via `0x00b2b630`); `destPos`
+  confirmed NOT uniform — either another live object's position (via an unresolved singleton
+  accessor `0x009da4e0`) or an externally-supplied scripted/network destination (via a byte-stream
+  deserializer one hop further up `0x00b25620`'s own call chain), a genuine, confirmed finding
+  rather than an unresolved parameter. Of the 2 remaining unopened `0x00b1cc60` callers,
+  `0x00b45aa2` joins the live-entity family; `0x007d41a1` is a DIFFERENT consumer entirely — a
+  corner-curve point-pool system keyed on one of two global singletons
+  (`0x0012fdff0`/`0x0012feb20`), sharpening item (b)'s existing open note rather than resolving it.
+  Also includes 2 small self-corrections to this same section made before dispatching this agent:
+  fixed two stale `0x00ad2f80` "exact semantics OPEN" cross-references (resolved earlier this
+  session by `get_char_vehicle_type`, `spec-lua-api-behaviour.md` §21.24/§22.19) and struck a
+  momentarily-wrong note about `0x00b2bbc0`'s `0xe`/`0x10`-state branch (already fully resolved in
+  §18.6, caught by the orchestrator before any agent time was wasted on it). Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §18.4(b) RESOLVED: the "corner-curve point pool" was a misreading; closes the
+  full §18 open-items list (SPEC TEAM, agent `a0bad2c44b64da2b0`, independently re-verified by
+  direct query before splicing — `0x02705fe0`/BSP-pool addresses/GPS-module xref ranges all
+  matched exactly). `0x007d1040`/`0x007d3830` are plain accessors on the already-documented
+  Traffic zone-data singleton `0x02705fe0`, resolving the long-standing `0x0115a220`
+  quantization-constant and "whose point pool is this" open notes. `0x0084b170`'s "curve
+  progress test" hypothesis is REFUTED — it's a generic 2-point segment query against a global
+  BSP-tree pool (`0x0242dd90`/`0x0242ddcc`), also used by the ordinary lane-follower
+  `0x00b1be40`. The two singletons `0x007d41a1` reads (`0x0012fdff0`/`0x0012feb20`) are
+  per-player-slot records of the already-documented GPS waypoint-navigation module
+  (`spec-hud-runtime.md`'s "Waypoint/GPS" section) — `0x007d41a1` is the GPS route pathfinder
+  reusing ordinary traffic lookahead machinery, not a traffic/camera/cutscene consumer. Genuinely
+  still open: the BSP pool's own per-entry real-world meaning (registration functions not
+  opened); whether the GPS player-slot selector is strictly local-co-op-only. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — BSP pool identity CONFIRMED: city district/"hood" gang-territory boundary
+  volumes, not water/occlusion/exclusion geometry (SPEC TEAM, agent `ae950690639a4fa3f`,
+  independently re-verified by direct raw-memory read — the 9 `hood_*` field-name strings and
+  the `.?AVdistrict@@`/`.?AVhood@@` RTTI tags at `0x01301adc`/`0x01301b1c` both matched exactly).
+  Only `0x0084d120` is a real constructor (via dispatch slot `0x01164304`), reading 9 named
+  fields from a separate "hood definition" table (not any `.czn_pc` content-kind id) and
+  inserting into the pool unless `hood_island_type!=0` or the pool (cap 15) is full. `0x0084af30`
+  is the pool reset, not a registrar; `0x0084b0c0`/`0x0084b110` are the point-test/segment-test
+  siblings of the already-documented `0x0084b170`. Matches `spec-cellphone-menu-runtime.md`'s
+  already-documented pause-map district-control/STAG-takeover system by field names
+  (`hood_owner`/`hood_income`/`hood_takeover_areas`) — closes the open item for good. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — self-correction, no agent: §17.7's confidence-summary OPEN line still listed
+  "the near-field vehicle population's own spawn-candidate algorithm and despawn-schedule tick"
+  and "the distant-to-near promotion/demotion boundary" as open, but §17.4c (landed 2026-10-08)
+  already resolves both — same stale-marker pattern this session's cleanup pass just flagged
+  elsewhere. Struck in place, pointed at §17.4c; the 3 genuinely-still-open sub-items left
+  untouched. Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- 2026-10-11 — §18.6b's steering-curve threshold/slope OPEN item RESOLVED, picked directly from
+  Team B's own CHOSEN-stand-in list (SPEC TEAM, agent `ab93c2359d407d0c6`, independently
+  re-verified by direct query before splicing — the ctor's vtable write and both float reads
+  from the shared constant matched exactly). The curve struct's real values are
+  threshold=1.0/slope=1.0 (hardcoded, universal, no `.xtbl` read, one construction site
+  project-wide) — NOT Team B's placeholder 0.2/0.3. Since the consumer always clamps input to
+  `[0,1]`, these real values mean the curve is a structural no-op: steering input passes through
+  unshaped, no deadzone or ramp. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.

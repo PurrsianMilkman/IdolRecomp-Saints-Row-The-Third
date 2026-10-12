@@ -202,8 +202,47 @@
 // WHAT THIS FILE PORTS AS CONFIRMED: the dot-product-gated cos(30deg)/
 // 5.0-unit alignment-AND-distance test picking between throttle=0
 // (far/misaligned) and a driving throttle (close/aligned); brake=0 outside
-// the dead-end case; the steering MAGNITUDE being a full +-1.0, not
-// proportional.
+// the dead-end case.
+//
+// STEERING MAGNITUDE (REVISED AGAIN 2026-10-11, same overtake-gate-18.6b
+// task, after Sec18.6's own "Secondary item" was itself RESOLVED): the
+// first merge read step 3 as "a full +-1.0, not proportional" and sent that
+// literal value onward every tick. A live 900-frame playtest showed this is
+// a real, visible regression once combined with Sec18.6a's bit-2 sign
+// (which, for an all-same-direction ambient population, never gets
+// rewritten after spawn per Sec18.6b's own root-cause finding above) -
+// every affected vehicle locks onto ONE constant full-lock turn for the
+// entire run. A SECOND unit's interim fix replaced that literal +-1.0 with
+// a dot-product-scaled stand-in (`clamp(1.0 - dot, 0, 1)`), explicitly
+// flagged as NOT a claim about the real curve. Sec18.6's own curve
+// evaluator (`0x00ae5290`, `driverInput+0x20`) is now RESOLVED (see
+// traffic_lane_detail::ApplySteeringCurve() above for the full CONFIRMED
+// mechanics: airborne early-out, sign negation, clamp, 2-segment
+// piecewise-linear response, sign reapplied) - this file now runs that
+// REAL curve mechanism rather than the plain linear stand-in.
+//
+// ONE THING THE REAL MECHANICS CANNOT FIX BY THEMSELVES: Sec18.6's own text
+// is explicit that the dispatcher's real x-input to this curve is the
+// ALREADY-CLAMPED +-1.0 SIGN itself (`0x00b47490`/`0x00b2bbc0`'s output),
+// and the curve's own second-slope formula is derived SPECIFICALLY so the
+// curve lands at exactly +-1.0 when |x|=1.0 - i.e. feeding the curve a
+// literal +-1.0 input, as `state.passSideFlag`'s own bit-to-sign mapping
+// produces, is mathematically DEGENERATE: ANY threshold/slope choice still
+// outputs exactly +-1.0, reintroducing the very full-lock regression this
+// task exists to fix. This file does NOT feed the curve that literal sign.
+// CHOSEN (same spirit as the replaced stand-in, now reshaped through the
+// real curve instead of a plain linear map): the curve's x-input is
+// `state.passSideFlag`'s own real sign multiplied by this file's own
+// already-computed heading-to-lookahead-target alignment error
+// (`1.0 - clamp(dot, -1, 1)`, step 1's `dot` - 0.0 when already aimed at
+// the target, 1.0 when aimed away from it) - a continuous, non-saturated
+// signal the real dispatcher's own confirmed +-1.0 sign cannot supply, so
+// the curve's threshold/slope shape has something non-trivial to act on.
+// Reported plainly as a CHOSEN input choice (what feeds the curve), NOT a
+// claim about 0x00b47490's own real x-input, which Sec18.6's own text does
+// not resolve either way. `state.passSideFlag`'s own sign is UNCHANGED and
+// still the sole sign source, consistent with Team A's "no parallel sign
+// system" finding - only how that sign combines with magnitude changed.
 //
 // A SECOND FLAGGED AMBIGUITY, NOT INVENTED AROUND: step 4's own "distance"
 // operand (fed into the 5.0-unit gate alongside the dot product) is never
@@ -225,81 +264,143 @@
 // anchor-distance either.
 //
 // ============================================================================
-// 5a. THE STEERING-SIGN SOURCE, REPLACED (Sec18.6a, REWRITTEN 2026-10-10,
-//     traffic-overtake-passside-flag task): a real overtake-gated model,
-//     not the cross-product stand-in the first merge used
+// 5a. THE STEERING-SIGN SOURCE (Sec18.6a/Sec18.6b) - REWRITTEN AGAIN
+//     2026-10-11 (overtake-gate-18.6b task), replacing the first merge's
+//     CHOSEN distance/alignment/closing-speed thresholds with Sec18.6b's
+//     real 12-step gate (0x00b47f10, fully reconstructed, real constants
+//     read directly off their data addresses).
 // ============================================================================
-// Sec18.6a (CONFIRMED, 0x00b4ad30/0x00b47c80/0x00b47f10) corrects the
-// previous reading above: `+0xe09` bit 2 is NOT a static/spawn-time lane-
-// cross-track sign - it is a DYNAMIC "which side to pass the other vehicle
-// on" flag. The real code only OVERWRITES it (`new_bit2 = (dot < 0.0)`, a
-// standard assign-from-boolean idiom - on any tick the write doesn't run,
-// the bit keeps whatever it was last set to) while BOTH:
-//   (a) the entity's own drive-state field `+0xc69` reads `0xe` - Sec18.6a's
-//       own switch; this codebase's near-field ambient-traffic model has no
-//       equivalent multi-state `+0xc69`-shaped field anywhere (StepLaneFollow
-//       runs one continuous per-tick update, not a `0xd`/`0xe`/`0xf`/`0x10`
-//       state machine) - CHOSEN, documented plainly: this precondition is
-//       treated as always-satisfied (the overtake gate below runs every
-//       tick), the SAME "no equivalent field -> neutral bypass" convention
-//       PassesLaneMask() already uses above for maskInclude/maskExclude
-//       defaults, not a silent drop of the condition.
-//   (b) `0x00b47f10`'s own geometric gate passes - "distance/closing-speed/
-//       alignment comparisons between the entity and a second record" per
-//       Sec18.6a; the second record's own identity is Sec18.6a's own OPEN
-//       item. purrsian-52's direction (not this file's own invention): use
-//       the nearest near-field vehicle AHEAD of this one as a labelled
-//       stand-in for that second record - see OvertakeCandidate below and
-//       its own doc comment.
+// Sec18.6a (unchanged by this task): `+0xe09` bit 2 is a DYNAMIC "which side
+// to pass the other vehicle on" flag, only OVERWRITTEN while the gate passes
+// - on any tick the write doesn't run, the bit keeps whatever it was last set
+// to. This codebase's near-field ambient-traffic model has no `+0xc69`-shaped
+// drive-state field (CHOSEN bypass, unchanged: the gate below runs every
+// tick, same "no equivalent field -> neutral bypass" convention as
+// PassesLaneMask()'s maskInclude/maskExclude defaults).
 //
-// When written, the new bit value is `(dot < 0.0)`, where Sec18.6a's own dot
-// product is `lateral_axis . (secondVehiclePos + halfWidth - myPos)` -
-// "which side does the other vehicle currently sit on relative to my own
-// lateral axis." This codebase has no tracked `+0x4c/0x50/0x54`-equivalent
-// lateral-axis vector on NearFieldVehicle - CHOSEN: the lateral axis is
-// derived from the SAME heading this file already tracks, rotated +90
-// degrees (`(-sin(heading), cos(heading))`), the standard "left/right of
-// forward" convention; halfWidth is dropped (CHOSEN - no per-vehicle extent
-// is modelled anywhere in NearFieldVehicle either, and Sec18.6a's own prose
-// treats it as a minor offset on top of the position term, not load-bearing
-// to the SIGN test).
+// ORCHESTRATOR COURSE-CORRECTION (2026-10-11, mid-task, two relayed Team A
+// findings, BOTH independently verified against the spec text actually read
+// before acting on them, per this project's own "relayed technical claims
+// get verified, not dismissed" rule):
+//   1. Team A traced that bit 2 is the ONLY steering-sign source in the real
+//      game, always - 0x00b47490 step 2 always reads it, with NO second,
+//      parallel "ordinary lane-keeping sign" computation anywhere. VERIFIED
+//      against Sec18.6's own text (0x00b47490's step 2 is unconditional, and
+//      the 0xe/0x10-state sibling path 0x00b2bbc0 "picks a sign" the same
+//      way, not a documented second mechanism). CONCLUSION: this file does
+//      NOT build a second, parallel, lookahead-derived steering-SIGN system
+//      for "when the overtake gate isn't active" - state.passSideFlag,
+//      unconditionally, is still the only sign source below, exactly as
+//      Sec18.6a already specified. The original task brief's item 4
+//      ("fall back to lookahead-based SIGN when the gate doesn't fire") is
+//      NOT implemented as a second sign system because Team A's trace says
+//      no such real second system exists - implementing one would be the
+//      spec DEVIATION, not a faithful port.
+//   2. A second relayed message hypothesized the real MAGNITUDE write is
+//      `f(heading-dot-to-lookahead-target) * sign(bit2)` - a single combined
+//      float sent to 0x00ae5290. CHECKED against Sec18.6's own disassembly
+//      text (re-read in full for this task, not re-summarized): `0x00a929e0`
+//      is called with exactly ONE float parameter (`signFloat`, already
+//      clamped to [-1,1]), which is the SAME scalar `0x00ae5290` receives as
+//      its own only numeric parameter - no second magnitude value is passed
+//      in from 0x00b47490 anywhere in the confirmed body. **This hypothesis
+//      is NOT supported by the opened disassembly and is reported here as a
+//      discrepancy, not silently adopted:** the real magnitude transform (if
+//      any) happens INSIDE 0x00ae5290's own curve function (parameterized by
+//      a struct at `this+0x20`), which Sec18.6's own "Secondary item" already
+//      flags OPEN - not independently proven at the evaluator level, and
+//      NOT reopened by this task (this project's clean-room rule still
+//      forbids Team B from tracing it). So neither "literal full-lock +-1.0"
+//      (the first merge's reading) nor "heading-dot-scaled magnitude" (the
+//      interjection's hypothesis) is a CONFIRMED port of the real curve - both
+//      are CHOSEN stand-ins for a function this project cannot open. See the
+//      "STEERING MAGNITUDE, CHOSEN FIX" note under item 5 below for which one
+//      this file now uses and exactly why, stated as an engineering
+//      simplification to resolve an observed regression, not a spec claim.
 //
-// THE GATE ITSELF (0x00b47f10, CHOSEN concrete thresholds - Sec18.6a is
-// explicit the magnitude helpers inside it "were not independently opened"):
-// this file reads "distance/closing-speed/alignment... against a second
-// vehicle-shaped record" as three independent tests, ANDed:
-//   - distance: the candidate is within kOvertakeGateMaxDistance of this
-//     vehicle (an overtake/pass decision is inherently a close-range test,
-//     not a whole-graph query);
-//   - alignment: the candidate sits within kOvertakeGateAlignmentCosine of
-//     straight ahead (dot of this vehicle's own forward axis and the unit
-//     vector toward the candidate) - confirms "ahead", matching the
-//     "nearest vehicle ahead" stand-in itself, not beside or behind;
-//   - closing speed: this vehicle's own current speed exceeds
-//     kOvertakeGateMinClosingSpeedMs - CHOSEN simplification, documented
-//     plainly: Sec18.6a's own closing-speed test is between TWO vehicles'
-//     velocities, but this file's second-vehicle stand-in (OvertakeCandidate)
-//     carries no velocity field (NearFieldVehicle has none to read one from
-//     either) - "I am moving toward a vehicle ahead" is read as the closing-
-//     speed precondition instead of a true two-body relative-speed test.
+// `0x00b47f10`'s real 12-step gate (Sec18.6b, fully reconstructed - see that
+// section for the complete step list, every constant independently
+// re-verified against the live Ghidra server before being spliced into the
+// spec): this file ports Sec18.6b's own "Drop-in guidance" minimal shape,
+// APPROXIMATED further where this codebase's data model has no equivalent
+// field, documented plainly per step:
+//   (a) PORTED VERBATIM: forward-facing-divergence gate, `dot(ownFwd,
+//       otherFwd) <= 0.0` (Sec18.6b step 3's own oncoming/crossing-only
+//       test, constant 0x0125e270=0.0 reused exactly). REQUIRES a forward
+//       vector for the candidate, which NearFieldVehicle itself has no
+//       field for (position-only struct) - the CALLER (tools/sr3_viewer.cpp)
+//       resolves this from its own per-vehicle heading side-car map and
+//       threads it into OvertakeCandidate::headingRad (extended by this
+//       task - see that struct's own doc comment).
+//   (b) BYPASSED, not approximated: Sec18.6b step 4's own absolute own-
+//       vehicle half-extent floor (>=64.0 squared, i.e. >=8 linear units).
+//       NearFieldVehicle/OvertakeCandidate model NO bounding-extent field at
+//       all (unchanged from the first pass's own same gap) - there is
+//       nothing to compare against, so this step is treated as
+//       always-satisfied, the SAME neutral-bypass convention already used
+//       for the `+0xc69` drive-state precondition above, not a silent drop.
+//   (c) PORTED VERBATIM (mechanism AND constant): Sec18.6b steps 6-7's own
+//       speed-extrapolated forward closing-distance floor -
+//       `predicted = pos + fwd*speed` for both vehicles (step 6, no
+//       dt-scaling in the spec's own text, ported literally even though
+//       this makes `speed` an implicit "per-tick" unit rather than a true
+//       per-second rate - Sec18.6b does not resolve this unit ambiguity and
+//       this file does not invent a dt-scaling the spec never states), then
+//       `closingProjection = dot(predictedOther - predictedSelf, ownFwd) >=
+//       3.0` (step 7, constant 0x01116444=3.0 reused exactly, REQUIRED).
+//   (d)+(e) APPROXIMATED, NOT a literal port, flagged plainly: Sec18.6b's
+//       real steps 8-10 compute `sizeDelta = otherHalfWidth - ownHalfExtent`
+//       then use it twice - once for an absolute squared-distance cap (81.0,
+//       step 9) on a "pass point" built from sizeDelta, once for the FINAL
+//       dimensionless ratio test (`0.5 <= closingProjection /
+//       clamp(fwdComponent*1.8, 0.1, inf) <= 1.0`, step 10) where
+//       fwdComponent is itself derived from sizeDelta. Neither half-width
+//       NOR half-extent is modelled anywhere in this codebase (same gap as
+//       step (b)) - with sizeDelta forced to the zero vector (the only
+//       value this file CAN supply without inventing a vehicle-size
+//       number), fwdComponent collapses to 0.0, which clamps the step-10
+//       denominator to its 0.1 floor and makes `finalRatio` enormous for
+//       any closingProjection satisfying step (c) - i.e. step (e)'s real
+//       ratio test would ALWAYS fail under this file's own zero-sizeDelta
+//       substitution, reintroducing exactly the "structurally never fires"
+//       bug Sec18.6b's own drop-in guidance was written to fix. Rather than
+//       port a formula that is known in advance to degenerate to "never
+//       passes" given this codebase's missing fields, this file substitutes
+//       ONE combined approximate check in place of both (d) and (e): the
+//       planar squared distance between the two vehicles' SAME predicted
+//       positions already computed for step (c) must be `<= 81.0` (step 9's
+//       own 9-unit-radius constant, 0x01117da8, reused numerically - the
+//       only piece of (d)/(e) this file can still apply meaningfully without
+//       half-width data). This is WEAKER than the real ratio test (any
+//       closing pair within the radius passes, not just one in the real
+//       0.5-1.0 ratio band) and is reported here as an open approximation,
+//       not hidden inside the code.
+//   step 11 (leadHandle-gated `0x00dab5e0>=0.25`, OPEN helper): SKIPPED
+//       outright, per Sec18.6b's own explicit allowance - this codebase has
+//       no "lead vehicle" handle-resolution concept anywhere (leadHandle
+//       never resolves), which Sec18.6b itself calls "a normal 'no lead
+//       vehicle' case, not an error path."
+//   step 1 (the `+0xe08`/`+0xe0c` early-out) and step 2 (leadHandle
+//       resolution itself): not portable (no equivalent fields), same
+//       neutral-bypass convention as (b) above.
 //
-// DEFAULT WHEN NO OVERTAKE IS ACTIVE: Sec18.6a's own prose ("bit 2 keeps
-// whatever value it was last set to - there is no clear-every-frame or
-// set-once-at-spawn path") answers the steady-state case but not the TRUE
-// initial value before this vehicle's gate has ever once passed. Sec18.6a
-// does not give one. CHOSEN, stated plainly: `LaneFollowState::passSideFlag`
-// defaults to `false` at `LaneFollowState::Begin()` (-> steer +1.0, see the
-// mapping below) - an arbitrary but stable starting side, consistent with
-// "no overtake in progress yet" being the common case for a freshly-spawned
-// vehicle with nothing yet ahead of it to pass.
+// Sec18.6b's own ROOT-CAUSE finding, carried over and expected to apply
+// here too: "If a 900-frame test never saw step 3 (forward dot <= 0)
+// succeed - i.e. all observed traffic was same-direction, non-crossing -
+// the gate was structurally guaranteed never to fire." This file's own
+// live 900-frame re-verification (see HANDOFF.md / commit message for this
+// task) reports that number plainly, honest-null-result or not.
 //
-// BIT-TO-STEER-SIGN MAPPING: Sec18.6a traces the bit's OWN write, not how
-// the dispatcher at 0x00a929e0/0x00ae5290 (step 3 above, already CONFIRMED
-// full-lock +-1.0) reads it back out - that mapping is not in Sec18.6a's own
-// text and is OPEN. CHOSEN, arbitrary but documented: passSideFlag==false ->
-// steer +1.0, passSideFlag==true -> steer -1.0 (the same polarity convention
-// the replaced cross-product stand-in used, kept only for continuity, not
-// because any evidence ties it to the real dispatcher's own read).
+// DEFAULT WHEN NO OVERTAKE IS ACTIVE: unchanged from the first pass - CHOSEN
+// `false` at `LaneFollowState::Begin()`. Sec18.6b does not give a real
+// initial-value setter either (not retraced by this task; Team A offered to
+// trace it separately, flagged here as still OPEN rather than resolved).
+//
+// BIT-TO-STEER-SIGN MAPPING: unchanged, CHOSEN, arbitrary but documented:
+// passSideFlag==false -> steer sign +1.0, passSideFlag==true -> steer sign
+// -1.0 (see "STEERING MAGNITUDE, CHOSEN FIX" under item 5 below for how this
+// sign now COMBINES with magnitude, which is the actual fix for the
+// full-lock regression - the sign mapping itself did not need to change).
 //
 // The driving throttle VALUE for the "close/aligned" branch is also CHOSEN
 // (kDrivingThrottle below) - 3.5's own real units are OPEN per Sec18.6, so
@@ -307,10 +408,11 @@
 //
 // The real "3.5"/distance-gate CONSTANTS Sec18.6 DOES give numerically
 // (cos(30deg), 5.0 world units) ARE reused verbatim below, not re-chosen.
-// The overtake-gate's OWN three thresholds (distance/alignment/closing-speed
-// above) are NOT given numerically by Sec18.6a (its own magnitude helpers
-// were not opened) and are therefore CHOSEN in full, unlike the Sec18.6
-// step-4 constants.
+// The overtake-gate's own constants are now Sec18.6b's REAL numbers (0.0,
+// 3.0, 81.0 above) wherever portable, and explicitly-flagged approximations
+// only where this codebase's missing half-width/half-extent/lead-handle
+// fields make the real formula degenerate - not CHOSEN-in-full as the first
+// pass's three guessed thresholds were.
 //
 // PHYSICS INTEGRATION - unchanged from the first pass, still the one real
 // write surface (Sec18.3). This file does not itself depend on sr3physics
@@ -360,14 +462,27 @@ inline constexpr uint32_t kMaskExcludeNone = 0x0u;
 inline constexpr double kAlignmentCosineThreshold = 0.86602540378443864676;  // cos(30 degrees)
 inline constexpr double kAlignmentDistanceThreshold = 5.0;
 
-// Sec18.6a's own overtake/pass-side gate (0x00b47f10) - CHOSEN concrete
-// thresholds in full, see file header item 5a: Sec18.6a names the gate's
-// SHAPE ("distance/closing-speed/alignment") but its own magnitude helpers
-// were not independently opened, so none of these three numbers are reused
-// from the real binary.
-inline constexpr double kOvertakeGateMaxDistance = 8.0;              // world units
-inline constexpr double kOvertakeGateAlignmentCosine = 0.93969262078590838405;  // cos(20 degrees) - "ahead", narrower than the 30-degree steering-alignment cone above
-inline constexpr double kOvertakeGateMinClosingSpeedMs = 0.1;        // CHOSEN simplification - see file header item 5a (no 2nd-vehicle velocity modelled)
+// Sec18.6b's own real overtake/pass-side gate (0x00b47f10, fully
+// reconstructed) - see file header item 5a for the full step-by-step
+// mapping and which steps are PORTED VERBATIM vs APPROXIMATED vs BYPASSED.
+// Replaces the first pass's three fully-CHOSEN distance/alignment/
+// closing-speed thresholds.
+inline constexpr double kOvertakeGateForwardDivergence = 0.0;    // step (a)/3 - 0x0125e270, PORTED VERBATIM: dot(ownFwd,otherFwd) must be <= this
+inline constexpr double kOvertakeGateClosingDistanceFloor = 3.0; // step (c)/7 - 0x01116444, PORTED VERBATIM: closingProjection must be >= this
+inline constexpr double kOvertakeGatePassPointDistanceSq = 81.0; // steps (d)+(e)/9-10 - 0x01117da8 (9^2), APPROXIMATED single combined check, see item 5a
+
+// Sec18.6's own "Secondary item" (RESOLVED 2026-10-11, overtake-gate-18.6b
+// task) - the `driverInput+0x20` 2-float `{threshold, slope}` CONFIRMED to
+// parameterize 0x00ae5290's inline curve.
+// Sec18.6b: real values, CONFIRMED - one universal, hardcoded constructor
+// (0x00aba420) called unconditionally for every vehicle's driverInput, no
+// .xtbl read, no per-vehicle-type variation. Since the consumer clamps
+// input magnitude to [0,1] before evaluating the curve, threshold=1.0
+// makes the above-threshold branch in ApplySteeringCurve() below
+// structurally unreachable - the curve degenerates to a pure identity
+// pass-through, output = |input|.
+inline constexpr double kSteerCurveThreshold = 1.0;
+inline constexpr double kSteerCurveSlope = 1.0;
 
 namespace traffic_lane_detail {
 inline double Dist2D(const sr3zone::TrafficPoint& a, const sr3zone::TrafficPoint& b) {
@@ -382,6 +497,53 @@ inline double Dist2D(double ax, double az, const sr3zone::TrafficPoint& b) {
     const double dx = static_cast<double>(b.x) - ax;
     const double dz = static_cast<double>(b.z) - az;
     return std::sqrt(dx * dx + dz * dz);
+}
+
+// Sec18.6's own "Secondary item" curve (RESOLVED 2026-10-11, 0x00ae5290,
+// fully inline - no separate evaluator function exists in the real game).
+// PORTED mechanics, CONFIRMED by direct disassembly re-opened for that spec
+// pass:
+//   1. an airborne-gated early-out: 0x00ae5290 reads an airborne/grounded
+//      pair off a sub-object at `this+0x150` (same shape as Sec18.6a's
+//      0x00ad3820) and returns immediately, WRITING NOTHING, when airborne.
+//      This codebase's near-field ambient-vehicle population
+//      (NearFieldVehicle, near_field_vehicle_population.h) carries no
+//      grounded/airborne field at all - CHOSEN bypass, same "no equivalent
+//      field -> neutral bypass" convention PassesLaneMask() already uses:
+//      `airborne` is always treated as false, the curve always runs. A
+//      real caller that DOES track airborne state for a given vehicle
+//      should check it BEFORE calling this function and skip the call
+//      entirely (equivalent to "write nothing") rather than pass true here
+//      (this function does not itself implement a "write nothing" return
+//      path - there is nothing to leave unwritten in this stateless port).
+//   2. the input sign is NEGATED first (the stored convention inside the
+//      real function is inverted relative to its caller's own sign).
+//   3. clamped to [-1,1].
+//   4. (unless a bit on `this+0x164` is set - this codebase models no such
+//      bit, CHOSEN bypass: the curve always runs, same convention as (1))
+//      a 2-segment piecewise-linear response: for |x| <= threshold,
+//      output = slope * |x|; for |x| > threshold, a second slope
+//      `(1.0 - slope*threshold) / (1.0 - threshold)` continues the ramp so
+//      the curve lands exactly at 1.0 when |x| = 1.0.
+//   5. sign reapplied, result clamped to [-1,1] again.
+// `threshold`/`slope` are the real CONFIRMED values (kSteerCurveThreshold/
+// kSteerCurveSlope above, Sec18.6b) - not CHOSEN. The real `driverInput+0x20`
+// config struct turns out not to be a per-vehicle config table at all: one
+// hardcoded constructor builds it identically for every vehicle.
+inline double ApplySteeringCurve(double signedInput, double threshold, double slope, bool airborne) {
+    if (airborne) return 0.0;  // see step 1 above - not reachable while the bypass holds `airborne` false
+    double x = -signedInput;           // step 2
+    x = std::clamp(x, -1.0, 1.0);       // step 3
+    const double sign = (x < 0.0) ? -1.0 : 1.0;
+    const double mag = std::fabs(x);
+    double out;
+    if (mag <= threshold) {
+        out = slope * mag;
+    } else {
+        const double secondSlope = (1.0 - slope * threshold) / (1.0 - threshold);
+        out = slope * threshold + secondSlope * (mag - threshold);
+    }
+    return std::clamp(sign * out, -1.0, 1.0);  // step 5
 }
 }  // namespace traffic_lane_detail
 
@@ -508,12 +670,26 @@ inline std::optional<size_t> ChooseNextSegmentByNearestDistance(const TrafficLan
 // AHEAD of the follower as this second record - a caller (e.g.
 // tools/sr3_viewer.cpp's playtest loop) resolves that candidate among its
 // own live near-field-vehicle population (this header has no population
-// concept of its own) and passes it in here each tick. Carries no velocity
-// field - see file header item 5a for why the closing-speed gate test is a
-// one-body simplification as a result.
+// concept of its own) and passes it in here each tick.
+//
+// EXTENDED 2026-10-11 (overtake-gate-18.6b task): `headingRad`/`speedMs`
+// added so Sec18.6b's real step (a) (forward-divergence) and step (c)
+// (speed-extrapolated closing distance) are computable at all - the first
+// pass's position-only struct could not support either real step.
+// NearFieldVehicle itself still carries neither field (position-only, per
+// near_field_vehicle_population.h); the CALLER threads these in from its
+// own per-vehicle side-car tracking (tools/sr3_viewer.cpp already keeps
+// nearFieldVehicleHeading/nearFieldVehicleSpeed maps for exactly this
+// purpose - see ResolveNearestNearFieldVehicleAhead()'s own updated
+// signature there). Defaults (0.0 heading, 0.0 speed) make a
+// default-constructed candidate read as "stationary, facing +X" - callers
+// that cannot supply real values should prefer `std::nullopt` instead of a
+// default-constructed candidate, same as before.
 struct OvertakeCandidate {
     double x = 0.0;
     double z = 0.0;
+    double headingRad = 0.0;  // NEW: the candidate's own forward-axis heading, same convention as vehicleHeadingRad below
+    double speedMs = 0.0;     // NEW: the candidate's own current speed (world units/sec) - feeds step (c)'s predicted-position extrapolation
 };
 
 // Cursor state for one vehicle following the lane graph, PLUS Sec18.5's own
@@ -588,6 +764,7 @@ struct LaneFollowCommand {
     bool advancedSegment = false;  // true the tick the follower hopped segments (diagnostic)
     bool requeried = false;        // true the tick the cached-target throttle (item 4) actually re-ran the walk (diagnostic)
     bool aligned = false;          // Sec18.6 step 4's own alignment-AND-distance gate result (diagnostic)
+    bool overtakeGateFired = false;  // Sec18.6b's real gate result this tick (diagnostic) - true only when state.passSideFlag was actually rewritten
     double steer = 0.0;            // Sec18.6: CONFIRMED full-lock +-1.0 (or 0 when stuck) - feed into sr3physics::DriverInput::steer
     double throttle = 0.0;         // [0,1]  - feed into sr3physics::DriverInput::throttle
     double brake = 0.0;            // [0,1]  - feed into sr3physics::DriverInput::brake
@@ -712,16 +889,19 @@ inline LookaheadWalkResult WalkLookahead(const TrafficLaneGraph& graph, size_t s
 // heading directly, no conversion needed.
 //
 // `vehicleSpeedMs`: this vehicle's own current speed (world units/sec) -
-// feeds the Sec18.6a overtake gate's own closing-speed test (file header
-// item 5a); CHOSEN default 0.0 for callers that don't track speed (the gate
-// then simply never passes, same as "no overtake candidate given").
+// feeds Sec18.6b's real gate step (c)'s speed-extrapolated closing-distance
+// test (file header item 5a); CHOSEN default 0.0 for callers that don't
+// track speed (predicted position then collapses to the raw position,
+// making the closing-distance test strictly harder to pass, not a bypass).
 //
 // `overtakeCandidate`: Sec18.6a's own "second record", resolved by the
 // CALLER (this header has no population concept of its own) - purrsian-52's
-// own directed stand-in is the nearest near-field vehicle ahead of this one;
-// pass std::nullopt when none is nearby/eligible this tick (the gate then
-// never passes and `state.passSideFlag` simply keeps its last value, per
-// Sec18.6a's own "no clear-every-frame path" text).
+// own directed stand-in is the nearest near-field vehicle ahead of this one,
+// EXTENDED (this task) to also carry the candidate's own heading/speed so
+// Sec18.6b's real gate steps are computable; pass std::nullopt when none is
+// nearby/eligible this tick (the gate then never passes and
+// `state.passSideFlag` simply keeps its last value, per Sec18.6a's own "no
+// clear-every-frame path" text).
 inline LaneFollowCommand StepLaneFollow(const TrafficLaneGraph& graph, LaneFollowState& state, double vehicleX,
                                          double vehicleZ, double vehicleHeadingRad,
                                          const LaneFollowConfig& config = LaneFollowConfig{},
@@ -808,24 +988,54 @@ inline LaneFollowCommand StepLaneFollow(const TrafficLaneGraph& graph, LaneFollo
     const double targetDirZ = dz * invDist;
     const double dot = headingFwdX * targetDirX + headingFwdZ * targetDirZ;      // Sec18.6 step 1
 
-    // ---- Item 5a (Sec18.6a): the real overtake/pass-side gate, recomputing
-    // state.passSideFlag ONLY when it passes - otherwise the flag simply
-    // keeps whatever it was last set to (Sec18.6a's own text), ported
-    // verbatim below rather than recomputed unconditionally every tick. ----
+    // ---- Item 5a (Sec18.6b): the REAL 12-step overtake/pass-side gate
+    // (Drop-in-guidance port, steps (a)/(c) verbatim, (d)+(e) approximated,
+    // (b)/step-11 bypassed - see file header item 5a for the full mapping),
+    // recomputing state.passSideFlag ONLY when ALL ported/approximated
+    // steps pass - otherwise the flag simply keeps whatever it was last set
+    // to (Sec18.6a's own text, unchanged by this task). ----
+    bool overtakeGateFired = false;
     if (overtakeCandidate.has_value()) {
         const double cdx = overtakeCandidate->x - vehicleX;
         const double cdz = overtakeCandidate->z - vehicleZ;
-        const double cDist = std::sqrt(cdx * cdx + cdz * cdz);
-        const double cInvDist = (cDist > 1e-9) ? (1.0 / cDist) : 0.0;
-        const double cDirX = cdx * cInvDist;
-        const double cDirZ = cdz * cInvDist;
-        // Alignment: is the candidate roughly ahead of this vehicle's own
-        // forward axis? (CHOSEN gate component, file header item 5a.)
-        const double aheadDot = headingFwdX * cDirX + headingFwdZ * cDirZ;
-        const bool gateDistance = cDist <= kOvertakeGateMaxDistance;
-        const bool gateAlignment = aheadDot >= kOvertakeGateAlignmentCosine;
-        const bool gateClosingSpeed = vehicleSpeedMs >= kOvertakeGateMinClosingSpeedMs;
-        if (gateDistance && gateAlignment && gateClosingSpeed) {
+
+        // Step (a)/3, PORTED VERBATIM: forward-facing-divergence - the two
+        // vehicles' forward axes must be >=90 degrees apart (oncoming/
+        // crossing traffic only). Same-direction traffic structurally
+        // cannot pass this (Sec18.6b's own documented root cause of "never
+        // fires" against an all-same-direction population).
+        const double otherFwdX = std::cos(overtakeCandidate->headingRad);
+        const double otherFwdZ = std::sin(overtakeCandidate->headingRad);
+        const double forwardDot = headingFwdX * otherFwdX + headingFwdZ * otherFwdZ;
+        const bool gateForwardDivergence = forwardDot <= kOvertakeGateForwardDivergence;
+
+        // Step (c)/6-7, PORTED VERBATIM: speed-extrapolated forward closing
+        // distance. predicted = pos + fwd*speed (no dt-scaling - Sec18.6b's
+        // own text does not scale this by a timestep either, see file
+        // header item 5a).
+        const double predictedSelfX = vehicleX + headingFwdX * vehicleSpeedMs;
+        const double predictedSelfZ = vehicleZ + headingFwdZ * vehicleSpeedMs;
+        const double predictedOtherX = overtakeCandidate->x + otherFwdX * overtakeCandidate->speedMs;
+        const double predictedOtherZ = overtakeCandidate->z + otherFwdZ * overtakeCandidate->speedMs;
+        const double closingDx = predictedOtherX - predictedSelfX;
+        const double closingDz = predictedOtherZ - predictedSelfZ;
+        const double closingProjection = headingFwdX * closingDx + headingFwdZ * closingDz;
+        const bool gateClosingDistance = closingProjection >= kOvertakeGateClosingDistanceFloor;
+
+        // Steps (d)+(e)/9-10, APPROXIMATED (see file header item 5a for why
+        // the real ratio test degenerates to "always fails" once sizeDelta
+        // is forced to zero): single combined squared-distance cap on the
+        // two vehicles' own predicted positions, reusing step 9's real 81.0
+        // (9^2) constant.
+        const double predictedDistSq = closingDx * closingDx + closingDz * closingDz;
+        const bool gatePassPointBound = predictedDistSq <= kOvertakeGatePassPointDistanceSq;
+
+        // Step (b)/4 and step 2/11 (leadHandle path): BYPASSED - no
+        // half-extent or lead-handle concept modelled, see file header item
+        // 5a. Treated as always-satisfied, not silently dropped.
+        overtakeGateFired = gateForwardDivergence && gateClosingDistance && gatePassPointBound;
+
+        if (overtakeGateFired) {
             // Sec18.6a's own write: new_bit2 = (lateral_axis . (candidate -
             // myPos) < 0.0) - lateral axis CHOSEN as heading rotated +90
             // degrees (file header item 5a), halfWidth term dropped (not
@@ -856,13 +1066,34 @@ inline LaneFollowCommand StepLaneFollow(const TrafficLaneGraph& graph, LaneFollo
     // Sec18.5/18.6 cached-target mechanism rather than two unrelated
     // distances.
     cmd.aligned = (dot >= kAlignmentCosineThreshold) && (distFromCachedOrigin <= kAlignmentDistanceThreshold);
-    // Sec18.6 step 3: CONFIRMED full-lock +-1.0, not proportional. Sign
-    // source is now the REAL Sec18.6a overtake flag (state.passSideFlag,
-    // recomputed above only behind the overtake gate) rather than the first
-    // merge's cross-product stand-in. Bit-to-sign mapping itself is CHOSEN,
-    // arbitrary but documented - file header item 5a ("BIT-TO-STEER-SIGN
-    // MAPPING").
-    cmd.steer = state.passSideFlag ? -1.0 : 1.0;
+    cmd.overtakeGateFired = overtakeGateFired;
+    // Sign: UNCHANGED, still the sole source Team A confirmed is real -
+    // state.passSideFlag (Sec18.6a), recomputed above only behind the real
+    // Sec18.6b gate, otherwise keeping its last value. Bit-to-sign mapping
+    // itself is CHOSEN, arbitrary but documented - file header item 5a
+    // ("BIT-TO-STEER-SIGN MAPPING").
+    const double steerSign = state.passSideFlag ? -1.0 : 1.0;
+    // Magnitude: Sec18.6's own "Secondary item" curve (RESOLVED 2026-10-11),
+    // run for real via traffic_lane_detail::ApplySteeringCurve() - see that
+    // function's own doc comment for the CONFIRMED airborne-gate/negate/
+    // clamp/piecewise-linear/reapply-sign mechanics, and file header item 5
+    // ("STEERING MAGNITUDE") for why this file feeds the curve
+    // `steerSign * alignmentError` rather than the literal +-1.0 `steerSign`
+    // alone (the latter is mathematically degenerate - the curve always
+    // lands at +-1.0 when |x|=1.0, which would silently reintroduce the
+    // exact full-lock regression this task fixes). `airborne` is CHOSEN
+    // false - NearFieldVehicle models no grounded/airborne field (file
+    // header item 5, same neutral-bypass convention as PassesLaneMask()).
+    const double alignmentError = std::clamp(1.0 - std::clamp(dot, -1.0, 1.0), 0.0, 1.0);
+    // Pre-negated by -steerSign (not +steerSign): ApplySteeringCurve's own
+    // step 2 negates its input before anything else (CONFIRMED mechanic,
+    // see its doc comment) - pre-compensating here keeps this file's own
+    // "BIT-TO-STEER-SIGN MAPPING" convention (passSideFlag==false -> +1)
+    // meaning what it says at the OUTPUT, rather than silently inverting it
+    // through the curve's own internal negation.
+    const double curveInput = -steerSign * alignmentError;
+    cmd.steer = traffic_lane_detail::ApplySteeringCurve(curveInput, kSteerCurveThreshold, kSteerCurveSlope,
+                                                          /*airborne=*/false);
     // Sec18.6 step 4: CONFIRMED throttle=0 when far/misaligned; CHOSEN
     // driving-throttle magnitude when close/aligned (the real "3.5"
     // literal's units are OPEN).

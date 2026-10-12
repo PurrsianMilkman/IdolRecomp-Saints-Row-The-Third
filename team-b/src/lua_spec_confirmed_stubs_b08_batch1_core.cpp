@@ -400,6 +400,35 @@ int stub_on_attack_performed(lua_State* L) {
 // follower-sentinel-resolver pass, via resolveFollowerAwareObject(). The
 // destination resolver family (§4.13) is unaffected - distinct resolver,
 // not re-corrected.
+//
+// REAL position write, 2026-10-11 (spec-lua-api-behaviour.md §4.2's own
+// "RECONCILED 2026-10-11, mission-blocker follow-up for `m07`" note,
+// independently re-verified before splicing): the real `teleport`
+// (`0x00a60e30`) commits its placement by calling the resolved mover's own
+// vtable slot `+0x40` - the SAME generic transform-setter
+// `spec-player-runtime.md` §6.9/§7.5/§11.5.1 already names, and the EXACT
+// SAME `+0x40`..`+0x6c` field `get_dist`/`get_object_pos` (§4.2/§20.24) read
+// as the object's live, continuously-updated position. This project already
+// models that one shared field as `CharacterState::worldPosition` /
+// `VehicleState::worldPosition` (`EngineState::bridgeLiveCharacterPosition()`
+// 's own doc comment) - until now `teleport` recorded a `TeleportRequest`
+// but never actually wrote it, leaving every teleported name's own position
+// permanently OPEN for any later `get_dist`/`get_object_pos` call, even
+// though the real engine's `teleport` is precisely what the real `+0x40`
+// field would have been populated by. Fixed here: once both names resolve,
+// look up the destination's own real position the SAME way `get_dist`
+// already does (`tryResolveWorldPositionFromZoneData()`'s real `.czn_pc`
+// source - §4.2's own body text: "args 5-7... XYZ position offsets applied
+// on top of the destination's own position") and bridge mover = destination
+// position + the 3 real offset arguments into the mover's live
+// `worldPosition` via `bridgeLiveCharacterPosition()` - the same setter
+// `runPlaytest()`'s own per-frame player bridge uses, so a later
+// `get_dist`/`get_object_pos` call for this name reads the SAME real value
+// a resolver walking the live `+0x40..+0x6c` block would. If the
+// destination's own position is not (yet) resolvable from real zone data
+// either, nothing is written - an honest OPEN gap stays OPEN rather than
+// fabricating 0,0,0 for the mover, consistent with this project's standing
+// no-invented-values discipline.
 int stub_teleport(lua_State* L) {
     logCall(L, upLog(L), "teleport", upStateTag(L));
     std::string target = argString(L, 1);
@@ -424,6 +453,16 @@ int stub_teleport(lua_State* L) {
     bool isPlayerClass = st->playerClassChainResolves(resolvedTarget); // CHOSEN default now applies when no test .set() it - see engine_state.h
     req.tookPlayerPath = isPlayerClass;
     req.exitVehiclesArg3 = isPlayerClass && arg3; // CONFIRMED: NOT forwarded on the non-player path
+    // REAL position write (see this function's own doc comment above): mover
+    // = destination's real position + the 3 real offset arguments, into the
+    // SAME live worldPosition field get_dist/get_object_pos read.
+    CharacterState& destChar = st->getOrCreateCharacter(dest);
+    st->tryResolveWorldPositionFromZoneData(dest, destChar.worldPosition);
+    if (destChar.worldPosition.known()) {
+        WorldPosition destPos = destChar.worldPosition.get();
+        WorldPosition moverPos{destPos.x + arg5, destPos.y + arg6, destPos.z + arg7};
+        st->bridgeLiveCharacterPosition(resolvedTarget, moverPos);
+    }
     return 0;
 }
 

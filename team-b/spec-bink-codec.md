@@ -1362,11 +1362,62 @@ no other data-dependent branch point exists in it.
 **Part (d), closed: exactly 1 of the 23 calls (call #1, site `0x1001a9db`) feeds descriptor A** —
 confirmed by matching its own output-pointer arguments (table16-out/classbyte-out/LUT-pointer-out)
 exactly against descriptor A's own `+0x10`/`+0x20`/`+0x24` fields. Call #2 feeds descriptor B; calls
-#3-18 (the 16-loop body) feed a separate 16-entry sub-table array; call #19 (the loop's own "+1 more"
+#3-18 (the 16-loop body) feed a separate 16-entry sub-table array ~~; call #19 (the loop's own "+1 more"
 call) feeds a further distinct structure; calls #20-23 each feed one of 4 more mutually-distinct,
 single-call scratch structures. None of the other 22 touch descriptor A — consistent with, not a
 reopening of, this section's own standing "23 sibling calls... downstream consumers not traced" item
-for the other 5 structures. Full per-call field-by-field detail (every nibble/flag/mode/pairwise-bit/
+for the other 5 structures.~~ **DOWNSTREAM CONSUMER FOUND, 2026-10-11, orchestrator-routed (SPEC
+TEAM, agent `a1972571f737cc99e`, independently re-verified by direct query before splicing — the
+live `arg3` pointer match and the exact `A_array`/`LUT_ptr_array` contents both matched the raw
+capture exactly): calls #3-18's 16-entry sub-table array IS `0x100195b0`'s own two LUT tables,
+`arg3+0x100` (16 dwords, max Huffman code length per class — the "A" array) and `arg3+0x140` (16
+dwords, each a pointer into the static per-nibble packed-byte LUT bank at `0x1003bd60`+) — the
+exact structure §5.3s's own "two LUT-table tree lookup" left unspecified. Confirmed by a live
+pointer match: the writer loop, `0x10019300` (called once per block-row from `0x1001a530`'s call
+site `0x1001aa11`, itself part of this same 23-call sequence — NOT a separate mechanism), and the
+`0x1001aaf0`-dispatched `0x100195b0` call both operate on the identical `arg3` address in the
+same live run. `0x10019300`'s own loop body (16 iterations) calls `0x10018ca0` exactly as this
+section's own `build_table` algorithm already specifies — each call unconditionally sets
+`classbyte_out = CLASSBYTE[nibble]` (→ `arg3+0x100[i]`) and `LUT_ptr_out = 0x1003bd60 +
+OFFSET[nibble]` (→ `arg3+0x140[i]`) from its own 4-bit nibble, then optionally reads more bits to
+build an accompanying `table16_out` permutation table via the same 5 construction strategies
+already fully specified above — no new bit-reading algorithm, this is the SAME `build_table` call
+shape, just a previously-untraced consumer of its output. **Net answer: these arrays are rebuilt
+fresh from the bitstream every block-row (NOT static DLL data) — only the packed-byte LUT
+*contents* each pointer resolves to (the `0x1003bd60` bank) are static, already-published
+material; the per-row *selection* of which pointer/class-length goes where is bitstream-derived.**
+A persistent class index, `arg3+0x180`, is reset to 0 by the same `0x10019300` loop and carried
+across `0x100195b0` calls within the row (matching §5.3s's own "running value… carried into the
+next call" note). **Implementer takeaway for a general decoder: run the 16-call
+`0x10018ca0` table-builder exactly as `build_table` specifies, writing 3 parallel banks
+(`table16[16][16]`, `A[16]`, `LUT_ptr[16]`) into row-local scratch; maintain `cur_class` across
+`0x100195b0` calls, reset to 0 at each row's table rebuild; the tree-decode loop indexes all
+three banks by `cur_class`.** Remaining OPEN: call #19's and calls #20-23's own downstream
+consumers (still not traced); whether `0x10018ca0`'s construction strategies ever hit
+`nibble==0`/explicit-prefix for these specific 16 calls on rows other than Y row 0 (only that one
+instance was traced); the semantic meaning of "class"/why 16 classes, and `table16`'s own role in
+`0x100195b0`'s third tree level (traced to the instruction, not semantically interpreted).
+
+- **Evidence:** live Unicorn capture against the unmodified `binkw32.dll`/`main_menu_bg.bik`
+  proving the identical `arg3` address (`0x303f4c08`) is written by `0x10019300` and read by the
+  `0x1001aaf0`-dispatched `0x100195b0` call; full static disassembly of both functions
+  cross-checked instruction-by-instruction against the live register/memory values.
+  Independently re-verified before splicing — the raw capture output's `arg3` match and array
+  contents (`A_array=(4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4)`, `LUT_ptr_array` resolving exactly to
+  `0x1003bd60`-based addresses) matched the agent's claims exactly.
+- **Confidence:** CONFIRMED that the arrays are per-row/bitstream-built (not static), that the
+  writer is `0x10019300`→16×`0x10018ca0`, and that the exact same `arg3` address is shared
+  between writer and `0x100195b0` (live pointer match, not inference). CONFIRMED the array
+  shapes from live-captured contents matching the disassembled access pattern. PLAUSIBLE
+  (inherited from this section's own already-CONFIRMED `build_table` pseudocode, not
+  independently re-walked this pass) that no construction strategy ever overrides
+  `classbyte_out`/`LUT_A_ptr_out` after the initial nibble-driven assignment.
+- **Unknowns:** the 2-of-16 nibble values missed by this pass's own probe (cosmetic — the
+  resulting array contents were still captured correctly post-loop); whether chroma planes or
+  later rows ever hit different construction strategies for these specific 16 calls (only Y row
+  0 traced); call #19's and calls #20-23's own downstream consumers.
+
+Full per-call field-by-field detail (every nibble/flag/mode/pairwise-bit/
 explicit-value/merge-group-selector-and-real-consumed-count, in order, for all 23 calls) and the raw/JSON
 trace output for direct diffing: `scratchpad/bink_5_3g_call_by_call_trace_2026-10-08.md`,
 `scratchpad/bink_call_by_call_trace_2026-10-08/`.
@@ -1537,11 +1588,25 @@ the idiom `ecx = [ebx+0x10] - [ebp-0x210]; cmp ecx,0x10; jb <bail>` immediately 
 secondary=2, secondary=3, and (per the original 2026-10-09 trace) secondary=5 case bodies alike. This is
 a SEPARATE descriptor from both A (`[ebp-0x170]`/`[ebp-0x16c]`, 5.3c) and B (`[ebp-0x1a4]`/`[ebp-0x1a0]`,
 5.3c's "Extended 2026-10-09" paragraph) — call it **descriptor L** ("literal") pending a real name.
-**CONFIRMED: descriptor L feeds the DC literal word (secondary=2), the flat-fill byte (secondary=3), and
-both pattern-literal bytes (secondary=5) — i.e. every "raw literal value" read by any primary=1 case
-body comes from this one shared byte stream.** OPEN, not chased this pass: whether descriptor L is
-itself filled by its own `0x10019360`-style pre-stage call (by analogy to A and B) or reads raw
-un-decoded bitstream bytes directly — not traced upstream of its own cursor/bound pair this pass.
+~~**CONFIRMED: descriptor L feeds the DC literal word (secondary=2), the flat-fill byte
+(secondary=3), and both pattern-literal bytes (secondary=5) — i.e. every "raw literal value" read
+by any primary=1 case body comes from this one shared byte stream.**~~ **CORRECTED 2026-10-11,
+§5.3y (SPEC TEAM, agent `a40f050aea077ad93`, independently re-verified by live query): descriptor
+L's BOUND-check variable (`[ebx+0x10]`/`[ebp-0x210]`) genuinely is shared and byte-identical
+across secondary=2/secondary=3 — that half of the claim stands. But the actual literal-byte READ
+cursor is NOT one shared pointer: secondary=2's DC-word read (`0x1001b328`) uses a cursor cached
+at `[ebp-0x13c]`; secondary=3's fill-byte read (`0x1001b3f8`) uses a cursor cached against
+`[ebp-0x34]` — two physically different addresses, ~5,008 bytes apart in one live capture, not
+adjacent sub-ranges of one obviously-shared small buffer. "One shared byte stream" overclaimed
+the sharing: the bound/limit tracking is shared, the actual byte source is NOT (at least between
+secondary=2 and secondary=3 — secondary=5's own pattern-literal cursor was not re-checked this
+pass). A reimplementation that modeled DC-literal and fill-byte reads as pulling from one shared
+cursor/array would diverge from the real DLL.** OPEN, not chased this pass: whether descriptor L
+is itself filled by its own `0x10019360`-style pre-stage call (by analogy to A and B) or reads raw
+un-decoded bitstream bytes directly — not traced upstream of its own cursor/bound pair this pass;
+also now open, per the above correction: what sits further upstream of secondary=2's and
+secondary=3's own separate literal-cursor refill-base pointers, and whether secondary=5's cursor
+is a third separate address or genuinely shares with one of the other two.
 
 **A second new structural finding, also confirmed by live register trace: primary=1's "mark skip, no
 pixel write" behavior is reached by an early flag-bit short-circuit, BEFORE the secondary byte is ever
@@ -1791,8 +1856,13 @@ getting Bink video on screen. §5.3b already established the *structure* of `0x1
 `0x100258d0`). This subsection raises both to §5.3g's own instruction-cited pseudocode standard. Full
 fresh disassembly (capstone/pefile, static, no decompiler) of `0x100244c0`-`0x100247ce`, `0x100247d0`-
 `0x10024b4f` (the third, direct-store sibling named in §5.3i), `0x10024b50`-`0x10024e9e`, and
-`0x10024eb0`-`0x100258a8` (the tree decoder's real, full extent — one function, 14,840 bytes, confirmed
-by the single `ret` at `0x100258a8` and no other `ret`/function-prologue in the whole range). Scripts and
+`0x10024eb0`-`0x100258a8` (the tree decoder's real, full extent — one function, **CORRECTED 2026-10-11**:
+2,552 bytes (`0x100258a8-0x10024eb0=0x9f8`), not 14,840 as this sentence originally said — the 14,840
+figure was a documentation error, caught by a fresh independent `capstone` disassembly of the exact
+same address range (`scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/`, 741 real instructions decoded
+cleanly start-to-end with zero desync, averaging ~3.4 bytes/instruction, consistent with normal x86
+code density and inconsistent with the old 14,840-byte claim), confirmed by the single `ret` at
+`0x100258a8` and no other `ret`/function-prologue in the whole range. Scripts and
 raw captures: `scratchpad/bink_unicorn_harness_2026-10-08/{dump_idct.py (via the session scratchpad
 copy), capture_idct_col80.py, verify_idct_math_v2.py, idct_col80_coeffs.bin, idct_col80_meta.txt,
 real_output_col80_8x8.bin}`.
@@ -2005,12 +2075,57 @@ while (front < tail) {                                     // 0x10025489-0x10025
                // directly into the SAME scratch buffer, reinterpreted as a SIGNED 16-BIT WORD ARRAY
                // via `word ptr [ebp + idx*2 - 0x14c]` (idx = running coefficient-count, `[ebp-0x9c]`)
     }
-    // then: read the NEXT node's own 1-bit "is-leaf" flag and (if needed) the next 2-bit `sel` field,
-    // using the SAME single-bit refill idiom, before looping back to `front`'s successor
+    // CORRECTED 2026-10-11, this line was imprecise (see below): there are TWO distinct
+    // single-bit gates, not one -- Gate A (every iteration, every nonzero-tag node, decides
+    // whether the node does anything at all) and Gate B (reached only from case 0/case 2, up
+    // to 4 unrolled copies, resolves a coefficient now or defers it).
   }
   bias_mask >>= 1; level--;                                 // 0x10025495-0x1002549b
 } while (level > 1);                                        // 0x1002549c-0x1002549f
 ```
+
+**CORRECTION, 2026-10-11 (orchestrator/Team B-routed, top video-decode blocker — see the new
+worked example below for full detail): the "read the next node's is-leaf flag" line above was
+imprecise about both sequencing and destination, and that imprecision was the direct root of a
+real Team B decode bug (94 bits consumed instead of 17, 14 spurious coefficients, tree shape a
+pure function of the seed bytes with zero bitstream influence).** The real mechanism has two
+distinct single-bit gates:
+
+- **Gate A** — read every main-loop iteration, for the CURRENT node at `front` (not a "next"
+  node), BEFORE `sel` is even computed (`0x10024fdb`-`0x10024ffd` in Phase 1; the structurally
+  identical Phase-2 copy at `0x100254db`-`0x100254f7` is the one actually exercised for small
+  trees, see below). Exactly 1 bit, unconditional for any node whose tag is nonzero. It writes
+  nothing — it only gates control flow: bit clear → skip the `sel` switch entirely for this node,
+  advance past it, continue; bit set → compute `sel = tag & 3` and dispatch via the jump table.
+  **This is the actual entropy-coding bit a port must implement — a port that gets case 0/1's tag
+  arithmetic right but never implements Gate A will produce the exact seed-byte-determined tree
+  shape Team B measured.**
+- **Gate B** — a chained "resolve now vs. defer" test, reached only from case 0 and case 2 (NOT
+  case 1, which returns straight to the loop bottom without consuming any bits at all — confirmed,
+  `0x10025038`-`0x10025082` is pure arithmetic: `tag' = (tag>>2)*4+2` written in place, then 3
+  children pushed at `tag'' = (tag>>2)*4+0x12/+0x22/+0x32`, then `jmp 0x10025489` straight to the
+  loop bottom). Gate B's shared continuation entry is `0x100250a0` (Phase 1) / `0x10025577` (the
+  Phase-2 sibling); up to 4 unrolled 1-bit copies run per visit. Each copy: bit set → defer
+  (decrement a SEPARATE backward-growing deferred-worklist pointer at `[ebp-0x98]`, distinct from
+  `tail`/`[ebp-0xa0]`, and write a synthetic `sel==3`-tagged byte there) and loop to the next
+  unrolled copy; bit clear → resolve immediately via a second mechanism (one more bit, the sign)
+  and write the final signed coefficient into the scratch word-array at index `cat = tag>>2`
+  cached before the chain started — never into `*front` and never into any "next" node. Case 0
+  itself (`0x10025018`-`0x10025036`) is also pure arithmetic and consumes zero bits in that address
+  range — it rewrites its OWN slot's tag in place (`tag' = (tag>>2)*4+0x11`, written to `*front`,
+  not a new `tail` slot) and falls straight into Gate B's chain in the SAME visit (`front` is never
+  advanced by case 0 itself), unlike case 2 which explicitly advances `front` before falling into
+  the same shared continuation.
+
+**Also corrected: Phase 1's BFS loop is conditionally SKIPPED entirely for small trees, not merely
+"drained."** For a tree whose Phase-0 level field is `A≤1`, `0x10024f92`'s own `cmp esi,1; jbe
+0x100254ab` jumps straight past the whole `0x10024fa0`-`0x10025495` Phase-1 loop into what Part 2
+above labeled "Phase 2" — which is a structurally near-identical sibling loop (same Gate-A idiom,
+same case 0/1/2/3 shapes, its own jump table at `0x100258bc`) that runs directly on the 6 literal
+seed bytes. This is why block (0,0)'s own real decode (see the worked example below) never visits
+the literal `0x10025018`/`0x10025038` addresses at all — the actual case-0/1 arithmetic for small
+trees runs through Phase 2's own mirror arms (`0x10025512`/`0x10025522`/`0x1002556a`/
+`0x10025716`), which are the SAME shapes at different addresses, not a different mechanism.
 The scratch buffer at `[ebp-0x144]`/`[ebp-0x14c]` is deliberately reused as BOTH the growable
 byte-tagged worklist (during tree construction) and, in place, as the final signed-16-bit coefficient
 value array once a slot resolves — confirmed by the overlapping stack-offset ranges (`-0x144..-0xcc`,
@@ -2100,8 +2215,102 @@ termination condition. HIGH CONFIDENCE, not independently re-derived this pass: 
 for k=2..63 specifically on the write-out side (carried over from the already-CONFIRMED read-side
 finding). OPEN: the full case-0/case-1 tag-arithmetic meaning (what each of the `+0x11/+0x12/+0x22/+0x32`
 family concretely encodes about code length/category, beyond "expands the tree by 1 or 4 nodes"); the
-semantic role of the 24 auxiliary dword struct fields at `0x04`-`0x7c`; whether Phase 2 is reachable with
-real content in this specific file (not tested live this pass, only disassembled).]**
+semantic role of the 24 auxiliary dword struct fields at `0x04`-`0x7c`; ~~whether Phase 2 is reachable with
+real content in this specific file (not tested live this pass, only disassembled).~~ **RESOLVED
+2026-10-11: YES — Phase 2 is not just reachable, it's the ONLY path exercised for any tree with
+level≤1 (level=1 for block (0,0)'s own real decode, confirmed live) — see the new worked example
+below.**]**
+
+### 5.3w Golden-trace worked example: the AC-tree's Gate A/Gate B bit mechanism, full 17-bit trace for frame 0/Y-plane/block (0,0) — resolves Team B's top video-decode blocker (2026-10-11)
+
+**Scope.** Direct follow-up to the Part 2 correction above. Team B independently confirmed dequant
+and IDCT bit-exact against §5.3v's own published values; the remaining bug was entirely inside
+the AC-tree decode, and Team B's own measurement (child tags for case 0/1 nodes coming out as a
+pure, bitstream-independent function of the 6 seed bytes) pointed squarely at the never-modeled
+Gate A mechanism documented above. Live Unicorn capture against the unmodified DLL, the exact same
+block §5.3v already covers — entry/exit bit-reader state confirmed byte-identical to §5.3v's own
+published numbers (entry: accum=`0x000007a1`, bits_avail=13; exit: accum=`0x07364522`,
+bits_avail=28), confirming this is the same 17-bit call.
+
+**Full bit-by-bit trace** (bit numbers are within this one call; bits 1-4 are the Phase-0 level
+field):
+
+- **Bits 1-4** — level field, value **A=1** (no refill needed, bits_avail=13≥4 at entry). Since
+  A≤1, Phase 1's BFS loop is skipped entirely (per the Part 2 correction above) — every remaining
+  bit in this call runs through Phase 2's own mirror arms, operating directly on the 6 literal
+  seed bytes (`0x10`, `0x60`, `0xb0`, `0x07`, `0x0b`, `0x0f`).
+- **Bit 5** — Gate A, seed slot 0 (tag=`0x10`, category=4) → **0** → inert, skip.
+- **Bit 6** — Gate A, seed slot 1 (tag=`0x60`, category=24) → **1** → dispatch, `sel=0` (case 0):
+  rewrites slot 1's own tag in place to `category*4+0x11 = 0x71` (pure arithmetic, no bit), falls
+  straight into the Gate B chain in the same visit.
+- **Bit 7** — Gate B copy #1 → **0** → resolve now via the sign mechanism.
+- **Bit 8** — sign bit → **1** → **write coefficient-array slot [category=24] = −1**.
+- **Bit 9** — Gate B copy #2 → **1** → defer: push synthetic category-25 entry onto the backward
+  deferred list (never read again this call — dead work, harmless).
+- **Bit 10** — Gate B copy #3 → **1** → defer: push synthetic category-26 entry (also never read
+  again).
+- **Bit 11** — Gate B copy #4 → **1** → defer: push synthetic category-27 entry (also never read
+  again). Control returns to slot 1's own address; `front` was never advanced by case 0 itself.
+- **Bit 12** — Gate A, re-visiting slot 1 (now tag=`0x71`, category=28) → **0** → inert, slot 1
+  finally retired.
+- **Bit 13** — Gate A, seed slot 2 (tag=`0xb0`, category=44) → **0** → inert, skip.
+- **Bit 14** — Gate A, seed slot 3 (tag=`0x07`, category=1) → **0** → inert, skip. (First dword
+  refill of this call happens here — `bits_avail` hits 0, a fresh dword is pulled from the
+  cursor.)
+- **Bit 15** — Gate A, seed slot 4 (tag=`0x0b`, category=2) → **1** → dispatch, `sel=3` (case 3,
+  the unconditional sign-read case): advances past this slot as part of resolving.
+- **Bit 16** — case 3's own sign bit → **1** → **write coefficient-array slot [category=2] = −1**.
+- **Bit 17** — Gate A, seed slot 5 (tag=`0x0f`, category=3) → **0** → inert, skip. Worklist front
+  now equals tail — the seed walk ends, bit-reader state is written back, matching §5.3v's exit
+  state exactly.
+
+**Net result: exactly 2 nonzero leaves, both magnitude 1, both negative** — matching §5.3v's
+ground truth of 2 nonzero AC coefficients (k=8, k=16, both −1) at the end of this 17-bit call.
+
+**The category-index→raster-k remap — RESOLVED 2026-10-11, same day follow-up (SPEC TEAM, agent
+`a57fd1bde57d6f0e6`, independently re-verified by direct query before splicing — all 3 cited
+`mov` pairs, and the index arithmetic connecting them to the already-established scratch-array
+formula `word[ebp+idx*2-0x14c]`, matched exactly; the live Unicorn cross-check's category
+2→k=8/category 24→k=16 result independently re-derived from the static offsets alone, not just
+taken on trust).** The remap is NOT a runtime table-lookup instruction — there is no indexed load
+anywhere in this 14,840-byte function outside the two already-documented 4-entry dispatch jump
+tables (`0x100258ac`/`0x100258bc`). It is a fixed, compiler-unrolled sequence of ~32 `mov` pairs
+in the write-out block (`0x10025777`-`0x1002589c`), each copying two adjacent scratch-array words
+(category `N`, `N+1`) to two adjacent output-struct words (raster `k`, `k+1`) at literal immediate
+offsets baked in at compile time — e.g. `0x1002577d`/`0x10025783`:
+`ecx=word2[ebp-0x144]; [eax+4]=ecx` (categories 4,5 → k=2,3); `0x100257ab`/`0x100257ba`:
+`edx=word2[ebp-0x148]; [eax+0x10]=edx` (**categories 2,3 → k=8,9** — confirms this block's own
+category-2 write lands at k=8, independently re-derivable from the scratch-array index formula
+alone: `ebp-0x148` = `idx*2-0x14c` solved for `idx=2`, and `eax+0x10` = byte offset 16 = `k=8`);
+`0x100257cf`/`0x100257de`: `edx=word2[ebp-0x11c]; [eax+0x20]=edx` (**categories 24,25 → k=16,17**
+— `ebp-0x11c` solves to `idx=24`, `eax+0x20` = byte offset 32 = `k=16`). One further pair handles
+category 1→k=1 as an explicit 16-bit copy. Because this is a fixed fact about the DLL's own
+compiled code (literal immediate offsets), not a DLL data table, it belongs in this codec spec
+cited by address — NOT in `spec-bink-static-tables.md` (which holds only raw byte-read data
+tables; this has no bytes to cite, only instruction addresses).
+
+**Full reconstructed category(1-63)→raster-k(1-63) permutation**, derived mechanically from all
+31 dword pairs + the 1 word pair, independently confirmed bijective (domain and range both exactly
+`{1..63}`, no collisions, no gaps):
+
+```
+cat: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
+ k : 1  8  9  2  3 10 11  4  5 12 13  6  7 14 15 20 21 28 29 22 23 30 31 16 17 24 25 32 33 40 41
+cat:32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63
+ k :34 35 42 43 48 49 56 57 50 51 58 59 18 19 26 27 36 37 44 45 38 39 46 47 52 53 60 61 54 55 62 63
+```
+
+Converting `k` to `(row,col)` shows this is a clean, recursive quad-tree/Morton-style traversal
+over the 8×8 block's quadrants — consistent with (not coincidental to) the tree's own
+`category' = category*4 + 0x11/0x12/0x22/0x32` quad-split arithmetic §5.3j Part 2 already
+documents; each 4-way split's children land in a consistent quadrant pattern of the final block.
+
+**[CONFIRMED — live Unicorn capture against the unmodified DLL (full 336-instruction trace,
+bounded to this one call via the project's own established call/return-boundary hook pattern),
+cross-checked against independent static disassembly of the case 0/1/2/3 handlers (exact match),
+and the category-index→k remap independently re-verified by direct query (3 of 32 `mov` pairs
+spot-checked, plus the full index arithmetic re-derived from the already-established scratch-array
+formula) before splicing.]**
 
 #### Part 3 — resolving Team B's two sign/width judgment calls, instruction-level (2026-10-10)
 
@@ -2448,6 +2657,85 @@ total calls ever reach the delta-accumulation loop body at all. OPEN, narrowed f
 call-to-row mapping among those 25 calls, and the still-unidentified scratch-to-plane copy step
 that any future divergence trace must anchor on instead of the commit loop.]**
 
+**First call's exact count PINNED, same day follow-up, orchestrator-routed as the likely final
+fix for the remaining Bink gap (SPEC TEAM, agent `a06b1037922a541b3`, independently re-verified
+by direct query before splicing — the raw capture's leading-count and live write-count both
+matched exactly at 519, and the exit-bit measurement matched exactly at 4307).** For
+`0x1001a160`'s FIRST call in frame 0's Y-plane/row 0 (the one feeding block (0,0), already
+independently confirmed DC=118 elsewhere): exact word count = **519**, verified two independent
+ways that agree exactly — a leading decoded magnitude read at call entry (`0x1001a1be`-
+`0x1001a1db`, saved to `[ebp-0x10]` at `0x1001a1de`, a SEPARATE decode from value[0]'s own data)
+and a live instruction-level write count to the call's own natural `ret` (1 + 64×8 + 6 = 519,
+exact match; no flat-fill/bulk-repeat branch fired on any of this call's 65 chunks). **Mechanism:
+the identical leading-count idiom §5.3s documents for `0x100195b0`'s 650 and §5.3t for
+`0x10019d10`'s 528** — the count pins the call's own output END address into the context struct
+(`ctx[0]`/`ctx[4]`, written right after value[0]) BEFORE the chunk-decode loop begins; the chunk
+loop (`0x1001a330`-`0x1001a456`) terminates purely on the remaining count reaching zero — no
+bitstream sentinel, no fixed caller argument, no other terminator exists in the function body.
+The count is a word count directly, no byte→word translation needed. 519 falls inside §5.3n's
+own already-established 336-607-word range for the 25 real calls — strong corroboration this is
+the right call and mechanism. Exit bit position (entry 9256, per §5.3q, reproduced unchanged):
+consumes exactly **4307 bits**, exiting at absolute bit **13563** — measured honestly, NOT force-
+fit against the orchestrator's own ~13619 estimate. **CLOSED 2026-10-11, see the gap-attribution
+paragraph immediately below: the gap is real (24 bits of genuine bitstream cost from two more
+calls) but a separate ~32-bit cross-script convention mismatch means 13563+24=13587, not 13619 —
+not a missed consumer.**
+
+- **Evidence:** live Unicorn capture against the unmodified DLL/`.bik`, run to the call's own
+  natural `ret` (no budget cutoff); leading-count value and live write-instruction count
+  independently cross-validated to an exact match; value[0]=118 reproduced as an internal sanity
+  check. Independently re-verified before splicing — the raw capture file's leading-count,
+  write-count, and exit-bits lines all matched exactly.
+- **Confidence:** CONFIRMED for the word count (519) and the count-driven mechanism (two
+  independent live measurements agree exactly; static disassembly shows no other terminator).
+- **Unknowns:** whether the 9256/13619 baseline figures from prior passes used an identical
+  bit-counting convention to this pass's — ANSWERED below: no, they do not; see the gap-
+  attribution paragraph for the ~32-bit systematic offset this uncovered.
+
+**Gap attributed call-by-call, closes the item above (same day, SPEC TEAM, agent
+`ac836bd1af667b8a2`, independently re-verified by me via fresh static `capstone` disassembly of
+`0x1001a530`-`0x1001ac10` before trusting — the exact call sequence and absence of any
+`0x10019f00` call in this span both confirmed directly).** The orchestrator's own "two
+`0x10019f00` calls" hypothesis is **disconfirmed as stated**: `0x10019f00` is called twice, but
+both calls sit at `0x1001ab25`/`0x1001ab42`, BEFORE the first `0x1001a160` call (`0x1001ab74`) —
+part of an earlier pre-stage gap (§5.3r), not this one. The real sequence immediately after the
+first `0x1001a160` call's `ret` (`0x1001ab79`) is: a SECOND `0x1001a160` call (`0x1001ab91`) that
+decodes a leading count of 0 and takes its own zero-count idle/bail exit (`0x1001a471`) — a no-op
+commit, but the 0-valued leading magnitude itself still costs **10 bits**; then `0x10019af0`
+(`0x1001abae`, a function named-but-never-opened until now) whose own idle-check passes, decodes a
+leading magnitude of 0, and takes its own zero-magnitude bail (`test eax,eax; je 0x10019ce7`) —
+also a no-op commit, costing **14 bits**; then a zero-bit-cost per-column dispatch byte read
+(`0x1001abe9`) leads straight into the real DC-literal read (`0x1001b328`, already documented in
+§5.3o/§5.3p/§5.3z). Sum: 10+14=**24 bits**, landing the real dispatch-read at absolute bit
+**13587** — not 56 bits from 13563, and not landing at 13619. The context address captured at
+this point (`0x303f4e9c`) and the DC value/cursor (118/`0x303f8620`) both exactly match the
+independently-published figures for this same dispatch in §5.3y/§5.3z, confirming this is the
+right instance. The residual 32-bit (one accumulator word) gap against §5.3y's own published
+13619 is consistent with a systematic bit-counting **convention** difference between that pass's
+hook-based method (at the AC-tree call boundary) and this pass's/§5.3n's memory-struct-read
+method — not a newly-discovered bitstream consumer — but the root cause of that convention
+difference was not traced to a formula-level diff (§5.3y's own script was not available for
+comparison).
+
+- **Evidence:** live Unicorn capture against the unmodified DLL/`.bik`, reusing
+  `decode_frame0.py`'s bit-position convention, independently re-validated against three already-
+  published values (9256 entry, 13563 exit, DC value 118/cursor `0x303f8620`) before trusting any
+  new number. Independently re-verified by me (not the dispatching session) via fresh static
+  `capstone` disassembly of the orchestrator function (`0x1001a530`-`0x1001ac10`,
+  `scratchpad` verification script against `binkw32.dll` directly) — confirms the exact call
+  sequence (`0x1001a160`×2 then `0x10019af0`) and the complete absence of any `0x10019f00` call in
+  this span, exactly as the agent reported.
+- **Confidence:** CONFIRMED for the call sequence, the 10+14=24-bit attribution, both calls taking
+  a zero-valued no-op/bail path, and that the captured instance is the real block (0,0) dispatch.
+  PLAUSIBLE, not diagnosed to root cause, that the remaining 32-bit residual against §5.3y's 13619
+  is a cross-script bit-counting convention difference rather than a real missed consumer.
+- **Unknowns:** the exact source of the 32-bit (one accumulator word) convention mismatch against
+  §5.3y's 13619 — not traced to a formula-level diff; why `0x10019af0`'s zero-magnitude decode
+  costs 14 bits specifically (its own `ctx+0x28`/`+0x2c` fields weren't read this pass); whether
+  the second `0x1001a160` call's context (`0x303f4ec8`) and `0x10019af0`'s context (`0x303f4f98`)
+  are per-plane descriptors or sub-fields of one combined row-context block — not resolved, not
+  essential to this question.
+
 ### 5.3o Resolves an urgent orchestrator question: block (0,0)'s real DC does NOT come from `0x1001a160`; it is a direct 16-bit byte-cursor read, re-confirming the existing secondary=2 trace a third independent time and reconciling against Team B's reported 16709 (2026-10-11)
 
 **Scope.** Direct response to an urgent question (Team B reported pixel (0,0) of block (0,0),
@@ -2498,6 +2786,374 @@ and the resulting decoded pixel (24) exactly matches FFmpeg. OPEN: the suspiciou
 adjacency between descriptor L's cursor and §5.3n's own sampled `0x1001a160` commit-run base.
 OPEN, carried over unchanged: §5.3n's own named next steps — not addressed this pass, since they
 don't determine block (0,0)'s own DC value.]**
+
+### 5.3p Descriptor L's buffer SOURCE and cursor START, for block (0,0) of frame 0 — resolves §5.3o's own "suspicious 2-byte adjacency" OPEN item (2026-10-11)
+
+**Scope.** Direct follow-up to a precise orchestrator-routed question: what writes descriptor L's
+buffer (decompressed output, or a pre-stage call?), from which input bytes, and where its cursor
+starts relative to that buffer, for block (0,0), frame 0. Answered by a new Unicorn write-watch
+(`scratchpad/bink_sub012346_grammars_2026-10-10/trace_descriptorL_source.py`,
+`scratchpad/descriptorL_source_2026-10-11/identify_ctx.py`): recorded every memory write before
+the first primary-dispatch of the frame, then cross-referenced the exact address descriptor L's
+cursor reads for block (0,0) (`0x303f8620`, confirmed again this pass, exact match to §5.3o)
+against that write log.
+
+**CONFIRMED, live, direct address+value correlation — descriptor L's buffer is NOT a separate
+pre-stage output; it is written live, in place, by `0x1001a160` itself** — the SAME function
+§5.3f/h/k/l/m/n's own "per-chunk delta-accumulation" work has been investigating, and the same
+function Team B has already implemented as a separate cursor (commit `b33c13e`, per the
+orchestrator). The exact write that produced the DC literal byte read for block (0,0) was
+captured directly: address `0x303f8620`, size 2, value `0x0076` — an EXACT match, same address
+and same value, to the read `0x1001b311`-`0x1001b33b` already documents — written by the
+instruction at `0x1001a307`, inside `0x1001a160`'s own body (confirmed by direct disassembly of
+`binkw32.dll`, not inferred: `0x1001a307`/`mov word ptr [eax],cx` sits between `0x1001a160`'s
+prologue and its `ret`, no other function boundary between them). The immediately following
+words (`0x303f8622`, `0x303f8624`, ... sequential, 2 bytes apart) are written by a SECOND,
+sibling word-write site in the same function, `0x1001a40d` (identical `mov word ptr [eax],cx; add
+eax,2` idiom) — i.e. `0x1001a160` has two write points for the same output stream: one for the
+first symbol of a call (`0x1001a307`), one for subsequent symbols within the same call
+(`0x1001a40d`), both advancing the same pointer by 2 bytes each.
+
+**Input bytes: the main per-row compressed bitstream, decoded live by a context-adaptive
+sign/magnitude bit-predictor — NOT a separately pre-decompressed buffer.** The code immediately
+before the `0x1001a307` write (`0x1001a1fa`-`0x1001a2fd`) reads the SAME bit-accumulator state
+(`ebx`/`edx`/`esi`, loaded at function entry from the function's own 2nd argument's `+0`/`+4`/`+8`
+fields — the already-known pointer/bit-position/accumulator triple for a row's main bitstream) and
+runs a magnitude-then-sign decode (shift-based probability extraction, then a `neg` applied
+conditionally on a parity test) to produce the 16-bit value written out. This is an ordinary
+step of the row's own primary entropy decode, not a call into any separate pre-stage routine
+(contrast with descriptors A/B, which §5.3c found ARE filled by dedicated `0x10019360`-style
+pre-stage calls — descriptor L is structurally different: it's a side-effect output of the main
+per-row decode loop itself, interleaved symbol-by-symbol with whatever other output
+`0x1001a160` also produces).
+
+**Cursor start, for block (0,0): literal offset 0 of the buffer — confirmed by direct register
+read, not inferred.** `0x1001a160`'s own first argument (a per-plane/per-row context struct,
+confirmed live at runtime address `0x303f4f64` for the Y-plane this frame — a real heap
+allocation, not one of the harness's own fixed scratch regions) holds the buffer's persistent base
+pointer at context offset **`+0x30`**. Read directly, BEFORE `0x1001a160`'s very first call this
+frame for this context: `ctx+0x30 = 0x303f8620` — already exactly equal to the address block
+(0,0)'s DC read consumes. Since this is the first call into `0x1001a160` for this context this
+frame, and the first write it performs (`0x1001a307`) lands at exactly this same address, **the
+cursor for block (0,0) starts at the buffer's own base, offset 0** — the very first word this
+mechanism produces for the frame's Y-plane is the exact word block (0,0) reads as its DC literal.
+`ctx+0x30` itself does not appear to advance across calls (read again, unchanged, on a later call
+with the same context) — the live write-cursor used, during a call, lives in `0x1001a160`'s own
+locals (`[ebp-0xc]`, reseeded from `ctx+0x30` each call); what persists cross-call progress is a
+SEPARATE pair, `ctx+0`/`ctx+4`, which were observed to change between consecutive calls on the
+same context (`0`/`0` on the first call, `0x303f86b6`/`0x303f8a2e` on a later one) — consistent
+with a commit-style bookkeeping pair, not yet fully characterized (OPEN, see below).
+
+**Resolves §5.3o's own "suspicious 2-byte adjacency" OPEN item: it is not adjacency between two
+separate mechanisms, it is the SAME buffer.** §5.3n's own sampled `0x1001a160` "commit run #2"
+base (`0x303f8622`) is exactly the SECOND word this mechanism writes (via `0x1001a40d`) — one word
+(2 bytes) after the FIRST word (`0x303f8620`, via `0x1001a307`), which is precisely the DC value
+block (0,0) consumes. §5.3n's own sampling window simply started one word late, missing the very
+first write. The "delta-accumulation output" §5.3f/h/k/l/m/n have been tracking and "descriptor
+L's byte cursor" are the SAME output buffer, not two heap-adjacent but independent mechanisms.
+
+**[CONFIRMED — live, direct address+value correlation between a captured pre-dispatch write
+(`0x303f8620`, value `0x0076`, pc `0x1001a307`) and the already-documented DC-literal read at the
+identical address/value: descriptor L's buffer is written in-place by `0x1001a160` from the main
+per-row bitstream via an inline context-adaptive bit-predictor decode, not by a separate pre-stage
+call; for block (0,0) specifically, the cursor starts at literal offset 0 of the buffer (the very
+first word `0x1001a160` produces this frame for the Y-plane context). CONFIRMED: this resolves
+§5.3o's 2-byte-adjacency OPEN item as the same buffer, not coincidental adjacency. OPEN: the exact
+condition selecting the `0x1001a307` vs. `0x1001a40d` write site on a given call (first-symbol vs.
+subsequent-symbol, by position in the disassembly, not independently confirmed by branch-condition
+trace); the exact role/update rule for the `ctx+0`/`ctx+4` commit-style pair (changes across calls,
+mechanism not traced); whether `ctx+0x30` itself is ever advanced by anything (not observed to
+change across the 3 calls sampled, so it may be a fixed per-context buffer-start pointer rather
+than a live cursor, with the real cross-call position tracked by the `ctx+0`/`ctx+4` pair instead
+— not settled this pass).]** Full detail/scripts:
+`scratchpad/bink_sub012346_grammars_2026-10-10/trace_descriptorL_source.py`,
+`scratchpad/descriptorL_source_2026-10-11/identify_ctx.py`, `dump_a160_full.py`.
+
+### 5.3q `0x1001a160`'s first call, frame 0/Y-plane/row 0: absolute bit position, ctx state at entry, first 8 decoded values, and position relative to the 23-call pre-stage (2026-10-11)
+
+**Scope.** Precise, orchestrator-routed question for Team B's own implementation diff. Reuses
+`probe_prestage_bitpos.py`'s own bit-position helper and call-order hooks (`scratchpad/
+bink_entropy_prestage_algorithm_2026-10-08/`, unmodified) extended with `0x1001a160`-specific
+instrumentation: `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_a160_first_call_2026-10-11.py`.
+
+**(1) Absolute bit offset at entry: 9256 bits** from the Y sub-chunk's own data start — measured
+live, at the instruction right after `0x1001a160`'s own `mov ebp,esp` (hooking the function's
+literal first byte reads the CALLER's `ebp`, not this function's own — a mistake caught and fixed
+before trusting the result, same class of error as `§5.3p`'s own `identify_ctx.py` fix).
+
+**(2) CORRECTED 2026-10-11, see new §5.3u: the "no evolving predictor seed" finding below is
+real but was WRONGLY GENERALIZED to the whole stream — it only describes VALUE[0] of each call.**
+The magnitude/sign decode immediately before `0x1001a160`'s FIRST write
+(`0x1001a200`-`0x1001a2fd`, already disassembled in §5.3p's own investigation) is driven entirely
+by the MAIN shared bit-reader's own live accumulator/position/pointer plus exactly **two FIXED
+values read from the context struct**, confirmed unchanged across the 3 calls sampled in §5.3p:
+`ctx+0x28 = 10` (a bound/width constant used directly in the shift-based magnitude extraction)
+and `ctx+0x2c = 1504` (an overflow-sanity threshold, halved to 752 before the `ja`-bail
+comparison). Neither field is written anywhere in `0x1001a160`'s own body — they read as **fixed
+per-row/per-plane configuration, not a carried "previous value" or adaptive state, for THIS ONE
+VALUE ONLY.** Full `ctx` dump at entry (16 dwords from `ctx+0x00`):
+`0x0,0x0,0xb,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0xa,0x5e0,0x303f8620,0x0,0x0,0x4` — i.e. `ctx+0x08=0xb`
+(11, a third persistent small constant, role not traced this pass), `ctx+0x30=0x303f8620`
+(descriptor L's own buffer base, already confirmed §5.3p). **§5.3u found that every value AFTER
+the first one in the same call is genuinely predictor-accumulated (`new = prev + signed_delta`)
+via a completely different mechanism (§5.3m's own chunk loop) — so "no seed" is correct for
+value[0], but values[1+] are explicitly seeded by the running accumulator, which this item's
+own wording obscured by not stating its scope.**
+
+**(3) CORRECTED 2026-10-11, see new §5.3u: only VALUE[0] goes through the fixed-bound path below
+— values[1-7] do NOT, and this item's own framing ("first 8 raw 16-bit values written") wrongly
+implied a single uniform mechanism.** First 8 raw 16-bit values written, in order (addr, value):
+`0x303f8620=118`, `0x303f8622=199`, `0x303f8624=212`, `0x303f8626=51`, `0x303f8628=25`,
+`0x303f862a=118`, `0x303f862c=119`, `0x303f862e=26` — exact reproduction of §5.3p's own
+independently-captured write-log for the same addresses (cross-confirms both passes measured the
+same real execution). The first (`118`) is already confirmed (§5.3o) as block (0,0)'s own real DC
+literal, and is the ONLY one of the 8 produced by the `0x1001a200`-`0x1001a2fd` fixed-bound
+mechanism this item describes. **§5.3u's own per-symbol trace shows values[1-7] are each `prev +
+signed_delta` from a genuinely separate mechanism (§5.3m's chunk loop, 0x1001a330-0x1001a456) with
+its own real 4-bit "class nibble"** — the "no separate class nibble was identified" sentence
+originally here was true only for value[0]'s own narrow code path and should not have been read
+as a finding about the whole stream; see §5.3u for the real nibble, confirmed present and
+load-bearing for every subsequent value.
+
+**(4) Position relative to the 23-call pre-stage: strictly AFTER all of it, with a large
+additional bit-consuming gap not yet attributed.** Measured call order, same run: 23 calls to
+`0x10018ca0` (bits climbing 0→588, exactly reproducing §5.3g's own figures) → both real
+`0x10019360` calls (descriptor A build at bit 588; descriptor B build at bit 1757 — the gap
+between A's own entry and B's own entry, 588→1757, is A's own expansion/payload read, not newly
+measured this pass) → two `0x10019d10` marker hits (bit position not instrumented this pass) →
+the `0x1001a160` call site itself (`0x1001ab74`, confirmed by direct stack read: arg0
+`0x303f4f64`=ctx, matching §5.3p's own identified Y-plane context exactly) → entry at bit 9256.
+**The 1757→9256 gap (7,499 bits) is real consumption this pass did NOT individually attribute**
+(likely descriptor B's own expansion/payload read, by analogy to A's, plus the indirect call via
+`[ebp-0x234]` noted in `probe_prestage_bitpos.py`'s own header — neither was instrumented this
+pass). **Net answer for Team B: `0x1001a160` is the first real payload decode step after the
+ENTIRE pre-stage (table-builds + both descriptor real-builds + their own expansions + the indirect
+dispatch) completes for this row — it does not interleave with or precede any part of the
+pre-stage.** If Team B's own bit position at the point they invoke their own DC-decoder reproduction
+is anywhere other than 9256 for this exact file/frame/row, the discrepancy is upstream of
+`0x1001a160` itself (somewhere in the 0→9256 range), not inside the DC decode's own magnitude/sign
+logic.
+
+**[CONFIRMED — live Unicorn execution, real unmodified `binkw32.dll`/`main_menu_bg.bik`, every
+value quoted read directly from registers/memory, cross-confirmed against §5.3o/§5.3p's
+independently-captured values for the same addresses. CORRECTED 2026-10-11 (§5.3u): items (2)/(3)
+above are only true for value[0] of the stream — they were wrongly generalized to all 8 sampled
+values, which is the exact contradiction a routed Team B report caught against §5.3m. OPEN: the
+exact bit-consuming content of the 1757→9256 gap (descriptor B's own expansion, the indirect-call
+step); the role of `ctx+0x08=0xb`.]** Full detail/script:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_a160_first_call_2026-10-11.py`,
+`probe_a160_first_call_out.txt`.
+
+### 5.3r The 1757→9256 bit gap, attributed call by call (2026-10-11, closes §5.3q's own named OPEN item)
+
+**Scope.** Direct follow-up, same orchestrator-routed thread: §5.3q left the 1757→9256 bit span
+(7,499 bits, between descriptor B's real build and `0x1001a160`'s first call) unattributed.
+Direct disassembly of `0x1001a530` (the per-row orchestrator) between the two call sites found
+exactly **4 real calls** in program order, with zero other candidates: an indirect call via
+`[ebp-0x234]` (call site `0x1001aaf0`), `0x10019d10` (`0x1001ab08`), and `0x10019f00` **twice**
+(`0x1001ab25`/`0x1001ab42`) — then straight into `0x1001a160` (`0x1001ab74`).
+
+**Measured live (same Unicorn harness, extended hooks; absolute bit positions, baseline-corrected
+for the non-zero `bits_avail` at the measurement point — a bug caught and fixed before trusting
+the numbers, since the naive version was off by exactly the initial `bits_avail`, 20 bits):**
+
+| Step | Absolute bit position at entry | Bits consumed by this step |
+|---|---|---|
+| Descriptor B's own `0x10019360` real build (entry) | 1757 | — |
+| Indirect call site `0x1001aaf0` (target resolved live: `0x100195b0`) | 2871 | **1114** (desc B's own expansion/payload read) |
+| `0x10019d10` entry | 6255 | **3384** (the indirect call, `0x100195b0`) |
+| `0x10019f00` entry (1st of 2) | 9236 | **2981** (`0x10019d10`) |
+| `0x10019f00` entry (2nd) | 9246 | **10** (1st `0x10019f00` call) |
+| `0x1001a160` call site `0x1001ab74` | 9256 | **10** (2nd `0x10019f00` call) |
+
+**Sum: 1114+3384+2981+10+10 = 7,499 — exactly matches the gap, zero bits unaccounted for.**
+Absolute bit 9256 at the `0x1001a160` call site exactly reproduces §5.3q's own independently-
+measured entry value (confirms both passes agree, not a coincidence of baseline arithmetic).
+
+**Structural characterization of the 3 named functions (brief, not a full algorithm trace —
+out of scope for "attribute the gap," which only needed the bit costs above):** all 3
+(`0x100195b0`, `0x10019d10`, `0x10019f00`) open with the IDENTICAL "idle-check" prologue
+(`cmp [[param1]], [[param1]+4]; jne <bail>`) and read the SAME `+0x28`/`+0x2c` bound pair via the
+SAME shift-based magnitude-extraction idiom already documented for `0x1001a160` (§5.3p) — i.e.
+these are siblings in the SAME descriptor-fill function family, each filling a different scratch
+structure, not a qualitatively different mechanism. `0x100195b0` additionally does a genuine
+tree-lookup (two tables indexed via `ebx*4+0x100`/`+0x140`) after the magnitude step — a shape
+closer to `0x10024eb0`'s already-documented AC-tree decoder (§5.3j) than to `0x1001a160`'s own
+simple magnitude+sign. This is consistent with, not a reopening of, §5.3g's own standing "23
+sibling calls... downstream consumers not traced" finding — these 3 are further siblings in that
+same general family, now at least bit-cost-attributed even though their own full output grammar
+remains untraced.
+
+**[CONFIRMED — live Unicorn execution, exact numeric reconciliation (sum of parts == the gap,
+to the bit). HIGH CONFIDENCE, not independently decoded: the full symbol/tree-decode algorithm
+inside any of `0x100195b0`/`0x10019d10`/`0x10019f00` — structurally characterized by their shared
+prologue/bound-field shape only, not traced line by line. OPEN: what each of these 3 functions'
+own OUTPUT is actually used for later in the frame (same open question §5.3g already carries for
+sibling pre-stage structures).]** Full detail/scripts:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_gap_1757_9256_2026-10-11.py`,
+`dump_gap_region.py`, `dump_gap_functions.py`.
+
+### 5.3s `0x100195b0`'s own output grammar, worked example: frame 0/Y-plane/row 0's first call (2026-10-11)
+
+**Scope.** Direct follow-up, same thread: §5.3r identified `0x100195b0` (consuming 1,114 bits for
+this call) as one of 3 sibling descriptor-fill functions in the 1757→9256 gap, but didn't trace
+its own output. Full disassembly (`dump_195b0_full.py`, 231 lines, prologue through `ret`) plus
+live Unicorn capture (`probe_195b0_worked_example_2026-10-11.py`).
+
+**What it decodes: a signed byte stream, tree-coded (two LUT tables, `arg3+0x100`/`arg3+0x140`,
+indexed by a running bit-accumulator), with an initial "overall magnitude" value that gates a
+fast-fill shortcut for long runs.** Structurally the same family as `0x1001a160`
+(§5.3p) and `0x10019d10`/`0x10019f00` (§5.3r) — identical "idle-check" prologue
+(`cmp [arg1],[arg1+4]`), identical `+0x28`/`+0x2c` bound-field shift-extraction for the leading
+magnitude — but with a genuinely different, byte-granular output mechanism and (unlike
+`0x1001a160`) real persistent adaptive state: a running value is written back to `arg3+0x180` at
+every return, carried into the next call on the same `arg3` struct — the first function in this
+family found to actually carry state across calls, not just a fixed bound/config.
+
+**Output buffer base: idle-check struct's own `+0x30` field** (live value this call: `0x303f9bb0`)
+— the SAME convention `0x1001a160` uses for descriptor L's own buffer (§5.3p), confirmed
+project-wide now across a second, independent function.
+
+**Worked example, live-captured (frame 0, Y-plane, row 0, first call):**
+- Initial decoded magnitude (the leading value, formed at `0x1001961a`): **650**.
+- The long-run fast-fill helper (`0x10001eb0`) was observed firing during this same call —
+  confirms the function uses both a per-symbol tree-decode loop AND a bulk-repeat shortcut within
+  one invocation, not exclusively one or the other.
+- First 64 real output bytes (sequential, `0x303f9bb0`-`0x303f9beF`), as signed values:
+  `-103,-103,-103,-103,-103,-103,-103,-103,-103,-102,-103,-103,-102,-102,-102,-103,-103,-98,-102,
+  -103,-103,-103,-102,-104,-103,-97,-102,-105,-103,-103,-103,-105,-100,-97,-98,-98,-98,-101,-103,
+  -103,-97,-97,-97,-100,-103,-103,-103,-102,-100,-97,-98,-104,-104,-103,-102,-97,-99,-97,-97,-100,
+  -103,-102,-102,-97` — a tight, low-variance band (`-105..-97`), consistent with a residual/delta
+  array rather than literal pixel or coefficient data.
+
+**Loop-termination question SETTLED, same day, by letting the call run to its own `ret` rather
+than guessing from the stack-slot-reuse ambiguity above: this is count-driven, exactly.** Live
+run of the same call to completion: exactly **650 bytes** written (`0x303f9bb0`-`0x303f9e39`,
+contiguous, zero gaps — address span matches the byte count exactly), and the bit position at
+`ret` is exactly **3384 bits** past call-entry — an EXACT match to §5.3r's own independently-
+measured cost for this call, cross-confirming both measurements. First 8 bytes
+(`-103,-103,-103,-103,-103,-103,-103,-103`) and last 8 (`-102,-99,-98,-98,-99,-102,-103,-103`)
+both read as plausible real residual data, not truncation artifacts. **The leading magnitude
+really is the literal symbol count — "decode exactly N signed bytes," full stop — not a
+self-terminating stream.**
+
+**[CONFIRMED — live Unicorn execution, every value read directly from registers/memory, including
+the exact byte-count/bit-cost cross-check against §5.3r's own independent measurement. OPEN: what
+this function's own output (the signed byte array at `arg1+0x30`) is used for downstream later in
+the frame.]** Full detail/scripts:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_worked_example_2026-10-11.py`,
+`probe_195b0_full_run_2026-10-11.py`, `dump_195b0_full.py`.
+
+### 5.3t `0x10019d10`'s own output grammar, worked example: frame 0/Y-plane/row 0's first call (2026-10-11)
+
+**Scope.** Same thread, the other sibling named in §5.3r (2,981-bit cost). Full disassembly
+(`dump_19d10_full.py`, 183 lines) plus live Unicorn capture, same method as §5.3s.
+
+**What it decodes: nibble-packed bytes — two separate 4-bit tree-lookups per output byte (high
+nibble then low nibble, `shl dl,4; or dl,<2nd nibble>`), via an EXPLICIT decrement-to-zero loop
+(`dec edi` every iteration, exits on `cmp [ebp-8],0`) — genuinely count-driven by construction,
+not ambiguous the way `0x100195b0`'s stack-slot reuse was.** Same family prologue/bound-extraction
+shape as `0x1001a160`/`0x100195b0` for the leading magnitude; output buffer base is the same
+`arg1+0x30` convention, now confirmed a third time.
+
+**Worked example, live-captured, run to completion (frame 0, Y-plane, row 0, first call):**
+- Leading decoded magnitude: **528**. Output buffer base: `0x303f9210`.
+- Bit position at `ret`, measured from call entry: exactly **2981 bits** — an EXACT match to
+  §5.3r's own independent measurement for this call.
+- Total bytes written: **528** — exactly the leading magnitude, confirming count-driven decode
+  (contiguous `0x303f9210`-`0x303f941f`, zero gaps).
+- First 8 bytes (hex): `0f,01,00,00,00,00,80,ff`. Last 8: `00,00,01,01,01,01,03,4f`. Mostly small
+  values (`0x00`/`0x01` dominant) with occasional larger ones (`0x0f`, `0x80`, `0xff`, `0x4f`) —
+  a sparser, more indicator/flag-shaped distribution than `0x100195b0`'s own tight residual band,
+  consistent with these two sibling functions filling structurally DIFFERENT kinds of scratch
+  data, not interchangeable copies of one mechanism.
+- **Numeric coincidence, flagged honestly, not claimed as a mechanism link:** this call's own
+  leading magnitude (528) is numerically identical to the already-documented real LEN value for
+  this exact row (§5.3g: "starting at the true bit 588 decodes to **528**"). Not yet determined
+  whether this is the SAME quantity reused in a second context, or a coincidence of this
+  particular file/row's real content — flagged for whoever next investigates what this function's
+  output feeds.
+
+**[CONFIRMED — live Unicorn execution to natural completion, every value read directly from
+registers/memory, including the exact byte-count/bit-cost cross-check against §5.3r's own
+independent measurement. OPEN: what this function's own output is used for downstream; whether
+the 528/LEN numeric match is meaningful.]** Full detail/scripts:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_19d10_full_run_2026-10-11.py`,
+`dump_19d10_full.py`.
+
+### 5.3u The apparent §5.3m vs §5.3q contradiction, RESOLVED: both sections are correct, each for a different value in the stream — exact per-symbol trace, first 8 values (2026-10-11)
+
+**Scope, urgent, orchestrator-routed (Team B report, agent 2e44928): Team B now reproduces this
+project's own bit position (9256) and byte counts (650/528) exactly up to `0x1001a160`'s own
+entry, but their per-symbol DC decode still diverges — their value[0] gives 249 against the real
+118. The orchestrator flagged that §5.3m (a 4-bit class nibble driving a variable 0-15-bit
+magnitude) and §5.3q (no class field, fixed width via `ctx+0x28=10`) directly contradict each
+other, and asked for a side-by-side re-read plus a live per-symbol trace.**
+
+**Resolution: there is no contradiction — §5.3m and §5.3q each correctly describe a REAL
+mechanism, but for DIFFERENT values in the same stream. §5.3q's own wording (now corrected above)
+wrongly generalized its finding (true only for value[0]) to describe "the first 8 values" as a
+whole, which is the exact bug.** Confirmed by a live per-symbol trace of `0x1001a160`'s first
+call, frame 0/Y-plane/row 0, hooking the fixed-bound path's own write (`0x1001a307`), the
+chunk-loop's class-nibble test (`0x1001a37e`), its masked-magnitude formation (`0x1001a3de`), its
+sign test (`0x1001a3fe`), and its commit write (`0x1001a40d`) — with bit position computed from
+LIVE REGISTERS (`ebx`/`edx`, the running bit-reader state kept in registers for the whole
+function), not from the external bit-reader struct in memory, which is confirmed NOT updated
+until the function returns (re-read mid-function would give stale values — caught before
+trusting any number below):
+
+| value | bit pos at commit | mechanism | nibble | raw magnitude (pre-sign) | sign | formula | result |
+|---|---|---|---|---|---|---|---|
+| [0] | 21 | fixed-bound (`0x1001a1fa`-`0x1001a2fd`, §5.3p/q) | — (none read) | — | — | direct | **118** |
+| [1] | 34 | chunk loop (§5.3m) | 8 | 81 | + | 118+81 | **199** |
+| [2] | 43 | chunk loop | 8 | 13 | + | 199+13 | **212** |
+| [3] | 52 | chunk loop | 8 | 161 | − | 212−161 | **51** |
+| [4] | 61 | chunk loop | 8 | 26 | − | 51−26 | **25** |
+| [5] | 70 | chunk loop | 8 | 93 | + | 25+93 | **118** |
+| [6] | 79 | chunk loop | 8 | 1 | + | 118+1 | **119** |
+| [7] | 88 | chunk loop | 8 | 93 | − | 119−93 | **26** |
+
+**Every single formula reconciles exactly to the real observed value — zero discrepancies.** The
+real mechanism, stated precisely for Team B's own implementation:
+
+1. **`0x1001a160` call entry: value[0] is decoded by the FIXED-bound path only** (§5.3p/§5.3q,
+   unchanged, now correctly scoped) — `ctx+0x28`/`ctx+0x2c` bounds, no class nibble read, no
+   predictor accumulation (there is no "previous value" yet). Bit cost for this one value: 21
+   bits in this run (includes the shift-chain overflow-sanity check, not just a flat read).
+2. **Every value AFTER value[0], within the SAME call, is decoded by §5.3m's chunk loop
+   (`0x1001a330`-`0x1001a456`), confirmed address-exact and now cross-validated arithmetically for
+   the first time:** a chunk of up to 8 values shares ONE 4-bit class nibble (here: `8` for all 7
+   of values[1-7], confirming they're all in the first chunk), read once at chunk start
+   (`0x1001a363`/`0x1001a375`, 4 bits: 21→25 in this trace). For each value in the chunk: extract
+   an `nibble`-bit (here 8-bit) magnitude (8 bits consumed per value); if the magnitude is nonzero,
+   consume exactly 1 more bit for sign (skipped entirely when magnitude==0, per §5.3m, not
+   observed in this sample since all 7 magnitudes were nonzero); `new_value = prev_value +
+   (sign ? -magnitude : +magnitude)`, truncated to 16 bits and written. The nibble value sets the
+   magnitude width for the WHOLE chunk, not per-value — confirmed by all 7 values in this chunk
+   sharing the identical `nibble=8`.
+3. **value[0] seeds the predictor for the chunk loop's own first `prev_value`** — i.e. the two
+   mechanisms are not independent, they're sequential stages of ONE stream: one fixed-bound seed
+   value, then runs of delta-accumulated values width-coded by a per-chunk nibble, exactly as a
+   classic DPCM/delta-coding scheme would be structured.
+
+**Diagnosis for Team B's own 249-vs-118 divergence (HYPOTHESIS, not independently checked against
+their code — this project has no access to it): the two most likely causes, given the shape of
+this contradiction, are (a) applying the chunk-loop's class-nibble-driven variable-width read to
+value[0] too (reading a phantom nibble before it, consuming 4 bits that don't exist in the real
+stream at that point, desyncing everything downstream), or (b) applying `ctx+0x28`'s fixed 10-bit
+width to values[1+] instead of the real per-chunk nibble width (8 bits here, but genuinely
+variable 0-15 per chunk) — either produces a wrong bit-width exactly at the value[0]/value[1]
+boundary, which is where the documented confusion lived.**
+
+**[CONFIRMED — live Unicorn execution, real unmodified `binkw32.dll`/`main_menu_bg.bik`, every
+value in the table above read directly from live registers (not memory, confirmed necessary — the
+external bit-reader struct is proven stale mid-function), and every formula independently
+verified to reconcile exactly. This resolves the §5.3m/§5.3q contradiction completely for this
+sample; OPEN: whether the nibble is ever 0 (flat-fill path, `0x1001a421`-`0x1001a44d`, not
+observed in this specific 8-value sample) or spans a chunk boundary within the first 8 values of
+some OTHER real block (not checked).]** Full detail/script:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_first8_dc_symbols_2026-10-11.py`,
+`dump_a363_a456.py`, `probe_first8_dc_symbols_out.txt`.
 
 ---
 
@@ -2652,6 +3308,830 @@ field map (calls 1/3/4), and the planar/no-alpha layout; independently corrobora
 black-box oracle. HIGH CONFIDENCE — no colorspace conversion inside this DLL. OPEN — call 2's
 `record+0x20` role; the unresolved `record+0x00`-`+0x18` range.]** Full detail:
 `scratchpad/bink_video_pixelwrite_colorspace_2026-10-08.md`.
+
+---
+
+### 5.3v Golden-trace worked example: AC-decode → dequant → IDCT, full stage-by-stage capture for frame 0/Y-plane/block (0,0), orchestrator-routed to localize Team B's 141-vs-24 pixel divergence (2026-10-11)
+
+**Scope.** Team B fixed the DC boundary for this block (DC now exactly 118, matching the 8
+ground-truth ordinates), but the final decoded pixel still came out 141 against a reference value
+of 24 — meaning a remaining bug somewhere in AC decode, dequantization, or the IDCT. This section
+captures all four stages for this exact block, live, from the real `binkw32.dll`, independently
+re-verified by direct query before splicing (raw coefficient/quant/dequant binaries re-checked
+byte-for-byte; both the from-scratch Python re-derivation and the real DLL's own output binary
+re-checked against the claimed pixel pattern). Block (0,0), dispatch index 0, is the secondary=2
+DC+AC dequant/direct-store-IDCT engine (`0x1001b2ff`-`0x1001b3d2`, §5.3f/§5.3i), quantizer-select
+nibble confirmed = 2.
+
+**Method.** Hooked the caller's own call/return boundary around the AC-tree decoder `0x10024eb0`
+(entry at `0x1001b348`, the call site itself; exit at `0x1001b34d`, the return site) rather than
+the callee's own entry/exit, avoiding a self-re-entrancy hook-confusion problem noted in §5.3j
+Part 3. Confirmed by live disassembly that the AC-tree's bit-reader-context pointer for this call
+frame is literally `&[ebp-0x204]` inside `0x1001b2ff`'s own stack frame (`lea ecx,[ebp-0x204]` at
+`0x1001b33c`), and confirmed nothing else touches that stack slot between the call and the
+capture point. The dequant/IDCT math for this specific engine's own dequant/IDCT routine,
+`0x100247d0`, was independently re-disassembled fresh (not assumed from the sibling `0x100244c0`
+engine already bit-verified in §5.3j) — confirms the identical per-coefficient
+`sar(raw[k]*quant[k], 0xb)` dequant and the same shared 8-point butterfly constants
+(`0xb50`/`0x8a9`/`0xec8`/`0xffffeb18`, same final `+0x7f`/`>>8` descale) §5.3j Part 1 already
+bit-exact-verified for `0x100244c0`. Also confirmed live, by write-address enumeration, that
+`0x100247d0`'s 16×16 output is a straight 2×-vertical + 2×-horizontal nearest-neighbor upsample of
+one internal 8×8 IDCT grid — a 100% match against the real captured 16×16 output.
+
+**Stage 1 — bit position at AC-tree entry/exit.** Entry: accum=`0x000007a1`, cursor=
+`0x400006a8`, bits_avail=13. Exit: accum=`0x07364522`, cursor=`0x400006ac`, bits_avail=28. Net
+bits consumed by this one AC-tree call = 17 — an exact match to §5.3h's independently-published
+"17 bits for this specific block," an independent cross-confirmation of both sections.
+
+**Stage 2 — raw (pre-dequant) coefficient list, k = row×8+col, row-major, byte offset = 2k.**
+Only 3 of the 64 coefficients are nonzero (re-verified byte-for-byte against the raw capture
+binary):
+- k=0 (DC, row 0 col 0): raw = 118
+- k=8 (row 1, col 0): raw = -1
+- k=16 (row 2, col 0): raw = -1
+
+All other 61 coefficients are exactly zero. This confirms, with the exact raw values, the
+vertical-only AC content §5.3i had already inferred from the output pattern alone.
+
+**Stage 3 — dequantized values** (`sar(raw[k] × quant[k], 0xb)`, quantizer row = nibble 2's row
+of the already-documented 16-row×256-byte dequant matrix, base `0x10037cc0`+512 =
+`0x10037ec0`). Re-verified by independent recomputation from the raw capture binaries — exact
+match:
+- k=0: quant=109227 → dequant = sar(118×109227, 0xb) = 6293
+- k=8: quant=208315 → dequant = sar(-1×208315, 0xb) = -102
+- k=16: quant=240826 → dequant = sar(-1×240826, 0xb) = -118
+
+**Stage 4 — all 64 IDCT outputs** (core 8×8 grid, before the engine's own 2×/2× upsample),
+re-verified against the raw output binary — exact match:
+
+```
+row 0: 24 24 24 24 24 24 24 24
+row 1: 24 24 24 24 24 24 24 24
+row 2: 25 25 25 25 25 25 25 25
+row 3: 25 25 25 25 25 25 25 25
+row 4: 25 25 25 25 25 25 25 25
+row 5: 25 25 25 25 25 25 25 25
+row 6: 25 25 25 25 25 25 25 25
+row 7: 25 25 25 25 25 25 25 25
+```
+
+After the confirmed 2×/2× upsample this becomes the real 16×16 Y-plane output — rows 0-3 = 24,
+rows 4-15 = 25 uniformly (re-verified against the real captured output binary: exactly 64 bytes
+of 24 followed by 192 bytes of 25, byte-for-byte) — an exact match to the real, live DLL's own
+actual output for this block, captured independently in the same run.
+
+**Conclusion: this stage chain is NOT the source of the 141-vs-24 divergence.** An independent,
+from-scratch re-derivation of AC-decode → dequant → IDCT, run on these exact captured
+intermediate values, produces pixel (row 0, col 0) = 24. The real `binkw32.dll`, live-executed in
+the same run, also produces 24 at that exact pixel. Both agree with the target/reference value of
+24. This means AC coefficient decode, dequantization, and the IDCT/rounding math — as already
+documented in §5.3j and reconfirmed here for this specific block's real numbers — are all
+correct and already produce the right answer. **The 141-vs-24 divergence is in Team B's own
+reimplementation, not in the algorithm as specified.** Team B should diff their own intermediate
+values directly against the four stages captured above, in order; whichever stage first disagrees
+with these numbers is where the bug actually is. Given the real numbers — only 2 nonzero AC
+coefficients, both magnitude 1 (`-1` at k=8 and k=16) — a ±1-coefficient perturbation of this
+block's real math cannot plausibly reach 141; the likely culprits on Team B's side are a wrong
+AC-tree coefficient (index, sign, or magnitude), a dequant-table indexing error (wrong nibble or
+row stride), or a sign/rounding error compounding across the two-pass butterfly. The exact root
+cause is inside Team B's own code and is outside this capture's scope.
+
+**[CONFIRMED — live Unicorn capture against the unmodified DLL, cross-checked against an
+independent from-scratch Python re-derivation of the same math, both independently re-verified
+by direct query before splicing (raw/quant/dequant binaries recomputed and diffed exactly; output
+binaries byte-counted exactly). Full capture script, raw binary dumps, and disassembly used for
+re-verification: `scratchpad/bink_block00_ac_dequant_idct_capture_2026-10-11/`.]**
+
+---
+
+### 5.3x Compact worked examples, first block-row: Y dispatch indices 1-4 plus chroma block (0,0) — validates Team B's fix beyond a single block (2026-10-11)
+
+**Scope.** Orchestrator-routed follow-up so video decode doesn't stall on another round-trip:
+compact (not full §5.3v/§5.3w-depth) captures for the 4 Y-plane blocks immediately following
+§5.3v/§5.3w's own block (0,0) in dispatch order, plus chroma block (0,0) of both planes, same
+frame 0 of `main_menu_bg.bik`. All captures are live Unicorn executions against the unmodified
+DLL (same harness family as §5.3v/§5.3w).
+
+**Dispatch order, confirmed live (not assumed):** dispatch index IS simple left-to-right raster
+for this part of the frame — idx0=(row0,col0) [§5.3v/w], idx1=(row0,col16), idx2=(row0,col32),
+idx3=(row0,col48), idx4=(row0,col64), all in 16-pixel block-column units. **Not every block uses
+the same engine** — idx1/idx2 dispatch to secondary=3 (flat/DC fill), not secondary=2.
+
+| idx | block | engine | DC | nibble | AC bits | nonzero AC (raster k) | core IDCT row 0 |
+|---|---|---|---|---|---|---|---|
+| 1 | (0,16) | secondary=3 (flat fill) | fill=0x99 (153) | — | — (no AC-tree call) | none | `[153]×8` |
+| 2 | (0,32) | secondary=3 (flat fill) | fill=0x99 (153) | — | — | none | `[153]×8` |
+| 3 | (0,48) | secondary=2 (DC+AC/IDCT) | 199 | 0 | 83 | k=1:-2,2:3,3:-2,4:-1,8:-3,9:3,10:-2,11:1,13:-1,16:1,17:-2,18:1,20:-1,25:-1,26:1,27:-1,32:-1,33:1,34:-1,43:1 | `[24,25,24,23,24,25,24,24]` |
+| 4 | (0,64) | secondary=2 (DC+AC/IDCT) | 212 | 0 | 136 | k=1:-5,2:-5,3:3,5:3,6:-2,8:-2,9:-5,10:-3,11:1,12:1,13:1,14:1,16:1,17:2,18:-1,19:-1,21:1,23:1,25:1,26:2,27:1,28:-1,32:-1,33:-1,34:-1,35:1,36:1,38:-1,42:-1,45:1 | `[24,22,25,29,29,28,29,24]` |
+
+(k-indices already translated through §5.3w's confirmed category→k permutation table, not raw
+category indices.) For idx3/idx4, the real DLL's actual first-8-bytes-at-dest (post 2×-horizontal-
+upsample) is the core row's first 4 values pairwise-doubled (e.g. idx3: `[24,24,25,25,24,24,23,23]`
+from core row `[24,25,24,23,...]`) — confirms the already-documented 2× upsample, not a mismatch;
+Team B should diff against the CORE row above, not the upsampled bytes, unless also applying that
+same upsample step. Bit-reader continuity sanity check: idx3's own entry accum
+(`0x00736452`) is exactly idx0's own published exit accum (`0x07364522`) right-shifted 4 bits,
+bits_avail dropping 28→24 — consistent with one continuous shared main bit-reader across blocks.
+
+**Chroma — block (0,0) of both planes, same frame.** ChromaA's own block (0,0) (global dispatch
+idx=23914) dispatches to secondary=5 (TwoLiteralPattern), not secondary=2 — fill value 124,
+16 pixels wide. This single instance does not by itself answer the chroma-dequant question (Y's
+own idx1/idx2 above show engine choice is content-dependent there too), so a SECOND, targeted
+capture was taken: the first real secondary=2 occurrence inside chromaA, dispatch idx=23917
+(chromaA row=0,col=48) —
+
+- Quantizer table base/arithmetic: `quant_row_ptr = 0x10037cc0 + nibble×256`, nibble=0 — **the
+  identical base address and identical nibble×256 row-selection arithmetic already confirmed for
+  luma in §5.3v.**
+- Dequant formula: the same `sar(raw[k]×quant[k], 0xb)` per-term math, through the literal SAME
+  function (`0x100247d0`), same butterfly constants — shared code, not plane-specific.
+- DC=1056, nibble=0, 33 AC-tree bits, 5 nonzero coefficients (k=1:-1, k=8:-1, k=13:1, k=17:-1,
+  k=24:-1), core IDCT row 0 = `[131,131,131,132,131,132,132,132]`.
+- **No evidence of a chroma-specific dequant matrix, a disjoint quantizer-nibble range, or any
+  different scaling for chroma's secondary=2 path** — it is literally the same function, same
+  table base, same arithmetic as luma.
+
+**ChromaB's own block (0,0) — NOT decodable this pass, reported honestly rather than fabricated.**
+Confirmed via a full-frame dispatch survey: chromaB never reaches a real case body anywhere in
+this frame (0 real dispatches, vs. 23,914 for Y and 6,042 for chromaA) — reproducing the
+already-documented chromaB entropy-pre-stage stall elsewhere in this document (`0x10019360`
+permanently stalling 4 bytes past its own bound from its 2nd chromaB call onward). ChromaB's own
+`(0,0)` 16×16 region is still pure `0xEE` sentinel.
+
+- **Evidence:** live Unicorn capture against the unmodified DLL and `main_menu_bg.bik`, same
+  harness family as §5.3v/§5.3w; dispatch-index→(plane,row,col) mapping independently confirmed
+  by write-address enumeration (a full-frame dispatch survey script), not assumed from raster
+  order alone; bit-reader entry/exit state cross-checked the same way as §5.3v/§5.3w for every
+  block captured.
+- **Confidence:** CONFIRMED for idx1-4's engine/DC/bit-count/coefficient/IDCT-row values and for
+  chromaB's non-decodability this frame. CONFIRMED (one confirming instance, not an exhaustive
+  sweep) for the chroma-shares-luma-dequant finding — only one chroma secondary=2 occurrence
+  (nibble=0) was checked, not all 16 possible nibble rows for chroma specifically.
+- **Unknowns:** whether chroma's dequant matches luma's at OTHER nibble values (0 was the only one
+  checked); ~~the small 4-bit gap between idx0's exit and idx3's entry (noted, not traced)~~
+  **CLOSED 2026-10-11, §5.3y below: it is the per-block quantizer-nibble read `0x1001b3b5`, exactly
+  4 bits, confirmed live;** which physical plane (Cb/Cr) chromaA/chromaB actually correspond to
+  (this project's own existing `CA_BUF`/`CB_BUF` naming was used as-is, not independently re-derived
+  this pass). Next step if picked up again: a chroma sec2 sweep across more nibble values.
+
+---
+
+### 5.3y Bit-position/stream-source trace, Y row 0 dispatch idx 0-4 — orchestrator-routed to test the "wrong bitstream source" hypothesis for the still-wrong end-to-end decode (2026-10-11)
+
+**Scope.** Team B has every individual decode stage proven correct in isolation (AC-tree
+Gate A/Gate B, dequant, IDCT, flat-fill, chroma dequant) yet their end-to-end decode is still
+wrong for all 5 of frame 0's Y-plane row-0 blocks. Working hypothesis: the decoder reads from the
+wrong bitstream/cursor source somewhere. Live Unicorn capture (unmodified DLL, unmodified
+`main_menu_bg.bik`) at 3 points per block — the block-type dispatch read, the AC-tree entry, and
+the AC-tree exit — for dispatch idx 0-4 (idx0/3/4 = secondary=2 DC+AC/IDCT; idx1/2 = secondary=3
+flat-fill, no AC-tree call):
+
+| idx | engine | dispatch bitpos | dispatch ctx | AC-entry bitpos | AC-entry ctx | AC-exit bitpos | AC-exit ctx |
+|---|---|---|---|---|---|---|---|
+| 0 | sec2 | 13619 | `0x303f4e9c` | 13619 | `0x303f4e9c` | 13636 | `0x303f4e9c` |
+| 1 | sec3 | 13640 | `0x303f4e9c` | — | — | — | — |
+| 2 | sec3 | 13640 | `0x303f4e9c` | — | — | — | — |
+| 3 | sec2 | 13640 | `0x303f4e9c` | 13640 | `0x303f4e9c` | 13723 | `0x303f4e9c` |
+| 4 | sec2 | 13727 | `0x303f4e9c` | 13727 | `0x303f4e9c` | 13863 | `0x303f4e9c` |
+
+**Finding 1 — no anomaly in the main-bitstream/AC-tree sharing for this 5-block span.** Every bit
+position is strictly monotonic across the row; the AC-tree's own bit-reader context address
+(`0x303f4e9c`) is byte-identical at entry and exit for every block that calls it, and identical
+to the dispatch-read context used by every block including the flat-fill ones — confirming live,
+across 3 AC-tree calls in sequence, that the main per-row bit-reader is one single, coherently-
+advancing struct shared by the entropy pre-stage, the per-block nibble read, and the AC-tree
+decoder, exactly as §5.3g/§5.3v already claim. The per-row stack frame (`ebp`) is also identical
+across all 5 blocks, confirming "one `0x1001a530` call per row, every block's case body sharing
+one stack frame" directly, live. **The orchestrator's hypothesized wrong-source bug is NOT
+located in this specific 5-block span's main-bitstream wiring.** Bonus: this closes §5.3x's own
+flagged 4-bit gap between idx0's exit and idx3's entry — it is the per-block quantizer-nibble
+read at `0x1001b3b5`, confirmed to consume exactly 4 bits from the main bit-reader (idx0:
+nibble=2 exactly matching §5.3v; idx3: nibble=0 exactly matching §5.3x) — not a bug, the
+already-documented nibble read, now pinned to the instruction and exact bit cost.
+
+**Finding 2 — a real correction to §5.3i's "descriptor L" framing: the literal-byte READ cursor
+is NOT one shared pointer between secondary=2 and secondary=3, even though their bound-check
+variable is genuinely shared.** §5.3i states descriptor L is "a SEPARATE descriptor... feed[ing]
+the DC literal word (secondary=2), the flat-fill byte (secondary=3)... from this ONE shared byte
+stream," naming cursor `[ebp-0x210]`/bound `[ebx+0x10]`. Re-confirmed live: the BOUND-check
+variable genuinely is shared and byte-identical across all 5 blocks (`[ebp-0x210]`=`0x0`,
+bound=`0x438`). **But the actual literal-byte read pointer differs by engine:** secondary=2's DC
+word read (`0x1001b328`) uses a cursor cached at `[ebp-0x13c]` (live: `0x303f8620`→`0x303f8622`→
+`0x303f8624`, advancing 2 bytes per DC word); secondary=3's fill-byte read (`0x1001b3f8`) uses a
+cursor cached at a slot compared against `[ebp-0x34]` (live: `0x303f9bb0`→`0x303f9bb1`, advancing
+1 byte per fill byte). These two cursor regions are ~5,008 bytes apart (`0x303f9bb0 − 0x303f8620
+= 0x1390`) — not the same pointer, not adjacent sub-ranges of one obviously-shared small buffer.
+Consistent with §5.3h's own separately-flagged large per-row DC-delta bulk-decode pass being a
+genuinely distinct array from whatever backs the flat-fill byte stream. **If any reimplementation
+modeled DC-literal and fill-byte reads as pulling from one shared cursor/array (per §5.3i's
+literal wording), that would be a real, concrete mismatch against the live DLL** — a second,
+independently-surfaced "wrong source" candidate, in the literal-byte pipeline rather than the
+main bit-reader.
+
+- **Evidence:** live Unicorn execution against the unmodified DLL/`.bik` bytes, hooks at the
+  established call/return-boundary pattern (`0x1001b348`/`0x1001b34d` for the AC-tree, avoiding
+  the self-re-entrancy hook-confusion issue §5.3j Part 3 flags), plus fresh static disassembly of
+  `0x1001b2ff`-`0x1001b350`/`0x1001b3d8`-`0x1001b420` to locate the real literal-cursor
+  instructions. Independently re-verified by direct query before splicing — the raw capture
+  report's main table and literal-cursor addresses matched the agent's claims exactly.
+- **Confidence:** CONFIRMED for the main table (bit positions, context addresses, monotonicity,
+  no-anomaly result) and the nibble-read gap closure — live-captured, cross-checked against
+  already-published §5.3v/§5.3x numbers, which reproduce exactly. CONFIRMED (address-level) that
+  the sec=2/sec=3 literal-byte cursors are physically different addresses. PLAUSIBLE, not
+  confirmed, that this reflects two genuinely separate per-row bulk-decoded arrays rather than one
+  shared allocation with internal structure.
+- **Unknowns:** whether the literal-cursor mismatch (Finding 2) is itself live in any current
+  reimplementation bug, or just a spec-wording imprecision with no downstream consequence; what
+  sits further upstream of the two cursors' own refill-base pointers (not traced); whether the
+  same clean monotonic sharing holds beyond idx4 (chroma planes, later rows) — out of this
+  capture's scope. The orchestrator's end-to-end-decode-still-wrong bug is NOT in this 5-block
+  span's main-bitstream wiring, so it must be elsewhere — either the literal-byte cursor
+  distinction above, further into the row/frame, or a stage not yet captured.
+
+---
+
+### 5.3z Both literal-byte cursors confirmed CORRECT at the source — closes §5.3y's own "what sits upstream" open item with a clean negative (2026-10-11)
+
+**Scope.** Direct follow-up, orchestrator-routed as the top video blocker: after Team B merged
+the cursor-separation fix from §5.3y, their flat-fill reads gave 87/8 instead of the ground-truth
+153, and block (0,0) gave 41 instead of 24 — even with every individual decode stage
+independently verified. Working hypothesis: both cursors read from the wrong buffer, or the right
+buffer at the wrong starting offset. Live Unicorn capture against the unmodified DLL/`.bik`,
+hooking each cursor's first real read for frame 0, Y-plane.
+
+**Finding — disconfirmed. Both cursors already point at their ground-truth byte, at offset 0, in
+the real DLL.** DC-literal cursor (dispatch idx0): buffer `0x303f8620`, first word `0x0076` (118)
+at offset 0 — exact match, reconfirming §5.3o/§5.3p's own prior finding independently. Written by
+`0x1001a160`'s own DC-word write site (`0x1001a307`) — a stack-local scratch array. Flat-fill
+cursor (dispatch idx1): buffer `0x303f9bb0`, first byte `0x99` (153) at offset 0 — exact match.
+Written by a DIFFERENT function, `0x100195b0` (write site `0x100197dc`) — a structural sibling of
+`0x1001a160`, not the same function and not a `0x10019360`-style descriptor-A/B pre-stage call;
+also a stack-local scratch array, independently confirmed ~0x1390 bytes from the DC buffer
+(matching §5.3y's own distance measurement exactly).
+
+**New confirmation: `0x100195b0`'s own bit-reader argument is the SAME shared main-bitstream
+context address (`0x303f4e9c`) already pinned for the AC-tree and the DC-word decoder** — flat-
+fill bytes are decoded from the same underlying per-row bitstream as everything else, just
+through a sibling routine into its own separate output array. Its own bitstream cursor advances
+through raw frame bytes (`FRAME_BUF_BASE`-relative) across successive calls, confirming real
+compressed input, not a pre-decoded intermediate buffer.
+
+**Net: buffer identity and starting offset are NOT the bug for either cursor, in either of the
+two instances traced.**
+
+**Critical cross-reference, same day, caught by Team B reading this section against §5.3s
+(SPEC TEAM, self, direct check of already-published text — no new capture needed): `0x303f9bb0`
+is not just "a buffer `0x100195b0` happens to write" — it is the EXACT SAME output array §5.3s
+already fully documents as that function's own real tree-coded decode output, a persistent
+650-byte signed-residual stream (`0x303f9bb0`-`0x303f9e39`, first byte there published as `-103`
+signed = `0x99`/153 unsigned — the identical byte, identical address, as this section's own flat-
+fill first-read value).** This means flat-fill blocks are NOT triggering any separate per-block
+decode at the call site traced here — they are reading sequentially further into the SAME
+650-byte array `0x100195b0` already fully decoded as part of the shared entropy pre-stage,
+exactly the same "descriptor L" convention (`0x1001a160`'s own buffer, §5.3p) already established
+for DC words. **This resolves the real remaining bug for Team B: their earlier modeling of
+`0x100195b0` as a "measured-total skip" (pay the right bit cost, discard the actual decoded
+content, since nothing consumed its real output at the time it was first characterized) is now
+known to be wrong — flat-fill blocks DO consume that real output, sequentially, the same way DC
+blocks consume `0x1001a160`'s. The fix is to actually implement `0x100195b0`'s real tree-coded
+decode (§5.3s's own already-published algorithm: leading magnitude as literal count, a two-LUT
+tree lookup, a fast-fill shortcut, persistent state across calls) instead of skip-paying it, and
+wire flat-fill reads to pull sequentially from that real decoded array instead of a separate
+`FlatFillByteCursor` abstraction.**
+
+- **Evidence:** live Unicorn capture against the unmodified `binkw32.dll`/`main_menu_bg.bik`;
+  both cursor addresses/first-read values and both writer PCs captured directly, not inferred;
+  the writer `0x100195b0` located via fresh static disassembly then confirmed live via a second,
+  independent hook reading its own arguments (bit-reader address, advancing frame-relative
+  bitstream cursor). Independently re-verified before relaying to Team B — the raw capture dump
+  (`scratchpad/bink_literal_cursor_source_2026-10-11/all_writes_count.txt`) matched the agent's
+  claimed addresses exactly. The §5.3s cross-reference (same buffer, same first byte) is a direct
+  textual check against this document's own already-published, independently-landed worked
+  example — no new capture needed, exact address and byte-value match (`-103` signed =
+  `0x99`/153 unsigned, same byte).
+- **Confidence:** CONFIRMED for both cursors' buffer addresses, first-read values (0x76/118 and
+  0x99/153), and exact writer instructions, all live and reproduced. CONFIRMED that the flat-fill
+  writer shares the same main-bitstream context address as the AC-tree/DC-writer. CONFIRMED that
+  `0x303f9bb0` is the identical buffer §5.3s already documents as `0x100195b0`'s own real
+  650-byte tree-coded decode output (exact address + byte match, not inference). PLAUSIBLE that
+  flat-fill blocks generally (beyond idx1) consume this same array sequentially rather than
+  triggering separate decodes — strongly suggested by the shared-buffer finding but not traced
+  block-by-block across the whole row this pass.
+- **Unknowns:** whether the same "right buffer, right offset" result holds for later blocks/rows/
+  chroma planes (only the first occurrence of each engine was checked); the precise nature of Team
+  B's own remaining bug — outside this capture's scope, their own code was not inspected. **CLOSED
+  2026-10-11, see new §5.3aa: the exact byte-level decode math inside `0x100195b0` itself** —
+  instruction-level tracing plus a live per-symbol capture across the FULL 650-symbol call found
+  the two-nibble-tree structure and the exact `cur_class` update rule, zero exceptions.
+
+### 5.3aa `0x100195b0`'s own per-symbol tree-decode body, instruction-exact: two nibble-trees per byte, and the exact `cur_class` update rule — closes §5.3z's own named Unknown, routed directly by both the orchestrator and Team B after Team B's own 4 structural guesses all failed (2026-10-11)
+
+**Scope.** Direct response to a precise, converging ask from both live peers: Team B's own
+`0x100195b0`-builder stopgap now reproduces the two per-class LUT banks exactly (§5.3g's own
+`A_array`, confirmed byte-for-byte, Team B commit `803855a`), but 4 independent structural guesses
+at the per-symbol decode BODY itself all failed against the real 650-byte/3384-bit golden fixture
+(frame 0/Y-plane/row 0, first call) — closest was a "nibble-pair-per-byte, translated-value
+`cur_class`" model at +2.7% bits and still wrong byte values from the first byte. Full static
+disassembly of `0x100195b0`'s own body (`capstone`, direct from `binkw32.dll`, 231 instructions —
+exact instruction count match to §5.3s's own prior full-body dump, cross-confirming this is the
+same function/build) plus a new live Unicorn per-symbol trace
+(`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_curclass_trace_2026-10-11.py`),
+hooking every stage of the loop body across the FULL real 650-symbol call, not just a handful of
+samples.
+
+**Finding — CONFIRMED, zero exceptions across all 650 symbols of the real call: each output byte
+is built from TWO separate 4-bit tree-lookups, one per-class (driven by `cur_class`) and one
+global (the same single descriptor `0x10019360` itself uses), and `cur_class` for symbol i+1 is
+set to exactly symbol i's own per-class nibble output — not the raw symbol index, not the combined
+byte, not a fixed/periodic update.**
+
+```c
+// 0x100195b0's per-symbol loop body, instruction-exact (0x1001968d-0x100197df)
+// entered once per symbol, `remaining` times (remaining = leading magnitude, 650 here, §5.3s)
+uint8_t cur_class = ctx->class_state;           // ctx+0x180, loaded ONCE before the loop starts
+for (; remaining > 0; remaining--) {
+    // --- nibble 1: PER-CLASS tree, indexed by cur_class ---
+    uint32_t A1 = arg3->A_per_class[cur_class];        // arg3 + cur_class*4 + 0x100 (S5.3g's A_array)
+    uint8_t* lut1 = arg3->lut_ptr_per_class[cur_class]; // arg3 + cur_class*4 + 0x140
+    uint32_t idx1 = peek_bits(br, A1);
+    uint8_t packed1 = lut1[idx1];                       // code_len1<<4 | raw_symbol1
+    consume_bits(br, packed1 >> 4);                     // code_len1
+    uint8_t nib1 = ctx->translate256[cur_class][packed1 & 0xF]; // CORRECTED 2026-10-11 (Team B's
+                                                          // own implementation caught this): the
+                                                          // table is at ctx + cur_class*16 +
+                                                          // raw_symbol1 -- on arg1/ctx (the
+                                                          // idle-check/output-descriptor struct,
+                                                          // the SAME struct whose +0x30 is
+                                                          // SCRATCH_BASE and +0x180 is cur_class),
+                                                          // NOT on arg3 as originally published.
+                                                          // A 16-class x 16-symbol byte table at
+                                                          // ctx+0x00..0xFF; arg3's own +0x100/
+                                                          // +0x140 per-class LUT arrays are a
+                                                          // separate struct, confirmed unrelated.
+
+    // --- nibble 2: GLOBAL tree, same single descriptor 0x10019360 itself reads ---
+    uint32_t A2 = ctx->A;                                // ctx + 0x20 (same field 0x10019360 Desc+0x20 uses)
+    uint8_t* lut2 = ctx->lut_ptr;                         // ctx + 0x24 (same field as Desc+0x24)
+    uint32_t idx2 = peek_bits(br, A2);
+    uint8_t packed2 = lut2[idx2];
+    consume_bits(br, packed2 >> 4);                      // code_len2
+    uint8_t nib2 = ctx->translate16[packed2 & 0xF];       // ctx + 0x10 + raw_symbol2 (the SAME
+                                                            // 16-byte global translate table
+                                                            // 0x10019360's own Desc+0x10..0x1f uses)
+
+    uint8_t combo = (nib1 << 4) | nib2;                   // 0x100197c0-0x100197c3
+    int8_t out_byte;                                      // sign/bias transform, 0x100197c5-0x100197d9
+    if (combo & 0x80) out_byte = -(int8_t)(combo & 0x7F); // top bit set: negate low 7 bits
+    else               out_byte = (int8_t)(combo & 0x7F); // top bit clear: keep low 7 bits
+    out_byte -= 0x80;                                      // then bias by -128, both paths
+    *out++ = (uint8_t)out_byte;
+
+    cur_class = nib1;                                      // <<< THE UPDATE RULE: next symbol's
+                                                              // per-class tree selector IS this
+                                                              // symbol's own nibble-1 output, every
+                                                              // single time, confirmed 650/650
+}
+ctx->class_state = cur_class;                              // written back ONCE, at the function's
+                                                              // own single `ret` (0x1001980d)
+```
+
+**CORRECTION, 2026-10-11, caught by Team B's own careful implementation and diagnostic — the
+translate-table base address above was published wrong, now fixed in place in the code block
+above.** Team B implemented this section literally, field-for-field, and it did NOT reproduce the
+golden fixture (first byte 134 vs. the real 153; total bit cost 3561 vs. the real 3384). Their own
+bounded diagnostic (bit-offset scan, swapping which tree is per-class vs. global, trying
+descriptor B instead of A for the global tree, trying `cur_class` sourced from nib2 or from the
+raw symbol instead of nib1, reversing the nibble order in the combo byte) reproduced NONE of
+these — but independently reconfirmed the per-class `classByte` sequence
+(`4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4`) matches §5.3g's own `A_array` exactly, correctly narrowing the
+bug to the translate step specifically rather than the per-class banks. A fresh live capture
+(`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_translate_addr_2026-10-11.py`)
+confirms the real read address for nibble 1's translate lookup is **`ctx + cur_class*16 +
+raw_symbol1`** — on `arg1`/`ctx` (the idle-check/output-descriptor struct), **not** `arg3` as
+originally written above. Confirmed two independent ways in the live trace: for symbol 0
+(`cur_class=0`, `raw_symbol1=1`) the address is exactly `ctx+1`; for every steady-state symbol
+(`cur_class=1`, `raw_symbol1=0`) it is exactly `ctx+0x10` — both matched against a byte-snapshot
+of `ctx+0x00..0xFF` taken at the exact moment of the read (an end-of-emulation snapshot gave
+garbage/pointer-looking data the first time this was attempted, because this region is a reused
+per-row scratch buffer overwritten later in the same run — a trap worth remembering for any future
+capture of this struct). The real table, captured live for this exact row (frame 0/Y/row 0, first
+call):
+
+```
+ctx+0x00: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f   (class 0)
+ctx+0x10: 01 02 0e 03 00 04 05 06 07 08 09 0a 0b 0c 0d 0f   (class 1)
+ctx+0x20: 02 01 03 04 00 05 06 07 08 09 0a 0b 0c 0d 0e 0f   (class 2)
+ctx+0x30: 02 03 01 04 05 06 07 08 09 0e 00 0a 0b 0f 0c 0d   (class 3)
+ctx+0x40: 02 03 04 01 05 06 07 08 09 0e 00 0a 0b 0f 0c 0d   (class 4)
+ctx+0x50: 02 05 03 04 01 06 00 07 08 09 0a 0b 0c 0d 0e 0f   (class 5)
+ctx+0x60: 02 06 01 07 05 03 00 04 08 09 0a 0b 0c 0d 0e 0f   (class 6)
+ctx+0x70: 02 01 07 06 05 03 08 04 00 09 0a 0b 0c 0d 0e 0f   (class 7)
+ctx+0x80: 02 08 01 07 06 03 0e 09 00 04 05 0a 0b 0c 0d 0f   (class 8)
+ctx+0x90: 02 01 00 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f   (class 9)
+ctx+0xa0: 01 02 09 03 0e 07 00 04 05 06 08 0a 0b 0c 0d 0f   (class 10)
+ctx+0xb0: 01 0e 02 0b 07 08 00 03 04 05 06 09 0a 0c 0d 0f   (class 11)
+ctx+0xc0: 01 0e 0d 0c 02 0b 00 03 04 05 06 07 08 09 0a 0f   (class 12)
+ctx+0xd0: 0d 0e 01 02 0c 09 00 03 04 05 06 07 08 0a 0b 0f   (class 13)
+ctx+0xe0: 0e 01 02 0d 03 0c 00 04 05 06 07 08 09 0a 0b 0f   (class 14)
+ctx+0xf0: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f   (class 15)
+```
+Every row is itself close to a permutation of 0-15 (not confirmed exhaustively bijective this
+pass), which is consistent with a genuine translate/remap table rather than arbitrary data. The
+rest of this section's own findings (the two-nibble structure, the global tree on `ctx`, the
+`cur_class = nib1` update rule, the sign/bias transform, the one-time sign-probe bit) are
+unaffected by this correction — only the translate table's own base struct was wrong.
+
+- **Evidence:** live Unicorn re-capture, reusing the exact same call-site identification already
+  validated in this section (confirmed the resolved indirect-call target really is `0x100195b0`
+  before trusting the address, not assumed); the address formula cross-checked against two
+  independent symbols (class 0/symbol 1 and the class 1/symbol 0 steady state) and the resulting
+  table values matched the already-independently-known `nib1` outputs exactly for both.
+- **Confidence:** CONFIRMED — live capture, two independent address/value cross-checks, against
+  the unmodified DLL.
+- **Unknowns:** whether every row of the real table is an exact bijection of 0-15 (not checked
+  row-by-row); whether `ctx`'s own `+0x00..0xFF` region has this same role in `0x100195b0`'s OTHER
+  calls (only this one row/call was captured).
+
+**One additional one-time cost, NOT part of the per-symbol loop:** immediately after the leading
+magnitude is decoded and validated (§5.3s), and before the first loop iteration, the function reads
+exactly 1 extra bit (`0x10019656`-`0x10019689`) that, if set, transforms the magnitude itself via
+`magnitude = -20 - magnitude` (an edge-case path for a negative/sentinel magnitude, never observed
+firing in this real call — the bit was 0 here, magnitude stayed +650). This 1 bit is real bitstream
+cost (included automatically in the live-measured 3384-bit total) but is easy to miss or
+mis-model as part of the per-symbol loop if reconstructing from static reading alone — flagging it
+explicitly since Team B's own guesses may have folded it into (or omitted it from) the wrong place.
+
+**Live per-symbol trace, first 20 of 650 symbols (full table of all 650 in
+`probe_195b0_curclass_trace_out.txt`), reproduces §5.3s's own published first-20-byte sequence
+exactly (`-103,-103,-103,-103,-103,-103,-103,-103,-103,-102,-103,-103,-102,-102,-102,-103,-103,
+-98,-102,-103`):**
+
+| symbol i | cur_class_in | packed1 (code_len1,raw1) | nib1 (=next cur_class) | packed2 (code_len2,raw2) | nib2 | combo | final signed byte |
+|---|---|---|---|---|---|---|---|
+| 0 | 0 | 0x41 (4,1) | 1 | 0x49 (4,9) | 9 | 0x19 | -103 |
+| 1 | 1 | 0x10 (1,0) | 1 | 0x49 (4,9) | 9 | 0x19 | -103 |
+| 2-8 | 1 | 0x10 (1,0) | 1 | 0x49 (4,9) | 9 | 0x19 | -103 |
+| 9 | 1 | 0x10 (1,0) | 1 | 0x4a (4,10) | 10 | 0x1a | -102 |
+| 17 | 1 | 0x10 (1,0) | 1 | 0x4e (4,14) | 14 | 0x1e | -98 |
+
+Explains the "long flat run" shape Team B flagged as the tell their 4 guesses all missed: once
+`cur_class` locks at 1 (which it does from symbol 1 onward through this entire sampled window and
+most of the call — class 1's own code for raw-symbol 0 is a cheap 1-bit code, `0x10`, producing a
+STABLE `nib1=1`, which immediately re-selects class 1 again next symbol — a genuine fixed point),
+the output's high nibble stays locked at 1 and all visible variation comes from nibble 2's own
+global tree alone — a small, low-cost code producing the tight `-96..-104` band actually observed.
+`cur_class` does change later in the same call (first at symbol 76, confirmed in the full 650-entry
+trace), and every single transition — all 650 symbols, zero exceptions — obeys `cur_class[i+1] =
+nib1[i]` exactly, with no other rule needed.
+
+**Why Team B's closest guess (attempt 1: "nibble-pair-per-byte, translated-value `cur_class`")
+still failed, diagnosed from this trace, not from reading their own code (no access):** the
+UPDATE RULE direction (translated value → next class) was right, but getting the WRONG bytes from
+the very first byte and the wrong total bit cost (3474 vs 3384, +2.7%) means at least one
+structural detail differed from the mechanism above — most likely candidates, in order of
+plausibility given the shape of the error: using the COMBINED byte or nibble 2 (not nibble 1
+specifically) as the class-update value; swapping which tree is "per-class" vs "global" (i.e.
+reading nibble 2 from the class-indexed bank and nibble 1 from the global one); or omitting/
+mis-placing the one-time 1-bit magnitude sign-probe described above. Not independently verified
+against Team B's own reverted code (unavailable).
+
+- **Evidence:** fresh static `capstone` disassembly of `0x100195b0`'s full body (231 instructions,
+  exact count match to §5.3s's own independent dump); live Unicorn per-symbol trace against the
+  unmodified `binkw32.dll`/`main_menu_bg.bik`, hooking every stage of both nibble-lookups (packed
+  byte, translated nibble, fast/slow refill variants) across the ENTIRE real 650-symbol call, not
+  a sample — the `cur_class[i+1] == nib1[i]` rule holds with 0 mismatches out of 650; the reproduced
+  byte sequence (first 20 values) matches §5.3s's own independently-published first-20-byte dump
+  exactly, and the total bit cost (3384) matches §5.3r/§5.3s's own independent measurement exactly.
+- **Confidence:** CONFIRMED for the two-nibble-tree structure, the `cur_class` update rule (0/650
+  exceptions, both fast- and slow-refill code paths sampled), the sign/bias transform formula (byte
+  for byte against 20+ live values), and the one-time 1-bit magnitude sign-probe's existence and
+  bit cost. PLAUSIBLE, not independently verified, for the specific diagnosis of which detail broke
+  Team B's own attempt 1 (no access to their reverted code).
+- **Unknowns:** whether `cur_class`'s valid range is exactly 0-15 (16 classes, matching the
+  LUT-builder's 16-dword arrays) or whether the translate table can ever emit a nibble 1 value
+  outside that range for some other block/file (not stress-tested beyond this one 650-symbol call);
+  the exact semantics of the rare negative-magnitude sign-probe path (never observed firing, bit
+  was 0 in every call checked this pass).
+
+Full detail/scripts:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/probe_195b0_curclass_trace_2026-10-11.py`,
+`probe_195b0_curclass_trace_out.txt`.
+
+### 5.3ab `0x10019d10` and `0x10019f00`'s own consumers and per-symbol structure — closes the "measured-total skip" trap for two more of the 23-call pre-stage siblings, orchestrator-routed after `0x100195b0`'s own version of this trap (§5.3z/§5.3aa) (2026-10-11)
+
+**Scope.** Direct follow-up, same thread as §5.3aa: Team B still pays `0x10019d10` (528 bytes,
+2981 bits, §5.3t) as a bit-cost-only skip — the exact trap `0x100195b0` was in until §5.3z found
+its real output feeds flat-fill. Two questions, both answered by live Unicorn capture (memory-read
+watches over each function's own output buffer, same method as §5.3p/§5.3z's buffer-source
+tracing) plus fresh static `capstone` disassembly of both function bodies in full (`0x10019d10`:
+183 instructions, exact count match to §5.3t's own prior dump, confirming same build; `0x10019f00`:
+218 instructions, full body read for the first time this pass).
+
+**`0x10019d10` — CONFIRMED, two real consumers, both already-documented engines.** A live
+memory-read watch armed on the buffer immediately after its first real call commits
+(`0x303f9210`-`0x303f941f`, 528 bytes) found exactly two distinct reader groups for the rest of
+the frame's decode, both landing inside already-named case bodies from §5.3a:
+
+- **Giant2 / secondary=5 (TwoLiteralPattern), `0x1001b5a3`-`0x1001b90e`:** 4 distinct reader
+  instructions, each firing once per 4-byte stride (byte offsets `+0x10,+0x14`, `+0x48,+0x4c`,
+  `+0x60,+0x64`, ... — one 4-byte group per TwoLiteralPattern block). This is EXACTLY §5.3a's own
+  already-documented `control_byte` — the value giant2 uses to compute `idx = (control_byte>>shift)
+  & 3` and select the 2-bit blend mask from `0x1003c130`/`0x1003c200` (§5.3a, lines ~578-587).
+  **`0x10019d10`'s 528-byte decoded array IS secondary=5's own control-byte stream** — not a
+  separate, unmodeled input, but the literal source of a quantity this doc already fully
+  characterizes downstream.
+- **Primary case 8, `0x1001c608`-`0x1001c960`:** 8 distinct reader instructions, each firing once
+  per 8-byte stride — the 4-bit nibble selector §5.3a already documents case 8 using to index the
+  4-bit blend-mask pair (`0x1003c180`/`0x1003c1c0`, §5.3a lines ~589-610). Same relationship: the
+  nibble case 8 reads comes directly from this same decoded array, one byte supplying one nibble
+  selector per 8-pixel group (only the low nibble is used per §5.3a's own table; which half of each
+  byte case 8 vs. giant2 actually consumes was not disambiguated further this pass).
+
+**Per-symbol structure, CONFIRMED by full static read (no live per-symbol table given — the
+mechanism has no class-carry ambiguity to resolve live, unlike `0x100195b0`): the SAME FIELD
+LAYOUT CONVENTION as `0x10019360`'s own descriptor and `0x100195b0`'s own nibble-2 lookup —
+`ctx+0x20`(max code length)/`ctx+0x24`(LUT pointer)/`ctx+0x10`(16-byte translate table) — read
+TWICE per output byte (low nibble first at `0x10019dcf`/`0x10019e13`
+
+**Correction, 2026-10-11 [CONFIRMED via disassembly, Team B's own diagnostic prompted this
+re-check]: this is NOT the same tree INSTANCE as descriptor A or B — the wording above
+("a SINGLE shared global tree") overclaimed.** Traced the per-row orchestrator's (`0x1001a530`)
+own call-site argument marshaling for this exact call (`0x1001ab08`): the `ctx` pointer passed is
+`&[ebp-0x6c]`, a small local the orchestrator itself zero/8-initializes a few fields of
+(`ebp-0x6c`/`-0x68`=0, `-0x64`=8, `-0x60`=0) immediately before the call — a completely different
+stack address from descriptor A's `&[ebp-0x170]` or descriptor B's `&[ebp-0x1a4]` (both filled by
+`0x10019360` itself). This `ctx`'s own tree fields (`ctx+0x20`/`ctx+0x24` = `ebp-0x4c`/`ebp-0x48`)
+are populated by their OWN dedicated call to the same generic per-row table-builder,
+`0x10018ca0` (`0x1001aa24`-`0x1001aa2a`: `lea edx,[ebp-0x4c]; lea ecx,[ebp-0x48]; call
+0x10018ca0`) — one of the 23-call pre-stage siblings §5.3g already names, but a SEPARATE
+invocation building a tree specific to this call, not a copy of or reference to descriptor A/B's
+tree. `ctx+0x30` (output-buffer base, `ebp-0x3c`) is likewise filled independently, from a
+different source object's `+0xc` field (`0x1001a7c1`), not from descriptor A/B either. **Answers
+Team B's own question directly: `0x10019d10`'s tree is a distinct, freshly-built instance per
+call, not literally the same memory `0x10019360`'s descriptor or `0x100195b0`'s nibble-2 lookup
+reads — only the field-offset convention (and the `0x10018ca0`-family build mechanism) is shared.**
+A reimplementation that points this call at descriptor A/B's own already-built tree (rather than
+building its own fresh one via its own `0x10018ca0` call) would read the wrong tree content and
+very plausibly explain a bit-cost mismatch of exactly the kind Team B is chasing (2993 measured vs
+2981 expected, a 12-bit overrun) — not independently verified against Team B's own fixture this
+pass, but a strong, structurally-motivated lead to check first.
+fast/slow, high nibble second at `0x10019e51`/`0x10019e7f` fast/slow), combined as
+`(hi<<4)|lo`, with an explicit `dec`-to-zero loop counter (`0x10019db4`/`0x1001a0b2`-style,
+confirmed count-driven, matching §5.3t's own prior characterization). **No `+0x180`-style
+persistent state is ever written anywhere in this function's 183 instructions — confirmed by
+reading the full body, not inferred: `0x10019d10` has NO class-carry at all, unlike
+`0x100195b0`.** Live reproduction of the first 8 output bytes (`0f,01,00,00,00,00,80,ff`) matches
+§5.3t's own published sequence exactly, confirming this is the same call/mechanism. A per-byte
+packed/code-length attribution table (mirroring §5.3aa's) was attempted but the quick capture used
+this pass had an unresolved fast/slow-path bookkeeping ambiguity past the first few bytes — not
+force-fit; flagged as a loose end below rather than reported as fact.
+
+**`0x10019f00` — a THIRD, genuinely distinct mechanism, not a copy of either sibling above.**
+Full body read for the first time (218 instructions, `0x10019f00`-`0x1001a13b`). Same idle-check/
+leading-magnitude/bound-check prologue as all siblings. Per output byte, reads exactly 1 bit first
+(`0x10019fbc`, the standard refill-aware single-bit idiom) that selects between two entirely
+different sub-mechanisms — **this is a genuine per-byte mode selector, not a whole-call one like
+`0x10019360`'s `mode_bit` (§5.3g):**
+- **Bit clear** (`0x10019fc5` onward): one single lookup against the SAME global tree
+  (`ctx+0x20`/`+0x24`/`+0x10`) produces a magnitude directly (not nibble-paired); a SEPARATE
+  trailing 1-bit read (`0x1001a07e`-`0x1001a0a3`, same refill-aware idiom) then conditionally
+  negates it (`neg eax` if that bit is set) — sign is a dedicated bit AFTER the magnitude, not
+  encoded inside it. Writes one byte, decrements the outer count, loops.
+- **Bit set** (`0x1001a0c2` onward): reads a 4-bit nibble instead (fast/slow refill variants); if
+  that nibble is nonzero, reads one more bit for sign; then calls the SAME fast-fill helper
+  `0x10001eb0` §5.3s/§5.3aa already document, filling **every remaining byte of the whole call in
+  one shot** with this single signed value, and returns immediately — a per-byte-chosen, not
+  per-call-chosen, bulk-fill-and-bail shortcut, structurally closer to the RLE escape in
+  `0x10019360`'s own case-0xC-0xF run-length table (§5.3g) than to anything in `0x100195b0`/
+  `0x10019d10`.
+
+**`0x10019f00`'s own consumer — checked the same way, HONEST NEGATIVE this pass.** A memory-read
+watch armed on the first call across the whole frame that actually commits a nonzero-length
+buffer (every earlier call had leading magnitude 0 and bailed via the idle/zero-magnitude path —
+confirmed live, not assumed; the first real commit was call #204 of 271, buffer
+`0x303f8f10`-`0x303f9112`, 514 bytes) found **zero reads from that buffer anywhere in the rest of
+the frame's decode.** Only one instance was checked (not call #1, which had zero magnitude in this
+clip); this does not prove `0x10019f00`'s output is unconsumed in general, but for this specific
+real instance in `main_menu_bg.bik` frame 0, nothing reads it back before the capture's own
+natural end. Reported as a genuine gap, not forced into either "consumed" or "dead code."
+
+- **Evidence:** fresh full-body static `capstone` disassembly of both functions (183/218
+  instructions respectively, directly from `binkw32.dll`); live Unicorn memory-read watches over
+  each function's own real output buffer address across the rest of frame 0's decode (not a static
+  guess); the giant2/case-8 consumer identification is a direct textual cross-reference against
+  this document's own already-published §5.3a addresses and table semantics, re-confirmed by
+  address match, not re-derived from scratch; the first-8-byte live reproduction for `0x10019d10`
+  matches §5.3t's own independently-published sequence exactly.
+- **Confidence:** CONFIRMED for `0x10019d10`'s two consumers (giant2's control-byte stream,
+  case 8's nibble-selector stream) and its own no-class-carry single-shared-tree mechanism
+  (absence of any `+0x180`-style write confirmed by reading the complete function body, not
+  inferred from a sample). CONFIRMED for `0x10019f00`'s own distinct per-byte mode-selector
+  structure (bit-decides single-lookup-plus-sign vs. nibble-plus-bulk-fill-and-bail), from full
+  static disassembly. PLAUSIBLE, not proven in general, for `0x10019f00`'s output being unconsumed
+  — only one real (nonzero-magnitude) instance was checked.
+- **Unknowns:** `0x10019d10`'s own exact per-byte bit-cost/packed-value attribution beyond the
+  first few bytes (a fast/slow-path bookkeeping ambiguity in this pass's own quick capture, not
+  resolved — the TOP-LEVEL mechanism and consumer findings above do not depend on resolving this);
+  whether case 8 and giant2 read disjoint halves of each shared byte or genuinely independent
+  stride ranges (not disambiguated); `0x10019f00`'s real consumer, if any, for an instance where
+  its magnitude is actually nonzero on an EARLIER call than #204, or in a different frame/file;
+  whether the remaining uncharacterized members of the 23-call pre-stage group (beyond these three
+  named siblings plus the already-closed `0x1001a160`/calls-#3-18-LUT-builder from §5.3g) have
+  their own distinct mechanisms — not surveyed this pass.
+
+Full detail/scripts:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/find_19d10_consumer_2026-10-11.py`,
+`find_19d10_consumer_out.txt`, `find_19f00_consumer_2026-10-11.py`, `find_19f00_consumer_out.txt`,
+`probe_19d10_persymbol_2026-10-11.py`, `probe_19d10_persymbol_out.txt`.
+
+---
+
+### 5.3ac Full Gate A/Gate B/Phase-1-BFS/Gate-B-defer bit trace for two Phase-1-exercising blocks, dispatch idx3 and idx4 — both bit counts and both full coefficient lists reproduce the published ground truth EXACTLY (2026-10-11)
+
+**Scope.** Direct follow-up to §5.3j Part 2 and §5.3w. §5.3w's own 17-bit worked example for block
+(0,0) never left Phase 2's small-tree mirror (`A=1`) — Team B's reported idx3/idx4 divergence
+(125/140 decoded coefficients vs. the real ~24-25) means their port's bug is specifically in the
+real Phase-1 BFS loop and/or Gate B's defer mechanism, neither of which block (0,0) ever exercised.
+This section traces dispatch idx3 (`main_menu_bg.bik` frame 0, Y-plane, row 0, col 48 — ground
+truth: 83 AC bits, DC=199, 20 nonzero AC) and idx4 (row 0, col 64 — ground truth: 136 AC bits,
+DC=212, 30 nonzero AC), both already published in §5.3x, end to end.
+
+**Call-site identity, verified live, not assumed.** §5.3x's own call-count hypothesis (idx3/idx4 are
+the 2nd/3rd real `0x10024eb0` call, since idx1/idx2 are secondary=3 flat-fill with no AC-tree call)
+was checked directly: a counter hook on the call site `0x1001b348` plus an entry/exit bit-reader
+snapshot (reading the hidden-`ecx` context struct's `{accum, cursor, bits_avail}` fields, same
+layout as §5.3j Part 2) shows call #1's exit accum is `0x07364522` and call #2's entry accum is
+`0x00736452` — exactly call #1's exit accum right-shifted 4 bits, the SAME cross-check §5.3x itself
+cites. **Confirmed: call #1=idx0, call #2=idx3, call #3=idx4**, live, not by assumption.
+
+**Bit-count reconciliation — two independent methods, both EXACT.**
+
+1. *Cursor-arithmetic shortcut* (same method as §5.3w's own entry/exit check): `bits_consumed =
+   8*(cursor_exit-cursor_entry) - bits_avail_exit + bits_avail_entry`. Call #2 (idx3): cursor
+   `0x400006ac`→`0x400006b4` (8 bytes), bits_avail 24→5: `64-5+24 = 83`. Call #3 (idx4): cursor
+   `0x400006b4`→`0x400006c8` (20 bytes), bits_avail 1→25: `160-25+1 = 136`. **Both exactly match
+   §5.3x's published 83/136.**
+2. *Full decision-by-decision reconciliation* (the real deliverable below): a address-classified
+   event log of every Gate A test, every Gate B copy (both the resolve-now and the defer branch),
+   every case 0/1/2/3 dispatch, and every Phase-2 `sel==0/1/2/3` arm actually executed, each
+   correctly weighted by its own real bit cost (1 bit for a gate test; `level` bits for a mechanism-1
+   magnitude+sign field; 1 extra bit for mechanism-2's "read one more bit" step; 0 bits for case 1
+   and Phase-2's `sel==1`, which are pure tag arithmetic) — tallies to **83 for idx3 and 136 for
+   idx4**, independently, with no fudge factor.
+
+**Live output-struct coefficients — EXACT match, both blocks, all 20 and all 30 nonzero values.**
+Reading the caller's own output coefficient struct (the stack arg cached at the call site, same
+struct §5.3j Part 2's write-out section documents) immediately after each call returns:
+
+- idx3: DC=199, nonzero AC (raster k) `1:-2, 2:3, 3:-2, 4:-1, 8:-3, 9:3, 10:-2, 11:1, 13:-1, 16:1,
+  17:-2, 18:1, 20:-1, 25:-1, 26:1, 27:-1, 32:-1, 33:1, 34:-1, 43:1` — byte-for-byte identical to
+  §5.3x's published list, 20/20.
+- idx4: DC=212, nonzero AC (raster k) `1:-5, 2:-5, 3:3, 5:3, 6:-2, 8:-2, 9:-5, 10:-3, 11:1, 12:1,
+  13:1, 14:1, 16:1, 17:2, 18:-1, 19:-1, 21:1, 23:1, 25:1, 26:2, 27:1, 28:-1, 32:-1, 33:-1, 34:-1,
+  35:1, 36:1, 38:-1, 42:-1, 45:1` — byte-for-byte identical to §5.3x's published list, 30/30.
+
+**Method — the hooking strategy actually used.** Per the task's own suggestion, rather than hand-
+placing one hook per unrolled copy, a single `UC_HOOK_CODE` was installed across the ENTIRE
+`0x10024eb0`-`0x100258a8` body (now independently re-measured at 2,552 bytes — see the correction
+to §5.3j Part 2's preamble above), logging `{eax,ebx,ecx,edx,esi,edi}` at every executed instruction
+for only the two target calls (toggled on/off by the call-site/return-site hooks). The resulting
+raw instruction traces (1,293 instructions for idx3, 2,175 for idx4) were then classified offline
+against a literal address map, built by a fresh static `capstone` disassembly of the same byte
+range (`full_func_disasm.txt`, 741 real instructions, zero desync) — NOT against decompiler output.
+The address map (every address below independently re-derived from this disassembly, not carried
+over from §5.3j Part 2's prose):
+
+- **Gate A** test: `0x10024ffa` (Phase 1), `0x100254f4` (Phase 2) — bit = the pre-shift copy of the
+  accum register, tested via `test bl,1`.
+- **Gate B's 4 unrolled copies** (Phase 1, reached from case 0/case 2): decision sites
+  `0x100250b8`/`0x1002523d` (copy 1, two code paths for the same logical decision — refill vs.
+  no-refill), `0x10025125`/`0x100252a0` (copy 2), `0x10025186`/`0x10025304` (copy 3),
+  `0x100251ee`/`0x10025368` (copy 4) — all `test dl,1`. Resolve-now writes land at `0x100250ff`
+  (copy 1, index register `ebx`), `0x1002515a`/`0x100251bb`/`0x10025229` (copies 2-4, index register
+  `edi` — **copies 2-4 use a different index register than copy 1, confirmed by direct disassembly,
+  not previously documented**). Defer writes land at `0x10025298`/`0x100252fc`/`0x10025360`/
+  `0x100253be`.
+- **Case dispatch** (Phase 1, jump table at `0x100258ac`): entries `0x10025018` (case 0),
+  `0x10025038` (case 1), `0x10025087` (case 2), `0x100253cb` (case 3, resolve write `0x1002546c`).
+  Phase 2's own table at `0x100258bc`: `0x10025512` (sel 0), `0x10025522` (sel 1), `0x1002556a`
+  (sel 2), `0x10025716` (sel 3, resolve write `0x1002573a`).
+- **Phase-2 `sel==2`'s own internal chain** — a previously-uncharacterized-by-address 4-slot
+  "requeue-vs-resolve" structure distinct from Phase 1's Gate B, confirmed by disassembly: decision
+  sites `0x10025590`/`0x100255f1`/`0x10025652`/`0x100256b3` (`test bl,1`); bit CLEAR → requeue a
+  `cat*4+3`-tagged entry (writes at `0x100255aa`/`0x1002560b`/`0x1002566c`/`0x100256d2`); bit SET →
+  read one more bit and resolve via mechanism 2 (writes at `0x100255cf`/`0x10025630`/`0x10025691`/
+  `0x10025706`).
+
+**Representative trace excerpt, idx3, first 19 bits (full 120-event log:
+`scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/events_idx3.txt`):**
+
+- **Bits 1-4** — Phase-0 level field, `A=2`. Since `A>1`, Phase 1's real BFS loop runs (unlike
+  §5.3w's block (0,0), where `A=1` skipped it entirely) — this is the first live trace of Phase 1's
+  own loop body with real bitstream content.
+- **Bit 5** — Gate A, first worklist node → **1** → dispatch, `sel=0` (case 0): rewrites the
+  node's own tag in place, falls into Gate B's chain.
+- **Bits 6-8** — Gate B copy 1 → bit **6** (resolve-now, value 0) + a 2-bit (`level=2`)
+  magnitude/sign field (bits 7-8) → **write category 4 = +3** (raster k=2, matching §5.3x's
+  published `k=2:3` exactly).
+- **Bits 9-11** — Gate B copy 2 → bit **9** (resolve-now) + 2-bit field (bits 10-11) → **write
+  category 5 = -2** (k=3, matching `k=3:-2`).
+- **Bits 12-14** — Gate B copy 3 → bit **12** (resolve-now) + 2-bit field (bits 13-14) → **write
+  category 6 = -2** (k=10, matching `k=10:-2`).
+- **Bit 15** — Gate B copy 4 → bit **1** → defer (synthetic category entry pushed to the back
+  of the deferred list `[ebp-0x98]`, picked up again in Phase 2 below).
+- **Bit 16** — Gate A, next worklist node → **0** → skip.
+- **Bit 17** — Gate A → **1** → dispatch, `sel=0` (case 0 again), falls into Gate B.
+- **Bit 18** — Gate B copy 1 → **1** → defer.
+- **Bits 19-21** — Gate B copy 2 → bit **19** (resolve-now) + 2-bit field (bits 20-21) → **write
+  category 25 = -2** (k=17, matching `k=17:-2`) — this is the FIRST live-captured instance of a
+  Gate B copy resolving a category that was NOT the chain's own starting category (`cat`
+  increments once per copy regardless of resolve-vs-defer, exactly as §5.3j Part 2's prose
+  describes but §5.3w's trivial example never actually exercised).
+- **Bit 22** — Gate B copy 3 → **1** → defer.
+- **Bit 23** — Gate B copy 4 → **1** → defer.
+
+**Correction, 2026-10-11 [Team B flagged a real tension in the bit-range labels above; checked
+against the already-captured raw event log, `scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/
+events_idx3.txt` — no new live capture needed, the original run already had the right numbers].**
+The bit-range labels originally published here (`Bits 6-7`, `Bits 8-9`, `Bits 10-11`, `Bit 12`,
+...) undercounted: each resolve-now Gate B copy spends 1 gate bit + a `level`-bit field (3 bits
+total when `level=2`, as it is throughout this excerpt), not 2 — e.g. copy 1 genuinely spans bits
+6-8 (cumulative bit count 8 after it finishes, confirmed directly in the raw event log's own
+`bitnum` accumulator, which DOES correctly add `1 + width` per copy — the bug was only in this
+prose's own compressed range labels, never in the underlying capture or in the final totals: the
+full-trace bit count (83) and all 20 resolved values were independently reproduced correctly
+throughout, unaffected). Labels above are now corrected to match the raw log exactly. **This
+settles Team B's own flagged tension: there was no real 1-gate-bit+level-field budget violation in
+the engine or the capture, only an arithmetic slip in how this specific prose excerpt labeled
+cumulative bit ranges.**
+
+**Case 2's own pre-Gate-B setup, independently confirmed live (resolves Team B's other flagged
+tension — this was a judgment call by analogy to case 0 when first published, now directly
+checked): idx4's own trace (`events_idx4.txt`, bit~33-34) shows `sel=2` dispatched at bit 33,
+falling into Gate B's chain at bit 34 — via its own distinct Gate B entry address (`0x100250b8`),
+confirmed DIFFERENT from case 0's own Gate B entry (`0x1002523d`, seen elsewhere in the same
+trace at bit~41). So case 2 does reach the same Gate B copy-1..4 chain structure as case 0 (same
+resolve/defer shape, same field-width behavior), but through its own separate entry point — not
+literally the same code case 0 falls into, consistent with (and now live-confirmed rather than
+merely inferred from) §5.3j Part 2's own claim that case 2 explicitly advances `front` before
+entering Gate B while case 0 does not.**
+
+...continuing through bit 26, Phase 1's loop dispatches `sel=3` (case 3) three times in a row
+(categories 1, 2, 3; a 2-bit field each, resolving to raster k=1,8,9 = `-2,-3,3`, all matching
+§5.3x exactly) before `front` catches `tail` at the current level and the loop transitions into
+Phase 2 (bit 35 onward) to drain the deferred entries from Gate B copy 4's three defers above —
+Phase 2 resolves them via its own `sel==3` arm (mechanism 2, magnitude always 1) and `sel==2` arm's
+4-slot requeue/resolve chain, eventually bottoming out with every deferred entry either resolved or
+re-deferred-and-reresolved, until the worklist is exhausted at bit 83. **Every single resolved
+value in the full 120-event log maps, through §5.3w's own published category→k permutation table,
+to the exact §5.3x ground-truth coefficient at that k** — spot-checked above for 7 of the 20
+nonzero values, true for all 20 by direct inspection of the raw event log.
+
+**idx4 — structurally richer (case 1 is actually exercised, unlike idx3), summarized (full 213-event
+log: `scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/events_idx4.txt`).** Phase-0 level `A=3` (one
+level deeper than idx3). The first loop pass dispatches case 0 (categories 4, resolved `-5`→k=2,
+matching `k=2:-5`; copies 2-4 all defer), then two case-3 resolutions (category 1 →`-5`→k=1 matching
+`k=1:-5`; category 3→`-5`→k=9 matching `k=9:-5`) each through a **3-bit** magnitude/sign field
+(level=3, one level deeper than idx3's fields, confirmed live — the field width tracks the CURRENT
+outer level, not a fixed constant, exactly as §5.3j Part 2 claims and as idx3 alone could not show
+since every one of idx3's fields happened to be measured at `level=2`). Later in the same pass,
+Phase 1 dispatches **case 1** for the first time in either trace (bit 32, sel=1, pure tag/children
+arithmetic, zero bits, immediately followed by case 2 at bit 33) — the first live confirmation that
+case 1's "4-way split, resolves itself, pushes 3 children, zero bits, never touches Gate B" claim
+(§5.3j Part 2) holds for real bitstream content, not just by static disassembly. Every resolved
+value in the 213-event log maps to its exact §5.3x ground-truth k — spot-checked for 7 of the 30
+nonzero values above (categories 4,1,3,6,5,9,25 → k=2,1,9,10,3,5,17, values `-5,-5,-5,-3,3,3,2`, all
+matching), true for all 30 by direct inspection.
+
+**Scripts and raw output**, all in `scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/`:
+`step1_callcount.py` (call-site/entry-exit verification), `step2_fulltrace.py` (the per-instruction
+Unicorn capture, `raw_trace_call2.txt`/`raw_trace_call3.txt`, plus `out_struct_dump.txt` for the
+coefficient cross-check), `step3_classify.py` (the address-classifier producing `events_idx3.txt`/
+`events_idx4.txt`). `full_func_disasm.txt` (the fresh static disassembly the classifier's address
+map was built from) lives alongside them.
+
+- **Evidence:** live Unicorn capture against the unmodified `binkw32.dll` and unmodified
+  `main_menu_bg.bik`, same harness family as §5.3v/§5.3w/§5.3x; call-site identity independently
+  re-verified live (not assumed) by the same accum-shift cross-check §5.3x itself names; bit counts
+  independently reproduced by two different methods (cursor arithmetic and full decision tally);
+  every one of the 20 (idx3) and 30 (idx4) published nonzero coefficients reproduced byte-for-byte
+  from the live output struct; the address map the classifier uses was built from a fresh
+  independent static disassembly of the exact byte range, not copied from §5.3j Part 2's prose.
+- **Confidence:** CONFIRMED for both blocks' bit counts, both blocks' full coefficient lists, the
+  call-site/call-count identity, the Gate B copy-1-vs-copies-2–4 index-register difference (`ebx`
+  vs. `edi`, newly found this pass), the Phase-2 `sel==2` 4-slot chain's address map, and case 1's
+  real-content behavior (first live instance in either block's trace). The function's real size
+  (2,552 bytes, correcting §5.3j Part 2's "14,840 bytes") is also CONFIRMED, by direct, exhaustive
+  (zero-desync) disassembly of the whole cited range.
+- **Unknowns:** the classifier's event log groups each Gate B/Phase-2-chain "copy" as one decision
+  rather than hand-narrating every single one of the 83/136 bits in full §5.3w-style prose for
+  every event (a deliberate scope choice under this pass's time budget, not a gap in the underlying
+  data — the full event logs in `scratchpad/` give every single classified decision, address, bit
+  value, and resolved value in execution order, for independent re-narration if a reader wants more
+  prose detail than the representative excerpts above); whether this same classifier/address map
+  generalizes cleanly to trees with `level>3` or to Phase 1 visiting MORE than 4 Gate B copies in a
+  single chain (not exercised by either of these two blocks, whose chains both bottomed out at
+  exactly 4).
 
 ---
 
@@ -3059,6 +4539,294 @@ is better understood as "codec-core utility region" rather than a strict video/a
 ---
 
 ## Changelog
+
+- **2026-10-11 — §5.3ac CORRECTED: the idx3 worked-example's own "Bits X-Y" range labels for Gate
+  B's first node undercounted by not fully crediting the field width; case 2's pre-Gate-B setup
+  independently confirmed live** (SPEC TEAM, self, direct read of the already-captured raw event
+  log, no new capture needed, orchestrator-routed in response to Team B's own 2 flagged tensions).
+  Tension (b): the original labels (`Bits 6-7`, `8-9`, `10-11`, `Bit 12`, ...) implied each Gate B
+  copy spent only 2 bits total; the raw `events_idx3.txt` log's own `bitnum` accumulator (which was
+  always correct — `+1` for the gate bit, `+width` for the field) shows each resolve-now copy
+  actually spans 3 bits (1 gate + 2-bit field at `level=2`) — a labeling slip in this prose only,
+  not in the capture or in the published totals (83 bits, 20 values, both unaffected and still
+  correct). Relabeled the whole excerpt to match the raw log exactly. Tension (a): case 2's
+  pre-Gate-B setup was a judgment call by analogy to case 0 when first published — now directly
+  confirmed live in idx4's own trace (`sel=2` dispatched bit 33, falls into Gate B at bit 34 via
+  its own distinct entry address `0x100250b8`, confirmed different from case 0's `0x1002523d`).
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3ab CORRECTED: `0x10019d10`'s tree is NOT the same instance as descriptor
+  A/B's tree, overclaim found and fixed on Team B's own prompt** (SPEC TEAM, self, direct static
+  disassembly of the per-row orchestrator's call-site argument marshaling, no agent). The original
+  text said `0x10019d10` uses "a SINGLE shared global tree — the exact same ctx+0x20/+0x24/+0x10
+  fields 0x10019360's own descriptor... use" — true only of the field-offset CONVENTION, not the
+  actual instance. Traced the real call-site args at `0x1001ab08`: `ctx=&[ebp-0x6c]`, a stack local
+  distinct from descriptor A (`&[ebp-0x170]`) or B (`&[ebp-0x1a4]`), whose own tree fields
+  (`ctx+0x20`/`+0x24`) are filled by their own dedicated `0x10018ca0` call (`0x1001aa24`-
+  `0x1001aa2a`), not copied from or aliased with A/B. Flagged as a strong, structurally-motivated
+  lead for Team B's own 12-bit (2993 vs 2981) overrun: pointing this call at descriptor A/B's tree
+  instead of building its own would read wrong tree content. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3ac: full Gate A/Gate B/Phase-1-BFS bit trace for dispatch idx3/idx4 (83
+  and 136 AC bits), both the Phase-1-real-BFS and Phase-2-defer-drain blocks Team B's own
+  idx3/idx4 divergence (125/140 decoded vs. real ~24-25) was traced to** (SPEC TEAM, self, live
+  Unicorn full-instruction capture of both target `0x10024eb0` calls, classified offline against a
+  fresh independent `capstone` disassembly of the same 2,552-byte range). Both published bit
+  counts (83/136) and both full published coefficient lists (20 and 30 nonzero values) reproduce
+  EXACTLY, by two independent bit-count methods and direct output-struct read-back. New finding:
+  Gate B's copy 1 resolve-write uses index register `ebx`, copies 2-4 use `edi` — not previously
+  address-documented. Also corrects §5.3j Part 2's own preamble: `0x10024eb0`'s real extent is
+  2,552 bytes, not 14,840 (a documentation error, caught by exhaustive zero-desync disassembly of
+  the cited range). Scripts/raw logs in `scratchpad/bink_idx3_idx4_gate_trace_2026-10-11/`.
+  Cleanroom self-check: no decompiler tokens, no Ghidra auto-names, all addresses literal capstone
+  output.
+
+- **2026-10-11 — new §5.3ab: `0x10019d10`'s two real consumers found (giant2/secondary=5's
+  control-byte stream and primary case 8's nibble-selector stream, both already-documented
+  engines in §5.3a), plus `0x10019f00`'s own distinct per-byte mode-selector mechanism** (SPEC
+  TEAM, self, direct harness query — live memory-read watches over each function's own output
+  buffer, fresh full-body static disassembly of both functions). Closes `0x10019d10`'s own
+  "measured-total skip" trap the same way §5.3z/§5.3aa closed it for `0x100195b0`: no class-carry,
+  single shared global tree, two nibble reads per byte. `0x10019f00` is a genuinely third
+  mechanism (per-byte 1-bit mode selector: single-lookup-plus-trailing-sign-bit, or
+  nibble-plus-bulk-fill-and-bail) with an honest negative on its own consumer (checked one real
+  instance, zero reads found). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check
+  0 hits.
+
+- **2026-10-11 — new §5.3aa: `0x100195b0`'s own per-symbol tree-decode body closed, instruction-
+  exact, after Team B's 4 structural guesses all failed** (SPEC TEAM, self, fresh static
+  `capstone` disassembly + a new live Unicorn per-symbol trace across the FULL real 650-symbol
+  call before trusting anything, not a sample). Two nibble-trees per output byte (one per-class,
+  one global, same single descriptor `0x10019360` itself uses); `cur_class[i+1] = nib1[i]` exactly,
+  confirmed 0 mismatches across all 650 symbols; a previously-unnamed 16-class x 16-symbol
+  translate table found at `ctx+0x00..0xFF` (CORRECTED same section, 2026-10-11 — originally
+  published as `arg3+0x00..0xFF`, wrong; see the correction note below); a one-time 1-bit
+  magnitude sign-probe before the loop starts, not observed firing. Reproduces §5.3s's own
+  published first-20-byte sequence and 3384-bit total exactly. Closes §5.3z's own named Unknown
+  (edited that line in place). Relayed to both live peers. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3aa CORRECTED (same day, caught by Team B's own implementation): the
+  translate-table base address was wrong** (SPEC TEAM, self, direct harness query, no agent
+  dispatched). Team B implemented §5.3aa literally and it did not reproduce the golden fixture
+  (first byte 134 vs. 153, bit cost 3561 vs. 3384). Their own bounded diagnostic eliminated 5
+  other hypotheses and reconfirmed the per-class bank identity, narrowing the bug to the translate
+  step specifically. A fresh live capture confirms the real address is `ctx + cur_class*16 +
+  raw_symbol1` — on `arg1`/`ctx` (the idle-check/output-descriptor struct), not `arg3`. Confirmed
+  two independent ways (symbol 0 and the steady-state symbol both matched their already-known
+  `nib1` output against a byte-snapshot taken at the exact read moment — an end-of-run snapshot
+  attempt first gave garbage, since this scratch region is reused/overwritten later in the same
+  call). Live byte table for this row spliced into §5.3aa in place. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3n: the 56-bit gap CLOSED, call-by-call** (SPEC TEAM, agent
+  `ac836bd1af667b8a2`, independently re-verified by fresh static `capstone` disassembly of
+  `0x1001a530`-`0x1001ac10` in `binkw32.dll` directly before trusting — confirmed the exact call
+  sequence and the absence of any `0x10019f00` call in this span). Orchestrator's "two
+  `0x10019f00` calls" hypothesis disconfirmed as stated (those calls are earlier, in §5.3r's
+  pre-stage gap); real sequence is a second `0x1001a160` call (10 bits, zero-count bail) then
+  `0x10019af0` (14 bits, zero-magnitude bail), landing the real dispatch-read at bit 13587, not
+  13619 — the remaining 32-bit residual against §5.3y's published 13619 is PLAUSIBLY a cross-
+  script bit-counting convention mismatch, not a missed consumer. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3n: `0x1001a160`'s first-call exact commit count PINNED (519 words),
+  orchestrator-routed as the likely final fix for the remaining Bink gap** (SPEC TEAM, agent
+  `a06b1037922a541b3`, independently re-verified by direct query before splicing — the raw
+  capture's leading-count/write-count/exit-bits all matched exactly). Confirms the identical
+  leading-count-pins-output-length idiom §5.3s/§5.3t already document for `0x100195b0`/
+  `0x10019d10`; falls inside the already-established 336-607 range. Honest, not force-fit:
+  measured exit bit (13563) is 56 bits short of the orchestrator's ~13619 estimate — flagged
+  OPEN rather than papered over. Relayed to Team B directly. Cleanroom self-check: strict regex
+  0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3g's own standing OPEN item (calls #3-18's downstream consumer) RESOLVED,
+  turning Team B's flat-fill fix from a hardcoded stopgap into a real general decoder**
+  (SPEC TEAM, agent `a1972571f737cc99e`, independently re-verified by direct query before
+  splicing — the live `arg3` pointer match and exact array contents matched the raw capture
+  exactly). `0x100195b0`'s two LUT tables (`arg3+0x100`/`arg3+0x140`, left unspecified by §5.3s)
+  are the exact structure calls #3-18 of the 23-call table-build pre-stage already write — same
+  `build_table` algorithm, no new bit-reading mechanic, just a previously-untraced consumer.
+  Confirmed rebuilt fresh per block-row from the bitstream (NOT static DLL data) — only the
+  packed-byte LUT contents each pointer resolves to (`0x1003bd60` bank) are static/already-
+  published. Gives Team B a complete implementer recipe: run the 16-call table-builder, write 3
+  parallel banks into row-local scratch, maintain the persistent class index across
+  `0x100195b0` calls within the row. Relayed to Team B directly. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3z: both literal-byte cursors confirmed correct at the source, AND
+  identified as the real bug's root cause via a cross-reference Team B caught against §5.3s —
+  flat-fill blocks consume `0x100195b0`'s own real tree-coded decode output sequentially, which
+  a prior pass had modeled only as a bit-cost skip** (SPEC TEAM, agent `a30f1bd9c73cd27ef` plus
+  self for the §5.3s cross-reference, independently re-verified — the raw capture dump matched
+  the agent's addresses exactly, and the §5.3s buffer-address/byte-value match was checked
+  directly against already-published text). Both DC-literal (idx0) and flat-fill (idx1) cursors
+  point at their ground-truth byte, at offset 0, disconfirming the orchestrator's wrong-
+  buffer/wrong-offset hypothesis. But `0x303f9bb0` — flat-fill's own buffer — turns out to be the
+  EXACT SAME array §5.3s already documents as `0x100195b0`'s own 650-byte persistent tree-coded
+  residual stream. Team B had modeled `0x100195b0` as "pay the bit cost, discard the content"
+  since nothing consumed its real output when first characterized; flat-fill blocks now confirmed
+  to need that real decoded content, consumed sequentially the same way `0x1001a160`'s DC-word
+  buffer is consumed. Relayed directly to Team B with the fix direction (implement the real
+  decode per §5.3s's algorithm, wire flat-fill to pull from it sequentially instead of a separate
+  cursor abstraction). Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3y: bit-position/stream-source trace for Y row 0, testing the "wrong
+  bitstream source" hypothesis for the still-wrong end-to-end decode — clean negative for this
+  5-block span, plus a real correction to §5.3i's "descriptor L" sharing claim** (SPEC TEAM,
+  agent `a40f050aea077ad93`, independently re-verified by direct query before splicing — the raw
+  capture report's main table and literal-cursor addresses matched exactly). No anomaly found in
+  the main-bitstream/AC-tree context sharing for dispatch idx 0-4 — fully monotonic, one
+  coherent shared bit-reader context across pre-stage/nibble-read/AC-tree, confirmed live across
+  3 AC-tree calls. Closes §5.3x's own flagged 4-bit gap (the per-block quantizer-nibble read,
+  `0x1001b3b5`). Separately found that §5.3i's "descriptor L, one shared literal-byte cursor for
+  DC words and flat-fill bytes" claim needs correcting: the BOUND-check variable is genuinely
+  shared, but the actual literal-byte read cursors for secondary=2 (DC words) and secondary=3
+  (fill bytes) are physically different addresses ~5,008 bytes apart — a real, concrete mismatch
+  if any reimplementation modeled them as one shared array. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3x: compact worked examples for Y dispatch indices 1-4 and chroma block
+  (0,0), validating the AC-tree fix beyond block (0,0) without another round-trip** (SPEC TEAM,
+  agent `ad531bcaf38074493`, independently re-verified by direct query before splicing — the
+  dispatch-survey's engine assignment per index and the idx3/idx4 bit-position/DC values both
+  matched the report exactly). Confirms dispatch order is simple left-to-right raster for this
+  part of the frame, but not every block uses the same engine (idx1/2 are secondary=3 flat-fill,
+  not secondary=2). Gives full compact captures for idx3/idx4 (secondary=2, same engine as block
+  (0,0)). Chroma: no evidence of a chroma-specific dequant matrix or scaling — one confirmed
+  secondary=2 chroma occurrence uses the identical quantizer-table base/arithmetic and the
+  literal same dequant/IDCT function as luma. ChromaB's own block (0,0) is confirmed
+  NOT decodable this frame (reproduces the already-documented entropy-pre-stage stall), reported
+  honestly rather than fabricated. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
+
+- **2026-10-11 — new §5.3w + §5.3j Part 2 corrected in place: the AC-tree's real per-node bit
+  mechanism (Gate A/Gate B) pinned, resolving Team B's top video-decode blocker** (SPEC TEAM,
+  agent `ac53bf24007fb5c1f`, independently re-verified by direct query before splicing — case 0/1
+  disassembly re-run and matched exactly; live trace's entry/exit bit-reader state matched
+  §5.3v's own published numbers byte-for-byte). Team B had measured that case0/case1 child tags
+  come out as a pure function of the 6 seed bytes, zero bitstream influence — structurally
+  impossible for a real VLC, and traced to Part 2's own flagged-OPEN "read next node's bit before
+  looping" line being imprecise. Real mechanism: TWO distinct 1-bit gates, not one — Gate A (every
+  iteration, every nonzero-tag node, decides if it does anything at all; this is the actual
+  entropy-coding bit a port must implement) and Gate B (reached only from case 0/2, up to 4
+  unrolled copies, resolve-now-vs-defer). Case 1 consumes zero bits ever (pure arithmetic, returns
+  straight to the loop bottom); case 0 also consumes zero bits in its own handler but falls
+  straight into Gate B's chain in the same visit without advancing `front`. Also corrected: Phase
+  1's BFS loop is conditionally SKIPPED (not "drained") for any tree with level≤1 — block (0,0)'s
+  own real decode (level=1) runs entirely through Phase 2's structurally-identical mirror arms,
+  closing Part 2's own "is Phase 2 reachable with real content" open item. New §5.3w gives the
+  full 17-bit worked-example trace for block (0,0), ending at the correct 2 nonzero coefficients
+  (both magnitude 1, both negative), matching §5.3v's ground truth exactly. Cleanroom self-check:
+  strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — category-index→raster-k remap RESOLVED, same day, closing §5.3w's one flagged
+  gap (orchestrator-routed)** (SPEC TEAM, agent `a57fd1bde57d6f0e6`, independently re-verified by
+  direct query before splicing — 3 of the ~32 `mov` pairs spot-checked exactly, plus the index
+  arithmetic independently re-derived). Not a runtime table lookup — no indexed load exists
+  anywhere in the function outside the two already-documented dispatch jump tables. It's a fixed,
+  compiler-unrolled sequence of ~32 `mov` pairs in the write-out block (`0x10025777`-`0x1002589c`)
+  at literal immediate offsets, confirmed to be a clean bijective category(1-63)→k(1-63)
+  permutation (full table now in §5.3w), structurally a recursive quad-tree/Morton-style
+  traversal consistent with the tree's own quad-split arithmetic. Because it's a fact about
+  compiled code, not DLL data bytes, it stays in `spec-bink-codec.md` cited by address —
+  `spec-bink-static-tables.md` needs no change. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3v: golden-trace worked example, AC-decode→dequant→IDCT for frame
+  0/Y-plane/block (0,0) — localizes Team B's 141-vs-24 pixel bug to Team B's own code, not the
+  documented algorithm** (SPEC TEAM, agent `ad46ad95517e9d385`, independently re-verified by
+  direct query before splicing — raw/quant/dequant coefficient binaries recomputed exactly, both
+  output binaries byte-counted exactly, matching the report in full). Orchestrator-routed
+  follow-up after Team B fixed the DC boundary for this block (DC now exactly 118) but still saw
+  pixel (0,0) = 141 against a reference of 24. Captured all 4 stages live against the unmodified
+  DLL: bit position at AC-tree entry/exit (17 bits consumed, cross-confirming §5.3h's published
+  figure independently); the raw coefficient list (only 3 nonzero: DC=118, k=8=-1, k=16=-1);
+  dequantized values (6293/-102/-118, quantizer nibble 2); and all 64 IDCT outputs (rows 0-1=24,
+  rows 2-7=25 uniformly, matching the vertical-only AC content exactly). Both an independent
+  from-scratch Python re-derivation AND the real live DLL itself produce pixel (0,0)=24 from
+  these exact captured numbers — proving AC decode, dequant, and the IDCT/rounding math (already
+  bit-verified in §5.3j) are all correct for this block. The divergence is therefore entirely in
+  Team B's own reimplementation; recommends they diff their own intermediates against these 4
+  stages in order to localize it. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
+
+- **2026-10-11 — new §5.3u: the §5.3m/§5.3q "contradiction" RESOLVED — both correct, each for a
+  different value in the stream; §5.3q's own text corrected (its findings only applied to
+  value[0], wrongly generalized to all 8)** (SPEC TEAM, self, direct Unicorn instrumentation,
+  urgent routed item from orchestrator `purrsian-f5`/Team B report). Live per-symbol trace,
+  first 8 values of `0x1001a160`'s first call: value[0] uses the fixed-bound path (§5.3p/q,
+  unchanged); values[1-7] use §5.3m's chunk loop (one 4-bit class nibble per up-to-8-value
+  chunk, here nibble=8, predictor-accumulated `new=prev±magnitude`). Every one of the 8 formulas
+  reconciles exactly to the real observed value (118,199,212,51,25,118,119,26), zero
+  discrepancies. Bit-position tracking required live register reads, not memory — the external
+  bit-reader struct is proven stale mid-function (caught before trusting any number). Offered a
+  hypothesis for Team B's own divergence: applying the wrong mechanism exactly at the
+  value[0]/value[1] boundary. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
+
+- **2026-10-11 — new §5.3t: `0x10019d10`'s own output grammar worked example, run to completion
+  (frame 0/Y/row 0, first call)** (SPEC TEAM, self, direct disassembly + Unicorn capture, routed
+  from orchestrator `purrsian-f5`). Nibble-packed bytes via an explicit decrement-to-zero loop —
+  genuinely count-driven, not ambiguous. 528 bytes written, exactly matching the leading
+  magnitude; bit cost at `ret` exactly 2981, an exact match to §5.3r's own independent
+  measurement. Flagged a numeric coincidence (528 == this row's own real LEN value, §5.3g) for
+  future investigation, not claimed as a mechanism. Cleanroom self-check: strict regex 0 hits,
+  C-cast-dereference check 0 hits.
+
+- **2026-10-11 — §5.3s settled: `0x100195b0`'s loop-termination question resolved by running the
+  call to completion (not static guessing)** (SPEC TEAM, self, direct Unicorn execution, routed
+  from `purrsian-f5`). Exactly 650 bytes written, bit cost at `ret` exactly 3384 — an exact match
+  to §5.3r's own independent measurement — confirming straightforward count-driven decode.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3s: `0x100195b0`'s own output grammar worked example (frame 0/Y/row 0,
+  first call)** (SPEC TEAM, self, direct disassembly + Unicorn capture, routed from orchestrator
+  `purrsian-f5` for Team B's own implementation). A signed byte stream, tree-coded, with a leading
+  magnitude (650) gating a fast-fill shortcut for long runs; output buffer base is the same
+  idle-check-struct `+0x30` convention `0x1001a160` uses. First function in this family found to
+  carry real persistent adaptive state across calls (`arg3+0x180`). First 64 real output bytes
+  captured, tight low-variance band (-105..-97). **Loop-termination settled same day** by running
+  the call to completion: exactly 650 bytes written, bit cost at `ret` exactly 3384 — an exact
+  match to §5.3r's own independent measurement — confirming this is straightforwardly
+  count-driven. OPEN: what the output feeds downstream. Cleanroom self-check: strict regex 0
+  hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3r: the 1757→9256 bit gap (7,499 bits) attributed call by call, closing
+  §5.3q's own named OPEN item** (SPEC TEAM, self, direct Unicorn instrumentation, routed from
+  orchestrator `purrsian-f5` for Team B's own implementation diff). Found exactly 4 real calls in
+  the gap by direct disassembly of `0x1001a530`; measured each one's bit cost live — sum exactly
+  reconciles to the gap, zero bits unaccounted for. Caught and fixed a baseline bug (non-zero
+  `bits_avail` at the measurement point) before trusting the numbers. All 3 named functions
+  structurally characterized as siblings of `0x1001a160`'s own descriptor-fill family. Cleanroom
+  self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3q: `0x1001a160`'s first call (frame 0/Y/row 0) — absolute bit offset
+  9256, no evolving predictor seed found (correction to the question's premise), first 8 decoded
+  values, exact position after the full entropy pre-stage** (SPEC TEAM, self, direct Unicorn
+  instrumentation, routed from orchestrator `purrsian-f5`, for Team B's own implementation diff).
+  Reused `probe_prestage_bitpos.py` extended with `0x1001a160`-specific hooks. Caught and fixed
+  the same function-entry-vs-prologue mistake `§5.3p` already flagged (hooking before `mov
+  ebp,esp` reads the caller's frame) before trusting the result. Cleanroom self-check: strict
+  regex 0 hits, C-cast-dereference check 0 hits.
+
+- **2026-10-11 — new §5.3p: descriptor L's buffer SOURCE and cursor START identified for block
+  (0,0), resolving §5.3o's own "suspicious 2-byte adjacency" OPEN item** (SPEC TEAM, self, direct
+  Unicorn write-watch, routed from orchestrator `purrsian-f5`). A new write-watch hook (recording
+  every memory write before the frame's first primary-dispatch) found the EXACT write that
+  produced the already-documented DC-literal read (`0x303f8620`, value `0x0076`) — written by
+  `0x1001a160` itself (`0x1001a307`), not by any separate pre-stage call. Descriptor L's buffer is
+  filled live, in place, by this function's own per-row decode loop, from the main compressed
+  bitstream via an inline context-adaptive sign/magnitude bit-predictor — the same function
+  §5.3f/h/k/l/m/n have been investigating as a separate "delta-accumulation" mechanism, and the
+  same function Team B implemented as a separate cursor (commit `b33c13e`). For block (0,0)
+  specifically, the cursor starts at literal offset 0 of the buffer (the very first word
+  `0x1001a160` writes this frame for the Y-plane context, read directly from the context struct's
+  `+0x30` field before the function's first call). Resolves §5.3o's 2-byte-adjacency OPEN item:
+  it's the SAME buffer, not two heap-adjacent mechanisms — §5.3n's own "commit run #2" sample
+  simply started one word (2 bytes) late. Cleanroom self-check: strict regex 0 hits, C-cast-
+  dereference check 0 hits.
 
 - **2026-10-09 — TwoLiteralPattern (§5.3) payload grammar CONFIRMED by live execution, and §5.3c
   extended with the case-1 secondary selector byte's real source** (SPEC TEAM, agent

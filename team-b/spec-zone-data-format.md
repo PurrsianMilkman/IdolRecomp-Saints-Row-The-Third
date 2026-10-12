@@ -2259,6 +2259,66 @@ left to the orchestrator/user to dispatch. Full detail: `spec-terrain-format.md`
 - **`0x2247` Water volumes** — `{count,arrayPtr}` header, 5-field-per-entry pointer-fixup record; one field feeds the same `0x00dcd3d0` primitive Interior Triggers uses.
 - **`0x2248` Wave killers** — minimal `{count,arrayPtr}`, zero inline processing, same lazy-materialization pattern as Heightmap.
 - **`0x2249` Water surfaces** — two-level array, outer 16-byte stride (subcount + fixup to an inner 20-byte-stride array).
+
+**Water-vs-missing-ground hypothesis, tested 2026-10-11 — orchestrator-routed static pass on the
+long-parked ground-missing live-playtest bug, CLEAN NEGATIVE as a tile-classification signal**
+(SPEC TEAM, self, direct real-byte read against the real shipped `sr3_city_0.vpp_pc`/
+`sr3_city_1.vpp_pc`/`sr3_city_missions.vpp_pc` archives via `tools/harnesses/czn_u2_replay.py`'s
+own `collect_pairs`/top-level-tag-walk primitives, extended to census `0x2247`/`0x2249`
+presence+length per tile; the `.czn_pc` interior hold was lifted by the user 2026-10-07, see
+HANDOFF §27.H-0c — raw bytes read directly, no agent dispatch needed). Hypothesis: the 4
+reported-broken tiles (`0914`/`0915`/`0715`/`0716`) might be coastal/water tiles whose missing
+"ground" is actually a missing WATER surface. **Real per-tile `~f<NNNN>.czn_pc` census, both
+groups:**
+
+| tile | class | has `0x2247` (water volume) | has `0x2249` (water surface) |
+|---|---|---|---|
+| `0914` | broken | **no** | **no** |
+| `0915` | broken | yes (5768 B) | no |
+| `0715` | broken | yes (4000 B) | yes (14948 B) |
+| `0716` | broken | yes (5412 B) | yes (17328 B) |
+| `0916` | good | yes (12836 B) | no |
+| `0818` | good | yes (3824 B) | yes (11868 B) |
+| `0912` | good | yes (4180 B) | yes (17828 B) |
+| `1015` | good | **no** | **no** |
+| `1016` | good | yes (2000 B) | yes (6948 B) |
+
+**Both the "broken" and "good" groups span the full range** (neither, water-volume-only, or
+both) — `0914` (broken) has neither water content kind, exactly like `1015` (good); `0715`/`0716`
+(broken) have both, exactly like `0818`/`0912`/`1016` (good). **This is a clean negative: per-tile
+water-volume/water-surface record presence does NOT correlate with the known broken/good split**
+— it does not explain why these 4 specific tiles show the void. This does not fully rule out a
+water-surface explanation (these two content kinds may represent local decorative water features
+— pools/canals/ponds — rather than the main sea, and the player's own report of a void near the
+default spawn at (-1280,-560) involves tile `0915`, whose own water-volume record is present but
+small; also see `spec-player-runtime.md` §6.9-area's `0x0079a420` finding below, which found water
+clamping is driven by a single GLOBAL bounding box, not per-tile records at all, so a per-tile
+census was never guaranteed to be decisive either way) — but it closes this specific, cheap
+empirical test as a non-explanation. Script: `scratchpad/water_check_2026-10-11_run.py`.
+
+**`0x0079a420` opened (orchestrator-routed, same pass) — the player-camera "surface clamp"
+previously flagged only as `HYPOTHESIS: water surface` (`spec-player-runtime.md` §6.9-area) is
+CONFIRMED to be a global-box-gated downward raycast, not a water-specific or per-tile
+mechanism.** Full body opened (`0x0079a420`-`0x0079a65b`), independently re-verified against the
+live Ghidra server before splicing. It first classifies the X/Y position against a single
+GLOBAL rectangular bounding box (4 zero-fill runtime floats at `0x0223a7cc`-`0x0223a7d8` — no
+static initializer, no direct writer found in this pass, so the box's real in-session extent is
+genuinely unknown without either locating an indirect writer or a live capture) via `0x00797500`.
+Only when the position classifies as "near/inside" that box (return value 2 or 3) does it probe a
+downward ray from the position to 100 units below it, via the raycast primitive `0x0075dfc0`, and
+return the hit surface's position/height; classified as 0 or 1 (further outside), it returns a
+fixed default instead of raycasting at all. **This is a generic anti-clip/surface-snap mechanism
+gated by one global region, not a per-tile or per-water-volume lookup** — consistent with being
+the single ocean/sea-level boundary for the whole map (HIGH CONFIDENCE, not proven: the box's
+real coordinates were not recovered), but equally consistent with a more general "stay above the
+nearest collidable surface" safety net unrelated to water specifically. **Net for the
+ground-missing bug: if the default spawn at (-1280,-560) falls inside this global box, this
+clamp would raise the CAMERA (not the player) above whatever the downward raycast hits — if
+nothing is hit (e.g. no collision geometry present, consistent with the known-sparse `0x2237`
+content at tile `0915`), the clamp simply does nothing, which is consistent with, but does not
+independently prove, the void being an absence of collidable surface rather than a missing water
+plane specifically.** Whether (-1280,-560) actually falls inside the global box remains OPEN
+(needs the box's real runtime value, which needs either its writer traced or a live capture).
 - **`0x2250` Parking** — **the one genuine structural outlier, now deep-dived (§13.4):** not a byte-format record at all, but a thin generic-property wrapper around a raw embedded Havok 2010.2.0-r1 physics packfile — one `hkpBoxShape` per ambient parking space, MOPP-accelerated. Prop ids `0x13`/`7` are generic base-class bookkeeping (self-handle/dispatch-context, NOT the CRC-32 name-hash convention §9.3/§11.7 use), correctly not forced through that dictionary attack.
 - **`0x2252` Supplemental LOD** — own magic `0xa58137c8` (version `==2`), calls `0x00e40210` — a distinct address from the family's own `0xe401d0`, deliberately not conflated despite the resemblance.
 - **`0x2253` Fading grid data** — handler tail-jumps (not calls) into `0x00854ce0`; no magic; pure self-relative-pointer-fixup grid/tree shape, `0x28`-byte-stride records each with 3 fixup fields.
@@ -2329,9 +2389,47 @@ This directly confirms, from the real consumer's own arithmetic rather than file
 
 **Review status (2026-10-11): CONFIRMED for the handler, registry mechanism, on-disk record format (population-wide), origin formula, the runtime sampler through the resolved grid index, the literal value read (no scale/bias), and that this content kind's own query chain has no rendering consequence. HIGH CONFIDENCE for height-value-equals-metres and the `~al`-spacing reconciliation. OPEN for the `-5.0` sentinel/legitimate-value ambiguity and for an exhaustive whole-binary search for any separate `0x2244` render path.**
 
+### 13.6 `0x2237`'s own Havok collision shape — cross-reference, full chain lives in `spec-player-runtime.md` §5.6 (2026-10-11)
+
+`0x2237` (already confirmed above and in §13.2 to carry street pavement's visible geometry) also
+builds its own Havok collision shape directly from the same record's data — a third real instance
+of the "`.czn_pc` content kind embeds a raw Havok shape with no `.clmesh_pc` involvement" pattern
+§13.4 establishes for `0x2250`/Parking, confirmed by SHARED CODE: `0x2237`'s handler
+(`0x00864c60`) reaches the identical generic physics-shape wrapper (`0x007a78a0`, classId
+`0xc006c`, property id `7` via `0x00c21b20`) that `0x2250`'s own Parking delegate
+(`0x00862ae0`→`0x00862bcb`→`0x00c16840`) uses, and the identical MOPP-wrap constructor
+(`0x00d54300`, confirmed by direct xref to have exactly 4 callers project-wide) that
+`.clmesh_pc`'s own collision path (§4.4.6 cross-ref, `spec-physics-format.md`) uses. Full
+chain, address-by-address: `spec-player-runtime.md` §5.6's own "character proxy" sub-passage,
+dated 2026-10-11 — not duplicated here to avoid two sources of truth for the same chain. This
+closes the "which file supplies ground collision" open item that section tracked.
+
 ---
 
 ## Changelog
+
+- **2026-10-11 — water-vs-missing-ground hypothesis tested for the long-parked ground-missing
+  live-playtest bug: CLEAN NEGATIVE as a tile-classification signal** (SPEC TEAM, self, direct
+  real-byte read against the real shipped city archives, no agent dispatch — orchestrator-routed).
+  Census of `0x2247`/`0x2249` (Water volumes/Water surfaces) presence across the 4 known-broken
+  tiles (`0914`/`0915`/`0715`/`0716`) and 5 known-good tiles (`0916`/`0818`/`0912`/`1015`/`1016`):
+  both groups span the full range (neither/water-volume-only/both) — `0914` (broken) has neither,
+  exactly like `1015` (good). Per-tile water-content presence does not correlate with the
+  broken/good split, closing this specific empirical test as a non-explanation (does not fully
+  rule out water as a factor via a different, non-per-tile mechanism — see the `0x0079a420`
+  finding immediately below). Also resolved `spec-player-runtime.md` §6.9-area's standing
+  `HYPOTHESIS: water surface` tag on `0x0079a420`: it's a generic global-box-gated downward
+  raycast (box at `0x0223a7cc`-`0x0223a7d8`, zero-fill runtime, no writer found this pass), not a
+  per-tile or water-specific lookup. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
+  check 0 hits.
+
+- **2026-10-11 — new §13.6: `0x2237`'s own Havok collision shape, cross-referenced from
+  `spec-player-runtime.md` §5.6's full chain** (SPEC TEAM, agent `a73e5e44581178516`,
+  independently re-verified). Closes the "which file supplies ground collision" open item that
+  section tracked: `0x2237`'s handler builds its own `hkpExtendedMeshShape`/`hkpMoppBvTreeShape`
+  directly from the record's own data, registered via the same generic physics-shape wrapper
+  §13.4 already documents for `0x2250`/Parking — shared code, not just an analogous pattern.
+  Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
 
 - **2026-10-11 — §13.5 RESOLVED: the `0x2244` heightmap's own query chain has NO rendering
   consequence — likely rules out "heightmap data missing" as the live-playtest ground-missing

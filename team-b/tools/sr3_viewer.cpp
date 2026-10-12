@@ -7900,6 +7900,24 @@ struct CityGroundTile {
     // that case, never drawTextured() with an empty vector, so a tile this
     // resolves nothing for stays byte-identical to before this task.
     std::vector<ID3D11ShaderResourceView*> perMaterialSrv;
+    // Real `0x2237` ground-pavement collision triangles (street-collision-
+    // 0x2237-mopp follow-up task, 2026-10-11 - spec-player-runtime.md
+    // Sec5.6.5's "RESOLVED, 2026-10-11" finding / spec-zone-data-format.md
+    // Sec13.6): the SAME world-space vertex positions/triangles the render
+    // path above already decodes for this tile (tryRenderZoneEntry()'s own
+    // `outCollisionTris` parameter, below) - the real engine's own
+    // `0x00864c60` handler builds its Havok hkpExtendedMeshShape from
+    // exactly this same per-record vertex/u16-index data, independent of
+    // any separate MOPP-blob byte parse (see this project's own citation at
+    // SampleGroundMeshHeight()'s doc comment for the full chain). Built
+    // ONLY when loadCityGroundTile() is called with `buildCollision=true`
+    // (runWalkDemo()'s --collision path, runPlaytest() unconditionally -
+    // see those call sites); empty/unbuilt otherwise, so every
+    // pre-existing caller (plain `city`/`walk` without --collision) is
+    // completely unaffected, same "additive, zero-cost unless opted in"
+    // discipline ClmeshTriangleCollisionWorld's own CityProp::collisionBvh
+    // already uses for props.
+    CollisionBvh collisionBvh;
 };
 
 // Diagnostic-only (never affects what is rendered): re-derives how many
@@ -8242,9 +8260,23 @@ void resolveGroundTextureBindings(const vpp::Container& top, const std::vector<u
     if (resolvedCount > 0) tile.perMaterialSrv = std::move(perMaterial);
 }
 
+// `outCollisionTris` (street-collision-0x2237-mopp follow-up task,
+// 2026-10-11): when non-null, ALSO decodes every uploaded channel's real
+// WORLD-space vertex positions (3 consecutive entries per triangle - the
+// SAME `outCollisionTris` shape loadCityProp() already uses for
+// `.clmesh_pc`, just with no local->world translation needed here - this
+// content kind's own decoded positions are already world-space, see this
+// function's own `tile.renderers.push_back` loop above's "world Y 18-31"
+// doc-comment note confirming that directly) via decodeChannel()/
+// triangleListForRange() - the identical data MeshRenderer::upload() just
+// sent to the GPU for rendering, read a second time into plain CPU
+// triangles, exactly mirroring loadCityProp()'s own established pattern.
+// Defaults to nullptr, which is every pre-existing caller, so this costs
+// nothing and changes nothing for them.
 bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, ID3D11Device* device,
                         CityGroundTile& tile, std::string& why, bool* outBytesUnreadable = nullptr,
-                        TextureSearchCache* texCache = nullptr) {
+                        TextureSearchCache* texCache = nullptr,
+                        std::vector<std::array<float, 3>>* outCollisionTris = nullptr) {
     if (outBytesUnreadable) *outBytesUnreadable = false;
     std::string gznName = cznName;
     {
@@ -8365,6 +8397,22 @@ bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, I
         targets.push_back(GroupTarget{});
     }
 
+    // Collision triangle capture (street-collision-0x2237-mopp follow-up
+    // task) - decoded ONCE here, outside the render loop below, since every
+    // target shares the same resolved channel; "skip, don't fabricate" on
+    // any decode failure, same discipline loadCityProp()'s own
+    // `outCollisionTris` block already uses.
+    std::vector<sr3mesh::Vertex> collisionVerts;
+    bool haveCollisionVerts = false;
+    if (outCollisionTris != nullptr) {
+        try {
+            collisionVerts = mesh.decodeChannel(channelIndex);
+            haveCollisionVerts = true;
+        } catch (const std::exception&) {
+            haveCollisionVerts = false;
+        }
+    }
+
     std::string error;
     for (const auto& t : targets) {
         auto r = std::make_unique<sr3render::MeshRenderer>();
@@ -8397,16 +8445,59 @@ bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, I
                         r->boundsMax()[0], r->boundsMax()[1], r->boundsMax()[2]);
         }
         tile.renderers.push_back(std::move(r));
+        if (haveCollisionVerts && outCollisionTris != nullptr) {
+            // Real triangles for THIS target's own draw ranges, in the
+            // SAME world-space positions just uploaded for rendering -
+            // see triangleListForRange()'s own "strip-to-list, degenerates
+            // already dropped" contract (ClmeshTriangleCollisionWorld's
+            // doc comment above already cites this for `.clmesh_pc`; the
+            // SAME sr3mesh::MeshBlock method, reused unmodified here).
+            std::vector<uint32_t> triIdx;
+            if (mesh.drawGroupsLocated() && !t.rangeMask.empty()) {
+                const auto& group = mesh.drawGroups()[t.groupIndex];
+                for (size_t rr = 0; rr < group.size(); ++rr) {
+                    if (!t.rangeMask[rr]) continue;
+                    std::vector<uint32_t> one = mesh.triangleListForRange(group[rr]);
+                    triIdx.insert(triIdx.end(), one.begin(), one.end());
+                }
+            } else {
+                // No located draw groups at all (the `else` branch above,
+                // one empty GroupTarget) - fall back to the whole mesh's
+                // own triangle list, same shape MeshRenderer::upload()
+                // itself falls back to for rendering when given no mask.
+                triIdx = mesh.triangleListIndices();
+            }
+            for (size_t i = 0; i + 2 < triIdx.size(); i += 3) {
+                const uint32_t ia = triIdx[i], ib = triIdx[i + 1], ic = triIdx[i + 2];
+                if (ia >= collisionVerts.size() || ib >= collisionVerts.size() || ic >= collisionVerts.size())
+                    continue;
+                outCollisionTris->push_back(collisionVerts[ia].position);
+                outCollisionTris->push_back(collisionVerts[ib].position);
+                outCollisionTris->push_back(collisionVerts[ic].position);
+            }
+        }
     }
     tile.cznName = cznName;
     return true;
 }
 
+// `buildCollision` (street-collision-0x2237-mopp follow-up task,
+// 2026-10-11): when true, ALSO captures this tile's real `0x2237`
+// collision triangles (tryRenderZoneEntry()'s own `outCollisionTris`,
+// above) and builds `tile.collisionBvh` from them - the SAME
+// CollisionBvh/BuildCollisionBvh() machinery ClmeshTriangleCollisionWorld
+// already uses for `.clmesh_pc` props, just with a zero translation (this
+// content kind's own decoded positions are already world-space, unlike a
+// prop's local-space triangles). Defaults to false, which is every
+// pre-existing caller (plain `city` without --collision), so this costs
+// nothing and changes nothing for them.
 bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives, ID3D11Device* device,
-                        CityGroundTile& tile, std::string& why) {
+                        CityGroundTile& tile, std::string& why, bool buildCollision = false) {
     tile.col = col;
     tile.row = row;
     bool foundAnyEntry = false;
+    std::vector<std::array<float, 3>> localCollisionTris;
+    auto* collisionOut = buildCollision ? &localCollisionTris : nullptr;
     // Every prefix-matching candidate seen across every given archive (base
     // zone included) - diagnostic only, see describeZoneCandidateBlockCount()
     // and the `why`-message building below.
@@ -8442,8 +8533,11 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
         std::string archiveWhy;
         if (haveBase) {
             bool bytesUnreadable = false;
-            if (tryRenderZoneEntry(*a.top, cznName, device, tile, archiveWhy, &bytesUnreadable, &a.texCache)) {
+            if (tryRenderZoneEntry(*a.top, cznName, device, tile, archiveWhy, &bytesUnreadable, &a.texCache,
+                                    collisionOut)) {
                 tile.archiveIndex = ai;
+                if (collisionOut != nullptr && !localCollisionTris.empty())
+                    tile.collisionBvh = BuildCollisionBvh(localCollisionTris, 0.0f, 0.0f, 0.0f);
                 return true;
             }
             // Regression-safety: with no `~s` candidate in this archive at
@@ -8464,8 +8558,10 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
             // rendered already returned true above, so this never
             // overrides real `~f` ground data.
             std::string sWhy;
-            if (tryRenderZoneEntry(*a.top, sBaseName, device, tile, sWhy, nullptr, &a.texCache)) {
+            if (tryRenderZoneEntry(*a.top, sBaseName, device, tile, sWhy, nullptr, &a.texCache, collisionOut)) {
                 tile.archiveIndex = ai;
+                if (collisionOut != nullptr && !localCollisionTris.empty())
+                    tile.collisionBvh = BuildCollisionBvh(localCollisionTris, 0.0f, 0.0f, 0.0f);
                 return true;
             }
             archiveWhy += archiveWhy.empty() ? sWhy : ("; ~s fallback " + sWhy);
@@ -8509,6 +8605,122 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
         }
     }
     return false;
+}
+
+// ===========================================================================
+// REAL `0x2237` GROUND-PAVEMENT COLLISION (street-collision-0x2237-mopp
+// follow-up task, 2026-10-11) - spec-player-runtime.md Sec5.6.5's own
+// "RESOLVED, 2026-10-11" finding (spec-zone-data-format.md Sec13.6 is the
+// shorter cross-reference pointing back at the same text): the real
+// engine's `0x2237` record handler (`0x00864c60`) builds its OWN Havok
+// collision shape directly from the SAME record - an `hkpExtendedMeshShape`
+// over the identical vertex/u16-index arrays this project's existing
+// `sr3zone::ZoneGeometry::locate()` + `tryRenderZoneEntry()` pipeline
+// already decodes for RENDERING - optionally wrapped in an `hkpMoppBvTreeShape`
+// bounding-volume accelerator when the record's own embedded blob starts
+// with the literal "MOPP" magic. This project does not parse that MOPP
+// BVH blob at all (out of scope, per the orchestrator's own instruction,
+// same "real triangle DATA, project's own acceleration structure" split
+// ClmeshTriangleCollisionWorld's own doc comment above already uses for
+// `.clmesh_pc`) - `CollisionBvh`/`BuildCollisionBvh()` (this file, above)
+// is reused completely unmodified as that acceleration structure, fed with
+// the ground tile's own real triangles captured above
+// (CityGroundTile::collisionBvh, tryRenderZoneEntry()'s own
+// `outCollisionTris` parameter) rather than with a second, separately-
+// parsed copy of the align16/u32-len/align16/data/align4/two-vec3 MOPP-
+// adjacent blob the spec section also describes - the spec text is
+// explicit the mesh shape is built from "the SAME vertex/u16-index arrays"
+// already decoded for the visible-geometry side, so re-parsing that
+// raw blob a second time would be exactly the kind of redundant/
+// drift-prone second implementation this project's own standing rule
+// against duplicate parsers forbids, not a more faithful port.
+//
+// WHAT THIS REPLACES: the flat `y <= groundY` ground-plane binary
+// (sr3player/character_collision.h's own top comment) and the Heightmap
+// (0x2244)-based scalar sampler (sr3zone/zone_heightmap.h,
+// `sampleRealGroundHeight()` below) - both were explicit, honestly-labelled
+// STAND-INS for street pavement specifically (0x2244 is a genuinely
+// separate content kind, not the pavement's own render/collision mesh -
+// see zone_heightmap.h's own top comment). `SampleGroundMeshHeight()`
+// below is tried FIRST wherever a real `0x2237` collision mesh resolved
+// for the queried tile; the heightmap sampler (then the flat plane) stays
+// exactly as the fallback chain for any position/tile this new real
+// source does not cover - never removed, since not every tile is
+// guaranteed to carry a real populated MOPP-adjacent mesh (this project's
+// own real-bytes check only confirmed two specific tiles, 0916 and 1312 -
+// see the spec text above for the exact citation).
+//
+// Point-queries the SAME per-tile CollisionBvh the (future) ground-mesh
+// wall/curb collision would use, via a single vertical ray straight down
+// through it (sr3player::RayVsTriangle3D, already public, already used by
+// the camera/AI line-of-sight pair - a vertical ray IS exactly that
+// primitive's own existing contract with x0==x1 && z0==z1, not a new
+// primitive). Recurses the SAME BVH node shape sweepBvhNode() above
+// already walks, just an XZ point-in-AABB test instead of a swept-circle
+// one (the point query's own degenerate case of that same broad-phase
+// rejection).
+void sampleGroundMeshBvhNode(const CollisionBvh& bvh, int nodeIdx, double x, double z, double rayY0, double rayY1,
+                             double referenceY, bool& found, double& bestY) {
+    if (nodeIdx < 0) return;
+    const CollisionBvhNode& node = bvh.nodes[static_cast<size_t>(nodeIdx)];
+    if (static_cast<double>(x) < node.min[0] || static_cast<double>(x) > node.max[0] ||
+        static_cast<double>(z) < node.min[2] || static_cast<double>(z) > node.max[2])
+        return;  // the vertical ray at (x,z) never enters this subtree's own AABB
+    if (node.left < 0) {  // leaf
+        for (int i = node.triStart; i < node.triStart + node.triCount; ++i) {
+            const CollisionTriangle& t = bvh.tris[static_cast<size_t>(i)];
+            double f;
+            sr3player::Vec3 n;
+            if (sr3player::RayVsTriangle3D(x, rayY0, z, x, rayY1, z, static_cast<double>(t.v0[0]),
+                                            static_cast<double>(t.v0[1]), static_cast<double>(t.v0[2]),
+                                            static_cast<double>(t.v1[0]), static_cast<double>(t.v1[1]),
+                                            static_cast<double>(t.v1[2]), static_cast<double>(t.v2[0]),
+                                            static_cast<double>(t.v2[1]), static_cast<double>(t.v2[2]), f, n)) {
+                const double y = rayY0 + (rayY1 - rayY0) * f;
+                // Among every real triangle the vertical ray crosses (a
+                // multi-storey overpass/tunnel could legitimately have
+                // more than one), keep the hit closest to `referenceY` -
+                // the same "closest to where the caller already was"
+                // disambiguation convention this project's own
+                // heightmap-based fallback sampler does NOT need (it has
+                // only ever returned a single grid value), but a real
+                // triangle mesh genuinely can.
+                if (!found || std::fabs(y - referenceY) < std::fabs(bestY - referenceY)) {
+                    bestY = y;
+                    found = true;
+                }
+            }
+        }
+        return;
+    }
+    sampleGroundMeshBvhNode(bvh, node.left, x, z, rayY0, rayY1, referenceY, found, bestY);
+    sampleGroundMeshBvhNode(bvh, node.right, x, z, rayY0, rayY1, referenceY, found, bestY);
+}
+
+// Public entry point: searches every loaded ground tile's own real
+// collision mesh (tiles with none - `collisionBvh.empty()` - are skipped,
+// not treated as "ground is at Y=0 here") for the real `0x2237` pavement
+// height at (x,z), closest to `referenceY`. Returns false (outY untouched)
+// when no loaded tile's real mesh covers this position at all - the
+// caller's own existing heightmap/flat-plane fallback chain is
+// unaffected and still runs in that case (see this section's own top
+// comment). The vertical ray spans referenceY +/- 500m - generous enough
+// for any real city tile's own vertical extent (this project's own
+// measured real range is tens of metres, see loadCityGroundTile()'s own
+// "world Y 18-31" doc-comment note) without needing a second, tile-bounds-
+// derived span.
+bool SampleGroundMeshHeight(const std::map<std::pair<int, int>, std::unique_ptr<CityGroundTile>>& tiles, double x,
+                            double z, double referenceY, double& outY) {
+    bool found = false;
+    double bestY = 0.0;
+    const double rayY0 = referenceY + 500.0, rayY1 = referenceY - 500.0;
+    for (const auto& kv : tiles) {
+        const CollisionBvh& bvh = kv.second->collisionBvh;
+        if (bvh.empty()) continue;
+        sampleGroundMeshBvhNode(bvh, bvh.root, x, z, rayY0, rayY1, referenceY, found, bestY);
+    }
+    if (found) outY = bestY;
+    return found;
 }
 
 // Loads ONE tile's real Heightmap (0x2244) record (spec-zone-data-format.md
@@ -10079,14 +10291,20 @@ private:
 // `.clmesh_pc` in the same tiles it checked to be "street furniture only -
 // 142 distinct props, zero road-named"), NOT the large city street/
 // sidewalk/building-shell surface geometry (that is `.czn_pc`/`.gzn_pc`
-// zone/terrain data, content-kind `0x2237` - a SEPARATE, not-yet-wired
-// collision source; see runWalkDemo()'s own "GROUND/TERRAIN" top comment
-// for the render-only pipeline this project already has for it). So a
-// human walking through this demo will correctly stop at a real prop's
-// real wall/edge, but will NOT yet be blocked by the ground/building-shell
-// surface itself (that keeps using the fake y<=groundY ground-plane
-// binary character_collision.h's own top comment already documents as a
-// CHOSEN stand-in, unchanged by this task).
+// zone/terrain data, content-kind `0x2237`). UPDATE 2026-10-11 (street-
+// collision-0x2237-mopp follow-up task): `0x2237`'s own real street-
+// pavement VERTICAL support is now ALSO wired - see SampleGroundMeshHeight()
+// above loadCityGroundTile() for the real `0x2237` collision-mesh ground-
+// height sampler this task added, which supersedes the fake y<=groundY
+// ground-plane binary (character_collision.h's own top comment) and the
+// Heightmap (0x2244)-based fallback for runPlaytest()'s player/vehicle
+// vertical support specifically. This class (ClmeshTriangleCollisionWorld)
+// itself is UNCHANGED by that task - it still only ever queries `.clmesh_pc`
+// prop triangles for its own HORIZONTAL sweepCylinder() (walls/curbs/street
+// furniture); `0x2237`'s own pavement surface was never fed into THIS
+// class's own horizontal wall-sweep query (a flat walkable floor has no
+// business blocking horizontal movement the way a wall does) - only into
+// the separate vertical ground-height sampler.
 //
 // ALSO UNCHANGED BY THIS TASK, same caveat CityPropAabbCollisionWorld's own
 // doc comment above already states and runCity()'s own top comment first
@@ -11725,7 +11943,11 @@ int runWalkDemo(int argc, char** argv) {
             if (groundTiles.count(t)) continue;
             auto gt = std::make_unique<CityGroundTile>();
             std::string why;
-            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why)) {
+            // buildCollision = collisionEnabled (street-collision-0x2237-
+            // mopp follow-up task, 2026-10-11): --collision now also wires
+            // real `0x2237` ground-pavement collision triangles, matching
+            // the prop-level `collisionEnabled` gate above.
+            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why, collisionEnabled)) {
                 std::printf("[ground] frame %d LOAD  tile %02d%02d: %s, %zu range(s), %u triangles\n", frame,
                             t.first, t.second, gt->cznName.c_str(), gt->rangesRendered, gt->triangles);
             } else {
@@ -15458,9 +15680,19 @@ size_t NearestLaneGraphSegmentStart(const sr3airuntime::TrafficLaneGraph& graph,
 // "Ahead" is tested against `selfHeadingRad` (the caller's own current
 // heading, possibly one tick stale - see the call site's own comment).
 // Returns std::nullopt if no other live vehicle qualifies.
+//
+// EXTENDED 2026-10-11 (overtake-gate-18.6b task): `headingById`/`speedById`
+// added - sr3airuntime::OvertakeCandidate now carries the candidate's own
+// heading/speed (needed by spec-ai-runtime.md Sec18.6b's real gate steps
+// (a)/(c), see traffic_lane_follower.h's own updated file header item 5a);
+// NearFieldVehicle itself still has no such fields, so this helper looks
+// them up from the SAME per-vehicle side-car maps the call site below
+// already maintains for every live near-field vehicle (including this
+// candidate), rather than inventing a second tracking structure.
 std::optional<sr3airuntime::OvertakeCandidate> ResolveNearestNearFieldVehicleAhead(
     const std::vector<sr3airuntime::NearFieldVehicle>& liveVehicles, uint64_t selfId, double selfX, double selfZ,
-    double selfHeadingRad) {
+    double selfHeadingRad, const std::unordered_map<uint64_t, double>& headingById,
+    const std::unordered_map<uint64_t, double>& speedById) {
     const double fwdX = std::cos(selfHeadingRad);
     const double fwdZ = std::sin(selfHeadingRad);
     std::optional<sr3airuntime::OvertakeCandidate> best;
@@ -15475,7 +15707,12 @@ std::optional<sr3airuntime::OvertakeCandidate> ResolveNearestNearFieldVehicleAhe
         if (aheadDot <= 0.0) continue;  // not ahead - not a candidate
         if (bestDist < 0.0 || odist < bestDist) {
             bestDist = odist;
-            best = sr3airuntime::OvertakeCandidate{other.pos.x, other.pos.z};
+            sr3airuntime::OvertakeCandidate candidate{other.pos.x, other.pos.z};
+            auto headingIt = headingById.find(other.id);
+            if (headingIt != headingById.end()) candidate.headingRad = headingIt->second;
+            auto speedIt = speedById.find(other.id);
+            if (speedIt != speedById.end()) candidate.speedMs = speedIt->second;
+            best = candidate;
         }
     }
     return best;
@@ -20942,9 +21179,32 @@ int runPlaytest(int argc, char** argv) {
             if (groundTiles.count(t)) continue;
             auto gt = std::make_unique<CityGroundTile>();
             std::string why;
-            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why)) {
-                std::printf("[ground] frame %d LOAD  tile %02d%02d: %s, %zu range(s), %u triangles\n", frame,
-                            t.first, t.second, gt->cznName.c_str(), gt->rangesRendered, gt->triangles);
+            // buildCollision = true, UNCONDITIONALLY (street-collision-
+            // 0x2237-mopp follow-up task, 2026-10-11): this project's own
+            // Heightmap-based `sampleRealGroundHeight()` fallback below is
+            // ALSO sampled unconditionally (never gated on --no-collision,
+            // which this function's own usage text documents as scoped
+            // ONLY to "the player's pm.collisionHook" - horizontal wall
+            // collision) - real ground-pavement VERTICAL support follows
+            // that same unconditional precedent, not the horizontal
+            // `noCollision` gate.
+            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why, true)) {
+                // Collision diagnostics appended to this LOAD line (street-
+                // collision-0x2237-mopp follow-up task, 2026-10-11) - the
+                // real triangle count and this tile's own collision-mesh
+                // XZ footprint, so a reader can see directly whether/where
+                // SampleGroundMeshHeight() has real coverage for this tile
+                // without a separate diagnostic command.
+                const CollisionBvh& cbvh = gt->collisionBvh;
+                const bool haveRoot = cbvh.root >= 0;
+                const CollisionBvhNode* rootNode = haveRoot ? &cbvh.nodes[static_cast<size_t>(cbvh.root)] : nullptr;
+                std::printf("[ground] frame %d LOAD  tile %02d%02d: %s, %zu range(s), %u triangles (collision "
+                            "tris=%zu bounds x[%.1f,%.1f] z[%.1f,%.1f])\n", frame, t.first, t.second,
+                            gt->cznName.c_str(), gt->rangesRendered, gt->triangles, cbvh.tris.size(),
+                            haveRoot ? static_cast<double>(rootNode->min[0]) : 0.0,
+                            haveRoot ? static_cast<double>(rootNode->max[0]) : 0.0,
+                            haveRoot ? static_cast<double>(rootNode->min[2]) : 0.0,
+                            haveRoot ? static_cast<double>(rootNode->max[2]) : 0.0);
             } else {
                 std::printf("[ground] frame %d tile %02d%02d: SKIPPED (no real ground rendered): %s\n", frame,
                             t.first, t.second, why.c_str());
@@ -21050,6 +21310,22 @@ int runPlaytest(int argc, char** argv) {
         if (sr3zone::SampleHeightmapHeight(it->second, x, z, h)) return h;
         return fallback;
     };
+    // REAL `0x2237` ground-pavement collision mesh height, tried FIRST
+    // (street-collision-0x2237-mopp follow-up task, 2026-10-11 - see
+    // SampleGroundMeshHeight()'s own doc comment above, right after
+    // loadCityGroundTile(), for the full spec citation and why the
+    // Heightmap/flat-plane chain above stays as the fallback rather than
+    // being removed). `referenceY = fallback` disambiguates a multi-hit
+    // vertical ray the SAME way the caller's own existing fallback value
+    // already represents "the best height known before this query" -
+    // consistent with every other call site in this file that threads a
+    // `fallback` through unchanged.
+    auto sampleGroundHeight = [&](double x, double z, float fallback) -> float {
+        double meshY = 0.0;
+        if (SampleGroundMeshHeight(groundTiles, x, z, static_cast<double>(fallback), meshY))
+            return static_cast<float>(meshY);
+        return sampleRealGroundHeight(x, z, fallback);
+    };
     sr3player::GroundFollower playerGroundFollower(static_cast<double>(finalGroundY));
     sr3player::GroundFollower vehicleGroundFollower(static_cast<double>(finalGroundY));
     float vehicleGroundY = finalGroundY;  // updated every frame below once the vehicle is loaded; render code
@@ -21070,6 +21346,23 @@ int runPlaytest(int argc, char** argv) {
             std::printf("heightmap: NO real Heightmap (0x2244) record resolved at spawn (%.1f %.1f) - staying on "
                         "the flat-plane fallback (%.2fm)\n",
                         static_cast<double>(spawnX), static_cast<double>(spawnZ), static_cast<double>(finalGroundY));
+        }
+        // Same one-time probe for the REAL `0x2237` ground-pavement
+        // collision mesh (street-collision-0x2237-mopp follow-up task,
+        // 2026-10-11) - printed so a reader of this command's own stdout
+        // can see directly whether the spawn tile's own real mesh
+        // resolved (and at what height) rather than falling through to
+        // the Heightmap/flat-plane chain above.
+        double meshProbe = 0.0;
+        if (SampleGroundMeshHeight(groundTiles, static_cast<double>(spawnX), static_cast<double>(spawnZ),
+                                    static_cast<double>(finalGroundY), meshProbe)) {
+            std::printf("groundmesh: real 0x2237 collision-mesh sample at spawn (%.1f %.1f) = %.2fm (used in "
+                        "preference to the heightmap/flat-plane chain above)\n",
+                        static_cast<double>(spawnX), static_cast<double>(spawnZ), meshProbe);
+        } else {
+            std::printf("groundmesh: NO real 0x2237 collision-mesh triangle resolved at spawn (%.1f %.1f) - "
+                        "falling back to the heightmap/flat-plane chain above\n",
+                        static_cast<double>(spawnX), static_cast<double>(spawnZ));
         }
     }
 
@@ -21270,6 +21563,14 @@ int runPlaytest(int argc, char** argv) {
     // no 2nd-vehicle velocity is tracked). Same side-car-map convention as
     // nearFieldVehicleHeading just above.
     std::unordered_map<uint64_t, double> nearFieldVehicleSpeed;
+    // overtake-gate-18.6b task (2026-10-11) diagnostic-only side-car maps -
+    // NOT a gameplay field, exists purely so --headless runs can print a
+    // real per-vehicle net-displacement/gate-fire summary at the end of the
+    // run (same measurement this task's own live 900-frame re-verification
+    // needs), without adding a permanent CLI flag for something only this
+    // kind of offline verification run needs.
+    std::unordered_map<uint64_t, sr3airuntime::Vec3> nearFieldVehicleStartPosForTrace;
+    uint64_t overtakeGateFireCountForTrace = 0;
     // CHOSEN (not spec-stated - Sec18 describes steady-state following
     // only, never a kinematic model for ambient traffic that has no own
     // per-instance Havok body): near-field ambient vehicles do not each get
@@ -21857,8 +22158,8 @@ int runPlaytest(int argc, char** argv) {
         // never a hard per-frame teleport, even though in practice a
         // PARKED car's own (x,z) rarely changes tile.
         if (vehicleEnabled) {
-            const float vehRawH = sampleRealGroundHeight(vehicleRig.sim->state_.posX, vehicleRig.sim->state_.posZ,
-                                                          finalGroundY);
+            const float vehRawH = sampleGroundHeight(vehicleRig.sim->state_.posX, vehicleRig.sim->state_.posZ,
+                                                      finalGroundY);
             vehicleGroundY = static_cast<float>(vehicleGroundFollower.update(vehRawH, dt).groundY);
         }
 
@@ -21965,6 +22266,12 @@ int runPlaytest(int argc, char** argv) {
                     nfv.pos.x = static_cast<double>(p0.x);
                     nfv.pos.z = static_cast<double>(p0.z);
                 }
+                // overtake-gate-18.6b task diagnostic (see this map's own
+                // declaration comment): record the AFTER-snap starting
+                // position once, the first tick this vehicle gets a lane
+                // state, so the end-of-run summary can report real net
+                // displacement.
+                nearFieldVehicleStartPosForTrace[nfv.id] = nfv.pos;
             }
             double& heading = nearFieldVehicleHeading[nfv.id];
             double& trackedSpeedMs = nearFieldVehicleSpeed[nfv.id];  // default-constructed 0.0 on first use
@@ -21986,12 +22293,13 @@ int runPlaytest(int argc, char** argv) {
             // final heading) - a one-tick staleness, same acceptable lag
             // the cached-target re-query mechanism elsewhere in this file
             // already tolerates.
-            std::optional<sr3airuntime::OvertakeCandidate> overtakeCandidate =
-                ResolveNearestNearFieldVehicleAhead(nearFieldLive, nfv.id, nfv.pos.x, nfv.pos.z, heading);
+            std::optional<sr3airuntime::OvertakeCandidate> overtakeCandidate = ResolveNearestNearFieldVehicleAhead(
+                nearFieldLive, nfv.id, nfv.pos.x, nfv.pos.z, heading, nearFieldVehicleHeading, nearFieldVehicleSpeed);
 
             sr3airuntime::LaneFollowCommand cmd = sr3airuntime::StepLaneFollow(
                 trafficLaneGraph, stateIt->second, nfv.pos.x, nfv.pos.z, heading, sr3airuntime::LaneFollowConfig{},
                 trackedSpeedMs, overtakeCandidate);
+            if (cmd.overtakeGateFired) ++overtakeGateFireCountForTrace;  // overtake-gate-18.6b task diagnostic
             // CHOSEN kinematic integration - see this block's own
             // declaration comment above (kNearFieldVehicleTurnRateRadPerSec/
             // kNearFieldVehicleCruiseSpeedMs) for why no per-vehicle Havok
@@ -22368,7 +22676,7 @@ int runPlaytest(int argc, char** argv) {
         // now aimed at a ground height that itself never jumps underneath
         // an already-grounded player.
         const float playerRawH =
-            sampleRealGroundHeight(pm.st.position.x, pm.st.position.z, finalGroundY);
+            sampleGroundHeight(pm.st.position.x, pm.st.position.z, finalGroundY);
         collisionDriver.setGroundY(playerGroundFollower.update(playerRawH, dt).groundY);
 
         bridge.stepFrame(pm, animFrame);
@@ -23026,8 +23334,32 @@ int runPlaytest(int argc, char** argv) {
                                     triggerName.c_str(), edge, nowInside ? "on_trigger" : "on_trigger_exit");
                         continue;
                     }
+                    // 2026-10-11 fix (m09/m13/m05 trigger-stall task): every real
+                    // on_trigger/on_trigger_exit callback this project's own mission
+                    // scripts register (m09_player_on_boat_enter_cb, m13_trigger_cback,
+                    // m05's own land-trigger callback, etc.) declares a first parameter
+                    // ("human") and either compares it against LOCAL_PLAYER/REMOTE_PLAYER
+                    // (an identity gate) or, for m05, ignores it and sets its flag
+                    // unconditionally. Previously this call always spawned with
+                    // nargs=0, so `human` was unconditionally nil inside every one of
+                    // these callbacks - a reimplementation-side bug independent of and
+                    // prior to either of spec-lua-api-behaviour.md Sec1.14's two
+                    // hypotheses (identity-mismatch / dispatch-chain-interception): the
+                    // callback was reached (this project's own dispatch has no 6-way
+                    // type-tester chain to misroute through - CHOSEN, not modeled, see
+                    // Sec1.14), but its own first argument was always missing. Fixed by
+                    // pushing this project's one real player-identity sentinel
+                    // ("#PLAYER1#", see EngineState's own existing "#PLAYER1#"/"#PLAYER2#"
+                    // convention) as that argument - the playtest harness only ever
+                    // drives the LOCAL player's own position, so every trigger
+                    // enter/exit transition detected here is the local player's own.
+                    // LOCAL_PLAYER/REMOTE_PLAYER are registered as the matching Lua
+                    // globals in the gameplay state (src/lua_host.cpp) so the identity
+                    // comparison in m09/m13's callbacks has a real, non-nil value on
+                    // both sides.
+                    lua_pushstring(hudGp, "#PLAYER1#");
                     sr3luahost::BareThreadTable::Record* spawned =
-                        hudHost->bareGlobals().threads().allocate(hudGp, cbName, /*nargs=*/0, /*hasParent=*/false);
+                        hudHost->bareGlobals().threads().allocate(hudGp, cbName, /*nargs=*/1, /*hasParent=*/false);
                     if (!spawned) {
                         std::printf("mission  : in-world trigger '%s' %s transition - coroutine for '%s' NOT "
                                     "spawned (script-thread table full)\n",
@@ -23643,12 +23975,21 @@ int runPlaytest(int argc, char** argv) {
                                 static_cast<double>(diagEyeX), static_cast<double>(diagEyeY),
                                 static_cast<double>(diagEyeZ));
                 } else {
-                    std::printf("captured : %s (frame %d, DRIVING - vehicle pos (%.2f %.2f) heading %.1f deg, "
+                    // vehicleGroundY added to this diagnostic line (street-
+                    // collision-0x2237-mopp follow-up task, 2026-10-11) -
+                    // the vehicle's own render Y (this header's own top
+                    // comment: "has no vertical physics model of any kind
+                    // ... GroundFollower IS the entire vertical model"),
+                    // now fed by SampleGroundMeshHeight() in preference to
+                    // the heightmap/flat-plane chain - printed so a reader
+                    // can directly see it tracking the real 0x2237 mesh
+                    // height as the vehicle drives, not a fixed value.
+                    std::printf("captured : %s (frame %d, DRIVING - vehicle pos (%.2f %.2f %.2f) heading %.1f deg, "
                                 "speed %.2f m/s, camera eye (%.2f %.2f %.2f))\n",
-                                path.c_str(), frames, vehicleRig.sim->state_.posX, vehicleRig.sim->state_.posZ,
-                                headingNow * 180.0 / 3.14159265, vehicleRig.sim->state_.velForwardBody,
-                                static_cast<double>(diagEyeX), static_cast<double>(diagEyeY),
-                                static_cast<double>(diagEyeZ));
+                                path.c_str(), frames, vehicleRig.sim->state_.posX, static_cast<double>(vehicleGroundY),
+                                vehicleRig.sim->state_.posZ, headingNow * 180.0 / 3.14159265,
+                                vehicleRig.sim->state_.velForwardBody, static_cast<double>(diagEyeX),
+                                static_cast<double>(diagEyeY), static_cast<double>(diagEyeZ));
                 }
             } else {
                 std::fprintf(stderr, "capture failed: %s\n", error.c_str());
@@ -23682,6 +24023,27 @@ int runPlaytest(int argc, char** argv) {
         swapChain.present(true);
         ++frames;
         if (maxFrames >= 0 && frames >= maxFrames) break;
+    }
+    // overtake-gate-18.6b task diagnostic (2026-10-11), --headless only -
+    // real per-vehicle net-displacement/gate-fire numbers for this task's
+    // own live 900-frame re-verification requirement (spec-ai-runtime.md
+    // Sec18.6b), not a permanent gameplay feature.
+    if (headless) {
+        double minDisp = -1.0, maxDisp = -1.0;
+        for (const auto& nfv : nearFieldLive) {
+            auto it = nearFieldVehicleStartPosForTrace.find(nfv.id);
+            if (it == nearFieldVehicleStartPosForTrace.end()) continue;
+            const double ddx = nfv.pos.x - it->second.x;
+            const double ddz = nfv.pos.z - it->second.z;
+            const double disp = std::sqrt(ddx * ddx + ddz * ddz);
+            if (minDisp < 0.0 || disp < minDisp) minDisp = disp;
+            if (maxDisp < 0.0 || disp > maxDisp) maxDisp = disp;
+        }
+        std::printf(
+            "traffic-overtake-gate-trace: frames=%d live_near_field_vehicles=%zu overtake_gate_fire_count=%llu "
+            "net_displacement_range=[%.2f,%.2f]\n",
+            frames, nearFieldLive.size(), static_cast<unsigned long long>(overtakeGateFireCountForTrace), minDisp,
+            maxDisp);
     }
     if (cursorHidden) ShowCursor(TRUE);
     // MISSION-HOST (this task, screen-fade-mainloop-tick/m09-progress): if the mission is
